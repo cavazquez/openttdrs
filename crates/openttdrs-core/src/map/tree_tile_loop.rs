@@ -277,6 +277,12 @@ pub fn process_tree_and_field_growth_from_visits(
                 // Releer: el desierto (P3.9) puede haber mutado la tesela antes.
                 let tile = map.get(c).unwrap_or(tile);
                 let ground = clear_ground_type(tile.m5);
+                // `TileLoop_Clear` termina después de `TileLoopClearAlps`
+                // cuando la capa de nieve está activa. No se debe avanzar la
+                // densidad/counter subyacente en esa misma visita.
+                if tile.m3 & 0x10 != 0 || ground == CLEAR_GROUND_SNOW {
+                    continue;
+                }
                 let density = clear_density(tile.m5);
                 if ground == CLEAR_GROUND_ROUGH && density == 0 {
                     grass_updates.push((c, tile.mapt, clear_ground_m5(CLEAR_GROUND_GRASS, 3)));
@@ -612,22 +618,31 @@ fn plant_generation_tree(map: &mut Map, c: TileCoord, previous: Tile, tree_type:
     let _ = map.set_tile(c, tree);
 }
 
-/// Zona trópica desierto (`GetTropicZone == Desert`), aproximada con `desert_patch`.
+/// Zona trópica desierto (`GetTropicZone == Desert`) para una coordenada
+/// aislada. Se conserva como helper de compatibilidad para callers que no
+/// tienen un mapa materializado; la generación de mundos usa los bits bajos
+/// de `MAPT`, que son la fuente autoritativa de OpenTTD.
 #[must_use]
 pub fn is_tropic_desert_zone(c: TileCoord, climate: Climate, world_seed: u64) -> bool {
     climate.uses_desert_patches() && desert_patch(c.x, c.y, world_seed)
 }
 
-/// `NeighbourIsNormal`: algún vecino diagonal no-desierto o mar.
+/// `NeighbourIsNormal`: algún vecino ortogonal no-desierto o mar.
 #[must_use]
-fn neighbour_is_normal(map: &Map, c: TileCoord, climate: Climate, world_seed: u64) -> bool {
+fn neighbour_is_normal(map: &Map, c: TileCoord) -> bool {
     for dir in 0..4u8 {
         let (dx, dy) = crate::map::diag_dir_offset(dir);
         let n = TileCoord::new(c.x + dx, c.y + dy);
         let Some(tile) = map.get(n) else {
             continue;
         };
-        if !is_tropic_desert_zone(n, climate, world_seed) {
+        // `IsValidTile` excludes the freeform `MP_VOID` border. A void
+        // neighbour therefore must not make a desert edge transition to
+        // density one.
+        if tile.kind == TileKind::Void {
+            continue;
+        }
+        if tile.mapt & 0x03 != 1 {
             return true;
         }
         if tile_has_water_class(tile.kind) && water_class_from_m1(tile.m1) == WaterClass::Sea {
@@ -642,7 +657,7 @@ pub fn tile_loop_clear_desert(
     map: &mut Map,
     c: TileCoord,
     climate: Climate,
-    world_seed: u64,
+    _world_seed: u64,
 ) -> bool {
     if !climate.uses_desert_patches() {
         return false;
@@ -659,12 +674,8 @@ pub fn tile_loop_clear_desert(
     } else {
         0
     };
-    let expected = if is_tropic_desert_zone(c, climate, world_seed) {
-        if neighbour_is_normal(map, c, climate, world_seed) {
-            1
-        } else {
-            3
-        }
+    let expected = if tile.mapt & 0x03 == 1 {
+        if neighbour_is_normal(map, c) { 1 } else { 3 }
     } else {
         0
     };
@@ -704,7 +715,8 @@ pub fn apply_desert_transition_from_visits(
     dirty
 }
 
-/// Nieve ártico al estilo OpenTTD `TileLoopClearAlps`: altura vs snow line, franja tile-loop.
+/// Nieve ártica al estilo OpenTTD `TileLoopClearAlps`: altura frente a la
+/// línea de nieve, en la franja del tile loop.
 ///
 /// Cada tick procesa `MapSize/256` teselas (misma franja que el landscape). La densidad
 /// sube/baja de a 1 hasta el nivel requerido; no hay barrido O(map) diario.
@@ -743,62 +755,89 @@ pub fn apply_seasonal_snow_from_visits(
     if !climate.uses_snow_ground() {
         return Vec::new();
     }
-    let snow_line = i32::from(snow_line_height);
-    let mut updates = Vec::new();
-    for &(c, tile) in visits {
-        if tile.kind != TileKind::Grass {
-            continue;
+    let mut dirty = Vec::new();
+    for &(c, _) in visits {
+        if tile_loop_clear_alps_at(map, c, snow_line_height) {
+            dirty.push(c);
         }
-        let ground = clear_ground_type(tile.m5);
-        if matches!(ground, CLEAR_GROUND_ROCKY | CLEAR_GROUND_DESERT) {
-            continue;
-        }
-        let Some((_, z)) = tile_slope_and_z(map, c) else {
-            continue;
-        };
-        let k = i32::from(z) - snow_line + 1;
-        let is_snow = ground == CLEAR_GROUND_SNOW;
-        let density = clear_density(tile.m5);
-        let new_m5 = if is_snow {
-            let req = if k < 0 {
-                0_u8
-            } else {
-                u8::try_from(k.clamp(0, 3)).unwrap_or(3)
-            };
-            match density.cmp(&req) {
-                std::cmp::Ordering::Equal => {
-                    if k < 0 {
-                        Some(clear_ground_m5(CLEAR_GROUND_GRASS, 3))
-                    } else {
-                        None
-                    }
-                }
-                std::cmp::Ordering::Less => Some(clear_ground_m5(
-                    CLEAR_GROUND_SNOW,
-                    density.saturating_add(1),
-                )),
-                std::cmp::Ordering::Greater => Some(clear_ground_m5(
-                    CLEAR_GROUND_SNOW,
-                    density.saturating_sub(1),
-                )),
-            }
-        } else if k >= 0 {
-            Some(clear_ground_m5(CLEAR_GROUND_SNOW, 0))
-        } else {
-            None
-        };
-        if let Some(new_m5) = new_m5
-            && new_m5 != tile.m5
-        {
-            updates.push((c, tile.mapt, new_m5));
-        }
-    }
-    let mut dirty = Vec::with_capacity(updates.len());
-    for (c, mapt, new_m5) in updates {
-        let _ = map.set_mapt_m5(c, mapt, new_m5);
-        dirty.push(c);
     }
     dirty
+}
+
+/// Ejecuta `TileLoopClearAlps` sobre una sola tesela viva.
+///
+/// OpenTTD almacena la presencia de nieve en `MAP3` bit 4; los bits de suelo
+/// de `MAP5` siguen describiendo el sustrato que queda debajo. El valor
+/// `CLEAR_GROUND_SNOW` se acepta sólo como formato legado de mapas JSON y se
+/// normaliza a la representación canónica en la primera visita.
+pub(crate) fn tile_loop_clear_alps_at(map: &mut Map, c: TileCoord, snow_line_height: u8) -> bool {
+    let Some(tile) = map.get(c) else {
+        return false;
+    };
+    if tile.kind != TileKind::Grass {
+        return false;
+    }
+    let Some((_, z)) = tile_slope_and_z(map, c) else {
+        return false;
+    };
+
+    let raw_ground = clear_ground_type(tile.m5);
+    let legacy_snow = raw_ground == CLEAR_GROUND_SNOW && tile.m3 & 0x10 == 0;
+    let is_snow = tile.m3 & 0x10 != 0 || legacy_snow;
+    // `CLEAR_SNOW` no es un tipo persistido: una tesela vieja que lo use en
+    // MAP5 representa césped debajo de la capa de nieve.
+    let underlying_ground = if legacy_snow {
+        CLEAR_GROUND_GRASS
+    } else {
+        raw_ground
+    };
+    let density = clear_density(tile.m5);
+    let k = i32::from(z) - i32::from(snow_line_height) + 1;
+
+    let (new_m3, new_m5) = if is_snow {
+        let required = if k < 0 {
+            0
+        } else {
+            u8::try_from(k.clamp(0, 3)).unwrap_or(3)
+        };
+        if density == required {
+            if k >= 0 {
+                return false;
+            }
+            // `ClearSnow`: se conserva el suelo subyacente y se restaura la
+            // densidad plena de césped/rough.
+            (tile.m3 & !0x10, clear_ground_m5(underlying_ground, 3))
+        } else {
+            let next_density = if density < required {
+                density.saturating_add(1)
+            } else {
+                density.saturating_sub(1)
+            };
+            (
+                tile.m3 | 0x10,
+                clear_ground_m5(underlying_ground, next_density),
+            )
+        }
+    } else if k >= 0 {
+        // `MakeSnow(tile, 0)`: los campos se convierten en césped, los demás
+        // sustratos conservan su tipo y empiezan con densidad cero.
+        let ground = if raw_ground == CLEAR_GROUND_FIELDS {
+            CLEAR_GROUND_GRASS
+        } else {
+            raw_ground
+        };
+        (tile.m3 | 0x10, clear_ground_m5(ground, 0))
+    } else {
+        return false;
+    };
+
+    if new_m3 == tile.m3 && new_m5 == tile.m5 {
+        return false;
+    }
+    let mut updated = tile;
+    updated.m3 = new_m3;
+    updated.m5 = new_m5;
+    map.set_tile(c, updated).is_ok()
 }
 
 /// Coloca un árbol (hierba → bosque etapa 0; bosque → +1 árbol si hay sitio).
@@ -1365,12 +1404,14 @@ mod tests {
         assert!(dirty.contains(&high));
         assert_eq!(
             clear_ground_type(map.get(high).unwrap().m5),
-            CLEAR_GROUND_SNOW
+            CLEAR_GROUND_GRASS
         );
+        assert_ne!(map.get(high).unwrap().m3 & 0x10, 0);
         assert_eq!(clear_density(map.get(high).unwrap().m5), 0);
 
-        map.set_mapt_m5(low, 0, clear_ground_m5(CLEAR_GROUND_SNOW, 0))
+        map.set_mapt_m5(low, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 0))
             .unwrap();
+        map.set_m3(low, 0x10).unwrap();
         let low_tile = map.get(low).unwrap();
         let dirty_thaw =
             apply_seasonal_snow_from_visits(&mut map, Climate::SubArctic, 10, &[(low, low_tile)]);
@@ -1386,8 +1427,9 @@ mod tests {
         let mut map = Map::new_flat(4, 4, 12);
         let c = TileCoord::new(1, 1);
         map.set_kind(c, TileKind::Grass).unwrap();
-        map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_SNOW, 0))
+        map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 0))
             .unwrap();
+        map.set_m3(c, 0x10).unwrap();
         let tile = map.get(c).unwrap();
         apply_seasonal_snow_from_visits(&mut map, Climate::SubArctic, 10, &[(c, tile)]);
         assert_eq!(clear_density(map.get(c).unwrap().m5), 1);
@@ -1424,7 +1466,7 @@ mod tests {
         let mut map = Map::new_flat(1, 1, 0);
         let c = TileCoord::new(0, 0);
         map.set_kind(c, TileKind::Grass).unwrap();
-        map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
+        map.set_mapt_m5(c, 1, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
             .unwrap();
         assert!(tile_loop_clear_desert(
             &mut map,
@@ -1460,7 +1502,7 @@ mod tests {
         let c = edge.expect("debe existir borde desierto/normal");
         let mut map = Map::new_flat(64, 64, 0);
         map.set_kind(c, TileKind::Grass).unwrap();
-        map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
+        map.set_mapt_m5(c, 1, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
             .unwrap();
         assert!(tile_loop_clear_desert(
             &mut map,
@@ -1531,7 +1573,8 @@ mod tests {
         );
         assert_eq!(
             clear_ground_type(map.get(TileCoord::new(10, 10)).unwrap().m5),
-            CLEAR_GROUND_SNOW
+            CLEAR_GROUND_GRASS
         );
+        assert_ne!(map.get(TileCoord::new(10, 10)).unwrap().m3 & 0x10, 0);
     }
 }

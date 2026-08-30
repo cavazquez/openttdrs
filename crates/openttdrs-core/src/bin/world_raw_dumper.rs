@@ -92,6 +92,7 @@ struct Args {
     out: PathBuf,
     generate: Option<(u32, u32)>,
     generate_until: GenerateUntil,
+    climate: Option<Climate>,
     replay_trees: bool,
     tree_trace: Option<PathBuf>,
     seed: Option<u64>,
@@ -109,6 +110,7 @@ fn print_usage() {
          Opciones:\n\
            --generate WIDTHxHEIGHT          genera el mapa procedural openttdrs (sin guardar .sav)\n\
            --seed N                          semilla para --generate\n\
+           --climate CLIMA                   clima para --generate (temperate|arctic|tropic|toyland)\n\
            --generate-until FASE             detiene tras landscape|clear|towns|industries|objects|trees|startup\n\
            --replay-trees                    reproduce GenerateTrees desde DATE.random_state\n\
            --tree-trace SALIDA.jsonl         traza cada PlaceTree de --replay-trees\n\
@@ -174,6 +176,12 @@ fn parse_dimensions(value: &str) -> Result<(u32, u32), String> {
     Ok((width, height))
 }
 
+fn parse_climate(value: &str) -> Result<Climate, String> {
+    Climate::parse(value).ok_or_else(|| {
+        format!("--climate inválido: {value} (usar temperate, arctic, tropic o toyland)")
+    })
+}
+
 fn parse_region(value: &str) -> Result<WorldRawRegion, String> {
     let mut values = value.split(',');
     let min_x = values
@@ -204,6 +212,7 @@ fn parse_args() -> Result<Args, String> {
     let mut positional = Vec::new();
     let mut generate = None;
     let mut generate_until = None;
+    let mut climate = None;
     let mut seed = None;
     let mut stage = None;
     let mut replay_trees = false;
@@ -234,6 +243,12 @@ fn parse_args() -> Result<Args, String> {
                     &mut args,
                     "--generate-until",
                 )?)?);
+            }
+            "--climate" => {
+                if climate.is_some() {
+                    return Err("--climate fue indicado más de una vez".to_string());
+                }
+                climate = Some(parse_climate(&next_value(&mut args, "--climate")?)?);
             }
             "--replay-trees" => {
                 if replay_trees {
@@ -307,6 +322,9 @@ fn parse_args() -> Result<Args, String> {
     if generate.is_none() && generate_until.is_some() {
         return Err("--generate-until requiere --generate".to_string());
     }
+    if generate.is_none() && climate.is_some() {
+        return Err("--climate requiere --generate".to_string());
+    }
     if tree_trace.is_some() && !replay_trees {
         return Err("--tree-trace requiere --replay-trees".to_string());
     }
@@ -341,6 +359,7 @@ fn parse_args() -> Result<Args, String> {
         out: positional.remove(0),
         generate,
         generate_until: generate_until.unwrap_or(GenerateUntil::Startup),
+        climate,
         replay_trees,
         tree_trace,
         seed,
@@ -498,8 +517,9 @@ fn run(args: &Args) -> Result<(), String> {
         // El dumper y el cliente deben partir del mismo perfil de «Nueva
         // partida». Las variables de entorno sólo permiten aislar una etapa
         // del oracle sin cambiar los defaults publicados.
-        let mut config = WorldGenConfig::for_new_game(Climate::Temperate, seed)
-            .with_terrain_type(TerrainType::Flat);
+        let climate = args.climate.unwrap_or(Climate::Temperate);
+        let mut config =
+            WorldGenConfig::for_new_game(climate, seed).with_terrain_type(TerrainType::Flat);
         config.water_borders = Some(
             std::env::var("OPENTTDRS_WATER_BORDERS")
                 .ok()
@@ -536,7 +556,7 @@ fn run(args: &Args) -> Result<(), String> {
             .unwrap_or(0);
         let mut state = GameState::from_map(map);
         state.world_seed = seed;
-        state.climate = Climate::Temperate;
+        state.climate = climate;
         let population_config = PopulationGenConfig {
             seed,
             ..PopulationGenConfig::default()
@@ -593,8 +613,9 @@ fn run(args: &Args) -> Result<(), String> {
         state.random = generation_rng;
         map = state.map;
         let source = format!(
-            "generated:{width}x{height}:seed={seed}:until={}",
-            args.generate_until.as_str()
+            "generated:{width}x{height}:seed={seed}:climate={}:until={}",
+            climate_code(climate),
+            args.generate_until.as_str(),
         );
         let emitted = dump_map(
             &map,
@@ -604,7 +625,7 @@ fn run(args: &Args) -> Result<(), String> {
             0,
             (matches!(args.generate_until, GenerateUntil::Startup) && startup_ticks != 0)
                 .then_some(u64::from(startup_ticks) + 1),
-            0,
+            climate_code(climate),
         )?;
         println!(
             "world-raw {}: {} teselas ({source}) → {}",
@@ -748,7 +769,7 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{GenerateUntil, parse_dimensions};
+    use super::{Climate, GenerateUntil, parse_climate, parse_dimensions};
 
     #[test]
     fn generated_dimensions_accept_openttd_sizes() {
@@ -767,5 +788,14 @@ mod tests {
         assert_eq!(GenerateUntil::parse("objects"), Ok(GenerateUntil::Objects));
         assert_eq!(GenerateUntil::parse("startup"), Ok(GenerateUntil::Startup));
         assert!(GenerateUntil::parse("rivers").is_err());
+    }
+
+    #[test]
+    fn climate_parser_accepts_all_landscapes_and_rejects_unknown() {
+        assert_eq!(parse_climate("temperate"), Ok(Climate::Temperate));
+        assert_eq!(parse_climate("arctic"), Ok(Climate::SubArctic));
+        assert_eq!(parse_climate("tropic"), Ok(Climate::SubTropical));
+        assert_eq!(parse_climate("toyland"), Ok(Climate::Toyland));
+        assert!(parse_climate("mars").is_err());
     }
 }

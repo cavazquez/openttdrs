@@ -2355,8 +2355,14 @@ pub(crate) fn spawn_generic_land_tile_with_objects(
     let rocky_img = || rocky_image(assets, tileh);
     let snow_desert_img = || snow_desert_image(assets, usize::from(tile_m5 & 0x03), tileh);
 
-    let clear_ground =
-        effective_clear_ground(climate, tile_m5, ctx.tx_i32(), ctx.ty_i32(), world_seed);
+    // `IsSnowTile` de OpenTTD vive en MAP3 bit 4 y no cambia el tipo de suelo
+    // de MAP5. Mantener el fallback de `effective_clear_ground` permite seguir
+    // dibujando mapas JSON legados que codificaban `CLEAR_SNOW` en MAP5.
+    let clear_ground = if ctx.tile.is_some_and(|tile| tile.m3 & 0x10 != 0) {
+        CLEAR_GROUND_SNOW
+    } else {
+        effective_clear_ground(climate, tile_m5, ctx.tx_i32(), ctx.ty_i32(), world_seed)
+    };
 
     let (image, color) = match ctx.kind {
         TileKind::Grass if ottd_type == 0 => match clear_ground {

@@ -9,7 +9,7 @@
 
 use crate::GameState;
 use crate::cargodist::parity::Randomizer;
-use crate::map::{Map, TileKind, collect_tile_loop_visits};
+use crate::map::{Map, TileKind, TileLoopState, collect_tile_loop_visits};
 
 /// Cantidad de pasadas que `CreateRivers` ejecuta tras ensanchar ríos.
 ///
@@ -72,7 +72,29 @@ fn run_generation_tile_loop_impl(
     // tile desde el mapa antes de cada callback conserva mutaciones producidas
     // por una tesela anterior de la misma pasada (en especial inundaciones).
     for (coord, snapshot) in &visits {
-        let tile = state.map.get(*coord).unwrap_or(*snapshot);
+        let mut tile = state.map.get(*coord).unwrap_or(*snapshot);
+        // `TileLoop_Clear` despacha la transición de clima antes del
+        // crecimiento genérico. Releer la tesela conserva la mutación de
+        // MAP3/MAP5 y decide si la segunda parte del callback debe ejecutarse.
+        match state.climate {
+            crate::world_gen::Climate::SubTropical => {
+                crate::map::tree_tile_loop::tile_loop_clear_desert(
+                    &mut state.map,
+                    *coord,
+                    state.climate,
+                    state.world_seed,
+                );
+            }
+            crate::world_gen::Climate::SubArctic => {
+                crate::map::tree_tile_loop::tile_loop_clear_alps_at(
+                    &mut state.map,
+                    *coord,
+                    state.snow_line_height,
+                );
+            }
+            _ => {}
+        }
+        tile = state.map.get(*coord).unwrap_or(tile);
         match tile.kind {
             // TileLoop_Clear y TileLoop_Trees comparten el crecimiento de
             // hierba/campos y la actualización de árboles. El helper ya
@@ -198,6 +220,28 @@ pub(crate) fn run_landscape_river_tile_loops_with_rng(
     seed: u64,
     rng: &mut Randomizer,
 ) {
+    let _ = run_landscape_tile_loops_with_rng_and_cursor(
+        map,
+        climate,
+        seed,
+        rng,
+        LANDSCAPE_RIVER_TILE_LOOP_PASSES,
+        crate::world_gen::DEF_SNOW_LINE_HEIGHT,
+        TileLoopState::default().cur_tileloop_tile,
+    );
+}
+
+/// Ejecuta una cantidad explícita de pasadas del tile loop de generación y
+/// devuelve el cursor LFSR para que otra frontera continúe la misma secuencia.
+pub(crate) fn run_landscape_tile_loops_with_rng_and_cursor(
+    map: &mut Map,
+    climate: crate::world_gen::Climate,
+    seed: u64,
+    rng: &mut Randomizer,
+    passes: u64,
+    snow_line_height: u8,
+    start_cursor: u32,
+) -> u32 {
     // Mover en vez de clonar evita duplicar un mapa de hasta 4096² teselas
     // durante su creación. El placeholder no se observa: se reemplaza por el
     // mapa generado antes de devolver.
@@ -205,13 +249,17 @@ pub(crate) fn run_landscape_river_tile_loops_with_rng(
     let mut state = GameState::from_map(landscape);
     state.climate = climate;
     state.world_seed = seed;
-    for _ in 0..LANDSCAPE_RIVER_TILE_LOOP_PASSES {
+    state.snow_line_height = snow_line_height;
+    state.cur_tileloop_tile = start_cursor;
+    for _ in 0..passes {
         // `CreateRivers` no incrementa `TimerGameTick::counter` dentro de
         // este bucle. Usar siempre cero conserva tanto el callback manual de
         // tile 0 como cualquier regla dependiente del tick.
         run_generation_tile_loop_impl(&mut state, 0, Some(&mut *rng));
     }
+    let cursor = state.cur_tileloop_tile;
     *map = state.map;
+    cursor
 }
 
 #[cfg(test)]

@@ -31,6 +31,7 @@ pub use config::{
     effective_clear_ground, initial_clear_ground, initial_clear_ground_with_lines,
 };
 pub use heightmap::{HeightmapData, apply_heightmap, parse_hmap, serialize_heightmap};
+use landcover::{mark_tropic_desert_zones, mark_tropic_rainforest_zones};
 pub use objects::generate_objects_with_rng;
 pub use population::{
     IndustryDensity, NUM_INITIAL_INDUSTRIES, NUM_INITIAL_TOWNS, PopulationGenConfig, TownDensity,
@@ -50,7 +51,7 @@ pub use trees::{
 
 use crate::cargodist::parity::Randomizer;
 use crate::company::OWNER_NONE_M1;
-use crate::map::{Map, MapError, TileCoord, TileKind, tile_slope_and_z};
+use crate::map::{Map, MapError, TileCoord, TileKind};
 
 use rivers::{carve_rivers, convert_ground_tiles_into_water_tiles};
 use tgp::{calculate_coverage_line, generate_tgp_heights};
@@ -258,22 +259,15 @@ pub fn apply_landscape_with_rng(
             if map.get_kind(c) == Some(TileKind::Void) {
                 continue;
             }
-            let Some((_, z)) = tile_slope_and_z(map, c) else {
-                continue;
-            };
+            // `InitializeLandscape` siempre llama `MakeClear(...,
+            // CLEAR_GRASS, 3)`. La nieve ártica y el desierto tropical se
+            // materializan después, en sus callbacks de `CreateRivers` /
+            // `CreateDesertOrRainForest`; no deben adelantarse en MAP5.
             let ground =
                 if (map.get(c).map_or(0, |tile| (tile.m5 >> 2) & 0x07)) == CLEAR_GROUND_ROCKY {
                     CLEAR_GROUND_ROCKY
                 } else {
-                    initial_clear_ground_with_lines(
-                        config.climate,
-                        x,
-                        y,
-                        z,
-                        config.seed,
-                        snow_line,
-                        desert_line,
-                    )
+                    CLEAR_GROUND_GRASS
                 };
             // `InitializeLandscape`/`MakeClear` arranca todas las teselas de
             // suelo con densidad 3. La densidad variable que usamos aquí
@@ -283,10 +277,32 @@ pub fn apply_landscape_with_rng(
             map.set_kind(c, TileKind::Grass)?;
             map.set_mapt_m5(c, 0, m5)?;
             map.set_m1(c, OWNER_NONE_M1)?;
+            map.set_m3(c, 0)?;
         }
     }
 
     convert_ground_tiles_into_water_tiles(map, preserve)?;
+
+    // En trópico `CreateDesertOrRainForest` marca el desierto, ejecuta una
+    // ronda completa de tile loops para estabilizar densidades y recién
+    // entonces marca la selva. El cursor LFSR se conserva para la ronda que
+    // `CreateRivers` ejecuta después.
+    let mut tile_loop_cursor = crate::map::TileLoopState::default().cur_tileloop_tile;
+    if config.climate == Climate::SubTropical {
+        let line = desert_line.unwrap_or(0);
+        mark_tropic_desert_zones(map, line, preserve);
+        tile_loop_cursor = tile_loop::run_landscape_tile_loops_with_rng_and_cursor(
+            map,
+            config.climate,
+            config.seed,
+            &mut rng,
+            tile_loop::LANDSCAPE_RIVER_TILE_LOOP_PASSES,
+            snow_line,
+            tile_loop_cursor,
+        );
+        mark_tropic_rainforest_zones(map, preserve);
+    }
+
     carve_rivers(map, config, map_w, map_h, preserve, &mut rng)?;
     // `CreateRivers` llama de nuevo a `ConvertGroundTilesIntoWaterTiles`
     // después de ensanchar ríos. Hoy nuestro port no modifica alturas al
@@ -303,11 +319,14 @@ pub fn apply_landscape_with_rng(
         // consumen `Random()` del mismo stream que continúa en
         // `GenerateClearTile`. No se puede reconstruir desde `seed` sin
         // desplazar toda la generación posterior.
-        tile_loop::run_landscape_river_tile_loops_with_rng(
+        let _ = tile_loop::run_landscape_tile_loops_with_rng_and_cursor(
             map,
             config.climate,
             config.seed,
             &mut rng,
+            tile_loop::LANDSCAPE_RIVER_TILE_LOOP_PASSES,
+            snow_line,
+            tile_loop_cursor,
         );
     }
 

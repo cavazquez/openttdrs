@@ -171,8 +171,8 @@ pub const fn clear_ground_m5(ground: u8, density: u8) -> u8 {
 
 /// Resuelve el suelo visible según clima y datos de tesela (para render / gen).
 ///
-/// En ártico la nieve vive en `m5` (`CLEAR_GROUND_SNOW`); no se fuerza aquí para
-/// permitir deshielo estacional (`apply_seasonal_snow`).
+/// En ártico la nieve persistida vive en `m3` bit 4 (`IsSnowTile`); el valor
+/// `CLEAR_GROUND_SNOW` en `m5` se conserva sólo para importar mapas legados.
 #[must_use]
 pub fn effective_clear_ground(climate: Climate, tile_m5: u8, tx: i32, ty: i32, seed: u64) -> u8 {
     use super::landcover::desert_patch;

@@ -32,6 +32,15 @@ def test_first_divergent_stage_uses_pipeline_order() -> None:
     assert phase.first_divergent_stage({"clear": {"exact_match": True}}) is None
 
 
+def test_climate_codes_cover_all_openttd_landscapes() -> None:
+    assert phase.CLIMATE_CODES == {
+        "temperate": 0,
+        "arctic": 1,
+        "tropic": 2,
+        "toyland": 3,
+    }
+
+
 if __name__ == "__main__":
     test_parse_phases_rejects_reordered_or_unknown_values()
     test_first_divergent_stage_uses_pipeline_order()

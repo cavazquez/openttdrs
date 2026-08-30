@@ -25,6 +25,12 @@ import random_map_parity as matrix
 
 ROOT = Path(__file__).resolve().parents[1]
 PHASES = ("landscape", "clear", "towns", "industries", "objects", "trees")
+CLIMATE_CODES = {
+    "temperate": 0,
+    "arctic": 1,
+    "tropic": 2,
+    "toyland": 3,
+}
 
 
 class GenerationPhaseError(RuntimeError):
@@ -72,6 +78,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--size", type=int, default=64, help="lado del mapa (default: 64)")
     parser.add_argument("--seed", type=int, default=1_330_935_378, help="seed de OpenTTD")
+    parser.add_argument(
+        "--climate",
+        choices=tuple(CLIMATE_CODES),
+        default="temperate",
+        help="clima de OpenTTD (default: temperate)",
+    )
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--phases", default=",".join(PHASES))
     parser.add_argument("--out-dir", type=Path, help="directorio para artefactos")
@@ -163,6 +175,7 @@ def run_candidate_raw(
     candidate: Path,
     size: int,
     seed: int,
+    climate: str,
     phase: str,
     commit: str,
     out: Path,
@@ -176,6 +189,8 @@ def run_candidate_raw(
             f"{size}x{size}",
             "--seed",
             str(seed),
+            "--climate",
+            climate,
             "--generate-until",
             phase,
             str(out),
@@ -210,13 +225,14 @@ def main() -> int:
         "candidate": {"binary": str(candidate)},
         "size": args.size,
         "seed": args.seed,
+        "climate": args.climate,
         "phases": list(phases),
         "block_size": 4,
     }
     try:
         with tempfile.TemporaryDirectory(prefix="openttdrs-generation-phase-config-") as config_dir:
             config = Path(config_dir) / "openttd.cfg"
-            matrix.write_config(config, args.size)
+            matrix.write_config(config, args.size, climate=CLIMATE_CODES[args.climate])
             reference_raw_by_phase = run_reference_generation(
                 reference,
                 config,
@@ -234,6 +250,7 @@ def main() -> int:
                 candidate,
                 args.size,
                 args.seed,
+                args.climate,
                 phase,
                 commit,
                 candidate_raw,

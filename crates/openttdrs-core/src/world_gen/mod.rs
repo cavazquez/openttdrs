@@ -192,6 +192,20 @@ pub fn apply_landscape_with_rng(
     config: &WorldGenConfig,
     preserve: &[PreserveRect],
 ) -> Result<WorldGenRng, MapError> {
+    apply_landscape_with_rng_and_cursor(map, config, preserve).map(|(rng, _)| rng)
+}
+
+/// Ejecuta `GenerateLandscape` y conserva también el cursor LFSR que deja
+/// `CreateRivers` para la cola inicial de `RunTileLoop`.
+///
+/// `OpenTTD` no reinicia `_cur_tileloop_tile` entre `CreateRivers` y las 0x500
+/// pasadas de arranque. Los consumidores que necesitan reproducir el mapa
+/// completo deben propagar el segundo elemento junto al RNG.
+pub fn apply_landscape_with_rng_and_cursor(
+    map: &mut Map,
+    config: &WorldGenConfig,
+    preserve: &[PreserveRect],
+) -> Result<(WorldGenRng, u32), MapError> {
     let (mw, mh) = map.dimensions();
     let map_w = i32::try_from(mw).expect("map width fits i32");
     let map_h = i32::try_from(mh).expect("map height fits i32");
@@ -321,7 +335,7 @@ pub fn apply_landscape_with_rng(
         // consumen `Random()` del mismo stream que continúa en
         // `GenerateClearTile`. No se puede reconstruir desde `seed` sin
         // desplazar toda la generación posterior.
-        let _ = tile_loop::run_landscape_tile_loops_with_rng_and_cursor(
+        tile_loop_cursor = tile_loop::run_landscape_tile_loops_with_rng_and_cursor(
             map,
             config.climate,
             config.seed,
@@ -332,7 +346,7 @@ pub fn apply_landscape_with_rng(
         );
     }
 
-    Ok(rng)
+    Ok((rng, tile_loop_cursor))
 }
 
 /// Devuelve la línea de nieve que `CalculateSnowLine` persistirá en una nueva

@@ -38,7 +38,8 @@ pub use index::{
 };
 pub use industry_action2::action2_eval_ctx_for_industry_tile_with_world;
 pub use industry_construction::{
-    INDUSTRY_CONSTRUCTION_COMPLETED, advance_industry_construction, industry_construction_counter,
+    INDUSTRY_CONSTRUCTION_COMPLETED, advance_industry_construction,
+    advance_industry_construction_tile_loop_at, industry_construction_counter,
     industry_construction_stage, is_industry_completed, make_industry_tile_bigger,
     step_industry_tiles, step_industry_tiles_with_seed, step_industry_tiles_with_seed_and_catalog,
 };
@@ -61,9 +62,9 @@ pub use industry_tile_anim::{
     GFX_BUBBLE_GENERATOR, GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED,
     GFX_GOLD_MINE_TOWER_ANIMATED, GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2,
     GFX_OILWELL_ANIMATED_3, advance_industry_animated_tiles, advance_industry_tile_animations,
-    advance_industry_tile_loop_events, advance_newgrf_industry_animated_tiles,
-    bubble_generator_spawns_from_visits, industry_animation_frame, industry_gfx,
-    industry_tile_anim_state, set_industry_gfx,
+    advance_industry_tile_loop_events, advance_industry_tile_loop_events_from_visits_with_rng,
+    advance_newgrf_industry_animated_tiles, bubble_generator_spawns_from_visits,
+    industry_animation_frame, industry_gfx, industry_tile_anim_state, set_industry_gfx,
 };
 pub use level_crossing::is_road_level_crossing;
 pub use object::{

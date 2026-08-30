@@ -503,21 +503,27 @@ fn step_one_generation_forest_tile(map: &mut Map, rng: &mut Randomizer, c: TileC
     let mapt = tile.mapt;
 
     match growth {
-        TREE_GROWTH_GROWN => match rng.next() & 0x07 {
-            0 => {
-                let _ = map.set_mapt_m5(c, mapt, with_tree_or_field_stage(m5, growth + 1));
+        TREE_GROWTH_GROWN => {
+            let tree_random = rng.next();
+            match tree_random & 0x07 {
+                0 => {
+                    let _ = map.set_mapt_m5(c, mapt, with_tree_or_field_stage(m5, growth + 1));
+                }
+                1 if count < 4 => {
+                    let m5 = with_tree_count(m5, count);
+                    let _ = map.set_mapt_m5(
+                        c,
+                        mapt,
+                        with_tree_or_field_stage(m5, TREE_GROWTH_GROWING1),
+                    );
+                }
+                1 | 2 => {
+                    let direction = (rng.next() & 0x07) as usize;
+                    try_spread_generation_neighbor(map, c, tree_type, direction);
+                }
+                _ => {}
             }
-            1 if count < 4 => {
-                let m5 = with_tree_count(m5, count);
-                let _ =
-                    map.set_mapt_m5(c, mapt, with_tree_or_field_stage(m5, TREE_GROWTH_GROWING1));
-            }
-            1 | 2 => {
-                let direction = (rng.next() & 0x07) as usize;
-                try_spread_generation_neighbor(map, c, tree_type, direction);
-            }
-            _ => {}
-        },
+        }
         TREE_GROWTH_DEAD => {
             if count > 1 {
                 let m5 = with_tree_count(m5, count.saturating_sub(2));

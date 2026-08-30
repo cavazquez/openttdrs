@@ -10,7 +10,9 @@
 use crate::GameState;
 use crate::cargodist::parity::Randomizer;
 use crate::house_spec::get_town_radius_group;
-use crate::map::{Map, Tile, TileCoord, TileKind, TileLoopState, collect_tile_loop_visits};
+use crate::map::{
+    Map, Tile, TileCoord, TileKind, TileLoopState, collect_tile_loop_visits, coord_to_linear_index,
+};
 
 /// Cantidad de pasadas que `CreateRivers` ejecuta tras ensanchar ríos.
 ///
@@ -105,6 +107,7 @@ fn run_generation_tile_loop_impl(
     visit_count
 }
 
+#[allow(clippy::too_many_lines)] // Agrupa el orden observable de una visita de generación.
 fn dispatch_generation_tile_loop_tile(
     state: &mut GameState,
     tick: u64,
@@ -162,7 +165,13 @@ fn dispatch_generation_tile_loop_tile(
             if crate::map::industry_terrain::industry_tile_on_water(tile) {
                 crate::map::water_flood::tile_loop_water_at(state, coord, tile);
             }
-            let one = [(coord, tile)];
+            let Some(live_tile) = state.map.get(coord) else {
+                return;
+            };
+            if live_tile.kind != TileKind::Industry {
+                return;
+            }
+            let one = [(coord, live_tile)];
             let _ = crate::map::industry_random::
                 advance_industry_tile_randomisation_from_visits_with_catalog(
                     &mut state.map,
@@ -175,24 +184,76 @@ fn dispatch_generation_tile_loop_tile(
                     &state.industry_spec_catalog,
                     state.climate,
                 );
-            let _ = crate::map::industry_construction::advance_industry_construction_from_visits(
+            // `MakeIndustryTileBigger` muta sólo la tesela visitada. La
+            // simulación económica puede sincronizar un footprint, pero la
+            // cola de generación debe conservar el desfase LFSR de cada parte.
+            let was_completed = live_tile.m1 & 0x80 != 0;
+            let construction_rollover =
+                crate::map::industry_construction::industry_construction_counter(live_tile.m1) == 3;
+            let _ = crate::map::industry_construction::advance_industry_construction_tile_loop_at(
                 &mut state.map,
-                &one,
-                &state.industries,
+                coord,
             );
-            let _ = crate::map::industry_tile_anim::advance_industry_tile_loop_events_from_visits(
-                &mut state.map,
-                tick,
-                &one,
-            );
+            // Aunque el grupo de animación vanilla no tenga callbacks, la
+            // expresión C++ `TriggerIndustryTileAnimation_ConstructionStageChanged`
+            // evalúa `Random()` antes de comprobar la máscara. Esa extracción
+            // ocurre en cada cuarta visita (incluida la finalización).
+            if construction_rollover && let Some(rng) = generation_rng.as_deref_mut() {
+                let _ = rng.next();
+            }
+            // Completing a vanilla power-plant chimney creates a smoke effect
+            // immediately. `ChimneySmokeInit` takes one word from the same
+            // global RNG for its initial sprite/progress, even though the
+            // effect is not serialized in the world-raw map.
+            let completed_now = !was_completed
+                && state
+                    .map
+                    .get(coord)
+                    .is_some_and(|updated| updated.m1 & 0x80 != 0);
+            if completed_now
+                && state.map.get(coord).is_some_and(|updated| {
+                    crate::map::industry_tile_anim::industry_gfx(&updated) == 8
+                })
+                && let Some(rng) = generation_rng.as_deref_mut()
+            {
+                let _chimney_smoke_seed = rng.next();
+            }
+            // OpenTTD retorna inmediatamente después de `MakeIndustryTileBigger`;
+            // una tesela que termina su obra en esta visita no puede animarse
+            // hasta una franja posterior.
+            if !was_completed {
+                return;
+            }
+            let one = [(coord, state.map.get(coord).unwrap_or(live_tile))];
+            if let Some(rng) = generation_rng.as_deref_mut() {
+                let _ = crate::map::industry_tile_anim::
+                    advance_industry_tile_loop_events_from_visits_with_rng(
+                        &mut state.map,
+                        tick,
+                        &one,
+                        rng,
+                    );
+            } else {
+                let _ =
+                    crate::map::industry_tile_anim::advance_industry_tile_loop_events_from_visits(
+                        &mut state.map,
+                        tick,
+                        &one,
+                    );
+            }
         }
         TileKind::Road => tile_loop_road(state, coord, tile),
-        // Casas, vías, estaciones, objetos y depósitos tienen callbacks de
-        // tile loop propios en OpenTTD. Para un mundo nuevo sus rutas de
-        // estado todavía no tienen una mutación equivalente; dejar explícito
-        // el no-op evita ejecutar lógica de economía del tick normal.
-        TileKind::House
-        | TileKind::Rail
+        // `TileLoop_Town` avanza la construcción y consume el mismo stream
+        // global cuando una casa terminada produce pasajeros/correo. La
+        // economía que actualiza estaciones queda fuera de esta cola: sólo
+        // se reproducen aquí los bytes de MAP3/MAP5 y las extracciones de
+        // `Random()` que pueden desplazar los callbacks siguientes.
+        TileKind::House => tile_loop_house(state, tick, coord, tile, generation_rng),
+        // Vías, estaciones, objetos y depósitos tienen callbacks de tile loop
+        // propios en OpenTTD. Para un mundo nuevo sus rutas de estado todavía
+        // no tienen una mutación equivalente; dejar explícito el no-op evita
+        // ejecutar lógica de economía del tick normal.
+        TileKind::Rail
         | TileKind::RoadDepot
         | TileKind::RailDepot
         | TileKind::ShipDepot
@@ -205,6 +266,94 @@ fn dispatch_generation_tile_loop_tile(
         | TileKind::Void
         | TileKind::Unknown(_) => {}
     }
+}
+
+/// Ejecuta la parte de `TileLoop_Town` observable durante la cola de arranque.
+///
+/// `OpenTTD` guarda el contador de construcción en los cinco bits bajos de
+/// `MAP5`: los tres inferiores son el contador y los bits 3–4 la etapa. Al
+/// terminar una obra escribe `MAP3` bit 7 y reinicia la edad (`MAP5 = 0`). Una
+/// casa multitesela se identifica por las flags de la tesela norte y avanza
+/// todas sus subteselas en una sola visita; las subteselas restantes tienen
+/// flags vacías y no vuelven a avanzar el conjunto.
+fn tile_loop_house(
+    state: &mut GameState,
+    tick: u64,
+    coord: TileCoord,
+    tile: Tile,
+    generation_rng: &mut Option<&mut Randomizer>,
+) {
+    let house_id = tile.m8 & 0x0FFF;
+    let Some(house) =
+        crate::house_spec::vanilla_or_newgrf_house(&state.house_spec_catalog, house_id)
+    else {
+        return;
+    };
+
+    // `NewHouseTileLoop` (CB21/CB22) may remove or replace a NewGRF house
+    // before construction. Until that callback has a stateful generation
+    // context, leaving the tile untouched is safer than consuming RNG or
+    // marking it completed with vanilla semantics.
+    if house_id >= crate::house_spec::NEW_HOUSE_OFFSET {
+        return;
+    }
+
+    if tile.m3 & 0x80 == 0 {
+        // Las subteselas de una casa multitesela llevan un `HouseID` propio
+        // pero su spec tiene flags vacías. OpenTTD sólo avanza el conjunto
+        // cuando visita la tesela norte (la que conserva las flags de la
+        // huella); avanzar una subtesela por separado terminaría la obra
+        // varias visitas antes que el original.
+        if house.building_flags() == 0 {
+            return;
+        }
+        for (dx, dy) in crate::house_spec::house_footprint_offsets(house.building_flags()) {
+            let part = TileCoord::new(coord.x + dx, coord.y + dy);
+            advance_house_construction_tile(&mut state.map, part);
+        }
+        return;
+    }
+
+    let Some(rng) = generation_rng.as_deref_mut() else {
+        return;
+    };
+    // `TileLoop_Town` tests the vanilla lift before taking the unconditional
+    // random value used by cargo generation. The result only registers an
+    // animated tile (not a raw map byte), but the draw must remain in order.
+    if house.building_flags() & crate::house_spec::BUILDING_FLAG_IS_ANIMATED != 0
+        && !crate::map::house_lift::lift_has_destination(tile)
+    {
+        let _ = rng.random_range(2);
+    }
+
+    // `r = Random()` siempre se extrae antes de la producción. El perfil de
+    // Nueva partida de OpenTTD usa `TCGM_BITCOUNT` por defecto: la producción
+    // sólo visita las dos especificaciones (pasajeros/correo) cuando los dos
+    // bits altos del contador de tick coinciden con los dos bits bajos de
+    // `TileIndex`. Esto también mantiene el stream exacto en la cola 0x500.
+    let _random = rng.next();
+    let tile_index = coord_to_linear_index(coord, state.map.dimensions().0).unwrap_or(0);
+    if ((tick >> 8) & 0x03) == u64::from(tile_index & 0x03) {
+        let _passengers = rng.next();
+        let _mail = rng.next();
+    }
+}
+
+fn advance_house_construction_tile(map: &mut crate::map::Map, coord: TileCoord) {
+    let Some(mut tile) = map.get(coord) else {
+        return;
+    };
+    if tile.kind != TileKind::House || tile.m3 & 0x80 != 0 {
+        return;
+    }
+
+    let next = (tile.m5 & 0x1F).wrapping_add(1) & 0x1F;
+    tile.m5 = (tile.m5 & !0x1F) | next;
+    if (tile.m5 >> 3) & 0x03 == 3 {
+        tile.m3 |= 0x80;
+        tile.m5 = 0;
+    }
+    let _ = map.set_tile(coord, tile);
 }
 
 /// Ejecuta la parte de `TileLoop_Road` que es observable durante la creación
@@ -537,6 +686,65 @@ mod tests {
         assert_eq!(reclaimed.kind, TileKind::Grass);
         assert_eq!(reclaimed.m5, crate::world_gen::clear_ground_m5(0, 2));
         assert_eq!(reclaimed.m3, 0);
+    }
+
+    #[test]
+    fn town_tile_loop_advances_multitile_construction_once_per_base_visit() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let base = TileCoord::new(1, 1);
+        let spec = crate::map::TownHouseSpec {
+            house_id: 20, // vanilla 2×2 stadium footprint
+            town_id: 0,
+            random_bits: 0,
+            construction_counter: 7,
+            construction_stage: 2,
+            is_protected: false,
+            processing_time: 0,
+        };
+        let offsets = [(0, 0, 20), (0, 1, 21), (1, 0, 22), (1, 1, 23)];
+        for (dx, dy, house_id) in offsets {
+            let tile =
+                crate::map::Tile::town_house(crate::map::TownHouseSpec { house_id, ..spec }, 0, 0);
+            map.set_tile(TileCoord::new(base.x + dx, base.y + dy), tile)
+                .unwrap();
+        }
+        let mut state = GameState::from_map(map);
+        let mut rng = Randomizer::new(1);
+        let mut generation_rng = Some(&mut rng);
+        let current = state.map.get(base).unwrap();
+
+        tile_loop_house(&mut state, 0, base, current, &mut generation_rng);
+
+        for (dx, dy, _) in offsets {
+            let tile = state
+                .map
+                .get(TileCoord::new(base.x + dx, base.y + dy))
+                .unwrap();
+            assert_ne!(tile.m3 & 0x80, 0);
+            assert_eq!(tile.m5, 0);
+        }
+        // Construction returns before the completed-house RNG path.
+        assert_eq!(rng, Randomizer::new(1));
+    }
+
+    #[test]
+    fn town_tile_loop_consumes_house_random_and_default_cargo_draws() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let coord = TileCoord::new(0, 0);
+        map.set_tile(coord, crate::map::Tile::completed_house(0, 0, 0))
+            .unwrap();
+        let mut state = GameState::from_map(map);
+        let mut actual = Randomizer::new(42);
+        let mut expected = actual;
+        let _ = expected.next();
+        let _ = expected.next();
+        let _ = expected.next();
+        let mut generation_rng = Some(&mut actual);
+        let current = state.map.get(coord).unwrap();
+
+        tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
+
+        assert_eq!(actual, expected);
     }
 
     #[test]

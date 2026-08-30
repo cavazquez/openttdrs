@@ -11,9 +11,10 @@ use openttdrs_core::world_raw::{
 };
 use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, TreePlacement, WorldGenConfig,
-    apply_clear_generation_with_rng, apply_landscape_with_rng, effective_snow_line_height,
-    generate_industries_with_rng, generate_objects_with_rng, generate_towns_with_rng,
-    generate_trees_with_rng_observer_with_map_settings, run_generation_tile_loops_with_rng,
+    apply_clear_generation_with_rng, apply_landscape_with_rng_and_cursor,
+    effective_snow_line_height, generate_industries_with_rng, generate_objects_with_rng,
+    generate_towns_with_rng, generate_trees_with_rng_observer_with_map_settings,
+    run_generation_tile_loops_with_rng,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -534,8 +535,8 @@ fn run(args: &Args) -> Result<(), String> {
             .ok()
             .and_then(|value| value.parse().ok())
             .unwrap_or(config.startup_rng_draws);
-        let mut generation_rng =
-            apply_landscape_with_rng(&mut map, &config, &[]).map_err(|error| {
+        let (mut generation_rng, landscape_tile_cursor) =
+            apply_landscape_with_rng_and_cursor(&mut map, &config, &[]).map_err(|error| {
                 format!("falló la generación {width}x{height}, seed={seed}: {error:?}")
             })?;
         if !matches!(args.generate_until, GenerateUntil::Landscape) {
@@ -555,6 +556,10 @@ fn run(args: &Args) -> Result<(), String> {
             .and_then(|value| value.parse::<u32>().ok())
             .unwrap_or(0);
         let mut state = GameState::from_map(map);
+        // `CreateRivers` deja el cursor LFSR avanzado; `GenerateClearTile`,
+        // pueblos, industrias, objetos y árboles no lo reinician antes de la
+        // cola de 0x500 `RunTileLoop`.
+        state.cur_tileloop_tile = landscape_tile_cursor;
         state.world_seed = seed;
         state.climate = climate;
         state.snow_line_height =
@@ -608,6 +613,15 @@ fn run(args: &Args) -> Result<(), String> {
                 state.construction.effective_map_height_limit(),
                 state.snow_line_height,
             );
+        }
+        // `GenerateWorld` inicializa los pools antes de entrar a la cola de
+        // `RunTileLoop`: `StartupEngines` toma una palabra para la semilla de
+        // disponibilidad y `StartupDisasters` otra para el retardo inicial.
+        // Ambas llamadas ocurren aun cuando el mapa no contenga vehículos o
+        // desastres visibles, por lo que deben conservarse en el stream global.
+        if matches!(args.generate_until, GenerateUntil::Startup) {
+            let _startup_engine_seed = generation_rng.next();
+            let _startup_disaster_delay = generation_rng.next();
         }
         // El RNG global que usa `RunTileLoop` es el mismo stream que dejó
         // `GenerateTrees`; reiniciar el estado a la semilla 1 aquí desfasaba

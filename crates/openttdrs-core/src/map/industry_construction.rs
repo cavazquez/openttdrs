@@ -47,7 +47,10 @@ pub fn make_industry_tile_bigger(m1: u8) -> u8 {
     }
     let stage = industry_construction_stage(m1) + 1;
     if stage >= INDUSTRY_CONSTRUCTION_COMPLETED {
-        m1 | 0x83
+        // OpenTTD llama a `SetIndustryConstructionCounter(tile, 0)` antes
+        // de escribir la etapa final y el bit de completado. No conserva los
+        // bits 2–3 del contador que provocó la transición.
+        (m1 & 0xF0) | 0x83
     } else {
         (m1 & 0xF0) | (stage & 0x03)
     }
@@ -275,6 +278,20 @@ fn advance_single_tile(map: &mut Map, coord: TileCoord, dirty: &mut Vec<TileCoor
     }
 }
 
+/// Avanza únicamente la tesela que recibió la visita de `RunTileLoop`.
+///
+/// `MakeIndustryTileBigger` no recorre el footprint: durante la cola de
+/// generación OpenTTD llama al callback por tesela y cada parte puede llevar
+/// un contador distinto según el orden LFSR. La simulación normal conserva la
+/// API de footprint sincronizado anterior; esta entrada separada evita usar
+/// ese atajo en el oráculo de nueva partida.
+pub fn advance_industry_construction_tile_loop_at(map: &mut Map, coord: TileCoord) -> bool {
+    let before = map.get(coord);
+    let mut dirty = Vec::new();
+    advance_single_tile(map, coord, &mut dirty);
+    before != map.get(coord)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -321,6 +338,24 @@ mod tests {
         assert_eq!(m1 & 0x0F, 0x04); // stage 0, counter 1
         let m1 = make_industry_tile_bigger(m1);
         assert_eq!(industry_construction_counter(m1), 2);
+    }
+
+    #[test]
+    fn construction_completion_resets_counter_bits() {
+        // Etapa 2, contador 3, con WaterClass=River: el siguiente paso
+        // completa la industria y debe dejar counter=0, no 3.
+        let m1 = set_water_class_m1(0x0E, WaterClass::River);
+        let completed = make_industry_tile_bigger(m1);
+        assert!(is_industry_completed(completed));
+        assert_eq!(
+            industry_construction_stage(completed),
+            INDUSTRY_CONSTRUCTION_COMPLETED
+        );
+        assert_eq!(industry_construction_counter(completed), 0);
+        assert_eq!(
+            crate::map::water_class_from_m1(completed),
+            WaterClass::River
+        );
     }
 
     #[test]

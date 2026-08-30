@@ -35,6 +35,8 @@ pub const GFX_OILWELL_ANIMATED_3: u16 = 32;
 pub const GFX_COPPER_MINE_TOWER_NOT_ANIMATED: u16 = 47;
 /// `GFX_COPPER_MINE_TOWER_ANIMATED`
 pub const GFX_COPPER_MINE_TOWER_ANIMATED: u16 = 48;
+/// `GFX_POWERPLANT_SPARKS` (sólo consume Chance16 en `TileLoop_Industry`).
+pub const GFX_POWERPLANT_SPARKS: u16 = 10;
 /// `GFX_GOLD_MINE_TOWER_NOT_ANIMATED`
 pub const GFX_GOLD_MINE_TOWER_NOT_ANIMATED: u16 = 79;
 /// `GFX_GOLD_MINE_TOWER_ANIMATED`
@@ -45,6 +47,8 @@ pub const GFX_PLASTIC_FOUNTAIN_ANIMATED_1: u16 = 148;
 pub const GFX_PLASTIC_FOUNTAIN_ANIMATED_8: u16 = 155;
 /// `GFX_BUBBLE_GENERATOR`: cada visita de TileLoop crea `EV_BUBBLE`.
 pub const GFX_BUBBLE_GENERATOR: u16 = 161;
+/// `GFX_SUGAR_MINE_SIEVE` (Chance16 en `TileLoop_Industry`).
+pub const GFX_SUGAR_MINE_SIEVE: u16 = 174;
 
 const TOWER_ANIM_GFX: [u16; 3] = [
     GFX_COAL_MINE_TOWER_ANIMATED,
@@ -143,6 +147,23 @@ fn ottd_chance_1_in_n(tick: u64, x: i32, y: i32, n: u64) -> bool {
         .wrapping_mul(31)
         .wrapping_add(tick.wrapping_mul(17));
     h.is_multiple_of(n)
+}
+
+/// `Chance16(a, b)` consumiendo una palabra del stream global de OpenTTD.
+///
+/// La comparación usa los 16 bits bajos y redondea el producto, igual que
+/// `Chance16I`; `RandomRange` no es intercambiable en los bordes.
+fn chance16_rng(
+    rng: &mut crate::cargodist::parity::Randomizer,
+    numerator: u32,
+    denominator: u32,
+) -> bool {
+    if denominator == 0 {
+        return false;
+    }
+    let random_low = u64::from(rng.next() & 0xFFFF);
+    let denominator = u64::from(denominator);
+    ((random_low * denominator + denominator / 2) >> 16) < u64::from(numerator)
 }
 
 /// `TileLoop_Industry`: pozo idle → animado (`Chance16(1, 6)`).
@@ -304,6 +325,117 @@ fn apply_tile_loop_industry(tile: &mut Tile, tick: u64, x: i32, y: i32) -> Indus
         return IndustryAnimUpdate::Visual;
     }
     IndustryAnimUpdate::None
+}
+
+/// Parte vanilla de `TileLoop_Industry` que depende del `_random` global.
+///
+/// La API de animación usada por la simulación conserva un fallback
+/// determinista para callers que no tienen el stream del juego. La generación
+/// de una partida nueva sí lo conserva y debe ejecutar cada `Chance16` en el
+/// mismo orden, además de escribir el frame en `MAP7` (`Tile::m7`).
+pub fn advance_industry_tile_loop_events_from_visits_with_rng(
+    map: &mut Map,
+    tick: u64,
+    visits: &[(TileCoord, Tile)],
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> Vec<TileCoord> {
+    let mut dirty = Vec::new();
+    for &(coord, snapshot) in visits {
+        if snapshot.kind != TileKind::Industry {
+            continue;
+        }
+        let Some(mut tile) = map.get(coord) else {
+            continue;
+        };
+        if tile.kind != TileKind::Industry || !is_industry_completed(&tile) {
+            continue;
+        }
+
+        // `TriggerIndustryTileAnimation(tile, TileLoop)` recibe `Random()`
+        // como argumento antes de comprobar si la spec tiene un callback.
+        // Incluso las teselas vanilla sin animación consumen esa palabra en
+        // OpenTTD; conservarla aquí evita desplazar el stream de árboles y
+        // casas posteriores.
+        let _tile_loop_random = rng.next();
+        let gfx = industry_gfx(&tile);
+        let mut changed = false;
+        match gfx {
+            GFX_OILWELL_NOT_ANIMATED => {
+                if chance16_rng(rng, 1, 6) {
+                    set_industry_gfx(&mut tile, GFX_OILWELL_ANIMATED_1);
+                    tile.m7 = 0;
+                    tile.m6 = (tile.m6 & !0x03) | 0x03;
+                    changed = true;
+                }
+            }
+            GFX_COAL_MINE_TOWER_NOT_ANIMATED
+            | GFX_COPPER_MINE_TOWER_NOT_ANIMATED
+            | GFX_GOLD_MINE_TOWER_NOT_ANIMATED
+                if tick & MINE_TOWER_QUIET_MASK == 0 =>
+            {
+                if chance16_rng(rng, 1, 2) {
+                    let active = match gfx {
+                        GFX_COAL_MINE_TOWER_NOT_ANIMATED => GFX_COAL_MINE_TOWER_ANIMATED,
+                        GFX_COPPER_MINE_TOWER_NOT_ANIMATED => GFX_COPPER_MINE_TOWER_ANIMATED,
+                        _ => GFX_GOLD_MINE_TOWER_ANIMATED,
+                    };
+                    set_industry_gfx(&mut tile, active);
+                    tile.m7 = 0x80;
+                    tile.m6 = (tile.m6 & !0x03) | 0x03;
+                    changed = true;
+                }
+            }
+            GFX_COAL_MINE_TOWER_ANIMATED
+            | GFX_COPPER_MINE_TOWER_ANIMATED
+            | GFX_GOLD_MINE_TOWER_ANIMATED
+                if tick & MINE_TOWER_QUIET_MASK == 0 =>
+            {
+                let idle = match gfx {
+                    GFX_COAL_MINE_TOWER_ANIMATED => GFX_COAL_MINE_TOWER_NOT_ANIMATED,
+                    GFX_COPPER_MINE_TOWER_ANIMATED => GFX_COPPER_MINE_TOWER_NOT_ANIMATED,
+                    _ => GFX_GOLD_MINE_TOWER_NOT_ANIMATED,
+                };
+                set_industry_gfx(&mut tile, idle);
+                tile.m1 = (tile.m1 & 0xFC) | 3;
+                // `DeleteAnimatedTile` marks the entry Deleted until the
+                // next animation sweep (MAP6 bits 0–1 = 1).
+                tile.m6 = (tile.m6 & !0x03) | 0x01;
+                changed = true;
+            }
+            GFX_POWERPLANT_SPARKS => {
+                // `TileLoopIndustry_PowerPlant`: cuando la tirada tiene
+                // éxito la tesela se registra en `AnimatedTileList`. MAP6
+                // conserva ese estado como `Animated` (bits 0..1 = 3), que
+                // debe sobrevivir al volcado raw aunque el efecto sonoro no
+                // se materialice en una generación headless.
+                if chance16_rng(rng, 1, 3) {
+                    tile.m6 = (tile.m6 & !0x03) | 0x03;
+                    changed = true;
+                }
+            }
+            GFX_SUGAR_MINE_SIEVE => {
+                // La criba de la azucarera usa el mismo contrato que las
+                // chispas de la central: una tirada exitosa añade la tesela
+                // a `AnimatedTileList` y escribe el estado `Animated`.
+                if chance16_rng(rng, 1, 3) {
+                    tile.m6 = (tile.m6 & !0x03) | 0x03;
+                    changed = true;
+                }
+            }
+            GFX_BUBBLE_GENERATOR => {
+                // `TileLoopIndustry_BubbleGenerator` chooses an effect
+                // direction with `Random() & 3`, even when audio/effects are
+                // unavailable in a headless generation run.
+                let _ = rng.next() & 3;
+            }
+            _ => {}
+        }
+
+        if changed && map.set_tile(coord, tile).is_ok() {
+            dirty.push(coord);
+        }
+    }
+    dirty
 }
 
 fn apply_animate_industry(tile: &mut Tile, tick: u64, x: i32, y: i32) -> IndustryAnimUpdate {
@@ -801,6 +933,28 @@ mod tests {
             }
         }
         assert!(promoted, "gfx 29 debe pasar a gfx 30 en tile loop");
+    }
+
+    #[test]
+    fn powerplant_sparks_register_animated_tile_on_success() {
+        let coord = TileCoord::new(0, 0);
+        let mut map = Map::new_flat(1, 1, 0);
+        map.set_tile(coord, industry_tile(GFX_POWERPLANT_SPARKS, 0x80, 0))
+            .unwrap();
+        // Las dos primeras palabras son la extracción incondicional de
+        // `TriggerIndustryTileAnimation` y `Chance16(1, 3)`. Este estado deja
+        // la segunda palabra por debajo del umbral y fuerza el camino que
+        // llama a `AddAnimatedTile`.
+        let mut rng = crate::cargodist::parity::Randomizer {
+            state: [0x3849_BDDF, 0x221D_69C1],
+        };
+        let visits = [(coord, map.get(coord).unwrap())];
+
+        let dirty =
+            advance_industry_tile_loop_events_from_visits_with_rng(&mut map, 0, &visits, &mut rng);
+
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(map.get(coord).unwrap().m6 & 0x03, 0x03);
     }
 
     #[test]

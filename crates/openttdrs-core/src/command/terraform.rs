@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::economy::{terraform_cost_per_corner, terraform_cost_per_corner_inflated};
 use crate::game_state::GameState;
-use crate::map::{Map, TileCoord, TileKind};
+use crate::map::{Map, TileCoord, TileKind, is_coast_tile};
 use crate::tile_slope_and_z;
 
 use super::error::CommandError;
@@ -151,7 +151,18 @@ impl<'a> TerraformModel<'a> {
             }
             if self.primary_tile.is_none() || self.primary_tile == Some(*c) {
                 let kind = self.map.get_kind(*c).unwrap_or(TileKind::Void);
-                if !is_source_terraformable(kind, self.allow_water_source) {
+                let source_ok = match kind {
+                    TileKind::Grass | TileKind::Forest => true,
+                    // OpenTTD treats a coast as clearable terrain during
+                    // autoslope/platform checks; plain water remains blocked
+                    // when `NoWater` is set.
+                    TileKind::Water if !self.allow_water_source => {
+                        self.map.get(*c).is_some_and(is_coast_tile)
+                    }
+                    TileKind::Water if self.allow_water_source => true,
+                    _ => false,
+                };
+                if !source_ok {
                     return Err(CommandError::TileNotTerraformable);
                 }
             }
@@ -176,11 +187,6 @@ impl<'a> TerraformModel<'a> {
         }
         Ok(())
     }
-}
-
-const fn is_source_terraformable(kind: TileKind, allow_water: bool) -> bool {
-    matches!(kind, TileKind::Grass | TileKind::Forest)
-        || (allow_water && matches!(kind, TileKind::Water))
 }
 
 struct TerraformResult {

@@ -10,7 +10,8 @@ use crate::game_state::GameState;
 use crate::industry::IndustrySpec;
 use crate::map::tree_tile_loop::{clear_ground_type, with_clear_counter};
 use crate::map::{
-    Map, Tile, TileCoord, TileKind, clear_neighbour_non_flooding_states, tile_slope_and_z,
+    Map, Tile, TileCoord, TileKind, clear_neighbour_non_flooding_states, is_coast_tile,
+    tile_slope_and_z,
 };
 use crate::world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW,
@@ -366,14 +367,12 @@ fn generated_industry_platform_is_valid(
             if current.height == target_height {
                 continue;
             }
-            if !generated_industry_can_terraform_surroundings(map, c, target_height, 0)
-                || simulate_generated_terraform_north_corner(
-                    map,
-                    c,
-                    current.height <= target_height,
-                )
-                .is_none()
-            {
+            let surroundings_ok =
+                generated_industry_can_terraform_surroundings(map, c, target_height, 0);
+            let terraform_ok =
+                simulate_generated_terraform_north_corner(map, c, current.height <= target_height)
+                    .is_some();
+            if !surroundings_ok || !terraform_ok {
                 return false;
             }
         }
@@ -387,7 +386,9 @@ fn clear_generated_industry_platform_tile(map: &mut Map, c: TileCoord) -> bool {
     let Some(mut tile) = map.get(c) else {
         return false;
     };
-    if !matches!(tile.kind, TileKind::Grass | TileKind::Forest) {
+    if !(matches!(tile.kind, TileKind::Grass | TileKind::Forest)
+        || tile.kind == TileKind::Water && is_coast_tile(tile))
+    {
         return false;
     }
     clear_neighbour_non_flooding_states(map, c);
@@ -558,14 +559,14 @@ fn try_place_industry(
         // `FindTownForIndustry`; no sustituirlos por una distancia genérica
         // evita descartar la mina nativa `(21,41)` de RMAP-061 y, a la vez,
         // rechaza la central demasiado cerca de ella en RMAP-062.
-        if generated_industry_has_conflict(ctx.state, origin, spec)
-            || !generated_industry_can_use_closest_town(
-                ctx.state,
-                origin,
-                spec,
-                ctx.multiple_industry_per_town,
-            )
-        {
+        let has_conflict = generated_industry_has_conflict(ctx.state, origin, spec);
+        let can_use_town = generated_industry_can_use_closest_town(
+            ctx.state,
+            origin,
+            spec,
+            ctx.multiple_industry_per_town,
+        );
+        if has_conflict || !can_use_town {
             continue;
         }
         // `EnsureNoVehicleOnGround` runs before the clear pass in
@@ -579,18 +580,19 @@ fn try_place_industry(
         if generated_industry_has_vehicle(ctx.state, &layout) {
             continue;
         }
-        if check_place_industry_spec_layout(&ctx.state.map, origin, spec, attempt.layout_index)
-            .is_err()
-        {
+        let clear_check =
+            check_place_industry_spec_layout(&ctx.state.map, origin, spec, attempt.layout_index);
+        if clear_check.is_err() {
             continue;
         }
-        if !generated_industry_platform_is_valid(
+        let platform_valid = generated_industry_platform_is_valid(
             &ctx.state.map,
             origin,
             spec,
             attempt.layout_index,
             ctx.industry_platform,
-        ) {
+        );
+        if !platform_valid {
             continue;
         }
         let Ok(layout_index) = u8::try_from(attempt.layout_index) else {
@@ -606,12 +608,11 @@ fn try_place_industry(
             continue;
         };
         let original_map = std::mem::replace(&mut ctx.state.map, leveled_map);
-        if apply_command(
+        let placement_result = apply_command(
             ctx.state,
             &Command::PlaceIndustrySpecLayout(origin, spec, layout_index),
-        )
-        .is_err()
-        {
+        );
+        if placement_result.is_err() {
             // The command layer is intentionally allowed to reject a stale
             // candidate (for example when a pool limit is reached). Restore
             // the pre-platform map just like OpenTTD's command transaction.
@@ -1132,7 +1133,7 @@ mod tests {
     use crate::vehicle::{Vehicle, VehicleKind};
     use crate::world_gen::{
         Climate, PopulationGenConfig, TerrainType, WorldGenConfig, apply_world_gen_with_rng,
-        generate_towns_with_rng,
+        generate_industries_with_rng, generate_towns_with_rng,
     };
 
     fn generated_towns_state_and_rng(seed: u64) -> (GameState, Randomizer) {
@@ -1627,6 +1628,63 @@ mod tests {
             3,
             1,
         ));
+    }
+
+    #[test]
+    fn arctic_industry_platform_clears_coast_before_the_next_rng_boundary() {
+        // Seed 1330935379 places Food Processing at (49,31). Its free
+        // platform raises the coastal slope to the east and clears the coast
+        // tile touched by the recursive north-corner terraform. Keeping that
+        // coast in the platform transaction is what preserves Paper Mill and
+        // every later force-one origin.
+        let seed = 1_330_935_379;
+        let mut map = Map::new_flat(64, 64, 0);
+        let config = WorldGenConfig::for_new_game(Climate::SubArctic, seed)
+            .with_terrain_type(TerrainType::Flat);
+        let mut rng = apply_world_gen_with_rng(&mut map, &config, &[])
+            .expect("arctic landscape and clear generation");
+        let mut state = GameState::from_map(map);
+        state.world_seed = seed;
+        state.climate = Climate::SubArctic;
+        state.snow_line_height = crate::world_gen::effective_snow_line_height(
+            &state.map,
+            state.climate,
+            config.snow_coverage,
+        );
+        let population = PopulationGenConfig {
+            seed,
+            ..PopulationGenConfig::default()
+        };
+        let _ = generate_towns_with_rng(&mut state, &population, &[], &mut rng);
+        let _ = generate_industries_with_rng(&mut state, &population, &[], &mut rng);
+
+        let origins: Vec<_> = state
+            .industries
+            .iter()
+            .map(|industry| (industry.spec, industry.pos))
+            .collect();
+        assert_eq!(
+            origins,
+            vec![
+                (Some(IndustrySpec::CoalMine), TileCoord::new(30, 53)),
+                (Some(IndustrySpec::PowerStation), TileCoord::new(13, 36)),
+                (Some(IndustrySpec::OilRefinery), TileCoord::new(20, 39)),
+                (Some(IndustrySpec::PrintingWorks), TileCoord::new(43, 41)),
+                (Some(IndustrySpec::Farm), TileCoord::new(16, 16)),
+                (Some(IndustrySpec::OilWells), TileCoord::new(46, 35)),
+                (
+                    Some(IndustrySpec::FoodProcessingPlant),
+                    TileCoord::new(49, 31)
+                ),
+                (Some(IndustrySpec::PaperMill), TileCoord::new(22, 10)),
+                (Some(IndustrySpec::GoldMine), TileCoord::new(5, 38)),
+                (Some(IndustrySpec::BankArcticTropic), TileCoord::new(26, 24)),
+            ]
+        );
+        assert_eq!(
+            state.map.get(TileCoord::new(55, 30)).map(|tile| tile.kind),
+            Some(TileKind::Grass)
+        );
     }
 
     #[test]

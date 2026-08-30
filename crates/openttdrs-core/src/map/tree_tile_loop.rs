@@ -9,12 +9,18 @@
 //! Campos (`CoalField`) siguen etapa 0…7 lineal.
 
 use crate::GameState;
+use crate::cargodist::parity::Randomizer;
+use crate::company::OWNER_NONE_M1;
 use crate::map::tile_loop::{MAP_TILE_LOOP_STRIDE, TileLoopState, collect_tile_loop_visits};
-use crate::map::water_class::{WaterClass, tile_has_water_class, water_class_from_m1};
-use crate::map::{Map, TileCoord, TileKind, coord_to_linear_index, tile_slope_and_z};
+use crate::map::water_class::{
+    WaterClass, is_coast_tile, set_water_class_m1, tile_has_water_class, water_class_from_m1,
+};
+use crate::map::water_flood::{DIR_OFFSETS, is_slope_one_corner_raised};
+use crate::map::{Map, Tile, TileCoord, TileKind, coord_to_linear_index, tile_slope_and_z};
 use crate::world_gen::{
-    CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-    CLEAR_GROUND_SNOW, Climate, DEF_SNOW_LINE_HEIGHT, clear_ground_m5, desert_patch,
+    CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY,
+    CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW, Climate, DEF_SNOW_LINE_HEIGHT, clear_ground_m5,
+    desert_patch,
 };
 
 /// OpenTTD `TILE_UPDATE_FREQUENCY`: ticks entre visitas a la misma tesela.
@@ -411,9 +417,199 @@ fn clear_dead_tree_tile(map: &mut Map, c: TileCoord, m2: u8) {
         }
         _ => (CLEAR_GROUND_GRASS, density), // Grass / Shore → hierba
     };
-    let _ = map.set_kind(c, TileKind::Grass);
-    let _ = map.set_mapt_m5(c, 0x00, clear_ground_m5(clear_ground, clear_density));
-    let _ = map.set_m2(c, 0);
+    let Some(previous) = map.get(c) else {
+        return;
+    };
+    // `MakeClear` resetea todos los planos auxiliares. Conservar `m1`/`m3`
+    // de MP_TREES deja una WaterClass inválida y un tipo de árbol visibles en
+    // el raw aunque la tesela ya sea `MP_CLEAR`.
+    let clear = Tile {
+        height: previous.height,
+        kind: TileKind::Grass,
+        // `SetTileType(MP_CLEAR)` sólo reemplaza el nibble alto: la zona
+        // tropical de `MAPT` sigue disponible para los callbacks posteriores.
+        mapt: previous.mapt & 0x0F,
+        m5: clear_ground_m5(clear_ground, clear_density),
+        m1: OWNER_NONE_M1,
+        m6: 0,
+        m8: 0,
+        m3: 0,
+        m2: 0,
+        m2_hi: 0,
+        m7: 0,
+        m3hi: 0,
+    };
+    let _ = map.set_tile(c, clear);
+}
+
+/// Ejecuta el subconjunto de `TileLoop_Trees` que corre durante
+/// `CreateRivers` en una partida temperate nueva.
+///
+/// La configuración inicial de OpenTTD usa `extra_tree_placement =
+/// ETP_SPREAD_ALL`; por eso las ramas de crecimiento pueden propagarse y,
+/// sobre todo, deben leer del `Random()` global. El tile loop normal conserva
+/// por ahora su RNG determinista independiente, porque no comparte el stream
+/// de construcción del mundo.
+pub(crate) fn process_generation_tree_growth_at(
+    map: &mut Map,
+    climate: Climate,
+    tick: u64,
+    rng: &mut Randomizer,
+    c: TileCoord,
+) {
+    debug_assert_eq!(climate, Climate::Temperate);
+    let Some(tile) = map.get(c) else {
+        return;
+    };
+    if tile.kind != TileKind::Forest {
+        return;
+    }
+
+    let cycle = landscape_tile_cycle(c, tick);
+    if cycle & 7 == 7 && tree_ground(tile.m2) == 0 {
+        let density = tree_ground_density(tile.m2);
+        if density < 3 {
+            let _ = map.set_m2(c, make_tree_m2(0, density + 1));
+        }
+    }
+    if cycle % TREE_UPDATE_FREQUENCY != TREE_UPDATE_FREQUENCY - 1 {
+        return;
+    }
+
+    step_one_generation_forest_tile(map, rng, c);
+}
+
+fn step_one_generation_forest_tile(map: &mut Map, rng: &mut Randomizer, c: TileCoord) {
+    let Some(tile) = map.get(c) else {
+        return;
+    };
+    if tile.kind != TileKind::Forest {
+        return;
+    }
+
+    let m5 = normalize_tree_growth(tile.m5);
+    if m5 != tile.m5 {
+        let _ = map.set_mapt_m5(c, tile.mapt, m5);
+    }
+    let growth = tree_or_field_stage(m5);
+    let count = tree_count(m5);
+    let tree_type = tile.m3;
+    let mapt = tile.mapt;
+
+    match growth {
+        TREE_GROWTH_GROWN => match rng.next() & 0x07 {
+            0 => {
+                let _ = map.set_mapt_m5(c, mapt, with_tree_or_field_stage(m5, growth + 1));
+            }
+            1 if count < 4 => {
+                let m5 = with_tree_count(m5, count);
+                let _ =
+                    map.set_mapt_m5(c, mapt, with_tree_or_field_stage(m5, TREE_GROWTH_GROWING1));
+            }
+            1 | 2 => {
+                let direction = (rng.next() & 0x07) as usize;
+                try_spread_generation_neighbor(map, c, tree_type, direction);
+            }
+            _ => {}
+        },
+        TREE_GROWTH_DEAD => {
+            if count > 1 {
+                let m5 = with_tree_count(m5, count.saturating_sub(2));
+                let _ = map.set_mapt_m5(c, mapt, with_tree_or_field_stage(m5, TREE_GROWTH_GROWN));
+            } else {
+                clear_dead_tree_tile(map, c, tile.m2);
+            }
+        }
+        g if g < TREE_GROWTH_GROWN || (TREE_GROWTH_GROWN < g && g < TREE_GROWTH_DEAD) => {
+            let _ = map.set_mapt_m5(c, mapt, with_tree_or_field_stage(m5, g + 1));
+        }
+        _ => {}
+    }
+}
+
+fn try_spread_generation_neighbor(map: &mut Map, c: TileCoord, tree_type: u8, direction: usize) {
+    let (dx, dy) = DIR_OFFSETS[direction];
+    let neighbour = TileCoord::new(c.x + dx, c.y + dy);
+    let Some(tile) = map.get(neighbour) else {
+        return;
+    };
+    if !generation_tree_plantable(map, neighbour, tile) {
+        return;
+    }
+    // OpenTTD evita replantar hierba recién despejada, pero deja que nieve y
+    // costas usen el constructor normal de árbol.
+    if tile.kind == TileKind::Grass
+        && clear_ground_type(tile.m5) == CLEAR_GROUND_GRASS
+        && tile.m3 & (1 << 4) == 0
+        && clear_density(tile.m5) != 3
+    {
+        return;
+    }
+    plant_generation_tree(map, neighbour, tile, tree_type);
+}
+
+fn generation_tree_plantable(map: &Map, c: TileCoord, tile: Tile) -> bool {
+    match tile.kind {
+        TileKind::Water => tile_slope_and_z(map, c)
+            .is_some_and(|(slope, _)| is_coast_tile(tile) && !is_slope_one_corner_raised(slope)),
+        TileKind::Grass => !matches!(
+            clear_ground_type(tile.m5),
+            CLEAR_GROUND_FIELDS | CLEAR_GROUND_ROCKY | CLEAR_GROUND_DESERT
+        ),
+        _ => false,
+    }
+}
+
+fn plant_generation_tree(map: &mut Map, c: TileCoord, previous: Tile, tree_type: u8) {
+    let (ground, density) = match previous.kind {
+        TileKind::Water => {
+            crate::map::water_flood::clear_neighbour_non_flooding_states(map, c);
+            (3, 3)
+        }
+        TileKind::Grass => {
+            let clear_ground = clear_ground_type(previous.m5);
+            let density = if clear_ground == CLEAR_GROUND_ROUGH {
+                3
+            } else {
+                clear_density(previous.m5)
+            };
+            let ground = if previous.m3 & (1 << 4) != 0 {
+                if clear_ground == CLEAR_GROUND_ROUGH {
+                    4
+                } else {
+                    2
+                }
+            } else {
+                match clear_ground {
+                    CLEAR_GROUND_GRASS => 0,
+                    CLEAR_GROUND_ROUGH => 1,
+                    _ => 2,
+                }
+            };
+            (ground, density)
+        }
+        _ => return,
+    };
+    let water_class = if ground == 3 {
+        WaterClass::Sea
+    } else {
+        WaterClass::Invalid
+    };
+    let tree = Tile {
+        height: previous.height,
+        kind: TileKind::Forest,
+        mapt: 0x40 | (previous.mapt & 0x0F),
+        m5: TREE_GROWTH_GROWING1,
+        m1: set_water_class_m1(OWNER_NONE_M1, water_class),
+        m6: previous.m6 & 0x03,
+        m8: 0,
+        m3: tree_type,
+        m2: make_tree_m2(ground, density),
+        m2_hi: 0,
+        m7: 0,
+        m3hi: 0,
+    };
+    let _ = map.set_tile(c, tree);
 }
 
 /// Zona trópica desierto (`GetTropicZone == Desert`), aproximada con `desert_patch`.
@@ -838,6 +1034,92 @@ mod tests {
         let mut loop_state = TileLoopState::default();
         grow_trees_at(&mut map, tick, 0, &mut loop_state);
         assert_eq!(map.get_kind(c), Some(TileKind::Grass));
+    }
+
+    #[test]
+    fn clearing_dead_tree_resets_make_clear_raw_planes() {
+        let mut map = Map::new_flat(2, 2, 7);
+        let c = TileCoord::new(0, 0);
+        let dirty_tree = Tile {
+            height: 7,
+            kind: TileKind::Forest,
+            mapt: 0x4F,
+            m5: TREE_GROWTH_DEAD,
+            m1: 0x70,
+            m6: 0xFF,
+            m8: 0xFFFF,
+            m3: 0xAA,
+            m2: make_tree_m2(0, 2),
+            m2_hi: 0xFF,
+            m7: 0xFF,
+            m3hi: 0xFF,
+        };
+        map.set_tile(c, dirty_tree).unwrap();
+
+        clear_dead_tree_tile(&mut map, c, dirty_tree.m2);
+
+        assert_eq!(
+            map.get(c),
+            Some(Tile {
+                height: 7,
+                kind: TileKind::Grass,
+                mapt: 0x0F,
+                m5: clear_ground_m5(CLEAR_GROUND_GRASS, 2),
+                m1: OWNER_NONE_M1,
+                m6: 0,
+                m8: 0,
+                m3: 0,
+                m2: 0,
+                m2_hi: 0,
+                m7: 0,
+                m3hi: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn generation_tree_loop_consumes_shared_rng_for_grown_tree() {
+        let mut map = Map::new_flat(32, 32, 0);
+        // 11 * 13 + 9 * 16 = 287, de modo que el árbol entra en el ciclo 15
+        // de `TileLoop_Trees` con `tick == 0`.
+        let c = TileCoord::new(13, 16);
+        force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
+        // `state[0] = 8` produce `Random() == 0`: la primera rama inicia la
+        // destrucción y consume exactamente una palabra del stream global.
+        let mut rng = Randomizer { state: [8, 1] };
+        let mut expected_rng = rng;
+        assert_eq!(expected_rng.next() & 7, 0);
+
+        process_generation_tree_growth_at(&mut map, Climate::Temperate, 0, &mut rng, c);
+
+        assert_eq!(
+            tree_or_field_stage(map.get(c).unwrap().m5),
+            TREE_GROWTH_GROWN + 1
+        );
+        assert_eq!(rng, expected_rng, "debe avanzar el RNG compartido una vez");
+    }
+
+    #[test]
+    fn generation_tree_spread_consumes_direction_from_shared_rng() {
+        let mut map = Map::new_flat(32, 32, 0);
+        let c = TileCoord::new(13, 16);
+        force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
+        let mut rng = Randomizer { state: [24, 1] };
+        let mut expected_rng = rng;
+        assert_eq!(expected_rng.next() & 7, 2);
+        let direction = (expected_rng.next() & 7) as usize;
+        let (dx, dy) = DIR_OFFSETS[direction];
+        let neighbour = TileCoord::new(c.x + dx, c.y + dy);
+        map.set_mapt_m5(neighbour, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
+            .unwrap();
+
+        process_generation_tree_growth_at(&mut map, Climate::Temperate, 0, &mut rng, c);
+
+        assert_eq!(rng, expected_rng, "spread debe consumir dos Random()");
+        let planted = map.get(neighbour).unwrap();
+        assert_eq!(planted.kind, TileKind::Forest);
+        assert_eq!(planted.m3, 0);
+        assert_eq!(planted.m5, TREE_GROWTH_GROWING1);
     }
 
     #[test]

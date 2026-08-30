@@ -8,6 +8,7 @@
 //! producción antes de tiempo.
 
 use crate::GameState;
+use crate::cargodist::parity::Randomizer;
 use crate::map::{Map, TileKind, collect_tile_loop_visits};
 
 /// Cantidad de pasadas que `CreateRivers` ejecuta tras ensanchar ríos.
@@ -27,6 +28,17 @@ pub const LANDSCAPE_RIVER_TILE_LOOP_PASSES: u64 = 256;
 /// El retorno es el número de teselas visitadas (útil para telemetría y
 /// pruebas de la secuencia LFSR).
 pub fn run_generation_tile_loop(state: &mut GameState, tick: u64) -> usize {
+    run_generation_tile_loop_impl(state, tick, None)
+}
+
+/// Variante interna de [`run_generation_tile_loop`] para la cola de
+/// `CreateRivers`. Sólo esa frontera tiene que conservar el stream global de
+/// `Random()` mientras los árboles de humedal ejecutan `TileLoop_Trees`.
+fn run_generation_tile_loop_impl(
+    state: &mut GameState,
+    tick: u64,
+    mut generation_rng: Option<&mut Randomizer>,
+) -> usize {
     let visits = collect_tile_loop_visits(&state.map, tick, &mut state.cur_tileloop_tile);
     let visit_count = visits.len();
 
@@ -39,6 +51,26 @@ pub fn run_generation_tile_loop(state: &mut GameState, tick: u64) -> usize {
             // TileLoop_Clear y TileLoop_Trees comparten el crecimiento de
             // hierba/campos y la actualización de árboles. El helper ya
             // vuelve a leer la tesela viva después de una transición desértica.
+            TileKind::Forest
+                if state.climate == crate::world_gen::Climate::Temperate
+                    && generation_rng.is_some() =>
+            {
+                // `TileLoop_Trees` delega primero una orilla a
+                // `TileLoop_Water`. El callback puede cambiar la tesela, por
+                // lo que el procesador de árbol la vuelve a leer del mapa.
+                if (tile.m2 >> 6) & 0x07 == 3 {
+                    crate::map::water_flood::tile_loop_water_at(state, *coord, tile);
+                }
+                if let Some(rng) = generation_rng.as_deref_mut() {
+                    crate::map::tree_tile_loop::process_generation_tree_growth_at(
+                        &mut state.map,
+                        state.climate,
+                        tick,
+                        rng,
+                        *coord,
+                    );
+                }
+            }
             TileKind::Grass | TileKind::Forest | TileKind::CoalField => {
                 crate::map::tree_tile_loop::process_tree_and_field_growth_from_visits(
                     &mut state.map,
@@ -125,6 +157,21 @@ pub fn run_landscape_river_tile_loops(
     climate: crate::world_gen::Climate,
     seed: u64,
 ) {
+    let mut rng = Randomizer::new(seed as u32);
+    run_landscape_river_tile_loops_with_rng(map, climate, seed, &mut rng);
+}
+
+/// Igual que [`run_landscape_river_tile_loops`], pero continúa el stream de
+/// generación que ya usaron terreno y ríos.
+///
+/// Es `pub(crate)` para que [`crate::world_gen::apply_landscape_with_rng`]
+/// no reinicie el RNG entre `CreateRivers` y `GenerateClearTile`.
+pub(crate) fn run_landscape_river_tile_loops_with_rng(
+    map: &mut Map,
+    climate: crate::world_gen::Climate,
+    seed: u64,
+    rng: &mut Randomizer,
+) {
     // Mover en vez de clonar evita duplicar un mapa de hasta 4096² teselas
     // durante su creación. El placeholder no se observa: se reemplaza por el
     // mapa generado antes de devolver.
@@ -136,7 +183,7 @@ pub fn run_landscape_river_tile_loops(
         // `CreateRivers` no incrementa `TimerGameTick::counter` dentro de
         // este bucle. Usar siempre cero conserva tanto el callback manual de
         // tile 0 como cualquier regla dependiente del tick.
-        run_generation_tile_loop(&mut state, 0);
+        run_generation_tile_loop_impl(&mut state, 0, Some(&mut *rng));
     }
     *map = state.map;
 }

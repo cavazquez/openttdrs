@@ -298,7 +298,16 @@ pub fn apply_landscape_with_rng(
     // agua que ya no puede seguir inundando (`MAP3` bit 0). Debe ocurrir antes
     // de `GenerateClearTile`, igual que en `GenerateLandscape` de OpenTTD.
     if config.amount_of_rivers != 0 {
-        run_landscape_river_tile_loops(map, config.climate, config.seed);
+        // Los callbacks de árboles que se ejecutan al terminar `CreateRivers`
+        // consumen `Random()` del mismo stream que continúa en
+        // `GenerateClearTile`. No se puede reconstruir desde `seed` sin
+        // desplazar toda la generación posterior.
+        tile_loop::run_landscape_river_tile_loops_with_rng(
+            map,
+            config.climate,
+            config.seed,
+            &mut rng,
+        );
     }
 
     Ok(rng)

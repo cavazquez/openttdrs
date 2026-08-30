@@ -1,5 +1,7 @@
 //! Colocación y crecimiento inicial de pueblos (`GenerateTowns` / `DoCreateTown`).
 
+use std::collections::HashSet;
+
 use super::{PopCtx, in_preserve};
 use crate::bridge_spec::{BridgeSpecDef, BridgeType, bridge_available_in, set_bridge_middle_mapt};
 use crate::company::OWNER_NONE_M1;
@@ -96,6 +98,12 @@ const TOWN_SURROUNDING_GOAL: usize = 12;
 const DEFAULT_LARGER_TOWNS_INTERVAL: u32 = 4;
 /// Último intento de `GenerateTowns` cuando no se pudo crear ninguno.
 const RANDOM_TOWN_FALLBACK_ATTEMPTS: usize = 10_000;
+/// `GenerateTownName` limita cada intento a mil palabras del generador.
+const GENERATED_TOWN_NAME_ATTEMPTS: usize = 1_000;
+/// `MAX_LENGTH_TOWN_NAME_CHARS` rechaza nombres con 32 o más caracteres.
+const MAX_GENERATED_TOWN_NAME_CHARS: usize = 32;
+/// Valor vanilla de `game_creation.town_name` en una partida nueva (inglés).
+const DEFAULT_GENERATED_TOWN_NAME_LANGUAGE: u16 = 0;
 const SPIRAL_DIRS: [(i32, i32); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
 /// Direcciones de `GetClosestWaterDistance`, que recorre rombos Manhattan.
 const WATER_DISTANCE_DIAMOND_DIRS: [(i32, i32); 4] = [(-1, 1), (1, 1), (1, -1), (-1, -1)];
@@ -173,16 +181,26 @@ pub(super) fn place_towns(
     // pueblo. El constructor que sigue conserva el mismo stream durante
     // `DoCreateTown`, incluidos sus intentos de crecimiento inicial.
     let city_random_offset = ctx.rng.next() % DEFAULT_LARGER_TOWNS_INTERVAL;
-
+    // El conjunto nativo se rellena antes del primer intento y reserva el
+    // nombre aunque `CreateRandomTown` no consiga una fundación. Sin esta
+    // frontera, un nombre repetido consume una sola palabra en Rust mientras
+    // que OpenTTD sigue llamando `Random()` hasta encontrar uno válido.
+    let mut town_names: HashSet<String> = ctx
+        .state
+        .towns
+        .iter()
+        .map(|town| town.name.clone())
+        .collect();
     for _ in 0..target {
         let is_city = (city_random_offset
             .saturating_add(u32::try_from(town_centers.len().saturating_sub(before)).unwrap_or(0)))
             % DEFAULT_LARGER_TOWNS_INTERVAL
             == 0;
-        // En el set vanilla de nombres `GenerateTownName` obtiene su parte
-        // determinista de un único `Random()`. La comprobación de nombres
-        // únicos queda pendiente junto con el modelo de crecimiento.
-        let name_seed = ctx.rng.next();
+        // `GenerateTownName` puede consumir hasta mil palabras si el nombre
+        // es demasiado largo o ya fue reservado por otro pueblo.
+        let Some(name_seed) = next_unique_town_name_seed(ctx.rng, &mut town_names) else {
+            continue;
+        };
         let _ = try_build_random_town_with_generated_growth(
             ctx,
             town_centers,
@@ -196,16 +214,48 @@ pub(super) fn place_towns(
     // ninguno. Es importante para mapas pequeños e islas: el total inicial es
     // una sugerencia, no una garantía de que los 20 intentos alcancen tierra.
     if town_centers.len() == before {
-        let name_seed = ctx.rng.next();
-        let _ = try_build_random_town_with_generated_growth(
-            ctx,
-            town_centers,
-            name_seed,
-            true,
-            RANDOM_TOWN_FALLBACK_ATTEMPTS,
-        );
+        // Vanilla descarta el conjunto temporal antes del intento agresivo:
+        // aquí sólo deben bloquearse nombres de pueblos que sí sobrevivieron
+        // a `CreateRandomTown`.
+        town_names.clear();
+        town_names.extend(ctx.state.towns.iter().map(|town| town.name.clone()));
+        if let Some(name_seed) = next_unique_town_name_seed(ctx.rng, &mut town_names) {
+            let _ = try_build_random_town_with_generated_growth(
+                ctx,
+                town_centers,
+                name_seed,
+                true,
+                RANDOM_TOWN_FALLBACK_ATTEMPTS,
+            );
+        }
     }
     town_centers.len().saturating_sub(before)
+}
+
+/// Devuelve la próxima palabra que `GenerateTownName` aceptaría.
+///
+/// La reserva se hace antes de intentar `CreateRandomTown`, igual que el
+/// `TownNames` temporal de `GenerateTowns`: una fundación que luego se borra
+/// no libera el nombre dentro de la primera pasada. `HashSet<String>` modela
+/// la comparación del nombre renderizado, ya que varios seeds pueden generar
+/// la misma ciudad.
+fn next_unique_town_name_seed(
+    rng: &mut crate::cargodist::parity::Randomizer,
+    town_names: &mut HashSet<String>,
+) -> Option<u32> {
+    for _ in 0..GENERATED_TOWN_NAME_ATTEMPTS {
+        let seed = rng.next();
+        let Some(name) = generate_town_name(DEFAULT_GENERATED_TOWN_NAME_LANGUAGE, seed) else {
+            continue;
+        };
+        if name.chars().count() >= MAX_GENERATED_TOWN_NAME_CHARS {
+            continue;
+        }
+        if town_names.insert(name) {
+            return Some(seed);
+        }
+    }
+    None
 }
 
 /// Recorre los intentos de `CreateRandomTown`.
@@ -248,7 +298,7 @@ fn build_selected_town_with_generated_growth(
     name_seed: u32,
     is_city: bool,
 ) -> bool {
-    let name = generate_town_name(4, name_seed)
+    let name = generate_town_name(DEFAULT_GENERATED_TOWN_NAME_LANGUAGE, name_seed)
         .unwrap_or_else(|| format!("Pueblo {},{}", center.x, center.y));
     let mut town = Town {
         id: u32::try_from(ctx.state.towns.len()).unwrap_or(u32::MAX),
@@ -267,7 +317,6 @@ fn build_selected_town_with_generated_growth(
     let temporary_house_budget = initial_town_house_budget(ctx.rng, is_city);
     town.num_houses = u16::try_from(temporary_house_budget).unwrap_or(u16::MAX);
     update_town_radius(&mut town);
-
     // `CMD_DELETE_TOWN` revierte una fundación sin población. El generador no
     // publica el pueblo hasta el final, así que basta conservar una copia del
     // mapa; deliberadamente no se revierte el RNG porque OpenTTD ya consumió
@@ -858,16 +907,58 @@ fn clear_generated_town_terraform_tile(map: &mut crate::map::Map, tile: TileCoor
     map.set_tile(tile, entry).is_ok()
 }
 
+/// Despeje de una boca de túnel municipal.
+///
+/// `CmdBuildTunnel` puede arrancar sobre una carretera de `OWNER_TOWN` que el
+/// caminador acaba de crear. `ClearTile_Road` retira esa calle bajo `Auto`,
+/// mientras que el despeje usado por `TerraformTownTile` debe seguir
+/// rechazando infraestructura. Mantener esta variante separada conserva
+/// ambas semánticas y los efectos laterales sobre el agua vecina.
+fn clear_generated_town_tunnel_endpoint(map: &mut crate::map::Map, tile: TileCoord) -> bool {
+    let Some(mut entry) = map.get(tile) else {
+        return false;
+    };
+    if entry.kind == TileKind::Void {
+        return true;
+    }
+    let municipal_road = entry.kind == TileKind::Road
+        && entry.m1 == crate::company::OWNER_TOWN_M1
+        && entry.m3 == TOWN_ROAD_NO_TRAM_OWNER
+        && entry.m8 == TOWN_ROAD_INVALID_TRAM_TYPE
+        && crate::road_type::tram_track_bits(&entry) == 0;
+    if !(matches!(entry.kind, TileKind::Grass | TileKind::Forest)
+        || entry.kind == TileKind::Water && is_coast_tile(entry)
+        || municipal_road)
+    {
+        return false;
+    }
+
+    clear_neighbour_non_flooding_states(map, tile);
+    entry.kind = TileKind::Grass;
+    entry.mapt &= 0x0F;
+    entry.m1 = OWNER_NONE_M1;
+    entry.m2 = 0;
+    entry.m2_hi = 0;
+    entry.m3 = 0;
+    entry.m3hi = 0;
+    entry.m5 = clear_ground_m5(CLEAR_GROUND_GRASS, 3);
+    entry.m6 = 0;
+    entry.m7 = 0;
+    entry.m8 = 0;
+    map.set_tile(tile, entry).is_ok()
+}
+
 /// Intenta una alternativa de `TerraformTownTile` en un modelo atómico antes
 /// de materializarla. Además de propagar las alturas, reproduce el límite de
 /// coste y el `DoClearSquare` de `CmdTerraformLand`: sin ambos, una fundación
 /// urbana puede aceptarse de más o dejar residuos de clear/costa que cambian
 /// los bytes del mapa y la secuencia posterior.
-fn try_level_generated_town_land(
+fn try_generated_town_terraform(
     map: &mut crate::map::Map,
     tile: TileCoord,
     corners: u8,
     raise: bool,
+    enforce_cost_limit: bool,
 ) -> bool {
     let mut state = GeneratedTownTerraformState::default();
     for corner in [
@@ -902,7 +993,7 @@ fn try_level_generated_town_land(
     let Some(total_cost) = generated_town_terraform_cost(map, &state) else {
         return false;
     };
-    if total_cost >= GENERATED_TOWN_TERRAFORM_COST_LIMIT {
+    if enforce_cost_limit && total_cost >= GENERATED_TOWN_TERRAFORM_COST_LIMIT {
         return false;
     }
     if !state
@@ -919,6 +1010,28 @@ fn try_level_generated_town_land(
         }
     }
     true
+}
+
+fn try_level_generated_town_land(
+    map: &mut crate::map::Map,
+    tile: TileCoord,
+    corners: u8,
+    raise: bool,
+) -> bool {
+    try_generated_town_terraform(map, tile, corners, raise, true)
+}
+
+/// `CmdBuildTunnel` invoca `CMD_TERRAFORM_LAND` directamente y no pasa por el
+/// límite reducido de `TerraformTownTile`. Una boca en una ladera pronunciada
+/// puede propagar el ajuste a más de ocho vértices; el coste se valida para
+/// que no falle el comando, pero no se usa como umbral de rechazo.
+fn try_level_generated_tunnel_land(
+    map: &mut crate::map::Map,
+    tile: TileCoord,
+    corners: u8,
+    raise: bool,
+) -> bool {
+    try_generated_town_terraform(map, tile, corners, raise, false)
 }
 
 /// Subconjunto ejecutable de `LevelTownLand` para la fundación de un pueblo.
@@ -1019,15 +1132,172 @@ fn generated_town_road_can_continue_after_bridge(
     };
     match tile.kind {
         TileKind::Grass | TileKind::Forest => true,
-        TileKind::Road => generated_town_road_bits(map, next) != 0,
         TileKind::RoadBridge | TileKind::RoadTunnel => {
             tile.m5 & 0x0C == 0x04 && tile.m5 & 0x03 == direction
         }
         // `CMD_BUILD_ROAD(NoWater)` puede proseguir por una costa, pero no
         // sobre agua real. Es la misma distinción que `IsRoadAllowedHere`.
         TileKind::Water => !has_tile_water_ground(tile),
+        // `CanRoadContinueIntoNextTile` accepts an `MP_ROAD` tile only when it
+        // is a depot facing the bridge direction. Procedural town growth has
+        // no depots at this point, so normal roads and all other tile kinds
+        // stop the preflight instead of consuming bridge/tunnel draws.
         _ => false,
     }
+}
+
+/// Preflight de `GrowTownWithTunnel` para la carretera municipal.
+///
+/// `OpenTTD` no consume RNG al decidir un túnel: primero comprueba la pendiente
+/// y la continuación, busca la primera tesela al mismo nivel y recién después
+/// ejecuta `CMD_BUILD_TUNNEL`. Mantener esa frontera sin sorteos es importante
+/// porque un túnel que no se puede materializar debe dejar que la llamada siga
+/// por `GrowTownWithRoad` con exactamente el mismo estado aleatorio.
+fn generated_town_road_tunnel_end(
+    map: &crate::map::Map,
+    start: TileCoord,
+    direction: u8,
+    population: u32,
+) -> Option<TileCoord> {
+    let (start_slope, start_z) = tile_slope_and_z(map, start)?;
+    if start_slope != generated_town_inclined_slope(direction) {
+        return None;
+    }
+
+    let source = add_town_diag(start, reverse_town_diag_dir(direction));
+    if generated_town_road_bits(map, source) & town_diag_dir_to_road_bits(direction) == 0 {
+        return None;
+    }
+
+    // La primera rama de la referencia distingue entre un túnel bajo una
+    // montaña continua y un túnel corto bajo una obstrucción. En ambos casos
+    // `CanRoadContinueIntoNextTile` es una consulta sin RNG.
+    let continues_at_start = generated_town_road_can_continue_after_bridge(map, start, direction);
+    let max_length = if continues_at_start {
+        for offset in 0..4_i32 {
+            let tile = TileCoord::new(
+                start.x + crate::map::diag_dir_offset(direction).0 * offset,
+                start.y + crate::map::diag_dir_offset(direction).1 * offset,
+            );
+            let slope = tile_slope_and_z(map, tile)?.0;
+            let one_corner_raised = matches!(
+                slope & 0x0F,
+                SLOPE_CORNER_W | SLOPE_CORNER_S | SLOPE_CORNER_E | SLOPE_CORNER_N
+            ) && slope & SLOPE_STEEP == 0;
+            if slope != generated_town_inclined_slope(direction)
+                && slope & SLOPE_STEEP == 0
+                && !one_corner_raised
+            {
+                return None;
+            }
+        }
+        usize::try_from(population / 1_000)
+            .unwrap_or(usize::MAX)
+            .saturating_add(GENERATED_TOWN_FLAT_BRIDGE_LENGTH_CAP)
+    } else {
+        5
+    };
+
+    let (dx, dy) = crate::map::diag_dir_offset(direction);
+    let mut tunnel_length = 0_usize;
+    let mut end = start;
+    loop {
+        if tunnel_length >= max_length {
+            return None;
+        }
+        tunnel_length = tunnel_length.saturating_add(1);
+        end = TileCoord::new(end.x + dx, end.y + dy);
+        let (_, end_z) = tile_slope_and_z(map, end)?;
+        if end_z == start_z {
+            break;
+        }
+    }
+
+    if tunnel_length == 1 || !generated_town_road_can_continue_after_bridge(map, end, direction) {
+        return None;
+    }
+
+    // `CMD_BUILD_TUNNEL` limpia sólo las dos bocas. En la generación de
+    // pueblos esas teselas deben ser clear/trees (agua real y objetos se
+    // rechazan con `NoWater`); el interior queda intacto bajo la montaña.
+    let endpoint_clearable = |tile: TileCoord| {
+        map.get(tile).is_some_and(|tile| {
+            (matches!(tile.kind, TileKind::Grass | TileKind::Forest)
+                && !has_tile_water_ground(tile))
+                || (tile.kind == TileKind::Road
+                    && tile.m1 == crate::company::OWNER_TOWN_M1
+                    && tile.m3 == TOWN_ROAD_NO_TRAM_OWNER
+                    && tile.m8 == TOWN_ROAD_INVALID_TRAM_TYPE
+                    && crate::road_type::tram_track_bits(&tile) == 0)
+        })
+    };
+    endpoint_clearable(start)
+        .then_some(end)
+        .filter(|_| endpoint_clearable(end))
+}
+
+/// Escribe `MakeRoadTunnel` para las dos bocas de un túnel municipal.
+///
+/// `MakeRoadTunnel` usa `MAPT=0x90`, el dueño de carretera en `MAP7` (la
+/// representación no-normal de `SetRoadOwner`) y `INVALID_ROADTYPE` en la
+/// capa de tranvía. Las teselas interiores no se modifican: `OpenTTD` sólo
+/// persiste las dos entradas y reconstruye el tramo a partir de ellas.
+fn materialize_generated_town_road_tunnel(
+    map: &mut crate::map::Map,
+    start: TileCoord,
+    end: TileCoord,
+    direction: u8,
+) -> bool {
+    let Some((start_slope, _)) = tile_slope_and_z(map, start) else {
+        return false;
+    };
+    let Some((end_slope, _)) = tile_slope_and_z(map, end) else {
+        return false;
+    };
+
+    // `CMD_BUILD_TUNNEL` despeja las dos bocas antes de escribirlas. Esto no
+    // cambia la geometría, pero sí reinicia los bytes de clear y sus vecinos
+    // de agua; hacerlo antes de la terraformación conserva esos efectos.
+    if !clear_generated_town_tunnel_endpoint(map, start)
+        || !clear_generated_town_tunnel_endpoint(map, end)
+    {
+        return false;
+    }
+
+    // Si la pendiente opuesta no es complementaria, OpenTTD excava la boca
+    // final con `CMD_TERRAFORM_LAND(end_tileh & start_tileh, false)`. La
+    // rutina de terraformación ya implementa la recursión, los tiles sucios,
+    // el coste y la limpieza atómica usados por LevelTownLand.
+    if complement_slope(start_slope) != end_slope {
+        let edges = end_slope & start_slope & SLOPE_CORNER_MASK;
+        if edges == 0 || !try_level_generated_tunnel_land(map, end, edges, false) {
+            return false;
+        }
+    }
+
+    for (coord, portal_direction) in [
+        (start, direction & 3),
+        (end, reverse_town_diag_dir(direction)),
+    ] {
+        let Some(mut tile) = map.get(coord) else {
+            return false;
+        };
+        tile.kind = TileKind::RoadTunnel;
+        tile.mapt = (tile.mapt & 0x0F) | 0x90;
+        tile.m1 = crate::company::OWNER_TOWN_M1;
+        tile.m2 = 0;
+        tile.m2_hi = 0;
+        tile.m3 = 0;
+        tile.m3hi = 0;
+        tile.m5 = 0x04 | portal_direction;
+        tile.m6 = 0;
+        tile.m7 = crate::company::OWNER_TOWN_M1;
+        tile.m8 = TOWN_ROAD_INVALID_TRAM_TYPE;
+        if map.set_tile(coord, tile).is_err() {
+            return false;
+        }
+    }
+    true
 }
 
 /// Genera todas las teselas de un puente recto sin depender del índice lineal
@@ -1075,9 +1345,16 @@ fn generated_town_road_bridge_command_supported(
     let (Some(start_tile), Some(end_tile)) = (map.get(start), map.get(end)) else {
         return false;
     };
-    if !matches!(start_tile.kind, TileKind::Grass | TileKind::Forest)
-        || !matches!(end_tile.kind, TileKind::Grass | TileKind::Forest)
-    {
+    // `CMD_BUILD_BRIDGE` puede usar una costa como rampa: el comando limpia
+    // ese `MP_WATER` durante el pase Execute y luego escribe
+    // `MakeRoadBridgeRamp`. Excluirla aquí hacía que el walker consumiera los
+    // 23 sorteos de tipo y volviera a una calle normal, a diferencia del
+    // oráculo que acepta el primer puente válido.
+    let ramp_clearable = |tile: crate::map::Tile| {
+        matches!(tile.kind, TileKind::Grass | TileKind::Forest)
+            || (tile.kind == TileKind::Water && is_coast_tile(tile))
+    };
+    if !ramp_clearable(start_tile) || !ramp_clearable(end_tile) {
         return false;
     }
     let Some((start_slope, start_z)) = tile_slope_and_z(map, start) else {
@@ -1302,7 +1579,9 @@ fn grow_generated_town_road_in_tile(
         // no pueda continuar más lejos.
         let rcmd = town_diag_dir_to_road_bits(target_dir) | town_diag_dir_to_road_bits(source_dir);
         let continuation = add_town_diag(tile, target_dir);
-        if !generated_town_road_allowed_here(map, town, continuation, target_dir, rng) {
+        let continuation_allowed =
+            generated_town_road_allowed_here(map, town, continuation, target_dir, rng);
+        if !continuation_allowed {
             if target_dir != reverse_town_diag_dir(source_dir) {
                 return GeneratedRoadGrowthResult::SearchStopped;
             }
@@ -1326,6 +1605,11 @@ fn grow_generated_town_road_in_tile(
             context,
             rng,
         ) {
+            return GeneratedRoadGrowthResult::Road(tile);
+        }
+        if let Some(end) = generated_town_road_tunnel_end(map, tile, target_dir, town.population)
+            && materialize_generated_town_road_tunnel(map, tile, end, target_dir)
+        {
             return GeneratedRoadGrowthResult::Road(tile);
         }
         if write_generated_town_road_to_map(map, tile, rcmd, town.id) {
@@ -1386,8 +1670,9 @@ fn grow_generated_town_road_in_tile(
     // puede seguir, o siempre si `IsRoadAllowedHere` la rechaza. La esquina
     // de una curva no tiene target vial y mantiene `allow_house = true`.
     let allow_house = road_target_dir.is_none_or(|road_target_dir| {
-        !generated_town_road_allowed_here(map, town, house_tile, road_target_dir, rng)
-            || chance16(rng, 6, 10)
+        let allowed = generated_town_road_allowed_here(map, town, house_tile, road_target_dir, rng);
+        let chance = if allowed { chance16(rng, 6, 10) } else { false };
+        !allowed || chance
     });
     if allow_house {
         // La rama C++ no nivela ni llama `TryBuildTownHouse` sobre una casa
@@ -1432,6 +1717,11 @@ fn grow_generated_town_road_in_tile(
     ) {
         return GeneratedRoadGrowthResult::Road(tile);
     }
+    if let Some(end) = generated_town_road_tunnel_end(map, tile, target_dir, town.population)
+        && materialize_generated_town_road_tunnel(map, tile, end, target_dir)
+    {
+        return GeneratedRoadGrowthResult::Road(tile);
+    }
     if add_generated_town_road_bits_to_map(map, tile, rcmd, town.id) {
         GeneratedRoadGrowthResult::Road(tile)
     } else {
@@ -1453,7 +1743,8 @@ fn grow_generated_town_road_once(
 ) -> Option<TileCoord> {
     let mut tile = town.pos;
     for &(dx, dy) in &TOWN_GROWTH_COORD_MOD {
-        if generated_town_road_bits(map, tile) != 0 {
+        let bits = generated_town_road_bits(map, tile);
+        if bits != 0 {
             return grow_generated_town_at_road(map, town, tile, context, rng);
         }
         tile = TileCoord::new(tile.x + dx, tile.y + dy);
@@ -1866,10 +2157,12 @@ fn is_flat_clear_or_tree(map: &crate::map::Map, tile: TileCoord) -> bool {
 fn is_clear_or_tree_not_rough(map: &crate::map::Map, tile: TileCoord) -> bool {
     map.get(tile).is_some_and(|candidate| match candidate.kind {
         TileKind::Grass => clear_ground_type(candidate.m5) != CLEAR_GROUND_ROUGH,
-        // Los árboles se crean después de pueblos en genworld. El subtipo de
-        // suelo de árbol aún no se necesita para las fixtures, pero permitir
-        // bosque aquí conserva la misma clase de terreno del chequeo nativo.
-        TileKind::Forest => true,
+        // `TownCanBePlacedHere` excluye los árboles sobre suelo rough
+        // (`GetTreeGround() == TREE_GROUND_ROUGH`) del cuadro 5×5. El ground
+        // vive en MAP2 bits 6..8; aceptar cualquier bosque hacía que una
+        // fundación posterior consumiera el mismo RNG pero eligiera otro
+        // sitio cuando el primer candidato tocaba humedales.
+        TileKind::Forest => ((candidate.m2 >> 6) & 0x07) != 1,
         _ => false,
     })
 }
@@ -2090,15 +2383,24 @@ fn write_generated_town_road_to_map(
     let Some(mut tile) = map.get(coord) else {
         return false;
     };
-    let existing = if tile.kind == TileKind::Road {
-        tile.m5 & 0x0F
-    } else {
+    let replacing_non_road = tile.kind != TileKind::Road;
+    let existing = if replacing_non_road {
         0
+    } else {
+        tile.m5 & 0x0F
     };
     let Some(pieces) = normalize_generated_town_road_command_bits(map, coord, road_bits, existing)
     else {
         return false;
     };
+    if replacing_non_road {
+        // `CMD_BUILD_ROAD` primero ejecuta `CMD_LANDSCAPE_CLEAR` sobre una
+        // tesela de terreno. `ClearTile_Clear` termina en `DoClearSquare`,
+        // que limpia el bit non-flooding de las ocho aguas vecinas aun cuando
+        // la calle reemplaza inmediatamente el terreno. La escritura directa
+        // debe conservar ese efecto lateral para costas generadas.
+        clear_neighbour_non_flooding_states(map, coord);
+    }
     let town = u16::try_from(town_id).unwrap_or(u16::MAX).to_le_bytes();
     tile.kind = TileKind::Road;
     tile.mapt = 0x20;
@@ -3812,6 +4114,77 @@ mod tests {
         assert_eq!(state.map.get(start).expect("start ramp").m5, 0x84);
         assert_eq!(state.map.get(end).expect("sloped end ramp").m5, 0x86);
         assert_eq!(tile_slope_and_z(&state.map, end), Some((SLOPE_CORNER_N, 1)));
+    }
+
+    #[test]
+    fn town_tunnel_clears_municipal_start_and_levels_steep_exit() {
+        let mut map = Map::new_flat(16, 16, 1);
+        let direction = 1;
+        let source = TileCoord::new(5, 4);
+        let start = TileCoord::new(5, 5);
+        let end = TileCoord::new(5, 9);
+
+        assert!(write_generated_town_road_to_map(
+            &mut map,
+            source,
+            town_diag_dir_to_road_bits(direction),
+            0,
+        ));
+        assert!(write_generated_town_road_to_map(
+            &mut map,
+            start,
+            ROAD_BITS_AXIS_Y,
+            0,
+        ));
+
+        // Start slope SE (6), three steep mountain tiles, then an exit with
+        // the native 0x1B slope. The tunnel command lowers the shared S
+        // corner of the exit before writing either portal.
+        for (vertex, height) in [
+            (TileCoord::new(5, 6), 2),
+            (TileCoord::new(6, 6), 2),
+            (TileCoord::new(6, 7), 4),
+            (TileCoord::new(5, 7), 2),
+            (TileCoord::new(6, 8), 4),
+            (TileCoord::new(5, 8), 2),
+            (TileCoord::new(6, 9), 3),
+            (TileCoord::new(5, 9), 3),
+            (TileCoord::new(6, 10), 3),
+        ] {
+            map.set_height(vertex, height).expect("terrain vertex");
+        }
+        assert_eq!(tile_slope_and_z(&map, start), Some((SLOPE_SE, 1)));
+        assert_eq!(tile_slope_and_z(&map, end), Some((0x1B, 1)));
+        assert_eq!(
+            generated_town_road_tunnel_end(&map, start, direction, 0),
+            Some(end)
+        );
+
+        assert!(materialize_generated_town_road_tunnel(
+            &mut map, start, end, direction
+        ));
+
+        let start_portal = map.get(start).expect("start portal");
+        assert_eq!(start_portal.kind, TileKind::RoadTunnel);
+        assert_eq!(start_portal.mapt, 0x90);
+        assert_eq!(start_portal.m5, 0x05);
+        assert_eq!(start_portal.m1, crate::company::OWNER_TOWN_M1);
+        assert_eq!(start_portal.m7, crate::company::OWNER_TOWN_M1);
+        assert_eq!(start_portal.m8, TOWN_ROAD_INVALID_TRAM_TYPE);
+
+        let end_portal = map.get(end).expect("end portal");
+        assert_eq!(end_portal.kind, TileKind::RoadTunnel);
+        assert_eq!(end_portal.m5, 0x07);
+        assert_eq!(end_portal.m1, crate::company::OWNER_TOWN_M1);
+        assert_eq!(end_portal.m7, crate::company::OWNER_TOWN_M1);
+        assert_eq!(end_portal.m8, TOWN_ROAD_INVALID_TRAM_TYPE);
+        assert_eq!(
+            map.get(TileCoord::new(6, 10))
+                .expect("levelled exit corner")
+                .height,
+            2
+        );
+        assert_eq!(tile_slope_and_z(&map, end), Some((0x1B, 1)));
     }
 
     #[test]

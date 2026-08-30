@@ -673,6 +673,13 @@ fn collect_road_tiles_near(map: &Map, center: TileCoord, radius: i32) -> Vec<Til
 pub(crate) fn can_build_house(map: &Map, pos: TileCoord, noslope: bool) -> bool {
     let clearable = map.get(pos).is_some_and(|tile| {
         matches!(tile.kind, TileKind::Grass | TileKind::Forest)
+            // `ClearTile_Road` succeeds under `Auto` only for a single road
+            // piece without a tram overlay.  Towns can therefore replace a
+            // one-bit road with a house, but not a straight/crossing road.
+            || (tile.kind == TileKind::Road
+                && (tile.m5 & 0x0F).is_power_of_two()
+                && crate::road_type::tram_track_bits(&tile) == 0
+                && crate::road_type::tram_road_type_from_tile(&tile).is_none())
             // `CMD_LANDSCAPE_CLEAR(NoWater)` despeja una costa: aunque sus
             // bytes sean MP_WATER, `HasTileWaterGround` la excluye.
             || (tile.kind == TileKind::Water && !has_tile_water_ground(tile))

@@ -279,7 +279,8 @@ fn place_company_statue(map: &mut Map, pos: TileCoord, company: CompanyId) -> bo
         return false;
     }
     tile.kind = TileKind::Grass;
-    tile.mapt = MP_OBJECT_MAPT;
+    // `SetTileType(MP_OBJECT)` conserva `TropicZone` en los bits bajos.
+    tile.mapt = MP_OBJECT_MAPT | (tile.mapt & 0x0F);
     tile.m5 = OBJECT_TYPE_STATUE_COMPANY;
     tile.m1 = company.0;
     tile.m2 = 0;

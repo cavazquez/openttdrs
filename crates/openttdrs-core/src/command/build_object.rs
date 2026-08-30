@@ -149,9 +149,10 @@ fn place_object_tile(
     object_type: u8,
     offset: u8,
 ) -> Result<(), CommandError> {
+    let low_mapt = state.map.get(c).map_or(0, |tile| tile.mapt & 0x0F);
     state
         .map
-        .set_mapt_m5(c, MP_OBJECT_MAPT, object_type)
+        .set_mapt_m5(c, MP_OBJECT_MAPT | low_mapt, object_type)
         .map_err(|_| CommandError::OutOfBounds)?;
     state
         .map
@@ -303,6 +304,20 @@ mod tests {
         let tile = state.map.get(c).expect("tile");
         assert_eq!(object_type_from_tile(&tile), Some(OBJECT_TYPE_LIGHTHOUSE));
         assert!(state.economy.money < before);
+    }
+
+    #[test]
+    fn built_object_preserves_tropic_zone_nibble() {
+        let mut state = GameState::new(8, 8);
+        let c = TileCoord::new(2, 2);
+        state
+            .map
+            .set_mapt_m5(c, 0x22, 0)
+            .expect("tropical zone fixture");
+
+        place_object_tile(&mut state, c, OBJECT_TYPE_LIGHTHOUSE, 0).expect("place object tile");
+
+        assert_eq!(state.map.get(c).expect("object tile").mapt & 0x0F, 2);
     }
 
     #[test]

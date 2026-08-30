@@ -221,13 +221,17 @@ fn place_industry_spec_template_sandbox(
     let industry_id = next_industry_instance_id(state);
     let random_colour = industry_id.wrapping_mul(5) % 16;
     for (tile, m5) in template {
+        let low_mapt = state
+            .map
+            .get(*tile)
+            .map_or(0, |current| current.mapt & 0x0F);
         state
             .map
             .set_kind(*tile, TileKind::Industry)
             .map_err(|_| CommandError::OutOfBounds)?;
         state
             .map
-            .set_mapt_m5(*tile, 0x80, *m5)
+            .set_mapt_m5(*tile, 0x80 | low_mapt, *m5)
             .map_err(|_| CommandError::OutOfBounds)?;
         // Obra desde etapa 0; el tile loop (P6) avanza `m1` hasta `IsIndustryCompleted`.
         // OpenTTD `MakeIndustry`: tierra → WaterClass::Invalid; oil rig → Sea.
@@ -445,6 +449,23 @@ mod tests {
             state.map.get_kind(TileCoord::new(6, 4)),
             Some(TileKind::Industry)
         );
+    }
+
+    #[test]
+    fn industry_materialization_preserves_tropic_zone_nibble() {
+        let origin = TileCoord::new(4, 4);
+        let mut state = GameState::new(16, 16);
+        assert!(state.map.set_mapt_m5(origin, 0x22, 0).is_ok());
+
+        assert!(
+            apply_command(
+                &mut state,
+                &Command::PlaceIndustrySpecLayout(origin, IndustrySpec::CoalMine, 0),
+            )
+            .is_ok()
+        );
+
+        assert_eq!(state.map.get(origin).map_or(0, |tile| tile.mapt & 0x0F), 2);
     }
 
     #[test]

@@ -59,9 +59,10 @@ pub(crate) fn buy_land_area(
         return Err(CommandError::InsufficientFunds);
     }
     for c in candidates {
+        let low_mapt = state.map.get(c).map_or(0, |tile| tile.mapt & 0x0F);
         state
             .map
-            .set_mapt_m5(c, MP_OBJECT_MAPT, OBJECT_TYPE_OWNED_LAND)
+            .set_mapt_m5(c, MP_OBJECT_MAPT | low_mapt, OBJECT_TYPE_OWNED_LAND)
             .map_err(|_| CommandError::OutOfBounds)?;
         state
             .map
@@ -134,5 +135,19 @@ mod tests {
                 ));
             }
         }
+    }
+
+    #[test]
+    fn buy_land_preserves_tropic_zone_nibble() {
+        let mut state = GameState::new(8, 8);
+        let c = TileCoord::new(2, 2);
+        state
+            .map
+            .set_mapt_m5(c, 0x21, 0)
+            .expect("tropical zone fixture");
+
+        buy_land(&mut state, c).expect("buy land");
+
+        assert_eq!(state.map.get(c).expect("owned tile").mapt & 0x0F, 1);
     }
 }

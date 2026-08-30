@@ -271,7 +271,10 @@ fn build_generated_object(
         WaterClass::Invalid
     };
     tile.kind = TileKind::Unknown(10);
-    tile.mapt = MP_OBJECT_MAPT;
+    // `SetTileType(MP_OBJECT)` conserva los bits bajos de MAPT. En mapas
+    // tropicales son `TropicZone`; perderlos sólo en la tesela raíz del
+    // objeto desfasaba la frontera raw frente a OpenTTD.
+    tile.mapt = MP_OBJECT_MAPT | (tile.mapt & 0x0F);
     tile.m1 = set_water_class_m1(OWNER_NONE_M1, water_class);
     tile.m2 = object_id as u8;
     tile.m2_hi = (object_id >> 8) as u8;
@@ -386,5 +389,21 @@ mod tests {
                 set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid)
             );
         }
+    }
+
+    #[test]
+    fn generated_object_preserves_tropic_zone_nibble() {
+        let mut state = GameState::new(8, 8);
+        let coord = TileCoord::new(3, 3);
+        state
+            .map
+            .set_mapt_m5(coord, 0x22, 0)
+            .expect("tropical zone fixture");
+        let mut rng = WorldGenRng::new(1);
+
+        build_generated_object(&mut state, coord, 0, 1, 1, &mut rng);
+
+        let tile = state.map.get(coord).expect("object tile");
+        assert_eq!(tile.mapt, MP_OBJECT_MAPT | 0x02);
     }
 }

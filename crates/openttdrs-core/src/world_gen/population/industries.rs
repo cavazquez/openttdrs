@@ -430,8 +430,9 @@ fn clear_generated_industry_platform_tile(map: &mut Map, c: TileCoord) -> bool {
 ///
 /// Cada esquina se mueve de a un nivel, usando el mismo modelo que el pase de
 /// prueba y limpiando las teselas incidentes antes de escribir las alturas.
-/// Si el mapa cambió entre ambos pases se aborta sin intentar colocar la
-/// industria; el flujo normal siempre lo llama inmediatamente tras validar.
+/// Si una orden individual falla durante `Execute`, `OpenTTD` conserva las
+/// esquinas ya niveladas y continúa con la siguiente; la industria se crea
+/// mientras la pasada de prueba haya sido válida.
 fn level_generated_industry_platform(
     map: &Map,
     origin: TileCoord,
@@ -443,8 +444,11 @@ fn level_generated_industry_platform(
         return None;
     }
     // `CheckIfCanLevelIndustryPlatform` has a test pass and an execute pass.
-    // Keep the execute pass isolated until every terraform/clear operation has
-    // succeeded; a failed command must not leave a half-levelled map behind.
+    // The native execute pass deliberately ignores a failed terraform command:
+    // it advances its local height and continues with the next tile, leaving
+    // that individual corner unchanged. Keep each step transactional, but do
+    // not reject the whole industry after a step that was already accepted by
+    // the immutable test pass.
     let mut candidate = map.clone();
     let (start_x, start_y, end_x, end_y) =
         generated_industry_platform_area(&candidate, origin, spec, layout_index, platform)?;
@@ -461,23 +465,28 @@ fn level_generated_industry_platform(
                     &candidate,
                     c,
                     current_height <= target_height,
-                )?;
+                );
+                let Some(step) = step else {
+                    break;
+                };
+                let mut step_map = candidate.clone();
                 if !step
                     .dirty_tiles
                     .iter()
                     .copied()
-                    .all(|dirty| clear_generated_industry_platform_tile(&mut candidate, dirty))
+                    .all(|dirty| clear_generated_industry_platform_tile(&mut step_map, dirty))
                 {
-                    return None;
+                    break;
                 }
-                for (height_x, height_y, height) in step.heights {
-                    if candidate
+                let heights_ok = step.heights.iter().all(|&(height_x, height_y, height)| {
+                    step_map
                         .set_height(TileCoord::new(height_x, height_y), height)
-                        .is_err()
-                    {
-                        return None;
-                    }
+                        .is_ok()
+                });
+                if !heights_ok {
+                    break;
                 }
+                candidate = step_map;
             }
         }
     }
@@ -535,19 +544,29 @@ fn generated_industry_check_proc_allows(
 
 /// `CheckScaledDistanceFromEdge(TileAddXY(tile, 1, 1), 32)` con bordes
 /// `freeform_edges`, que es la topología usada por los mapas generados.
+/// `OpenTTD` sólo escala el límite cuando una dimensión supera 256 teselas;
+/// hacerlo por eje es importante en mapas rectangulares y evita que una
+/// refinería válida de 512×512 sea rechazada después de consumir su intento.
 fn generated_industry_is_near_edge(state: &GameState, origin: TileCoord) -> bool {
     let (map_w, map_h) = state.map.dimensions();
     let x = origin.x.saturating_add(1);
     let y = origin.y.saturating_add(1);
     let max_x = i32::try_from(map_w).unwrap_or(i32::MAX).saturating_sub(1);
     let max_y = i32::try_from(map_h).unwrap_or(i32::MAX).saturating_sub(1);
+    let scale_x = if map_w > 256 { map_w / 256 } else { 1 };
+    let scale_y = if map_h > 256 { map_h / 256 } else { 1 };
+    let max_distance_x = 32_u32.saturating_mul(scale_x);
+    let max_distance_y = 32_u32.saturating_mul(scale_y);
     let distances = [
         x.saturating_sub(1),
         y.saturating_sub(1),
         max_x.saturating_sub(x).saturating_sub(1),
         max_y.saturating_sub(y).saturating_sub(1),
     ];
-    distances.into_iter().any(|distance| distance < 32)
+    distances[0] < i32::try_from(max_distance_x).unwrap_or(i32::MAX)
+        || distances[2] < i32::try_from(max_distance_x).unwrap_or(i32::MAX)
+        || distances[1] < i32::try_from(max_distance_y).unwrap_or(i32::MAX)
+        || distances[3] < i32::try_from(max_distance_y).unwrap_or(i32::MAX)
 }
 
 /// Ejecuta una llamada completa a `PlaceIndustry` para una especie fija.
@@ -602,8 +621,15 @@ fn try_place_industry(
         }
         let clear_check =
             check_place_industry_spec_layout(&ctx.state.map, origin, spec, attempt.layout_index);
-        if clear_check.is_err() {
-            continue;
+        if let Err(error) = clear_check {
+            // `CheckIfIndustryTileSlopes` deliberately defers steep-slope
+            // rejection to `CheckIfCanLevelIndustryPlatform` while
+            // Terragenesis is generating a world.  The public command keeps
+            // the strict slope contract; only this generation path may carry
+            // the one deferred error forward to the platform check.
+            if !matches!(error, crate::command::CommandError::InvalidTerrainSlope) {
+                continue;
+            }
         }
         let platform_valid = generated_industry_platform_is_valid(
             &ctx.state.map,
@@ -1752,6 +1778,37 @@ mod tests {
             &state,
             TileCoord::new(20, 20),
             IndustrySpec::Sawmill,
+        ));
+    }
+
+    #[test]
+    fn refinery_edge_limit_scales_per_dimension_above_256() {
+        let state = GameState::new(512, 512);
+        assert!(generated_industry_is_near_edge(
+            &state,
+            TileCoord::new(63, 200)
+        ));
+        assert!(!generated_industry_is_near_edge(
+            &state,
+            TileCoord::new(64, 200)
+        ));
+        assert!(generated_industry_is_near_edge(
+            &state,
+            TileCoord::new(200, 63)
+        ));
+        assert!(!generated_industry_is_near_edge(
+            &state,
+            TileCoord::new(200, 64)
+        ));
+
+        let small = GameState::new(128, 128);
+        assert!(generated_industry_is_near_edge(
+            &small,
+            TileCoord::new(31, 64)
+        ));
+        assert!(!generated_industry_is_near_edge(
+            &small,
+            TileCoord::new(32, 64)
         ));
     }
 

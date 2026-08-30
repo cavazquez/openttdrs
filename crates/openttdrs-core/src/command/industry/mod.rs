@@ -284,6 +284,10 @@ fn place_industry_spec_template_sandbox(
         // byte. This matters when a town bank replaces a house carrying
         // animation metadata.
         let mut map_tile = state.map.get(*tile).ok_or(CommandError::OutOfBounds)?;
+        // `MakeIndustry` writes both halves of the 9-bit gfx ID. The low
+        // byte is already part of the template, but bit 8 lives in `m6` and
+        // must not survive from the clear/platform source tile.
+        crate::map::set_industry_gfx(&mut map_tile, u16::from(*m5));
         map_tile.m8 = 0;
         state
             .map
@@ -571,6 +575,7 @@ mod tests {
             let mut source = state.map.get(tile).unwrap();
             source.kind = TileKind::House;
             source.m8 = 0x7F;
+            source.m6 = 0x04;
             state.map.set_tile(tile, source).unwrap();
         }
 
@@ -582,6 +587,8 @@ mod tests {
 
         assert_eq!(state.map.get(origin).unwrap().m8, 0);
         assert_eq!(state.map.get(TileCoord::new(5, 4)).unwrap().m8, 0);
+        assert_eq!(state.map.get(origin).unwrap().m6 & 0x04, 0);
+        assert_eq!(state.map.get(TileCoord::new(5, 4)).unwrap().m6 & 0x04, 0);
     }
 
     #[test]

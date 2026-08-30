@@ -1,5 +1,6 @@
 //! Colocación y crecimiento inicial de pueblos (`GenerateTowns` / `DoCreateTown`).
 
+use super::{PopCtx, in_preserve};
 use crate::bridge_spec::{BridgeSpecDef, BridgeType, bridge_available_in, set_bridge_middle_mapt};
 use crate::company::OWNER_NONE_M1;
 use crate::house_spec::{
@@ -8,9 +9,9 @@ use crate::house_spec::{
 };
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
 use crate::map::{
-    SLOPE_NE, SLOPE_NW, SLOPE_STEEP, TOWN_HOUSE_COMPLETED, TileCoord, TileKind, TownHouseFootprint,
-    TownHouseSpec, WaterClass, clear_neighbour_non_flooding_states, complement_slope,
-    has_tile_water_ground, is_coast_tile, tile_slope_and_z, water_class_from_m1,
+    SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_STEEP, SLOPE_SW, TOWN_HOUSE_COMPLETED, TileCoord, TileKind,
+    TownHouseFootprint, TownHouseSpec, WaterClass, clear_neighbour_non_flooding_states,
+    complement_slope, has_tile_water_ground, is_coast_tile, tile_slope_and_z, water_class_from_m1,
 };
 use crate::sav::house_spec_population;
 use crate::town::{
@@ -25,8 +26,6 @@ use crate::world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY,
     CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW, clear_ground_m5,
 };
-
-use super::{PopCtx, in_preserve};
 
 /// Bits de carretera recta (eje X / eje Y).
 const ROAD_BITS_AXIS_X: u8 = 0x0A;
@@ -957,6 +956,9 @@ enum GeneratedRoadGrowthResult {
 /// cruzar ríos cortos. La longitud cuenta el salto desde la primera rampa
 /// hasta la rampa opuesta, igual que `bridge_length` de `OpenTTD`.
 const GENERATED_TOWN_FLAT_BRIDGE_LENGTH_CAP: usize = 5;
+/// El arranque inclinado escala con población, pero la rutina nativa lo limita
+/// a once teselas incluso para ciudades grandes.
+const GENERATED_TOWN_SLOPED_BRIDGE_LENGTH_CAP: usize = 11;
 /// `MAX_BRIDGES - 1`: la selección urbana toma los slots 0..=11, no el
 /// último puente tubular. Mantener el límite es una frontera RNG observable.
 const GENERATED_TOWN_BRIDGE_RANDOM_TYPE_LIMIT: u32 = 12;
@@ -971,12 +973,42 @@ fn generated_town_flat_bridge_crosses_water(tile: crate::map::Tile) -> bool {
     tile.kind == TileKind::Water && water_class_from_m1(tile.m1) != WaterClass::Sea
 }
 
+/// La rama inclinada de `GrowTownWithBridge` admite cualquier agua; la plana
+/// limita el cruce a río/canal para no tender puentes urbanos sobre el mar.
+fn generated_town_bridge_crosses_water(tile: crate::map::Tile, start_is_flat: bool) -> bool {
+    tile.kind == TileKind::Water
+        && (!start_is_flat || generated_town_flat_bridge_crosses_water(tile))
+}
+
+/// `InclinedSlope(DiagDirection)` de `OpenTTD`.
+const fn generated_town_inclined_slope(direction: u8) -> u8 {
+    match direction & 3 {
+        0 => SLOPE_NE,
+        1 => SLOPE_SE,
+        2 => SLOPE_SW,
+        _ => SLOPE_NW,
+    }
+}
+
+/// Tope de `GrowTownWithBridge`: plano fijo a cinco, inclinado según la
+/// población temporal que `DoCreateTown` mantiene durante su bootstrap.
+fn generated_town_bridge_length_cap(start_slope: u8, population: u32) -> usize {
+    if start_slope == 0 {
+        GENERATED_TOWN_FLAT_BRIDGE_LENGTH_CAP
+    } else {
+        usize::try_from(population / 1_000)
+            .unwrap_or(usize::MAX)
+            .saturating_add(GENERATED_TOWN_FLAT_BRIDGE_LENGTH_CAP)
+            .min(GENERATED_TOWN_SLOPED_BRIDGE_LENGTH_CAP)
+    }
+}
+
 /// Comprueba la continuación que exige `CanRoadContinueIntoNextTile` una vez
 /// que ya se encontró la otra orilla. Durante la generación inicial no hay
 /// estaciones, pasos a nivel ni carreteras unidireccionales creadas por el
 /// jugador; conservar las rutas habituales evita que un río corto consuma la
 /// selección de puente cuando no hay suelo al que conectar.
-fn generated_town_road_can_continue_after_flat_bridge(
+fn generated_town_road_can_continue_after_bridge(
     map: &crate::map::Map,
     end: TileCoord,
     direction: u8,
@@ -1019,13 +1051,17 @@ fn generated_town_bridge_line(
 
 /// Parte sin RNG de `CMD_BUILD_BRIDGE` que necesita el generador de pueblos.
 ///
-/// El subcaso se limita deliberadamente a una rampa inicial plana sobre un
-/// tramo de río/canal. `CMD_BUILD_BRIDGE` permite que la rampa de llegada sea
-/// inclinada; vías, calles unidireccionales y otras geometrías siguen en
-/// RMAP-030 para no inventar resultados de `CheckBridgeSlope`.
+/// Cubre una rampa inicial plana sobre río/canal y la rampa inclinada nativa
+/// compatible con la dirección de salida. Vías, calles unidireccionales y el
+/// resto de geometrías/foundations siguen en RMAP-030 para no inventar
+/// resultados de `CheckBridgeSlope`.
 /// Si esta comprobación falla después de que `GrowTownWithBridge` ya pasó sus
 /// gates, el caller conserva los 23 sorteos de tipo que hace el comando C++.
-fn generated_town_flat_bridge_command_supported(map: &crate::map::Map, line: &[TileCoord]) -> bool {
+fn generated_town_road_bridge_command_supported(
+    map: &crate::map::Map,
+    line: &[TileCoord],
+    direction: u8,
+) -> bool {
     let Some((&start, rest)) = line.split_first() else {
         return false;
     };
@@ -1047,11 +1083,14 @@ fn generated_town_flat_bridge_command_supported(map: &crate::map::Map, line: &[T
     let Some((start_slope, start_z)) = tile_slope_and_z(map, start) else {
         return false;
     };
-    // `CMD_BUILD_BRIDGE` acepta la rampa de llegada en una pendiente. El
-    // extremo de partida de esta rama de `GrowTownWithBridge` sí debe ser
-    // plano; exigir el mismo nivel/plano también en la otra orilla descartaba
-    // puentes municipales válidos sobre un río de una tesela.
-    if start_slope != 0 {
+    // El preflight de `GrowTownWithBridge` admite el arranque inclinado si la
+    // cara elevada queda del lado opuesto a la marcha. Para las pendientes que
+    // ya son una rampa nativa no hace falta foundation: la forma válida es
+    // `InclinedSlope(ReverseDiagDir(direction))`. La llegada conserva el
+    // manejo de foundation ya cubierto por RMAP-084.
+    if start_slope != 0
+        && start_slope != generated_town_inclined_slope(reverse_town_diag_dir(direction))
+    {
         return false;
     }
 
@@ -1060,7 +1099,7 @@ fn generated_town_flat_bridge_command_supported(map: &crate::map::Map, line: &[T
             return false;
         };
         tile.mapt & 0x0C == 0
-            && generated_town_flat_bridge_crosses_water(tile)
+            && generated_town_bridge_crosses_water(tile, start_slope == 0)
             && tile_slope_and_z(map, middle_tile).is_some_and(|(_, z)| z <= start_z)
     })
 }
@@ -1068,7 +1107,7 @@ fn generated_town_flat_bridge_command_supported(map: &crate::map::Map, line: &[T
 /// Escribe los bytes de `MakeRoadBridgeRamp` y `SetBridgeMiddle` para un
 /// puente municipal. Los extremos no llevan `TownID` en MAP2: una rampa usa
 /// MAP7 como dueño de la capa road, a diferencia de `MakeRoadNormal`.
-fn materialize_generated_town_flat_road_bridge(
+fn materialize_generated_town_road_bridge(
     map: &mut crate::map::Map,
     line: &[TileCoord],
     direction: u8,
@@ -1114,21 +1153,26 @@ fn materialize_generated_town_flat_road_bridge(
     true
 }
 
-/// Subconjunto plano de `GrowTownWithBridge` que inicia una calle municipal
-/// sobre un río o canal angosto. La selección de tipo sucede *después* de
-/// encontrar ambas orillas y validar la continuidad: mover el `RandomRange`
-/// antes de esos gates desalinearía todas las casas y pueblos posteriores.
-fn try_grow_generated_town_flat_bridge(
+/// Subconjunto de `GrowTownWithBridge` que inicia una calle municipal sobre
+/// un cruce de agua corto desde una rampa plana o la pendiente nativa
+/// compatible. La selección de tipo sucede *después* de encontrar ambas
+/// orillas y validar la continuidad: mover el `RandomRange` antes de esos
+/// gates desalinearía todas las casas y pueblos posteriores.
+fn try_grow_generated_town_road_bridge(
     map: &mut crate::map::Map,
     start: TileCoord,
     direction: Option<u8>,
+    population: u32,
     context: &GeneratedTownGrowthContext,
     rng: &mut crate::cargodist::parity::Randomizer,
 ) -> bool {
     let Some(direction) = direction else {
         return false;
     };
-    if tile_slope_and_z(map, start).is_none_or(|(slope, _)| slope != 0) {
+    let Some((start_slope, _)) = tile_slope_and_z(map, start) else {
+        return false;
+    };
+    if start_slope != 0 && start_slope & generated_town_inclined_slope(direction) != 0 {
         return false;
     }
 
@@ -1138,9 +1182,10 @@ fn try_grow_generated_town_flat_bridge(
     }
 
     let mut bridge_length = 0_usize;
+    let bridge_length_cap = generated_town_bridge_length_cap(start_slope, population);
     let mut end = start;
     loop {
-        if bridge_length >= GENERATED_TOWN_FLAT_BRIDGE_LENGTH_CAP {
+        if bridge_length >= bridge_length_cap {
             return false;
         }
         bridge_length = bridge_length.saturating_add(1);
@@ -1148,13 +1193,11 @@ fn try_grow_generated_town_flat_bridge(
         let Some(tile) = map.get(end) else {
             return false;
         };
-        if !generated_town_flat_bridge_crosses_water(tile) {
+        if !generated_town_bridge_crosses_water(tile, start_slope == 0) {
             break;
         }
     }
-    if bridge_length == 1
-        || !generated_town_road_can_continue_after_flat_bridge(map, end, direction)
-    {
+    if bridge_length == 1 || !generated_town_road_can_continue_after_bridge(map, end, direction) {
         return false;
     }
 
@@ -1162,7 +1205,7 @@ fn try_grow_generated_town_flat_bridge(
         return false;
     };
     let middle_len = u16::try_from(line.len().saturating_sub(2)).unwrap_or(u16::MAX);
-    let command_supported = generated_town_flat_bridge_command_supported(map, &line);
+    let command_supported = generated_town_road_bridge_command_supported(map, &line, direction);
     for _ in 0..GENERATED_TOWN_BRIDGE_TYPE_ATTEMPTS {
         let bridge_type = BridgeType::from_u8(
             u8::try_from(rng.random_range(GENERATED_TOWN_BRIDGE_RANDOM_TYPE_LIMIT)).unwrap_or(0),
@@ -1175,7 +1218,7 @@ fn try_grow_generated_town_flat_bridge(
                 context.calendar_year,
                 middle_len,
             )
-            && materialize_generated_town_flat_road_bridge(map, &line, direction, bridge_type)
+            && materialize_generated_town_road_bridge(map, &line, direction, bridge_type)
         {
             return true;
         }
@@ -1275,7 +1318,14 @@ fn grow_generated_town_road_in_tile(
         if rcmd == 0 {
             return GeneratedRoadGrowthResult::SearchStopped;
         }
-        if try_grow_generated_town_flat_bridge(map, tile, Some(target_dir), context, rng) {
+        if try_grow_generated_town_road_bridge(
+            map,
+            tile,
+            Some(target_dir),
+            town.population,
+            context,
+            rng,
+        ) {
             return GeneratedRoadGrowthResult::Road(tile);
         }
         if write_generated_town_road_to_map(map, tile, rcmd, town.id) {
@@ -1298,7 +1348,8 @@ fn grow_generated_town_road_in_tile(
         if rcmd == 0 {
             return GeneratedRoadGrowthResult::SearchStopped;
         }
-        if try_grow_generated_town_flat_bridge(map, tile, Some(dir), context, rng) {
+        if try_grow_generated_town_road_bridge(map, tile, Some(dir), town.population, context, rng)
+        {
             return GeneratedRoadGrowthResult::Road(tile);
         }
         if add_generated_town_road_bits_to_map(map, tile, rcmd, town.id) {
@@ -1371,7 +1422,14 @@ fn grow_generated_town_road_in_tile(
     if rcmd == 0 {
         return GeneratedRoadGrowthResult::SearchStopped;
     }
-    if try_grow_generated_town_flat_bridge(map, tile, Some(target_dir), context, rng) {
+    if try_grow_generated_town_road_bridge(
+        map,
+        tile,
+        Some(target_dir),
+        town.population,
+        context,
+        rng,
+    ) {
         return GeneratedRoadGrowthResult::Road(tile);
     }
     if add_generated_town_road_bits_to_map(map, tile, rcmd, town.id) {
@@ -3663,10 +3721,11 @@ mod tests {
         let mut rng = Randomizer {
             state: [653_263_232, 3_923_936_600],
         };
-        assert!(try_grow_generated_town_flat_bridge(
+        assert!(try_grow_generated_town_road_bridge(
             &mut state.map,
             start,
             Some(3),
+            0,
             &context,
             &mut rng,
         ));
@@ -3728,8 +3787,8 @@ mod tests {
         assert_eq!(tile_slope_and_z(&state.map, end), Some((SLOPE_CORNER_N, 1)));
 
         let line = [start, middle, end];
-        assert!(generated_town_flat_bridge_command_supported(
-            &state.map, &line
+        assert!(generated_town_road_bridge_command_supported(
+            &state.map, &line, 0
         ));
 
         let context = GeneratedTownGrowthContext {
@@ -3740,10 +3799,11 @@ mod tests {
         let mut rng = Randomizer {
             state: [653_263_232, 3_923_936_600],
         };
-        assert!(try_grow_generated_town_flat_bridge(
+        assert!(try_grow_generated_town_road_bridge(
             &mut state.map,
             start,
             Some(0),
+            0,
             &context,
             &mut rng,
         ));
@@ -3752,6 +3812,80 @@ mod tests {
         assert_eq!(state.map.get(start).expect("start ramp").m5, 0x84);
         assert_eq!(state.map.get(end).expect("sloped end ramp").m5, 0x86);
         assert_eq!(tile_slope_and_z(&state.map, end), Some((SLOPE_CORNER_N, 1)));
+    }
+
+    #[test]
+    fn town_bridge_accepts_native_sloped_start_ramp_and_rng_boundary() {
+        // RMAP-082/086, 256² seed 1330935381: la llamada 452 de
+        // `GrowTown` sale por una rampa NE, cruza un río de una tesela hacia
+        // SW y elige hormigón en el primer `RandomRange(MAX_BRIDGES - 1)`.
+        // Antes sólo se aceptaba un inicio plano y se construía una calle
+        // normal sobre la rampa, desplazando toda la secuencia urbana.
+        let mut state = GameState::new(10, 10);
+        let source = TileCoord::new(3, 4);
+        let start = TileCoord::new(4, 4);
+        let middle = TileCoord::new(5, 4);
+        let end = TileCoord::new(6, 4);
+        assert!(write_generated_town_road(
+            &mut state,
+            source,
+            town_diag_dir_to_road_bits(2),
+            5,
+        ));
+        crate::map::make_water_tile(&mut state.map, middle, crate::map::WaterClass::River)
+            .expect("river span");
+        state
+            .map
+            .set_height(start, 2)
+            .expect("north corner of the start ramp");
+        state
+            .map
+            .set_height(TileCoord::new(start.x, start.y + 1), 2)
+            .expect("east corner of the start ramp");
+        assert_eq!(tile_slope_and_z(&state.map, start), Some((SLOPE_NE, 1)));
+
+        let line = [start, middle, end];
+        assert!(generated_town_road_bridge_command_supported(
+            &state.map, &line, 2
+        ));
+
+        let context = GeneratedTownGrowthContext {
+            climate: Climate::Temperate,
+            calendar_year: 1950,
+            bridge_spec_catalog: state.bridge_spec_catalog.clone(),
+        };
+        // Estado tras las cuatro decisiones del walker y justo antes de
+        // seleccionar el tipo de puente en la referencia.
+        let mut rng = Randomizer {
+            state: [0xab7c_ac70, 0xb429_6331],
+        };
+        assert!(try_grow_generated_town_road_bridge(
+            &mut state.map,
+            start,
+            Some(2),
+            190,
+            &context,
+            &mut rng,
+        ));
+        assert_eq!(rng.state, [0x48c8_e6db, 0x156f_958d]);
+
+        let start_ramp = state.map.get(start).expect("start ramp");
+        assert_eq!(start_ramp.kind, TileKind::RoadBridge);
+        assert_eq!(start_ramp.mapt, 0x90);
+        assert_eq!(start_ramp.m5, 0x86);
+        assert_eq!(start_ramp.m6, BridgeType::Concrete.as_u8() << 2);
+        assert_eq!(start_ramp.m7, crate::company::OWNER_TOWN_M1);
+        assert_eq!(start_ramp.m8, TOWN_ROAD_INVALID_TRAM_TYPE);
+
+        let span = state.map.get(middle).expect("river span");
+        assert_eq!(span.kind, TileKind::Water);
+        assert_eq!(span.mapt, 0x64);
+
+        let end_ramp = state.map.get(end).expect("end ramp");
+        assert_eq!(end_ramp.kind, TileKind::RoadBridge);
+        assert_eq!(end_ramp.m5, 0x84);
+        assert_eq!(end_ramp.m6, BridgeType::Concrete.as_u8() << 2);
+        assert_eq!(tile_slope_and_z(&state.map, start), Some((SLOPE_NE, 1)));
     }
 
     #[test]
@@ -3765,7 +3899,7 @@ mod tests {
         crate::map::make_water_tile(&mut map, line[1], crate::map::WaterClass::River)
             .expect("river span");
 
-        assert!(materialize_generated_town_flat_road_bridge(
+        assert!(materialize_generated_town_road_bridge(
             &mut map,
             &line,
             3,
@@ -3802,10 +3936,11 @@ mod tests {
         };
         let before = rng;
 
-        assert!(!try_grow_generated_town_flat_bridge(
+        assert!(!try_grow_generated_town_road_bridge(
             &mut state.map,
             start,
             Some(3),
+            0,
             &context,
             &mut rng,
         ));

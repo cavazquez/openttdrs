@@ -27,16 +27,26 @@ SCAN_PATHS=(
 )
 
 FAIL=0
-
 info() { echo "[parity-docs] $*"; }
 err() { echo "[parity-docs] ERROR: $*" >&2; FAIL=1; }
+
+# `rg` is preferred for its stable Unicode/regex behaviour, but the checker
+# also runs in minimal CI images where ripgrep is not preinstalled. GNU grep's
+# extended-regex mode accepts the same patterns used below, so keep the gate
+# self-contained instead of making the workflow depend on an apt repository.
+if command -v rg >/dev/null 2>&1; then
+  SEARCH_CMD=(rg)
+else
+  SEARCH_CMD=(grep -E)
+  info "ripgrep no está instalado; usando grep -E como fallback"
+fi
 
 info "Buscando afirmaciones obsoletas en docs de paridad ..."
 
 check_pat() {
   local pat="$1"
   local hits
-  hits="$(rg -n -e "$pat" "${SCAN_PATHS[@]}" || true)"
+  hits="$("${SEARCH_CMD[@]}" -n -e "$pat" "${SCAN_PATHS[@]}" || true)"
   if [[ -n "$hits" ]]; then
     err "patrón /$pat/:"
     printf '%s\n' "$hits" >&2
@@ -46,7 +56,7 @@ check_pat() {
 require_pat() {
   local pat="$1"
   local path="$2"
-  if ! rg -q -e "$pat" "$path"; then
+  if ! "${SEARCH_CMD[@]}" -q -e "$pat" "$path"; then
     err "falta patrón canónico /$pat/ en $path"
   fi
 }

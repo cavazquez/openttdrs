@@ -172,7 +172,7 @@ fn train_smoke_to_emit(
     train_smoke_to_emit_with_engine(map, vehicle, engine, tick, smoke_amount)
 }
 
-/// Igual que [`train_smoke_to_emit`], pero usando el catálogo de motores de la
+/// Igual que `train_smoke_to_emit`, pero usando el catálogo de motores de la
 /// partida para resolver callbacks de vehículos NewGRF.
 fn train_smoke_to_emit_with_engine(
     map: &Map,

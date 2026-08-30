@@ -239,7 +239,7 @@ pub fn get_translated_industry_id(clean: u16, overrides: &[u16]) -> u16 {
 /// `GetCargoTranslation`: índice GRF-local → label vía `cargo_spec` / tabla bitnum.
 ///
 /// No inventa aliases de clima: si no hay `cargo_spec` ni bitnum conocido en
-/// [`TEMPERATE_CARGO_TYPES`] (misma tabla climate-independent del default),
+/// [`crate::TEMPERATE_CARGO_TYPES`] (misma tabla climate-independent del default),
 /// devuelve `None`.
 #[must_use]
 pub fn get_cargo_translation(cargo: u8, catalog: &[CargoSpecDef]) -> Option<String> {

@@ -1071,7 +1071,7 @@ fn trigger_newgrf_station_animation_for_station_with_industries<S: BuildHasher>(
 ///
 /// Es la semántica necesaria para eventos de carga/descarga de tren. Las
 /// plataformas vecinas pertenecientes a otra estación quedan filtradas por la
-/// misma asignación lógica usada en [`station_animation_whole_tiles`].
+/// misma asignación lógica usada en `station_animation_whole_tiles`.
 #[allow(clippy::too_many_arguments)] // La mutación toca mapa, estaciones y lista activa.
 pub fn trigger_newgrf_station_animation_for_platform<S: BuildHasher>(
     map: &mut Map,

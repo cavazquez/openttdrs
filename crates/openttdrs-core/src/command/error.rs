@@ -115,6 +115,8 @@ pub enum CommandError {
     IndustryTileOccupied,
     /// El clear automático de una industria no puede demoler esta tesela.
     IndustryTileCannotBeCleared,
+    /// La industria sólo puede ocupar edificios ya pertenecientes a un pueblo.
+    IndustryMustBeBuiltInTown,
     /// Préstamo ya al máximo permitido.
     LoanAtMaximum,
     /// No hay préstamo suficiente para devolver.

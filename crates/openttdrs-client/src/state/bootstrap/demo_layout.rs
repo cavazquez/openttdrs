@@ -6,7 +6,7 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{
     BridgeType, FACTORY_GRAIN_INPUT, FACTORY_LIVESTOCK_INPUT, FACTORY_STEEL_INPUT, Industry,
     IndustryKind, IndustrySpec, PathNetwork, PreserveRect, WorldGenConfig, WorldGenRng,
-    apply_world_gen_with_rng, find_path, road_stop_approach_tile,
+    apply_world_gen_with_rng, effective_snow_line_height, find_path, road_stop_approach_tile,
 };
 
 /// Carretera horizontal de demo (eje X).
@@ -127,7 +127,11 @@ pub(crate) fn apply_optional_world_gen(
     preserve: &[PreserveRect],
 ) -> Option<WorldGenRng> {
     match apply_world_gen_with_rng(&mut state.map, &config, preserve) {
-        Ok(rng) => Some(rng),
+        Ok(rng) => {
+            state.snow_line_height =
+                effective_snow_line_height(&state.map, config.climate, config.snow_coverage);
+            Some(rng)
+        }
         Err(e) => {
             error!("Generación procedural fallida: {e:?}");
             None

@@ -112,6 +112,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::IndustryTileCannotBeCleared => {
             "Hay una construcción que debe demolerse antes de ubicar la industria."
         }
+        CommandError::IndustryMustBeBuiltInTown => {
+            "Esta industria solo puede construirse sobre edificios de un pueblo."
+        }
         CommandError::LoanAtMaximum => "El préstamo ya está al máximo permitido.",
         CommandError::NoLoanToRepay => "No hay préstamo suficiente para devolver.",
         CommandError::TownNotFound => "Ciudad no encontrada.",
@@ -229,6 +232,7 @@ mod tests {
             CommandError::IndustryNotAvailableInClimate,
             CommandError::IndustryTileOccupied,
             CommandError::IndustryTileCannotBeCleared,
+            CommandError::IndustryMustBeBuiltInTown,
             CommandError::LoanAtMaximum,
             CommandError::NoLoanToRepay,
             CommandError::TownNotFound,

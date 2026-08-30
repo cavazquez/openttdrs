@@ -229,11 +229,13 @@ pub fn apply_landscape_with_rng(
     }
 
     // Coberturas post-relieve (`CalculateSnowLine` / `CalculateDesertLine`).
-    let snow_line = if config.climate == Climate::SubArctic {
-        calculate_coverage_line(&heights, map_w, map_h, config.snow_coverage, 0).max(2)
-    } else {
-        DEF_SNOW_LINE_HEIGHT
-    };
+    let snow_line = calculate_snow_line_from_heights(
+        &heights,
+        map_w,
+        map_h,
+        config.climate,
+        config.snow_coverage,
+    );
     let desert_line = if config.climate == Climate::SubTropical {
         Some(calculate_coverage_line(
             &heights,
@@ -331,6 +333,37 @@ pub fn apply_landscape_with_rng(
     }
 
     Ok(rng)
+}
+
+/// Devuelve la línea de nieve que `CalculateSnowLine` persistirá en una nueva
+/// partida. El valor depende de las alturas ya corregidas y no del default
+/// fijo de `GameState`; las fases de población y árboles deben recibir esta
+/// misma línea para conservar el stream y las reglas climáticas de `OpenTTD`.
+#[must_use]
+pub fn effective_snow_line_height(map: &Map, climate: Climate, snow_coverage: u8) -> u8 {
+    let (map_w, map_h) = map.dimensions();
+    let heights: Vec<u8> = map.tiles().iter().map(|tile| tile.height).collect();
+    calculate_snow_line_from_heights(
+        &heights,
+        i32::try_from(map_w).unwrap_or(i32::MAX),
+        i32::try_from(map_h).unwrap_or(i32::MAX),
+        climate,
+        snow_coverage,
+    )
+}
+
+fn calculate_snow_line_from_heights(
+    heights: &[u8],
+    map_w: i32,
+    map_h: i32,
+    climate: Climate,
+    snow_coverage: u8,
+) -> u8 {
+    if climate == Climate::SubArctic {
+        calculate_coverage_line(heights, map_w, map_h, snow_coverage, 0).max(2)
+    } else {
+        DEF_SNOW_LINE_HEIGHT
+    }
 }
 
 /// Materializa el marco `MP_VOID` inicial de `InitializeLandscape`.

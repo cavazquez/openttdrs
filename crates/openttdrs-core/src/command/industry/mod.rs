@@ -95,7 +95,17 @@ fn check_industry_template(
     for (tile, _) in template {
         super::transport::check_in_bounds(map, *tile)?;
         let existing_kind = map.get_kind(*tile).unwrap_or(TileKind::Grass);
-        if let Some(error) = industry_auto_clear_error(existing_kind) {
+        // `CheckIfIndustryTilesAreFree` treats `OnlyInTown` industries
+        // specially: every footprint tile must already be a town building,
+        // and the clear command runs as OWNER_TOWN. In particular this is
+        // what rejects the Arctic/Tropic bank attempt at (26,40) in the
+        // native 64x64 seed while admitting the later house-backed attempt.
+        let requires_house = industry_requires_house_tiles(spec);
+        if requires_house {
+            if existing_kind != TileKind::House {
+                return Err(CommandError::IndustryMustBeBuiltInTown);
+            }
+        } else if let Some(error) = industry_auto_clear_error(existing_kind) {
             return Err(error);
         }
         // `CheckIfIndustryTilesAreFree` rejects a land industry on any tile
@@ -114,7 +124,7 @@ fn check_industry_template(
             // industry (`IsBridgeAbove`/`ClearTile_TunnelBridge` in C++).
             return Err(CommandError::IndustryTileCannotBeCleared);
         }
-        if !transport_tile_is_buildable(existing_kind) {
+        if !requires_house && !transport_tile_is_buildable(existing_kind) {
             return Err(build_error_for_kind(existing_kind));
         }
         // Todas las teselas vanilla que forman las diez industrias force-one
@@ -127,6 +137,17 @@ fn check_industry_template(
         }
     }
     Ok(())
+}
+
+/// Vanilla `IndustryBehaviour::OnlyInTown` species use the house-only branch
+/// of `CheckIfIndustryTilesAreFree`. The rest of the town association check
+/// still happens in the procedural placement phase; this helper models the
+/// per-tile requirement without coupling the command module to `GameState`.
+const fn industry_requires_house_tiles(spec: IndustrySpec) -> bool {
+    matches!(
+        spec,
+        IndustrySpec::BankArcticTropic | IndustrySpec::WaterTower
+    )
 }
 
 /// Errores no negociables de `CMD_LANDSCAPE_CLEAR` con `DoCommandFlag::Auto`
@@ -219,6 +240,15 @@ fn place_industry_spec_template_sandbox(
         state
             .map
             .set_m1(*tile, m1)
+            .map_err(|_| CommandError::OutOfBounds)?;
+        // `MakeIndustry` clears MAP8 independently of the industry random
+        // byte. This matters when a town bank replaces a house carrying
+        // animation metadata.
+        let mut map_tile = state.map.get(*tile).ok_or(CommandError::OutOfBounds)?;
+        map_tile.m8 = 0;
+        state
+            .map
+            .set_tile(*tile, map_tile)
             .map_err(|_| CommandError::OutOfBounds)?;
         state
             .map
@@ -451,6 +481,51 @@ mod tests {
             check_place_industry_spec_layout(&map, origin, IndustrySpec::SteelMill, 0),
             Err(CommandError::IndustryTileCannotBeCleared)
         );
+    }
+
+    #[test]
+    fn arctic_bank_requires_a_house_on_every_layout_tile() {
+        let origin = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(16, 16, 0);
+
+        assert_eq!(
+            check_place_industry_spec_layout(&map, origin, IndustrySpec::BankArcticTropic, 0,),
+            Err(CommandError::IndustryMustBeBuiltInTown)
+        );
+
+        assert!(map.set_kind(origin, TileKind::House).is_ok());
+        assert_eq!(
+            check_place_industry_spec_layout(&map, origin, IndustrySpec::BankArcticTropic, 0,),
+            Err(CommandError::IndustryMustBeBuiltInTown)
+        );
+        assert!(map.set_kind(TileCoord::new(5, 4), TileKind::House).is_ok());
+        assert!(
+            check_place_industry_spec_layout(&map, origin, IndustrySpec::BankArcticTropic, 0,)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn industry_make_resets_map8_from_the_source_tile() {
+        let origin = TileCoord::new(4, 4);
+        let mut state = GameState::new(16, 16);
+        state.climate = crate::Climate::SubArctic;
+        for tile in [origin, TileCoord::new(5, 4)] {
+            let mut source = state.map.get(tile).unwrap();
+            source.kind = TileKind::House;
+            source.m8 = 0x7F;
+            state.map.set_tile(tile, source).unwrap();
+        }
+
+        apply_command(
+            &mut state,
+            &Command::PlaceIndustrySpecLayout(origin, IndustrySpec::BankArcticTropic, 0),
+        )
+        .unwrap();
+
+        assert_eq!(state.map.get(origin).unwrap().m8, 0);
+        assert_eq!(state.map.get(TileCoord::new(5, 4)).unwrap().m8, 0);
     }
 
     #[test]

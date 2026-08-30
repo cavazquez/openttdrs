@@ -1,5 +1,6 @@
 //! Colocación de industrias (MVP de `GenerateIndustries`).
 
+use super::{PopCtx, in_preserve, scale_by_land_proportion, scale_by_size};
 use crate::command::{
     Command, apply_command, check_place_industry_spec_layout, industry_template_layout_count,
     industry_template_with_layout, simulate_generated_terraform_north_corner,
@@ -8,13 +9,13 @@ use crate::company::OWNER_NONE_M1;
 use crate::game_state::GameState;
 use crate::industry::IndustrySpec;
 use crate::map::tree_tile_loop::{clear_ground_type, with_clear_counter};
-use crate::map::{Map, Tile, TileCoord, TileKind, clear_neighbour_non_flooding_states};
+use crate::map::{
+    Map, Tile, TileCoord, TileKind, clear_neighbour_non_flooding_states, tile_slope_and_z,
+};
 use crate::world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW,
     clear_ground_m5,
 };
-
-use super::{PopCtx, in_preserve, scale_by_land_proportion, scale_by_size};
 
 /// `PlaceIndustry` prueba hasta este número de teselas para una especie ya
 /// seleccionada. La selección ponderada ocurre fuera de este bucle; no se
@@ -750,6 +751,10 @@ fn apply_generated_industry_bytes(
         // `MakeIndustry` resets m4 (MAP4, represented by `m3hi`) even when
         // the platform clear left a fence/animation byte on the source tile.
         tile.m3hi = 0;
+        // `MakeIndustry` also clears MAP8. Houses carry animation/metadata in
+        // that byte, so leaving it behind only affected the late bank that
+        // overwrites town buildings in the Arctic reference map.
+        tile.m8 = 0;
         tile.m3 = tile_random;
         let _ = state.map.set_tile(*coord, tile);
     }
@@ -993,6 +998,16 @@ fn plant_farm_field(ctx: &mut PopCtx<'_>, center: TileCoord, industry_id: u8) {
     let map_w = i32::try_from(ctx.mw).unwrap_or(i32::MAX);
     let map_h = i32::try_from(ctx.mh).unwrap_or(i32::MAX);
     if map_w == 0 || map_h == 0 {
+        return;
+    }
+    // `PlantFarmField` exits before drawing the field size in Arctic when the
+    // selected centre is at (or above) the snow line.  Keeping this guard
+    // ahead of the first `Random()` is essential: a rejected field attempt
+    // must not move the stream used by the next industry.
+    if ctx.state.climate == crate::Climate::SubArctic
+        && tile_slope_and_z(&ctx.state.map, center)
+            .is_some_and(|(_, z)| z.saturating_add(2) >= ctx.state.snow_line_height)
+    {
         return;
     }
     let mut size_random = (ctx.rng.next() & 0x303).wrapping_add(0x404);
@@ -1329,6 +1344,37 @@ mod tests {
                 && (tile.m3 & 0x0F) <= 8
                 && tile.m1 == OWNER_NONE_M1
         }));
+    }
+
+    #[test]
+    fn arctic_farm_field_above_snowline_returns_before_rng_draw() {
+        let center = TileCoord::new(8, 8);
+        let mut state = GameState::new(16, 16);
+        state.climate = Climate::SubArctic;
+        state.snow_line_height = 10;
+        state.map = Map::new_flat(16, 16, 8);
+        let mut rng = Randomizer::new(1234);
+        let before = rng.state;
+        let mut ctx = PopCtx {
+            state: &mut state,
+            preserve: &[],
+            rng: &mut rng,
+            mw: 16,
+            mh: 16,
+            industry_platform: 1,
+            multiple_industry_per_town: false,
+        };
+
+        plant_farm_field(&mut ctx, center, 0);
+
+        assert_eq!(ctx.rng.state, before);
+        assert!(
+            !ctx.state
+                .map
+                .tiles()
+                .iter()
+                .any(|tile| is_farm_field(*tile))
+        );
     }
 
     #[test]

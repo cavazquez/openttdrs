@@ -468,6 +468,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Hay una construcción que debe demolerse antes de ubicar la industria." => {
             "A building must be demolished before placing the industry."
         }
+        "Esta industria solo puede construirse sobre edificios de un pueblo." => {
+            "This industry can only be built on town buildings."
+        }
         "El préstamo ya está al máximo permitido." => {
             "The loan is already at the allowed maximum."
         }

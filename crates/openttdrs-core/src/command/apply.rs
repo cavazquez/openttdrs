@@ -725,6 +725,11 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             let mut generation_rng =
                 crate::world_gen::apply_world_gen_with_rng(&mut state.map, &cfg, &[])
                     .map_err(|_| CommandError::OutOfBounds)?;
+            state.snow_line_height = crate::world_gen::effective_snow_line_height(
+                &state.map,
+                cfg.climate,
+                cfg.snow_coverage,
+            );
             state.climate = *climate;
             state.world_seed = seed;
             state.towns.clear();

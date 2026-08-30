@@ -1,7 +1,9 @@
 //! Arranque del mapa procedural con opciones de nueva partida.
 
 use openttdrs_core::prelude::*;
-use openttdrs_core::{Climate, WorldGenConfig, apply_world_gen, tick_for_calendar_year};
+use openttdrs_core::{
+    Climate, WorldGenConfig, apply_world_gen, effective_snow_line_height, tick_for_calendar_year,
+};
 
 use super::demo_layout::{
     apply_optional_world_gen, demo_preserve_rects, fill_flat_grass, place_bridge_demo_gap,
@@ -409,6 +411,11 @@ pub(crate) fn build_empty_procedural_world(
             world_config.water_borders = None;
         }
         let _ = apply_world_gen(&mut state.map, &world_config, &[]);
+        state.snow_line_height = effective_snow_line_height(
+            &state.map,
+            world_config.climate,
+            world_config.snow_coverage,
+        );
     }
     state
 }

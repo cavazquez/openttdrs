@@ -278,6 +278,17 @@ pub struct WorldGenConfig {
     pub startup_rng_draws: u8,
 }
 
+/// Máscara especial que pide a `OpenTTD` sortear los bordes con agua.
+///
+/// El valor es el sentinel usado por `game_creation.water_borders`, no una
+/// máscara de cuatro bordes ya resuelta. `height_map_normalize` consume un
+/// `Random()` cuando recibe este valor.
+pub const NEW_GAME_RANDOM_WATER_BORDERS: u8 = 0x10;
+
+/// Sorteos que `StartupEconomy` consume antes de `GenerateLandscape` en una
+/// partida nueva vanilla.
+pub const NEW_GAME_STARTUP_RNG_DRAWS: u8 = 1;
+
 impl Default for WorldGenConfig {
     fn default() -> Self {
         Self {
@@ -302,6 +313,23 @@ impl Default for WorldGenConfig {
 }
 
 impl WorldGenConfig {
+    /// Perfil compartido por el menú de «Nueva partida» y los oráculos.
+    ///
+    /// Los consumidores pueden aplicar después sus opciones de relieve y de
+    /// bordes (`with_height_span`, `with_terrain_type` o `island`). Mantener
+    /// aquí los valores que afectan al stream evita que el cliente y
+    /// `world_raw_dumper` avancen el RNG de forma distinta antes de TGP.
+    #[must_use]
+    pub fn for_new_game(climate: Climate, seed: u64) -> Self {
+        Self {
+            climate,
+            seed,
+            water_borders: Some(NEW_GAME_RANDOM_WATER_BORDERS),
+            startup_rng_draws: NEW_GAME_STARTUP_RNG_DRAWS,
+            ..Self::default()
+        }
+    }
+
     /// Sincroniza `terrain_type` ↔ `height_span` a partir del span legado.
     #[must_use]
     pub const fn with_height_span(mut self, span: u8) -> Self {

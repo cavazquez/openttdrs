@@ -26,9 +26,9 @@ pub(crate) use clear_tiles::generate_clear_tiles;
 pub use config::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY,
     CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW, Climate, DEF_DESERT_COVERAGE, DEF_SNOW_COVERAGE,
-    DEF_SNOW_LINE_HEIGHT, PreserveRect, QuantitySeaLakes, TerrainType, TgenSmoothness,
-    WorldGenConfig, clear_ground_m5, effective_clear_ground, initial_clear_ground,
-    initial_clear_ground_with_lines,
+    DEF_SNOW_LINE_HEIGHT, NEW_GAME_RANDOM_WATER_BORDERS, NEW_GAME_STARTUP_RNG_DRAWS, PreserveRect,
+    QuantitySeaLakes, TerrainType, TgenSmoothness, WorldGenConfig, clear_ground_m5,
+    effective_clear_ground, initial_clear_ground, initial_clear_ground_with_lines,
 };
 pub use heightmap::{HeightmapData, apply_heightmap, parse_hmap, serialize_heightmap};
 pub use objects::generate_objects_with_rng;
@@ -39,7 +39,8 @@ pub use population::{
     industry_target_count, road_tiles_are_flat, scale_by_size, town_target_count,
 };
 pub use tile_loop::{
-    LANDSCAPE_RIVER_TILE_LOOP_PASSES, run_generation_tile_loop, run_landscape_river_tile_loops,
+    LANDSCAPE_RIVER_TILE_LOOP_PASSES, STARTUP_TILE_LOOP_PASSES, run_generation_tile_loop,
+    run_generation_tile_loops_with_rng, run_landscape_river_tile_loops,
 };
 pub use trees::{
     TreePlacement, TreePlacementOrigin, generate_trees, generate_trees_with_rng,
@@ -395,6 +396,18 @@ mod tests {
         assert_eq!(Climate::parse("tropic"), Some(Climate::SubTropical));
         assert_eq!(Climate::parse("toyland"), Some(Climate::Toyland));
         assert!(Climate::parse("mars").is_none());
+    }
+
+    #[test]
+    fn new_game_profile_matches_openttd_startup_contract() {
+        let config = WorldGenConfig::for_new_game(Climate::SubTropical, 42);
+
+        assert_eq!(config.climate, Climate::SubTropical);
+        assert_eq!(config.seed, 42);
+        assert!(!config.island);
+        assert_eq!(config.water_borders, Some(NEW_GAME_RANDOM_WATER_BORDERS));
+        assert_eq!(config.startup_rng_draws, NEW_GAME_STARTUP_RNG_DRAWS);
+        assert_eq!(STARTUP_TILE_LOOP_PASSES, 0x500);
     }
 
     #[test]

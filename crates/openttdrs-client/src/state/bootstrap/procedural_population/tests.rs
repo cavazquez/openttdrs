@@ -1,5 +1,7 @@
 use super::should_populate_procedurally;
-use crate::state::bootstrap::{NewGameSettings, PopulationDensity, build_procedural_demo_world};
+use crate::state::bootstrap::{
+    MapSizePreset, NewGameSettings, PopulationDensity, build_procedural_demo_world,
+};
 use openttdrs_core::Climate;
 use openttdrs_core::prelude::*;
 
@@ -18,6 +20,17 @@ fn populates_large_procedural_island() {
         !state.industries.is_empty(),
         "debe haber al menos una industria"
     );
+}
+
+#[test]
+fn new_game_runs_startup_tile_loop_queue_after_population() {
+    let settings = NewGameSettings::procedural_island(Climate::Temperate, 100);
+    let state = build_procedural_demo_world(&settings);
+
+    // Un mapa 64² ejecuta 16 visitas LFSR por pasada; la última pasada del
+    // bloque 0x500 queda disponible para diagnóstico y evita que una futura
+    // refactorización omita silenciosamente la cola de arranque.
+    assert_eq!(state.runtime.tile_loop_visited.len(), 16);
 }
 
 #[test]
@@ -75,7 +88,16 @@ fn procedural_houses_keep_native_town_bytes_with_valid_specs() {
 
 #[test]
 fn procedural_town_population_matches_house_specs() {
-    let settings = NewGameSettings::procedural_island(Climate::Temperate, 777);
+    // Aislar el contrato de población de la cola de tile loops de una partida
+    // nueva: el callback de agua puede inundar una casa durante esas pasadas,
+    // mientras que aquí verificamos únicamente la suma que se escribe al
+    // materializar los edificios.
+    let settings = NewGameSettings {
+        map_size: MapSizePreset::SMALL,
+        preserve_demo: false,
+        seed: 777,
+        ..NewGameSettings::default()
+    };
     let state = build_procedural_demo_world(&settings);
     assert!(!state.towns.is_empty());
     let (mw, mh) = state.map.dimensions();

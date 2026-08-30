@@ -18,6 +18,10 @@ use crate::map::{Map, TileKind, collect_tile_loop_visits};
 /// `non-flooding` en `MAP3` bit 0.
 pub const LANDSCAPE_RIVER_TILE_LOOP_PASSES: u64 = 256;
 
+/// Pasadas de `RunTileLoop` que `GenerateWorld` ejecuta después de crear el
+/// mapa y las entidades iniciales (`genworld.cpp`).
+pub const STARTUP_TILE_LOOP_PASSES: u64 = 0x500;
+
 /// Ejecuta una pasada de `RunTileLoop` para la generación de un mundo nuevo.
 ///
 /// `tick` es el contador de `TimerGameTick` usado por los callbacks de
@@ -29,6 +33,28 @@ pub const LANDSCAPE_RIVER_TILE_LOOP_PASSES: u64 = 256;
 /// pruebas de la secuencia LFSR).
 pub fn run_generation_tile_loop(state: &mut GameState, tick: u64) -> usize {
     run_generation_tile_loop_impl(state, tick, None)
+}
+
+/// Ejecuta la cola de tile loops de una partida nueva con el RNG global de
+/// generación.
+///
+/// `OpenTTD` llama a `RunTileLoop`, incrementa `TimerGameTick::counter` y
+/// repite la operación `0x500` veces antes de entregar el mundo al jugador.
+/// El parámetro `passes` permite a los oráculos y tests aislar una prefija de
+/// la cola; los consumidores de Nueva partida deben usar
+/// [`STARTUP_TILE_LOOP_PASSES`]. El contador económico de [`GameState`] no se
+/// modifica.
+pub fn run_generation_tile_loops_with_rng(
+    state: &mut GameState,
+    rng: &mut Randomizer,
+    passes: u64,
+) -> usize {
+    let mut visited = 0usize;
+    for tick in 0..passes {
+        visited =
+            visited.saturating_add(run_generation_tile_loop_impl(state, tick, Some(&mut *rng)));
+    }
+    visited
 }
 
 /// Variante interna de [`run_generation_tile_loop`] para la cola de
@@ -230,6 +256,27 @@ mod tests {
         assert_eq!(state.vehicles.len(), before_vehicles);
         assert_eq!(state.industries.len(), before_industries);
         assert_ne!(state.map.get(c).unwrap().m5, 0x00);
+    }
+
+    #[test]
+    fn startup_tile_loop_prefix_keeps_calendar_separate() {
+        let map = Map::new_flat(64, 64, 1);
+        let mut state = GameState::from_map(map);
+        let mut expected_cursor = state.cur_tileloop_tile;
+        let mut expected_visits = 0usize;
+        for tick in 0..3 {
+            expected_visits +=
+                collect_tile_loop_visits(&state.map, tick, &mut expected_cursor).len();
+        }
+        let mut rng = Randomizer::new(42);
+        let before_tick = state.tick.get();
+
+        let visited = run_generation_tile_loops_with_rng(&mut state, &mut rng, 3);
+
+        assert_eq!(visited, expected_visits);
+        assert_eq!(state.tick.get(), before_tick);
+        assert_eq!(state.cur_tileloop_tile, expected_cursor);
+        assert_eq!(state.runtime.tile_loop_visited.len(), 16);
     }
 
     #[test]

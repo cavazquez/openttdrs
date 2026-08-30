@@ -347,18 +347,16 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
             settings.seed
         };
         state.world_seed = seed;
-        generation_rng = apply_optional_world_gen(
-            &mut state,
-            WorldGenConfig {
-                climate: settings.climate,
-                seed,
-                sea_level: 1,
-                island: settings.island,
-                ..WorldGenConfig::default()
-                    .with_height_span(settings.terrain_roughness.height_span())
-            },
-            &preserve,
-        );
+        let mut world_config = WorldGenConfig::for_new_game(settings.climate, seed)
+            .with_height_span(settings.terrain_roughness.height_span());
+        // El selector «isla» del cliente conserva la semántica histórica de
+        // mojar los cuatro bordes; el perfil vanilla usa `Random` cuando no
+        // se fuerza esa opción.
+        world_config.island = settings.island;
+        if settings.island {
+            world_config.water_borders = None;
+        }
+        generation_rng = apply_optional_world_gen(&mut state, world_config, &preserve);
     }
     if should_populate_procedurally(&settings) {
         populate_procedural_world(&mut state, &settings, &preserve, generation_rng.as_mut());
@@ -404,18 +402,13 @@ pub(crate) fn build_empty_procedural_world(
             settings.seed
         };
         state.world_seed = seed;
-        let _ = apply_world_gen(
-            &mut state.map,
-            &WorldGenConfig {
-                climate: settings.climate,
-                seed,
-                sea_level: 1,
-                island: settings.island,
-                ..WorldGenConfig::default()
-                    .with_height_span(settings.terrain_roughness.height_span())
-            },
-            &[],
-        );
+        let mut world_config = WorldGenConfig::for_new_game(settings.climate, seed)
+            .with_height_span(settings.terrain_roughness.height_span());
+        world_config.island = settings.island;
+        if settings.island {
+            world_config.water_borders = None;
+        }
+        let _ = apply_world_gen(&mut state.map, &world_config, &[]);
     }
     state
 }

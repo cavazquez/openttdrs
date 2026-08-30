@@ -739,18 +739,20 @@ pub use vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup};
 pub use world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
     CLEAR_GROUND_SNOW, Climate, DEF_DESERT_COVERAGE, DEF_SNOW_COVERAGE, DEF_SNOW_LINE_HEIGHT,
-    HeightmapData, IndustryDensity, LANDSCAPE_RIVER_TILE_LOOP_PASSES, NUM_INITIAL_INDUSTRIES,
-    NUM_INITIAL_TOWNS, PopulationGenConfig, PreserveRect, QuantitySeaLakes, TerrainType,
-    TgenSmoothness, TownDensity, TreePlacement, TreePlacementOrigin, WorldGenConfig, WorldGenRng,
-    apply_clear_generation_with_rng, apply_heightmap, apply_landscape_with_rng,
-    apply_population_gen, apply_population_gen_with_rng, apply_world_gen, apply_world_gen_with_rng,
-    ceil_div, clear_ground_m5, effective_clear_ground, generate_industries,
-    generate_industries_with_rng, generate_objects_with_rng, generate_towns,
+    HeightmapData, IndustryDensity, LANDSCAPE_RIVER_TILE_LOOP_PASSES,
+    NEW_GAME_RANDOM_WATER_BORDERS, NEW_GAME_STARTUP_RNG_DRAWS, NUM_INITIAL_INDUSTRIES,
+    NUM_INITIAL_TOWNS, PopulationGenConfig, PreserveRect, QuantitySeaLakes,
+    STARTUP_TILE_LOOP_PASSES, TerrainType, TgenSmoothness, TownDensity, TreePlacement,
+    TreePlacementOrigin, WorldGenConfig, WorldGenRng, apply_clear_generation_with_rng,
+    apply_heightmap, apply_landscape_with_rng, apply_population_gen, apply_population_gen_with_rng,
+    apply_world_gen, apply_world_gen_with_rng, ceil_div, clear_ground_m5, effective_clear_ground,
+    generate_industries, generate_industries_with_rng, generate_objects_with_rng, generate_towns,
     generate_towns_with_rng, generate_trees, generate_trees_with_rng,
     generate_trees_with_rng_observer, generate_trees_with_rng_observer_with_height_limit,
     generate_trees_with_rng_observer_with_map_settings, house_beside_road, industry_target_count,
     initial_clear_ground, parse_hmap, road_tiles_are_flat, run_generation_tile_loop,
-    run_landscape_river_tile_loops, scale_by_size, serialize_heightmap, town_target_count,
+    run_generation_tile_loops_with_rng, run_landscape_river_tile_loops, scale_by_size,
+    serialize_heightmap, town_target_count,
 };
 
 #[cfg(test)]

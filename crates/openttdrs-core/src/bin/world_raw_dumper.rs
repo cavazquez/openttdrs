@@ -13,7 +13,7 @@ use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, TreePlacement, WorldGenConfig,
     apply_clear_generation_with_rng, apply_landscape_with_rng, generate_industries_with_rng,
     generate_objects_with_rng, generate_towns_with_rng, generate_trees_with_rng,
-    generate_trees_with_rng_observer_with_map_settings, run_generation_tile_loop,
+    generate_trees_with_rng_observer_with_map_settings, run_generation_tile_loops_with_rng,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -495,31 +495,25 @@ fn run(args: &Args) -> Result<(), String> {
             return Err("--generate requiere --seed N".to_string());
         };
         let mut map = Map::new_flat(width, height, 0);
-        let config = WorldGenConfig {
-            climate: Climate::Temperate,
-            seed,
-            sea_level: 1,
-            // Defaults equivalentes al generador TGP de OpenTTD: relieve
-            // Flat (1), nivel de mar muy bajo y `water_borders=Random`.
-            // Los bordes void se materializan en `apply_world_gen`, como hace
-            // `freeform_edges` al inicializar el mapa C++.
-            island: false,
-            water_borders: Some(
-                std::env::var("OPENTTDRS_WATER_BORDERS")
-                    .ok()
-                    .and_then(|value| value.parse().ok())
-                    .unwrap_or(0x10),
-            ),
-            amount_of_rivers: std::env::var("OPENTTDRS_AMOUNT_OF_RIVERS")
+        // El dumper y el cliente deben partir del mismo perfil de «Nueva
+        // partida». Las variables de entorno sólo permiten aislar una etapa
+        // del oracle sin cambiar los defaults publicados.
+        let mut config = WorldGenConfig::for_new_game(Climate::Temperate, seed)
+            .with_terrain_type(TerrainType::Flat);
+        config.water_borders = Some(
+            std::env::var("OPENTTDRS_WATER_BORDERS")
                 .ok()
                 .and_then(|value| value.parse().ok())
-                .unwrap_or(2),
-            startup_rng_draws: std::env::var("OPENTTDRS_STARTUP_RNG_DRAWS")
-                .ok()
-                .and_then(|value| value.parse().ok())
-                .unwrap_or(1),
-            ..WorldGenConfig::default().with_terrain_type(TerrainType::Flat)
-        };
+                .unwrap_or(config.water_borders.unwrap_or(0)),
+        );
+        config.amount_of_rivers = std::env::var("OPENTTDRS_AMOUNT_OF_RIVERS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(config.amount_of_rivers);
+        config.startup_rng_draws = std::env::var("OPENTTDRS_STARTUP_RNG_DRAWS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(config.startup_rng_draws);
         let mut generation_rng =
             apply_landscape_with_rng(&mut map, &config, &[]).map_err(|error| {
                 format!("falló la generación {width}x{height}, seed={seed}: {error:?}")
@@ -589,12 +583,14 @@ fn run(args: &Args) -> Result<(), String> {
         // El RNG global que usa `RunTileLoop` es el mismo stream que dejó
         // `GenerateTrees`; reiniciar el estado a la semilla 1 aquí desfasaba
         // industria/árboles y cualquier callback que consuma Random().
-        state.random = generation_rng;
         if matches!(args.generate_until, GenerateUntil::Startup) {
-            for tick in 0..u64::from(startup_ticks) {
-                run_generation_tile_loop(&mut state, tick);
-            }
+            run_generation_tile_loops_with_rng(
+                &mut state,
+                &mut generation_rng,
+                u64::from(startup_ticks),
+            );
         }
+        state.random = generation_rng;
         map = state.map;
         let source = format!(
             "generated:{width}x{height}:seed={seed}:until={}",

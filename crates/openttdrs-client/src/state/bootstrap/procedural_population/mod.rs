@@ -5,8 +5,8 @@ mod tests;
 
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    PopulationGenConfig, PreserveRect, WorldGenRng, apply_population_gen,
-    apply_population_gen_with_rng,
+    PopulationGenConfig, PreserveRect, STARTUP_TILE_LOOP_PASSES, WorldGenRng, apply_population_gen,
+    apply_population_gen_with_rng, run_generation_tile_loops_with_rng,
 };
 
 use super::world::NewGameSettings;
@@ -35,6 +35,11 @@ pub(crate) fn populate_procedural_world(
     };
     if let Some(rng) = generation_rng.as_mut() {
         apply_population_gen_with_rng(state, &config, preserve, rng);
+        // El mundo nuevo de OpenTTD ejecuta la cola de RunTileLoop después de
+        // GenerateTrees y antes de devolver el control al jugador. Se usa el
+        // mismo stream que dejó la población para no desfasar callbacks de
+        // árboles, agua e industrias.
+        run_generation_tile_loops_with_rng(state, rng, STARTUP_TILE_LOOP_PASSES);
     } else {
         apply_population_gen(state, &config, preserve);
     }

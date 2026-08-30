@@ -698,10 +698,26 @@ pub fn get_translated_house_id(clean: u16, overrides: &[u16]) -> u16 {
 /// Máscara de clima para el landscape actual (`GetClimateMaskForLandscape`).
 #[must_use]
 pub fn climate_zone_mask(climate: Climate, tile_height: u8) -> u16 {
+    climate_zone_mask_at_snow_line(climate, tile_height, DEF_SNOW_LINE_HEIGHT)
+}
+
+/// Máscara de clima usando la línea de nieve efectiva del mapa.
+///
+/// `OpenTTD` recalcula `game_creation.snow_line_height` a partir de la
+/// cobertura ártica antes de `GenerateTowns`. La variante histórica de
+/// [`climate_zone_mask`] conserva el valor por defecto para los consumidores
+/// que no tienen contexto de partida; la generación de pueblos debe usar esta
+/// función con la línea persistida en `GameState`.
+#[must_use]
+pub fn climate_zone_mask_at_snow_line(
+    climate: Climate,
+    tile_height: u8,
+    snow_line_height: u8,
+) -> u16 {
     match climate {
         Climate::Temperate => 1 << (HouseZone::ClimateTemperate as u8),
         Climate::SubArctic => {
-            if i32::from(tile_height) > i32::from(DEF_SNOW_LINE_HEIGHT) {
+            if i32::from(tile_height) > i32::from(snow_line_height) {
                 1 << (HouseZone::ClimateSubarcticAboveSnow as u8)
             } else {
                 1 << (HouseZone::ClimateSubarcticBelowSnow as u8)
@@ -928,6 +944,21 @@ mod tests {
         let hs = HouseSpec::get(3).unwrap();
         assert!(hs.is_church());
         assert_eq!(hs.population, 5);
+    }
+
+    #[test]
+    fn arctic_house_zone_uses_effective_snow_line() {
+        let above_snow = 1 << HouseZone::ClimateSubarcticAboveSnow as u8;
+        let below_snow = 1 << HouseZone::ClimateSubarcticBelowSnow as u8;
+
+        assert_eq!(
+            climate_zone_mask_at_snow_line(Climate::SubArctic, 3, 2),
+            above_snow
+        );
+        assert_eq!(
+            climate_zone_mask_at_snow_line(Climate::SubArctic, 3, DEF_SNOW_LINE_HEIGHT),
+            below_snow
+        );
     }
 
     #[test]

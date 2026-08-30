@@ -7,7 +7,7 @@ use crate::bridge_spec::{BridgeSpecDef, BridgeType, bridge_available_in, set_bri
 use crate::company::OWNER_NONE_M1;
 use crate::house_spec::{
     BUILDING_FLAG_SIZE_1X2, BUILDING_FLAG_SIZE_2X1, BUILDING_FLAG_SIZE_2X2, HouseSpec,
-    climate_zone_mask, get_town_radius_group,
+    climate_zone_mask_at_snow_line, get_town_radius_group,
 };
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
 use crate::map::{
@@ -331,10 +331,14 @@ fn build_selected_town_with_generated_growth(
 
     let growth_context = GeneratedTownGrowthContext {
         climate: ctx.state.climate,
+        snow_line_height: ctx.state.snow_line_height,
         calendar_year: ctx.state.calendar.year,
         bridge_spec_catalog: ctx.state.bridge_spec_catalog.clone(),
     };
     let initial_growth_calls = temporary_house_budget.saturating_mul(4);
+    // La primera llamada de `GrowTown` ya está representada por el bootstrap
+    // que crea la carretera inicial; continuar en la frontera siguiente evita
+    // ejecutar una iteración extra respecto de `DoCreateTown`.
     for _ in 1..initial_growth_calls {
         let _ =
             grow_generated_town_road_once(&mut ctx.state.map, &mut town, &growth_context, ctx.rng);
@@ -1510,6 +1514,7 @@ fn try_grow_generated_town_road_bridge(
 #[derive(Clone)]
 struct GeneratedTownGrowthContext {
     climate: crate::world_gen::Climate,
+    snow_line_height: u8,
     calendar_year: u32,
     /// El comando de puente del pueblo consulta el catálogo activo, no una
     /// tabla fija: Action0 Bridges ya pudo alterar sus límites antes de la
@@ -1692,6 +1697,7 @@ fn grow_generated_town_road_in_tile(
             map,
             house_tile,
             context.climate,
+            context.snow_line_height,
             context.calendar_year,
             rng,
         ) && materialize_generated_town_house(map, town, candidate, rng)
@@ -1952,6 +1958,7 @@ fn choose_generated_town_house_candidate(
     map: &crate::map::Map,
     tile: TileCoord,
     climate: crate::world_gen::Climate,
+    snow_line_height: u8,
     calendar_year: u32,
     rng: &mut crate::cargodist::parity::Randomizer,
 ) -> Option<TownHouseCandidate> {
@@ -1964,7 +1971,8 @@ fn choose_generated_town_house_candidate(
     let (slope, _) = tile_slope_and_z(map, tile)?;
     let max_z = town_house_tile_max_z(map, tile)?;
     let zone = get_town_radius_group(town, tile);
-    let required_zones = (1_u16 << (zone as u8)) | climate_zone_mask(climate, max_z);
+    let required_zones =
+        (1_u16 << (zone as u8)) | climate_zone_mask_at_snow_line(climate, max_z, snow_line_height);
     let mut probability_max = 0_u32;
     let mut candidates = Vec::new();
 
@@ -2484,6 +2492,7 @@ mod tests {
     ) -> Option<TileCoord> {
         let context = GeneratedTownGrowthContext {
             climate: Climate::Temperate,
+            snow_line_height: state.snow_line_height,
             calendar_year: 1950,
             bridge_spec_catalog: state.bridge_spec_catalog.clone(),
         };
@@ -3909,6 +3918,7 @@ mod tests {
             &state.map,
             tile,
             Climate::Temperate,
+            crate::world_gen::DEF_SNOW_LINE_HEIGHT,
             1950,
             &mut rng,
         )
@@ -3947,6 +3957,7 @@ mod tests {
             &state.map,
             tile,
             Climate::Temperate,
+            crate::world_gen::DEF_SNOW_LINE_HEIGHT,
             1950,
             &mut rng,
         )
@@ -4039,6 +4050,7 @@ mod tests {
 
         let context = GeneratedTownGrowthContext {
             climate: Climate::Temperate,
+            snow_line_height: state.snow_line_height,
             calendar_year: 1950,
             bridge_spec_catalog: state.bridge_spec_catalog.clone(),
         };
@@ -4117,6 +4129,7 @@ mod tests {
 
         let context = GeneratedTownGrowthContext {
             climate: Climate::Temperate,
+            snow_line_height: state.snow_line_height,
             calendar_year: 1950,
             bridge_spec_catalog: state.bridge_spec_catalog.clone(),
         };
@@ -4246,6 +4259,7 @@ mod tests {
 
         let context = GeneratedTownGrowthContext {
             climate: Climate::Temperate,
+            snow_line_height: state.snow_line_height,
             calendar_year: 1950,
             bridge_spec_catalog: state.bridge_spec_catalog.clone(),
         };
@@ -4323,6 +4337,7 @@ mod tests {
             .expect("sea span");
         let context = GeneratedTownGrowthContext {
             climate: Climate::Temperate,
+            snow_line_height: state.snow_line_height,
             calendar_year: 1950,
             bridge_spec_catalog: state.bridge_spec_catalog.clone(),
         };

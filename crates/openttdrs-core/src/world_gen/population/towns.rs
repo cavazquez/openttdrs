@@ -510,13 +510,21 @@ fn clean_up_generated_town_road_bits(
         }
         let neighbour = add_town_diag(tile, dir);
         let connective = match map.get_kind(neighbour) {
-            Some(
-                TileKind::Grass
-                | TileKind::Forest
-                | TileKind::Road
-                | TileKind::RoadBridge
-                | TileKind::RoadTunnel,
-            ) => true,
+            Some(TileKind::Grass | TileKind::Forest | TileKind::Road) => true,
+            Some(TileKind::RoadBridge | TileKind::RoadTunnel) => {
+                // `CleanUpRoadBits` no acepta una rampa de puente/túnel por
+                // el mero hecho de ser vial: la boca sólo conecta si su
+                // único bit exterior coincide con el bit espejado de la
+                // conexión que se está limpiando. `GetAnyRoadBits` del
+                // oráculo usa la dirección opuesta a la almacenada en M5.
+                generated_town_road_tunnel_bridge_direction(map, neighbour).is_some_and(
+                    |bridge_dir| {
+                        town_diag_dir_to_road_bits(reverse_town_diag_dir(bridge_dir))
+                            & town_diag_dir_to_road_bits(reverse_town_diag_dir(dir))
+                            != 0
+                    },
+                )
+            }
             Some(TileKind::Water) => !is_water_ground(map, neighbour),
             Some(
                 TileKind::Rail
@@ -4386,6 +4394,29 @@ mod tests {
         map.set_kind(TileCoord::new(3, 4), TileKind::House)
             .expect("house neighbour");
         assert_eq!(clean_up_generated_town_road_bits(&map, road, 0x0A), 0x02);
+    }
+
+    #[test]
+    fn cleanup_road_bits_checks_bridge_mouth_direction() {
+        let mut map = Map::new_flat(8, 8, 1);
+        let road = TileCoord::new(4, 4);
+        let mouth = add_town_diag(road, 3);
+        let mut bridge = map.get(mouth).expect("bridge mouth");
+        bridge.kind = TileKind::RoadBridge;
+        bridge.mapt = 0x90;
+        // The bridge points toward direction 2, so its exterior bit points
+        // opposite direction 0 and cannot connect the direction-3 plan.
+        bridge.m5 = 0x04 | 2;
+        map.set_tile(mouth, bridge).expect("write bridge mouth");
+        assert_eq!(clean_up_generated_town_road_bits(&map, road, ROAD_NW), 0);
+
+        bridge.m5 = 0x04 | 3;
+        map.set_tile(mouth, bridge)
+            .expect("write matching bridge mouth");
+        assert_eq!(
+            clean_up_generated_town_road_bits(&map, road, ROAD_NW),
+            ROAD_NW
+        );
     }
 
     #[test]

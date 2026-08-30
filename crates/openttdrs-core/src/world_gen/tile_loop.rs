@@ -96,103 +96,115 @@ fn run_generation_tile_loop_impl(
             _ => {}
         }
         tile = state.map.get(*coord).unwrap_or(tile);
-        match tile.kind {
-            // TileLoop_Clear y TileLoop_Trees comparten el crecimiento de
-            // hierba/campos y la actualización de árboles. El helper ya
-            // vuelve a leer la tesela viva después de una transición desértica.
-            TileKind::Forest
-                if state.climate == crate::world_gen::Climate::Temperate
-                    && generation_rng.is_some() =>
-            {
-                // `TileLoop_Trees` delega primero una orilla a
-                // `TileLoop_Water`. El callback puede cambiar la tesela, por
-                // lo que el procesador de árbol la vuelve a leer del mapa.
-                if (tile.m2 >> 6) & 0x07 == 3 {
-                    crate::map::water_flood::tile_loop_water_at(state, *coord, tile);
-                }
-                if let Some(rng) = generation_rng.as_deref_mut() {
-                    crate::map::tree_tile_loop::process_generation_tree_growth_at(
-                        &mut state.map,
-                        state.climate,
-                        tick,
-                        rng,
-                        *coord,
-                    );
-                }
-            }
-            TileKind::Grass | TileKind::Forest | TileKind::CoalField => {
-                crate::map::tree_tile_loop::process_tree_and_field_growth_from_visits(
-                    &mut state.map,
-                    tick,
-                    state.world_seed,
-                    &[(*coord, tile)],
-                );
-            }
-            // TileLoop_Water es el único callback aplicable a MP_WATER y no
-            // debe tratar los bordes MP_VOID como tiles válidos al inundar.
-            TileKind::Water => {
-                crate::map::water_flood::tile_loop_water_at(state, *coord, tile);
-            }
-            // TileLoop_Industry primero deja que una industria sobre agua
-            // intente inundar, luego ejecuta randomización, obra y animación.
-            // Las tres operaciones consumen exactamente la visita actual y no
-            // barren de nuevo el mapa.
-            TileKind::Industry => {
-                if crate::map::industry_terrain::industry_tile_on_water(tile) {
-                    crate::map::water_flood::tile_loop_water_at(state, *coord, tile);
-                }
-                let one = [(*coord, tile)];
-                let _ = crate::map::industry_random::
-                    advance_industry_tile_randomisation_from_visits_with_catalog(
-                        &mut state.map,
-                        tick,
-                        state.world_seed,
-                        &one,
-                        &state.industries,
-                        &state.towns,
-                        &state.industry_tile_spec_catalog,
-                        &state.industry_spec_catalog,
-                        state.climate,
-                    );
-                let _ =
-                    crate::map::industry_construction::advance_industry_construction_from_visits(
-                        &mut state.map,
-                        &one,
-                        &state.industries,
-                    );
-                let _ =
-                    crate::map::industry_tile_anim::advance_industry_tile_loop_events_from_visits(
-                        &mut state.map,
-                        tick,
-                        &one,
-                    );
-            }
-            TileKind::Road => tile_loop_road(state, *coord, tile),
-            // Casas, carreteras, vías, estaciones, objetos y depósitos tienen
-            // callbacks de tile loop propios en OpenTTD. Para un mundo nuevo
-            // sus rutas de estado todavía no tienen una mutación equivalente;
-            // dejar explícito el no-op evita ejecutar lógica de economía del
-            // tick normal y mantiene el contrato de la pasada.
-            TileKind::House
-            | TileKind::Rail
-            | TileKind::RoadDepot
-            | TileKind::RailDepot
-            | TileKind::ShipDepot
-            | TileKind::Airport
-            | TileKind::RoadTunnel
-            | TileKind::RailTunnel
-            | TileKind::RoadBridge
-            | TileKind::RailBridge
-            | TileKind::Station
-            | TileKind::Void
-            | TileKind::Unknown(_) => {}
-        }
+        dispatch_generation_tile_loop_tile(state, tick, *coord, tile, &mut generation_rng);
     }
 
     // El último conjunto queda disponible para herramientas de diagnóstico,
     // igual que después de `phase_tile_loop` en la simulación normal.
     state.runtime.tile_loop_visited = visits;
     visit_count
+}
+
+fn dispatch_generation_tile_loop_tile(
+    state: &mut GameState,
+    tick: u64,
+    coord: TileCoord,
+    tile: Tile,
+    generation_rng: &mut Option<&mut Randomizer>,
+) {
+    match tile.kind {
+        // TileLoop_Clear y TileLoop_Trees comparten el crecimiento de
+        // hierba/campos y la actualización de árboles. El helper ya vuelve a
+        // leer la tesela viva después de una transición desértica.
+        TileKind::Forest
+            if state.climate == crate::world_gen::Climate::Temperate
+                && generation_rng.is_some() =>
+        {
+            // `TileLoop_Trees` delega primero una orilla a `TileLoop_Water`.
+            // El callback puede cambiar la tesela, por lo que el procesador
+            // de árbol la vuelve a leer del mapa.
+            if (tile.m2 >> 6) & 0x07 == 3 {
+                crate::map::water_flood::tile_loop_water_at(state, coord, tile);
+            }
+            if let Some(rng) = generation_rng.as_deref_mut() {
+                crate::map::tree_tile_loop::process_generation_tree_growth_at(
+                    &mut state.map,
+                    state.climate,
+                    tick,
+                    rng,
+                    coord,
+                );
+            }
+        }
+        TileKind::Forest | TileKind::CoalField | TileKind::Grass => {
+            if tile.kind == TileKind::Grass
+                && crate::map::tree_tile_loop::clear_ground_type(tile.m5)
+                    == crate::world_gen::CLEAR_GROUND_FIELDS
+            {
+                tile_loop_clear_field(state, coord, tile);
+            } else {
+                crate::map::tree_tile_loop::process_tree_and_field_growth_from_visits(
+                    &mut state.map,
+                    tick,
+                    state.world_seed,
+                    &[(coord, tile)],
+                );
+            }
+        }
+        // TileLoop_Water es el único callback aplicable a MP_WATER y no debe
+        // tratar los bordes MP_VOID como tiles válidos al inundar.
+        TileKind::Water => crate::map::water_flood::tile_loop_water_at(state, coord, tile),
+        // TileLoop_Industry primero deja que una industria sobre agua intente
+        // inundar, luego ejecuta randomización, obra y animación. Las tres
+        // operaciones consumen exactamente la visita actual y no barren de
+        // nuevo el mapa.
+        TileKind::Industry => {
+            if crate::map::industry_terrain::industry_tile_on_water(tile) {
+                crate::map::water_flood::tile_loop_water_at(state, coord, tile);
+            }
+            let one = [(coord, tile)];
+            let _ = crate::map::industry_random::
+                advance_industry_tile_randomisation_from_visits_with_catalog(
+                    &mut state.map,
+                    tick,
+                    state.world_seed,
+                    &one,
+                    &state.industries,
+                    &state.towns,
+                    &state.industry_tile_spec_catalog,
+                    &state.industry_spec_catalog,
+                    state.climate,
+                );
+            let _ = crate::map::industry_construction::advance_industry_construction_from_visits(
+                &mut state.map,
+                &one,
+                &state.industries,
+            );
+            let _ = crate::map::industry_tile_anim::advance_industry_tile_loop_events_from_visits(
+                &mut state.map,
+                tick,
+                &one,
+            );
+        }
+        TileKind::Road => tile_loop_road(state, coord, tile),
+        // Casas, vías, estaciones, objetos y depósitos tienen callbacks de
+        // tile loop propios en OpenTTD. Para un mundo nuevo sus rutas de
+        // estado todavía no tienen una mutación equivalente; dejar explícito
+        // el no-op evita ejecutar lógica de economía del tick normal.
+        TileKind::House
+        | TileKind::Rail
+        | TileKind::RoadDepot
+        | TileKind::RailDepot
+        | TileKind::ShipDepot
+        | TileKind::Airport
+        | TileKind::RoadTunnel
+        | TileKind::RailTunnel
+        | TileKind::RoadBridge
+        | TileKind::RailBridge
+        | TileKind::Station
+        | TileKind::Void
+        | TileKind::Unknown(_) => {}
+    }
 }
 
 /// Ejecuta la parte de `TileLoop_Road` que es observable durante la creación
@@ -243,6 +255,90 @@ fn tile_loop_road(state: &mut GameState, coord: TileCoord, tile: Tile) {
     let mut updated = tile;
     updated.m6 = (updated.m6 & !0x38) | (next << 3);
     let _ = state.map.set_tile(coord, updated);
+}
+
+/// Reproduce la rama `CLEAR_FIELDS` de `TileLoop_Clear`.
+///
+/// Los campos son `MP_CLEAR` aunque se vean como una clase semántica de
+/// terreno. Cada visita actualiza primero las cercas que limitan con una
+/// tesela que no es campo y después avanza `MAP5`/`MAP3` con el contador de
+/// ocho estados. Cuando un campo huérfano supera el tipo 7, `OpenTTD` lo
+/// convierte en hierba de densidad 2; los campos ligados a una industria
+/// vuelven al tipo 0 después del tipo 8.
+fn tile_loop_clear_field(state: &mut GameState, coord: TileCoord, tile: Tile) {
+    if tile.m3 & 0x10 != 0 {
+        return;
+    }
+
+    let mut updated = tile;
+    for direction in 0_u8..4 {
+        if field_fence(updated, direction) != 0 {
+            continue;
+        }
+        let (dx, dy) = crate::map::diag_dir_offset(direction);
+        let neighbour = TileCoord::new(coord.x + dx, coord.y + dy);
+        let neighbour_is_field = state.map.get(neighbour).is_some_and(|candidate| {
+            candidate.kind == TileKind::Grass
+                && candidate.ottd_type_nibble() == 0
+                && crate::map::tree_tile_loop::clear_ground_type(candidate.m5)
+                    == crate::world_gen::CLEAR_GROUND_FIELDS
+        });
+        if !neighbour_is_field {
+            set_field_fence(&mut updated, direction, 3);
+        }
+    }
+
+    let counter = crate::map::tree_tile_loop::clear_counter(updated.m5);
+    if counter < 7 {
+        updated.m5 = crate::map::tree_tile_loop::with_clear_counter(updated.m5, counter + 1);
+    } else {
+        updated.m5 = crate::map::tree_tile_loop::with_clear_counter(updated.m5, 0);
+        let field_type = updated.m3 & 0x0F;
+        if field_type >= 7
+            && !state
+                .industries
+                .iter()
+                .any(|industry| industry.instance_id == updated.m2)
+        {
+            // `MakeClear(tile, CLEAR_GRASS, 2)` resets every auxiliary map
+            // plane except the low `TropicZone` nibble of `MAPT`.
+            updated.kind = TileKind::Grass;
+            updated.mapt &= 0x0F;
+            updated.m1 = crate::company::OWNER_NONE_M1;
+            updated.m2 = 0;
+            updated.m2_hi = 0;
+            updated.m3 = 0;
+            updated.m3hi = 0;
+            updated.m5 = crate::world_gen::clear_ground_m5(crate::world_gen::CLEAR_GROUND_GRASS, 2);
+            updated.m6 = 0;
+            updated.m7 = 0;
+            updated.m8 = 0;
+        } else {
+            let next_type = if field_type < 8 { field_type + 1 } else { 0 };
+            updated.m3 = (updated.m3 & !0x0F) | next_type;
+        }
+    }
+
+    let _ = state.map.set_tile(coord, updated);
+}
+
+fn field_fence(tile: Tile, direction: u8) -> u8 {
+    match direction & 3 {
+        0 => (tile.m3 >> 5) & 0x07,   // DIAGDIR_NE
+        1 => (tile.m3hi >> 2) & 0x07, // DIAGDIR_SE
+        2 => (tile.m3hi >> 5) & 0x07, // DIAGDIR_SW
+        _ => (tile.m6 >> 2) & 0x07,   // DIAGDIR_NW
+    }
+}
+
+fn set_field_fence(tile: &mut Tile, direction: u8, value: u8) {
+    let value = (value & 0x07) << 5;
+    match direction & 3 {
+        0 => tile.m3 = (tile.m3 & !0xE0) | value,
+        1 => tile.m3hi = (tile.m3hi & !0x1C) | (value >> 3),
+        2 => tile.m3hi = (tile.m3hi & !0xE0) | value,
+        _ => tile.m6 = (tile.m6 & !0x1C) | (value >> 3),
+    }
 }
 
 /// Reproduce las pasadas `RunTileLoop` finales de `CreateRivers`.
@@ -410,6 +506,37 @@ mod tests {
         tile_loop_road(&mut state, road, current);
         assert_eq!((state.map.get(road).unwrap().m6 >> 3) & 0x07, 3);
         assert_eq!(state.map.get(road).unwrap().m6 & 0x07, 3);
+    }
+
+    #[test]
+    fn clear_field_tile_loop_updates_fences_and_reclaims_orphans() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let field = TileCoord::new(1, 1);
+        let mut tile = map.get(field).unwrap();
+        tile.m5 = crate::world_gen::clear_ground_m5(crate::world_gen::CLEAR_GROUND_FIELDS, 3);
+        tile.m2 = 0;
+        map.set_tile(field, tile).unwrap();
+        let mut state = GameState::from_map(map);
+
+        let current = state.map.get(field).unwrap();
+        tile_loop_clear_field(&mut state, field, current);
+        let updated = state.map.get(field).unwrap();
+        assert_eq!(crate::map::tree_tile_loop::clear_counter(updated.m5), 1);
+        assert_eq!((updated.m3 >> 5) & 0x07, 3);
+        assert_eq!((updated.m3hi >> 2) & 0x07, 3);
+        assert_eq!((updated.m3hi >> 5) & 0x07, 3);
+        assert_eq!((updated.m6 >> 2) & 0x07, 3);
+
+        let mut orphan = updated;
+        orphan.m3 = (orphan.m3 & !0x0F) | 7;
+        orphan.m5 = crate::map::tree_tile_loop::with_clear_counter(orphan.m5, 7);
+        state.map.set_tile(field, orphan).unwrap();
+        let current = state.map.get(field).unwrap();
+        tile_loop_clear_field(&mut state, field, current);
+        let reclaimed = state.map.get(field).unwrap();
+        assert_eq!(reclaimed.kind, TileKind::Grass);
+        assert_eq!(reclaimed.m5, crate::world_gen::clear_ground_m5(0, 2));
+        assert_eq!(reclaimed.m3, 0);
     }
 
     #[test]

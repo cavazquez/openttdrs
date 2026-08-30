@@ -669,7 +669,7 @@ pub fn tile_loop_clear_desert(
         return false;
     }
     let ground = clear_ground_type(tile.m5);
-    let current = if matches!(ground, CLEAR_GROUND_DESERT | CLEAR_GROUND_ROCKY) {
+    let current = if ground == CLEAR_GROUND_DESERT {
         clear_density(tile.m5)
     } else {
         0
@@ -682,9 +682,7 @@ pub fn tile_loop_clear_desert(
     if current == expected {
         return false;
     }
-    let new_m5 = if ground == CLEAR_GROUND_ROCKY {
-        clear_ground_m5(CLEAR_GROUND_ROCKY, expected)
-    } else if expected == 0 {
+    let new_m5 = if expected == 0 {
         clear_ground_m5(CLEAR_GROUND_GRASS, 3)
     } else {
         clear_ground_m5(CLEAR_GROUND_DESERT, expected)
@@ -1479,6 +1477,25 @@ mod tests {
             CLEAR_GROUND_DESERT
         );
         assert_eq!(clear_density(map.get(c).unwrap().m5), 3);
+    }
+
+    #[test]
+    fn clear_desert_transition_replaces_rocky_ground() {
+        let mut map = Map::new_flat(64, 64, 0);
+        let c = TileCoord::new(32, 32);
+        for y in 31..=33 {
+            for x in 31..=33 {
+                map.set_mapt_m5(TileCoord::new(x, y), 0x01, 0)
+                    .expect("desert zone");
+            }
+        }
+        map.set_mapt_m5(c, 0x01, clear_ground_m5(CLEAR_GROUND_ROCKY, 3))
+            .expect("rocky ground");
+
+        assert!(tile_loop_clear_desert(&mut map, c, Climate::SubTropical, 0));
+        let tile = map.get(c).expect("transitioned tile");
+        assert_eq!(clear_ground_type(tile.m5), CLEAR_GROUND_DESERT);
+        assert_eq!(clear_density(tile.m5), 3);
     }
 
     #[test]

@@ -4672,9 +4672,17 @@ mod tests {
         );
     }
 
+    static TEMPFILE_DIR_SEQUENCE: std::sync::atomic::AtomicUsize =
+        std::sync::atomic::AtomicUsize::new(0);
+
     fn tempfile_dir_with(name: &str, bytes: &[u8]) -> std::path::PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("openttdrs_ngr_{}_{}", std::process::id(), name));
+        let sequence = TEMPFILE_DIR_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "openttdrs_ngr_{}_{}_{}",
+            std::process::id(),
+            sequence,
+            name
+        ));
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join(name), bytes).unwrap();
         dir

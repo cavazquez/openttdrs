@@ -105,7 +105,7 @@ fn check_industry_template(
             if existing_kind != TileKind::House {
                 return Err(CommandError::IndustryMustBeBuiltInTown);
             }
-        } else if let Some(error) = industry_auto_clear_error(existing_kind) {
+        } else if let Some(error) = map.get(*tile).and_then(industry_auto_clear_error_for_tile) {
             return Err(error);
         }
         // `CheckIfIndustryTilesAreFree` rejects a land industry on any tile
@@ -161,6 +161,31 @@ const fn industry_auto_clear_error(kind: TileKind) -> Option<CommandError> {
         TileKind::Industry => Some(CommandError::IndustryTileOccupied),
         TileKind::House => Some(CommandError::IndustryTileCannotBeCleared),
         _ => None,
+    }
+}
+
+/// Contrato de `ClearTile_Road` cuando la industria se prueba con `Auto`.
+///
+/// Una calle normal sólo puede desaparecer automáticamente si contiene una
+/// única pieza de carretera y no tiene vía de tranvía. Cruces, depósitos,
+/// puentes y túneles requieren una orden explícita de demolición. Durante la
+/// generación esto importa aunque la altura sea plana: `CheckIfCanLevelIndustryPlatform`
+/// no inspecciona el tipo cuando no hay que nivelar, pero
+/// `CheckIfIndustryTilesAreFree` sí ejecuta el clear automático primero.
+fn industry_auto_clear_error_for_tile(tile: Tile) -> Option<CommandError> {
+    if let Some(error) = industry_auto_clear_error(tile.kind) {
+        return Some(error);
+    }
+    if tile.kind != TileKind::Road {
+        return None;
+    }
+    let road_tile_type = (tile.m5 >> 6) & 0x03;
+    let road_bits = tile.m5 & 0x0F;
+    let tram_bits = tile.m3 & 0x0F;
+    if road_tile_type != 0 || road_bits.count_ones() != 1 || tram_bits != 0 {
+        Some(CommandError::IndustryTileCannotBeCleared)
+    } else {
+        None
     }
 }
 
@@ -302,7 +327,7 @@ pub fn check_place_industry_spec_def(
     for (tile, _) in &footprint {
         super::transport::check_in_bounds(map, *tile)?;
         let existing_kind = map.get_kind(*tile).unwrap_or(TileKind::Grass);
-        if let Some(error) = industry_auto_clear_error(existing_kind) {
+        if let Some(error) = map.get(*tile).and_then(industry_auto_clear_error_for_tile) {
             return Err(error);
         }
         if tile_has_water_class(existing_kind)
@@ -579,6 +604,25 @@ mod tests {
 
         assert_eq!(
             check_place_industry_spec_layout(&map, origin, IndustrySpec::CoalMine, 0),
+            Err(CommandError::IndustryTileCannotBeCleared)
+        );
+    }
+
+    #[test]
+    fn industry_layout_rejects_a_multi_piece_road_under_auto_clear() {
+        let origin = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(16, 16, 0);
+        let Some(mut road) = map.get(origin) else {
+            panic!("flat tile missing");
+        };
+        road.kind = TileKind::Road;
+        road.mapt = 0x20;
+        road.m5 = 0x0A; // ROAD_X: dos piezas, por lo que Auto debe fallar.
+        road.m3 = 0;
+        assert!(map.set_tile(origin, road).is_ok());
+
+        assert_eq!(
+            check_place_industry_spec_layout(&map, origin, IndustrySpec::PowerStation, 2),
             Err(CommandError::IndustryTileCannotBeCleared)
         );
     }

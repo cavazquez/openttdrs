@@ -192,7 +192,9 @@ fn flooding_behaviour_at(map: &Map, c: TileCoord, tile: Tile) -> FloodingBehavio
 fn is_flood_clearable(kind: TileKind) -> bool {
     matches!(
         kind,
-        TileKind::Grass | TileKind::Forest | TileKind::CoalField | TileKind::House
+        // `DoFloodTile` delegates to `CMD_LANDSCAPE_CLEAR`; a town house is
+        // not clearable by the water company and therefore remains intact.
+        TileKind::Grass | TileKind::Forest | TileKind::CoalField
     )
 }
 
@@ -516,6 +518,20 @@ mod tests {
 
     fn sea_at(map: &mut Map, c: TileCoord) {
         make_water_tile(map, c, WaterClass::Sea).unwrap();
+    }
+
+    #[test]
+    fn flood_does_not_clear_town_houses() {
+        let mut state = GameState::from_map(Map::new_flat(2, 2, 0));
+        let house = TileCoord::new(1, 1);
+        state
+            .map
+            .set_tile(house, Tile::completed_house(0, 0, 0))
+            .unwrap();
+        let before = state.map.get(house).unwrap();
+
+        assert!(!do_flood_tile(&mut state, house));
+        assert_eq!(state.map.get(house).unwrap(), before);
     }
 
     #[test]

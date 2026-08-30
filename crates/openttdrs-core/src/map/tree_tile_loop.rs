@@ -411,6 +411,13 @@ fn try_spread_neighbor(map: &mut Map, tick: u64, world_seed: u64, c: TileCoord, 
 fn clear_dead_tree_tile(map: &mut Map, c: TileCoord, m2: u8) {
     let ground = tree_ground(m2);
     let density = tree_ground_density(m2);
+    // `TileLoop_Trees` calls `MakeShore` when the last tree on a shore
+    // disappears. It is not the same operation as clearing a tree on grass:
+    // the tile becomes `MP_WATER/Coast` and keeps the water owner/class.
+    if ground == 3 {
+        let _ = crate::map::water_flood::make_shore_tile(map, c);
+        return;
+    }
     let (clear_ground, clear_density) = match ground {
         1 => (CLEAR_GROUND_ROUGH, 3), // Rough
         2 | 4 => {
@@ -1077,6 +1084,24 @@ mod tests {
         let mut loop_state = TileLoopState::default();
         grow_trees_at(&mut map, tick, 0, &mut loop_state);
         assert_eq!(map.get_kind(c), Some(TileKind::Grass));
+    }
+
+    #[test]
+    fn dead_shore_tree_becomes_coast_water() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let c = TileCoord::new(0, 0);
+        force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_DEAD));
+        let mut tree = map.get(c).unwrap();
+        tree.m2 = make_tree_m2(3, 3);
+        map.set_tile(c, tree).unwrap();
+
+        clear_dead_tree_tile(&mut map, c, tree.m2);
+
+        let tile = map.get(c).unwrap();
+        assert_eq!(tile.kind, TileKind::Water);
+        assert_eq!(tile.mapt & 0xF0, 0x60);
+        assert_eq!(tile.m5, 0x10);
+        assert_eq!(water_class_from_m1(tile.m1), WaterClass::Sea);
     }
 
     #[test]

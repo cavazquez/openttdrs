@@ -750,10 +750,10 @@ pub use world_gen::{
     generate_objects_with_rng, generate_towns, generate_towns_with_rng, generate_trees,
     generate_trees_with_rng, generate_trees_with_rng_observer,
     generate_trees_with_rng_observer_with_height_limit,
-    generate_trees_with_rng_observer_with_map_settings, house_beside_road, industry_target_count,
-    initial_clear_ground, parse_hmap, road_tiles_are_flat, run_generation_tile_loop,
-    run_generation_tile_loops_with_rng, run_landscape_river_tile_loops, scale_by_size,
-    serialize_heightmap, town_target_count,
+    generate_trees_with_rng_observer_with_map_settings, generate_trees_with_rng_with_map_settings,
+    house_beside_road, industry_target_count, initial_clear_ground, parse_hmap,
+    road_tiles_are_flat, run_generation_tile_loop, run_generation_tile_loops_with_rng,
+    run_landscape_river_tile_loops, scale_by_size, serialize_heightmap, town_target_count,
 };
 
 #[cfg(test)]

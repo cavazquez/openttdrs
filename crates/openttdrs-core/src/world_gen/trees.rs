@@ -133,8 +133,41 @@ pub fn generate_trees_with_rng(
     rng: &mut Randomizer,
     preserve: &[PreserveRect],
 ) {
+    generate_trees_with_rng_with_map_settings(
+        map,
+        climate,
+        rng,
+        preserve,
+        MAP_HEIGHT_LIMIT_AUTO_MINIMUM,
+        super::DEF_SNOW_LINE_HEIGHT,
+    );
+}
+
+/// Variante no observada que continúa `GenerateTrees` usando los ajustes
+/// efectivos de la partida nueva.
+///
+/// El wrapper histórico [`generate_trees_with_rng`] conserva el default de
+/// línea de nieve para callers que no tienen un `GameState`; el pipeline de
+/// creación debe pasar la línea calculada y el límite de altura persistido,
+/// igual que `PlaceTreesRandomly` en `OpenTTD`.
+pub fn generate_trees_with_rng_with_map_settings(
+    map: &mut Map,
+    climate: Climate,
+    rng: &mut Randomizer,
+    preserve: &[PreserveRect],
+    map_height_limit: u8,
+    snow_line_height: u8,
+) {
     let mut ignore = |_placement: TreePlacement| {};
-    generate_trees_with_rng_observer(map, climate, rng, preserve, &mut ignore);
+    generate_trees_with_rng_observer_with_map_settings(
+        map,
+        climate,
+        rng,
+        preserve,
+        map_height_limit,
+        snow_line_height,
+        &mut ignore,
+    );
 }
 
 /// Variante de [`generate_trees_with_rng`] que informa cada llamada admitida por
@@ -659,10 +692,11 @@ fn point_in_triangle(x: i32, y: i32, v1: Point, v2: Point, v3: Point) -> bool {
 mod tests {
     use super::{
         GROVE_ANGLE_STEP, GROVE_PHASE_DIVISOR, TROPIC_ZONE_DESERT, TROPIC_ZONE_RAINFOREST,
-        generate_trees, generate_trees_with_rng_observer, is_plantable,
-        is_slope_with_one_corner_raised, place_rainforest_trees, place_tree,
-        place_tree_keep_density, random_tile, random_tree_type, same_height_attempt_count,
-        tree_group_count,
+        generate_trees, generate_trees_with_rng_observer,
+        generate_trees_with_rng_observer_with_map_settings,
+        generate_trees_with_rng_with_map_settings, is_plantable, is_slope_with_one_corner_raised,
+        place_rainforest_trees, place_tree, place_tree_keep_density, random_tile, random_tree_type,
+        same_height_attempt_count, tree_group_count,
     };
     use crate::cargodist::parity::Randomizer;
     use crate::map::{
@@ -714,6 +748,35 @@ mod tests {
         assert_eq!(same_height_attempt_count(3, Climate::SubArctic, 2, 30), 9);
         assert_eq!(same_height_attempt_count(2, Climate::SubArctic, 2, 30), 2);
         assert_eq!(same_height_attempt_count(3, Climate::Temperate, 2, 30), 3);
+    }
+
+    #[test]
+    fn map_settings_wrapper_preserves_effective_arctic_snow_line() {
+        let mut default_map = Map::new_flat(64, 64, 3);
+        let mut effective_map = default_map.clone();
+        let mut default_rng = Randomizer::new(0x1234_5678);
+        let mut effective_rng = default_rng;
+
+        generate_trees_with_rng_observer_with_map_settings(
+            &mut default_map,
+            Climate::SubArctic,
+            &mut default_rng,
+            &[],
+            30,
+            crate::world_gen::DEF_SNOW_LINE_HEIGHT,
+            &mut |_| {},
+        );
+        generate_trees_with_rng_with_map_settings(
+            &mut effective_map,
+            Climate::SubArctic,
+            &mut effective_rng,
+            &[],
+            30,
+            2,
+        );
+
+        assert_ne!(default_map.tiles(), effective_map.tiles());
+        assert_ne!(default_rng.state, effective_rng.state);
     }
 
     #[test]

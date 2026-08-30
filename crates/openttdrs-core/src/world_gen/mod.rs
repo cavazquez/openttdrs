@@ -46,7 +46,7 @@ pub use tile_loop::{
 pub use trees::{
     TreePlacement, TreePlacementOrigin, generate_trees, generate_trees_with_rng,
     generate_trees_with_rng_observer, generate_trees_with_rng_observer_with_height_limit,
-    generate_trees_with_rng_observer_with_map_settings,
+    generate_trees_with_rng_observer_with_map_settings, generate_trees_with_rng_with_map_settings,
 };
 
 use crate::cargodist::parity::Randomizer;

@@ -293,7 +293,14 @@ pub fn apply_population_gen_with_rng(
     // footprint replaces the clear tile and consumes the shared RNG stream.
     let climate = state.climate;
     super::objects::generate_objects_with_rng(state, climate, rng, preserve);
-    super::trees::generate_trees_with_rng(&mut state.map, state.climate, rng, preserve);
+    super::trees::generate_trees_with_rng_with_map_settings(
+        &mut state.map,
+        state.climate,
+        rng,
+        preserve,
+        state.construction.effective_map_height_limit(),
+        state.snow_line_height,
+    );
 }
 
 pub(crate) fn in_preserve(preserve: &[PreserveRect], x: i32, y: i32) -> bool {

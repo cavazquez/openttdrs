@@ -13,8 +13,7 @@ use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, TreePlacement, WorldGenConfig,
     apply_clear_generation_with_rng, apply_landscape_with_rng, effective_snow_line_height,
     generate_industries_with_rng, generate_objects_with_rng, generate_towns_with_rng,
-    generate_trees_with_rng, generate_trees_with_rng_observer_with_map_settings,
-    run_generation_tile_loops_with_rng,
+    generate_trees_with_rng_observer_with_map_settings, run_generation_tile_loops_with_rng,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -601,7 +600,14 @@ fn run(args: &Args) -> Result<(), String> {
             args.generate_until,
             GenerateUntil::Trees | GenerateUntil::Startup
         ) {
-            generate_trees_with_rng(&mut state.map, state.climate, &mut generation_rng, &[]);
+            openttdrs_core::generate_trees_with_rng_with_map_settings(
+                &mut state.map,
+                state.climate,
+                &mut generation_rng,
+                &[],
+                state.construction.effective_map_height_limit(),
+                state.snow_line_height,
+            );
         }
         // El RNG global que usa `RunTileLoop` es el mismo stream que dejó
         // `GenerateTrees`; reiniciar el estado a la semilla 1 aquí desfasaba

@@ -5,7 +5,9 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use crate::cargodist::parity::Randomizer;
 use crate::company::OWNER_NONE_M1;
 use crate::map::slope::{SLOPE_STEEP, complement_slope, inclined_slope_direction};
-use crate::map::water_flood::{DIR_OFFSETS, FLOOD_FROM_DIRS, is_slope_one_corner_raised};
+use crate::map::water_flood::{
+    DIR_OFFSETS, FLOOD_FROM_DIRS, clear_neighbour_non_flooding_states, is_slope_one_corner_raised,
+};
 use crate::map::{
     Map, MapError, Tile, TileCoord, TileKind, WaterClass, is_river_tile, make_shore_tile,
     make_water_tile, set_water_class_m1, tile_slope_and_z, water_class_from_m1,
@@ -170,7 +172,15 @@ fn find_spring(
     let Some((slope, reference_height)) = tile_slope_and_z(map, coord) else {
         return false;
     };
-    if slope != 0 || matches!(config.climate, super::config::Climate::SubTropical) {
+    if slope != 0 {
+        return false;
+    }
+    // Tropical springs are restricted to the rainforest zone by
+    // `FindSpring`; unlike the other climates this is not a blanket reject.
+    // The zone is persisted in the low MAPT bits by `CreateDesertOrRainForest`.
+    if config.climate == super::config::Climate::SubTropical
+        && map.get(coord).is_none_or(|tile| tile.mapt & 0x03 != 2)
+    {
         return false;
     }
 
@@ -455,7 +465,7 @@ fn valid_river_terminus_tile(
     tile: TileCoord,
     height: u8,
     climate: super::config::Climate,
-    world_seed: u64,
+    _world_seed: u64,
 ) -> bool {
     let Some(entry) = map.get(tile) else {
         return false;
@@ -464,9 +474,10 @@ fn valid_river_terminus_tile(
         return false;
     }
     // `IsValidRiverTerminusTile` rejects tropical desert. The current
-    // generator stores that zone in the low MAPT nibble; the shared helper
-    // keeps the check identical to the tree/landcover code.
-    if climate.uses_desert_patches() && super::desert_patch(tile.x, tile.y, world_seed) {
+    // generator stores that zone in the low MAPT nibble; do not recompute a
+    // coordinate hash here because the actual zone can have been changed by
+    // `MakeRiverAndModifyDesertZoneAround` while a river is being built.
+    if climate.uses_desert_patches() && entry.mapt & 0x03 == 1 {
         return false;
     }
     tile_slope_and_z(map, tile).is_some_and(|(slope, _)| slope == 0)
@@ -983,12 +994,28 @@ fn build_river_path(
 }
 
 /// `MakeRiverAndModifyDesertZoneAround`: `MakeWater` receives the low byte of
-/// a fresh global `Random()` draw for every newly materialized river tile.
+/// a fresh global `Random()` draw for every newly materialized river tile and
+/// clears desert zones in the surrounding diameter-five spiral.
 fn make_river_tile(map: &mut Map, coord: TileCoord, rng: &mut Randomizer) -> Result<(), MapError> {
     make_water_tile(map, coord, WaterClass::River)?;
     let mut tile = map.get(coord).ok_or(MapError::OutOfBounds)?;
     tile.m3hi = rng.next() as u8;
-    map.set_tile(coord, tile)
+    map.set_tile(coord, tile)?;
+
+    // `MakeRiverAndModifyDesertZoneAround` removes desert directly around
+    // every river tile. This mutation is observable before the next spring
+    // search, so it must happen in the same helper rather than only when a
+    // lake or wetland is created.
+    for nearby in spiral_tiles(coord, 5, map) {
+        let Some(mut nearby_tile) = map.get(nearby) else {
+            continue;
+        };
+        if nearby_tile.mapt & 0x03 == 1 {
+            nearby_tile.mapt &= !0x03;
+            map.set_tile(nearby, nearby_tile)?;
+        }
+    }
+    Ok(())
 }
 
 fn is_slope_with_one_corner_raised(slope: u8) -> bool {
@@ -1118,7 +1145,10 @@ fn clear_terraform_water_tile(map: &mut Map, coord: TileCoord) {
         return;
     };
     tile.kind = TileKind::Grass;
-    tile.mapt = 0;
+    // `DoClearSquare` calls `MakeClear`, whose `SetTileType(MP_CLEAR)` only
+    // replaces MAPT bits 4..7.  Tropical-zone/bridge-state bits therefore
+    // survive when river widening terraforms a coast back into clear ground.
+    tile.mapt &= 0x0F;
     tile.m5 = clear_ground_m5(CLEAR_GROUND_GRASS, 3);
     tile.m1 = OWNER_NONE_M1;
     tile.m2 = 0;
@@ -1129,6 +1159,7 @@ fn clear_terraform_water_tile(map: &mut Map, coord: TileCoord) {
     tile.m7 = 0;
     tile.m8 = 0;
     let _ = map.set_tile(coord, tile);
+    clear_neighbour_non_flooding_states(map, coord);
 }
 
 /// Subconjunto ejecutable de `RiverMakeWider`. El caso plano (el dominante en
@@ -1408,7 +1439,7 @@ mod tests {
     use crate::cargodist::parity::Randomizer;
     use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};
     use crate::map::is_river_tile;
-    use crate::world_gen::Climate;
+    use crate::world_gen::{CLEAR_GROUND_DESERT, Climate};
 
     #[test]
     fn converter_makes_flat_ground_sea_and_one_corner_slope_shore() {
@@ -1448,6 +1479,72 @@ mod tests {
         let clear = map.get(c).expect("clear slope");
         assert_eq!(clear.kind, TileKind::Grass);
         assert_eq!(clear.m1, OWNER_NONE_M1);
+    }
+
+    #[test]
+    fn tropical_springs_require_rainforest_but_are_not_globally_rejected() {
+        let centre = TileCoord::new(32, 32);
+        let mut map = Map::new_flat(64, 64, 1);
+        // Keep the centre flat while putting four higher neighbours around
+        // it, satisfying FindSpring's local hill test without introducing a
+        // height more than two levels above the reference.
+        for raised in [
+            TileCoord::new(31, 32),
+            TileCoord::new(34, 32),
+            TileCoord::new(32, 31),
+            TileCoord::new(32, 34),
+        ] {
+            map.set_height(raised, 2).expect("spring neighbour");
+        }
+        let config = WorldGenConfig {
+            climate: Climate::SubTropical,
+            ..WorldGenConfig::default()
+        };
+
+        assert!(!find_spring(&map, centre, &config, &[]));
+        map.set_mapt_m5(centre, 0x02, 0).expect("rainforest zone");
+        assert!(find_spring(&map, centre, &config, &[]));
+    }
+
+    #[test]
+    fn tropical_river_terminus_uses_materialized_desert_zone() {
+        let tile = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(16, 16, 1);
+        map.set_mapt_m5(tile, 0x01, 0).expect("desert zone");
+        assert!(!valid_river_terminus_tile(
+            &map,
+            tile,
+            1,
+            Climate::SubTropical,
+            0
+        ));
+        map.set_mapt_m5(tile, 0x02, 0).expect("rainforest zone");
+        assert!(valid_river_terminus_tile(
+            &map,
+            tile,
+            1,
+            Climate::SubTropical,
+            0
+        ));
+    }
+
+    #[test]
+    fn river_tile_clears_desert_within_native_spiral_diameter() {
+        let centre = TileCoord::new(8, 8);
+        let nearby = TileCoord::new(10, 8);
+        let outside = TileCoord::new(11, 8);
+        let mut map = Map::new_flat(24, 24, 1);
+        for tile in [centre, nearby, outside] {
+            map.set_mapt_m5(tile, 0x01, clear_ground_m5(CLEAR_GROUND_DESERT, 3))
+                .expect("desert zone");
+        }
+
+        let mut rng = Randomizer::new(7);
+        make_river_tile(&mut map, centre, &mut rng).expect("river tile");
+
+        assert_eq!(map.get(centre).expect("river tile").mapt & 0x03, 0);
+        assert_eq!(map.get(nearby).expect("nearby tile").mapt & 0x03, 0);
+        assert_eq!(map.get(outside).expect("outside tile").mapt & 0x03, 1);
     }
 
     #[test]

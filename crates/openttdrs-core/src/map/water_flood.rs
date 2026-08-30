@@ -123,7 +123,9 @@ fn make_tree_m2(ground: u8, density: u8) -> u8 {
 pub fn make_shore_tile(map: &mut Map, c: TileCoord) -> Result<(), super::MapError> {
     let mut tile = map.get(c).ok_or(super::MapError::OutOfBounds)?;
     tile.kind = TileKind::Water;
-    tile.mapt = 0x60;
+    // `MakeShore` also uses `SetTileType` and therefore preserves the low
+    // tropical-zone/bridge-state nibble in MAPT.
+    tile.mapt = 0x60 | (tile.mapt & 0x0F);
     tile.m5 = WATER_TYPE_COAST << 4;
     // `MakeShore` asigna OWNER_WATER, no el dueño anterior de la tesela.
     tile.m1 = set_water_class_m1(crate::company::OWNER_WATER_M1, WaterClass::Sea);
@@ -310,6 +312,7 @@ pub fn do_flood_tile(state: &mut GameState, target: TileCoord) -> bool {
             }
             kind if is_flood_clearable(kind) => {
                 flood_vehicles(state, target);
+                clear_neighbour_non_flooding_states(&mut state.map, target);
                 if make_shore_tile(&mut state.map, target).is_ok() {
                     return true;
                 }
@@ -326,10 +329,14 @@ pub fn do_flood_tile(state: &mut GameState, target: TileCoord) -> bool {
         return false;
     }
     flood_vehicles(state, target);
+    let preserved_mapt = tile.mapt & 0x0F;
     let _ = state.map.set_kind(target, TileKind::Grass);
-    let _ = state
-        .map
-        .set_mapt_m5(target, 0x00, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
+    let _ = state.map.set_mapt_m5(
+        target,
+        preserved_mapt,
+        clear_ground_m5(CLEAR_GROUND_GRASS, 3),
+    );
+    clear_neighbour_non_flooding_states(&mut state.map, target);
     state.stations.retain(|s| s.pos != target);
     make_water_tile(&mut state.map, target, WaterClass::Sea).is_ok()
 }
@@ -446,10 +453,13 @@ fn dry_up_tile(state: &mut GameState, c: TileCoord) {
             let _ = state.map.set_tile(c, t);
         }
         TileKind::Water if is_coast_water(tile) => {
+            let preserved_mapt = tile.mapt & 0x0F;
             let _ = state.map.set_kind(c, TileKind::Grass);
-            let _ = state
-                .map
-                .set_mapt_m5(c, 0x00, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
+            let _ =
+                state
+                    .map
+                    .set_mapt_m5(c, preserved_mapt, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
+            clear_neighbour_non_flooding_states(&mut state.map, c);
             let _ = state.map.set_m1(c, OWNER_NONE_M1);
             let _ = state.map.set_m2(c, 0);
             let _ = state.map.set_m3(c, 0);
@@ -587,6 +597,15 @@ mod tests {
         map.set_height(TileCoord::new(coast.x + 1, coast.y + 1), 1)
             .expect("raise south corner");
         make_shore_tile(&mut map, coast).expect("make coast");
+        let mut zoned_coast = map.get(coast).expect("coast");
+        zoned_coast.mapt |= 0x02;
+        map.set_tile(coast, zoned_coast).expect("rainforest zone");
+        let neighbour = TileCoord::new(2, 3);
+        make_water_tile(&mut map, neighbour, WaterClass::River).expect("river neighbour");
+        let mut river_neighbour = map.get(neighbour).expect("river neighbour");
+        river_neighbour.m3 = 1;
+        map.set_tile(neighbour, river_neighbour)
+            .expect("non-flooding state");
         let mut state = GameState::from_map(map);
 
         let tile = state.map.get(coast).expect("coast");
@@ -594,7 +613,9 @@ mod tests {
 
         let drained = state.map.get(coast).expect("drained coast");
         assert_eq!(drained.kind, TileKind::Grass);
+        assert_eq!(drained.mapt & 0x03, 2);
         assert_eq!(drained.m5, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
+        assert_eq!(state.map.get(neighbour).expect("river neighbour").m3 & 1, 0);
     }
 
     /// `GameState::new` usa altura 1; la inundación solo actúa a `GetTileZ == 0`.
@@ -618,7 +639,7 @@ mod tests {
         state.map.set_kind(land, TileKind::Grass).unwrap();
         state
             .map
-            .set_mapt_m5(land, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
+            .set_mapt_m5(land, 0x02, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
             .unwrap();
         let tile = state.map.get(water).unwrap();
         tile_loop_water_at(&mut state, water, tile);
@@ -627,6 +648,7 @@ mod tests {
             water_class_from_m1(state.map.get(land).unwrap().m1),
             WaterClass::Sea
         );
+        assert_eq!(state.map.get(land).unwrap().mapt & 0x03, 2);
     }
 
     #[test]

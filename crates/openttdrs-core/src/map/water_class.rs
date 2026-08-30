@@ -117,7 +117,9 @@ pub fn river_tile_is_ship_navigable(map: &Map, c: TileCoord) -> bool {
 pub fn make_water_tile(map: &mut Map, c: TileCoord, wc: WaterClass) -> Result<(), super::MapError> {
     let mut tile = map.get(c).ok_or(super::MapError::OutOfBounds)?;
     tile.kind = TileKind::Water;
-    tile.mapt = 0x60;
+    // `SetTileType(MP_WATER)` changes only MAPT bits 4..7. The tropical-zone
+    // and bridge-state bits in the low nibble survive the conversion.
+    tile.mapt = 0x60 | (tile.mapt & 0x0F);
     // `MakeWater`/`MakeRiver` de OpenTTD asigna OWNER_WATER (0x11) a
     // mares y ríos. Los canales conservan el dueño que ya haya seleccionado
     // el comando constructor.

@@ -2,9 +2,12 @@ use crate::IndustrySpec;
 use crate::map::TileCoord;
 
 use super::layout_tables::{
-    COAL_MINE_LAYOUTS, FACTORY_LAYOUTS, FARM_LAYOUTS, FOREST_LAYOUTS, GOLD_MINE_LAYOUTS,
-    IRON_MINE_LAYOUTS, METAL_MINE_LAYOUTS, OIL_LAYOUTS, POWER_STATION_LAYOUTS, REFINERY_LAYOUTS,
-    SAWMILL_LAYOUTS, STEEL_MILL_LAYOUTS,
+    BANK_LAYOUTS, BANK2_LAYOUTS, COAL_MINE_LAYOUTS, DIAMOND_MINE_LAYOUTS, FACTORY_LAYOUTS,
+    FACTORY_TROPIC_LAYOUTS, FARM_LAYOUTS, FARM_TROPIC_LAYOUTS, FOOD_PROCESS_LAYOUTS,
+    FOREST_LAYOUTS, FRUIT_PLANTATION_LAYOUTS, GOLD_MINE_LAYOUTS, IRON_MINE_LAYOUTS,
+    LUMBER_MILL_LAYOUTS, METAL_MINE_LAYOUTS, OIL_LAYOUTS, PAPER_MILL_LAYOUTS,
+    POWER_STATION_LAYOUTS, PRINTING_WORKS_LAYOUTS, REFINERY_LAYOUTS, RUBBER_PLANTATION_LAYOUTS,
+    SAWMILL_LAYOUTS, STEEL_MILL_LAYOUTS, WATER_SUPPLY_LAYOUTS, WATER_TOWER_LAYOUTS,
 };
 use super::toyland_layout_tables::{
     BATTERY_FARM_LAYOUTS, BUBBLE_GENERATOR_LAYOUTS, CANDY_FACTORY_LAYOUTS, COLA_WELLS_LAYOUTS,
@@ -58,25 +61,27 @@ fn layouts_for_spec(spec: IndustrySpec) -> &'static [IndustryLayout] {
         IndustrySpec::PowerStation => &POWER_STATION_LAYOUTS,
         IndustrySpec::IronOreMine => &IRON_MINE_LAYOUTS,
         IndustrySpec::CopperOreMine => &METAL_MINE_LAYOUTS,
-        IndustrySpec::GoldMine | IndustrySpec::DiamondMine => &GOLD_MINE_LAYOUTS,
-        IndustrySpec::Forest | IndustrySpec::FruitPlantation | IndustrySpec::RubberPlantation => {
-            &FOREST_LAYOUTS
-        }
-        IndustrySpec::Farm | IndustrySpec::FarmTropic => &FARM_LAYOUTS,
-        IndustrySpec::OilWells | IndustrySpec::WaterSupply => &OIL_LAYOUTS,
+        IndustrySpec::GoldMine => &GOLD_MINE_LAYOUTS,
+        IndustrySpec::DiamondMine => &DIAMOND_MINE_LAYOUTS,
+        IndustrySpec::Forest => &FOREST_LAYOUTS,
+        IndustrySpec::FruitPlantation => &FRUIT_PLANTATION_LAYOUTS,
+        IndustrySpec::RubberPlantation => &RUBBER_PLANTATION_LAYOUTS,
+        IndustrySpec::Farm => &FARM_LAYOUTS,
+        IndustrySpec::FarmTropic => &FARM_TROPIC_LAYOUTS,
+        IndustrySpec::OilWells => &OIL_LAYOUTS,
+        IndustrySpec::WaterSupply => &WATER_SUPPLY_LAYOUTS,
         IndustrySpec::OilRefinery => &REFINERY_LAYOUTS,
-        IndustrySpec::Factory
-        | IndustrySpec::FactoryTropic
-        | IndustrySpec::Bank
-        | IndustrySpec::BankArcticTropic
-        | IndustrySpec::PrintingWorks
-        | IndustrySpec::FoodProcessingPlant
-        | IndustrySpec::WaterTower
-        | IndustrySpec::ToyShop => &FACTORY_LAYOUTS,
+        IndustrySpec::Factory | IndustrySpec::ToyShop => &FACTORY_LAYOUTS,
+        IndustrySpec::FactoryTropic => &FACTORY_TROPIC_LAYOUTS,
+        IndustrySpec::Bank => &BANK_LAYOUTS,
+        IndustrySpec::BankArcticTropic => &BANK2_LAYOUTS,
+        IndustrySpec::PrintingWorks => &PRINTING_WORKS_LAYOUTS,
+        IndustrySpec::FoodProcessingPlant => &FOOD_PROCESS_LAYOUTS,
+        IndustrySpec::WaterTower => &WATER_TOWER_LAYOUTS,
         IndustrySpec::SteelMill => &STEEL_MILL_LAYOUTS,
-        IndustrySpec::Sawmill | IndustrySpec::PaperMill | IndustrySpec::LumberMill => {
-            &SAWMILL_LAYOUTS
-        }
+        IndustrySpec::Sawmill => &SAWMILL_LAYOUTS,
+        IndustrySpec::PaperMill => &PAPER_MILL_LAYOUTS,
+        IndustrySpec::LumberMill => &LUMBER_MILL_LAYOUTS,
         IndustrySpec::CottonCandy => &COTTON_CANDY_LAYOUTS,
         IndustrySpec::CandyFactory => &CANDY_FACTORY_LAYOUTS,
         IndustrySpec::BatteryFarm => &BATTERY_FARM_LAYOUTS,
@@ -111,6 +116,24 @@ mod tests {
             3
         );
         assert_eq!(industry_template_layout_count(IndustrySpec::SteelMill), 2);
+        assert_eq!(
+            industry_template_layout_count(IndustrySpec::PrintingWorks),
+            2
+        );
+        assert_eq!(
+            industry_template_layout_count(IndustrySpec::FoodProcessingPlant),
+            2
+        );
+        assert_eq!(industry_template_layout_count(IndustrySpec::PaperMill), 1);
+        assert_eq!(
+            industry_template_layout_count(IndustrySpec::BankArcticTropic),
+            1
+        );
+        assert_eq!(industry_template_layout_count(IndustrySpec::DiamondMine), 1);
+        assert_eq!(
+            industry_template_layout_count(IndustrySpec::FactoryTropic),
+            2
+        );
 
         let coal =
             industry_template_with_layout(origin, IndustrySpec::CoalMine, 0).unwrap_or_default();
@@ -128,5 +151,36 @@ mod tests {
         assert_eq!(steel.len(), 14);
         assert_eq!(steel[13], (TileCoord::new(22, 33), 57));
         assert!(industry_template_with_layout(origin, IndustrySpec::CoalMine, 4).is_none());
+
+        let printing = industry_template_with_layout(origin, IndustrySpec::PrintingWorks, 0)
+            .unwrap_or_default();
+        assert_eq!(printing.len(), 12);
+        assert_eq!(printing[0], (origin, 43));
+        assert_eq!(printing[11], (TileCoord::new(23, 32), 46));
+
+        let food = industry_template_with_layout(origin, IndustrySpec::FoodProcessingPlant, 1)
+            .unwrap_or_default();
+        assert_eq!(food.len(), 14);
+        assert_eq!(food[0], (origin, 61));
+        assert_eq!(food[13], (TileCoord::new(21, 33), 62));
+
+        let paper =
+            industry_template_with_layout(origin, IndustrySpec::PaperMill, 0).unwrap_or_default();
+        assert_eq!(paper.len(), 12);
+        assert_eq!(paper[11], (TileCoord::new(23, 32), 70));
+
+        let bank = industry_template_with_layout(origin, IndustrySpec::BankArcticTropic, 0)
+            .unwrap_or_default();
+        assert_eq!(bank, vec![(origin, 89), (TileCoord::new(21, 30), 90)]);
+
+        let diamond =
+            industry_template_with_layout(origin, IndustrySpec::DiamondMine, 0).unwrap_or_default();
+        assert_eq!(diamond.len(), 9);
+        assert_eq!(diamond[8], (TileCoord::new(22, 32), 99));
+
+        let factory_tropic = industry_template_with_layout(origin, IndustrySpec::FactoryTropic, 0)
+            .unwrap_or_default();
+        assert_eq!(factory_tropic.len(), 8);
+        assert_eq!(factory_tropic[7], (TileCoord::new(21, 33), 124));
     }
 }

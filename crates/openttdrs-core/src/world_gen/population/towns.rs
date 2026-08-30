@@ -1087,13 +1087,16 @@ const GENERATED_TOWN_BRIDGE_TYPE_ATTEMPTS: usize = 23;
 /// `GrowTownWithBridge`. Un canal tiene la misma semántica que un río aquí;
 /// una costa/agua marina no es un candidato para un puente urbano plano.
 fn generated_town_flat_bridge_crosses_water(tile: crate::map::Tile) -> bool {
-    tile.kind == TileKind::Water && water_class_from_m1(tile.m1) != WaterClass::Sea
+    tile.kind == TileKind::Water
+        && !is_coast_tile(tile)
+        && water_class_from_m1(tile.m1) != WaterClass::Sea
 }
 
 /// La rama inclinada de `GrowTownWithBridge` admite cualquier agua; la plana
 /// limita el cruce a río/canal para no tender puentes urbanos sobre el mar.
 fn generated_town_bridge_crosses_water(tile: crate::map::Tile, start_is_flat: bool) -> bool {
     tile.kind == TileKind::Water
+        && !is_coast_tile(tile)
         && (!start_is_flat || generated_town_flat_bridge_crosses_water(tile))
 }
 
@@ -1397,6 +1400,12 @@ fn materialize_generated_town_road_bridge(
     if line.len() < 3 {
         return false;
     }
+    // `CMD_BUILD_BRIDGE` ejecuta `CMD_LANDSCAPE_CLEAR` sobre ambas rampas
+    // antes de `MakeRoadBridgeRamp`. `DoClearSquare` también reinicia el
+    // estado non-flooding de las ocho teselas de agua vecinas; omitir esa
+    // limpieza deja bytes de inundación viejos alrededor de la orilla.
+    clear_neighbour_non_flooding_states(map, line[0]);
+    clear_neighbour_non_flooding_states(map, *line.last().expect("line has an end ramp"));
     let axis_y = matches!(direction & 3, 1 | 3);
     for (index, coord) in line.iter().copied().enumerate() {
         let Some(mut tile) = map.get(coord) else {
@@ -4307,6 +4316,13 @@ mod tests {
         ];
         crate::map::make_water_tile(&mut map, line[1], crate::map::WaterClass::River)
             .expect("river span");
+        let neighbour = TileCoord::new(4, 4);
+        crate::map::make_water_tile(&mut map, neighbour, crate::map::WaterClass::River)
+            .expect("river neighbour");
+        let mut neighbour_tile = map.get(neighbour).expect("neighbour");
+        neighbour_tile.m3 = 1;
+        map.set_tile(neighbour, neighbour_tile)
+            .expect("set flooding state");
 
         assert!(materialize_generated_town_road_bridge(
             &mut map,
@@ -4319,6 +4335,7 @@ mod tests {
         assert_eq!(map.get(line[0]).expect("start ramp").m6, bridge_type);
         assert_eq!(map.get(line[2]).expect("end ramp").m6, bridge_type);
         assert_eq!(map.get(line[1]).expect("river under span").m6, 0);
+        assert_eq!(map.get(neighbour).expect("neighbour").m3, 0);
     }
 
     #[test]

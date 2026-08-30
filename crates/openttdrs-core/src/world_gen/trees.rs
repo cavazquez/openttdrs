@@ -363,6 +363,126 @@ fn random_tile(seed: u32, map_w: u32, map_h: u32) -> TileCoord {
     )
 }
 
+/// Ejecuta el `OnTick_Trees` inicial que sigue a la cola de generación.
+///
+/// `GenerateWorld` deja `_trees_tick_ctr` en cero. En el primer tick regular
+/// ese contador se decrementa una vez y, para la configuración vanilla
+/// (`ETP_SPREAD_ALL`), se intenta plantar un árbol con el siguiente valor del
+/// `Random()` global. Los mapas pequeños pueden saltar este intento mediante
+/// la máscara de frecuencia de `OnTick_Trees`; el intento igualmente debe
+/// consumir el mismo stream cuando el tamaño lo admite, aunque el sustrato
+/// finalmente no sea plantable.
+pub(crate) fn advance_first_regular_tree_tick(
+    map: &mut Map,
+    climate: Climate,
+    tick: u64,
+    rng: &mut Randomizer,
+) -> Vec<TileCoord> {
+    let (map_w, map_h) = map.dimensions();
+    let skip = scale_by_size(16, map_w, map_h);
+    if skip < 16 {
+        let divisor = 16 / skip.max(1);
+        if tick & u64::from(divisor.saturating_sub(1)) != 0 {
+            return Vec::new();
+        }
+    }
+
+    let mut planted = Vec::new();
+    if matches!(climate, Climate::SubTropical) {
+        for _ in 0..scale_by_size(1, map_w, map_h) {
+            let r = rng.next();
+            let c = random_tile(r, map_w, map_h);
+            if let Some(tree) = plant_random_tree_tick(map, c, r, climate, true) {
+                planted.push(tree);
+            }
+        }
+    }
+
+    // `_trees_tick_ctr` starts at zero. `DecrementTreeCounter` therefore
+    // underflows and returns true for every supported map size. The default
+    // setting is ETP_SPREAD_ALL, so the non-rainforest attempt follows the
+    // optional tropical pass.
+    let r = rng.next();
+    let c = random_tile(r, map_w, map_h);
+    if let Some(tree) = plant_random_tree_tick(map, c, r, climate, false) {
+        planted.push(tree);
+    }
+    planted
+}
+
+/// `PlantRandomTree` + `PlantTreesOnTile` de `tree_cmd.cpp` para el tick
+/// posterior a la generación. A diferencia de `PlaceTree` durante
+/// `GenerateTrees`, el callback fija `count = 0` y `growth = Growing1`, por lo
+/// que no se deben reutilizar los bits aleatorios de cantidad/crecimiento.
+fn plant_random_tree_tick(
+    map: &mut Map,
+    c: TileCoord,
+    random: u32,
+    climate: Climate,
+    rainforest_only: bool,
+) -> Option<TileCoord> {
+    let previous = map.get(c)?;
+    if rainforest_only
+        && (!matches!(climate, Climate::SubTropical)
+            || tropic_zone(previous) != TROPIC_ZONE_RAINFOREST)
+    {
+        return None;
+    }
+    if !is_plantable(map, c, &[], false) {
+        return None;
+    }
+    let tree_type = random_tree_type(previous, random, climate)?;
+
+    let (ground, density, water_class) = match previous.kind {
+        TileKind::Water => {
+            clear_neighbour_non_flooding_states(map, c);
+            (TREE_GROUND_SHORE, 3, WaterClass::Sea)
+        }
+        TileKind::Grass => {
+            let original_ground = clear_ground_type(previous.m5);
+            let density = if original_ground == CLEAR_GROUND_ROUGH {
+                3
+            } else {
+                clear_density(previous.m5)
+            };
+            let is_snow =
+                previous.m3 & CLEAR_SNOW_M3_BIT != 0 || original_ground == CLEAR_GROUND_SNOW;
+            let ground = if is_snow {
+                if original_ground == CLEAR_GROUND_ROUGH {
+                    TREE_GROUND_ROUGH_SNOW
+                } else {
+                    TREE_GROUND_SNOW_DESERT
+                }
+            } else {
+                match original_ground {
+                    CLEAR_GROUND_ROUGH => TREE_GROUND_ROUGH,
+                    CLEAR_GROUND_SNOW | CLEAR_GROUND_DESERT => TREE_GROUND_SNOW_DESERT,
+                    _ => TREE_GROUND_GRASS,
+                }
+            };
+            (ground, density, WaterClass::Invalid)
+        }
+        _ => return None,
+    };
+
+    let tree_m2 = (ground << 6) | (density << 4);
+    let tree = Tile {
+        height: previous.height,
+        kind: TileKind::Forest,
+        mapt: 0x40 | (previous.mapt & 0x0F),
+        m5: 0, // TreeGrowthStage::Growing1, count = 0.
+        m1: set_water_class_m1(OWNER_NONE_M1, water_class),
+        m6: previous.m6 & 0x03,
+        m8: 0,
+        m3: tree_type,
+        m2: tree_m2,
+        m2_hi: 0,
+        m7: 0,
+        m3hi: 0,
+    };
+    map.set_tile(c, tree).ok().map(|()| c)
+}
+
 /// `TileAddWrap` no envuelve en realidad cuando `freeform_edges` está activo:
 /// descarta los bordes y cualquier desplazamiento fuera del mapa.
 fn tile_add_wrap(center: TileCoord, dx: i32, dy: i32, map_w: u32, map_h: u32) -> Option<TileCoord> {
@@ -692,7 +812,7 @@ fn point_in_triangle(x: i32, y: i32, v1: Point, v2: Point, v3: Point) -> bool {
 mod tests {
     use super::{
         GROVE_ANGLE_STEP, GROVE_PHASE_DIVISOR, TROPIC_ZONE_DESERT, TROPIC_ZONE_RAINFOREST,
-        generate_trees, generate_trees_with_rng_observer,
+        advance_first_regular_tree_tick, generate_trees, generate_trees_with_rng_observer,
         generate_trees_with_rng_observer_with_map_settings,
         generate_trees_with_rng_with_map_settings, is_plantable, is_slope_with_one_corner_raised,
         place_rainforest_trees, place_tree, place_tree_keep_density, random_tile, random_tree_type,
@@ -711,6 +831,33 @@ mod tests {
         assert_eq!(random_tile(0, 64, 64), TileCoord::new(0, 0));
         assert_eq!(random_tile(65, 64, 64), TileCoord::new(1, 1));
         assert_eq!(random_tile(u32::MAX, 64, 64), TileCoord::new(63, 63));
+    }
+
+    #[test]
+    fn first_regular_tree_tick_matches_plant_random_tree_contract() {
+        let mut map = Map::new_flat(256, 256, 0);
+        let mut rng = Randomizer::new(42);
+        let mut expected_rng = rng;
+        let random = expected_rng.next();
+        let expected = random_tile(random, 256, 256);
+        map.set_mapt_m5(expected, 0, 3)
+            .expect("flat test tile must accept tree density");
+
+        let planted = advance_first_regular_tree_tick(&mut map, Climate::Temperate, 1281, &mut rng);
+
+        assert_eq!(planted, vec![expected]);
+        let tile = map.get(expected).expect("random tree tile");
+        assert_eq!(tile.kind, TileKind::Forest);
+        assert_eq!(tile.mapt, 0x40);
+        assert_eq!(
+            tile.m1,
+            set_water_class_m1(crate::company::OWNER_NONE_M1, WaterClass::Invalid)
+        );
+        assert_eq!(tile.m2, 0x30);
+        assert_eq!(tile.m3, ((random >> 24) * 12 / 256) as u8);
+        assert_eq!(tile.m5, 0);
+        assert_eq!(tile.m6, 0);
+        assert_eq!(tile.m7, 0);
     }
 
     #[test]

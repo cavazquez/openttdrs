@@ -60,6 +60,51 @@ pub fn run_generation_tile_loops_with_rng(
     visited
 }
 
+/// Ejecuta la transición que `OpenTTD` hace al entregar un mundo nuevo al
+/// `StateGameLoop`.
+///
+/// `GenerateWorld` termina con `TimerGameTick::counter == 0x500`. En el primer
+/// tick regular se llama primero a `AnimateAnimatedTiles` con ese contador y,
+/// después de incrementarlo, a `RunTileLoop` con `0x501`. La diferencia es
+/// observable en `MAP6/MAP7` de industrias animadas y en los campos visitados
+/// por el LFSR; omitirla deja al generador un tick detrás del mapa que exporta
+/// el oráculo de `OpenTTD`.
+pub fn run_first_regular_game_tick_with_rng(
+    state: &mut GameState,
+    rng: &mut Randomizer,
+    startup_tick: u64,
+) -> usize {
+    let (width, height) = state.map.dimensions();
+    let animated_industries: Vec<TileCoord> = (0..height)
+        .flat_map(|y| (0..width).map(move |x| TileCoord::new(x.cast_signed(), y.cast_signed())))
+        .filter(|&coord| {
+            state
+                .map
+                .get(coord)
+                .is_some_and(|tile| tile.kind == TileKind::Industry && tile.m6 & 0x03 != 0)
+        })
+        .collect();
+    let _ = crate::map::industry_tile_anim::advance_startup_animated_industry_tiles(
+        &mut state.map,
+        startup_tick,
+        &animated_industries,
+        rng,
+    );
+    let visited = run_generation_tile_loop_impl(state, startup_tick.saturating_add(1), Some(rng));
+    // `StateGameLoop` continúa con `CallLandscapeTick`; en una partida nueva
+    // el primer callback con efecto observable suele ser `OnTick_Trees`, que
+    // puede consumir el RNG global y convertir una tesela clear en árboles.
+    // Reproducirlo aquí mantiene el raw exportado después del tick alineado
+    // con OpenTTD, sin adelantar economía ni calendario.
+    let _ = super::trees::advance_first_regular_tree_tick(
+        &mut state.map,
+        state.climate,
+        startup_tick.saturating_add(1),
+        rng,
+    );
+    visited
+}
+
 /// Variante interna de [`run_generation_tile_loop`] para la cola de
 /// `CreateRivers`. Sólo esa frontera tiene que conservar el stream global de
 /// `Random()` mientras los árboles de humedal ejecutan `TileLoop_Trees`.
@@ -620,6 +665,22 @@ mod tests {
         assert_eq!(visited, expected_visits);
         assert_eq!(state.tick.get(), before_tick);
         assert_eq!(state.cur_tileloop_tile, expected_cursor);
+        assert_eq!(state.runtime.tile_loop_visited.len(), 16);
+    }
+
+    #[test]
+    fn first_regular_game_tick_runs_animation_then_next_lfsr_pass() {
+        let map = Map::new_flat(64, 64, 1);
+        let mut state = GameState::from_map(map);
+        let mut expected_cursor = state.cur_tileloop_tile;
+        let _ = collect_tile_loop_visits(&state.map, 1281, &mut expected_cursor);
+        let mut rng = Randomizer::new(42);
+
+        let visited = run_first_regular_game_tick_with_rng(&mut state, &mut rng, 1280);
+
+        assert_eq!(visited, 16);
+        assert_eq!(state.cur_tileloop_tile, expected_cursor);
+        assert_eq!(state.tick.get(), 0);
         assert_eq!(state.runtime.tile_loop_visited.len(), 16);
     }
 

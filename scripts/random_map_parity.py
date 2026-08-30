@@ -29,8 +29,9 @@ ROOT = Path(__file__).resolve().parents[1]
 RAW_FIELDS = ("height", "type", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8")
 DEFAULT_MATRIX = "64:8,128:4,256:2,512:1"
 # `genworld.cpp` runs TILE_UPDATE_FREQUENCY (0x500) tile loops after
-# GenerateTrees before handing the new game to the caller. Keep the generator
-# side at the same observation point as the OpenTTD raw hook.
+# GenerateTrees before handing the new game to the caller. The first regular
+# StateGameLoop then animates, runs the 0x501 tile loop and ticks trees; keep
+# the generator side at that same observation point as the OpenTTD raw hook.
 REFERENCE_STARTUP_TILE_LOOPS = 0x500
 Tile = tuple[int, ...]
 

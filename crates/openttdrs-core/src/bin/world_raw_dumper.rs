@@ -14,7 +14,7 @@ use openttdrs_core::{
     apply_clear_generation_with_rng, apply_landscape_with_rng_and_cursor,
     effective_snow_line_height, generate_industries_with_rng, generate_objects_with_rng,
     generate_towns_with_rng, generate_trees_with_rng_observer_with_map_settings,
-    run_generation_tile_loops_with_rng,
+    run_first_regular_game_tick_with_rng, run_generation_tile_loops_with_rng,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -632,6 +632,17 @@ fn run(args: &Args) -> Result<(), String> {
                 &mut generation_rng,
                 u64::from(startup_ticks),
             );
+            // `StateGameLoop` anima primero con el contador que dejó la cola
+            // de generación y luego incrementa el reloj antes de su primer
+            // `RunTileLoop`. El exportador de OpenTTD observa el mapa después
+            // de esas dos operaciones, no en la frontera intermedia.
+            if startup_ticks > 0 {
+                run_first_regular_game_tick_with_rng(
+                    &mut state,
+                    &mut generation_rng,
+                    u64::from(startup_ticks),
+                );
+            }
         }
         state.random = generation_rng;
         map = state.map;

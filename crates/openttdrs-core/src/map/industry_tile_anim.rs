@@ -166,6 +166,173 @@ fn chance16_rng(
     ((random_low * denominator + denominator / 2) >> 16) < u64::from(numerator)
 }
 
+/// Reproduce la pasada `AnimateAnimatedTiles` inmediatamente posterior a la
+/// cola de generación de un mundo nuevo.
+///
+/// Durante `GenerateWorld` el estado de `AnimatedTileList` queda reflejado en
+/// los dos bits bajos de `MAP6`: `3` significa `Animated` y `1` significa
+/// `Deleted` (la entrada se elimina al comienzo de la siguiente pasada). El
+/// estado persistido del mapa sólo contiene el frame en `MAP7`; por eso esta
+/// ruta usa `MAP7` directamente, igual que `AnimateTile_Industry`, en lugar de
+/// la representación `m3hi` que usa la simulación visual normal.
+#[allow(
+    clippy::manual_range_contains,
+    clippy::too_many_lines,
+    clippy::verbose_bit_mask
+)]
+pub fn advance_startup_animated_industry_tiles(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> Vec<TileCoord> {
+    let mut dirty = Vec::new();
+    for &coord in coords {
+        let Some(mut tile) = map.get(coord) else {
+            continue;
+        };
+        if tile.kind != TileKind::Industry || !is_industry_completed(&tile) {
+            continue;
+        }
+
+        match tile.m6 & 0x03 {
+            // `AnimateAnimatedTiles` drops a Deleted entry before invoking
+            // `AnimateTile`; no other map byte is touched in that branch.
+            0x01 => {
+                tile.m6 &= !0x03;
+                if map.set_tile(coord, tile).is_ok() {
+                    dirty.push(coord);
+                }
+                continue;
+            }
+            0x03 => {}
+            _ => continue,
+        }
+
+        let before = tile;
+        match industry_gfx(&tile) {
+            GFX_SUGAR_MINE_SIEVE if tick & 1 == 0 => {
+                let mut frame = tile.m7.wrapping_add(1);
+                if frame >= 96 {
+                    frame = 0;
+                    tile.m6 = (tile.m6 & !0x03) | 0x01;
+                }
+                tile.m7 = frame;
+            }
+            70 if tick & 3 == 0 => {
+                let mut frame = tile.m7.wrapping_add(1);
+                if frame >= 70 {
+                    frame = 0;
+                    tile.m6 = (tile.m6 & !0x03) | 0x01;
+                }
+                tile.m7 = frame;
+            }
+            161 if tick & 1 == 0 => {
+                let frame = tile.m7.wrapping_add(1);
+                tile.m7 = if frame >= 40 { 0 } else { frame };
+                if frame >= 40 {
+                    tile.m6 = (tile.m6 & !0x03) | 0x01;
+                }
+            }
+            GFX_POWERPLANT_SPARKS if tick & 3 == 0 => {
+                if tile.m7 == 6 {
+                    tile.m7 = 0;
+                    tile.m6 = (tile.m6 & !0x03) | 0x01;
+                } else {
+                    tile.m7 = tile.m7.wrapping_add(1);
+                }
+            }
+            28 if tick & 1 == 0 => {
+                let frame = tile.m7.wrapping_add(1);
+                tile.m7 = frame;
+                if frame >= 50 {
+                    tile.m7 = 0;
+                    let next_loop = tile.m3hi.wrapping_add(1);
+                    tile.m3hi = next_loop;
+                    if next_loop >= 8 {
+                        tile.m3hi = 0;
+                        tile.m6 = (tile.m6 & !0x03) | 0x01;
+                    }
+                }
+            }
+            gfx @ (GFX_PLASTIC_FOUNTAIN_ANIMATED_1..=GFX_PLASTIC_FOUNTAIN_ANIMATED_8)
+                if tick & 3 == 0 =>
+            {
+                set_industry_gfx(
+                    &mut tile,
+                    if gfx < GFX_PLASTIC_FOUNTAIN_ANIMATED_8 {
+                        gfx + 1
+                    } else {
+                        GFX_PLASTIC_FOUNTAIN_ANIMATED_1
+                    },
+                );
+            }
+            gfx @ (GFX_OILWELL_ANIMATED_1..=GFX_OILWELL_ANIMATED_3) if tick & 7 == 0 => {
+                // `AnimateOilWell` evaluates Chance16 before looking at the
+                // current frame, even when this call cannot finish a cycle.
+                let stop = chance16_rng(rng, 1, 7);
+                let mut frame = tile.m7.wrapping_add(1);
+                if frame == 4 {
+                    frame = 0;
+                    let mut next_gfx = gfx + 1;
+                    if next_gfx > GFX_OILWELL_ANIMATED_3 {
+                        if stop {
+                            next_gfx = GFX_OILWELL_NOT_ANIMATED;
+                            tile.m6 = (tile.m6 & !0x03) | 0x01;
+                        } else {
+                            next_gfx = GFX_OILWELL_ANIMATED_1;
+                        }
+                    }
+                    set_industry_gfx(&mut tile, next_gfx);
+                }
+                tile.m7 = frame;
+            }
+            GFX_COAL_MINE_TOWER_ANIMATED
+            | GFX_COPPER_MINE_TOWER_ANIMATED
+            | GFX_GOLD_MINE_TOWER_ANIMATED => {
+                let mut state = (tick & 0x7FF) as i32 - 0x400;
+                if state >= 0 {
+                    if state < 0x1A0 {
+                        if state < 0x20 || state >= 0x180 {
+                            if tile.m7 & 0x40 == 0 {
+                                tile.m7 |= 0x40;
+                            }
+                            if state & 7 != 0 {
+                                state = -1;
+                            }
+                        } else if state & 3 != 0 {
+                            state = -1;
+                        }
+                        if state >= 0 {
+                            let frame = tile.m7.wrapping_add(1) | 0x40;
+                            tile.m7 = if frame > 0xC2 { 0xC0 } else { frame };
+                        }
+                    } else if (0x200..0x3A0).contains(&state) {
+                        let mask = if state < 0x220 || state >= 0x380 {
+                            7
+                        } else {
+                            3
+                        };
+                        if state & mask == 0 {
+                            let mut frame = (tile.m7 & 0xBF).wrapping_sub(1);
+                            if frame < 0x80 {
+                                frame = 0x82;
+                            }
+                            tile.m7 = frame;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        if tile != before && map.set_tile(coord, tile).is_ok() {
+            dirty.push(coord);
+        }
+    }
+    dirty
+}
+
 /// `TileLoop_Industry`: pozo idle → animado (`Chance16(1, 6)`).
 fn try_start_oil_well_animation(tile: &mut Tile, gfx: u16, tick: u64, x: i32, y: i32) -> bool {
     if gfx != GFX_OILWELL_NOT_ANIMATED {
@@ -955,6 +1122,57 @@ mod tests {
 
         assert_eq!(dirty, vec![coord]);
         assert_eq!(map.get(coord).unwrap().m6 & 0x03, 0x03);
+    }
+
+    #[test]
+    fn startup_animation_uses_map7_for_mine_tower_frame() {
+        let coord = TileCoord::new(0, 0);
+        let mut map = Map::new_flat(1, 1, 0);
+        let mut tile = industry_tile(GFX_COAL_MINE_TOWER_ANIMATED, 0x80, 0);
+        tile.m6 = 0x03;
+        tile.m7 = 0x80;
+        map.set_tile(coord, tile).unwrap();
+        let mut rng = crate::cargodist::parity::Randomizer::new(1);
+
+        let dirty = advance_startup_animated_industry_tiles(&mut map, 1280, &[coord], &mut rng);
+
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(map.get(coord).unwrap().m7, 0xC1);
+        assert_eq!(map.get(coord).unwrap().m6 & 0x03, 0x03);
+    }
+
+    #[test]
+    fn startup_animation_clears_deleted_industry_entry() {
+        let coord = TileCoord::new(0, 0);
+        let mut map = Map::new_flat(1, 1, 0);
+        let mut tile = industry_tile(GFX_COAL_MINE_TOWER_NOT_ANIMATED, 0x80, 0);
+        tile.m6 = 0x01;
+        tile.m7 = 0x80;
+        map.set_tile(coord, tile).unwrap();
+        let mut rng = crate::cargodist::parity::Randomizer::new(1);
+
+        let dirty = advance_startup_animated_industry_tiles(&mut map, 1280, &[coord], &mut rng);
+
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(map.get(coord).unwrap().m6 & 0x03, 0);
+        assert_eq!(map.get(coord).unwrap().m7, 0x80);
+    }
+
+    #[test]
+    fn startup_oilwell_animation_consumes_chance_random_and_advances_map7() {
+        let coord = TileCoord::new(0, 0);
+        let mut map = Map::new_flat(1, 1, 0);
+        let mut tile = industry_tile(GFX_OILWELL_ANIMATED_1, 0x80, 0);
+        tile.m6 = 0x03;
+        map.set_tile(coord, tile).unwrap();
+        let mut actual = crate::cargodist::parity::Randomizer::new(1);
+        let mut expected = actual;
+        let _ = expected.next();
+
+        advance_startup_animated_industry_tiles(&mut map, 1280, &[coord], &mut actual);
+
+        assert_eq!(actual, expected);
+        assert_eq!(map.get(coord).unwrap().m7, 1);
     }
 
     #[test]

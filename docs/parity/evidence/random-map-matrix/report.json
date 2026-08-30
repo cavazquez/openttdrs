@@ -3,9 +3,9 @@
   "contract": "random-map-parity-evidence",
   "reference": {
     "tag": "15.3",
-    "checkout_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+    "checkout_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
     "canonical_pin": "14ec60f248547d4d062a1160f0fc26d742319888",
-    "status": "diagnostic-local-checkout-not-canonical-pin"
+    "status": "canonical-pin-validated"
   },
   "matrix": [
     { "size": "64x64", "maps": 8, "tiles_per_map": 4096, "blocks4_per_map": 256 },
@@ -23,14 +23,14 @@
   },
   "same_seed_generator": {
     "cases": 15,
-    "exact_cases": 0,
-    "divergent_cases": 15,
+    "exact_cases": 15,
+    "divergent_cases": 0,
     "error_cases": 0,
-    "min_changed_tiles": 1700,
-    "max_changed_tiles": 136048,
-    "changed_blocks4_cases": 15,
-    "status": "open-product-gap",
-    "note": "Corrida posterior a portar la suma de octavas de costa sin normalizar, FixSlopes y el descarte de MP_VOID en TileLoop_Water, además de compartir el stream Randomizer entre TGP, GenerateClearTile, pueblos, industrias y árboles; aún divergen el algoritmo/consumo exacto de esas etapas, GenerateObjects y m1..m8."
+    "min_changed_tiles": 0,
+    "max_changed_tiles": 0,
+    "changed_blocks4_cases": 0,
+    "status": "cohort-exact-open-coverage",
+    "note": "Cohorte validada contra el pin canónico después de observar la misma frontera de entrega: 0x500 RunTileLoop durante GenerateWorld y el primer StateGameLoop (AnimateAnimatedTiles, RunTileLoop 0x501 y OnTick_Trees). RMAP-004 permanece abierto para tamaños, climas, configuraciones, ticks posteriores y fases aún no cubiertas."
   },
   "comparison": {
     "fields": ["height", "type", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"],

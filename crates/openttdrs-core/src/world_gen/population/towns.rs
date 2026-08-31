@@ -490,6 +490,71 @@ fn generated_town_road_bits(map: &crate::map::Map, tile: TileCoord) -> u8 {
     }
 }
 
+/// Pendiente efectiva de una carretera con cimiento (`GetFoundationSlope`).
+///
+/// `IsRoadAllowedHere` no compara siempre contra la pendiente cruda del mapa:
+/// cuando `build_on_slopes` está activo, `GetRoadFoundation` puede nivelar una
+/// combinación de `m5` y altura (por ejemplo, `SLOPE_WSE` + `ROAD_X` pasa a
+/// `SLOPE_FLAT`). Omitir esta reducción hace que el walker rechace una calle
+/// existente y consuma un camino RNG distinto al de `OpenTTD`.
+fn generated_town_road_surface_slope(tileh: u8, road_bits: u8) -> u8 {
+    // `_invalid_tileh_slopes_road[0]` de `road_cmd.cpp`: los bits prohibidos
+    // para una base nivelada. Cero significa que la fundación nivela la vía.
+    const INVALID_WITHOUT_FOUNDATION: [u8; 15] = [
+        0x00, 0x0C, 0x09, 0x08, 0x03, 0x00, 0x01, 0x00, 0x06, 0x04, 0x00, 0x00, 0x02, 0x00, 0x00,
+    ];
+    // `_invalid_tileh_slopes_road[1]`: una carretera recta puede conservar
+    // la pendiente sin cimiento. Las curvas/cruces caen en el cimiento
+    // inclinado que `ApplyFoundationToSlope` transforma en una pendiente
+    // diagonal de superficie.
+    const INVALID_STRAIGHT: [u8; 15] = [
+        0x00, 0x00, 0x00, 0x05, 0x00, 0x0F, 0x0A, 0x0F, 0x00, 0x0A, 0x0F, 0x0F, 0x05, 0x0F, 0x0F,
+    ];
+    if tileh == 0 || road_bits == 0 {
+        return tileh;
+    }
+
+    // `GetRoadFoundation` trata las pendientes empinadas como la esquina más
+    // alta antes de consultar las dos tablas de combinaciones válidas.
+    let normalized = if tileh & SLOPE_STEEP != 0 {
+        match tileh & 0x0F {
+            1 => 1,
+            2 => 2,
+            4 => 4,
+            _ => 8,
+        }
+    } else {
+        tileh & 0x0F
+    };
+
+    if INVALID_WITHOUT_FOUNDATION[usize::from(normalized)] & road_bits == 0 {
+        return 0;
+    }
+
+    let one_corner = matches!(normalized, 1 | 2 | 4 | 8);
+    if !one_corner && INVALID_STRAIGHT[usize::from(normalized)] & road_bits == 0 {
+        return normalized;
+    }
+
+    let highest_corner = match normalized {
+        1 => 1,
+        2 => 2,
+        4 => 4,
+        _ => 8,
+    };
+    if road_bits == ROAD_BITS_AXIS_X {
+        if matches!(highest_corner, 1 | 2) {
+            SLOPE_SW
+        } else {
+            SLOPE_NE
+        }
+    } else if matches!(highest_corner, 2 | 4) {
+        SLOPE_SE
+    } else {
+        SLOPE_NW
+    }
+}
+
 /// `CleanUpRoadBits` elimina una salida vial que apunta a una tesela con la
 /// que no se puede conectar. `GrowTownInTile` compone primero sus dos bits y
 /// recién aquí ve si una rama termina contra una casa, agua real o borde.
@@ -660,10 +725,16 @@ fn generated_town_road_allowed_here(
         return false;
     }
     let clearable = map.get(tile).is_some_and(|candidate| {
-        matches!(
-            candidate.kind,
-            TileKind::Grass | TileKind::Forest | TileKind::Road
-        ) || (candidate.kind == TileKind::Water && !has_tile_water_ground(candidate))
+        // `IsRoadAllowedHere` first accepts any existing town road bits. A
+        // bridge/tunnel mouth exposes those bits through `GetAnyRoadBits`,
+        // even though its tile kind is not `MP_ROAD`; rejecting it here would
+        // stop the walker before `CleanUpRoadBits` and shift the RNG stream.
+        generated_town_road_bits(map, tile) != 0
+            || matches!(
+                candidate.kind,
+                TileKind::Grass | TileKind::Forest | TileKind::Road
+            )
+            || (candidate.kind == TileKind::Water && !has_tile_water_ground(candidate))
     });
     if !clearable {
         return false;
@@ -674,9 +745,15 @@ fn generated_town_road_allowed_here(
     } else {
         2
     };
-    let ret = !generated_is_neighbour_road_tile(map, tile, dir, neighbour_distance);
+    let has_neighbour = generated_is_neighbour_road_tile(map, tile, dir, neighbour_distance);
+    let ret = !has_neighbour;
 
-    let slope = tile_slope_and_z(map, tile).map_or(SLOPE_STEEP, |(slope, _)| slope);
+    let raw_slope = tile_slope_and_z(map, tile).map_or(SLOPE_STEEP, |(slope, _)| slope);
+    let slope = if map.get_kind(tile) == Some(TileKind::Road) {
+        generated_town_road_surface_slope(raw_slope, generated_town_road_bits(map, tile))
+    } else {
+        raw_slope
+    };
     if slope == 0 {
         return ret;
     }
@@ -4775,5 +4852,33 @@ mod tests {
             &mut water_rng,
         ));
         assert!(generated_can_follow_town_road(&map, town.pos, 2));
+    }
+
+    #[test]
+    fn generated_town_roads_accept_existing_tunnel_mouth() {
+        // RMAP-119: `IsRoadAllowedHere` consulta `GetTownRoadBits` antes de
+        // intentar limpiar la tesela. Una boca municipal es `MP_TUNNELBRIDGE`
+        // (no `MP_ROAD`), pero expone ambos bits del eje y debe dejar que el
+        // walker continúe sin consumir RNG adicional.
+        let mut map = Map::new_flat(8, 8, 1);
+        let mouth = TileCoord::new(3, 3);
+        let mut tunnel = map.get(mouth).expect("tunnel mouth");
+        tunnel.kind = TileKind::RoadTunnel;
+        tunnel.mapt = 0x90;
+        tunnel.m1 = crate::company::OWNER_TOWN_M1;
+        tunnel.m5 = 0x04 | 2;
+        tunnel.m7 = crate::company::OWNER_TOWN_M1;
+        tunnel.m8 = TOWN_ROAD_INVALID_TRAM_TYPE;
+        map.set_tile(mouth, tunnel).expect("install tunnel mouth");
+
+        let town = Town {
+            layout: TownLayout::Original,
+            ..Town::default()
+        };
+        let mut rng = Randomizer::default();
+        assert!(generated_town_road_allowed_here(
+            &map, &town, mouth, 2, &mut rng
+        ));
+        assert_eq!(rng, Randomizer::default());
     }
 }

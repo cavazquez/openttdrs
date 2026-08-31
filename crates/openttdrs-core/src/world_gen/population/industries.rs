@@ -542,7 +542,10 @@ fn generated_industry_check_proc_allows(
         // `CHECK_LUMBERMILL`: el aserradero tropical exige rainforest.
         IndustrySpec::LumberMill => tile.mapt & 0x03 == 2,
         // `CHECK_BUBBLEGEN`: Toyland limita el generador a tierras bajas.
-        IndustrySpec::BubbleGenerator => tile.height <= 4,
+        // `GetTileZ` es el mínimo de las cuatro esquinas; usar el valor de la
+        // esquina norte (`tile.height`) rechaza pendientes cuya base sigue
+        // estando por debajo del límite nativo.
+        IndustrySpec::BubbleGenerator => tile_z <= 4,
         _ => true,
     }
 }
@@ -1306,9 +1309,31 @@ mod tests {
 
         let mut toyland = GameState::new(64, 64);
         toyland.climate = Climate::Toyland;
-        toyland.map.set_height(low, 5).expect("high fixture");
+        for vertex in [
+            low,
+            TileCoord::new(low.x + 1, low.y),
+            TileCoord::new(low.x, low.y + 1),
+            TileCoord::new(low.x + 1, low.y + 1),
+        ] {
+            toyland.map.set_height(vertex, 5).expect("high fixture");
+        }
         assert!(!generated_industry_check_proc_allows(
             &toyland,
+            low,
+            IndustrySpec::BubbleGenerator
+        ));
+
+        // A steep tile can store a high north corner while its bottom Z is
+        // still low enough for CHECK_BUBBLEGEN. OpenTTD admits that site.
+        let mut sloped_toyland = GameState::new(64, 64);
+        sloped_toyland.climate = Climate::Toyland;
+        sloped_toyland
+            .map
+            .set_height(low, 5)
+            .expect("sloped fixture");
+        assert_eq!(tile_slope_and_z(&sloped_toyland.map, low), Some((8, 1)));
+        assert!(generated_industry_check_proc_allows(
+            &sloped_toyland,
             low,
             IndustrySpec::BubbleGenerator
         ));

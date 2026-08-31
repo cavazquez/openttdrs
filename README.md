@@ -36,11 +36,11 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 **Trabajo reciente (agosto 2026):** se alinearon las fases del generador
 procedural (`landscape` → `clear` → `towns` → `industries` → `objects` →
 `trees`) con OpenTTD para las cohortes canónicas, incluyendo los bucles de
-teselas, costas, industrias, árboles y bocas de puentes/túneles. La semilla
-Toyland 512² `1330935378` ya coincide hasta `clear`; la siguiente divergencia
-reproducible está acotada al crecimiento de pueblos. El detalle y el alcance
-pendiente viven en el [plan continuo de paridad](docs/parity/continuous-work-plan.md)
-y en los [issues abiertos](https://github.com/cavazquez/openttdrs/issues).
+teselas, costas, industrias, árboles y bocas de puentes/túneles. Las semillas
+Toyland 512² `1330935378` y `1330935379` coinciden en las seis fases auditadas;
+la generalización a otras semillas, tamaños, climas y configuraciones sigue
+abierta. El detalle y el alcance pendiente viven en el [plan continuo de
+paridad](docs/parity/continuous-work-plan.md) y en los [issues abiertos](https://github.com/cavazquez/openttdrs/issues).
 
 **Siguiente corte (roadmap):** cerrar la primera divergencia restante de
 `RMAP-004` y continuar con composición raster, SAV, NewGRF runtime, movimiento

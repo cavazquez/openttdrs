@@ -14,15 +14,16 @@ Cuando esa evidencia ya coincide pero el resultado compuesto difiere, usar el
 La paridad de mapas aleatorios se audita por estado lógico, no por capturas
 gigantes: [`parity/random-map-matrix.md`](parity/random-map-matrix.md) separa
 la apertura de `.sav` (15/15 exactos en la última matriz) de la generación con
-el mismo seed (brecha de producto aún abierta). La última comparación Toyland
-512² (seed `1330935378`) ya coincide en `landscape` y `clear` después de
-alinear el RNG global de `TileLoop_Trees`; la primera divergencia medible queda
-en `towns`, por lo que este resultado no se extiende a la paridad completa del
-mapa.
+el mismo seed (brecha de producto aún abierta). Las comparaciones Toyland 512²
+de las seeds `1330935378` y `1330935379` coinciden en las seis fases
+(`landscape`→`trees`) después de alinear el RNG de `TileLoop_Trees`, la
+pendiente efectiva y la admisión de bocas viales existentes. Esto es evidencia
+acotada a esas seeds/configuración; no se extiende a la paridad completa del
+mapa ni a otras geometrías o fases posteriores.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-08-22 · `main` `31c7ec03`.
+**Corte canónico: 2026-08-31 · `main` (ver commit publicado más reciente).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el

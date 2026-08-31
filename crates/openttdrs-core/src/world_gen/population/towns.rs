@@ -12,8 +12,9 @@ use crate::house_spec::{
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
 use crate::map::{
     SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_STEEP, SLOPE_SW, TOWN_HOUSE_COMPLETED, TileCoord, TileKind,
-    TownHouseFootprint, TownHouseSpec, WaterClass, clear_neighbour_non_flooding_states,
-    complement_slope, has_tile_water_ground, is_coast_tile, tile_slope_and_z, water_class_from_m1,
+    TownHouseFootprint, TownHouseSpec, WaterClass, bridge_surface_slope_and_z,
+    clear_neighbour_non_flooding_states, complement_slope, has_tile_water_ground, is_coast_tile,
+    tile_slope_and_z, water_class_from_m1,
 };
 use crate::sav::house_spec_population;
 use crate::town::{
@@ -1452,16 +1453,42 @@ fn generated_town_road_bridge_command_supported(
     let Some((start_slope, start_z)) = tile_slope_and_z(map, start) else {
         return false;
     };
-    // El preflight de `GrowTownWithBridge` admite el arranque inclinado si la
-    // cara elevada queda del lado opuesto a la marcha. Para las pendientes que
-    // ya son una rampa nativa no hace falta foundation: la forma válida es
-    // `InclinedSlope(ReverseDiagDir(direction))`. La llegada conserva el
-    // manejo de foundation ya cubierto por RMAP-084.
-    if start_slope != 0
-        && start_slope != generated_town_inclined_slope(reverse_town_diag_dir(direction))
+    let Some((end_slope, end_z)) = tile_slope_and_z(map, end) else {
+        return false;
+    };
+
+    // `CmdBuildBridge` canoniza los extremos por índice lineal antes de
+    // aplicar `CheckBridgeSlope`: el extremo menor es la pieza NORTH y el
+    // mayor la SOUTH, aun cuando `GrowTownWithBridge` esté caminando en el
+    // sentido opuesto. Cada cimiento puede cambiar tanto la pendiente de la
+    // rampa como su nivel efectivo; omitirlo acepta puentes que el comando
+    // nativo rechaza cuando las cabezas no quedan a la misma altura (por
+    // ejemplo, la semilla ártica 1330935380).
+    let (width, _) = map.dimensions();
+    let linear_index = |tile: TileCoord| {
+        u64::try_from(tile.y)
+            .unwrap_or(0)
+            .saturating_mul(u64::from(width))
+            .saturating_add(u64::try_from(tile.x).unwrap_or(0))
+    };
+    let axis_x = matches!(direction & 3, 0 | 2);
+    let (north_slope, north_z, south_slope, south_z) = if linear_index(start) <= linear_index(end) {
+        (start_slope, start_z, end_slope, end_z)
+    } else {
+        (end_slope, end_z, start_slope, start_z)
+    };
+    let (north_surface, north_foundation_dz) = bridge_surface_slope_and_z(north_slope, axis_x);
+    let (south_surface, south_foundation_dz) = bridge_surface_slope_and_z(south_slope, axis_x);
+    let north_valid_inclined = if axis_x { SLOPE_NE } else { SLOPE_NW };
+    let south_valid_inclined = if axis_x { SLOPE_SW } else { SLOPE_SE };
+    if (north_surface != 0 && north_surface != north_valid_inclined)
+        || (south_surface != 0 && south_surface != south_valid_inclined)
+        || u16::from(north_z).saturating_add(u16::from(north_foundation_dz))
+            != u16::from(south_z).saturating_add(u16::from(south_foundation_dz))
     {
         return false;
     }
+    let bridge_level = u16::from(north_z).saturating_add(u16::from(north_foundation_dz));
 
     middle.iter().copied().all(|middle_tile| {
         let Some(tile) = map.get(middle_tile) else {
@@ -1469,7 +1496,7 @@ fn generated_town_road_bridge_command_supported(
         };
         tile.mapt & 0x0C == 0
             && generated_town_bridge_crosses_water(tile, start_slope == 0)
-            && tile_slope_and_z(map, middle_tile).is_some_and(|(_, z)| z <= start_z)
+            && tile_slope_and_z(map, middle_tile).is_some_and(|(_, z)| u16::from(z) <= bridge_level)
     })
 }
 
@@ -2261,10 +2288,13 @@ fn is_clear_or_tree_not_rough(map: &crate::map::Map, tile: TileCoord) -> bool {
         TileKind::Grass => clear_ground_type(candidate.m5) != CLEAR_GROUND_ROUGH,
         // `TownCanBePlacedHere` excluye los árboles sobre suelo rough
         // (`GetTreeGround() == TREE_GROUND_ROUGH`) del cuadro 5×5. El ground
-        // vive en MAP2 bits 6..8; aceptar cualquier bosque hacía que una
-        // fundación posterior consumiera el mismo RNG pero eligiera otro
-        // sitio cuando el primer candidato tocaba humedales.
-        TileKind::Forest => ((candidate.m2 >> 6) & 0x07) != 1,
+        // vive en MAP2 bits 6..8, incluido el bit que se serializa en
+        // `m2_hi`; leer sólo el byte bajo convierte `RoughSnow` (0x0100) en
+        // Grass y permite una fundación que OpenTTD rechaza.
+        TileKind::Forest => {
+            let m2 = u16::from(candidate.m2) | (u16::from(candidate.m2_hi) << 8);
+            ((m2 >> 6) & 0x07) != 1
+        }
         _ => false,
     })
 }
@@ -4188,6 +4218,43 @@ mod tests {
             ROAD_BITS_AXIS_Y
         );
         assert!(generated_can_follow_town_road(&state.map, source, 3));
+    }
+
+    #[test]
+    fn flat_town_bridge_rejects_heads_at_different_effective_heights() {
+        // `CmdBuildBridge` exige que ambas cabezas queden al mismo nivel
+        // después de aplicar sus cimientos. La previsualización anterior sólo
+        // comparaba la altura del vano y aceptaba este caso, aunque el
+        // comando nativo rechazaba el puente y continuaba con una calle.
+        let mut state = GameState::new(10, 10);
+        let source = TileCoord::new(4, 2);
+        let start = TileCoord::new(4, 3);
+        let middle = TileCoord::new(4, 4);
+        let end = TileCoord::new(4, 5);
+        assert!(write_generated_town_road(
+            &mut state,
+            source,
+            town_diag_dir_to_road_bits(1),
+            0,
+        ));
+        crate::map::make_water_tile(&mut state.map, middle, crate::map::WaterClass::River)
+            .expect("river span");
+        for vertex in [
+            TileCoord::new(4, 3),
+            TileCoord::new(5, 3),
+            TileCoord::new(4, 4),
+            TileCoord::new(5, 4),
+        ] {
+            state.map.set_height(vertex, 2).expect("start height");
+        }
+        assert_eq!(tile_slope_and_z(&state.map, start), Some((0, 2)));
+        assert_eq!(tile_slope_and_z(&state.map, end), Some((0, 1)));
+
+        assert!(!generated_town_road_bridge_command_supported(
+            &state.map,
+            &[start, middle, end],
+            1,
+        ));
     }
 
     #[test]

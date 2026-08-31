@@ -24,7 +24,10 @@ mapa ni a otras geometrías o fases posteriores. El control Arctic 512²
 `TileLoopTreesAlps` con el RNG global y contar agua fluvial en el escalado de
 faros. RMAP-123 además alinea `RiverMakeWider` con `IsValidTile` en el borde
 `MP_VOID` y conserva el `MAP2` de 16 bits cuando `RoughSnow` ocupa el byte
-alto; la generalización del clima permanece abierta.
+alto. RMAP-124 aplica también `CheckBridgeSlope` al preflight de puentes
+municipales: las cuatro seeds árticas 512² (`1330935378`–`1330935381`) quedan
+exactas en `landscape`→`trees`, comparando teselas y bloques 4×4; la
+generalización del clima permanece abierta.
 
 ## Estado canónico actual
 

@@ -41,8 +41,10 @@ Toyland 512² `1330935378`–`1330935381` coinciden en las seis fases auditadas,
 incluido el despeje completo de casas multitile al crear Toy Shops; la
 semilla Arctic 512² `1330935382` también coincide en las seis fronteras tras
 alinear `TileLoopTreesAlps`, el escalado de faros con bordes fluviales y el
-rechazo de `MP_VOID`/preservación de `RoughSnow` en `MAP2`; la generalización a
-otras semillas, tamaños, climas y configuraciones sigue abierta. El detalle y
+rechazo de `MP_VOID`/preservación de `RoughSnow` en `MAP2`; la cohorte Arctic
+512² `1330935378`–`1330935381` también queda exacta tras validar las cabezas de
+puente con `CheckBridgeSlope`; la generalización a otras semillas, tamaños,
+climas y configuraciones sigue abierta. El detalle y
 el alcance pendiente viven en el [plan continuo de
 paridad](docs/parity/continuous-work-plan.md) y en los [issues abiertos](https://github.com/cavazquez/openttdrs/issues).
 

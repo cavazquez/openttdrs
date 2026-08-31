@@ -17,11 +17,13 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Gobierno:** [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [ADRs](docs/adr/)
 
-**Última actualización:** 2026-08-14
+**Última actualización:** 2026-08-31
 
 ---
 
 ## Estado del proyecto
+
+> Actualizado: 2026-08-31.
 
 | Capa | Qué hay |
 |------|---------|
@@ -31,13 +33,25 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 | **NewGRF** | Catálogos Action0/3/5 y runtime parcial; las matrices de [propiedades](docs/parity/newgrf-action0-matrix.md) y [callbacks](docs/parity/newgrf-callback-matrix.md) distinguen parseado, almacenado y ejecutado |
 | **Hito 0.1** | `0.1.0-alpha.1` preparada; solitario jugable. **I8 red** MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅) + host migration ([#171](https://github.com/cavazquez/openttdrs/issues/171), [ADR 0004](docs/adr/0004-host-migration-post-v1.md)) |
 
-**Trabajo reciente (jul 2026):** Action2 variational (trains/stations/road), procedure `7E` / `\2psto`, vars de vehículo y de tesela al dibujar. Issues de backlog: [issues abiertas](https://github.com/cavazquez/openttdrs/issues).
+**Trabajo reciente (agosto 2026):** se alinearon las fases del generador
+procedural (`landscape` → `clear` → `towns` → `industries` → `objects` →
+`trees`) con OpenTTD para las cohortes canónicas, incluyendo los bucles de
+teselas, costas, industrias, árboles y bocas de puentes/túneles. La semilla
+Toyland 512² `1330935378` ya coincide hasta `clear`; la siguiente divergencia
+reproducible está acotada al crecimiento de pueblos. El detalle y el alcance
+pendiente viven en el [plan continuo de paridad](docs/parity/continuous-work-plan.md)
+y en los [issues abiertos](https://github.com/cavazquez/openttdrs/issues).
 
-**Siguiente corte (roadmap):** paridad UI / pulido — ver [PLANIFICACION.md](docs/PLANIFICACION.md#paridad-ui-global). Editor #42 ✅ · GameScript-lite #43 ✅ · IA TransCargo ✅ (Squirrel OOS).
+**Siguiente corte (roadmap):** cerrar la primera divergencia restante de
+`RMAP-004` y continuar con composición raster, SAV, NewGRF runtime, movimiento
+y economía, y settings/idiomas, en ese orden. Editor #42 ✅ · GameScript-lite
+#43 ✅ · IA TransCargo ✅ (Squirrel OOS).
 
 ---
 
 ## Arranque rápido
+
+> Actualizado: 2026-08-31.
 
 ```bash
 # 0) Diagnóstico de entorno (no adivinar qué falta)
@@ -52,6 +66,8 @@ cargo run -p openttdrs-client
 ```
 
 ### Dependencias (máquina nueva)
+
+> Actualizado: 2026-08-31.
 
 `./scripts/doctor.sh` chequea toolchain Rust, paquetes APT (misma lista que CI en [`.github/apt-packages.txt`](.github/apt-packages.txt)), `grfcodec`, Python (`numpy` / `Pillow`) y assets. Con `--fix` imprime los comandos a correr. **pip no es obligatorio**: solo es alternativa si no usás paquetes del sistema.
 
@@ -94,6 +110,8 @@ En juego: **F5** guardar · **F9** cargar · pausa/velocidad en toolbar · prefe
 
 ## Desarrollo
 
+> Actualizado: 2026-08-31.
+
 Flujo de PRs y DoD: [CONTRIBUTING.md](CONTRIBUTING.md). Capas: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ```bash
@@ -125,6 +143,8 @@ cargo deny check       # licencias + advisories + sources + bans (deny.toml)
 ```
 
 ### Caché de compilación (`sccache`)
+
+> Actualizado: 2026-08-31.
 
 GitHub Actions activa `sccache` con el backend de caché de Actions en todos los
 jobs que compilan Rust. En local es opcional: `./scripts/check.sh` lo detecta y
@@ -164,6 +184,8 @@ Detalle: [docs/PARIDAD.md](docs/PARIDAD.md).
 
 ## CI y calidad
 
+> Actualizado: 2026-08-31.
+
 Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (sccache + caché Cargo + APT):
 
 | Paso | Contenido |
@@ -185,6 +207,8 @@ Cobertura manual: [.github/workflows/coverage.yml](.github/workflows/coverage.ym
 
 ### Release alpha
 
+> Actualizado: 2026-08-31.
+
 El workflow [release.yml](.github/workflows/release.yml) se puede ejecutar manualmente
 para probar artefactos sin publicar. Un tag que coincida exactamente con la versión
 del workspace (actualmente `v0.1.0-alpha.1`) crea una prerelease con binarios,
@@ -205,6 +229,9 @@ Notas: [CHANGELOG.md](CHANGELOG.md) · [RELEASE_NOTES.md](RELEASE_NOTES.md) ·
 
 ## Qué está hecho / qué falta (resumen)
 
+> Actualizado: 2026-08-31. Las matrices canónicas enlazadas abajo tienen
+> prioridad sobre cualquier resumen de esta tabla.
+
 Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 
 | Área | Estado | Notas |
@@ -222,11 +249,15 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | Multijugador (I8) | 🟡 | MVP lockstep + dedicated + host migration; desync/UI OOS |
 | IA rivales / GameScript / editor | 🟡 | TransCargo + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
 
-Backlog vivo: [issues del repo](https://github.com/cavazquez/openttdrs/issues) (generadas desde los ROADMAP, jul 2026).
+Backlog vivo al 2026-08-31: [issues del repo](https://github.com/cavazquez/openttdrs/issues),
+con el alcance vigente consolidado en [continuous-work-plan.md](docs/parity/continuous-work-plan.md)
+y [PARIDAD.md](docs/PARIDAD.md).
 
 ---
 
 ## Documentación
+
+> Actualizado: 2026-08-31.
 
 | Documento | Uso |
 |-----------|-----|
@@ -252,6 +283,8 @@ Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.m
 
 ## Stack
 
+> Actualizado: 2026-08-31.
+
 | Tecnología | Rol |
 |------------|-----|
 | Rust 2024 (MSRV **1.98**) | Workspace `openttdrs-core` + `openttdrs-client` + `openttdrs-net` |
@@ -264,6 +297,8 @@ Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.m
 ---
 
 ## Estructura del repo
+
+> Actualizado: 2026-08-31.
 
 ```
 Cargo.toml                 # Workspace
@@ -280,5 +315,7 @@ reference/                 # Clon OpenTTD (gitignored)
 ---
 
 ## Licencia
+
+> Actualizado: 2026-08-31.
 
 **GPL-2.0-only** (ver `LICENSE`). El código de OpenTTD usado como referencia conserva su propia licencia y copyright.

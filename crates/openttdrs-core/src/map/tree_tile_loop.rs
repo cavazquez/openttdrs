@@ -37,6 +37,12 @@ pub const TREE_GROWTH_GROWING1: u8 = 0;
 pub const TREE_GROWTH_GROWN: u8 = 3;
 pub const TREE_GROWTH_DEAD: u8 = 6;
 
+/// Valores de `TreeGround` persistidos en MAP2 (`tree_map.h`).
+const TREE_GROUND_GRASS: u8 = 0;
+const TREE_GROUND_ROUGH: u8 = 1;
+const TREE_GROUND_SNOW_DESERT: u8 = 2;
+const TREE_GROUND_ROUGH_SNOW: u8 = 4;
+
 const GROWTH_MASK: u8 = 0x07;
 const TREE_COUNT_SHIFT: u8 = 6;
 
@@ -159,6 +165,80 @@ const fn tree_ground_density(m2: u8) -> u8 {
 #[must_use]
 const fn make_tree_m2(ground: u8, density: u8) -> u8 {
     ((ground & 0x07) << 6) | ((density & 0x03) << 4)
+}
+
+#[must_use]
+const fn tree_m2_word(tile: Tile) -> u16 {
+    (tile.m2 as u16) | ((tile.m2_hi as u16) << 8)
+}
+
+#[must_use]
+const fn make_tree_m2_word(ground: u8, density: u8) -> u16 {
+    (((ground & 0x07) as u16) << 6) | (((density & 0x03) as u16) << 4)
+}
+
+/// Ejecuta `TileLoopTreesAlps` sobre un árbol durante las pasadas de
+/// generación. La versión de OpenTTD también consume un `Random()` cuando
+/// una tesela ya está estabilizada en nieve densa; se conserva esa frontera
+/// aunque el resultado del sonido no sea observable en un mapa nuevo.
+pub(crate) fn tile_loop_trees_alps_at(
+    map: &mut Map,
+    c: TileCoord,
+    snow_line_height: u8,
+    rng: &mut Randomizer,
+) -> bool {
+    let Some(tile) = map.get(c) else {
+        return false;
+    };
+    if tile.kind != TileKind::Forest {
+        return false;
+    }
+    let Some((_, z)) = tile_slope_and_z(map, c) else {
+        return false;
+    };
+
+    let word = tree_m2_word(tile);
+    let ground = ((word >> 6) & 0x07) as u8;
+    let density = ((word >> 4) & 0x03) as u8;
+    let k = i32::from(z) - i32::from(snow_line_height) + 1;
+
+    let new_word = if k < 0 {
+        match ground {
+            TREE_GROUND_SNOW_DESERT => Some(make_tree_m2_word(TREE_GROUND_GRASS, 3)),
+            TREE_GROUND_ROUGH_SNOW => Some(make_tree_m2_word(TREE_GROUND_ROUGH, 3)),
+            _ => None,
+        }
+    } else {
+        let required = u8::try_from(k.clamp(0, 3)).unwrap_or(3);
+        if ground != TREE_GROUND_SNOW_DESERT && ground != TREE_GROUND_ROUGH_SNOW {
+            let snow_ground = if ground == TREE_GROUND_ROUGH {
+                TREE_GROUND_ROUGH_SNOW
+            } else {
+                TREE_GROUND_SNOW_DESERT
+            };
+            Some(make_tree_m2_word(snow_ground, required))
+        } else if density != required {
+            Some(make_tree_m2_word(ground, required))
+        } else {
+            if density == 3 {
+                // `TileLoopTreesAlps` samples this value for the ambient
+                // snow sound even when no MAP2 byte changes.
+                let _ = rng.next();
+            }
+            None
+        }
+    };
+
+    let Some(new_word) = new_word else {
+        return false;
+    };
+    if new_word == word {
+        return false;
+    }
+    let mut updated = tile;
+    updated.m2 = u8::try_from(new_word).unwrap_or_default();
+    updated.m2_hi = u8::try_from(new_word >> 8).unwrap_or_default();
+    map.set_tile(c, updated).is_ok()
 }
 
 /// Normaliza etapas inválidas (> `Dead`) dejadas por el crecimiento lineal antiguo.
@@ -474,7 +554,10 @@ pub(crate) fn process_generation_tree_growth_at(
     rng: &mut Randomizer,
     c: TileCoord,
 ) {
-    debug_assert!(matches!(climate, Climate::Temperate | Climate::Toyland));
+    debug_assert!(matches!(
+        climate,
+        Climate::Temperate | Climate::SubArctic | Climate::Toyland
+    ));
     let Some(tile) = map.get(c) else {
         return;
     };

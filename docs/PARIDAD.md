@@ -19,7 +19,10 @@ de las seeds `1330935378` y `1330935379` coinciden en las seis fases
 (`landscape`→`trees`) después de alinear el RNG de `TileLoop_Trees`, la
 pendiente efectiva y la admisión de bocas viales existentes. Esto es evidencia
 acotada a esas seeds/configuración; no se extiende a la paridad completa del
-mapa ni a otras geometrías o fases posteriores.
+mapa ni a otras geometrías o fases posteriores. El control Arctic 512²
+`1330935382` también quedó exacto en las seis fronteras después de alinear
+`TileLoopTreesAlps` con el RNG global y contar agua fluvial en el escalado de
+faros; la generalización del clima permanece abierta.
 
 ## Estado canónico actual
 

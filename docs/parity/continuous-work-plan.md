@@ -68,7 +68,19 @@ cierran RMAP-004/RMAP-024/RMAP-027/RMAP-030/RMAP-032/RMAP-034.
 > canónico. Las columnas desconocidas de las demás tablas reconstruidas y el
 > resto de pools nativos siguen pendientes.
 
+> El rango compacto de sub-issues de la fila RMAP-004 se mantiene como
+> referencia histórica; RMAP-122 está cerrado y documentado en la matriz
+> detallada. El padre sigue abierto y cualquier nuevo corte debe agregar otro
+> sub-issue, no convertir este control en paridad general.
+
 ## Cómo se decide el siguiente bloque
+
+Actualización RMAP-122 (2026-08-31): la primera divergencia ártica de 512²
+quedó resuelta en `TileLoopTreesAlps` y en el conteo de faros de bordes con
+ríos. La semilla `1330935382` es exacta en `landscape`, `clear`, `towns`,
+`industries`, `objects` y `trees` (0 teselas y 0 bloques 4×4). Es un control
+acotado; no amplía el cierre de RMAP-004 ni de sus padres a otras semillas,
+tamaños, configuraciones o ticks.
 
 Actualización de #329: el renderer de vehículos ya resuelve los canales
 primario y secundario de las 23 libreas por esquema (incluidas clase de

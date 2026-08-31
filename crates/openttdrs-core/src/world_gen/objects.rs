@@ -127,14 +127,16 @@ fn lighthouse_amount(map: &Map) -> u32 {
         return 0;
     }
 
-    // `GenerateObjects` counts only the water one tile inside each freeform
-    // edge.  The corners are deliberately not counted twice.
+    // `GenerateObjects` counts every MP_WATER tile one tile inside each
+    // freeform edge, including rivers (the later lighthouse placement still
+    // requires `WaterClass::Sea`). The corners are deliberately not counted
+    // twice.
     let mut water_tiles = 0u32;
     for x in 0..max_x {
-        if is_sea(map, TileCoord::new(x as i32, 1)) {
+        if is_water(map, TileCoord::new(x as i32, 1)) {
             water_tiles = water_tiles.saturating_add(1);
         }
-        if is_sea(
+        if is_water(
             map,
             TileCoord::new(x as i32, max_y.saturating_sub(1) as i32),
         ) {
@@ -142,10 +144,10 @@ fn lighthouse_amount(map: &Map) -> u32 {
         }
     }
     for y in 1..max_y {
-        if is_sea(map, TileCoord::new(1, y as i32)) {
+        if is_water(map, TileCoord::new(1, y as i32)) {
             water_tiles = water_tiles.saturating_add(1);
         }
-        if is_sea(
+        if is_water(
             map,
             TileCoord::new(max_x.saturating_sub(1) as i32, y as i32),
         ) {
@@ -335,6 +337,10 @@ fn is_sea(map: &Map, coord: TileCoord) -> bool {
     })
 }
 
+fn is_water(map: &Map, coord: TileCoord) -> bool {
+    map.get_kind(coord) == Some(TileKind::Water)
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
@@ -361,6 +367,49 @@ mod tests {
             }
         }
         assert!(lighthouse_amount(&map) > 0);
+    }
+
+    #[test]
+    fn lighthouse_amount_counts_rivers_like_generate_objects() {
+        let mut map = Map::new_flat(512, 512, 0);
+        let mut border_water = 0u32;
+        for x in 0..511 {
+            for y in [1, 510] {
+                let c = TileCoord::new(x, y);
+                let mut tile = map.get(c).expect("border tile");
+                tile.kind = TileKind::Water;
+                tile.mapt = 0x60;
+                tile.m1 = set_water_class_m1(
+                    OWNER_NONE_M1,
+                    if border_water < 8 {
+                        WaterClass::River
+                    } else {
+                        WaterClass::Sea
+                    },
+                );
+                map.set_tile(c, tile).expect("water border");
+                border_water += 1;
+            }
+        }
+        for y in 1..133 {
+            let c = TileCoord::new(1, y);
+            let mut tile = map.get(c).expect("border tile");
+            tile.kind = TileKind::Water;
+            tile.mapt = 0x60;
+            tile.m1 = set_water_class_m1(
+                OWNER_NONE_M1,
+                if border_water < 8 {
+                    WaterClass::River
+                } else {
+                    WaterClass::Sea
+                },
+            );
+            map.set_tile(c, tile).expect("water border");
+            border_water += 1;
+        }
+        assert_eq!(border_water, 1_154);
+        // 8 × 1154 water-weighted lighthouses, scaled to a 512² map, yields 9.
+        assert_eq!(lighthouse_amount(&map), 9);
     }
 
     #[test]

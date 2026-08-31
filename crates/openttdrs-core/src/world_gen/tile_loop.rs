@@ -139,6 +139,16 @@ fn run_generation_tile_loop_impl(
                     *coord,
                     state.snow_line_height,
                 );
+                if tile.kind == TileKind::Forest
+                    && let Some(rng) = generation_rng.as_deref_mut()
+                {
+                    crate::map::tree_tile_loop::tile_loop_trees_alps_at(
+                        &mut state.map,
+                        *coord,
+                        state.snow_line_height,
+                        rng,
+                    );
+                }
             }
             _ => {}
         }
@@ -167,7 +177,9 @@ fn dispatch_generation_tile_loop_tile(
         TileKind::Forest
             if matches!(
                 state.climate,
-                crate::world_gen::Climate::Temperate | crate::world_gen::Climate::Toyland
+                crate::world_gen::Climate::Temperate
+                    | crate::world_gen::Climate::SubArctic
+                    | crate::world_gen::Climate::Toyland
             ) && generation_rng.is_some() =>
         {
             // `TileLoop_Trees` delega primero una orilla a `TileLoop_Water`.

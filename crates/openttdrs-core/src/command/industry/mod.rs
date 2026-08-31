@@ -1,8 +1,15 @@
+use crate::company::OWNER_NONE_M1;
+use crate::house_spec::{
+    BUILDING_FLAG_SIZE_1X2, BUILDING_FLAG_SIZE_2X1, BUILDING_FLAG_SIZE_2X2,
+    house_footprint_offsets, vanilla_or_newgrf_house,
+};
 use crate::industry_spec::{IndustrySpecDef, industry_spec_def};
 use crate::map::{
-    SLOPE_STEEP, Tile, TileCoord, TileKind, tile_has_water_class, tile_slope_and_z,
-    water_class_from_m1,
+    SLOPE_STEEP, Tile, TileCoord, TileKind, clear_neighbour_non_flooding_states,
+    tile_has_water_class, tile_slope_and_z, water_class_from_m1,
 };
+use crate::town::{nearest_town_index, update_town_radius};
+use crate::world_gen::{CLEAR_GROUND_GRASS, clear_ground_m5};
 use crate::{GameState, Industry, IndustryKind, IndustrySpec};
 
 use super::CommandError;
@@ -255,7 +262,17 @@ fn place_industry_spec_template_sandbox(
     let footprint: Vec<TileCoord> = template.iter().map(|(tile, _)| *tile).collect();
     let industry_id = next_industry_instance_id(state);
     let random_colour = industry_id.wrapping_mul(5) % 16;
+    let mut cleared_house_tiles = Vec::new();
     for (tile, m5) in template {
+        // `OnlyNearTown` allows Toy Shops to replace houses. The native clear
+        // command receives the sub-tile, resolves the northern/base tile of a
+        // multi-tile house, and clears every part before `MakeIndustry`
+        // writes the selected layout. Without this collateral clear a house
+        // part outside the industry footprint survives and shifts the raw
+        // MAPT/MAP8 bytes (for example Toyland seed 1330935380 at 426,140).
+        if spec == IndustrySpec::ToyShop {
+            clear_town_house_for_industry(state, *tile, &mut cleared_house_tiles);
+        }
         let low_mapt = state
             .map
             .get(*tile)
@@ -314,6 +331,10 @@ fn place_industry_spec_template_sandbox(
     state
         .runtime
         .industry_tile_dirty
+        .extend(cleared_house_tiles.iter().copied());
+    state
+        .runtime
+        .industry_tile_dirty
         .extend(footprint.iter().copied());
     state
         .industries
@@ -326,6 +347,159 @@ fn place_industry_spec_template_sandbox(
     );
     state.economy.money -= 250;
     Ok(())
+}
+
+/// Despeja la casa municipal completa que `CMD_LANDSCAPE_CLEAR` encuentra al
+/// crear una Toy Shop sobre una subtesela de `OnlyNearTown`.
+///
+/// `GetHouseNorthPart` no guarda un puntero al origen en el mapa: deduce la
+/// tesela norte mirando los tres IDs consecutivos anteriores y sus flags de
+/// tamaño. Repetimos ese algoritmo para que una casa 1×2/2×1/2×2 se retire en
+/// el mismo orden que `ClearTownHouse`, incluidos los efectos de población y
+/// radios del pueblo. Las casas desconocidas se tratan como 1×1 segura, igual
+/// que el fallback del cargador cuando falta una definición `NewGRF`.
+fn clear_town_house_for_industry(
+    state: &mut GameState,
+    tile_coord: TileCoord,
+    cleared: &mut Vec<TileCoord>,
+) {
+    let Some(tile) = state.map.get(tile_coord) else {
+        return;
+    };
+    if tile.kind != TileKind::House {
+        return;
+    }
+
+    let current_id = tile.m8 & 0x0FFF;
+    let (base, base_id) = house_north_part(
+        &state.map,
+        tile_coord,
+        current_id,
+        &state.house_spec_catalog,
+    );
+    let Some(base_tile) = state
+        .map
+        .get(base)
+        .filter(|candidate| candidate.kind == TileKind::House)
+    else {
+        return;
+    };
+    let Some(house) = vanilla_or_newgrf_house(&state.house_spec_catalog, base_id) else {
+        // An invalid HouseID cannot describe a valid multi-tile footprint. The
+        // explicit tile is still cleared below, matching the command's
+        // best-effort behavior for legacy maps with incomplete catalogs.
+        clear_town_house_tile(&mut state.map, tile_coord, cleared);
+        return;
+    };
+    let flags = house.building_flags();
+    let offsets = house_footprint_offsets(flags);
+    let completed = base_tile.m3 & 0x80 != 0;
+    let town_id = u32::from(base_tile.m2) | (u32::from(base_tile.m2_hi) << 8);
+
+    for (dx, dy) in offsets {
+        let part = TileCoord::new(base.x + dx, base.y + dy);
+        if state.map.get_kind(part) == Some(TileKind::House) {
+            clear_town_house_tile(&mut state.map, part, cleared);
+        }
+    }
+
+    // `ClearTownHouse` updates the owning town once per house, not once per
+    // sub-tile. Procedural maps normally carry MAP2, while imported/legacy
+    // maps may only have a nearest-town association.
+    let town_index = state
+        .towns
+        .iter()
+        .position(|town| town.id == town_id)
+        .or_else(|| nearest_town_index(&state.towns, base).map(|(index, _)| index));
+    if let Some(index) = town_index {
+        let town = &mut state.towns[index];
+        if completed {
+            town.population = town
+                .population
+                .saturating_sub(u32::from(house.population()));
+        }
+        town.num_houses = town.num_houses.saturating_sub(1);
+        if house.is_church() {
+            town.has_church = false;
+        }
+        if house.is_stadium() {
+            town.has_stadium = false;
+        }
+        update_town_radius(town);
+    }
+}
+
+/// Devuelve la tesela norte/base y el `HouseID` de una casa multitile.
+fn house_north_part(
+    map: &crate::map::Map,
+    tile: TileCoord,
+    house_id: u16,
+    catalog: &[crate::house_spec::HouseSpecDef],
+) -> (TileCoord, u16) {
+    if house_id >= 3 {
+        if vanilla_or_newgrf_house(catalog, house_id - 1)
+            .is_some_and(|house| house.building_flags() & BUILDING_FLAG_SIZE_2X1 != 0)
+        {
+            let base = TileCoord::new(tile.x - 1, tile.y);
+            if map.get_kind(base) == Some(TileKind::House) {
+                return (base, house_id - 1);
+            }
+        }
+        if vanilla_or_newgrf_house(catalog, house_id - 1).is_some_and(|house| {
+            house.building_flags() & (BUILDING_FLAG_SIZE_1X2 | BUILDING_FLAG_SIZE_2X2) != 0
+        }) {
+            let base = TileCoord::new(tile.x, tile.y - 1);
+            if map.get_kind(base) == Some(TileKind::House) {
+                return (base, house_id - 1);
+            }
+        }
+        if house_id >= 2
+            && vanilla_or_newgrf_house(catalog, house_id - 2)
+                .is_some_and(|house| house.building_flags() & BUILDING_FLAG_SIZE_2X2 != 0)
+        {
+            let base = TileCoord::new(tile.x - 1, tile.y);
+            if map.get_kind(base) == Some(TileKind::House) {
+                return (base, house_id - 2);
+            }
+        }
+        if house_id >= 3
+            && vanilla_or_newgrf_house(catalog, house_id - 3)
+                .is_some_and(|house| house.building_flags() & BUILDING_FLAG_SIZE_2X2 != 0)
+        {
+            let base = TileCoord::new(tile.x - 1, tile.y - 1);
+            if map.get_kind(base) == Some(TileKind::House) {
+                return (base, house_id - 3);
+            }
+        }
+    }
+    // The current tile is the north/base part for a 1×1 house (or when a
+    // malformed legacy map has an orphaned sub-ID).
+    (tile, house_id)
+}
+
+fn clear_town_house_tile(
+    map: &mut crate::map::Map,
+    coord: TileCoord,
+    cleared: &mut Vec<TileCoord>,
+) {
+    let Some(mut tile) = map.get(coord) else {
+        return;
+    };
+    clear_neighbour_non_flooding_states(map, coord);
+    tile.kind = TileKind::Grass;
+    tile.mapt &= 0x0F;
+    tile.m1 = OWNER_NONE_M1;
+    tile.m2 = 0;
+    tile.m2_hi = 0;
+    tile.m3 = 0;
+    tile.m3hi = 0;
+    tile.m5 = clear_ground_m5(CLEAR_GROUND_GRASS, 3);
+    tile.m6 = 0;
+    tile.m7 = 0;
+    tile.m8 = 0;
+    if map.set_tile(coord, tile).is_ok() {
+        cleared.push(coord);
+    }
 }
 
 /// Coloca industria desde [`IndustrySpecDef`] (layout `NewGRF` → tiles con gfx ≥175).
@@ -654,6 +828,70 @@ mod tests {
         assert!(map.set_kind(TileCoord::new(5, 5), TileKind::House).is_ok());
 
         assert!(check_place_industry_spec_layout(&map, origin, IndustrySpec::ToyShop, 0).is_ok());
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn toy_shop_clears_the_complete_multitile_house() {
+        let origin = TileCoord::new(6, 6);
+        let mut state = GameState::new(16, 16);
+        state.climate = crate::Climate::Toyland;
+        state.towns.push(crate::town::Town {
+            id: 0,
+            pos: TileCoord::new(6, 6),
+            population: 1_000,
+            num_houses: 1,
+            ..Default::default()
+        });
+        state
+            .map
+            .make_town_house_footprint(
+                TileCoord::new(6, 5),
+                crate::map::TownHouseSpec {
+                    house_id: 99,
+                    town_id: 0,
+                    random_bits: 7,
+                    construction_counter: 0,
+                    construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                    is_protected: false,
+                    processing_time: 0,
+                },
+                crate::map::TownHouseFootprint::OneByTwo,
+            )
+            .unwrap();
+
+        apply_command(
+            &mut state,
+            &Command::PlaceIndustrySpecLayout(origin, IndustrySpec::ToyShop, 0),
+        )
+        .unwrap();
+
+        // The selected layout starts on the southern sub-tile (HouseID 100),
+        // so native ClearTownHouse must also remove the northern HouseID 99.
+        assert_eq!(
+            state.map.get(TileCoord::new(6, 5)).unwrap().kind,
+            TileKind::Grass
+        );
+        assert_eq!(state.map.get(origin).unwrap().kind, TileKind::Industry);
+        let industry = state.map.get(origin).unwrap();
+        assert_eq!(industry.mapt, 0x80);
+        assert_eq!(
+            industry.m1,
+            crate::map::set_water_class_m1(0, crate::map::WaterClass::Invalid)
+        );
+        assert_eq!(state.towns[0].num_houses, 0);
+        assert_eq!(state.towns[0].population, 965);
+        assert_eq!(
+            state.runtime.industry_tile_dirty,
+            vec![
+                TileCoord::new(6, 5),
+                TileCoord::new(6, 6),
+                TileCoord::new(6, 6),
+                TileCoord::new(6, 7),
+                TileCoord::new(7, 6),
+                TileCoord::new(7, 7),
+            ]
+        );
     }
 
     #[test]

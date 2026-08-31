@@ -37,8 +37,9 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 procedural (`landscape` → `clear` → `towns` → `industries` → `objects` →
 `trees`) con OpenTTD para las cohortes canónicas, incluyendo los bucles de
 teselas, costas, industrias, árboles y bocas de puentes/túneles. Las semillas
-Toyland 512² `1330935378` y `1330935379` coinciden en las seis fases auditadas;
-la generalización a otras semillas, tamaños, climas y configuraciones sigue
+Toyland 512² `1330935378`–`1330935381` coinciden en las seis fases auditadas,
+incluido el despeje completo de casas multitile al crear Toy Shops; la
+generalización a otras semillas, tamaños, climas y configuraciones sigue
 abierta. El detalle y el alcance pendiente viven en el [plan continuo de
 paridad](docs/parity/continuous-work-plan.md) y en los [issues abiertos](https://github.com/cavazquez/openttdrs/issues).
 

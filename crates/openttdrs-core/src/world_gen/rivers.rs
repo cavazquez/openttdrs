@@ -1121,9 +1121,9 @@ fn terraform_river_corners(map: &mut Map, tile: TileCoord, corners: u8, raise: b
     for dirty in dirty_tiles {
         if map
             .get(dirty)
-            .is_some_and(|entry| entry.kind == TileKind::Water)
+            .is_some_and(|entry| matches!(entry.kind, TileKind::Grass | TileKind::Water))
         {
-            clear_terraform_water_tile(map, dirty);
+            clear_terraform_tile(map, dirty);
         }
     }
     for (coord, height) in updates {
@@ -1137,10 +1137,13 @@ fn terraform_river_corners(map: &mut Map, tile: TileCoord, corners: u8, raise: b
     true
 }
 
-/// `DoClearSquare` aplicado por `TerraformTile_Water` durante la ampliación
-/// de un río. La densidad de hierba inicial es tres y el resto de planos se
-/// reinicia exactamente como `MakeClear(tile, CLEAR_GRASS, 3)`.
-fn clear_terraform_water_tile(map: &mut Map, coord: TileCoord) {
+/// `DoClearSquare` aplicado por `TerraformTile_Clear`/`TerraformTile_Water`
+/// durante la ampliación de un río. La densidad de hierba inicial es tres y el
+/// resto de planos se reinicia exactamente como `MakeClear(tile, CLEAR_GRASS,
+/// 3)`. El callback de una tesela clear también se ejecuta al modificar una
+/// esquina: limitarlo a agua dejaba rocas de `FixSlopes` que el original
+/// limpia antes de `TileLoopClearAlps`.
+fn clear_terraform_tile(map: &mut Map, coord: TileCoord) {
     let Some(mut tile) = map.get(coord) else {
         return;
     };
@@ -1449,7 +1452,7 @@ mod tests {
     use crate::cargodist::parity::Randomizer;
     use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};
     use crate::map::is_river_tile;
-    use crate::world_gen::{CLEAR_GROUND_DESERT, Climate};
+    use crate::world_gen::{CLEAR_GROUND_DESERT, CLEAR_GROUND_ROCKY, Climate};
 
     #[test]
     fn converter_makes_flat_ground_sea_and_one_corner_slope_shore() {
@@ -1604,6 +1607,23 @@ mod tests {
             assert_eq!(clear.m1, OWNER_NONE_M1, "tile {tile:?}");
             assert_eq!(clear.m5, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
         }
+    }
+
+    #[test]
+    fn small_sea_flattening_clears_rocky_ground_sharing_raised_corners() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let lake = TileCoord::new(3, 3);
+        let adjacent_rock = TileCoord::new(2, 3);
+        make_water_tile(&mut map, lake, WaterClass::Sea).expect("make inland sea tile");
+        map.set_mapt_m5(adjacent_rock, 0, clear_ground_m5(CLEAR_GROUND_ROCKY, 3))
+            .expect("make neighbouring ground rocky");
+
+        flatten_small_sea_tile(&mut map, lake);
+
+        let clear = map.get(adjacent_rock).expect("cleared neighbouring ground");
+        assert_eq!(clear.kind, TileKind::Grass);
+        assert_eq!(clear.height, 0);
+        assert_eq!(clear.m5, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
     }
 
     fn descending_river_test_map(width: i32, sea_x: i32) -> Map {

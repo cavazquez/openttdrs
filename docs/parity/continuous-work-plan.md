@@ -94,6 +94,15 @@ quedan exactas en las seis fronteras, comparando teselas y bloques 4×4. El
 resultado sigue acotado a la cohorte; RMAP-004 y sus padres mantienen abiertos
 otros mapas, configuraciones y ticks.
 
+Actualización RMAP-125 (2026-08-31): la frontera ártica 1024²/seed
+`1330935378` queda exacta en `landscape`, `clear` y `towns` (0 teselas y 0
+bloques 4×4). La primera divergencia se trasladó a `industries`, con 59.558
+teselas y 6.038 bloques 4×4; `objects`/`trees` heredan ese estado. La corrección
+de `TileLoopTreesAlps` escribe ahora ambos bytes de `MAP2` y el callback de
+terraformación limpia también `MP_CLEAR` vecino, por lo que esta etapa queda
+publicada como diagnóstico abierto y el próximo bloque debe aislar la admisión
+industrial a escala 1024².
+
 Actualización de #329: el renderer de vehículos ya resuelve los canales
 primario y secundario de las 23 libreas por esquema (incluidas clase de
 tracción, DMU/EMU, carga, aviones, barcos y tranvías), la prioridad de librea

@@ -246,8 +246,9 @@ pub(crate) fn tile_loop_trees_alps_at(
         return false;
     }
     let mut updated = tile;
-    updated.m2 = u8::try_from(new_word).unwrap_or_default();
-    updated.m2_hi = u8::try_from(new_word >> 8).unwrap_or_default();
+    let [m2, m2_hi] = new_word.to_le_bytes();
+    updated.m2 = m2;
+    updated.m2_hi = m2_hi;
     map.set_tile(c, updated).is_ok()
 }
 
@@ -1283,6 +1284,26 @@ mod tests {
             TREE_GROWTH_GROWN + 1
         );
         assert_eq!(rng, expected_rng, "Toyland debe compartir el RNG vanilla");
+    }
+
+    #[test]
+    fn arctic_tree_snow_update_writes_low_map2_byte() {
+        let mut map = Map::new_flat(2, 2, 7);
+        let c = TileCoord::new(0, 0);
+        force_forest(&mut map, c, TREE_GROWTH_GROWING1);
+        let mut tree = map.get(c).unwrap();
+        tree.m2 = make_tree_m2(TREE_GROUND_ROUGH, 3);
+        tree.m3 = 12;
+        map.set_tile(c, tree).unwrap();
+
+        let mut rng = Randomizer {
+            state: [0x1234, 0x5678],
+        };
+        assert!(tile_loop_trees_alps_at(&mut map, c, 6, &mut rng));
+
+        let result = map.get(c).unwrap();
+        assert_eq!(result.m2, 0x20, "la densidad 2 vive en el byte bajo");
+        assert_eq!(result.m2_hi, 1, "RoughSnow vive en los bits altos");
     }
 
     #[test]

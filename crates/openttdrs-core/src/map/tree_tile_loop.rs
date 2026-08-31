@@ -153,13 +153,13 @@ pub const fn with_clear_counter(m5: u8, counter: u8) -> u8 {
 }
 
 #[must_use]
-const fn tree_ground(m2: u8) -> u8 {
-    (m2 >> 6) & 0x07
+const fn tree_ground(m2: u16) -> u8 {
+    ((m2 >> 6) & 0x07) as u8
 }
 
 #[must_use]
-const fn tree_ground_density(m2: u8) -> u8 {
-    (m2 >> 4) & 0x03
+const fn tree_ground_density(m2: u16) -> u8 {
+    ((m2 >> 4) & 0x03) as u8
 }
 
 #[must_use]
@@ -175,6 +175,16 @@ const fn tree_m2_word(tile: Tile) -> u16 {
 #[must_use]
 const fn make_tree_m2_word(ground: u8, density: u8) -> u16 {
     (((ground & 0x07) as u16) << 6) | (((density & 0x03) as u16) << 4)
+}
+
+fn set_tree_m2_word(map: &mut Map, c: TileCoord, word: u16) {
+    let Some(mut tile) = map.get(c) else {
+        return;
+    };
+    let [m2, m2_hi] = word.to_le_bytes();
+    tile.m2 = m2;
+    tile.m2_hi = m2_hi;
+    let _ = map.set_tile(c, tile);
 }
 
 /// Ejecuta `TileLoopTreesAlps` sobre un árbol durante las pasadas de
@@ -333,10 +343,11 @@ pub fn process_tree_and_field_growth_from_visits(
         let cycle = landscape_tile_cycle(c, tick);
         match tile.kind {
             TileKind::Forest => {
-                if cycle & 7 == 7 && tree_ground(tile.m2) == 0 {
-                    let density = tree_ground_density(tile.m2);
+                let tree_m2 = tree_m2_word(tile);
+                if cycle & 7 == 7 && tree_ground(tree_m2) == 0 {
+                    let density = tree_ground_density(tree_m2);
                     if density < 3 {
-                        forest_ground_updates.push((c, make_tree_m2(0, density + 1)));
+                        forest_ground_updates.push((c, make_tree_m2_word(0, density + 1)));
                     }
                 }
                 if cycle % TREE_UPDATE_FREQUENCY == TREE_UPDATE_FREQUENCY - 1 {
@@ -384,7 +395,7 @@ pub fn process_tree_and_field_growth_from_visits(
     }
 
     for (c, m2) in forest_ground_updates {
-        let _ = map.set_m2(c, m2);
+        set_tree_m2_word(map, c, m2);
     }
     for (c, mapt, new_m5) in grass_updates {
         let _ = map.set_mapt_m5(c, mapt, new_m5);
@@ -424,7 +435,6 @@ fn step_one_forest_tile(map: &mut Map, tick: u64, world_seed: u64, c: TileCoord)
     let growth = tree_or_field_stage(m5);
     let count = tree_count(m5);
     let tree_type = tile.m3;
-    let m2 = tile.m2;
     let mapt = tile.mapt;
 
     match growth {
@@ -460,7 +470,7 @@ fn step_one_forest_tile(map: &mut Map, tick: u64, world_seed: u64, c: TileCoord)
                 );
                 let _ = map.set_mapt_m5(c, mapt, new_m5);
             } else {
-                clear_dead_tree_tile(map, c, m2);
+                clear_dead_tree_tile(map, c, tree_m2_word(tile));
             }
         }
         g if g < TREE_GROWTH_GROWN || (TREE_GROWTH_GROWN < g && g < TREE_GROWTH_DEAD) => {
@@ -488,7 +498,7 @@ fn try_spread_neighbor(map: &mut Map, tick: u64, world_seed: u64, c: TileCoord, 
     plant_trees_on_clear(map, n, TREE_GROWTH_GROWING1, tree_type);
 }
 
-fn clear_dead_tree_tile(map: &mut Map, c: TileCoord, m2: u8) {
+fn clear_dead_tree_tile(map: &mut Map, c: TileCoord, m2: u16) {
     let ground = tree_ground(m2);
     let density = tree_ground_density(m2);
     // `TileLoop_Trees` calls `MakeShore` when the last tree on a shore
@@ -566,10 +576,11 @@ pub(crate) fn process_generation_tree_growth_at(
     }
 
     let cycle = landscape_tile_cycle(c, tick);
-    if cycle & 7 == 7 && tree_ground(tile.m2) == 0 {
-        let density = tree_ground_density(tile.m2);
+    let tree_m2 = tree_m2_word(tile);
+    if cycle & 7 == 7 && tree_ground(tree_m2) == 0 {
+        let density = tree_ground_density(tree_m2);
         if density < 3 {
-            let _ = map.set_m2(c, make_tree_m2(0, density + 1));
+            set_tree_m2_word(map, c, make_tree_m2_word(0, density + 1));
         }
     }
     if cycle % TREE_UPDATE_FREQUENCY != TREE_UPDATE_FREQUENCY - 1 {
@@ -623,7 +634,7 @@ fn step_one_generation_forest_tile(map: &mut Map, rng: &mut Randomizer, c: TileC
                 let m5 = with_tree_count(m5, count.saturating_sub(2));
                 let _ = map.set_mapt_m5(c, mapt, with_tree_or_field_stage(m5, TREE_GROWTH_GROWN));
             } else {
-                clear_dead_tree_tile(map, c, tile.m2);
+                clear_dead_tree_tile(map, c, tree_m2_word(tile));
             }
         }
         g if g < TREE_GROWTH_GROWN || (TREE_GROWTH_GROWN < g && g < TREE_GROWTH_DEAD) => {
@@ -1004,7 +1015,7 @@ pub fn clear_tree(
             let tile = game_state.map.get(c).ok_or(CommandError::OutOfBounds)?;
             let count = tree_count(tile.m5);
             if count <= 1 {
-                clear_dead_tree_tile(&mut game_state.map, c, tile.m2);
+                clear_dead_tree_tile(&mut game_state.map, c, tree_m2_word(tile));
             } else {
                 let new_m5 = with_tree_count(tile.m5, count.saturating_sub(2));
                 game_state
@@ -1182,7 +1193,7 @@ mod tests {
         tree.m2 = make_tree_m2(3, 3);
         map.set_tile(c, tree).unwrap();
 
-        clear_dead_tree_tile(&mut map, c, tree.m2);
+        clear_dead_tree_tile(&mut map, c, tree_m2_word(tree));
 
         let tile = map.get(c).unwrap();
         assert_eq!(tile.kind, TileKind::Water);
@@ -1195,6 +1206,8 @@ mod tests {
     fn clearing_dead_tree_resets_make_clear_raw_planes() {
         let mut map = Map::new_flat(2, 2, 7);
         let c = TileCoord::new(0, 0);
+        // El byte alto convierte el valor en `TREE_GROUND_ROUGH_SNOW`; la
+        // limpieza conserva la semántica del sustrato antes de resetearlo.
         let dirty_tree = Tile {
             height: 7,
             kind: TileKind::Forest,
@@ -1211,7 +1224,7 @@ mod tests {
         };
         map.set_tile(c, dirty_tree).unwrap();
 
-        clear_dead_tree_tile(&mut map, c, dirty_tree.m2);
+        clear_dead_tree_tile(&mut map, c, tree_m2_word(dirty_tree));
 
         assert_eq!(
             map.get(c),
@@ -1219,7 +1232,7 @@ mod tests {
                 height: 7,
                 kind: TileKind::Grass,
                 mapt: 0x0F,
-                m5: clear_ground_m5(CLEAR_GROUND_GRASS, 2),
+                m5: clear_ground_m5(CLEAR_GROUND_ROUGH, 3),
                 m1: OWNER_NONE_M1,
                 m6: 0,
                 m8: 0,
@@ -1270,6 +1283,32 @@ mod tests {
             TREE_GROWTH_GROWN + 1
         );
         assert_eq!(rng, expected_rng, "Toyland debe compartir el RNG vanilla");
+    }
+
+    #[test]
+    fn arctic_tree_growth_preserves_rough_snow_ground_high_map2_byte() {
+        let mut map = Map::new_flat(32, 32, 0);
+        // 11 * 13 + 9 * 16 = 287: la tesela recibe tanto la actualización
+        // de densidad (ciclo 7) como la de crecimiento (ciclo 15).
+        let c = TileCoord::new(13, 16);
+        force_forest(&mut map, c, TREE_GROWTH_GROWING1);
+        let mut tree = map.get(c).unwrap();
+        // RoughSnow se guarda en los bits altos de MAP2; el byte bajo queda
+        // en cero y no debe interpretarse como suelo Grass con densidad 0.
+        tree.m2 = 0;
+        tree.m2_hi = 1;
+        map.set_tile(c, tree).unwrap();
+
+        let mut rng = Randomizer {
+            state: [0x1234, 0x5678],
+        };
+        let before = rng;
+        process_generation_tree_growth_at(&mut map, Climate::SubArctic, 0, &mut rng, c);
+
+        let result = map.get(c).unwrap();
+        assert_eq!(result.m2, 0);
+        assert_eq!(result.m2_hi, 1);
+        assert_eq!(rng, before, "un árbol Growing1 no debe consumir RNG");
     }
 
     #[test]

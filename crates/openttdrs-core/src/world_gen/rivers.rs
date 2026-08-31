@@ -1278,7 +1278,17 @@ fn river_make_wider(
         let (downstream_dx, downstream_dy) = crate::map::diag_dir_offset((direction + 2) % 4);
         let upstream = TileCoord::new(tile.x + upstream_dx, tile.y + upstream_dy);
         let downstream = TileCoord::new(tile.x + downstream_dx, tile.y + downstream_dy);
-        if map.get(upstream).is_none() || map.get(downstream).is_none() {
+        // `IsValidTile` excludes the freeform-edge MP_VOID frame.  A void
+        // neighbour is still present in the map vector, so checking only
+        // `Option::is_none` would incorrectly create river tiles outside the
+        // playable area and consume an extra global RNG draw.
+        if map
+            .get(upstream)
+            .is_none_or(|tile| tile.kind == TileKind::Void)
+            || map
+                .get(downstream)
+                .is_none_or(|tile| tile.kind == TileKind::Void)
+        {
             return Ok(());
         }
         let downstream_is_ocean = tile_slope_and_z(map, downstream).is_some_and(|(slope, z)| {

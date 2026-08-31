@@ -22,7 +22,9 @@ acotada a esas seeds/configuración; no se extiende a la paridad completa del
 mapa ni a otras geometrías o fases posteriores. El control Arctic 512²
 `1330935382` también quedó exacto en las seis fronteras después de alinear
 `TileLoopTreesAlps` con el RNG global y contar agua fluvial en el escalado de
-faros; la generalización del clima permanece abierta.
+faros. RMAP-123 además alinea `RiverMakeWider` con `IsValidTile` en el borde
+`MP_VOID` y conserva el `MAP2` de 16 bits cuando `RoughSnow` ocupa el byte
+alto; la generalización del clima permanece abierta.
 
 ## Estado canónico actual
 

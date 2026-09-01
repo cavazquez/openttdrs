@@ -163,7 +163,12 @@ pub struct WorldRawDumpSummary {
 /// SHA-256 hexadecimal minúsculo de los bytes exactos del `.sav`.
 #[must_use]
 pub fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    let digest = Sha256::digest(bytes);
+    let mut output = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        output.push_str(&format!("{byte:02x}"));
+    }
+    output
 }
 
 /// Escribe un stream JSONL de metadatos y filas crudas en orden fila-mayor.

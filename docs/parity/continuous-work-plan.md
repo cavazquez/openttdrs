@@ -104,6 +104,12 @@ tesela, bytes y bloques 4×4 queda exacta en `landscape`, `clear`, `towns`,
 este sub-issue con alcance acotado; RMAP-004/RMAP-056 siguen abiertos para
 otras semillas, tamaños, climas, configuraciones y runtime NewGRF.
 
+Actualización RMAP-126 (2026-08-31): se conserva el bit `MAP3` de nieve que
+`MakeSnow` deja al limpiar árboles `ROUGH_SNOW` en el tile loop ártico. La
+frontera `landscape` 1024²/seed `1330935379` queda exacta por tesela, bytes y
+bloques 4×4 (0/0/0). El siguiente corte reproducible es la divergencia de
+`towns` de esa misma matriz; el padre RMAP-004 sigue abierto.
+
 Actualización de #329: el renderer de vehículos ya resuelve los canales
 primario y secundario de las 23 libreas por esquema (incluidas clase de
 tracción, DMU/EMU, carga, aviones, barcos y tranvías), la prioridad de librea

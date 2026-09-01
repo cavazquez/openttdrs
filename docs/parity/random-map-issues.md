@@ -157,3 +157,14 @@ Los IDs anteriores son estables dentro del repositorio y están listos para
 copiarse a GitHub. La creación automática de issues remotos requiere renovar
 la sesión de `gh` (`gh auth status` informa que el token actual es inválido);
 no se inventaron números de issue ni se reutilizaron los de composición visual.
+
+### RMAP-126 — Suelo nevado al morir un árbol ártico
+
+**Estado: cerrado (sub-issue acotado de RMAP-004/RMAP-010/RMAP-018).** En
+`TREE_GROUND_ROUGH_SNOW`, OpenTTD limpia el árbol como `MakeClear` y vuelve a
+aplicar `MakeSnow`, dejando `MAP3` bit 4 (`0x10`). Rust reiniciaba `m3` a cero
+y convertía dos teselas de 1024²/seed `1330935379` en clear sin nieve.
+`clear_dead_tree_tile` conserva ahora el bit y la regresión
+`clearing_dead_tree_resets_make_clear_raw_planes` lo fija. La comparación raw
+por tesela, bytes y bloques 4×4 queda exacta (0/0/0) en `landscape`; el cierre
+no generaliza a otras semillas, tamaños, ciclos posteriores o climas.

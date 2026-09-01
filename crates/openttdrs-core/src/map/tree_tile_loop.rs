@@ -537,7 +537,13 @@ fn clear_dead_tree_tile(map: &mut Map, c: TileCoord, m2: u16) {
         m1: OWNER_NONE_M1,
         m6: 0,
         m8: 0,
-        m3: 0,
+        // `TREE_GROUND_ROUGH_SNOW` is cleared as rough ground and then passed
+        // through `MakeSnow`, which stores the snow flag in `MAP3` bit 4.
+        m3: if ground == TREE_GROUND_ROUGH_SNOW {
+            0x10
+        } else {
+            0
+        },
         m2: 0,
         m2_hi: 0,
         m7: 0,
@@ -1237,7 +1243,7 @@ mod tests {
                 m1: OWNER_NONE_M1,
                 m6: 0,
                 m8: 0,
-                m3: 0,
+                m3: 0x10,
                 m2: 0,
                 m2_hi: 0,
                 m7: 0,

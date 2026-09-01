@@ -104,6 +104,19 @@ capturas sólo como diagnóstico, no como único oracle.
   el mismo push en el siguiente límite de etapa; nunca convertir ese rechazo
   operativo en una pregunta al usuario ni abandonar el trabajo restante. Sólo
   publicar por el remoto canónico cuando el entorno lo permita.
+- Procedimiento obligatorio ante un `push` rechazado: (a) guardar el hash y la
+  salida del intento en el registro de la etapa; (b) comprobar que el commit
+  permanece en la rama local; (c) continuar inmediatamente con el siguiente
+  issue sin esperar aprobación, sin pausar la sesión y sin volver a pedir
+  autorización; (d) reintentar `git push origin main` al terminar la siguiente
+  etapa y en cada etapa posterior hasta que el remoto acepte. Un rechazo de
+  permisos, autenticación, red o controles CI es un estado de publicación
+  pendiente, nunca una condición de parada del trabajo técnico.
+- La secuencia mínima de publicación es siempre `git commit` → intento de
+  `git push origin main` → registro del resultado → siguiente issue. Si el
+  comando requiere escalamiento del entorno, usarlo automáticamente porque la
+  autorización permanente ya está documentada; si el escalamiento es denegado,
+  aplicar el procedimiento anterior y seguir trabajando.
 - No usar operaciones destructivas (`reset --hard`, checkout de descarte,
   borrados masivos) sin instrucción explícita.
 - El checkout local `reference/` es un oracle de OpenTTD: puede instrumentarse

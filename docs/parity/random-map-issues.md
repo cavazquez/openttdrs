@@ -168,3 +168,19 @@ y convertía dos teselas de 1024²/seed `1330935379` en clear sin nieve.
 `clearing_dead_tree_resets_make_clear_raw_planes` lo fija. La comparación raw
 por tesela, bytes y bloques 4×4 queda exacta (0/0/0) en `landscape`; el cierre
 no generaliza a otras semillas, tamaños, ciclos posteriores o climas.
+
+### RMAP-127 — Despeje `Auto` de una salida vial municipal multibit
+
+**Estado: cerrado (sub-issue acotado de RMAP-004/RMAP-024/RMAP-030/RMAP-082).**
+`generated_town_road_tunnel_end` replica ahora el contrato de
+`CmdBuildTunnel`: la boca de salida municipal sólo se puede limpiar
+implícitamente cuando tiene un único bit de carretera, sin tranvía; una tesela
+con dos bits debe despejarse explícitamente y hace que el túnel sea rechazado,
+dejando que la caminata continúe con la carretera normal. La boca de entrada
+sigue aceptando la carretera seleccionada por el walker. La regresión
+`town_tunnel_clears_municipal_start_and_levels_steep_exit` cubre la salida
+multibit y el túnel válido. En 1024²/seed ártica `1330935379`, la divergencia de
+`towns` baja de **7.833 teselas, 41.011 bytes y 1.181 bloques 4×4** a
+**0/0/0**; la comparación raw posterior coincide en las 1.048.576 teselas.
+El alcance queda limitado a esta regla de despeje y cohorte; otras semillas,
+tamaños, climas, configuraciones y túneles/runtime NewGRF siguen abiertos.

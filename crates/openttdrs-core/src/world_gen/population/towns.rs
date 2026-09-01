@@ -1313,7 +1313,7 @@ fn generated_town_road_tunnel_end(
     // `CMD_BUILD_TUNNEL` limpia sólo las dos bocas. En la generación de
     // pueblos esas teselas deben ser clear/trees (agua real y objetos se
     // rechazan con `NoWater`); el interior queda intacto bajo la montaña.
-    let endpoint_clearable = |tile: TileCoord| {
+    let endpoint_clearable = |tile: TileCoord, start_endpoint: bool| {
         map.get(tile).is_some_and(|tile| {
             (matches!(tile.kind, TileKind::Grass | TileKind::Forest)
                 && !has_tile_water_ground(tile))
@@ -1321,12 +1321,18 @@ fn generated_town_road_tunnel_end(
                     && tile.m1 == crate::company::OWNER_TOWN_M1
                     && tile.m3 == TOWN_ROAD_NO_TRAM_OWNER
                     && tile.m8 == TOWN_ROAD_INVALID_TRAM_TYPE
-                    && crate::road_type::tram_track_bits(&tile) == 0)
+                    && crate::road_type::tram_track_bits(&tile) == 0
+                    // `CmdBuildTunnel` passes `Auto` to `ClearTile_Road` for
+                    // the exit. A two-bit block must first be removed
+                    // explicitly and therefore rejects the preflight. The
+                    // source mouth is already the road selected by the town
+                    // walker and remains eligible for the native command.
+                    && (start_endpoint || (tile.m5 & 0x0F).is_power_of_two()))
         })
     };
-    endpoint_clearable(start)
+    endpoint_clearable(start, true)
         .then_some(end)
-        .filter(|_| endpoint_clearable(end))
+        .filter(|_| endpoint_clearable(end, false))
 }
 
 /// Escribe `MakeRoadTunnel` para las dos bocas de un túnel municipal.
@@ -4354,6 +4360,21 @@ mod tests {
         assert_eq!(
             generated_town_road_tunnel_end(&map, start, direction, 0),
             Some(end)
+        );
+
+        // `CmdBuildTunnel` clears its exit with `Auto`; a municipal road
+        // exposing both bits is not an implicit clear candidate. The source
+        // mouth remains eligible for the direct materialization test below.
+        let mut blocked_exit = map.clone();
+        assert!(write_generated_town_road_to_map(
+            &mut blocked_exit,
+            end,
+            ROAD_BITS_AXIS_Y,
+            0,
+        ));
+        assert_eq!(
+            generated_town_road_tunnel_end(&blocked_exit, start, direction, 0),
+            None
         );
 
         assert!(materialize_generated_town_road_tunnel(

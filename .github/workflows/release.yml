@@ -204,7 +204,7 @@ jobs:
         uses: ./.github/composite/sccache
 
       - name: Caché Cargo
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.9.2
         with:
           # No mezclar artefactos nativos entre el baseline GLIBC 2.35 y 24.04.
           shared-key: release-${{ matrix.os }}-${{ matrix.target }}

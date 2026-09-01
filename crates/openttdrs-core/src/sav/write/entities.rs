@@ -140,7 +140,7 @@ fn source_for_packet(state: &GameState, packet: &CargoPacket) -> (u8, u16) {
         .iter()
         .find(|industry| industry.pos == packet.source || industry.tiles.contains(&packet.source))
     {
-        return (0, u16::from(industry.instance_id));
+        return (0, industry.instance_id);
     }
     if let Some(town) = state.towns.iter().find(|town| town.pos == packet.source) {
         return (1, u16::try_from(town.id).unwrap_or(u16::MAX));

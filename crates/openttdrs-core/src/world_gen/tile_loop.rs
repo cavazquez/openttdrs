@@ -12,6 +12,7 @@ use crate::cargodist::parity::Randomizer;
 use crate::house_spec::get_town_radius_group;
 use crate::map::{
     Map, Tile, TileCoord, TileKind, TileLoopState, collect_tile_loop_visits, coord_to_linear_index,
+    industry_instance_id,
 };
 
 /// Cantidad de pasadas que `CreateRivers` ejecuta tras ensanchar ríos.
@@ -506,7 +507,7 @@ fn tile_loop_clear_field(state: &mut GameState, coord: TileCoord, tile: Tile) {
             && !state
                 .industries
                 .iter()
-                .any(|industry| industry.instance_id == updated.m2)
+                .any(|industry| industry.instance_id == industry_instance_id(&updated))
         {
             // `MakeClear(tile, CLEAR_GRASS, 2)` resets every auxiliary map
             // plane except the low `TropicZone` nibble of `MAPT`.

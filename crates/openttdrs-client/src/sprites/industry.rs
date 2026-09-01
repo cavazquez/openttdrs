@@ -162,7 +162,7 @@ pub fn industry_gfx_uses_random_colour(gfx: u16) -> bool {
 /// Color de compañía OpenTTD para la instancia (`Industry.random_colour` vía `m2`).
 #[must_use]
 pub fn industry_palette_colour_for_instance(
-    instance_id: u8,
+    instance_id: u16,
     industries: &[openttdrs_core::Industry],
 ) -> crate::sprites::CompanyColour {
     if let Some(ind) = industries.iter().find(|i| i.instance_id == instance_id) {
@@ -180,7 +180,7 @@ pub fn industry_palette_colour_for_instance(
         industries
             .get(idx)
             .map(|i| i.random_colour)
-            .unwrap_or_else(|| instance_id.wrapping_mul(5) % 16),
+            .unwrap_or_else(|| (instance_id.wrapping_mul(5) % 16) as u8),
     )
 }
 

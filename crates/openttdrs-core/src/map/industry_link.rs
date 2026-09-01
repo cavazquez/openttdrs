@@ -6,7 +6,7 @@ use crate::map::{Tile, TileKind};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IndustryTileLink {
     /// `m2` ≠ 0: ID de instancia en el array global de industrias.
-    Instance(u8),
+    Instance(u16),
     /// Fixture legacy: `m1 = 0x80 | id` con `m2 = 0`.
     LegacyM1(u8),
     /// Sin ID en mapa: flood solo dentro del mismo componente anónimo.
@@ -15,8 +15,8 @@ pub enum IndustryTileLink {
 
 /// `IndustryID` de la tesela (`m2` en OpenTTD).
 #[must_use]
-pub fn industry_instance_id(tile: &Tile) -> u8 {
-    tile.m2
+pub fn industry_instance_id(tile: &Tile) -> u16 {
+    u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8)
 }
 
 #[must_use]
@@ -24,8 +24,9 @@ pub fn industry_tile_link(tile: &Tile) -> Option<IndustryTileLink> {
     if tile.kind != TileKind::Industry {
         return None;
     }
-    if tile.m2 != 0 {
-        return Some(IndustryTileLink::Instance(tile.m2));
+    let instance_id = industry_instance_id(tile);
+    if instance_id != 0 {
+        return Some(IndustryTileLink::Instance(instance_id));
     }
     let low = tile.m1 & 0x7F;
     if low != 0 && tile.m1 & 0x80 != 0 {
@@ -48,8 +49,8 @@ pub fn industry_tiles_mergeable(a: &Tile, b: &Tile, anonymous_same_group: bool) 
         return false;
     };
     match (la, lb) {
-        (IndustryTileLink::Instance(ia), IndustryTileLink::Instance(ib))
-        | (IndustryTileLink::LegacyM1(ia), IndustryTileLink::LegacyM1(ib)) => ia == ib,
+        (IndustryTileLink::Instance(ia), IndustryTileLink::Instance(ib)) => ia == ib,
+        (IndustryTileLink::LegacyM1(ia), IndustryTileLink::LegacyM1(ib)) => ia == ib,
         (IndustryTileLink::Anonymous, IndustryTileLink::Anonymous) => anonymous_same_group,
         _ => false,
     }
@@ -76,6 +77,17 @@ mod tests {
     fn link_uses_m2_first() {
         let t = industry_tile(0x80, 5, 0);
         assert_eq!(industry_tile_link(&t), Some(IndustryTileLink::Instance(5)));
+    }
+
+    #[test]
+    fn link_preserves_the_high_map2_byte_for_large_industry_ids() {
+        let mut t = industry_tile(0x80, 0x05, 0);
+        t.m2_hi = 0x01;
+        assert_eq!(industry_instance_id(&t), 0x0105);
+        assert_eq!(
+            industry_tile_link(&t),
+            Some(IndustryTileLink::Instance(0x0105))
+        );
     }
 
     #[test]

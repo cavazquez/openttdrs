@@ -214,7 +214,8 @@ fn tile_belongs_to_industry(map: &Map, coord: TileCoord, current: Option<&Indust
     if tile.kind != TileKind::Industry {
         return false;
     }
-    (tile.m2 != 0 && tile.m2 == industry.instance_id) || industry.contains_tile(coord)
+    (industry_instance_id(&tile) != 0 && industry_instance_id(&tile) == industry.instance_id)
+        || industry.contains_tile(coord)
 }
 
 fn relative_position(coord: TileCoord, origin: TileCoord) -> u32 {

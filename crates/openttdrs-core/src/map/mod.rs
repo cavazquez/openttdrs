@@ -309,6 +309,20 @@ impl Map {
         Ok(())
     }
 
+    /// Escribe un `IndustryID`/`TownID` completo en los dos bytes de MAP2.
+    ///
+    /// La API histórica [`Self::set_m2`] sigue siendo de un byte para
+    /// reservas PBS, árboles y fixtures legacy; las entidades que usan el
+    /// pool nativo deben pasar por esta variante para conservar IDs mayores
+    /// que 255.
+    pub fn set_m2_u16(&mut self, c: TileCoord, m2: u16) -> Result<(), MapError> {
+        let i = self.index(c).ok_or(MapError::OutOfBounds)?;
+        let [low, high] = m2.to_le_bytes();
+        self.tiles[i].m2 = low;
+        self.tiles[i].m2_hi = high;
+        Ok(())
+    }
+
     pub fn set_m3(&mut self, c: TileCoord, m3: u8) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
         self.tiles[i].m3 = m3;
@@ -520,6 +534,17 @@ mod ottdmap_binary_tests {
         map.set_house_town_id(c, 0x1234).unwrap();
         let tile = map.get(c).expect("house tile");
         assert_eq!(u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8), 0x1234);
+    }
+
+    #[test]
+    fn set_m2_u16_roundtrips_an_industry_id_above_255() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let c = TileCoord::new(1, 1);
+        map.set_m2_u16(c, 0x0348).unwrap();
+        let tile = map.get(c).expect("map tile");
+        assert_eq!(tile.m2, 0x48);
+        assert_eq!(tile.m2_hi, 0x03);
+        assert_eq!(u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8), 0x0348);
     }
 
     #[test]

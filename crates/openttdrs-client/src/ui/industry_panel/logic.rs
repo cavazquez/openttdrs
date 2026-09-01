@@ -98,7 +98,10 @@ pub(crate) fn industry_stats_for_component(
     anchor: TileCoord,
 ) -> Option<(IndustryKind, Option<IndustrySpec>, u32, u32, TileCoord)> {
     let tiles = flood_industry_tiles(map, anchor);
-    let instance_id = map.get(anchor).map(|t| t.m2).unwrap_or(0);
+    let instance_id = map
+        .get(anchor)
+        .map(|tile| openttdrs_core::industry_instance_id(&tile))
+        .unwrap_or(0);
     if instance_id != 0
         && let Some(i) = sim
             .state

@@ -44,7 +44,7 @@ pub(super) fn place_industry_kind_sandbox(
 }
 
 /// 12 bits deterministas para la fase de producción (`i->counter = GB(r, 4, 12)`).
-fn industry_counter_seed(state: &GameState, c: TileCoord, industry_id: u8) -> u16 {
+fn industry_counter_seed(state: &GameState, c: TileCoord, industry_id: u16) -> u16 {
     let salt = u64::from(industry_id);
     let lo = crate::map::industry_tile_rng(state.world_seed, state.tick.get(), c, salt);
     let hi = crate::map::industry_tile_rng(state.world_seed, state.tick.get(), c, salt + 0x100);
@@ -58,18 +58,15 @@ fn industry_counter_seed(state: &GameState, c: TileCoord, industry_id: u8) -> u1
 /// `m2` de los campos que pertenecen a Farm. El pool real reutiliza huecos,
 /// por lo que buscar el menor ID ausente es además estable tras demoliciones o
 /// imports con IDs no densos.
-fn next_industry_instance_id(state: &GameState) -> u8 {
-    (0..=u8::MAX)
+fn next_industry_instance_id(state: &GameState) -> u16 {
+    (0..=u16::MAX)
         .find(|candidate| {
             !state
                 .industries
                 .iter()
                 .any(|industry| industry.instance_id == *candidate)
         })
-        // El mapa crudo del modelo actual conserva un byte para el ID. Si se
-        // agotaran los 256 slots, mantenemos el fallback histórico hasta que
-        // RMAP-064 amplíe el campo a la representación completa del pool.
-        .unwrap_or(u8::MAX)
+        .unwrap_or(u16::MAX)
 }
 
 pub fn check_place_industry_spec(
@@ -261,7 +258,7 @@ fn place_industry_spec_template_sandbox(
 ) -> Result<(), CommandError> {
     let footprint: Vec<TileCoord> = template.iter().map(|(tile, _)| *tile).collect();
     let industry_id = next_industry_instance_id(state);
-    let random_colour = industry_id.wrapping_mul(5) % 16;
+    let random_colour = u8::try_from(industry_id.wrapping_mul(5) % 16).unwrap_or(0);
     let mut cleared_house_tiles = Vec::new();
     for (tile, m5) in template {
         // `OnlyNearTown` allows Toy Shops to replace houses. The native clear
@@ -312,7 +309,7 @@ fn place_industry_spec_template_sandbox(
             .map_err(|_| CommandError::OutOfBounds)?;
         state
             .map
-            .set_m2(*tile, industry_id)
+            .set_m2_u16(*tile, industry_id)
             .map_err(|_| CommandError::OutOfBounds)?;
         // P7: `MakeIndustry` — random bits en m3, triggers limpios en m6.
         let bits = crate::map::industry_tile_rng(
@@ -551,7 +548,7 @@ pub fn place_industry_spec_def_sandbox(
     let footprint = def.footprint_at(c, 0);
     let tiles: Vec<TileCoord> = footprint.iter().map(|(t, _)| *t).collect();
     let industry_id = next_industry_instance_id(state);
-    let random_colour = industry_id.wrapping_mul(5) % 16;
+    let random_colour = u8::try_from(industry_id.wrapping_mul(5) % 16).unwrap_or(0);
     for (tile, gfx) in &footprint {
         state
             .map
@@ -566,7 +563,9 @@ pub fn place_industry_spec_def_sandbox(
             crate::map::set_water_class_m1(0, crate::map::WaterClass::Invalid)
         };
         map_tile.m1 = m1;
-        map_tile.m2 = industry_id;
+        let [industry_id_low, industry_id_high] = industry_id.to_le_bytes();
+        map_tile.m2 = industry_id_low;
+        map_tile.m2_hi = industry_id_high;
         let bits = crate::map::industry_tile_rng(
             state.world_seed,
             state.tick.get(),

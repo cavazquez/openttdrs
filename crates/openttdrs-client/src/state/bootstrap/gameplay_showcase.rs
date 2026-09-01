@@ -472,7 +472,7 @@ fn place_rail_industries(state: &mut GameState) {
             10,
         ),
     ];
-    let industry_id = u8::try_from(state.industries.len().saturating_add(1)).unwrap_or(255);
+    let industry_id = u16::try_from(state.industries.len().saturating_add(1)).unwrap_or(u16::MAX);
     for (coord, gfx) in power_tiles {
         let Some(mut tile) = state.map.get(coord) else {
             continue;
@@ -480,7 +480,9 @@ fn place_rail_industries(state: &mut GameState) {
         tile.kind = TileKind::Industry;
         tile.mapt = 0x80;
         tile.m1 = 0x80;
-        tile.m2 = industry_id;
+        let [industry_id_low, industry_id_high] = industry_id.to_le_bytes();
+        tile.m2 = industry_id_low;
+        tile.m2_hi = industry_id_high;
         tile.m5 = gfx;
         openttdrs_core::init_industry_tile_random(&mut tile, gfx.wrapping_mul(29));
         let _ = state.map.set_tile(coord, tile);
@@ -493,7 +495,7 @@ fn place_rail_industries(state: &mut GameState) {
             IndustryKind::Factory,
             IndustrySpec::PowerStation,
             footprint,
-            industry_id.wrapping_mul(5),
+            u8::try_from(industry_id.wrapping_mul(5) % 16).unwrap_or(0),
         )
         .with_instance_id(industry_id),
     );

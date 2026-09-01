@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 use super::tile_loop::TileLoopState;
-use super::{Map, TileCoord, TileKind};
+use super::{Map, TileCoord, TileKind, industry_instance_id};
 use crate::Industry;
 
 /// Etapa de obra 0–2 en `m1` bits 0–1; 3 = terminada (`INDUSTRY_COMPLETED`).
@@ -182,12 +182,11 @@ pub fn advance_industry_construction_from_visits(
         // `IndustryID(0)` es válido en el pool nativo. La pertenencia se
         // confirma además contra la huella: sólo una tesela sin entidad sigue
         // por el fallback huérfano individual.
-        if let Some(ind) = industries
-            .iter()
-            .find(|industry| industry.instance_id == tile.m2 && industry.contains_tile(coord))
-        {
+        if let Some(ind) = industries.iter().find(|industry| {
+            industry.instance_id == industry_instance_id(&tile) && industry.contains_tile(coord)
+        }) {
             if coord == ind.pos {
-                triggered_ids.insert(tile.m2);
+                triggered_ids.insert(industry_instance_id(&tile));
             }
             continue;
         }

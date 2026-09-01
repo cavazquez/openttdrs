@@ -773,10 +773,11 @@ pub struct Industry {
     /// Color aleatorio de industria (`Colours` 0–15) para edificios con paleta.
     #[serde(default)]
     pub random_colour: u8,
-    /// `IndustryID` de mapa (`m2`). El ID 0 es válido en un `.sav`; cuando no
-    /// existe una entidad correspondiente también se usa como fallback legacy.
+    /// `IndustryID` de mapa (`MAP2`, bytes bajo/alto). El ID 0 es válido en un
+    /// `.sav`; cuando no existe una entidad correspondiente también se usa
+    /// como fallback legacy.
     #[serde(default)]
-    pub instance_id: u8,
+    pub instance_id: u16,
     /// Unidades producidas acumuladas (para deltas mensuales).
     #[serde(default)]
     pub produced_total: u64,
@@ -945,7 +946,7 @@ impl Industry {
 
     /// Asigna el `IndustryID` de mapa (`m2`).
     #[must_use]
-    pub fn with_instance_id(mut self, instance_id: u8) -> Self {
+    pub fn with_instance_id(mut self, instance_id: u16) -> Self {
         self.instance_id = instance_id;
         self
     }

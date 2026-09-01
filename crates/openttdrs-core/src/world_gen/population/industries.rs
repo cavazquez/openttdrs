@@ -977,14 +977,15 @@ fn farm_industry_location_size(
     (width, height)
 }
 
-fn make_farm_field(mut field: Tile, field_type: u8, counter: u8, industry_id: u8) -> Tile {
+fn make_farm_field(mut field: Tile, field_type: u8, counter: u8, industry_id: u16) -> Tile {
     // `MakeField`: `SetTileType` conserva el nibble bajo de MAPT, mientras
     // que los bytes de clear se reinicializan exactamente como la rutina C++.
     field.kind = TileKind::Grass;
     field.mapt &= 0x0F;
     field.m1 = OWNER_NONE_M1;
-    field.m2 = industry_id;
-    field.m2_hi = 0;
+    let [industry_id_low, industry_id_high] = industry_id.to_le_bytes();
+    field.m2 = industry_id_low;
+    field.m2_hi = industry_id_high;
     field.m3 = field_type;
     field.m3hi = 0;
     field.m5 = with_clear_counter(clear_ground_m5(CLEAR_GROUND_FIELDS, 3), counter);
@@ -1049,7 +1050,7 @@ fn setup_farm_field_fence(
 
 /// `PlantFarmField`: una vez elegido un centro válido, el tamaño se consume
 /// antes de saber si el rectángulo tiene suficientes teselas aptas.
-fn plant_farm_field(ctx: &mut PopCtx<'_>, center: TileCoord, industry_id: u8) {
+fn plant_farm_field(ctx: &mut PopCtx<'_>, center: TileCoord, industry_id: u16) {
     let map_w = i32::try_from(ctx.mw).unwrap_or(i32::MAX);
     let map_h = i32::try_from(ctx.mh).unwrap_or(i32::MAX);
     if map_w == 0 || map_h == 0 {
@@ -1161,7 +1162,7 @@ fn plant_farm_fields(
     origin: TileCoord,
     spec: IndustrySpec,
     layout_index: usize,
-    industry_id: u8,
+    industry_id: u16,
 ) {
     let map_w = i32::try_from(ctx.mw).unwrap_or(i32::MAX);
     let map_h = i32::try_from(ctx.mh).unwrap_or(i32::MAX);
@@ -1453,6 +1454,17 @@ mod tests {
                 && (tile.m3 & 0x0F) <= 8
                 && tile.m1 == OWNER_NONE_M1
         }));
+    }
+
+    #[test]
+    fn farm_fields_preserve_the_high_map2_byte_of_their_industry_id() {
+        let tile = Map::new_flat(1, 1, 0)
+            .get(TileCoord::new(0, 0))
+            .expect("flat map tile");
+        let field = make_farm_field(tile, 2, 1, 0x0123);
+        assert_eq!(field.m2, 0x23);
+        assert_eq!(field.m2_hi, 0x01);
+        assert_eq!(crate::map::industry_instance_id(&field), 0x0123);
     }
 
     #[test]

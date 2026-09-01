@@ -1291,7 +1291,9 @@ pub(crate) fn spawn_industry_tile_with_world(
         .map_or(0u16, |t| openttdrs_core::get_clean_industry_gfx(t.m5, t.m6));
     let translated = openttdrs_core::get_translated_industry_tile_id(clean, industry_overrides);
     let m1 = ctx.tile.map_or(0, |t| t.m1);
-    let m2 = ctx.tile.map_or(0, |t| t.m2);
+    let m2 = ctx
+        .tile
+        .map_or(0, |tile| openttdrs_core::industry_instance_id(&tile));
     let m3hi = ctx.tile.map_or(0, |t| t.m3hi);
     let stage = usize::from(openttdrs_core::industry_construction_stage(m1));
     let newgrf_def = if translated >= openttdrs_core::NEW_INDUSTRY_TILE_OFFSET {

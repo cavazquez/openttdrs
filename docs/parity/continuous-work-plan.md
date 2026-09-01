@@ -94,14 +94,15 @@ quedan exactas en las seis fronteras, comparando teselas y bloques 4×4. El
 resultado sigue acotado a la cohorte; RMAP-004 y sus padres mantienen abiertos
 otros mapas, configuraciones y ticks.
 
-Actualización RMAP-125 (2026-08-31): la frontera ártica 1024²/seed
-`1330935378` queda exacta en `landscape`, `clear` y `towns` (0 teselas y 0
-bloques 4×4). La primera divergencia se trasladó a `industries`, con 59.558
-teselas y 6.038 bloques 4×4; `objects`/`trees` heredan ese estado. La corrección
-de `TileLoopTreesAlps` escribe ahora ambos bytes de `MAP2` y el callback de
-terraformación limpia también `MP_CLEAR` vecino, por lo que esta etapa queda
-publicada como diagnóstico abierto y el próximo bloque debe aislar la admisión
-industrial a escala 1024².
+Actualización RMAP-125 (2026-08-31): la divergencia ártica 1024²/seed
+`1330935378` quedó aislada en el identificador de industria. El candidato
+truncaba `IndustryID` a `u8` y hacía colisionar el pool desde 256; OpenTTD
+conserva el valor completo en `MAP2` bajo/alto. La corrección propaga `u16`
+por entidades, campos, vínculos, SAV, comandos y renderer. La comparación por
+tesela, bytes y bloques 4×4 queda exacta en `landscape`, `clear`, `towns`,
+`industries`, `objects` y `trees` (**0/0** en las seis fronteras). Se cierra
+este sub-issue con alcance acotado; RMAP-004/RMAP-056 siguen abiertos para
+otras semillas, tamaños, climas, configuraciones y runtime NewGRF.
 
 Actualización de #329: el renderer de vehículos ya resuelve los canales
 primario y secundario de las 23 libreas por esquema (incluidas clase de

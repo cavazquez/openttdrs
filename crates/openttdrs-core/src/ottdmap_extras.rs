@@ -177,8 +177,8 @@ impl OttdmapExtras {
 
     /// Busca el tipo `OpenTTD` en footer `INDP` por `IndustryID` (`m2` en tesela `MP_INDUSTRY`).
     #[must_use]
-    pub fn industry_type_for_instance(&self, instance: u8) -> Option<u8> {
-        let idx = u16::from(instance);
+    pub fn industry_type_for_instance(&self, instance: u16) -> Option<u8> {
+        let idx = instance;
         self.industry_types
             .iter()
             .find(|(i, _)| *i == idx)
@@ -188,7 +188,7 @@ impl OttdmapExtras {
     /// Compat: antes se pasaba `m1`; ahora preferir [`Self::industry_type_for_instance`].
     #[must_use]
     pub fn industry_type_for_tile_index(&self, m1: u8) -> Option<u8> {
-        self.industry_type_for_instance(m1 & 0x7F)
+        self.industry_type_for_instance(u16::from(m1 & 0x7F))
     }
 }
 

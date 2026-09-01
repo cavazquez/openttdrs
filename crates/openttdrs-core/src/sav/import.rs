@@ -32,8 +32,8 @@ pub fn industry_kind_from_ottd_type(industry_type: u8) -> IndustryKind {
 /// Color determinista usado cuando un formato antiguo no conserva
 /// `Industry.random_colour`.
 #[must_use]
-pub const fn industry_random_colour_from_instance(instance_id: u8) -> u8 {
-    instance_id.wrapping_mul(5) % 16
+pub const fn industry_random_colour_from_instance(instance_id: u16) -> u8 {
+    (instance_id.wrapping_mul(5) % 16) as u8
 }
 
 type IndustryGfxRange = (u16, u16, &'static str, Option<IndustryKind>);
@@ -175,8 +175,8 @@ pub(crate) fn hydrate_sav_industries(
             .or_else(|| gfx.map(industry_kind_from_gfx))
             .unwrap_or_else(|| industry_kind_from_ottd_type(saved.industry_type));
         let instance_id = state.map.get(origin).map_or_else(
-            || u8::try_from(saved.industry_id).unwrap_or(0),
-            |tile| tile.m2,
+            || u16::try_from(saved.industry_id).unwrap_or(0),
+            |tile| crate::map::industry_instance_id(&tile),
         );
         let mut industry = if let Some(spec) = spec {
             Industry::with_tiles_spec(origin, kind, spec, tiles, saved.random_colour)
@@ -240,7 +240,9 @@ pub fn hydrate_industries_from_map_tiles(state: &mut GameState, extras: Option<&
         };
         let gfx = get_clean_industry_gfx(tile.m5, tile.m6);
         let kind = extras
-            .and_then(|extras| extras.industry_type_for_instance(tile.m2))
+            .and_then(|extras| {
+                extras.industry_type_for_instance(crate::map::industry_instance_id(&tile))
+            })
             .map_or_else(|| industry_kind_from_gfx(gfx), industry_kind_from_ottd_type);
         let mut industry = if let Some(spec) = industry_spec_from_gfx(gfx) {
             Industry::with_tiles_spec(
@@ -248,13 +250,14 @@ pub fn hydrate_industries_from_map_tiles(state: &mut GameState, extras: Option<&
                 kind,
                 spec,
                 component,
-                industry_random_colour_from_instance(tile.m2),
+                industry_random_colour_from_instance(crate::map::industry_instance_id(&tile)),
             )
         } else {
-            Industry::with_tiles(origin, kind, component)
-                .with_random_colour(industry_random_colour_from_instance(tile.m2))
+            Industry::with_tiles(origin, kind, component).with_random_colour(
+                industry_random_colour_from_instance(crate::map::industry_instance_id(&tile)),
+            )
         };
-        industry.instance_id = tile.m2;
+        industry.instance_id = crate::map::industry_instance_id(&tile);
         industry.prod_level = PRODLEVEL_DEFAULT;
         state.industries.push(industry);
     }

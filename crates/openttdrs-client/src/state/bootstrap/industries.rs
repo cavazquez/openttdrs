@@ -55,7 +55,7 @@ pub(crate) fn place_industries(
                 TileKind::Industry if industry_count.is_multiple_of(16) => {
                     let gfx = get_clean_industry_gfx(tile.m5, tile.m6);
                     let kind = industry_kind_from_gfx(gfx);
-                    let instance_id = tile.m2;
+                    let instance_id = openttdrs_core::industry_instance_id(&tile);
                     let industry = if let Some(spec) = industry_spec_from_gfx(gfx) {
                         Industry::with_tiles_spec(
                             coord,

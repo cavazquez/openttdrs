@@ -8,6 +8,7 @@
 use crate::map::{Map, Tile};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::fmt::Write as _;
 use std::io::{self, Write};
 
 /// Versión actual del contrato `world-raw`.
@@ -166,7 +167,7 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     let mut output = String::with_capacity(digest.len() * 2);
     for byte in digest {
-        output.push_str(&format!("{byte:02x}"));
+        let _ = write!(output, "{byte:02x}");
     }
     output
 }

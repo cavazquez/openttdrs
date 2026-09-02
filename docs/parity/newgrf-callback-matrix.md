@@ -181,6 +181,14 @@ velocidades obsoletas. La regresión
 reutilización y el fallback canónico. La fusión parcial por fila y las columnas
 desconocidas de `ORDL`/`STNN`/`CITY`/`INDY` siguen pendientes.
 
+Actualización #329-VEHICLE-SAV-ORDL-010 (2026-09-02): `ORDL` comparte ahora
+el snapshot semántico de vehículos. Cuando no cambia ninguna fila, el
+exportador reemite la lista de órdenes original y conserva sus columnas
+futuras; una mutación de orden o de topología activa el encoder canónico.
+La regresión `imported_vehs_body_is_reused_until_vehicle_semantics_change`
+cubre la pareja `ORDL`/`VEHS`. La fusión parcial y las columnas desconocidas de
+`STNN`/`CITY`/`INDY` siguen pendientes.
+
 La tabla de variables relativas conserva el parámetro `ExtendedByte` completo
 (WORD, hasta 14 bits) para `61 → 0x60`; los IDs locales superiores a `0xFF` no
 se aliasan con el motor vanilla de id cero.

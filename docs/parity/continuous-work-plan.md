@@ -579,3 +579,12 @@ reconstruye la tabla canónica para no guardar estado obsoleto. La regresión
 `imported_vehs_body_is_reused_until_vehicle_semantics_change` cubre ambos
 caminos. La huella todavía no fusiona columnas desconocidas después de una
 mutación parcial ni cubre `ORDL`/`STNN`/`CITY`/`INDY`; #329 sigue abierto.
+
+Actualización #329-VEHICLE-SAV-ORDL-010 (2026-09-02): el mismo snapshot de
+passthrough ahora cubre `ORDL`. Las listas de órdenes se reemiten byte a byte
+cuando sus filas semánticas no cambian, por lo que campos futuros del pool de
+órdenes sobreviven a un ciclo SAV. Si cambia una orden o la topología de una
+lista, se usa el encoder canónico y no se conserva una referencia obsoleta.
+`imported_vehs_body_is_reused_until_vehicle_semantics_change` verifica `ORDL`
+y `VEHS` en conjunto. La fusión parcial tras mutaciones y las tablas
+`STNN`/`CITY`/`INDY` siguen pendientes; #329 no se cierra.

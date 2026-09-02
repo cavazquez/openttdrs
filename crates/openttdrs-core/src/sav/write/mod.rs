@@ -82,16 +82,19 @@ pub fn save_to_bytes_with(state: &GameState, container: SavContainer) -> Result<
     wrap_container(&payload, EXPORT_SAVE_VERSION, container)
 }
 
-/// Serializa únicamente las filas semánticas de `VEHS`.
+/// Serializa únicamente las filas semánticas de `ORDL` y `VEHS`.
 ///
 /// El importador usa esta representación como huella: si las filas siguen
 /// iguales, el escritor puede reutilizar el cuerpo original y no perder
 /// columnas que una versión más nueva de `OpenTTD` haya añadido.
-pub(crate) fn semantic_vehs_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
+type SavVehicleTableRecords = (Vec<Vec<u8>>, Vec<Vec<u8>>);
+
+pub(crate) fn semantic_vehicle_table_records(
+    state: &GameState,
+) -> Result<SavVehicleTableRecords, SavError> {
     let (map_w, _) = state.map.dimensions();
     let cargo_export = entities::cargo_packet_export(state, map_w);
-    let (_, vehs) = vehicles::ordl_and_vehs_records_with_cargo(state, map_w, &cargo_export)?;
-    Ok(vehs)
+    vehicles::ordl_and_vehs_records_with_cargo(state, map_w, &cargo_export)
 }
 
 /// Chunks siempre presentes en un export mínimo (mapa + CITY + DATE + PLYR).
@@ -268,20 +271,28 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     }
 
     let (ordl, vehs) = vehicles::ordl_and_vehs_records_with_cargo(state, w, &cargo_export)?;
-    if !ordl.is_empty() {
+    let raw_vehicle_tables = state.sav_vehs_passthrough.as_ref();
+    let raw_ordl = raw_vehicle_tables.and_then(|passthrough| {
+        passthrough.ordl_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"ORDL"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.ordl_semantic_records == ordl
+        })
+    });
+    if let Some(raw) = raw_ordl {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else if !ordl.is_empty() {
         data.extend_from_slice(&vehicles::ordl_chunk(&ordl)?);
     }
-    let raw_vehs = state.sav_vehs_passthrough.as_ref().filter(|passthrough| {
-        passthrough.chunk.name == *b"VEHS"
-            && passthrough.chunk.ch_type != super::chunks::CH_RIFF
-            && passthrough.semantic_records == vehs
+    let raw_vehs = raw_vehicle_tables.and_then(|passthrough| {
+        passthrough.vehs_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"VEHS"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.vehs_semantic_records == vehs
+        })
     });
     if let Some(raw) = raw_vehs {
-        data.extend_from_slice(&chunks::raw_chunk(
-            raw.chunk.name,
-            raw.chunk.ch_type,
-            &raw.chunk.body,
-        ));
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else if !vehs.is_empty() {
         data.extend_from_slice(&vehicles::vehs_chunk(&vehs)?);
     }
@@ -730,12 +741,13 @@ mod tests {
     fn imported_vehs_body_is_reused_until_vehicle_semantics_change() {
         let mut state = tiny_state();
         let vehicle_pos = TileCoord::new(10, 20);
-        state.vehicles.push(Vehicle::new(
-            41,
-            VehicleKind::Train,
-            vehicle_pos,
-            vehicle_pos,
-        ));
+        let station_pos = TileCoord::new(28, 39);
+        state
+            .stations
+            .push(Station::new_with_kind(station_pos, StopKind::RailStation));
+        let mut train = Vehicle::new(41, VehicleKind::Train, vehicle_pos, vehicle_pos);
+        train.set_vehicle_orders(vec![VehicleOrder::station(station_pos)]);
+        state.vehicles.push(train);
 
         let original = save_to_bytes_with(&state, SavContainer::Ottn).expect("save original");
         let (original_payload, _) = crate::sav::container::decompress(&original).expect("payload");
@@ -744,13 +756,32 @@ mod tests {
             .expect("VEHS original")
             .body
             .clone();
+        let original_ordl = crate::sav::chunks::find_chunk(&original_chunks, "ORDL")
+            .expect("ORDL original")
+            .body
+            .clone();
 
         let mut loaded = GameState::from_sav_game(sav::load(&original).expect("load original"));
         let passthrough = loaded
             .sav_vehs_passthrough
             .as_ref()
             .expect("VEHS passthrough after import");
-        assert_eq!(passthrough.chunk.body, original_vehs);
+        assert_eq!(
+            passthrough
+                .vehs_chunk
+                .as_ref()
+                .expect("VEHS passthrough")
+                .body,
+            original_vehs
+        );
+        assert_eq!(
+            passthrough
+                .ordl_chunk
+                .as_ref()
+                .expect("ORDL passthrough")
+                .body,
+            original_ordl
+        );
 
         let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
         let (resaved_payload, _) = crate::sav::container::decompress(&resaved).expect("payload");
@@ -758,6 +789,9 @@ mod tests {
         let resaved_vehs =
             crate::sav::chunks::find_chunk(&resaved_chunks, "VEHS").expect("VEHS resaved");
         assert_eq!(resaved_vehs.body, original_vehs);
+        let resaved_ordl =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "ORDL").expect("ORDL resaved");
+        assert_eq!(resaved_ordl.body, original_ordl);
 
         loaded.vehicles[0].cur_speed = loaded.vehicles[0].cur_speed.saturating_add(1);
         let changed = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("save changed");

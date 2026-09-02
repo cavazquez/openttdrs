@@ -641,6 +641,22 @@ fn generated_can_follow_town_road(map: &crate::map::Map, tile: TileCoord, dir: u
     }
 }
 
+/// `GrowTownAtRoad` abandona la caminata al entrar en una carretera municipal
+/// de otra ciudad. `CanFollowRoad` sí acepta la tesela para poder avanzar, pero
+/// el chequeo de propietario posterior a `TileAddByDiagDir` termina la llamada
+/// sin probar otra dirección ni consumir más RNG. Mantener esta frontera fuera
+/// de `generated_can_follow_town_road` conserva ese orden observable.
+fn generated_town_road_is_foreign(map: &crate::map::Map, tile: TileCoord, town_id: u32) -> bool {
+    let Some(candidate) = map.get(tile) else {
+        return false;
+    };
+    if candidate.kind != TileKind::Road || candidate.m1 != crate::company::OWNER_TOWN_M1 {
+        return false;
+    }
+    let owner = u16::from(candidate.m2) | (u16::from(candidate.m2_hi) << 8);
+    owner != u16::try_from(town_id).unwrap_or(u16::MAX)
+}
+
 /// Dirección persistida de una rampa vial `MP_TUNNELBRIDGE`; `None` para
 /// ferrocarril, una rampa corrupta o una tesela común.
 fn generated_town_road_tunnel_bridge_direction(
@@ -2041,6 +2057,9 @@ fn grow_generated_town_at_road(
 
         let dir = target_dir?;
         tile = add_town_diag(tile, dir);
+        if generated_town_road_is_foreign(map, tile, town.id) {
+            return None;
+        }
         iterations -= 1;
         if iterations < 0 {
             return None;
@@ -5113,5 +5132,21 @@ mod tests {
             &map, &town, mouth, 2, &mut rng
         ));
         assert_eq!(rng, Randomizer::default());
+    }
+
+    #[test]
+    fn town_walker_stops_after_entering_another_towns_road() {
+        let mut map = Map::new_flat(8, 8, 1);
+        let tile = TileCoord::new(3, 3);
+        let mut road = map.get(tile).expect("foreign road");
+        road.kind = TileKind::Road;
+        road.mapt = 0x20;
+        road.m1 = crate::company::OWNER_TOWN_M1;
+        road.m2 = 7;
+        road.m5 = ROAD_BITS_AXIS_X;
+        map.set_tile(tile, road).expect("install foreign road");
+
+        assert!(generated_town_road_is_foreign(&map, tile, 3));
+        assert!(!generated_town_road_is_foreign(&map, tile, 7));
     }
 }

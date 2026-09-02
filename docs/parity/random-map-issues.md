@@ -271,3 +271,26 @@ la siguiente primera divergencia queda aislada en `towns` (**11.021
 teselas/1.657 bloques 4×4**) para el sub-issue siguiente. El alcance sólo
 cubre la limpieza de árboles nevados; el padre RMAP-004 y las demás semillas,
 tamaños, climas y fases posteriores siguen abiertos.
+
+### RMAP-132 — Detener el caminador urbano al entrar en una carretera de otro pueblo
+
+**Estado: cerrado (sub-issue acotado de RMAP-024/RMAP-027/RMAP-030).** Tras
+corregir RMAP-131, la primera divergencia de la seed ártica `1330935383` en
+1024² era una carretera extra en `(716,229)`. El oráculo detiene
+`GrowTownAtRoad` al avanzar a la carretera municipal de otro pueblo en
+`(724,236)` (`MAP2/TownID=247`), sin probar otra dirección ni consumir RNG;
+Rust continuaba la caminata porque `CanFollowRoad` sólo había validado que la
+tesela tuviera bits viales. Ese único tramo desplazaba la frontera de RNG y
+desde el pueblo 270 cambiaba todas las fundaciones posteriores.
+
+La caminata ahora conserva la aceptación previa de `CanFollowRoad`, pero tras
+`TileAddByDiagDir` comprueba `OWNER_TOWN` y el TownID de la carretera; si es de
+otra ciudad retorna inmediatamente, igual que `GrowTownAtRoad`. La regresión
+`town_walker_stops_after_entering_another_towns_road` cubre la propiedad y la
+igualdad del pueblo propio. En la cohorte reproducible
+`generation_phase_parity.py --size 1024 --seed 1330935383 --climate arctic
+--phases landscape,clear,towns,industries,objects,trees --require-exact`, las
+seis fronteras quedan exactas (**0 teselas, 0 bytes y 0 bloques 4×4**); la
+comparación verificó también que el estado RNG y los 373 centros coinciden.
+El cierre se limita a la regla de propietario y esta cohorte; otras semillas,
+tamaños, layouts, carreteras no municipales y runtime NewGRF siguen abiertos.

@@ -278,6 +278,7 @@ mod tests {
             from_newgrf: true,
             local_id: u8::try_from(state.object_spec_catalog.len()).unwrap_or(0),
             grfid: 0x4F_42_00_01,
+            newgrf_grf_version: 0,
             climate_mask,
             build_cost_factor: cost_factor,
             callback_mask: 0,
@@ -462,10 +463,12 @@ mod tests {
         std::fs::write(dir.join("object-slope-callback.grf"), &bytes).expect("write");
 
         let mut state = GameState::new(8, 8);
-        state.newgrf_stack.push(crate::NewGrfEntry::new(
+        let mut entry = crate::NewGrfEntry::new(
             "object-slope-callback.grf",
             crate::newgrf_config::grfid_from_bytes(*b"CBOS"),
-        ));
+        );
+        entry.grf_version = 8;
+        state.newgrf_stack.push(entry);
         apply_newgrf_objects(&mut state, &[&dir]);
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -490,6 +493,12 @@ mod tests {
             state.map.get_kind(TileCoord::new(3, 3)),
             Some(TileKind::Grass)
         );
+
+        // En GRF 7, el mismo cero del callback se interpreta como éxito por
+        // la inversión histórica del bit 10.
+        state.object_spec_catalog[0].newgrf_grf_version = 7;
+        assert_eq!(command_would_fail(&state, &command), None);
+        apply_command(&mut state, &command).expect("GRF 7 permite la pendiente");
     }
 
     #[test]
@@ -641,6 +650,7 @@ mod tests {
             from_newgrf: true,
             local_id: 0,
             grfid: 1,
+            newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: 1,
             callback_mask: 0,
@@ -660,6 +670,7 @@ mod tests {
             from_newgrf: true,
             local_id: 1,
             grfid: 1,
+            newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: 1,
             callback_mask: 0,
@@ -684,6 +695,7 @@ mod tests {
             from_newgrf: true,
             local_id: 3,
             grfid: 0x4F_42_00_02,
+            newgrf_grf_version: 0,
             climate_mask: 0x05,
             build_cost_factor: 5,
             callback_mask: OBJECT_CALLBACK_SLOPE_CHECK_MASK,

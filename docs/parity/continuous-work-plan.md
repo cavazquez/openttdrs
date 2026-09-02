@@ -347,6 +347,12 @@ siendo atómica antes de mutar el mapa. Continúan pendientes el scope completo
 de `BaseStation`, vecinos y mensajes de error de texto GRF; #329 permanece
 abierto.
 
+Actualización #329-OBJECT-CB157-020 (2026-09-02): los objetos NewGRF guardan
+también la versión Action8 del GRF en su spec. CB157 aplica la inversión del
+bit 10 para GRF 7 antes de aceptar/rechazar cada tesela del footprint, tanto
+en query como en execute, sin cobrar ni mutar parcialmente. Permanecen fuera
+los scopes/vecinos completos, strings de error y callbacks adicionales.
+
 ### Avance NewGRF — 2026-08-27
 
 La ruta de tile loop de `IndustryTile` ahora recibe los catálogos y pools de

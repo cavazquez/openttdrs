@@ -218,6 +218,7 @@ mod tests {
             from_newgrf: true,
             local_id: 4,
             grfid: 0x4f42_0001,
+            newgrf_grf_version: 0,
             climate_mask: 0x0f,
             build_cost_factor: 1,
             callback_mask: 0,

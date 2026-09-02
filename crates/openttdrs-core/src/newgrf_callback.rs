@@ -1549,9 +1549,10 @@ pub fn resolve_cargo_station_rating_callback(
 ///
 /// `param1` es el slope de la tesela y `param2` codifica el offset `(dx, dy)`
 /// del footprint (`dy << 4 | dx`), igual que `object_cmd.cpp`. Durante la
-/// construcción no existe una instancia de objeto persistente; por ahora el
-/// resolver aporta esos parámetros genéricos, no los scopes completos de
-/// objeto/vecinos de `OpenTTD`.
+/// construcción no existe una instancia de objeto persistente; el resolver
+/// aporta los parámetros genéricos y aplica la inversión de bit 10 de GRF
+/// anteriores a la versión 8. Los scopes completos de objeto/vecinos de
+/// `OpenTTD` siguen fuera de este corte.
 #[must_use]
 pub fn apply_object_slope_callback(def: &ObjectSpecDef, slope: u8, footprint_offset: u8) -> bool {
     if !def.has_slope_check_callback() {
@@ -1566,7 +1567,7 @@ pub fn apply_object_slope_callback(def: &ObjectSpecDef, slope: u8, footprint_off
         u32::from(slope),
         u32::from(footprint_offset),
     );
-    callback_allows_location(result)
+    callback_allows_location_for_grf(result, def.grfid, def.newgrf_grf_version)
 }
 
 /// Call site de construcción de estación ferroviaria: CB `0x13` availability.
@@ -1594,8 +1595,8 @@ pub fn apply_station_availability_callback_for_build(
 /// altura, una variante orientada en los nibbles alto/bajo de `param1`.
 /// `param2` empaqueta cantidad de andenes, longitud y los offsets de andén y
 /// posición. Se resuelve antes de que exista una estación; por eso este corte no
-/// aporta scope/registro persistente de estación ni la inversión de bit 10 de
-/// GRFs anteriores a versión 8.
+/// aporta scope/registro persistente de estación, aunque sí aplica la inversión
+/// de bit 10 de GRFs anteriores a versión 8.
 #[must_use]
 pub fn apply_station_slope_callback_for_build(
     def: &crate::station_class::StationSpecDef,

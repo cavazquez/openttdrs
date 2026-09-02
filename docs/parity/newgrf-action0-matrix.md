@@ -405,7 +405,7 @@ mutar; escribe todas las teselas (`m5` = id ≥ `NEW_OBJECT_OFFSET`, `m2` = offs
 | `0B` climate mask BYTE | **runtime** (filtra en `check_build_object`) |
 | `0C` size BYTE | **runtime** (footprint W×H en build/clear/render) |
 | `0D` build cost multiplier BYTE | **runtime** (`build_object_cost_factored`) |
-| `15` callback mask WORD | **parcial runtime**: bit `SlopeCheck` → CB157 en query+execute; sin scopes completos/error string/fallback de pendiente upstream |
+| `15` callback mask WORD | **parcial runtime**: bit `SlopeCheck` → CB157 en query+execute, incluida la inversión del bit 10 para GRF <8; sin scopes completos/error string/fallback de pendiente upstream |
 | `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
 | `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** (`associated_badges` + diagnósticos) |
 | Action1/3 views | **runtime** (render `views[i % len]` por tesela del footprint) |

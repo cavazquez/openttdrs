@@ -39,6 +39,9 @@ pub struct ObjectSpecDef {
     /// GRFID del set.
     #[serde(default)]
     pub grfid: u32,
+    /// Versión de formato Action8 del GRF dueño (para callbacks de ubicación).
+    #[serde(default)]
+    pub newgrf_grf_version: u8,
     /// Máscara de climas Action0 `0x0B` (`LandscapeTypes`).
     #[serde(default = "default_object_climate_mask")]
     pub climate_mask: u8,
@@ -277,6 +280,7 @@ mod tests {
             from_newgrf: true,
             local_id: 4,
             grfid: 0,
+            newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: DEFAULT_OBJECT_BUILD_COST_FACTOR,
             callback_mask: 0,
@@ -329,6 +333,7 @@ mod tests {
             from_newgrf: true,
             local_id: 4,
             grfid: 0,
+            newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: DEFAULT_OBJECT_BUILD_COST_FACTOR,
             callback_mask: 0,

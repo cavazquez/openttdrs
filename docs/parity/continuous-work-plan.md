@@ -619,6 +619,15 @@ encoder canónico para no conservar referencias obsoletas. La regresión
 La fusión de columnas desconocidas tras una mutación y los pools aún no
 modelados continúan pendientes; #329 permanece abierto.
 
+Actualización #329-VEHICLE-SAV-LINKGRAPH-015 (2026-09-02): `LGRP` conserva
+ahora su cuerpo nativo cuando los nodos, aristas, cargos y referencias a
+estaciones coinciden con la huella reconstruida. `LGRJ`/`LGRS` mantienen el
+passthrough runtime existente y se invalidan cuando `LinkGraphStats` registra
+un viaje nuevo. La regresión `export_roundtrip_preserves_lgrp_edge` comprueba
+el cuerpo byte a byte; una mutación de flujo cae al encoder canónico. Las
+columnas desconocidas después de una mutación y la ejecución completa de jobs
+de cargodist siguen pendientes; #328 permanece abierto.
+
 Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` comparte ahora la
 huella de filas con las tablas SAV anteriores. Un round-trip sin cambios de
 compañías conserva byte a byte el header y las columnas futuras de dinero,

@@ -102,6 +102,7 @@ pub(crate) struct SavSemanticTableRecords {
     pub(crate) plyr: Vec<Vec<u8>>,
     pub(crate) grps: Vec<Vec<u8>>,
     pub(crate) ernw: Vec<Vec<u8>>,
+    pub(crate) lgrp: Vec<Vec<u8>>,
 }
 
 pub(crate) fn semantic_table_records(
@@ -117,6 +118,7 @@ pub(crate) fn semantic_table_records(
     let plyr = meta::plyr_records(state, &autoreplace_export)?;
     let grps = fleet::group_records(&state.vehicle_groups)?;
     let ernw = fleet::autoreplace_records(&autoreplace_export)?;
+    let lgrp = super::linkgraph::lgrp_records(&state.link_graph, &state.stations, map_w)?;
     Ok(SavSemanticTableRecords {
         ordl,
         vehs,
@@ -129,6 +131,7 @@ pub(crate) fn semantic_table_records(
         plyr,
         grps,
         ernw,
+        lgrp,
     })
 }
 
@@ -364,10 +367,25 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(&capa);
     }
 
-    data.extend_from_slice(&super::linkgraph::encode_linkgraph_chunks(
+    let lgrp = super::linkgraph::lgrp_records(&state.link_graph, &state.stations, w)?;
+    let raw_lgrp = raw_tables.and_then(|passthrough| {
+        passthrough.lgrp_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"LGRP"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.lgrp_semantic_records == lgrp
+        })
+    });
+    if let Some(raw) = raw_lgrp {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else {
+        data.extend_from_slice(&super::linkgraph::encode_lgrp_chunk(
+            &state.link_graph,
+            &state.stations,
+            w,
+        )?);
+    }
+    data.extend_from_slice(&super::linkgraph::encode_linkgraph_runtime_chunks(
         &state.link_graph,
-        &state.stations,
-        w,
     )?);
 
     let pats = vec![meta::pats_record(state)];
@@ -2144,6 +2162,12 @@ mod tests {
             .link_graph
             .record_trip(a, b, CargoType::Goods, 7, 40, 120);
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let (payload, _) = crate::sav::container::decompress(&bytes).expect("payload");
+        let original_chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
+        let original_lgrp = crate::sav::chunks::find_chunk(&original_chunks, "LGRP")
+            .expect("LGRP original")
+            .body
+            .clone();
         let sav = sav::load(&bytes).expect("load");
         let key = LinkEdgeKey {
             from: a,
@@ -2159,6 +2183,12 @@ mod tests {
             loaded.link_graph.edges.get(&key).map(|s| s.units_total),
             Some(7)
         );
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
+        let (resaved_payload, _) = crate::sav::container::decompress(&resaved).expect("payload");
+        let resaved_chunks = crate::sav::chunks::parse_chunks(&resaved_payload).expect("chunks");
+        let resaved_lgrp =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "LGRP").expect("LGRP resaved");
+        assert_eq!(resaved_lgrp.body, original_lgrp);
     }
 
     #[test]

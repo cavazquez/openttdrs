@@ -219,6 +219,13 @@ reglas; una mutación de grupo o autorrenovación activa el writer actual y
 recalcula las referencias. La fusión parcial posterior y los pools restantes
 siguen abiertos.
 
+Actualización #329-VEHICLE-SAV-LINKGRAPH-015 (2026-09-02): `LGRP` usa ahora
+una huella de registros reconstruidos para conservar headers y columnas
+futuras sin cambios; `LGRJ`/`LGRS` siguen reutilizando sus cuerpos runtime
+opacos hasta que se registra una arista nueva. La mutación semántica activa el
+writer actual y mantiene el grafo válido, pero jobs/cargodist completo aún no
+se ejecutan en Rust.
+
 Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` conserva ahora su
 cuerpo original cuando las filas semánticas de compañías coinciden. El
 exportador mantiene así columnas nuevas de ajustes, economía, libreas y

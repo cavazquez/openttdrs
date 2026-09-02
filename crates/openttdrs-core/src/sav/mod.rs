@@ -143,6 +143,8 @@ pub(crate) struct SavTablePassthrough {
     pub(crate) grps_semantic_records: Vec<Vec<u8>>,
     pub(crate) ernw_chunk: Option<SavOpaqueChunk>,
     pub(crate) ernw_semantic_records: Vec<Vec<u8>>,
+    pub(crate) lgrp_chunk: Option<SavOpaqueChunk>,
+    pub(crate) lgrp_semantic_records: Vec<Vec<u8>>,
 }
 
 /// Chunks que el escritor reconstruye desde el modelo semántico.
@@ -361,6 +363,8 @@ pub struct SavGame {
     pub(crate) grps_raw_chunk: Option<SavOpaqueChunk>,
     /// Cuerpo original de `ERNW`, separado para conservar reglas futuras.
     pub(crate) ernw_raw_chunk: Option<SavOpaqueChunk>,
+    /// Cuerpo original de `LGRP`, separado para conservar métricas futuras.
+    pub(crate) lgrp_raw_chunk: Option<SavOpaqueChunk>,
     /// Chunks nativos no modelados que se conservan para round-trip.
     pub opaque_chunks: Vec<SavOpaqueChunk>,
 }
@@ -472,6 +476,11 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         ch_type: chunk.ch_type,
         body: chunk.body.clone(),
     });
+    let lgrp_raw_chunk = chunks::find_chunk(&chunk_list, "LGRP").map(|chunk| SavOpaqueChunk {
+        name: chunk.name,
+        ch_type: chunk.ch_type,
+        body: chunk.body.clone(),
+    });
     let opaque_chunks = opaque_chunks_from_chunks(&chunk_list);
     let link_graph =
         linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
@@ -526,6 +535,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         plyr_raw_chunk,
         grps_raw_chunk,
         ernw_raw_chunk,
+        lgrp_raw_chunk,
         opaque_chunks,
     })
 }
@@ -1021,6 +1031,7 @@ impl GameState {
         let plyr_raw_chunk = sav.plyr_raw_chunk.take();
         let grps_raw_chunk = sav.grps_raw_chunk.take();
         let ernw_raw_chunk = sav.ernw_raw_chunk.take();
+        let lgrp_raw_chunk = sav.lgrp_raw_chunk.take();
         let random_state = sav.random_state;
         let mut map = sav.map;
         normalize_rail_trackbits_from_neighbors(&mut map);
@@ -1759,7 +1770,8 @@ impl GameState {
             || capy_raw_chunk.is_some()
             || plyr_raw_chunk.is_some()
             || grps_raw_chunk.is_some()
-            || ernw_raw_chunk.is_some())
+            || ernw_raw_chunk.is_some()
+            || lgrp_raw_chunk.is_some())
             && let Ok(records) = write::semantic_table_records(&state)
         {
             state.sav_table_passthrough = Some(SavTablePassthrough {
@@ -1785,6 +1797,8 @@ impl GameState {
                 grps_semantic_records: records.grps,
                 ernw_chunk: ernw_raw_chunk,
                 ernw_semantic_records: records.ernw,
+                lgrp_chunk: lgrp_raw_chunk,
+                lgrp_semantic_records: records.lgrp,
             });
         }
         state
@@ -1865,6 +1879,7 @@ mod tests {
             plyr_raw_chunk: None,
             grps_raw_chunk: None,
             ernw_raw_chunk: None,
+            lgrp_raw_chunk: None,
             opaque_chunks: Vec::new(),
         }
     }
@@ -2737,6 +2752,7 @@ mod tests {
             plyr_raw_chunk: None,
             grps_raw_chunk: None,
             ernw_raw_chunk: None,
+            lgrp_raw_chunk: None,
             opaque_chunks: Vec::new(),
         };
         let state = GameState::from_sav_game(sav);

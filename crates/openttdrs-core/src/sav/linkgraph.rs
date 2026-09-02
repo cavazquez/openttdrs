@@ -323,32 +323,33 @@ fn lgrp_table_header() -> Result<Vec<u8>, SavError> {
 }
 
 /// Emite `LGRP` (+ `LGRJ`/`LGRS` vacíos) desde el grafo observado.
-pub(crate) fn encode_linkgraph_chunks(
+pub(crate) fn lgrp_records(
     stats: &LinkGraphStats,
     stations: &[crate::station::Station],
     map_w: u32,
-) -> Result<Vec<u8>, SavError> {
+) -> Result<Vec<Vec<u8>>, SavError> {
     let station_ids: HashMap<TileCoord, u16> = stations
         .iter()
         .enumerate()
         .filter_map(|(i, s)| u16::try_from(i).ok().map(|id| (s.pos, id)))
         .collect();
+    graphs_from_stats(stats)
+        .iter()
+        .map(|(cargo, tiles, edges)| encode_lgrp_record(*cargo, tiles, edges, map_w, &station_ids))
+        .collect()
+}
 
-    let graphs = graphs_from_stats(stats);
-    let mut records = Vec::new();
-    for (cargo, tiles, edges) in &graphs {
-        records.push(encode_lgrp_record(
-            *cargo,
-            tiles,
-            edges,
-            map_w,
-            &station_ids,
-        )?);
-    }
+pub(crate) fn encode_lgrp_chunk(
+    stats: &LinkGraphStats,
+    stations: &[crate::station::Station],
+    map_w: u32,
+) -> Result<Vec<u8>, SavError> {
+    let records = lgrp_records(stats, stations, map_w)?;
+    raw_table_chunk(*b"LGRP", &lgrp_table_header()?, &records)
+}
 
+pub(crate) fn encode_linkgraph_runtime_chunks(stats: &LinkGraphStats) -> Result<Vec<u8>, SavError> {
     let mut out = Vec::new();
-    // Siempre emitir LGRP (puede estar vacío): OpenTTD lo tolera.
-    out.extend_from_slice(&raw_table_chunk(*b"LGRP", &lgrp_table_header()?, &records)?);
     if stats.runtime_chunks.is_empty() {
         // Jobs / schedule vacíos (SpawnAll regenera).
         out.extend_from_slice(&raw_table_chunk(*b"LGRJ", &[0], &[])?);
@@ -362,6 +363,19 @@ pub(crate) fn encode_linkgraph_chunks(
             out.extend_from_slice(&chunk.body);
         }
     }
+    Ok(out)
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_linkgraph_chunks(
+    stats: &LinkGraphStats,
+    stations: &[crate::station::Station],
+    map_w: u32,
+) -> Result<Vec<u8>, SavError> {
+    let mut out = Vec::new();
+    // Siempre emitir LGRP (puede estar vacío): OpenTTD lo tolera.
+    out.extend_from_slice(&encode_lgrp_chunk(stats, stations, map_w)?);
+    out.extend_from_slice(&encode_linkgraph_runtime_chunks(stats)?);
     Ok(out)
 }
 

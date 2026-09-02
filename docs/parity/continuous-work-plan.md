@@ -484,3 +484,15 @@ deliberadamente `m5=SW` con `SLOPE_NE` y verifica el slot frontal Action5
 correspondiente; una prueba de sprite cubre las cuatro direcciones y las
 variantes normal/nieve. Las pendientes no válidas, las rotaciones de
 compositor y las paletas especiales siguen abiertas; #326 no se cierra.
+
+Actualización #329-VEHICLE-SHIP-001 (2026-09-02): la velocidad de un barco
+NewGRF respeta ahora el orden de `Ship::UpdateCache` de OpenTTD. El controlador
+consulta primero `CBID_VEHICLE_MODIFY_PROPERTY` (`PROP_SHIP_SPEED`, `0x0B`) y
+aplica después la fracción de mar/canal, en lugar de volver a
+`EngineDef::max_speed` y descartar el resultado dinámico. El helper
+`ship_speed_for_tile_with_speed` conserva la API vanilla y permite probar la
+propiedad ya resuelta; `ship_cb36_speed_is_fractioned_after_callback` cubre un
+CB36 que devuelve 80 con fracción oceánica 128/256 (resultado 40). Las
+fracciones por clase de agua y los límites de puentes siguen aplicándose; las
+otras propiedades runtime de vehículos, APIs legacy sin catálogo y scopes
+avanzados mantienen abierto #329.

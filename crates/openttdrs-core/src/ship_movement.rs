@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::engine::{get_advance_distance, get_advance_speed, ship_speed_for_tile};
+use crate::engine::{get_advance_distance, get_advance_speed, ship_speed_for_tile_with_speed};
 use crate::map::{Map, TILE_PIXEL_HEIGHT, TileCoord, TileKind};
 use crate::vehicle::{
     DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, Vehicle, VehicleDirection,
@@ -438,7 +438,10 @@ fn ship_max_speed(
     let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
     if let Some(map) = map {
         let is_canal = map.get(v.pos).is_some_and(crate::map::is_canal_tile);
-        max_speed = ship_speed_for_tile(engine, is_canal);
+        // OpenTTD aplica la fracción océano/canal después de `GetVehicleProperty`.
+        // No volver al `engine.max_speed` base: CB36 puede haber modificado la
+        // velocidad de esta unidad.
+        max_speed = ship_speed_for_tile_with_speed(engine, max_speed, is_canal);
         if let Some(bridge_cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, v.pos) {
             max_speed = max_speed.min(bridge_cap);
         }
@@ -812,7 +815,7 @@ mod tests {
     use crate::GameState;
     use crate::engine::ENGINE_SHIP_MPS;
     use crate::pathfinder::{PathNetwork, find_path};
-    use crate::{Command, TileCoord, Vehicle, VehicleKind, apply_command};
+    use crate::{Command, TileCoord, TileKind, Vehicle, VehicleKind, apply_command};
 
     use super::*;
 
@@ -1002,6 +1005,64 @@ mod tests {
         v.set_cruise_speed();
         v.step();
         assert_eq!(v.pos, TileCoord::new(0, 0));
+    }
+
+    #[test]
+    fn ship_cb36_speed_is_fractioned_after_callback() {
+        use crate::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        // A nvar=0 Action2 returns 80 for CB36 (PROP_SHIP_SPEED).  The
+        // native Ship::UpdateCache then applies the ocean fraction to that
+        // callback result, not to the Action0 catalogue speed.
+        let mut runtime = TrainSpriteGraphics::default();
+        runtime.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        runtime.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: 80,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+
+        let mut engine = crate::engine::engines_table()
+            .iter()
+            .find(|candidate| candidate.kind == VehicleKind::Ship)
+            .cloned()
+            .expect("motor marítimo vanilla");
+        engine.id = 65_103;
+        engine.newgrf_grfid = 0x5348_4950;
+        engine.newgrf_local_id = 0;
+        engine.ocean_speed_frac = 128;
+        engine.canal_speed_frac = 64;
+        engine.newgrf_runtime = Some(Box::new(runtime));
+
+        let pos = TileCoord::new(1, 1);
+        let mut vehicle = Vehicle::new(1, VehicleKind::Ship, pos, pos);
+        vehicle.engine_id = Some(engine.id);
+        let mut map = crate::Map::new_flat(4, 4, 0);
+        crate::map::make_water_tile(&mut map, pos, crate::map::WaterClass::Sea)
+            .expect("crear tesela de mar");
+        assert_eq!(map.get_kind(pos), Some(TileKind::Water));
+
+        let catalog = vec![engine];
+        let raw = crate::newgrf_callback::vehicle_max_speed(&catalog[0], &mut vehicle);
+        assert_eq!(raw, 80);
+        assert_eq!(ship_max_speed(&mut vehicle, Some(&map), &catalog), 40);
     }
 
     #[test]

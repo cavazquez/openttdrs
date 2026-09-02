@@ -189,13 +189,29 @@ pub fn engine_tractive_effort(engine: &super::EngineDef) -> u8 {
 /// Velocidad máxima de barco según tesela (océano vs canal). `frac == 0` → 256/256.
 #[must_use]
 pub fn ship_speed_for_tile(engine: &super::EngineDef, is_canal: bool) -> u16 {
+    ship_speed_for_tile_with_speed(engine, engine.max_speed, is_canal)
+}
+
+/// Velocidad máxima de barco con la propiedad `PROP_SHIP_SPEED` ya resuelta.
+///
+/// `Ship::UpdateCache` en `OpenTTD` primero consulta `GetVehicleProperty` (que
+/// puede ejecutar CB36) y recién después aplica la fracción de agua. Mantener
+/// este helper separado conserva la API histórica de [`ship_speed_for_tile`]
+/// para callers que sólo tienen el catálogo, pero permite que el movimiento
+/// no descarte una velocidad dinámica del `NewGRF`.
+#[must_use]
+pub fn ship_speed_for_tile_with_speed(
+    engine: &super::EngineDef,
+    raw_speed: u16,
+    is_canal: bool,
+) -> u16 {
     let frac = if is_canal {
         engine.canal_speed_frac
     } else {
         engine.ocean_speed_frac
     };
     let frac = if frac == 0 { 256u32 } else { u32::from(frac) };
-    let speed = u32::from(engine.max_speed).saturating_mul(frac) / 256;
+    let speed = u32::from(raw_speed).saturating_mul(frac) / 256;
     u16::try_from(speed).unwrap_or(u16::MAX).max(1)
 }
 

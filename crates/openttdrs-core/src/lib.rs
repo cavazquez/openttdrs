@@ -252,11 +252,11 @@ pub use engine::{
     get_advance_distance, get_advance_speed, get_curve_speed_limit, next_free_engine_id,
     progress_step_for_speed, road_default_air_drag, road_engine_air_drag,
     road_engine_tractive_effort, road_max_te_n, road_realistic_acceleration, road_rolling_friction,
-    scale_train_air_drag, ship_speed_for_tile, tile_progress_length, train_acceleration,
-    train_default_air_drag, train_max_te_n, train_realistic_acceleration,
-    train_realistic_station_max_speed, train_smoke_kind, train_sprite_group,
-    train_visual_progress_from_motion, train_visual_progress_from_pixel, update_road_speed,
-    update_road_vehicle_speed, update_train_speed, vanilla_engine_catalog,
+    scale_train_air_drag, ship_speed_for_tile, ship_speed_for_tile_with_speed,
+    tile_progress_length, train_acceleration, train_default_air_drag, train_max_te_n,
+    train_realistic_acceleration, train_realistic_station_max_speed, train_smoke_kind,
+    train_sprite_group, train_visual_progress_from_motion, train_visual_progress_from_pixel,
+    update_road_speed, update_road_vehicle_speed, update_train_speed, vanilla_engine_catalog,
     vanilla_train_tractive_effort,
 };
 pub use entity_history::{

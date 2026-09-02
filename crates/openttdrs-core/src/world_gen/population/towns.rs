@@ -1756,20 +1756,11 @@ fn grow_generated_town_road_in_tile(
         let Some(mut target_dir) = target_dir else {
             return GeneratedRoadGrowthResult::SearchStopped;
         };
-        let clearable = map.get(tile).is_some_and(|candidate| {
-            matches!(candidate.kind, TileKind::Grass | TileKind::Forest)
-                // La construcción de una calle nueva recurre a
-                // `CMD_LANDSCAPE_CLEAR(NoWater)`, que puede despejar coast.
-                || (candidate.kind == TileKind::Water && !has_tile_water_ground(candidate))
-        });
-        if !clearable {
-            return GeneratedRoadGrowthResult::SearchStopped;
-        }
-
-        // A diferencia del bootstrap, `GrowTownInTile` puede nivelar una
-        // pendiente antes de poner carretera. En tierra recién generada la
-        // primera alternativa nativa (elevar las esquinas bajas) es
-        // suficiente y deja la misma pendiente que verá `IsRoadAllowedHere`.
+        // `GrowTownInTile` sortea `LevelTownLand` antes de consultar
+        // `IsRoadAllowedHere`, incluso cuando la tesela ya está ocupada por
+        // una casa, agua o queda fuera del mapa. `LevelTownLand` falla sin
+        // mutar esos tipos, pero el `Chance16` sigue siendo observable en el
+        // flujo RNG (RMAP-135).
         if chance16(rng, 1, 6) {
             let _ = level_generated_town_land(map, tile);
         }
@@ -5132,6 +5123,46 @@ mod tests {
             &mut water_rng,
         ));
         assert!(generated_can_follow_town_road(&map, town.pos, 2));
+    }
+
+    #[test]
+    fn generated_town_growth_consumes_slope_chance_on_occupied_tile() {
+        // `GrowTownInTile` sortea `LevelTownLand` antes de rechazar una casa
+        // ocupada en `IsRoadAllowedHere`. Aunque el comando de terraformación
+        // no modifique la casa, esa palabra mantiene alineado el RNG de las
+        // llamadas siguientes (RMAP-135).
+        let mut map = Map::new_flat(8, 8, 1);
+        let tile = TileCoord::new(3, 3);
+        map.set_kind(tile, TileKind::House).expect("occupied tile");
+        let mut town = Town {
+            layout: TownLayout::Original,
+            ..Town::default()
+        };
+        let context = GeneratedTownGrowthContext {
+            climate: Climate::Temperate,
+            snow_line_height: 0,
+            calendar_year: 1950,
+            bridge_spec_catalog: Vec::new(),
+        };
+        let mut rng = Randomizer {
+            state: [0x1234_5678, 0x9ABC_DEF0],
+        };
+        let mut expected = rng;
+        let _ = chance16(&mut expected, 1, 6);
+
+        let result = grow_generated_town_road_in_tile(
+            &mut map,
+            &mut town,
+            tile,
+            0,
+            Some(0),
+            &context,
+            &mut rng,
+        );
+
+        assert!(matches!(result, GeneratedRoadGrowthResult::SearchStopped));
+        assert_eq!(rng, expected);
+        assert_eq!(map.get_kind(tile), Some(TileKind::House));
     }
 
     #[test]

@@ -349,3 +349,27 @@ exacta en las seis fronteras: **0 teselas, 0 bytes y 0 bloques 4×4** en
 1.048.576 teselas. El cierre sólo cubre la geometría de esta consulta y esta
 cohorte; otras longitudes, puentes/túneles, semillas, tamaños y ticks siguen
 abiertos en los issues padres.
+
+### RMAP-135 — Consumir `LevelTownLand` antes de rechazar una tesela ocupada
+
+**Estado: cerrado (sub-issue acotado de RMAP-004/RMAP-024/RMAP-027/RMAP-030).**
+La primera divergencia de la cohorte temperate 1024²/seed `1330935387` estaba
+en `towns`: después de la llamada 111 del pueblo `253`, OpenTTD consumía un
+`Chance16(1,6)` al visitar `(19,487)`, una casa ya existente sin bits de
+carretera. Rust devolvía antes por una preselección de tesela "despejable" y
+no hacía ese sorteo; el siguiente crecimiento construía la calle `(20,478)`
+con bytes distintos y terminaba seleccionando la casa `(18,483)` en lugar de
+`(21,483)` (3 teselas/3 bloques 4×4).
+
+La rama `cur_rb == 0` ya no filtra el tipo de tesela antes de ejecutar el
+`Chance16`: llama al `LevelTownLand` seguro (que no modifica casas, agua ni
+bordes) y recién después consulta `IsRoadAllowedHere`, reproduciendo la
+frontera RNG nativa. La regresión
+`generated_town_growth_consumes_slope_chance_on_occupied_tile` verifica el
+consumo y que la casa permanezca intacta. La comparación
+`generation_phase_parity.py --size 1024 --seed 1330935387 --climate temperate
+--phases towns --require-exact` queda exacta (**0 teselas/0 bloques 4×4**); la
+corrida completa de las seis fases queda como validación final de esta etapa.
+El cierre sólo cubre este orden de sorteo y esta cohorte; otras semillas,
+tamaños, layouts, climas y fases posteriores siguen abiertos en los issues
+padres.

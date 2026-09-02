@@ -174,6 +174,68 @@ fn train_consist_attach_wagon_grows_capacity_and_length() {
 }
 
 #[test]
+fn attach_newgrf_wagon_refreshes_callback_consist_cache() {
+    use crate::engine::engines_table;
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+
+    let mut state = GameState::new(8, 8);
+    let depot = TileCoord::new(3, 3);
+    state.map.set_kind(depot, TileKind::RailDepot).unwrap();
+
+    let mut runtime = TrainSpriteGraphics::default();
+    runtime.assigns.push(TrainSpriteAssign {
+        local_id: 0,
+        set_id: 2,
+    });
+    runtime.action2_var.insert(
+        2,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x1A,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: 77,
+                    ..Action2VarAdjust::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+    let mut wagon_engine = engines_table()
+        .iter()
+        .find(|candidate| candidate.is_wagon())
+        .cloned()
+        .unwrap();
+    wagon_engine.id = 65_105;
+    wagon_engine.newgrf_grfid = 0x5741_474E;
+    wagon_engine.newgrf_local_id = 0;
+    wagon_engine.newgrf_runtime = Some(Box::new(runtime));
+    state.engine_catalog.push(wagon_engine.clone());
+
+    let head_id = 1;
+    let wagon_id = 2;
+    let mut head = Vehicle::new(head_id, VehicleKind::Train, depot, depot);
+    head.engine_id = Some(crate::engine::ENGINE_TRAIN_KIRBY);
+    let mut wagon = Vehicle::new(wagon_id, VehicleKind::Train, depot, depot);
+    wagon.engine_id = Some(wagon_engine.id);
+    state.vehicles.extend([head, wagon]);
+
+    apply_command(
+        &mut state,
+        &Command::AttachWagonToConsist { head_id, wagon_id },
+    )
+    .unwrap();
+
+    let head = state.vehicles.iter().find(|v| v.id == head_id).unwrap();
+    assert_eq!(head.next_unit, Some(wagon_id));
+    assert_eq!(head.capacity, 77);
+}
+
+#[test]
 fn train_consist_sell_head_sells_chain() {
     let mut s = SandboxMap::flat_rich(12, 12, 1);
     for x in 2..=6_i32 {

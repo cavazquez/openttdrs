@@ -1554,7 +1554,12 @@ impl GameState {
             .map(|vehicle| vehicle.id)
             .collect();
         for head in train_heads {
-            crate::train_consist::consist_changed(&mut state.vehicles, head);
+            crate::train_consist::consist_changed_with_map_and_catalog(
+                &mut state.vehicles,
+                head,
+                Some(&state.map),
+                &state.engine_catalog,
+            );
         }
 
         // En saves modernos `VEHS.common.orders` es una referencia al pool

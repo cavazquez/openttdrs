@@ -507,3 +507,15 @@ CB36 que devuelve 80 con fracción oceánica 128/256 (resultado 40). Las
 fracciones por clase de agua y los límites de puentes siguen aplicándose; las
 otras propiedades runtime de vehículos, APIs legacy sin catálogo y scopes
 avanzados mantienen abierto #329.
+
+Actualización #329-VEHICLE-CONSIST-003 (2026-09-02): las operaciones de depósito
+que cambian la topología (`AttachWagonToConsist`, `DetachConsistUnit`,
+`MoveRailVehicle` y venta) vuelven a calcular `ConsistChanged` con el catálogo
+activo y el mapa, en vez de dejar la caché vanilla que escribían los helpers
+legacy. La importación `.sav` también reatacha los trenes y refresca capacidad,
+velocidad, potencia, peso y esfuerzo tractor con los callbacks CB36 disponibles;
+la validación de enganche acepta IDs de motores NewGRF presentes en el catálogo.
+`attach_newgrf_wagon_refreshes_callback_consist_cache` comprueba que una
+capacidad dinámica 77 se conserva en la cabeza después de enganchar el vagón.
+Las cadenas articuladas avanzadas, las APIs directas sin catálogo y otras
+propiedades Action0 siguen abiertas; #329 no se cierra.

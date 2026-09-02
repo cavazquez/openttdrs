@@ -351,6 +351,10 @@ La capacidad dinámica durante la partida ya se refresca al entrar en
 los factores de compra/explotación de CB36 también se aplican al construir,
 vender, autoreemplazar, valorar activos y cobrar el coste anual. Quedan las
 APIs legacy sin catálogo y el resto de propiedades Action0.
+Las operaciones de depósito y la importación SAV refrescan `ConsistChanged`
+contra el catálogo activo después de acoplar, desacoplar, mover o vender
+unidades, por lo que las cachés de capacidad, velocidad, potencia, peso y
+esfuerzo tractor no vuelven a la tabla vanilla.
 La predicción ferroviaria de salida de tesela usada por las señales y la salida
 de depósito también recibe el catálogo activo: `PROP_TRAIN_SPEED` (`0x09`) se
 resuelve sobre una copia del vehículo y limita los dos pasos especulativos del

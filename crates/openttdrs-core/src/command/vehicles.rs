@@ -592,7 +592,10 @@ fn attach_wagon_to_consist_ex(
     }
     let wagon_eng = wagon
         .engine_id
-        .and_then(crate::engine::engine_by_id)
+        .and_then(|id| {
+            crate::engine::engine_in_catalog(&state.engine_catalog, id)
+                .or_else(|| crate::engine::engine_by_id(id))
+        })
         .ok_or(CommandError::EngineNotFound)?;
     if !wagon_eng.is_wagon() && wagon.prev_unit.is_some() {
         return Err(CommandError::VehicleKindNotAllowed);
@@ -604,6 +607,12 @@ fn attach_wagon_to_consist_ex(
     };
     attach(&mut state.vehicles, head_id, wagon_id)
         .map_err(|()| CommandError::VehicleKindNotAllowed)?;
+    crate::train_consist::consist_changed_with_map_and_catalog(
+        &mut state.vehicles,
+        head_id,
+        Some(&state.map),
+        &state.engine_catalog,
+    );
     Ok(())
 }
 
@@ -620,8 +629,27 @@ pub(super) fn detach_consist_unit(state: &mut GameState, unit_id: u32) -> Result
     if !matches!(state.map.get_kind(unit.pos), Some(TileKind::RailDepot)) {
         return Err(CommandError::VehicleNotInDepot);
     }
+    let old_head = crate::train_consist::consist_head_id(&state.vehicles, unit_id);
     crate::train_consist::detach_unit(&mut state.vehicles, unit_id)
         .map_err(|()| CommandError::VehicleNotFound)?;
+    let mut heads = vec![unit_id];
+    if let Some(old_head) = old_head {
+        heads.push(old_head);
+    }
+    for head_id in heads {
+        if state
+            .vehicles
+            .iter()
+            .any(|vehicle| vehicle.id == head_id && vehicle.is_consist_head())
+        {
+            crate::train_consist::consist_changed_with_map_and_catalog(
+                &mut state.vehicles,
+                head_id,
+                Some(&state.map),
+                &state.engine_catalog,
+            );
+        }
+    }
     Ok(())
 }
 
@@ -645,6 +673,7 @@ pub(super) fn move_rail_vehicle(
     if !matches!(state.map.get_kind(unit.pos), Some(TileKind::RailDepot)) {
         return Err(CommandError::VehicleNotInDepot);
     }
+    let old_head = crate::train_consist::consist_head_id(&state.vehicles, unit_id);
     if move_chain {
         crate::train_consist::detach_unit_keep_tail(&mut state.vehicles, unit_id)
             .map_err(|()| CommandError::VehicleNotFound)?;
@@ -656,7 +685,22 @@ pub(super) fn move_rail_vehicle(
         .and_then(|aid| crate::train_consist::consist_head_id(&state.vehicles, aid))
         .unwrap_or(head_id);
     // Enganchar al final del consist (MVP: no inserta en medio).
-    attach_wagon_to_consist_ex(state, attach_head, unit_id, move_chain)
+    attach_wagon_to_consist_ex(state, attach_head, unit_id, move_chain)?;
+    if let Some(old_head) = old_head
+        && old_head != attach_head
+        && state
+            .vehicles
+            .iter()
+            .any(|vehicle| vehicle.id == old_head && vehicle.is_consist_head())
+    {
+        crate::train_consist::consist_changed_with_map_and_catalog(
+            &mut state.vehicles,
+            old_head,
+            Some(&state.map),
+            &state.engine_catalog,
+        );
+    }
+    Ok(())
 }
 
 pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(), CommandError> {
@@ -702,7 +746,12 @@ pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(),
         .map(|v| v.id)
         .collect();
     for hid in heads {
-        crate::train_consist::consist_changed(&mut state.vehicles, hid);
+        crate::train_consist::consist_changed_with_map_and_catalog(
+            &mut state.vehicles,
+            hid,
+            Some(&state.map),
+            &state.engine_catalog,
+        );
     }
     state.credit_company(owner, refund_total);
     Ok(())

@@ -1087,7 +1087,10 @@ fn write_indy_produced(
     Ok(())
 }
 
-fn indy_records_with_cargo(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>, SavError> {
+pub(super) fn indy_records_with_cargo(
+    state: &GameState,
+    map_w: u32,
+) -> Result<Vec<Vec<u8>>, SavError> {
     let mut out = Vec::with_capacity(state.industries.len());
     for ind in &state.industries {
         let Some(tile_idx) = coord_to_linear_index(ind.pos, map_w) else {

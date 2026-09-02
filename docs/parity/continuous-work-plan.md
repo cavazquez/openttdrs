@@ -588,3 +588,12 @@ lista, se usa el encoder canónico y no se conserva una referencia obsoleta.
 `imported_vehs_body_is_reused_until_vehicle_semantics_change` verifica `ORDL`
 y `VEHS` en conjunto. La fusión parcial tras mutaciones y las tablas
 `STNN`/`CITY`/`INDY` siguen pendientes; #329 no se cierra.
+
+Actualización #329-VEHICLE-SAV-TABLES-011 (2026-09-02): el snapshot de
+interoperabilidad se extendió a `STNN`, `CITY` e `INDY`. En cargar→guardar sin
+cambiar estaciones, ciudades o industrias se reemiten sus cuerpos nativos y
+sus columnas futuras permanecen intactas; una mutación semántica cae al
+encoder canónico, igual que `ORDL`/`VEHS`. La huella es por filas y no inventa
+campos nuevos cuando cambia el conjunto de entidades. La fusión parcial de
+columnas tras una mutación y los demás pools nativos siguen pendientes; #329
+permanece abierto.

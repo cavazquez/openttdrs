@@ -189,6 +189,13 @@ La regresión `imported_vehs_body_is_reused_until_vehicle_semantics_change`
 cubre la pareja `ORDL`/`VEHS`. La fusión parcial y las columnas desconocidas de
 `STNN`/`CITY`/`INDY` siguen pendientes.
 
+Actualización #329-VEHICLE-SAV-TABLES-011 (2026-09-02): `STNN`, `CITY` e
+`INDY` también guardan el cuerpo original y su huella semántica. Los ciclos
+SAV sin cambios de estaciones, ciudades o industrias conservan columnas
+futuras; cualquier diferencia de filas activa la serialización canónica para
+evitar datos obsoletos. La fusión parcial posterior y los demás pools nativos
+siguen pendientes.
+
 La tabla de variables relativas conserva el parámetro `ExtendedByte` completo
 (WORD, hasta 14 bits) para `61 → 0x60`; los IDs locales superiores a `0xFF` no
 se aliasan con el motor vanilla de id cero.

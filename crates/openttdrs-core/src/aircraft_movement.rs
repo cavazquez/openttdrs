@@ -68,7 +68,9 @@ pub fn tick_aircraft_phase_with_catalog(
         return AircraftPhaseEvent::None;
     }
     // Country/Small: motor FTA cuando aplica.
-    if let Some(ev) = crate::airport_fta::tick_country_airport_fta(v, map, stations) {
+    if let Some(ev) =
+        crate::airport_fta::tick_country_airport_fta_with_catalog(v, map, stations, engine_catalog)
+    {
         return ev;
     }
     match v.aircraft_phase {

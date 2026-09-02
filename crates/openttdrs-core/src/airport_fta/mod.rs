@@ -46,7 +46,8 @@ pub use oilrig::{OILRIG_ENTRIES, OILRIG_MOVING_DATA, OILRIG_NOF_ELEMENTS, oilrig
 pub use profile::fta_profile_for_spec;
 pub use tick::{
     airport_nw_origin, init_airport_fta_on_purchase, init_country_fta_on_purchase,
-    station_uses_airport_fta, station_uses_country_fta, tick_airport_fta, tick_country_airport_fta,
+    station_uses_airport_fta, station_uses_country_fta, tick_airport_fta,
+    tick_airport_fta_with_catalog, tick_country_airport_fta, tick_country_airport_fta_with_catalog,
 };
 pub use types::{
     AirportBlockBits, AirportFtaEdge, AirportFtaKind, AirportFtaProfile, AirportHeading,

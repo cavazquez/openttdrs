@@ -529,3 +529,14 @@ capacidad NewGRF no conserva la del motor anterior durante el tick de salida.
 El refresco de capacidades en `LoadUnloadStation` sigue siendo necesario para
 callbacks que dependan del estado que cambia durante la partida, por lo que
 #329 permanece abierto.
+
+Actualización #329-VEHICLE-AIRPORT-005 (2026-09-02): la salida de una
+aeronave desde la FTA del aeropuerto ya conserva el catálogo activo hasta
+`finish_takeoff`. El cierre de despegue resuelve `PROP_AIRCRAFT_SPEED`
+(`CB36`, `0x0C`) sobre el motor NewGRF y reinicia `subspeed`, igual que las
+rutas de despegue no-FTA; antes esa transición llamaba al helper vanilla y
+podía recuperar `EngineDef::max_speed` aunque el resto del vuelo ya usara el
+catálogo. La regresión
+`finish_takeoff_uses_active_catalog_speed_callback` fija un callback que
+reduce la velocidad al abandonar la pista. El scope de aeropuerto y las APIs
+legacy sin catálogo siguen abiertos, por lo que #329 no se cierra.

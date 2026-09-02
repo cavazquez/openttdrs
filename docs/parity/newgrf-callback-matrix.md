@@ -138,6 +138,15 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 
 ## Residual explícito (no bloquea cierre MVP #266)
 
+Actualización #329-VEHICLE-AIRPORT-005 (2026-09-02): el controlador de la FTA
+de aeropuertos recibe ahora el catálogo activo desde
+`tick_aircraft_phase_with_catalog`; `finish_takeoff` consulta
+`PROP_AIRCRAFT_SPEED` (`0x0C`) mediante CB36 antes de volver a crucero y
+reinicia `subspeed`. La API legacy conserva el fallback vanilla pasando un
+catálogo vacío. La regresión `finish_takeoff_uses_active_catalog_speed_callback`
+cubre la transición de salida desde pista. El resto de propiedades/call sites
+de vehículos y los scopes avanzados siguen en estado parcial.
+
 La tabla de variables relativas conserva el parámetro `ExtendedByte` completo
 (WORD, hasta 14 bits) para `61 → 0x60`; los IDs locales superiores a `0xFF` no
 se aliasan con el motor vanilla de id cero.

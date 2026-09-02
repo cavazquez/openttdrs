@@ -56,7 +56,18 @@ pub fn tick_country_airport_fta(
     map: &Map,
     stations: &mut [Station],
 ) -> Option<AircraftPhaseEvent> {
-    tick_airport_fta(v, map, stations)
+    tick_country_airport_fta_with_catalog(v, map, stations, &[])
+}
+
+/// Variante de [`tick_country_airport_fta`] que conserva el catálogo activo
+/// para callbacks `NewGRF` ejecutados al abandonar la pista.
+pub fn tick_country_airport_fta_with_catalog(
+    v: &mut Vehicle,
+    map: &Map,
+    stations: &mut [Station],
+    engine_catalog: &[crate::engine::EngineDef],
+) -> Option<AircraftPhaseEvent> {
+    tick_airport_fta_with_catalog(v, map, stations, engine_catalog)
 }
 
 /// Tick FTA para specs soportados hasta Helistation.
@@ -64,6 +75,17 @@ pub fn tick_airport_fta(
     v: &mut Vehicle,
     map: &Map,
     stations: &mut [Station],
+) -> Option<AircraftPhaseEvent> {
+    tick_airport_fta_with_catalog(v, map, stations, &[])
+}
+
+/// Variante de [`tick_airport_fta`] que resuelve propiedades runtime contra
+/// el catálogo de la partida (incluidos motores creados por Action0).
+pub fn tick_airport_fta_with_catalog(
+    v: &mut Vehicle,
+    map: &Map,
+    stations: &mut [Station],
+    engine_catalog: &[crate::engine::EngineDef],
 ) -> Option<AircraftPhaseEvent> {
     if v.kind != VehicleKind::Aircraft || !v.running {
         return None;
@@ -118,9 +140,14 @@ pub fn tick_airport_fta(
         return Some(ev);
     }
     if should_finish_takeoff(v, &profile) {
-        return Some(finish_takeoff(v, &mut stations[st_idx]));
+        return Some(finish_takeoff(v, &mut stations[st_idx], engine_catalog));
     }
-    Some(advance_fta_node(v, &mut stations[st_idx], &profile))
+    Some(advance_fta_node(
+        v,
+        &mut stations[st_idx],
+        &profile,
+        engine_catalog,
+    ))
 }
 
 fn try_enter_approach(v: &mut Vehicle, stations: &[Station]) -> Option<AircraftPhaseEvent> {
@@ -197,6 +224,7 @@ fn advance_fta_node(
     v: &mut Vehicle,
     station: &mut Station,
     profile: &AirportFtaProfile,
+    engine_catalog: &[crate::engine::EngineDef],
 ) -> AircraftPhaseEvent {
     let prev = v.airport_pos;
     nudge_heading_at_node(v, profile);
@@ -205,7 +233,7 @@ fn advance_fta_node(
         if should_finish_takeoff(v, profile)
             || (profile.fixedwing_takeoff_pos == Some(v.airport_pos))
         {
-            return finish_takeoff(v, station);
+            return finish_takeoff(v, station, engine_catalog);
         }
         return AircraftPhaseEvent::None;
     };
@@ -217,7 +245,7 @@ fn advance_fta_node(
             AirportHeading::HeliTakeoff | AirportHeading::EndTakeoff
         )
     {
-        return finish_takeoff(v, station);
+        return finish_takeoff(v, station, engine_catalog);
     }
 
     // Multi-avión: no pisar reservas ajenas; mantener las propias hasta poder avanzar.
@@ -865,7 +893,11 @@ fn update_heading_for_orders(v: &mut Vehicle, station: &Station, kind: AirportFt
     }
 }
 
-fn finish_takeoff(v: &mut Vehicle, station: &mut Station) -> AircraftPhaseEvent {
+fn finish_takeoff(
+    v: &mut Vehicle,
+    station: &mut Station,
+    engine_catalog: &[crate::engine::EngineDef],
+) -> AircraftPhaseEvent {
     release_held_blocks(station, v);
     v.airport_fta_active = false;
     v.airport_fta_station = None;
@@ -878,7 +910,9 @@ fn finish_takeoff(v: &mut Vehicle, station: &mut Station) -> AircraftPhaseEvent 
     v.airport_subpos_valid = false;
     v.path = straight_line_path(v.pos, v.dest).into();
     v.progress = 0;
-    v.set_cruise_speed();
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
+    v.cur_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
+    v.subspeed = 0;
     AircraftPhaseEvent::None
 }
 
@@ -1325,4 +1359,67 @@ fn move_towards_waypoint(
         return true;
     }
     false
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::engine::{ENGINE_AIRCRAFT_DAKOTA, engine_by_id};
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+    use crate::station::StopKind;
+
+    fn speed_callback(value: u32) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: value,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
+    #[test]
+    fn finish_takeoff_uses_active_catalog_speed_callback() {
+        let engine_id = 50_001;
+        let mut engine = engine_by_id(ENGINE_AIRCRAFT_DAKOTA).unwrap().clone();
+        engine.id = engine_id;
+        engine.newgrf_grfid = 0x4654_4135;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(speed_callback(37)));
+
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Aircraft,
+            TileCoord::new(4, 4),
+            TileCoord::new(20, 20),
+        );
+        vehicle.engine_id = Some(engine_id);
+        vehicle.cur_speed = engine.max_speed;
+        vehicle.subspeed = 9;
+        let mut station = Station::new_with_kind(TileCoord::new(4, 4), StopKind::Airport);
+
+        finish_takeoff(&mut vehicle, &mut station, &[engine]);
+
+        assert_eq!(vehicle.aircraft_phase, AircraftPhase::Flying);
+        assert_eq!(vehicle.cur_speed, 37);
+        assert_eq!(vehicle.subspeed, 0);
+    }
 }

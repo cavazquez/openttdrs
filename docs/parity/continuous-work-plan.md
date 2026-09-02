@@ -353,6 +353,12 @@ bit 10 para GRF 7 antes de aceptar/rechazar cada tesela del footprint, tanto
 en query como en execute, sin cobrar ni mutar parcialmente. Permanecen fuera
 los scopes/vecinos completos, strings de error y callbacks adicionales.
 
+Actualización #329-INDUSTRY-CB28-021 (2026-09-02): las industrias NewGRF
+conservan ahora la versión Action8 junto a su catálogo. CB28 normaliza el bit
+10 para GRF anteriores a la versión 8 antes de autorizar la fundación; la
+prueba cargada cubre rechazo en GRF 8 y aceptación en GRF 7. Siguen fuera los
+scopes/parametrización completos y los strings de error GRF.
+
 ### Avance NewGRF — 2026-08-27
 
 La ruta de tile loop de `IndustryTile` ahora recibe los catálogos y pools de

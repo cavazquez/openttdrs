@@ -2110,6 +2110,7 @@ mod tests {
             name: "Dual producer".into(),
             from_newgrf: true,
             grfid: 1,
+            newgrf_grf_version: 0,
             newgrf_local_id: 0,
             newgrf_runtime: None,
         };
@@ -2149,6 +2150,7 @@ mod tests {
             name: "Dual processor".into(),
             from_newgrf: true,
             grfid: 1,
+            newgrf_grf_version: 0,
             newgrf_local_id: 1,
             newgrf_runtime: None,
         };

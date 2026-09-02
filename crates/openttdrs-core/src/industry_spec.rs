@@ -80,6 +80,9 @@ pub struct IndustrySpecDef {
     pub name: String,
     pub from_newgrf: bool,
     pub grfid: u32,
+    /// Versión de formato Action8 del GRF dueño (para callbacks de ubicación).
+    #[serde(default)]
+    pub newgrf_grf_version: u8,
     /// Runtime Action2 para CBs de industria (#266); no se serializa.
     #[serde(default, skip)]
     pub newgrf_local_id: u8,
@@ -325,6 +328,7 @@ mod tests {
             name: String::new(),
             from_newgrf: true,
             grfid: 1,
+            newgrf_grf_version: 0,
             newgrf_local_id: 0,
             newgrf_runtime: None,
         }];

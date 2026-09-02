@@ -11,6 +11,10 @@ use super::error::CommandError;
 use super::types::LevelMode;
 use super::util::in_bounds;
 
+/// Legacy command limit used when a `GameState` has no resolved construction
+/// setting. New-game industry platforms pass their effective map limit
+/// explicitly; keeping this default at 15 preserves the original manual
+/// terraform contract for old callers.
 const MAP_HEIGHT_LIMIT: u8 = 15;
 const MAX_CORNER_STEPS: u8 = 32;
 const MAPT_WATER: u8 = 0x60;
@@ -25,6 +29,7 @@ struct TerraformModel<'a> {
     heights: HashMap<CornerKey, u8>,
     dirty_tiles: HashSet<TileCoord>,
     cost: i64,
+    max_height: u8,
     allow_water_source: bool,
     cost_per_corner: i64,
     /// Solo exige `Grass`/`Forest` en esta tesela (autoslope junto a vías vecinas).
@@ -38,6 +43,7 @@ impl<'a> TerraformModel<'a> {
             heights: HashMap::new(),
             dirty_tiles: HashSet::new(),
             cost: 0,
+            max_height: MAP_HEIGHT_LIMIT,
             allow_water_source,
             cost_per_corner,
             primary_tile: None,
@@ -46,6 +52,11 @@ impl<'a> TerraformModel<'a> {
 
     fn with_primary_tile(mut self, c: TileCoord) -> Self {
         self.primary_tile = Some(c);
+        self
+    }
+
+    fn with_max_height(mut self, max_height: u8) -> Self {
+        self.max_height = max_height;
         self
     }
 
@@ -80,7 +91,7 @@ impl<'a> TerraformModel<'a> {
         if target == current {
             return Ok(());
         }
-        if target > MAP_HEIGHT_LIMIT {
+        if target > self.max_height {
             return Err(CommandError::TerrainTooHigh);
         }
 
@@ -101,7 +112,7 @@ impl<'a> TerraformModel<'a> {
                 if next < 0 {
                     return Err(CommandError::TerrainTooLow);
                 }
-                if next > i16::from(MAP_HEIGHT_LIMIT) {
+                if next > i16::from(self.max_height) {
                     return Err(CommandError::TerrainTooHigh);
                 }
                 let next_u8 = u8::try_from(next).map_err(|_| CommandError::TerrainTooHigh)?;
@@ -219,6 +230,7 @@ pub(crate) fn simulate_generated_terraform_north_corner(
     map: &Map,
     c: TileCoord,
     raise: bool,
+    max_height: u8,
 ) -> Option<GeneratedTerraformStep> {
     let current = map.get(c)?.height;
     let target = if raise {
@@ -226,7 +238,7 @@ pub(crate) fn simulate_generated_terraform_north_corner(
     } else {
         current.checked_sub(1)?
     };
-    let mut model = TerraformModel::new(map, false, 0);
+    let mut model = TerraformModel::new(map, false, 0).with_max_height(max_height);
     model.terraform_north_corner(c.x, c.y, target).ok()?;
     model.validate_terraformable().ok()?;
 

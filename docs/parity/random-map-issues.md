@@ -143,6 +143,7 @@ tiene un criterio verificable y apunta a la evidencia; no se declaran como
 | **RMAP-123** | Rechazar `MP_VOID` al ensanchar ríos y conservar el suelo `RoughSnow` de `MAP2` durante el tile loop ártico. | **Cerrado (sub-issue acotado de RMAP-004/RMAP-018)** | `river_make_wider` replica `IsValidTile` y no materializa una expansión contra el marco `MP_VOID`; antes añadía teselas en el borde libre y desplazaba el RNG de toda la fase. El crecimiento de árboles lee/escribe el `MAP2` completo de 16 bits, por lo que `RoughSnow` (valor `0x0100`, byte alto) ya no se interpreta como Grass de densidad cero ni se convierte en `0x0110`. La regresión `arctic_tree_growth_preserves_rough_snow_ground_high_map2_byte` cubre el byte alto y el consumo RNG. `generation_phase_parity.py --size 512 --seed 1330935378 --climate arctic --phases landscape,clear,towns,industries,objects,trees --require-exact` queda exacto en las seis fronteras: **0 teselas y 0 bloques 4×4 distintos**. El cierre está limitado a esta semilla/configuración; RMAP-004/RMAP-018 mantienen abiertas otras semillas, tamaños, settings de río, climas y fases posteriores. |
 | **RMAP-124** | Rechazo nativo de puentes municipales con cabezas a distinta altura efectiva. | **Cerrado (sub-issue acotado de RMAP-004/RMAP-024/RMAP-030/RMAP-082)** | `generated_town_road_bridge_command_supported` canoniza los extremos por índice lineal y replica `CheckBridgeSlope`: valida la pendiente de cada pieza, aplica el cimiento de puente y exige que ambas cabezas queden al mismo nivel antes de aceptar el tipo de puente. Antes se materializaba un puente plano sobre un río cuya orilla opuesta estaba un nivel más baja; OpenTTD rechazaba los 23 tipos y continuaba con carretera, desplazando toda la secuencia urbana (seed ártica `1330935380`, 512²: 9733 teselas/1458 bloques 4×4). La regresión `flat_town_bridge_rejects_heads_at_different_effective_heights` fija la frontera sin consumo RNG. `generation_phase_parity.py --size 512 --climate arctic --phases landscape,clear,towns,industries,objects,trees --require-exact` da **0 teselas y 0 bloques 4×4** en las cuatro seeds `1330935378`–`1330935381` y las seis fases. El cierre sólo cubre esta cohorte; los padres mantienen abiertas otras semillas, tamaños, climas, configuraciones de río y geometrías urbanas. |
 | **RMAP-125** | Primera divergencia de industrias en mapa ártico grande (1024²). | **Cerrado (sub-issue acotado de RMAP-004/RMAP-056)** | La divergencia de **59.558 teselas y 6.038 bloques 4×4** en `industries` provenía de truncar `IndustryID` a `u8`: OpenTTD conserva el identificador completo en los dos bytes de `MAP2`, mientras el candidato hacía colisionar todos los IDs desde 256. `Industry.instance_id`, la vinculación de teselas, campos de granja, hidratación SAV, colocación y render ahora usan `u16` y escriben/leen `m2`+`m2_hi`. La regresión `link_preserves_the_high_map2_byte_for_large_industry_ids` cubre el caso 0x0105. `generation_phase_parity.py --size 1024 --seed 1330935378 --climate arctic --phases landscape,clear,towns,industries,objects,trees --require-exact` queda exacto en las seis fronteras: **0 teselas y 0 bloques 4×4** en cada fase; `objects` y `trees` también son byte a byte exactos. El cierre sólo cubre esta semilla/configuración; RMAP-004/RMAP-056 mantienen abiertas otras semillas, tamaños, climas, configuraciones de río, industrias acuáticas y callbacks/runtime NewGRF. |
+| **RMAP-136** | Primera divergencia de industrias en mapa temperate 2048²: nivelado de plataformas sobre el límite histórico de 15. | **Cerrado (sub-issue acotado de RMAP-004/RMAP-056)** | OpenTTD resuelve `construction.map_height_limit = 0` a un límite efectivo de al menos 30 durante una partida nueva. El simulador Rust de `CmdTerraformLand` conservaba el tope histórico 15 también para `CheckIfCanLevelIndustryPlatform`, rechazaba la primera plataforma válida con esquina 16 y desplazaba la selección desde el `IndustryID` 34 (804.066 teselas/84.706 bloques 4×4). `TerraformModel` mantiene el tope 15 para comandos manuales antiguos, pero la pasada de industrias recibe `ConstructionSettings::effective_map_height_limit()`. La regresión `platform_accepts_automatic_map_height_above_original_limit` cubre una plataforma a nivel 16 con límite automático 30. La frontera `industries` de temperate 2048²/seed `1330935404` queda exacta al comparar las 4.194.304 teselas: **0 teselas, 0 campos y 0 bloques 4×4**. RMAP-004/RMAP-056 siguen abiertos para límites dinámicos, otras semillas/tamaños, industrias acuáticas y callbacks/runtime NewGRF. |
 
 El avance de código de RMAP-004 deja un contrato reproducible para aislar
 terreno: `OPENTTDRS_GENERATE_POPULATION=0` omite pueblos/industrias,
@@ -373,3 +374,24 @@ corrida completa de las seis fases queda como validación final de esta etapa.
 El cierre sólo cubre este orden de sorteo y esta cohorte; otras semillas,
 tamaños, layouts, climas y fases posteriores siguen abiertos en los issues
 padres.
+
+### RMAP-136 — Usar el límite efectivo al nivelar plataformas industriales
+
+**Estado: cerrado (sub-issue acotado de RMAP-004/RMAP-056).** La primera
+divergencia de industrias en temperate 2048²/seed `1330935404` aparecía en el
+`IndustryID` 34. Su plataforma de cinco teselas tenía una esquina de nivel 16;
+OpenTTD acepta ese nivel porque una partida nueva resuelve el setting automático
+`construction.map_height_limit = 0` a un límite efectivo mínimo de 30. El
+simulador Rust aplicaba todavía el límite histórico 15 durante
+`CheckIfCanLevelIndustryPlatform`, descartaba el sitio y cambiaba toda la
+secuencia (804.066 teselas y 84.706 bloques 4×4 distintos).
+
+`TerraformModel` conserva el límite 15 para comandos manuales que no tienen un
+setting resuelto, pero la comprobación y ejecución de plataformas reciben ahora
+`ConstructionSettings::effective_map_height_limit()`. La regresión
+`platform_accepts_automatic_map_height_above_original_limit` cubre una esquina
+de nivel 16 con límite automático 30. La comparación raw de la frontera
+`industries` contra OpenTTD queda exacta en las 4.194.304 teselas del mapa:
+**0 teselas, 0 campos y 0 bloques 4×4**. El cierre es acotado a esta resolución
+de setting y cohorte; quedan abiertos el cálculo dinámico del límite automático,
+otras semillas/tamaños, industrias acuáticas y callbacks/runtime NewGRF.

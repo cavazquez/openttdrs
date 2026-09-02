@@ -382,12 +382,13 @@ fn generated_industry_can_terraform_surroundings(
 /// Igual que el original, cada `CmdTerraformLand` se prueba contra el mapa
 /// intacto: las mutaciones sólo ocurren después de que toda la plataforma haya
 /// pasado esta primera ronda.
-fn generated_industry_platform_is_valid(
+fn generated_industry_platform_is_valid_with_limit(
     map: &Map,
     origin: TileCoord,
     spec: IndustrySpec,
     layout_index: usize,
     platform: u8,
+    max_height: u8,
 ) -> bool {
     let Some((start_x, start_y, end_x, end_y)) =
         generated_industry_platform_area(map, origin, spec, layout_index, platform)
@@ -408,9 +409,13 @@ fn generated_industry_platform_is_valid(
             }
             let surroundings_ok =
                 generated_industry_can_terraform_surroundings(map, c, target_height, 0);
-            let terraform_ok =
-                simulate_generated_terraform_north_corner(map, c, current.height <= target_height)
-                    .is_some();
+            let terraform_ok = simulate_generated_terraform_north_corner(
+                map,
+                c,
+                current.height <= target_height,
+                max_height,
+            )
+            .is_some();
             if !surroundings_ok || !terraform_ok {
                 return false;
             }
@@ -452,14 +457,22 @@ fn clear_generated_industry_platform_tile(map: &mut Map, c: TileCoord) -> bool {
 /// Si una orden individual falla durante `Execute`, `OpenTTD` conserva las
 /// esquinas ya niveladas y continúa con la siguiente; la industria se crea
 /// mientras la pasada de prueba haya sido válida.
-fn level_generated_industry_platform(
+fn level_generated_industry_platform_with_limit(
     map: &Map,
     origin: TileCoord,
     spec: IndustrySpec,
     layout_index: usize,
     platform: u8,
+    max_height: u8,
 ) -> Option<Map> {
-    if !generated_industry_platform_is_valid(map, origin, spec, layout_index, platform) {
+    if !generated_industry_platform_is_valid_with_limit(
+        map,
+        origin,
+        spec,
+        layout_index,
+        platform,
+        max_height,
+    ) {
         return None;
     }
     // `CheckIfCanLevelIndustryPlatform` has a test pass and an execute pass.
@@ -484,6 +497,7 @@ fn level_generated_industry_platform(
                     &candidate,
                     c,
                     current_height <= target_height,
+                    max_height,
                 );
                 let Some(step) = step else {
                     break;
@@ -661,12 +675,14 @@ fn try_place_industry(
                 continue;
             }
         }
-        let platform_valid = generated_industry_platform_is_valid(
+        let max_height = ctx.state.construction.effective_map_height_limit();
+        let platform_valid = generated_industry_platform_is_valid_with_limit(
             &ctx.state.map,
             origin,
             spec,
             attempt.layout_index,
             ctx.industry_platform,
+            max_height,
         );
         if !platform_valid {
             continue;
@@ -674,12 +690,13 @@ fn try_place_industry(
         let Ok(layout_index) = u8::try_from(attempt.layout_index) else {
             continue;
         };
-        let Some(leveled_map) = level_generated_industry_platform(
+        let Some(leveled_map) = level_generated_industry_platform_with_limit(
             &ctx.state.map,
             origin,
             spec,
             attempt.layout_index,
             ctx.industry_platform,
+            max_height,
         ) else {
             continue;
         };
@@ -1761,19 +1778,39 @@ mod tests {
         // `CheckIfCanLevelIndustryPlatform`, por eso este caso protege la
         // regla que no cubría el chequeo de slope aislado.
         let state = generated_towns_state_for_platform(1_330_935_378);
-        assert!(!generated_industry_platform_is_valid(
+        assert!(!generated_industry_platform_is_valid_with_limit(
             &state.map,
             TileCoord::new(50, 59),
             IndustrySpec::CoalMine,
             0,
             1,
+            30,
         ));
-        assert!(generated_industry_platform_is_valid(
+        assert!(generated_industry_platform_is_valid_with_limit(
             &state.map,
             TileCoord::new(21, 41),
             IndustrySpec::CoalMine,
             3,
             1,
+            30,
+        ));
+    }
+
+    #[test]
+    fn platform_accepts_automatic_map_height_above_original_limit() {
+        // A new game resolves `map_height_limit = 0` to at least 30.  The
+        // original 15-level command cap therefore must not reject an
+        // otherwise valid industry platform whose reference corner is 16.
+        let mut map = Map::new_flat(32, 32, 15);
+        let origin = TileCoord::new(10, 10);
+        map.set_height(origin, 16).expect("high platform corner");
+        assert!(generated_industry_platform_is_valid_with_limit(
+            &map,
+            origin,
+            IndustrySpec::OilWells,
+            0,
+            1,
+            30,
         ));
     }
 
@@ -1838,12 +1875,13 @@ mod tests {
     fn industry_platform_execute_is_transactional() {
         let state = generated_towns_state_for_platform(1_330_935_378);
         let before = state.map.tiles().to_vec();
-        let candidate = level_generated_industry_platform(
+        let candidate = level_generated_industry_platform_with_limit(
             &state.map,
             TileCoord::new(21, 41),
             IndustrySpec::CoalMine,
             3,
             1,
+            30,
         )
         .expect("accepted platform");
 

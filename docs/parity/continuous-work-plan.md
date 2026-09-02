@@ -35,6 +35,13 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 | 6 | Movimiento y economía diferencial (#330) | Abierto | Oráculos externos para carretera (tráfico/colisiones/dirección), rail (PBS/YAPF/presignals/consist) y aire/mar, incluyendo casos límite. El perfilador de `Kale_TitleGame.sav` ya no aborta cuando un callback devuelve un pago negativo: los contadores `u64` de estación/empresa/estadística saturan ese ajuste a cero y el crédito firmado conserva la penalización; quedan pendientes los oráculos diferenciales y sus casos límite. |
 | 7 | Idiomas y settings (#331) | Abierto | Catálogo de idiomas, locale, settings y textos guardados se cargan y se comparan con OpenTTD sin colisiones ECS ni regresiones de UI. |
 
+Actualización #329-INDUSTRY-CB28-021 (2026-09-02): CB28 mantiene la semántica
+exacta de OpenTTD (sin invertir el bit 10), y el call site de construcción
+expone `IACT_USERCREATION` (`param2=2`) y las variables básicas de ubicación
+`0x80`/`0x81`/`0x82`/`0x86`–`0x8A`/`0x8D`. Continúan pendientes `0x7A` (badges),
+`0x8B` (distancia al agua), `0x8F` (random), flags/fundador/fechas, otros
+tipos de creación y strings de error; #329 permanece abierto.
+
 Última etapa RMAP-064/069/070/071/072/073/074/075/076/079/080/083: la plantación de Farm replica ahora el orden de RNG,
 la geometría y las cercas de OpenTTD, el primer `IndustryID(0)` permanece
 vinculado a toda su huella durante la obra y la cohorte de carbón escribe los

@@ -1152,6 +1152,78 @@ pub fn apply_industry_location_callback(def: &IndustrySpecDef) -> bool {
     callback_allows_location(result)
 }
 
+/// Call site de industria al fundar desde el mapa/juego.
+///
+/// El callback de `OpenTTD` recibe `IACT_USERCREATION` en `param2` y un scope
+/// temporal con la tesela, el layout y el pueblo más cercano. La API histórica
+/// [`apply_industry_location_callback`] se conserva para consumidores que no
+/// tienen mundo disponible; los comandos de construcción deben usar esta
+/// variante para que un Action2 pueda consultar esas variables.
+#[must_use]
+pub fn apply_industry_location_callback_for_build(
+    def: &IndustrySpecDef,
+    state: &GameState,
+    pos: TileCoord,
+    layout_index: u8,
+    random_bits: u32,
+) -> bool {
+    if !def.has_location_callback() {
+        return true;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return true;
+    };
+
+    // Reutilizar el contexto de tesela mantiene la codificación de terreno y
+    // los fallbacks de mapas importados en un único sitio.
+    let mut ctx = crate::map::action2_eval_ctx_for_industry_tile_with_world(
+        &state.map,
+        pos,
+        &state.industries,
+        &state.towns,
+        &state.industry_tile_spec_catalog,
+        &state.industry_spec_catalog,
+        state.climate,
+        None,
+        &[],
+    );
+    ctx.random_bits = random_bits;
+    let map_index = crate::map::coord_to_linear_index(pos, state.map.dimensions().0).unwrap_or(0);
+    ctx.vars.insert(0x80, map_index);
+    ctx.vars.insert(0x81, map_index >> 8);
+    ctx.vars.insert(0x86, u32::from(layout_index));
+    ctx.vars
+        .insert(0x87, ctx.vars.get(&0x41).copied().unwrap_or(0));
+    ctx.vars.insert(
+        0x8A,
+        state.map.get(pos).map_or(0, |tile| u32::from(tile.height)),
+    );
+    if let Some((town_idx, distance)) = crate::town::nearest_town_index(&state.towns, pos) {
+        let town = &state.towns[town_idx];
+        ctx.vars.insert(0x82, town.id);
+        ctx.vars.insert(
+            0x88,
+            u32::from(crate::house_spec::get_town_radius_group(town, pos) as u8),
+        );
+        ctx.vars.insert(0x89, distance.min(u32::from(u8::MAX)));
+        ctx.vars.insert(
+            0x8D,
+            crate::house_spec::distance_square(town.pos, pos).min(u32::from(u16::MAX)),
+        );
+    } else {
+        ctx.vars.insert(0x82, 0);
+        ctx.vars.insert(0x88, 0);
+        ctx.vars.insert(0x89, 0);
+        ctx.vars.insert(0x8D, 0);
+    }
+
+    // `IACT_USERCREATION` (newgrf_industries.h) is the callback parameter
+    // used by the user-facing Fund/Build command.
+    let result =
+        runtime.resolve_callback_ctx(def.newgrf_local_id, CBID_INDUSTRY_LOCATION, 0, 2, &mut ctx);
+    callback_allows_location(result)
+}
+
 /// Construye el contexto mínimo del scope `Industry` para callbacks de
 /// producción. Las variables de vecinos/industria cercana que requieren
 /// consultar el mapa se dejan fuera; las variables propias (stocks, nivel,
@@ -3595,6 +3667,49 @@ mod tests {
         def.newgrf_runtime = Some(Box::new(gfx_callback_literal(0x10)));
         def.callback_mask = 0;
         assert!(apply_industry_location_callback(&def));
+    }
+
+    #[test]
+    fn industry_location_build_exposes_creation_param_and_scope() {
+        let mut def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: Vec::new(),
+            produced_cargo_labels: Vec::new(),
+            accepted_cargo_indices: Vec::new(),
+            accepted_cargo_labels: Vec::new(),
+            production_rates: Vec::new(),
+            input_multipliers: Vec::new(),
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_LOCATION_MASK,
+            cost_multiplier: 0,
+            name: "location-scope".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_allow_if_byte(0x18, 0, 2))),
+        };
+        let state = crate::GameState::new(8, 8);
+        let pos = TileCoord::new(2, 3);
+
+        // La API legacy no conoce el tipo de creación y deja `param2 = 0`.
+        assert!(!apply_industry_location_callback(&def));
+        // El call site de construcción pasa IACT_USERCREATION (=2).
+        assert!(apply_industry_location_callback_for_build(
+            &def, &state, pos, 4, 0
+        ));
+
+        // El mismo contexto expone el índice de layout y TileIndex de OpenTTD.
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x86, 0, 4)));
+        assert!(apply_industry_location_callback_for_build(
+            &def, &state, pos, 4, 0
+        ));
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x80, 0, 26)));
+        assert!(apply_industry_location_callback_for_build(
+            &def, &state, pos, 4, 0
+        ));
     }
 
     #[test]

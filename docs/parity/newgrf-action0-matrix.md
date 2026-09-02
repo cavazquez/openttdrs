@@ -355,7 +355,9 @@ Catálogo runtime `industry_spec_catalog` (ids ≥ `NEW_INDUSTRYOFFSET` = 37).
 Apply: tiles (`09`) antes que industries. Layouts `0x0A` resuelven `gfx==0xFE`
 → tile local del mismo GRF a gfx global. Produced/accepted (`0x10`/`0x11` o
 `0x25`/`0x26`) como índices+labels vía `cargo_spec`. `callback_mask`
-(`0x21`/`0x22`) almacenado; CB28 se ejecuta al colocar (#228). Place:
+(`0x21`/`0x22`) almacenado; CB28 se ejecuta al colocar (#228), con
+`IACT_USERCREATION` y el scope básico de TileIndex/layout/pueblo/terreno/altura.
+Place:
 `place_industry_spec_def_sandbox` escribe footprint con gfx NewGRF y copia al
 runtime las dos tasas/cargos de salida, los stocks separados y la matriz de
 `input_multipliers`; la simulación usa esos datos para producir y transportar.
@@ -380,7 +382,7 @@ Labels custom o de climas no representados por `CargoType` siguen en fallback.
 | `1B`/`1F`/`24` string WORD | consumidas |
 | `1C`–`1E` input multipliers DWORD | **runtime** (matriz aplicada al output primario; segundo output cuando está declarado) |
 | `20` prospecting DWORD | consumida |
-| `21`/`22` callback mask BYTE | almacenado; CB28 ejecutado al colocar, resto sin call site |
+| `21`/`22` callback mask BYTE | almacenado; CB28 ejecutado al colocar con `IACT_USERCREATION` y scope básico, resto sin call site |
 | `23` removal cost DWORD | consumida |
 | `25`/`26` cargo lists variables | **runtime** (índices+labels) |
 | `27` production rates list | **runtime** |

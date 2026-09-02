@@ -543,8 +543,9 @@ pub fn place_industry_spec_def_sandbox(
     let Some(def) = industry_spec_def(&state.industry_spec_catalog, type_id).cloned() else {
         return Err(CommandError::OutOfBounds);
     };
-    // #266: CB 0x28 location — deny observable (no silencioso).
-    if !crate::newgrf_callback::apply_industry_location_callback(&def) {
+    // #266: CB 0x28 location — deny observable (no silencioso). El comando de
+    // usuario debe exponer el scope temporal y `IACT_USERCREATION`.
+    if !crate::newgrf_callback::apply_industry_location_callback_for_build(&def, state, c, 0, 0) {
         return Err(CommandError::NewGrfCallbackDenied);
     }
     check_place_industry_spec_def(&state.map, c, &def)?;

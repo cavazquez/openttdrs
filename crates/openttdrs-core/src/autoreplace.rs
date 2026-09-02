@@ -136,12 +136,14 @@ fn engine_for_state(state: &GameState, engine_id: u16) -> Option<EngineDef> {
         .or_else(|| engine_by_id(engine_id).cloned())
 }
 
-fn apply_engine_with_refit(vehicle: &mut Vehicle, new_engine: &EngineDef, current_tick: u64) {
+fn apply_engine_with_refit(
+    vehicle: &mut Vehicle,
+    new_engine: &EngineDef,
+    current_tick: u64,
+    cargo_spec_catalog: &[crate::cargo_spec::CargoSpecDef],
+) {
     vehicle.engine_id = Some(new_engine.id);
     vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(new_engine, vehicle);
-    if new_engine.capacity > 0 {
-        vehicle.capacity = new_engine.capacity;
-    }
     if let Some(c) = new_engine.cargo {
         vehicle.cargo_type = Some(c);
     } else if let Some(current) = vehicle.cargo_type {
@@ -152,6 +154,36 @@ fn apply_engine_with_refit(vehicle: &mut Vehicle, new_engine: &EngineDef, curren
         {
             vehicle.cargo_type = Some(first);
         }
+    }
+    // `DetermineCapacity` se vuelve a ejecutar al cambiar el motor, no en el
+    // siguiente tick de carga. Esto es observable para CB36 dependiente del
+    // cargo y evita que autoreplace conserve transitoriamente la capacidad
+    // del motor anterior. Las locomotoras sin capacidad propia mantienen el
+    // placeholder hasta que `ConsistChanged` suma los vagones.
+    let callback_capacity =
+        crate::newgrf_callback::resolve_vehicle_capacity_property_callback(new_engine, vehicle);
+    let raw_capacity =
+        callback_capacity.or((new_engine.capacity > 0).then_some(new_engine.capacity));
+    if let Some(raw_capacity) = raw_capacity {
+        let cargo = vehicle
+            .cargo_type
+            .or(new_engine.cargo)
+            .unwrap_or(match vehicle.kind {
+                VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
+                    crate::CargoType::Passengers
+                }
+                VehicleKind::Truck | VehicleKind::Ship => crate::CargoType::Goods,
+                VehicleKind::Train => crate::CargoType::Passengers,
+            });
+        vehicle.capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
+            raw_capacity,
+            cargo_spec_catalog,
+            cargo,
+        );
+    } else if vehicle.kind != VehicleKind::Train {
+        // Un motor sin propiedad de capacidad no puede conservar la carga de
+        // la unidad sustituida (p. ej. una pieza articulada no transportable).
+        vehicle.capacity = 0;
     }
     vehicle.build_tick = current_tick;
     crate::vehicle::init_vehicle_reliability_from_engine(vehicle, new_engine);
@@ -362,7 +394,12 @@ fn replace_chain(
     // Longitud antigua redondeada a teselas (OpenTTD: CeilDiv(..., TILE_SIZE)*TILE_SIZE).
     let old_total_rounded = old_total.div_ceil(16).saturating_mul(16);
 
-    apply_engine_with_refit(&mut state.vehicles[head_idx], new_engine, current_tick);
+    apply_engine_with_refit(
+        &mut state.vehicles[head_idx],
+        new_engine,
+        current_tick,
+        &state.cargo_spec_catalog,
+    );
 
     if !is_train && !is_road {
         return Ok(());
@@ -400,7 +437,7 @@ fn replace_chain(
             continue;
         };
         if let Some(unit) = state.vehicles.iter_mut().find(|v| v.id == uid) {
-            apply_engine_with_refit(unit, &eng, current_tick);
+            apply_engine_with_refit(unit, &eng, current_tick, &state.cargo_spec_catalog);
         }
     }
 
@@ -467,7 +504,7 @@ fn sync_dual_head_after_replace(
             if let Some(rid) = rear_id
                 && let Some(rear) = state.vehicles.iter_mut().find(|v| v.id == rid)
             {
-                apply_engine_with_refit(rear, new_engine, current_tick);
+                apply_engine_with_refit(rear, new_engine, current_tick, &state.cargo_spec_catalog);
             }
             return;
         }
@@ -494,9 +531,13 @@ fn sync_dual_head_after_replace(
         let mut rear = Vehicle::new(next_id, new_engine.kind, depot_pos, depot_pos);
         rear.running = false;
         rear.engine_id = Some(new_engine.id);
-        rear.unit_length = crate::newgrf_callback::vehicle_unit_length(new_engine, &mut rear);
-        rear.capacity = new_engine.capacity;
         rear.cargo_type = new_engine.cargo;
+        apply_engine_with_refit(
+            &mut rear,
+            new_engine,
+            current_tick,
+            &state.cargo_spec_catalog,
+        );
         rear.build_tick = current_tick;
         rear.owner = owner;
         rear.direction = direction;
@@ -632,6 +673,31 @@ mod tests {
                         rhs: literal(0x7F),
                     },
                 ],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
+    fn property_callback(value: u32) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: value,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
                 ranges: Vec::new(),
                 default: 0,
             },
@@ -814,6 +880,44 @@ mod tests {
             after < before,
             "wagon removal debe acortar; {before}→{after}"
         );
+    }
+
+    #[test]
+    fn autoreplace_applies_newgrf_capacity_before_leaving_depot() {
+        use crate::engine::{ENGINE_BUS_MPS, engine_by_id};
+
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        state.map.set_kind(depot, TileKind::RoadDepot).unwrap();
+        state.companies[0].engine_renew_money = 0;
+        state.companies[0].economy.money = 5_000_000;
+        state.economy.money = 5_000_000;
+
+        let mut old_engine = engine_by_id(ENGINE_BUS_MPS).unwrap().clone();
+        old_engine.id = 1_401;
+        old_engine.from_newgrf = true;
+        old_engine.newgrf_grfid = 0x4F4C_4443;
+        old_engine.newgrf_local_id = 0;
+        old_engine.capacity = 12;
+        let mut new_engine = old_engine.clone();
+        new_engine.id = 1_402;
+        new_engine.newgrf_grfid = 0x4E45_5743;
+        new_engine.newgrf_runtime = Some(Box::new(property_callback(77)));
+        state.engine_catalog.extend([old_engine, new_engine]);
+
+        let mut vehicle = Vehicle::new(1, VehicleKind::Bus, depot, depot);
+        vehicle.engine_id = Some(1_401);
+        vehicle.capacity = 12;
+        vehicle.cargo_type = Some(crate::CargoType::Passengers);
+        state.vehicles.push(vehicle);
+        state
+            .autoreplace_rules
+            .push(AutoReplaceRule::new(1_401, 1_402));
+
+        assert!(try_autoreplace_vehicle(&mut state, 1).unwrap());
+        let replaced = state.vehicles.iter().find(|v| v.id == 1).unwrap();
+        assert_eq!(replaced.engine_id, Some(1_402));
+        assert_eq!(replaced.capacity, 77);
     }
 
     #[test]

@@ -519,3 +519,13 @@ la validación de enganche acepta IDs de motores NewGRF presentes en el catálog
 capacidad dinámica 77 se conserva en la cabeza después de enganchar el vagón.
 Las cadenas articuladas avanzadas, las APIs directas sin catálogo y otras
 propiedades Action0 siguen abiertas; #329 no se cierra.
+
+Actualización #329-VEHICLE-AUTOREPLACE-004 (2026-09-02): `ReplaceChain` ya
+resuelve la capacidad CB36 del motor nuevo inmediatamente al autoreemplazar,
+después de fijar el cargo/refit efectivo, y aplica el multiplicador de
+capacidad del catálogo de cargos. La misma ruta cubre las traseras de trenes
+dual-head y las piezas creadas en depósito; una regresión vial confirma que la
+capacidad NewGRF no conserva la del motor anterior durante el tick de salida.
+El refresco de capacidades en `LoadUnloadStation` sigue siendo necesario para
+callbacks que dependan del estado que cambia durante la partida, por lo que
+#329 permanece abierto.

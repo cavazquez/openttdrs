@@ -340,12 +340,18 @@ fn spawn_dual_headed_rear(
         rear.cargo_type = engine.cargo;
     }
     rear.unit_length = crate::newgrf_callback::vehicle_unit_length(engine, &mut rear);
-    let rear_capacity = (engine.capacity > 0 || engine.cargo.is_some())
-        .then(|| {
-            crate::newgrf_callback::resolve_vehicle_capacity_property_callback(engine, &mut rear)
-        })
-        .flatten()
-        .unwrap_or(engine.capacity);
+    let callback_capacity =
+        crate::newgrf_callback::resolve_vehicle_capacity_property_callback(engine, &mut rear);
+    let raw_capacity = callback_capacity.or((engine.capacity > 0).then_some(engine.capacity));
+    let rear_capacity = raw_capacity.map_or(0, |raw| {
+        crate::cargo_spec::apply_cargo_capacity_multiplier(
+            raw,
+            &state.cargo_spec_catalog,
+            rear.cargo_type
+                .or(engine.cargo)
+                .unwrap_or(crate::CargoType::Passengers),
+        )
+    });
     rear.capacity = rear_capacity;
     rear.cargo_type = engine.cargo;
     rear.build_tick = state.tick.get();

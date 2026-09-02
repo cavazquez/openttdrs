@@ -607,9 +607,7 @@ pub(crate) fn process_generation_tree_growth_at(
     let cycle = landscape_tile_cycle(c, tick);
     // The tropical prelude may have changed MAP2; the generic grass-density
     // branch must inspect that live value, just like `TileLoop_Trees`.
-    let tree_m2 = map
-        .get(c)
-        .map_or_else(|| tree_m2_word(tile), tree_m2_word);
+    let tree_m2 = map.get(c).map_or_else(|| tree_m2_word(tile), tree_m2_word);
     if cycle & 7 == 7 && tree_ground(tree_m2) == 0 {
         let density = tree_ground_density(tree_m2);
         if density < 3 {

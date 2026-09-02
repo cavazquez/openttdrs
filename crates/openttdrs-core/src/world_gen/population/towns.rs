@@ -1244,30 +1244,41 @@ fn generated_town_mountain_tunnel_length_cap(population: u32) -> usize {
 /// `SpiralTileSequence(tile, bridge_length, 0, 0)` usado por
 /// `GrowTownWithBridge` para descartar puentes paralelos redundantes.
 ///
-/// La secuencia nativa recorre las coronas de una ventana cuadrada alrededor
-/// de la rampa inicial. Para esta consulta sólo importa pertenecer a la
-/// ventana (el orden no consume RNG), por lo que se conserva la misma
-/// extensión y se evita introducir un nuevo iterador público en el mapa.
+/// La secuencia nativa recorre una espiral de coronas alrededor de la rampa
+/// inicial. Para esta consulta sólo importa pertenecer a la secuencia (el
+/// orden no consume RNG), pero no se puede sustituir por una ventana cuadrada:
+/// sus esquinas no son inspeccionadas por `SpiralTileSequence`.
 fn generated_town_has_parallel_road_bridge(
     map: &crate::map::Map,
     start: TileCoord,
     radius: usize,
     direction: u8,
 ) -> bool {
-    let radius = i32::try_from(radius).unwrap_or(i32::MAX);
     let opposite_slope = generated_town_inclined_slope(reverse_town_diag_dir(direction));
-    for y in start.y.saturating_sub(radius)..=start.y.saturating_add(radius) {
-        for x in start.x.saturating_sub(radius)..=start.x.saturating_add(radius) {
-            let candidate = TileCoord::new(x, y);
-            if map.get_kind(candidate) != Some(TileKind::RoadBridge) {
-                continue;
-            }
-            if tile_slope_and_z(map, candidate)
-                .is_some_and(|(slope, _)| slope & opposite_slope != 0)
-            {
-                return true;
+    // `SpiralTileSequence(start, radius, 0, 0)` no es un cuadrado: sus
+    // cascarones avanzan con `TileIndexDiffCByDiagDir` y saltan cada corona
+    // con `DIR_W = {+1,-1}`. El filtro cuadrado anterior podía ver una rampa
+    // diagonal a dos teselas que el oráculo nunca inspecciona (RMAP-134).
+    let mut candidate = TileCoord::new(start.x.saturating_add(1), start.y);
+    for ring in 0..radius {
+        let side_length = ring.saturating_mul(2).saturating_add(1);
+        for spiral_direction in 0..4_u8 {
+            for _ in 0..side_length {
+                if map.get_kind(candidate) == Some(TileKind::RoadBridge)
+                    && tile_slope_and_z(map, candidate)
+                        .is_some_and(|(slope, _)| slope & opposite_slope != 0)
+                {
+                    return true;
+                }
+                let (dx, dy) = crate::map::diag_dir_offset(spiral_direction);
+                candidate = TileCoord::new(
+                    candidate.x.saturating_add(dx),
+                    candidate.y.saturating_add(dy),
+                );
             }
         }
+        // `TileIndexDiffCByDir(DIR_W)` in OpenTTD.
+        candidate = TileCoord::new(candidate.x.saturating_add(1), candidate.y.saturating_sub(1));
     }
     false
 }
@@ -4711,6 +4722,23 @@ mod tests {
         map.set_height(TileCoord::new(parallel.x + 1, parallel.y), 1)
             .expect("flatten parallel west");
         assert!(!generated_town_has_parallel_road_bridge(&map, start, 4, 1));
+    }
+
+    #[test]
+    fn sloped_town_bridge_parallel_scan_excludes_square_corner() {
+        let mut map = Map::new_flat(16, 16, 1);
+        let start = TileCoord::new(8, 8);
+        // Esta boca cae dentro del cuadrado que usaba el preflight anterior,
+        // pero no forma parte de `SpiralTileSequence(start, 2, 0, 0)`.
+        let outside_spiral = TileCoord::new(6, 8);
+        map.set_kind(outside_spiral, TileKind::RoadBridge)
+            .expect("corner bridge mouth");
+        map.set_height(outside_spiral, 2)
+            .expect("corner north height");
+        map.set_height(TileCoord::new(outside_spiral.x + 1, outside_spiral.y), 2)
+            .expect("corner west height");
+        assert_eq!(tile_slope_and_z(&map, outside_spiral), Some((SLOPE_NW, 1)));
+        assert!(!generated_town_has_parallel_road_bridge(&map, start, 2, 1));
     }
 
     #[test]

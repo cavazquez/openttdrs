@@ -322,3 +322,30 @@ exacta en las seis fronteras: **0 teselas, 0 bytes y 0 bloques 4×4** distintos
 en 1.048.576 teselas. El cierre sólo cubre el orden tropical de ese tile loop
 y esta cohorte; otras semillas, tamaños, configuraciones de árboles/ríos,
 climas y ticks posteriores siguen dentro de RMAP-004/RMAP-018.
+
+### RMAP-134 — Recorrer la espiral nativa al descartar puentes municipales paralelos
+
+**Estado: cerrado (sub-issue acotado de RMAP-004/RMAP-024/RMAP-027/RMAP-030).**
+Después de RMAP-133, la primera divergencia tropical de 1024²/seed
+`1330935386` estaba en `towns`: el pueblo `273`, en su llamada 69, construía
+en OpenTTD la boca de puente `(679,509)` y consumía las tres selecciones de
+tipo de puente. El port hacía el preflight con un cuadrado alrededor de la
+rampa; veía como "paralelo" la boca inclinada `(677,509)`, que queda fuera de
+`SpiralTileSequence(tile, 2, 0, 0)`, rechazaba el puente y seguía por carretera
+normal. Esa decisión cambiaba el stream RNG y producía 10.787 teselas/1.600
+bloques 4×4 distintos en la frontera `towns`.
+
+`generated_town_has_parallel_road_bridge` reproduce ahora la secuencia nativa:
+comienza en `start + (1,0)`, recorre cada corona con
+`TileIndexDiffCByDiagDir` y salta la siguiente con `DIR_W`, sin inspeccionar las
+esquinas que el oráculo no visita. La regresión
+`sloped_town_bridge_parallel_scan_excludes_square_corner` fija precisamente la
+boca `(6,8)` fuera de la espiral pero dentro del cuadrado antiguo, mientras
+`sloped_town_bridge_rejects_a_parallel_road_bridge` conserva el rechazo de una
+boca realmente visitada. Con la corrección, la comparación diferencial
+`generation_phase_parity.py --size 1024 --seed 1330935386 --climate tropic
+--phases landscape,clear,towns,industries,objects,trees --require-exact` queda
+exacta en las seis fronteras: **0 teselas, 0 bytes y 0 bloques 4×4** en
+1.048.576 teselas. El cierre sólo cubre la geometría de esta consulta y esta
+cohorte; otras longitudes, puentes/túneles, semillas, tamaños y ticks siguen
+abiertos en los issues padres.

@@ -1275,6 +1275,7 @@ fn closest_water_distance_for_location(map: &Map, center: TileCoord) -> u32 {
 fn action2_eval_ctx_from_industry(industry: &Industry, random: u32) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx {
         random_bits: random,
+        parent_random_bits: u32::from(industry.newgrf_random),
         ..Action2EvalCtx::default()
     };
     let accepted = industry.station_input_requirements();
@@ -1300,8 +1301,37 @@ fn action2_eval_ctx_from_industry(industry: &Industry, random: u32) -> Action2Ev
         .insert(0x80, u32::from_ne_bytes(industry.pos.x.to_ne_bytes()));
     ctx.vars
         .insert(0x81, u32::from_ne_bytes(industry.pos.y.to_ne_bytes()));
+    let founder = industry
+        .founder
+        .map_or(u32::from(crate::industry::INDUSTRY_FOUNDER_INVALID), |id| {
+            u32::from(id.0)
+        });
+    ctx.vars.insert(0x44, u32::from(industry.selected_layout));
+    ctx.vars.insert(0x45, founder);
+    ctx.vars.insert(0x46, industry.construction_date);
+    ctx.vars.insert(0x47, u32::from(industry.control_flags));
     ctx.vars.insert(0x93, u32::from(industry.prod_level));
     ctx.vars.insert(0xAA, u32::from(industry.counter));
+    ctx.vars.insert(0xA7, founder);
+    ctx.vars.insert(0xA8, u32::from(industry.random_colour));
+    ctx.vars.insert(
+        0xA9,
+        industry
+            .last_prod_year
+            .saturating_sub(crate::news::CALENDAR_BASE_YEAR)
+            .min(u32::from(u8::MAX)),
+    );
+    ctx.vars.insert(0xAB, u32::from(industry.counter >> 8));
+    ctx.vars
+        .insert(0xAC, u32::from(industry.was_cargo_delivered));
+    ctx.vars.insert(
+        0xB0,
+        industry
+            .construction_date
+            .saturating_sub(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR)
+            .min(u32::from(u16::MAX)),
+    );
+    ctx.vars.insert(0xB3, u32::from(industry.construction_type));
     ctx
 }
 

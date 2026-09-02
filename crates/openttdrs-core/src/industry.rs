@@ -42,6 +42,27 @@ pub const PRODLEVEL_DEFAULT: u8 = 0x10;
 /// Tope de producción (`PRODLEVEL_MAXIMUM`).
 pub const PRODLEVEL_MAXIMUM: u8 = 0x80;
 
+/// Días desde el origen de `OpenTTD` (1920-01-01) hasta el año base que usa
+/// este proyecto para iniciar una partida (1950-01-01).
+///
+/// `TimerGameCalendar::date` del modelo reducido empieza en cero en 1950,
+/// mientras que `Industry::construction_date` y las variables `NewGRF` 0x46
+/// usan la fecha absoluta del calendario nativo. La diferencia incluye los
+/// siete años bisiestos de 1920..1948.
+pub const OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR: u32 = 10_957;
+
+/// Industria creada sin compañía fundadora (`INVALID_OWNER`).
+pub const INDUSTRY_FOUNDER_INVALID: u8 = 0xFF;
+
+/// `IndustryConstructionType::ICT_UNKNOWN`.
+pub const INDUSTRY_CONSTRUCTION_UNKNOWN: u8 = 0;
+/// Construcción normal durante una partida.
+pub const INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY: u8 = 1;
+/// Industria creada por la generación de mapa.
+pub const INDUSTRY_CONSTRUCTION_MAP_GENERATION: u8 = 2;
+/// Industria creada desde el editor de escenarios.
+pub const INDUSTRY_CONSTRUCTION_SCENARIO_EDITOR: u8 = 3;
+
 /// ≥ 60 % transportado el mes pasado (`PERCENT_TRANSPORTED_60`).
 pub const PERCENT_TRANSPORTED_60: u8 = 153;
 /// ≥ 80 % transportado (`PERCENT_TRANSPORTED_80`); solo modo smooth, reservado.
@@ -786,6 +807,27 @@ pub struct Industry {
     /// antiguos dejan cero, que es también el valor vanilla por defecto.
     #[serde(default)]
     pub newgrf_random: u16,
+    /// Compañía que fundó la industria (`INVALID_OWNER` se representa como
+    /// `None`). Las industrias generadas en el mapa no tienen fundador.
+    #[serde(default)]
+    pub founder: Option<crate::company::CompanyId>,
+    /// Fecha absoluta de construcción, en días desde 1920-01-01 como en
+    /// `TimerGameCalendar::Date` de `OpenTTD`.
+    #[serde(default)]
+    pub construction_date: u32,
+    /// Forma en que se creó la industria (`IndustryConstructionType`).
+    #[serde(default)]
+    pub construction_type: u8,
+    /// Flags de control de `GameScript` (`IndustryControlFlags`), opacos para
+    /// el modelo reducido pero visibles desde `NewGRF`.
+    #[serde(default)]
+    pub control_flags: u8,
+    /// Marca que la industria fue elegida como destino de una entrega.
+    #[serde(default)]
+    pub was_cargo_delivered: bool,
+    /// Último año económico en que produjo carga.
+    #[serde(default)]
+    pub last_prod_year: u32,
     /// `IndustryID` de mapa (`MAP2`, bytes bajo/alto). El ID 0 es válido en un
     /// `.sav`; cuando no existe una entidad correspondiente también se usa
     /// como fallback legacy.
@@ -888,6 +930,12 @@ impl Industry {
             random_colour: 0,
             selected_layout: 0,
             newgrf_random: 0,
+            founder: None,
+            construction_date: 0,
+            construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,
+            control_flags: 0,
+            was_cargo_delivered: false,
+            last_prod_year: 0,
             instance_id: 0,
             produced_total: 0,
             transported_total: 0,
@@ -920,6 +968,12 @@ impl Industry {
             random_colour: 0,
             selected_layout: 0,
             newgrf_random: 0,
+            founder: None,
+            construction_date: 0,
+            construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,
+            control_flags: 0,
+            was_cargo_delivered: false,
+            last_prod_year: 0,
             instance_id: 0,
             produced_total: 0,
             transported_total: 0,
@@ -958,6 +1012,12 @@ impl Industry {
             random_colour,
             selected_layout: 0,
             newgrf_random: 0,
+            founder: None,
+            construction_date: 0,
+            construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,
+            control_flags: 0,
+            was_cargo_delivered: false,
+            last_prod_year: 0,
             instance_id: 0,
             produced_total: 0,
             transported_total: 0,
@@ -1007,6 +1067,48 @@ impl Industry {
     #[must_use]
     pub const fn with_newgrf_random(mut self, random: u16) -> Self {
         self.newgrf_random = random;
+        self
+    }
+
+    /// Conserva la compañía fundadora (`None` = `INVALID_OWNER`).
+    #[must_use]
+    pub const fn with_founder(mut self, founder: Option<crate::company::CompanyId>) -> Self {
+        self.founder = founder;
+        self
+    }
+
+    /// Conserva la fecha absoluta de construcción de `OpenTTD`.
+    #[must_use]
+    pub const fn with_construction_date(mut self, construction_date: u32) -> Self {
+        self.construction_date = construction_date;
+        self
+    }
+
+    /// Conserva el tipo de construcción (`ICT_*`).
+    #[must_use]
+    pub const fn with_construction_type(mut self, construction_type: u8) -> Self {
+        self.construction_type = construction_type;
+        self
+    }
+
+    /// Conserva flags de control de `GameScript` sin interpretarlos.
+    #[must_use]
+    pub const fn with_control_flags(mut self, control_flags: u8) -> Self {
+        self.control_flags = control_flags;
+        self
+    }
+
+    /// Marca la industria como destino de una entrega.
+    #[must_use]
+    pub const fn with_was_cargo_delivered(mut self, delivered: bool) -> Self {
+        self.was_cargo_delivered = delivered;
+        self
+    }
+
+    /// Conserva el último año económico con producción.
+    #[must_use]
+    pub const fn with_last_prod_year(mut self, year: u32) -> Self {
+        self.last_prod_year = year;
         self
     }
 

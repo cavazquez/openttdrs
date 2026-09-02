@@ -352,6 +352,15 @@ fn place_industry_spec_template_sandbox(
         Industry::with_tiles_spec(c, spec.kind(), spec, footprint, random_colour)
             .with_instance_id(industry_id)
             .with_selected_layout(selected_layout)
+            .with_founder(Some(state.active_company))
+            .with_construction_date(
+                state
+                    .calendar
+                    .date
+                    .saturating_add(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR),
+            )
+            .with_construction_type(crate::industry::INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY)
+            .with_last_prod_year(state.economy_timer.year)
             .with_counter(counter),
     );
     state.economy.money -= 250;
@@ -650,6 +659,15 @@ pub fn place_industry_spec_def_layout_sandbox(
         .with_random_colour(random_colour)
         .with_selected_layout(selected_layout)
         .with_newgrf_random(random_bits)
+        .with_founder(Some(state.active_company))
+        .with_construction_date(
+            state
+                .calendar
+                .date
+                .saturating_add(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR),
+        )
+        .with_construction_type(crate::industry::INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY)
+        .with_last_prod_year(state.economy_timer.year)
         .with_counter(counter)
         .with_newgrf_spec(def.id, &def);
     if let Some(initial_level) =
@@ -720,6 +738,19 @@ mod tests {
             Some(TileKind::Industry)
         );
         assert_eq!(state.industries[0].selected_layout, 3);
+        assert_eq!(
+            state.industries[0].founder,
+            Some(crate::company::CompanyId::PLAYER)
+        );
+        assert_eq!(
+            state.industries[0].construction_date,
+            crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR
+        );
+        assert_eq!(
+            state.industries[0].construction_type,
+            crate::industry::INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY
+        );
+        assert_eq!(state.industries[0].last_prod_year, state.economy_timer.year);
     }
 
     #[test]
@@ -754,6 +785,15 @@ mod tests {
         let industry = &state.industries[0];
         assert_eq!(industry.selected_layout, 2);
         assert_eq!(industry.newgrf_random, 0xBEEF);
+        assert_eq!(industry.founder, Some(crate::company::CompanyId::PLAYER));
+        assert_eq!(
+            industry.construction_date,
+            crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR
+        );
+        assert_eq!(
+            industry.construction_type,
+            crate::industry::INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY
+        );
         assert_eq!(industry.tiles.len(), 2);
         assert_eq!(
             state

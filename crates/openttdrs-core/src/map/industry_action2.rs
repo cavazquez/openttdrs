@@ -354,7 +354,7 @@ fn industry_tile_id_at_offset(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn populate_industry_parent_scope(
     ctx: &mut Action2EvalCtx,
     map: &Map,
@@ -381,9 +381,18 @@ fn populate_industry_parent_scope(
     // two layouts share the same geometry and when CB68 filters instances.
     ctx.parent_vars
         .insert(0x44, u32::from(industry.selected_layout));
-    ctx.parent_vars.insert(0x45, 0);
-    ctx.parent_vars.insert(0x46, 0);
-    ctx.parent_vars.insert(0x47, 0);
+    // `0x45` combines founder, AI bit and company recolour in OpenTTD.  The
+    // reduced model has the stable founder id; the optional high bits remain
+    // zero until company recolour metadata is modelled here.
+    let founder = industry
+        .founder
+        .map_or(u32::from(crate::industry::INDUSTRY_FOUNDER_INVALID), |id| {
+            u32::from(id.0)
+        });
+    ctx.parent_vars.insert(0x45, founder);
+    ctx.parent_vars.insert(0x46, industry.construction_date);
+    ctx.parent_vars
+        .insert(0x47, u32::from(industry.control_flags));
     ctx.parent_vars.insert(0x64, 0);
     if let Some(spec) = spec {
         ctx.parent_vars.insert(0xA6, u32::from(spec.local_id));
@@ -451,16 +460,30 @@ fn populate_industry_parent_scope(
         .insert(0x9C, u32::from(industry.last_month_pct_transported()));
     ctx.parent_vars
         .insert(0x9D, u32::from(industry.last_month_pct_transported()));
-    ctx.parent_vars.insert(0xA7, 0);
+    ctx.parent_vars.insert(0xA7, founder);
     ctx.parent_vars
         .insert(0xA8, u32::from(industry.random_colour));
-    ctx.parent_vars.insert(0xA9, 0);
+    ctx.parent_vars.insert(
+        0xA9,
+        industry
+            .last_prod_year
+            .saturating_sub(crate::news::CALENDAR_BASE_YEAR)
+            .min(u32::from(u8::MAX)),
+    );
     ctx.parent_vars.insert(0xAA, u32::from(industry.counter));
     ctx.parent_vars
         .insert(0xAB, u32::from(industry.counter >> 8));
-    ctx.parent_vars.insert(0xAC, 0);
-    ctx.parent_vars.insert(0xB0, 0);
-    ctx.parent_vars.insert(0xB3, 0);
+    ctx.parent_vars
+        .insert(0xAC, u32::from(industry.was_cargo_delivered));
+    ctx.parent_vars.insert(
+        0xB0,
+        industry
+            .construction_date
+            .saturating_sub(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR)
+            .min(u32::from(u16::MAX)),
+    );
+    ctx.parent_vars
+        .insert(0xB3, u32::from(industry.construction_type));
     ctx.parent_vars.insert(0xB4, 0);
     // `IndustriesScopeResolver::GetRandomBits` reads Industry::random.  The
     // production phase counter is a separate variable (0xAA/0xAB) and must
@@ -798,6 +821,12 @@ mod tests {
             .with_instance_id(9)
             .with_selected_layout(3)
             .with_newgrf_random(0xBEEF)
+            .with_founder(Some(crate::company::CompanyId(2)))
+            .with_construction_date(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17)
+            .with_construction_type(crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION)
+            .with_control_flags(5)
+            .with_was_cargo_delivered(true)
+            .with_last_prod_year(1972)
             .with_counter(0x0678);
         industry.stock = 0x1234;
         let ctx = action2_eval_ctx_for_industry_tile_with_world(
@@ -813,8 +842,19 @@ mod tests {
         );
 
         assert_eq!(ctx.parent_vars.get(&0x44), Some(&3));
+        assert_eq!(ctx.parent_vars.get(&0x45), Some(&2));
+        assert_eq!(
+            ctx.parent_vars.get(&0x46),
+            Some(&(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17))
+        );
+        assert_eq!(ctx.parent_vars.get(&0x47), Some(&5));
         assert_eq!(ctx.parent_vars.get(&0x8A), Some(&0x1234));
+        assert_eq!(ctx.parent_vars.get(&0xA7), Some(&2));
+        assert_eq!(ctx.parent_vars.get(&0xA9), Some(&22));
         assert_eq!(ctx.parent_vars.get(&0xAA), Some(&0x0678));
+        assert_eq!(ctx.parent_vars.get(&0xAC), Some(&1));
+        assert_eq!(ctx.parent_vars.get(&0xB0), Some(&17));
+        assert_eq!(ctx.parent_vars.get(&0xB3), Some(&2));
         assert_eq!(ctx.parent_random_bits, 0xBEEF);
     }
 

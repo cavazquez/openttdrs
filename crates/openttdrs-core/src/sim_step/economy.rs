@@ -436,6 +436,12 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
         state.stats.industry_cargo_units_produced += produced;
         state.industries[i].produced_total =
             state.industries[i].produced_total.saturating_add(produced);
+        if produced > 0 {
+            // `UpdateIndustryStatistics` actualiza este año cuando la
+            // producción mensual tuvo actividad. Mantenerlo aquí también
+            // cubre callbacks CB1/CB2 que producen entre cierres de mes.
+            state.industries[i].last_prod_year = state.economy_timer.year;
+        }
 
         // La producción no se queda en la mina: se reparte a las estaciones de la cobertura
         // según su rating (`TransportIndustryGoods` / `MoveGoodsToStation`).

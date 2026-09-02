@@ -761,6 +761,20 @@ pub struct SavIndustry {
     pub selected_layout: u8,
     /// Bits aleatorios persistentes de la industria (`Industry::random`, `SLV_82`).
     pub random: u16,
+    /// Último año económico con producción (`Industry::last_prod_year`).
+    pub last_prod_year: u32,
+    /// `Industry::was_cargo_delivered`; se conserva como booleano para no
+    /// confundir el flag nativo con un contador.
+    pub was_cargo_delivered: bool,
+    /// Flags opacos de `GameScript` (`Industry::ctlflags`).
+    pub control_flags: u8,
+    /// Fundador serializado como `CompanyID`; `None` representa
+    /// `INVALID_OWNER` (por ejemplo, una industria generada en el mapa).
+    pub founder: Option<u8>,
+    /// Fecha absoluta de construcción (`TimerGameCalendar::Date`).
+    pub construction_date: u32,
+    /// `IndustryConstructionType` (`ICT_*`).
+    pub construction_type: u8,
     /// Nivel de producción (`Industry::prod_level`).
     pub prod_level: u8,
     /// Salidas y stock en espera (`Industry::produced`).
@@ -813,6 +827,12 @@ pub(crate) fn industries_from_chunks(
                     counter: 0,
                     selected_layout: 0,
                     random: 0,
+                    last_prod_year: 0,
+                    was_cargo_delivered: false,
+                    control_flags: 0,
+                    founder: None,
+                    construction_date: 0,
+                    construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,
                     prod_level: crate::industry::PRODLEVEL_DEFAULT,
                     produced: Vec::new(),
                     accepted: Vec::new(),
@@ -854,6 +874,29 @@ fn sav_industry_from_record(
         .and_then(SlValue::as_u64)
         .and_then(|value| u16::try_from(value).ok())
         .unwrap_or(0);
+    let last_prod_year = record_get(record, "last_prod_year")
+        .and_then(SlValue::as_i64)
+        .and_then(|value| u32::try_from(value).ok())
+        .unwrap_or(0);
+    let was_cargo_delivered = record_get(record, "was_cargo_delivered")
+        .and_then(SlValue::as_u64)
+        .is_some_and(|value| value != 0);
+    let control_flags = record_get(record, "ctlflags")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u8::try_from(value).ok())
+        .unwrap_or(0);
+    let founder = record_get(record, "founder")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u8::try_from(value).ok())
+        .filter(|&value| value != crate::industry::INDUSTRY_FOUNDER_INVALID);
+    let construction_date = record_get(record, "construction_date")
+        .and_then(SlValue::as_i64)
+        .and_then(|value| u32::try_from(value).ok())
+        .unwrap_or(0);
+    let construction_type = record_get(record, "construction_type")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u8::try_from(value).ok())
+        .unwrap_or(crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN);
     let prod_level = record_get(record, "prod_level")
         .and_then(SlValue::as_u64)
         .and_then(|value| u8::try_from(value).ok())
@@ -869,6 +912,12 @@ fn sav_industry_from_record(
         counter,
         selected_layout,
         random,
+        last_prod_year,
+        was_cargo_delivered,
+        control_flags,
+        founder,
+        construction_date,
+        construction_type,
         prod_level,
         produced: industry_produced_from_record(record),
         accepted: industry_accepted_from_record(record),

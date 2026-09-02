@@ -862,6 +862,17 @@ fn apply_generated_industry_bytes(
     {
         industry.random_colour = random.random_colour;
         industry.counter = random.counter;
+        // `GenerateIndustries` calls the same creation helper as a player,
+        // pero OpenTTD marca estas instancias como mapa generado y sin
+        // compañía fundadora. La fecha mantiene el formato absoluto que usa
+        // el scope Industry (1920-01-01 como origen).
+        industry.founder = None;
+        industry.construction_date = state
+            .calendar
+            .date
+            .saturating_add(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR);
+        industry.construction_type = crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION;
+        industry.last_prod_year = state.economy_timer.year;
     }
 }
 

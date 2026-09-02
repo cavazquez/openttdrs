@@ -995,6 +995,12 @@ fn append_indy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "random_colour")?;
     append_field(header, 2, "prod_level")?;
     append_field(header, 4, "counter")?;
+    append_field(header, 5, "last_prod_year")?;
+    append_field(header, 2, "was_cargo_delivered")?;
+    append_field(header, 2, "ctlflags")?;
+    append_field(header, 2, "founder")?;
+    append_field(header, 5, "construction_date")?;
+    append_field(header, 2, "construction_type")?;
     append_field(header, 2, "selected_layout")?;
     append_field(header, 4, "random")?;
     append_field(header, 0x1B, "accepted")?;
@@ -1112,6 +1118,17 @@ pub(super) fn indy_records_with_cargo(
         rec.push(ind.random_colour % 16);
         rec.push(ind.prod_level);
         rec.extend_from_slice(&ind.counter.to_be_bytes());
+        let last_prod_year = i32::try_from(ind.last_prod_year).unwrap_or(i32::MAX);
+        rec.extend_from_slice(&last_prod_year.to_be_bytes());
+        rec.push(u8::from(ind.was_cargo_delivered));
+        rec.push(ind.control_flags);
+        rec.push(
+            ind.founder
+                .map_or(crate::industry::INDUSTRY_FOUNDER_INVALID, |id| id.0),
+        );
+        let construction_date = i32::try_from(ind.construction_date).unwrap_or(i32::MAX);
+        rec.extend_from_slice(&construction_date.to_be_bytes());
+        rec.push(ind.construction_type);
         rec.push(ind.selected_layout);
         rec.extend_from_slice(&ind.newgrf_random.to_be_bytes());
         write_indy_accepted(&mut rec, ind, state.climate)?;
@@ -1132,7 +1149,7 @@ pub(super) fn indy_chunk(state: &GameState, map_w: u32) -> Result<Vec<u8>, SavEr
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::too_many_lines)]
 mod tests {
     use super::*;
     use crate::map::TileCoord;
@@ -1315,6 +1332,12 @@ mod tests {
         industry.stock = 42;
         industry.selected_layout = 3;
         industry.newgrf_random = 0xBEEF;
+        industry.last_prod_year = 1972;
+        industry.was_cargo_delivered = true;
+        industry.control_flags = 5;
+        industry.founder = Some(crate::company::CompanyId(2));
+        industry.construction_date = crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17;
+        industry.construction_type = crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION;
         industry.add_accepted_cargo_waiting(CargoType::Livestock, 9);
         // Steel no es la salida legacy de la fábrica y debe viajar en la
         // lista adicional, no desaparecer ni sobrescribir `stock`.
@@ -1333,6 +1356,40 @@ mod tests {
             crate::sav::table::record_get(record, "random")
                 .and_then(crate::sav::table::SlValue::as_u64),
             Some(0xBEEF)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "last_prod_year")
+                .and_then(crate::sav::table::SlValue::as_i64),
+            Some(1972)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "was_cargo_delivered")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "ctlflags")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(5)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "founder")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(2)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "construction_date")
+                .and_then(crate::sav::table::SlValue::as_i64),
+            Some(i64::from(
+                crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17
+            ))
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "construction_type")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(u64::from(
+                crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION
+            ))
         );
         let accepted = match crate::sav::table::record_get(record, "accepted") {
             Some(crate::sav::table::SlValue::Structs(items)) => items,

@@ -187,6 +187,12 @@ pub(crate) fn hydrate_sav_industries(
         .with_counter(saved.counter);
         industry.selected_layout = saved.selected_layout;
         industry.newgrf_random = saved.random;
+        industry.last_prod_year = saved.last_prod_year;
+        industry.was_cargo_delivered = saved.was_cargo_delivered;
+        industry.control_flags = saved.control_flags;
+        industry.founder = saved.founder.map(crate::company::CompanyId);
+        industry.construction_date = saved.construction_date;
+        industry.construction_type = saved.construction_type;
         industry.prod_level = saved.prod_level;
         import_industry_output_stock(&mut industry, saved, state.climate);
         state.industries.push(industry);
@@ -360,6 +366,12 @@ mod tests {
             counter: 123,
             selected_layout: 2,
             random: 0xBEEF,
+            last_prod_year: 1972,
+            was_cargo_delivered: true,
+            control_flags: 5,
+            founder: Some(2),
+            construction_date: crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17,
+            construction_type: crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION,
             prod_level: 32,
             produced: vec![
                 super::super::entities::SavIndustryProducedCargo {
@@ -391,6 +403,18 @@ mod tests {
         assert_eq!(industry.counter, 123);
         assert_eq!(industry.selected_layout, 2);
         assert_eq!(industry.newgrf_random, 0xBEEF);
+        assert_eq!(industry.last_prod_year, 1972);
+        assert!(industry.was_cargo_delivered);
+        assert_eq!(industry.control_flags, 5);
+        assert_eq!(industry.founder, Some(crate::company::CompanyId(2)));
+        assert_eq!(
+            industry.construction_date,
+            crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17
+        );
+        assert_eq!(
+            industry.construction_type,
+            crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION
+        );
         assert_eq!(industry.prod_level, 32);
         assert_eq!(industry.random_colour, 14);
     }

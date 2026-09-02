@@ -1,7 +1,7 @@
 //! Export mínimo de [`GameState`] a savegame `OpenTTD` (`.sav`).
 //!
 //! Contenedor por defecto: `OTTZ` (zlib). Versión de save: [`EXPORT_SAVE_VERSION`].
-//! Chunks: `MAPS` (`CH_TABLE`) + planos RIFF + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`CAPA`/`LGRP` + `DATE` + `PLYR`.
+//! Chunks: `MAPS` (`CH_TABLE`) + planos RIFF + `STNN`/`CITY`/`INDY`/`PSAC`/`ORDL`/`VEHS`/`CAPA`/`LGRP` + `DATE` + `PLYR`.
 //!
 //! Subconjunto prometido (MVP #226/#267): mapa + `CITY` (≥1) + `STNN` moderno
 //! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD + ship + aircraft ala fija)
@@ -537,10 +537,20 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if rebuild_object_mappings && let Some(obid) = object_mappings::object_mappings_chunk(state)? {
         data.extend_from_slice(&obid);
     }
+    // `PSAC` se reconstruye cuando el estado tiene storages decodificados o
+    // una industria escribió registros `7C`. Las filas ajenas (por ejemplo de
+    // estaciones/pueblos todavía sin runtime) viajan dentro del mismo pool y
+    // se conservan en `GameState::sav_persistent_storages`.
+    let psac = entities::persistent_storage_chunk(state)?;
+    let rebuild_psac = psac.is_some();
+    if let Some(psac) = psac {
+        data.extend_from_slice(&psac);
+    }
     for chunk in &state.sav_opaque_chunks {
         if super::REBUILT_CHUNKS.contains(&chunk.name)
             || (rebuild_objects && chunk.name == *b"OBJS")
             || (rebuild_object_mappings && chunk.name == *b"OBID")
+            || (rebuild_psac && chunk.name == *b"PSAC")
         {
             continue;
         }
@@ -1226,6 +1236,50 @@ mod tests {
                 .body,
             original_ngrf
         );
+    }
+
+    #[test]
+    fn ottn_roundtrip_hydrates_industry_psa_storage() {
+        let mut state = tiny_state();
+        let pos = TileCoord::new(12, 12);
+        let mut tile = state.map.get(pos).expect("industry tile");
+        tile.kind = TileKind::Industry;
+        state.map.set_tile(pos, tile).expect("set industry tile");
+        let mut industry = crate::Industry::new(pos, crate::IndustryKind::CoalMine);
+        industry.newgrf_persistent_regs.insert(7, 0xDEAD_BEEF);
+        state.industries.push(industry);
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let chunks = crate::sav::chunks::parse_chunks(&bytes[8..]).expect("chunks");
+        let indy = crate::sav::chunks::find_chunk(&chunks, "INDY").expect("INDY");
+        let indy_rows =
+            crate::sav::table::parse_table_chunk(&indy.body, false).expect("INDY table");
+        assert_eq!(
+            crate::sav::table::record_get(&indy_rows[0].1, "psa")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(1)
+        );
+        assert!(crate::sav::chunks::find_chunk(&chunks, "PSAC").is_some());
+
+        let loaded = GameState::from_sav_game(sav::load(&bytes).expect("load"));
+        assert_eq!(loaded.industries.len(), 1);
+        assert_eq!(loaded.industries[0].newgrf_persistent_storage_id, Some(0));
+        assert_eq!(
+            loaded.industries[0].newgrf_persistent_regs.get(&7),
+            Some(&0xDEAD_BEEF)
+        );
+        assert_eq!(loaded.sav_persistent_storages.len(), 1);
+        assert_eq!(loaded.sav_persistent_storages[0].storage[7], 0xDEAD_BEEF);
+
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
+        let resaved_chunks = crate::sav::chunks::parse_chunks(&resaved[8..]).expect("chunks");
+        let psac = crate::sav::chunks::find_chunk(&resaved_chunks, "PSAC").expect("PSAC resaved");
+        let rows = crate::sav::table::parse_table_chunk(&psac.body, false).expect("PSAC table");
+        let values = match crate::sav::table::record_get(&rows[0].1, "storage") {
+            Some(crate::sav::table::SlValue::List(values)) => values,
+            other => panic!("storage ausente: {other:?}"),
+        };
+        assert_eq!(values[7].as_u64(), Some(u64::from(0xDEAD_BEEF_u32)));
     }
 
     #[test]

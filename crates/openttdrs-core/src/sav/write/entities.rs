@@ -1,6 +1,7 @@
 //! Serialización de entidades: estaciones, ciudades, industrias.
 
 use super::super::SavError;
+use super::super::SavPersistentStorage;
 use super::super::chunks::CH_TABLE;
 use super::chunks::raw_table_chunk;
 use super::codec::{write_gamma, write_str};
@@ -1002,6 +1003,7 @@ fn append_indy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 5, "construction_date")?;
     append_field(header, 2, "construction_type")?;
     append_field(header, 2, "selected_layout")?;
+    append_field(header, 6, "psa")?;
     append_field(header, 4, "random")?;
     append_field(header, 0x1B, "accepted")?;
     append_field(header, 0x1B, "produced")?;
@@ -1109,8 +1111,9 @@ pub(super) fn indy_records_with_cargo(
     state: &GameState,
     map_w: u32,
 ) -> Result<Vec<Vec<u8>>, SavError> {
+    let persistent_storage_ids = industry_persistent_storage_ids(state)?;
     let mut out = Vec::with_capacity(state.industries.len());
-    for ind in &state.industries {
+    for (industry_index, ind) in state.industries.iter().enumerate() {
         let Some(tile_idx) = coord_to_linear_index(ind.pos, map_w) else {
             continue;
         };
@@ -1135,12 +1138,182 @@ pub(super) fn indy_records_with_cargo(
         rec.extend_from_slice(&construction_date.to_be_bytes());
         rec.push(ind.construction_type);
         rec.push(ind.selected_layout);
+        let psa = match persistent_storage_ids
+            .get(industry_index)
+            .copied()
+            .flatten()
+        {
+            Some(id) => id.checked_add(1).ok_or(SavError::ValueOutOfRange {
+                field: "persistent storage id",
+                value: id,
+            })?,
+            None => 0,
+        };
+        rec.extend_from_slice(&psa.to_be_bytes());
         rec.extend_from_slice(&ind.newgrf_random.to_be_bytes());
         write_indy_accepted(&mut rec, ind, state.climate)?;
         write_indy_produced(&mut rec, ind, state.climate)?;
         out.push(rec);
     }
     Ok(out)
+}
+
+/// Determina los índices de pool que deben aparecer en `INDY.psa`.
+///
+/// Las industrias importadas conservan su referencia nativa. Una industria
+/// creada localmente obtiene el primer índice libre sólo cuando tiene registros
+/// `7C`; esto hace determinista el export y evita compactar storages ajenos.
+fn industry_persistent_storage_ids(state: &GameState) -> Result<Vec<Option<u32>>, SavError> {
+    let mut used: std::collections::BTreeSet<u32> = state
+        .sav_persistent_storages
+        .iter()
+        .map(|storage| storage.storage_id)
+        .collect();
+    used.extend(
+        state
+            .industries
+            .iter()
+            .filter_map(|industry| industry.newgrf_persistent_storage_id),
+    );
+    let mut next_free = 0u32;
+    let mut out = Vec::with_capacity(state.industries.len());
+    for industry in &state.industries {
+        if let Some(id) = industry.newgrf_persistent_storage_id {
+            out.push(Some(id));
+            continue;
+        }
+        if industry.newgrf_persistent_regs.is_empty() {
+            out.push(None);
+            continue;
+        }
+        while used.contains(&next_free) {
+            next_free = next_free.checked_add(1).ok_or(SavError::ValueOutOfRange {
+                field: "persistent storage id",
+                value: u32::MAX,
+            })?;
+        }
+        used.insert(next_free);
+        out.push(Some(next_free));
+        next_free = next_free.checked_add(1).ok_or(SavError::ValueOutOfRange {
+            field: "persistent storage id",
+            value: u32::MAX,
+        })?;
+    }
+    Ok(out)
+}
+
+fn industry_persistent_storage_grfid(state: &GameState, industry: &Industry) -> u32 {
+    industry
+        .newgrf_type_id
+        .and_then(|type_id| {
+            state
+                .industry_spec_catalog
+                .iter()
+                .find(|spec| spec.id == type_id)
+        })
+        .map_or(0, |spec| spec.grfid)
+}
+
+fn normalized_storage_values(values: &[u32]) -> Vec<u32> {
+    let mut out = vec![0; 256];
+    let len = values.len().min(out.len());
+    out[..len].copy_from_slice(&values[..len]);
+    out
+}
+
+/// Registros densos del chunk nativo `PSAC`.
+///
+/// Las filas existentes se conservan, incluso si pertenecen a una estación o
+/// pueblo que aún no tiene runtime PSA. Las industrias sólo parchean sus
+/// índices asignados, sin descartar storages ajenos.
+pub(super) fn persistent_storage_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
+    let ids = industry_persistent_storage_ids(state)?;
+    let mut storages = state.sav_persistent_storages.clone();
+    let mut by_id = std::collections::HashMap::new();
+    for (index, storage) in storages.iter().enumerate() {
+        by_id.insert(storage.storage_id, index);
+    }
+    for (industry_index, industry) in state.industries.iter().enumerate() {
+        let Some(storage_id) = ids.get(industry_index).copied().flatten() else {
+            continue;
+        };
+        let storage_index = if let Some(&index) = by_id.get(&storage_id) {
+            index
+        } else {
+            // Una referencia importada sin fila PSAC válida no debe fabricar
+            // un storage vacío ni suprimir el chunk opaco original. Sólo se
+            // crea una fila nueva cuando hay registros runtime que guardar.
+            if industry.newgrf_persistent_regs.is_empty()
+                && industry.newgrf_persistent_storage_id.is_some()
+            {
+                continue;
+            }
+            let index = storages.len();
+            storages.push(SavPersistentStorage {
+                storage_id,
+                grfid: industry_persistent_storage_grfid(state, industry),
+                storage: vec![0; 256],
+            });
+            by_id.insert(storage_id, index);
+            index
+        };
+        let storage = &mut storages[storage_index];
+        if storage.grfid == 0 {
+            storage.grfid = industry_persistent_storage_grfid(state, industry);
+        }
+        let mut values = normalized_storage_values(&storage.storage);
+        for (&register, &value) in &industry.newgrf_persistent_regs {
+            values[usize::from(register)] = value;
+        }
+        storage.storage = values;
+    }
+    if storages.is_empty() {
+        return Ok(Vec::new());
+    }
+    let max_id = storages
+        .iter()
+        .map(|storage| storage.storage_id)
+        .max()
+        .ok_or(SavError::BadFormat("PSAC sin filas".into()))?;
+    let max_id = usize::try_from(max_id).map_err(|_| SavError::ValueOutOfRange {
+        field: "persistent storage id",
+        value: max_id,
+    })?;
+    if max_id >= (1 << 14) {
+        return Err(SavError::ValueOutOfRange {
+            field: "persistent storage id",
+            value: u32::try_from(max_id).unwrap_or(u32::MAX),
+        });
+    }
+    let mut records = vec![Vec::new(); max_id.saturating_add(1)];
+    for storage in storages {
+        let index = usize::try_from(storage.storage_id).map_err(|_| SavError::ValueOutOfRange {
+            field: "persistent storage id",
+            value: storage.storage_id,
+        })?;
+        let mut record = Vec::with_capacity(4 + 2 + 256 * 4);
+        record.extend_from_slice(&storage.grfid.to_be_bytes());
+        write_gamma(256, &mut record)?;
+        for value in normalized_storage_values(&storage.storage) {
+            record.extend_from_slice(&value.to_be_bytes());
+        }
+        records[index] = record;
+    }
+    Ok(records)
+}
+
+pub(super) fn persistent_storage_chunk(state: &GameState) -> Result<Option<Vec<u8>>, SavError> {
+    let records = persistent_storage_records(state)?;
+    if records.is_empty() {
+        return Ok(None);
+    }
+    let mut header = Vec::new();
+    append_field(&mut header, 6, "grfid")?;
+    append_field(&mut header, 0x16, "storage")?;
+    header.push(0);
+    Ok(Some(raw_table_chunk(
+        *b"PSAC", &header, &records, CH_TABLE,
+    )?))
 }
 
 pub(super) fn indy_chunk(state: &GameState, map_w: u32) -> Result<Vec<u8>, SavError> {
@@ -1439,5 +1612,36 @@ mod tests {
                     .and_then(crate::sav::table::SlValue::as_u64)
                     == Some(7)
         }));
+    }
+
+    #[test]
+    fn psac_chunk_and_indy_reference_preserve_sparse_storage_id() {
+        let mut state = GameState::new(8, 8);
+        let mut industry = Industry::new(TileCoord::new(3, 3), IndustryKind::Factory);
+        industry.newgrf_persistent_storage_id = Some(3);
+        industry.newgrf_persistent_regs.insert(7, 0xDEAD_BEEF);
+        state.industries.push(industry);
+
+        let indy = indy_chunk(&state, 8).expect("INDY chunk");
+        let indy_rows =
+            crate::sav::table::parse_table_chunk(&indy[5..], false).expect("INDY table");
+        assert_eq!(
+            crate::sav::table::record_get(&indy_rows[0].1, "psa")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(4)
+        );
+
+        let psac = persistent_storage_chunk(&state)
+            .expect("PSAC result")
+            .expect("PSAC chunk");
+        let rows = crate::sav::table::parse_table_chunk(&psac[5..], false).expect("PSAC table");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, 3);
+        let values = match crate::sav::table::record_get(&rows[0].1, "storage") {
+            Some(crate::sav::table::SlValue::List(values)) => values,
+            other => panic!("storage ausente: {other:?}"),
+        };
+        assert_eq!(values.len(), 256);
+        assert_eq!(values[7].as_u64(), Some(u64::from(0xDEAD_BEEF_u32)));
     }
 }

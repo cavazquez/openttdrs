@@ -777,6 +777,8 @@ pub struct SavIndustry {
     pub construction_type: u8,
     /// Nivel de producción (`Industry::prod_level`).
     pub prod_level: u8,
+    /// Índice del pool `PersistentStorage` (`INDY.psa`), si existe.
+    pub persistent_storage_id: Option<u32>,
     /// Salidas y stock en espera (`Industry::produced`).
     pub produced: Vec<SavIndustryProducedCargo>,
     /// Insumos recibidos y en espera (`Industry::accepted`).
@@ -798,6 +800,22 @@ pub struct SavIndustryAcceptedCargo {
     pub waiting: u16,
     /// Último día económico absoluto (`Industry::AcceptedCargo::last_accepted`).
     pub last_accepted: u32,
+}
+
+/// Fila del pool nativo `PersistentStorage` (`PSAC`).
+///
+/// `storage` conserva los 256 valores de 32 bits exactamente como fueron
+/// escritos por `OpenTTD`; los callbacks los interpretan como registros
+/// firmados sólo al consumirlos, por lo que aquí se mantiene la representación
+/// binaria (`u32`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SavPersistentStorage {
+    /// Índice del pool, correlacionado con `INDY.psa`/otras referencias.
+    pub storage_id: u32,
+    /// GRFID dueño del storage (`0` para vanilla/legacy).
+    pub grfid: u32,
+    /// Array persistente de 256 registros (`SLE_UINT32`).
+    pub storage: Vec<u32>,
 }
 
 /// Industrias del chunk `INDY` (solo saves con tablas); best-effort.
@@ -836,6 +854,7 @@ pub(crate) fn industries_from_chunks(
                     construction_date: 0,
                     construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,
                     prod_level: crate::industry::PRODLEVEL_DEFAULT,
+                    persistent_storage_id: None,
                     produced: Vec::new(),
                     accepted: Vec::new(),
                 });
@@ -903,6 +922,10 @@ fn sav_industry_from_record(
         .and_then(SlValue::as_u64)
         .and_then(|value| u8::try_from(value).ok())
         .unwrap_or(crate::industry::PRODLEVEL_DEFAULT);
+    let persistent_storage_id = record_get(record, "psa")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| value.checked_sub(1))
+        .and_then(|value| u32::try_from(value).ok());
     #[allow(clippy::cast_possible_truncation)]
     Some(SavIndustry {
         industry_id,
@@ -921,9 +944,55 @@ fn sav_industry_from_record(
         construction_date,
         construction_type,
         prod_level,
+        persistent_storage_id,
         produced: industry_produced_from_record(record),
         accepted: industry_accepted_from_record(record),
     })
+}
+
+/// Decodifica el pool `PSAC` de un save moderno.
+///
+/// El chunk es `CH_TABLE` denso: los huecos se omiten del resultado genérico,
+/// pero el índice de cada fila se conserva para poder reconstruir referencias
+/// `REF_STORAGE` (`index + 1`) sin compactarlas.
+#[must_use]
+pub(crate) fn persistent_storages_from_chunks(
+    chunks: &[RawChunk],
+    _save_version: u16,
+) -> Vec<SavPersistentStorage> {
+    let Some(psac) = find_chunk(chunks, "PSAC") else {
+        return Vec::new();
+    };
+    if !matches!(
+        psac.ch_type,
+        super::chunks::CH_TABLE | super::chunks::CH_SPARSE_TABLE
+    ) {
+        return Vec::new();
+    }
+    let sparse = psac.ch_type == super::chunks::CH_SPARSE_TABLE;
+    super::table::parse_table_chunk(&psac.body, sparse)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(storage_id, record)| {
+            let grfid = record_get(&record, "grfid")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(0);
+            let storage = match record_get(&record, "storage") {
+                Some(SlValue::List(values)) => values
+                    .iter()
+                    .filter_map(SlValue::as_u64)
+                    .filter_map(|value| u32::try_from(value).ok())
+                    .collect(),
+                _ => return None,
+            };
+            Some(SavPersistentStorage {
+                storage_id,
+                grfid,
+                storage,
+            })
+        })
+        .collect()
 }
 
 fn industry_produced_from_record(record: &SlRecord) -> Vec<SavIndustryProducedCargo> {
@@ -2583,6 +2652,32 @@ mod tests {
         assert_eq!(industry.produced[0].waiting, 77);
         assert_eq!(industry.accepted[0].cargo_slot, 6);
         assert_eq!(industry.accepted[0].waiting, 15);
+    }
+
+    #[test]
+    fn decodes_psac_storage_rows_and_preserves_pool_index() {
+        let mut record = Vec::new();
+        record.extend_from_slice(&0x1234_5678_u32.to_be_bytes());
+        super::super::table::tests::write_gamma(256, &mut record);
+        for index in 0..256_u32 {
+            let value: u32 = if index == 7 { 0xDEAD_BEEF } else { 0 };
+            record.extend_from_slice(&value.to_be_bytes());
+        }
+        let body = super::super::table::tests::build_table_body(
+            &[(6, "grfid"), (0x16, "storage")],
+            &[record],
+        );
+        let chunk = RawChunk {
+            name: *b"PSAC",
+            ch_type: super::super::chunks::CH_TABLE,
+            body,
+        };
+        let storages = persistent_storages_from_chunks(&[chunk], 355);
+        assert_eq!(storages.len(), 1);
+        assert_eq!(storages[0].storage_id, 0);
+        assert_eq!(storages[0].grfid, 0x1234_5678);
+        assert_eq!(storages[0].storage.len(), 256);
+        assert_eq!(storages[0].storage[7], 0xDEAD_BEEF);
     }
 
     #[test]

@@ -187,6 +187,7 @@ pub(crate) fn hydrate_sav_industries(
         .with_counter(saved.counter);
         industry.selected_layout = saved.selected_layout;
         industry.newgrf_random = saved.random;
+        industry.newgrf_persistent_storage_id = saved.persistent_storage_id;
         industry.last_prod_year = saved.last_prod_year;
         industry.was_cargo_delivered = saved.was_cargo_delivered;
         industry.control_flags = saved.control_flags;
@@ -232,6 +233,44 @@ fn import_industry_output_stock(industry: &mut Industry, saved: &SavIndustry, cl
         industry.set_last_accepted_date(cargo, accepted.last_accepted);
     }
     industry.capacity = INDUSTRY_STOCK_CAPACITY.max(industry.stock.max(industry.secondary_stock));
+}
+
+/// Hidrata los registros `7C` de industrias desde las filas `PSAC` importadas.
+///
+/// Sólo los valores distintos de cero se materializan en el mapa disperso de
+/// runtime; la fila completa permanece en `GameState::sav_persistent_storages`
+/// para conservar ceros explícitos y storages de otras entidades al exportar.
+pub(crate) fn hydrate_sav_industry_persistent_storage(
+    state: &mut GameState,
+    sav_industries: &[SavIndustry],
+    persistent_storages: &[crate::sav::SavPersistentStorage],
+) {
+    if sav_industries.is_empty() || persistent_storages.is_empty() {
+        return;
+    }
+    let by_id: std::collections::HashMap<u32, &crate::sav::SavPersistentStorage> =
+        persistent_storages
+            .iter()
+            .map(|storage| (storage.storage_id, storage))
+            .collect();
+    for (industry, saved) in state.industries.iter_mut().zip(sav_industries) {
+        let Some(storage_id) = saved.persistent_storage_id else {
+            continue;
+        };
+        let Some(storage) = by_id.get(&storage_id) else {
+            continue;
+        };
+        industry.newgrf_persistent_storage_id = Some(storage_id);
+        for (index, &value) in storage.storage.iter().enumerate() {
+            if value == 0 {
+                continue;
+            }
+            let Ok(index) = u8::try_from(index) else {
+                break;
+            };
+            industry.newgrf_persistent_regs.insert(index, value);
+        }
+    }
 }
 
 /// Hidrata industrias de un `.ottdmap` que no trae el chunk `INDY`.
@@ -374,6 +413,7 @@ mod tests {
             construction_date: crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17,
             construction_type: crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION,
             prod_level: 32,
+            persistent_storage_id: None,
             produced: vec![
                 super::super::entities::SavIndustryProducedCargo {
                     cargo_slot: 1,

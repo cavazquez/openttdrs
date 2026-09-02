@@ -572,6 +572,13 @@ pub struct GameState {
     /// `NewGRF`, motores y objetos al exportar nuevamente a `OpenTTD`.
     #[serde(default)]
     pub sav_opaque_chunks: Vec<crate::sav::SavOpaqueChunk>,
+    /// Filas decodificadas del pool nativo `PSAC`.
+    ///
+    /// El vector es efímero para el formato JSON propio: se conserva aquí
+    /// durante un round-trip SAV para mantener índices y storages de entidades
+    /// que todavía no tienen runtime completo (estaciones, pueblos, etc.).
+    #[serde(skip, default)]
+    pub(crate) sav_persistent_storages: Vec<crate::sav::SavPersistentStorage>,
     /// Tablas nativas reconstruidas conservadas mientras sus filas semánticas
     /// no cambian.
     /// `serde(skip)` evita copiar el payload crudo al formato JSON propio.
@@ -772,6 +779,7 @@ impl GameState {
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
+            sav_persistent_storages: Vec::new(),
             sav_table_passthrough: None,
             sav_objects_dirty: false,
             sav_object_mappings_dirty: false,
@@ -907,6 +915,7 @@ impl GameState {
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
+            sav_persistent_storages: Vec::new(),
             sav_table_passthrough: None,
             sav_objects_dirty: false,
             sav_object_mappings_dirty: false,

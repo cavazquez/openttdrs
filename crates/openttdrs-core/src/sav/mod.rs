@@ -1,6 +1,7 @@
 //! Parser y export mínimo de savegames de `OpenTTD` (`.sav`): contenedor
 //! comprimido, chunks de mapa, estaciones (`STNN`), ciudades (`CITY`),
-//! industrias (`INDY`), vehículos (`VEHS`), órdenes (`ORDL`) y dinero (`PLYR`).
+//! industrias (`INDY`), storages persistentes `NewGRF` (`PSAC`), vehículos
+//! (`VEHS`), órdenes (`ORDL`) y dinero (`PLYR`).
 //!
 //! El mapa se reconstruye reutilizando el pipeline `.ottdmap` ya validado
 //! (`Map::from_ottd_binary_with_extras`), generando el bloque en memoria.
@@ -92,9 +93,9 @@ use std::collections::HashMap;
 
 pub use entities::{
     SavCargoPacket, SavIndustry, SavIndustryAcceptedCargo, SavIndustryProducedCargo, SavObject,
-    SavObjectMapping, SavRoadStopSpecMapping, SavRoadStopStationData, SavRoadStopTileData,
-    SavStation, SavStationCargo, SavVehicle, SavVehicleKind, format_generated_station_name,
-    resolve_sav_station_name,
+    SavObjectMapping, SavPersistentStorage, SavRoadStopSpecMapping, SavRoadStopStationData,
+    SavRoadStopTileData, SavStation, SavStationCargo, SavVehicle, SavVehicleKind,
+    format_generated_station_name, resolve_sav_station_name,
 };
 pub use import::{
     hydrate_industries_from_map_tiles, industry_group_from_gfx, industry_kind_from_gfx,
@@ -171,6 +172,9 @@ const REBUILT_CHUNKS: &[[u8; 4]] = &[
 /// runtime. La comparación con [`REBUILT_CHUNKS`] evita reemitir una copia
 /// obsoleta de `ORDR`/`PLYR`/`VEHS` junto con la tabla reconstruida, pero deja
 /// pasar tanto los chunks `NewGRF` conocidos como cualquier fourcc futuro.
+/// `PSAC` queda opaco hasta que el exportador dispone de filas decodificadas;
+/// en ese caso se reemplaza por su representación canónica para actualizar
+/// referencias `INDY.psa` sin duplicar el chunk.
 fn opaque_chunks_from_chunks(chunks: &[chunks::RawChunk]) -> Vec<SavOpaqueChunk> {
     chunks
         .iter()
@@ -263,6 +267,8 @@ pub struct SavGame {
     pub towns: Vec<Town>,
     /// Industrias del chunk `INDY` (posición/tamaño/tipo reales).
     pub industries: Vec<SavIndustry>,
+    /// Pool nativo `PSAC` de registros persistentes `NewGRF`.
+    pub persistent_storages: Vec<SavPersistentStorage>,
     /// Paquetes de carga físicos del chunk `CAPA`.
     pub cargo_packets: Vec<SavCargoPacket>,
     /// Pagos activos del pool `CAPY`, incluyendo liquidaciones en curso.
@@ -408,6 +414,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let mut towns = entities::towns_from_chunks(&chunk_list, map_w, version);
     rebuild_town_populations(&map, &mut towns);
     let industries = entities::industries_from_chunks(&chunk_list, map_w, version);
+    let persistent_storages = entities::persistent_storages_from_chunks(&chunk_list, version);
     let cargo_packets = entities::cargo_packets_from_chunks(&chunk_list, map_w, version);
     let cargo_payments = economy::cargo_payments_from_chunks(&chunk_list);
     let order_import = orders::SavOrderImport::from_chunks(&chunk_list, version);
@@ -519,6 +526,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         stations,
         towns,
         industries,
+        persistent_storages,
         cargo_packets,
         cargo_payments,
         vehicles,
@@ -1109,6 +1117,9 @@ impl GameState {
         };
         state.objects = sav.objects;
         state.object_mappings = sav.object_mappings;
+        state
+            .sav_persistent_storages
+            .clone_from(&sav.persistent_storages);
         state.sav_objects_dirty = false;
         state.sav_object_mappings_dirty = false;
         state.sav_opaque_chunks = sav.opaque_chunks;
@@ -1328,6 +1339,11 @@ impl GameState {
         }
         hydrate_sav_road_stop_tiles(&mut state, &sav.road_stop_station_data);
         import::hydrate_sav_industries(&mut state, &sav.industries, &sav.extras);
+        import::hydrate_sav_industry_persistent_storage(
+            &mut state,
+            &sav.industries,
+            &sav.persistent_storages,
+        );
         state.link_graph = sav.link_graph;
         if !matches!(
             state.cargo_dist.distribution,
@@ -1878,6 +1894,7 @@ mod tests {
             stations: Vec::new(),
             towns: Vec::new(),
             industries: Vec::new(),
+            persistent_storages: Vec::new(),
             cargo_packets: Vec::new(),
             cargo_payments: Vec::new(),
             vehicles: Vec::new(),
@@ -2319,6 +2336,7 @@ mod tests {
                 ..Default::default()
             }],
             industries: Vec::new(),
+            persistent_storages: Vec::new(),
             cargo_packets: Vec::new(),
             cargo_payments: Vec::new(),
             link_graph: LinkGraphStats::default(),

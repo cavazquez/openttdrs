@@ -817,6 +817,13 @@ pub struct Industry {
     /// escritos por `\2psto`. El GRFID se resuelve desde el catálogo activo.
     #[serde(default)]
     pub newgrf_persistent_regs: std::collections::HashMap<u8, u32>,
+    /// Índice del pool `PersistentStorage` referenciado por `INDY.psa`.
+    ///
+    /// `None` identifica una industria sin storage nativo. El índice no se
+    /// confunde con `instance_id`: el pool PSA puede tener huecos y su
+    /// identidad debe sobrevivir a un round-trip `.sav`.
+    #[serde(default)]
+    pub newgrf_persistent_storage_id: Option<u32>,
     /// Compañía que fundó la industria (`INVALID_OWNER` se representa como
     /// `None`). Las industrias generadas en el mapa no tienen fundador.
     #[serde(default)]
@@ -942,6 +949,7 @@ impl Industry {
             selected_layout: 0,
             newgrf_random: 0,
             newgrf_persistent_regs: std::collections::HashMap::new(),
+            newgrf_persistent_storage_id: None,
             founder: None,
             construction_date: 0,
             construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,
@@ -982,6 +990,7 @@ impl Industry {
             selected_layout: 0,
             newgrf_random: 0,
             newgrf_persistent_regs: std::collections::HashMap::new(),
+            newgrf_persistent_storage_id: None,
             founder: None,
             construction_date: 0,
             construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,
@@ -1028,6 +1037,7 @@ impl Industry {
             selected_layout: 0,
             newgrf_random: 0,
             newgrf_persistent_regs: std::collections::HashMap::new(),
+            newgrf_persistent_storage_id: None,
             founder: None,
             construction_date: 0,
             construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,

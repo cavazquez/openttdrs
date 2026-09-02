@@ -3745,9 +3745,15 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                 return;
             }
             let rail = ctx.kind == TileKind::RailTunnel;
-            let dir = inclined_slope_direction(tileh)
-                .or_else(|| ctx.tile.map(|t| t.m5 & 0x03))
-                .unwrap_or(0);
+            // `DrawTile_TunnelBridge` siempre usa `GetTunnelBridgeDirection`,
+            // que lee los dos bits bajos de `m5`. La pendiente sólo decide si
+            // la boca es construible; no debe reemplazar la dirección
+            // persistida (un save importado puede conservar una pendiente
+            // efectiva distinta tras una fundación/terraformación).
+            let dir = ctx.tile.map_or_else(
+                || inclined_slope_direction(tileh).unwrap_or(0),
+                |tile| tile.m5 & 0x03,
+            );
             let rail_type = ctx
                 .tile
                 .map_or(openttdrs_core::RailType::Rail, rail_type_from_tile);

@@ -474,3 +474,13 @@ normales y ocho nieve/desierto, y el renderer la carga antes del overlay; si un
 PNG/atlas falta, sólo esa capa cae al portal OpenGFX. La regresión de túnel
 verifica el parent Action5 y el child del portal. Las pendientes/rotaciones y
 las paletas especiales continúan abiertas; #326 permanece en curso.
+Actualización #326-RAIL-TUNNEL-004 (2026-09-02): la orientación de cada boca
+se toma ahora de `GetTunnelBridgeDirection` (`m5 & 3`), igual que
+`DrawTile_TunnelBridge`, y no de la pendiente efectiva calculada por el
+renderer. Esto cubre saves importados que conservan una pendiente de terreno
+distinta de los bytes de dirección. La regresión
+`newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined` usa
+deliberadamente `m5=SW` con `SLOPE_NE` y verifica el slot frontal Action5
+correspondiente; una prueba de sprite cubre las cuatro direcciones y las
+variantes normal/nieve. Las pendientes no válidas, las rotaciones de
+compositor y las paletas especiales siguen abiertas; #326 no se cierra.

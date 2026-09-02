@@ -265,6 +265,10 @@ base. La base de césped `SPR_RAILTYPE_TUNNEL_BASE` se extrae del Action5 `0x17`
 oficial por clima y se carga con sus slots normal/nieve antes del overlay; la
 ausencia de un PNG cae sólo esa capa al portal OpenGFX. Las variantes de
 pendiente/rotación y paletas especiales todavía requieren una matriz específica.
+La dirección de la boca ya respeta `m5 & 3` (`GetTunnelBridgeDirection`) aun
+cuando la pendiente efectiva del mapa no coincida; la matriz de cuatro
+direcciones y los ocho slots normal/nieve tienen regresión explícita, pero no
+implica paridad del compositor de foundations ni de paletas especiales.
 En vehículos marítimos, las listas CTT `0x1E/0x1F` ya conservan inclusión y
 exclusión de cargos y la máscara final de refit descarta los cargos excluidos;
 el resto de propiedades CTT variables continúa pendiente.

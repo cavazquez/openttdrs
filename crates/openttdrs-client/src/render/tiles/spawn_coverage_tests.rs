@@ -2576,13 +2576,18 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
         Tile {
             kind: TileKind::RailTunnel,
             mapt: 0x10,
-            m5: 0,
+            // OpenTTD obtiene la orientación de `GetTunnelBridgeDirection`
+            // (`m5 & 3`), no de la pendiente efectiva. Deliberadamente
+            // usamos SW (2) con una pendiente NE para cubrir saves
+            // importados cuya geometría y bytes no coinciden.
+            m5: 2,
             ..tile_template()
         },
     )
     .expect("rail tunnel");
     // Las dos esquinas del norte/este elevadas producen SLOPE_NE (12), la
-    // boca que `DrawTile_TunnelBridge` acepta y que resuelve dir=0.
+    // boca que `DrawTile_TunnelBridge` acepta. La dirección real sigue siendo
+    // SW (2), la persistida en m5.
     map.set_height(TileCoord::new(2, 2), 1)
         .expect("north height");
     map.set_height(TileCoord::new(2, 3), 1)
@@ -2687,8 +2692,8 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
         world
             .query::<&ViewportSortableParent>()
             .iter(&world)
-            .any(|parent| parent.sprite_id == 6124),
-        "la fachada base Action5 0x17 debe conservar su parent sortable"
+            .any(|parent| parent.sprite_id == 6128),
+        "la fachada base Action5 0x17 debe usar dir=SW de m5 (slot frontal 5)"
     );
     assert_eq!(
         world.query::<&ViewportSortableChild>().iter(&world).count(),

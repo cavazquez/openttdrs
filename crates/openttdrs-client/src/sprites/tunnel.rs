@@ -294,4 +294,27 @@ mod tests {
         assert_eq!(front.y, origin.y + 38.0 - 37.0 / 2.0 - 30.0);
         assert_eq!(front.z, crate::iso::sortable_draw_z(190, 125, 0, 0.08));
     }
+
+    #[test]
+    fn rail_tunnel_base_slots_cover_all_directions_and_snow_variants() {
+        for dir in 0..4 {
+            let d = dir as u8;
+            let normal_rear = crate::sprites::rail_tunnel_base_slot(d, false, false);
+            let normal_front = crate::sprites::rail_tunnel_base_slot(d, false, true);
+            let snow_rear = crate::sprites::rail_tunnel_base_slot(d, true, false);
+            let snow_front = crate::sprites::rail_tunnel_base_slot(d, true, true);
+            assert_eq!(normal_rear, dir * 2);
+            assert_eq!(normal_front, dir * 2 + 1);
+            assert_eq!(snow_rear, 8 + dir * 2);
+            assert_eq!(snow_front, 8 + dir * 2 + 1);
+            assert_eq!(
+                crate::sprites::rail_tunnel_base_sprite_id(0, normal_rear),
+                Some(6123 + normal_rear as u32)
+            );
+            assert_eq!(
+                crate::sprites::rail_tunnel_base_sprite_id(1, snow_front),
+                Some(6123 + snow_front as u32)
+            );
+        }
+    }
 }

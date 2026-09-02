@@ -143,7 +143,7 @@ fn append_company_economy_history(
     Ok(())
 }
 
-fn plyr_records(
+pub(super) fn plyr_records(
     state: &GameState,
     autoreplace_export: &super::fleet::AutoreplaceExport,
 ) -> Result<Vec<Vec<u8>>, SavError> {

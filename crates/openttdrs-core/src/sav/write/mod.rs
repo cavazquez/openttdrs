@@ -99,6 +99,7 @@ pub(crate) struct SavSemanticTableRecords {
     pub(crate) pats: Vec<Vec<u8>>,
     pub(crate) ecmy: Vec<Vec<u8>>,
     pub(crate) capy: Vec<Vec<u8>>,
+    pub(crate) plyr: Vec<Vec<u8>>,
 }
 
 pub(crate) fn semantic_table_records(
@@ -110,6 +111,8 @@ pub(crate) fn semantic_table_records(
     let stnn = entities::stnn_records_with_cargo(state, map_w, &cargo_export)?;
     let city = entities::city_records(state, map_w)?;
     let indy = entities::indy_records_with_cargo(state, map_w)?;
+    let autoreplace_export = fleet::autoreplace_export(state)?;
+    let plyr = meta::plyr_records(state, &autoreplace_export)?;
     Ok(SavSemanticTableRecords {
         ordl,
         vehs,
@@ -119,6 +122,7 @@ pub(crate) fn semantic_table_records(
         pats: vec![meta::pats_record(state)],
         ecmy: vec![meta::ecmy_record(state)],
         capy: meta::capy_records(state)?,
+        plyr,
     })
 }
 
@@ -431,7 +435,19 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         ],
         &[meta::date_record(state)],
     )?);
-    data.extend_from_slice(&meta::plyr_chunk(state, &autoreplace_export)?);
+    let plyr = meta::plyr_records(state, &autoreplace_export)?;
+    let raw_plyr = raw_tables.and_then(|passthrough| {
+        passthrough.plyr_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"PLYR"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.plyr_semantic_records == plyr
+        })
+    });
+    if let Some(raw) = raw_plyr {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else {
+        data.extend_from_slice(&meta::plyr_chunk(state, &autoreplace_export)?);
+    }
 
     data.extend_from_slice(&[0, 0, 0, 0]);
     Ok(data)
@@ -887,6 +903,10 @@ mod tests {
             .expect("ECMY original")
             .body
             .clone();
+        let original_plyr = crate::sav::chunks::find_chunk(&original_chunks, "PLYR")
+            .expect("PLYR original")
+            .body
+            .clone();
 
         let mut loaded = GameState::from_sav_game(sav::load(&original).expect("load original"));
         let passthrough = loaded
@@ -949,6 +969,14 @@ mod tests {
                 .body,
             original_ecmy
         );
+        assert_eq!(
+            passthrough
+                .plyr_chunk
+                .as_ref()
+                .expect("PLYR passthrough")
+                .body,
+            original_plyr
+        );
 
         let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
         let (resaved_payload, _) = crate::sav::container::decompress(&resaved).expect("payload");
@@ -974,6 +1002,9 @@ mod tests {
         let resaved_ecmy =
             crate::sav::chunks::find_chunk(&resaved_chunks, "ECMY").expect("ECMY resaved");
         assert_eq!(resaved_ecmy.body, original_ecmy);
+        let resaved_plyr =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "PLYR").expect("PLYR resaved");
+        assert_eq!(resaved_plyr.body, original_plyr);
 
         loaded.vehicles[0].cur_speed = loaded.vehicles[0].cur_speed.saturating_add(1);
         let changed = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("save changed");

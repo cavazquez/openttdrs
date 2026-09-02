@@ -609,3 +609,12 @@ ajuste o pago vuelve al encoder canónico. Las regresiones
 caminos. La fusión de columnas desconocidas después de una mutación, `PLYR`,
 `GRPS`/`ERNW` y los demás pools nativos siguen pendientes; #329 permanece
 abierto.
+
+Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` comparte ahora la
+huella de filas con las tablas SAV anteriores. Un round-trip sin cambios de
+compañías conserva byte a byte el header y las columnas futuras de dinero,
+ajustes, economía, libreas y retrato; cualquier cambio de empresa o de una
+regla asociada invalida sólo ese cuerpo y usa el encoder semántico actual. La
+regresión `imported_vehs_body_is_reused_until_vehicle_semantics_change` verifica
+la reutilización. La fusión por columnas tras una mutación y los pools
+`GRPS`/`ERNW` todavía requieren cobertura diferencial; #329 permanece abierto.

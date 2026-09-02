@@ -152,7 +152,7 @@ Fuente: `newgrf_act0_stations.cpp`.
 |---|---|
 | `08` class label | **runtime** |
 | `0A` copy sprite layout | consumida (extended-byte id) |
-| `0B` callback mask | **runtime parcial**: se conserva en el spec; `Avail` ejecuta CB13, `DrawTileLayout` ejecuta CB14 en el renderer, `AnimationNextFrame`/`AnimationSpeed` habilitan CB141/CB142 y `SlopeCheck` ejecuta CB149 por tesela al consultar/construir. Restan otros bits, scopes/layouts dinámicos completos, strings y compatibilidad GRF <8 del CB149. |
+| `0B` callback mask | **runtime parcial**: se conserva en el spec; `Avail` ejecuta CB13, `DrawTileLayout` ejecuta CB14 en el renderer, `AnimationNextFrame`/`AnimationSpeed` habilitan CB141/CB142 y `SlopeCheck` ejecuta CB149 por tesela al consultar/construir, incluida la inversión de bit 10 para GRF <8. Restan otros bits, scopes/layouts dinámicos completos y strings. |
 | `0C` disallowed platforms bitmask | **runtime** |
 | `0D` disallowed lengths bitmask | **runtime** |
 | `0E` custom tile layout | **runtime** |

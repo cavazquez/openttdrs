@@ -338,6 +338,15 @@ las paletas especiales de vehículos (2CC/crash) ya están materializadas;
 siguen abiertos scopes parent/relative avanzados y callbacks/layouts sin call
 site completo.
 
+Actualización #329-STATION-CB149-019 (2026-09-02): la comprobación de pendiente
+de estaciones ferroviarias (`CB149`) aplica ahora la compatibilidad de
+`OpenTTD` para GRF anteriores a la versión 8: se invierte el bit 10 del
+resultado antes de decidir si la tesela es válida. Los parámetros de slope,
+orientación, andén y posición se mantienen iguales y la query/execute sigue
+siendo atómica antes de mutar el mapa. Continúan pendientes el scope completo
+de `BaseStation`, vecinos y mensajes de error de texto GRF; #329 permanece
+abierto.
+
 ### Avance NewGRF — 2026-08-27
 
 La ruta de tile loop de `IndustryTile` ahora recibe los catálogos y pools de

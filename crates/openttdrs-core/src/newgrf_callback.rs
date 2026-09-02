@@ -1086,6 +1086,25 @@ pub const fn callback_allows_location(result: u16) -> bool {
     result == CALLBACK_FAILED || result == 0x400
 }
 
+/// Aplica la compatibilidad de resultados de ubicación de `OpenTTD`.
+///
+/// En GRF anteriores a la versión 8 el bit 10 de los callbacks de ubicación
+/// está invertido: `0` significa «sin error» y `0x400` es un error estándar.
+/// Una versión `0` identifica specs vanilla/fixtures sin versión Action8 y no
+/// debe activar la inversión; los GRF publicados usan las versiones 7/8.
+#[must_use]
+pub const fn callback_allows_location_for_grf(result: u16, grfid: u32, grf_version: u8) -> bool {
+    if result == CALLBACK_FAILED {
+        return true;
+    }
+    let normalized = if grfid != 0 && grf_version != 0 && grf_version < 8 {
+        result ^ (1 << 10)
+    } else {
+        result
+    };
+    callback_allows_location(normalized)
+}
+
 /// Resultado de un callback booleano de ocho bits (CB13 de station/RoadStop,
 /// CB17 de house). `CALLBACK_FAILED` permite el fallback y cualquier byte bajo
 /// no nulo permite la operación, como `Convert8bitBooleanCallback` upstream.
@@ -1611,7 +1630,7 @@ pub fn apply_station_slope_callback_for_build(
         param1,
         param2,
     );
-    callback_allows_location(result)
+    callback_allows_location_for_grf(result, def.newgrf_grfid, def.newgrf_grf_version)
 }
 
 /// Resolver stateful de estación para scopes que sí tienen una estación.
@@ -3403,6 +3422,14 @@ mod tests {
         assert!(!callback_allows_location(0xFF));
         assert!(!callback_allows_location(0x401));
 
+        // `GetErrorMessageFromLocationCallbackResult` invierte bit 10 para
+        // GRF < 8: cero es éxito y 0x400 es el error estándar.
+        assert!(callback_allows_location_for_grf(0, 1, 7));
+        assert!(!callback_allows_location_for_grf(0x400, 1, 7));
+        assert!(!callback_allows_location_for_grf(0, 1, 8));
+        assert!(callback_allows_location_for_grf(0x400, 1, 8));
+        assert!(callback_allows_location_for_grf(CALLBACK_FAILED, 1, 7));
+
         assert!(callback_allows_8bit_boolean(CALLBACK_FAILED));
         assert!(!callback_allows_8bit_boolean(0));
         assert!(callback_allows_8bit_boolean(1));
@@ -3770,6 +3797,19 @@ mod tests {
         def.callback_mask = 0;
         def.newgrf_runtime = Some(Box::new(gfx_callback_literal(0)));
         assert!(apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 2, 4,
+        ));
+
+        // Los GRF antiguos expresan éxito con cero (bit 10 invertido).
+        def.callback_mask = crate::station_class::STATION_CALLBACK_SLOPE_CHECK_MASK;
+        def.newgrf_grfid = 0x1234;
+        def.newgrf_grf_version = 7;
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal(0)));
+        assert!(apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 2, 4,
+        ));
+        def.newgrf_grf_version = 8;
+        assert!(!apply_station_slope_callback_for_build(
             &def, 1, true, 3, 5, 2, 4,
         ));
     }

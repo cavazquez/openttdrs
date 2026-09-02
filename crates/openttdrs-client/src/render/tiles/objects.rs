@@ -111,6 +111,28 @@ fn spawn_custom_rail_tunnel_surface(
     ));
 }
 
+/// Ancla una vista `RTSG_TUNNEL_PORTAL` al borde sortable de la boca. El
+/// `roof_bounds` de `DrawTile_TunnelBridge` agrega el mismo remap `(15,15,0)`
+/// que usa la capa frontal vanilla; sólo cambia el centro NFO de la vista
+/// Action1/2.
+fn custom_rail_tunnel_front_translation(
+    ctx: &TileRenderContext,
+    center_offset: Vec2,
+    base_z: u8,
+    layer: f32,
+) -> Vec3 {
+    let elevation = f32::from(base_z) * HEIGHT_PX;
+    let mut position = Vec3::new(
+        ctx.iso_pos.x + center_offset.x,
+        ctx.iso_pos.y + center_offset.y + elevation,
+        sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), base_z, layer),
+    );
+    let offset = remap_tile_offset(15.0, 15.0, 0.0) * 0.5;
+    position.x += offset.x;
+    position.y += offset.y;
+    position
+}
+
 /// `DrawRoadCatenary` usa la geometría de la entrada de la parada, no los
 /// roadbits almacenados en `m3/m5`. Las vistas `RSV_*` están ordenadas
 /// NE, SE, SW, NW y una bahía sólo tiene un brazo conectado.
@@ -3734,7 +3756,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             // `UsesOverlay()`. Resolver ambos grupos antes de dibujar permite
             // conservar esa regla y deja el portal vanilla como fallback si
             // falta cualquiera de las vistas para la dirección actual.
-            let custom_tunnel_surface = if rail {
+            let (custom_tunnel_portal, custom_tunnel_surface) = if rail {
                 let rail_index = usize::from(rail_type.as_u8());
                 let uses_overlay = rail_type_underlay_newgrf
                     .get(rail_index)
@@ -3759,7 +3781,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                                 )
                             })
                     });
-                    if portal_resolves.is_some() {
+                    let tunnel_resolves = if portal_resolves.is_some() {
                         ctx.tile.and_then(|tile| {
                             rail_type_tunnel_newgrf
                                 .get(rail_index)
@@ -3781,12 +3803,13 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                         })
                     } else {
                         None
-                    }
+                    };
+                    (portal_resolves, tunnel_resolves)
                 } else {
-                    None
+                    (None, None)
                 }
             } else {
-                None
+                (None, None)
             };
             let rear_image = if rail {
                 assets.rail_tunnel_portal_sprite(rail_type, dir)
@@ -3925,6 +3948,10 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             let (front_offset, (ox, oy, oz, ex, ey, ez)) =
                 crate::sprites::tunnel_front_trace_geometry(dir);
             let front_bounds = TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez);
+            let custom_front_translation = custom_tunnel_portal.as_ref().map(|resolved| {
+                custom_rail_tunnel_front_translation(ctx, resolved.center_offset, base_z, 0.08)
+            });
+            let custom_front_sprite = custom_tunnel_portal.map(|resolved| resolved.sprite);
             let tunnel_parents = (!draw_tunnel_catenary).then(|| {
                 tunnel_sortable_parents(
                     ctx.tx_i32(),
@@ -3939,7 +3966,11 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             // portal se registra antes de los separadores, aunque las
             // profundidades de runtime se reasignen después.
             WorldDrawTrace::record_sprite_with_geometry(
-                "tunnel-front",
+                if custom_front_sprite.is_some() {
+                    "tunnel-front-newgrf"
+                } else {
+                    "tunnel-front"
+                },
                 if draw_tunnel_catenary {
                     "combined"
                 } else {
@@ -3958,6 +3989,9 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                 front_sprite_id,
                 0.08,
             );
+            if let Some(custom_translation) = custom_front_translation {
+                front_translation = custom_translation;
+            }
             let front_sortable_parent = tunnel_parents.as_ref().map(|parents| {
                 let source_depth = viewport_source_depth(
                     sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.08),
@@ -3975,7 +4009,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             let mut front_entity = commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                front_image.sprite(),
+                custom_front_sprite.unwrap_or_else(|| front_image.sprite()),
                 Transform::from_translation(front_translation),
             ));
             if let Some(parent) = front_sortable_parent {

@@ -258,9 +258,11 @@ parser/runtime conserva también `RTSG_TUNNEL` (selector 3) y
 `RTSG_TUNNEL_PORTAL` (selector 10). En una boca ferroviaria con `UsesOverlay()`
 se dibuja la superficie `RTSG_TUNNEL` con el ancla NFO y orden independiente,
 antes de PBS/catenaria; si falla la resolución se conserva el portal OpenGFX.
-El `RTSG_TUNNEL_PORTAL` aún no reemplaza la base de césped
-`SPR_RAILTYPE_TUNNEL_BASE` ni el sortable de fachada, y las variantes de
-pendiente/rotación y paletas especiales todavía requieren una matriz específica.
+Cuando `RTSG_TUNNEL_PORTAL` resuelve una vista Action2, la fachada sortable ya
+usa el sprite custom y su centro NFO (`tunnel-front-newgrf`), con fallback por
+vista. La base de césped `SPR_RAILTYPE_TUNNEL_BASE` sigue siendo vanilla hasta
+integrar su extracción/carga Action5; las variantes de pendiente/rotación y
+paletas especiales todavía requieren una matriz específica.
 En vehículos marítimos, las listas CTT `0x1E/0x1F` ya conservan inclusión y
 exclusión de cargos y la máscara final de refit descarta los cargos excluidos;
 el resto de propiedades CTT variables continúa pendiente.

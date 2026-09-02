@@ -465,7 +465,10 @@ resuelto, el renderer consume la vista `RTSG_TUNNEL` con su ancla NFO como
 OpenGFX si falta una vista o el clima/fecha no coincide. La regresión
 `newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined` cubre
 una boca inclinada `SLOPE_NE` y confirma la capa independiente del sorter.
-El overlay de fachada `RTSG_TUNNEL_PORTAL` todavía no sustituye el
-`SPR_RAILTYPE_TUNNEL_BASE` (base de césped sin portal) ni su `AddSortable`:
-esa diferencia, junto con túneles en pendientes/rotaciones y paletas especiales,
-mantiene #326 abierto.
+Actualización #326-RAIL-TUNNEL-003 (2026-09-02): cuando `RTSG_TUNNEL_PORTAL`
+resuelve una vista Action2, la fachada ya usa el sprite custom y su centro NFO
+en la capa sortable (`tunnel-front-newgrf`); esto corrige el anclaje visual de
+las bocas y conserva el fallback vanilla por vista. La base de césped
+`SPR_RAILTYPE_TUNNEL_BASE` todavía no se extrae/carga como Action5, por lo que
+el suelo posterior permanece tipado vanilla. Las pendientes/rotaciones y las
+paletas especiales continúan abiertas; #326 permanece en curso.

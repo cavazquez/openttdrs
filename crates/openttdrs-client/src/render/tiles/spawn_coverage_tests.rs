@@ -2683,6 +2683,16 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
         custom_layers, 1,
         "RTSG_TUNNEL debe dibujar la superficie custom"
     );
+    let front_offset = crate::iso::remap_tile_offset(15.0, 15.0, 0.0) * 0.5;
+    let front_iso = crate::iso::iso(2, 2);
+    assert!(
+        world.query::<&Transform>().iter(&world).any(|transform| {
+            (transform.translation.x - (front_iso.x + front_offset.x)).abs() < f32::EPSILON
+                && (transform.translation.y - (front_iso.y + 2.0 + front_offset.y)).abs()
+                    < f32::EPSILON
+        }),
+        "RTSG_TUNNEL_PORTAL debe anclar la fachada custom al borde sortable"
+    );
 }
 
 #[test]

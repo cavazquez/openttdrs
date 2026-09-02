@@ -294,3 +294,31 @@ seis fronteras quedan exactas (**0 teselas, 0 bytes y 0 bloques 4×4**); la
 comparación verificó también que el estado RNG y los 373 centros coinciden.
 El cierre se limita a la regla de propietario y esta cohorte; otras semillas,
 tamaños, layouts, carreteras no municipales y runtime NewGRF siguen abiertos.
+
+### RMAP-133 — Ejecutar el `TileLoop_Trees` tropical con el RNG global
+
+**Estado: cerrado (sub-issue acotado de RMAP-004/RMAP-018/RMAP-019).** La
+primera divergencia de la seed tropical `1330935384` en 1024² estaba ya en la
+frontera `landscape`: seis teselas diferían después de las 256 pasadas que
+`CreateRivers` ejecuta sobre el mapa. Rust procesaba los árboles tropicales
+con el RNG determinista de simulación y omitía la extracción de `Random()` del
+paso de selva; una propagación distinta alteraba además las densidades y el
+sustrato de las teselas vecinas.
+
+La cola de generación usa ahora el RNG compartido para todas las variantes de
+`TileLoop_Trees`. En trópico aplica antes la transición
+`TROPICZONE_DESERT`→`TREE_GROUND_SNOW_DESERT`, consume el sorteo de sonido de
+`TROPICZONE_RAINFOREST` aunque el sonido esté desactivado y bloquea la
+propagación desde el desierto. El crecimiento común relee `MAP2` después de
+esa transición para no restaurar por accidente la densidad anterior. Las
+regresiones `tropical_rainforest_tile_consumes_sound_random_before_growth` y
+`tropical_desert_tree_sets_snow_ground_without_random` cubren el stream y los
+bytes crudos.
+
+La comparación diferencial
+`generation_phase_parity.py --size 1024 --seed 1330935384 --climate tropic
+--phases landscape,clear,towns,industries,objects,trees --require-exact` queda
+exacta en las seis fronteras: **0 teselas, 0 bytes y 0 bloques 4×4** distintos
+en 1.048.576 teselas. El cierre sólo cubre el orden tropical de ese tile loop
+y esta cohorte; otras semillas, tamaños, configuraciones de árboles/ríos,
+climas y ticks posteriores siguen dentro de RMAP-004/RMAP-018.

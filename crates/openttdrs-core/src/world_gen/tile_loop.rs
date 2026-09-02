@@ -180,6 +180,7 @@ fn dispatch_generation_tile_loop_tile(
                 state.climate,
                 crate::world_gen::Climate::Temperate
                     | crate::world_gen::Climate::SubArctic
+                    | crate::world_gen::Climate::SubTropical
                     | crate::world_gen::Climate::Toyland
             ) && generation_rng.is_some() =>
         {

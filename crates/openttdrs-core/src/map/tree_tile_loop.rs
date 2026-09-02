@@ -556,17 +556,14 @@ fn clear_dead_tree_tile(map: &mut Map, c: TileCoord, m2: u16) {
 }
 
 /// Ejecuta el subconjunto de `TileLoop_Trees` que corre durante
-/// `CreateRivers` en una partida nueva. Temperate y Toyland comparten el
-/// camino vanilla sin transiciones climáticas previas, y ambos consumen el
-/// RNG global al alcanzar una actualización de crecimiento; Arctic/Tropic
-/// mantienen por ahora sus rutas específicas hasta contar con fixtures de
-/// paridad independientes.
+/// `CreateRivers` en una partida nueva. Todas las variantes consumen el RNG
+/// global al alcanzar una actualización de crecimiento; el trópico además
+/// sortea el callback de sonido de selva y actualiza el sustrato desértico
+/// antes de aplicar la lógica común de árboles.
 ///
 /// La configuración inicial de OpenTTD usa `extra_tree_placement =
 /// ETP_SPREAD_ALL`; por eso las ramas de crecimiento pueden propagarse y,
-/// sobre todo, deben leer del `Random()` global. El tile loop normal conserva
-/// por ahora su RNG determinista independiente, porque no comparte el stream
-/// de construcción del mundo.
+/// sobre todo, deben leer del `Random()` global.
 pub(crate) fn process_generation_tree_growth_at(
     map: &mut Map,
     climate: Climate,
@@ -576,7 +573,7 @@ pub(crate) fn process_generation_tree_growth_at(
 ) {
     debug_assert!(matches!(
         climate,
-        Climate::Temperate | Climate::SubArctic | Climate::Toyland
+        Climate::Temperate | Climate::SubArctic | Climate::SubTropical | Climate::Toyland
     ));
     let Some(tile) = map.get(c) else {
         return;
@@ -585,8 +582,34 @@ pub(crate) fn process_generation_tree_growth_at(
         return;
     }
 
+    // `TileLoopTreesDesert` precede a la lógica común. En selva siempre toma
+    // un `Random()`, incluso con sonido ambiente desactivado; en desierto
+    // actualiza el sustrato a nieve/desierto y bloquea la propagación.
+    let can_spread = if climate == Climate::SubTropical {
+        match tile.mapt & 0x03 {
+            1 => {
+                let tree_m2 = tree_m2_word(tile);
+                if tree_ground(tree_m2) != TREE_GROUND_SNOW_DESERT {
+                    set_tree_m2_word(map, c, make_tree_m2_word(TREE_GROUND_SNOW_DESERT, 3));
+                }
+                false
+            }
+            2 => {
+                let _ = rng.next();
+                true
+            }
+            _ => true,
+        }
+    } else {
+        true
+    };
+
     let cycle = landscape_tile_cycle(c, tick);
-    let tree_m2 = tree_m2_word(tile);
+    // The tropical prelude may have changed MAP2; the generic grass-density
+    // branch must inspect that live value, just like `TileLoop_Trees`.
+    let tree_m2 = map
+        .get(c)
+        .map_or_else(|| tree_m2_word(tile), tree_m2_word);
     if cycle & 7 == 7 && tree_ground(tree_m2) == 0 {
         let density = tree_ground_density(tree_m2);
         if density < 3 {
@@ -597,10 +620,15 @@ pub(crate) fn process_generation_tree_growth_at(
         return;
     }
 
-    step_one_generation_forest_tile(map, rng, c);
+    step_one_generation_forest_tile(map, rng, c, can_spread);
 }
 
-fn step_one_generation_forest_tile(map: &mut Map, rng: &mut Randomizer, c: TileCoord) {
+fn step_one_generation_forest_tile(
+    map: &mut Map,
+    rng: &mut Randomizer,
+    c: TileCoord,
+    can_spread: bool,
+) {
     let Some(tile) = map.get(c) else {
         return;
     };
@@ -633,6 +661,9 @@ fn step_one_generation_forest_tile(map: &mut Map, rng: &mut Randomizer, c: TileC
                     );
                 }
                 1 | 2 => {
+                    if !can_spread {
+                        return;
+                    }
                     let direction = (rng.next() & 0x07) as usize;
                     try_spread_generation_neighbor(map, c, tree_type, direction);
                 }
@@ -1293,6 +1324,53 @@ mod tests {
             TREE_GROWTH_GROWN + 1
         );
         assert_eq!(rng, expected_rng, "Toyland debe compartir el RNG vanilla");
+    }
+
+    #[test]
+    fn tropical_rainforest_tile_consumes_sound_random_before_growth() {
+        let mut map = Map::new_flat(32, 32, 0);
+        let c = TileCoord::new(13, 16); // ciclo 15 con tick cero
+        force_forest(&mut map, c, TREE_GROWTH_GROWING1);
+        let mut tree = map.get(c).unwrap();
+        tree.mapt = 0x42; // MP_TREES + TROPICZONE_RAINFOREST
+        map.set_tile(c, tree).unwrap();
+
+        let mut rng = Randomizer { state: [8, 1] };
+        let mut expected_rng = rng;
+        let _ = expected_rng.next();
+        process_generation_tree_growth_at(&mut map, Climate::SubTropical, 0, &mut rng, c);
+
+        assert_eq!(
+            rng, expected_rng,
+            "la selva consume Random() aun sin sonido"
+        );
+        assert_eq!(
+            tree_or_field_stage(map.get(c).unwrap().m5),
+            TREE_GROWTH_GROWING1 + 1
+        );
+    }
+
+    #[test]
+    fn tropical_desert_tree_sets_snow_ground_without_random() {
+        let mut map = Map::new_flat(32, 32, 0);
+        let c = TileCoord::new(13, 16);
+        force_forest(&mut map, c, TREE_GROWTH_GROWING1);
+        let mut tree = map.get(c).unwrap();
+        tree.mapt = 0x41; // MP_TREES + TROPICZONE_DESERT
+        tree.m2 = make_tree_m2(TREE_GROUND_GRASS, 1);
+        map.set_tile(c, tree).unwrap();
+
+        let mut rng = Randomizer {
+            state: [0x1234, 0x5678],
+        };
+        let before = rng;
+        process_generation_tree_growth_at(&mut map, Climate::SubTropical, 0, &mut rng, c);
+
+        assert_eq!(rng, before, "el sustrato desértico no sortea dirección");
+        assert_eq!(
+            tree_m2_word(map.get(c).unwrap()),
+            u16::from(make_tree_m2(TREE_GROUND_SNOW_DESERT, 3))
+        );
     }
 
     #[test]

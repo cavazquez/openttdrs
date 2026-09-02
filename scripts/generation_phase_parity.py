@@ -84,6 +84,27 @@ def parse_args() -> argparse.Namespace:
         default="temperate",
         help="clima de OpenTTD (default: temperate)",
     )
+    parser.add_argument(
+        "--amount-of-rivers",
+        type=int,
+        choices=range(4),
+        help="cantidad de ríos de game_creation (0..3; default: OpenTTD)",
+    )
+    parser.add_argument(
+        "--min-river-length",
+        type=int,
+        help="longitud mínima experta de ríos (2..255; default: OpenTTD)",
+    )
+    parser.add_argument(
+        "--river-route-random",
+        type=int,
+        help="aleatoriedad experta de la ruta de ríos (1..255; default: OpenTTD)",
+    )
+    parser.add_argument(
+        "--water-borders",
+        type=int,
+        help="máscara water_borders (0..16; default: OpenTTD)",
+    )
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--phases", default=",".join(PHASES))
     parser.add_argument("--out-dir", type=Path, help="directorio para artefactos")
@@ -101,6 +122,13 @@ def validate_args(args: argparse.Namespace) -> tuple[Path, Path, str, tuple[str,
         raise GenerationPhaseError("--size debe ser una potencia de dos entre 64 y 4096")
     if args.timeout <= 0:
         raise GenerationPhaseError("--timeout debe ser positivo")
+    for name, value, minimum, maximum in (
+        ("--min-river-length", args.min_river_length, 2, 255),
+        ("--river-route-random", args.river_route_random, 1, 255),
+        ("--water-borders", args.water_borders, 0, 16),
+    ):
+        if value is not None and not minimum <= value <= maximum:
+            raise GenerationPhaseError(f"{name} debe estar entre {minimum} y {maximum}")
     reference = args.reference_bin.resolve()
     if not reference.is_file():
         raise GenerationPhaseError(f"no existe el binario OpenTTD {reference}")
@@ -126,6 +154,10 @@ def run_reference_generation(
         "OPENTTDRS_TREE_PRE_SAVE_OUT",
         "OPENTTDRS_TREE_POST_SAVE_OUT",
         "OPENTTDRS_TREE_TRACE_OUT",
+        "OPENTTDRS_AMOUNT_OF_RIVERS",
+        "OPENTTDRS_MIN_RIVER_LENGTH",
+        "OPENTTDRS_RIVER_ROUTE_RANDOM",
+        "OPENTTDRS_WATER_BORDERS",
     ):
         env.pop(key, None)
     random_map_raw = stage_dir / "generation.after_startup.raw.jsonl"
@@ -181,7 +213,28 @@ def run_candidate_raw(
     out: Path,
     timeout: int,
     log: Path,
+    *,
+    amount_of_rivers: int | None,
+    min_river_length: int | None,
+    river_route_random: int | None,
+    water_borders: int | None,
 ) -> None:
+    env = {**os.environ, "CARGO_NET_OFFLINE": "true"}
+    for key in (
+        "OPENTTDRS_AMOUNT_OF_RIVERS",
+        "OPENTTDRS_MIN_RIVER_LENGTH",
+        "OPENTTDRS_RIVER_ROUTE_RANDOM",
+        "OPENTTDRS_WATER_BORDERS",
+    ):
+        env.pop(key, None)
+    for key, value in (
+        ("OPENTTDRS_AMOUNT_OF_RIVERS", amount_of_rivers),
+        ("OPENTTDRS_MIN_RIVER_LENGTH", min_river_length),
+        ("OPENTTDRS_RIVER_ROUTE_RANDOM", river_route_random),
+        ("OPENTTDRS_WATER_BORDERS", water_borders),
+    ):
+        if value is not None:
+            env[key] = str(value)
     matrix.run_checked(
         [
             str(candidate),
@@ -199,7 +252,7 @@ def run_candidate_raw(
             "--openttd-commit",
             commit,
         ],
-        {**os.environ, "CARGO_NET_OFFLINE": "true"},
+        env,
         timeout,
         log,
     )
@@ -228,11 +281,25 @@ def main() -> int:
         "climate": args.climate,
         "phases": list(phases),
         "block_size": 4,
+        "generation_settings": {
+            "amount_of_rivers": args.amount_of_rivers,
+            "min_river_length": args.min_river_length,
+            "river_route_random": args.river_route_random,
+            "water_borders": args.water_borders,
+        },
     }
     try:
         with tempfile.TemporaryDirectory(prefix="openttdrs-generation-phase-config-") as config_dir:
             config = Path(config_dir) / "openttd.cfg"
-            matrix.write_config(config, args.size, climate=CLIMATE_CODES[args.climate])
+            matrix.write_config(
+                config,
+                args.size,
+                climate=CLIMATE_CODES[args.climate],
+                amount_of_rivers=args.amount_of_rivers,
+                min_river_length=args.min_river_length,
+                river_route_random=args.river_route_random,
+                water_borders=args.water_borders,
+            )
             reference_raw_by_phase = run_reference_generation(
                 reference,
                 config,
@@ -256,6 +323,10 @@ def main() -> int:
                 candidate_raw,
                 args.timeout,
                 out_dir / f"{phase}.candidate.log",
+                amount_of_rivers=args.amount_of_rivers,
+                min_river_length=args.min_river_length,
+                river_route_random=args.river_route_random,
+                water_borders=args.water_borders,
             )
             reference_metadata, reference_tiles = matrix.read_world_raw(reference_raw)
             candidate_metadata, candidate_tiles = matrix.read_world_raw(candidate_raw)

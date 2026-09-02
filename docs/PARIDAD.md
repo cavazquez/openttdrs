@@ -27,11 +27,14 @@ faros. RMAP-123 además alinea `RiverMakeWider` con `IsValidTile` en el borde
 alto. RMAP-124 aplica también `CheckBridgeSlope` al preflight de puentes
 municipales: las cuatro seeds árticas 512² (`1330935378`–`1330935381`) quedan
 exactas en `landscape`→`trees`, comparando teselas y bloques 4×4; la
-generalización del clima permanece abierta.
+generalización del clima permanece abierta. RMAP-139 agrega al comparador los
+ajustes explícitos de ríos (`amount_of_rivers`, `min_river_length`,
+`river_route_random`) y `water_borders`; las combinaciones verificadas en
+temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-08-31 · `main` (ver commit publicado más reciente).
+**Corte canónico: 2026-09-02 · `main` (ver commit publicado más reciente).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el

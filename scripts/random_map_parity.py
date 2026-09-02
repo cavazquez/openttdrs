@@ -72,19 +72,45 @@ def load_manifest_commit() -> str:
         raise MatrixError(f"no se pudo leer el commit OpenTTD de {path}") from error
 
 
-def write_config(path: Path, size: int, climate: int = 0) -> None:
-    """Escribe la configuración headless de un mapa cuadrado de OpenTTD."""
+def write_config(
+    path: Path,
+    size: int,
+    climate: int = 0,
+    *,
+    amount_of_rivers: int | None = None,
+    min_river_length: int | None = None,
+    river_route_random: int | None = None,
+    water_borders: int | None = None,
+) -> None:
+    """Escribe la configuración headless de un mapa cuadrado de OpenTTD.
+
+    Los ajustes de ríos son opcionales para que la matriz canónica conserve el
+    perfil de partida nueva, pero el comparador por fases pueda auditar los
+    valores expertos que suelen quedar fuera de las pruebas vanilla.
+    """
     bits = int(math.log2(size))
     if climate not in range(4):
         raise MatrixError(f"clima inválido {climate}; usar 0..3")
+    settings: list[str] = []
+    for name, value, minimum, maximum in (
+        ("amount_of_rivers", amount_of_rivers, 0, 3),
+        ("min_river_length", min_river_length, 2, 255),
+        ("river_route_random", river_route_random, 1, 255),
+        ("water_borders", water_borders, 0, 16),
+    ):
+        if value is not None:
+            if not minimum <= value <= maximum:
+                raise MatrixError(f"{name} inválido {value}; usar {minimum}..{maximum}")
+            settings.append(f"{name} = {value}\n")
     path.write_text(
         "[game_creation]\n"
         f"map_x = {bits}\n"
         f"map_y = {bits}\n"
         f"landscape = {climate}\n"
-        "\n"
-        "[misc]\n"
-        "no_multithreading = true\n",
+        + "".join(settings)
+        + "\n"
+        + "[misc]\n"
+        + "no_multithreading = true\n",
         encoding="utf-8",
     )
 

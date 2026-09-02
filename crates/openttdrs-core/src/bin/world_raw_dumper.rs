@@ -532,6 +532,14 @@ fn run(args: &Args) -> Result<(), String> {
             .ok()
             .and_then(|value| value.parse().ok())
             .unwrap_or(config.amount_of_rivers);
+        config.min_river_length = std::env::var("OPENTTDRS_MIN_RIVER_LENGTH")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(config.min_river_length);
+        config.river_route_random = std::env::var("OPENTTDRS_RIVER_ROUTE_RANDOM")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(config.river_route_random);
         config.startup_rng_draws = std::env::var("OPENTTDRS_STARTUP_RNG_DRAWS")
             .ok()
             .and_then(|value| value.parse().ok())

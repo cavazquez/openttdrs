@@ -90,7 +90,7 @@ pub fn tick_airport_fta_with_catalog(
     if v.kind != VehicleKind::Aircraft || !v.running {
         return None;
     }
-    if let Some(ev) = try_enter_approach(v, stations) {
+    if let Some(ev) = try_enter_approach(v, stations, engine_catalog) {
         return Some(ev);
     }
     if v.aircraft_phase == AircraftPhase::Flying && !v.airport_fta_active {
@@ -111,7 +111,7 @@ pub fn tick_airport_fta_with_catalog(
             return None;
         }
     }
-    update_heading_for_orders(v, &stations[st_idx], profile.kind);
+    update_heading_for_orders(v, &stations[st_idx], profile.kind, engine_catalog);
     if v.airport_loading_stand_reached && (v.awaiting_load_window || v.cargo_transfer_active()) {
         v.cur_speed = 0;
         return Some(sync_phase_from_node(v, &profile));
@@ -150,7 +150,16 @@ pub fn tick_airport_fta_with_catalog(
     ))
 }
 
-fn try_enter_approach(v: &mut Vehicle, stations: &[Station]) -> Option<AircraftPhaseEvent> {
+fn vehicle_is_helicopter(v: &Vehicle, engine_catalog: &[crate::engine::EngineDef]) -> bool {
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
+    crate::engine::aircraft_is_helicopter_def(engine)
+}
+
+fn try_enter_approach(
+    v: &mut Vehicle,
+    stations: &[Station],
+    engine_catalog: &[crate::engine::EngineDef],
+) -> Option<AircraftPhaseEvent> {
     if v.aircraft_phase != AircraftPhase::Flying || v.airport_fta_active {
         return None;
     }
@@ -171,9 +180,7 @@ fn try_enter_approach(v: &mut Vehicle, stations: &[Station]) -> Option<AircraftP
     v.airport_prev_pos = entry;
     v.airport_waypoint_reached = false;
     v.airport_loading_stand_reached = false;
-    let is_helicopter = v
-        .engine_id
-        .is_some_and(crate::engine::aircraft_is_helicopter);
+    let is_helicopter = vehicle_is_helicopter(v, engine_catalog);
     v.airport_heading = if is_helicopter
         || matches!(
             profile.kind,
@@ -227,7 +234,7 @@ fn advance_fta_node(
     engine_catalog: &[crate::engine::EngineDef],
 ) -> AircraftPhaseEvent {
     let prev = v.airport_pos;
-    nudge_heading_at_node(v, profile);
+    nudge_heading_at_node(v, profile, engine_catalog);
 
     let Some(mut edge) = choose_next_edge(v, profile) else {
         if should_finish_takeoff(v, profile)
@@ -329,10 +336,12 @@ fn airport_node_is_loading_stand(kind: AirportFtaKind, node: u8) -> bool {
     clippy::unnested_or_patterns,
     clippy::match_same_arms
 )]
-fn nudge_heading_at_node(v: &mut Vehicle, profile: &AirportFtaProfile) {
-    if v.engine_id
-        .is_some_and(crate::engine::aircraft_is_helicopter)
-    {
+fn nudge_heading_at_node(
+    v: &mut Vehicle,
+    profile: &AirportFtaProfile,
+    engine_catalog: &[crate::engine::EngineDef],
+) {
+    if vehicle_is_helicopter(v, engine_catalog) {
         // Nodos verticales: no pisar headings heli con nudges de ala fija.
         match (profile.kind, v.airport_pos) {
             (AirportFtaKind::Country, 19)
@@ -816,7 +825,12 @@ fn update_heading_helistation(v: &mut Vehicle, remote: bool) {
     }
 }
 
-fn update_heading_for_orders(v: &mut Vehicle, station: &Station, kind: AirportFtaKind) {
+fn update_heading_for_orders(
+    v: &mut Vehicle,
+    station: &Station,
+    kind: AirportFtaKind,
+    engine_catalog: &[crate::engine::EngineDef],
+) {
     let remote = !station.covers_tile(v.dest) && v.pos != v.dest;
     if kind == AirportFtaKind::Helidepot {
         update_heading_helidepot(v, remote);
@@ -830,8 +844,7 @@ fn update_heading_for_orders(v: &mut Vehicle, station: &Station, kind: AirportFt
         update_heading_helistation(v, remote);
         return;
     }
-    if v.engine_id
-        .is_some_and(crate::engine::aircraft_is_helicopter)
+    if vehicle_is_helicopter(v, engine_catalog)
         && matches!(
             kind,
             AirportFtaKind::Country
@@ -1421,5 +1434,39 @@ mod tests {
         assert_eq!(vehicle.aircraft_phase, AircraftPhase::Flying);
         assert_eq!(vehicle.cur_speed, 37);
         assert_eq!(vehicle.subspeed, 0);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn fta_approach_uses_active_catalog_helicopter_flag() {
+        let engine_id = 50_002;
+        let mut engine = engine_by_id(ENGINE_AIRCRAFT_DAKOTA).unwrap().clone();
+        engine.id = engine_id;
+        engine.newgrf_grfid = 0x464C_4147;
+        engine.is_helicopter = true;
+        let catalog = vec![engine];
+
+        let origin = TileCoord::new(4, 4);
+        let mut station = Station::new_with_kind(origin, StopKind::Airport);
+        station.airport_spec = crate::airport_class::AirportSpecId::City;
+        station.airport_tiles =
+            crate::airport::airport_spec_tiles(origin, station.airport_spec, false)
+                .map(|(coord, _)| coord)
+                .collect();
+
+        let mut vehicle = Vehicle::new(2, VehicleKind::Aircraft, origin, origin);
+        vehicle.engine_id = Some(engine_id);
+        vehicle.running = true;
+        vehicle.aircraft_phase = AircraftPhase::Flying;
+
+        let event = try_enter_approach(&mut vehicle, &[station], &catalog);
+
+        assert_eq!(event, Some(AircraftPhaseEvent::Landing));
+        assert_eq!(vehicle.aircraft_phase, AircraftPhase::Landing);
+        assert_eq!(
+            vehicle.airport_heading,
+            AirportHeading::HeliLanding,
+            "el flag Action0 debe seleccionar la entrada heli aunque el id no sea vanilla"
+        );
     }
 }

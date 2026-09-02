@@ -541,6 +541,15 @@ catálogo. La regresión
 reduce la velocidad al abandonar la pista. El scope de aeropuerto y las APIs
 legacy sin catálogo siguen abiertos, por lo que #329 no se cierra.
 
+Actualización #329-VEHICLE-AIRCRAFT-SUBTYPE-007 (2026-09-02): la FTA y el
+evento `AirplaneTouchdown` ya resuelven el subtipo de aeronave desde el
+catálogo activo (`EngineDef::is_helicopter`), no sólo desde los IDs vanilla.
+Así un helicóptero definido por Action0 conserva `HeliLanding`/`HeliTakeoff`,
+no reserva la pista de ala fija y no dispara el callback de touchdown de avión.
+La regresión `fta_approach_uses_active_catalog_helicopter_flag` cubre la
+entrada a un aeropuerto mixto con un ID NewGRF. Los demás callbacks de subtype,
+sprites y scopes de aeropuerto siguen abiertos; #329 no se cierra.
+
 Actualización #329-VEHICLE-ROAD-SLOPE-006 (2026-09-02): la sincronización de
 `RoadZPosAffectSpeed` al terminar cada subpaso vial ya recibe el catálogo
 activo. El techo de la bajada consulta `PROP_ROAD_SPEED` (`CB36`, `0x15`) sobre

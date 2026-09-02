@@ -278,6 +278,7 @@ pub fn engine_for_vehicle_catalog<'a>(
     vehicle
         .engine_id
         .and_then(|id| catalog.iter().find(|candidate| candidate.id == id))
+        .or_else(|| vehicle.engine_id.and_then(crate::engine::engine_by_id))
         .unwrap_or_else(|| {
             crate::engine::engine_for_vehicle(
                 vehicle.kind,

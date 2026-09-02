@@ -81,11 +81,13 @@ pub(super) fn tick_aircraft_phases(state: &mut GameState) {
         let simple_touchdown = !prev_fta
             && previous_phase == AircraftPhase::Landing
             && state.vehicles[i].aircraft_phase != AircraftPhase::Landing;
-        if (fta_touchdown || simple_touchdown)
-            && !state.vehicles[i]
-                .engine_id
-                .is_some_and(crate::engine::aircraft_is_helicopter)
-        {
+        let aircraft_is_helicopter = crate::engine::aircraft_is_helicopter_def(
+            crate::newgrf_callback::engine_for_vehicle_catalog(
+                &state.engine_catalog,
+                &state.vehicles[i],
+            ),
+        );
+        if (fta_touchdown || simple_touchdown) && !aircraft_is_helicopter {
             super::trigger_airport_animation_at(
                 state,
                 at,

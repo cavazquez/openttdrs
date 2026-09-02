@@ -156,6 +156,14 @@ legacy sigue pasando un catálogo vacío y usa el fallback vanilla. La regresió
 la corrección de pendiente. El resto de propiedades/call sites viales y los
 scopes avanzados siguen parciales.
 
+Actualización #329-VEHICLE-AIRCRAFT-SUBTYPE-007 (2026-09-02): la clasificación
+de helicópteros en la FTA y en `AirplaneTouchdown` usa ahora
+`EngineDef::is_helicopter` del catálogo activo, con fallback para los IDs
+vanilla. Un aeropuerto mixto ya conserva headings heli para motores Action0 con
+IDs propios y evita emitir touchdown de ala fija. La regresión
+`fta_approach_uses_active_catalog_helicopter_flag` cubre esa entrada; el resto
+del runtime de aeronaves y los scopes avanzados permanece parcial.
+
 La tabla de variables relativas conserva el parámetro `ExtendedByte` completo
 (WORD, hasta 14 bits) para `61 → 0x60`; los IDs locales superiores a `0xFF` no
 se aliasan con el motor vanilla de id cero.

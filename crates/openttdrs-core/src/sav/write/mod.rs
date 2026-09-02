@@ -332,6 +332,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
                 (6, "townnamegrfid"),
                 (4, "townnametype"),
                 (6, "townnameparts"),
+                (0x16, "psa_list"),
             ],
             &city,
         )?;
@@ -1347,6 +1348,63 @@ mod tests {
             other => panic!("storage ausente: {other:?}"),
         };
         assert_eq!(resaved_values[7].as_u64(), Some(u64::from(0xCAFE_BABEu32)));
+    }
+
+    #[test]
+    fn ottn_roundtrip_preserves_town_psa_list_refs() {
+        let mut state = tiny_state();
+        let town = Town {
+            id: 3,
+            pos: TileCoord::new(12, 12),
+            name: "PSA Town".into(),
+            ..Default::default()
+        };
+        state.towns.push(town);
+        state.sav_town_persistent_storage_ids.insert(3, vec![2, 5]);
+        state.sav_persistent_storages = vec![
+            crate::sav::SavPersistentStorage {
+                storage_id: 2,
+                grfid: 0x1111_2222,
+                storage: vec![0; 256],
+            },
+            crate::sav::SavPersistentStorage {
+                storage_id: 5,
+                grfid: 0x3333_4444,
+                storage: vec![0; 256],
+            },
+        ];
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let chunks = crate::sav::chunks::parse_chunks(&bytes[8..]).expect("chunks");
+        let city = crate::sav::chunks::find_chunk(&chunks, "CITY").expect("CITY");
+        let rows = crate::sav::table::parse_table_chunk(&city.body, false).expect("CITY table");
+        let refs = match crate::sav::table::record_get(&rows[0].1, "psa_list") {
+            Some(crate::sav::table::SlValue::List(values)) => values
+                .iter()
+                .map(crate::sav::table::SlValue::as_u64)
+                .collect::<Option<Vec<_>>>(),
+            other => panic!("psa_list ausente: {other:?}"),
+        };
+        assert_eq!(refs, Some(vec![3, 6]));
+
+        let loaded = GameState::from_sav_game(sav::load(&bytes).expect("load"));
+        assert_eq!(
+            loaded.sav_town_persistent_storage_ids.get(&0),
+            Some(&vec![2, 5])
+        );
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
+        let resaved_chunks = crate::sav::chunks::parse_chunks(&resaved[8..]).expect("chunks");
+        let resaved_city = crate::sav::chunks::find_chunk(&resaved_chunks, "CITY").expect("CITY");
+        let resaved_rows =
+            crate::sav::table::parse_table_chunk(&resaved_city.body, false).expect("CITY table");
+        let resaved_refs = match crate::sav::table::record_get(&resaved_rows[0].1, "psa_list") {
+            Some(crate::sav::table::SlValue::List(values)) => values
+                .iter()
+                .map(crate::sav::table::SlValue::as_u64)
+                .collect::<Option<Vec<_>>>(),
+            other => panic!("psa_list ausente: {other:?}"),
+        };
+        assert_eq!(resaved_refs, Some(vec![3, 6]));
     }
 
     #[test]

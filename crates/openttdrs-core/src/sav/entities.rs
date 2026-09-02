@@ -752,6 +752,39 @@ pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32, save_version: u
     out
 }
 
+/// Decodifica las referencias `PersistentStorage` de `CITY.psa_list`.
+///
+/// Cada valor es `storage_id + 1` (`REF_STORAGE`); se devuelve el índice cero
+/// basado para que el exportador pueda reemitir exactamente la misma lista.
+#[must_use]
+pub(crate) fn town_persistent_storage_ids_from_chunks(
+    chunks: &[RawChunk],
+    save_version: u16,
+) -> std::collections::HashMap<u32, Vec<u32>> {
+    let Some(city) = find_chunk(chunks, "CITY") else {
+        return std::collections::HashMap::new();
+    };
+    table_rows(city, save_version)
+        .into_iter()
+        .filter_map(|(town_id, record)| {
+            let ids = match record_get(&record, "psa_list") {
+                Some(SlValue::List(values)) => values
+                    .iter()
+                    .filter_map(SlValue::as_u64)
+                    .filter_map(|value| value.checked_sub(1))
+                    .filter_map(|value| u32::try_from(value).ok())
+                    .collect::<Vec<_>>(),
+                _ => return None,
+            };
+            if ids.is_empty() {
+                None
+            } else {
+                Some((town_id, ids))
+            }
+        })
+        .collect()
+}
+
 /// Industria decodificada del chunk `INDY` (saves con tablas).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavIndustry {
@@ -2615,6 +2648,26 @@ mod tests {
         assert_eq!(towns[0].population, 0, "la población se reconstruye aparte");
         assert_eq!(towns[0].pos, TileCoord::new(3, 3));
         assert_eq!(towns[1].name, "Ciudad 2");
+    }
+
+    #[test]
+    fn decodes_town_psa_list_refs_without_compacting_ids() {
+        let mut record = Vec::new();
+        record.extend_from_slice(&(3u32 * 64 + 3).to_be_bytes());
+        write_str("Rosario", &mut record);
+        write_gamma(2, &mut record); // two REF_STORAGE entries
+        record.extend_from_slice(&3u32.to_be_bytes()); // storage id 2
+        record.extend_from_slice(&6u32.to_be_bytes()); // storage id 5
+        let chunk = RawChunk {
+            name: *b"CITY",
+            ch_type: CH_TABLE,
+            body: build_table_body(
+                &[(6, "xy"), (0x0A | 0x10, "name"), (0x16, "psa_list")],
+                &[record],
+            ),
+        };
+        let refs = town_persistent_storage_ids_from_chunks(&[chunk], 300);
+        assert_eq!(refs.get(&0), Some(&vec![2, 5]));
     }
 
     #[test]

@@ -266,6 +266,8 @@ pub struct SavGame {
     pub stations: Vec<SavStation>,
     /// Ciudades del chunk `CITY`.
     pub towns: Vec<Town>,
+    /// Referencias `CITY.psa_list` por índice de pueblo.
+    pub town_persistent_storage_ids: std::collections::HashMap<u32, Vec<u32>>,
     /// Industrias del chunk `INDY` (posición/tamaño/tipo reales).
     pub industries: Vec<SavIndustry>,
     /// Pool nativo `PSAC` de registros persistentes `NewGRF`.
@@ -413,6 +415,8 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let (map_w, map_h) = map.dimensions();
     let stations = entities::stations_from_chunks(&chunk_list, map_w, version);
     let mut towns = entities::towns_from_chunks(&chunk_list, map_w, version);
+    let town_persistent_storage_ids =
+        entities::town_persistent_storage_ids_from_chunks(&chunk_list, version);
     rebuild_town_populations(&map, &mut towns);
     let industries = entities::industries_from_chunks(&chunk_list, map_w, version);
     let persistent_storages = entities::persistent_storages_from_chunks(&chunk_list, version);
@@ -526,6 +530,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         extras,
         stations,
         towns,
+        town_persistent_storage_ids,
         industries,
         persistent_storages,
         cargo_packets,
@@ -1134,6 +1139,7 @@ impl GameState {
         state.sync_timers_from_tick();
         state.jgr_tunnels_from_footer = sav.extras.jgr_tunnels_from_tnbp();
         state.towns = sav.towns;
+        state.sav_town_persistent_storage_ids = sav.town_persistent_storage_ids;
         for town in &mut state.towns {
             town.init_growth_goals(state.climate);
         }
@@ -1901,6 +1907,7 @@ mod tests {
             extras: OttdmapExtras::default(),
             stations: Vec::new(),
             towns: Vec::new(),
+            town_persistent_storage_ids: HashMap::new(),
             industries: Vec::new(),
             persistent_storages: Vec::new(),
             cargo_packets: Vec::new(),
@@ -2350,6 +2357,7 @@ mod tests {
                 growth_funded: 0,
                 ..Default::default()
             }],
+            town_persistent_storage_ids: HashMap::new(),
             industries: Vec::new(),
             persistent_storages: Vec::new(),
             cargo_packets: Vec::new(),

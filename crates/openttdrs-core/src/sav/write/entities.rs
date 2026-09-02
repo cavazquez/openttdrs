@@ -933,7 +933,25 @@ pub(super) fn default_city_record(map_w: u32, map_h: u32) -> Result<Vec<u8>, Sav
     rec.extend_from_slice(&0u32.to_be_bytes()); // townnamegrfid
     rec.extend_from_slice(&0x20C0u16.to_be_bytes()); // townnametype (inglés)
     rec.extend_from_slice(&0u32.to_be_bytes()); // townnameparts
+    write_persistent_storage_refs(&[], &mut rec)?;
     Ok(rec)
+}
+
+/// Escribe un `REFVECTOR(REF_STORAGE)` usando índices cero basados en runtime.
+fn write_persistent_storage_refs(ids: &[u32], buf: &mut Vec<u8>) -> Result<(), SavError> {
+    let count = u32::try_from(ids.len()).map_err(|_| SavError::ValueOutOfRange {
+        field: "town persistent storage count",
+        value: u32::MAX,
+    })?;
+    write_gamma(count, buf)?;
+    for &id in ids {
+        let reference = id.checked_add(1).ok_or(SavError::ValueOutOfRange {
+            field: "town persistent storage id",
+            value: id,
+        })?;
+        buf.extend_from_slice(&reference.to_be_bytes());
+    }
+    Ok(())
 }
 
 /// Construye records CITY desde ciudades del estado.
@@ -958,6 +976,11 @@ pub(super) fn city_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>
         rec.extend_from_slice(&0u32.to_be_bytes()); // townnamegrfid
         rec.extend_from_slice(&0x20C0u16.to_be_bytes()); // townnametype (inglés)
         rec.extend_from_slice(&0u32.to_be_bytes()); // townnameparts
+        let ids = state
+            .sav_town_persistent_storage_ids
+            .get(&town.id)
+            .map_or(&[][..], Vec::as_slice);
+        write_persistent_storage_refs(ids, &mut rec)?;
         out.push(rec);
     }
     if out.is_empty() {
@@ -1318,6 +1341,13 @@ fn persistent_storage_ids(state: &GameState) -> Result<PersistentStorageIds, Sav
             .stations
             .iter()
             .filter_map(|station| station.newgrf_persistent_storage_id),
+    );
+    used.extend(
+        state
+            .sav_town_persistent_storage_ids
+            .values()
+            .flatten()
+            .copied(),
     );
 
     let mut next_free = 0u32;

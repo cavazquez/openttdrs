@@ -71,10 +71,11 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Plataformas y release | **Preparada con gates** | `main` protegido y checks Windows/macOS; queda dry-run/smoke de `0.1.0-alpha.1` en [#296](https://github.com/cavazquez/openttdrs/issues/296) |
 
 Actualización SAV/NewGRF (2026-09-02): `INDY.psa`,
-`STNN.normal.airport.psa` y el pool `PSAC` ya se importan, hidratan y reemiten
-para industrias y aeropuertos, conservando índices y 256 registros por fila;
-los storages de pueblos, casas y otras entidades se mantienen como filas
-opacas aunque todavía no tengan runtime propio. La paridad restante está
+`STNN.normal.airport.psa`, `CITY.psa_list` y el pool `PSAC` ya se importan,
+hidratan sus referencias y se reemiten para industrias, aeropuertos y pueblos,
+conservando índices y 256 registros por fila; los storages de casas y otras
+entidades se mantienen como filas opacas aunque todavía no tengan runtime
+propio. La paridad restante está
 detallada en [`parity/sav-compatibility.md`](parity/sav-compatibility.md).
 
 ### Propiedad de cada estado (evitar trabajo duplicado)

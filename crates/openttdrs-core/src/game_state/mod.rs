@@ -579,6 +579,9 @@ pub struct GameState {
     /// que todavía no tienen runtime completo (estaciones, pueblos, etc.).
     #[serde(skip, default)]
     pub(crate) sav_persistent_storages: Vec<crate::sav::SavPersistentStorage>,
+    /// Referencias `CITY.psa_list` preservadas durante un round-trip SAV.
+    #[serde(skip, default)]
+    pub(crate) sav_town_persistent_storage_ids: std::collections::HashMap<u32, Vec<u32>>,
     /// Historiales anidados importados desde `INDY`.
     ///
     /// `OpenTTD` guarda una ventana distinta para cada cargo producido/aceptado;
@@ -788,6 +791,7 @@ impl GameState {
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
             sav_persistent_storages: Vec::new(),
+            sav_town_persistent_storage_ids: std::collections::HashMap::new(),
             sav_industry_histories: Vec::new(),
             sav_table_passthrough: None,
             sav_objects_dirty: false,
@@ -925,6 +929,7 @@ impl GameState {
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
             sav_persistent_storages: Vec::new(),
+            sav_town_persistent_storage_ids: std::collections::HashMap::new(),
             sav_industry_histories: Vec::new(),
             sav_table_passthrough: None,
             sav_objects_dirty: false,

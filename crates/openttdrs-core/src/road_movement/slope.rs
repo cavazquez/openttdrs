@@ -93,6 +93,16 @@ pub fn road_z_pos_affect_speed(
 
 /// Sincroniza `z_pos` y corrige `cur_speed` tras un tick de carretera.
 pub fn sync_road_slope_speed(v: &mut Vehicle, map: &Map) {
+    sync_road_slope_speed_with_catalog(v, map, &[]);
+}
+
+/// Variante de [`sync_road_slope_speed`] que resuelve CB36 contra el
+/// catálogo activo de la partida (incluidos motores creados por Action0).
+pub fn sync_road_slope_speed_with_catalog(
+    v: &mut Vehicle,
+    map: &Map,
+    engine_catalog: &[crate::engine::EngineDef],
+) {
     if !is_road_vehicle_kind(v.kind) {
         return;
     }
@@ -103,7 +113,7 @@ pub fn sync_road_slope_speed(v: &mut Vehicle, map: &Map) {
         return;
     };
     v.z_pos = Some(new_z);
-    let engine = v.effective_engine();
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
     let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
     if let Some(cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, v.pos) {
         max_speed = max_speed.min(cap);
@@ -220,5 +230,31 @@ mod tests {
     fn downhill_adds_two_within_cap() {
         assert_eq!(road_z_pos_affect_speed(10, 8, 0, 500), 12);
         assert_eq!(road_z_pos_affect_speed(10, 8, 0, 11), 10);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn slope_sync_uses_active_catalog_speed_callback() {
+        let mut engine = crate::engine::engine_by_id(crate::engine::ENGINE_BUS_MPS)
+            .unwrap()
+            .clone();
+        engine.id = crate::engine::NEWGRF_ENGINE_ID_BASE + 1;
+        engine.newgrf_grfid = 0x534C_4F50;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(callback_literal(21)));
+        let catalog = vec![engine];
+
+        let map = Map::new_flat(8, 8, 0);
+        let mut v = road_vehicle();
+        v.engine_id = Some(crate::engine::NEWGRF_ENGINE_ID_BASE + 1);
+        v.cur_speed = 20;
+        v.z_pos = Some(8);
+
+        sync_road_slope_speed_with_catalog(&mut v, &map, &catalog);
+
+        // Con el techo CB36=21, la bajada no puede aplicar +2 (22); el
+        // catálogo vanilla del autobús sí habría producido 22.
+        assert_eq!(v.cur_speed, 20);
+        assert_eq!(v.z_pos, Some(0));
     }
 }

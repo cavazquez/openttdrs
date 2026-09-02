@@ -47,7 +47,7 @@ pub use rvsb::RVSB_DRIVE_SIDE;
 pub use rvsb::{RVSB_IN_DEPOT, RVSB_TRACKDIR_MASK, trackdir_from_direction};
 pub use slope::{
     current_road_max_speed_with_callbacks, current_road_max_speed_with_callbacks_in_catalog,
-    road_z_pos_affect_speed, sync_road_slope_speed,
+    road_z_pos_affect_speed, sync_road_slope_speed, sync_road_slope_speed_with_catalog,
 };
 pub use traffic::{
     BLOCKED_CTR_LIMIT, RoadTrafficIndex, apply_road_veh_close_to, apply_road_veh_close_to_indexed,

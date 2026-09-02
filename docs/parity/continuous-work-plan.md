@@ -540,3 +540,13 @@ catálogo. La regresión
 `finish_takeoff_uses_active_catalog_speed_callback` fija un callback que
 reduce la velocidad al abandonar la pista. El scope de aeropuerto y las APIs
 legacy sin catálogo siguen abiertos, por lo que #329 no se cierra.
+
+Actualización #329-VEHICLE-ROAD-SLOPE-006 (2026-09-02): la sincronización de
+`RoadZPosAffectSpeed` al terminar cada subpaso vial ya recibe el catálogo
+activo. El techo de la bajada consulta `PROP_ROAD_SPEED` (`CB36`, `0x15`) sobre
+el motor NewGRF antes de permitir el empuje de dos unidades; la API legacy
+conserva el fallback vanilla. La regresión
+`slope_sync_uses_active_catalog_speed_callback` cubre el caso en que el
+callback reduce el techo y evita que la bajada recupere velocidad vanilla. Las
+otras propiedades viales y las APIs directas sin catálogo siguen abiertas, por
+lo que #329 no se cierra.

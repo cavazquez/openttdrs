@@ -147,6 +147,15 @@ catálogo vacío. La regresión `finish_takeoff_uses_active_catalog_speed_callba
 cubre la transición de salida desde pista. El resto de propiedades/call sites
 de vehículos y los scopes avanzados siguen en estado parcial.
 
+Actualización #329-VEHICLE-ROAD-SLOPE-006 (2026-09-02): el cierre del tick de
+carretera propaga el catálogo activo a `sync_road_slope_speed`; la bajada de
+`RoadZPosAffectSpeed` consulta `PROP_ROAD_SPEED` (`0x15`) mediante CB36 antes
+de aplicar el empuje, manteniendo el límite dinámico del motor. La variante
+legacy sigue pasando un catálogo vacío y usa el fallback vanilla. La regresión
+`slope_sync_uses_active_catalog_speed_callback` fija el techo NewGRF durante
+la corrección de pendiente. El resto de propiedades/call sites viales y los
+scopes avanzados siguen parciales.
+
 La tabla de variables relativas conserva el parámetro `ExtendedByte` completo
 (WORD, hasta 14 bits) para `61 → 0x60`; los IDs locales superiores a `0xFF` no
 se aliasan con el motor vanilla de id cero.

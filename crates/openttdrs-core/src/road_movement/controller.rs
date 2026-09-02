@@ -16,7 +16,7 @@ use crate::road_movement::rvsb::{
     RVSB_USING_SECOND_BAY, RVSB_WORMHOLE, is_bay_road_state, is_drive_through_road_state,
     trackdir_for_entry_exit, trackdir_from_direction,
 };
-use crate::road_movement::slope::sync_road_slope_speed;
+use crate::road_movement::slope::sync_road_slope_speed_with_catalog;
 use crate::road_movement::traffic::{
     RoadTrafficIndex, apply_road_veh_close_to, apply_road_veh_close_to_indexed_with_catalog,
     is_road_vehicle_kind,
@@ -605,7 +605,7 @@ fn road_vehicle_tick_side_with_traffic(
         };
     }
     if let Some(map) = map {
-        sync_road_slope_speed(&mut vehicles[v_idx], map);
+        sync_road_slope_speed_with_catalog(&mut vehicles[v_idx], map, engine_catalog);
     }
 }
 

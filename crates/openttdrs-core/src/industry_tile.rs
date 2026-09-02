@@ -11,6 +11,9 @@ pub const NEW_INDUSTRY_TILE_OFFSET: u16 = 175;
 pub const NUM_INDUSTRY_TILES: u16 = 512;
 /// Id inválido (`OpenTTD` `INVALID_INDUSTRYTILE`).
 pub const INVALID_INDUSTRY_TILE: u16 = NUM_INDUSTRY_TILES;
+/// Bit `IndustryTileCallbackMask::DrawFoundations`: consulta CB `0x150` al
+/// dibujar una tesela de industria sobre una pendiente.
+pub const INDUSTRY_TILE_CALLBACK_DRAW_FOUNDATIONS_MASK: u8 = 1 << 5;
 
 /// Identificador global de gfx de tesela de industria.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -79,6 +82,12 @@ pub struct IndustryTileSpecDef {
 }
 
 impl IndustryTileSpecDef {
+    /// ¿El GRF decide si se dibuja la fundación nivelada (`CB 0x150`)?
+    #[must_use]
+    pub const fn has_draw_foundations_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_TILE_CALLBACK_DRAW_FOUNDATIONS_MASK != 0
+    }
+
     #[must_use]
     pub fn newgrf_view(&self, idx: usize) -> Option<&crate::newgrf_sprites::DecodedSprite> {
         if self.newgrf_views.is_empty() {
@@ -197,6 +206,34 @@ mod tests {
         assert_eq!(get_translated_industry_tile_id(41, &ovr), 41);
         assert_eq!(get_translated_industry_tile_id(200, &ovr), 200);
         assert_eq!(ovr.len(), NEW_INDUSTRY_TILE_OFFSET as usize);
+    }
+
+    #[test]
+    fn industry_tile_draw_foundations_callback_uses_upstream_mask() {
+        let mut def = IndustryTileSpecDef {
+            gfx: IndustryTileGfxId(NEW_INDUSTRY_TILE_OFFSET),
+            subst_id: 0,
+            from_newgrf: true,
+            accepts_cargo_indices: Vec::new(),
+            accepts_cargo_labels: Vec::new(),
+            acceptance: Vec::new(),
+            callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_grfid: 1,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: None,
+        };
+        assert!(!def.has_draw_foundations_callback());
+        def.callback_mask = INDUSTRY_TILE_CALLBACK_DRAW_FOUNDATIONS_MASK;
+        assert!(def.has_draw_foundations_callback());
     }
 
     #[test]

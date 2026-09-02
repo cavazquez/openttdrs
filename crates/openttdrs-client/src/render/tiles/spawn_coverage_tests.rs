@@ -1781,6 +1781,100 @@ fn newgrf_house_building_uses_runtime_action2_view() {
 }
 
 #[test]
+fn newgrf_house_draw_foundations_callback_can_suppress_default() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(3, 3, 0);
+    let coord = TileCoord::new(1, 1);
+    let mut house = tile_template();
+    house.kind = TileKind::House;
+    house.m8 = 110;
+    house.m3 = 0x80;
+    house.m5 = 2;
+    map.set_tile(coord, house).expect("house tile");
+    map.set_height(TileCoord::new(2, 1), 1)
+        .expect("west corner height");
+    let view = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: [220, 40, 40, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let mut runtime = callback_literal_runtime(3, 0);
+    runtime.sets = vec![vec![view.clone()]];
+    let house_def = HouseSpecDef {
+        id: 110,
+        local_id: 3,
+        subst_id: 0,
+        building_flags: openttdrs_core::house_spec::BUILDING_FLAG_SIZE_1X1,
+        min_year: 0,
+        max_year: 5000,
+        population: 1,
+        mail_generation: 1,
+        availability: openttdrs_core::DEFAULT_HOUSE_AVAILABILITY,
+        probability: openttdrs_core::DEFAULT_HOUSE_PROBABILITY,
+        override_id: None,
+        callback_mask: openttdrs_core::HOUSE_CALLBACK_DRAW_FOUNDATIONS_MASK,
+        name: "no foundation house".into(),
+        from_newgrf: true,
+        grfid: 0,
+        newgrf_views: vec![view],
+        newgrf_local_id: 3,
+        newgrf_runtime: Some(Box::new(runtime)),
+    };
+    let grid = RenderGrid::from_map(&map, 3, 3);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfHouseSpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: ResMut<crate::render::NewGrfHouseSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_house_tile(
+                    &mut commands,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    HouseSpawnResources {
+                        map: &m.0,
+                        map_dims: m.0.dimensions(),
+                        house_catalog: std::slice::from_ref(&house_def),
+                        house_counts: None,
+                        towns: &[],
+                        climate: TEST_CLIMATE,
+                        newgrf_stack: &[],
+                        foundation_newgrf: &[],
+                        house_sprites: Some(&mut cache),
+                        action5_sprites: None,
+                        images: Some(&mut images),
+                    },
+                );
+            },
+        )
+        .expect("house draw-foundations callback");
+
+    let foundation_count = world
+        .query::<&ViewportSortableParent>()
+        .iter(&world)
+        .filter(|parent| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+        })
+        .count();
+    assert_eq!(
+        foundation_count, 0,
+        "CB 0x150 = 0 debe suprimir la fundación"
+    );
+}
+
+#[test]
 fn sloped_bridge_ramp_ground_attaches_to_the_last_foundation_parent() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();
@@ -3475,6 +3569,100 @@ fn sloped_newgrf_industry_overlay_is_child_of_foundation() {
     );
 }
 
+#[test]
+fn newgrf_industry_draw_foundations_callback_can_suppress_default() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let coord = TileCoord::new(1, 1);
+    map.set_height(coord, 7).expect("h");
+    for (x, y) in [(0, 0), (2, 0), (0, 2), (2, 2)] {
+        map.set_height(TileCoord::new(x, y), 4).expect("h");
+    }
+    let mut tile = tile_template();
+    tile.kind = TileKind::Industry;
+    tile.mapt = 0x80;
+    tile.m5 = 175;
+    tile.m1 = 0x80;
+    map.set_tile(coord, tile).expect("industry tile");
+    let view = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: [40, 220, 40, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let mut runtime = callback_literal_runtime(3, 0);
+    runtime.sets = vec![vec![view.clone()]];
+    let def = IndustryTileSpecDef {
+        gfx: IndustryTileGfxId(175),
+        subst_id: 0,
+        from_newgrf: true,
+        accepts_cargo_indices: Vec::new(),
+        accepts_cargo_labels: Vec::new(),
+        acceptance: Vec::new(),
+        callback_mask: openttdrs_core::INDUSTRY_TILE_CALLBACK_DRAW_FOUNDATIONS_MASK,
+        animation_frames: 0,
+        animation_status: 0,
+        animation_speed: 0,
+        animation_triggers: 0,
+        animation_special_flags: 0,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
+        newgrf_local_id: 3,
+        newgrf_grfid: 0,
+        newgrf_preview: Some(view.clone()),
+        newgrf_views: vec![view],
+        newgrf_runtime: Some(Box::new(runtime)),
+    };
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut company: Local<CompanyColoredSprites>,
+                  mut images: Local<Assets<Image>>| {
+                let mut cache = crate::render::NewGrfIndustrySpriteCache::default();
+                spawn_industry_tile(
+                    &mut commands,
+                    &a.0,
+                    &m.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    &[],
+                    &mut company,
+                    &mut images,
+                    std::slice::from_ref(&def),
+                    &openttdrs_core::empty_industry_tile_overrides(),
+                    Some(&mut cache),
+                    &[],
+                    None,
+                    &[],
+                );
+            },
+        )
+        .expect("industry draw-foundations callback");
+
+    let foundation_count = world
+        .query::<&ViewportSortableParent>()
+        .iter(&world)
+        .filter(|parent| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+        })
+        .count();
+    assert_eq!(
+        foundation_count, 0,
+        "CB 0x150 = 0 debe suprimir la fundación de industria"
+    );
+}
+
 /// `industry_land.h`: GFX 7 usa `s1=0xF54` / `SPR_FLAT_BARE_LAND` y el
 /// edificio 2047. La omisión histórica de esa capa dejaba tierra áspera bajo
 /// la planta y 36 comandos 3924 sin equivalente al contrastar Kale.
@@ -4565,4 +4753,32 @@ fn tile_template() -> Tile {
         m7: 0,
         m3hi: 0,
     }
+}
+
+fn callback_literal_runtime(local_id: u8, value: u8) -> TrainSpriteGraphics {
+    let mut runtime = TrainSpriteGraphics {
+        assigns: vec![TrainSpriteAssign {
+            local_id,
+            set_id: 0,
+        }],
+        ..Default::default()
+    };
+    runtime.action2_var.insert(
+        0,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x1A,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: u32::from(value),
+                    ..Default::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+    runtime.action2_to_action1.insert(0, 0);
+    runtime
 }

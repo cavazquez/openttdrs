@@ -236,7 +236,10 @@ las seis filas de puente (`95..106`) con sus 119 sprites extraídos y las mismas
 cajas `SpriteBounds` delanteras/traseras. El flag Action0
 `RoadTypeFlag::Catenary` y el tranvía vanilla determinan si se solicita el
 grupo. Los layouts/children completos de objetos, industrias y casas ya se
-materializan; siguen pendientes scopes, callbacks y paletas especiales.
+materializan; los callbacks de fundación `0x150` de casas y teselas de
+industria ya pueden suprimir `FOUNDATION_LEVELED` y dejan el layout sobre el
+relieve original cuando devuelven cero. Siguen pendientes scopes, callbacks
+restantes y paletas especiales.
 Los overlays de estación rail NewGRF se resuelven también en pendientes y se
 vinculan al parent de la fundación nivelada. Sus layouts `TileSeq` completos
 ahora sustituyen el suelo y emiten parents/children con cajas `M(...)`; los
@@ -271,11 +274,11 @@ frame, posición y random/triggers) y registran el edificio con bounds
 conservadoras como parent sortable; los layouts `TileSeq`/children completos de
 industria y casa ya reemplazan el suelo/edificio vanilla. Las variables `0x44`,
 `0x60`/`0x61` (conteos por `HouseID`) y `0x62`/`0x63` (información/frame de
-teselas vecinas) usan el mapa y una instantánea de conteos por pase; siguen
-pendientes los conteos por clase, aceptación de estaciones, callbacks de
-foundation específicos,
+teselas vecinas) usan el mapa y una instantánea de conteos por pase. El
+callback de fundación `0x150` ya decide, por casa, si se conserva el cimiento
+nivelado; siguen pendientes los conteos por clase, aceptación de estaciones,
 color/view y las paletas especiales no basadas en la rampa de compañía fuera
-del renderer de vehículos siguen pendientes de un contrato runtime completo.
+del renderer de vehículos, además de un contrato runtime completo.
 El sprite-stack de vehículos ya resuelve grupos
 Action2 real (loaded/loading) y materializa hasta ocho capas como children
 ordenados por unidad. La compra y el autoreemplazo de trenes y vehículos de

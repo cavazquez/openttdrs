@@ -1093,6 +1093,22 @@ pub const fn callback_allows_8bit_boolean(result: u16) -> bool {
     result == CALLBACK_FAILED || (result & 0xFF) != 0
 }
 
+/// Convierte los callbacks `ConvertBooleanCallback` de `OpenTTD`.
+///
+/// Los callbacks de dibujo de fundaciones (casas, industrias y aeropuertos)
+/// usan la conversión booleana de 15 bits, no la variante de ocho bits:
+/// `CALLBACK_FAILED` conserva la fundación por defecto y cualquier resultado
+/// no nulo la solicita. Mantener esta decisión en un helper evita que cada
+/// renderer trate `0x100`/`0x400` de forma distinta.
+#[must_use]
+pub const fn callback_draws_default_foundation(result: u16) -> bool {
+    if result == CALLBACK_FAILED {
+        true
+    } else {
+        result != 0
+    }
+}
+
 /// Alias de compatibilidad para usuarios de la API que consultaban resultados
 /// de ubicación. Los callbacks booleanos deben usar
 /// [`callback_allows_8bit_boolean`] explícitamente.
@@ -3391,6 +3407,17 @@ mod tests {
         assert!(callback_allows_8bit_boolean(1));
         assert!(callback_allows_8bit_boolean(0xFF));
         assert!(!callback_allows_8bit_boolean(0x100));
+    }
+
+    #[test]
+    fn foundation_callback_uses_full_boolean_semantics() {
+        assert!(callback_draws_default_foundation(CALLBACK_FAILED));
+        assert!(!callback_draws_default_foundation(0));
+        assert!(callback_draws_default_foundation(1));
+        // `ConvertBooleanCallback` checks the complete callback result for
+        // foundation callbacks; this differs from `Convert8bitBooleanCallback`.
+        assert!(callback_draws_default_foundation(0x100));
+        assert!(callback_draws_default_foundation(0x400));
     }
 
     #[test]

@@ -1103,6 +1103,11 @@ pub const CBID_INDUSTRY_MONTHLY_PROD_CHANGE: u16 = 0x35;
 pub const CBID_INDUSTRY_PROD_CHANGE_BUILD: u16 = 0x15F;
 /// Callback casas: permitir construcción (`CBID_HOUSE_ALLOW_CONSTRUCTION`).
 pub const CBID_HOUSE_ALLOW_CONSTRUCTION: u16 = 0x17;
+/// Callback casas: decidir si se dibuja la fundación (`CBID_HOUSE_DRAW_FOUNDATIONS`).
+pub const CBID_HOUSE_DRAW_FOUNDATIONS: u16 = 0x150;
+/// Callback teselas de industria: decidir si se dibuja la fundación
+/// (`CBID_INDTILE_DRAW_FOUNDATIONS`).
+pub const CBID_INDTILE_DRAW_FOUNDATIONS: u16 = 0x150;
 /// Callback cargos: calcular ingreso de la entrega (`CBID_CARGO_PROFIT_CALC`).
 pub const CBID_CARGO_PROFIT_CALC: u16 = 0x39;
 /// Callback cargos: calcular rating de estación (`CBID_CARGO_STATION_RATING_CALC`).

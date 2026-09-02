@@ -44,6 +44,9 @@ pub const BUILDING_FLAG_IS_STADIUM: u8 = 1 << 7;
 pub const STATION_ACCEPTANCE_THRESHOLD: u32 = 8;
 /// Bit `HouseCallbackMask::AllowConstruction`: consulta CB `0x17` al crecer.
 pub const HOUSE_CALLBACK_ALLOW_CONSTRUCTION_MASK: u16 = 1;
+/// Bit `HouseCallbackMask::DrawFoundations`: consulta CB `0x150` al dibujar
+/// una casa sobre una pendiente.
+pub const HOUSE_CALLBACK_DRAW_FOUNDATIONS_MASK: u16 = 1 << 11;
 
 /// Vista de un `HouseSpec` vanilla.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -216,6 +219,12 @@ impl HouseSpecDef {
     #[must_use]
     pub const fn has_construction_callback(&self) -> bool {
         self.callback_mask & HOUSE_CALLBACK_ALLOW_CONSTRUCTION_MASK != 0
+    }
+
+    /// ¿El GRF decide si se dibuja la fundación nivelada (`CB 0x150`)?
+    #[must_use]
+    pub const fn has_draw_foundations_callback(&self) -> bool {
+        self.callback_mask & HOUSE_CALLBACK_DRAW_FOUNDATIONS_MASK != 0
     }
 
     #[must_use]
@@ -1020,6 +1029,33 @@ mod tests {
         }];
         assert_eq!(resolve_house_draw_id(NEW_HOUSE_OFFSET, &catalog), 7);
         assert_eq!(resolve_house_draw_id(200, &[]), 200 % NEW_HOUSE_OFFSET);
+    }
+
+    #[test]
+    fn house_draw_foundations_callback_uses_upstream_mask() {
+        let mut def = HouseSpecDef {
+            id: NEW_HOUSE_OFFSET,
+            local_id: 0,
+            subst_id: 0,
+            building_flags: BUILDING_FLAG_SIZE_1X1,
+            min_year: 0,
+            max_year: HOUSE_YEAR_MAX,
+            population: 1,
+            mail_generation: 0,
+            availability: DEFAULT_HOUSE_AVAILABILITY,
+            probability: DEFAULT_HOUSE_PROBABILITY,
+            override_id: None,
+            callback_mask: 0,
+            name: "foundation-callback".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        };
+        assert!(!def.has_draw_foundations_callback());
+        def.callback_mask = HOUSE_CALLBACK_DRAW_FOUNDATIONS_MASK;
+        assert!(def.has_draw_foundations_callback());
     }
 
     #[test]

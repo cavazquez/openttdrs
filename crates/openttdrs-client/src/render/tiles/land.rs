@@ -535,6 +535,56 @@ pub(crate) fn spawn_house_tile(
             )
         })
     });
+    let house_def = ctx.tile.and_then(|_| {
+        crate::render::house_newgrf::newgrf_house_def_for_id(
+            resources.house_catalog,
+            clean_house_id,
+        )
+    });
+    // `DrawNewHouseTile` only emits `FOUNDATION_LEVELED` when the optional
+    // callback `CBID_HOUSE_DRAW_FOUNDATIONS` returns true. Antes el renderer
+    // forzaba el cimiento para toda casa inclinada, haciendo imposible que un
+    // GRF dibujara su propio suelo/relieve (la divergencia se veía como un
+    // rombo extra detrás del layout custom).
+    let draws_default_foundation = if tileh == 0 {
+        // OpenTTD no evalúa el callback para una tesela plana: tampoco hay
+        // una fundación que insertar en ese caso.
+        true
+    } else {
+        match (ctx.tile, house_def) {
+            (Some(tile), Some(def)) if def.has_draw_foundations_callback() => {
+                match def.newgrf_runtime.as_ref() {
+                    None => true,
+                    Some(runtime) => {
+                        let mut callback_ctx = house_action2_context(
+                            resources.map,
+                            tile,
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            resources.climate,
+                            resources.towns,
+                            resources.house_catalog,
+                            resources.house_counts,
+                            def,
+                        );
+                        callback_ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
+                            resources.newgrf_stack,
+                            def.grfid,
+                        ));
+                        let result = runtime.resolve_callback_ctx_u16(
+                            u16::from(def.newgrf_local_id),
+                            openttdrs_core::CBID_HOUSE_DRAW_FOUNDATIONS,
+                            0,
+                            0,
+                            &mut callback_ctx,
+                        );
+                        openttdrs_core::callback_draws_default_foundation(result)
+                    }
+                }
+            }
+            _ => true,
+        }
+    };
     let custom_house_layout = house_layout
         .as_ref()
         .is_some_and(|(_, layout, _)| layout.complete)
@@ -545,7 +595,7 @@ pub(crate) fn spawn_house_tile(
     // muta la superficie antes de dibujar *ambas* capas de la casa. El suelo
     // `s1` no es el césped natural que había debajo: es exactamente el
     // `ground.sprite` de `town_land.h`.
-    let leveled = tileh != 0;
+    let leveled = tileh != 0 && draws_default_foundation;
     // No alcanza con `foundation_{tileh}`: `DrawFoundation` escoge el bloque
     // 0..3 según las dos paredes visibles frente a sus vecinos. Para casas en
     // pendientes, el atajo histórico usaba siempre el bloque original y
@@ -1320,6 +1370,48 @@ pub(crate) fn spawn_industry_tile_with_world(
             )
         })
     });
+    // `DrawNewIndustryTile` deja que `CBID_INDTILE_DRAW_FOUNDATIONS` suprima
+    // la fundación nivelada. La ruta anterior la forzaba siempre en una
+    // pendiente, por lo que los layouts NewGRF que dibujan su propio relieve
+    // recibían un cimiento vanilla adicional.
+    let draws_default_foundation = if tileh == 0 {
+        true
+    } else {
+        match newgrf_def {
+            Some(def) if def.has_draw_foundations_callback() => match def.newgrf_runtime.as_ref() {
+                None => true,
+                Some(runtime) => {
+                    let neighbor_params =
+                        requested_industry_scope_vars(def.newgrf_runtime.as_deref());
+                    let mut callback_ctx =
+                        openttdrs_core::action2_eval_ctx_for_industry_tile_with_world(
+                            map,
+                            ctx.coord,
+                            industries,
+                            towns,
+                            industry_catalog,
+                            industry_specs,
+                            climate,
+                            Some(def),
+                            &neighbor_params,
+                        );
+                    callback_ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
+                        newgrf_stack,
+                        def.newgrf_grfid,
+                    ));
+                    let result = runtime.resolve_callback_ctx_u16(
+                        u16::from(def.newgrf_local_id),
+                        openttdrs_core::CBID_INDTILE_DRAW_FOUNDATIONS,
+                        0,
+                        0,
+                        &mut callback_ctx,
+                    );
+                    openttdrs_core::callback_draws_default_foundation(result)
+                }
+            },
+            _ => true,
+        }
+    };
     let custom_industry_layout = industry_layout
         .as_ref()
         .is_some_and(|(_, layout, _)| layout.complete)
@@ -1382,7 +1474,7 @@ pub(crate) fn spawn_industry_tile_with_world(
             slope_half_ground,
         );
     }
-    let leveled = tileh != 0;
+    let leveled = tileh != 0 && draws_default_foundation;
     let foundation = if leveled {
         spawn_forced_leveled_foundation_with_child_parent(
             commands,

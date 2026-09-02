@@ -3606,7 +3606,7 @@ fn airport_tile_draws_default_foundation(
         0,
         &mut ctx,
     );
-    result == openttdrs_core::CALLBACK_FAILED || result != 0
+    openttdrs_core::callback_draws_default_foundation(result)
 }
 
 /// Variante de [`spawn_transport_object_tile`] que conserva el estado de

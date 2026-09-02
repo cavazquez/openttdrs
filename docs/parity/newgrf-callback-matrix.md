@@ -212,6 +212,13 @@ versiones nuevas durante un round-trip; una mutación semántica invalida sólo
 ese chunk y activa el writer canónico. La fusión parcial de columnas y los
 otros pools SAV todavía requieren trabajo diferencial.
 
+Actualización #329-VEHICLE-SAV-FLEET-014 (2026-09-02): `GRPS` y `ERNW` usan
+ahora una huella densa de filas semánticas para reemitir sus cuerpos originales
+sin cambios. Se conservan así columnas futuras, huecos de pool y enlaces de
+reglas; una mutación de grupo o autorrenovación activa el writer actual y
+recalcula las referencias. La fusión parcial posterior y los pools restantes
+siguen abiertos.
+
 Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` conserva ahora su
 cuerpo original cuando las filas semánticas de compañías coinciden. El
 exportador mantiene así columnas nuevas de ajustes, economía, libreas y

@@ -36,6 +36,14 @@ pub(super) fn groups_chunk(groups: &[VehicleGroup]) -> Result<Option<Vec<u8>>, S
     append_field(&mut header, 4, "number")?;
     header.push(0);
 
+    let records = group_records(groups)?;
+    Ok(Some(raw_table_chunk(
+        *b"GRPS", &header, &records, CH_TABLE,
+    )?))
+}
+
+/// Serializa las filas semánticas densas de `GRPS`.
+pub(super) fn group_records(groups: &[VehicleGroup]) -> Result<Vec<Vec<u8>>, SavError> {
     // GRPS es CH_TABLE denso: la posición de la fila es el GroupID de pool.
     // Conservar huecos permite round-trippear IDs no consecutivos y evita
     // confundirlos con `number`, que es sólo el ordinal visible por empresa.
@@ -64,9 +72,7 @@ pub(super) fn groups_chunk(groups: &[VehicleGroup]) -> Result<Option<Vec<u8>>, S
             records[index] = record;
         }
     }
-    Ok(Some(raw_table_chunk(
-        *b"GRPS", &header, &records, CH_TABLE,
-    )?))
+    Ok(records)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -276,6 +282,14 @@ pub(super) fn autoreplace_chunk(export: &AutoreplaceExport) -> Result<Option<Vec
     append_field(&mut header, 1, "replace_when_old")?;
     header.push(0);
 
+    let records = autoreplace_records(export)?;
+    Ok(Some(raw_table_chunk(
+        *b"ERNW", &header, &records, CH_TABLE,
+    )?))
+}
+
+/// Serializa las filas semánticas densas de `ERNW`.
+pub(super) fn autoreplace_records(export: &AutoreplaceExport) -> Result<Vec<Vec<u8>>, SavError> {
     let max_pool_id = export
         .rules
         .iter()
@@ -304,21 +318,5 @@ pub(super) fn autoreplace_chunk(export: &AutoreplaceExport) -> Result<Option<Vec
         record.push(u8::from(rule.only_when_old));
         records[usize::from(export_rule.pool_id)] = record;
     }
-    Ok(Some(raw_table_chunk(
-        *b"ERNW", &header, &records, CH_TABLE,
-    )?))
-}
-
-pub(super) fn fleet_chunks(
-    state: &GameState,
-    autoreplace_export: &AutoreplaceExport,
-) -> Result<Vec<u8>, SavError> {
-    let mut chunks = Vec::new();
-    if let Some(groups) = groups_chunk(&state.vehicle_groups)? {
-        chunks.extend_from_slice(&groups);
-    }
-    if let Some(renew) = autoreplace_chunk(autoreplace_export)? {
-        chunks.extend_from_slice(&renew);
-    }
-    Ok(chunks)
+    Ok(records)
 }

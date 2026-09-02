@@ -610,6 +610,15 @@ caminos. La fusión de columnas desconocidas después de una mutación, `PLYR`,
 `GRPS`/`ERNW` y los demás pools nativos siguen pendientes; #329 permanece
 abierto.
 
+Actualización #329-VEHICLE-SAV-FLEET-014 (2026-09-02): `GRPS` y `ERNW` también
+conservan el cuerpo nativo cuando los grupos, reglas, huecos de pool y enlaces
+de autorrenovación no cambian. La exportación sigue normalizando IDs y cadenas
+antes de comparar, y cualquier alta, baja, renombrado o cambio de regla cae al
+encoder canónico para no conservar referencias obsoletas. La regresión
+`ottn_roundtrip_preserves_group_names_and_autoreplace_rules` cubre ambos pools.
+La fusión de columnas desconocidas tras una mutación y los pools aún no
+modelados continúan pendientes; #329 permanece abierto.
+
 Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` comparte ahora la
 huella de filas con las tablas SAV anteriores. Un round-trip sin cambios de
 compañías conserva byte a byte el header y las columnas futuras de dinero,

@@ -977,7 +977,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
         });
     }
 
-    // `fleet::fleet_chunks` emite GRPS/ERNW por separado. Aquí sólo se asigna
+    // El exportador principal emite GRPS/ERNW por separado. Aquí sólo se asigna
     // la referencia `ORDL`: varios vehículos de una lista compartida deben
     // reutilizar una sola fila y conservar su identidad en `VEHS.common.orders`.
     let mut shared_order_refs = HashMap::<u32, u32>::new();

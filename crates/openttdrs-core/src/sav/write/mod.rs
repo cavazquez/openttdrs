@@ -100,6 +100,8 @@ pub(crate) struct SavSemanticTableRecords {
     pub(crate) ecmy: Vec<Vec<u8>>,
     pub(crate) capy: Vec<Vec<u8>>,
     pub(crate) plyr: Vec<Vec<u8>>,
+    pub(crate) grps: Vec<Vec<u8>>,
+    pub(crate) ernw: Vec<Vec<u8>>,
 }
 
 pub(crate) fn semantic_table_records(
@@ -113,6 +115,8 @@ pub(crate) fn semantic_table_records(
     let indy = entities::indy_records_with_cargo(state, map_w)?;
     let autoreplace_export = fleet::autoreplace_export(state)?;
     let plyr = meta::plyr_records(state, &autoreplace_export)?;
+    let grps = fleet::group_records(&state.vehicle_groups)?;
+    let ernw = fleet::autoreplace_records(&autoreplace_export)?;
     Ok(SavSemanticTableRecords {
         ordl,
         vehs,
@@ -123,6 +127,8 @@ pub(crate) fn semantic_table_records(
         ecmy: vec![meta::ecmy_record(state)],
         capy: meta::capy_records(state)?,
         plyr,
+        grps,
+        ernw,
     })
 }
 
@@ -405,7 +411,33 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     } else if let Some(capy) = meta::capy_chunk(state)? {
         data.extend_from_slice(&capy);
     }
-    data.extend_from_slice(&fleet::fleet_chunks(state, &autoreplace_export)?);
+    let grps = fleet::group_records(&state.vehicle_groups)?;
+    let raw_grps = raw_tables.and_then(|passthrough| {
+        passthrough.grps_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"GRPS"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.grps_semantic_records == grps
+        })
+    });
+    if let Some(raw) = raw_grps {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else if let Some(groups) = fleet::groups_chunk(&state.vehicle_groups)? {
+        data.extend_from_slice(&groups);
+    }
+
+    let ernw = fleet::autoreplace_records(&autoreplace_export)?;
+    let raw_ernw = raw_tables.and_then(|passthrough| {
+        passthrough.ernw_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"ERNW"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.ernw_semantic_records == ernw
+        })
+    });
+    if let Some(raw) = raw_ernw {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else if let Some(renew) = fleet::autoreplace_chunk(&autoreplace_export)? {
+        data.extend_from_slice(&renew);
+    }
     if let Some(ngrf) = newgrf::newgrf_chunk(state)? {
         data.extend_from_slice(&ngrf);
     }

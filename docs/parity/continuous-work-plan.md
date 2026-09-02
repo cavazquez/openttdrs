@@ -744,8 +744,9 @@ invalidación tras mutaciones y cargos custom; #329 y #328 permanecen abiertos.
 Actualización #329-TOWN-PSA-025 (2026-09-02): `CITY.psa_list` ya hidrata los
 registros no nulos de `PSAC` por GRFID en cada `Town`, conserva el `storage_id`
 original y los reemite junto con las filas densas. Los contextos Action2 de
-casas y objetos copian el PSA del pueblo asociado al scope parent, por lo que
-`7C` deja de ser sólo passthrough en esos dos call sites. El writeback de
-registros modificados, los scopes parent de estaciones/aeropuertos y las
-mutaciones estructurales de casas/objetos siguen pendientes; #329 y #328
-permanecen abiertos.
+casas y objetos copian ahora también las variables conservadas de
+`TownScopeResolver` (posición, población, crecimiento, radios, ratings,
+historial y entregas) al scope parent; por lo que `7C` deja de ser sólo
+passthrough en esos dos call sites. El writeback de registros modificados, los
+scopes parent de estaciones/aeropuertos y las mutaciones estructurales de
+casas/objetos siguen pendientes; #329 y #328 permanecen abiertos.

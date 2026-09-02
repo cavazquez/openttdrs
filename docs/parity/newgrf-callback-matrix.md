@@ -263,6 +263,15 @@ una compañía o una referencia de autorrenovación. Los escalares fijos
 compatibles se fusionan ahora; mutaciones variables/anidadas y headers
 estructurales tras una mutación siguen pendientes.
 
+Actualización #329-TOWN-SCOPE-026 (2026-09-02): casas y objetos materializan
+ahora el scope parent de `TownScopeResolver` con las variables conservadas por
+el modelo (`0x41`, posición `0x80`/`0x81`, población `0x82`/`0x83`, crecimiento,
+radios, ratings, estatuas, cantidad de casas, historial de pasajeros/correo,
+entregas de comida/agua y meses de financiación), además de seleccionar `7C`
+por GRFID desde `CITY.psa_list`. Los flags/cache de cargos no representados,
+writeback de town PSA y scopes completos de estación/aeropuerto siguen
+pendientes.
+
 - Resto de CBs houses / airports / industries / objects (incluidos los huecos que aún no tienen call site), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.
 - Storage persistente de industria/aeropuerto/pueblo: `INDY.psa`, `STNN.normal.airport.psa`, `CITY.psa_list` y `PSAC` se importan, hidratan sus referencias y exportan para los registros `7C` conocidos; casas y objetos leen el PSA del pueblo desde su scope parent. Siguen pendientes el writeback de teselas, la invalidación tras mutaciones y los callbacks PSA de pueblo/casa/objeto. CB140–142 preserva `7C` de la estación pero no los scopes/áreas completos de `BaseStation`; CB14 aún no aporta el scope/regs de `BaseStation` ni layout 16-bit exacto; CB149 aún no aporta scope/vecinos ni strings GRF.

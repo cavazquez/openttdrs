@@ -436,7 +436,7 @@ pub fn action2_eval_ctx_for_house_tile_with_counts(
     if let (Some(town_id), Some(def)) = (town_id, current_def)
         && let Some(town) = towns.iter().find(|town| town.id == town_id)
     {
-        town.copy_newgrf_persistent_registers(def.grfid, &mut ctx);
+        town.copy_newgrf_parent_scope(def.grfid, &mut ctx);
     }
     for &(variable, parameter) in neighbor_params {
         match variable {
@@ -1194,6 +1194,8 @@ mod tests {
             &[],
         );
         assert_eq!(ctx.parent_persistent_registers.get(&7), Some(&0xCAFE_BABE));
+        assert_eq!(ctx.parent_vars.get(&0x41), Some(&3));
+        assert_eq!(ctx.parent_vars.get(&0x82), Some(&0));
     }
 
     #[test]

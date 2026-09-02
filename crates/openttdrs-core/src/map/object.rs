@@ -441,7 +441,7 @@ pub fn action2_eval_ctx_for_object_tile_with_counts(
         // ObjectResolverObject's parent scope is the associated town. Select
         // its persistent storage by the object GRFID so `7C` sees the same
         // values as OpenTTD after a SAV round-trip.
-        town.copy_newgrf_persistent_registers(current_grfid(object_type, object_catalog), &mut ctx);
+        town.copy_newgrf_parent_scope(current_grfid(object_type, object_catalog), &mut ctx);
     }
     ctx.vars
         .insert(0x42, current.map_or(0, |object| object.build_date));
@@ -911,6 +911,7 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x47), Some(&6));
         assert_eq!(ctx.vars.get(&0x48), Some(&2));
         assert_eq!(ctx.parent_persistent_registers.get(&4), Some(&0x1020_3040));
+        assert_eq!(ctx.parent_vars.get(&0x41), Some(&1));
         assert_eq!(
             ctx.parameterized_vars.get(&(0x60, 0x0F)),
             Some(&0x0002_0004)

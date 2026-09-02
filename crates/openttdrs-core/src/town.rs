@@ -416,15 +416,97 @@ impl Town {
         }
     }
 
-    /// Copia los registros `7C` del PSA de este pueblo al scope padre de un
-    /// Action2. Un pueblo no tiene un único storage global: la selección
-    /// nativa se hace por GRFID, por eso el caller debe pasar el GRFID del
-    /// objeto que se está resolviendo.
-    pub(crate) fn copy_newgrf_persistent_registers(
+    /// Expone las variables de `TownScopeResolver` que el modelo conserva en
+    /// el scope parent de un `Action2`. Las variables sin representación
+    /// equivalente (flags/cache de cargos custom) se dejan ausentes para que
+    /// el evaluador aplique el fallback nativo cero.
+    pub(crate) fn copy_newgrf_parent_scope(
         &self,
         grfid: u32,
         ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
     ) {
+        let population = self.population.min(u32::from(u16::MAX));
+        ctx.parent_vars.insert(0x41, self.id);
+        ctx.parent_vars.insert(0x80, self.pos.x.cast_unsigned());
+        ctx.parent_vars.insert(0x81, self.pos.y.cast_unsigned());
+        ctx.parent_vars
+            .insert(0x82, population & u32::from(u16::MAX));
+        ctx.parent_vars.insert(0x83, population >> 8);
+        ctx.parent_vars.insert(
+            0x8A,
+            u32::from(self.grow_counter) / u32::try_from(TOWN_GROWTH_TICKS).unwrap_or(1),
+        );
+        for (index, &radius) in self.squared_town_zone_radius.iter().enumerate() {
+            let Ok(offset) = u8::try_from(index.saturating_mul(2)) else {
+                break;
+            };
+            let radius = radius.min(u32::from(u16::MAX));
+            ctx.parent_vars
+                .insert(0x94 + offset, radius & u32::from(u16::MAX));
+            ctx.parent_vars.insert(0x95 + offset, radius >> 8);
+        }
+        for (index, &rating) in self.authority_ratings.iter().take(8).enumerate() {
+            let Ok(offset) = u8::try_from(index.saturating_mul(2)) else {
+                break;
+            };
+            let rating = u32::from(u16::from_ne_bytes(rating.to_ne_bytes()));
+            ctx.parent_vars
+                .insert(0x9E + offset, rating & u32::from(u16::MAX));
+            ctx.parent_vars.insert(0x9F + offset, rating >> 8);
+        }
+        ctx.parent_vars.insert(0xB2, u32::from(self.statues));
+        ctx.parent_vars.insert(0xB6, u32::from(self.num_houses));
+        ctx.parent_vars.insert(
+            0xB9,
+            u32::from(self.growth_rate) / u32::try_from(TOWN_GROWTH_TICKS).unwrap_or(1),
+        );
+        let current = self.history.samples.last().copied().unwrap_or_default();
+        let previous = self
+            .history
+            .samples
+            .iter()
+            .rev()
+            .nth(1)
+            .copied()
+            .unwrap_or_default();
+        let history_pairs = [
+            (0xBA, current.passengers_served),
+            (0xBC, current.mail_served),
+            (0xBE, current.passengers_served),
+            (0xC0, current.mail_served),
+            (0xC2, previous.passengers_served),
+            (0xC4, previous.mail_served),
+            (0xC6, previous.passengers_served),
+            (0xC8, previous.mail_served),
+        ];
+        for (offset, value) in history_pairs {
+            let value = value.min(u32::from(u16::MAX));
+            ctx.parent_vars.insert(offset, value & u32::from(u16::MAX));
+            ctx.parent_vars.insert(offset + 1, value >> 8);
+        }
+        let food_new = self.received_new[usize::from(TownGrowthEffect::Food as u8)];
+        let water_new = self.received_new[usize::from(TownGrowthEffect::Water as u8)];
+        let food_old = self.received_old[usize::from(TownGrowthEffect::Food as u8)];
+        let water_old = self.received_old[usize::from(TownGrowthEffect::Water as u8)];
+        for (offset, value) in [
+            (0xCC, food_new),
+            (0xCE, water_new),
+            (0xD0, food_old),
+            (0xD2, water_old),
+        ] {
+            let value = value.min(u32::from(u16::MAX));
+            ctx.parent_vars.insert(offset, value & u32::from(u16::MAX));
+            ctx.parent_vars.insert(offset + 1, value >> 8);
+        }
+        ctx.parent_vars
+            .insert(0xD4, u32::from(self.road_build_months));
+        ctx.parent_vars
+            .insert(0xD5, u32::from(self.fund_buildings_months));
+
+        // Un pueblo no tiene un único storage global: la selección nativa se
+        // hace por GRFID, por eso el caller debe pasar el GRFID del objeto que
+        // se está resolviendo.
+        ctx.parent_persistent_registers.clear();
         if let Some(registers) = self.newgrf_persistent_regs.get(&grfid) {
             ctx.parent_persistent_registers.clone_from(registers);
         }
@@ -1292,6 +1374,66 @@ pub fn record_delivery_near_town(
 mod tests {
     use super::*;
     use crate::map::{TileCoord, TileKind};
+
+    #[test]
+    fn newgrf_parent_scope_exposes_supported_town_variables() {
+        let mut town = Town {
+            id: 7,
+            pos: TileCoord::new(0x12, 0x34),
+            population: 0x1234,
+            authority_ratings: vec![-1, 0x1234],
+            growth_rate: 140,
+            grow_counter: 70,
+            num_houses: 9,
+            squared_town_zone_radius: [0x1234, 0x5678, 0x9ABC, 0xDEF0, 0x1111],
+            statues: 0x55,
+            road_build_months: 4,
+            fund_buildings_months: 3,
+            ..Default::default()
+        };
+        town.history.samples = vec![
+            crate::entity_history::TownHistorySample {
+                population: 100,
+                passengers_served: 11,
+                mail_served: 13,
+                rating: 500,
+            },
+            crate::entity_history::TownHistorySample {
+                population: 120,
+                passengers_served: 17,
+                mail_served: 19,
+                rating: 600,
+            },
+        ];
+        town.received_new[TownGrowthEffect::Food as usize] = 0x1234;
+        town.received_new[TownGrowthEffect::Water as usize] = 0x5678;
+        town.received_old[TownGrowthEffect::Food as usize] = 0x9ABC;
+        town.received_old[TownGrowthEffect::Water as usize] = 0xDEF0;
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        town.copy_newgrf_parent_scope(0, &mut ctx);
+
+        assert_eq!(ctx.parent_vars.get(&0x41), Some(&7));
+        assert_eq!(ctx.parent_vars.get(&0x80), Some(&0x12));
+        assert_eq!(ctx.parent_vars.get(&0x81), Some(&0x34));
+        assert_eq!(ctx.parent_vars.get(&0x82), Some(&0x1234));
+        assert_eq!(ctx.parent_vars.get(&0x83), Some(&0x12));
+        assert_eq!(ctx.parent_vars.get(&0x8A), Some(&1));
+        assert_eq!(ctx.parent_vars.get(&0xB2), Some(&0x55));
+        assert_eq!(ctx.parent_vars.get(&0xB6), Some(&9));
+        assert_eq!(ctx.parent_vars.get(&0xB9), Some(&2));
+        assert_eq!(ctx.parent_vars.get(&0x94), Some(&0x1234));
+        assert_eq!(ctx.parent_vars.get(&0x95), Some(&0x12));
+        assert_eq!(ctx.parent_vars.get(&0x9E), Some(&0xFFFF));
+        assert_eq!(ctx.parent_vars.get(&0x9F), Some(&0xFF));
+        assert_eq!(ctx.parent_vars.get(&0xBA), Some(&17));
+        assert_eq!(ctx.parent_vars.get(&0xBC), Some(&19));
+        assert_eq!(ctx.parent_vars.get(&0xC2), Some(&11));
+        assert_eq!(ctx.parent_vars.get(&0xC4), Some(&13));
+        assert_eq!(ctx.parent_vars.get(&0xCC), Some(&0x1234));
+        assert_eq!(ctx.parent_vars.get(&0xD2), Some(&0xDEF0));
+        assert_eq!(ctx.parent_vars.get(&0xD4), Some(&4));
+        assert_eq!(ctx.parent_vars.get(&0xD5), Some(&3));
+    }
 
     #[test]
     fn produce_adds_cargo_when_houses_in_coverage() {

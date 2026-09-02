@@ -75,6 +75,8 @@ pub struct SavStation {
     pub airport_rotation: u8,
     /// `Station::airport.blocks` (guardado como `airport.flags`).
     pub airport_blocks: u64,
+    /// Índice del pool `PersistentStorage` referenciado por `airport.psa`.
+    pub airport_persistent_storage_id: Option<u32>,
     /// Paquetes de carga en espera, agrupados por slot de cargo de `OpenTTD`.
     ///
     /// La carga física vive en `CAPA`; `STNN.goods[].cargo[]` sólo conserva
@@ -160,6 +162,7 @@ pub(crate) struct SavStationIndex {
     pub airport_layout: u8,
     pub airport_rotation: u8,
     pub airport_blocks: u64,
+    pub airport_persistent_storage_id: Option<u32>,
 }
 
 /// Primer (y único) registro de un campo struct de tabla.
@@ -246,6 +249,12 @@ pub(crate) fn station_index_from_chunks(
             .and_then(|n| record_get(n, "airport.flags"))
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
+        // `REF_STORAGE` se serializa como índice + 1; cero representa null.
+        let airport_persistent_storage_id = normal
+            .and_then(|n| record_get(n, "airport.psa"))
+            .and_then(SlValue::as_u64)
+            .and_then(|value| value.checked_sub(1))
+            .and_then(|value| u32::try_from(value).ok());
         #[allow(clippy::cast_possible_truncation)]
         out.insert(
             idx,
@@ -262,6 +271,7 @@ pub(crate) fn station_index_from_chunks(
                 airport_layout: airport_layout as u8,
                 airport_rotation: airport_rotation as u8,
                 airport_blocks,
+                airport_persistent_storage_id,
             },
         );
     }
@@ -427,6 +437,7 @@ pub(crate) fn stations_from_chunks(
             airport_layout: st.airport_layout,
             airport_rotation: st.airport_rotation,
             airport_blocks: st.airport_blocks,
+            airport_persistent_storage_id: st.airport_persistent_storage_id,
             cargo: cargo_by_station.remove(&station_id).unwrap_or_default(),
         })
         .collect()

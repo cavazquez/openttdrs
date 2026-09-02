@@ -36,6 +36,9 @@ const VEH_INVALID: u8 = 0xFF;
 /// Identidad nativa `(GRFID, localidx)` de una spec de road stop.
 type RoadStopSpecIdentity = (u32, u16);
 
+/// IDs asignados a los storages PSA de industrias y estaciones.
+type PersistentStorageIds = (Vec<Option<u32>>, Vec<Option<u32>>);
+
 /// Registro serializable del pool `CAPA`.
 ///
 /// El tipo de carga no forma parte del registro nativo: `OpenTTD` lo obtiene de
@@ -652,6 +655,7 @@ fn write_stnn_normal(
     station_id: u32,
     cargo_export: &CargoPacketExport,
     climate: crate::Climate,
+    persistent_storage_id: Option<u32>,
 ) -> Result<(), SavError> {
     let name = st.name.as_deref().unwrap_or("");
     buf.push(1); // base presente
@@ -695,7 +699,20 @@ fn write_stnn_normal(
     buf.push(st.airport_layout); // layout
     buf.extend_from_slice(&0u64.to_be_bytes()); // airport.flags
     buf.push(st.airport_rotation & 6); // rotation
-    buf.extend_from_slice(&0u32.to_be_bytes()); // psa null
+    let psa = if facilities & FACIL_AIRPORT != 0 {
+        persistent_storage_id
+            .map(|id| {
+                id.checked_add(1).ok_or(SavError::ValueOutOfRange {
+                    field: "airport persistent storage id",
+                    value: id,
+                })
+            })
+            .transpose()?
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    buf.extend_from_slice(&psa.to_be_bytes()); // airport.psa (REF_STORAGE)
 
     buf.push(0); // indtype
     buf.push(0); // time_since_load
@@ -794,6 +811,7 @@ pub(crate) fn stnn_records_with_cargo(
 ) -> Result<Vec<Vec<u8>>, SavError> {
     // CITY sintético o real: el primer municipio es índice 0 → ref 1.
     let town_ref = 1u32;
+    let station_persistent_storage_ids = station_persistent_storage_ids(state)?;
     let mut out = Vec::with_capacity(state.stations.len());
     for (station_index, st) in state.stations.iter().enumerate() {
         if st.pos.x < 0 || st.pos.y < 0 {
@@ -830,6 +848,10 @@ pub(crate) fn stnn_records_with_cargo(
                 station_id,
                 cargo_export,
                 state.climate,
+                station_persistent_storage_ids
+                    .get(station_index)
+                    .copied()
+                    .flatten(),
             )?;
             rec.push(0); // waypoint ausente
         }
@@ -1241,6 +1263,45 @@ pub(super) fn indy_records_with_cargo(
 /// creada localmente obtiene el primer índice libre sólo cuando tiene registros
 /// `7C`; esto hace determinista el export y evita compactar storages ajenos.
 fn industry_persistent_storage_ids(state: &GameState) -> Result<Vec<Option<u32>>, SavError> {
+    Ok(persistent_storage_ids(state)?.0)
+}
+
+fn station_persistent_storage_ids(state: &GameState) -> Result<Vec<Option<u32>>, SavError> {
+    Ok(persistent_storage_ids(state)?.1)
+}
+
+fn station_has_persistent_storage(station: &Station) -> bool {
+    matches!(station.stop_kind, StopKind::Airport)
+        || !station.airport_tiles.is_empty()
+        || station.airport_newgrf_spec_id.is_some()
+}
+
+fn next_free_persistent_storage_id(
+    used: &mut std::collections::BTreeSet<u32>,
+    next_free: &mut u32,
+) -> Result<u32, SavError> {
+    while used.contains(next_free) {
+        *next_free = next_free.checked_add(1).ok_or(SavError::ValueOutOfRange {
+            field: "persistent storage id",
+            value: u32::MAX,
+        })?;
+    }
+    let id = *next_free;
+    used.insert(id);
+    *next_free = next_free.checked_add(1).ok_or(SavError::ValueOutOfRange {
+        field: "persistent storage id",
+        value: u32::MAX,
+    })?;
+    Ok(id)
+}
+
+/// Asigna IDs estables para los storages de industrias y aeropuertos.
+///
+/// Los IDs explícitos y las filas importadas ocupan el espacio antes de
+/// asignar una fila a registros runtime nuevos. El orden de asignación es
+/// industrias y luego estaciones, igual que el orden de emisión de los
+/// chunks, para que `STNN.airport.psa` y `PSAC` siempre coincidan.
+fn persistent_storage_ids(state: &GameState) -> Result<PersistentStorageIds, SavError> {
     let mut used: std::collections::BTreeSet<u32> = state
         .sav_persistent_storages
         .iter()
@@ -1252,31 +1313,44 @@ fn industry_persistent_storage_ids(state: &GameState) -> Result<Vec<Option<u32>>
             .iter()
             .filter_map(|industry| industry.newgrf_persistent_storage_id),
     );
+    used.extend(
+        state
+            .stations
+            .iter()
+            .filter_map(|station| station.newgrf_persistent_storage_id),
+    );
+
     let mut next_free = 0u32;
-    let mut out = Vec::with_capacity(state.industries.len());
+    let mut industry_ids = Vec::with_capacity(state.industries.len());
     for industry in &state.industries {
         if let Some(id) = industry.newgrf_persistent_storage_id {
-            out.push(Some(id));
-            continue;
+            industry_ids.push(Some(id));
+        } else if industry.newgrf_persistent_regs.is_empty() {
+            industry_ids.push(None);
+        } else {
+            industry_ids.push(Some(next_free_persistent_storage_id(
+                &mut used,
+                &mut next_free,
+            )?));
         }
-        if industry.newgrf_persistent_regs.is_empty() {
-            out.push(None);
-            continue;
-        }
-        while used.contains(&next_free) {
-            next_free = next_free.checked_add(1).ok_or(SavError::ValueOutOfRange {
-                field: "persistent storage id",
-                value: u32::MAX,
-            })?;
-        }
-        used.insert(next_free);
-        out.push(Some(next_free));
-        next_free = next_free.checked_add(1).ok_or(SavError::ValueOutOfRange {
-            field: "persistent storage id",
-            value: u32::MAX,
-        })?;
     }
-    Ok(out)
+
+    let mut station_ids = Vec::with_capacity(state.stations.len());
+    for station in &state.stations {
+        if !station_has_persistent_storage(station) {
+            station_ids.push(None);
+        } else if let Some(id) = station.newgrf_persistent_storage_id {
+            station_ids.push(Some(id));
+        } else if station.newgrf_persistent_regs.is_empty() {
+            station_ids.push(None);
+        } else {
+            station_ids.push(Some(next_free_persistent_storage_id(
+                &mut used,
+                &mut next_free,
+            )?));
+        }
+    }
+    Ok((industry_ids, station_ids))
 }
 
 fn industry_persistent_storage_grfid(state: &GameState, industry: &Industry) -> u32 {
@@ -1291,11 +1365,54 @@ fn industry_persistent_storage_grfid(state: &GameState, industry: &Industry) -> 
         .map_or(0, |spec| spec.grfid)
 }
 
+fn station_persistent_storage_grfid(state: &GameState, station: &Station) -> u32 {
+    station
+        .airport_newgrf_spec_id
+        .and_then(|id| state.airport_spec_catalog.iter().find(|spec| spec.id == id))
+        .map_or(0, |spec| spec.newgrf_grfid)
+}
+
 fn normalized_storage_values(values: &[u32]) -> Vec<u32> {
     let mut out = vec![0; 256];
     let len = values.len().min(out.len());
     out[..len].copy_from_slice(&values[..len]);
     out
+}
+
+fn merge_persistent_storage(
+    storages: &mut Vec<SavPersistentStorage>,
+    by_id: &mut HashMap<u32, usize>,
+    storage_id: u32,
+    explicit_storage_id: Option<u32>,
+    grfid: u32,
+    regs: &HashMap<u8, u32>,
+) {
+    let storage_index = if let Some(&index) = by_id.get(&storage_id) {
+        index
+    } else {
+        // Una referencia importada sin fila PSAC válida no debe fabricar un
+        // storage vacío; sólo se crea una fila al guardar registros runtime.
+        if regs.is_empty() && explicit_storage_id.is_some() {
+            return;
+        }
+        let index = storages.len();
+        storages.push(SavPersistentStorage {
+            storage_id,
+            grfid,
+            storage: vec![0; 256],
+        });
+        by_id.insert(storage_id, index);
+        index
+    };
+    let storage = &mut storages[storage_index];
+    if storage.grfid == 0 {
+        storage.grfid = grfid;
+    }
+    let mut values = normalized_storage_values(&storage.storage);
+    for (&register, &value) in regs {
+        values[usize::from(register)] = value;
+    }
+    storage.storage = values;
 }
 
 /// Registros densos del chunk nativo `PSAC`.
@@ -1304,45 +1421,37 @@ fn normalized_storage_values(values: &[u32]) -> Vec<u32> {
 /// pueblo que aún no tiene runtime PSA. Las industrias sólo parchean sus
 /// índices asignados, sin descartar storages ajenos.
 pub(super) fn persistent_storage_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
-    let ids = industry_persistent_storage_ids(state)?;
+    let (industry_ids, station_ids) = persistent_storage_ids(state)?;
     let mut storages = state.sav_persistent_storages.clone();
     let mut by_id = std::collections::HashMap::new();
     for (index, storage) in storages.iter().enumerate() {
         by_id.insert(storage.storage_id, index);
     }
     for (industry_index, industry) in state.industries.iter().enumerate() {
-        let Some(storage_id) = ids.get(industry_index).copied().flatten() else {
+        let Some(storage_id) = industry_ids.get(industry_index).copied().flatten() else {
             continue;
         };
-        let storage_index = if let Some(&index) = by_id.get(&storage_id) {
-            index
-        } else {
-            // Una referencia importada sin fila PSAC válida no debe fabricar
-            // un storage vacío ni suprimir el chunk opaco original. Sólo se
-            // crea una fila nueva cuando hay registros runtime que guardar.
-            if industry.newgrf_persistent_regs.is_empty()
-                && industry.newgrf_persistent_storage_id.is_some()
-            {
-                continue;
-            }
-            let index = storages.len();
-            storages.push(SavPersistentStorage {
-                storage_id,
-                grfid: industry_persistent_storage_grfid(state, industry),
-                storage: vec![0; 256],
-            });
-            by_id.insert(storage_id, index);
-            index
+        merge_persistent_storage(
+            &mut storages,
+            &mut by_id,
+            storage_id,
+            industry.newgrf_persistent_storage_id,
+            industry_persistent_storage_grfid(state, industry),
+            &industry.newgrf_persistent_regs,
+        );
+    }
+    for (station_index, station) in state.stations.iter().enumerate() {
+        let Some(storage_id) = station_ids.get(station_index).copied().flatten() else {
+            continue;
         };
-        let storage = &mut storages[storage_index];
-        if storage.grfid == 0 {
-            storage.grfid = industry_persistent_storage_grfid(state, industry);
-        }
-        let mut values = normalized_storage_values(&storage.storage);
-        for (&register, &value) in &industry.newgrf_persistent_regs {
-            values[usize::from(register)] = value;
-        }
-        storage.storage = values;
+        merge_persistent_storage(
+            &mut storages,
+            &mut by_id,
+            storage_id,
+            station.newgrf_persistent_storage_id,
+            station_persistent_storage_grfid(state, station),
+            &station.newgrf_persistent_regs,
+        );
     }
     if storages.is_empty() {
         return Ok(Vec::new());
@@ -1447,6 +1556,7 @@ mod tests {
         airport.airport_newgrf_spec_id = Some(10);
         airport.airport_layout = 3;
         airport.airport_rotation = 6;
+        airport.newgrf_persistent_storage_id = Some(3);
         airport.airport_tiles = vec![
             TileCoord::new(4, 5),
             TileCoord::new(5, 5),
@@ -1486,6 +1596,10 @@ mod tests {
         assert_eq!(
             record_get(normal, "airport.rotation").and_then(SlValue::as_u64),
             Some(6)
+        );
+        assert_eq!(
+            record_get(normal, "airport.psa").and_then(SlValue::as_u64),
+            Some(4)
         );
     }
 

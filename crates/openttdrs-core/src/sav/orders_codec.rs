@@ -584,6 +584,7 @@ mod tests {
                 airport_layout: 0,
                 airport_rotation: 0,
                 airport_blocks: 0,
+                airport_persistent_storage_id: None,
             },
         );
         let decoded = vehicle_orders_from_sav(&[sav], &stations, 64);
@@ -658,6 +659,7 @@ mod tests {
                 airport_layout: 0,
                 airport_rotation: 0,
                 airport_blocks: 0,
+                airport_persistent_storage_id: None,
             },
         );
         let decoded = vehicle_orders_from_sav(&[sav], &stations, 64);
@@ -682,6 +684,7 @@ mod tests {
                 airport_layout: 0,
                 airport_rotation: 0,
                 airport_blocks: 0,
+                airport_persistent_storage_id: None,
             },
         );
         let order = SavOrder {
@@ -755,6 +758,7 @@ mod tests {
                 airport_layout: 0,
                 airport_rotation: 0,
                 airport_blocks: 0,
+                airport_persistent_storage_id: None,
             },
         );
         assert_eq!(vehicle_orders_from_sav(&[sav], &stations, 32), vec![order]);

@@ -273,6 +273,54 @@ pub(crate) fn hydrate_sav_industry_persistent_storage(
     }
 }
 
+/// Hidrata los registros `7C` del aeropuerto de cada estación desde `PSAC`.
+///
+/// `STNN.normal.airport.psa` referencia la misma tabla nativa que `INDY.psa`,
+/// pero el runtime mantiene los registros en la entidad `Station`. Los ceros
+/// siguen en `GameState::sav_persistent_storages` para que una futura entidad
+/// pueda reclamarlos sin perder bytes durante el round-trip.
+pub(crate) fn hydrate_sav_station_persistent_storage(
+    state: &mut GameState,
+    sav_stations: &[crate::sav::SavStation],
+    persistent_storages: &[crate::sav::SavPersistentStorage],
+) {
+    if sav_stations.is_empty() || persistent_storages.is_empty() {
+        return;
+    }
+    let by_id: std::collections::HashMap<u32, &crate::sav::SavPersistentStorage> =
+        persistent_storages
+            .iter()
+            .map(|storage| (storage.storage_id, storage))
+            .collect();
+    for station in &mut state.stations {
+        let Some(station_id) = station.ottd_station_id else {
+            continue;
+        };
+        let Some(saved) = sav_stations
+            .iter()
+            .find(|saved| saved.station_id == station_id)
+        else {
+            continue;
+        };
+        let Some(storage_id) = saved.airport_persistent_storage_id else {
+            continue;
+        };
+        let Some(storage) = by_id.get(&storage_id) else {
+            continue;
+        };
+        station.newgrf_persistent_storage_id = Some(storage_id);
+        for (index, &value) in storage.storage.iter().enumerate() {
+            if value == 0 {
+                continue;
+            }
+            let Ok(index) = u8::try_from(index) else {
+                break;
+            };
+            station.newgrf_persistent_regs.insert(index, value);
+        }
+    }
+}
+
 /// Hidrata industrias de un `.ottdmap` que no trae el chunk `INDY`.
 ///
 /// La agrupación por componentes sólo es un fallback: los `.sav` modernos

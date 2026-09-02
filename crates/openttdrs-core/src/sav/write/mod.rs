@@ -1283,6 +1283,73 @@ mod tests {
     }
 
     #[test]
+    fn ottn_roundtrip_hydrates_airport_psa_storage() {
+        let mut state = tiny_state();
+        let pos = TileCoord::new(12, 12);
+        let mut tile = state.map.get(pos).expect("airport tile");
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m2 = 0;
+        tile.m6 = 1 << 3; // StationType::Airport
+        state.map.set_tile(pos, tile).expect("set airport tile");
+
+        let mut airport = Station::new_with_kind(pos, StopKind::Airport);
+        airport.ottd_station_id = Some(0);
+        airport.airport_tiles = vec![pos];
+        airport.airport_newgrf_spec_id = Some(10);
+        airport.newgrf_persistent_regs.insert(7, 0xCAFE_BABE);
+        state.stations.push(airport);
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let chunks = crate::sav::chunks::parse_chunks(&bytes[8..]).expect("chunks");
+        let stnn = crate::sav::chunks::find_chunk(&chunks, "STNN").expect("STNN");
+        let rows = crate::sav::table::parse_table_chunk(&stnn.body, false).expect("STNN table");
+        let normal = match crate::sav::table::record_get(&rows[0].1, "normal") {
+            Some(crate::sav::table::SlValue::Structs(items)) => items.first().expect("normal"),
+            other => panic!("normal ausente: {other:?}"),
+        };
+        assert_eq!(
+            crate::sav::table::record_get(normal, "airport.psa")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(1)
+        );
+        let psac = crate::sav::chunks::find_chunk(&chunks, "PSAC").expect("PSAC");
+        let psac_rows =
+            crate::sav::table::parse_table_chunk(&psac.body, false).expect("PSAC table");
+        let values = match crate::sav::table::record_get(&psac_rows[0].1, "storage") {
+            Some(crate::sav::table::SlValue::List(values)) => values,
+            other => panic!("storage ausente: {other:?}"),
+        };
+        assert_eq!(values[7].as_u64(), Some(u64::from(0xCAFE_BABEu32)));
+
+        let loaded = GameState::from_sav_game(sav::load(&bytes).expect("load"));
+        assert_eq!(loaded.stations.len(), 1);
+        assert_eq!(loaded.stations[0].newgrf_persistent_storage_id, Some(0));
+        assert_eq!(
+            loaded.stations[0].newgrf_persistent_regs.get(&7),
+            Some(&0xCAFE_BABE)
+        );
+        assert_eq!(loaded.sav_persistent_storages.len(), 1);
+
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
+        let resaved_game = sav::load(&resaved).expect("reload");
+        assert_eq!(
+            resaved_game.stations[0].airport_persistent_storage_id,
+            Some(0)
+        );
+        let resaved_chunks = crate::sav::chunks::parse_chunks(&resaved[8..]).expect("chunks");
+        let resaved_psac =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "PSAC").expect("PSAC resaved");
+        let resaved_rows =
+            crate::sav::table::parse_table_chunk(&resaved_psac.body, false).expect("PSAC table");
+        let resaved_values = match crate::sav::table::record_get(&resaved_rows[0].1, "storage") {
+            Some(crate::sav::table::SlValue::List(values)) => values,
+            other => panic!("storage ausente: {other:?}"),
+        };
+        assert_eq!(resaved_values[7].as_u64(), Some(u64::from(0xCAFE_BABEu32)));
+    }
+
+    #[test]
     fn ottn_roundtrip_preserves_industry_nested_histories() {
         let mut state = tiny_state();
         let pos = TileCoord::new(12, 12);

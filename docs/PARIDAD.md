@@ -70,11 +70,12 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Render/UI vanilla | **Media funcional / baja de composición raster** | Hay cobertura OpenGFX y evidencia `world-draw` por tesela, pero no paridad global de framebuffer; la captura limpia vigente de Kale sigue siendo diferente. Véase [evidencia visual raster](#evidencia-visual-raster-vigente) |
 | Plataformas y release | **Preparada con gates** | `main` protegido y checks Windows/macOS; queda dry-run/smoke de `0.1.0-alpha.1` en [#296](https://github.com/cavazquez/openttdrs/issues/296) |
 
-Actualización SAV/NewGRF (2026-09-02): `INDY.psa` y el pool `PSAC` ya se
-importan, hidratan y reemiten para las industrias, conservando índices y 256
-registros por fila; los storages de estaciones, pueblos y otras entidades se
-mantienen como filas opacas aunque todavía no tengan runtime propio. La
-paridad restante está detallada en [`parity/sav-compatibility.md`](parity/sav-compatibility.md).
+Actualización SAV/NewGRF (2026-09-02): `INDY.psa`,
+`STNN.normal.airport.psa` y el pool `PSAC` ya se importan, hidratan y reemiten
+para industrias y aeropuertos, conservando índices y 256 registros por fila;
+los storages de pueblos, casas y otras entidades se mantienen como filas
+opacas aunque todavía no tengan runtime propio. La paridad restante está
+detallada en [`parity/sav-compatibility.md`](parity/sav-compatibility.md).
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

@@ -339,6 +339,7 @@ mod tests {
                 airport_layout: 0,
                 airport_rotation: 0,
                 airport_blocks: 0,
+                airport_persistent_storage_id: None,
             },
         );
         // Middle = bits 4–5 = 1 (default `VehicleOrder::station`).
@@ -377,6 +378,7 @@ mod tests {
                 airport_layout: 0,
                 airport_rotation: 0,
                 airport_blocks: 0,
+                airport_persistent_storage_id: None,
             },
         );
         let full = stop_flags_from_sav(OTTD_LOAD_FULL << 4);

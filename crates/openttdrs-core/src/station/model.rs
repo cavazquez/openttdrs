@@ -299,6 +299,13 @@ pub struct Station {
     /// Registros persistentes `NewGRF` (`7C` / `\2psto`); writeback tras CB/Action2 (#266).
     #[serde(default)]
     pub newgrf_persistent_regs: std::collections::HashMap<u8, u32>,
+    /// Índice del pool nativo `PSAC` referenciado por `STNN.normal.airport.psa`.
+    ///
+    /// Las estaciones creadas localmente reciben un índice al exportarse sólo
+    /// cuando un callback haya escrito registros persistentes; las importadas
+    /// conservan el índice original para no mezclar storages de otra entidad.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub newgrf_persistent_storage_id: Option<u32>,
 }
 
 const fn default_station_rating() -> u8 {
@@ -370,6 +377,7 @@ impl Station {
             road_stop_newgrf_random_bits: newgrf_random_bits.to_le_bytes()[0],
             newgrf_waiting_random_triggers: 0,
             newgrf_persistent_regs: std::collections::HashMap::new(),
+            newgrf_persistent_storage_id: None,
         }
     }
 

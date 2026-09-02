@@ -168,9 +168,10 @@ Actualización #329-VEHICLE-SAV-AIRCRAFT-008 (2026-09-02): el escritor `VEHS`
 consulta el catálogo activo para clasificar aeronaves y emite la cadena
 helicóptero+sombra+rotor cuando `EngineDef::is_helicopter` procede de Action0 o
 NewGRF. La regresión `vehs_uses_newgrf_catalog_for_aircraft_subtype` cubre un
-ID local fuera de la tabla vanilla. La serialización todavía reconstruye un
-encabezado mínimo y no conserva columnas desconocidas; ese residual sigue
-abierto.
+ID local fuera de la tabla vanilla. La serialización aún reconstruye un
+encabezado mínimo para cambios estructurales, variables o anidados; los
+cambios escalares fijos compatibles se fusionan sobre el cuerpo importado.
+Ese residual sigue abierto.
 
 Actualización #329-VEHICLE-SAV-VEHS-009 (2026-09-02): `VEHS` importa también
 el cuerpo crudo y una huella de las filas semánticas. Si la huella no cambia,
@@ -178,23 +179,26 @@ el ciclo SAV reemite el chunk original byte a byte y mantiene columnas futuras;
 una mutación semántica invalida ese cuerpo para evitar exportar posiciones o
 velocidades obsoletas. La regresión
 `imported_vehs_body_is_reused_until_vehicle_semantics_change` cubre la
-reutilización y el fallback canónico. La fusión parcial por fila y las columnas
-desconocidas de `ORDL`/`STNN`/`CITY`/`INDY` siguen pendientes.
+reutilización y el fallback canónico. La fusión común conserva ahora columnas
+desconocidas cuando sólo cambia un escalar fijo y no cambian filas ni índices;
+mutaciones variables/anidadas o estructurales siguen pendientes.
 
 Actualización #329-VEHICLE-SAV-ORDL-010 (2026-09-02): `ORDL` comparte ahora
 el snapshot semántico de vehículos. Cuando no cambia ninguna fila, el
 exportador reemite la lista de órdenes original y conserva sus columnas
 futuras; una mutación de orden o de topología activa el encoder canónico.
 La regresión `imported_vehs_body_is_reused_until_vehicle_semantics_change`
-cubre la pareja `ORDL`/`VEHS`. La fusión parcial y las columnas desconocidas de
-`STNN`/`CITY`/`INDY` siguen pendientes.
+cubre la pareja `ORDL`/`VEHS`. La fusión común cubre ahora escalares fijos
+compatibles; mutaciones de strings/listas/structs o cambios de filas e índices
+siguen pendientes.
 
 Actualización #329-VEHICLE-SAV-TABLES-011 (2026-09-02): `STNN`, `CITY` e
 `INDY` también guardan el cuerpo original y su huella semántica. Los ciclos
 SAV sin cambios de estaciones, ciudades o industrias conservan columnas
 futuras; cualquier diferencia de filas activa la serialización canónica para
-evitar datos obsoletos. La fusión parcial posterior y los demás pools nativos
-siguen pendientes.
+evitar datos obsoletos. Los escalares fijos compatibles se fusionan ahora sin
+perder columnas futuras; mutaciones variables/anidadas y los demás pools
+nativos siguen pendientes.
 
 La tabla de variables relativas conserva el parámetro `ExtendedByte` completo
 (WORD, hasta 14 bits) para `61 → 0x60`; los IDs locales superiores a `0xFF` no
@@ -209,28 +213,30 @@ Actualización #329-VEHICLE-SAV-META-012 (2026-09-02): `PATS`, `ECMY` y `CAPY`
 reutilizan ahora sus cuerpos originales cuando las filas conocidas no cambian.
 Esto preserva ajustes, contadores económicos y referencias/pagos de carga de
 versiones nuevas durante un round-trip; una mutación semántica invalida sólo
-ese chunk y activa el writer canónico. La fusión parcial de columnas y los
-otros pools SAV todavía requieren trabajo diferencial.
+ese chunk y activa el writer canónico salvo que sea un escalar fijo compatible,
+que se fusiona in-place. Las mutaciones variables/anidadas y los otros pools
+SAV todavía requieren trabajo diferencial.
 
 Actualización #329-VEHICLE-SAV-FLEET-014 (2026-09-02): `GRPS` y `ERNW` usan
 ahora una huella densa de filas semánticas para reemitir sus cuerpos originales
 sin cambios. Se conservan así columnas futuras, huecos de pool y enlaces de
 reglas; una mutación de grupo o autorrenovación activa el writer actual y
-recalcula las referencias. La fusión parcial posterior y los pools restantes
-siguen abiertos.
+recalcula las referencias. Los escalares fijos compatibles se fusionan ahora;
+mutaciones variables/anidadas y los pools restantes siguen abiertos.
 
 Actualización #329-VEHICLE-SAV-LINKGRAPH-015 (2026-09-02): `LGRP` usa ahora
 una huella de registros reconstruidos para conservar headers y columnas
 futuras sin cambios; `LGRJ`/`LGRS` siguen reutilizando sus cuerpos runtime
 opacos hasta que se registra una arista nueva. La mutación semántica activa el
-writer actual y mantiene el grafo válido, pero jobs/cargodist completo aún no
-se ejecutan en Rust.
+writer actual y mantiene el grafo válido; los escalares fijos compatibles
+pueden fusionarse sin perder columnas futuras, pero jobs/cargodist completos
+aún no se ejecutan en Rust.
 
 Actualización #329-VEHICLE-SAV-NGRF-016 (2026-09-02): `NGRF` reemite su cuerpo
 original mientras las filas del stack activo no cambian, conservando digest,
 paleta y columnas futuras; un cambio de orden, GRFID, versión o parámetro usa
 el encoder semántico. El runtime aún necesita resolver archivos no instalados y
-fusionar columnas desconocidas después de mutaciones parciales.
+fusionar mutaciones variables/anidadas después de cambios parciales.
 
 Actualización #329-VEHICLE-SAV-DATE-017 (2026-09-02): `DATE` reutiliza ahora el
 cuerpo original cuando sus cuatro valores conocidos (fecha, tick y dos
@@ -241,14 +247,15 @@ Actualización #329-VEHICLE-SAV-CAPA-018 (2026-09-02): `CAPA` compara ahora la
 huella densa de paquetes físicos y reemite el cuerpo original sin cambios,
 conservando columnas futuras. Cualquier mutación de paquetes o referencias
 activa la serialización canónica y mantiene los enlaces `STNN`/`VEHS` válidos;
-la fusión parcial de columnas sigue pendiente.
+las mutaciones variables/anidadas siguen pendientes.
 
 Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` conserva ahora su
 cuerpo original cuando las filas semánticas de compañías coinciden. El
 exportador mantiene así columnas nuevas de ajustes, economía, libreas y
 retrato durante un round-trip sin cambios, y cae al writer canónico si cambia
-una compañía o una referencia de autorrenovación. La fusión parcial y los
-headers desconocidos tras una mutación siguen pendientes.
+una compañía o una referencia de autorrenovación. Los escalares fijos
+compatibles se fusionan ahora; mutaciones variables/anidadas y headers
+estructurales tras una mutación siguen pendientes.
 
 - Resto de CBs houses / airports / industries / objects (excepto CB157), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; siguen pendientes los scopes parent de estación/industria/casa/objeto con sus storage propios.

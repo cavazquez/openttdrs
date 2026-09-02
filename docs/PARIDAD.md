@@ -73,10 +73,12 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 Actualización SAV/NewGRF (2026-09-02): `INDY.psa`,
 `STNN.normal.airport.psa`, `CITY.psa_list` y el pool `PSAC` ya se importan,
 hidratan sus referencias y se reemiten para industrias, aeropuertos y pueblos,
-conservando índices y 256 registros por fila; los storages de casas y otras
-entidades se mantienen como filas opacas aunque todavía no tengan runtime
-propio. La paridad restante está
-detallada en [`parity/sav-compatibility.md`](parity/sav-compatibility.md).
+conservando índices y 256 registros por fila; el PSA no nulo de cada pueblo se
+expone por GRFID en los scopes parent de casas y objetos, mientras los storages
+propios de esas entidades y otros consumidores se mantienen como filas opacas.
+La lectura runtime está acotada a esos dos call sites; el writeback y el resto
+de la paridad están
+detallados en [`parity/sav-compatibility.md`](parity/sav-compatibility.md).
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

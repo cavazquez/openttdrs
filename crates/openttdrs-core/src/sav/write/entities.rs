@@ -36,8 +36,12 @@ const VEH_INVALID: u8 = 0xFF;
 /// Identidad nativa `(GRFID, localidx)` de una spec de road stop.
 type RoadStopSpecIdentity = (u32, u16);
 
-/// IDs asignados a los storages PSA de industrias y estaciones.
-type PersistentStorageIds = (Vec<Option<u32>>, Vec<Option<u32>>);
+/// IDs asignados a los storages PSA de industrias, estaciones y pueblos.
+///
+/// El tercer componente conserva la relación `GRFID → storage_id` de cada
+/// pueblo. Los refs importados sin fila `PSAC` siguen viviendo en el mapa
+/// histórico de `GameState` y no se compactan.
+type PersistentStorageIds = (Vec<Option<u32>>, Vec<Option<u32>>, Vec<HashMap<u32, u32>>);
 
 /// Registro serializable del pool `CAPA`.
 ///
@@ -962,8 +966,9 @@ fn write_persistent_storage_refs(ids: &[u32], buf: &mut Vec<u8>) -> Result<(), S
 ///
 /// Falla si algún nombre de ciudad es demasiado largo.
 pub(super) fn city_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>, SavError> {
+    let assigned_town_storage_ids = persistent_storage_ids(state)?.2;
     let mut out = Vec::with_capacity(state.towns.len().max(1));
-    for town in &state.towns {
+    for (town_index, town) in state.towns.iter().enumerate() {
         let Some(tile_idx) = coord_to_linear_index(town.pos, map_w) else {
             continue;
         };
@@ -976,11 +981,21 @@ pub(super) fn city_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>
         rec.extend_from_slice(&0u32.to_be_bytes()); // townnamegrfid
         rec.extend_from_slice(&0x20C0u16.to_be_bytes()); // townnametype (inglés)
         rec.extend_from_slice(&0u32.to_be_bytes()); // townnameparts
-        let ids = state
+        let mut ids = state
             .sav_town_persistent_storage_ids
             .get(&town.id)
-            .map_or(&[][..], Vec::as_slice);
-        write_persistent_storage_refs(ids, &mut rec)?;
+            .cloned()
+            .unwrap_or_default();
+        if let Some(assigned) = assigned_town_storage_ids.get(town_index) {
+            let mut extras: Vec<u32> = assigned.values().copied().collect();
+            extras.sort_unstable();
+            for id in extras {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+        }
+        write_persistent_storage_refs(&ids, &mut rec)?;
         out.push(rec);
     }
     if out.is_empty() {
@@ -1349,6 +1364,13 @@ fn persistent_storage_ids(state: &GameState) -> Result<PersistentStorageIds, Sav
             .flatten()
             .copied(),
     );
+    used.extend(
+        state
+            .towns
+            .iter()
+            .flat_map(|town| town.newgrf_persistent_storage_ids.values())
+            .copied(),
+    );
 
     let mut next_free = 0u32;
     let mut industry_ids = Vec::with_capacity(state.industries.len());
@@ -1380,7 +1402,31 @@ fn persistent_storage_ids(state: &GameState) -> Result<PersistentStorageIds, Sav
             )?));
         }
     }
-    Ok((industry_ids, station_ids))
+
+    // Las filas nuevas de pueblo se asignan después de industrias y
+    // estaciones, siguiendo el orden de emisión de los pools y evitando
+    // renumerar referencias ya presentes en un SAV importado.
+    let mut town_ids = Vec::with_capacity(state.towns.len());
+    for town in &state.towns {
+        let mut ids = town.newgrf_persistent_storage_ids.clone();
+        let mut grfids: Vec<u32> = town.newgrf_persistent_regs.keys().copied().collect();
+        grfids.sort_unstable();
+        for grfid in grfids {
+            if ids.contains_key(&grfid) {
+                continue;
+            }
+            let Some(regs) = town.newgrf_persistent_regs.get(&grfid) else {
+                continue;
+            };
+            if regs.is_empty() {
+                continue;
+            }
+            let id = next_free_persistent_storage_id(&mut used, &mut next_free)?;
+            ids.insert(grfid, id);
+        }
+        town_ids.push(ids);
+    }
+    Ok((industry_ids, station_ids, town_ids))
 }
 
 fn industry_persistent_storage_grfid(state: &GameState, industry: &Industry) -> u32 {
@@ -1451,7 +1497,7 @@ fn merge_persistent_storage(
 /// pueblo que aún no tiene runtime PSA. Las industrias sólo parchean sus
 /// índices asignados, sin descartar storages ajenos.
 pub(super) fn persistent_storage_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
-    let (industry_ids, station_ids) = persistent_storage_ids(state)?;
+    let (industry_ids, station_ids, town_ids) = persistent_storage_ids(state)?;
     let mut storages = state.sav_persistent_storages.clone();
     let mut by_id = std::collections::HashMap::new();
     for (index, storage) in storages.iter().enumerate() {
@@ -1482,6 +1528,24 @@ pub(super) fn persistent_storage_records(state: &GameState) -> Result<Vec<Vec<u8
             station_persistent_storage_grfid(state, station),
             &station.newgrf_persistent_regs,
         );
+    }
+    for (town_index, town) in state.towns.iter().enumerate() {
+        let Some(ids) = town_ids.get(town_index) else {
+            continue;
+        };
+        for (&grfid, &storage_id) in ids {
+            let Some(regs) = town.newgrf_persistent_regs.get(&grfid) else {
+                continue;
+            };
+            merge_persistent_storage(
+                &mut storages,
+                &mut by_id,
+                storage_id,
+                town.newgrf_persistent_storage_ids.get(&grfid).copied(),
+                grfid,
+                regs,
+            );
+        }
     }
     if storages.is_empty() {
         return Ok(Vec::new());

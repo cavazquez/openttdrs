@@ -438,6 +438,10 @@ pub fn action2_eval_ctx_for_object_tile_with_counts(
             .insert(0x45, (zone << 16) | manhattan.min(u32::from(u16::MAX)));
         ctx.vars
             .insert(0x46, crate::house_spec::distance_square(town.pos, coord));
+        // ObjectResolverObject's parent scope is the associated town. Select
+        // its persistent storage by the object GRFID so `7C` sees the same
+        // values as OpenTTD after a SAV round-trip.
+        town.copy_newgrf_persistent_registers(current_grfid(object_type, object_catalog), &mut ctx);
     }
     ctx.vars
         .insert(0x42, current.map_or(0, |object| object.build_date));
@@ -869,11 +873,15 @@ mod tests {
             newgrf_runtime: None,
             associated_badges: Vec::new(),
         }];
-        let town = crate::town::Town {
+        let mut town = crate::town::Town {
             id: 1,
             pos: TileCoord::new(1, 0),
             ..Default::default()
         };
+        town.newgrf_persistent_regs
+            .entry(0xABCD_0001)
+            .or_default()
+            .insert(4, 0x1020_3040);
         let counts = ObjectScopeCounts::from_objects(&objects);
         let ctx = action2_eval_ctx_for_object_tile_with_counts(
             &map,
@@ -902,6 +910,7 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x46), Some(&0));
         assert_eq!(ctx.vars.get(&0x47), Some(&6));
         assert_eq!(ctx.vars.get(&0x48), Some(&2));
+        assert_eq!(ctx.parent_persistent_registers.get(&4), Some(&0x1020_3040));
         assert_eq!(
             ctx.parameterized_vars.get(&(0x60, 0x0F)),
             Some(&0x0002_0004)

@@ -321,6 +321,65 @@ pub(crate) fn hydrate_sav_station_persistent_storage(
     }
 }
 
+/// Hidrata el PSA de cada pueblo desde `CITY.psa_list` y `PSAC`.
+///
+/// Un pueblo puede tener una fila por GRFID. Se conservan tanto el índice
+/// nativo como los valores no nulos para que los scopes parent de casas y
+/// objetos puedan consultar `7C` sin mezclar dos `NewGRF`; la fila densa
+/// completa continúa en
+/// `GameState::sav_persistent_storages` para el exportador.
+pub(crate) fn hydrate_sav_town_persistent_storage(
+    state: &mut GameState,
+    town_refs: &std::collections::HashMap<u32, Vec<u32>>,
+    persistent_storages: &[crate::sav::SavPersistentStorage],
+) {
+    if town_refs.is_empty() || persistent_storages.is_empty() {
+        return;
+    }
+    let by_id: std::collections::HashMap<u32, &crate::sav::SavPersistentStorage> =
+        persistent_storages
+            .iter()
+            .map(|storage| (storage.storage_id, storage))
+            .collect();
+    for (&town_index, ids) in town_refs {
+        let Ok(town_index) = usize::try_from(town_index) else {
+            continue;
+        };
+        let Some(town) = state.towns.get_mut(town_index) else {
+            continue;
+        };
+        for &storage_id in ids {
+            let Some(storage) = by_id.get(&storage_id) else {
+                continue;
+            };
+            // OpenTTD crea a lo sumo un town PSA por GRFID. Un save malformado
+            // con referencias duplicadas conserva la primera fila nativa en
+            // vez de sobrescribir sus registros.
+            if town
+                .newgrf_persistent_storage_ids
+                .contains_key(&storage.grfid)
+            {
+                continue;
+            }
+            town.newgrf_persistent_storage_ids
+                .insert(storage.grfid, storage_id);
+            let registers = town
+                .newgrf_persistent_regs
+                .entry(storage.grfid)
+                .or_default();
+            for (index, &value) in storage.storage.iter().enumerate() {
+                if value == 0 {
+                    continue;
+                }
+                let Ok(index) = u8::try_from(index) else {
+                    break;
+                };
+                registers.insert(index, value);
+            }
+        }
+    }
+}
+
 /// Hidrata industrias de un `.ottdmap` que no trae el chunk `INDY`.
 ///
 /// La agrupación por componentes sólo es un fallback: los `.sav` modernos

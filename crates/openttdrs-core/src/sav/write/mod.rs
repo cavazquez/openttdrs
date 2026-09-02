@@ -1365,12 +1365,20 @@ mod tests {
             crate::sav::SavPersistentStorage {
                 storage_id: 2,
                 grfid: 0x1111_2222,
-                storage: vec![0; 256],
+                storage: {
+                    let mut storage = vec![0; 256];
+                    storage[7] = 0xCAFE_BABE;
+                    storage
+                },
             },
             crate::sav::SavPersistentStorage {
                 storage_id: 5,
                 grfid: 0x3333_4444,
-                storage: vec![0; 256],
+                storage: {
+                    let mut storage = vec![0; 256];
+                    storage[9] = 0x1020_3040;
+                    storage
+                },
             },
         ];
 
@@ -1392,6 +1400,20 @@ mod tests {
             loaded.sav_town_persistent_storage_ids.get(&0),
             Some(&vec![2, 5])
         );
+        assert_eq!(
+            loaded.towns[0]
+                .newgrf_persistent_regs
+                .get(&0x1111_2222)
+                .and_then(|regs| regs.get(&7)),
+            Some(&0xCAFE_BABE)
+        );
+        assert_eq!(
+            loaded.towns[0]
+                .newgrf_persistent_regs
+                .get(&0x3333_4444)
+                .and_then(|regs| regs.get(&9)),
+            Some(&0x1020_3040)
+        );
         let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
         let resaved_chunks = crate::sav::chunks::parse_chunks(&resaved[8..]).expect("chunks");
         let resaved_city = crate::sav::chunks::find_chunk(&resaved_chunks, "CITY").expect("CITY");
@@ -1405,6 +1427,24 @@ mod tests {
             other => panic!("psa_list ausente: {other:?}"),
         };
         assert_eq!(resaved_refs, Some(vec![3, 6]));
+        let resaved_psac = crate::sav::chunks::find_chunk(&resaved_chunks, "PSAC").expect("PSAC");
+        let resaved_psac_rows =
+            crate::sav::table::parse_table_chunk(&resaved_psac.body, false).expect("PSAC table");
+        assert_eq!(resaved_psac_rows.len(), 2);
+        assert_eq!(
+            match crate::sav::table::record_get(&resaved_psac_rows[0].1, "storage") {
+                Some(crate::sav::table::SlValue::List(values)) => values[7].as_u64(),
+                other => panic!("storage ausente: {other:?}"),
+            },
+            Some(u64::from(0xCAFE_BABEu32))
+        );
+        assert_eq!(
+            match crate::sav::table::record_get(&resaved_psac_rows[1].1, "storage") {
+                Some(crate::sav::table::SlValue::List(values)) => values[9].as_u64(),
+                other => panic!("storage ausente: {other:?}"),
+            },
+            Some(u64::from(0x1020_3040u32))
+        );
     }
 
     #[test]

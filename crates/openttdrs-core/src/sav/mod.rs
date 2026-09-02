@@ -1140,6 +1140,13 @@ impl GameState {
         state.jgr_tunnels_from_footer = sav.extras.jgr_tunnels_from_tnbp();
         state.towns = sav.towns;
         state.sav_town_persistent_storage_ids = sav.town_persistent_storage_ids;
+        let town_persistent_storage_ids = state.sav_town_persistent_storage_ids.clone();
+        let persistent_storages = state.sav_persistent_storages.clone();
+        import::hydrate_sav_town_persistent_storage(
+            &mut state,
+            &town_persistent_storage_ids,
+            &persistent_storages,
+        );
         for town in &mut state.towns {
             town.init_growth_goals(state.climate);
         }

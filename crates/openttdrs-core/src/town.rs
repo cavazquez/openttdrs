@@ -278,6 +278,19 @@ pub struct Town {
     /// Meses de «unwanted» por compañía tras soborno fallido.
     #[serde(default = "default_unwanted")]
     pub unwanted: Vec<u8>,
+    /// Índices del pool nativo `PSAC` por GRFID para el scope de pueblo.
+    ///
+    /// `CITY.psa_list` puede contener un storage por `NewGRF`. El campo se
+    /// mantiene fuera del JSON propio: el índice nativo y la fila completa
+    /// viven en `GameState::sav_persistent_storages`, mientras este mapa
+    /// permite que los resolvers lean los registros `7C` durante el runtime
+    /// sin confundir dos GRF distintos. El writeback de town PSA queda
+    /// pendiente de conectar con la mutación de callbacks.
+    #[serde(skip, default)]
+    pub newgrf_persistent_storage_ids: std::collections::HashMap<u32, u32>,
+    /// Registros no nulos del PSA de pueblo, agrupados por GRFID.
+    #[serde(skip, default)]
+    pub newgrf_persistent_regs: std::collections::HashMap<u32, std::collections::HashMap<u8, u32>>,
 }
 
 fn default_unwanted() -> Vec<u8> {
@@ -324,6 +337,8 @@ impl Default for Town {
             exclusivity: None,
             statues: 0,
             unwanted: default_unwanted(),
+            newgrf_persistent_storage_ids: std::collections::HashMap::new(),
+            newgrf_persistent_regs: std::collections::HashMap::new(),
         }
     }
 }
@@ -398,6 +413,20 @@ impl Town {
         }
         if let Some(slot) = self.unwanted.get_mut(company.index()) {
             *slot = months;
+        }
+    }
+
+    /// Copia los registros `7C` del PSA de este pueblo al scope padre de un
+    /// Action2. Un pueblo no tiene un único storage global: la selección
+    /// nativa se hace por GRFID, por eso el caller debe pasar el GRFID del
+    /// objeto que se está resolviendo.
+    pub(crate) fn copy_newgrf_persistent_registers(
+        &self,
+        grfid: u32,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) {
+        if let Some(registers) = self.newgrf_persistent_regs.get(&grfid) {
+            ctx.parent_persistent_registers.clone_from(registers);
         }
     }
 

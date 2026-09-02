@@ -429,6 +429,15 @@ pub fn action2_eval_ctx_for_house_tile_with_counts(
     ctx.vars.insert(0x44, (map_count << 8) | town_count);
 
     let current_def = house_catalog.iter().find(|def| def.id == house_id);
+    // HouseResolverObject expone el pueblo como scope parent. En particular,
+    // `7C` debe seleccionar la fila PSA por GRFID; sin este write-through una
+    // casa NewGRF que consulta estado persistente volvía siempre cero después
+    // de cargar un SAV.
+    if let (Some(town_id), Some(def)) = (town_id, current_def)
+        && let Some(town) = towns.iter().find(|town| town.id == town_id)
+    {
+        town.copy_newgrf_persistent_registers(def.grfid, &mut ctx);
+    }
     for &(variable, parameter) in neighbor_params {
         match variable {
             0x60 => {
@@ -1137,6 +1146,54 @@ mod tests {
         let nearby_water = *ctx.parameterized_vars.get(&(0x62, 0x0F)).unwrap();
         assert_eq!(nearby_water >> 24, 6);
         assert_eq!(nearby_water & 0xFF, 0);
+    }
+
+    #[test]
+    fn house_action2_map_context_exposes_town_persistent_scope() {
+        let mut map = Map::new_flat(2, 1, 0);
+        let coord = TileCoord::new(0, 0);
+        map.set_completed_house(coord, 7, 0).unwrap();
+        map.set_house_town_id(coord, 3).unwrap();
+        let mut town = Town {
+            id: 3,
+            pos: coord,
+            ..Default::default()
+        };
+        town.newgrf_persistent_regs
+            .entry(0x1122_3344)
+            .or_default()
+            .insert(7, 0xCAFE_BABE);
+        let def = HouseSpecDef {
+            id: 7,
+            local_id: 2,
+            subst_id: 0,
+            building_flags: BUILDING_FLAG_SIZE_1X1,
+            min_year: 0,
+            max_year: HOUSE_YEAR_MAX,
+            population: 1,
+            mail_generation: 0,
+            availability: DEFAULT_HOUSE_AVAILABILITY,
+            probability: DEFAULT_HOUSE_PROBABILITY,
+            override_id: None,
+            callback_mask: 0,
+            name: "town-psa".into(),
+            from_newgrf: true,
+            grfid: 0x1122_3344,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 2,
+            newgrf_runtime: None,
+        };
+        let ctx = action2_eval_ctx_for_house_tile_with_map(
+            &map,
+            map.get(coord).unwrap(),
+            coord.x,
+            coord.y,
+            Climate::Temperate,
+            std::slice::from_ref(&town),
+            std::slice::from_ref(&def),
+            &[],
+        );
+        assert_eq!(ctx.parent_persistent_registers.get(&7), Some(&0xCAFE_BABE));
     }
 
     #[test]

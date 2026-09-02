@@ -88,6 +88,8 @@ pub fn action2_eval_ctx_for_industry_tile_with_world(
 
     if let Some(industry) = current {
         populate_industry_parent_scope(&mut ctx, map, coord, industry, industry_catalog);
+        ctx.parent_persistent_registers
+            .clone_from(&industry.newgrf_persistent_regs);
     }
 
     let current_grfid = current_spec.map_or(0, |spec| spec.newgrf_grfid);

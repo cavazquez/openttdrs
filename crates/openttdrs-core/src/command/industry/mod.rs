@@ -673,7 +673,7 @@ pub fn place_industry_spec_def_layout_sandbox(
     if let Some(initial_level) =
         crate::newgrf_callback::resolve_industry_production_change_build_callback(
             &def,
-            &industry,
+            &mut industry,
             &mut state.random,
         )
     {

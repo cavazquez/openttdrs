@@ -101,6 +101,13 @@ pub fn action2_eval_ctx_from_station(station: &Station) -> Action2EvalCtx {
     ctx
 }
 
+/// Escribe de vuelta los registros persistentes de una industria (`7C`).
+pub fn writeback_industry_persistent_registers(industry: &mut Industry, ctx: &Action2EvalCtx) {
+    industry
+        .newgrf_persistent_regs
+        .clone_from(&ctx.persistent_registers);
+}
+
 /// Resuelve un callback sobre el runtime Action2 del motor, con writeback de regs.
 ///
 /// Sin runtime / sin asignación Action3 → [`CALLBACK_FAILED`] (observable).
@@ -1278,6 +1285,8 @@ fn action2_eval_ctx_from_industry(industry: &Industry, random: u32) -> Action2Ev
         parent_random_bits: u32::from(industry.newgrf_random),
         ..Action2EvalCtx::default()
     };
+    ctx.persistent_registers
+        .clone_from(&industry.newgrf_persistent_regs);
     let accepted = industry.station_input_requirements();
     ctx.vars.insert(
         0x40,
@@ -1492,6 +1501,7 @@ pub fn apply_industry_production_callback(
             break;
         }
     }
+    writeback_industry_persistent_registers(industry, &ctx);
     result
 }
 
@@ -1533,7 +1543,7 @@ fn decode_industry_production_action(
 /// como en `OpenTTD`, no debe caer silenciosamente al algoritmo vanilla.
 pub fn resolve_industry_production_change_callback(
     def: &IndustrySpecDef,
-    industry: &Industry,
+    industry: &mut Industry,
     monthly: bool,
     rng: &mut Randomizer,
 ) -> Option<IndustryProductionAction> {
@@ -1562,6 +1572,7 @@ pub fn resolve_industry_production_change_callback(
         random,
         &mut ctx,
     );
+    writeback_industry_persistent_registers(industry, &ctx);
     Some(decode_industry_production_action(result, &ctx))
 }
 
@@ -1570,7 +1581,7 @@ pub fn resolve_industry_production_change_callback(
 /// nivel inicial vanilla, igual que el chequeo de `OpenTTD`.
 pub fn resolve_industry_production_change_build_callback(
     def: &IndustrySpecDef,
-    industry: &Industry,
+    industry: &mut Industry,
     rng: &mut Randomizer,
 ) -> Option<u8> {
     if !def.has_production_change_build_callback() {
@@ -1586,6 +1597,7 @@ pub fn resolve_industry_production_change_build_callback(
         random,
         &mut ctx,
     );
+    writeback_industry_persistent_registers(industry, &ctx);
     (result != CALLBACK_FAILED
         && (u16::from(crate::industry::PRODLEVEL_MINIMUM)
             ..=u16::from(crate::industry::PRODLEVEL_MAXIMUM))
@@ -3903,25 +3915,31 @@ mod tests {
             newgrf_local_id: 0,
             newgrf_runtime: Some(Box::new(gfx_callback_literal(0x02))),
         };
-        let industry = Industry::new(
+        let mut industry = Industry::new(
             TileCoord::new(4, 5),
             crate::industry::IndustryKind::CoalMine,
         );
         let mut rng = Randomizer::new(42);
         assert_eq!(
-            resolve_industry_production_change_callback(&def, &industry, false, &mut rng),
+            resolve_industry_production_change_callback(&def, &mut industry, false, &mut rng),
             Some(IndustryProductionAction::Double)
         );
+
+        // `7C`/`\\2psto` must survive the mutable industry callback just as
+        // it does for vehicle and station scopes.
+        def.newgrf_runtime = Some(Box::new(gfx_callback_psto(3, 42, 0x02)));
+        let _ = resolve_industry_production_change_callback(&def, &mut industry, false, &mut rng);
+        assert_eq!(industry.newgrf_persistent_regs.get(&3), Some(&42));
 
         def.callback_mask = crate::industry_spec::INDUSTRY_CALLBACK_PROD_CHANGE_BUILD_MASK;
         def.newgrf_runtime = Some(Box::new(gfx_callback_literal(64)));
         assert_eq!(
-            resolve_industry_production_change_build_callback(&def, &industry, &mut rng),
+            resolve_industry_production_change_build_callback(&def, &mut industry, &mut rng),
             Some(64)
         );
         def.newgrf_runtime = Some(Box::new(gfx_callback_literal(3)));
         assert_eq!(
-            resolve_industry_production_change_build_callback(&def, &industry, &mut rng),
+            resolve_industry_production_change_build_callback(&def, &mut industry, &mut rng),
             None,
             "niveles fuera del rango válido conservan el valor vanilla"
         );

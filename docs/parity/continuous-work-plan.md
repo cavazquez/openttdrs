@@ -721,3 +721,9 @@ layout/random. El comando de fundación asigna la compañía activa y
 `INDY` importa/exporta los campos nativos correspondientes, incluida la fecha
 de última aceptación de cada slot. #329 y el bloque SAV siguen abiertos por
 PSA, historiales anidados, cargos custom y callbacks restantes.
+
+Actualización #329-INDUSTRY-PSA-024 (2026-09-02): los callbacks de producción
+y cambio de nivel siembran y escriben los registros persistentes `7C` de la
+industria; los contextos de tesela ya leen el storage del padre. La cobertura
+queda deliberadamente parcial hasta conectar el writeback de callbacks de
+tesela, el GRFID/feature nativo y los chunks `PSA` del SAV.

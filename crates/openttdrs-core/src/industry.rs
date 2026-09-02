@@ -811,6 +811,12 @@ pub struct Industry {
     /// antiguos dejan cero, que es también el valor vanilla por defecto.
     #[serde(default)]
     pub newgrf_random: u16,
+    /// Registros `7C` persistentes por industria para callbacks `NewGRF`.
+    ///
+    /// La clave es el índice PSA (0..255) y el valor conserva los 32 bits
+    /// escritos por `\2psto`. El GRFID se resuelve desde el catálogo activo.
+    #[serde(default)]
+    pub newgrf_persistent_regs: std::collections::HashMap<u8, u32>,
     /// Compañía que fundó la industria (`INVALID_OWNER` se representa como
     /// `None`). Las industrias generadas en el mapa no tienen fundador.
     #[serde(default)]
@@ -935,6 +941,7 @@ impl Industry {
             random_colour: 0,
             selected_layout: 0,
             newgrf_random: 0,
+            newgrf_persistent_regs: std::collections::HashMap::new(),
             founder: None,
             construction_date: 0,
             construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,
@@ -974,6 +981,7 @@ impl Industry {
             random_colour: 0,
             selected_layout: 0,
             newgrf_random: 0,
+            newgrf_persistent_regs: std::collections::HashMap::new(),
             founder: None,
             construction_date: 0,
             construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,
@@ -1019,6 +1027,7 @@ impl Industry {
             random_colour,
             selected_layout: 0,
             newgrf_random: 0,
+            newgrf_persistent_regs: std::collections::HashMap::new(),
             founder: None,
             construction_date: 0,
             construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,

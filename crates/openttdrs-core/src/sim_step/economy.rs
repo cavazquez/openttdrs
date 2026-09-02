@@ -266,7 +266,7 @@ pub(super) fn maybe_change_industry_production(state: &mut GameState) {
     let callback_action = def.as_ref().and_then(|def| {
         crate::newgrf_callback::resolve_industry_production_change_callback(
             def,
-            &state.industries[idx],
+            &mut state.industries[idx],
             false,
             &mut state.random,
         )
@@ -315,7 +315,7 @@ pub(super) fn maybe_change_industry_production_monthly(state: &mut GameState) {
         };
         let Some(action) = crate::newgrf_callback::resolve_industry_production_change_callback(
             &def,
-            &state.industries[idx],
+            &mut state.industries[idx],
             true,
             &mut state.random,
         ) else {

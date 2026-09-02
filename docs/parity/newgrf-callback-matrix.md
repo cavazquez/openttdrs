@@ -232,6 +232,11 @@ paleta y columnas futuras; un cambio de orden, GRFID, versión o parámetro usa
 el encoder semántico. El runtime aún necesita resolver archivos no instalados y
 fusionar columnas desconocidas después de mutaciones parciales.
 
+Actualización #329-VEHICLE-SAV-DATE-017 (2026-09-02): `DATE` reutiliza ahora el
+cuerpo original cuando sus cuatro valores conocidos (fecha, tick y dos
+palabras RNG) coinciden. Cambiar cualquiera de ellos fuerza la serialización
+canónica, manteniendo el reloj válido sin copiar estado obsoleto.
+
 Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` conserva ahora su
 cuerpo original cuando las filas semánticas de compañías coinciden. El
 exportador mantiene así columnas nuevas de ajustes, economía, libreas y

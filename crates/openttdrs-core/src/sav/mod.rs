@@ -147,6 +147,8 @@ pub(crate) struct SavTablePassthrough {
     pub(crate) lgrp_semantic_records: Vec<Vec<u8>>,
     pub(crate) ngrf_chunk: Option<SavOpaqueChunk>,
     pub(crate) ngrf_semantic_records: Vec<Vec<u8>>,
+    pub(crate) date_chunk: Option<SavOpaqueChunk>,
+    pub(crate) date_semantic_records: Vec<Vec<u8>>,
 }
 
 /// Chunks que el escritor reconstruye desde el modelo semántico.
@@ -369,6 +371,8 @@ pub struct SavGame {
     pub(crate) lgrp_raw_chunk: Option<SavOpaqueChunk>,
     /// Cuerpo original de `NGRF`, separado para conservar parámetros futuros.
     pub(crate) ngrf_raw_chunk: Option<SavOpaqueChunk>,
+    /// Cuerpo original de `DATE`, separado para conservar campos futuros.
+    pub(crate) date_raw_chunk: Option<SavOpaqueChunk>,
     /// Chunks nativos no modelados que se conservan para round-trip.
     pub opaque_chunks: Vec<SavOpaqueChunk>,
 }
@@ -490,6 +494,11 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         ch_type: chunk.ch_type,
         body: chunk.body.clone(),
     });
+    let date_raw_chunk = chunks::find_chunk(&chunk_list, "DATE").map(|chunk| SavOpaqueChunk {
+        name: chunk.name,
+        ch_type: chunk.ch_type,
+        body: chunk.body.clone(),
+    });
     let opaque_chunks = opaque_chunks_from_chunks(&chunk_list);
     let link_graph =
         linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
@@ -546,6 +555,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         ernw_raw_chunk,
         lgrp_raw_chunk,
         ngrf_raw_chunk,
+        date_raw_chunk,
         opaque_chunks,
     })
 }
@@ -1043,6 +1053,7 @@ impl GameState {
         let ernw_raw_chunk = sav.ernw_raw_chunk.take();
         let lgrp_raw_chunk = sav.lgrp_raw_chunk.take();
         let ngrf_raw_chunk = sav.ngrf_raw_chunk.take();
+        let date_raw_chunk = sav.date_raw_chunk.take();
         let random_state = sav.random_state;
         let mut map = sav.map;
         normalize_rail_trackbits_from_neighbors(&mut map);
@@ -1783,7 +1794,8 @@ impl GameState {
             || grps_raw_chunk.is_some()
             || ernw_raw_chunk.is_some()
             || lgrp_raw_chunk.is_some()
-            || ngrf_raw_chunk.is_some())
+            || ngrf_raw_chunk.is_some()
+            || date_raw_chunk.is_some())
             && let Ok(records) = write::semantic_table_records(&state)
         {
             state.sav_table_passthrough = Some(SavTablePassthrough {
@@ -1813,6 +1825,8 @@ impl GameState {
                 lgrp_semantic_records: records.lgrp,
                 ngrf_chunk: ngrf_raw_chunk,
                 ngrf_semantic_records: records.ngrf,
+                date_chunk: date_raw_chunk,
+                date_semantic_records: records.date,
             });
         }
         state
@@ -1895,6 +1909,7 @@ mod tests {
             ernw_raw_chunk: None,
             lgrp_raw_chunk: None,
             ngrf_raw_chunk: None,
+            date_raw_chunk: None,
             opaque_chunks: Vec::new(),
         }
     }
@@ -2769,6 +2784,7 @@ mod tests {
             ernw_raw_chunk: None,
             lgrp_raw_chunk: None,
             ngrf_raw_chunk: None,
+            date_raw_chunk: None,
             opaque_chunks: Vec::new(),
         };
         let state = GameState::from_sav_game(sav);

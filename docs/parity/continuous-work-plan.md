@@ -638,6 +638,15 @@ parámetro o la composición del stack invalida el passthrough y reconstruye só
 La resolución de archivos GRF ausentes y la fusión parcial tras una mutación
 siguen pendientes; #329 permanece abierto.
 
+Actualización #329-VEHICLE-SAV-DATE-017 (2026-09-02): `DATE` conserva ahora su
+cuerpo nativo cuando la fecha de calendario, el tick y el estado RNG coinciden.
+El round-trip sin cambios mantiene campos futuros del reloj; avanzar el tick,
+alterar el RNG o cambiar el calendario invalida únicamente esa tabla y usa el
+encoder canónico. La regresión
+`imported_vehs_body_is_reused_until_vehicle_semantics_change` verifica el caso
+sin mutación. Quedan pendientes columnas desconocidas después de una mutación
+y los pools aún no modelados; #328/#329 permanecen abiertos.
+
 Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` comparte ahora la
 huella de filas con las tablas SAV anteriores. Un round-trip sin cambios de
 compañías conserva byte a byte el header y las columnas futuras de dinero,

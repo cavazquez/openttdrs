@@ -104,6 +104,7 @@ pub(crate) struct SavSemanticTableRecords {
     pub(crate) ernw: Vec<Vec<u8>>,
     pub(crate) lgrp: Vec<Vec<u8>>,
     pub(crate) ngrf: Vec<Vec<u8>>,
+    pub(crate) date: Vec<Vec<u8>>,
 }
 
 pub(crate) fn semantic_table_records(
@@ -121,6 +122,7 @@ pub(crate) fn semantic_table_records(
     let ernw = fleet::autoreplace_records(&autoreplace_export)?;
     let lgrp = super::linkgraph::lgrp_records(&state.link_graph, &state.stations, map_w)?;
     let ngrf = newgrf::newgrf_records(state)?;
+    let date_records = vec![meta::date_record(state)];
     Ok(SavSemanticTableRecords {
         ordl,
         vehs,
@@ -135,6 +137,7 @@ pub(crate) fn semantic_table_records(
         ernw,
         lgrp,
         ngrf,
+        date: date_records,
     })
 }
 
@@ -488,16 +491,28 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(&chunks::raw_chunk(chunk.name, chunk.ch_type, &chunk.body));
     }
 
-    data.extend_from_slice(&chunks::table_chunk(
-        *b"DATE",
-        &[
-            (5, "date"),
-            (8, "tick_counter"),
-            (6, "random_state[0]"),
-            (6, "random_state[1]"),
-        ],
-        &[meta::date_record(state)],
-    )?);
+    let date_records = vec![meta::date_record(state)];
+    let raw_date = raw_tables.and_then(|passthrough| {
+        passthrough.date_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"DATE"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.date_semantic_records == date_records
+        })
+    });
+    if let Some(raw) = raw_date {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else {
+        data.extend_from_slice(&chunks::table_chunk(
+            *b"DATE",
+            &[
+                (5, "date"),
+                (8, "tick_counter"),
+                (6, "random_state[0]"),
+                (6, "random_state[1]"),
+            ],
+            &date_records,
+        )?);
+    }
     let plyr = meta::plyr_records(state, &autoreplace_export)?;
     let raw_plyr = raw_tables.and_then(|passthrough| {
         passthrough.plyr_chunk.as_ref().filter(|chunk| {
@@ -970,6 +985,10 @@ mod tests {
             .expect("PLYR original")
             .body
             .clone();
+        let original_date = crate::sav::chunks::find_chunk(&original_chunks, "DATE")
+            .expect("DATE original")
+            .body
+            .clone();
 
         let mut loaded = GameState::from_sav_game(sav::load(&original).expect("load original"));
         let passthrough = loaded
@@ -1040,6 +1059,14 @@ mod tests {
                 .body,
             original_plyr
         );
+        assert_eq!(
+            passthrough
+                .date_chunk
+                .as_ref()
+                .expect("DATE passthrough")
+                .body,
+            original_date
+        );
 
         let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
         let (resaved_payload, _) = crate::sav::container::decompress(&resaved).expect("payload");
@@ -1068,6 +1095,9 @@ mod tests {
         let resaved_plyr =
             crate::sav::chunks::find_chunk(&resaved_chunks, "PLYR").expect("PLYR resaved");
         assert_eq!(resaved_plyr.body, original_plyr);
+        let resaved_date =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "DATE").expect("DATE resaved");
+        assert_eq!(resaved_date.body, original_date);
 
         loaded.vehicles[0].cur_speed = loaded.vehicles[0].cur_speed.saturating_add(1);
         let changed = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("save changed");

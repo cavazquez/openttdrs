@@ -46,6 +46,20 @@
       "note": "Los 18 slots Action5 0x09 y sus anclas NFO vienen de openttd.grf; el check en CI valida metadata y el local valida además los PNG 8bpp extraídos."
     },
     {
+      "id": "rail_tunnel_base_sprites",
+      "generator": "scripts/extract_rail_tunnel_base_sprites.py",
+      "output": "crates/openttdrs-client/src/sprites/rail_tunnel_base_sprites_generated.rs",
+      "inputs": [
+        "reference/openttd-upstream/media/baseset/openttd/tunnel_portals.nfo",
+        "reference/openttd-upstream/media/baseset/openttd/tunnel_portals.png"
+      ],
+      "check": "regenerate_or_hash",
+      "requires_opengfx": false,
+      "output_sha256": "e73089350497c42c46413fb62e8e7f8b538901e70b8893da7cef18ff09c211c3",
+      "license": "GPL-2.0-only (gráficos extra predeterminados de OpenTTD)",
+      "note": "Action5 0x17 publica 16 slots por clima; Arctic y Toyland publican ocho y el extractor duplica explícitamente sus vistas para los slots nieve/desierto."
+    },
+    {
       "id": "vehicle_gfx_data",
       "generator": "scripts/gen_vehicle_gfx_data.py",
       "output": "crates/openttdrs-client/src/sprites/vehicle_gfx_data_generated.rs",
@@ -124,9 +138,9 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "5596ab78b289cd6bd51ae210f4644b5fa39c2409977f6555304729a67f1cb04c",
+      "output_sha256": "f051ea89b180960dac4a99ff4a12675ce86503d8962e00a12e040e87b53b6389",
       "license": "layout derivado de PNG OpenGFX locales",
-      "note": "Regenerado y verificado 2026-08-14 con el atlas OpenGFX local; incluye las familias de estación monorail/maglev, los 74 StationGfx de aeropuerto, las 19 pendientes de agua para bordes Void, los 18 fallbacks Action5 de flechas one-way y las variantes de pasos a nivel. CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
+      "note": "Regenerado y verificado 2026-09-02 con el atlas OpenGFX local; incluye las familias de estación monorail/maglev, los 74 StationGfx de aeropuerto, las 19 pendientes de agua para bordes Void, los 18 fallbacks Action5 de flechas one-way, los 64 slots de base Action5 0x17 de túnel y las variantes de pasos a nivel. CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
     },
     {
       "id": "airport_station_draw_data",
@@ -254,6 +268,11 @@
     {
       "output": "crates/openttdrs-client/src/sprites/oneway_road_sprites_generated.rs",
       "generator": "scripts/extract_oneway_road_sprites.py",
+      "pilot": true
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/rail_tunnel_base_sprites_generated.rs",
+      "generator": "scripts/extract_rail_tunnel_base_sprites.py",
       "pilot": true
     },
     {

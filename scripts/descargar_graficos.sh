@@ -123,19 +123,21 @@ require_py_mod PIL
 mkdir -p "${DEST}"
 mkdir -p "${DOWNLOADS_DIR}"
 
-# Obtiene las dos fuentes mínimas del GRF extra oficial. OpenTTD usa este GRF
-# paletizado incluso con OpenGFX2 32bpp, por lo que las flechas Action5 no
-# deben extraerse de un baseset ni de su side-cache de señales.
+# Obtiene las fuentes mínimas del GRF extra oficial. OpenTTD usa este GRF
+# paletizado incluso con OpenGFX2 32bpp, por lo que las flechas Action5 0x09
+# y la base de portal ferroviario 0x17 no deben extraerse de un baseset ni de
+# su side-cache de señales.
 ensure_openttd_oneway_source() {
   local reference_dir="${ROOT}/reference/openttd-upstream/media/baseset/openttd"
-  if [[ -f "${reference_dir}/oneway.nfo" && -f "${reference_dir}/oneway.png" ]]; then
+  if [[ -f "${reference_dir}/oneway.nfo" && -f "${reference_dir}/oneway.png" \
+        && -f "${reference_dir}/tunnel_portals.nfo" && -f "${reference_dir}/tunnel_portals.png" ]]; then
     OPENTTD_ONEWAY_SOURCE_DIR="${reference_dir}"
-    echo "Fallback one-way: usando pin OpenTTD local (${OPENTTD_ONEWAY_SOURCE_DIR})"
+    echo "Fallback Action5 0x09/0x17: usando pin OpenTTD local (${OPENTTD_ONEWAY_SOURCE_DIR})"
     return 0
   fi
 
   mkdir -p "${OPENTTD_EXTRA_CACHE}"
-  for file in oneway.nfo oneway.png; do
+  for file in oneway.nfo oneway.png tunnel_portals.nfo tunnel_portals.png; do
     local cached="${OPENTTD_EXTRA_CACHE}/${file}"
     if [[ -f "${cached}" ]]; then
       continue
@@ -1507,6 +1509,10 @@ python3 "$(dirname "$0")/extract_road_waypoint_sprites.py" || {
 ensure_openttd_oneway_source
 python3 "$(dirname "$0")/extract_oneway_road_sprites.py" \
   --source-dir "${OPENTTD_ONEWAY_SOURCE_DIR}"
+# Base Action5 0x17 del portal ferroviario: suelo que OpenTTD dibuja debajo
+# de cualquier fachada RTSG_TUNNEL_PORTAL custom.
+python3 "$(dirname "$0")/extract_rail_tunnel_base_sprites.py" \
+  --source-dir "${OPENTTD_ONEWAY_SOURCE_DIR}"
 # Paradas de carretera: capas de bahía y Action5 0x11 drive-through.
 python3 "$(dirname "$0")/gen_road_stop_gfx_data.py"
 # Depósitos viales: anclas NFO y PNG cambian entre OpenGFX 8bpp y OpenGFX2.
@@ -1549,6 +1555,7 @@ if command -v rustfmt >/dev/null 2>&1; then
     "${ROOT}/crates/openttdrs-client/src/sprites/tramway_catenary_gfx_data_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/tunnel_draw_data_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/road_waypoint_gfx_data_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/rail_tunnel_base_sprites_generated.rs"
   )
   rustfmt --edition 2024 "${GENERATED_RUST[@]}"
 else

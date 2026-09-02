@@ -2683,6 +2683,18 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
         custom_layers, 1,
         "RTSG_TUNNEL debe dibujar la superficie custom"
     );
+    assert!(
+        world
+            .query::<&ViewportSortableParent>()
+            .iter(&world)
+            .any(|parent| parent.sprite_id == 6124),
+        "la fachada base Action5 0x17 debe conservar su parent sortable"
+    );
+    assert_eq!(
+        world.query::<&ViewportSortableChild>().iter(&world).count(),
+        1,
+        "RTSG_TUNNEL_PORTAL debe quedar combinado como child de la fachada base"
+    );
     let front_offset = crate::iso::remap_tile_offset(15.0, 15.0, 0.0) * 0.5;
     let front_iso = crate::iso::iso(2, 2);
     assert!(

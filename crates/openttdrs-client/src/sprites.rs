@@ -33,6 +33,8 @@ mod industry;
 mod industry_draw_proc;
 #[path = "sprites/rail.rs"]
 mod rail;
+#[path = "sprites/rail_tunnel_base_sprites_generated.rs"]
+mod rail_tunnel_base_sprites_generated;
 #[path = "sprites/road.rs"]
 mod road;
 #[path = "sprites/shore_draw_data_generated.rs"]
@@ -58,6 +60,10 @@ mod tunnel;
 #[path = "sprites/water_palette_generated.rs"]
 mod water_palette_generated;
 
+pub(crate) use rail_tunnel_base_sprites_generated::{
+    RAIL_TUNNEL_BASE_CLIMATE_COUNT, RAIL_TUNNEL_BASE_SPRITE_COUNT, RAIL_TUNNEL_BASE_SPRITE_META,
+    rail_tunnel_base_slot, rail_tunnel_base_sprite_id,
+};
 pub(crate) use tile_atlas_generated::{
     TILE_ATLAS_NAMES, TILE_ATLAS_PAGE_COUNT, TILE_ATLAS_PAGE_RANGES, TILE_ATLAS_PAGE_SIZES,
     TILE_ATLAS_RECTS,
@@ -282,10 +288,11 @@ pub fn airport_station_overlay_rel_for_sprite(
 }
 pub use shore_draw_data_generated::{SHORE_META, SHORE_SPRITE_COUNT, TILEH_TO_SHORE_SPRITE};
 pub use tunnel::{
-    rail_tunnel_front_atlas_name, rail_tunnel_front_sprite_id, rail_tunnel_rear_atlas_name,
-    rail_tunnel_rear_sprite_id, tunnel_front_atlas_name, tunnel_front_sprite_id,
-    tunnel_front_trace_geometry, tunnel_front_translation, tunnel_portal_translation,
-    tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name, tunnel_rear_sprite_id,
+    rail_tunnel_base_translation, rail_tunnel_front_atlas_name, rail_tunnel_front_sprite_id,
+    rail_tunnel_rear_atlas_name, rail_tunnel_rear_sprite_id, tunnel_front_atlas_name,
+    tunnel_front_sprite_id, tunnel_front_trace_geometry, tunnel_front_translation,
+    tunnel_portal_translation, tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name,
+    tunnel_rear_sprite_id,
 };
 
 /// Humo mina de cobre (`SPR_SMOKE_0..4`). Regenerar: `python3 scripts/gen_copper_mine_smoke.py`.

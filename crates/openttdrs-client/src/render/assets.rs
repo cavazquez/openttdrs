@@ -162,6 +162,12 @@ pub(crate) struct WorldAssets {
     pub(crate) rail_tunnel_fronts: [AtlasSprite; 4],
     pub(crate) monorail_tunnel_fronts: [AtlasSprite; 4],
     pub(crate) maglev_tunnel_fronts: [AtlasSprite; 4],
+    /// Base Action5 0x17 del portal ferroviario: [LandscapeType][slot].
+    /// `None` conserva el portal tipado vanilla hasta que el extractor haya
+    /// generado el PNG correspondiente.
+    pub(crate) rail_tunnel_bases: [[Option<AtlasSprite>;
+        crate::sprites::RAIL_TUNNEL_BASE_SPRITE_COUNT];
+        crate::sprites::RAIL_TUNNEL_BASE_CLIMATE_COUNT],
     /// Sprites de puente por id OpenGFX (`bridge_{id}.png` o alias madera).
     pub(crate) bridge_by_id: std::collections::HashMap<u32, AtlasSprite>,
     /// Variantes recoloreadas (`PALETTE_TO_STRUCT_*`) fuera del atlas.
@@ -588,6 +594,15 @@ impl WorldAssets {
                 ))
                 .unwrap_or_else(|| rail_tunnel_fronts[dir].clone())
         });
+        let rail_tunnel_base_climate_names = ["temperate", "arctic", "tropical", "toyland"];
+        let rail_tunnel_bases = std::array::from_fn(|climate| {
+            std::array::from_fn(|slot| {
+                atlas.try_get(&format!(
+                    "rail_tunnel_base_{}_{slot:02}.png",
+                    rail_tunnel_base_climate_names[climate]
+                ))
+            })
+        });
         let mut bridge_by_id = std::collections::HashMap::new();
         use crate::sprites::{BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_ramp_sprite_id};
         use openttdrs_core::{BridgePiece, BridgeType, RailType};
@@ -823,6 +838,7 @@ impl WorldAssets {
             rail_tunnel_fronts,
             monorail_tunnel_fronts,
             maglev_tunnel_fronts,
+            rail_tunnel_bases,
             bridge_by_id,
             bridge_palettes,
             house_palettes,
@@ -953,6 +969,25 @@ impl WorldAssets {
                 &self.rail_tunnel_fronts[d]
             }
         }
+    }
+
+    /// Base Action5 0x17 de una boca ferroviaria, si el atlas fue generado
+    /// desde `openttd.grf`. Una ausencia puntual no contamina los demás slots:
+    /// el caller conserva el portal tipado OpenGFX para esa capa.
+    #[must_use]
+    pub(crate) fn rail_tunnel_base_sprite(
+        &self,
+        climate: openttdrs_core::Climate,
+        dir: u8,
+        snow_or_desert: bool,
+        front: bool,
+    ) -> Option<&AtlasSprite> {
+        let climate = usize::from(climate.newgrf_landscape_id());
+        let slot = crate::sprites::rail_tunnel_base_slot(dir, snow_or_desert, front);
+        self.rail_tunnel_bases
+            .get(climate)
+            .and_then(|slots| slots.get(slot))
+            .and_then(Option::as_ref)
     }
 }
 

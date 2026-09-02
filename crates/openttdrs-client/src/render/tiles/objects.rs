@@ -3751,11 +3751,11 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             let rail_type = ctx
                 .tile
                 .map_or(openttdrs_core::RailType::Rail, rail_type_from_tile);
-            // `DrawTile_TunnelBridge` sólo consulta `RTSG_TUNNEL` cuando el
-            // railtype publica `RTSG_TUNNEL_PORTAL` y, por tanto, activa
-            // `UsesOverlay()`. Resolver ambos grupos antes de dibujar permite
-            // conservar esa regla y deja el portal vanilla como fallback si
-            // falta cualquiera de las vistas para la dirección actual.
+            // `DrawTile_TunnelBridge` consulta ambos grupos sólo cuando el
+            // railtype activa `UsesOverlay()`, pero la superficie `RTSG_TUNNEL`
+            // es independiente de que exista una fachada `RTSG_TUNNEL_PORTAL`.
+            // Resolver cada vista por separado conserva el fallback vanilla
+            // únicamente para la capa ausente.
             let (custom_tunnel_portal, custom_tunnel_surface) = if rail {
                 let rail_index = usize::from(rail_type.as_u8());
                 let uses_overlay = rail_type_underlay_newgrf
@@ -3781,29 +3781,25 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                                 )
                             })
                     });
-                    let tunnel_resolves = if portal_resolves.is_some() {
-                        ctx.tile.and_then(|tile| {
-                            rail_type_tunnel_newgrf
-                                .get(rail_index)
-                                .and_then(Option::as_ref)
-                                .and_then(|spec| {
-                                    resolve_custom_rail_group_sprite(
-                                        map,
-                                        tile,
-                                        ctx,
-                                        climate,
-                                        calendar_date,
-                                        newgrf_stack,
-                                        spec,
-                                        dir & 3,
-                                        &mut signal_sprites,
-                                        &mut images,
-                                    )
-                                })
-                        })
-                    } else {
-                        None
-                    };
+                    let tunnel_resolves = ctx.tile.and_then(|tile| {
+                        rail_type_tunnel_newgrf
+                            .get(rail_index)
+                            .and_then(Option::as_ref)
+                            .and_then(|spec| {
+                                resolve_custom_rail_group_sprite(
+                                    map,
+                                    tile,
+                                    ctx,
+                                    climate,
+                                    calendar_date,
+                                    newgrf_stack,
+                                    spec,
+                                    dir & 3,
+                                    &mut signal_sprites,
+                                    &mut images,
+                                )
+                            })
+                    });
                     (portal_resolves, tunnel_resolves)
                 } else {
                     (None, None)
@@ -3811,43 +3807,97 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             } else {
                 (None, None)
             };
-            let rear_image = if rail {
+            let has_custom_tunnel_portal = custom_tunnel_portal.is_some();
+            let snow_or_desert = rail && ctx.tile.is_some_and(|tile| (tile.m7 & 0x20) != 0);
+            let climate_index = usize::from(climate.newgrf_landscape_id());
+            let custom_base_rear = if rail && has_custom_tunnel_portal {
+                assets.rail_tunnel_base_sprite(climate, dir, snow_or_desert, false)
+            } else {
+                None
+            };
+            let custom_base_front = if rail && has_custom_tunnel_portal {
+                assets.rail_tunnel_base_sprite(climate, dir, snow_or_desert, true)
+            } else {
+                None
+            };
+            let vanilla_rear_image = if rail {
                 assets.rail_tunnel_portal_sprite(rail_type, dir)
             } else {
                 assets.tunnel_portal_sprite(false, dir)
             };
-            let rear_sprite_id = if rail {
+            let vanilla_rear_sprite_id = if rail {
                 crate::sprites::rail_tunnel_rear_sprite_id(rail_type, dir)
             } else {
                 crate::sprites::tunnel_rear_sprite_id(false, dir)
             };
-            let front_image = if rail {
+            let rear_image = custom_base_rear.unwrap_or(vanilla_rear_image);
+            let rear_sprite_id = custom_base_rear
+                .and_then(|_| {
+                    crate::sprites::rail_tunnel_base_sprite_id(
+                        climate_index,
+                        crate::sprites::rail_tunnel_base_slot(dir, snow_or_desert, false),
+                    )
+                })
+                .unwrap_or(vanilla_rear_sprite_id);
+            let vanilla_front_image = if rail {
                 assets.rail_tunnel_portal_front_sprite(rail_type, dir)
             } else {
                 assets.tunnel_portal_front_sprite(false, dir)
             };
-            let front_sprite_id = if rail {
+            let vanilla_front_sprite_id = if rail {
                 crate::sprites::rail_tunnel_front_sprite_id(rail_type, dir)
             } else {
                 crate::sprites::tunnel_front_sprite_id(false, dir)
             };
+            let front_image = custom_base_front.unwrap_or(vanilla_front_image);
+            let front_sprite_id = custom_base_front
+                .and_then(|_| {
+                    crate::sprites::rail_tunnel_base_sprite_id(
+                        climate_index,
+                        crate::sprites::rail_tunnel_base_slot(dir, snow_or_desert, true),
+                    )
+                })
+                .unwrap_or(vanilla_front_sprite_id);
             // OpenTTD dibuja el rear como suelo y el front como techo sortable.
             // Aunque el rear sea `DrawGroundSprite`, no es un rombo 64×31:
             // los portales mono/maglev tienen `xrel/yrel` propios. Centrar el
             // PNG como terreno desplazaba la boca hasta 20 px y dejaba la vía
             // aparentemente desconectada. Ambas capas usan su anclaje NFO.
-            WorldDrawTrace::record_sprite("tunnel-rear", "ground", rear_sprite_id, false);
+            WorldDrawTrace::record_sprite(
+                if custom_base_rear.is_some() {
+                    "tunnel-railtype-base"
+                } else {
+                    "tunnel-rear"
+                },
+                "ground",
+                rear_sprite_id,
+                rail && has_custom_tunnel_portal && custom_base_rear.is_none(),
+            );
+            let rear_translation = if custom_base_rear.is_some() {
+                crate::sprites::rail_tunnel_base_translation(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    climate_index,
+                    dir,
+                    snow_or_desert,
+                    false,
+                    0.0,
+                )
+            } else {
+                crate::sprites::tunnel_portal_translation(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    vanilla_rear_sprite_id,
+                    0.0,
+                )
+            };
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 rear_image.sprite(),
-                Transform::from_translation(crate::sprites::tunnel_portal_translation(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    rear_sprite_id,
-                    0.0,
-                )),
+                Transform::from_translation(rear_translation),
             ));
             if let Some(resolved) = custom_tunnel_surface {
                 spawn_custom_rail_tunnel_surface(commands, ctx, resolved, base_z, 0.012, dir & 3);
@@ -3949,9 +3999,8 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                 crate::sprites::tunnel_front_trace_geometry(dir);
             let front_bounds = TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez);
             let custom_front_translation = custom_tunnel_portal.as_ref().map(|resolved| {
-                custom_rail_tunnel_front_translation(ctx, resolved.center_offset, base_z, 0.08)
+                custom_rail_tunnel_front_translation(ctx, resolved.center_offset, base_z, 0.081)
             });
-            let custom_front_sprite = custom_tunnel_portal.map(|resolved| resolved.sprite);
             let tunnel_parents = (!draw_tunnel_catenary).then(|| {
                 tunnel_sortable_parents(
                     ctx.tx_i32(),
@@ -3966,8 +4015,8 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             // portal se registra antes de los separadores, aunque las
             // profundidades de runtime se reasignen después.
             WorldDrawTrace::record_sprite_with_geometry(
-                if custom_front_sprite.is_some() {
-                    "tunnel-front-newgrf"
+                if custom_base_front.is_some() {
+                    "tunnel-front-railtype-base"
                 } else {
                     "tunnel-front"
                 },
@@ -3977,21 +4026,31 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                     "sortable"
                 },
                 front_sprite_id,
-                false,
+                rail && has_custom_tunnel_portal && custom_base_front.is_none(),
                 front_offset,
                 0,
                 Some(front_bounds),
             );
-            let mut front_translation = crate::sprites::tunnel_front_translation(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                front_sprite_id,
-                0.08,
-            );
-            if let Some(custom_translation) = custom_front_translation {
-                front_translation = custom_translation;
-            }
+            let mut front_translation = if custom_base_front.is_some() {
+                crate::sprites::rail_tunnel_base_translation(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    climate_index,
+                    dir,
+                    snow_or_desert,
+                    true,
+                    0.08,
+                )
+            } else {
+                crate::sprites::tunnel_front_translation(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    vanilla_front_sprite_id,
+                    0.08,
+                )
+            };
             let front_sortable_parent = tunnel_parents.as_ref().map(|parents| {
                 let source_depth = viewport_source_depth(
                     sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.08),
@@ -4009,11 +4068,46 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             let mut front_entity = commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                custom_front_sprite.unwrap_or_else(|| front_image.sprite()),
+                front_image.sprite(),
                 Transform::from_translation(front_translation),
             ));
             if let Some(parent) = front_sortable_parent {
                 front_entity.insert(parent);
+            }
+            let front_parent_entity = front_entity.id();
+            if let Some(resolved) = custom_tunnel_portal {
+                // OpenTTD combina la base Action5 y el overlay de portal en
+                // una misma pasada sortable. Un child conserva ese vínculo
+                // cuando no hay catenaria; con catenaria se usa un micro-slot
+                // inmediatamente posterior al techo base.
+                WorldDrawTrace::record_sprite_with_geometry(
+                    "tunnel-front-newgrf",
+                    if draw_tunnel_catenary {
+                        "combined"
+                    } else {
+                        "sortable"
+                    },
+                    vanilla_front_sprite_id,
+                    false,
+                    front_offset,
+                    0,
+                    Some(front_bounds),
+                );
+                let overlay_translation = custom_front_translation.unwrap_or_else(|| {
+                    custom_rail_tunnel_front_translation(ctx, resolved.center_offset, base_z, 0.081)
+                });
+                let mut overlay_entity = commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    resolved.sprite,
+                    Transform::from_translation(overlay_translation),
+                ));
+                if !draw_tunnel_catenary {
+                    overlay_entity.insert(crate::render::ViewportSortableChild {
+                        parent: front_parent_entity,
+                        source_depth: sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.081),
+                    });
+                }
             }
             // Wire de portal (`DrawRailCatenaryOnTunnel`) si la vía es eléctrica.
             if let Some((sprite, anchor)) = tunnel_catenary_sprite {

@@ -161,6 +161,34 @@ pub fn tunnel_front_translation(px: i32, py: i32, base_z: u8, sprite_id: u32, la
     pos
 }
 
+/// Posición de una vista Action5 0x17 de la base de túnel ferroviario.
+///
+/// La base posterior comparte el ancla NFO de `DrawGroundSprite`; la vista
+/// frontal recibe además el mismo remap `(15,15,0)` que `roof_bounds` usa para
+/// el techo vanilla. `climate` es el `LandscapeType` nativo (0..3).
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn rail_tunnel_base_translation(
+    px: i32,
+    py: i32,
+    base_z: u8,
+    climate: usize,
+    dir: u8,
+    snow_or_desert: bool,
+    front: bool,
+    layer: f32,
+) -> Vec3 {
+    let slot = crate::sprites::rail_tunnel_base_slot(dir, snow_or_desert, front);
+    let meta = crate::sprites::RAIL_TUNNEL_BASE_SPRITE_META[climate][slot];
+    let mut pos = tunnel_translation_from_meta(px, py, base_z, meta, layer);
+    if front {
+        let offset = remap_tile_offset(15.0, 15.0, 0.0) * 0.5;
+        pos.x += offset.x;
+        pos.y += offset.y;
+    }
+    pos
+}
+
 /// Geometría lógica de la capa frontal del portal, tal como
 /// `DrawTile_TunnelBridge` la pasa a `AddSortableSpriteToDraw`.
 ///
@@ -254,5 +282,16 @@ mod tests {
         assert_eq!(front.x - base.x, 0.0);
         assert_eq!(front.y - base.y, -30.0);
         assert_eq!(front.z, base.z);
+    }
+
+    #[test]
+    fn rail_tunnel_base_translation_uses_action5_meta_and_front_anchor() {
+        let rear = rail_tunnel_base_translation(190, 125, 0, 0, 0, false, false, 0.0);
+        let front = rail_tunnel_base_translation(190, 125, 0, 0, 0, false, true, 0.08);
+        let origin = iso(190, 125);
+        assert_eq!(rear.x, origin.x - 31.0 + 35.0 / 2.0);
+        assert_eq!(rear.y, origin.y + 2.0 - 33.0 / 2.0);
+        assert_eq!(front.y, origin.y + 38.0 - 37.0 / 2.0 - 30.0);
+        assert_eq!(front.z, crate::iso::sortable_draw_z(190, 125, 0, 0.08));
     }
 }

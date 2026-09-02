@@ -459,16 +459,18 @@ por lo que #326 permanece en curso.
 
 Actualización #326-RAIL-TUNNEL-002 (2026-09-02): el parser/runtime conserva
 ahora los selectores `RTSG_TUNNEL` (3) y `RTSG_TUNNEL_PORTAL` (10) por
-`RailType`. En una boca ferroviaria con `UsesOverlay()` y portal Action2
-resuelto, el renderer consume la vista `RTSG_TUNNEL` con su ancla NFO como
-`DrawGroundSprite`, antes de PBS y catenaria, y cae de forma atómica al portal
-OpenGFX si falta una vista o el clima/fecha no coincide. La regresión
+`RailType`. En una boca ferroviaria con `UsesOverlay()` el renderer consume la
+vista `RTSG_TUNNEL` con su ancla NFO como `DrawGroundSprite`, antes de PBS y
+catenaria, aunque la fachada `RTSG_TUNNEL_PORTAL` sea independiente; cada vista
+cae de forma atómica al portal OpenGFX si falta o el clima/fecha no coincide. La regresión
 `newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined` cubre
 una boca inclinada `SLOPE_NE` y confirma la capa independiente del sorter.
 Actualización #326-RAIL-TUNNEL-003 (2026-09-02): cuando `RTSG_TUNNEL_PORTAL`
 resuelve una vista Action2, la fachada ya usa el sprite custom y su centro NFO
-en la capa sortable (`tunnel-front-newgrf`); esto corrige el anclaje visual de
-las bocas y conserva el fallback vanilla por vista. La base de césped
-`SPR_RAILTYPE_TUNNEL_BASE` todavía no se extrae/carga como Action5, por lo que
-el suelo posterior permanece tipado vanilla. Las pendientes/rotaciones y las
-paletas especiales continúan abiertas; #326 permanece en curso.
+en la capa sortable (`tunnel-front-newgrf`), combinado como child de la base.
+El extractor `extract_rail_tunnel_base_sprites.py` incorpora ahora la base
+Action5 `0x17` (`SPR_RAILTYPE_TUNNEL_BASE`) por clima, con sus ocho slots
+normales y ocho nieve/desierto, y el renderer la carga antes del overlay; si un
+PNG/atlas falta, sólo esa capa cae al portal OpenGFX. La regresión de túnel
+verifica el parent Action5 y el child del portal. Las pendientes/rotaciones y
+las paletas especiales continúan abiertas; #326 permanece en curso.

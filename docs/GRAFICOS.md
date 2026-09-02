@@ -82,6 +82,24 @@ Consumidores actuales:
 | `gen_bridge_structure_palette.py` | tablas `PALETTE_TO_STRUCT_*` (pseudo-sprites 795–801 de `ogfx1_base`) |
 | `extract_rail_pbs_palette_sprites.py` | overlays de reserva PBS ya remapeados con la pseudo-sprite `PALETTE_CRASH=804` |
 
+#### Base Action5 de túneles ferroviarios
+
+`openttd.grf` también aporta el bloque Action5 `0x17`
+(`SPR_RAILTYPE_TUNNEL_BASE = 6123`). Son 16 slots por `LandscapeType`: ocho
+vistas normales y ocho para nieve/desierto, con la misma pareja rear/front que
+usa `DrawTile_TunnelBridge` cuando un `RailType` publica
+`RTSG_TUNNEL_PORTAL`. El extractor
+`scripts/extract_rail_tunnel_base_sprites.py` lee
+`tunnel_portals.{nfo,png}` del pin OpenTTD, conserva los offsets NFO y escribe
+`rail_tunnel_base_{climate}_{00..15}.png` antes de regenerar el atlas. El NFO
+oficial sólo publica ocho vistas para Arctic y Toyland; el pipeline duplica
+esas ocho en los slots de nieve para conservar el índice de 16 que consume el
+runtime, sin dejar sprites indefinidos.
+
+La carga del atlas mantiene fallback por slot al portal OpenGFX si el pipeline
+gráfico todavía no se ejecutó. `--check` compara metadata y, cuando existen
+los PNG locales, los 64 píxeles extraídos contra la fuente oficial.
+
 Ese directorio **no** se borra en la limpieza de `opengfx-*` / `opengfx2-*` de cada
 corrida; se reutiliza si el NFO ya está.
 

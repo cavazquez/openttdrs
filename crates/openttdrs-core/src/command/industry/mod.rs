@@ -247,7 +247,13 @@ pub(super) fn place_industry_spec_layout_sandbox(
     check_place_industry_spec_layout(&state.map, c, spec, layout_index)?;
     let template =
         industry_template_with_layout(c, spec, layout_index).ok_or(CommandError::OutOfBounds)?;
-    let selected_layout = u8::try_from(layout_index).unwrap_or(u8::MAX);
+    // `Industry::selected_layout` is one-based in OpenTTD; zero means an
+    // industry created before NewGRF layouts existed.  CB28 itself still
+    // receives the zero-based `layout_index` below.
+    let selected_layout = layout_index
+        .checked_add(1)
+        .and_then(|index| u8::try_from(index).ok())
+        .ok_or(CommandError::OutOfBounds)?;
     place_industry_spec_template_sandbox(state, c, spec, selected_layout, &template)
 }
 
@@ -559,7 +565,8 @@ pub fn place_industry_spec_def_sandbox(
 /// Coloca una industria `NewGRF` usando el layout elegido por el caller.
 ///
 /// `OpenTTD` sortea el layout antes de consultar CB28 y conserva el ordinal
-/// en `Industry::selected_layout`. La entrada histórica mantiene layout cero;
+/// (uno-based; cero es legacy) en `Industry::selected_layout`. La entrada histórica
+/// mantiene layout cero;
 /// esta variante permite a la generación, SAV y UI pasar el valor real sin
 /// volver a inferirlo desde la geometría de la huella.
 pub fn place_industry_spec_def_layout_sandbox(
@@ -572,7 +579,12 @@ pub fn place_industry_spec_def_layout_sandbox(
     let Some(def) = industry_spec_def(&state.industry_spec_catalog, type_id).cloned() else {
         return Err(CommandError::OutOfBounds);
     };
-    let selected_layout = u8::try_from(layout_index).unwrap_or(u8::MAX);
+    // CB28 recibe el índice cero-based, mientras que la instancia y el SAV
+    // conservan `layout_index + 1` (`selected_layout` upstream).
+    let selected_layout = layout_index
+        .checked_add(1)
+        .and_then(|index| u8::try_from(index).ok())
+        .ok_or(CommandError::OutOfBounds)?;
     // #266: CB 0x28 location — deny observable (no silencioso). El comando de
     // usuario debe exponer el scope temporal y `IACT_USERCREATION`.
     if !crate::newgrf_callback::apply_industry_location_callback_for_build(
@@ -705,7 +717,7 @@ mod tests {
             state.map.get_kind(TileCoord::new(6, 4)),
             Some(TileKind::Industry)
         );
-        assert_eq!(state.industries[0].selected_layout, 2);
+        assert_eq!(state.industries[0].selected_layout, 3);
     }
 
     #[test]
@@ -738,7 +750,7 @@ mod tests {
 
         assert_eq!(state.industries.len(), 1);
         let industry = &state.industries[0];
-        assert_eq!(industry.selected_layout, 1);
+        assert_eq!(industry.selected_layout, 2);
         assert_eq!(industry.newgrf_random, 0xBEEF);
         assert_eq!(industry.tiles.len(), 2);
         assert_eq!(

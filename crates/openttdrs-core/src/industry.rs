@@ -775,8 +775,9 @@ pub struct Industry {
     pub random_colour: u8,
     /// Layout elegido al crear la industria (`Industry::selected_layout`).
     ///
-    /// `OpenTTD` conserva este ordinal incluso cuando dos layouts producen la
-    /// misma huella geométrica; no se debe inferir únicamente desde `tiles`.
+    /// `OpenTTD` conserva el ordinal uno-based (cero identifica legacy) incluso
+    /// cuando dos layouts producen la misma huella geométrica; no se debe
+    /// inferir únicamente desde `tiles`.
     #[serde(default)]
     pub selected_layout: u8,
     /// Bits aleatorios persistentes de la instancia para scopes `NewGRF`.
@@ -995,7 +996,7 @@ impl Industry {
         self
     }
 
-    /// Conserva el ordinal del layout usado para materializar la huella.
+    /// Conserva el ordinal uno-based del layout usado para materializar la huella.
     #[must_use]
     pub const fn with_selected_layout(mut self, selected_layout: u8) -> Self {
         self.selected_layout = selected_layout;

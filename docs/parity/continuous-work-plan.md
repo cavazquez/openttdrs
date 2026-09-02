@@ -45,7 +45,7 @@ de error; #329 permanece abierto.
 
 Actualización #329-INDUSTRY-CB28-022 (2026-09-02): la construcción NewGRF
 acepta el layout sorteado/seleccionado en una variante atómica del comando,
-conserva `Industry.selected_layout` y los bits `Industry.random`, y los
+conserva el ordinal uno-based `Industry.selected_layout` y los bits `Industry.random`, y los
 reexpone en el scope padre de Action2. `INDY` ahora importa/exporta ambos
 campos; las variables WORD de stock, historial y contador ya no pierden sus
 bits altos. CB28, fundador/fechas/flags/PSA y mensajes de error siguen siendo

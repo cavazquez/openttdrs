@@ -122,6 +122,10 @@ pub struct SimulationRuntime {
     /// el tipo activa `RailTypeFlag::NoSpriteCombine`.
     pub rail_type_ground_complete_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
 
+    /// Action3 `Depot` por `RailType` (selector 8). Sustituye las seis capas
+    /// de fachada que `DrawRailTileSeq` desplaza desde `SPR_RAIL_DEPOT_SE_1`.
+    pub rail_type_depot_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
+
     /// Props Action0 runtime por `RailType` vanilla.
     pub rail_type_props: [crate::rail_type::RailTypeRuntimeProps; 4],
 
@@ -206,6 +210,7 @@ impl SimulationRuntime {
             rail_type_overlay_newgrf: Vec::new(),
             rail_type_underlay_newgrf: Vec::new(),
             rail_type_ground_complete_newgrf: Vec::new(),
+            rail_type_depot_newgrf: Vec::new(),
             rail_type_props: crate::rail_type::RailTypeRuntimeProps::defaults(),
             rail_type_badges: std::array::from_fn(|_| Vec::new()),
             rail_type_max_speed: [0; 4],

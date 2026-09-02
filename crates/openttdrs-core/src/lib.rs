@@ -558,14 +558,15 @@ pub use rail_signals::{
     tracks_overlap, valid_signal_facings_track, yapf_routing_signal,
 };
 pub use rail_type::{
-    RAIL_CONVERT_COST, RAIL_SPRITE_TYPE_GROUND, RAIL_SPRITE_TYPE_GROUND_COMPLETE,
-    RAIL_SPRITE_TYPE_SIGNALS, RAIL_SPRITE_TYPE_TRACK_OVERLAY, RAIL_SPRITE_TYPE_UNDERLAY,
-    RAIL_TYPE_FLAG_NO_SPRITE_COMBINE, RailSignalSpriteSpec, RailType, RailTypeRuntimeProps,
-    engine_compatible_with_rail, engine_requires_electric, engine_requires_maglev,
-    engine_requires_monorail, powered_railtypes_mask, powered_railtypes_mask_with_props,
-    rail_build_cost_multiplier, rail_type_bit, rail_type_from_tile, rail_type_track_speed_cap,
-    rail_types_compatible, rail_types_compatible_with_props, railtypes_mask_contains,
-    required_rail_type_for_engine, set_rail_type_on_tile, tile_usable_by_rail_type,
+    RAIL_CONVERT_COST, RAIL_SPRITE_TYPE_DEPOT, RAIL_SPRITE_TYPE_GROUND,
+    RAIL_SPRITE_TYPE_GROUND_COMPLETE, RAIL_SPRITE_TYPE_SIGNALS, RAIL_SPRITE_TYPE_TRACK_OVERLAY,
+    RAIL_SPRITE_TYPE_UNDERLAY, RAIL_TYPE_FLAG_NO_SPRITE_COMBINE, RailSignalSpriteSpec, RailType,
+    RailTypeRuntimeProps, engine_compatible_with_rail, engine_requires_electric,
+    engine_requires_maglev, engine_requires_monorail, powered_railtypes_mask,
+    powered_railtypes_mask_with_props, rail_build_cost_multiplier, rail_type_bit,
+    rail_type_from_tile, rail_type_track_speed_cap, rail_types_compatible,
+    rail_types_compatible_with_props, railtypes_mask_contains, required_rail_type_for_engine,
+    set_rail_type_on_tile, tile_usable_by_rail_type,
 };
 pub use refit::{
     next_refit_cargo, refit_allowed, refittable_cargo_types, refittable_cargo_types_for_engine,

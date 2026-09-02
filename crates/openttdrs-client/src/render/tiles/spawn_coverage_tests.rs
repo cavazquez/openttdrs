@@ -2467,6 +2467,103 @@ fn sloped_depot_grounds_and_reservation_attach_to_their_foundation_parent() {
 }
 
 #[test]
+fn newgrf_rail_depot_group_replaces_relocated_building_layers() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(2, 2);
+    let mut map = fresh_map8();
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::RailDepot,
+            mapt: 0x10,
+            // SE: OpenTTD's RTSG_DEPOT block uses the first two relocated
+            // sprites (SE_1/SE_2) for this orientation.
+            m5: 1,
+            ..tile_template()
+        },
+    )
+    .expect("rail depot");
+    let custom_rgba = [230, 70, 210, 255].repeat(16);
+    let view = DecodedSprite {
+        width: 4,
+        height: 4,
+        x_offs: -2,
+        y_offs: -4,
+        rgba: custom_rgba.clone(),
+        mask: Vec::new(),
+    };
+    let graphics = TrainSpriteGraphics {
+        sets: vec![vec![view.clone(); 6]],
+        specific_assigns: std::collections::HashMap::from([(
+            (0, openttdrs_core::RAIL_SPRITE_TYPE_DEPOT),
+            0,
+        )]),
+        ..Default::default()
+    };
+    let depot_spec = openttdrs_core::RailSignalSpriteSpec {
+        rail_type: RailType::Rail,
+        local_id: 0,
+        sprite_type: openttdrs_core::RAIL_SPRITE_TYPE_DEPOT,
+        grfid: 0x4445_504F,
+        type_tables: None,
+        graphics,
+    };
+    let depot_specs = vec![Some(depot_spec)];
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfSignalSpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut signal_sprites: ResMut<crate::render::NewGrfSignalSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &depot_specs,
+                    &[],
+                    None,
+                    Some(&mut signal_sprites),
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    Some(&mut images),
+                );
+            },
+        )
+        .expect("custom rail depot spawn");
+
+    let images = world.resource::<Assets<Image>>();
+    let custom_layers = images
+        .iter()
+        .filter(|(_, image)| image.data.as_deref() == Some(custom_rgba.as_slice()))
+        .count();
+    assert_eq!(custom_layers, 2, "SE debe consumir SE_1 y SE_2 custom");
+}
+
+#[test]
 fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
     let assets = boot_assets_app();
     let expected_apron = assets.airport_apron.clone();
@@ -2812,10 +2909,13 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
                     &[],
                     &catalog,
                     &[],
+                    &[],
+                    None,
                     None,
                     &[],
                     &[],
                     TEST_CLIMATE,
+                    0,
                     &[],
                     None,
                     &[],

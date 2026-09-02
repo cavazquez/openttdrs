@@ -250,8 +250,11 @@ HD y se vinculan a la fundación activa (con fallback por vista ausente). El
 flag `RailTypeFlag::NoSpriteCombine` ya selecciona el grupo
 `RTSG_GROUND_COMPLETE` (selector 12) para teselas planas, usando el bitmask de
 vías menos uno como índice, y mantiene el overlay PBS separado; si falta la
-vista, conserva la vía vanilla. Las variantes de pendiente, túnel y depósito
-todavía requieren una matriz específica.
+vista, conserva la vía vanilla. `RTSG_DEPOT` (selector 8) ya se aplica a las
+seis fachadas relocatables (`SE_1`, `SE_2`, `SW_1`, `SW_2`, `NE`, `NW`), con
+resolución Action2 por tesela, offsets NFO y el mismo sorter/parent de
+fundación; si una vista no existe, la capa individual cae a OpenGFX. Las
+variantes de pendiente y túnel todavía requieren una matriz específica.
 En vehículos marítimos, las listas CTT `0x1E/0x1F` ya conservan inclusión y
 exclusión de cargos y la máscara final de refit descarta los cargos excluidos;
 el resto de propiedades CTT variables continúa pendiente.

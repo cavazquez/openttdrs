@@ -3463,11 +3463,14 @@ pub(crate) fn spawn_transport_object_tile(
         stations,
         &[],
         &[],
+        &[],
         catenary_newgrf,
         catenary_sprites,
+        None,
         bridge_decks_newgrf,
         foundation_newgrf,
         Climate::Temperate,
+        0,
         &[],
         None,
         &[],
@@ -3626,11 +3629,14 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
     stations: &[Station],
     towns: &[openttdrs_core::Town],
     airport_tile_catalog: &[openttdrs_core::AirportTileSpecDef],
+    rail_type_depot_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    mut signal_sprites: Option<&mut crate::render::NewGrfSignalSpriteCache>,
     bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     climate: Climate,
+    calendar_date: u32,
     road_catalog: &[openttdrs_core::RoadTypeDef],
     road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
@@ -3962,6 +3968,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             spawn_rail_depot_tile(
                 commands,
                 assets,
+                map,
                 company,
                 owner_colour,
                 ctx,
@@ -3971,8 +3978,13 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                 dims.0,
                 depot_foundation.child_parent,
                 show_pbs_reservations,
+                climate,
+                calendar_date,
+                newgrf_stack,
+                rail_type_depot_newgrf,
                 catenary_newgrf,
                 &mut catenary_sprites,
+                &mut signal_sprites,
                 &mut images,
             );
         }
@@ -4605,6 +4617,55 @@ fn rail_depot_sorted_layer_centers(
     (catenary_depth, centers)
 }
 
+/// Índice de una fachada vanilla dentro del bloque relocatable de
+/// `RTSG_DEPOT`. OpenTTD calcula el desplazamiento desde `SE_1` (1063), por lo
+/// que el orden global es `SE_1`, `SE_2`, `SW_1`, `SW_2`, `NE`, `NW` aunque la
+/// tabla de orientaciones se presente como NE/SE/SW/NW.
+#[must_use]
+const fn rail_depot_custom_sprite_index(dir: usize, layer: usize) -> Option<u8> {
+    let dir = if dir > 3 { 3 } else { dir };
+    match dir {
+        0 if layer == 0 => Some(4),
+        1 if layer < 2 => Some(layer as u8),
+        2 if layer < 2 => Some(2 + layer as u8),
+        3 if layer == 0 => Some(5),
+        _ => None,
+    }
+}
+
+/// Resuelve una capa del grupo Action3 `RailSpriteType::Depot` manteniendo el
+/// mismo contexto de vía que `GetCustomRailSprite` (`0x40`–`0x45`, fecha,
+/// random y parámetros del GRF).
+#[allow(clippy::too_many_arguments)]
+fn resolve_custom_rail_depot_sprite(
+    map: &Map,
+    ctx: &TileRenderContext,
+    climate: Climate,
+    calendar_date: u32,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    spec: &openttdrs_core::RailSignalSpriteSpec,
+    image: u8,
+    signal_sprites: &mut Option<&mut crate::render::NewGrfSignalSpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+) -> Option<crate::render::signal_newgrf::ResolvedSignalSprite> {
+    let tile = ctx.tile?;
+    let cache = signal_sprites.as_deref_mut()?;
+    let images = images.as_deref_mut()?;
+    let mut action2 = openttdrs_core::action2_eval_ctx_for_rail_tile(
+        map,
+        tile,
+        ctx.coord,
+        climate,
+        calendar_date,
+        spec.type_tables.as_ref(),
+    );
+    action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+        newgrf_stack,
+        spec.grfid,
+    ));
+    cache.sprite_for_group(spec, image, &mut action2, images)
+}
+
 /// Cable de entrada del depósito eléctrico (`DrawRailCatenary` especial).
 ///
 /// Esta rama va después del suelo/reserva pero antes de las capas BUILD del
@@ -4688,6 +4749,7 @@ fn spawn_rail_depot_catenary(
 fn spawn_rail_depot_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
+    map: &Map,
     company: Option<&CompanyColoredSprites>,
     owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
@@ -4697,8 +4759,13 @@ fn spawn_rail_depot_tile(
     map_width: u32,
     foundation_child_parent: Option<Entity>,
     show_pbs_reservations: bool,
+    climate: Climate,
+    calendar_date: u32,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    rail_type_depot_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: &mut Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    signal_sprites: &mut Option<&mut crate::render::NewGrfSignalSpriteCache>,
     images: &mut Option<&mut Assets<Image>>,
 ) {
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
@@ -4806,6 +4873,9 @@ fn spawn_rail_depot_tile(
     );
     let depot_variant = rail_depot_visual_type_index(rail_type);
     let depot_builds = &assets.rail_depot_builds[depot_variant][dir];
+    let custom_depot_spec = rail_type_depot_newgrf
+        .get(usize::from(rail_type.as_u8()))
+        .and_then(Option::as_ref);
     // `DrawRailTileSeq`: cada fachada es un sortable con las bounds del
     // TILE_SEQ_LINE y recolor de la compañía propietaria. En una pendiente
     // la fundación altera la altura de mundo, no la caja local de la pieza.
@@ -4814,6 +4884,75 @@ fn spawn_rail_depot_tile(
     for (layer_i, spec) in rail_depot_build_layers(rail_type, dir).iter().enumerate() {
         if buildings_are_hidden {
             break;
+        }
+        let custom = custom_depot_spec.and_then(|custom_spec| {
+            rail_depot_custom_sprite_index(dir, layer_i).and_then(|image| {
+                resolve_custom_rail_depot_sprite(
+                    map,
+                    ctx,
+                    climate,
+                    calendar_date,
+                    newgrf_stack,
+                    custom_spec,
+                    image,
+                    &mut *signal_sprites,
+                    &mut *images,
+                )
+            })
+        });
+        if let Some(resolved) = custom {
+            // `DrawRailTileSeq` conserva la geometría de la línea (dx/dy/dz),
+            // pero el ancla NFO pertenece al sprite GRF resuelto. Reutilizar
+            // esos offsets evita centrar sprites HD como si fueran 64×31.
+            let mut seq = rail_depot_seq_gfx(spec);
+            seq.x_offs = resolved.center_offset.x - resolved.size.x * 0.5;
+            seq.y_offs = -resolved.center_offset.y - resolved.size.y * 0.5;
+            let mut center = road_depot_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                spec.z,
+                seq,
+                resolved.size.x,
+                resolved.size.y,
+            );
+            // El orden de padres se calculó con los prismas TILE_SEQ vanilla;
+            // conservar su profundidad mantiene la relación con la catenaria
+            // y las otras fachadas aun cuando el GRF publique dimensiones HD.
+            if let Some(vanilla_center) = build_centers.get(layer_i) {
+                center.z = vanilla_center.z;
+            }
+            WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                "rail-depot-building-newgrf",
+                "sortable",
+                1063 + u32::from(rail_depot_custom_sprite_index(dir, layer_i).unwrap_or(0)),
+                company_palette,
+                false,
+                (0, 0),
+                foundation_z_delta,
+                (0, 0, 0),
+                Some(TraceSpriteBounds::new(
+                    spec.dx as i32,
+                    spec.dy as i32,
+                    spec.dz as i32,
+                    spec.sx,
+                    spec.sy,
+                    23,
+                )),
+            );
+            let sprite = tint_building_sprite(resolved.sprite);
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(commands, sprite, ctx, center, map_width, parent);
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(center),
+                ));
+            }
+            continue;
         }
         let Some(image) = depot_builds.get(layer_i) else {
             WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
@@ -5120,6 +5259,18 @@ mod tests {
         assert_eq!(road_depot_foundation_child_offset(0), None);
         assert_eq!(road_depot_foundation_child_offset(6), Some((0, -32, 0)));
         assert_eq!(road_depot_foundation_child_offset(0x17), Some((0, -32, 0)));
+    }
+
+    #[test]
+    fn rail_depot_newgrf_slots_follow_the_relocated_vanilla_order() {
+        assert_eq!(super::rail_depot_custom_sprite_index(0, 0), Some(4));
+        assert_eq!(super::rail_depot_custom_sprite_index(1, 0), Some(0));
+        assert_eq!(super::rail_depot_custom_sprite_index(1, 1), Some(1));
+        assert_eq!(super::rail_depot_custom_sprite_index(2, 0), Some(2));
+        assert_eq!(super::rail_depot_custom_sprite_index(2, 1), Some(3));
+        assert_eq!(super::rail_depot_custom_sprite_index(3, 0), Some(5));
+        assert_eq!(super::rail_depot_custom_sprite_index(0, 1), None);
+        assert_eq!(super::rail_depot_custom_sprite_index(3, 1), None);
     }
 
     #[test]

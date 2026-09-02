@@ -102,6 +102,8 @@ pub const RAIL_SPRITE_TYPE_GROUND: u8 = 2;
 pub const RAIL_SPRITE_TYPE_UNDERLAY: u8 = 0;
 /// Selector Action3 `RailSpriteType::GroundComplete` (valor upstream 12).
 pub const RAIL_SPRITE_TYPE_GROUND_COMPLETE: u8 = 12;
+/// Selector Action3 `RailSpriteType::Depot` (valor upstream 8).
+pub const RAIL_SPRITE_TYPE_DEPOT: u8 = 8;
 
 /// `RailTypeFlag::NoSpriteCombine` de `OpenTTD` (`Action0` prop `0x10`, bit 3).
 pub const RAIL_TYPE_FLAG_NO_SPRITE_COMBINE: u8 = 1 << 3;
@@ -452,5 +454,6 @@ mod tests {
         assert!(props.no_sprite_combine());
         assert_eq!(RAIL_SPRITE_TYPE_GROUND, 2);
         assert_eq!(RAIL_SPRITE_TYPE_GROUND_COMPLETE, 12);
+        assert_eq!(RAIL_SPRITE_TYPE_DEPOT, 8);
     }
 }

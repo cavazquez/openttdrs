@@ -1969,6 +1969,25 @@ mod tests {
         ];
         let road_meta = parse_action0_vehicle_metas(&road).unwrap().remove(0);
         assert_eq!(road_meta.badge_local_ids, vec![7, 9]);
+
+        let industry = vec![
+            0x00,
+            ACTION0_FEATURE_INDUSTRIES,
+            0x02,
+            0x01,
+            0x00,
+            0x08,
+            0x00,
+            0x29,
+            0x02,
+            0x00,
+            0x34,
+            0x12,
+            0x78,
+            0x56,
+        ];
+        let industry_meta = parse_action0_industry_meta(&industry).unwrap();
+        assert_eq!(industry_meta.badge_local_ids, vec![0x1234, 0x5678]);
     }
 
     #[test]

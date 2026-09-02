@@ -13,7 +13,7 @@ use crate::house_spec::HouseSpecDef;
 use crate::industry::{Industry, IndustryProductionAction};
 use crate::industry_spec::{IndustrySpecDef, cargo_type_from_label};
 use crate::industry_tile::IndustryTileSpecDef;
-use crate::map::{Map, TileCoord};
+use crate::map::{Map, TileCoord, has_tile_water_ground};
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
@@ -1198,6 +1198,22 @@ pub fn apply_industry_location_callback_for_build(
         0x8A,
         state.map.get(pos).map_or(0, |tile| u32::from(tile.height)),
     );
+    // `GetClosestWaterDistance(tile, true)` de OpenTTD. Las industrias
+    // representadas actualmente son terrestres; cuando el catálogo conserve
+    // `BuiltOnWater` este argumento deberá derivarse de esa propiedad.
+    ctx.vars
+        .insert(0x8B, closest_water_distance_for_location(&state.map, pos));
+    ctx.vars.insert(0x8F, random_bits);
+    for (parameter, &badge) in def.newgrf_badge_translation.iter().enumerate() {
+        let value = if badge == u16::MAX {
+            u32::MAX
+        } else {
+            u32::from(def.associated_badges.contains(&badge))
+        };
+        if let Ok(parameter) = u8::try_from(parameter) {
+            ctx.parameterized_vars.insert((0x7A, parameter), value);
+        }
+    }
     if let Some((town_idx, distance)) = crate::town::nearest_town_index(&state.towns, pos) {
         let town = &state.towns[town_idx];
         ctx.vars.insert(0x82, town.id);
@@ -1222,6 +1238,36 @@ pub fn apply_industry_location_callback_for_build(
     let result =
         runtime.resolve_callback_ctx(def.newgrf_local_id, CBID_INDUSTRY_LOCATION, 0, 2, &mut ctx);
     callback_allows_location(result)
+}
+
+/// Réplica acotada de `GetClosestWaterDistance(tile, true)` para el scope de
+/// construcción. El resultado está limitado a `0x7F`, como en `OpenTTD`.
+fn closest_water_distance_for_location(map: &Map, center: TileCoord) -> u32 {
+    let is_water = |coord: TileCoord| {
+        map.get(coord).is_some_and(has_tile_water_ground)
+    };
+    if is_water(center) {
+        return 0;
+    }
+
+    let (width, height) = map.dimensions();
+    let max_x = i32::try_from(width).unwrap_or(i32::MAX);
+    let max_y = i32::try_from(height).unwrap_or(i32::MAX);
+    for distance in 1..0x7F_u32 {
+        let d = i32::try_from(distance).unwrap_or(i32::MAX);
+        let mut x = center.x;
+        let mut y = center.y.saturating_sub(d);
+        for (dx, dy) in [(-1, 1), (1, 1), (1, -1), (-1, -1)] {
+            for _ in 0..distance {
+                if x >= 0 && y >= 0 && x < max_x && y < max_y && is_water(TileCoord::new(x, y)) {
+                    return distance;
+                }
+                x = x.saturating_add(dx);
+                y = y.saturating_add(dy);
+            }
+        }
+    }
+    0x7F
 }
 
 /// Construye el contexto mínimo del scope `Industry` para callbacks de
@@ -2473,6 +2519,59 @@ mod tests {
         gfx
     }
 
+    fn gfx_callback_allow_if_parameterized_byte(
+        variable: u8,
+        parameter: u8,
+        shift: u8,
+        expected: u8,
+    ) -> TrainSpriteGraphics {
+        let literal = |value: u8| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                shift: 0,
+                and_mask: u32::from(value),
+                ..Action2VarAdjust::default()
+            },
+        };
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable,
+                    param: Some(parameter),
+                    adjust: Action2VarAdjust {
+                        shift,
+                        and_mask: u32::from(u8::MAX),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: vec![
+                    Action2VarOp {
+                        operator: 0x12,
+                        rhs: literal(expected),
+                    },
+                    Action2VarOp {
+                        operator: 0x0A,
+                        rhs: literal(0x10),
+                    },
+                    Action2VarOp {
+                        operator: 0x0A,
+                        rhs: literal(0x40),
+                    },
+                ],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     /// `16 * 64 = 0x400` vía operador mul (`and_mask` es BYTE).
     fn gfx_callback_allow_400() -> TrainSpriteGraphics {
         let mut gfx = TrainSpriteGraphics::default();
@@ -3653,6 +3752,8 @@ mod tests {
             input_multipliers: Vec::new(),
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_LOCATION_MASK,
             cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             name: "test".into(),
             from_newgrf: true,
             grfid: 1,
@@ -3685,6 +3786,8 @@ mod tests {
             input_multipliers: Vec::new(),
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_LOCATION_MASK,
             cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             name: "location-scope".into(),
             from_newgrf: true,
             grfid: 1,
@@ -3710,6 +3813,31 @@ mod tests {
         assert!(apply_industry_location_callback_for_build(
             &def, &state, pos, 4, 0
         ));
+
+        def.associated_badges = vec![7];
+        def.newgrf_badge_translation = vec![u16::MAX, 7];
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_parameterized_byte(
+            0x7A, 1, 0, 1,
+        )));
+        assert!(apply_industry_location_callback_for_build(
+            &def, &state, pos, 4, 0
+        ));
+
+        // `0x8B` recorre el rombo Manhattan hasta agua y `0x8F` expone los
+        // 32 bits aleatorios del intento de construcción.
+        let mut state = state;
+        state
+            .map
+            .set_kind(TileCoord::new(0, 0), crate::map::TileKind::Water)
+            .unwrap();
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x8B, 0, 5)));
+        assert!(apply_industry_location_callback_for_build(
+            &def, &state, pos, 4, 0xAB
+        ));
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x8F, 0, 0xAB)));
+        assert!(apply_industry_location_callback_for_build(
+            &def, &state, pos, 4, 0xAB
+        ));
     }
 
     #[test]
@@ -3728,6 +3856,8 @@ mod tests {
             input_multipliers: Vec::new(),
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_PRODUCTION_CHANGE_MASK,
             cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             name: "production-callback".into(),
             from_newgrf: true,
             grfid: 1,
@@ -3792,6 +3922,8 @@ mod tests {
             input_multipliers: Vec::new(),
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_PRODUCTION_CARGO_ARRIVAL_MASK,
             cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             name: "production-group".into(),
             from_newgrf: true,
             grfid: 1,

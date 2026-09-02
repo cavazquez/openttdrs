@@ -639,6 +639,8 @@ mod tests {
             input_multipliers: Vec::new(),
             callback_mask: 0,
             cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             name: String::new(),
             from_newgrf: true,
             grfid: 1,

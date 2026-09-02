@@ -118,10 +118,12 @@ fn local_tile_gfx_map(catalog: &[IndustryTileSpecDef]) -> HashMap<(u32, u16), u1
 }
 
 /// Reconstruye catálogo `Industries` (requiere tiles ya aplicados).
+#[allow(clippy::too_many_lines)]
 pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
     let local_tile_map = local_tile_gfx_map(&state.industry_tile_spec_catalog);
     let mut catalog = empty_industry_spec_catalog();
     let mut overrides = empty_industry_overrides();
+    let badge_catalog = state.badge_catalog.clone();
     let stack = state.newgrf_stack.clone();
     for entry in &stack {
         if !entry.enabled {
@@ -139,6 +141,7 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
         };
         let gfx =
             crate::newgrf_sprites::collect_industry_sprite_graphics(&data).unwrap_or_default();
+        let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
         for meta in collect_industry_metas_from_grf(&data) {
             let Some(global_id) = next_free_industry_id(&catalog) else {
                 break;
@@ -184,6 +187,19 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
             if let Some(ovr) = meta.override_id {
                 overrides[usize::from(ovr)] = global_id;
             }
+            let (associated_badges, newgrf_badge_translation, unresolved_badges) =
+                resolve_badge_local_ids(
+                    &meta.badge_local_ids,
+                    &type_tables.badges,
+                    &badge_catalog,
+                    entry.grfid,
+                );
+            for badge in unresolved_badges {
+                state.runtime.newgrf_diagnostics.push(format!(
+                    "{}: industry {}: badge '{}' no resuelto",
+                    entry.filename, meta.local_id, badge
+                ));
+            }
             catalog.push(IndustrySpecDef {
                 id: global_id,
                 local_id: meta.local_id,
@@ -198,6 +214,8 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
                 input_multipliers: meta.input_multipliers,
                 callback_mask: meta.callback_mask,
                 cost_multiplier: meta.cost_multiplier,
+                associated_badges,
+                newgrf_badge_translation,
                 name: meta.name,
                 from_newgrf: true,
                 grfid: entry.grfid,

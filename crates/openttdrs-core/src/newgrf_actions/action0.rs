@@ -508,6 +508,8 @@ pub struct ParsedIndustryMeta {
     pub input_multipliers: Vec<u16>,
     pub callback_mask: u16,
     pub cost_multiplier: u8,
+    /// `prop 0x29`: índices locales de la tabla Badge Translation Table.
+    pub badge_local_ids: Vec<u16>,
     pub name: String,
 }
 
@@ -1693,6 +1695,7 @@ pub fn parse_action0_industry_meta(payload: &[u8]) -> Option<ParsedIndustryMeta>
     let mut input_multipliers = Vec::new();
     let mut callback_mask = 0u16;
     let mut cost_multiplier = 0u8;
+    let mut badge_local_ids = Vec::new();
     let mut name = String::new();
 
     for _ in 0..header.num_props {
@@ -1858,6 +1861,12 @@ pub fn parse_action0_industry_meta(payload: &[u8]) -> Option<ParsedIndustryMeta>
                 if i + need > payload.len() {
                     break;
                 }
+                badge_local_ids = (0..count)
+                    .map(|offset| {
+                        let start = i + offset * 2;
+                        u16::from_le_bytes([payload[start], payload[start + 1]])
+                    })
+                    .collect();
                 i += need;
             }
             PROP_NAME_CSTRING => {
@@ -1889,6 +1898,7 @@ pub fn parse_action0_industry_meta(payload: &[u8]) -> Option<ParsedIndustryMeta>
         input_multipliers,
         callback_mask,
         cost_multiplier,
+        badge_local_ids,
         name,
     })
 }

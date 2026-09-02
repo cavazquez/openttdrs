@@ -37,10 +37,11 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 Actualización #329-INDUSTRY-CB28-021 (2026-09-02): CB28 mantiene la semántica
 exacta de OpenTTD (sin invertir el bit 10), y el call site de construcción
-expone `IACT_USERCREATION` (`param2=2`) y las variables básicas de ubicación
-`0x80`/`0x81`/`0x82`/`0x86`–`0x8A`/`0x8D`. Continúan pendientes `0x7A` (badges),
-`0x8B` (distancia al agua), `0x8F` (random), flags/fundador/fechas, otros
-tipos de creación y strings de error; #329 permanece abierto.
+expone `IACT_USERCREATION` (`param2=2`) y las variables de ubicación
+`0x7A`/`0x80`/`0x81`/`0x82`/`0x86`–`0x8B`/`0x8D`/`0x8F` (badges, TileIndex,
+pueblo, layout, terreno, zona, distancias, altura y random). Continúan
+pendientes flags/fundador/fechas completos, otros tipos de creación y strings
+de error; #329 permanece abierto.
 
 Última etapa RMAP-064/069/070/071/072/073/074/075/076/079/080/083: la plantación de Farm replica ahora el orden de RNG,
 la geometría y las cercas de OpenTTD, el primer `IndustryID(0)` permanece

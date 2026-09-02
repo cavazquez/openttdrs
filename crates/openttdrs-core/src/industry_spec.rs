@@ -77,6 +77,13 @@ pub struct IndustrySpecDef {
     pub callback_mask: u16,
     /// Cost multiplier (`0x0F`).
     pub cost_multiplier: u8,
+    /// Badges asociados (`prop 0x29`) resueltos a ids globales.
+    #[serde(default)]
+    pub associated_badges: Vec<u16>,
+    /// Tabla de traducción de índices locales de badge (`GlobalVar 0x18`).
+    /// Conserva `u16::MAX` para entradas que no pudieron resolverse.
+    #[serde(default)]
+    pub newgrf_badge_translation: Vec<u16>,
     pub name: String,
     pub from_newgrf: bool,
     pub grfid: u32,
@@ -322,6 +329,8 @@ mod tests {
             input_multipliers: Vec::new(),
             callback_mask: 0,
             cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             name: String::new(),
             from_newgrf: true,
             grfid: 1,

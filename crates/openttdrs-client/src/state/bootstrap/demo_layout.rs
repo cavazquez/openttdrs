@@ -6,7 +6,8 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{
     BridgeType, FACTORY_GRAIN_INPUT, FACTORY_LIVESTOCK_INPUT, FACTORY_STEEL_INPUT, Industry,
     IndustryKind, IndustrySpec, PathNetwork, PreserveRect, WorldGenConfig, WorldGenRng,
-    apply_world_gen_with_rng, effective_snow_line_height, find_path, road_stop_approach_tile,
+    apply_world_gen_with_rng, effective_new_game_map_height_limit, effective_snow_line_height,
+    find_path, road_stop_approach_tile,
 };
 
 /// Carretera horizontal de demo (eje X).
@@ -128,6 +129,9 @@ pub(crate) fn apply_optional_world_gen(
 ) -> Option<WorldGenRng> {
     match apply_world_gen_with_rng(&mut state.map, &config, preserve) {
         Ok(rng) => {
+            let (map_w, map_h) = state.map.dimensions();
+            state.construction.map_height_limit =
+                effective_new_game_map_height_limit(&config, map_w, map_h);
             state.snow_line_height =
                 effective_snow_line_height(&state.map, config.climate, config.snow_coverage);
             Some(rng)

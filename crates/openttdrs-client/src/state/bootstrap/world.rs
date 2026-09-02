@@ -2,7 +2,8 @@
 
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    Climate, WorldGenConfig, apply_world_gen, effective_snow_line_height, tick_for_calendar_year,
+    Climate, WorldGenConfig, apply_world_gen, effective_new_game_map_height_limit,
+    effective_snow_line_height, tick_for_calendar_year,
 };
 
 use super::demo_layout::{
@@ -411,6 +412,9 @@ pub(crate) fn build_empty_procedural_world(
             world_config.water_borders = None;
         }
         let _ = apply_world_gen(&mut state.map, &world_config, &[]);
+        let (map_w, map_h) = state.map.dimensions();
+        state.construction.map_height_limit =
+            effective_new_game_map_height_limit(&world_config, map_w, map_h);
         state.snow_line_height = effective_snow_line_height(
             &state.map,
             world_config.climate,

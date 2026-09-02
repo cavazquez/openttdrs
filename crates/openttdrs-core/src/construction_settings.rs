@@ -25,9 +25,11 @@ pub struct ConstructionSettings {
     /// Altura máxima de mapa (`construction.map_height_limit`).
     ///
     /// El valor `0` conserva el modo automático de `OpenTTD`; al crear el
-    /// mundo, el juego lo resuelve a por lo menos 30 antes de generar los
-    /// árboles. Mantener el valor crudo permite reemitir el setting sin perder
-    /// la preferencia de una partida nueva.
+    /// mundo, `GenerateWorld` lo reemplaza por la estimación TGP + 15 (como
+    /// mínimo 30) antes de generar industrias y árboles. Mantener el valor
+    /// crudo permite reemitir el setting sin perder la preferencia de una
+    /// partida nueva; la resolución dependiente del relieve vive en
+    /// `world_gen::effective_new_game_map_height_limit`.
     #[serde(default)]
     pub map_height_limit: u8,
     #[serde(default)]
@@ -58,11 +60,12 @@ impl Default for ConstructionSettings {
 }
 
 impl ConstructionSettings {
-    /// Límite efectivo después de la resolución automática de `OpenTTD`.
+    /// Límite efectivo para un estado genérico sin configuración de relieve.
     ///
-    /// `GenerateWorld` convierte el valor automático `0` en
-    /// `MAP_HEIGHT_LIMIT_AUTO_MINIMUM` antes de `GenerateTrees`; ésta es la
-    /// magnitud que debe consumir una reproducción de fase desde un `.sav`.
+    /// Un save ya cargado conserva el valor resuelto por `GenerateWorld`.
+    /// Las partidas nuevas deben usar
+    /// `world_gen::effective_new_game_map_height_limit`, que incorpora la
+    /// estimación TGP del tamaño y relieve elegidos.
     #[must_use]
     pub const fn effective_map_height_limit(self) -> u8 {
         if self.map_height_limit == 0 {

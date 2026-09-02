@@ -116,6 +116,15 @@ fn tgp_get_max_height(terrain: TerrainType, map_w: i32, map_h: i32) -> Height {
     i2h(MAX_HEIGHT[row][bucket])
 }
 
+/// Altura máxima entera que `GetEstimationTGPMapHeight` devuelve para una
+/// partida nueva. `GenerateWorld` usa esta estimación para resolver el límite
+/// automático de construcción antes de `GenerateTrees`.
+pub(super) fn estimated_map_height(terrain: TerrainType, map_w: u32, map_h: u32) -> u8 {
+    let map_w = i32::try_from(map_w).unwrap_or(i32::MAX);
+    let map_h = i32::try_from(map_h).unwrap_or(i32::MAX);
+    h2i(tgp_get_max_height(terrain, map_w, map_h)).clamp(0, u8::MAX as i32) as u8
+}
+
 fn get_amplitude(frequency: i32, smoothness: TgenSmoothness, max_height: Height) -> Amplitude {
     const AMPLITUDES: [[Amplitude; 7]; 4] = [
         [16000, 5600, 1968, 688, 240, 16, 16],

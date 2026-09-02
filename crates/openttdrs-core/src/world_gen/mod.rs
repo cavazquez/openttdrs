@@ -22,6 +22,9 @@ mod tgp;
 mod tile_loop;
 mod trees;
 
+const MAP_HEIGHT_LIMIT_AUTO_CEILING_ROOM: u8 = 15;
+const MAX_MAP_HEIGHT_LIMIT: u8 = u8::MAX;
+
 pub(crate) use clear_tiles::generate_clear_tiles;
 pub use config::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY,
@@ -50,6 +53,20 @@ pub use trees::{
     generate_trees_with_rng_observer_with_map_settings, generate_trees_with_rng_with_map_settings,
 };
 
+/// Resuelve `construction.map_height_limit = 0` durante una partida nueva.
+///
+/// `OpenTTD` no fija siempre el mínimo 30: primero estima la altura máxima de
+/// TGP (`GetEstimationTGPMapHeight`) y agrega 15 niveles de margen, con un
+/// mínimo de 30 y el tope del mapa. La misma magnitud alimenta las fases de
+/// industrias, árboles y la configuración persistida del mundo generado.
+#[must_use]
+pub fn effective_new_game_map_height_limit(config: &WorldGenConfig, map_w: u32, map_h: u32) -> u8 {
+    let estimated = tgp::estimated_map_height(config.terrain_type, map_w, map_h);
+    estimated
+        .saturating_add(MAP_HEIGHT_LIMIT_AUTO_CEILING_ROOM)
+        .clamp(MAP_HEIGHT_LIMIT_AUTO_MINIMUM, MAX_MAP_HEIGHT_LIMIT)
+}
+
 use crate::cargodist::parity::Randomizer;
 use crate::company::OWNER_NONE_M1;
 use crate::map::{Map, MapError, TileCoord, TileKind};
@@ -61,9 +78,10 @@ use tgp::{calculate_coverage_line, generate_tgp_heights};
 /// árboles durante la creación de una partida nueva.
 pub type WorldGenRng = Randomizer;
 
-/// Limite mínimo que `OpenTTD` elige cuando `construction.map_height_limit` está
-/// en automático (`MAP_HEIGHT_LIMIT_AUTO_MINIMUM`). La generación procedural
-/// de la matriz usa el ajuste automático del juego original.
+/// Límite mínimo que `OpenTTD` elige cuando `construction.map_height_limit` está
+/// en automático (`MAP_HEIGHT_LIMIT_AUTO_MINIMUM`). El valor final también
+/// incorpora la estimación TGP mediante
+/// [`effective_new_game_map_height_limit`].
 const MAP_HEIGHT_LIMIT_AUTO_MINIMUM: u8 = 30;
 
 /// Aplica `FixSlopes()` de `heightmap.cpp` después de TGP.
@@ -475,6 +493,23 @@ mod tests {
         assert_eq!(config.water_borders, Some(NEW_GAME_RANDOM_WATER_BORDERS));
         assert_eq!(config.startup_rng_draws, NEW_GAME_STARTUP_RNG_DRAWS);
         assert_eq!(STARTUP_TILE_LOOP_PASSES, 0x500);
+    }
+
+    #[test]
+    fn automatic_new_game_height_limit_uses_tgp_estimation_plus_margin() {
+        let flat = WorldGenConfig::default().with_terrain_type(TerrainType::Flat);
+        let very_flat = WorldGenConfig::default().with_terrain_type(TerrainType::VeryFlat);
+        let hilly = WorldGenConfig::default().with_terrain_type(TerrainType::Hilly);
+
+        // TGP's 2048-column table is 19/5/37 for Flat/VeryFlat/Hilly;
+        // GenerateWorld persists that estimate plus 15, with a floor of 30.
+        assert_eq!(effective_new_game_map_height_limit(&flat, 2048, 2048), 34);
+        assert_eq!(
+            effective_new_game_map_height_limit(&very_flat, 2048, 2048),
+            30
+        );
+        assert_eq!(effective_new_game_map_height_limit(&hilly, 2048, 2048), 52);
+        assert_eq!(effective_new_game_map_height_limit(&flat, 64, 64), 30);
     }
 
     #[test]

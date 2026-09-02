@@ -12,9 +12,10 @@ use openttdrs_core::world_raw::{
 use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, TreePlacement, WorldGenConfig,
     apply_clear_generation_with_rng, apply_landscape_with_rng_and_cursor,
-    effective_snow_line_height, generate_industries_with_rng, generate_objects_with_rng,
-    generate_towns_with_rng, generate_trees_with_rng_observer_with_map_settings,
-    run_first_regular_game_tick_with_rng, run_generation_tile_loops_with_rng,
+    effective_new_game_map_height_limit, effective_snow_line_height, generate_industries_with_rng,
+    generate_objects_with_rng, generate_towns_with_rng,
+    generate_trees_with_rng_observer_with_map_settings, run_first_regular_game_tick_with_rng,
+    run_generation_tile_loops_with_rng,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -562,6 +563,8 @@ fn run(args: &Args) -> Result<(), String> {
         state.cur_tileloop_tile = landscape_tile_cursor;
         state.world_seed = seed;
         state.climate = climate;
+        state.construction.map_height_limit =
+            effective_new_game_map_height_limit(&config, width, height);
         state.snow_line_height =
             effective_snow_line_height(&state.map, climate, config.snow_coverage);
         let population_config = PopulationGenConfig {

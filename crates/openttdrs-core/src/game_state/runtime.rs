@@ -126,6 +126,16 @@ pub struct SimulationRuntime {
     /// de fachada que `DrawRailTileSeq` desplaza desde `SPR_RAIL_DEPOT_SE_1`.
     pub rail_type_depot_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
 
+    /// Action3 `Tunnel` por `RailType` (selector 3). Es la superficie de la
+    /// boca que `OpenTTD` dibuja encima del portal base cuando el railtype usa
+    /// overlays.
+    pub rail_type_tunnel_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
+
+    /// Action3 `TunnelPortal` por `RailType` (selector 10). Es el overlay de
+    /// la fachada de túnel; su base vanilla se conserva si el grupo no
+    /// resuelve una vista para el clima/fecha actuales.
+    pub rail_type_tunnel_portal_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
+
     /// Props Action0 runtime por `RailType` vanilla.
     pub rail_type_props: [crate::rail_type::RailTypeRuntimeProps; 4],
 
@@ -211,6 +221,8 @@ impl SimulationRuntime {
             rail_type_underlay_newgrf: Vec::new(),
             rail_type_ground_complete_newgrf: Vec::new(),
             rail_type_depot_newgrf: Vec::new(),
+            rail_type_tunnel_newgrf: Vec::new(),
+            rail_type_tunnel_portal_newgrf: Vec::new(),
             rail_type_props: crate::rail_type::RailTypeRuntimeProps::defaults(),
             rail_type_badges: std::array::from_fn(|_| Vec::new()),
             rail_type_max_speed: [0; 4],

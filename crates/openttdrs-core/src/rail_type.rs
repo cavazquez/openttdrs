@@ -94,6 +94,8 @@ pub const RAIL_SPRITE_TYPE_SIGNALS: u8 = 11;
 pub const RAIL_SPRITE_TYPE_TRACK_OVERLAY: u8 = 1;
 /// Selector Action3 `RailSpriteType::Ground` / ground (valor upstream 2).
 pub const RAIL_SPRITE_TYPE_GROUND: u8 = 2;
+/// Selector Action3 `RailSpriteType::Tunnel` (valor upstream 3).
+pub const RAIL_SPRITE_TYPE_TUNNEL: u8 = 3;
 /// Selector Action3 histórico del parser local para `Ground`.
 ///
 /// Las versiones anteriores de `openttdrs` trataban el selector 0 como
@@ -104,6 +106,8 @@ pub const RAIL_SPRITE_TYPE_UNDERLAY: u8 = 0;
 pub const RAIL_SPRITE_TYPE_GROUND_COMPLETE: u8 = 12;
 /// Selector Action3 `RailSpriteType::Depot` (valor upstream 8).
 pub const RAIL_SPRITE_TYPE_DEPOT: u8 = 8;
+/// Selector Action3 `RailSpriteType::TunnelPortal` (valor upstream 10).
+pub const RAIL_SPRITE_TYPE_TUNNEL_PORTAL: u8 = 10;
 
 /// `RailTypeFlag::NoSpriteCombine` de `OpenTTD` (`Action0` prop `0x10`, bit 3).
 pub const RAIL_TYPE_FLAG_NO_SPRITE_COMBINE: u8 = 1 << 3;
@@ -453,7 +457,9 @@ mod tests {
         props.flags |= 0x01;
         assert!(props.no_sprite_combine());
         assert_eq!(RAIL_SPRITE_TYPE_GROUND, 2);
+        assert_eq!(RAIL_SPRITE_TYPE_TUNNEL, 3);
         assert_eq!(RAIL_SPRITE_TYPE_GROUND_COMPLETE, 12);
         assert_eq!(RAIL_SPRITE_TYPE_DEPOT, 8);
+        assert_eq!(RAIL_SPRITE_TYPE_TUNNEL_PORTAL, 10);
     }
 }

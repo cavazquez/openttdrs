@@ -2007,7 +2007,7 @@ const fn rail_ground_complete_offset(track_bits: u8) -> Option<u8> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn resolve_custom_rail_group_sprite(
+pub(crate) fn resolve_custom_rail_group_sprite(
     map: &Map,
     tile: openttdrs_core::Tile,
     ctx: &TileRenderContext,

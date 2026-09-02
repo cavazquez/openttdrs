@@ -253,8 +253,14 @@ vías menos uno como índice, y mantiene el overlay PBS separado; si falta la
 vista, conserva la vía vanilla. `RTSG_DEPOT` (selector 8) ya se aplica a las
 seis fachadas relocatables (`SE_1`, `SE_2`, `SW_1`, `SW_2`, `NE`, `NW`), con
 resolución Action2 por tesela, offsets NFO y el mismo sorter/parent de
-fundación; si una vista no existe, la capa individual cae a OpenGFX. Las
-variantes de pendiente y túnel todavía requieren una matriz específica.
+fundación; si una vista no existe, la capa individual cae a OpenGFX. El
+parser/runtime conserva también `RTSG_TUNNEL` (selector 3) y
+`RTSG_TUNNEL_PORTAL` (selector 10). En una boca ferroviaria con `UsesOverlay()`
+se dibuja la superficie `RTSG_TUNNEL` con el ancla NFO y orden independiente,
+antes de PBS/catenaria; si falla la resolución se conserva el portal OpenGFX.
+El `RTSG_TUNNEL_PORTAL` aún no reemplaza la base de césped
+`SPR_RAILTYPE_TUNNEL_BASE` ni el sortable de fachada, y las variantes de
+pendiente/rotación y paletas especiales todavía requieren una matriz específica.
 En vehículos marítimos, las listas CTT `0x1E/0x1F` ya conservan inclusión y
 exclusión de cargos y la máscara final de refit descarta los cargos excluidos;
 el resto de propiedades CTT variables continúa pendiente.

@@ -9,8 +9,8 @@ use openttdrs_core::{
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck_with_road_types};
 use super::transport::{
-    catenary_local_z_delta, record_road_ground_trace, spawn_rail_catenary_for_surface,
-    spawn_road_catenary_for_type,
+    catenary_local_z_delta, record_road_ground_trace, resolve_custom_rail_group_sprite,
+    spawn_rail_catenary_for_surface, spawn_road_catenary_for_type,
 };
 use super::{
     catenary_under_low_bridge,
@@ -21,7 +21,7 @@ use super::{
     sloped_or_flat_image, spawn_ground_sprite,
 };
 use crate::iso::{
-    TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half, ground_draw_z,
+    HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half, ground_draw_z,
     ground_tile_pos_half, overlay_pos, remap_tile_offset, road_depot_build_sprite_center,
     road_stop_build_sprite_center, shore_png_index, shore_sprite_half_h, slope_half_h,
     slope_sprite_offset, sortable_draw_z, tile_pos_half,
@@ -72,6 +72,43 @@ fn buildings_hidden() -> bool {
 fn tint_building_sprite(mut sprite: Sprite) -> Sprite {
     sprite.color = with_to_alpha(sprite.color, TransparencyOption::Buildings);
     sprite
+}
+
+/// Dibuja una vista `RTSG_TUNNEL` como `DrawGroundSprite`, conservando el
+/// ancla NFO de la vista Action1/2 en lugar de imponer el rombo 64×31 del
+/// baseset. El portal vanilla sigue siendo la base hasta que el grupo
+/// `RTSG_TUNNEL_PORTAL` tenga su sustituto de `SPR_RAILTYPE_TUNNEL_BASE`.
+#[allow(clippy::too_many_arguments)]
+fn spawn_custom_rail_tunnel_surface(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    resolved: crate::render::signal_newgrf::ResolvedSignalSprite,
+    base_z: u8,
+    layer: f32,
+    trace_image: u8,
+) {
+    WorldDrawTrace::record_sprite_with_palette_and_geometry(
+        "rail-tunnel-newgrf-ground",
+        "ground",
+        u32::from(trace_image),
+        0,
+        false,
+        (0, 0, 0),
+        0,
+        None,
+    );
+    let elevation = f32::from(base_z) * HEIGHT_PX;
+    let position = Vec3::new(
+        ctx.iso_pos.x + resolved.center_offset.x,
+        ctx.iso_pos.y + resolved.center_offset.y + elevation,
+        sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), base_z, layer),
+    );
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        resolved.sprite,
+        Transform::from_translation(position),
+    ));
 }
 
 /// `DrawRoadCatenary` usa la geometría de la entrada de la parada, no los
@@ -3464,6 +3501,9 @@ pub(crate) fn spawn_transport_object_tile(
         &[],
         &[],
         &[],
+        &[],
+        &[],
+        &[],
         catenary_newgrf,
         catenary_sprites,
         None,
@@ -3630,6 +3670,9 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
     towns: &[openttdrs_core::Town],
     airport_tile_catalog: &[openttdrs_core::AirportTileSpecDef],
     rail_type_depot_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_underlay_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_tunnel_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_tunnel_portal_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     mut signal_sprites: Option<&mut crate::render::NewGrfSignalSpriteCache>,
@@ -3686,6 +3729,65 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             let rail_type = ctx
                 .tile
                 .map_or(openttdrs_core::RailType::Rail, rail_type_from_tile);
+            // `DrawTile_TunnelBridge` sólo consulta `RTSG_TUNNEL` cuando el
+            // railtype publica `RTSG_TUNNEL_PORTAL` y, por tanto, activa
+            // `UsesOverlay()`. Resolver ambos grupos antes de dibujar permite
+            // conservar esa regla y deja el portal vanilla como fallback si
+            // falta cualquiera de las vistas para la dirección actual.
+            let custom_tunnel_surface = if rail {
+                let rail_index = usize::from(rail_type.as_u8());
+                let uses_overlay = rail_type_underlay_newgrf
+                    .get(rail_index)
+                    .is_some_and(Option::is_some);
+                if uses_overlay {
+                    let portal_resolves = ctx.tile.and_then(|tile| {
+                        rail_type_tunnel_portal_newgrf
+                            .get(rail_index)
+                            .and_then(Option::as_ref)
+                            .and_then(|spec| {
+                                resolve_custom_rail_group_sprite(
+                                    map,
+                                    tile,
+                                    ctx,
+                                    climate,
+                                    calendar_date,
+                                    newgrf_stack,
+                                    spec,
+                                    dir & 3,
+                                    &mut signal_sprites,
+                                    &mut images,
+                                )
+                            })
+                    });
+                    if portal_resolves.is_some() {
+                        ctx.tile.and_then(|tile| {
+                            rail_type_tunnel_newgrf
+                                .get(rail_index)
+                                .and_then(Option::as_ref)
+                                .and_then(|spec| {
+                                    resolve_custom_rail_group_sprite(
+                                        map,
+                                        tile,
+                                        ctx,
+                                        climate,
+                                        calendar_date,
+                                        newgrf_stack,
+                                        spec,
+                                        dir & 3,
+                                        &mut signal_sprites,
+                                        &mut images,
+                                    )
+                                })
+                        })
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let rear_image = if rail {
                 assets.rail_tunnel_portal_sprite(rail_type, dir)
             } else {
@@ -3724,6 +3826,9 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                     0.0,
                 )),
             ));
+            if let Some(resolved) = custom_tunnel_surface {
+                spawn_custom_rail_tunnel_surface(commands, ctx, resolved, base_z, 0.012, dir & 3);
+            }
             // Igual que `DrawTunnelBridgeTile`: el bit de reserva de las
             // rampas/túneles ferroviarios está en m5 bit 4. La capa es un
             // SINGLE tipado, separada del portal, y debe ir entre el suelo y

@@ -456,3 +456,16 @@ del sorter y el vínculo a la fundación nivelada. La regresión
 capas SE con sprites custom; la prueba de slots fija las cuatro orientaciones.
 Los grupos de túnel/portal, pendientes y paletas especiales continúan abiertos,
 por lo que #326 permanece en curso.
+
+Actualización #326-RAIL-TUNNEL-002 (2026-09-02): el parser/runtime conserva
+ahora los selectores `RTSG_TUNNEL` (3) y `RTSG_TUNNEL_PORTAL` (10) por
+`RailType`. En una boca ferroviaria con `UsesOverlay()` y portal Action2
+resuelto, el renderer consume la vista `RTSG_TUNNEL` con su ancla NFO como
+`DrawGroundSprite`, antes de PBS y catenaria, y cae de forma atómica al portal
+OpenGFX si falta una vista o el clima/fecha no coincide. La regresión
+`newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined` cubre
+una boca inclinada `SLOPE_NE` y confirma la capa independiente del sorter.
+El overlay de fachada `RTSG_TUNNEL_PORTAL` todavía no sustituye el
+`SPR_RAILTYPE_TUNNEL_BASE` (base de césped sin portal) ni su `AddSortable`:
+esa diferencia, junto con túneles en pendientes/rotaciones y paletas especiales,
+mantiene #326 abierto.

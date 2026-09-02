@@ -2539,6 +2539,9 @@ fn newgrf_rail_depot_group_replaces_relocated_building_layers() {
                     &[],
                     &depot_specs,
                     &[],
+                    &[],
+                    &[],
+                    &[],
                     None,
                     Some(&mut signal_sprites),
                     &[],
@@ -2561,6 +2564,125 @@ fn newgrf_rail_depot_group_replaces_relocated_building_layers() {
         .filter(|(_, image)| image.data.as_deref() == Some(custom_rgba.as_slice()))
         .count();
     assert_eq!(custom_layers, 2, "SE debe consumir SE_1 y SE_2 custom");
+}
+
+#[test]
+fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(2, 2);
+    let mut map = fresh_map8();
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::RailTunnel,
+            mapt: 0x10,
+            m5: 0,
+            ..tile_template()
+        },
+    )
+    .expect("rail tunnel");
+    // Las dos esquinas del norte/este elevadas producen SLOPE_NE (12), la
+    // boca que `DrawTile_TunnelBridge` acepta y que resuelve dir=0.
+    map.set_height(TileCoord::new(2, 2), 1)
+        .expect("north height");
+    map.set_height(TileCoord::new(2, 3), 1)
+        .expect("east height");
+    let custom_rgba = [230u8, 70, 210, 255].repeat(16);
+    let view = DecodedSprite {
+        width: 4,
+        height: 4,
+        x_offs: -2,
+        y_offs: -4,
+        rgba: custom_rgba.clone(),
+        mask: Vec::new(),
+    };
+    let graphics = |selector| TrainSpriteGraphics {
+        sets: vec![vec![view.clone(); 4]],
+        specific_assigns: std::collections::HashMap::from([((0, selector), 0)]),
+        ..Default::default()
+    };
+    let make_spec = |sprite_type, graphics| openttdrs_core::RailSignalSpriteSpec {
+        rail_type: RailType::Rail,
+        local_id: 0,
+        sprite_type,
+        grfid: 0x5455_4E4C,
+        type_tables: None,
+        graphics,
+    };
+    let underlay_specs = vec![Some(make_spec(
+        openttdrs_core::RAIL_SPRITE_TYPE_UNDERLAY,
+        graphics(openttdrs_core::RAIL_SPRITE_TYPE_UNDERLAY),
+    ))];
+    let tunnel_specs = vec![Some(make_spec(
+        openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL,
+        graphics(openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL),
+    ))];
+    let portal_specs = vec![Some(make_spec(
+        openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL_PORTAL,
+        graphics(openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL_PORTAL),
+    ))];
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfSignalSpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut signal_sprites: ResMut<crate::render::NewGrfSignalSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &underlay_specs,
+                    &tunnel_specs,
+                    &portal_specs,
+                    &[],
+                    None,
+                    Some(&mut signal_sprites),
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    Some(&mut images),
+                );
+            },
+        )
+        .expect("custom rail tunnel spawn");
+
+    // Los atlas de los tests comparten handles débiles con el cache Action2;
+    // identificar la entidad por su capa de sorter evita confundir el PNG de
+    // la boca vanilla con las imágenes materializadas por los grupos.
+    let custom_layer_z = crate::iso::sortable_draw_z(2, 2, 0, 0.012);
+    let custom_layers = world
+        .query::<&Transform>()
+        .iter(&world)
+        .filter(|transform| (transform.translation.z - custom_layer_z).abs() < f32::EPSILON)
+        .count();
+    assert_eq!(
+        custom_layers, 1,
+        "RTSG_TUNNEL debe dibujar la superficie custom"
+    );
 }
 
 #[test]
@@ -2908,6 +3030,9 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
                     &stations,
                     &[],
                     &catalog,
+                    &[],
+                    &[],
+                    &[],
                     &[],
                     &[],
                     None,

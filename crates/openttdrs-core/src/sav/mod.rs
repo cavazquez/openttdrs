@@ -92,10 +92,11 @@ use crate::vehicle::{AircraftPhase, Vehicle, VehicleKind};
 use std::collections::HashMap;
 
 pub use entities::{
-    SavCargoPacket, SavIndustry, SavIndustryAcceptedCargo, SavIndustryProducedCargo, SavObject,
-    SavObjectMapping, SavPersistentStorage, SavRoadStopSpecMapping, SavRoadStopStationData,
-    SavRoadStopTileData, SavStation, SavStationCargo, SavVehicle, SavVehicleKind,
-    format_generated_station_name, resolve_sav_station_name,
+    SavCargoPacket, SavIndustry, SavIndustryAcceptedCargo, SavIndustryAcceptedHistory,
+    SavIndustryProducedCargo, SavIndustryProducedHistory, SavObject, SavObjectMapping,
+    SavPersistentStorage, SavRoadStopSpecMapping, SavRoadStopStationData, SavRoadStopTileData,
+    SavStation, SavStationCargo, SavVehicle, SavVehicleKind, format_generated_station_name,
+    resolve_sav_station_name,
 };
 pub use import::{
     hydrate_industries_from_map_tiles, industry_group_from_gfx, industry_kind_from_gfx,
@@ -1120,6 +1121,7 @@ impl GameState {
         state
             .sav_persistent_storages
             .clone_from(&sav.persistent_storages);
+        state.sav_industry_histories.clone_from(&sav.industries);
         state.sav_objects_dirty = false;
         state.sav_object_mappings_dirty = false;
         state.sav_opaque_chunks = sav.opaque_chunks;

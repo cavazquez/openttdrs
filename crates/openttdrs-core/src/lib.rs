@@ -615,9 +615,10 @@ pub use road_type::{
 };
 pub use sav::{
     EXPORT_SAVE_VERSION, SavCargoPacket, SavContainer, SavError, SavGame, SavIndustry,
-    SavIndustryAcceptedCargo, SavIndustryProducedCargo, SavOpaqueChunk, SavPersistentStorage,
-    SavStation, SavStationCargo, SavVehicle, SavVehicleKind, house_spec_is_size_1x1,
-    house_spec_population, save as save_sav, save_to_bytes as save_sav_to_bytes,
+    SavIndustryAcceptedCargo, SavIndustryAcceptedHistory, SavIndustryProducedCargo,
+    SavIndustryProducedHistory, SavOpaqueChunk, SavPersistentStorage, SavStation, SavStationCargo,
+    SavVehicle, SavVehicleKind, house_spec_is_size_1x1, house_spec_population, save as save_sav,
+    save_to_bytes as save_sav_to_bytes,
 };
 pub use save::CURRENT_SAVE_VERSION;
 pub use save::SaveError;

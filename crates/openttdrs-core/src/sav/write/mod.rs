@@ -1283,6 +1283,64 @@ mod tests {
     }
 
     #[test]
+    fn ottn_roundtrip_preserves_industry_nested_histories() {
+        let mut state = tiny_state();
+        let pos = TileCoord::new(12, 12);
+        let mut tile = state.map.get(pos).expect("industry tile");
+        tile.kind = TileKind::Industry;
+        state.map.set_tile(pos, tile).expect("set industry tile");
+        state
+            .industries
+            .push(crate::Industry::new(pos, crate::IndustryKind::CoalMine));
+        state.sav_industry_histories.push(crate::sav::SavIndustry {
+            industry_id: 0,
+            pos,
+            width: 1,
+            height: 1,
+            industry_type: 0,
+            random_colour: 0,
+            counter: 0,
+            selected_layout: 0,
+            random: 0,
+            last_prod_year: 0,
+            was_cargo_delivered: false,
+            control_flags: 0,
+            founder: None,
+            construction_date: 0,
+            construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,
+            prod_level: crate::industry::PRODLEVEL_DEFAULT,
+            valid_history: 0b11,
+            persistent_storage_id: None,
+            produced: vec![crate::sav::SavIndustryProducedCargo {
+                cargo_slot: 1,
+                waiting: 7,
+                rate: 5,
+                history: vec![crate::sav::SavIndustryProducedHistory {
+                    production: 31,
+                    transported: 17,
+                }],
+            }],
+            accepted: Vec::new(),
+        });
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.industries[0].valid_history, 0b11);
+        assert_eq!(sav_game.industries[0].produced[0].history.len(), 1);
+        assert_eq!(sav_game.industries[0].produced[0].history[0].production, 31);
+
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(loaded.sav_industry_histories.len(), 1);
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
+        let resaved_game = sav::load(&resaved).expect("reload");
+        assert_eq!(resaved_game.industries[0].valid_history, 0b11);
+        assert_eq!(
+            resaved_game.industries[0].produced[0].history[0].transported,
+            17
+        );
+    }
+
+    #[test]
     fn ottn_roundtrip_preserves_city_and_indy() {
         use crate::industry::{Industry, IndustryKind, IndustrySpec};
 

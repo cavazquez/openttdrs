@@ -413,23 +413,28 @@ mod tests {
             construction_date: crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17,
             construction_type: crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION,
             prod_level: 32,
+            valid_history: 0,
             persistent_storage_id: None,
             produced: vec![
                 super::super::entities::SavIndustryProducedCargo {
                     cargo_slot: 1,
                     waiting: 77,
                     rate: 15,
+                    history: Vec::new(),
                 },
                 super::super::entities::SavIndustryProducedCargo {
                     cargo_slot: 9,
                     waiting: 22,
                     rate: 4,
+                    history: Vec::new(),
                 },
             ],
             accepted: vec![super::super::entities::SavIndustryAcceptedCargo {
                 cargo_slot: 6,
                 waiting: 15,
                 last_accepted: 10_974,
+                accumulated_waiting: 0,
+                history: Vec::new(),
             }],
         };
 

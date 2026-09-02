@@ -579,6 +579,14 @@ pub struct GameState {
     /// que todavía no tienen runtime completo (estaciones, pueblos, etc.).
     #[serde(skip, default)]
     pub(crate) sav_persistent_storages: Vec<crate::sav::SavPersistentStorage>,
+    /// Historiales anidados importados desde `INDY`.
+    ///
+    /// `OpenTTD` guarda una ventana distinta para cada cargo producido/aceptado;
+    /// el modelo económico reducido mantiene una serie agregada. Conservamos
+    /// las filas nativas fuera de JSON para reemitirlas aunque el runtime no
+    /// haya recalculado todavía ese cargo concreto.
+    #[serde(skip, default)]
+    pub(crate) sav_industry_histories: Vec<crate::sav::SavIndustry>,
     /// Tablas nativas reconstruidas conservadas mientras sus filas semánticas
     /// no cambian.
     /// `serde(skip)` evita copiar el payload crudo al formato JSON propio.
@@ -780,6 +788,7 @@ impl GameState {
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
             sav_persistent_storages: Vec::new(),
+            sav_industry_histories: Vec::new(),
             sav_table_passthrough: None,
             sav_objects_dirty: false,
             sav_object_mappings_dirty: false,
@@ -916,6 +925,7 @@ impl GameState {
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
             sav_persistent_storages: Vec::new(),
+            sav_industry_histories: Vec::new(),
             sav_table_passthrough: None,
             sav_objects_dirty: false,
             sav_object_mappings_dirty: false,

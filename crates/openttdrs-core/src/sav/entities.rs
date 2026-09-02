@@ -777,6 +777,11 @@ pub struct SavIndustry {
     pub construction_type: u8,
     /// Nivel de producción (`Industry::prod_level`).
     pub prod_level: u8,
+    /// Máscara de meses válidos del historial nativo (`Industry::valid_history`).
+    ///
+    /// Cada bit representa una posición de la ventana histórica de `OpenTTD`;
+    /// se conserva aunque el runtime reducido no la use para la economía.
+    pub valid_history: u64,
     /// Índice del pool `PersistentStorage` (`INDY.psa`), si existe.
     pub persistent_storage_id: Option<u32>,
     /// Salidas y stock en espera (`Industry::produced`).
@@ -791,6 +796,15 @@ pub struct SavIndustryProducedCargo {
     pub cargo_slot: u8,
     pub waiting: u16,
     pub rate: u8,
+    /// Historial mensual de producción/transporte de este cargo.
+    pub history: Vec<SavIndustryProducedHistory>,
+}
+
+/// Muestra mensual de `Industry::ProducedCargo::history`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavIndustryProducedHistory {
+    pub production: u16,
+    pub transported: u16,
 }
 
 /// Entrada `Industry::accepted` de `OpenTTD`.
@@ -800,6 +814,17 @@ pub struct SavIndustryAcceptedCargo {
     pub waiting: u16,
     /// Último día económico absoluto (`Industry::AcceptedCargo::last_accepted`).
     pub last_accepted: u32,
+    /// Acumulador usado para cerrar el promedio mensual (`SLV 357+`).
+    pub accumulated_waiting: u32,
+    /// Historial mensual de aceptado/en espera de este cargo.
+    pub history: Vec<SavIndustryAcceptedHistory>,
+}
+
+/// Muestra mensual de `Industry::AcceptedCargo::history`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavIndustryAcceptedHistory {
+    pub accepted: u16,
+    pub waiting: u16,
 }
 
 /// Fila del pool nativo `PersistentStorage` (`PSAC`).
@@ -854,6 +879,7 @@ pub(crate) fn industries_from_chunks(
                     construction_date: 0,
                     construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,
                     prod_level: crate::industry::PRODLEVEL_DEFAULT,
+                    valid_history: 0,
                     persistent_storage_id: None,
                     produced: Vec::new(),
                     accepted: Vec::new(),
@@ -922,6 +948,9 @@ fn sav_industry_from_record(
         .and_then(SlValue::as_u64)
         .and_then(|value| u8::try_from(value).ok())
         .unwrap_or(crate::industry::PRODLEVEL_DEFAULT);
+    let valid_history = record_get(record, "valid_history")
+        .and_then(SlValue::as_u64)
+        .unwrap_or(0);
     let persistent_storage_id = record_get(record, "psa")
         .and_then(SlValue::as_u64)
         .and_then(|value| value.checked_sub(1))
@@ -944,6 +973,7 @@ fn sav_industry_from_record(
         construction_date,
         construction_type,
         prod_level,
+        valid_history,
         persistent_storage_id,
         produced: industry_produced_from_record(record),
         accepted: industry_accepted_from_record(record),
@@ -1013,10 +1043,12 @@ fn industry_produced_from_record(record: &SlRecord) -> Vec<SavIndustryProducedCa
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value).ok())
                 .unwrap_or(0);
+            let history = industry_produced_history_from_record(entry);
             Some(SavIndustryProducedCargo {
                 cargo_slot,
                 waiting,
                 rate,
+                history,
             })
         })
         .collect()
@@ -1040,11 +1072,56 @@ fn industry_accepted_from_record(record: &SlRecord) -> Vec<SavIndustryAcceptedCa
                 .and_then(SlValue::as_i64)
                 .and_then(|value| u32::try_from(value).ok())
                 .unwrap_or(0);
+            let accumulated_waiting = record_get(entry, "accumulated_waiting")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(0);
+            let history = industry_accepted_history_from_record(entry);
             Some(SavIndustryAcceptedCargo {
                 cargo_slot,
                 waiting,
                 last_accepted,
+                accumulated_waiting,
+                history,
             })
+        })
+        .collect()
+}
+
+fn industry_produced_history_from_record(record: &SlRecord) -> Vec<SavIndustryProducedHistory> {
+    let Some(SlValue::Structs(history)) = record_get(record, "history") else {
+        return Vec::new();
+    };
+    history
+        .iter()
+        .map(|entry| SavIndustryProducedHistory {
+            production: record_get(entry, "production")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0),
+            transported: record_get(entry, "transported")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0),
+        })
+        .collect()
+}
+
+fn industry_accepted_history_from_record(record: &SlRecord) -> Vec<SavIndustryAcceptedHistory> {
+    let Some(SlValue::Structs(history)) = record_get(record, "history") else {
+        return Vec::new();
+    };
+    history
+        .iter()
+        .map(|entry| SavIndustryAcceptedHistory {
+            accepted: record_get(entry, "accepted")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0),
+            waiting: record_get(entry, "waiting")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0),
         })
         .collect()
 }
@@ -2622,12 +2699,27 @@ mod tests {
             ("counter".to_string(), SlValue::Uint(123)),
             ("selected_layout".to_string(), SlValue::Uint(2)),
             ("random".to_string(), SlValue::Uint(0xBEEF)),
+            ("valid_history".to_string(), SlValue::Uint(0x5A)),
             ("prod_level".to_string(), SlValue::Uint(32)),
             (
                 "accepted".to_string(),
                 SlValue::Structs(vec![vec![
                     ("cargo".to_string(), SlValue::Uint(6)),
                     ("waiting".to_string(), SlValue::Uint(15)),
+                    ("accumulated_waiting".to_string(), SlValue::Uint(77)),
+                    (
+                        "history".to_string(),
+                        SlValue::Structs(vec![
+                            vec![
+                                ("accepted".to_string(), SlValue::Uint(12)),
+                                ("waiting".to_string(), SlValue::Uint(8)),
+                            ],
+                            vec![
+                                ("accepted".to_string(), SlValue::Uint(9)),
+                                ("waiting".to_string(), SlValue::Uint(4)),
+                            ],
+                        ]),
+                    ),
                 ]]),
             ),
             (
@@ -2636,6 +2728,13 @@ mod tests {
                     ("cargo".to_string(), SlValue::Uint(1)),
                     ("waiting".to_string(), SlValue::Uint(77)),
                     ("rate".to_string(), SlValue::Uint(15)),
+                    (
+                        "history".to_string(),
+                        SlValue::Structs(vec![vec![
+                            ("production".to_string(), SlValue::Uint(44)),
+                            ("transported".to_string(), SlValue::Uint(33)),
+                        ]]),
+                    ),
                 ]]),
             ),
         ];
@@ -2646,12 +2745,20 @@ mod tests {
         assert_eq!(industry.counter, 123);
         assert_eq!(industry.selected_layout, 2);
         assert_eq!(industry.random, 0xBEEF);
+        assert_eq!(industry.valid_history, 0x5A);
         assert_eq!(industry.prod_level, 32);
         assert_eq!(industry.produced.len(), 1);
         assert_eq!(industry.produced[0].cargo_slot, 1);
         assert_eq!(industry.produced[0].waiting, 77);
+        assert_eq!(industry.produced[0].history.len(), 1);
+        assert_eq!(industry.produced[0].history[0].production, 44);
+        assert_eq!(industry.produced[0].history[0].transported, 33);
         assert_eq!(industry.accepted[0].cargo_slot, 6);
         assert_eq!(industry.accepted[0].waiting, 15);
+        assert_eq!(industry.accepted[0].accumulated_waiting, 77);
+        assert_eq!(industry.accepted[0].history.len(), 2);
+        assert_eq!(industry.accepted[0].history[1].accepted, 9);
+        assert_eq!(industry.accepted[0].history[1].waiting, 4);
     }
 
     #[test]

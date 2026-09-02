@@ -484,7 +484,19 @@ fn populate_industry_parent_scope(
     );
     ctx.parent_vars
         .insert(0xB3, u32::from(industry.construction_type));
-    ctx.parent_vars.insert(0xB4, 0);
+    // `0xB4` is the most recent accepted-cargo date, rebased to the native
+    // 1920 epoch and clamped to a WORD. Empty/legacy instances resolve zero.
+    let last_accepted = crate::ALL_CARGO_TYPES
+        .iter()
+        .map(|&cargo| industry.last_accepted_date(cargo))
+        .max()
+        .unwrap_or(0);
+    ctx.parent_vars.insert(
+        0xB4,
+        last_accepted
+            .saturating_sub(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR)
+            .min(u32::from(u16::MAX)),
+    );
     // `IndustriesScopeResolver::GetRandomBits` reads Industry::random.  The
     // production phase counter is a separate variable (0xAA/0xAB) and must
     // not become the random source for Action2 groups.
@@ -748,7 +760,9 @@ fn industry_cargo_variable(
                 .last()
                 .map_or(0, |sample| sample.transported)
         }),
-        0x6E => accepted.map_or(0, |_| 0),
+        // `AcceptedCargo::last_accepted` is an absolute economy date. Unlike
+        // the waiting amount it remains meaningful when the queue is empty.
+        0x6E => accepted.map_or(0, |cargo| industry.last_accepted_date(cargo)),
         0x6F => accepted.map_or(0, |cargo| industry.accepted_cargo_waiting(cargo)),
         0x70 => produced.map_or(0, |_| u32::from(industry.production_rate())),
         _ => 0,
@@ -828,6 +842,10 @@ mod tests {
             .with_was_cargo_delivered(true)
             .with_last_prod_year(1972)
             .with_counter(0x0678);
+        industry.set_last_accepted_date(
+            crate::CargoType::Livestock,
+            crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 23,
+        );
         industry.stock = 0x1234;
         let ctx = action2_eval_ctx_for_industry_tile_with_world(
             &map,
@@ -838,7 +856,7 @@ mod tests {
             &[],
             Climate::Temperate,
             None,
-            &[],
+            &[(0x6E, crate::CargoType::Livestock.bitnum())],
         );
 
         assert_eq!(ctx.parent_vars.get(&0x44), Some(&3));
@@ -855,6 +873,12 @@ mod tests {
         assert_eq!(ctx.parent_vars.get(&0xAC), Some(&1));
         assert_eq!(ctx.parent_vars.get(&0xB0), Some(&17));
         assert_eq!(ctx.parent_vars.get(&0xB3), Some(&2));
+        assert_eq!(ctx.parent_vars.get(&0xB4), Some(&23));
+        assert_eq!(
+            ctx.parent_parameterized_vars
+                .get(&(0x6E, crate::CargoType::Livestock.bitnum())),
+            Some(&(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 23)),
+        );
         assert_eq!(ctx.parent_random_bits, 0xBEEF);
     }
 

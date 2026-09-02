@@ -796,6 +796,8 @@ pub struct SavIndustryProducedCargo {
 pub struct SavIndustryAcceptedCargo {
     pub cargo_slot: u8,
     pub waiting: u16,
+    /// Último día económico absoluto (`Industry::AcceptedCargo::last_accepted`).
+    pub last_accepted: u32,
 }
 
 /// Industrias del chunk `INDY` (solo saves con tablas); best-effort.
@@ -965,9 +967,14 @@ fn industry_accepted_from_record(record: &SlRecord) -> Vec<SavIndustryAcceptedCa
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u16::try_from(value).ok())
                 .unwrap_or(0);
+            let last_accepted = record_get(entry, "last_accepted")
+                .and_then(SlValue::as_i64)
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(0);
             Some(SavIndustryAcceptedCargo {
                 cargo_slot,
                 waiting,
+                last_accepted,
             })
         })
         .collect()

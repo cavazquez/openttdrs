@@ -262,6 +262,14 @@ impl CargoStock {
         *slot = slot.saturating_add(amount);
     }
 
+    /// Reemplaza el valor de un cargo sin aplicar aritmética saturada.
+    ///
+    /// Se usa para fechas y otros valores por-cargo que no representan un
+    /// stock acumulable (`Industry::AcceptedCargo::last_accepted`).
+    pub fn set(&mut self, cargo: CargoType, value: u32) {
+        *self.slot_mut(cargo) = value;
+    }
+
     #[must_use]
     pub fn take(&mut self, cargo: CargoType, amount: u32) -> u32 {
         let slot = self.slot_mut(cargo);

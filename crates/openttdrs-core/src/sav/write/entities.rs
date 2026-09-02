@@ -1010,6 +1010,7 @@ fn append_indy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     // SlIndustryAccepted: sólo los campos que el modelo puede reconstruir.
     append_field(header, 2, "cargo")?;
     append_field(header, 4, "waiting")?;
+    append_field(header, 5, "last_accepted")?;
     header.push(0);
 
     // SlIndustryProduced: `history` se conserva en el JSON propio, pero el
@@ -1026,25 +1027,29 @@ fn write_indy_accepted(
     industry: &Industry,
     climate: crate::Climate,
 ) -> Result<(), SavError> {
-    let entries: Vec<(u8, u16)> = crate::cargo::CargoType::for_climate(climate)
+    let entries: Vec<(u8, u16, u32)> = crate::cargo::CargoType::for_climate(climate)
         .iter()
         .filter_map(|&cargo| {
             let waiting = industry.accepted_cargo_waiting(cargo);
-            if waiting == 0 {
+            let last_accepted = industry.last_accepted_date(cargo);
+            if waiting == 0 && last_accepted == 0 {
                 return None;
             }
             Some((
                 cargo_slot_for_climate(climate, cargo)?,
                 waiting.min(u32::from(u16::MAX)) as u16,
+                last_accepted,
             ))
         })
         .collect();
     // At most 12 entries for the built-in climate catalog, well below the
     // simple-gamma limit used by the TABLE codec.
     write_gamma(entries.len() as u32, buf)?;
-    for (cargo, waiting) in entries {
+    for (cargo, waiting, last_accepted) in entries {
         buf.push(cargo);
         buf.extend_from_slice(&waiting.to_be_bytes());
+        let last_accepted = i32::try_from(last_accepted).unwrap_or(i32::MAX);
+        buf.extend_from_slice(&last_accepted.to_be_bytes());
     }
     Ok(())
 }
@@ -1339,6 +1344,7 @@ mod tests {
         industry.construction_date = crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17;
         industry.construction_type = crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION;
         industry.add_accepted_cargo_waiting(CargoType::Livestock, 9);
+        industry.set_last_accepted_date(CargoType::Livestock, 10_974);
         // Steel no es la salida legacy de la fábrica y debe viajar en la
         // lista adicional, no desaparecer ni sobrescribir `stock`.
         industry.add_newgrf_produced_cargo(CargoType::Steel, 7);
@@ -1405,6 +1411,11 @@ mod tests {
             crate::sav::table::record_get(&accepted[0], "waiting")
                 .and_then(crate::sav::table::SlValue::as_u64),
             Some(9)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(&accepted[0], "last_accepted")
+                .and_then(crate::sav::table::SlValue::as_i64),
+            Some(10_974)
         );
 
         let produced = match crate::sav::table::record_get(record, "produced") {

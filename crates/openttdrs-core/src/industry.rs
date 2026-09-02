@@ -785,6 +785,10 @@ pub struct Industry {
     /// perder entregas cuando el GRF decide consumirlas más tarde.
     #[serde(default)]
     pub newgrf_accepted_cargo_waiting: CargoStock,
+    /// Último día económico en que cada cargo fue aceptado, en la escala
+    /// absoluta de `OpenTTD` (1920-01-01 = 0). Cero equivale a nunca/legacy.
+    #[serde(default)]
+    pub newgrf_last_accepted: CargoStock,
     /// Salidas `NewGRF` que no caben en los dos stocks legacy (`stock` y
     /// `secondary_stock`). Las dos salidas principales se reflejan también en
     /// esos campos para mantener compatibilidad con el cargador existente.
@@ -925,6 +929,7 @@ impl Industry {
             stock: 0,
             secondary_stock: 0,
             newgrf_accepted_cargo_waiting: CargoStock::default(),
+            newgrf_last_accepted: CargoStock::default(),
             newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour: 0,
@@ -963,6 +968,7 @@ impl Industry {
             stock: 0,
             secondary_stock: 0,
             newgrf_accepted_cargo_waiting: CargoStock::default(),
+            newgrf_last_accepted: CargoStock::default(),
             newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour: 0,
@@ -1007,6 +1013,7 @@ impl Industry {
             stock: 0,
             secondary_stock: 0,
             newgrf_accepted_cargo_waiting: CargoStock::default(),
+            newgrf_last_accepted: CargoStock::default(),
             newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour,
@@ -1231,6 +1238,30 @@ impl Industry {
     #[must_use]
     pub const fn accepted_cargo_waiting(&self, cargo: CargoType) -> u32 {
         self.newgrf_accepted_cargo_waiting.get(cargo)
+    }
+
+    /// Última fecha absoluta en que se aceptó `cargo` (`Industry::AcceptedCargo`).
+    #[must_use]
+    pub const fn last_accepted_date(&self, cargo: CargoType) -> u32 {
+        self.newgrf_last_accepted.get(cargo)
+    }
+
+    /// Guarda la fecha absoluta de la última aceptación de `cargo`.
+    pub fn set_last_accepted_date(&mut self, cargo: CargoType, date: u32) {
+        self.newgrf_last_accepted.set(cargo, date);
+    }
+
+    /// Registra una entrega aceptada y su fecha económica absoluta.
+    ///
+    /// El llamador decide si el callback de producción consume la cola; este
+    /// método sólo refleja el estado nativo de aceptación y evita marcarlo
+    /// para ajustes internos de una cola ya importada.
+    pub fn record_accepted_cargo(&mut self, cargo: CargoType, amount: u32, date: u32) {
+        if amount == 0 {
+            return;
+        }
+        self.add_accepted_cargo_waiting(cargo, amount);
+        self.set_last_accepted_date(cargo, date);
     }
 
     /// Añade cargo a la cola de entradas de la industria.

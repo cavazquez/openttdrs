@@ -229,6 +229,7 @@ fn import_industry_output_stock(industry: &mut Industry, saved: &SavIndustry, cl
             continue;
         };
         industry.add_accepted_cargo_waiting(cargo, u32::from(accepted.waiting));
+        industry.set_last_accepted_date(cargo, accepted.last_accepted);
     }
     industry.capacity = INDUSTRY_STOCK_CAPACITY.max(industry.stock.max(industry.secondary_stock));
 }
@@ -388,6 +389,7 @@ mod tests {
             accepted: vec![super::super::entities::SavIndustryAcceptedCargo {
                 cargo_slot: 6,
                 waiting: 15,
+                last_accepted: 10_974,
             }],
         };
 
@@ -400,6 +402,7 @@ mod tests {
         assert_eq!(industry.stock, 77);
         assert_eq!(industry.extra_produced_cargo(crate::CargoType::Steel), 22);
         assert_eq!(industry.accepted_cargo_waiting(crate::CargoType::Grain), 15);
+        assert_eq!(industry.last_accepted_date(crate::CargoType::Grain), 10_974);
         assert_eq!(industry.counter, 123);
         assert_eq!(industry.selected_layout, 2);
         assert_eq!(industry.newgrf_random, 0xBEEF);

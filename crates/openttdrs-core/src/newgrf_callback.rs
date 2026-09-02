@@ -1332,6 +1332,17 @@ fn action2_eval_ctx_from_industry(industry: &Industry, random: u32) -> Action2Ev
             .min(u32::from(u16::MAX)),
     );
     ctx.vars.insert(0xB3, u32::from(industry.construction_type));
+    let last_accepted = crate::ALL_CARGO_TYPES
+        .iter()
+        .map(|&cargo| industry.last_accepted_date(cargo))
+        .max()
+        .unwrap_or(0);
+    ctx.vars.insert(
+        0xB4,
+        last_accepted
+            .saturating_sub(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR)
+            .min(u32::from(u16::MAX)),
+    );
     ctx
 }
 

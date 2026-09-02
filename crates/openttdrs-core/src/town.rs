@@ -192,6 +192,30 @@ pub enum TownRatingCheckType {
     TunnelBridgeRemove,
 }
 
+/// Muestra mensual de carga suministrada a un pueblo (`CITY.supplied`).
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct TownSuppliedHistory {
+    pub production: u32,
+    pub transported: u32,
+}
+
+/// Estadísticas de un tipo de carga que el pueblo produjo (`CITY.supplied`).
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct TownSuppliedCargo {
+    /// ID de cargo nativo (`CargoType`), no un índice de efecto urbano.
+    pub cargo: u8,
+    pub history: Vec<TownSuppliedHistory>,
+}
+
+/// Estadísticas de carga recibida por un pueblo (`CITY.received`).
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct TownReceivedCargo {
+    pub old_max: u16,
+    pub new_max: u16,
+    pub old_act: u16,
+    pub new_act: u16,
+}
+
 /// Ciudad (importada de saves de `OpenTTD` o creada por el juego).
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -245,6 +269,13 @@ pub struct Town {
     /// Metas mensuales por efecto (`town->goal[]`).
     #[serde(default)]
     pub goals: [u32; TOWN_GROWTH_EFFECT_COUNT],
+    /// Historial nativo por cargo suministrado (`CITY.supplied`).
+    #[serde(default)]
+    pub supplied_cargo: Vec<TownSuppliedCargo>,
+    /// Estadísticas nativas por efecto recibido (`CITY.received`). El orden
+    /// de la lista es el orden de `Town::received` en `OpenTTD`.
+    #[serde(default)]
+    pub received_cargo: Vec<TownReceivedCargo>,
     /// Entregas del mes en curso (`received_new`).
     #[serde(default)]
     pub received_new: [u32; TOWN_GROWTH_EFFECT_COUNT],
@@ -357,6 +388,8 @@ impl Default for Town {
             mail_served: 0,
             growth_funded: 0,
             goals: [0; TOWN_GROWTH_EFFECT_COUNT],
+            supplied_cargo: Vec::new(),
+            received_cargo: Vec::new(),
             received_new: [0; TOWN_GROWTH_EFFECT_COUNT],
             received_old: [0; TOWN_GROWTH_EFFECT_COUNT],
             fund_buildings_months: 0,

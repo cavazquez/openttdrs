@@ -2,7 +2,10 @@
 //! (`VEHS`) y empresas (`PLYR`) desde tablas autodescriptivas.
 
 use crate::map::{TileCoord, coord_from_linear_index};
-use crate::town::{TOWN_GROWTH_EFFECT_COUNT, Town, TownLayout};
+use crate::town::{
+    TOWN_GROWTH_EFFECT_COUNT, Town, TownLayout, TownReceivedCargo, TownSuppliedCargo,
+    TownSuppliedHistory,
+};
 use std::collections::HashMap;
 
 use super::chunks::{RawChunk, find_chunk};
@@ -724,6 +727,8 @@ struct NativeTownMetadata {
     have_ratings: u16,
     unwanted: Vec<u8>,
     goals: [u32; TOWN_GROWTH_EFFECT_COUNT],
+    supplied_cargo: Vec<TownSuppliedCargo>,
+    received_cargo: Vec<TownReceivedCargo>,
     time_until_rebuild: u16,
     grow_counter: u16,
     growth_rate: u16,
@@ -766,6 +771,64 @@ fn native_town_unwanted(record: &SlRecord) -> Vec<u8> {
         .filter_map(|value| i8::try_from(value).ok())
         .map(|value| u8::try_from(value.max(0)).unwrap_or(0))
         .collect::<Vec<_>>()
+}
+
+fn native_town_supplied(record: &SlRecord) -> Vec<TownSuppliedCargo> {
+    let Some(SlValue::Structs(entries)) = record_get(record, "supplied") else {
+        return Vec::new();
+    };
+    entries
+        .iter()
+        .filter_map(|entry| {
+            let cargo = record_get(entry, "cargo")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())?;
+            let history = match record_get(entry, "history") {
+                Some(SlValue::Structs(samples)) => samples
+                    .iter()
+                    .map(|sample| TownSuppliedHistory {
+                        production: record_get(sample, "production")
+                            .and_then(SlValue::as_u64)
+                            .and_then(|value| u32::try_from(value).ok())
+                            .unwrap_or(0),
+                        transported: record_get(sample, "transported")
+                            .and_then(SlValue::as_u64)
+                            .and_then(|value| u32::try_from(value).ok())
+                            .unwrap_or(0),
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            };
+            Some(TownSuppliedCargo { cargo, history })
+        })
+        .collect()
+}
+
+fn native_town_received(record: &SlRecord) -> Vec<TownReceivedCargo> {
+    let Some(SlValue::Structs(entries)) = record_get(record, "received") else {
+        return Vec::new();
+    };
+    entries
+        .iter()
+        .map(|entry| TownReceivedCargo {
+            old_max: record_get(entry, "old_max")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0),
+            new_max: record_get(entry, "new_max")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0),
+            old_act: record_get(entry, "old_act")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0),
+            new_act: record_get(entry, "new_act")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0),
+        })
+        .collect()
 }
 
 fn native_town_metadata(record: &SlRecord) -> NativeTownMetadata {
@@ -818,6 +881,8 @@ fn native_town_metadata(record: &SlRecord) -> NativeTownMetadata {
             .unwrap_or(0),
         unwanted,
         goals,
+        supplied_cargo: native_town_supplied(record),
+        received_cargo: native_town_received(record),
         time_until_rebuild: scalar("time_until_rebuild")
             .and_then(|value| u16::try_from(value).ok())
             .unwrap_or(0),
@@ -887,6 +952,8 @@ pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32, save_version: u
             have_ratings,
             unwanted,
             goals,
+            supplied_cargo,
+            received_cargo,
             time_until_rebuild,
             grow_counter,
             growth_rate,
@@ -910,6 +977,8 @@ pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32, save_version: u
             have_ratings,
             unwanted,
             goals,
+            supplied_cargo,
+            received_cargo,
             is_growing: native_flags & 1 != 0,
             has_church: native_flags & (1 << 1) != 0,
             has_stadium: native_flags & (1 << 2) != 0,
@@ -2914,6 +2983,81 @@ mod tests {
         assert_eq!(town.layout, crate::town::TownLayout::Grid3x3);
         assert_eq!(town.valid_history, 0x0102_0304_0506_0708);
         assert!(town.native_text.is_empty());
+    }
+
+    #[test]
+    fn decodes_native_city_supply_histories() {
+        let record = vec![
+            (
+                "supplied".to_string(),
+                SlValue::Structs(vec![
+                    vec![
+                        ("cargo".to_string(), SlValue::Uint(0)),
+                        (
+                            "history".to_string(),
+                            SlValue::Structs(vec![
+                                vec![
+                                    ("production".to_string(), SlValue::Uint(1200)),
+                                    ("transported".to_string(), SlValue::Uint(900)),
+                                ],
+                                vec![
+                                    ("production".to_string(), SlValue::Uint(1400)),
+                                    ("transported".to_string(), SlValue::Uint(1000)),
+                                ],
+                            ]),
+                        ),
+                    ],
+                    vec![
+                        ("cargo".to_string(), SlValue::Uint(2)),
+                        ("history".to_string(), SlValue::Structs(Vec::new())),
+                    ],
+                ]),
+            ),
+            (
+                "received".to_string(),
+                SlValue::Structs(vec![
+                    vec![
+                        ("old_max".to_string(), SlValue::Uint(300)),
+                        ("new_max".to_string(), SlValue::Uint(450)),
+                        ("old_act".to_string(), SlValue::Uint(200)),
+                        ("new_act".to_string(), SlValue::Uint(350)),
+                    ],
+                    vec![
+                        ("old_max".to_string(), SlValue::Uint(40)),
+                        ("new_max".to_string(), SlValue::Uint(50)),
+                        ("old_act".to_string(), SlValue::Uint(30)),
+                        ("new_act".to_string(), SlValue::Uint(45)),
+                    ],
+                ]),
+            ),
+        ];
+        let metadata = native_town_metadata(&record);
+        assert_eq!(metadata.supplied_cargo.len(), 2);
+        assert_eq!(metadata.supplied_cargo[0].cargo, 0);
+        assert_eq!(
+            metadata.supplied_cargo[0].history,
+            vec![
+                TownSuppliedHistory {
+                    production: 1200,
+                    transported: 900,
+                },
+                TownSuppliedHistory {
+                    production: 1400,
+                    transported: 1000,
+                },
+            ]
+        );
+        assert!(metadata.supplied_cargo[1].history.is_empty());
+        assert_eq!(metadata.received_cargo.len(), 2);
+        assert_eq!(
+            metadata.received_cargo[0],
+            TownReceivedCargo {
+                old_max: 300,
+                new_max: 450,
+                old_act: 200,
+                new_act: 350,
+            }
+        );
     }
 
     #[test]

@@ -762,3 +762,11 @@ tabla nativa. Esto reduce la divergencia de lectura/runtime, pero no cierra
 interoperabilidad: el writer canónico aún genera el `CITY` mínimo y no hace
 writeback de estos campos ni de `supplied`/`received`; un `CITY` importado sin
 mutaciones continúa protegido por passthrough. #328/#329 siguen abiertos.
+
+Actualización #329-TOWN-CITY-028 (2026-09-02): la divergencia de listas
+anidadas de `CITY` quedó aislada y cubierta: `supplied` conserva cada cargo y
+sus muestras mensuales (`production`/`transported`) y `received` conserva los
+contadores `old_max`, `new_max`, `old_act` y `new_act` en el orden nativo. El
+modelo aún no usa estas series para crecimiento/economía y el writer canónico
+no las reemite; el passthrough de un save sin cambios sigue protegiendo el
+cuerpo original. #328/#329 permanecen abiertos.

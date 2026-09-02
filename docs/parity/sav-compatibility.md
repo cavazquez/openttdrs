@@ -48,6 +48,13 @@ Action2 cuando el pueblo está identificado. Una mutación económica futura
 deberá invalidar este snapshot para recalcular historiales y aún falta el
 writeback completo de los registros de pueblo.
 
+La misma importación conserva ahora `CITY.supplied` (cargo y muestras
+mensuales de producción/transporte) y `CITY.received` (contadores
+`old_max`/`new_max`/`old_act`/`new_act` por efecto) en `Town`. Estas listas
+tipadas todavía no alimentan el crecimiento ni se escriben desde el encoder
+canónico; una carga sin mutaciones sigue usando el cuerpo original por
+passthrough.
+
 ### Chunks futuros y campos no modelados
 
 El lector conserva ahora todos los chunks cuyo *fourcc* no es reconstruido por

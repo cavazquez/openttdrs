@@ -275,6 +275,15 @@ writer canónico sigue siendo mínimo y aún no reemite esta metadata ni las
 listas/structs anidadas; el passthrough sin mutaciones conserva el cuerpo
 original, por lo que #328/#329 permanecen abiertos.
 
+Actualización #329-TOWN-CITY-028 (2026-09-02): `CITY.supplied` y
+`CITY.received` ya se decodifican en estructuras tipadas (`cargo` + historial
+mensual de producción/transporte y los cuatro contadores old/new max/act por
+efecto). Esto evita que el parser descarte los historiales nativos presentes
+en SAV reales; una regresión cubre cargos con y sin historial y más de un slot
+recibido. Aún no se conectan esos contadores al cálculo de crecimiento ni se
+reemiten desde el writer canónico, por lo que la interoperabilidad de ciudades
+continúa siendo parcial.
+
 Actualización #329-TOWN-SCOPE-026 (2026-09-02): casas y objetos materializan
 ahora el scope parent de `TownScopeResolver` con las variables conservadas por
 el modelo (`0x41`, posición `0x80`/`0x81`, población `0x82`/`0x83`, crecimiento,

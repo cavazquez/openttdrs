@@ -802,6 +802,15 @@ pub struct Industry {
     /// Id global en `industry_spec_catalog` si proviene de `NewGRF` (`None` = vanilla).
     #[serde(default)]
     pub newgrf_type_id: Option<u16>,
+    /// Pueblo asociado por `ClosestTownFromTile` al crear la industria.
+    ///
+    /// Las industrias fundadas sobre una casa (bancos árticos/tropicales)
+    /// resuelven el pueblo desde la tesela (`Town::GetByTile`), que puede no
+    /// ser el pueblo geométricamente más cercano.  Conservarlo evita perder
+    /// esa relación cuando la casa es reemplazada por la huella industrial;
+    /// saves antiguos dejan `None` y usan el fallback geométrico.
+    #[serde(default)]
+    pub town_id: Option<u32>,
     /// Rate de producción `NewGRF` (copia del def al colocar; `None` = usar vanilla).
     #[serde(default)]
     pub newgrf_production_rate: Option<u8>,
@@ -871,6 +880,7 @@ impl Industry {
             counter: 0,
             prod_level: PRODLEVEL_DEFAULT,
             newgrf_type_id: None,
+            town_id: None,
             newgrf_production_rate: None,
             newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
@@ -900,6 +910,7 @@ impl Industry {
             counter: 0,
             prod_level: PRODLEVEL_DEFAULT,
             newgrf_type_id: None,
+            town_id: None,
             newgrf_production_rate: None,
             newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
@@ -935,6 +946,7 @@ impl Industry {
             counter: 0,
             prod_level: PRODLEVEL_DEFAULT,
             newgrf_type_id: None,
+            town_id: None,
             newgrf_production_rate: None,
             newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
@@ -948,6 +960,13 @@ impl Industry {
     #[must_use]
     pub fn with_instance_id(mut self, instance_id: u16) -> Self {
         self.instance_id = instance_id;
+        self
+    }
+
+    /// Asigna el pueblo asociado por `ClosestTownFromTile` al crearla.
+    #[must_use]
+    pub const fn with_town_id(mut self, town_id: Option<u32>) -> Self {
+        self.town_id = town_id;
         self
     }
 

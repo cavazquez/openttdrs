@@ -214,25 +214,42 @@ fn generated_industry_closest_town_id(state: &GameState, origin: TileCoord) -> O
         .map(|town| town.id)
 }
 
+/// `ClosestTownFromTile` conserva la asociación de una casa con el pueblo
+/// escrito en MAP2; no siempre gana el centro geométricamente más cercano.
+///
+/// `GenerateIndustries` intenta una ubicación antes de reemplazar su tesela,
+/// por lo que éste es el único momento en que todavía se puede observar ese
+/// vínculo. Si un mapa legado tiene un MAP2 inválido, el fallback geométrico
+/// coincide con `CalcClosestTownFromTile` usado por `OpenTTD` al repararlo.
+fn generated_industry_associated_town_id(state: &GameState, origin: TileCoord) -> Option<u32> {
+    if state.map.get_kind(origin) == Some(TileKind::House)
+        && let Some(tile) = state.map.get(origin)
+    {
+        let persisted = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
+        if state.towns.iter().any(|town| town.id == persisted) {
+            return Some(persisted);
+        }
+    }
+    generated_industry_closest_town_id(state, origin)
+}
+
 /// `FindTownForIndustry` de `industry_cmd.cpp` para la creación procedural.
 ///
-/// `OpenTTD` persiste el puntero al pueblo en la industria. El modelo Rust aún
-/// no conserva esa columna, pero durante `GenerateIndustries` los pueblos no
-/// cambian: volver a obtener el pueblo más cercano de cada industria existente
-/// es equivalente y preserva el ajuste `multiple_industry_per_town`.
+/// `OpenTTD` persiste el puntero al pueblo en la industria. La asociación se
+/// conserva en `Industry::town_id`; para entidades antiguas que no la tienen,
+/// el fallback geométrico mantiene la compatibilidad con el JSON previo.
 fn generated_industry_can_use_closest_town(
     state: &GameState,
     origin: TileCoord,
     spec: IndustrySpec,
     multiple_industry_per_town: bool,
 ) -> bool {
-    let Some(town) = state
-        .towns
-        .iter()
-        .min_by_key(|town| crate::economy::manhattan_distance(origin, town.pos))
-    else {
+    let Some(town_id) = generated_industry_associated_town_id(state, origin) else {
         // El original asume que `GenerateTowns` ya dejó al menos un pueblo.
         // Rechazar mantiene esta API total para fixtures y mapas inválidos.
+        return false;
+    };
+    let Some(town) = state.towns.iter().find(|town| town.id == town_id) else {
         return false;
     };
     // `CheckIfIndustryIsAllowed` runs after `FindTownForIndustry`. A Toy Shop
@@ -250,13 +267,15 @@ fn generated_industry_can_use_closest_town(
     {
         return false;
     }
-    let town_id = town.id;
     if multiple_industry_per_town {
         return true;
     }
     !state.industries.iter().any(|industry| {
         industry.spec == Some(spec)
-            && generated_industry_closest_town_id(state, industry.pos) == Some(town_id)
+            && industry
+                .town_id
+                .or_else(|| generated_industry_closest_town_id(state, industry.pos))
+                == Some(town_id)
     })
 }
 
@@ -602,6 +621,9 @@ fn try_place_industry(
         if !generated_industry_check_proc_allows(ctx.state, origin, spec) {
             continue;
         }
+        // `ClosestTownFromTile` debe observar MAP2 antes de que la orden
+        // reemplace una casa por la huella de la industria.
+        let associated_town_id = generated_industry_associated_town_id(ctx.state, origin);
         // `CreateNewIndustryHelper` ejecuta primero conflictos explícitos y
         // `FindTownForIndustry`; no sustituirlos por una distancia genérica
         // evita descartar la mina nativa `(21,41)` de RMAP-061 y, a la vez,
@@ -690,6 +712,9 @@ fn try_place_industry(
             attempt.layout_index,
             &constructor_random,
         );
+        if let Some(industry) = ctx.state.industries.last_mut() {
+            industry.town_id = associated_town_id;
+        }
         // `DoCreateNewIndustry` planta 50 campos alrededor de una granja con
         // `PlantRandomFarmField`. El mapa generado debe conservar el contrato
         // MP_CLEAR/CLEAR_FIELDS (no un TileKind inventado): el renderer y el
@@ -1183,7 +1208,9 @@ mod tests {
     use crate::cargodist::parity::Randomizer;
     use crate::game_state::GameState;
     use crate::industry::{Industry, IndustryKind};
-    use crate::map::{Map, tree_tile_loop::clear_density};
+    use crate::map::{
+        Map, TOWN_HOUSE_COMPLETED, Tile, TownHouseSpec, tree_tile_loop::clear_density,
+    };
     use crate::town::Town;
     use crate::vehicle::{Vehicle, VehicleKind};
     use crate::world_gen::{
@@ -1918,6 +1945,66 @@ mod tests {
             &state,
             TileCoord::new(8, 10),
             IndustrySpec::PowerStation,
+            false,
+        ));
+    }
+
+    #[test]
+    fn house_backed_industry_keeps_the_house_town_association() {
+        let mut state = GameState::new(512, 512);
+        state.towns.push(Town {
+            id: 20,
+            pos: TileCoord::new(150, 298),
+            ..Town::default()
+        });
+        state.towns.push(Town {
+            id: 177,
+            pos: TileCoord::new(139, 307),
+            ..Town::default()
+        });
+        let origin = TileCoord::new(142, 301);
+        state
+            .map
+            .set_tile(
+                origin,
+                Tile::town_house(
+                    TownHouseSpec {
+                        house_id: 0,
+                        town_id: 20,
+                        random_bits: 0,
+                        construction_counter: 0,
+                        construction_stage: TOWN_HOUSE_COMPLETED,
+                        is_protected: false,
+                        processing_time: 0,
+                    },
+                    0,
+                    0,
+                ),
+            )
+            .expect("house tile");
+        state.industries.push(
+            Industry::with_tiles_spec(
+                TileCoord::new(144, 299),
+                IndustryKind::Factory,
+                IndustrySpec::BankArcticTropic,
+                vec![TileCoord::new(144, 299)],
+                0,
+            )
+            .with_town_id(Some(20)),
+        );
+
+        assert_eq!(
+            generated_industry_closest_town_id(&state, origin),
+            Some(177)
+        );
+        assert_eq!(
+            generated_industry_associated_town_id(&state, origin),
+            Some(20)
+        );
+        assert!(!generated_industry_can_use_closest_town(
+            &state,
+            origin,
+            IndustrySpec::BankArcticTropic,
             false,
         ));
     }

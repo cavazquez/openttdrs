@@ -1,4 +1,4 @@
-//! Chunks de metadatos (DATE, PLYR).
+//! Chunks de metadatos (DATE, PLYR, PATS, ECMY y CAPY).
 
 use crate::game_state::GameState;
 use crate::map::{TileKind, coord_to_linear_index};
@@ -328,18 +328,6 @@ fn append_company_economy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
 /// cargarlo. El header contiene el subconjunto que el core modela; los demás
 /// settings de PATS conservan los defaults del juego.
 pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
-    let landscape = match state.climate {
-        crate::Climate::Temperate => 0,
-        crate::Climate::SubArctic => 1,
-        crate::Climate::SubTropical => 2,
-        crate::Climate::Toyland => 3,
-    };
-    let road_side = u8::from(state.construction.road_drive_on_right());
-    let signal_side = match state.construction.train_signal_side {
-        crate::TrainSignalSide::Left => 0,
-        crate::TrainSignalSide::RoadVehicleDrivingSide => 1,
-        crate::TrainSignalSide::Right => 2,
-    };
     table_chunk(
         *b"PATS",
         &[
@@ -368,52 +356,58 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
             (1, "economy.inflation"),
             (1, "difficulty.economy"),
         ],
-        &[{
-            let mut record = vec![
-                landscape,
-                state.snow_line_height,
-                state.construction.map_height_limit,
-                road_side,
-                signal_side,
-                u8::from(state.construction.freeform_edges),
-                state.pathfinding.wait_for_pbs_path,
-                state.pathfinding.path_backoff_interval,
-                u8::from(state.pathfinding.reverse_at_signals),
-                state.pathfinding.wait_oneway_signal,
-                state.pathfinding.wait_twoway_signal,
-                u8::from(state.pathfinding.reserve_paths),
-                state.train_acceleration_model as u8,
-                state.road_vehicle_acceleration_model as u8,
-                u8::from(state.station_noise_level),
-                state.vehicle_breakdowns.min(2),
-                u8::from(state.no_servicing_if_no_breakdowns),
-            ];
-            record.extend_from_slice(&state.subsidy_duration.to_be_bytes());
-            record.extend_from_slice(&[
-                state.subsidy_multiplier.min(3),
-                u8::from(state.disasters_enabled),
-                state.town_council_tolerance as u8,
-                u8::from(state.using_wallclock_units),
-                u8::from(state.global_economy.inflation_enabled),
-                u8::from(state.global_economy.recessions_enabled),
-            ]);
-            record
-        }],
+        &[pats_record(state)],
     )
+}
+
+/// Serializa la única fila semántica de `PATS`.
+pub(super) fn pats_record(state: &GameState) -> Vec<u8> {
+    let landscape = match state.climate {
+        crate::Climate::Temperate => 0,
+        crate::Climate::SubArctic => 1,
+        crate::Climate::SubTropical => 2,
+        crate::Climate::Toyland => 3,
+    };
+    let road_side = u8::from(state.construction.road_drive_on_right());
+    let signal_side = match state.construction.train_signal_side {
+        crate::TrainSignalSide::Left => 0,
+        crate::TrainSignalSide::RoadVehicleDrivingSide => 1,
+        crate::TrainSignalSide::Right => 2,
+    };
+    let mut record = vec![
+        landscape,
+        state.snow_line_height,
+        state.construction.map_height_limit,
+        road_side,
+        signal_side,
+        u8::from(state.construction.freeform_edges),
+        state.pathfinding.wait_for_pbs_path,
+        state.pathfinding.path_backoff_interval,
+        u8::from(state.pathfinding.reverse_at_signals),
+        state.pathfinding.wait_oneway_signal,
+        state.pathfinding.wait_twoway_signal,
+        u8::from(state.pathfinding.reserve_paths),
+        state.train_acceleration_model as u8,
+        state.road_vehicle_acceleration_model as u8,
+        u8::from(state.station_noise_level),
+        state.vehicle_breakdowns.min(2),
+        u8::from(state.no_servicing_if_no_breakdowns),
+    ];
+    record.extend_from_slice(&state.subsidy_duration.to_be_bytes());
+    record.extend_from_slice(&[
+        state.subsidy_multiplier.min(3),
+        u8::from(state.disasters_enabled),
+        state.town_council_tolerance as u8,
+        u8::from(state.using_wallclock_units),
+        u8::from(state.global_economy.inflation_enabled),
+        u8::from(state.global_economy.recessions_enabled),
+    ]);
+    record
 }
 
 /// Serializa el registro global `ECMY` que `OpenTTD` usa para reanudar inflación,
 /// recesiones y el reparto diario de cambios de industria.
 pub(super) fn ecmy_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
-    let economy = &state.global_economy;
-    let mut record = Vec::with_capacity(30);
-    record.extend_from_slice(&economy.inflation_prices.to_be_bytes());
-    record.extend_from_slice(&economy.inflation_payment.to_be_bytes());
-    record.extend_from_slice(&economy.fluct.to_be_bytes());
-    record.push(economy.interest_rate);
-    record.push(economy.infl_amount);
-    record.push(economy.infl_amount_pr);
-    record.extend_from_slice(&economy.industry_daily_change_counter.to_be_bytes());
     table_chunk(
         *b"ECMY",
         &[
@@ -425,8 +419,22 @@ pub(super) fn ecmy_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
             (2, "infl_amount_pr"),
             (6, "industry_daily_change_counter"),
         ],
-        &[record],
+        &[ecmy_record(state)],
     )
+}
+
+/// Serializa la única fila semántica de `ECMY`.
+pub(super) fn ecmy_record(state: &GameState) -> Vec<u8> {
+    let economy = &state.global_economy;
+    let mut record = Vec::with_capacity(30);
+    record.extend_from_slice(&economy.inflation_prices.to_be_bytes());
+    record.extend_from_slice(&economy.inflation_payment.to_be_bytes());
+    record.extend_from_slice(&economy.fluct.to_be_bytes());
+    record.push(economy.interest_rate);
+    record.push(economy.infl_amount);
+    record.push(economy.infl_amount_pr);
+    record.extend_from_slice(&economy.industry_daily_change_counter.to_be_bytes());
+    record
 }
 
 /// Devuelve la referencia sparse que `VEHS` asignará a una cabeza de vehículo.
@@ -466,8 +474,27 @@ fn emitted_vehicle_pool_index(state: &GameState, vehicle_id: u32) -> Option<u32>
 /// una descarga. Las entradas importadas sin enlace lógico conservan su
 /// referencia nativa; las nuevas se traducen desde `front_vehicle_id`.
 pub(super) fn capy_chunk(state: &GameState) -> Result<Option<Vec<u8>>, SavError> {
-    if state.cargo_payments.is_empty() {
+    let records = capy_records(state)?;
+    if records.is_empty() {
         return Ok(None);
+    }
+    table_chunk(
+        *b"CAPY",
+        &[
+            (6, "front"),
+            (7, "route_profit"),
+            (7, "visual_profit"),
+            (7, "visual_transfer"),
+        ],
+        &records,
+    )
+    .map(Some)
+}
+
+/// Serializa las filas semánticas del pool `CAPY`.
+pub(super) fn capy_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
+    if state.cargo_payments.is_empty() {
+        return Ok(Vec::new());
     }
     let max_id = state
         .cargo_payments
@@ -499,15 +526,5 @@ pub(super) fn capy_chunk(state: &GameState) -> Result<Option<Vec<u8>>, SavError>
         record.extend_from_slice(&payment.visual_profit.to_be_bytes());
         record.extend_from_slice(&payment.visual_transfer.to_be_bytes());
     }
-    table_chunk(
-        *b"CAPY",
-        &[
-            (6, "front"),
-            (7, "route_profit"),
-            (7, "visual_profit"),
-            (7, "visual_transfer"),
-        ],
-        &records,
-    )
-    .map(Some)
+    Ok(records)
 }

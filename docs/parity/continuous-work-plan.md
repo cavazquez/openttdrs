@@ -597,3 +597,15 @@ encoder canónico, igual que `ORDL`/`VEHS`. La huella es por filas y no inventa
 campos nuevos cuando cambia el conjunto de entidades. La fusión parcial de
 columnas tras una mutación y los demás pools nativos siguen pendientes; #329
 permanece abierto.
+
+Actualización #329-VEHICLE-SAV-META-012 (2026-09-02): el passthrough de tablas
+sin mutación ahora incluye `PATS`, `ECMY` y `CAPY`. Los ajustes de partida, los
+contadores económicos globales y las liquidaciones de carga se comparan por
+filas semánticas conocidas; mientras la huella no cambie, el exportador
+conserva el header y las columnas nativas completas, y cuando cambia un
+ajuste o pago vuelve al encoder canónico. Las regresiones
+`imported_vehs_body_is_reused_until_vehicle_semantics_change` y
+`capy_runtime_front_id_is_translated_to_sparse_vehicle_ref` cubren estos
+caminos. La fusión de columnas desconocidas después de una mutación, `PLYR`,
+`GRPS`/`ERNW` y los demás pools nativos siguen pendientes; #329 permanece
+abierto.

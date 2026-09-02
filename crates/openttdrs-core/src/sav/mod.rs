@@ -131,6 +131,12 @@ pub(crate) struct SavTablePassthrough {
     pub(crate) city_semantic_records: Vec<Vec<u8>>,
     pub(crate) indy_chunk: Option<SavOpaqueChunk>,
     pub(crate) indy_semantic_records: Vec<Vec<u8>>,
+    pub(crate) pats_chunk: Option<SavOpaqueChunk>,
+    pub(crate) pats_semantic_records: Vec<Vec<u8>>,
+    pub(crate) ecmy_chunk: Option<SavOpaqueChunk>,
+    pub(crate) ecmy_semantic_records: Vec<Vec<u8>>,
+    pub(crate) capy_chunk: Option<SavOpaqueChunk>,
+    pub(crate) capy_semantic_records: Vec<Vec<u8>>,
 }
 
 /// Chunks que el escritor reconstruye desde el modelo semántico.
@@ -337,6 +343,12 @@ pub struct SavGame {
     /// Cuerpo original de `INDY`, separado de `opaque_chunks` por ser una
     /// tabla reconstruida semánticamente.
     pub(crate) indy_raw_chunk: Option<SavOpaqueChunk>,
+    /// Cuerpo original de `PATS`, separado para conservar ajustes desconocidos.
+    pub(crate) pats_raw_chunk: Option<SavOpaqueChunk>,
+    /// Cuerpo original de `ECMY`, separado para conservar contadores futuros.
+    pub(crate) ecmy_raw_chunk: Option<SavOpaqueChunk>,
+    /// Cuerpo original de `CAPY`, separado para conservar columnas futuras.
+    pub(crate) capy_raw_chunk: Option<SavOpaqueChunk>,
     /// Chunks nativos no modelados que se conservan para round-trip.
     pub opaque_chunks: Vec<SavOpaqueChunk>,
 }
@@ -418,6 +430,21 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         ch_type: chunk.ch_type,
         body: chunk.body.clone(),
     });
+    let pats_raw_chunk = chunks::find_chunk(&chunk_list, "PATS").map(|chunk| SavOpaqueChunk {
+        name: chunk.name,
+        ch_type: chunk.ch_type,
+        body: chunk.body.clone(),
+    });
+    let ecmy_raw_chunk = chunks::find_chunk(&chunk_list, "ECMY").map(|chunk| SavOpaqueChunk {
+        name: chunk.name,
+        ch_type: chunk.ch_type,
+        body: chunk.body.clone(),
+    });
+    let capy_raw_chunk = chunks::find_chunk(&chunk_list, "CAPY").map(|chunk| SavOpaqueChunk {
+        name: chunk.name,
+        ch_type: chunk.ch_type,
+        body: chunk.body.clone(),
+    });
     let opaque_chunks = opaque_chunks_from_chunks(&chunk_list);
     let link_graph =
         linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
@@ -466,6 +493,9 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         stnn_raw_chunk,
         city_raw_chunk,
         indy_raw_chunk,
+        pats_raw_chunk,
+        ecmy_raw_chunk,
+        capy_raw_chunk,
         opaque_chunks,
     })
 }
@@ -955,6 +985,9 @@ impl GameState {
         let stnn_raw_chunk = sav.stnn_raw_chunk.take();
         let city_raw_chunk = sav.city_raw_chunk.take();
         let indy_raw_chunk = sav.indy_raw_chunk.take();
+        let pats_raw_chunk = sav.pats_raw_chunk.take();
+        let ecmy_raw_chunk = sav.ecmy_raw_chunk.take();
+        let capy_raw_chunk = sav.capy_raw_chunk.take();
         let random_state = sav.random_state;
         let mut map = sav.map;
         normalize_rail_trackbits_from_neighbors(&mut map);
@@ -1687,7 +1720,10 @@ impl GameState {
             || ordl_raw_chunk.is_some()
             || stnn_raw_chunk.is_some()
             || city_raw_chunk.is_some()
-            || indy_raw_chunk.is_some())
+            || indy_raw_chunk.is_some()
+            || pats_raw_chunk.is_some()
+            || ecmy_raw_chunk.is_some()
+            || capy_raw_chunk.is_some())
             && let Ok(records) = write::semantic_table_records(&state)
         {
             state.sav_table_passthrough = Some(SavTablePassthrough {
@@ -1701,6 +1737,12 @@ impl GameState {
                 city_semantic_records: records.city,
                 indy_chunk: indy_raw_chunk,
                 indy_semantic_records: records.indy,
+                pats_chunk: pats_raw_chunk,
+                pats_semantic_records: records.pats,
+                ecmy_chunk: ecmy_raw_chunk,
+                ecmy_semantic_records: records.ecmy,
+                capy_chunk: capy_raw_chunk,
+                capy_semantic_records: records.capy,
             });
         }
         state
@@ -1775,6 +1817,9 @@ mod tests {
             stnn_raw_chunk: None,
             city_raw_chunk: None,
             indy_raw_chunk: None,
+            pats_raw_chunk: None,
+            ecmy_raw_chunk: None,
+            capy_raw_chunk: None,
             opaque_chunks: Vec::new(),
         }
     }
@@ -2641,6 +2686,9 @@ mod tests {
             stnn_raw_chunk: None,
             city_raw_chunk: None,
             indy_raw_chunk: None,
+            pats_raw_chunk: None,
+            ecmy_raw_chunk: None,
+            capy_raw_chunk: None,
             opaque_chunks: Vec::new(),
         };
         let state = GameState::from_sav_game(sav);

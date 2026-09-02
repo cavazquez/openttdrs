@@ -14,6 +14,7 @@
 //! `OBID` y las columnas desconocidas siguen conservándose como passthrough;
 //! `ORDL`/`VEHS`/`STNN`/`CITY`/`INDY` reutilizan sus cuerpos originales cuando
 //! las filas semánticas no cambiaron.
+//! `PATS`/`ECMY`/`CAPY` aplican la misma regla para ajustes y pagos conocidos.
 //! Los chunks nativos no modelados se conservan como passthrough al reexportar.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
@@ -95,6 +96,9 @@ pub(crate) struct SavSemanticTableRecords {
     pub(crate) stnn: Vec<Vec<u8>>,
     pub(crate) city: Vec<Vec<u8>>,
     pub(crate) indy: Vec<Vec<u8>>,
+    pub(crate) pats: Vec<Vec<u8>>,
+    pub(crate) ecmy: Vec<Vec<u8>>,
+    pub(crate) capy: Vec<Vec<u8>>,
 }
 
 pub(crate) fn semantic_table_records(
@@ -112,6 +116,9 @@ pub(crate) fn semantic_table_records(
         stnn,
         city,
         indy,
+        pats: vec![meta::pats_record(state)],
+        ecmy: vec![meta::ecmy_record(state)],
+        capy: meta::capy_records(state)?,
     })
 }
 
@@ -353,9 +360,45 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         w,
     )?);
 
-    data.extend_from_slice(&meta::pats_chunk(state)?);
-    data.extend_from_slice(&meta::ecmy_chunk(state)?);
-    if let Some(capy) = meta::capy_chunk(state)? {
+    let pats = vec![meta::pats_record(state)];
+    let raw_pats = raw_tables.and_then(|passthrough| {
+        passthrough.pats_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"PATS"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.pats_semantic_records == pats
+        })
+    });
+    if let Some(raw) = raw_pats {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else {
+        data.extend_from_slice(&meta::pats_chunk(state)?);
+    }
+
+    let ecmy = vec![meta::ecmy_record(state)];
+    let raw_ecmy = raw_tables.and_then(|passthrough| {
+        passthrough.ecmy_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"ECMY"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.ecmy_semantic_records == ecmy
+        })
+    });
+    if let Some(raw) = raw_ecmy {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else {
+        data.extend_from_slice(&meta::ecmy_chunk(state)?);
+    }
+
+    let capy = meta::capy_records(state)?;
+    let raw_capy = raw_tables.and_then(|passthrough| {
+        passthrough.capy_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"CAPY"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.capy_semantic_records == capy
+        })
+    });
+    if let Some(raw) = raw_capy {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else if let Some(capy) = meta::capy_chunk(state)? {
         data.extend_from_slice(&capy);
     }
     data.extend_from_slice(&fleet::fleet_chunks(state, &autoreplace_export)?);
@@ -607,6 +650,18 @@ mod tests {
         assert_eq!(loaded.vehicles.len(), 1);
         assert_eq!(loaded.cargo_payments[0].front_vehicle_id, Some(0));
         assert_eq!(loaded.cargo_payments[0].front_vehicle_ref, Some(0));
+        let (payload, _) = crate::sav::container::decompress(&bytes).expect("payload");
+        let chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
+        let original_capy = crate::sav::chunks::find_chunk(&chunks, "CAPY")
+            .expect("CAPY original")
+            .body
+            .clone();
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
+        let (resaved_payload, _) = crate::sav::container::decompress(&resaved).expect("payload");
+        let resaved_chunks = crate::sav::chunks::parse_chunks(&resaved_payload).expect("chunks");
+        let resaved_capy =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "CAPY").expect("CAPY resaved");
+        assert_eq!(resaved_capy.body, original_capy);
     }
 
     #[test]
@@ -824,6 +879,14 @@ mod tests {
             .expect("INDY original")
             .body
             .clone();
+        let original_pats = crate::sav::chunks::find_chunk(&original_chunks, "PATS")
+            .expect("PATS original")
+            .body
+            .clone();
+        let original_ecmy = crate::sav::chunks::find_chunk(&original_chunks, "ECMY")
+            .expect("ECMY original")
+            .body
+            .clone();
 
         let mut loaded = GameState::from_sav_game(sav::load(&original).expect("load original"));
         let passthrough = loaded
@@ -870,6 +933,22 @@ mod tests {
                 .body,
             original_indy
         );
+        assert_eq!(
+            passthrough
+                .pats_chunk
+                .as_ref()
+                .expect("PATS passthrough")
+                .body,
+            original_pats
+        );
+        assert_eq!(
+            passthrough
+                .ecmy_chunk
+                .as_ref()
+                .expect("ECMY passthrough")
+                .body,
+            original_ecmy
+        );
 
         let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
         let (resaved_payload, _) = crate::sav::container::decompress(&resaved).expect("payload");
@@ -889,6 +968,12 @@ mod tests {
         let resaved_indy =
             crate::sav::chunks::find_chunk(&resaved_chunks, "INDY").expect("INDY resaved");
         assert_eq!(resaved_indy.body, original_indy);
+        let resaved_pats =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "PATS").expect("PATS resaved");
+        assert_eq!(resaved_pats.body, original_pats);
+        let resaved_ecmy =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "ECMY").expect("ECMY resaved");
+        assert_eq!(resaved_ecmy.body, original_ecmy);
 
         loaded.vehicles[0].cur_speed = loaded.vehicles[0].cur_speed.saturating_add(1);
         let changed = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("save changed");

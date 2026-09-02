@@ -184,3 +184,23 @@ multibit y el túnel válido. En 1024²/seed ártica `1330935379`, la divergenci
 **0/0/0**; la comparación raw posterior coincide en las 1.048.576 teselas.
 El alcance queda limitado a esta regla de despeje y cohorte; otras semillas,
 tamaños, climas, configuraciones y túneles/runtime NewGRF siguen abiertos.
+
+### RMAP-128 — Puentes paralelos y túneles bajo montaña durante `GrowTown`
+
+**Estado: cerrado (sub-issue acotado de RMAP-004/RMAP-024/RMAP-030/RMAP-082).**
+El crecimiento municipal replica ahora las tres fronteras que faltaban en la
+cohorte ártica grande: `GrowTownWithBridge` conserva el límite inclinado
+`población/1000 + 5` y recorre sólo agua plana (`IsWaterTile`, no costas),
+`SpiralTileSequence` rechaza una rampa vial inclinada paralela sin consumir
+RNG, y `GrowTownWithTunnel` usa su límite independiente
+`población/1000 + 7`. También se mantiene el salto de una boca al extremo
+opuesto sin volver a sortear la dirección. Las regresiones cubren los límites,
+la diferencia costa/agua y la detección de una rampa paralela.
+
+`generation_phase_parity.py --size 1024 --seed 1330935380 --climate arctic
+--phases landscape,clear,towns --require-exact` queda en **0 teselas y 0
+bloques 4×4 distintos** en las tres fronteras; el estado por pueblo y el RNG
+coinciden desde la fundación hasta `towns`. El cierre se limita a esta semilla,
+tamaño y fase; RMAP-004/RMAP-024/RMAP-030/RMAP-082 mantienen abiertas otras
+semillas, climas, configuraciones, fases posteriores y callbacks/runtime
+NewGRF.

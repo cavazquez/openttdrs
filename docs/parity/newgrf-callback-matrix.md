@@ -164,6 +164,14 @@ IDs propios y evita emitir touchdown de ala fija. La regresión
 `fta_approach_uses_active_catalog_helicopter_flag` cubre esa entrada; el resto
 del runtime de aeronaves y los scopes avanzados permanece parcial.
 
+Actualización #329-VEHICLE-SAV-AIRCRAFT-008 (2026-09-02): el escritor `VEHS`
+consulta el catálogo activo para clasificar aeronaves y emite la cadena
+helicóptero+sombra+rotor cuando `EngineDef::is_helicopter` procede de Action0 o
+NewGRF. La regresión `vehs_uses_newgrf_catalog_for_aircraft_subtype` cubre un
+ID local fuera de la tabla vanilla. La serialización todavía reconstruye un
+encabezado mínimo y no conserva columnas desconocidas; ese residual sigue
+abierto.
+
 La tabla de variables relativas conserva el parámetro `ExtendedByte` completo
 (WORD, hasta 14 bits) para `61 → 0x60`; los IDs locales superiores a `0xFF` no
 se aliasan con el motor vanilla de id cero.

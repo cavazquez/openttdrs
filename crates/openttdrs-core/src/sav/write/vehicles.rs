@@ -251,6 +251,16 @@ fn openttd_aircraft_engine_type(v: &Vehicle) -> u16 {
     }
 }
 
+/// Clasificación aérea efectiva para el catálogo de la partida.
+///
+/// Los motores agregados por Action0 no existen en la tabla vanilla estática;
+/// al escribir VEHS debemos consultar `GameState.engine_catalog` para decidir
+/// si la unidad necesita la cadena ala fija+sombra o helicóptero+sombra+rotor.
+fn aircraft_is_helicopter_for(state: &GameState, v: &Vehicle) -> bool {
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(&state.engine_catalog, v);
+    crate::engine::aircraft_is_helicopter_def(engine)
+}
+
 type SavRecordBytes = Vec<u8>;
 type SavRecordList = Vec<SavRecordBytes>;
 
@@ -957,9 +967,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
         let v = &state.vehicles[vehicle_idx];
         sparse_by_vehicle_id.insert(v.id, sparse_idx);
         sparse_idx = sparse_idx.saturating_add(if v.kind == VehicleKind::Aircraft {
-            if v.engine_id
-                .is_some_and(crate::engine::aircraft_is_helicopter)
-            {
+            if aircraft_is_helicopter_for(state, v) {
                 3
             } else {
                 2
@@ -1009,9 +1017,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
         };
 
         if is_air {
-            let is_helicopter = v
-                .engine_id
-                .is_some_and(crate::engine::aircraft_is_helicopter);
+            let is_helicopter = aircraft_is_helicopter_for(state, v);
             // Primario + sombra (y rotor para helicópteros). OpenTTD exige
             // ambos auxiliares al cargar un `Aircraft` normal.
             let shadow_idx = sparse_idx + 1;
@@ -1856,6 +1862,60 @@ mod tests {
         assert_eq!(
             record_get(rotor_common, "next").and_then(SlValue::as_u64),
             Some(0)
+        );
+    }
+
+    #[test]
+    fn vehs_uses_newgrf_catalog_for_aircraft_subtype() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let mut state = GameState::new(64, 64);
+        let mut custom_engine = crate::engine::engine_for_vehicle(
+            VehicleKind::Aircraft,
+            crate::engine::ENGINE_AIRCRAFT_DAKOTA,
+        )
+        .clone();
+        custom_engine.id = 0x7F00;
+        custom_engine.name = "NewGRF Rotor".to_owned();
+        custom_engine.from_newgrf = true;
+        custom_engine.is_helicopter = true;
+        state.engine_catalog = vec![custom_engine];
+
+        let air_pos = TileCoord::new(40, 40);
+        let mut helicopter = Vehicle::new(99, VehicleKind::Aircraft, air_pos, air_pos);
+        helicopter.engine_id = Some(0x7F00);
+        state.vehicles = vec![helicopter];
+
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        assert_eq!(vehs.len(), 3, "catálogo NewGRF: primario + sombra + rotor");
+        let chunk = vehs_chunk(&vehs).unwrap();
+        let chunks = parse_chunks(&chunk).unwrap();
+        let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
+        let subtypes: Vec<u64> = rows
+            .iter()
+            .map(|(_, row)| {
+                let aircraft = match record_get(row, "aircraft") {
+                    Some(SlValue::Structs(items)) => items.first().expect("aircraft"),
+                    other => panic!("aircraft ausente: {other:?}"),
+                };
+                let common = match record_get(aircraft, "common") {
+                    Some(SlValue::Structs(items)) => items.first().expect("common"),
+                    other => panic!("common ausente: {other:?}"),
+                };
+                record_get(common, "subtype")
+                    .and_then(SlValue::as_u64)
+                    .expect("subtype")
+            })
+            .collect();
+        assert_eq!(
+            subtypes,
+            vec![
+                u64::from(AIR_HELICOPTER),
+                u64::from(AIR_SHADOW),
+                u64::from(AIR_ROTOR)
+            ]
         );
     }
 

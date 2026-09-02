@@ -559,3 +559,13 @@ conserva el fallback vanilla. La regresión
 callback reduce el techo y evita que la bajada recupere velocidad vanilla. Las
 otras propiedades viales y las APIs directas sin catálogo siguen abiertas, por
 lo que #329 no se cierra.
+
+Actualización #329-VEHICLE-SAV-AIRCRAFT-008 (2026-09-02): el escritor `VEHS`
+clasifica ahora cada aeronave contra `GameState.engine_catalog`, incluyendo el
+flag `EngineDef::is_helicopter` de motores Action0/NewGRF. Al guardar una
+partida con un ID de motor propio se emite la cadena ala fija+sombra o
+helicóptero+sombra+rotor correcta; el cálculo de índices sparse y las
+referencias `next` usan la misma clasificación. La regresión
+`vehs_uses_newgrf_catalog_for_aircraft_subtype` verifica las tres filas del
+helicóptero custom. La tabla `VEHS` aún usa un encabezado mínimo y no conserva
+columnas desconocidas de una tabla reconstruida; #329 permanece abierto.

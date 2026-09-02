@@ -773,6 +773,18 @@ pub struct Industry {
     /// Color aleatorio de industria (`Colours` 0–15) para edificios con paleta.
     #[serde(default)]
     pub random_colour: u8,
+    /// Layout elegido al crear la industria (`Industry::selected_layout`).
+    ///
+    /// `OpenTTD` conserva este ordinal incluso cuando dos layouts producen la
+    /// misma huella geométrica; no se debe inferir únicamente desde `tiles`.
+    #[serde(default)]
+    pub selected_layout: u8,
+    /// Bits aleatorios persistentes de la instancia para scopes `NewGRF`.
+    ///
+    /// La tabla `INDY` los guarda como `random` desde `SLV_82`; los saves
+    /// antiguos dejan cero, que es también el valor vanilla por defecto.
+    #[serde(default)]
+    pub newgrf_random: u16,
     /// `IndustryID` de mapa (`MAP2`, bytes bajo/alto). El ID 0 es válido en un
     /// `.sav`; cuando no existe una entidad correspondiente también se usa
     /// como fallback legacy.
@@ -873,6 +885,8 @@ impl Industry {
             newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour: 0,
+            selected_layout: 0,
+            newgrf_random: 0,
             instance_id: 0,
             produced_total: 0,
             transported_total: 0,
@@ -903,6 +917,8 @@ impl Industry {
             newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour: 0,
+            selected_layout: 0,
+            newgrf_random: 0,
             instance_id: 0,
             produced_total: 0,
             transported_total: 0,
@@ -939,6 +955,8 @@ impl Industry {
             newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour,
+            selected_layout: 0,
+            newgrf_random: 0,
             instance_id: 0,
             produced_total: 0,
             transported_total: 0,
@@ -974,6 +992,20 @@ impl Industry {
     #[must_use]
     pub fn with_random_colour(mut self, random_colour: u8) -> Self {
         self.random_colour = random_colour % 16;
+        self
+    }
+
+    /// Conserva el ordinal del layout usado para materializar la huella.
+    #[must_use]
+    pub const fn with_selected_layout(mut self, selected_layout: u8) -> Self {
+        self.selected_layout = selected_layout;
+        self
+    }
+
+    /// Conserva los bits aleatorios de la instancia `NewGRF`.
+    #[must_use]
+    pub const fn with_newgrf_random(mut self, random: u16) -> Self {
+        self.newgrf_random = random;
         self
     }
 

@@ -185,6 +185,8 @@ pub(crate) fn hydrate_sav_industries(
         }
         .with_instance_id(instance_id)
         .with_counter(saved.counter);
+        industry.selected_layout = saved.selected_layout;
+        industry.newgrf_random = saved.random;
         industry.prod_level = saved.prod_level;
         import_industry_output_stock(&mut industry, saved, state.climate);
         state.industries.push(industry);
@@ -356,6 +358,8 @@ mod tests {
             industry_type: 0,
             random_colour: 14,
             counter: 123,
+            selected_layout: 2,
+            random: 0xBEEF,
             prod_level: 32,
             produced: vec![
                 super::super::entities::SavIndustryProducedCargo {
@@ -385,6 +389,8 @@ mod tests {
         assert_eq!(industry.extra_produced_cargo(crate::CargoType::Steel), 22);
         assert_eq!(industry.accepted_cargo_waiting(crate::CargoType::Grain), 15);
         assert_eq!(industry.counter, 123);
+        assert_eq!(industry.selected_layout, 2);
+        assert_eq!(industry.newgrf_random, 0xBEEF);
         assert_eq!(industry.prod_level, 32);
         assert_eq!(industry.random_colour, 14);
     }

@@ -232,7 +232,7 @@ pub(super) fn place_industry_spec_sandbox(
     }
     check_place_industry_spec(&state.map, c, spec)?;
     let template = industry_template(c, spec);
-    place_industry_spec_template_sandbox(state, c, spec, &template)
+    place_industry_spec_template_sandbox(state, c, spec, 0, &template)
 }
 
 pub(super) fn place_industry_spec_layout_sandbox(
@@ -247,13 +247,15 @@ pub(super) fn place_industry_spec_layout_sandbox(
     check_place_industry_spec_layout(&state.map, c, spec, layout_index)?;
     let template =
         industry_template_with_layout(c, spec, layout_index).ok_or(CommandError::OutOfBounds)?;
-    place_industry_spec_template_sandbox(state, c, spec, &template)
+    let selected_layout = u8::try_from(layout_index).unwrap_or(u8::MAX);
+    place_industry_spec_template_sandbox(state, c, spec, selected_layout, &template)
 }
 
 fn place_industry_spec_template_sandbox(
     state: &mut GameState,
     c: TileCoord,
     spec: IndustrySpec,
+    selected_layout: u8,
     template: &[(TileCoord, u8)],
 ) -> Result<(), CommandError> {
     let footprint: Vec<TileCoord> = template.iter().map(|(tile, _)| *tile).collect();
@@ -343,6 +345,7 @@ fn place_industry_spec_template_sandbox(
     state.industries.push(
         Industry::with_tiles_spec(c, spec.kind(), spec, footprint, random_colour)
             .with_instance_id(industry_id)
+            .with_selected_layout(selected_layout)
             .with_counter(counter),
     );
     state.economy.money -= 250;
@@ -508,7 +511,17 @@ pub fn check_place_industry_spec_def(
     c: TileCoord,
     def: &IndustrySpecDef,
 ) -> Result<(), CommandError> {
-    let footprint = def.footprint_at(c, 0);
+    check_place_industry_spec_def_layout(map, c, def, 0)
+}
+
+/// Valida el footprint del layout `NewGRF` que se va a materializar.
+pub fn check_place_industry_spec_def_layout(
+    map: &crate::map::Map,
+    c: TileCoord,
+    def: &IndustrySpecDef,
+    layout_index: usize,
+) -> Result<(), CommandError> {
+    let footprint = def.footprint_at(c, layout_index);
     if footprint.is_empty() {
         return Err(CommandError::OutOfBounds);
     }
@@ -540,16 +553,39 @@ pub fn place_industry_spec_def_sandbox(
     c: TileCoord,
     type_id: u16,
 ) -> Result<(), CommandError> {
+    place_industry_spec_def_layout_sandbox(state, c, type_id, 0, 0)
+}
+
+/// Coloca una industria `NewGRF` usando el layout elegido por el caller.
+///
+/// `OpenTTD` sortea el layout antes de consultar CB28 y conserva el ordinal
+/// en `Industry::selected_layout`. La entrada histórica mantiene layout cero;
+/// esta variante permite a la generación, SAV y UI pasar el valor real sin
+/// volver a inferirlo desde la geometría de la huella.
+pub fn place_industry_spec_def_layout_sandbox(
+    state: &mut GameState,
+    c: TileCoord,
+    type_id: u16,
+    layout_index: usize,
+    random_bits: u16,
+) -> Result<(), CommandError> {
     let Some(def) = industry_spec_def(&state.industry_spec_catalog, type_id).cloned() else {
         return Err(CommandError::OutOfBounds);
     };
+    let selected_layout = u8::try_from(layout_index).unwrap_or(u8::MAX);
     // #266: CB 0x28 location — deny observable (no silencioso). El comando de
     // usuario debe exponer el scope temporal y `IACT_USERCREATION`.
-    if !crate::newgrf_callback::apply_industry_location_callback_for_build(&def, state, c, 0, 0) {
+    if !crate::newgrf_callback::apply_industry_location_callback_for_build(
+        &def,
+        state,
+        c,
+        selected_layout,
+        u32::from(random_bits),
+    ) {
         return Err(CommandError::NewGrfCallbackDenied);
     }
-    check_place_industry_spec_def(&state.map, c, &def)?;
-    let footprint = def.footprint_at(c, 0);
+    check_place_industry_spec_def_layout(&state.map, c, &def, layout_index)?;
+    let footprint = def.footprint_at(c, layout_index);
     let tiles: Vec<TileCoord> = footprint.iter().map(|(t, _)| *t).collect();
     let industry_id = next_industry_instance_id(state);
     let random_colour = u8::try_from(industry_id.wrapping_mul(5) % 16).unwrap_or(0);
@@ -598,6 +634,8 @@ pub fn place_industry_spec_def_sandbox(
     let mut industry = Industry::with_tiles(c, kind, tiles)
         .with_instance_id(industry_id)
         .with_random_colour(random_colour)
+        .with_selected_layout(selected_layout)
+        .with_newgrf_random(random_bits)
         .with_counter(counter)
         .with_newgrf_spec(def.id, &def);
     if let Some(initial_level) =
@@ -667,6 +705,72 @@ mod tests {
             state.map.get_kind(TileCoord::new(6, 4)),
             Some(TileKind::Industry)
         );
+        assert_eq!(state.industries[0].selected_layout, 2);
+    }
+
+    #[test]
+    fn newgrf_industry_layout_and_random_are_preserved() {
+        let origin = TileCoord::new(4, 4);
+        let mut state = GameState::new(16, 16);
+        let mut def = test_newgrf_industry_spec();
+        def.layouts = vec![
+            vec![crate::industry_spec::IndustryLayoutTile {
+                x: 0,
+                y: 0,
+                gfx: 175,
+            }],
+            vec![
+                crate::industry_spec::IndustryLayoutTile {
+                    x: 0,
+                    y: 0,
+                    gfx: 176,
+                },
+                crate::industry_spec::IndustryLayoutTile {
+                    x: 1,
+                    y: 0,
+                    gfx: 177,
+                },
+            ],
+        ];
+        state.industry_spec_catalog.push(def);
+
+        assert!(place_industry_spec_def_layout_sandbox(&mut state, origin, 37, 1, 0xBEEF).is_ok());
+
+        assert_eq!(state.industries.len(), 1);
+        let industry = &state.industries[0];
+        assert_eq!(industry.selected_layout, 1);
+        assert_eq!(industry.newgrf_random, 0xBEEF);
+        assert_eq!(industry.tiles.len(), 2);
+        assert_eq!(
+            state
+                .map
+                .get(origin)
+                .map(|tile| crate::map::industry_gfx(&tile)),
+            Some(176)
+        );
+        assert_eq!(
+            state
+                .map
+                .get(TileCoord::new(5, 4))
+                .map(|tile| crate::map::industry_gfx(&tile)),
+            Some(177)
+        );
+    }
+
+    #[test]
+    fn newgrf_industry_layout_out_of_range_is_rejected_atomically() {
+        let origin = TileCoord::new(4, 4);
+        let mut state = GameState::new(16, 16);
+        state
+            .industry_spec_catalog
+            .push(test_newgrf_industry_spec());
+
+        assert_eq!(
+            place_industry_spec_def_layout_sandbox(&mut state, origin, 37, 1, 0),
+            Err(CommandError::OutOfBounds)
+        );
+        assert!(state.industries.is_empty());
+        assert_eq!(state.map.get_kind(origin), Some(TileKind::Grass));
     }
 
     #[test]

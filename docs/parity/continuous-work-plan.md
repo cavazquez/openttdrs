@@ -43,6 +43,14 @@ pueblo, layout, terreno, zona, distancias, altura y random). Continúan
 pendientes flags/fundador/fechas completos, otros tipos de creación y strings
 de error; #329 permanece abierto.
 
+Actualización #329-INDUSTRY-CB28-022 (2026-09-02): la construcción NewGRF
+acepta el layout sorteado/seleccionado en una variante atómica del comando,
+conserva `Industry.selected_layout` y los bits `Industry.random`, y los
+reexpone en el scope padre de Action2. `INDY` ahora importa/exporta ambos
+campos; las variables WORD de stock, historial y contador ya no pierden sus
+bits altos. CB28, fundador/fechas/flags/PSA y mensajes de error siguen siendo
+parciales, por lo que #329 y el bloque SAV no se cierran.
+
 Última etapa RMAP-064/069/070/071/072/073/074/075/076/079/080/083: la plantación de Farm replica ahora el orden de RNG,
 la geometría y las cercas de OpenTTD, el primer `IndustryID(0)` permanece
 vinculado a toda su huella durante la obra y la cohorte de carbón escribe los

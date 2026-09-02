@@ -757,6 +757,10 @@ pub struct SavIndustry {
     pub random_colour: u8,
     /// Fase exacta del ciclo de producción (`Industry::counter`).
     pub counter: u16,
+    /// Layout elegido al fundar (`Industry::selected_layout`, `SLV_73`).
+    pub selected_layout: u8,
+    /// Bits aleatorios persistentes de la industria (`Industry::random`, `SLV_82`).
+    pub random: u16,
     /// Nivel de producción (`Industry::prod_level`).
     pub prod_level: u8,
     /// Salidas y stock en espera (`Industry::produced`).
@@ -807,6 +811,8 @@ pub(crate) fn industries_from_chunks(
                     industry_type,
                     random_colour: 0,
                     counter: 0,
+                    selected_layout: 0,
+                    random: 0,
                     prod_level: crate::industry::PRODLEVEL_DEFAULT,
                     produced: Vec::new(),
                     accepted: Vec::new(),
@@ -840,6 +846,14 @@ fn sav_industry_from_record(
         .and_then(SlValue::as_u64)
         .and_then(|value| u16::try_from(value).ok())
         .unwrap_or(0);
+    let selected_layout = record_get(record, "selected_layout")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u8::try_from(value).ok())
+        .unwrap_or(0);
+    let random = record_get(record, "random")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u16::try_from(value).ok())
+        .unwrap_or(0);
     let prod_level = record_get(record, "prod_level")
         .and_then(SlValue::as_u64)
         .and_then(|value| u8::try_from(value).ok())
@@ -853,6 +867,8 @@ fn sav_industry_from_record(
         industry_type: industry_type.min(255) as u8,
         random_colour: (random_colour % 16) as u8,
         counter,
+        selected_layout,
+        random,
         prod_level,
         produced: industry_produced_from_record(record),
         accepted: industry_accepted_from_record(record),
@@ -2479,6 +2495,8 @@ mod tests {
             ("type".to_string(), SlValue::Uint(0)),
             ("random_colour".to_string(), SlValue::Uint(14)),
             ("counter".to_string(), SlValue::Uint(123)),
+            ("selected_layout".to_string(), SlValue::Uint(2)),
+            ("random".to_string(), SlValue::Uint(0xBEEF)),
             ("prod_level".to_string(), SlValue::Uint(32)),
             (
                 "accepted".to_string(),
@@ -2501,6 +2519,8 @@ mod tests {
 
         assert_eq!(industry.industry_id, 9);
         assert_eq!(industry.counter, 123);
+        assert_eq!(industry.selected_layout, 2);
+        assert_eq!(industry.random, 0xBEEF);
         assert_eq!(industry.prod_level, 32);
         assert_eq!(industry.produced.len(), 1);
         assert_eq!(industry.produced[0].cargo_slot, 1);

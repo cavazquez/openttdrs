@@ -376,10 +376,11 @@ fn populate_industry_parent_scope(
     }
     ctx.parent_vars
         .insert(0x43, closest_water_distance(map, coord));
-    // The model does not yet persist OpenTTD's selected layout separately;
-    // zero is the canonical vanilla/default layout until that field is
-    // imported from SAV.
-    ctx.parent_vars.insert(0x44, 0);
+    // OpenTTD stores the selected layout on the Industry instance.  Keeping
+    // the ordinal (rather than inferring it from the footprint) matters when
+    // two layouts share the same geometry and when CB68 filters instances.
+    ctx.parent_vars
+        .insert(0x44, u32::from(industry.selected_layout));
     ctx.parent_vars.insert(0x45, 0);
     ctx.parent_vars.insert(0x46, 0);
     ctx.parent_vars.insert(0x47, 0);
@@ -415,7 +416,10 @@ fn populate_industry_parent_scope(
             );
             let waiting = output_waiting[slot];
             let base = 0x8A + u8::try_from(slot * 2).unwrap_or(0);
-            ctx.parent_vars.insert(base, waiting & 0xFF);
+            // 0x8A/0x8C return the complete WORD; the following variable is
+            // only the high byte.  Truncating the low variable to eight bits
+            // made Action2 groups disagree once a stock exceeded 255.
+            ctx.parent_vars.insert(base, waiting & 0xFFFF);
             ctx.parent_vars.insert(base + 1, (waiting >> 8) & 0xFF);
             ctx.parent_vars.insert(
                 0x8E + u8::try_from(slot).unwrap_or(0),
@@ -451,19 +455,23 @@ fn populate_industry_parent_scope(
     ctx.parent_vars
         .insert(0xA8, u32::from(industry.random_colour));
     ctx.parent_vars.insert(0xA9, 0);
-    ctx.parent_vars
-        .insert(0xAA, u32::from(industry.counter & 0xFF));
+    ctx.parent_vars.insert(0xAA, u32::from(industry.counter));
     ctx.parent_vars
         .insert(0xAB, u32::from(industry.counter >> 8));
     ctx.parent_vars.insert(0xAC, 0);
     ctx.parent_vars.insert(0xB0, 0);
     ctx.parent_vars.insert(0xB3, 0);
     ctx.parent_vars.insert(0xB4, 0);
-    ctx.parent_random_bits = u32::from(industry.counter);
+    // `IndustriesScopeResolver::GetRandomBits` reads Industry::random.  The
+    // production phase counter is a separate variable (0xAA/0xAB) and must
+    // not become the random source for Action2 groups.
+    ctx.parent_random_bits = u32::from(industry.newgrf_random);
 }
 
 fn put_low_high(ctx: &mut Action2EvalCtx, low: u8, value: u32) {
-    ctx.parent_vars.insert(low, value & 0xFF);
+    // OpenTTD's low variable is a WORD (the next variable exposes its high
+    // byte), not an already-truncated byte.
+    ctx.parent_vars.insert(low, value & 0xFFFF);
     ctx.parent_vars.insert(low + 1, (value >> 8) & 0xFF);
 }
 
@@ -774,6 +782,40 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x44), Some(&0xD2));
         assert_eq!(ctx.vars.get(&0x5F), Some(&0xA500));
         assert_eq!(ctx.parameterized_vars.get(&(0x61, 0)), Some(&0xD2));
+    }
+
+    #[test]
+    fn industry_parent_scope_preserves_layout_random_and_word_values() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(1, 1);
+        let mut tile = map.get(coord).unwrap();
+        tile.kind = TileKind::Industry;
+        tile.m2 = 9;
+        set_industry_gfx(&mut tile, 7);
+        map.set_tile(coord, tile).unwrap();
+
+        let mut industry = Industry::new(coord, IndustryKind::Factory)
+            .with_instance_id(9)
+            .with_selected_layout(3)
+            .with_newgrf_random(0xBEEF)
+            .with_counter(0x0678);
+        industry.stock = 0x1234;
+        let ctx = action2_eval_ctx_for_industry_tile_with_world(
+            &map,
+            coord,
+            &[industry],
+            &[],
+            &[],
+            &[],
+            Climate::Temperate,
+            None,
+            &[],
+        );
+
+        assert_eq!(ctx.parent_vars.get(&0x44), Some(&3));
+        assert_eq!(ctx.parent_vars.get(&0x8A), Some(&0x1234));
+        assert_eq!(ctx.parent_vars.get(&0xAA), Some(&0x0678));
+        assert_eq!(ctx.parent_random_bits, 0xBEEF);
     }
 
     #[test]

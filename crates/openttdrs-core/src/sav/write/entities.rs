@@ -995,6 +995,8 @@ fn append_indy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "random_colour")?;
     append_field(header, 2, "prod_level")?;
     append_field(header, 4, "counter")?;
+    append_field(header, 2, "selected_layout")?;
+    append_field(header, 4, "random")?;
     append_field(header, 0x1B, "accepted")?;
     append_field(header, 0x1B, "produced")?;
     header.push(0);
@@ -1110,6 +1112,8 @@ pub(super) fn indy_records_with_cargo(
         rec.push(ind.random_colour % 16);
         rec.push(ind.prod_level);
         rec.extend_from_slice(&ind.counter.to_be_bytes());
+        rec.push(ind.selected_layout);
+        rec.extend_from_slice(&ind.newgrf_random.to_be_bytes());
         write_indy_accepted(&mut rec, ind, state.climate)?;
         write_indy_produced(&mut rec, ind, state.climate)?;
         out.push(rec);
@@ -1309,6 +1313,8 @@ mod tests {
             0,
         );
         industry.stock = 42;
+        industry.selected_layout = 3;
+        industry.newgrf_random = 0xBEEF;
         industry.add_accepted_cargo_waiting(CargoType::Livestock, 9);
         // Steel no es la salida legacy de la fábrica y debe viajar en la
         // lista adicional, no desaparecer ni sobrescribir `stock`.
@@ -1318,6 +1324,16 @@ mod tests {
         let chunk = indy_chunk(&state, 8).expect("INDY chunk");
         let rows = crate::sav::table::parse_table_chunk(&chunk[5..], false).expect("INDY table");
         let record = &rows[0].1;
+        assert_eq!(
+            crate::sav::table::record_get(record, "selected_layout")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(3)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "random")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(0xBEEF)
+        );
         let accepted = match crate::sav::table::record_get(record, "accepted") {
             Some(crate::sav::table::SlValue::Structs(items)) => items,
             other => panic!("accepted ausente: {other:?}"),

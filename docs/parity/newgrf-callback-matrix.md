@@ -263,6 +263,18 @@ una compañía o una referencia de autorrenovación. Los escalares fijos
 compatibles se fusionan ahora; mutaciones variables/anidadas y headers
 estructurales tras una mutación siguen pendientes.
 
+Actualización #329-TOWN-CITY-027 (2026-09-02): el importador `CITY` conserva
+ahora la metadata nativa que antes se descartaba (`townnamegrfid`,
+`townnametype`, `townnameparts`, flags, ratings, `have_ratings`, unwanted,
+metas de crecimiento, exclusividad, layout, estatuas, `valid_history` y texto
+de GameScript). `TownScopeResolver` usa los flags importados y expone también
+`0x40` (pueblo grande), `0x92`/`0x93` (flags), y `0xAE` (`have_ratings`) con
+fallbacks explícitos para saves antiguos. La prueba sintética reproduce la
+forma `CITY` de OpenTTD y verifica los escalares y listas decodificados. El
+writer canónico sigue siendo mínimo y aún no reemite esta metadata ni las
+listas/structs anidadas; el passthrough sin mutaciones conserva el cuerpo
+original, por lo que #328/#329 permanecen abiertos.
+
 Actualización #329-TOWN-SCOPE-026 (2026-09-02): casas y objetos materializan
 ahora el scope parent de `TownScopeResolver` con las variables conservadas por
 el modelo (`0x41`, posición `0x80`/`0x81`, población `0x82`/`0x83`, crecimiento,

@@ -2,7 +2,7 @@
 //! (`VEHS`) y empresas (`PLYR`) desde tablas autodescriptivas.
 
 use crate::map::{TileCoord, coord_from_linear_index};
-use crate::town::Town;
+use crate::town::{TOWN_GROWTH_EFFECT_COUNT, Town, TownLayout};
 use std::collections::HashMap;
 
 use super::chunks::{RawChunk, find_chunk};
@@ -714,6 +714,145 @@ fn generated_town_name(record: &super::table::SlRecord) -> Option<String> {
     )
 }
 
+#[derive(Default)]
+struct NativeTownMetadata {
+    townnamegrfid: u32,
+    townnametype: u16,
+    townnameparts: u32,
+    native_flags: u8,
+    authority_ratings: Vec<i16>,
+    have_ratings: u16,
+    unwanted: Vec<u8>,
+    goals: [u32; TOWN_GROWTH_EFFECT_COUNT],
+    time_until_rebuild: u16,
+    grow_counter: u16,
+    growth_rate: u16,
+    fund_buildings_months: u8,
+    road_build_months: u8,
+    exclusivity: Option<crate::company::CompanyId>,
+    exclusive_counter: u8,
+    larger_town: bool,
+    layout: TownLayout,
+    valid_history: u64,
+    native_text: String,
+    statues: u16,
+}
+
+fn list_values<'a>(record: &'a SlRecord, name: &str) -> Option<&'a [SlValue]> {
+    match record_get(record, name) {
+        Some(SlValue::List(values)) => Some(values),
+        _ => None,
+    }
+}
+
+fn native_town_ratings(record: &SlRecord) -> Vec<i16> {
+    let mut ratings = list_values(record, "ratings")
+        .unwrap_or_default()
+        .iter()
+        .filter_map(SlValue::as_i64)
+        .filter_map(|value| i16::try_from(value).ok())
+        .collect::<Vec<_>>();
+    if ratings.is_empty() {
+        ratings = vec![crate::town::TOWN_RATING_INITIAL; crate::town::MAX_TOWN_AUTHORITY_COMPANIES];
+    }
+    ratings
+}
+
+fn native_town_unwanted(record: &SlRecord) -> Vec<u8> {
+    list_values(record, "unwanted")
+        .unwrap_or_default()
+        .iter()
+        .filter_map(SlValue::as_i64)
+        .filter_map(|value| i8::try_from(value).ok())
+        .map(|value| u8::try_from(value.max(0)).unwrap_or(0))
+        .collect::<Vec<_>>()
+}
+
+fn native_town_metadata(record: &SlRecord) -> NativeTownMetadata {
+    let scalar = |name| record_get(record, name).and_then(SlValue::as_u64);
+    let native_flags = scalar("flags")
+        .and_then(|value| u8::try_from(value).ok())
+        .unwrap_or(0);
+    let unwanted = {
+        let values = native_town_unwanted(record);
+        if values.is_empty() {
+            vec![0; crate::town::MAX_TOWN_AUTHORITY_COMPANIES]
+        } else {
+            values
+        }
+    };
+    let mut goals = [0_u32; TOWN_GROWTH_EFFECT_COUNT];
+    if let Some(values) = list_values(record, "goal") {
+        for (slot, value) in values.iter().take(TOWN_GROWTH_EFFECT_COUNT).enumerate() {
+            goals[slot] = value
+                .as_u64()
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(0);
+        }
+    }
+    let layout = scalar("layout")
+        .and_then(|value| u8::try_from(value).ok())
+        .and_then(|value| match value {
+            0 => Some(TownLayout::Original),
+            1 => Some(TownLayout::BetterRoads),
+            2 => Some(TownLayout::Grid2x2),
+            3 => Some(TownLayout::Grid3x3),
+            4 => Some(TownLayout::Random),
+            _ => None,
+        })
+        .unwrap_or_default();
+    NativeTownMetadata {
+        townnamegrfid: scalar("townnamegrfid")
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(0),
+        townnametype: scalar("townnametype")
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0),
+        townnameparts: scalar("townnameparts")
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(0),
+        native_flags,
+        authority_ratings: native_town_ratings(record),
+        have_ratings: scalar("have_ratings")
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0),
+        unwanted,
+        goals,
+        time_until_rebuild: scalar("time_until_rebuild")
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0),
+        grow_counter: scalar("grow_counter")
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0),
+        growth_rate: scalar("growth_rate")
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0),
+        fund_buildings_months: scalar("fund_buildings_months")
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0),
+        road_build_months: scalar("road_build_months")
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0),
+        exclusivity: scalar("exclusivity")
+            .and_then(|value| u8::try_from(value).ok())
+            .filter(|&value| value != u8::MAX)
+            .map(crate::company::CompanyId),
+        exclusive_counter: scalar("exclusive_counter")
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0),
+        larger_town: scalar("larger_town").is_some_and(|value| value != 0),
+        layout,
+        valid_history: scalar("valid_history").unwrap_or(0),
+        native_text: record_get(record, "text")
+            .and_then(SlValue::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        statues: scalar("statues")
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0),
+    }
+}
+
 /// Ciudades del chunk `CITY` (tabla); nombre custom, nombre generado con el
 /// generador nativo de `OpenTTD`, o «Ciudad N» como último recurso.
 ///
@@ -738,11 +877,57 @@ pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32, save_version: u
             .map(str::to_string)
             .or_else(|| generated_town_name(&record))
             .unwrap_or_else(|| format!("Ciudad {}", idx + 1));
+        let metadata = native_town_metadata(&record);
+        let NativeTownMetadata {
+            townnamegrfid,
+            townnametype,
+            townnameparts,
+            native_flags,
+            authority_ratings,
+            have_ratings,
+            unwanted,
+            goals,
+            time_until_rebuild,
+            grow_counter,
+            growth_rate,
+            fund_buildings_months,
+            road_build_months,
+            exclusivity,
+            exclusive_counter,
+            larger_town,
+            layout,
+            valid_history,
+            native_text,
+            statues,
+        } = metadata;
         out.push(Town {
             id: idx,
             pos,
             name,
             population: 0,
+            native_flags,
+            authority_ratings,
+            have_ratings,
+            unwanted,
+            goals,
+            is_growing: native_flags & 1 != 0,
+            has_church: native_flags & (1 << 1) != 0,
+            has_stadium: native_flags & (1 << 2) != 0,
+            townnamegrfid,
+            townnametype,
+            townnameparts,
+            time_until_rebuild,
+            grow_counter,
+            growth_rate,
+            fund_buildings_months,
+            road_build_months,
+            exclusivity,
+            exclusive_counter,
+            larger_town,
+            layout,
+            valid_history,
+            native_text,
+            statues,
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
@@ -2648,6 +2833,87 @@ mod tests {
         assert_eq!(towns[0].population, 0, "la población se reconstruye aparte");
         assert_eq!(towns[0].pos, TileCoord::new(3, 3));
         assert_eq!(towns[1].name, "Ciudad 2");
+    }
+
+    #[test]
+    fn decodes_native_city_state_for_newgrf_town_scope() {
+        let mut record = Vec::new();
+        record.extend_from_slice(&(4_u32 * 64 + 7).to_be_bytes()); // xy
+        write_str("Scopeville", &mut record);
+        record.push(0b0000_0111); // flags: growing + church + stadium
+        record.extend_from_slice(&0x0021_u16.to_be_bytes()); // statues
+        record.extend_from_slice(&0x0005_u16.to_be_bytes()); // have_ratings
+        write_gamma(2, &mut record); // ratings
+        record.extend_from_slice(&(-12_i16).to_be_bytes());
+        record.extend_from_slice(&345_i16.to_be_bytes());
+        write_gamma(2, &mut record); // unwanted
+        record.extend_from_slice(&[4, 0]);
+        write_gamma(5, &mut record); // goal
+        for value in [11_u32, 22, 33, 44, 55] {
+            record.extend_from_slice(&value.to_be_bytes());
+        }
+        record.extend_from_slice(&17_u16.to_be_bytes()); // time_until_rebuild
+        record.extend_from_slice(&1234_u16.to_be_bytes()); // grow_counter
+        record.extend_from_slice(&4321_u16.to_be_bytes()); // growth_rate
+        record.push(2); // fund_buildings_months
+        record.push(3); // road_build_months
+        record.push(7); // exclusivity
+        record.push(9); // exclusive_counter
+        record.push(1); // larger_town
+        record.push(3); // layout grid 3x3
+        record.extend_from_slice(&0x0102_0304_0506_0708_u64.to_be_bytes());
+        write_str("", &mut record); // GameScript text
+
+        let chunk = RawChunk {
+            name: *b"CITY",
+            ch_type: CH_TABLE,
+            body: build_table_body(
+                &[
+                    (6, "xy"),
+                    (0x0A | 0x10, "name"),
+                    (2, "flags"),
+                    (4, "statues"),
+                    (4, "have_ratings"),
+                    (3 | 0x10, "ratings"),
+                    (1 | 0x10, "unwanted"),
+                    (6 | 0x10, "goal"),
+                    (4, "time_until_rebuild"),
+                    (4, "grow_counter"),
+                    (4, "growth_rate"),
+                    (2, "fund_buildings_months"),
+                    (2, "road_build_months"),
+                    (2, "exclusivity"),
+                    (2, "exclusive_counter"),
+                    (1, "larger_town"),
+                    (2, "layout"),
+                    (8, "valid_history"),
+                    (0x0A | 0x10, "text"),
+                ],
+                &[record],
+            ),
+        };
+        let towns = towns_from_chunks(&[chunk], 64, 300);
+        let town = towns.first().expect("native CITY row");
+        assert_eq!(town.pos, TileCoord::new(7, 4));
+        assert_eq!(town.name, "Scopeville");
+        assert_eq!(town.native_flags, 0b111);
+        assert!(town.is_growing && town.has_church && town.has_stadium);
+        assert_eq!(town.statues, 0x21);
+        assert_eq!(town.have_ratings, 5);
+        assert_eq!(town.authority_ratings, vec![-12, 345]);
+        assert_eq!(town.unwanted, vec![4, 0]);
+        assert_eq!(town.goals, [11, 22, 33, 44, 55]);
+        assert_eq!(town.time_until_rebuild, 17);
+        assert_eq!(town.grow_counter, 1234);
+        assert_eq!(town.growth_rate, 4321);
+        assert_eq!(town.fund_buildings_months, 2);
+        assert_eq!(town.road_build_months, 3);
+        assert_eq!(town.exclusivity, Some(crate::company::CompanyId(7)));
+        assert_eq!(town.exclusive_counter, 9);
+        assert!(town.larger_town);
+        assert_eq!(town.layout, crate::town::TownLayout::Grid3x3);
+        assert_eq!(town.valid_history, 0x0102_0304_0506_0708);
+        assert!(town.native_text.is_empty());
     }
 
     #[test]

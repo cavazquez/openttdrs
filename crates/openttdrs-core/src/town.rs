@@ -193,12 +193,33 @@ pub enum TownRatingCheckType {
 }
 
 /// Ciudad (importada de saves de `OpenTTD` o creada por el juego).
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Town {
     pub id: u32,
     pub pos: crate::map::TileCoord,
     pub name: String,
+    /// Identidad del generador de nombres nativo (`CITY.townnamegrfid`).
+    ///
+    /// Se conserva separada del nombre resuelto para que una carga desde SAV
+    /// no pierda la semilla de nombres aunque el runtime sólo muestre el
+    /// texto resultante.
+    #[serde(default)]
+    pub townnamegrfid: u32,
+    /// Tipo de nombre nativo (`CITY.townnametype`).
+    #[serde(default)]
+    pub townnametype: u16,
+    /// Partes/semilla del nombre nativo (`CITY.townnameparts`).
+    #[serde(default)]
+    pub townnameparts: u32,
     pub population: u32,
+    /// Bitset nativo `TownFlag` de `CITY.flags`.
+    ///
+    /// Las banderas que ya tienen un espejo semántico (`is_growing`,
+    /// `has_church`, `has_stadium`) se sincronizan al importar; los bits
+    /// restantes se preservan aunque todavía no tengan comportamiento propio.
+    #[serde(default)]
+    pub native_flags: u8,
     /// Valoración de la autoridad local por compañía (`ratings[MAX_COMPANIES]`).
     #[serde(
         default = "default_authority_ratings",
@@ -206,6 +227,9 @@ pub struct Town {
         deserialize_with = "authority_serde::deserialize"
     )]
     pub authority_ratings: Vec<i16>,
+    /// Máscara nativa de compañías con rating (`CITY.have_ratings`).
+    #[serde(default)]
+    pub have_ratings: u16,
     /// Campo legado en saves v22 (`local_authority_rating` único).
     #[serde(default, skip_serializing, rename = "local_authority_rating")]
     pub legacy_local_authority_rating: Option<i16>,
@@ -266,6 +290,16 @@ pub struct Town {
     /// Meses de reconstrucción vial financiada (`road_build_months`).
     #[serde(default)]
     pub road_build_months: u8,
+    /// `true` si el pueblo usa el algoritmo de crecimiento acelerado.
+    #[serde(default)]
+    pub larger_town: bool,
+    /// Máscara de meses válidos del historial de suministros (`CITY.valid_history`).
+    #[serde(default)]
+    pub valid_history: u64,
+    /// Texto adicional codificado por `GameScript` (`CITY.text`), conservado
+    /// como UTF-8 lossless-best-effort por el parser de tablas.
+    #[serde(default)]
+    pub native_text: String,
     /// Meses restantes de derechos exclusivos (`exclusive_counter`).
     #[serde(default)]
     pub exclusive_counter: u8,
@@ -311,8 +345,13 @@ impl Default for Town {
             id: 0,
             pos: TileCoord::new(0, 0),
             name: String::new(),
+            townnamegrfid: 0,
+            townnametype: 0,
+            townnameparts: 0,
             population: 0,
+            native_flags: 0,
             authority_ratings: default_authority_ratings(),
+            have_ratings: 0,
             legacy_local_authority_rating: None,
             passengers_served: 0,
             mail_served: 0,
@@ -333,6 +372,9 @@ impl Default for Town {
             has_stadium: false,
             time_until_rebuild: default_time_until_rebuild(),
             road_build_months: 0,
+            larger_town: false,
+            valid_history: 0,
+            native_text: String::new(),
             exclusive_counter: 0,
             exclusivity: None,
             statues: 0,
@@ -426,6 +468,21 @@ impl Town {
         ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
     ) {
         let population = self.population.min(u32::from(u16::MAX));
+        // `TownFlag` mantiene cuatro bits de comportamiento en OpenTTD. Los
+        // tres que ya tienen espejo en el modelo se vuelven a componer para
+        // que una mutación runtime no deje obsoleto el byte importado; los
+        // bits restantes se conservan literalmente.
+        let mut flags = self.native_flags & !0x07;
+        if self.is_growing {
+            flags |= 1 << 0;
+        }
+        if self.has_church {
+            flags |= 1 << 1;
+        }
+        if self.has_stadium {
+            flags |= 1 << 2;
+        }
+        ctx.parent_vars.insert(0x40, u32::from(self.larger_town));
         ctx.parent_vars.insert(0x41, self.id);
         ctx.parent_vars.insert(0x80, self.pos.x.cast_unsigned());
         ctx.parent_vars.insert(0x81, self.pos.y.cast_unsigned());
@@ -436,6 +493,8 @@ impl Town {
             0x8A,
             u32::from(self.grow_counter) / u32::try_from(TOWN_GROWTH_TICKS).unwrap_or(1),
         );
+        ctx.parent_vars.insert(0x92, u32::from(flags));
+        ctx.parent_vars.insert(0x93, 0);
         for (index, &radius) in self.squared_town_zone_radius.iter().enumerate() {
             let Ok(offset) = u8::try_from(index.saturating_mul(2)) else {
                 break;
@@ -445,6 +504,7 @@ impl Town {
                 .insert(0x94 + offset, radius & u32::from(u16::MAX));
             ctx.parent_vars.insert(0x95 + offset, radius >> 8);
         }
+        ctx.parent_vars.insert(0xAE, u32::from(self.have_ratings));
         for (index, &rating) in self.authority_ratings.iter().take(8).enumerate() {
             let Ok(offset) = u8::try_from(index.saturating_mul(2)) else {
                 break;
@@ -1389,6 +1449,12 @@ mod tests {
             statues: 0x55,
             road_build_months: 4,
             fund_buildings_months: 3,
+            native_flags: 0b111,
+            have_ratings: 0xA5,
+            larger_town: true,
+            is_growing: true,
+            has_church: true,
+            has_stadium: true,
             ..Default::default()
         };
         town.history.samples = vec![
@@ -1413,11 +1479,14 @@ mod tests {
         town.copy_newgrf_parent_scope(0, &mut ctx);
 
         assert_eq!(ctx.parent_vars.get(&0x41), Some(&7));
+        assert_eq!(ctx.parent_vars.get(&0x40), Some(&1));
         assert_eq!(ctx.parent_vars.get(&0x80), Some(&0x12));
         assert_eq!(ctx.parent_vars.get(&0x81), Some(&0x34));
         assert_eq!(ctx.parent_vars.get(&0x82), Some(&0x1234));
         assert_eq!(ctx.parent_vars.get(&0x83), Some(&0x12));
         assert_eq!(ctx.parent_vars.get(&0x8A), Some(&1));
+        assert_eq!(ctx.parent_vars.get(&0x92), Some(&0x07));
+        assert_eq!(ctx.parent_vars.get(&0x93), Some(&0));
         assert_eq!(ctx.parent_vars.get(&0xB2), Some(&0x55));
         assert_eq!(ctx.parent_vars.get(&0xB6), Some(&9));
         assert_eq!(ctx.parent_vars.get(&0xB9), Some(&2));
@@ -1433,6 +1502,7 @@ mod tests {
         assert_eq!(ctx.parent_vars.get(&0xD2), Some(&0xDEF0));
         assert_eq!(ctx.parent_vars.get(&0xD4), Some(&4));
         assert_eq!(ctx.parent_vars.get(&0xD5), Some(&3));
+        assert_eq!(ctx.parent_vars.get(&0xAE), Some(&0xA5));
     }
 
     #[test]

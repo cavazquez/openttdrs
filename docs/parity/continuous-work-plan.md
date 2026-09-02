@@ -750,3 +750,15 @@ historial y entregas) al scope parent; por lo que `7C` deja de ser sólo
 passthrough en esos dos call sites. El writeback de registros modificados, los
 scopes parent de estaciones/aeropuertos y las mutaciones estructurales de
 casas/objetos siguen pendientes; #329 y #328 permanecen abiertos.
+
+Actualización #329-TOWN-CITY-027 (2026-09-02): una inspección de un `CITY` real
+de OpenTTD 15.3 mostró que el parser anterior sólo retenía posición y nombre.
+Ahora `Town` conserva también la identidad del generador de nombres, flags,
+ratings, máscara `have_ratings`, unwanted, metas, contadores de crecimiento,
+exclusividad, layout, estatuas, `valid_history` y texto de GameScript. Los
+flags y las variables `0x40`, `0x92`, `0x93` y `0xAE` llegan al scope parent de
+casas/objetos, con una regresión sintética que comprueba la codificación de la
+tabla nativa. Esto reduce la divergencia de lectura/runtime, pero no cierra
+interoperabilidad: el writer canónico aún genera el `CITY` mínimo y no hace
+writeback de estos campos ni de `supplied`/`received`; un `CITY` importado sin
+mutaciones continúa protegido por passthrough. #328/#329 siguen abiertos.

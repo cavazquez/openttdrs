@@ -1243,9 +1243,7 @@ pub fn apply_industry_location_callback_for_build(
 /// Réplica acotada de `GetClosestWaterDistance(tile, true)` para el scope de
 /// construcción. El resultado está limitado a `0x7F`, como en `OpenTTD`.
 fn closest_water_distance_for_location(map: &Map, center: TileCoord) -> u32 {
-    let is_water = |coord: TileCoord| {
-        map.get(coord).is_some_and(has_tile_water_ground)
-    };
+    let is_water = |coord: TileCoord| map.get(coord).is_some_and(has_tile_water_ground);
     if is_water(center) {
         return 0;
     }

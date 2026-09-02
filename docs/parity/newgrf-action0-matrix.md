@@ -388,7 +388,7 @@ Labels custom o de climas no representados por `CargoType` siguen en fallback.
 | `25`/`26` cargo lists variables | **runtime** (índices+labels) |
 | `27` production rates list | **runtime** |
 | `28` multiplier table | **runtime** (almacenada) |
-| `29` badge list | consumida |
+| `29` badge list | **runtime parcial** (ids globales + tabla `GlobalVar 0x18` para CB28) |
 | `FE` nombre C-string (extensión local) | **runtime** |
 
 ## Objects (`0F`)

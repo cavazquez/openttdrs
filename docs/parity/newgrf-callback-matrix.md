@@ -117,7 +117,9 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 3. Vehicles CB11 — longitud efectiva al comprar/refrescar unidades (+ fallback `shorten_factor`).
 4. Vehicles CB15 — capacidad de refit en `RefitVehicle` (+ writeback persistent regs).
 5. Vehicles CB10 — efecto visual al emitir humo/chispas; el renderer usa el catálogo activo y respeta tipo/desactivación del callback (+ writeback persistent regs).
-6. Industries CB28 — location al colocar NewGRF (`place_industry_spec_def_sandbox`).
+6. Industries CB28 — location al colocar NewGRF (`place_industry_spec_def_sandbox`),
+   con `IACT_USERCREATION`, badges, TileIndex/layout, terreno, pueblo,
+   distancias, altura, agua y random; permanecen scopes nativos y errores GRF.
 7. Houses CB17 — allow construction durante crecimiento físico (GRF Action0/2/3 cargado + call site).
 8. Stations CB13 — availability en query+execute de construcción; sin storage en el scope nulo de OpenTTD.
 9. Industry tiles CB25/CB26/CB27 — trigger, next frame y velocidad en `phase_tile_animation` (FAILED observable).
@@ -126,10 +128,10 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 12. RoadStops CB140/CB141/CB142 — `Built`/`TileLoop`, carga/retirada de carga, carga/llegada/salida vial y `AcceptanceTick`; scheduler con velocidad/frame, writeback `7C`, CTT en `param2` y JSON round-trip. Cada tesela custom conserva spec/frame/activo/random, incluso tras `JoinStation`; los eventos exactos y de área completa siguen el alcance de `RoadStopTileData`. Action0 `0x0D` + Action2 random reacciona a NewCargo, CargoTaken, carga, llegada y salida con grupos `any`/`all`, bits base/tesela y triggers persistentes. Referencia: `newgrf_roadstop.cpp` / `newgrf_animation_base.h`.
 13. Vehicles CB32 — barrido económico escalonado, `day_counter` persistente, palabra de randomización de 16 bits, bits de paleta y trigger `Callback32` con reseed del grupo Action2 activo; `trigger_vehicle_randomisation_chain` cubre la propagación de `NewCargo`/`AnyNewCargo`, `Depot` y `Empty`. Los call sites de carga, vaciado y entrada a depósito de los cuatro tipos ya están conectados; la invalidación de paleta queda representada en la huella de Action2 que consume el renderer.
 14. Vehicles CB36 — resolver signed/unsigned, aplicar acortamiento `0x21`/`0x23`, consultar velocidad por clase y capacidad al crear/refitar/articular y durante `LoadUnloadStation`, resolver potencia/peso/TE para los recálculos ferroviario y vial con catálogo, y aplicar factores de compra/explotación en economía, activos y autoreplace; quedan APIs legacy sin catálogo, otras propiedades Action0 y scopes avanzados.
-15. Objects CB157 — pendiente por tesela de `BuildObject`, desde Action0 `0x15` y Action3→Action2 cargados; query y execute rechazan antes de mutar y aplican la inversión de bit 10 para GRF <8. Faltan scopes/vecinos, strings de error y fallback completo.
+15. Objects CB157 — parcial por tesela de `BuildObject`, desde Action0 `0x15` y Action3→Action2 cargados; query y execute rechazan antes de mutar y aplican la inversión de bit 10 para GRF <8. Faltan scopes/vecinos, strings de error y fallback completo.
 16. Cargoes CB39 — cálculo de pago por packet durante `unload_vehicles`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva la fórmula base.
 17. Cargoes CB145 — target de rating durante el barrido `update_station_ratings`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva el algoritmo estándar.
-18. Stations CB149 — por tesela al construir, desde Action0 `0x0B` y Action3→Action2 cargados; query y execute rechazan antes de mutar y aplican la inversión de bit 10 para GRF <8. Siguen pendientes scopes/vecinos y mensajes de error GRF.
+18. Stations CB149 — parcial por tesela al construir, desde Action0 `0x0B` y Action3→Action2 cargados; query y execute rechazan antes de mutar y aplican la inversión de bit 10 para GRF <8. Siguen pendientes scopes/vecinos y mensajes de error GRF.
 19. Stations CB14 — layout de tesela al dibujar, desde Action0 `0x0B` y Action3→Action2 cargados; el renderer el aplica antes de elegir la vista NewGRF.
 20. Stations CB140/CB141/CB142 — `Built`/`TileLoop`, `NewCargo`/`CargoTaken` y `AcceptanceTick` de área completa (250 ticks escalonada por StationID), y `VehicleLoads`/`VehicleArrives`/`VehicleDeparts`/`PathReservation` ferroviarios por plataforma; scheduler persistido por tesela, velocidad/frame, CTT de cargo en `param2` y var Action2 `4A`.
 21. Industries CB29/CB35 — cambios diario/mensual de `prod_level` con decodificación de acciones estándar y callback `0x15F` — nivel inicial al fundar.

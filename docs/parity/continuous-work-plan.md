@@ -647,6 +647,16 @@ encoder canónico. La regresión
 sin mutación. Quedan pendientes columnas desconocidas después de una mutación
 y los pools aún no modelados; #328/#329 permanecen abiertos.
 
+Actualización #329-VEHICLE-SAV-CAPA-018 (2026-09-02): el pool físico `CAPA`
+conserva su cuerpo nativo cuando los paquetes de estación/vehículo y sus
+referencias semánticas no cambian. Las columnas futuras de origen, tránsito y
+feeder sobreviven al round-trip; modificar, agregar o retirar un paquete
+invalida `CAPA` y vuelve al encoder canónico junto con los enlaces recalculados
+de `STNN`/`VEHS`. La regresión
+`export_roundtrip_preserves_station_and_vehicle_cargo_packets` verifica ambos
+caminos. La fusión parcial posterior y los pools nativos restantes continúan
+pendientes; #328 permanece abierto.
+
 Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` comparte ahora la
 huella de filas con las tablas SAV anteriores. Un round-trip sin cambios de
 compañías conserva byte a byte el header y las columnas futuras de dinero,

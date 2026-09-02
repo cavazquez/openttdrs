@@ -105,6 +105,7 @@ pub(crate) struct SavSemanticTableRecords {
     pub(crate) lgrp: Vec<Vec<u8>>,
     pub(crate) ngrf: Vec<Vec<u8>>,
     pub(crate) date: Vec<Vec<u8>>,
+    pub(crate) capa: Vec<Vec<u8>>,
 }
 
 pub(crate) fn semantic_table_records(
@@ -112,6 +113,7 @@ pub(crate) fn semantic_table_records(
 ) -> Result<SavSemanticTableRecords, SavError> {
     let (map_w, _) = state.map.dimensions();
     let cargo_export = entities::cargo_packet_export(state, map_w);
+    let capa = entities::capa_records(&cargo_export);
     let (ordl, vehs) = vehicles::ordl_and_vehs_records_with_cargo(state, map_w, &cargo_export)?;
     let stnn = entities::stnn_records_with_cargo(state, map_w, &cargo_export)?;
     let city = entities::city_records(state, map_w)?;
@@ -138,6 +140,7 @@ pub(crate) fn semantic_table_records(
         lgrp,
         ngrf,
         date: date_records,
+        capa,
     })
 }
 
@@ -369,7 +372,17 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     } else if !vehs.is_empty() {
         data.extend_from_slice(&vehicles::vehs_chunk(&vehs)?);
     }
-    if let Some(capa) = entities::capa_chunk(&cargo_export)? {
+    let capa_records = entities::capa_records(&cargo_export);
+    let raw_capa = raw_tables.and_then(|passthrough| {
+        passthrough.capa_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"CAPA"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.capa_semantic_records == capa_records
+        })
+    });
+    if let Some(raw) = raw_capa {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else if let Some(capa) = entities::capa_chunk(&cargo_export)? {
         data.extend_from_slice(&capa);
     }
 
@@ -423,14 +436,14 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     }
 
     let capy = meta::capy_records(state)?;
-    let raw_capy = raw_tables.and_then(|passthrough| {
+    let raw_capy_payments = raw_tables.and_then(|passthrough| {
         passthrough.capy_chunk.as_ref().filter(|chunk| {
             chunk.name == *b"CAPY"
                 && chunk.ch_type != super::chunks::CH_RIFF
                 && passthrough.capy_semantic_records == capy
         })
     });
-    if let Some(raw) = raw_capy {
+    if let Some(raw) = raw_capy_payments {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else if let Some(capy) = meta::capy_chunk(state)? {
         data.extend_from_slice(&capy);
@@ -2293,6 +2306,12 @@ mod tests {
         state.vehicles = vec![train];
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let (payload, _) = crate::sav::container::decompress(&bytes).expect("payload");
+        let original_chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
+        let original_capa = crate::sav::chunks::find_chunk(&original_chunks, "CAPA")
+            .expect("CAPA original")
+            .body
+            .clone();
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.cargo_packets.len(), 2);
         assert_eq!(sav_game.stations[0].cargo[0].packet_ids.len(), 1);
@@ -2308,6 +2327,27 @@ mod tests {
         assert_eq!(
             loaded.vehicles[0].cargo_packets.packets[0].next_hop,
             Some(destination)
+        );
+        let passthrough = loaded
+            .sav_table_passthrough
+            .as_ref()
+            .expect("CAPA passthrough after import");
+        assert_eq!(
+            passthrough
+                .capa_chunk
+                .as_ref()
+                .expect("CAPA passthrough")
+                .body,
+            original_capa
+        );
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
+        let (resaved_payload, _) = crate::sav::container::decompress(&resaved).expect("payload");
+        let resaved_chunks = crate::sav::chunks::parse_chunks(&resaved_payload).expect("chunks");
+        assert_eq!(
+            crate::sav::chunks::find_chunk(&resaved_chunks, "CAPA")
+                .expect("CAPA resaved")
+                .body,
+            original_capa
         );
     }
 

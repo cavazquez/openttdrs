@@ -867,10 +867,18 @@ fn append_capa_header(header: &mut Vec<u8>) -> Result<(), SavError> {
 
 /// Construye el pool `CAPA` y enlaza sus registros desde `STNN`/`VEHS`.
 pub(crate) fn capa_chunk(export: &CargoPacketExport) -> Result<Option<Vec<u8>>, SavError> {
-    if export.packets.is_empty() {
+    let records = capa_records(export);
+    if records.is_empty() {
         return Ok(None);
     }
-    let records = export
+    let mut header = Vec::new();
+    append_capa_header(&mut header)?;
+    raw_table_chunk(*b"CAPA", &header, &records, CH_TABLE).map(Some)
+}
+
+/// Serializa las filas semánticas del pool `CAPA`.
+pub(crate) fn capa_records(export: &CargoPacketExport) -> Vec<Vec<u8>> {
+    export
         .packets
         .iter()
         .map(|packet| {
@@ -887,10 +895,7 @@ pub(crate) fn capa_chunk(export: &CargoPacketExport) -> Result<Option<Vec<u8>>, 
             record.extend_from_slice(&packet.travelled_y.to_be_bytes());
             record
         })
-        .collect::<Vec<_>>();
-    let mut header = Vec::new();
-    append_capa_header(&mut header)?;
-    raw_table_chunk(*b"CAPA", &header, &records, CH_TABLE).map(Some)
+        .collect()
 }
 
 /// Record CITY mínimo (`OpenTTD` exige ≥1 municipio: `STR_ERROR_NO_TOWN_IN_SCENARIO`).

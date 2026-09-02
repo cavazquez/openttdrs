@@ -237,6 +237,12 @@ cuerpo original cuando sus cuatro valores conocidos (fecha, tick y dos
 palabras RNG) coinciden. Cambiar cualquiera de ellos fuerza la serialización
 canónica, manteniendo el reloj válido sin copiar estado obsoleto.
 
+Actualización #329-VEHICLE-SAV-CAPA-018 (2026-09-02): `CAPA` compara ahora la
+huella densa de paquetes físicos y reemite el cuerpo original sin cambios,
+conservando columnas futuras. Cualquier mutación de paquetes o referencias
+activa la serialización canónica y mantiene los enlaces `STNN`/`VEHS` válidos;
+la fusión parcial de columnas sigue pendiente.
+
 Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` conserva ahora su
 cuerpo original cuando las filas semánticas de compañías coinciden. El
 exportador mantiene así columnas nuevas de ajustes, economía, libreas y

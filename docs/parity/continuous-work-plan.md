@@ -485,6 +485,17 @@ correspondiente; una prueba de sprite cubre las cuatro direcciones y las
 variantes normal/nieve. Las pendientes no válidas, las rotaciones de
 compositor y las paletas especiales siguen abiertas; #326 no se cierra.
 
+Actualización #329-VEHICLE-TRAIN-002 (2026-09-02): la predicción de salida de
+tesela usada por las señales ferroviarias ya recibe el catálogo activo. Cuando
+`train_would_leave_tile_this_tick` se ejecuta durante `Train::CheckSignals`,
+CB36 (`PROP_TRAIN_SPEED`, `0x09`) se resuelve sobre una copia del vehículo y
+el resultado limita los dos pasos del *locomotive handler*; un callback que
+reduce la velocidad ya no se sustituye por `EngineDef::max_speed` vanilla.
+También la salida desde depósito usa esta variante. La regresión
+`train_tile_prediction_uses_newgrf_speed_property` fija la diferencia entre la
+predicción vanilla y la de un motor NewGRF. Potencia/TE/arrastre dinámicos,
+otras propiedades Action0 y APIs legacy sin catálogo siguen abiertos en #329.
+
 Actualización #329-VEHICLE-SHIP-001 (2026-09-02): la velocidad de un barco
 NewGRF respeta ahora el orden de `Ship::UpdateCache` de OpenTTD. El controlador
 consulta primero `CBID_VEHICLE_MODIFY_PROPERTY` (`PROP_SHIP_SPEED`, `0x0B`) y

@@ -31,7 +31,7 @@ pub fn tick_train_stay_in_depot(
 ) -> bool {
     let mut fleet = FleetIndex::default();
     fleet.rebuild(vehicles);
-    tick_train_stay_in_depot_indexed(map, vehicles, index, settings, &fleet)
+    tick_train_stay_in_depot_indexed(map, vehicles, index, settings, &fleet, &[])
 }
 
 /// Variante para el ciclo de simulación que reutiliza el `FleetIndex` del tick.
@@ -42,6 +42,7 @@ pub(crate) fn tick_train_stay_in_depot_indexed(
     index: usize,
     settings: PathfindingSettings,
     fleet: &FleetIndex,
+    engine_catalog: &[crate::engine::EngineDef],
 ) -> bool {
     let Some(vehicle) = vehicles.get(index) else {
         return false;
@@ -103,7 +104,7 @@ pub(crate) fn tick_train_stay_in_depot_indexed(
         return true;
     }
 
-    let exit_blocked = depot_exit_blocked_indexed(map, vehicles, index, fleet);
+    let exit_blocked = depot_exit_blocked_indexed(map, vehicles, index, fleet, engine_catalog);
 
     if !force {
         let Some(vehicle) = vehicles.get_mut(index) else {
@@ -407,12 +408,17 @@ fn depot_exit_blocked_indexed(
     vehicles: &[Vehicle],
     index: usize,
     fleet: &FleetIndex,
+    engine_catalog: &[crate::engine::EngineDef],
 ) -> bool {
     let Some(vehicle) = vehicles.get(index) else {
         return false;
     };
-    if crate::rail_signals::train_blocked_by_signal(map, vehicles, vehicle)
-        || crate::rail_signals::train_blocked_by_traffic_indexed(map, vehicles, vehicle, fleet)
+    if crate::rail_signals::train_blocked_by_signal_with_catalog(
+        map,
+        vehicles,
+        vehicle,
+        engine_catalog,
+    ) || crate::rail_signals::train_blocked_by_traffic_indexed(map, vehicles, vehicle, fleet)
     {
         return true;
     }

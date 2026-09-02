@@ -35,6 +35,67 @@ fn progress_requires_multiple_ticks_per_tile() {
 }
 
 #[test]
+fn train_tile_prediction_uses_newgrf_speed_property() {
+    use crate::engine::{TrainAccelerationModel, engines_table};
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+
+    // CB36 returns a deliberately low speed. The signal predictor must use
+    // that value instead of the Action0 catalogue speed when simulating its
+    // two locomotive-handler passes.
+    let mut runtime = TrainSpriteGraphics::default();
+    runtime.assigns.push(TrainSpriteAssign {
+        local_id: 0,
+        set_id: 2,
+    });
+    runtime.action2_var.insert(
+        2,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x1A,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: 1,
+                    ..Action2VarAdjust::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+
+    let mut engine = engines_table()
+        .iter()
+        .find(|candidate| candidate.kind == VehicleKind::Train)
+        .cloned()
+        .unwrap();
+    engine.id = 65_104;
+    engine.newgrf_grfid = 0x5452_4E53;
+    engine.newgrf_local_id = 0;
+    engine.newgrf_runtime = Some(Box::new(runtime));
+    let base_speed = engine.max_speed;
+
+    let pos = TileCoord::new(1, 1);
+    let mut train = Vehicle::new(1, VehicleKind::Train, pos, pos);
+    train.engine_id = Some(engine.id);
+    train.running = true;
+    train.cur_speed = base_speed;
+    train.rail_pixel = 15;
+    train.progress = 100;
+    let catalog = vec![engine];
+
+    assert!(train.train_would_leave_tile_this_tick(TrainAccelerationModel::Original));
+    assert!(
+        !train.train_would_leave_tile_this_tick_with_catalog(
+            TrainAccelerationModel::Original,
+            &catalog,
+        )
+    );
+}
+
+#[test]
 fn next_station_hop_skips_current_and_wraps() {
     let a = TileCoord::new(1, 1);
     let b = TileCoord::new(2, 2);

@@ -351,6 +351,12 @@ La capacidad dinámica durante la partida ya se refresca al entrar en
 los factores de compra/explotación de CB36 también se aplican al construir,
 vender, autoreemplazar, valorar activos y cobrar el coste anual. Quedan las
 APIs legacy sin catálogo y el resto de propiedades Action0.
+La predicción ferroviaria de salida de tesela usada por las señales y la salida
+de depósito también recibe el catálogo activo: `PROP_TRAIN_SPEED` (`0x09`) se
+resuelve sobre una copia del vehículo y limita los dos pasos especulativos del
+*locomotive handler*, sin escribir dos veces los registros `7C`. La regresión
+`train_tile_prediction_uses_newgrf_speed_property` cubre el caso reductivo;
+potencia/TE/arrastre dinámicos y el resto de propiedades siguen residuales.
 En barcos, la velocidad NewGRF ya respeta el orden nativo de `Ship::UpdateCache`:
 primero se consulta `PROP_SHIP_SPEED` (`CBID_VEHICLE_MODIFY_PROPERTY`, `0x0B`)
 y después se aplica la fracción de mar/canal. La regresión

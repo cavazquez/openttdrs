@@ -156,6 +156,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 i,
                 pf,
                 &state.runtime.fleet_index,
+                &state.engine_catalog,
             )
         {
             continue;
@@ -263,8 +264,11 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 } else {
                     // PBS fase 2: reserva por pista; bloqueo solo si el paso no está reservado.
                     crate::rail_pbs::train_blocked_by_reservation(&state.map, vehicle)
-                        || crate::rail_signals::train_blocked_by_signal(
-                            &state.map, vehicles, vehicle,
+                        || crate::rail_signals::train_blocked_by_signal_with_catalog(
+                            &state.map,
+                            vehicles,
+                            vehicle,
+                            &state.engine_catalog,
                         )
                         || crate::rail_signals::train_blocked_by_traffic_indexed(
                             &state.map,
@@ -286,10 +290,11 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             let waiting_pbs =
                 crate::rail_pbs::train_waiting_for_pbs_path(&state.map, &state.vehicles[i]);
             let waiting_signal = !waiting_pbs
-                && crate::rail_signals::train_blocked_by_signal(
+                && crate::rail_signals::train_blocked_by_signal_with_catalog(
                     &state.map,
                     &state.vehicles,
                     &state.vehicles[i],
+                    &state.engine_catalog,
                 );
             state.vehicles[i].cur_speed = 0;
             // PBS / head-on: timeout `wait_for_pbs_path`. Señal de bloque: oneway/twoway.

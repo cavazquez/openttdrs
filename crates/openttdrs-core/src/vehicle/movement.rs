@@ -583,14 +583,46 @@ impl super::model::Vehicle {
     /// `true` si este tick de juego (2× loco handler) cruzaría la tesela actual.
     #[must_use]
     pub fn train_would_leave_tile_this_tick(&self, train_accel: TrainAccelerationModel) -> bool {
+        let engine = self.effective_engine();
+        self.train_would_leave_tile_this_tick_with_engine(train_accel, engine, engine.max_speed)
+    }
+
+    /// Variante de [`Self::train_would_leave_tile_this_tick`] que resuelve el
+    /// motor desde el catálogo activo de la partida.
+    ///
+    /// La predicción se usa mientras se evalúa una señal y recibe un `&Vehicle`
+    /// compartido. Por eso CB36 se ejecuta sobre una copia: el resultado de
+    /// `PROP_TRAIN_SPEED` debe afectar la física de este tick, pero una
+    /// comprobación especulativa no debe escribir registros `7C` en el estado
+    /// autoritativo dos veces.
+    #[must_use]
+    pub fn train_would_leave_tile_this_tick_with_catalog(
+        &self,
+        train_accel: TrainAccelerationModel,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) -> bool {
+        let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, self);
+        let mut callback_vehicle = self.clone();
+        let max_speed = crate::newgrf_callback::vehicle_max_speed(engine, &mut callback_vehicle);
+        self.train_would_leave_tile_this_tick_with_engine(train_accel, engine, max_speed)
+    }
+
+    fn train_would_leave_tile_this_tick_with_engine(
+        &self,
+        train_accel: TrainAccelerationModel,
+        engine: &crate::engine::EngineDef,
+        mut max_speed: u16,
+    ) -> bool {
         if self.kind != super::model::VehicleKind::Train || self.cur_speed == 0 {
             return false;
+        }
+        if self.cached_max_speed > 0 && self.cached_max_speed < u16::MAX {
+            max_speed = max_speed.min(self.cached_max_speed);
         }
         let mut speed = self.cur_speed;
         let mut sub = self.subspeed;
         let mut progress = self.progress;
         let mut pixel = self.rail_pixel;
-        let engine = self.effective_engine();
         let (power, weight) = if self.cached_power_hp > 0 || self.cached_weight_t > 0 {
             (
                 self.cached_power_hp.max(engine.power_hp),
@@ -619,7 +651,7 @@ impl super::model::Vehicle {
                 weight,
                 te,
                 air,
-                engine.max_speed,
+                max_speed,
                 false,
             );
             speed = r.cur_speed;

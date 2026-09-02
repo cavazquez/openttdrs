@@ -229,7 +229,10 @@ pub(crate) fn rail_step_signal_allows(
 
 /// `true` si el avance sub-tesela de este tick completaría la tesela actual.
 #[must_use]
-fn train_would_complete_current_tile(vehicle: &Vehicle) -> bool {
+fn train_would_complete_current_tile(
+    vehicle: &Vehicle,
+    engine_catalog: &[crate::engine::EngineDef],
+) -> bool {
     if vehicle.depart_turn > 0 {
         let step = u16::from(vehicle.progress_step().max(1));
         return u16::from(vehicle.depart_turn).saturating_add(step) >= 255;
@@ -244,7 +247,11 @@ fn train_would_complete_current_tile(vehicle: &Vehicle) -> bool {
     } else {
         crate::engine::TrainAccelerationModel::Original
     };
-    vehicle.train_would_leave_tile_this_tick(model)
+    if engine_catalog.is_empty() {
+        vehicle.train_would_leave_tile_this_tick(model)
+    } else {
+        vehicle.train_would_leave_tile_this_tick_with_catalog(model, engine_catalog)
+    }
 }
 
 /// `true` si la salida path en `signal_tile` → `beyond` carece de reserva completa.
@@ -288,6 +295,7 @@ fn train_held_before_signal_tile(
     vehicle: &Vehicle,
     to: TileCoord,
     signal_tile: &crate::map::Tile,
+    engine_catalog: &[crate::engine::EngineDef],
 ) -> bool {
     let Some(beyond) = path_continuation_after(vehicle, to) else {
         return false;
@@ -305,7 +313,7 @@ fn train_held_before_signal_tile(
     if vehicle.cur_speed == 0 && vehicle.rail_pixel > 0 {
         return true;
     }
-    train_would_complete_current_tile(vehicle)
+    train_would_complete_current_tile(vehicle, engine_catalog)
 }
 
 /// `true` si el tren no puede avanzar por falta de reserva PBS completa en path.
@@ -340,6 +348,18 @@ pub fn train_blocked_by_pbs_path(map: &Map, vehicle: &Vehicle) -> bool {
 /// `true` si el tren no puede avanzar al siguiente paso por señal en rojo.
 #[must_use]
 pub fn train_blocked_by_signal(map: &Map, vehicles: &[Vehicle], vehicle: &Vehicle) -> bool {
+    train_blocked_by_signal_with_catalog(map, vehicles, vehicle, &[])
+}
+
+/// Variante de [`train_blocked_by_signal`] que usa los motores `NewGRF` de la
+/// partida para predecir si el tren cruza la tesela durante este tick.
+#[must_use]
+pub fn train_blocked_by_signal_with_catalog(
+    map: &Map,
+    vehicles: &[Vehicle],
+    vehicle: &Vehicle,
+    engine_catalog: &[crate::engine::EngineDef],
+) -> bool {
     if vehicle.kind != VehicleKind::Train || !vehicle.running {
         return false;
     }
@@ -351,7 +371,7 @@ pub fn train_blocked_by_signal(map: &Map, vehicles: &[Vehicle], vehicle: &Vehicl
     if let Some(signal_tile) = map.get(to)
         && signal_tile.kind == TileKind::Rail
         && rail_tile_is_signals(signal_tile.m5)
-        && train_held_before_signal_tile(map, vehicles, vehicle, to, &signal_tile)
+        && train_held_before_signal_tile(map, vehicles, vehicle, to, &signal_tile, engine_catalog)
     {
         return true;
     }

@@ -82,6 +82,18 @@ pub fn save_to_bytes_with(state: &GameState, container: SavContainer) -> Result<
     wrap_container(&payload, EXPORT_SAVE_VERSION, container)
 }
 
+/// Serializa únicamente las filas semánticas de `VEHS`.
+///
+/// El importador usa esta representación como huella: si las filas siguen
+/// iguales, el escritor puede reutilizar el cuerpo original y no perder
+/// columnas que una versión más nueva de `OpenTTD` haya añadido.
+pub(crate) fn semantic_vehs_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
+    let (map_w, _) = state.map.dimensions();
+    let cargo_export = entities::cargo_packet_export(state, map_w);
+    let (_, vehs) = vehicles::ordl_and_vehs_records_with_cargo(state, map_w, &cargo_export)?;
+    Ok(vehs)
+}
+
 /// Chunks siempre presentes en un export mínimo (mapa + CITY + DATE + PLYR).
 /// `CITY` es obligatorio para `OpenTTD` (`STR_ERROR_NO_TOWN_IN_SCENARIO`).
 pub const REQUIRED_EXPORT_CHUNKS: &[&str] = &[
@@ -259,7 +271,18 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if !ordl.is_empty() {
         data.extend_from_slice(&vehicles::ordl_chunk(&ordl)?);
     }
-    if !vehs.is_empty() {
+    let raw_vehs = state.sav_vehs_passthrough.as_ref().filter(|passthrough| {
+        passthrough.chunk.name == *b"VEHS"
+            && passthrough.chunk.ch_type != super::chunks::CH_RIFF
+            && passthrough.semantic_records == vehs
+    });
+    if let Some(raw) = raw_vehs {
+        data.extend_from_slice(&chunks::raw_chunk(
+            raw.chunk.name,
+            raw.chunk.ch_type,
+            &raw.chunk.body,
+        ));
+    } else if !vehs.is_empty() {
         data.extend_from_slice(&vehicles::vehs_chunk(&vehs)?);
     }
     if let Some(capa) = entities::capa_chunk(&cargo_export)? {
@@ -701,6 +724,48 @@ mod tests {
         for expected in ["GSET", "ENGN", "SRND"] {
             assert!(names.iter().any(|name| name == expected), "{names:?}");
         }
+    }
+
+    #[test]
+    fn imported_vehs_body_is_reused_until_vehicle_semantics_change() {
+        let mut state = tiny_state();
+        let vehicle_pos = TileCoord::new(10, 20);
+        state.vehicles.push(Vehicle::new(
+            41,
+            VehicleKind::Train,
+            vehicle_pos,
+            vehicle_pos,
+        ));
+
+        let original = save_to_bytes_with(&state, SavContainer::Ottn).expect("save original");
+        let (original_payload, _) = crate::sav::container::decompress(&original).expect("payload");
+        let original_chunks = crate::sav::chunks::parse_chunks(&original_payload).expect("chunks");
+        let original_vehs = crate::sav::chunks::find_chunk(&original_chunks, "VEHS")
+            .expect("VEHS original")
+            .body
+            .clone();
+
+        let mut loaded = GameState::from_sav_game(sav::load(&original).expect("load original"));
+        let passthrough = loaded
+            .sav_vehs_passthrough
+            .as_ref()
+            .expect("VEHS passthrough after import");
+        assert_eq!(passthrough.chunk.body, original_vehs);
+
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
+        let (resaved_payload, _) = crate::sav::container::decompress(&resaved).expect("payload");
+        let resaved_chunks = crate::sav::chunks::parse_chunks(&resaved_payload).expect("chunks");
+        let resaved_vehs =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "VEHS").expect("VEHS resaved");
+        assert_eq!(resaved_vehs.body, original_vehs);
+
+        loaded.vehicles[0].cur_speed = loaded.vehicles[0].cur_speed.saturating_add(1);
+        let changed = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("save changed");
+        let (changed_payload, _) = crate::sav::container::decompress(&changed).expect("payload");
+        let changed_chunks = crate::sav::chunks::parse_chunks(&changed_payload).expect("chunks");
+        let changed_vehs =
+            crate::sav::chunks::find_chunk(&changed_chunks, "VEHS").expect("VEHS changed");
+        assert_ne!(changed_vehs.body, original_vehs);
     }
 
     #[test]

@@ -569,3 +569,13 @@ referencias `next` usan la misma clasificación. La regresión
 `vehs_uses_newgrf_catalog_for_aircraft_subtype` verifica las tres filas del
 helicóptero custom. La tabla `VEHS` aún usa un encabezado mínimo y no conserva
 columnas desconocidas de una tabla reconstruida; #329 permanece abierto.
+
+Actualización #329-VEHICLE-SAV-VEHS-009 (2026-09-02): la importación conserva
+el cuerpo nativo de `VEHS` junto con una huella de sus filas semánticas. En un
+ciclo cargar→guardar sin cambiar vehículos, el exportador reemite exactamente
+el chunk original, incluidas columnas añadidas por versiones futuras de
+OpenTTD; si cambia una fila (por ejemplo `cur_speed`), invalida el passthrough y
+reconstruye la tabla canónica para no guardar estado obsoleto. La regresión
+`imported_vehs_body_is_reused_until_vehicle_semantics_change` cubre ambos
+caminos. La huella todavía no fusiona columnas desconocidas después de una
+mutación parcial ni cubre `ORDL`/`STNN`/`CITY`/`INDY`; #329 sigue abierto.

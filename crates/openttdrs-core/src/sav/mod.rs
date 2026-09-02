@@ -115,6 +115,15 @@ pub struct SavOpaqueChunk {
     pub body: Vec<u8>,
 }
 
+/// Snapshot crudo de `VEHS` junto con la representación semántica que generó
+/// el importador. Si la representación no cambia, el escritor puede reutilizar
+/// el cuerpo original y conservar columnas de versiones futuras de `OpenTTD`.
+#[derive(Debug, Clone)]
+pub(crate) struct SavVehiclesPassthrough {
+    pub(crate) chunk: SavOpaqueChunk,
+    pub(crate) semantic_records: Vec<Vec<u8>>,
+}
+
 /// Chunks que el escritor reconstruye desde el modelo semántico.
 ///
 /// Todo chunk que no aparece aquí se conserva como [`SavOpaqueChunk`]. Esto es
@@ -304,6 +313,9 @@ pub struct SavGame {
     pub objects: Vec<SavObject>,
     /// Mapeos `(GRFID, local ID) → ObjectType` del chunk `OBID`.
     pub object_mappings: Vec<SavObjectMapping>,
+    /// Cuerpo original de `VEHS`, separado de `opaque_chunks` porque la tabla
+    /// se reconstruye semánticamente al exportar.
+    pub(crate) vehs_raw_chunk: Option<SavOpaqueChunk>,
     /// Chunks nativos no modelados que se conservan para round-trip.
     pub opaque_chunks: Vec<SavOpaqueChunk>,
 }
@@ -359,6 +371,11 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let newgrf_stack = newgrf::newgrf_stack_from_chunks(&chunk_list);
     let objects = entities::objects_from_chunks(&chunk_list, map_w, map_h);
     let object_mappings = entities::object_mappings_from_chunks(&chunk_list);
+    let vehs_raw_chunk = chunks::find_chunk(&chunk_list, "VEHS").map(|chunk| SavOpaqueChunk {
+        name: chunk.name,
+        ch_type: chunk.ch_type,
+        body: chunk.body.clone(),
+    });
     let opaque_chunks = opaque_chunks_from_chunks(&chunk_list);
     let link_graph =
         linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
@@ -402,6 +419,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         newgrf_stack,
         objects,
         object_mappings,
+        vehs_raw_chunk,
         opaque_chunks,
     })
 }
@@ -884,8 +902,9 @@ impl GameState {
     /// servidores partan del mismo estado importado.
     #[must_use]
     #[allow(clippy::too_many_lines)]
-    pub fn from_sav_game(sav: SavGame) -> Self {
+    pub fn from_sav_game(mut sav: SavGame) -> Self {
         let clear_legacy_depot_reservations = sav.version < SLV_DEPOT_RESERVATION_PERSISTED;
+        let vehs_raw_chunk = sav.vehs_raw_chunk.take();
         let random_state = sav.random_state;
         let mut map = sav.map;
         normalize_rail_trackbits_from_neighbors(&mut map);
@@ -1614,6 +1633,14 @@ impl GameState {
                 payment.front_vehicle_id = Some(front_ref);
             }
         }
+        if let Some(chunk) = vehs_raw_chunk
+            && let Ok(semantic_records) = write::semantic_vehs_records(&state)
+        {
+            state.sav_vehs_passthrough = Some(SavVehiclesPassthrough {
+                chunk,
+                semantic_records,
+            });
+        }
         state
     }
 }
@@ -1681,6 +1708,7 @@ mod tests {
             newgrf_stack: Vec::new(),
             objects: Vec::new(),
             object_mappings: Vec::new(),
+            vehs_raw_chunk: None,
             opaque_chunks: Vec::new(),
         }
     }
@@ -2542,6 +2570,7 @@ mod tests {
             newgrf_stack: Vec::new(),
             objects: Vec::new(),
             object_mappings: Vec::new(),
+            vehs_raw_chunk: None,
             opaque_chunks: Vec::new(),
         };
         let state = GameState::from_sav_game(sav);

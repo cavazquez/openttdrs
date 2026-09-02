@@ -172,6 +172,15 @@ ID local fuera de la tabla vanilla. La serialización todavía reconstruye un
 encabezado mínimo y no conserva columnas desconocidas; ese residual sigue
 abierto.
 
+Actualización #329-VEHICLE-SAV-VEHS-009 (2026-09-02): `VEHS` importa también
+el cuerpo crudo y una huella de las filas semánticas. Si la huella no cambia,
+el ciclo SAV reemite el chunk original byte a byte y mantiene columnas futuras;
+una mutación semántica invalida ese cuerpo para evitar exportar posiciones o
+velocidades obsoletas. La regresión
+`imported_vehs_body_is_reused_until_vehicle_semantics_change` cubre la
+reutilización y el fallback canónico. La fusión parcial por fila y las columnas
+desconocidas de `ORDL`/`STNN`/`CITY`/`INDY` siguen pendientes.
+
 La tabla de variables relativas conserva el parámetro `ExtendedByte` completo
 (WORD, hasta 14 bits) para `61 → 0x60`; los IDs locales superiores a `0xFF` no
 se aliasan con el motor vanilla de id cero.

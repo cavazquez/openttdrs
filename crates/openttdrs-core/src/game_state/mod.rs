@@ -572,6 +572,10 @@ pub struct GameState {
     /// `NewGRF`, motores y objetos al exportar nuevamente a `OpenTTD`.
     #[serde(default)]
     pub sav_opaque_chunks: Vec<crate::sav::SavOpaqueChunk>,
+    /// `VEHS` nativo conservado mientras las filas semánticas no cambian.
+    /// `serde(skip)` evita copiar el payload crudo al formato JSON propio.
+    #[serde(skip, default)]
+    pub(crate) sav_vehs_passthrough: Option<crate::sav::SavVehiclesPassthrough>,
     /// Marca que invalida el passthrough de `OBJS` después de una mutación.
     /// Así un save importado conserva columnas desconocidas hasta que el
     /// jugador realmente construye o demuele un objeto.
@@ -767,6 +771,7 @@ impl GameState {
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
+            sav_vehs_passthrough: None,
             sav_objects_dirty: false,
             sav_object_mappings_dirty: false,
             signs: Vec::new(),
@@ -901,6 +906,7 @@ impl GameState {
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
+            sav_vehs_passthrough: None,
             sav_objects_dirty: false,
             sav_object_mappings_dirty: false,
             signs: Vec::new(),

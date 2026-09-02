@@ -252,3 +252,22 @@ Con el oráculo recompilado sin instrumentación,
 exacto: **0 teselas, 0 bytes y 0 bloques 4×4** en las seis fronteras. El cierre
 se limita a la semántica `MP_HOUSE` y esta cohorte; `IT_OIL_RIG`, SAV completo,
 otras semillas/tamaños/climas y callbacks/runtime NewGRF siguen abiertos.
+
+### RMAP-131 — Conservar la densidad de nieve al limpiar árboles `ROUGH_SNOW`
+
+**Estado: cerrado (sub-issue acotado de RMAP-004/RMAP-010/RMAP-018).** La
+primera divergencia de la seed ártica `1330935383` en 1024² era una sola
+tesela (un bloque 4×4) en la frontera `landscape`: el árbol de humedal llegaba
+a `TREE_GROUND_ROUGH_SNOW` con densidad parcial y Rust lo convertía en
+`CLEAR_ROUGH` de densidad 3, mientras OpenTTD hace `MakeClear(CLEAR_ROUGH, 3)`
+y después `MakeSnow(density)`. `clear_dead_tree_tile` conserva ahora la
+densidad de `MAP2` para `TREE_GROUND_SNOW_DESERT` y `TREE_GROUND_ROUGH_SNOW`,
+incluido el bit de nieve de `MAP3`; la regresión existente
+`clearing_dead_tree_resets_make_clear_raw_planes` fija la representación
+parcial. La comparación `generation_phase_parity.py --size 1024 --seed
+1330935383 --climate arctic --phases landscape,clear,towns,industries,objects,trees
+--require-exact` pasa `landscape` y `clear` con **0 teselas/0 bloques 4×4**;
+la siguiente primera divergencia queda aislada en `towns` (**11.021
+teselas/1.657 bloques 4×4**) para el sub-issue siguiente. El alcance sólo
+cubre la limpieza de árboles nevados; el padre RMAP-004 y las demás semillas,
+tamaños, climas y fases posteriores siguen abiertos.

@@ -512,11 +512,14 @@ fn clear_dead_tree_tile(map: &mut Map, c: TileCoord, m2: u16) {
     let (clear_ground, clear_density) = match ground {
         1 => (CLEAR_GROUND_ROUGH, 3), // Rough
         2 | 4 => {
-            // SnowOrDesert / RoughSnow → hierba+nieve o rough según clima simplificado.
+            // `TileLoop_Trees` first calls `MakeClear(..., 3)` and then
+            // `MakeSnow(..., density)`.  The snow density stored in MAP2 must
+            // survive that two-step transition; hard-coding 3 here loses the
+            // partial snow level of a dead tree (RMAP-131).
             if ground == 4 {
-                (CLEAR_GROUND_ROUGH, 3)
+                (CLEAR_GROUND_ROUGH, density)
             } else {
-                (CLEAR_GROUND_GRASS, 3)
+                (CLEAR_GROUND_GRASS, density)
             }
         }
         _ => (CLEAR_GROUND_GRASS, density), // Grass / Shore → hierba
@@ -1239,7 +1242,7 @@ mod tests {
                 height: 7,
                 kind: TileKind::Grass,
                 mapt: 0x0F,
-                m5: clear_ground_m5(CLEAR_GROUND_ROUGH, 3),
+                m5: clear_ground_m5(CLEAR_GROUND_ROUGH, 2),
                 m1: OWNER_NONE_M1,
                 m6: 0,
                 m8: 0,

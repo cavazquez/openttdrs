@@ -580,10 +580,12 @@ pub fn place_industry_spec_def_layout_sandbox(
         return Err(CommandError::OutOfBounds);
     };
     // CB28 recibe el índice cero-based, mientras que la instancia y el SAV
-    // conservan `layout_index + 1` (`selected_layout` upstream).
-    let selected_layout = layout_index
+    // conservan `layout_index + 1` (`selected_layout` upstream). Mantener dos
+    // valores evita que el ordinal persistido se filtre accidentalmente al
+    // scope temporal del callback.
+    let callback_layout = u8::try_from(layout_index).map_err(|_| CommandError::OutOfBounds)?;
+    let selected_layout = callback_layout
         .checked_add(1)
-        .and_then(|index| u8::try_from(index).ok())
         .ok_or(CommandError::OutOfBounds)?;
     // #266: CB 0x28 location — deny observable (no silencioso). El comando de
     // usuario debe exponer el scope temporal y `IACT_USERCREATION`.
@@ -591,7 +593,7 @@ pub fn place_industry_spec_def_layout_sandbox(
         &def,
         state,
         c,
-        selected_layout,
+        callback_layout,
         u32::from(random_bits),
     ) {
         return Err(CommandError::NewGrfCallbackDenied);

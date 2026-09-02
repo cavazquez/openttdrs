@@ -201,7 +201,6 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
                 name: meta.name,
                 from_newgrf: true,
                 grfid: entry.grfid,
-                newgrf_grf_version: entry.grf_version,
                 newgrf_local_id: meta.local_id,
                 newgrf_runtime: (gfx.needs_runtime_resolve() || gfx.has_tile_layouts())
                     .then(|| Box::new(gfx.clone())),

@@ -1139,8 +1139,7 @@ pub const fn callback_allows_placement(result: u16) -> bool {
 
 /// Call site industria: CB `0x28` location al colocar (#266).
 ///
-/// Sin runtime → permitir (vanilla). Deny observable si el CB no permite; para
-/// GRF anteriores a la versión 8 se normaliza la inversión histórica del bit 10.
+/// Sin runtime → permitir (vanilla). Deny observable si el CB no permite.
 #[must_use]
 pub fn apply_industry_location_callback(def: &IndustrySpecDef) -> bool {
     if !def.has_location_callback() {
@@ -1150,7 +1149,7 @@ pub fn apply_industry_location_callback(def: &IndustrySpecDef) -> bool {
         return true;
     };
     let result = runtime.resolve_callback(def.newgrf_local_id, CBID_INDUSTRY_LOCATION, 0, 0);
-    callback_allows_location_for_grf(result, def.grfid, def.newgrf_grf_version)
+    callback_allows_location(result)
 }
 
 /// Construye el contexto mínimo del scope `Industry` para callbacks de
@@ -3585,17 +3584,11 @@ mod tests {
             name: "test".into(),
             from_newgrf: true,
             grfid: 1,
-            newgrf_grf_version: 8,
             newgrf_local_id: 0,
-            newgrf_runtime: Some(Box::new(gfx_callback_literal(0))),
+            newgrf_runtime: Some(Box::new(gfx_callback_literal(0x10))),
         };
         assert!(!apply_industry_location_callback(&def));
-        // Los GRF anteriores a la versión 8 expresan éxito con cero.
-        def.newgrf_grf_version = 7;
-        assert!(apply_industry_location_callback(&def));
         def.newgrf_runtime = Some(Box::new(gfx_callback_allow_400()));
-        assert!(!apply_industry_location_callback(&def));
-        def.newgrf_grf_version = 8;
         assert!(apply_industry_location_callback(&def));
         def.newgrf_runtime = None;
         assert!(apply_industry_location_callback(&def));
@@ -3623,7 +3616,6 @@ mod tests {
             name: "production-callback".into(),
             from_newgrf: true,
             grfid: 1,
-            newgrf_grf_version: 0,
             newgrf_local_id: 0,
             newgrf_runtime: Some(Box::new(gfx_callback_literal(0x02))),
         };
@@ -3688,7 +3680,6 @@ mod tests {
             name: "production-group".into(),
             from_newgrf: true,
             grfid: 1,
-            newgrf_grf_version: 0,
             newgrf_local_id: 0,
             newgrf_runtime: Some(Box::new(runtime)),
         };

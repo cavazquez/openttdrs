@@ -5331,7 +5331,7 @@ mod tests {
         let action2 = build_action2_callback_literal_payload(
             ACTION0_FEATURE_INDUSTRIES,
             7,
-            0, // GRF >=8: cero no es 0x400 y OpenTTD rechaza la ubicación.
+            0x10, // No es FAILED/0x400: OpenTTD rechaza la ubicación.
         );
         let bytes = build_grf_v2_feature_with_action2_chain(
             &action0,
@@ -5347,15 +5347,14 @@ mod tests {
         );
         let dir = tempfile_dir_with("industry_cb.grf", &bytes);
         let mut state = GameState::new(4, 4);
-        let mut entry = crate::NewGrfEntry::new("industry_cb.grf", 0x4943_0001);
-        entry.grf_version = 8;
-        state.newgrf_stack.push(entry);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("industry_cb.grf", 0x4943_0001));
 
         apply_newgrf_industries(&mut state, &[&dir]);
         let def = state.industry_spec_catalog.first().unwrap();
         assert!(def.newgrf_runtime.is_some());
         assert!(def.has_location_callback());
-        assert_eq!(def.newgrf_grf_version, 8);
         let type_id = def.id;
 
         assert_eq!(
@@ -5363,11 +5362,6 @@ mod tests {
             Err(CommandError::NewGrfCallbackDenied)
         );
         assert!(state.industries.is_empty());
-
-        // El mismo resultado se interpreta como éxito para un GRF 7.
-        state.industry_spec_catalog[0].newgrf_grf_version = 7;
-        assert!(place_industry_spec_def_sandbox(&mut state, TileCoord::new(1, 1), type_id).is_ok());
-        assert_eq!(state.industries.len(), 1);
     }
 
     /// CB13 debe venir del Action2 de un GRF cargado y bloquear tanto query

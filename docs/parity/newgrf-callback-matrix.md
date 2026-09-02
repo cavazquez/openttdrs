@@ -226,6 +226,12 @@ opacos hasta que se registra una arista nueva. La mutación semántica activa el
 writer actual y mantiene el grafo válido, pero jobs/cargodist completo aún no
 se ejecutan en Rust.
 
+Actualización #329-VEHICLE-SAV-NGRF-016 (2026-09-02): `NGRF` reemite su cuerpo
+original mientras las filas del stack activo no cambian, conservando digest,
+paleta y columnas futuras; un cambio de orden, GRFID, versión o parámetro usa
+el encoder semántico. El runtime aún necesita resolver archivos no instalados y
+fusionar columnas desconocidas después de mutaciones parciales.
+
 Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` conserva ahora su
 cuerpo original cuando las filas semánticas de compañías coinciden. El
 exportador mantiene así columnas nuevas de ajustes, economía, libreas y

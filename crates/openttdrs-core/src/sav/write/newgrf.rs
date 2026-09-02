@@ -22,6 +22,31 @@ pub(super) fn newgrf_chunk(state: &GameState) -> Result<Option<Vec<u8>>, SavErro
         return Ok(None);
     }
 
+    let records = newgrf_records(state)?;
+
+    let chunk = table_chunk(
+        *b"NGRF",
+        &[
+            (0x0A, "filename"),
+            (6, "ident.grfid"),
+            (2 | 0x10, "ident.md5sum"),
+            (6, "version"),
+            (6 | 0x10, "param"),
+            (2, "num_params"),
+            (2, "palette"),
+        ],
+        &records,
+    )?;
+    Ok(Some(chunk))
+}
+
+/// Serializa las filas semánticas activas de `NGRF`.
+pub(super) fn newgrf_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
+    let entries: Vec<_> = state
+        .newgrf_stack
+        .iter()
+        .filter(|entry| entry.enabled && !entry.is_static && !entry.filename.is_empty())
+        .collect();
     let mut records = Vec::with_capacity(entries.len());
     for entry in entries {
         let mut record = Vec::new();
@@ -44,21 +69,7 @@ pub(super) fn newgrf_chunk(state: &GameState) -> Result<Option<Vec<u8>>, SavErro
         record.push(0);
         records.push(record);
     }
-
-    let chunk = table_chunk(
-        *b"NGRF",
-        &[
-            (0x0A, "filename"),
-            (6, "ident.grfid"),
-            (2 | 0x10, "ident.md5sum"),
-            (6, "version"),
-            (6 | 0x10, "param"),
-            (2, "num_params"),
-            (2, "palette"),
-        ],
-        &records,
-    )?;
-    Ok(Some(chunk))
+    Ok(records)
 }
 
 #[cfg(test)]

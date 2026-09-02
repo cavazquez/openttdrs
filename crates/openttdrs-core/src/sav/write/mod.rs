@@ -103,6 +103,7 @@ pub(crate) struct SavSemanticTableRecords {
     pub(crate) grps: Vec<Vec<u8>>,
     pub(crate) ernw: Vec<Vec<u8>>,
     pub(crate) lgrp: Vec<Vec<u8>>,
+    pub(crate) ngrf: Vec<Vec<u8>>,
 }
 
 pub(crate) fn semantic_table_records(
@@ -119,6 +120,7 @@ pub(crate) fn semantic_table_records(
     let grps = fleet::group_records(&state.vehicle_groups)?;
     let ernw = fleet::autoreplace_records(&autoreplace_export)?;
     let lgrp = super::linkgraph::lgrp_records(&state.link_graph, &state.stations, map_w)?;
+    let ngrf = newgrf::newgrf_records(state)?;
     Ok(SavSemanticTableRecords {
         ordl,
         vehs,
@@ -132,6 +134,7 @@ pub(crate) fn semantic_table_records(
         grps,
         ernw,
         lgrp,
+        ngrf,
     })
 }
 
@@ -456,7 +459,17 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     } else if let Some(renew) = fleet::autoreplace_chunk(&autoreplace_export)? {
         data.extend_from_slice(&renew);
     }
-    if let Some(ngrf) = newgrf::newgrf_chunk(state)? {
+    let ngrf = newgrf::newgrf_records(state)?;
+    let raw_ngrf = raw_tables.and_then(|passthrough| {
+        passthrough.ngrf_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"NGRF"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.ngrf_semantic_records == ngrf
+        })
+    });
+    if let Some(raw) = raw_ngrf {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else if let Some(ngrf) = newgrf::newgrf_chunk(state)? {
         data.extend_from_slice(&ngrf);
     }
     if rebuild_objects && let Some(objs) = objects::objects_chunk(state, w, h)? {
@@ -1083,11 +1096,42 @@ mod tests {
         let chunks = crate::sav::chunks::parse_chunks(payload).expect("chunks");
         let ngrf = crate::sav::chunks::find_chunk(&chunks, "NGRF").expect("NGRF");
         assert_eq!(ngrf.ch_type, crate::sav::chunks::CH_TABLE);
+        let original_ngrf = ngrf.body.clone();
 
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.newgrf_stack, vec![active.clone()]);
         let loaded = GameState::from_sav_game(sav_game);
         assert_eq!(loaded.newgrf_stack, vec![active]);
+        let passthrough = loaded
+            .sav_table_passthrough
+            .as_ref()
+            .expect("NGRF passthrough after import");
+        assert_eq!(
+            passthrough
+                .ngrf_chunk
+                .as_ref()
+                .expect("NGRF passthrough")
+                .body,
+            original_ngrf
+        );
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave");
+        let resaved_chunks = crate::sav::chunks::parse_chunks(&resaved[8..]).expect("chunks");
+        assert_eq!(
+            crate::sav::chunks::find_chunk(&resaved_chunks, "NGRF")
+                .expect("NGRF resaved")
+                .body,
+            original_ngrf
+        );
+        let mut changed = loaded.clone();
+        changed.newgrf_stack[0].set_param(0, 0xDEAD_BEEF);
+        let changed_bytes = save_to_bytes_with(&changed, SavContainer::Ottn).expect("changed");
+        let changed_chunks = crate::sav::chunks::parse_chunks(&changed_bytes[8..]).expect("chunks");
+        assert_ne!(
+            crate::sav::chunks::find_chunk(&changed_chunks, "NGRF")
+                .expect("NGRF changed")
+                .body,
+            original_ngrf
+        );
     }
 
     #[test]

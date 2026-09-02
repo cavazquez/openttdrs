@@ -628,6 +628,16 @@ el cuerpo byte a byte; una mutación de flujo cae al encoder canónico. Las
 columnas desconocidas después de una mutación y la ejecución completa de jobs
 de cargodist siguen pendientes; #328 permanece abierto.
 
+Actualización #329-VEHICLE-SAV-NGRF-016 (2026-09-02): la tabla `NGRF` conserva
+ahora su cuerpo nativo cuando el stack activo, el orden, las versiones y los
+parámetros conocidos coinciden. Así sobreviven el digest, la paleta y columnas
+añadidas por versiones futuras en un round-trip sin cambios; alterar un
+parámetro o la composición del stack invalida el passthrough y reconstruye sólo
+`NGRF`. La regresión
+`ottn_roundtrip_preserves_active_newgrf_configuration` cubre ambos caminos.
+La resolución de archivos GRF ausentes y la fusión parcial tras una mutación
+siguen pendientes; #329 permanece abierto.
+
 Actualización #329-VEHICLE-SAV-PLYR-013 (2026-09-02): `PLYR` comparte ahora la
 huella de filas con las tablas SAV anteriores. Un round-trip sin cambios de
 compañías conserva byte a byte el header y las columnas futuras de dinero,

@@ -204,3 +204,26 @@ coinciden desde la fundación hasta `towns`. El cierre se limita a esta semilla,
 tamaño y fase; RMAP-004/RMAP-024/RMAP-030/RMAP-082 mantienen abiertas otras
 semillas, climas, configuraciones, fases posteriores y callbacks/runtime
 NewGRF.
+
+### RMAP-129 — Conservar entidades de industria cuando el origen cae dentro de otra huella
+
+**Estado: cerrado (sub-issue acotado de RMAP-004/RMAP-056).** La primera
+divergencia posterior a `towns` en el mapa ártico 1024²/seed `1330935380`
+afectaba **14.558 teselas y 1.480 bloques 4×4** en `industries`: el comando
+Rust eliminaba del vector `GameState::industries` una entidad cuyo layout
+contenía el origen de la nueva industria, aunque las teselas materializadas
+no se superpusieran. El siguiente `IndustryID` reutilizaba entonces un hueco
+que OpenTTD mantiene ocupado (caso reproducido por una mina de oro y una mina
+de carbón cuyo layout empieza con un offset positivo), desplazando `MAP2` en
+las industrias y campos siguientes.
+
+La ruta de colocación ya no hace `retain` por el origen; las comprobaciones de
+huella (`CheckIfIndustryTilesAreFree`) son las que determinan solapamientos y
+el pool conserva cada ID hasta su demolición real. La regresión
+`industry_layout_origin_does_not_remove_containing_pool_item` verifica dos
+layouts no superpuestos con el origen de la segunda dentro de la primera y
+comprueba IDs `0` y `1`. La comparación raw por tesela, bytes y bloques 4×4
+queda exacta en `landscape`, `clear`, `towns`, `industries`, `objects` y
+`trees` de esa cohorte (**0/0/0**); el cierre sigue limitado a este caso,
+semilla, tamaño y fases. RMAP-004/RMAP-056 mantienen abiertas otras semillas,
+tamaños, climas, industrias acuáticas y callbacks/runtime NewGRF.

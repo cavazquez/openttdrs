@@ -333,9 +333,12 @@ fn place_industry_spec_template_sandbox(
         .runtime
         .industry_tile_dirty
         .extend(footprint.iter().copied());
-    state
-        .industries
-        .retain(|industry| !industry.contains_tile(c));
+    // `CheckIfIndustryTilesAreFree` already rejects an existing industry on
+    // every materialized footprint tile.  Do not remove an entity merely
+    // because the north/origin tile happens to lie inside another layout:
+    // native layouts may start at a positive offset (for example a coal mine
+    // at the last tile of a gold mine).  Retaining by `c` reused the old ID
+    // and made later MAP2 links diverge from the IndustryPool.
     let counter = industry_counter_seed(state, c, industry_id);
     state.industries.push(
         Industry::with_tiles_spec(c, spec.kind(), spec, footprint, random_colour)
@@ -582,9 +585,9 @@ pub fn place_industry_spec_def_sandbox(
         .runtime
         .industry_tile_dirty
         .extend(tiles.iter().copied());
-    state
-        .industries
-        .retain(|industry| !industry.contains_tile(c));
+    // The footprint checks above make overlap impossible.  In particular,
+    // never remove an unrelated industry whose layout contains only the
+    // requested origin; `IndustryPool` keeps that entity and its ID alive.
     let kind = if def.is_processor() {
         IndustryKind::Factory
     } else {
@@ -701,6 +704,58 @@ mod tests {
         assert_eq!(
             check_place_industry_spec_layout(&map, origin, IndustrySpec::CoalMine, 0),
             Err(CommandError::IndustryTileOccupied)
+        );
+    }
+
+    #[test]
+    fn industry_layout_origin_does_not_remove_containing_pool_item() {
+        let first_origin = TileCoord::new(4, 4);
+        let second_origin = TileCoord::new(7, 7);
+        let mut state = GameState::new(32, 32);
+        state.climate = crate::Climate::SubArctic;
+
+        let Some(first_layout) =
+            industry_template_with_layout(first_origin, IndustrySpec::GoldMine, 0)
+        else {
+            panic!("gold mine layout");
+        };
+        let Some(second_layout) =
+            industry_template_with_layout(second_origin, IndustrySpec::CoalMine, 3)
+        else {
+            panic!("coal mine layout");
+        };
+        assert!(first_layout.iter().any(|(tile, _)| *tile == second_origin));
+        assert!(
+            second_layout
+                .iter()
+                .all(|(tile, _)| !first_layout.iter().any(|(old, _)| old == tile))
+        );
+
+        assert!(
+            apply_command(
+                &mut state,
+                &Command::PlaceIndustrySpecLayout(first_origin, IndustrySpec::GoldMine, 0),
+            )
+            .is_ok()
+        );
+        assert!(
+            apply_command(
+                &mut state,
+                &Command::PlaceIndustrySpecLayout(second_origin, IndustrySpec::CoalMine, 3),
+            )
+            .is_ok()
+        );
+
+        assert_eq!(state.industries.len(), 2);
+        assert_eq!(state.industries[0].instance_id, 0);
+        assert_eq!(state.industries[1].instance_id, 1);
+        assert!(state.industries[0].tiles.contains(&second_origin));
+        assert_eq!(
+            state
+                .map
+                .get(TileCoord::new(second_origin.x, second_origin.y + 1))
+                .map(|tile| tile.m2),
+            Some(1)
         );
     }
 

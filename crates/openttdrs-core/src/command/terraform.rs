@@ -34,6 +34,9 @@ struct TerraformModel<'a> {
     cost_per_corner: i64,
     /// Solo exige `Grass`/`Forest` en esta tesela (autoslope junto a vías vecinas).
     primary_tile: Option<TileCoord>,
+    /// Permite que los procedimientos de teselas de industria decidan por
+    /// `CBID_INDTILE_AUTOSLOPE` en lugar de rechazarlas como terreno genérico.
+    allow_industry_autoslope: bool,
 }
 
 impl<'a> TerraformModel<'a> {
@@ -47,6 +50,7 @@ impl<'a> TerraformModel<'a> {
             allow_water_source,
             cost_per_corner,
             primary_tile: None,
+            allow_industry_autoslope: false,
         }
     }
 
@@ -57,6 +61,11 @@ impl<'a> TerraformModel<'a> {
 
     fn with_max_height(mut self, max_height: u8) -> Self {
         self.max_height = max_height;
+        self
+    }
+
+    fn with_industry_autoslope(mut self) -> Self {
+        self.allow_industry_autoslope = true;
         self
     }
 
@@ -164,6 +173,7 @@ impl<'a> TerraformModel<'a> {
                 let kind = self.map.get_kind(*c).unwrap_or(TileKind::Void);
                 let source_ok = match kind {
                     TileKind::Grass | TileKind::Forest => true,
+                    TileKind::Industry if self.allow_industry_autoslope => true,
                     // OpenTTD treats a coast as clearable terrain during
                     // autoslope/platform checks; plain water remains blocked
                     // when `NoWater` is set.
@@ -306,9 +316,13 @@ fn simulate_corner_delta(
     delta: i8,
     allow_water: bool,
     cost_per_corner: i64,
+    allow_industry_autoslope: bool,
 ) -> Result<TerraformResult, CommandError> {
     in_bounds(map, c)?;
     let mut model = TerraformModel::new(map, allow_water, cost_per_corner);
+    if allow_industry_autoslope {
+        model = model.with_industry_autoslope();
+    }
     let current = model.corner_height(c.x, c.y);
     let target = i16::from(current) + i16::from(delta);
     if target < 0 {
@@ -336,12 +350,16 @@ fn simulate_level_land(
     to: TileCoord,
     mode: LevelMode,
     cost_per_corner: i64,
+    allow_industry_autoslope: bool,
 ) -> Result<TerraformResult, CommandError> {
     in_bounds(map, from)?;
     in_bounds(map, to)?;
     let target = level_target_height(map, from, mode)?;
     let allow_water = !matches!(mode, LevelMode::Lower);
     let mut model = TerraformModel::new(map, allow_water, cost_per_corner);
+    if allow_industry_autoslope {
+        model = model.with_industry_autoslope();
+    }
     let (min_x, min_y, max_x, max_y) = tile_rect(from, to);
     for y in min_y..=max_y {
         for x in min_x..=max_x {
@@ -371,6 +389,87 @@ fn sync_tile_kind_after_heights(map: &mut Map, c: TileCoord) {
         let _ = map.set_kind(c, TileKind::Grass);
         let _ = map.set_mapt_m5(c, 0, 0);
     }
+}
+
+fn corner_height_with_result(map: &Map, result: &TerraformResult, cx: i32, cy: i32) -> u8 {
+    result
+        .heights
+        .iter()
+        .find(|(x, y, _)| *x == cx && *y == cy)
+        .map_or_else(
+            || {
+                map.get(TileCoord::new(cx, cy))
+                    .map_or(0, |tile| tile.height)
+            },
+            |(_, _, height)| *height,
+        )
+}
+
+fn slope_from_corner_heights(hnorth: u8, hwest: u8, heast: u8, hsouth: u8) -> (u8, u8, u8) {
+    let min_height = hnorth.min(hwest).min(heast).min(hsouth);
+    let max_height = hnorth.max(hwest).max(heast).max(hsouth);
+    let mut slope = 0_u8;
+    if hwest > min_height {
+        slope |= 1;
+    }
+    if hsouth > min_height {
+        slope |= 2;
+    }
+    if heast > min_height {
+        slope |= 4;
+    }
+    if hnorth > min_height {
+        slope |= 8;
+    }
+    if max_height.saturating_sub(min_height) > 1 {
+        slope |= crate::map::SLOPE_STEEP;
+    }
+    (slope, min_height, max_height)
+}
+
+fn slope_max_z(slope: u8) -> u8 {
+    if slope & crate::map::SLOPE_STEEP != 0 {
+        2
+    } else {
+        u8::from(slope & 0x0F != 0)
+    }
+}
+
+/// Ejecuta el procedimiento específico de `MP_INDUSTRY` sobre las teselas
+/// afectadas por una terraformación. `OpenTTD` sólo conserva la industria si
+/// old/new no son empinadas y el máximo absoluto no cambia; en ese caso
+/// `CBID_INDTILE_AUTOSLOPE` puede desactivar el autoslope.
+fn validate_industry_autoslope_callbacks(
+    state: &mut GameState,
+    result: &TerraformResult,
+) -> Result<(), CommandError> {
+    if state.economy.money < result.cost {
+        return Err(CommandError::InsufficientFunds);
+    }
+    let industries_before = state.industries.clone();
+    for &coord in &result.dirty_tiles {
+        if state.map.get_kind(coord) != Some(TileKind::Industry) {
+            continue;
+        }
+        let (old_slope, old_z) =
+            tile_slope_and_z(&state.map, coord).ok_or(CommandError::OutOfBounds)?;
+        let old_max = old_z.saturating_add(slope_max_z(old_slope));
+        let hnorth = corner_height_with_result(&state.map, result, coord.x, coord.y);
+        let hwest = corner_height_with_result(&state.map, result, coord.x + 1, coord.y);
+        let heast = corner_height_with_result(&state.map, result, coord.x, coord.y + 1);
+        let hsouth = corner_height_with_result(&state.map, result, coord.x + 1, coord.y + 1);
+        let (new_slope, new_z, _) = slope_from_corner_heights(hnorth, hwest, heast, hsouth);
+        let can_autoslope = old_slope & crate::map::SLOPE_STEEP == 0
+            && new_slope & crate::map::SLOPE_STEEP == 0
+            && old_max == new_z.saturating_add(slope_max_z(new_slope));
+        if !can_autoslope
+            || !crate::newgrf_callback::apply_industry_tile_autoslope_callback(state, coord)
+        {
+            state.industries = industries_before;
+            return Err(CommandError::TileNotTerraformable);
+        }
+    }
+    Ok(())
 }
 
 fn apply_terraform_result(
@@ -409,7 +508,7 @@ fn simulate_raise_land(
     cost_per_corner: i64,
 ) -> Result<TerraformResult, CommandError> {
     check_flat_water_raise(map, c)?;
-    simulate_corner_delta(map, c, 1, true, cost_per_corner)
+    simulate_corner_delta(map, c, 1, true, cost_per_corner, false)
 }
 
 fn simulate_lower_land(
@@ -417,7 +516,7 @@ fn simulate_lower_land(
     c: TileCoord,
     cost_per_corner: i64,
 ) -> Result<TerraformResult, CommandError> {
-    simulate_corner_delta(map, c, -1, false, cost_per_corner)
+    simulate_corner_delta(map, c, -1, false, cost_per_corner, false)
 }
 
 /// Nivela la tesela a `GetTileZ` (autoslope al construir vía/carretera).
@@ -481,6 +580,7 @@ pub(crate) fn check_level_land(
         to,
         mode,
         terraform_cost_per_corner_inflated(inflation_prices),
+        false,
     )?
     .cost)
 }
@@ -508,13 +608,15 @@ pub(super) fn apply_autoslope_if_needed(
 
 pub(super) fn raise_land(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
     let cost_per = terraform_cost_per_corner(&state.global_economy);
-    let result = simulate_raise_land(&state.map, c, cost_per)?;
+    let result = simulate_corner_delta(&state.map, c, 1, true, cost_per, true)?;
+    validate_industry_autoslope_callbacks(state, &result)?;
     apply_terraform_result(state, result)
 }
 
 pub(super) fn lower_land(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
     let cost_per = terraform_cost_per_corner(&state.global_economy);
-    let result = simulate_lower_land(&state.map, c, cost_per)?;
+    let result = simulate_corner_delta(&state.map, c, -1, false, cost_per, true)?;
+    validate_industry_autoslope_callbacks(state, &result)?;
     apply_terraform_result(state, result)
 }
 
@@ -525,7 +627,8 @@ pub(super) fn level_land(
     mode: LevelMode,
 ) -> Result<(), CommandError> {
     let cost_per = terraform_cost_per_corner(&state.global_economy);
-    let result = simulate_level_land(&state.map, from, to, mode, cost_per)?;
+    let result = simulate_level_land(&state.map, from, to, mode, cost_per, true)?;
+    validate_industry_autoslope_callbacks(state, &result)?;
     apply_terraform_result(state, result)
 }
 
@@ -646,5 +749,26 @@ mod tests {
             check_raise_land(&s.map, c, crate::economy::INFLATION_FRAC_ONE),
             Err(CommandError::TileNotTerraformable)
         );
+    }
+
+    #[test]
+    fn raise_industry_tile_preserves_industry_when_max_z_is_unchanged() {
+        let mut s = SandboxMap::flat(8, 8, 4);
+        let industry_tile = TileCoord::new(3, 3);
+        let mut tile = s.map.get(industry_tile).unwrap();
+        tile.kind = TileKind::Industry;
+        tile.m2 = 1;
+        crate::map::set_industry_gfx(&mut tile, 175);
+        s.map.set_tile(industry_tile, tile).unwrap();
+        s.industries.push(
+            crate::Industry::new(industry_tile, crate::IndustryKind::CoalMine).with_instance_id(1),
+        );
+        // Industry starts on a north slope (max z = 5). Raising its west
+        // corner keeps that max z and therefore follows TerraformTile_Industry
+        // autoslope instead of clearing the industry.
+        s.map.set_height(industry_tile, 5).unwrap();
+        crate::apply_command(&mut s, &crate::Command::RaiseLand(TileCoord::new(4, 3))).unwrap();
+        assert_eq!(s.map.get_kind(industry_tile), Some(TileKind::Industry));
+        assert_eq!(crate::tile_slope_and_z(&s.map, industry_tile).unwrap().0, 9);
     }
 }

@@ -21,9 +21,9 @@ use crate::map::object::action2_eval_ctx_for_object_tile_with_towns;
 use crate::map::{Map, TileCoord, has_tile_water_ground};
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
-    CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_SHAPE_CHECK,
-    CBID_INDUSTRY_LOCATION, CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_PROD_CHANGE_BUILD,
-    CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_OBJECT_LAND_SLOPE_CHECK,
+    CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_AUTOSLOPE,
+    CBID_INDTILE_SHAPE_CHECK, CBID_INDUSTRY_LOCATION, CBID_INDUSTRY_MONTHLY_PROD_CHANGE,
+    CBID_INDUSTRY_PROD_CHANGE_BUILD, CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_OBJECT_LAND_SLOPE_CHECK,
     CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
     CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_COLOUR_MAPPING,
@@ -1303,6 +1303,17 @@ pub const fn industry_tile_shape_callback_allows(result: u16, grf_version: u8) -
     }
 }
 
+/// Resultado de `CBID_INDTILE_AUTOSLOPE` (`0x3C`).
+///
+/// El callback es opt-out: `CALLBACK_FAILED` o cero permiten que la
+/// terraformación conserve la industria y aplique el autoslope; cualquier
+/// resultado no nulo desactiva el autoslope y deja que el procedimiento de
+/// limpieza normal decida el error.
+#[must_use]
+pub const fn industry_tile_autoslope_callback_allows(result: u16) -> bool {
+    result == CALLBACK_FAILED || result == 0
+}
+
 fn requested_industry_tile_scope_vars(runtime: &TrainSpriteGraphics) -> Vec<(u8, u8)> {
     let mut requested = Vec::new();
     for entry in runtime.action2_var.values() {
@@ -1398,6 +1409,71 @@ pub fn apply_industry_tile_shape_callback_for_build(
             .map_or(0, |entry| entry.grf_version);
         industry_tile_shape_callback_allows(result, grf_version)
     }
+}
+
+/// Ejecuta `CBID_INDTILE_AUTOSLOPE` sobre una tesela de industria existente.
+///
+/// El callback se evalúa con el `IndustryTileResolverObject` de la tesela y
+/// el `Industry` vivo como parent. La instancia se clona para que el snapshot
+/// usado por Action2 sea inmutable y el storage `7C` se escribe de vuelta sólo
+/// en la entidad correspondiente después de evaluar el resultado.
+#[must_use]
+pub fn apply_industry_tile_autoslope_callback(state: &mut GameState, coord: TileCoord) -> bool {
+    let Some(tile) = state.map.get(coord) else {
+        return false;
+    };
+    if tile.kind != crate::map::TileKind::Industry {
+        return true;
+    }
+    let gfx = crate::map::industry_gfx(&tile);
+    let Some(spec) =
+        crate::industry_tile::industry_tile_spec_def(&state.industry_tile_spec_catalog, gfx)
+    else {
+        return true;
+    };
+    if !spec.has_autoslope_callback() {
+        return true;
+    }
+    let Some(runtime) = spec.newgrf_runtime.as_ref() else {
+        return true;
+    };
+
+    let tile_instance_id = crate::map::industry_instance_id(&tile);
+    let snapshot = state.industries.clone();
+    let industry_index = snapshot.iter().position(|industry| {
+        industry.contains_tile(coord)
+            && (tile_instance_id == 0 || industry.instance_id == tile_instance_id)
+    });
+    let neighbor_params = requested_industry_tile_scope_vars(runtime);
+    let mut ctx = action2_eval_ctx_for_industry_tile_with_world(
+        &state.map,
+        coord,
+        &snapshot,
+        &state.towns,
+        &state.industry_tile_spec_catalog,
+        &state.industry_spec_catalog,
+        state.climate,
+        Some(spec),
+        &neighbor_params,
+    );
+    if let Some(index) = industry_index {
+        ctx.parent_persistent_registers
+            .clone_from(&snapshot[index].newgrf_persistent_regs);
+        ctx.parent_random_bits = u32::from(snapshot[index].newgrf_random);
+    }
+    let result = runtime.resolve_callback_ctx_u16(
+        u16::from(spec.newgrf_local_id),
+        CBID_INDTILE_AUTOSLOPE,
+        0,
+        0,
+        &mut ctx,
+    );
+    if let Some(index) = industry_index {
+        state.industries[index]
+            .newgrf_persistent_regs
+            .clone_from(&ctx.parent_persistent_registers);
+    }
+    industry_tile_autoslope_callback_allows(result)
 }
 
 /// Réplica acotada de `GetClosestWaterDistance(tile, true)` para el scope de
@@ -4003,6 +4079,59 @@ mod tests {
         assert!(!industry_tile_shape_callback_allows(0, 8));
         // Fixtures without Action8 keep the modern interpretation.
         assert!(industry_tile_shape_callback_allows(0x400, 0));
+    }
+
+    #[test]
+    fn industry_tile_autoslope_callback_is_opt_out() {
+        assert!(industry_tile_autoslope_callback_allows(CALLBACK_FAILED));
+        assert!(industry_tile_autoslope_callback_allows(0));
+        assert!(!industry_tile_autoslope_callback_allows(1));
+        assert!(!industry_tile_autoslope_callback_allows(0x400));
+    }
+
+    #[test]
+    fn industry_tile_autoslope_callback_uses_live_industry_scope() {
+        let coord = TileCoord::new(1, 1);
+        let mut state = crate::GameState::new(4, 4);
+        let mut map_tile = state.map.get(coord).unwrap();
+        map_tile.kind = crate::map::TileKind::Industry;
+        map_tile.m1 = 0x80;
+        map_tile.m2 = 1;
+        crate::map::set_industry_gfx(&mut map_tile, 175);
+        state.map.set_tile(coord, map_tile).unwrap();
+        state
+            .industries
+            .push(Industry::new(coord, crate::IndustryKind::CoalMine).with_instance_id(1));
+        let mut def = IndustryTileSpecDef {
+            gfx: crate::industry_tile::IndustryTileGfxId(175),
+            subst_id: 0,
+            from_newgrf: true,
+            slopes_refused: 0,
+            accepts_cargo_indices: Vec::new(),
+            accepts_cargo_labels: Vec::new(),
+            acceptance: Vec::new(),
+            callback_mask: crate::industry_tile::INDUSTRY_TILE_CALLBACK_AUTOSLOPE_MASK,
+            animation_frames: 0,
+            animation_status: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_grfid: 1,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(gfx_callback_literal(0))),
+        };
+        state.industry_tile_spec_catalog.push(def.clone());
+        assert!(apply_industry_tile_autoslope_callback(&mut state, coord));
+
+        // A non-zero callback opts out of autoslope, while the parent remains
+        // the same live industry selected by the tile's m2 instance id.
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal(1)));
+        state.industry_tile_spec_catalog[0] = def;
+        assert!(!apply_industry_tile_autoslope_callback(&mut state, coord));
     }
 
     #[test]

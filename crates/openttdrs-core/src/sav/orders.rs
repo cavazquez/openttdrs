@@ -328,6 +328,7 @@ mod tests {
             0,
             super::super::entities::SavStationIndex {
                 pos: TileCoord::new(5, 2),
+                owner: crate::company::CompanyId::PLAYER.0,
                 is_waypoint: false,
                 facilities: 1,
                 name: None,
@@ -367,6 +368,7 @@ mod tests {
             1,
             super::super::entities::SavStationIndex {
                 pos: TileCoord::new(3, 4),
+                owner: crate::company::CompanyId::PLAYER.0,
                 is_waypoint: false,
                 facilities: 1,
                 name: None,

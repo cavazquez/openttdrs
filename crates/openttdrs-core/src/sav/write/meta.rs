@@ -346,6 +346,7 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
             (2, "vehicle.train_acceleration_model"),
             (2, "vehicle.roadveh_acceleration_model"),
             (1, "economy.station_noise_level"),
+            (1, "station.serve_neutral_industries"),
             (2, "difficulty.vehicle_breakdowns"),
             (1, "order.no_servicing_if_no_breakdowns"),
             (4, "difficulty.subsidy_duration"),
@@ -390,6 +391,7 @@ pub(super) fn pats_record(state: &GameState) -> Vec<u8> {
         state.train_acceleration_model as u8,
         state.road_vehicle_acceleration_model as u8,
         u8::from(state.station_noise_level),
+        u8::from(state.serve_neutral_industries),
         state.vehicle_breakdowns.min(2),
         u8::from(state.no_servicing_if_no_breakdowns),
     ];

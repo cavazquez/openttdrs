@@ -56,6 +56,7 @@ pub(crate) struct ParsedSettings {
     pub train_acceleration_model: TrainAccelerationModel,
     pub road_vehicle_acceleration_model: RoadVehicleAccelerationModel,
     pub station_noise_level: bool,
+    pub serve_neutral_industries: bool,
     pub vehicle_breakdowns: u8,
     pub no_servicing_if_no_breakdowns: bool,
     pub subsidy_duration: u16,
@@ -75,6 +76,7 @@ impl Default for ParsedSettings {
             train_acceleration_model: TrainAccelerationModel::Realistic,
             road_vehicle_acceleration_model: RoadVehicleAccelerationModel::Realistic,
             station_noise_level: false,
+            serve_neutral_industries: true,
             vehicle_breakdowns: 2,
             no_servicing_if_no_breakdowns: true,
             subsidy_duration: 1,
@@ -202,6 +204,13 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                 .and_then(bool_from_u64)
             {
                 parsed.station_noise_level = value;
+                found = true;
+            }
+            if let Some(value) = record_get(&record, "station.serve_neutral_industries")
+                .and_then(SlValue::as_u64)
+                .and_then(bool_from_u64)
+            {
+                parsed.serve_neutral_industries = value;
                 found = true;
             }
             if let Some(value) = record_get(&record, "difficulty.vehicle_breakdowns")
@@ -377,6 +386,17 @@ mod tests {
         );
         assert!(parsed.station_noise_level);
         assert_eq!(parsed.vehicle_breakdowns, 2);
+    }
+
+    #[test]
+    fn reads_neutral_industry_service_setting() {
+        let chunk = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(1, "station.serve_neutral_industries")], &[vec![0]]),
+        };
+        let parsed = settings_from_chunks(&[chunk]);
+        assert!(!parsed.serve_neutral_industries);
     }
 
     #[test]

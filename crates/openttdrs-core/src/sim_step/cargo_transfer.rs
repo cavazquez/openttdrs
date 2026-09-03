@@ -291,6 +291,7 @@ fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
 /// cantidad o la capacidad `uint16` de `AcceptedCargo::waiting`. El callback
 /// `CBID_INDUSTRY_REFUSE_CARGO` puede omitir una industria temporalmente; la
 /// producción se difiere hasta terminar toda la fase de carga/descarga.
+#[allow(clippy::too_many_lines)]
 fn deliver_goods_to_industries(
     state: &mut GameState,
     station_idx: usize,
@@ -306,6 +307,10 @@ fn deliver_goods_to_industries(
         return (0, Vec::new());
     };
     let station_pos = station.pos;
+    let station_owner = station.owner;
+    let station_id = station.ottd_station_id;
+    let neutral_industry_id = station.neutral_industry_id;
+    let serve_neutral_industries = state.serve_neutral_industries;
     let station_town = town::nearest_town_index(&state.towns, station_pos)
         .filter(|(_, distance)| *distance <= town::TOWN_AUTHORITY_RADIUS)
         .and_then(|(index, _)| state.towns.get(index).map(|town| town.id));
@@ -318,6 +323,15 @@ fn deliver_goods_to_industries(
         .filter(|(_, industry)| {
             !industry.contains_tile(source)
                 && industry.accepts_cargo(cargo)
+                && industry
+                    .exclusive_supplier
+                    .is_none_or(|supplier| supplier == station_owner)
+                && (serve_neutral_industries
+                    || neutral_industry_id.is_none_or(|id| id == industry.instance_id))
+                && (serve_neutral_industries
+                    || industry
+                        .neutral_station_id
+                        .is_none_or(|id| station_id == Some(id)))
                 && station::industry_in_station_coverage(industry, station_pos, radius)
         })
         .map(|(index, industry)| {
@@ -1730,6 +1744,69 @@ mod tests {
         );
         assert_eq!(state.industries[1].stock, 12);
         assert_eq!(state.stats.industry_cargo_units_produced, 12);
+    }
+
+    #[test]
+    fn exclusive_supplier_uses_station_owner_for_industry_delivery() {
+        let mut state = GameState::new(16, 16);
+        let station_pos = TileCoord::new(5, 5);
+        state.stations.push(crate::Station::new_with_kind(
+            station_pos,
+            crate::station::StopKind::TruckStop,
+        ));
+        let source_pos = TileCoord::new(5, 4);
+        let destination_pos = TileCoord::new(5, 6);
+        state.industries.push(
+            crate::Industry::with_tiles_spec(
+                source_pos,
+                crate::IndustryKind::Factory,
+                crate::IndustrySpec::Factory,
+                vec![source_pos],
+                0,
+            )
+            .with_instance_id(3),
+        );
+        let mut destination = crate::Industry::with_tiles_spec(
+            destination_pos,
+            crate::IndustryKind::Factory,
+            crate::IndustrySpec::Factory,
+            vec![destination_pos],
+            0,
+        )
+        .with_instance_id(4);
+        destination.exclusive_supplier = Some(crate::company::CompanyId(1));
+        state.industries.push(destination);
+
+        let (accepted, destinations) = deliver_goods_to_industries(
+            &mut state,
+            0,
+            CargoType::Livestock,
+            12,
+            source_pos,
+            crate::company::CompanyId::PLAYER,
+        );
+        assert_eq!(accepted, 0);
+        assert!(destinations.is_empty());
+        assert_eq!(
+            state.industries[1].accepted_cargo_waiting(CargoType::Livestock),
+            0
+        );
+
+        state.stations[0].owner = crate::company::CompanyId(1);
+        let (accepted, destinations) = deliver_goods_to_industries(
+            &mut state,
+            0,
+            CargoType::Livestock,
+            12,
+            source_pos,
+            crate::company::CompanyId(1),
+        );
+        assert_eq!(accepted, 12);
+        assert_eq!(destinations, vec![1]);
+        assert_eq!(
+            state.industries[1].accepted_cargo_waiting(CargoType::Livestock),
+            12
+        );
     }
 
     #[test]

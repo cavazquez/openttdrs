@@ -712,10 +712,11 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
             .iter()
             .map(|station| station.cargo_stock)
             .collect();
-        let _moved = crate::industry::transport_industry_goods(
+        let _moved = crate::industry::transport_industry_goods_with_settings(
             &mut state.industries[i],
             &mut state.stations,
             state.order.selectgoods,
+            state.serve_neutral_industries,
         );
         trigger_station_new_cargo_since(state, &station_stock_before);
     }

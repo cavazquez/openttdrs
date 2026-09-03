@@ -573,6 +573,7 @@ mod tests {
             3,
             SavStationIndex {
                 pos: TileCoord::new(2, 2),
+                owner: crate::company::CompanyId::PLAYER.0,
                 is_waypoint: false,
                 facilities: 1,
                 name: None,
@@ -648,6 +649,7 @@ mod tests {
             1,
             SavStationIndex {
                 pos: TileCoord::new(3, 4),
+                owner: crate::company::CompanyId::PLAYER.0,
                 is_waypoint: false,
                 facilities: 1,
                 name: None,
@@ -673,6 +675,7 @@ mod tests {
             1,
             SavStationIndex {
                 pos: TileCoord::new(7, 9),
+                owner: crate::company::CompanyId::PLAYER.0,
                 is_waypoint: false,
                 facilities: 1,
                 name: None,
@@ -747,6 +750,7 @@ mod tests {
             7,
             SavStationIndex {
                 pos: TileCoord::new(1, 1),
+                owner: crate::company::CompanyId::NONE.0,
                 is_waypoint: true,
                 facilities: 0,
                 name: None,

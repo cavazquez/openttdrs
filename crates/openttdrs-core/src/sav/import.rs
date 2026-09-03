@@ -397,6 +397,8 @@ pub(crate) fn hydrate_sav_industries(
         industry.last_prod_year = saved.last_prod_year;
         industry.was_cargo_delivered = saved.was_cargo_delivered;
         industry.control_flags = saved.control_flags;
+        industry.neutral_station_id = saved.neutral_station_id;
+        industry.exclusive_supplier = saved.exclusive_supplier.map(crate::company::CompanyId);
         industry.founder = saved.founder.map(crate::company::CompanyId);
         industry.construction_date = saved.construction_date;
         industry.construction_type = saved.construction_type;
@@ -1016,6 +1018,7 @@ mod tests {
             pos: TileCoord::new(2, 2),
             width: 1,
             height: 2,
+            neutral_station_id: None,
             industry_type: 0,
             random_colour: 14,
             counter: 123,
@@ -1024,6 +1027,7 @@ mod tests {
             last_prod_year: 1972,
             was_cargo_delivered: true,
             control_flags: 5,
+            exclusive_supplier: None,
             founder: Some(2),
             construction_date: crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17,
             construction_type: crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION,

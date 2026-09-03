@@ -189,6 +189,13 @@ pub struct Station {
     /// Compañía propietaria (Fase 4; default jugador).
     #[serde(default)]
     pub owner: CompanyId,
+    /// Industria asociada a una estación neutral (por ejemplo, un oil rig).
+    ///
+    /// `OpenTTD` mantiene el enlace inverso en `Industry::neutral_station`;
+    /// `None` identifica una estación normal. El valor es el `IndustryID`
+    /// nativo y no el índice del vector runtime.
+    #[serde(default)]
+    pub neutral_industry_id: Option<u16>,
     /// Nombre de la estación (saves de `OpenTTD` con nombre custom).
     #[serde(default)]
     pub name: Option<String>,
@@ -350,6 +357,7 @@ impl Station {
             ottd_station_id: None,
             stop_kind,
             owner: CompanyId::PLAYER,
+            neutral_industry_id: None,
             name: None,
             stock: 0,
             cargo_stock: CargoStock::default(),

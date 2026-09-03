@@ -318,6 +318,8 @@ pub struct SavGame {
     pub road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel,
     /// Límite de ruido de aeropuerto persistido en `PATS` / `OPTS`.
     pub station_noise_level: bool,
+    /// Servicio de industrias con estación neutral persistido en `PATS`.
+    pub serve_neutral_industries: bool,
     /// Nivel de averías persistido en `PATS` / `OPTS`.
     pub vehicle_breakdowns: u8,
     /// No mandar vehículos a servicio sin averías (`PATS` / `OPTS`).
@@ -394,6 +396,10 @@ pub struct SavGame {
 /// `SLV_100`: desde esta versión `OpenTTD` persiste las reservas PBS de
 /// depósitos. `AfterLoadGame()` sólo limpia el bit en saves anteriores.
 const SLV_DEPOT_RESERVATION_PERSISTED: u16 = 100;
+/// `SLV_SERVE_NEUTRAL_INDUSTRIES` de `OpenTTD` (210). Antes de esta versión el
+/// comportamiento histórico siempre permitía a estaciones de compañías
+/// servir industrias con estación neutral.
+const SLV_SERVE_NEUTRAL_INDUSTRIES: u16 = 210;
 
 /// Carga un savegame de `OpenTTD` desde sus bytes.
 ///
@@ -552,6 +558,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         train_acceleration_model: parsed_settings.train_acceleration_model,
         road_vehicle_acceleration_model: parsed_settings.road_vehicle_acceleration_model,
         station_noise_level: parsed_settings.station_noise_level,
+        serve_neutral_industries: parsed_settings.serve_neutral_industries,
         vehicle_breakdowns: parsed_settings.vehicle_breakdowns,
         no_servicing_if_no_breakdowns: parsed_settings.no_servicing_if_no_breakdowns,
         subsidy_duration: parsed_settings.subsidy_duration,
@@ -1108,6 +1115,11 @@ impl GameState {
         state.train_acceleration_model = sav.train_acceleration_model;
         state.road_vehicle_acceleration_model = sav.road_vehicle_acceleration_model;
         state.station_noise_level = sav.station_noise_level;
+        state.serve_neutral_industries = if sav.version < SLV_SERVE_NEUTRAL_INDUSTRIES {
+            true
+        } else {
+            sav.serve_neutral_industries
+        };
         state.vehicle_breakdowns = sav.vehicle_breakdowns;
         state.no_servicing_if_no_breakdowns = sav.no_servicing_if_no_breakdowns;
         state.subsidy_duration = sav.subsidy_duration;
@@ -1302,6 +1314,7 @@ impl GameState {
             let stop_kind = stop_kind_from_facilities(st.facilities);
             let mut station = Station::new_with_kind(st.pos, stop_kind);
             station.ottd_station_id = Some(st.station_id);
+            station.owner = crate::company::CompanyId(st.owner);
             station.name = entities::resolve_sav_station_name(st, &state.towns);
             station.newgrf_persistent_storage_id = st.airport_persistent_storage_id;
             // Una misma estación puede combinar tren, bus y aeropuerto. No
@@ -1367,6 +1380,22 @@ impl GameState {
             &sav.persistent_storages,
         );
         import::hydrate_sav_industries(&mut state, &sav.industries, &sav.extras);
+        // `INDY.neutral_station` y `Station::industry` son referencias
+        // cruzadas en OpenTTD. Reconstituir el enlace después de hidratar
+        // ambos pools evita depender del orden de las filas en el save.
+        for industry in &state.industries {
+            let Some(station_id) = industry.neutral_station_id else {
+                continue;
+            };
+            let industry_id = industry.instance_id;
+            if let Some(station) = state
+                .stations
+                .iter_mut()
+                .find(|station| station.ottd_station_id == Some(station_id))
+            {
+                station.neutral_industry_id = Some(industry_id);
+            }
+        }
         import::hydrate_sav_industry_persistent_storage(
             &mut state,
             &sav.industries,
@@ -1955,6 +1984,7 @@ mod tests {
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
             road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel::Realistic,
             station_noise_level: false,
+            serve_neutral_industries: true,
             vehicle_breakdowns: 2,
             no_servicing_if_no_breakdowns: true,
             subsidy_duration: 1,
@@ -2090,6 +2120,7 @@ mod tests {
             pos: origin,
             width: 1,
             height: 1,
+            neutral_station_id: None,
             industry_type: 9,
             random_colour: 0,
             counter: 0,
@@ -2098,6 +2129,7 @@ mod tests {
             last_prod_year: 0,
             was_cargo_delivered: false,
             control_flags: 0,
+            exclusive_supplier: None,
             founder: None,
             construction_date: 0,
             construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,
@@ -2192,6 +2224,7 @@ mod tests {
             pos,
             width: 1,
             height: 1,
+            neutral_station_id: None,
             industry_type: 0,
             random_colour: 0,
             counter: 0,
@@ -2200,6 +2233,7 @@ mod tests {
             last_prod_year: 0,
             was_cargo_delivered: false,
             control_flags: 0,
+            exclusive_supplier: None,
             founder: None,
             construction_date: 0,
             construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,
@@ -2278,6 +2312,7 @@ mod tests {
         sav.stations.push(SavStation {
             station_id: 7,
             pos: oilrig,
+            owner: crate::company::CompanyId::NONE.0,
             name: Some("Plataforma".to_string()),
             facilities: FACIL_AIRPORT,
             string_id: None,
@@ -2294,12 +2329,83 @@ mod tests {
 
         let state = GameState::from_sav_game(sav);
         let station = state.stations.first().expect("station");
+        assert!(station.owner.is_neutral());
         assert_eq!(station.airport_tiles, vec![oilrig]);
         assert_eq!(state.map.get_kind(oilrig), Some(TileKind::Station));
         assert_eq!(
             state.map.get(oilrig).map(|tile| tile.m6),
             Some(crate::station::STATION_TYPE_OILRIG << 3)
         );
+    }
+
+    #[test]
+    fn from_sav_game_restores_station_owner_and_industry_exclusivity_links() {
+        let industry_pos = TileCoord::new(4, 4);
+        let station_pos = TileCoord::new(4, 5);
+        let mut map = Map::new_flat(8, 8, 0);
+        let mut industry_tile = map.get(industry_pos).expect("industry tile");
+        industry_tile.kind = TileKind::Industry;
+        industry_tile.m2 = 4;
+        map.set_tile(industry_pos, industry_tile)
+            .expect("set industry");
+        let mut station_tile = map.get(station_pos).expect("station tile");
+        station_tile.kind = TileKind::Station;
+        station_tile.m2 = 7;
+        station_tile.m6 = crate::station::STATION_TYPE_DOCK << 3;
+        map.set_tile(station_pos, station_tile)
+            .expect("set station");
+
+        let mut sav = empty_sav(352, map);
+        sav.stations.push(SavStation {
+            station_id: 7,
+            pos: station_pos,
+            owner: crate::company::CompanyId::NONE.0,
+            name: Some("Neutral Dock".into()),
+            facilities: FACIL_DOCK,
+            string_id: None,
+            town_id: None,
+            airport_type: 0,
+            airport_w: 0,
+            airport_h: 0,
+            airport_layout: 0,
+            airport_rotation: 0,
+            airport_blocks: 0,
+            airport_persistent_storage_id: None,
+            cargo: Vec::new(),
+        });
+        sav.industries.push(SavIndustry {
+            industry_id: 4,
+            pos: industry_pos,
+            width: 1,
+            height: 1,
+            neutral_station_id: Some(7),
+            industry_type: 7,
+            random_colour: 0,
+            counter: 0,
+            selected_layout: 0,
+            random: 0,
+            last_prod_year: 0,
+            was_cargo_delivered: false,
+            control_flags: 0,
+            exclusive_supplier: Some(2),
+            founder: None,
+            construction_date: 0,
+            construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,
+            prod_level: crate::industry::PRODLEVEL_DEFAULT,
+            valid_history: 0,
+            persistent_storage_id: None,
+            produced: Vec::new(),
+            accepted: Vec::new(),
+        });
+
+        let state = GameState::from_sav_game(sav);
+        assert_eq!(state.stations[0].owner, crate::company::CompanyId::NONE);
+        assert_eq!(state.stations[0].neutral_industry_id, Some(4));
+        assert_eq!(
+            state.industries[0].exclusive_supplier,
+            Some(crate::company::CompanyId(2))
+        );
+        assert_eq!(state.industries[0].neutral_station_id, Some(7));
     }
 
     #[test]
@@ -2315,6 +2421,7 @@ mod tests {
         sav.stations.push(SavStation {
             station_id: 7,
             pos: tile_pos,
+            owner: crate::company::CompanyId::PLAYER.0,
             name: Some("Parada importada".into()),
             facilities: FACIL_BUS_STOP,
             string_id: None,
@@ -2369,6 +2476,7 @@ mod tests {
             SavStation {
                 station_id: 0,
                 pos: source,
+                owner: crate::company::CompanyId::PLAYER.0,
                 name: Some("Origen".to_string()),
                 facilities: FACIL_TRAIN,
                 string_id: None,
@@ -2389,6 +2497,7 @@ mod tests {
             SavStation {
                 station_id: 1,
                 pos: destination,
+                owner: crate::company::CompanyId::PLAYER.0,
                 name: Some("Destino".to_string()),
                 facilities: FACIL_TRAIN,
                 string_id: None,
@@ -2421,6 +2530,7 @@ mod tests {
                 station_id,
                 entities::SavStationIndex {
                     pos,
+                    owner: crate::company::CompanyId::PLAYER.0,
                     is_waypoint: false,
                     facilities: FACIL_TRAIN,
                     name: None,
@@ -2532,6 +2642,7 @@ mod tests {
                 SavStation {
                     station_id: 0,
                     pos: crate::TileCoord::new(3, 3),
+                    owner: crate::company::CompanyId::PLAYER.0,
                     name: Some("Estación Norte".into()),
                     facilities: 0x01,
                     string_id: None,
@@ -2548,6 +2659,7 @@ mod tests {
                 SavStation {
                     station_id: 1,
                     pos: crate::TileCoord::new(10, 10),
+                    owner: crate::company::CompanyId(1).0,
                     name: Some("Intermodal".into()),
                     facilities: FACIL_TRAIN | FACIL_BUS_STOP | FACIL_AIRPORT,
                     string_id: None,
@@ -3028,6 +3140,7 @@ mod tests {
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
             road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel::Realistic,
             station_noise_level: false,
+            serve_neutral_industries: true,
             vehicle_breakdowns: 2,
             no_servicing_if_no_breakdowns: true,
             subsidy_duration: 1,

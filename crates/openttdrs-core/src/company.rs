@@ -16,10 +16,28 @@ pub struct CompanyId(pub u8);
 
 impl CompanyId {
     pub const PLAYER: Self = Self(0);
+    /// `OWNER_NONE` de `OpenTTD`: infraestructura/estaciones neutrales sin
+    /// compañía propietaria (valor nativo 0x10).
+    pub const NONE: Self = Self(0x10);
+    /// `OWNER_TOWN` nativo. No es una compañía jugable, pero puede aparecer
+    /// como propietario de infraestructura municipal importada.
+    pub const TOWN: Self = Self(0x0F);
+    /// `OWNER_WATER` nativo, usado por tiles de agua y boyas.
+    pub const WATER: Self = Self(0x11);
+    /// `OWNER_DEITY` nativo, reservado a editor/GameScript.
+    pub const DEITY: Self = Self(0x12);
+    /// `INVALID_OWNER` nativo (`Owner::Invalid()`).
+    pub const INVALID: Self = Self(u8::MAX);
 
     #[must_use]
     pub const fn index(self) -> usize {
         self.0 as usize
+    }
+
+    /// ¿Representa el propietario neutral (`OWNER_NONE`) de `OpenTTD`?
+    #[must_use]
+    pub const fn is_neutral(self) -> bool {
+        self.0 == Self::NONE.0
     }
 
     /// ¿El byte `m1` de tesela es el owner municipal (`OWNER_TOWN` en `OpenTTD`)?

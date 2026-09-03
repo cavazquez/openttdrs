@@ -646,6 +646,7 @@ mod tests {
         let mut state = tiny_state();
         let mut rail = Station::new_with_kind(TileCoord::new(28, 39), StopKind::RailStation);
         rail.name = Some("Central Demo".into());
+        rail.owner = crate::company::CompanyId::NONE;
         let mut bus = Station::new_with_kind(TileCoord::new(17, 15), StopKind::BusStop);
         bus.name = Some("Parada Villa".into());
         state.stations = vec![rail, bus];
@@ -666,6 +667,7 @@ mod tests {
             .find(|s| s.name.as_deref() == Some("Central Demo"))
             .expect("central");
         assert_eq!(central.pos, TileCoord::new(28, 39));
+        assert_eq!(central.owner, crate::company::CompanyId::NONE.0);
         assert_eq!(central.facilities & 0x01, 0x01); // FACIL_TRAIN
 
         let loaded = GameState::from_sav_game(sav_game);
@@ -698,6 +700,7 @@ mod tests {
         state.road_vehicle_acceleration_model =
             crate::engine::RoadVehicleAccelerationModel::Original;
         state.station_noise_level = true;
+        state.serve_neutral_industries = false;
         state.vehicle_breakdowns = 0;
         state.no_servicing_if_no_breakdowns = false;
         state.subsidy_duration = 5_000;
@@ -738,6 +741,10 @@ mod tests {
             state.road_vehicle_acceleration_model
         );
         assert_eq!(sav_game.station_noise_level, state.station_noise_level);
+        assert_eq!(
+            sav_game.serve_neutral_industries,
+            state.serve_neutral_industries
+        );
         assert_eq!(sav_game.vehicle_breakdowns, state.vehicle_breakdowns);
         assert_eq!(
             sav_game.no_servicing_if_no_breakdowns,
@@ -1575,6 +1582,7 @@ mod tests {
             pos,
             width: 1,
             height: 1,
+            neutral_station_id: None,
             industry_type: 0,
             random_colour: 0,
             counter: 0,
@@ -1583,6 +1591,7 @@ mod tests {
             last_prod_year: 0,
             was_cargo_delivered: false,
             control_flags: 0,
+            exclusive_supplier: None,
             founder: None,
             construction_date: 0,
             construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,

@@ -684,13 +684,14 @@ fn write_stnn_base(
     name: &str,
     facilities: u8,
     town_ref: u32,
+    owner: crate::company::CompanyId,
 ) -> Result<(), SavError> {
     buf.extend_from_slice(&tile_idx.to_be_bytes());
     buf.extend_from_slice(&town_ref.to_be_bytes());
     buf.extend_from_slice(&STR_SV_STNAME.to_be_bytes());
     write_str(name, buf)?;
     buf.push(0); // delete_ctr
-    buf.push(0); // owner (compañía 0)
+    buf.push(owner.0);
     buf.push(facilities);
     buf.extend_from_slice(&0i32.to_be_bytes()); // build_date
     buf.extend_from_slice(&0u16.to_be_bytes()); // random_bits
@@ -706,6 +707,7 @@ fn write_stnn_normal(
     map_w: u32,
     facilities: u8,
     town_ref: u32,
+    owner: crate::company::CompanyId,
     station_id: u32,
     cargo_export: &CargoPacketExport,
     climate: crate::Climate,
@@ -713,7 +715,7 @@ fn write_stnn_normal(
 ) -> Result<(), SavError> {
     let name = st.name.as_deref().unwrap_or("");
     buf.push(1); // base presente
-    write_stnn_base(buf, tile_idx, name, facilities, town_ref)?;
+    write_stnn_base(buf, tile_idx, name, facilities, town_ref, owner)?;
 
     let (train_tile, train_w, train_h) =
         if facilities & FACIL_TRAIN != 0 && !is_waypoint(facilities) {
@@ -822,10 +824,11 @@ fn write_stnn_waypoint(
     tile_idx: u32,
     facilities: u8,
     town_ref: u32,
+    owner: crate::company::CompanyId,
 ) -> Result<(), SavError> {
     let name = st.name.as_deref().unwrap_or("");
     buf.push(1); // base presente
-    write_stnn_base(buf, tile_idx, name, facilities, town_ref)?;
+    write_stnn_base(buf, tile_idx, name, facilities, town_ref, owner)?;
     buf.extend_from_slice(&0u16.to_be_bytes()); // town_cn
     let (train_tile, w, h) = if facilities & FACIL_TRAIN != 0 {
         (tile_idx, 1u8, 1u8)
@@ -888,7 +891,7 @@ pub(crate) fn stnn_records_with_cargo(
         if is_waypoint(facilities) {
             rec.push(0); // normal ausente
             rec.push(1); // waypoint presente
-            write_stnn_waypoint(&mut rec, st, tile_idx, facilities, town_ref)?;
+            write_stnn_waypoint(&mut rec, st, tile_idx, facilities, town_ref, st.owner)?;
         } else {
             rec.push(1); // normal presente
             let station_id = station_id_for_index(state, station_index).map_or(u32::MAX, u32::from);
@@ -899,6 +902,7 @@ pub(crate) fn stnn_records_with_cargo(
                 map_w,
                 facilities,
                 town_ref,
+                st.owner,
                 station_id,
                 cargo_export,
                 state.climate,
@@ -1230,6 +1234,7 @@ fn append_indy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 6, "location.tile")?;
     append_field(header, 2, "location.w")?;
     append_field(header, 2, "location.h")?;
+    append_field(header, 6, "neutral_station")?; // REF_STATION
     append_field(header, 2, "type")?;
     append_field(header, 2, "random_colour")?;
     append_field(header, 2, "prod_level")?;
@@ -1237,6 +1242,7 @@ fn append_indy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 5, "last_prod_year")?;
     append_field(header, 2, "was_cargo_delivered")?;
     append_field(header, 2, "ctlflags")?;
+    append_field(header, 2, "exclusive_supplier")?;
     append_field(header, 2, "founder")?;
     append_field(header, 5, "construction_date")?;
     append_field(header, 2, "construction_type")?;
@@ -1507,6 +1513,30 @@ fn saved_industry<'a>(
         .find(|saved| saved.pos == industry.pos)
 }
 
+fn neutral_station_ref(state: &GameState, industry: &Industry) -> Result<u32, SavError> {
+    let Some(station_id) = industry.neutral_station_id else {
+        return Ok(0);
+    };
+    // `REF_STATION` is an index + 1; zero is the null reference.
+    station_id
+        .checked_add(1)
+        .ok_or(SavError::ValueOutOfRange {
+            field: "industry neutral station id",
+            value: station_id,
+        })
+        .and_then(|reference| {
+            state
+                .stations
+                .iter()
+                .any(|station| station.ottd_station_id == Some(station_id))
+                .then_some(reference)
+                .ok_or(SavError::ValueOutOfRange {
+                    field: "industry neutral station reference",
+                    value: station_id,
+                })
+        })
+}
+
 pub(super) fn indy_records_with_cargo(
     state: &GameState,
     map_w: u32,
@@ -1523,6 +1553,7 @@ pub(super) fn indy_records_with_cargo(
         rec.extend_from_slice(&tile_idx.to_be_bytes());
         rec.push(w);
         rec.push(h);
+        rec.extend_from_slice(&neutral_station_ref(state, ind)?.to_be_bytes());
         rec.push(industry_ottd_type(ind));
         rec.push(ind.random_colour % 16);
         rec.push(ind.prod_level);
@@ -1531,6 +1562,10 @@ pub(super) fn indy_records_with_cargo(
         rec.extend_from_slice(&last_prod_year.to_be_bytes());
         rec.push(u8::from(ind.was_cargo_delivered));
         rec.push(ind.control_flags);
+        rec.push(
+            ind.exclusive_supplier
+                .map_or(crate::company::CompanyId::INVALID.0, |owner| owner.0),
+        );
         rec.push(
             ind.founder
                 .map_or(crate::industry::INDUSTRY_FOUNDER_INVALID, |id| id.0),
@@ -1916,6 +1951,7 @@ mod tests {
     fn stnn_airport_record_preserves_custom_type_and_footprint() {
         let mut state = GameState::new(16, 16);
         let mut airport = Station::new_with_kind(TileCoord::new(7, 7), StopKind::Airport);
+        airport.owner = crate::company::CompanyId::NONE;
         airport.ottd_station_id = Some(10);
         airport.airport_newgrf_spec_id = Some(10);
         airport.airport_layout = 3;
@@ -1937,6 +1973,14 @@ mod tests {
             Some(SlValue::Structs(items)) => items.first().expect("normal"),
             other => panic!("normal ausente: {other:?}"),
         };
+        let base = match record_get(normal, "base") {
+            Some(SlValue::Structs(items)) => items.first().expect("base"),
+            other => panic!("base ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(base, "owner").and_then(SlValue::as_u64),
+            Some(16)
+        );
         assert_eq!(
             record_get(normal, "airport.type").and_then(SlValue::as_u64),
             Some(10)
@@ -2068,6 +2112,8 @@ mod tests {
         industry.last_prod_year = 1972;
         industry.was_cargo_delivered = true;
         industry.control_flags = 5;
+        industry.neutral_station_id = Some(42);
+        industry.exclusive_supplier = Some(crate::company::CompanyId(2));
         industry.founder = Some(crate::company::CompanyId(2));
         industry.construction_date = crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17;
         industry.construction_type = crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION;
@@ -2076,12 +2122,18 @@ mod tests {
         // Steel no es la salida legacy de la fábrica y debe viajar en la
         // lista adicional, no desaparecer ni sobrescribir `stock`.
         industry.add_newgrf_produced_cargo(CargoType::Steel, 7);
+        let mut neutral_station =
+            Station::new_with_kind(TileCoord::new(4, 3), crate::station::StopKind::Dock);
+        neutral_station.ottd_station_id = Some(42);
+        neutral_station.owner = crate::company::CompanyId::NONE;
+        state.stations.push(neutral_station);
         state.industries.push(industry);
         state.sav_industry_histories.push(crate::sav::SavIndustry {
             industry_id: 0,
             pos: TileCoord::new(3, 3),
             width: 1,
             height: 1,
+            neutral_station_id: None,
             industry_type: 3,
             random_colour: 0,
             counter: 0,
@@ -2090,6 +2142,7 @@ mod tests {
             last_prod_year: 0,
             was_cargo_delivered: false,
             control_flags: 0,
+            exclusive_supplier: None,
             founder: None,
             construction_date: 0,
             construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,
@@ -2155,6 +2208,16 @@ mod tests {
             crate::sav::table::record_get(record, "ctlflags")
                 .and_then(crate::sav::table::SlValue::as_u64),
             Some(5)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "exclusive_supplier")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(2)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "neutral_station")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(43)
         );
         assert_eq!(
             crate::sav::table::record_get(record, "founder")

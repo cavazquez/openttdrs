@@ -864,6 +864,17 @@ pub struct Industry {
     /// el modelo reducido pero visibles desde `NewGRF`.
     #[serde(default)]
     pub control_flags: u8,
+    /// Estación neutral asociada (`Industry::neutral_station`).
+    ///
+    /// `OpenTTD` serializa la referencia en `INDY`; el ID es el `StationID`
+    /// nativo (no el índice de `GameState::stations`). `None` representa una
+    /// industria sin estación neutral asociada.
+    #[serde(default)]
+    pub neutral_station_id: Option<u32>,
+    /// Compañía con derechos exclusivos para entregar cargo a la industria.
+    /// `None` equivale a `INVALID_OWNER` y permite a cualquier compañía.
+    #[serde(default)]
+    pub exclusive_supplier: Option<crate::company::CompanyId>,
     /// Marca que la industria fue elegida como destino de una entrega.
     #[serde(default)]
     pub was_cargo_delivered: bool,
@@ -1013,6 +1024,8 @@ impl Industry {
             construction_date: 0,
             construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,
             control_flags: 0,
+            neutral_station_id: None,
+            exclusive_supplier: None,
             was_cargo_delivered: false,
             last_prod_year: 0,
             instance_id: 0,
@@ -1065,6 +1078,8 @@ impl Industry {
             construction_date: 0,
             construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,
             control_flags: 0,
+            neutral_station_id: None,
+            exclusive_supplier: None,
             was_cargo_delivered: false,
             last_prod_year: 0,
             instance_id: 0,
@@ -1123,6 +1138,8 @@ impl Industry {
             construction_date: 0,
             construction_type: INDUSTRY_CONSTRUCTION_UNKNOWN,
             control_flags: 0,
+            neutral_station_id: None,
+            exclusive_supplier: None,
             was_cargo_delivered: false,
             last_prod_year: 0,
             instance_id: 0,
@@ -2176,13 +2193,25 @@ fn covering_freight_station_indices(industry: &Industry, stations: &[Station]) -
 }
 
 /// Estaciones en cobertura que pueden recibir la producción de esta industria.
-fn covering_output_station_indices(industry: &Industry, stations: &[Station]) -> Vec<usize> {
+fn covering_output_station_indices(
+    industry: &Industry,
+    stations: &[Station],
+    serve_neutral_industries: bool,
+) -> Vec<usize> {
     let cargo = industry.output_cargo();
     stations
         .iter()
         .enumerate()
         .filter(|(_, station)| {
+            let station_matches_neutral_industry = station
+                .neutral_industry_id
+                .is_none_or(|id| id == industry.instance_id);
+            let industry_matches_station = industry
+                .neutral_station_id
+                .is_none_or(|id| station.ottd_station_id == Some(id));
             station.accepts_cargo(cargo)
+                && (serve_neutral_industries
+                    || (station_matches_neutral_industry && industry_matches_station))
                 && station::industry_in_station_coverage(
                     industry,
                     station.pos,
@@ -2209,11 +2238,23 @@ pub fn transport_industry_goods(
     stations: &mut [Station],
     selectgoods: bool,
 ) -> u32 {
+    transport_industry_goods_with_settings(industry, stations, selectgoods, true)
+}
+
+/// Variante de [`transport_industry_goods`] que aplica el ajuste nativo
+/// `station.serve_neutral_industries` al asociar estaciones neutrales.
+pub fn transport_industry_goods_with_settings(
+    industry: &mut Industry,
+    stations: &mut [Station],
+    selectgoods: bool,
+    serve_neutral_industries: bool,
+) -> u32 {
     let mut total = 0u32;
     total = total.saturating_add(transport_industry_cargo_stock(
         industry,
         stations,
         selectgoods,
+        serve_neutral_industries,
         industry.output_cargo(),
         true,
     ));
@@ -2222,6 +2263,7 @@ pub fn transport_industry_goods(
             industry,
             stations,
             selectgoods,
+            serve_neutral_industries,
             secondary,
             false,
         ));
@@ -2239,6 +2281,7 @@ pub fn transport_industry_goods(
             industry,
             stations,
             selectgoods,
+            serve_neutral_industries,
             cargo,
         ));
     }
@@ -2249,6 +2292,7 @@ fn transport_industry_cargo_stock(
     industry: &mut Industry,
     stations: &mut [Station],
     selectgoods: bool,
+    serve_neutral_industries: bool,
     cargo: CargoType,
     primary: bool,
 ) -> u32 {
@@ -2260,7 +2304,7 @@ fn transport_industry_cargo_stock(
     if stock == 0 {
         return 0;
     }
-    let nearby = covering_output_station_indices(industry, stations);
+    let nearby = covering_output_station_indices(industry, stations, serve_neutral_industries);
     let eligible: Vec<usize> = nearby
         .into_iter()
         .filter(|&idx| station::can_move_goods_to_station(&stations[idx], cargo, selectgoods))
@@ -2295,13 +2339,14 @@ fn transport_industry_extra_cargo_stock(
     industry: &mut Industry,
     stations: &mut [Station],
     selectgoods: bool,
+    serve_neutral_industries: bool,
     cargo: CargoType,
 ) -> u32 {
     let stock = industry.extra_produced_cargo(cargo);
     if stock == 0 {
         return 0;
     }
-    let nearby = covering_output_station_indices(industry, stations);
+    let nearby = covering_output_station_indices(industry, stations, serve_neutral_industries);
     let eligible: Vec<usize> = nearby
         .into_iter()
         .filter(|&idx| station::can_move_goods_to_station(&stations[idx], cargo, selectgoods))
@@ -3131,6 +3176,37 @@ mod tests {
             stations[0].cargo_stock.coal,
             stations[1].cargo_stock.coal
         );
+    }
+
+    /// Con el ajuste nativo desactivado, una industria vinculada a una estación
+    /// neutral sólo puede enviar su producción a esa estación. Al activarlo,
+    /// vuelve a entrar en la cobertura de cualquier estación compatible.
+    #[test]
+    fn neutral_station_setting_limits_industry_output() {
+        let industry_pos = TileCoord::new(4, 4);
+        let mut industry = Industry::new(industry_pos, IndustryKind::CoalMine).with_instance_id(7);
+        industry.neutral_station_id = Some(42);
+        industry.stock = 20;
+
+        let mut neutral = Station::new_with_kind(TileCoord::new(3, 4), StopKind::RailStation);
+        neutral.ottd_station_id = Some(42);
+        neutral.neutral_industry_id = Some(7);
+        let regular = Station::new_with_kind(TileCoord::new(5, 4), StopKind::RailStation);
+        let mut stations = vec![neutral, regular];
+
+        let moved =
+            transport_industry_goods_with_settings(&mut industry, &mut stations, false, false);
+        assert!(moved > 0);
+        assert!(stations[0].cargo_stock.coal > 0);
+        assert_eq!(stations[1].cargo_stock.coal, 0);
+
+        industry.stock = 20;
+        stations[0].cargo_stock.coal = 0;
+        stations[1].cargo_stock.coal = 0;
+        let moved =
+            transport_industry_goods_with_settings(&mut industry, &mut stations, false, true);
+        assert!(moved > 0);
+        assert!(stations[1].cargo_stock.coal > 0);
     }
 
     /// Con selectgoods, una estación nunca visitada no se lleva nada: el stock se queda

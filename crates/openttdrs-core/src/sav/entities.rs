@@ -59,6 +59,9 @@ pub struct SavStation {
     /// del `Vec`); necesario para correlacionar con oráculos/trazas externas.
     pub station_id: u32,
     pub pos: TileCoord,
+    /// `BaseStation::owner` serializado como `Owner` (`0..MAX_COMPANIES` para
+    /// compañías, `0x10` para `OWNER_NONE`/estaciones neutrales).
+    pub owner: u8,
     /// Nombre puesto por el jugador; `None` si usa nombre generado.
     pub name: Option<String>,
     /// Bits `FACIL_*` de `OpenTTD` (1 tren, 2 camión, 4 bus, 8 aeropuerto, 0x10 muelle).
@@ -154,6 +157,7 @@ pub struct SavCargoPacket {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SavStationIndex {
     pub pos: TileCoord,
+    pub owner: u8,
     pub is_waypoint: bool,
     pub facilities: u8,
     pub name: Option<String>,
@@ -212,6 +216,10 @@ pub(crate) fn station_index_from_chunks(
             .and_then(SlValue::as_u64)
             .or_else(|| record_get(&record, "facilities").and_then(SlValue::as_u64))
             .unwrap_or(0);
+        let owner = record_get(base, "owner")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(crate::company::CompanyId::PLAYER.0);
         let is_waypoint = facilities & FACIL_WAYPOINT != 0;
         let name = record_get(base, "name")
             .and_then(|v| v.as_str())
@@ -263,6 +271,7 @@ pub(crate) fn station_index_from_chunks(
             idx,
             SavStationIndex {
                 pos,
+                owner,
                 is_waypoint,
                 facilities: facilities as u8,
                 name,
@@ -430,6 +439,7 @@ pub(crate) fn stations_from_chunks(
         .map(|(station_id, st)| SavStation {
             station_id,
             pos: st.pos,
+            owner: st.owner,
             name: st.name,
             facilities: st.facilities,
             string_id: st.string_id,
@@ -1055,6 +1065,8 @@ pub struct SavIndustry {
     /// Dimensiones del rectángulo (`location.w` × `location.h`).
     pub width: u8,
     pub height: u8,
+    /// Referencia `Industry::neutral_station` (`StationID + 1`, cero = none).
+    pub neutral_station_id: Option<u32>,
     /// `IndustryType` de `OpenTTD` (índice en la tabla de specs).
     pub industry_type: u8,
     /// `Industry.random_colour` (`Colours`, 0–15) para `PALETTE_MODIFIER_COLOUR`.
@@ -1072,6 +1084,8 @@ pub struct SavIndustry {
     pub was_cargo_delivered: bool,
     /// Flags opacos de `GameScript` (`Industry::ctlflags`).
     pub control_flags: u8,
+    /// `Industry::exclusive_supplier`; `None` representa `INVALID_OWNER`.
+    pub exclusive_supplier: Option<u8>,
     /// Fundador serializado como `CompanyID`; `None` representa
     /// `INVALID_OWNER` (por ejemplo, una industria generada en el mapa).
     pub founder: Option<u8>,
@@ -1171,6 +1185,7 @@ pub(crate) fn industries_from_chunks(
                     pos,
                     width: 1,
                     height: 1,
+                    neutral_station_id: None,
                     industry_type,
                     random_colour: 0,
                     counter: 0,
@@ -1179,6 +1194,7 @@ pub(crate) fn industries_from_chunks(
                     last_prod_year: 0,
                     was_cargo_delivered: false,
                     control_flags: 0,
+                    exclusive_supplier: None,
                     founder: None,
                     construction_date: 0,
                     construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,
@@ -1207,6 +1223,11 @@ fn sav_industry_from_record(
     let height = record_get(record, "location.h")
         .and_then(SlValue::as_u64)
         .unwrap_or(1);
+    let neutral_station_id = record_get(record, "neutral_station")
+        .and_then(SlValue::as_u64)
+        .filter(|&value| value > 0)
+        .and_then(|value| value.checked_sub(1))
+        .and_then(|value| u32::try_from(value).ok());
     let industry_type = record_get(record, "type")
         .and_then(SlValue::as_u64)
         .unwrap_or(0);
@@ -1236,6 +1257,10 @@ fn sav_industry_from_record(
         .and_then(SlValue::as_u64)
         .and_then(|value| u8::try_from(value).ok())
         .unwrap_or(0);
+    let exclusive_supplier = record_get(record, "exclusive_supplier")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u8::try_from(value).ok())
+        .filter(|&value| value != crate::company::CompanyId::INVALID.0);
     let founder = record_get(record, "founder")
         .and_then(SlValue::as_u64)
         .and_then(|value| u8::try_from(value).ok())
@@ -1265,6 +1290,7 @@ fn sav_industry_from_record(
         pos,
         width: width.min(255) as u8,
         height: height.min(255) as u8,
+        neutral_station_id,
         industry_type: industry_type.min(255) as u8,
         random_colour: (random_colour % 16) as u8,
         counter,
@@ -1273,6 +1299,7 @@ fn sav_industry_from_record(
         last_prod_year,
         was_cargo_delivered,
         control_flags,
+        exclusive_supplier,
         founder,
         construction_date,
         construction_type,
@@ -2806,7 +2833,12 @@ mod tests {
             name: *b"STNN",
             ch_type: CH_TABLE,
             body: build_table_body(
-                &[(6, "xy"), (0x0A | 0x10, "name"), (2, "facilities")],
+                &[
+                    (6, "xy"),
+                    (0x0A | 0x10, "name"),
+                    (2, "owner"),
+                    (2, "facilities"),
+                ],
                 records,
             ),
         }
@@ -2817,11 +2849,13 @@ mod tests {
         let mut st = Vec::new();
         st.extend_from_slice(&(2u32 * 64 + 5).to_be_bytes()); // xy → (5,2) con w=64
         write_str("Mi Estación", &mut st);
+        st.push(crate::company::CompanyId::NONE.0); // estación neutral
         st.push(1); // FACIL_TRAIN
 
         let mut wp = Vec::new();
         wp.extend_from_slice(&10u32.to_be_bytes());
         write_str("", &mut wp);
+        wp.push(crate::company::CompanyId::PLAYER.0);
         wp.push(0x80); // waypoint
 
         let chunks = vec![station_chunk(&[st, wp])];
@@ -2829,6 +2863,7 @@ mod tests {
         assert_eq!(stations.len(), 1);
         assert_eq!(stations[0].pos, TileCoord::new(5, 2));
         assert_eq!(stations[0].name.as_deref(), Some("Mi Estación"));
+        assert_eq!(stations[0].owner, crate::company::CompanyId::NONE.0);
         assert_eq!(stations[0].facilities, 1);
     }
 
@@ -3174,6 +3209,7 @@ mod tests {
             ("location.tile".to_string(), SlValue::Uint(5 * 64 + 10)),
             ("location.w".to_string(), SlValue::Uint(2)),
             ("location.h".to_string(), SlValue::Uint(3)),
+            ("neutral_station".to_string(), SlValue::Uint(8)),
             ("type".to_string(), SlValue::Uint(0)),
             ("random_colour".to_string(), SlValue::Uint(14)),
             ("counter".to_string(), SlValue::Uint(123)),
@@ -3181,6 +3217,7 @@ mod tests {
             ("random".to_string(), SlValue::Uint(0xBEEF)),
             ("valid_history".to_string(), SlValue::Uint(0x5A)),
             ("prod_level".to_string(), SlValue::Uint(32)),
+            ("exclusive_supplier".to_string(), SlValue::Uint(2)),
             (
                 "accepted".to_string(),
                 SlValue::Structs(vec![vec![
@@ -3222,6 +3259,8 @@ mod tests {
         let industry = sav_industry_from_record(9, &record, 64).expect("INDY record");
 
         assert_eq!(industry.industry_id, 9);
+        assert_eq!(industry.neutral_station_id, Some(7));
+        assert_eq!(industry.exclusive_supplier, Some(2));
         assert_eq!(industry.counter, 123);
         assert_eq!(industry.selected_layout, 2);
         assert_eq!(industry.random, 0xBEEF);

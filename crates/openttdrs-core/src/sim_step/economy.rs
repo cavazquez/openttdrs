@@ -45,6 +45,7 @@ fn trigger_station_new_cargo_since(state: &mut GameState, before: &[crate::Cargo
     }
 }
 
+#[allow(clippy::too_many_lines)]
 pub(super) fn process_monthly_economy(state: &mut GameState) {
     apply_monthly_inflation_and_fluctuations(state);
     apply_monthly_interest_and_bankruptcy(state);
@@ -151,6 +152,7 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
         let produced = industry.produced_total;
         let transported = industry.transported_total;
         industry.history.push_month(stock, produced, transported);
+        industry.rollover_accepted_history();
     }
     // OpenTTD evalúa CB35 después de actualizar las estadísticas mensuales.
     maybe_change_industry_production_monthly(state);

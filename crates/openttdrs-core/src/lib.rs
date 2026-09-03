@@ -262,7 +262,8 @@ pub use engine::{
     vanilla_train_tractive_effort,
 };
 pub use entity_history::{
-    ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
+    ENTITY_HISTORY_MONTHS, INDUSTRY_HISTORY_RECORDS, IndustryAcceptedHistorySample,
+    IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
 };
 pub use fleet_index::{FleetIndex, TerminalSpatialIndex};
 pub use ground_crash::{

@@ -1281,16 +1281,54 @@ fn write_indy_accepted(
     climate: crate::Climate,
     saved: Option<&crate::sav::SavIndustry>,
 ) -> Result<(), SavError> {
-    let entries: Vec<(u8, u16, u32)> = crate::cargo::CargoType::for_climate(climate)
-        .iter()
-        .filter_map(|&cargo| {
+    let mut cargos = crate::cargo::CargoType::for_climate(climate).to_vec();
+    for &cargo in industry.accepted_history.keys() {
+        if !cargos.contains(&cargo) {
+            cargos.push(cargo);
+        }
+    }
+    if let Some(saved_industry) = saved {
+        for entry in &saved_industry.accepted {
+            let Some(cargo) = crate::CargoType::from_climate_slot(climate, entry.cargo_slot) else {
+                continue;
+            };
+            if !cargos.contains(&cargo) {
+                cargos.push(cargo);
+            }
+        }
+    }
+    let entries: Vec<(u8, crate::CargoType, u16, u32)> = cargos
+        .into_iter()
+        .filter_map(|cargo| {
+            let slot = cargo_slot_for_climate(climate, cargo)?;
             let waiting = industry.accepted_cargo_waiting(cargo);
             let last_accepted = industry.last_accepted_date(cargo);
-            if waiting == 0 && last_accepted == 0 {
+            let saved_entry = saved.and_then(|saved_industry| {
+                saved_industry.accepted.iter().find(|entry| {
+                    crate::CargoType::from_climate_slot(climate, entry.cargo_slot) == Some(cargo)
+                })
+            });
+            let has_runtime_history = industry
+                .accepted_history
+                .get(&cargo)
+                .is_some_and(|history| !history.is_empty());
+            let has_saved_history = saved_entry.is_some_and(|entry| !entry.history.is_empty());
+            let accumulated_waiting = if has_runtime_history {
+                industry.accepted_accumulated_waiting.get(cargo)
+            } else {
+                saved_entry.map_or(0, |entry| entry.accumulated_waiting)
+            };
+            if waiting == 0
+                && last_accepted == 0
+                && accumulated_waiting == 0
+                && !has_runtime_history
+                && !has_saved_history
+            {
                 return None;
             }
             Some((
-                cargo_slot_for_climate(climate, cargo)?,
+                slot,
+                cargo,
                 waiting.min(u32::from(u16::MAX)) as u16,
                 last_accepted,
             ))
@@ -1299,32 +1337,44 @@ fn write_indy_accepted(
     // At most 12 entries for the built-in climate catalog, well below the
     // simple-gamma limit used by the TABLE codec.
     write_gamma(entries.len() as u32, buf)?;
-    for (cargo, waiting, last_accepted) in entries {
-        buf.push(cargo);
+    for (cargo_slot, cargo_type, waiting, last_accepted) in entries {
+        buf.push(cargo_slot);
         buf.extend_from_slice(&waiting.to_be_bytes());
         let last_accepted = i32::try_from(last_accepted).unwrap_or(i32::MAX);
         buf.extend_from_slice(&last_accepted.to_be_bytes());
-        let saved = saved.and_then(|industry| {
-            industry
-                .accepted
-                .iter()
-                .find(|entry| entry.cargo_slot == cargo)
+        let saved_entry = saved.and_then(|industry| {
+            industry.accepted.iter().find(|entry| {
+                crate::CargoType::from_climate_slot(climate, entry.cargo_slot) == Some(cargo_type)
+            })
         });
-        buf.extend_from_slice(
-            &saved
-                .map_or(0, |entry| entry.accumulated_waiting)
-                .to_be_bytes(),
-        );
+        let accumulated_waiting = if industry.accepted_history.contains_key(&cargo_type) {
+            industry.accepted_accumulated_waiting.get(cargo_type)
+        } else {
+            saved_entry.map_or(0, |entry| entry.accumulated_waiting)
+        };
+        buf.extend_from_slice(&accumulated_waiting.to_be_bytes());
+        let runtime_history = industry.accepted_history.get(&cargo_type);
+        let history = runtime_history
+            .filter(|history| !history.is_empty())
+            .map(|history| {
+                history
+                    .iter()
+                    .map(|sample| crate::sav::SavIndustryAcceptedHistory {
+                        accepted: sample.accepted,
+                        waiting: sample.waiting,
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .or_else(|| saved_entry.map(|entry| entry.history.clone()))
+            .unwrap_or_default();
         write_gamma(
-            u32::try_from(saved.map_or(0, |entry| entry.history.len())).map_err(|_| {
-                SavError::ValueOutOfRange {
-                    field: "industry accepted history length",
-                    value: u32::MAX,
-                }
+            u32::try_from(history.len()).map_err(|_| SavError::ValueOutOfRange {
+                field: "industry accepted history length",
+                value: u32::MAX,
             })?,
             buf,
         )?;
-        for sample in saved.into_iter().flat_map(|entry| entry.history.iter()) {
+        for sample in history {
             buf.extend_from_slice(&sample.accepted.to_be_bytes());
             buf.extend_from_slice(&sample.waiting.to_be_bytes());
         }
@@ -1469,7 +1519,12 @@ pub(super) fn indy_records_with_cargo(
         };
         rec.extend_from_slice(&psa.to_be_bytes());
         rec.extend_from_slice(&ind.newgrf_random.to_be_bytes());
-        rec.extend_from_slice(&saved.map_or(0, |saved| saved.valid_history).to_be_bytes());
+        let valid_history = if ind.valid_history != 0 {
+            ind.valid_history
+        } else {
+            saved.map_or(0, |saved| saved.valid_history)
+        };
+        rec.extend_from_slice(&valid_history.to_be_bytes());
         write_indy_accepted(&mut rec, ind, state.climate, saved)?;
         write_indy_produced(&mut rec, ind, state.climate, saved)?;
         out.push(rec);
@@ -2199,5 +2254,46 @@ mod tests {
         };
         assert_eq!(values.len(), 256);
         assert_eq!(values[7].as_u64(), Some(u64::from(0xDEAD_BEEF_u32)));
+    }
+
+    #[test]
+    fn indy_chunk_emits_runtime_accepted_history() {
+        let mut state = GameState::new(8, 8);
+        let mut industry = Industry::new(TileCoord::new(2, 2), IndustryKind::Factory);
+        industry.record_accepted_cargo(CargoType::Livestock, 12, 10_974);
+        industry
+            .accepted_accumulated_waiting
+            .set(CargoType::Livestock, 88);
+        industry.valid_history = 0x55;
+        state.industries.push(industry);
+
+        let indy = indy_chunk(&state, 8).expect("INDY chunk");
+        let rows = crate::sav::table::parse_table_chunk(&indy[5..], false).expect("INDY table");
+        let record = &rows[0].1;
+        assert_eq!(
+            crate::sav::table::record_get(record, "valid_history")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(0x55)
+        );
+        let accepted = match crate::sav::table::record_get(record, "accepted") {
+            Some(crate::sav::table::SlValue::Structs(items)) => items,
+            other => panic!("accepted ausente: {other:?}"),
+        };
+        assert_eq!(accepted.len(), 1);
+        assert_eq!(
+            crate::sav::table::record_get(&accepted[0], "accumulated_waiting")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(88)
+        );
+        let history = match crate::sav::table::record_get(&accepted[0], "history") {
+            Some(crate::sav::table::SlValue::Structs(items)) => items,
+            other => panic!("accepted history ausente: {other:?}"),
+        };
+        assert_eq!(history.len(), 1);
+        assert_eq!(
+            crate::sav::table::record_get(&history[0], "accepted")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(12)
+        );
     }
 }

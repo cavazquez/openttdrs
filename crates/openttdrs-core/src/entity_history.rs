@@ -5,6 +5,24 @@ use crate::game_state::ECONOMY_HISTORY_MONTHS;
 /// Misma profundidad que los gráficos económicos.
 pub const ENTITY_HISTORY_MONTHS: usize = ECONOMY_HISTORY_MONTHS;
 
+/// Número de registros que `OpenTTD` reserva para los historiales de
+/// industrias (`HISTORY_RECORDS`: mes actual + meses/trimestres/años).
+///
+/// El runtime reducido no expone todavía las vistas trimestrales/anuales,
+/// pero conserva los 37 registros nativos para que un `INDY` mutado pueda
+/// volver a escribirse sin truncar la ventana que espera `OpenTTD`.
+pub const INDUSTRY_HISTORY_RECORDS: usize = 37;
+
+/// Muestra mensual de un cargo aceptado por una industria.
+///
+/// El orden es el nativo de `OpenTTD`: índice cero es el mes actual y los
+/// siguientes son meses anteriores. `waiting` es el promedio diario del mes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct IndustryAcceptedHistorySample {
+    pub accepted: u16,
+    pub waiting: u16,
+}
+
 /// Muestra mensual de un pueblo.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TownHistorySample {

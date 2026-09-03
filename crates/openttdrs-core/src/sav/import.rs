@@ -393,6 +393,7 @@ pub(crate) fn hydrate_sav_industries(
         industry.selected_layout = saved.selected_layout;
         industry.newgrf_random = saved.random;
         industry.newgrf_persistent_storage_id = saved.persistent_storage_id;
+        industry.valid_history = saved.valid_history;
         industry.last_prod_year = saved.last_prod_year;
         industry.was_cargo_delivered = saved.was_cargo_delivered;
         industry.control_flags = saved.control_flags;
@@ -436,6 +437,24 @@ fn import_industry_output_stock(industry: &mut Industry, saved: &SavIndustry, cl
         };
         industry.add_accepted_cargo_waiting(cargo, u32::from(accepted.waiting));
         industry.set_last_accepted_date(cargo, accepted.last_accepted);
+        industry
+            .accepted_accumulated_waiting
+            .set(cargo, accepted.accumulated_waiting);
+        if !accepted.history.is_empty() {
+            industry.accepted_history.insert(
+                cargo,
+                accepted
+                    .history
+                    .iter()
+                    .map(
+                        |sample| crate::entity_history::IndustryAcceptedHistorySample {
+                            accepted: sample.accepted,
+                            waiting: sample.waiting,
+                        },
+                    )
+                    .collect(),
+            );
+        }
     }
     industry.capacity = INDUSTRY_STOCK_CAPACITY.max(industry.stock.max(industry.secondary_stock));
 }
@@ -510,6 +529,8 @@ pub(crate) fn rehydrate_sav_industries_with_catalog(state: &mut GameState) -> us
         else {
             continue;
         };
+
+        industry.valid_history = saved.valid_history;
 
         let clean_id = u16::from(saved.industry_type);
         let translated_id = crate::industry_spec::get_translated_industry_id(clean_id, &overrides);
@@ -604,6 +625,24 @@ pub(crate) fn rehydrate_sav_industries_with_catalog(state: &mut GameState) -> us
                     industry
                         .newgrf_last_accepted
                         .set(*cargo, entry.last_accepted);
+                    industry
+                        .accepted_accumulated_waiting
+                        .set(*cargo, entry.accumulated_waiting);
+                    if !entry.history.is_empty() {
+                        industry.accepted_history.insert(
+                            *cargo,
+                            entry
+                                .history
+                                .iter()
+                                .map(|sample| {
+                                    crate::entity_history::IndustryAcceptedHistorySample {
+                                        accepted: sample.accepted,
+                                        waiting: sample.waiting,
+                                    }
+                                })
+                                .collect(),
+                        );
+                    }
                 }
                 industry.capacity =
                     INDUSTRY_STOCK_CAPACITY.max(industry.stock.max(industry.secondary_stock));
@@ -956,7 +995,7 @@ mod tests {
             construction_date: crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 17,
             construction_type: crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION,
             prod_level: 32,
-            valid_history: 0,
+            valid_history: 0xA,
             persistent_storage_id: None,
             produced: vec![
                 super::super::entities::SavIndustryProducedCargo {
@@ -976,8 +1015,11 @@ mod tests {
                 cargo_slot: 6,
                 waiting: 15,
                 last_accepted: 10_974,
-                accumulated_waiting: 0,
-                history: Vec::new(),
+                accumulated_waiting: 77,
+                history: vec![super::super::entities::SavIndustryAcceptedHistory {
+                    accepted: 12,
+                    waiting: 8,
+                }],
             }],
         };
 
@@ -1007,6 +1049,23 @@ mod tests {
             crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION
         );
         assert_eq!(industry.prod_level, 32);
+        assert_eq!(industry.valid_history, 0xA);
+        assert_eq!(
+            industry
+                .accepted_accumulated_waiting
+                .get(crate::CargoType::Grain),
+            77
+        );
+        assert_eq!(
+            industry.accepted_history_for(crate::CargoType::Grain),
+            Some(
+                [crate::entity_history::IndustryAcceptedHistorySample {
+                    accepted: 12,
+                    waiting: 8,
+                }]
+                .as_slice()
+            )
+        );
         assert_eq!(industry.random_colour, 14);
     }
 }

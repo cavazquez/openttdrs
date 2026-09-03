@@ -785,6 +785,23 @@ pub struct Industry {
     /// perder entregas cuando el GRF decide consumirlas más tarde.
     #[serde(default)]
     pub newgrf_accepted_cargo_waiting: CargoStock,
+    /// Historial mensual nativo por cargo aceptado (`INDY.accepted[].history`).
+    /// El índice cero es el mes actual, como en `HistoryData` de `OpenTTD`.
+    #[serde(default)]
+    pub accepted_history: std::collections::HashMap<
+        CargoType,
+        Vec<crate::entity_history::IndustryAcceptedHistorySample>,
+    >,
+    /// Suma diaria de `accepted[].waiting` usada para calcular el promedio
+    /// mensual al cerrar la economía.
+    #[serde(default)]
+    pub accepted_accumulated_waiting: CargoStock,
+    /// Días económicos acumulados desde el último cierre mensual.
+    #[serde(default)]
+    pub accepted_history_days: u16,
+    /// Máscara de registros válidos de los historiales nativos de industria.
+    #[serde(default)]
+    pub valid_history: u64,
     /// Último día económico en que cada cargo fue aceptado, en la escala
     /// absoluta de `OpenTTD` (1920-01-01 = 0). Cero equivale a nunca/legacy.
     #[serde(default)]
@@ -971,6 +988,10 @@ impl Industry {
             stock: 0,
             secondary_stock: 0,
             newgrf_accepted_cargo_waiting: CargoStock::default(),
+            accepted_history: std::collections::HashMap::new(),
+            accepted_accumulated_waiting: CargoStock::default(),
+            accepted_history_days: 0,
+            valid_history: 0,
             newgrf_last_accepted: CargoStock::default(),
             newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
@@ -1018,6 +1039,10 @@ impl Industry {
             stock: 0,
             secondary_stock: 0,
             newgrf_accepted_cargo_waiting: CargoStock::default(),
+            accepted_history: std::collections::HashMap::new(),
+            accepted_accumulated_waiting: CargoStock::default(),
+            accepted_history_days: 0,
+            valid_history: 0,
             newgrf_last_accepted: CargoStock::default(),
             newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
@@ -1071,6 +1096,10 @@ impl Industry {
             stock: 0,
             secondary_stock: 0,
             newgrf_accepted_cargo_waiting: CargoStock::default(),
+            accepted_history: std::collections::HashMap::new(),
+            accepted_accumulated_waiting: CargoStock::default(),
+            accepted_history_days: 0,
+            valid_history: 0,
             newgrf_last_accepted: CargoStock::default(),
             newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
@@ -1349,14 +1378,83 @@ impl Industry {
     /// Registra una entrega aceptada y su fecha económica absoluta.
     ///
     /// El llamador decide si el callback de producción consume la cola; este
-    /// método sólo refleja el estado nativo de aceptación y evita marcarlo
-    /// para ajustes internos de una cola ya importada.
+    /// método refleja la cola, la fecha y el contador del mes actual, igual
+    /// que `DeliverGoodsToIndustry` (`GetOrCreateHistory()[THIS_MONTH]`).
     pub fn record_accepted_cargo(&mut self, cargo: CargoType, amount: u32, date: u32) {
         if amount == 0 {
             return;
         }
+        let before = self.accepted_cargo_waiting(cargo);
         self.add_accepted_cargo_waiting(cargo, amount);
+        let accepted = self.accepted_cargo_waiting(cargo).saturating_sub(before);
+        if accepted == 0 {
+            return;
+        }
         self.set_last_accepted_date(cargo, date);
+        let history = self.accepted_history.entry(cargo).or_default();
+        if history.is_empty() {
+            history.push(crate::entity_history::IndustryAcceptedHistorySample::default());
+        }
+        history[0].accepted = history[0]
+            .accepted
+            .saturating_add(u16::try_from(accepted.min(u32::from(u16::MAX))).unwrap_or(u16::MAX));
+    }
+
+    /// Acumula el waiting actual una vez por día económico.
+    ///
+    /// `OnTick_Industry` de `OpenTTD` hace esta suma antes de calcular el
+    /// promedio mensual de cada entrada aceptada. Sólo se crean historiales
+    /// para cargos que alguna vez fueron aceptados, como `GetOrCreateHistory`.
+    pub fn accumulate_accepted_waiting(&mut self) {
+        let cargos: Vec<_> = self.accepted_history.keys().copied().collect();
+        for &cargo in &cargos {
+            self.accepted_accumulated_waiting
+                .add(cargo, self.accepted_cargo_waiting(cargo));
+        }
+        self.accepted_history_days = self.accepted_history_days.saturating_add(1);
+    }
+
+    /// Cierra el mes de historiales aceptados y abre el registro actual.
+    ///
+    /// El registro cero conserva el mes que acaba de terminar y luego se
+    /// desplaza a índice uno, manteniendo el orden nativo de `OpenTTD`.
+    pub fn rollover_accepted_history(&mut self) {
+        let days = u32::from(self.accepted_history_days.max(1));
+        let cargos: Vec<_> = self.accepted_history.keys().copied().collect();
+        for &cargo in &cargos {
+            let average = u16::try_from(
+                self.accepted_accumulated_waiting
+                    .get(cargo)
+                    .saturating_div(days)
+                    .min(u32::from(u16::MAX)),
+            )
+            .unwrap_or(u16::MAX);
+            let history = self.accepted_history.entry(cargo).or_default();
+            if history.is_empty() {
+                history.push(crate::entity_history::IndustryAcceptedHistorySample::default());
+            }
+            history[0].waiting = average;
+            history.insert(
+                0,
+                crate::entity_history::IndustryAcceptedHistorySample::default(),
+            );
+            history.truncate(crate::entity_history::INDUSTRY_HISTORY_RECORDS);
+        }
+        self.accepted_accumulated_waiting = CargoStock::default();
+        self.accepted_history_days = 0;
+        if !cargos.is_empty() {
+            let mask = (1_u64 << crate::entity_history::INDUSTRY_HISTORY_RECORDS) - 1;
+            self.valid_history = ((self.valid_history << 1) | (1_u64 << 1)) & mask;
+        }
+    }
+
+    /// Devuelve el historial aceptado en orden nativo (mes actual primero).
+    #[must_use]
+    pub fn accepted_history_for(
+        &self,
+        cargo: CargoType,
+    ) -> Option<&[crate::entity_history::IndustryAcceptedHistorySample]> {
+        self.accepted_history.get(&cargo).map(Vec::as_slice)
     }
 
     /// Añade cargo a la cola de entradas de la industria.
@@ -2867,6 +2965,47 @@ mod tests {
         stations[0].cargo_stock.livestock = FACTORY_LIVESTOCK_INPUT;
         assert!(!fact.produce_from_nearby_stations(&mut stations, 512));
         assert_eq!(fact.stock, 0);
+    }
+
+    #[test]
+    fn accepted_history_tracks_delivery_daily_average_and_rollover() {
+        let mut industry = Industry::new(TileCoord::new(2, 2), IndustryKind::Factory);
+
+        industry.record_accepted_cargo(CargoType::Livestock, 12, 1234);
+        industry.record_accepted_cargo(CargoType::Livestock, 7, 1235);
+        assert_eq!(industry.accepted_cargo_waiting(CargoType::Livestock), 19);
+        assert_eq!(industry.last_accepted_date(CargoType::Livestock), 1235);
+        assert_eq!(
+            industry.accepted_history_for(CargoType::Livestock),
+            Some(
+                [crate::entity_history::IndustryAcceptedHistorySample {
+                    accepted: 19,
+                    waiting: 0,
+                }]
+                .as_slice()
+            )
+        );
+
+        industry.accumulate_accepted_waiting();
+        industry.accumulate_accepted_waiting();
+        industry.rollover_accepted_history();
+
+        let history = industry
+            .accepted_history_for(CargoType::Livestock)
+            .unwrap_or(&[]);
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].accepted, 0);
+        assert_eq!(history[0].waiting, 0);
+        assert_eq!(history[1].accepted, 19);
+        assert_eq!(history[1].waiting, 19);
+        assert_eq!(industry.accepted_history_days, 0);
+        assert_eq!(
+            industry
+                .accepted_accumulated_waiting
+                .get(CargoType::Livestock),
+            0
+        );
+        assert_eq!(industry.valid_history & (1 << 1), 1 << 1);
     }
 
     /// Dos estaciones sobre la misma mina se reparten el carbón según el rating:

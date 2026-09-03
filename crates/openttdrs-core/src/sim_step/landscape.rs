@@ -132,6 +132,9 @@ fn trigger_station_acceptance_animations(state: &mut GameState, t: u64) {
 fn on_tick_industry(state: &mut GameState, t: u64) {
     super::economy::produce_industries(state, t);
     if state.runtime.calendar_triggers.new_day {
+        for industry in &mut state.industries {
+            industry.accumulate_accepted_waiting();
+        }
         super::economy::maybe_change_industry_production(state);
     }
 }

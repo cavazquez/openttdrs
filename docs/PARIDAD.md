@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `0fddd2f4`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `6e3ad37a`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -175,6 +175,16 @@ Se aplican tasas y multiplicadores por slot, la capacidad contempla los stocks
 extra y `INDY` exporta sus esperas/tasas desde la tercera salida. La prueba de
 cuatro entradas/salidas verifica 32 unidades por salida; quedan pendientes el
 historial/GUI de slots ilimitados, cargos custom y rehidratación runtime SAV.
+
+Actualización #329-INDUSTRY-SPECIAL-EFFECT-043 (2026-09-03, `6e3ad37a`):
+`CBID_INDUSTRY_SPECIAL_EFFECT` (`0x3B`) se ejecuta en cada ciclo de 256 ticks
+para los flags `PlantFields`/`CutTrees`; `param1` recibe la palabra `Random()`
+y `param2` distingue campos (`0`) de árboles (`1`). La ruta escribe PSA `7C`,
+acepta resultados booleanos válidos y aplica fallback nativo ante
+`CALLBACK_FAILED`: `Chance16(1,8)` y espiral/periodo 512. Se reutiliza la
+geometría de campos, se corta un árbol adulto de la espiral 40×40 y se agregan
+45 unidades al primer output. `PlantOnBuild`, escalas/sonidos y goldens
+integrales siguen pendientes; #329 permanece abierto.
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

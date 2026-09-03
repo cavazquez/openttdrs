@@ -25,8 +25,8 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-03
 
-Base funcional publicada en `origin/main`: **`0fddd2f4`** (`industry: process
-all NewGRF output slots`). Este handoff documental se publica
+Base funcional publicada en `origin/main`: **`6e3ad37a`** (`industry: execute
+special effects`). Este handoff documental se publica
 después de las etapas de rechazo temporal (`65682a42`) y cargos dinámicos
 (`389109c1`); es el punto de reanudación y el código publicado coincide con
 este árbol.
@@ -35,12 +35,12 @@ este árbol.
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. Layouts `TileSeq`, parents/children, catenaria, PBS y varias capas ya tienen cobertura focal; foundations de rail pendiente/túnel, foundations/rotaciones de aeropuertos, sprite-stack/callbacks avanzados de vehículos y el orden completo de framebuffer siguen sin equivalencia global. | Medir la primera familia visible restante con `world-draw` y, si aplica, capturas en `0,12×`, `0,25×`, `0,50×` y `1×`. |
 | [#328](https://github.com/cavazquez/openttdrs/issues/328) | El round-trip preserva las tablas y campos escalares modelados, `CITY`/`INDY`/`STNN`/`PSAC`, `OBJS`/`OBID`, grupos, órdenes y autoreplace en el subconjunto documentado. Mutaciones de strings, listas/structs anidados, columnas desconocidas, pools nativos de casas/objetos y labels/cargos no representables todavía degradan al writer canónico o quedan pendientes. CB17 de casas y CB157 de objetos pueden crear/modificar PSA de pueblo y el writer les asigna una fila `PSAC`/referencia `CITY` al exportar. | Elegir una mutación SAV reproducible de lista/struct anidado y comparar bytes OpenTTD→Rust→OpenTTD. |
-| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17 durante crecimiento físico y CB157 durante construcción de objetos evalúan ahora el parent real y persisten `\2psto` por GRFID. CB25/26/27 de animación y la re-randomización `ResolveRerandomisation` de teselas evalúan el contexto completo y escriben el PSA parent de `Industry` en la instancia viva; `IndustryTick` y `CargoReceived` usan ahora la misma ruta con reseed parent una vez por footprint. Shape-check `CB2F`, `slopes_refused`, el ID correcto `CB30` de foundations, `CB3C` de autoslope manual (raise/lower/level), `CB14A` de color al fundar, `CB3D` de rechazo temporal de cargas y `CB14B`/`CB14C` de cargos dinámicos ya tienen call sites y regresiones; `prop 0x1A` conserva `IndustryBehaviour::CargoTypesUnlimited` y los callbacks dinámicos recorren hasta 16 slots, con salidas extra procesadas, transportables y exportables. La ruta legacy sin world conserva fallback explícito. El rechazo se consulta al procesar lotes de estación y los cargos dinámicos sólo al fundar. Sigue faltando materializar la entrega directa/monitor `DeliverGoodsToIndustry`; además permanecen pendientes slots vacíos legacy, cargos custom, rehidratación runtime SAV, historiales por salida, GUI/variables ilimitadas, autoslope en generación automática, efectos especiales, sonido, historiales tras mutaciones y el resto de callbacks/scope. | Cubrir el siguiente callback de industria con una divergencia reproducible (preferentemente efectos especiales o entrega directa); no cerrar #329 por este subconjunto. |
+| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17/CB157 evalúan y escriben el parent real. CB25/26/27, re-randomización, `IndustryTick` y `CargoReceived` comparten contexto y PSA por huella. Shape-check `CB2F`, foundations `CB30`, autoslope manual `CB3C`, color `CB14A`, rechazo `CB3D`, cargos dinámicos `CB14B`/`CB14C`, `CargoTypesUnlimited` (hasta 16 slots, con salidas extra procesadas/transportables/exportables) y efectos especiales `CB3B` ya tienen call sites y regresiones; la ruta legacy conserva fallback explícito. El callback de efectos usa `Chance16(1,8)`/periodo 512 ante `CALLBACK_FAILED`. Sigue faltando materializar `DeliverGoodsToIndustry`, además de slots vacíos legacy, cargos custom, rehidratación runtime SAV, historiales por salida, GUI/variables ilimitadas, `PlantOnBuild`, autoslope en generación automática, sonido, historiales tras mutaciones y el resto de callbacks/scope. | Cubrir `PlantOnBuild` en colocación NewGRF/manual o la entrega directa con una divergencia reproducible; no cerrar #329 por este subconjunto. |
 | [#330](https://github.com/cavazquez/openttdrs/issues/330) | Economía básica y movimiento funcionan, pero los oráculos externos todavía son acotados. Tráfico/colisiones/dirección vial exhaustivos, PBS/YAPF/presignals/consist ferroviarios y navegación aire/mar no tienen aún cobertura diferencial completa. | Tomar el primer fixture externo reproducible de movimiento y registrar tick, entidad y estado nativo divergente. |
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
 
-Última validación de `0fddd2f4`: `cargo fmt --all -- --check`, clippy estricto
+Última validación de `6e3ad37a`: `cargo fmt --all -- --check`, clippy estricto
 de core y cliente, **1.969** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualizan en el siguiente corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
@@ -169,6 +169,13 @@ stocks y `INDY` exporta espera/tasa desde la tercera salida. La regresión de
 cuatro entradas y cuatro salidas verifica 32 unidades por salida en un ciclo.
 Quedan pendientes historial por salida, GUI/variables ilimitadas, cargos
 custom y rehidratación runtime completa desde SAV; #329 sigue abierto.
+
+Actualización #329-INDUSTRY-SPECIAL-EFFECT-043 (2026-09-03, commit `6e3ad37a`):
+`CBID_INDUSTRY_SPECIAL_EFFECT` (`0x3B`) corre en el ciclo de 256 ticks para
+`PlantFields` y `CutTrees`, pasando `Random()` y escribiendo `7C`. Se reutiliza
+la geometría de campos y la espiral 40×40 de árboles, con fallback vanilla ante
+`CALLBACK_FAILED`; `PlantOnBuild`, escalas/sonidos y goldens integrales siguen
+pendientes, por lo que #329 permanece abierto.
 
 ## Orden recomendado
 

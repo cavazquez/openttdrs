@@ -1354,10 +1354,14 @@ fn write_indy_produced(
             1 => industry.secondary_stock,
             _ => industry.extra_produced_cargo(cargo),
         };
-        let rate = if index == 0 {
-            industry.production_rate()
-        } else {
-            secondary_rate
+        let rate = match index {
+            0 => industry.production_rate(),
+            1 => secondary_rate,
+            _ => industry
+                .newgrf_extra_production_rates
+                .get(index - 2)
+                .copied()
+                .unwrap_or(0),
         };
         if let Some(slot) = cargo_slot_for_climate(climate, cargo) {
             entries.push((slot, waiting.min(u32::from(u16::MAX)) as u16, rate));

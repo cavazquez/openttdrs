@@ -2068,9 +2068,18 @@ pub fn apply_industry_dynamic_cargo_callbacks(
     industry.newgrf_secondary_output_cargo = output_slots.get(1).map(|slot| slot.cargo);
     industry.newgrf_extra_output_cargos =
         output_slots.iter().skip(2).map(|slot| slot.cargo).collect();
-    industry.newgrf_secondary_production_rate = industry
-        .newgrf_secondary_production_rate
-        .filter(|_| output_slots.len() > 1);
+    let output_rate = |slot: Option<&IndustryDynamicCargoSlot>| {
+        slot.and_then(|slot| def.production_rates.get(slot.source_index).copied())
+            .unwrap_or(0)
+    };
+    industry.newgrf_production_rate = Some(output_rate(output_slots.first()));
+    industry.newgrf_secondary_production_rate =
+        (output_slots.len() > 1).then(|| output_rate(output_slots.get(1)));
+    industry.newgrf_extra_production_rates = output_slots
+        .iter()
+        .skip(2)
+        .map(|slot| output_rate(Some(slot)))
+        .collect();
     industry.newgrf_processing_inputs = input_slots
         .iter()
         .map(|slot| IndustryProcessingInput {
@@ -2092,6 +2101,18 @@ pub fn apply_industry_dynamic_cargo_callbacks(
             .collect()
     } else {
         vec![0; input_slots.len()]
+    };
+    industry.newgrf_processing_extra_multipliers = if output_slots.len() > 2 {
+        input_slots
+            .iter()
+            .flat_map(|input| {
+                output_slots.iter().skip(2).map(|output| {
+                    industry_callback_multiplier(def, input.source_index, output.source_index)
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
     };
     writeback_industry_persistent_registers(industry, &ctx);
     true
@@ -5015,6 +5036,20 @@ mod tests {
             industry.newgrf_extra_output_cargos,
             vec![CargoType::Mail, CargoType::Oil]
         );
+
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(5, 5),
+            crate::station::StopKind::TruckStop,
+        )];
+        stations[0].cargo_stock.passengers = 8;
+        stations[0].cargo_stock.coal = 8;
+        stations[0].cargo_stock.mail = 8;
+        stations[0].cargo_stock.oil = 8;
+        assert!(industry.produce_from_nearby_stations(&mut stations, 512));
+        assert_eq!(industry.stock, 32);
+        assert_eq!(industry.secondary_stock, 32);
+        assert_eq!(industry.extra_produced_cargo(CargoType::Mail), 32);
+        assert_eq!(industry.extra_produced_cargo(CargoType::Oil), 32);
     }
 
     #[test]

@@ -900,6 +900,10 @@ pub struct Industry {
     /// utilizan `newgrf_extra_produced_cargo`.
     #[serde(default)]
     pub newgrf_extra_output_cargos: Vec<CargoType>,
+    /// Tasas de producción de las salidas desde el tercer slot, alineadas con
+    /// `newgrf_extra_output_cargos`.
+    #[serde(default)]
+    pub newgrf_extra_production_rates: Vec<u8>,
     /// `true` cuando los callbacks `0x14B`/`0x14C` reemplazaron las listas
     /// estáticas al fundar la industria. Permite representar una lista
     /// callback vacía sin volver al fallback vanilla.
@@ -911,6 +915,10 @@ pub struct Industry {
     /// Multiplicadores del segundo output para esos mismos insumos.
     #[serde(default)]
     pub newgrf_processing_secondary_multipliers: Vec<u16>,
+    /// Multiplicadores de las salidas desde el tercer slot, aplanados como
+    /// `[input][extra_output]`.
+    #[serde(default)]
+    pub newgrf_processing_extra_multipliers: Vec<u16>,
 }
 
 const fn default_prod_level() -> u8 {
@@ -979,9 +987,11 @@ impl Industry {
             newgrf_output_cargo: None,
             newgrf_secondary_output_cargo: None,
             newgrf_extra_output_cargos: Vec::new(),
+            newgrf_extra_production_rates: Vec::new(),
             newgrf_dynamic_cargo_types: false,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
+            newgrf_processing_extra_multipliers: Vec::new(),
         }
     }
 
@@ -1022,9 +1032,11 @@ impl Industry {
             newgrf_output_cargo: None,
             newgrf_secondary_output_cargo: None,
             newgrf_extra_output_cargos: Vec::new(),
+            newgrf_extra_production_rates: Vec::new(),
             newgrf_dynamic_cargo_types: false,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
+            newgrf_processing_extra_multipliers: Vec::new(),
         }
     }
 
@@ -1071,9 +1083,11 @@ impl Industry {
             newgrf_output_cargo: None,
             newgrf_secondary_output_cargo: None,
             newgrf_extra_output_cargos: Vec::new(),
+            newgrf_extra_production_rates: Vec::new(),
             newgrf_dynamic_cargo_types: false,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
+            newgrf_processing_extra_multipliers: Vec::new(),
         }
     }
 
@@ -1236,6 +1250,34 @@ impl Industry {
             .min(255)
     }
 
+    fn production_rate_for_output(&self, index: usize) -> u8 {
+        match index {
+            0 => self.production_rate(),
+            1 => self
+                .newgrf_secondary_production_rate
+                .or_else(|| self.spec.and_then(IndustrySpec::production_rate_secondary))
+                .unwrap_or(0),
+            _ => self
+                .newgrf_extra_production_rates
+                .get(index - 2)
+                .copied()
+                .unwrap_or(0),
+        }
+    }
+
+    fn production_amounts_for_outputs(&self, outputs: &[CargoType]) -> Vec<u32> {
+        outputs
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                Self::scaled_production_amount(
+                    self.production_rate_for_output(index),
+                    self.prod_level,
+                )
+            })
+            .collect()
+    }
+
     /// Cargos producidos del spec (primario + secundario).
     #[must_use]
     pub fn produced_cargos(&self) -> Vec<CargoType> {
@@ -1372,42 +1414,66 @@ impl Industry {
             .sum()
     }
 
-    /// Salidas de una procesadora, separadas en primario/secundario.
-    fn processing_output_amounts(&self) -> [u32; 2] {
+    /// Salidas de una procesadora para todos los slots `NewGRF` activos.
+    fn processing_output_amounts_all(&self) -> Vec<u32> {
         if self.prod_level == PRODLEVEL_CLOSURE {
-            return [0, 0];
+            return vec![0u32; self.produced_cargos().len()];
         }
         let inputs = self.processing_inputs();
         if inputs.is_empty() {
-            return [0, 0];
+            return vec![0u32; self.produced_cargos().len()];
         }
-        if self.newgrf_dynamic_cargo_types && self.produced_cargos().is_empty() {
-            return [0, 0];
+        let outputs = self.produced_cargos();
+        if self.newgrf_dynamic_cargo_types && outputs.is_empty() {
+            return Vec::new();
         }
         if self.newgrf_type_id.is_none() {
-            return [self.processing_output_amount(), 0];
+            let mut amounts = vec![0u32; outputs.len()];
+            if let Some(primary) = amounts.first_mut() {
+                *primary = self.processing_output_amount();
+            }
+            return amounts;
         }
-        let primary = inputs
-            .iter()
-            .map(|input| {
-                let consumed = scaled_processing_batch(input.batch, self.prod_level);
-                consumed.saturating_mul(u32::from(input.multiplier)) / 256
-            })
-            .sum();
-        let secondary = inputs
-            .iter()
-            .enumerate()
-            .map(|(idx, input)| {
-                let consumed = scaled_processing_batch(input.batch, self.prod_level);
+        let mut amounts = vec![0u32; outputs.len()];
+        for (input_idx, input) in inputs.iter().enumerate() {
+            let consumed = scaled_processing_batch(input.batch, self.prod_level);
+            if let Some(primary) = amounts.first_mut() {
+                *primary = (*primary)
+                    .saturating_add(consumed.saturating_mul(u32::from(input.multiplier)) / 256);
+            }
+            if let Some(secondary) = amounts.get_mut(1) {
                 let multiplier = self
                     .newgrf_processing_secondary_multipliers
-                    .get(idx)
+                    .get(input_idx)
                     .copied()
                     .unwrap_or(0);
-                consumed.saturating_mul(u32::from(multiplier)) / 256
+                *secondary = (*secondary)
+                    .saturating_add(consumed.saturating_mul(u32::from(multiplier)) / 256);
+            }
+            for (output_idx, amount) in amounts.iter_mut().enumerate().skip(2) {
+                let multiplier = self
+                    .newgrf_processing_extra_multipliers
+                    .get(input_idx.saturating_mul(outputs.len() - 2) + output_idx - 2)
+                    .copied()
+                    .unwrap_or(0);
+                *amount =
+                    (*amount).saturating_add(consumed.saturating_mul(u32::from(multiplier)) / 256);
+            }
+        }
+        amounts
+    }
+
+    fn all_output_stocks_full(&self) -> bool {
+        let outputs = self.produced_cargos();
+        !outputs.is_empty()
+            && outputs.iter().enumerate().all(|(index, cargo)| {
+                let stock = match index {
+                    0 => self.stock,
+                    1 => self.secondary_stock,
+                    _ => self.extra_produced_cargo(*cargo),
+                };
+                stock >= self.capacity
             })
-            .sum();
-        [primary, secondary]
     }
 
     fn processing_inputs(&self) -> &[IndustryProcessingInput] {
@@ -1446,20 +1512,26 @@ impl Industry {
         if self.requires_station_inputs() || self.is_closing() {
             return;
         }
-        let amount = self.produce_amount();
-        let secondary = self.produce_secondary_amount();
-        if amount == 0 && secondary == 0 {
+        let outputs = self.produced_cargos();
+        let amounts = self.production_amounts_for_outputs(&outputs);
+        if amounts.iter().all(|&amount| amount == 0) {
             return;
         }
         if self.produces_on_tick(tick) {
-            if amount > 0 {
-                self.stock = self.stock.saturating_add(amount).min(self.capacity);
-            }
-            if secondary > 0 {
-                self.secondary_stock = self
-                    .secondary_stock
-                    .saturating_add(secondary)
-                    .min(self.capacity);
+            for (index, (&cargo, &amount)) in outputs.iter().zip(&amounts).enumerate() {
+                if amount == 0 {
+                    continue;
+                }
+                if self.newgrf_type_id.is_some() {
+                    self.add_newgrf_produced_cargo(cargo, amount);
+                } else if index == 0 {
+                    self.stock = self.stock.saturating_add(amount).min(self.capacity);
+                } else if index == 1 {
+                    self.secondary_stock = self
+                        .secondary_stock
+                        .saturating_add(amount)
+                        .min(self.capacity);
+                }
             }
         }
     }
@@ -1502,9 +1574,7 @@ impl Industry {
         if inputs.is_empty() || self.is_closing() {
             return false;
         }
-        if !self.produces_on_tick(tick)
-            || (self.stock >= self.capacity && self.secondary_stock >= self.capacity)
-        {
+        if !self.produces_on_tick(tick) || self.all_output_stocks_full() {
             return false;
         }
 
@@ -1566,18 +1636,25 @@ impl Industry {
             return true;
         }
 
-        let [output, secondary_output] = self.processing_output_amounts();
-        if output == 0 && secondary_output == 0 {
+        let outputs = self.produced_cargos();
+        let amounts = self.processing_output_amounts_all();
+        if amounts.iter().all(|&amount| amount == 0) {
             return self.life_type() == IndustryLifeType::BlackHole;
         }
-        if output > 0 {
-            self.stock = self.stock.saturating_add(output).min(self.capacity);
-        }
-        if secondary_output > 0 {
-            self.secondary_stock = self
-                .secondary_stock
-                .saturating_add(secondary_output)
-                .min(self.capacity);
+        for (index, (&cargo, &amount)) in outputs.iter().zip(&amounts).enumerate() {
+            if amount == 0 {
+                continue;
+            }
+            if self.newgrf_type_id.is_some() {
+                self.add_newgrf_produced_cargo(cargo, amount);
+            } else if index == 0 {
+                self.stock = self.stock.saturating_add(amount).min(self.capacity);
+            } else if index == 1 {
+                self.secondary_stock = self
+                    .secondary_stock
+                    .saturating_add(amount)
+                    .min(self.capacity);
+            }
         }
         true
     }
@@ -1664,9 +1741,11 @@ impl Industry {
         self.newgrf_output_cargo = output_cargo;
         self.newgrf_secondary_output_cargo = None;
         self.newgrf_extra_output_cargos.clear();
+        self.newgrf_extra_production_rates.clear();
         self.newgrf_dynamic_cargo_types = false;
         self.newgrf_processing_inputs.clear();
         self.newgrf_processing_secondary_multipliers.clear();
+        self.newgrf_processing_extra_multipliers.clear();
         self
     }
 
@@ -1680,6 +1759,7 @@ impl Industry {
         self.newgrf_output_cargo = outputs.first().copied();
         self.newgrf_secondary_output_cargo = outputs.get(1).copied();
         self.newgrf_extra_output_cargos = outputs.iter().copied().skip(2).collect();
+        self.newgrf_extra_production_rates = def.production_rates.iter().copied().skip(2).collect();
         self.newgrf_dynamic_cargo_types = false;
 
         let accepted = def.accepted_cargo_types();
@@ -1698,6 +1778,22 @@ impl Industry {
                 }
             })
             .collect();
+        self.newgrf_processing_extra_multipliers = if output_count > 2 {
+            accepted
+                .iter()
+                .enumerate()
+                .flat_map(|(input_idx, _)| {
+                    (2..output_count).map(move |output_idx| {
+                        def.input_multipliers
+                            .get(input_idx.saturating_mul(output_count) + output_idx)
+                            .copied()
+                            .unwrap_or(0)
+                    })
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         self.newgrf_processing_inputs = accepted
             .into_iter()
             .enumerate()

@@ -359,6 +359,26 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         &mut state.random,
         &mut state.runtime.active_house_lifts,
     );
+    let animation_coords: Vec<_> = state
+        .industries
+        .iter()
+        .flat_map(|industry| {
+            if industry.tiles.is_empty() {
+                vec![industry.pos]
+            } else {
+                industry.tiles.clone()
+            }
+        })
+        .collect();
+    let construction_stage_before: Vec<_> = animation_coords
+        .iter()
+        .filter_map(|&coord| {
+            state
+                .map
+                .get(coord)
+                .map(|tile| (coord, crate::map::industry_construction_stage(tile.m1)))
+        })
+        .collect();
     state.runtime.industry_tile_dirty =
         crate::map::step_industry_tiles_with_seed_and_catalog_and_world(
             &mut state.map,
@@ -371,17 +391,31 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             &state.industry_spec_catalog,
             state.climate,
         );
-    let animation_coords: Vec<_> = state
-        .industries
-        .iter()
-        .flat_map(|industry| {
-            if industry.tiles.is_empty() {
-                vec![industry.pos]
-            } else {
-                industry.tiles.clone()
-            }
+    let construction_stage_changed: Vec<_> = construction_stage_before
+        .into_iter()
+        .filter_map(|(coord, before)| {
+            state
+                .map
+                .get(coord)
+                .filter(|tile| crate::map::industry_construction_stage(tile.m1) != before)
+                .map(|_| coord)
         })
         .collect();
+    state.runtime.industry_tile_dirty.extend(
+        crate::map::trigger_newgrf_industry_animation_with_world(
+            &mut state.map,
+            t,
+            &construction_stage_changed,
+            &mut state.industries,
+            &state.towns,
+            &state.industry_tile_spec_catalog,
+            &state.industry_spec_catalog,
+            state.climate,
+            state.world_seed,
+            &mut state.newgrf_animated_industry_tiles,
+            crate::map::IndustryAnimationTrigger::ConstructionStageChanged,
+        ),
+    );
     state.runtime.industry_tile_dirty.extend(
         crate::map::trigger_newgrf_industry_animation_with_world(
             &mut state.map,

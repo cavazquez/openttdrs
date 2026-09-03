@@ -73,6 +73,7 @@ pub use industry_tile_anim::{
     advance_newgrf_industry_animation_frames_with_world, bubble_generator_spawns_from_visits,
     industry_animation_frame, industry_gfx, industry_tile_anim_state, set_industry_gfx,
     trigger_newgrf_industry_animation, trigger_newgrf_industry_animation_with_world,
+    trigger_newgrf_industry_animation_with_world_and_extra,
 };
 pub use level_crossing::is_road_level_crossing;
 pub use object::{

@@ -776,7 +776,7 @@ pub fn advance_newgrf_industry_animated_tiles<S: BuildHasher>(
         catalog,
         world_seed,
         active_tiles,
-        Some(IndustryAnimationTrigger::IndustryTick),
+        Some((IndustryAnimationTrigger::IndustryTick, 0)),
         true,
         |_, spec, callback, coord, param1, param2| {
             resolve_industry_tile_animation_callback(spec, callback, coord, param1, param2)
@@ -811,7 +811,7 @@ pub fn advance_newgrf_industry_animated_tiles_with_world<S: BuildHasher>(
         tile_spec_catalog,
         world_seed,
         active_tiles,
-        Some(IndustryAnimationTrigger::IndustryTick),
+        Some((IndustryAnimationTrigger::IndustryTick, 0)),
         true,
         |map, spec, callback, coord, param1, param2| {
             let Some(index) = industry_index_for_tile(map, &snapshot, coord) else {
@@ -935,7 +935,7 @@ pub fn trigger_newgrf_industry_animation<S: BuildHasher>(
         catalog,
         world_seed,
         active_tiles,
-        Some(trigger),
+        Some((trigger, 0)),
         false,
         |_, spec, callback, coord, param1, param2| {
             resolve_industry_tile_animation_callback(spec, callback, coord, param1, param2)
@@ -958,6 +958,40 @@ pub fn trigger_newgrf_industry_animation_with_world<S: BuildHasher>(
     active_tiles: &mut HashSet<TileCoord, S>,
     trigger: IndustryAnimationTrigger,
 ) -> Vec<TileCoord> {
+    trigger_newgrf_industry_animation_with_world_and_extra(
+        map,
+        tick,
+        coords,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        world_seed,
+        active_tiles,
+        trigger,
+        0,
+    )
+}
+
+/// Variante de [`trigger_newgrf_industry_animation_with_world`] que permite
+/// añadir bits altos a `var 18` (por ejemplo `0x100` en la primera llamada de
+/// `ConstructionStageChanged`).
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_industry_animation_with_world_and_extra<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+    trigger: IndustryAnimationTrigger,
+    trigger_extra: u32,
+) -> Vec<TileCoord> {
     let snapshot = industries.to_vec();
     advance_newgrf_industry_animated_tiles_inner(
         map,
@@ -966,7 +1000,7 @@ pub fn trigger_newgrf_industry_animation_with_world<S: BuildHasher>(
         tile_spec_catalog,
         world_seed,
         active_tiles,
-        Some(trigger),
+        Some((trigger, trigger_extra)),
         false,
         |map, spec, callback, coord, param1, param2| {
             let Some(index) = industry_index_for_tile(map, &snapshot, coord) else {
@@ -998,7 +1032,7 @@ fn advance_newgrf_industry_animated_tiles_inner<S: BuildHasher>(
     catalog: &[IndustryTileSpecDef],
     world_seed: u64,
     active_tiles: &mut HashSet<TileCoord, S>,
-    trigger: Option<IndustryAnimationTrigger>,
+    trigger: Option<(IndustryAnimationTrigger, u32)>,
     advance_frames: bool,
     mut resolve_callback: impl FnMut(&mut Map, &IndustryTileSpecDef, u16, TileCoord, u32, u32) -> u16,
 ) -> Vec<TileCoord> {
@@ -1018,8 +1052,8 @@ fn advance_newgrf_industry_animated_tiles_inner<S: BuildHasher>(
         }
 
         let before = tile.m3hi;
-        if let Some(trigger) =
-            trigger.filter(|trigger| spec.animation_triggers & trigger.mask() != 0)
+        if let Some((trigger, trigger_extra)) =
+            trigger.filter(|(trigger, _)| spec.animation_triggers & trigger.mask() != 0)
         {
             let random = u32::from(super::industry_tile_rng(
                 world_seed,
@@ -1033,7 +1067,7 @@ fn advance_newgrf_industry_animated_tiles_inner<S: BuildHasher>(
                 CBID_INDTILE_ANIMATION_TRIGGER,
                 coord,
                 random,
-                trigger.callback_param(0),
+                trigger.callback_param(trigger_extra),
             );
             if result != CALLBACK_FAILED {
                 match (result & 0xFF) as u8 {
@@ -1341,7 +1375,9 @@ mod tests {
     fn newgrf_animation_speed_callback_gates_frame_and_state_survives_save_load() {
         let coord = TileCoord::new(0, 0);
         let mut map = Map::new_flat(1, 1, 0);
-        map.set_tile(coord, industry_tile(175, 0x80, 0)).unwrap();
+        let mut tile = industry_tile(175, 0x80, 0);
+        tile.m2 = 1;
+        map.set_tile(coord, tile).unwrap();
         let catalog = vec![newgrf_animated_spec(
             INDTILE_CALLBACK_MASK_NEXT_FRAME | INDTILE_CALLBACK_MASK_SPEED,
         )];
@@ -1454,6 +1490,65 @@ mod tests {
             IndustryAnimationTrigger::CargoDistributed,
         );
         assert!(active.contains(&coord));
+    }
+
+    #[test]
+    fn newgrf_construction_stage_trigger_preserves_first_call_flag() {
+        let coord = TileCoord::new(0, 0);
+        let mut map = Map::new_flat(1, 1, 0);
+        map.set_tile(coord, industry_tile(175, 0x80, 0)).unwrap();
+
+        // CB25 returns var 18 >> 8, so the first-build extension (0x100)
+        // must be observable by the callback and produce frame 1.
+        let mut runtime = industry_animation_callbacks();
+        runtime.action2_var.insert(
+            4,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x18,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 8,
+                        and_mask: u32::from(u8::MAX),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        let mut spec = newgrf_animated_spec_for_trigger(
+            INDTILE_CALLBACK_MASK_NEXT_FRAME,
+            IndustryAnimationTrigger::ConstructionStageChanged,
+        );
+        spec.newgrf_runtime = Some(Box::new(runtime));
+        let mut active = HashSet::new();
+        let mut industries =
+            vec![Industry::new(coord, crate::industry::IndustryKind::CoalMine).with_instance_id(1)];
+
+        let dirty = trigger_newgrf_industry_animation_with_world_and_extra(
+            &mut map,
+            1,
+            &[coord],
+            &mut industries,
+            &[],
+            std::slice::from_ref(&spec),
+            &[],
+            crate::Climate::Temperate,
+            9,
+            &mut active,
+            IndustryAnimationTrigger::ConstructionStageChanged,
+            0x100,
+        );
+
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(map.get(coord).unwrap().m3hi, 1);
+        assert!(active.contains(&coord));
+        assert_eq!(
+            IndustryAnimationTrigger::ConstructionStageChanged.callback_param(0x100),
+            0x100
+        );
     }
 
     #[test]

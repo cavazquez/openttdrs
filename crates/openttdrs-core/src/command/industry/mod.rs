@@ -759,6 +759,32 @@ pub fn place_industry_spec_def_layout_sandbox(
     // instancia. Sin runtime se conserva el fallback de `with_newgrf_spec`.
     let _ = crate::newgrf_callback::apply_industry_dynamic_cargo_callbacks(&def, &mut industry);
     state.industries.push(industry);
+    let initial_animation_tiles = state
+        .industries
+        .last()
+        .map(|industry| {
+            if industry.tiles.is_empty() {
+                vec![industry.pos]
+            } else {
+                industry.tiles.clone()
+            }
+        })
+        .unwrap_or_default();
+    let animation_dirty = crate::map::trigger_newgrf_industry_animation_with_world_and_extra(
+        &mut state.map,
+        state.tick.get(),
+        &initial_animation_tiles,
+        &mut state.industries,
+        &state.towns,
+        &state.industry_tile_spec_catalog,
+        &state.industry_spec_catalog,
+        state.climate,
+        state.world_seed,
+        &mut state.newgrf_animated_industry_tiles,
+        crate::map::IndustryAnimationTrigger::ConstructionStageChanged,
+        0x100,
+    );
+    state.runtime.industry_tile_dirty.extend(animation_dirty);
     if def.behaviour & INDUSTRY_BEHAVIOUR_PLANT_ON_BUILD_MASK != 0 {
         plant_fields_on_build(state, c, &footprint_for_fields);
     }

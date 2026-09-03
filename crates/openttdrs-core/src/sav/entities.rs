@@ -971,7 +971,7 @@ pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32, save_version: u
             native_text,
             statues,
         } = metadata;
-        out.push(Town {
+        let mut town = Town {
             id: idx,
             pos,
             name,
@@ -1005,7 +1005,9 @@ pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32, save_version: u
             mail_served: 0,
             growth_funded: 0,
             ..Default::default()
-        });
+        };
+        town.hydrate_native_growth_stats();
+        out.push(town);
     }
     out
 }

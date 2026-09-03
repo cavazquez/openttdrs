@@ -768,7 +768,7 @@ Actualización #329-TOWN-CITY-028 (2026-09-02): la divergencia de listas
 anidadas de `CITY` quedó aislada y cubierta: `supplied` conserva cada cargo y
 sus muestras mensuales (`production`/`transported`) y `received` conserva los
 contadores `old_max`, `new_max`, `old_act` y `new_act` en el orden nativo. El
-modelo aún no usa estas series para crecimiento/economía; el writer canónico
+modelo aún no usaba estas series para crecimiento/economía; el writer canónico
 ya las reemite y el passthrough de un save sin cambios sigue protegiendo el
 cuerpo original. #328/#329 permanecen abiertos.
 
@@ -781,3 +781,13 @@ respeta los tamaños de OpenTTD (`MAX_COMPANIES` y `NUM_TAE`, con el slot
 de listas todavía usa el fallback canónico y puede perder columnas anidadas
 desconocidas. La hidratación no conecta aún las series con crecimiento/economía
 ni hace writeback de PSA de pueblos, por lo que #328/#329 continúan abiertos.
+
+Actualización #329-TOWN-CITY-030 (2026-09-03): al importar `CITY`, los
+contadores `received.old_act/new_act` hidratan las ventanas de crecimiento y
+se desplazan junto con el rollover mensual; las entregas runtime actualizan
+también el vector nativo antes de serializarlo. La producción de pasajeros y
+correo identifica la casa por `MAP2` (con fallback al pueblo más cercano),
+actualiza `supplied` y sus dos muestras mensuales, y los scopes parent exponen
+producción/transporte (`0xBA`–`0xCB`) desde esas series. Las columnas custom,
+los cargos NewGRF y el writeback de PSA de pueblos siguen pendientes; #328/#329
+continúan abiertos.

@@ -465,11 +465,11 @@ pub(super) fn produce_town_demand(state: &mut GameState, tick: u64) {
         .iter()
         .map(|station| station.cargo_stock)
         .collect();
-    let (passengers, mail) = town::produce_town_cargo(
+    let (passengers, mail) = town::produce_town_cargo_with_towns(
         &state.map,
         &state.industries,
         &mut state.stations,
-        &state.towns,
+        &mut state.towns,
         tick,
         state.order.selectgoods,
     );

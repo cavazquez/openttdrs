@@ -281,8 +281,8 @@ Actualización #329-TOWN-CITY-028 (2026-09-02): `CITY.supplied` y
 mensual de producción/transporte y los cuatro contadores old/new max/act por
 efecto). Esto evita que el parser descarte los historiales nativos presentes
 en SAV reales; una regresión cubre cargos con y sin historial y más de un slot
-recibido. El writer canónico los reemite con el formato nativo; aún no se
-conectan esos contadores al cálculo de crecimiento/economía y la
+recibido. El writer canónico los reemite con el formato nativo; antes no se
+conectaban esos contadores al cálculo de crecimiento/economía y la
 interoperabilidad de ciudades continúa siendo parcial.
 
 Actualización #329-TOWN-CITY-029 (2026-09-02): el writer canónico de `CITY`
@@ -294,8 +294,17 @@ estatuas, `valid_history` y texto), las listas `supplied`/`received` y
 valida el round-trip de escalares e historiales; un fixture generado se acepta
 con OpenTTD 15.3. La caché `cache.population` continúa fuera del writer porque
 OpenTTD la reconstruye desde las teselas. Mutaciones estructurales aún caen al
-header canónico y descartan columnas anidadas desconocidas; la conexión de
-estas series con crecimiento/economía y el writeback de PSA siguen pendientes.
+header canónico y descartan columnas anidadas desconocidas; el writeback de PSA
+y los consumidores de cargos custom siguen pendientes.
+
+Actualización #329-TOWN-CITY-030 (2026-09-03): `CITY.received.old_act/new_act`
+se hidrata ahora en las ventanas runtime que consulta `UpdateTownGrowth`, y
+el rollover mensual mantiene sincronizados los arrays semánticos y el vector
+nativo. La producción de casas registra `CITY.supplied` por cargo y actualiza
+sus muestras `THIS_MONTH`; los scopes parent de pueblo leen producción,
+transporte y porcentaje (`0xBA`–`0xCB`) desde ese historial. La cobertura sigue
+limitada a cargos representados y no resuelve todavía mutaciones de PSA ni
+columnas anidadas desconocidas.
 
 Actualización #329-TOWN-SCOPE-026 (2026-09-02): casas y objetos materializan
 ahora el scope parent de `TownScopeResolver` con las variables conservadas por

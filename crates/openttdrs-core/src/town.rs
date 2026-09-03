@@ -145,6 +145,10 @@ pub enum TownGrowthEffect {
 
 pub const TOWN_GROWTH_EFFECT_COUNT: usize = 5;
 
+/// Cantidad de muestras que `Town::SuppliedCargo::history` mantiene en
+/// `OpenTTD` (`LAST_MONTH` y `THIS_MONTH`).
+pub const TOWN_SUPPLIED_HISTORY_MONTHS: usize = 2;
+
 /// Meta especial: comida solo en invierno (`TOWN_GROWTH_WINTER`).
 pub const TOWN_GROWTH_WINTER: u32 = u32::MAX - 1;
 /// Meta especial: comida/agua en desierto (`TOWN_GROWTH_DESERT`).
@@ -495,6 +499,7 @@ impl Town {
     /// el scope parent de un `Action2`. Las variables sin representación
     /// equivalente (flags/cache de cargos custom) se dejan ausentes para que
     /// el evaluador aplique el fallback nativo cero.
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn copy_newgrf_parent_scope(
         &self,
         grfid: u32,
@@ -563,20 +568,58 @@ impl Town {
             .copied()
             .unwrap_or_default();
         let history_pairs = [
-            (0xBA, current.passengers_served),
-            (0xBC, current.mail_served),
-            (0xBE, current.passengers_served),
-            (0xC0, current.mail_served),
-            (0xC2, previous.passengers_served),
-            (0xC4, previous.mail_served),
-            (0xC6, previous.passengers_served),
-            (0xC8, previous.mail_served),
+            (
+                0xBA,
+                self.supplied_stat(CargoType::Passengers, true, false)
+                    .unwrap_or(current.passengers_served),
+            ),
+            (
+                0xBC,
+                self.supplied_stat(CargoType::Mail, true, false)
+                    .unwrap_or(current.mail_served),
+            ),
+            (
+                0xBE,
+                self.supplied_stat(CargoType::Passengers, true, true)
+                    .unwrap_or(current.passengers_served),
+            ),
+            (
+                0xC0,
+                self.supplied_stat(CargoType::Mail, true, true)
+                    .unwrap_or(current.mail_served),
+            ),
+            (
+                0xC2,
+                self.supplied_stat(CargoType::Passengers, false, false)
+                    .unwrap_or(previous.passengers_served),
+            ),
+            (
+                0xC4,
+                self.supplied_stat(CargoType::Mail, false, false)
+                    .unwrap_or(previous.mail_served),
+            ),
+            (
+                0xC6,
+                self.supplied_stat(CargoType::Passengers, false, true)
+                    .unwrap_or(previous.passengers_served),
+            ),
+            (
+                0xC8,
+                self.supplied_stat(CargoType::Mail, false, true)
+                    .unwrap_or(previous.mail_served),
+            ),
         ];
         for (offset, value) in history_pairs {
             let value = value.min(u32::from(u16::MAX));
             ctx.parent_vars.insert(offset, value & u32::from(u16::MAX));
             ctx.parent_vars.insert(offset + 1, value >> 8);
         }
+        ctx.parent_vars.insert(
+            0xCA,
+            u32::from(self.supplied_percent(CargoType::Passengers)),
+        );
+        ctx.parent_vars
+            .insert(0xCB, u32::from(self.supplied_percent(CargoType::Mail)));
         let food_new = self.received_new[usize::from(TownGrowthEffect::Food as u8)];
         let water_new = self.received_new[usize::from(TownGrowthEffect::Water as u8)];
         let food_old = self.received_old[usize::from(TownGrowthEffect::Food as u8)];
@@ -680,6 +723,142 @@ impl Town {
     fn add_received(&mut self, effect: TownGrowthEffect, amount: u32) {
         let i = effect as usize;
         self.received_new[i] = self.received_new[i].saturating_add(amount);
+        let native_slot = match effect {
+            TownGrowthEffect::Passengers => 1,
+            TownGrowthEffect::Mail => 2,
+            TownGrowthEffect::Goods => 3,
+            TownGrowthEffect::Water => 4,
+            TownGrowthEffect::Food => 5,
+        };
+        if self.received_cargo.len() <= native_slot {
+            self.received_cargo
+                .resize(TOWN_GROWTH_EFFECT_COUNT + 1, TownReceivedCargo::default());
+        }
+        self.received_cargo[native_slot].new_act = self.received_cargo[native_slot]
+            .new_act
+            .saturating_add(u16::try_from(amount).unwrap_or(u16::MAX));
+    }
+
+    /// Copia los contadores nativos de `CITY.received` a las ventanas que usa
+    /// el gate de crecimiento y los callbacks de pueblo.
+    pub fn hydrate_native_growth_stats(&mut self) {
+        if self.received_cargo.len() < TOWN_GROWTH_EFFECT_COUNT + 1 {
+            return;
+        }
+        // OpenTTD: NONE, PASSENGERS, MAIL, GOODS, WATER, FOOD.
+        for (model_slot, native_slot) in [1_usize, 2, 3, 5, 4].into_iter().enumerate() {
+            let Some(entry) = self.received_cargo.get(native_slot) else {
+                continue;
+            };
+            self.received_old[model_slot] = u32::from(entry.old_act);
+            self.received_new[model_slot] = u32::from(entry.new_act);
+        }
+    }
+
+    /// Avanza las estadísticas nativas de `CITY.received` al siguiente mes.
+    pub fn rollover_native_growth_stats(&mut self) {
+        for entry in &mut self.received_cargo {
+            entry.old_max = entry.new_max;
+            entry.new_max = 0;
+            entry.old_act = entry.new_act;
+            entry.new_act = 0;
+        }
+    }
+
+    /// Registra producción y transporte de una carga generada por una casa.
+    /// La lista se mantiene ordenada por el ID nativo de cargo, como en
+    /// `Town::GetOrCreateCargoSupplied` de `OpenTTD`.
+    pub fn record_town_cargo_supply(
+        &mut self,
+        cargo: CargoType,
+        production: u32,
+        transported: u32,
+    ) {
+        if production == 0 && transported == 0 {
+            return;
+        }
+        let cargo_id = cargo.cargo_id();
+        // Los saves nativos mantienen la lista ordenada, pero el JSON propio
+        // puede haber sido generado por versiones antiguas o editado a mano.
+        // Buscar primero por igualdad evita perder una entrada válida cuando
+        // la lista llega desordenada; la inserción nueva sí restablece el orden
+        // para que los siguientes cargos sigan el contrato de OpenTTD.
+        let index = if let Some(index) = self
+            .supplied_cargo
+            .iter()
+            .position(|entry| entry.cargo == cargo_id)
+        {
+            index
+        } else {
+            let index = self
+                .supplied_cargo
+                .iter()
+                .position(|entry| entry.cargo > cargo_id)
+                .unwrap_or(self.supplied_cargo.len());
+            self.supplied_cargo.insert(
+                index,
+                TownSuppliedCargo {
+                    cargo: cargo_id,
+                    history: Vec::new(),
+                },
+            );
+            index
+        };
+        let history = &mut self.supplied_cargo[index].history;
+        if history.len() < TOWN_SUPPLIED_HISTORY_MONTHS {
+            history.resize(TOWN_SUPPLIED_HISTORY_MONTHS, TownSuppliedHistory::default());
+        }
+        let Some(current) = history.last_mut() else {
+            return;
+        };
+        current.production = current.production.saturating_add(production);
+        current.transported = current.transported.saturating_add(transported);
+    }
+
+    /// Cierra el mes de `CITY.supplied`, desplazando la muestra actual a
+    /// `LAST_MONTH` y dejando a cero la de `THIS_MONTH`.
+    pub fn rollover_supplied_history(&mut self) {
+        for supplied in &mut self.supplied_cargo {
+            if supplied.history.len() < TOWN_SUPPLIED_HISTORY_MONTHS {
+                supplied
+                    .history
+                    .resize(TOWN_SUPPLIED_HISTORY_MONTHS, TownSuppliedHistory::default());
+            }
+            let last = supplied.history.len() - 1;
+            if last == 0 {
+                continue;
+            }
+            supplied.history.rotate_left(1);
+            supplied.history[last] = TownSuppliedHistory::default();
+        }
+    }
+
+    fn supplied_stat(&self, cargo: CargoType, current: bool, transported: bool) -> Option<u32> {
+        let entry = self
+            .supplied_cargo
+            .iter()
+            .find(|entry| entry.cargo == cargo.cargo_id())?;
+        let index = if current {
+            entry.history.len().checked_sub(1)?
+        } else {
+            entry.history.len().checked_sub(2)?
+        };
+        let sample = entry.history.get(index)?;
+        Some(if transported {
+            sample.transported
+        } else {
+            sample.production
+        })
+    }
+
+    fn supplied_percent(&self, cargo: CargoType) -> u8 {
+        let production = u64::from(self.supplied_stat(cargo, false, false).unwrap_or(0));
+        if production == 0 {
+            return 0;
+        }
+        let transported = u64::from(self.supplied_stat(cargo, false, true).unwrap_or(0));
+        u8::try_from((transported.saturating_mul(256) / production).min(u64::from(u8::MAX)))
+            .unwrap_or(u8::MAX)
     }
 }
 
@@ -917,6 +1096,8 @@ pub fn process_town_monthly_growth(
     for town in &mut *towns {
         town.ensure_authority_ratings(company_count);
         update_town_rating(town, stations, company_count);
+        town.rollover_supplied_history();
+        town.rollover_native_growth_stats();
         town.received_old = town.received_new;
         town.received_new = [0; TOWN_GROWTH_EFFECT_COUNT];
         if town.fund_buildings_months > 0 {
@@ -1008,9 +1189,32 @@ pub fn town_cargo_amount_per_cycle(rate: u16) -> u32 {
 /// las paradas que comparten casas compiten entre sí.
 pub fn produce_town_cargo(
     map: &Map,
-    _industries: &[Industry],
+    industries: &[Industry],
     stations: &mut [Station],
     towns: &[Town],
+    tick: u64,
+    selectgoods: bool,
+) -> (u64, u64) {
+    // Mantener la firma histórica para callers que sólo consultan la demanda;
+    // el camino de simulación usa la variante mutable y registra `CITY.supplied`.
+    let mut towns_snapshot = towns.to_vec();
+    produce_town_cargo_with_towns(
+        map,
+        industries,
+        stations,
+        &mut towns_snapshot,
+        tick,
+        selectgoods,
+    )
+}
+
+/// Genera pasajeros/correo y actualiza las estadísticas `CITY.supplied` del
+/// pueblo dueño de cada casa.
+pub fn produce_town_cargo_with_towns(
+    map: &Map,
+    _industries: &[Industry],
+    stations: &mut [Station],
+    towns: &mut [Town],
     tick: u64,
     selectgoods: bool,
 ) -> (u64, u64) {
@@ -1059,10 +1263,11 @@ pub fn produce_town_cargo(
                 continue;
             }
 
+            let town_idx = house_town_index(map, tile_pos, towns);
             let exclusivity = closest_town_exclusivity(towns, tile_pos);
             let pax_amount = town_cargo_amount_per_cycle(population);
             if pax_amount > 0 {
-                passengers += u64::from(station::move_goods_to_station(
+                let transported = station::move_goods_to_station(
                     stations,
                     &covering,
                     CargoType::Passengers,
@@ -1070,11 +1275,15 @@ pub fn produce_town_cargo(
                     tile_pos,
                     selectgoods,
                     exclusivity,
-                ));
+                );
+                passengers += u64::from(transported);
+                if let Some(town) = town_idx.and_then(|index| towns.get_mut(index)) {
+                    town.record_town_cargo_supply(CargoType::Passengers, pax_amount, transported);
+                }
             }
             let mail_amount = town_cargo_amount_per_cycle(mail_rate);
             if mail_amount > 0 {
-                mail += u64::from(station::move_goods_to_station(
+                let transported = station::move_goods_to_station(
                     stations,
                     &covering,
                     CargoType::Mail,
@@ -1082,7 +1291,11 @@ pub fn produce_town_cargo(
                     tile_pos,
                     selectgoods,
                     exclusivity,
-                ));
+                );
+                mail += u64::from(transported);
+                if let Some(town) = town_idx.and_then(|index| towns.get_mut(index)) {
+                    town.record_town_cargo_supply(CargoType::Mail, mail_amount, transported);
+                }
             }
         }
     }
@@ -1382,6 +1595,18 @@ pub fn nearest_town_index(towns: &[Town], pos: TileCoord) -> Option<(usize, u32)
         .min_by_key(|(_, d)| *d)
 }
 
+/// Resuelve el pueblo propietario de una casa usando `MAP2` y conserva el
+/// fallback de distancia para mapas legacy sin `TownID` válido.
+fn house_town_index(map: &Map, pos: TileCoord, towns: &[Town]) -> Option<usize> {
+    let persisted = map
+        .get(pos)
+        .filter(|tile| tile.kind == TileKind::House)
+        .map(|tile| u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8));
+    persisted
+        .and_then(|town_id| towns.iter().position(|town| town.id == town_id))
+        .or_else(|| nearest_town_index(towns, pos).map(|(index, _)| index))
+}
+
 /// Umbrales mínimos de rating para demolición municipal (`needed_rating` en `CheckforTownRating`).
 #[must_use]
 pub fn needed_rating_for_demolition(
@@ -1504,6 +1729,34 @@ mod tests {
                 rating: 600,
             },
         ];
+        town.supplied_cargo = vec![
+            TownSuppliedCargo {
+                cargo: CargoType::Passengers.cargo_id(),
+                history: vec![
+                    TownSuppliedHistory {
+                        production: 11,
+                        transported: 11,
+                    },
+                    TownSuppliedHistory {
+                        production: 17,
+                        transported: 17,
+                    },
+                ],
+            },
+            TownSuppliedCargo {
+                cargo: CargoType::Mail.cargo_id(),
+                history: vec![
+                    TownSuppliedHistory {
+                        production: 13,
+                        transported: 13,
+                    },
+                    TownSuppliedHistory {
+                        production: 19,
+                        transported: 19,
+                    },
+                ],
+            },
+        ];
         town.received_new[TownGrowthEffect::Food as usize] = 0x1234;
         town.received_new[TownGrowthEffect::Water as usize] = 0x5678;
         town.received_old[TownGrowthEffect::Food as usize] = 0x9ABC;
@@ -1531,11 +1784,83 @@ mod tests {
         assert_eq!(ctx.parent_vars.get(&0xBC), Some(&19));
         assert_eq!(ctx.parent_vars.get(&0xC2), Some(&11));
         assert_eq!(ctx.parent_vars.get(&0xC4), Some(&13));
+        assert_eq!(ctx.parent_vars.get(&0xCA), Some(&255));
+        assert_eq!(ctx.parent_vars.get(&0xCB), Some(&255));
         assert_eq!(ctx.parent_vars.get(&0xCC), Some(&0x1234));
         assert_eq!(ctx.parent_vars.get(&0xD2), Some(&0xDEF0));
         assert_eq!(ctx.parent_vars.get(&0xD4), Some(&4));
         assert_eq!(ctx.parent_vars.get(&0xD5), Some(&3));
         assert_eq!(ctx.parent_vars.get(&0xAE), Some(&0xA5));
+    }
+
+    #[test]
+    fn native_received_stats_feed_growth_and_follow_month_rollover() {
+        let mut town = Town {
+            received_cargo: vec![
+                TownReceivedCargo::default(),
+                TownReceivedCargo {
+                    old_act: 11,
+                    new_act: 12,
+                    ..Default::default()
+                },
+                TownReceivedCargo {
+                    old_act: 21,
+                    new_act: 22,
+                    ..Default::default()
+                },
+                TownReceivedCargo {
+                    old_act: 31,
+                    new_act: 32,
+                    ..Default::default()
+                },
+                TownReceivedCargo {
+                    old_act: 41,
+                    new_act: 42,
+                    ..Default::default()
+                },
+                TownReceivedCargo {
+                    old_act: 51,
+                    new_act: 52,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        town.hydrate_native_growth_stats();
+        assert_eq!(town.received_old, [11, 21, 31, 51, 41]);
+        assert_eq!(town.received_new, [12, 22, 32, 52, 42]);
+
+        town.record_town_cargo_delivery(CargoType::Food, 9);
+        assert_eq!(town.received_new[TownGrowthEffect::Food as usize], 61);
+        assert_eq!(town.received_cargo[5].new_act, 61);
+        town.rollover_native_growth_stats();
+        assert_eq!(town.received_cargo[5].old_act, 61);
+        assert_eq!(town.received_cargo[5].new_act, 0);
+    }
+
+    #[test]
+    fn supplied_history_records_generation_and_rolls_months() {
+        let mut town = Town::default();
+        town.record_town_cargo_supply(CargoType::Mail, 10, 7);
+        town.record_town_cargo_supply(CargoType::Passengers, 20, 13);
+        assert_eq!(
+            town.supplied_cargo
+                .iter()
+                .map(|entry| entry.cargo)
+                .collect::<Vec<_>>(),
+            vec![CargoType::Passengers.cargo_id(), CargoType::Mail.cargo_id()]
+        );
+        let passengers = &town.supplied_cargo[0].history;
+        assert_eq!(passengers.len(), TOWN_SUPPLIED_HISTORY_MONTHS);
+        assert_eq!(passengers[1].production, 20);
+        assert_eq!(passengers[1].transported, 13);
+
+        town.rollover_supplied_history();
+        assert_eq!(town.supplied_cargo[0].history[0].production, 20);
+        assert_eq!(
+            town.supplied_cargo[0].history[1],
+            TownSuppliedHistory::default()
+        );
     }
 
     #[test]
@@ -1557,6 +1882,43 @@ mod tests {
         assert_eq!(mail, 1);
         assert_eq!(stations[0].cargo_stock.passengers, 2);
         assert_eq!(stations[0].cargo_stock.mail, 1);
+    }
+
+    #[test]
+    fn produce_with_towns_updates_the_native_supplied_history() {
+        let mut map = Map::new_flat(16, 16, 0);
+        let house = TileCoord::new(7, 8);
+        let stop_pos = TileCoord::new(8, 8);
+        map.set_completed_house(house, 0, 0).unwrap();
+        map.set_house_town_id(house, 9).unwrap();
+        let mut towns = vec![Town {
+            id: 9,
+            pos: TileCoord::new(4, 4),
+            ..Default::default()
+        }];
+        let mut stations = vec![Station::new_with_kind(stop_pos, StopKind::BusStop)];
+        stations[0].goods.get_mut(CargoType::Passengers).last_speed = 1;
+
+        let (passengers, mail) = produce_town_cargo_with_towns(
+            &map,
+            &[],
+            &mut stations,
+            &mut towns,
+            TOWN_PRODUCE_TICKS,
+            true,
+        );
+        assert_eq!(passengers, 1);
+        assert_eq!(mail, 0);
+        let Some(supplied) = towns[0]
+            .supplied_cargo
+            .iter()
+            .find(|entry| entry.cargo == CargoType::Passengers.cargo_id())
+        else {
+            panic!("passenger supplied history");
+        };
+        assert_eq!(supplied.history.len(), TOWN_SUPPLIED_HISTORY_MONTHS);
+        assert_eq!(supplied.history[1].production, 2);
+        assert_eq!(supplied.history[1].transported, 1);
     }
 
     #[test]

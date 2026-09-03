@@ -1148,6 +1148,7 @@ impl GameState {
             &persistent_storages,
         );
         for town in &mut state.towns {
+            town.hydrate_native_growth_stats();
             // `CITY.goal` ya se importa desde el save. Sólo inicializar las
             // metas cuando la tabla no las traía (por ejemplo, saves antiguos)
             // evita borrar metas nativas o de GameScript al hidratar el estado.

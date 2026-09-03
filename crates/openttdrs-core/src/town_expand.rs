@@ -10,7 +10,7 @@ use crate::map::{
     Map, SLOPE_STEEP, TileCoord, TileKind, diag_dir_offset, effective_road_bits,
     has_tile_water_ground, tile_slope_and_z,
 };
-use crate::newgrf_callback::apply_house_construction_callback;
+use crate::newgrf_callback::apply_house_construction_callback_for_build;
 use crate::town::{Town, TownLayout, update_town_radius};
 use crate::world_gen::Climate;
 
@@ -350,7 +350,7 @@ fn try_build_town_house(
     // el footprint. Es un booleano de ocho bits: `CALLBACK_FAILED` o byte bajo
     // no nulo permite; cero rechaza sin dejar teselas parcialmente colocadas.
     if let Some(def) = house_spec_def(ctx.house_catalog, house_id)
-        && !apply_house_construction_callback(def)
+        && !apply_house_construction_callback_for_build(def, map, town, base, ctx.climate)
     {
         return None;
     }

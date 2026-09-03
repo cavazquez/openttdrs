@@ -127,7 +127,13 @@ fn eval_term(
     Some(apply_var_adjust(raw, &term.adjust))
 }
 
-fn apply_advanced_op(op: u8, val1: i32, val2: i32, ctx: &mut Action2EvalCtx) -> i32 {
+fn apply_advanced_op(
+    op: u8,
+    val1: i32,
+    val2: i32,
+    parent_scope: bool,
+    ctx: &mut Action2EvalCtx,
+) -> i32 {
     match op {
         0x00 => val1.wrapping_add(val2),
         0x01 => val1.wrapping_sub(val2),
@@ -183,10 +189,20 @@ fn apply_advanced_op(op: u8, val1: i32, val2: i32, ctx: &mut Action2EvalCtx) -> 
         }
         // \2rst: result = val2
         0x0F => val2,
-        // \2psto: persistent_registers[val2] = val1
+        // \2psto: persistent_registers[val2] = val1.  The storage belongs
+        // to the scope selected by the Action2 group (`0x82`/`0x86`/`0x8A`
+        // use the parent resolver), just like `SpriteGroup::EvalAdjustT` in
+        // OpenTTD.  Keeping the two maps separate prevents a house/vehicle
+        // child from writing into its own PSA when the callback targets the
+        // associated town/engine parent.
         0x10 => {
             let idx = u8::try_from(val2 & 0xFF).unwrap_or(0);
-            ctx.persistent_registers.insert(idx, val1.cast_unsigned());
+            let registers = if parent_scope {
+                &mut ctx.parent_persistent_registers
+            } else {
+                &mut ctx.persistent_registers
+            };
+            registers.insert(idx, val1.cast_unsigned());
             val1
         }
         0x11 => val1.rotate_right(val2.cast_unsigned() & 31),
@@ -294,7 +310,13 @@ pub(super) fn eval_action2_var(
         let Some(rhs) = eval_term(gfx, ctx, &op.rhs, depth) else {
             return entry.default;
         };
-        acc = apply_advanced_op(op.operator, acc, rhs, ctx);
+        acc = apply_advanced_op(
+            op.operator,
+            acc,
+            rhs,
+            entry.first.adjust.is_parent_scope(),
+            ctx,
+        );
     }
     ctx.last_result = acc.cast_unsigned();
     // nvar=0: devolver el valor calculado como callback (procedure / result).

@@ -353,8 +353,9 @@ pub struct Town {
     /// mantiene fuera del JSON propio: el índice nativo y la fila completa
     /// viven en `GameState::sav_persistent_storages`, mientras este mapa
     /// permite que los resolvers lean los registros `7C` durante el runtime
-    /// sin confundir dos GRF distintos. El writeback de town PSA queda
-    /// pendiente de conectar con la mutación de callbacks.
+    /// sin confundir dos GRF distintos. El callback de construcción de casas
+    /// ya escribe este storage; los callbacks de render/objetos y otros scopes
+    /// todavía requieren sus propios call sites.
     #[serde(skip, default)]
     pub newgrf_persistent_storage_ids: std::collections::HashMap<u32, u32>,
     /// Registros no nulos del PSA de pueblo, agrupados por GRFID.

@@ -591,6 +591,43 @@ mod tests {
     }
 
     #[test]
+    fn resolve_parent_scope_psto_writes_parent_storage() {
+        let parent = super::model::ACTION2_PARENT_SCOPE_MARKER;
+        let literal = |value: u32| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                shift: parent,
+                and_mask: value,
+                ..Action2VarAdjust::default()
+            },
+        };
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 3,
+        });
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: literal(42),
+                ops: vec![Action2VarOp {
+                    operator: 0x10, // \\2psto
+                    rhs: literal(5),
+                }],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        let result = gfx.resolve_callback_ctx(0, 0x17, 0, 0, &mut ctx);
+        assert_eq!(result, 42);
+        assert_eq!(ctx.parent_persistent_registers.get(&5), Some(&42));
+        assert!(ctx.persistent_registers.is_empty());
+    }
+
+    #[test]
     fn resolve_parent_and_relative_random_scopes() {
         let mut gfx = TrainSpriteGraphics::default();
         gfx.action2_random.insert(

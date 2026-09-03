@@ -9,7 +9,7 @@
 use crate::cargo_spec::CargoSpecDef;
 use crate::cargodist::parity::Randomizer;
 use crate::engine::EngineDef;
-use crate::house_spec::HouseSpecDef;
+use crate::house_spec::{HouseSpecDef, action2_eval_ctx_for_house_tile_with_towns};
 use crate::industry::{Industry, IndustryProductionAction};
 use crate::industry_spec::{IndustrySpecDef, cargo_type_from_label};
 use crate::industry_tile::IndustryTileSpecDef;
@@ -106,6 +106,20 @@ pub fn writeback_industry_persistent_registers(industry: &mut Industry, ctx: &Ac
     industry
         .newgrf_persistent_regs
         .clone_from(&ctx.persistent_registers);
+}
+
+/// Escribe el storage persistente del scope parent de un pueblo (`CITY.psa_list`).
+///
+/// Las casas y objetos resuelven el pueblo como parent, por lo que sus
+/// `\\2psto` no deben contaminar el storage propio del objeto. El mapa disperso
+/// se materializa sólo cuando el callback escribió al menos un registro; el
+/// exportador de SAV asigna/conserva el índice `PSAC` correspondiente.
+pub fn writeback_town_persistent_registers(town: &mut Town, grfid: u32, ctx: &Action2EvalCtx) {
+    if ctx.parent_persistent_registers.is_empty() {
+        return;
+    }
+    town.newgrf_persistent_regs
+        .insert(grfid, ctx.parent_persistent_registers.clone());
 }
 
 /// Resuelve un callback sobre el runtime Action2 del motor, con writeback de regs.
@@ -1618,6 +1632,52 @@ pub fn apply_house_construction_callback(def: &HouseSpecDef) -> bool {
     callback_allows_8bit_boolean(result)
 }
 
+/// Call site de construcción de una casa con el resolver completo de pueblo.
+///
+/// `HouseResolverObject` expone el `TownScopeResolver` como parent incluso
+/// antes de reservar el footprint. Esto permite que CB17 consulte `7C` y que
+/// `\\2psto` actualice el PSA de ese pueblo, preservando la selección por GRFID
+/// que usa `CITY.psa_list` en `OpenTTD`.
+#[must_use]
+pub fn apply_house_construction_callback_for_build(
+    def: &HouseSpecDef,
+    map: &Map,
+    town: &mut Town,
+    tile: TileCoord,
+    climate: crate::Climate,
+) -> bool {
+    if !def.has_construction_callback() {
+        return true;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return true;
+    };
+    let Some(map_tile) = map.get(tile) else {
+        // El caller normal nunca llega aquí (la huella ya fue validada), pero
+        // un candidato fuera del mapa conserva el fallback seguro de compra.
+        return true;
+    };
+    let mut ctx = action2_eval_ctx_for_house_tile_with_towns(
+        map_tile,
+        tile.x,
+        tile.y,
+        climate,
+        std::slice::from_ref(&*town),
+    );
+    // La asociación del candidato puede no estar escrita todavía en MAP2;
+    // durante el crecimiento el pueblo actual es el parent autoritativo.
+    town.copy_newgrf_parent_scope(def.grfid, &mut ctx);
+    let result = runtime.resolve_callback_ctx(
+        def.newgrf_local_id,
+        CBID_HOUSE_ALLOW_CONSTRUCTION,
+        0,
+        0,
+        &mut ctx,
+    );
+    writeback_town_persistent_registers(town, def.grfid, &ctx);
+    callback_allows_8bit_boolean(result)
+}
+
 /// Convierte un resultado callback de 15 bits al entero con signo de `OpenTTD`.
 fn signed_15_bit_callback_result(result: u16) -> i64 {
     let low_14 = i64::from(result & 0x3FFF);
@@ -2709,6 +2769,18 @@ mod tests {
                 default: 0,
             },
         );
+        gfx
+    }
+
+    fn gfx_callback_parent_psto(reg: u8, value: u8, result: u8) -> TrainSpriteGraphics {
+        let mut gfx = gfx_callback_psto(reg, value, result);
+        let Some(entry) = gfx.action2_var.get_mut(&2) else {
+            return gfx;
+        };
+        entry.first.adjust.shift |= 0x80;
+        for op in &mut entry.ops {
+            op.rhs.adjust.shift |= 0x80;
+        }
         gfx
     }
 
@@ -4039,6 +4111,62 @@ mod tests {
         let mut st = Station::new(TileCoord::new(2, 2));
         assert!(apply_station_availability_callback(&gfx, 0, &mut st));
         assert_eq!(st.newgrf_persistent_regs.get(&5), Some(&7));
+    }
+
+    #[test]
+    fn house_construction_callback_writes_town_parent_psa() {
+        let grfid = 0x1122_3344;
+        let tile = TileCoord::new(1, 1);
+        let map = Map::new_flat(4, 4, 0);
+        let mut town = Town {
+            id: 7,
+            pos: tile,
+            ..Default::default()
+        };
+        town.newgrf_persistent_regs
+            .entry(0x5566_7788)
+            .or_default()
+            .insert(3, 9);
+        let def = HouseSpecDef {
+            id: 200,
+            local_id: 0,
+            subst_id: 0,
+            building_flags: 0,
+            min_year: 0,
+            max_year: 5000,
+            population: 10,
+            mail_generation: 0,
+            availability: 0xFFFF,
+            probability: 1,
+            override_id: None,
+            callback_mask: crate::house_spec::HOUSE_CALLBACK_ALLOW_CONSTRUCTION_MASK,
+            name: "town-psa-cb17".into(),
+            from_newgrf: true,
+            grfid,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_parent_psto(5, 42, 0))),
+        };
+
+        assert!(!apply_house_construction_callback_for_build(
+            &def,
+            &map,
+            &mut town,
+            tile,
+            crate::Climate::Temperate,
+        ));
+        assert_eq!(
+            town.newgrf_persistent_regs
+                .get(&grfid)
+                .and_then(|registers| registers.get(&5)),
+            Some(&42)
+        );
+        assert_eq!(
+            town.newgrf_persistent_regs
+                .get(&0x5566_7788)
+                .and_then(|registers| registers.get(&3)),
+            Some(&9)
+        );
     }
 
     #[test]

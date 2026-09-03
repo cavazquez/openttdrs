@@ -682,6 +682,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn ottn_roundtrip_preserves_construction_settings_in_pats() {
         let mut state = tiny_state();
         state.climate = crate::Climate::SubTropical;

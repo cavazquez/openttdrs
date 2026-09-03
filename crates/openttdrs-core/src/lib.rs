@@ -72,6 +72,7 @@ pub mod road_type;
 pub mod sav;
 pub mod save;
 mod score;
+pub mod script_cargo_monitor;
 pub mod shared_orders;
 pub mod ship_movement;
 mod sign;
@@ -208,10 +209,11 @@ pub use company::{
     LIVERY_SCHEME_PASSENGER_WAGON_DIESEL, LIVERY_SCHEME_PASSENGER_WAGON_ELECTRIC,
     LIVERY_SCHEME_PASSENGER_WAGON_MAGLEV, LIVERY_SCHEME_PASSENGER_WAGON_MONORAIL,
     LIVERY_SCHEME_PASSENGER_WAGON_STEAM, LIVERY_SCHEME_SMALL_PLANE, LIVERY_SCHEME_STEAM,
-    LIVERY_SCHEME_TRUCK, RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO, company_colour_taken_by_other,
-    company_id_by_name, company_livery_colours, company_livery_primary_colour,
-    company_livery_secondary_colour, default_company_liveries, feeder_share_of,
-    first_free_company_colour, tile_owner_colour, tile_with_owner, vehicle_livery_scheme,
+    LIVERY_SCHEME_TRUCK, MAX_COMPANIES, RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO,
+    company_colour_taken_by_other, company_id_by_name, company_livery_colours,
+    company_livery_primary_colour, company_livery_secondary_colour, default_company_liveries,
+    feeder_share_of, first_free_company_colour, tile_owner_colour, tile_with_owner,
+    vehicle_livery_scheme,
 };
 pub use construction_settings::{ConstructionSettings, RoadVehicleDrivingSide, TrainSignalSide};
 pub use depot::{
@@ -277,6 +279,7 @@ pub use ground_crash::{
     CRASHED_CTR_REMOVE, CRASHED_CTR_START, crash_vehicle, maybe_road_train_crash,
     road_veh_check_train_crash, tick_crashed_vehicles,
 };
+pub use script_cargo_monitor::ScriptCargoMonitor;
 // Namespaces de compatibilidad cargodist (sin aplanar tipos en la raíz; #157).
 pub mod flow_stat {
     pub use crate::cargodist::legacy::flow_stat::*;

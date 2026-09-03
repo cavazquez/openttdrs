@@ -708,6 +708,14 @@ fn default_interactive_random() -> crate::linkgraph_parity::Randomizer {
 }
 
 impl GameState {
+    fn valid_script_cargo_monitor_company(company: crate::company::CompanyId) -> bool {
+        company.0 < crate::company::MAX_COMPANIES
+    }
+
+    fn valid_script_cargo_monitor_cargo(&self, cargo: crate::cargo::CargoType) -> bool {
+        crate::cargo::CargoType::for_climate(self.climate).contains(&cargo)
+    }
+
     /// Activa/consulta el acumulado de entregas de un pueblo.
     ///
     /// La lectura reinicia el contador; con `keep_monitoring = true` la clave
@@ -719,6 +727,12 @@ impl GameState {
         town_id: u32,
         keep_monitoring: bool,
     ) -> i32 {
+        if !Self::valid_script_cargo_monitor_company(company)
+            || !self.valid_script_cargo_monitor_cargo(cargo)
+            || !self.towns.iter().any(|town| town.id == town_id)
+        {
+            return -1;
+        }
         let monitor = crate::cargo_monitor::encode_cargo_town_monitor(company, cargo, town_id);
         self.runtime
             .cargo_monitor
@@ -733,6 +747,15 @@ impl GameState {
         industry_id: u16,
         keep_monitoring: bool,
     ) -> i32 {
+        if !Self::valid_script_cargo_monitor_company(company)
+            || !self.valid_script_cargo_monitor_cargo(cargo)
+            || !self
+                .industries
+                .iter()
+                .any(|industry| industry.instance_id == industry_id)
+        {
+            return -1;
+        }
         let monitor =
             crate::cargo_monitor::encode_cargo_industry_monitor(company, cargo, industry_id);
         self.runtime
@@ -748,6 +771,12 @@ impl GameState {
         town_id: u32,
         keep_monitoring: bool,
     ) -> i32 {
+        if !Self::valid_script_cargo_monitor_company(company)
+            || !self.valid_script_cargo_monitor_cargo(cargo)
+            || !self.towns.iter().any(|town| town.id == town_id)
+        {
+            return -1;
+        }
         let monitor = crate::cargo_monitor::encode_cargo_town_monitor(company, cargo, town_id);
         self.runtime
             .cargo_monitor
@@ -762,6 +791,15 @@ impl GameState {
         industry_id: u16,
         keep_monitoring: bool,
     ) -> i32 {
+        if !Self::valid_script_cargo_monitor_company(company)
+            || !self.valid_script_cargo_monitor_cargo(cargo)
+            || !self
+                .industries
+                .iter()
+                .any(|industry| industry.instance_id == industry_id)
+        {
+            return -1;
+        }
         let monitor =
             crate::cargo_monitor::encode_cargo_industry_monitor(company, cargo, industry_id);
         self.runtime
@@ -779,6 +817,13 @@ impl GameState {
         self.runtime
             .cargo_monitor
             .clear_delivery_monitoring(company);
+    }
+
+    /// Borra ambos mapas de monitores, equivalente a
+    /// `ScriptCargoMonitor::StopAllMonitoring`.
+    pub fn stop_all_cargo_monitoring(&mut self) {
+        self.clear_cargo_pickup_monitoring(None);
+        self.clear_cargo_delivery_monitoring(None);
     }
 
     #[must_use]

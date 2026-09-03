@@ -68,6 +68,12 @@ pub const OWNER_TOWN_M1: u8 = 0x0F;
 pub const OWNER_NONE_M1: u8 = 0x10;
 pub const OWNER_WATER_M1: u8 = 0x11;
 
+/// Cantidad máxima de compañías jugables (`OpenTTD::MAX_COMPANIES`).
+///
+/// Los valores `OWNER_TOWN` y posteriores son propietarios especiales, no
+/// identificadores válidos para las APIs de compañías de `GameScript`.
+pub const MAX_COMPANIES: u8 = 0x0F;
+
 /// Centinela nativo `COMPANY_MAX_LOAN_DEFAULT` de `OpenTTD`.
 ///
 /// `PLYR.max_loan` con este valor no representa un límite negativo: ordena

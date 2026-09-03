@@ -1,9 +1,9 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-03**,
-`main` con base funcional `601e7685`, posterior al writeback canónico de `CITY`,
+`main` con base funcional `916247a2`, posterior al writeback canónico de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
-`TileLoop` de teselas; referencia: **OpenTTD
+`TileLoop`/`IndustryTick`/`CargoReceived` de teselas; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
 
 Esta es la única matriz de capacidad para importación y exportación `.sav`.
@@ -53,10 +53,11 @@ de casas y CB157 de objetos durante construcción ya persisten los registros
 `7C` escritos por grupos Action2 parent en `Town.newgrf_persistent_regs`; los
 callbacks CB25/26/27 de animación de teselas hacen lo mismo en
 `Industry.newgrf_persistent_regs` durante la simulación. La re-randomización
-`ResolveRerandomisation` de teselas hace el mismo writeback en `TileLoop`. Al
-exportar, `PSAC` y `CITY.psa_list` reciben la fila nueva o actualizada. Los
-triggers `IndustryTick`/`CargoReceived`, los scopes de otros consumidores y
-las mutaciones de historiales continúan pendientes.
+`ResolveRerandomisation` de teselas hace el mismo writeback en
+`TileLoop`/`IndustryTick`/`CargoReceived`, y las máscaras parent se reseedean una
+vez por footprint. Al exportar, `PSAC` y `CITY.psa_list` reciben la fila nueva o
+actualizada. Los scopes de otros consumidores y las mutaciones de historiales
+continúan pendientes.
 
 La misma importación conserva ahora `CITY.supplied` (cargo y muestras
 mensuales de producción/transporte) y `CITY.received` (contadores

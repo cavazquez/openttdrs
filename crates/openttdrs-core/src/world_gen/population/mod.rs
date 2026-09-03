@@ -13,7 +13,7 @@
 mod industries;
 mod towns;
 
-pub(crate) use industries::plant_random_farm_field_runtime;
+pub(crate) use industries::{plant_random_farm_field_runtime, plant_random_farm_fields_runtime};
 
 use crate::cargodist::parity::Randomizer;
 use crate::game_state::GameState;

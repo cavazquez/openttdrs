@@ -3,13 +3,15 @@ use crate::house_spec::{
     BUILDING_FLAG_SIZE_1X2, BUILDING_FLAG_SIZE_2X1, BUILDING_FLAG_SIZE_2X2,
     house_footprint_offsets, vanilla_or_newgrf_house,
 };
-use crate::industry_spec::{IndustrySpecDef, industry_spec_def};
+use crate::industry_spec::{
+    INDUSTRY_BEHAVIOUR_PLANT_ON_BUILD_MASK, IndustrySpecDef, industry_spec_def,
+};
 use crate::map::{
     SLOPE_STEEP, Tile, TileCoord, TileKind, clear_neighbour_non_flooding_states,
     tile_has_water_class, tile_slope_and_z, water_class_from_m1,
 };
 use crate::town::{nearest_town_index, update_town_radius};
-use crate::world_gen::{CLEAR_GROUND_GRASS, clear_ground_m5};
+use crate::world_gen::{CLEAR_GROUND_GRASS, clear_ground_m5, plant_random_farm_fields_runtime};
 use crate::{GameState, Industry, IndustryKind, IndustrySpec};
 
 use super::CommandError;
@@ -232,7 +234,48 @@ pub(super) fn place_industry_spec_sandbox(
     }
     check_place_industry_spec(&state.map, c, spec)?;
     let template = industry_template(c, spec);
-    place_industry_spec_template_sandbox(state, c, spec, 0, &template)
+    place_industry_spec_template_sandbox(state, c, spec, 0, &template)?;
+    // Vanilla farms carry `PlantOnBuild` in the built-in industry table. The
+    // generation path uses the layout command plus its own shared RNG pass,
+    // so this branch is intentionally limited to the direct player command.
+    if matches!(spec, IndustrySpec::Farm | IndustrySpec::FarmTropic) {
+        let footprint: Vec<TileCoord> = template.iter().map(|(tile, _)| *tile).collect();
+        plant_fields_on_build(state, c, &footprint);
+    }
+    Ok(())
+}
+
+/// Ejecuta las 50 llamadas de `PlantRandomFarmField` posteriores a la creación
+/// de una granja. `OpenTTD` consume el RNG global incluso cuando un intento no
+/// encuentra un rectángulo apto; el helper conserva ese detalle.
+fn plant_fields_on_build(state: &mut GameState, origin: TileCoord, footprint: &[TileCoord]) {
+    let (width, height) = industry_footprint_dimensions(footprint, origin);
+    let industry_id = state
+        .industries
+        .iter()
+        .rev()
+        .find(|industry| industry.pos == origin)
+        .map_or(0, |industry| industry.instance_id);
+    let mut effect_rng = state.random;
+    plant_random_farm_fields_runtime(state, origin, width, height, industry_id, &mut effect_rng);
+    state.random = effect_rng;
+}
+
+fn industry_footprint_dimensions(footprint: &[TileCoord], origin: TileCoord) -> (i32, i32) {
+    let max_x = footprint
+        .iter()
+        .map(|coord| coord.x.saturating_sub(origin.x))
+        .max()
+        .unwrap_or(0);
+    let max_y = footprint
+        .iter()
+        .map(|coord| coord.y.saturating_sub(origin.y))
+        .max()
+        .unwrap_or(0);
+    (
+        max_x.saturating_add(1).max(1),
+        max_y.saturating_add(1).max(1),
+    )
 }
 
 pub(super) fn place_industry_spec_layout_sandbox(
@@ -679,6 +722,7 @@ pub fn place_industry_spec_def_layout_sandbox(
     } else {
         IndustryKind::CoalMine
     };
+    let footprint_for_fields = tiles.clone();
     let counter = industry_counter_seed(state, c, industry_id);
     let mut industry = Industry::with_tiles(c, kind, tiles)
         .with_instance_id(industry_id)
@@ -715,6 +759,9 @@ pub fn place_industry_spec_def_layout_sandbox(
     // instancia. Sin runtime se conserva el fallback de `with_newgrf_spec`.
     let _ = crate::newgrf_callback::apply_industry_dynamic_cargo_callbacks(&def, &mut industry);
     state.industries.push(industry);
+    if def.behaviour & INDUSTRY_BEHAVIOUR_PLANT_ON_BUILD_MASK != 0 {
+        plant_fields_on_build(state, c, &footprint_for_fields);
+    }
     state.economy.money -= 250;
     Ok(())
 }
@@ -790,6 +837,35 @@ mod tests {
     }
 
     #[test]
+    fn manual_farm_plants_fields_after_the_industry_is_created() {
+        let mut state = GameState::new(64, 64);
+        state.random = crate::cargodist::parity::Randomizer::new(0xCAFE);
+        let origin = TileCoord::new(32, 32);
+
+        assert!(
+            apply_command(
+                &mut state,
+                &Command::PlaceIndustrySpec(origin, IndustrySpec::Farm),
+            )
+            .is_ok()
+        );
+
+        let industry_id = state.industries[0].instance_id;
+        let fields = state
+            .map
+            .tiles()
+            .iter()
+            .filter(|tile| {
+                tile.kind == TileKind::Grass
+                    && crate::map::tree_tile_loop::clear_ground_type(tile.m5)
+                        == crate::world_gen::CLEAR_GROUND_FIELDS
+                    && (u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8)) == industry_id
+            })
+            .count();
+        assert!(fields > 0, "PlantOnBuild must create at least one field");
+    }
+
+    #[test]
     fn newgrf_industry_layout_and_random_are_preserved() {
         let origin = TileCoord::new(4, 4);
         let mut state = GameState::new(16, 16);
@@ -844,6 +920,34 @@ mod tests {
                 .get(TileCoord::new(5, 4))
                 .map(|tile| crate::map::industry_gfx(&tile)),
             Some(177)
+        );
+    }
+
+    #[test]
+    fn newgrf_plant_on_build_uses_the_declared_behaviour() {
+        let origin = TileCoord::new(32, 32);
+        let mut state = GameState::new(64, 64);
+        let mut def = test_newgrf_industry_spec();
+        def.behaviour = INDUSTRY_BEHAVIOUR_PLANT_ON_BUILD_MASK;
+        state.industry_spec_catalog.push(def);
+
+        assert!(place_industry_spec_def_layout_sandbox(&mut state, origin, 37, 0, 0).is_ok());
+
+        let industry_id = state.industries[0].instance_id;
+        let fields = state
+            .map
+            .tiles()
+            .iter()
+            .filter(|tile| {
+                tile.kind == TileKind::Grass
+                    && crate::map::tree_tile_loop::clear_ground_type(tile.m5)
+                        == crate::world_gen::CLEAR_GROUND_FIELDS
+                    && (u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8)) == industry_id
+            })
+            .count();
+        assert!(
+            fields > 0,
+            "PlantOnBuild must create fields around NewGRF industry"
         );
     }
 

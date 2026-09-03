@@ -1268,6 +1268,33 @@ pub(crate) fn plant_random_farm_field_runtime(
     plant_farm_field(&mut ctx, center, industry_id);
 }
 
+/// Ejecuta las 50 llamadas de `PlantRandomFarmField` que hace
+/// `DoCreateNewIndustry` cuando `PlantOnBuild` está activo.
+///
+/// La rutina mantiene el mismo orden de consumo RNG que `OpenTTD`: cada intento
+/// sortea primero las coordenadas y recién después `PlantFarmField` decide si
+/// el rectángulo es válido. Se expone como una frontera pequeña para que la
+/// colocación manual/NewGRF y la producción periódica compartan el contrato.
+pub(crate) fn plant_random_farm_fields_runtime(
+    state: &mut GameState,
+    origin: TileCoord,
+    location_width: i32,
+    location_height: i32,
+    industry_id: u16,
+    rng: &mut crate::cargodist::parity::Randomizer,
+) {
+    for _ in 0..FARM_FIELD_ATTEMPTS {
+        plant_random_farm_field_runtime(
+            state,
+            origin,
+            location_width,
+            location_height,
+            industry_id,
+            rng,
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

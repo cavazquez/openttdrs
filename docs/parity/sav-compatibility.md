@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-03**,
-`main` con base funcional `c88518c4`, posterior al writeback canónico de `CITY`,
+`main` con base funcional `aa289076`, posterior al writeback canónico de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
 separan de la pasada visual CB26/CB27; referencia: **OpenTTD
@@ -62,6 +62,11 @@ CB25 `IndustryTick` al intervalo de producción y CB25 `CargoReceived` después
 de confirmar una entrega. La pasada visual avanza CB26/CB27 sólo sobre la
 lista persistida de teselas activas; `CargoDistributed` y
 `ConstructionStageChanged` todavía no tienen call site.
+
+Actualización del corte `aa289076`: `CargoDistributed` se conecta al retorno
+positivo de `TransportIndustryGoods`; la huella NewGRF recibe CB25 sólo cuando
+la distribución llegó a una estación, mientras la pasada visual sigue
+avanzando CB26/CB27 sobre activos.
 
 | Área | Importar `.sav` de OpenTTD | Exportar `.sav` para OpenTTD | Límite y evidencia |
 |---|---|---|---|

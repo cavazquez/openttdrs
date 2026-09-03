@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `c88518c4`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `aa289076`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -116,6 +116,12 @@ CB26/CB27 avanzan únicamente la lista de teselas activas. La regresión cubre
 que un tick visual no active CB25. `CargoDistributed`,
 `ConstructionStageChanged`, sonido, scopes restantes y cargos custom siguen
 parciales; #329 continúa abierto.
+
+Actualización #329-INDTILE-ANIMATION-056 (2026-09-03, `aa289076`):
+`CargoDistributed` queda conectado después de una distribución efectiva a
+estaciones; la máscara no se confunde con `IndustryTick` y el callback usa la
+huella/PSA parent de la industria. `ConstructionStageChanged`, sonido, scopes
+restantes y cargos custom siguen parciales; #329 continúa abierto.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

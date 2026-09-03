@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `8be6bbc6`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `eb6bd78d`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -100,6 +100,13 @@ ante un parámetro fuera de rango devuelven `-1` sin activar estado. El reset,
 la saturación y la efimeridad siguen delegados al monitor runtime. Quedan
 pendientes cargos custom, reatachación cuando falta el catálogo y los demás
 bindings/scope de `GameScript`; #329 continúa abierto.
+
+Actualización #329-INDUSTRY-SAV-054 (2026-09-03, `eb6bd78d`): el writer
+`INDY` conserva como passthrough opaco las filas `accepted`/`produced` con
+slots de cargos que no se pueden resolver sin el catálogo NewGRF. El
+round-trip mantiene waiting/stock, rate, fechas, acumuladores e historiales,
+pero esos cargos siguen sin ejecución económica ni callbacks hasta instalar
+su `CargoSpec`; #329 continúa abierto.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

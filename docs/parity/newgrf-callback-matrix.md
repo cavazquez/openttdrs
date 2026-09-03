@@ -1,6 +1,7 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-03** (commit `9303cf65`, runtime PSA parent de CB157).
+Actualizada: **2026-09-03** (commit `47afecd7`, PSA parent de animación de
+teselas de industria).
 
 Referencia: commit `14ec60f248547d4d062a1160f0fc26d742319888`,
 `reference/openttd-upstream/src/newgrf_callbacks.h`.
@@ -38,6 +39,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `decode_vehicle_articulated_part`, `resolve_vehicle_articulated_part_callback`,
 `resolve_vehicle_visual_effect_callback`, `vehicle_visual_effect_kind`,
 `resolve_industry_tile_animation_callback`,
+`resolve_industry_tile_animation_callback_with_world`,
 `resolve_industry_tile_random_trigger`
 (`crates/openttdrs-core/src/newgrf_callback.rs`).
 
@@ -71,9 +73,9 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 | Houses (`07`) | `0x150` `CBID_HOUSE_DRAW_FOUNDATIONS` | **parcial runtime** | El renderer evalúa el callback con el scope de casa (etapa, edad, random, pueblo y parámetros GRF) antes de `FOUNDATION_LEVELED`; `CALLBACK_FAILED` conserva la fundación y un resultado cero la suprime, como `ConvertBooleanCallback` upstream. La regresión `newgrf_house_draw_foundations_callback_can_suppress_default` cubre una casa inclinada custom sin parent vanilla. Falta el resto de callbacks de casa y layouts/rotaciones avanzados. |
 | Houses | resto `0x1A`–`0x1C`, `0x1E`–`0x21`, … | **almacenado** | `HouseSpecDef.callback_mask` |
 | Houses | Action2 `TileLayoutSpriteGroup` (`TileSeq`) | **parcial runtime** | El catálogo conserva el grafo aunque la casa no tenga callbacks variables. El renderer resuelve la etapa/edad/terreno/random de la tesela y `0x42` consulta la zona del pueblo cuyo `TownID` está persistido en `MAP2` (con fallback al más cercano en mapas legacy); `0x44`, `0x60`/`0x61` calculan conteos por `HouseID` global y por pueblo desde una instantánea del mapa, y `0x62`/`0x63` consultan información/frame de teselas vecinas con wrap. Cuando el pueblo tiene una fila `CITY.psa_list`, el scope parent copia sus registros `7C` por GRFID para que `0x7C` lea el mismo PSA que OpenTTD. Sustituye `s1`/`s2` cuando el layout es completo y materializa ground, parents y children con cajas `M(...)`, incluyendo la superficie de una fundación nivelada; layouts incompletos, sprites base y paletas especiales mantienen fallback vanilla atómico. El writeback de `7C` está cubierto en CB17 de construcción; faltan el callback de dibujo/tesela, conteos por clase, aceptación de estaciones y layouts 16-bit completos.
-| Industry tiles (`09`) | `0x25` trigger, `0x26` next frame, `0x27` speed | **soportado** (#293) | `phase_tile_animation` ejecuta los tres con coordenada real, `param2=IndustryTick`, máscara Action0 y fallback `CALLBACK_FAILED` |
+| Industry tiles (`09`) | `0x25` trigger, `0x26` next frame, `0x27` speed | **parcial runtime** | `phase_tile_animation` ejecuta los tres con coordenada real, `param2=IndustryTick`, máscara Action0 y fallback `CALLBACK_FAILED`; la ruta con pools de mundo construye el scope completo de tesela/industria y escribe `\\2psto` parent en `Industry.newgrf_persistent_regs` después de cada callback. La API legacy conserva el contexto mínimo y no puede hacer writeback de una industria ausente |
 | Industry tiles (`09`) | `0x150` `CBID_INDTILE_DRAW_FOUNDATIONS` | **parcial runtime** | El renderer evalúa el callback con el scope de tesela/industria padre (etapa, random, terreno, pueblo, posición y parámetros GRF) antes de `FOUNDATION_LEVELED`; `CALLBACK_FAILED` conserva la fundación y cero la suprime, igual que `DrawNewIndustryTile` upstream. La regresión `newgrf_industry_draw_foundations_callback_can_suppress_default` cubre una tesela inclinada custom sin cimiento vanilla. Faltan callbacks de sonido, slope/autoslope y scopes avanzados. |
-| Industry tiles | Action2 vars `0x40`–`0x44`, `0x60`–`0x62`, `0x7A` | **parcial runtime** | El renderer construye el scope por tesela con `m3` como random (incluidos triggers), etapa de obra, terreno, zona del pueblo más cercano, posición relativa, frame completo `m3hi`, información/frame/id de teselas vecinas y presencia de badges mediante GlobalVar `0x18`; el mismo contexto alimenta vistas planas y layouts `TileSeq`, con caché por fingerprint. `0x62` conserva los sentinelas `0xFFFF`/`0xFFFE` y traduce el local del mismo GRF. Faltan el resto de variables específicas del tile y callbacks de sonido/slope/autoslope. |
+| Industry tiles | Action2 vars `0x40`–`0x44`, `0x60`–`0x62`, `0x7A` | **parcial runtime** | El renderer y los callbacks de animación construyen el scope por tesela con `m3` como random (incluidos triggers), etapa de obra, terreno, zona del pueblo más cercano, posición relativa, frame completo `m3hi`, información/frame/id de teselas vecinas y presencia de badges mediante GlobalVar `0x18`; el scope parent comparte stock/producción/historial de la `Industry` y sus registros PSA. El mismo contexto alimenta vistas planas y layouts `TileSeq`, con caché por fingerprint. `0x62` conserva los sentinelas `0xFFFF`/`0xFFFE` y traduce el local del mismo GRF. Faltan el resto de variables específicas del tile y callbacks de sonido/slope/autoslope. |
 | Industry tiles | `0x2B`–`0x2C`, … | **almacenado** | `IndustryTileSpecDef.callback_mask` |
 | Industries (`0A`) | `0x28` `CBID_INDUSTRY_LOCATION` | **parcial runtime** (#266) | Call site: `place_industry_spec_def_layout_sandbox` (la variante histórica usa layout 0); respeta el bit `Location`, valida y materializa el layout elegido, carga Action3→Action2, pasa `IACT_USERCREATION` (`param2=2`) y expone el scope de construcción con `0x7A` (badges), `0x80`/`0x81` (TileIndex), `0x82` (pueblo), `0x86` (layout cero-based), `0x87` (terreno), `0x88` (zona), `0x89`/`0x8D` (distancia), `0x8A` (altura), `0x8B` (distancia a agua) y `0x8F` (random). La instancia conserva `selected_layout` uno-based, `random`, fundador, fecha/tipo de construcción, año de última producción y flags para el scope padre y `INDY`; se permiten sólo `FAILED`/`0x400`. Siguen pendientes otros tipos de creación, strings de error GRF y la semántica de callbacks de GameScript |
 | Industries | `0x29` `CBID_INDUSTRY_PRODUCTION_CHANGE`; `0x35` `CBID_INDUSTRY_MONTHLYPROD_CHANGE`; `0x15F` `CBID_INDUSTRY_PROD_CHANGE_BUILD` | **parcial runtime** | CB29 se ejecuta en el cambio diario de una industria NewGRF y CB35 después de actualizar las estadísticas mensuales; se decodifican `no-op`, halve/double, divide/multiply, increment/decrement, cierre, cambio estándar y set de `prod_level` vía registro `0x100`. CB15F fija el nivel inicial al fundar si el resultado está en `PRODLEVEL_MINIMUM..MAXIMUM`. Los Action2 `IndustryProductionSpriteGroup` v0/v1/v2 se parsean, se conservan y se resuelven a través de Action3→Action2 (incluidos grupos random/variational). |
@@ -100,8 +102,8 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 | Temporal (`7D` / `\2sto`) | Solo durante la evaluación Action2 | Descartado al terminar el ctx |
 | Persistente (`7C` / `\2psto`) | Vehículo: `Vehicle.newgrf_persistent_regs` | Writeback tras CB; round-trip JSON save |
 | Persistente estación | `Station.newgrf_persistent_regs` | **parcial**: API stateful + JSON round-trip; CB13 de construcción no puede hacer writeback porque OpenTTD lo evalúa sin estación/tesela |
-| Persistente industria | `Industry.newgrf_persistent_regs` | Writeback tras CB; round-trip SAV/JSON, con `INDY.psa`/`PSAC` conservados |
-| Persistente pueblo (scope parent de casas/objetos) | `Town.newgrf_persistent_regs` | **parcial**: lectura `7C` por GRFID en Action2, `CITY`/`PSAC` y round-trip SAV/JSON; CB17 de casas y CB157 de objetos durante construcción hacen writeback parent por GRFID (con preflight aislado); callbacks de teselas y scopes de otras entidades siguen pendientes |
+| Persistente industria | `Industry.newgrf_persistent_regs` | Writeback tras CB de producción y tras CB25/26/27 de tesela cuando el scheduler recibe pools de mundo; round-trip SAV/JSON, con `INDY.psa`/`PSAC` conservados |
+| Persistente pueblo (scope parent de casas/objetos) | `Town.newgrf_persistent_regs` | **parcial**: lectura `7C` por GRFID en Action2, `CITY`/`PSAC` y round-trip SAV/JSON; CB17 de casas y CB157 de objetos durante construcción hacen writeback parent por GRFID (con preflight aislado); callbacks de teselas de industria ya escriben el parent `Industry`, mientras randomización y scopes de otras entidades siguen pendientes |
 | Persistente casa/objeto | — | **OOS** como entidad propia; consumen el PSA del pueblo asociado cuando existe |
 
 ## Triggers / random
@@ -329,6 +331,15 @@ persiste `\\2psto` por GRFID. Query/preview evalúan sobre copias de pueblos y
 el execute sólo conserva la copia después de comprobar fondos; la regresión
 cubre writeback, aislamiento por GRFID y rechazo sin fondos. El writeback de
 callbacks de teselas y los demás callbacks/scope de objetos siguen pendientes.
+
+Actualización #329-INDTILE-PSA-033 (2026-09-03, commit `47afecd7`): los
+callbacks de animación `CB25`/`CB26`/`CB27` de `IndustryTile` ya reciben el
+contexto completo de tesela y `IndustryTileResolverObject` parent en la ruta
+normal de simulación. `\\2psto` se hidrata desde la industria viva y vuelve a
+`Industry.newgrf_persistent_regs` tras cada evaluación; el scheduler conserva
+la asociación por `m2`/footprint y la API legacy queda explícitamente sin
+writeback. `CBID_RANDOM_TRIGGER` y los callbacks de foundations, sonido,
+slope/autoslope siguen pendientes; #329 no se cierra.
 
 - Resto de CBs houses / airports / industries / objects (incluidos los huecos que aún no tienen call site), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.

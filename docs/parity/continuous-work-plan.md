@@ -25,8 +25,8 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-03
 
-Base funcional publicada en `origin/main`: **`9303cf65`** (`newgrf: persist town
-PSA from object construction`). Este handoff documental se publica inmediatamente
+Base funcional publicada en `origin/main`: **`47afecd7`** (`newgrf: persist
+industry tile animation PSA`). Este handoff documental se publica inmediatamente
 después de ese commit; es el punto de reanudación y los cambios de la etapa
 funcional están en el mismo árbol.
 
@@ -34,13 +34,14 @@ funcional están en el mismo árbol.
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. Layouts `TileSeq`, parents/children, catenaria, PBS y varias capas ya tienen cobertura focal; foundations de rail pendiente/túnel, foundations/rotaciones de aeropuertos, sprite-stack/callbacks avanzados de vehículos y el orden completo de framebuffer siguen sin equivalencia global. | Medir la primera familia visible restante con `world-draw` y, si aplica, capturas en `0,12×`, `0,25×`, `0,50×` y `1×`. |
 | [#328](https://github.com/cavazquez/openttdrs/issues/328) | El round-trip preserva las tablas y campos escalares modelados, `CITY`/`INDY`/`STNN`/`PSAC`, `OBJS`/`OBID`, grupos, órdenes y autoreplace en el subconjunto documentado. Mutaciones de strings, listas/structs anidados, columnas desconocidas, pools nativos de casas/objetos y labels/cargos no representables todavía degradan al writer canónico o quedan pendientes. CB17 de casas y CB157 de objetos pueden crear/modificar PSA de pueblo y el writer les asigna una fila `PSAC`/referencia `CITY` al exportar. | Elegir una mutación SAV reproducible de lista/struct anidado y comparar bytes OpenTTD→Rust→OpenTTD. |
-| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17 durante crecimiento físico y CB157 durante construcción de objetos evalúan ahora el parent real y persisten `\2psto` por GRFID. Siguen pendientes el writeback de callbacks de teselas, historiales tras mutaciones, cargos custom y el resto de callbacks/scope. | Cubrir el siguiente consumidor que muta PSA (callback de teselas) con una regresión SAV; no cerrar #329 por este subconjunto. |
+| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17 durante crecimiento físico y CB157 durante construcción de objetos evalúan ahora el parent real y persisten `\2psto` por GRFID. CB25/26/27 de animación de teselas evalúan el contexto completo y escriben el PSA parent de `Industry` en la instancia viva; la ruta legacy sin world conserva fallback explícito. Siguen pendientes randomización/writeback de teselas, historiales tras mutaciones, cargos custom y el resto de callbacks/scope. | Cubrir el siguiente consumidor que muta PSA (randomización de teselas) con una regresión SAV; no cerrar #329 por este subconjunto. |
 | [#330](https://github.com/cavazquez/openttdrs/issues/330) | Economía básica y movimiento funcionan, pero los oráculos externos todavía son acotados. Tráfico/colisiones/dirección vial exhaustivos, PBS/YAPF/presignals/consist ferroviarios y navegación aire/mar no tienen aún cobertura diferencial completa. | Tomar el primer fixture externo reproducible de movimiento y registrar tick, entidad y estado nativo divergente. |
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
 
-Última validación de `9303cf65`: `cargo fmt --all -- --check`, clippy estricto
-de core/cliente, **1.949** tests de core, **1.064** tests de cliente,
+Última validación de `47afecd7`: `cargo fmt --all -- --check`, clippy estricto
+de core, **1.953** tests de core; la corrida completa de cliente y la matriz
+documental se actualizan en el siguiente corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.
 
@@ -63,6 +64,17 @@ después de comprobar fondos, por lo que un preview o una orden sin dinero no
 contamina el estado. La regresión cubre writeback, aislamiento por GRFID y
 ambas rutas (financiada/sin fondos). El writeback de callbacks de teselas y
 otros callbacks/scope de objetos sigue pendiente; #329 no se cierra.
+
+Actualización #329-INDTILE-PSA-033 (2026-09-03, commit `47afecd7`): los
+callbacks `CBID_INDTILE_ANIMATION_TRIGGER/NEXT_FRAME/SPEED` (`0x25`–`0x27`)
+de las teselas `NewGRF` se ejecutan ahora en la ruta normal con el
+`IndustryTileResolverObject` equivalente: etapa, terreno, posición, vecinos,
+badges y scope parent de industria. `\\2psto` del parent se hidrata desde la
+instancia viva y se escribe de vuelta a `Industry.newgrf_persistent_regs` tras
+cada callback; una regresión directa y otra del scheduler fijan el writeback y
+la asociación por `m2`/footprint. La API antigua conserva el fallback sin mundo.
+La randomización `CBID_RANDOM_TRIGGER`, foundations de render y callbacks de
+sonido/slope/autoslope siguen pendientes; #329 permanece abierto.
 
 ## Orden recomendado
 

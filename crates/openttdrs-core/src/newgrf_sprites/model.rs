@@ -1220,6 +1220,10 @@ pub const CBID_INDTILE_ANIMATION_TRIGGER: u16 = 0x25;
 pub const CBID_INDTILE_ANIMATION_NEXT_FRAME: u16 = 0x26;
 /// Callback teselas industria: velocidad de animación (`CBID_INDTILE_ANIMATION_SPEED`).
 pub const CBID_INDTILE_ANIMATION_SPEED: u16 = 0x27;
+/// Callback teselas industria: cantidades de aceptación (`CBID_INDTILE_CARGO_ACCEPTANCE`).
+pub const CBID_INDTILE_CARGO_ACCEPTANCE: u16 = 0x2B;
+/// Callback teselas industria: tipos de cargo aceptados (`CBID_INDTILE_ACCEPT_CARGO`).
+pub const CBID_INDTILE_ACCEPT_CARGO: u16 = 0x2C;
 /// Alias de compatibilidad para el nombre histórico del callback de siguiente frame.
 pub const CBID_INDTILE_ANIM_NEXT_FRAME: u16 = CBID_INDTILE_ANIMATION_NEXT_FRAME;
 /// Callback estaciones: disponibilidad de clase/spec (`CBID_STATION_AVAILABILITY`).

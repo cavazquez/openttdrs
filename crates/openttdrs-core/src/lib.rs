@@ -330,12 +330,13 @@ pub use industry_spec::{
     get_translated_industry_id, industry_spec_def, next_free_industry_id,
 };
 pub use industry_tile::{
-    INDUSTRY_TILE_CALLBACK_AUTOSLOPE_MASK, INDUSTRY_TILE_CALLBACK_DRAW_FOUNDATIONS_MASK,
-    INDUSTRY_TILE_CALLBACK_SHAPE_CHECK_MASK, INVALID_INDUSTRY_TILE, IndustryTileGfxId,
-    IndustryTileSpecDef, NEW_INDUSTRY_TILE_OFFSET, NUM_INDUSTRY_TILES,
-    empty_industry_tile_overrides, get_clean_industry_gfx, get_translated_industry_tile_id,
-    industry_tile_slope_refused, industry_tile_spec_def, next_free_industry_tile_gfx_id,
-    resolve_industry_tile_draw_gfx,
+    INDUSTRY_TILE_CALLBACK_ACCEPT_CARGO_MASK, INDUSTRY_TILE_CALLBACK_AUTOSLOPE_MASK,
+    INDUSTRY_TILE_CALLBACK_CARGO_ACCEPTANCE_MASK, INDUSTRY_TILE_CALLBACK_DRAW_FOUNDATIONS_MASK,
+    INDUSTRY_TILE_CALLBACK_SHAPE_CHECK_MASK, INDUSTRY_TILE_SPECIAL_ACCEPTS_ALL_CARGO_MASK,
+    INVALID_INDUSTRY_TILE, IndustryTileGfxId, IndustryTileSpecDef, NEW_INDUSTRY_TILE_OFFSET,
+    NUM_INDUSTRY_TILES, empty_industry_tile_overrides, get_clean_industry_gfx,
+    get_translated_industry_tile_id, industry_tile_slope_refused, industry_tile_spec_def,
+    next_free_industry_tile_gfx_id, resolve_industry_tile_draw_gfx,
 };
 pub use map::{
     AIRPORT_RADAR_FRAMES, FOUNDATION_ACTION5_SPRITE_BASE, FOUNDATION_INCLINED_X,
@@ -455,8 +456,8 @@ pub use newgrf_actions::{
     parse_action0_sound_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_callback::{
-    IndustryProductionCallbackResult, RoadStopCallbackWorld, Vehicle32DayCallback,
-    VehicleColourMapping, VehicleSoundOverride, VehicleVisualEffectKind,
+    IndustryProductionCallbackResult, IndustryTileCargoAcceptance, RoadStopCallbackWorld,
+    Vehicle32DayCallback, VehicleColourMapping, VehicleSoundOverride, VehicleVisualEffectKind,
     action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle, advance_road_stop_animation,
     advance_road_stop_animation_at_with_world, apply_house_construction_callback,
     apply_house_construction_callback_for_build, apply_industry_dynamic_cargo_callbacks,
@@ -474,6 +475,7 @@ pub use newgrf_callback::{
     resolve_industry_production_change_build_callback, resolve_industry_production_change_callback,
     resolve_industry_refuse_cargo_callback, resolve_industry_special_effect_callback,
     resolve_industry_tile_animation_callback, resolve_industry_tile_animation_callback_with_world,
+    resolve_industry_tile_cargo_acceptance_callback_with_world,
     resolve_industry_tile_random_trigger, resolve_vehicle_32day_callback, resolve_vehicle_callback,
     resolve_vehicle_capacity_property_callback, resolve_vehicle_colour_mapping_callback,
     resolve_vehicle_modify_property_callback, resolve_vehicle_sound_callback,
@@ -696,7 +698,8 @@ pub use station::{
     rail_station_stop_candidates_osl, rail_station_stop_tile, rail_station_stop_tile_for_approach,
     rail_station_stop_tile_for_approach_osl, rail_station_stop_tile_with_osl,
     recompute_station_rating, resolve_order_destination, resolve_order_destination_from,
-    road_stop_approach_tile, station_at_tile, station_catchment_radius, station_coverage_at,
+    road_stop_approach_tile, station_accepts_cargo_with_newgrf, station_at_tile,
+    station_catchment_radius, station_coverage_at, station_coverage_at_with_newgrf,
     station_coverage_for, station_covers_tile, station_footprint_tiles, station_map_coherence,
     station_rating_for_cargo, station_rating_for_company_cargo, station_tile_can_have_pylons,
     station_tile_can_have_wires, station_tile_has_reservation, station_tile_sets_adjacent,

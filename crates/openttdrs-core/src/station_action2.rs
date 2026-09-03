@@ -280,6 +280,10 @@ fn cargo_is_accepted(
     if !station.accepts_cargo(cargo) {
         return false;
     }
+    if coverage.exact_cargo_acceptance {
+        return coverage.accepted_cargo.get(cargo)
+            >= crate::house_spec::STATION_ACCEPTANCE_THRESHOLD;
+    }
     let amount = match cargo {
         CargoType::Passengers => coverage.accepts_passengers,
         CargoType::Mail => coverage.accepts_mail,

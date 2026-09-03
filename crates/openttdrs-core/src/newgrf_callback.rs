@@ -21,9 +21,10 @@ use crate::map::object::action2_eval_ctx_for_object_tile_with_towns;
 use crate::map::{Map, TileCoord, has_tile_water_ground};
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
-    CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_AUTOSLOPE,
-    CBID_INDTILE_SHAPE_CHECK, CBID_INDUSTRY_DECIDE_COLOUR, CBID_INDUSTRY_INPUT_CARGO_TYPES,
-    CBID_INDUSTRY_LOCATION, CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_OUTPUT_CARGO_TYPES,
+    CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_ACCEPT_CARGO,
+    CBID_INDTILE_AUTOSLOPE, CBID_INDTILE_CARGO_ACCEPTANCE, CBID_INDTILE_SHAPE_CHECK,
+    CBID_INDUSTRY_DECIDE_COLOUR, CBID_INDUSTRY_INPUT_CARGO_TYPES, CBID_INDUSTRY_LOCATION,
+    CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_OUTPUT_CARGO_TYPES,
     CBID_INDUSTRY_PROD_CHANGE_BUILD, CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_INDUSTRY_REFUSE_CARGO,
     CBID_INDUSTRY_SPECIAL_EFFECT, CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME,
     CBID_STATION_ANIMATION_SPEED, CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY,
@@ -3067,6 +3068,165 @@ fn eval_random_entry(entry: &Action2RandomEntry, ctx: &mut Action2EvalCtx) -> u1
     entry.sets[idx]
 }
 
+/// Resultado normalizado de la aceptación de una tesela `IndustryTile`.
+///
+/// `OpenTTD` conserva tres slots de cargo para las propiedades originales de
+/// industria. Los callbacks `0x2C` escriben los ids locales en esos slots y
+/// `0x2B` escribe una cantidad de aceptación de cuatro bits por slot. Usar
+/// arrays fijos aquí evita compactar un `INVALID_CARGO` intermedio: el índice
+/// del slot forma parte del contrato que ve el callback siguiente.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct IndustryTileCargoAcceptance {
+    pub cargos: [Option<CargoType>; crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS],
+    pub amounts: [i16; crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS],
+}
+
+fn industry_tile_static_cargo(def: &IndustryTileSpecDef, slot: usize) -> Option<CargoType> {
+    let local = *def.accepts_cargo_indices.get(slot)?;
+    if local == u8::MAX {
+        return None;
+    }
+    def.accepts_cargo_labels
+        .get(slot)
+        .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+        .or_else(|| CargoType::from_cargo_id(local))
+}
+
+fn industry_tile_cargo_for_local(def: &IndustryTileSpecDef, local: u8) -> Option<CargoType> {
+    if local == 0x1F {
+        return None;
+    }
+    def.accepts_cargo_indices
+        .iter()
+        .position(|&candidate| candidate == local)
+        .and_then(|slot| {
+            def.accepts_cargo_labels
+                .get(slot)
+                .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+        })
+        .or_else(|| CargoType::from_cargo_id(local))
+}
+
+fn static_industry_tile_cargo_acceptance(
+    def: &IndustryTileSpecDef,
+    industry: &Industry,
+) -> IndustryTileCargoAcceptance {
+    let mut result = IndustryTileCargoAcceptance::default();
+    for slot in 0..result.cargos.len() {
+        result.cargos[slot] = industry_tile_static_cargo(def, slot);
+        result.amounts[slot] = def.acceptance.get(slot).copied().unwrap_or(0).into();
+    }
+
+    // `IndustryTileSpecialFlag::AcceptsAllCargo` extends the declared list
+    // with the cargos currently accepted by the parent industry. OpenTTD adds
+    // 8/8 to an existing slot and otherwise consumes the first invalid slot.
+    if def.accepts_all_cargo() {
+        for (cargo, _) in industry.station_input_requirements() {
+            if let Some(slot) = result
+                .cargos
+                .iter()
+                .position(|candidate| *candidate == Some(cargo))
+            {
+                result.amounts[slot] = result.amounts[slot].saturating_add(8);
+            } else if let Some(slot) = result.cargos.iter().position(Option::is_none) {
+                result.cargos[slot] = Some(cargo);
+                result.amounts[slot] = result.amounts[slot].saturating_add(8);
+            }
+        }
+    }
+    result
+}
+
+/// Ejecuta `CBID_INDTILE_ACCEPT_CARGO` (`0x2C`) y
+/// `CBID_INDTILE_CARGO_ACCEPTANCE` (`0x2B`) con los scopes reales de la
+/// tesela y de su industria padre.
+///
+/// El orden reproduce `AddAcceptedCargo_Industry`: primero se reemplazan los
+/// ids de cargo (si `0x2C` resuelve) y después las cantidades (si `0x2B`
+/// resuelve). Un callback ausente o `CALLBACK_FAILED` conserva las propiedades
+/// estáticas y la bandera `AcceptsAllCargo`; no se inventa una aceptación para
+/// cargos que el catálogo no puede traducir.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_industry_tile_cargo_acceptance_callback_with_world(
+    def: &IndustryTileSpecDef,
+    industry: &mut Industry,
+    map: &Map,
+    coord: TileCoord,
+    industries: &[Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: crate::Climate,
+) -> IndustryTileCargoAcceptance {
+    let mut result = static_industry_tile_cargo_acceptance(def, industry);
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return result;
+    };
+    if map.get(coord).is_none() {
+        return result;
+    }
+
+    // Action2 puede consultar las teselas vecinas y el parent. El snapshot es
+    // deliberadamente inmutable; el `Industry` vivo recibe el writeback de
+    // PSA al finalizar ambos callbacks.
+    let neighbor_params = requested_industry_tile_scope_vars(runtime);
+    let mut ctx = action2_eval_ctx_for_industry_tile_with_world_and_parent(
+        map,
+        coord,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        Some(def),
+        &neighbor_params,
+        Some(industry),
+    );
+    ctx.parent_persistent_registers
+        .clone_from(&industry.newgrf_persistent_regs);
+    ctx.parent_random_bits = u32::from(industry.newgrf_random);
+
+    if def.has_accept_cargo_callback() {
+        let callback_result = runtime.resolve_callback_ctx_u16(
+            u16::from(def.newgrf_local_id),
+            CBID_INDTILE_ACCEPT_CARGO,
+            0,
+            0,
+            &mut ctx,
+        );
+        if callback_result != CALLBACK_FAILED {
+            for slot in 0..result.cargos.len() {
+                let shift = u32::try_from(slot * 5).unwrap_or(0);
+                let local =
+                    u8::try_from((u32::from(callback_result) >> shift) & 0x1F).unwrap_or(0x1F);
+                result.cargos[slot] = industry_tile_cargo_for_local(def, local);
+            }
+        }
+    }
+
+    if def.has_cargo_acceptance_callback() {
+        let callback_result = runtime.resolve_callback_ctx_u16(
+            u16::from(def.newgrf_local_id),
+            CBID_INDTILE_CARGO_ACCEPTANCE,
+            0,
+            0,
+            &mut ctx,
+        );
+        if callback_result != CALLBACK_FAILED {
+            for slot in 0..result.amounts.len() {
+                let shift = u32::try_from(slot * 4).unwrap_or(0);
+                result.amounts[slot] = i16::from(
+                    u8::try_from((u32::from(callback_result) >> shift) & 0x0F).unwrap_or(0),
+                );
+            }
+        }
+    }
+
+    writeback_industry_tile_parent_persistent_registers(industry, &ctx);
+    result
+}
+
 /// Resuelve un callback de animación de tesela de industria con contexto estable.
 ///
 /// Los parámetros siguen el contrato de `OpenTTD`: `param1` son random bits y
@@ -3508,6 +3668,73 @@ mod tests {
         for op in &mut entry.ops {
             op.rhs.adjust.shift |= 0x80;
         }
+        gfx
+    }
+
+    fn gfx_callback_industry_tile_acceptance(
+        cargo_result: u16,
+        acceptance_result: u16,
+    ) -> TrainSpriteGraphics {
+        let literal = |value: u16| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                shift: 0,
+                and_mask: u32::from(value),
+                ..Action2VarAdjust::default()
+            },
+        };
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: u32::from(u16::MAX),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![
+                    (
+                        3,
+                        u32::from(CBID_INDTILE_ACCEPT_CARGO),
+                        u32::from(CBID_INDTILE_ACCEPT_CARGO),
+                    ),
+                    (
+                        4,
+                        u32::from(CBID_INDTILE_CARGO_ACCEPTANCE),
+                        u32::from(CBID_INDTILE_CARGO_ACCEPTANCE),
+                    ),
+                ],
+                default: 0,
+            },
+        );
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: literal(cargo_result),
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx.action2_var.insert(
+            4,
+            Action2VarEntry {
+                first: literal(acceptance_result),
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
         gfx
     }
 
@@ -5672,7 +5899,7 @@ mod tests {
         let catalog = vec![def.clone()];
         let coord = TileCoord::new(1, 2);
         let mut map = crate::Map::new_flat(8, 8, 0);
-        let mut tile = map.get(coord).expect("tile");
+        let mut tile = map.get(coord).unwrap();
         tile.kind = crate::TileKind::Station;
         tile.m5 = crate::RSV_BAY_NE;
         map.set_tile(coord, tile).expect("station tile");
@@ -6070,5 +6297,92 @@ mod tests {
         assert_eq!(result, 0);
         assert_eq!(industry.newgrf_persistent_regs.get(&5), Some(&42));
         assert_eq!(industry.newgrf_persistent_regs.get(&3), Some(&9));
+    }
+
+    #[test]
+    fn industry_tile_cargo_callbacks_replace_slots_and_amounts() {
+        let coord = TileCoord::new(2, 2);
+        let mut map = Map::new_flat(8, 8, 0);
+        let mut tile = map.get(coord).unwrap();
+        tile.kind = crate::map::TileKind::Industry;
+        tile.m1 = 0x80;
+        tile.m2 = 7;
+        crate::map::set_industry_gfx(&mut tile, 175);
+        map.set_tile(coord, tile).unwrap();
+
+        let cargo_result = 7_u16 | (1_u16 << 5) | (0x1F_u16 << 10);
+        let acceptance_result = 0x000C_u16 | (4_u16 << 8);
+        let def = IndustryTileSpecDef {
+            gfx: crate::industry_tile::IndustryTileGfxId(175),
+            subst_id: 0,
+            from_newgrf: true,
+            slopes_refused: 0,
+            accepts_cargo_indices: vec![1, 7, 2],
+            accepts_cargo_labels: vec!["COAL".into(), "WOOD".into(), "MAIL".into()],
+            acceptance: vec![1, 1, 1],
+            callback_mask: crate::industry_tile::INDUSTRY_TILE_CALLBACK_ACCEPT_CARGO_MASK
+                | crate::industry_tile::INDUSTRY_TILE_CALLBACK_CARGO_ACCEPTANCE_MASK,
+            animation_frames: 0,
+            animation_status: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_grfid: 1,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(gfx_callback_industry_tile_acceptance(
+                cargo_result,
+                acceptance_result,
+            ))),
+        };
+        let mut industry = Industry::new(coord, crate::industry::IndustryKind::Factory)
+            .with_instance_id(7)
+            .with_newgrf_spec(
+                1,
+                &IndustrySpecDef {
+                    id: 1,
+                    local_id: 0,
+                    subst_id: 0,
+                    override_id: None,
+                    layouts: Vec::new(),
+                    produced_cargo_indices: vec![5],
+                    produced_cargo_labels: vec!["GOOD".into()],
+                    accepted_cargo_indices: vec![7],
+                    accepted_cargo_labels: vec!["WOOD".into()],
+                    production_rates: vec![0],
+                    input_multipliers: vec![256],
+                    callback_mask: 0,
+                    behaviour: 0,
+                    cost_multiplier: 0,
+                    associated_badges: Vec::new(),
+                    newgrf_badge_translation: Vec::new(),
+                    name: "acceptance-parent".into(),
+                    from_newgrf: true,
+                    grfid: 1,
+                    newgrf_local_id: 0,
+                    newgrf_runtime: None,
+                },
+            );
+        let industries = vec![industry.clone()];
+        let result = resolve_industry_tile_cargo_acceptance_callback_with_world(
+            &def,
+            &mut industry,
+            &map,
+            coord,
+            &industries,
+            &[],
+            std::slice::from_ref(&def),
+            &[],
+            crate::Climate::Temperate,
+        );
+
+        assert_eq!(
+            result.cargos,
+            [Some(CargoType::Wood), Some(CargoType::Coal), None]
+        );
+        assert_eq!(result.amounts, [12, 0, 4]);
     }
 }

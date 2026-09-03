@@ -20,6 +20,12 @@ pub const INDUSTRY_TILE_CALLBACK_DRAW_FOUNDATIONS_MASK: u8 = 1 << 5;
 /// Bit `IndustryTileCallbackMask::Autoslope`: consulta CB `0x3C` al
 /// terraformar una tesela de industria.
 pub const INDUSTRY_TILE_CALLBACK_AUTOSLOPE_MASK: u8 = 1 << 6;
+/// Bit `IndustryTileCallbackMask::CargoAcceptance`: consulta CB `0x2B`.
+pub const INDUSTRY_TILE_CALLBACK_CARGO_ACCEPTANCE_MASK: u8 = 1 << 2;
+/// Bit `IndustryTileCallbackMask::AcceptCargo`: consulta CB `0x2C`.
+pub const INDUSTRY_TILE_CALLBACK_ACCEPT_CARGO_MASK: u8 = 1 << 3;
+/// Bit `IndustryTileSpecialFlag::AcceptsAllCargo` de `prop 0x12`.
+pub const INDUSTRY_TILE_SPECIAL_ACCEPTS_ALL_CARGO_MASK: u8 = 1 << 1;
 
 /// Réplica de `IsSlopeRefused` para el fallback de `IndustryTile`.
 ///
@@ -128,6 +134,24 @@ pub struct IndustryTileSpecDef {
 }
 
 impl IndustryTileSpecDef {
+    /// ¿La tesela hereda todos los cargos que acepta su industria padre?
+    #[must_use]
+    pub const fn accepts_all_cargo(&self) -> bool {
+        self.animation_special_flags & INDUSTRY_TILE_SPECIAL_ACCEPTS_ALL_CARGO_MASK != 0
+    }
+
+    /// ¿El GRF decide las cantidades de aceptación mediante CB `0x2B`?
+    #[must_use]
+    pub const fn has_cargo_acceptance_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_TILE_CALLBACK_CARGO_ACCEPTANCE_MASK != 0
+    }
+
+    /// ¿El GRF decide los tipos de cargo mediante CB `0x2C`?
+    #[must_use]
+    pub const fn has_accept_cargo_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_TILE_CALLBACK_ACCEPT_CARGO_MASK != 0
+    }
+
     /// ¿El GRF decide si se dibuja la fundación nivelada (`CB 0x30`)?
     #[must_use]
     pub const fn has_draw_foundations_callback(&self) -> bool {

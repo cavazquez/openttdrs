@@ -1242,6 +1242,13 @@ mod tests {
     }
 
     fn newgrf_animated_spec(callback_mask: u8) -> IndustryTileSpecDef {
+        newgrf_animated_spec_for_trigger(callback_mask, IndustryAnimationTrigger::IndustryTick)
+    }
+
+    fn newgrf_animated_spec_for_trigger(
+        callback_mask: u8,
+        trigger: IndustryAnimationTrigger,
+    ) -> IndustryTileSpecDef {
         IndustryTileSpecDef {
             gfx: IndustryTileGfxId(175),
             subst_id: 0,
@@ -1254,7 +1261,7 @@ mod tests {
             animation_frames: 5,
             animation_status: 1,
             animation_speed: 0,
-            animation_triggers: 1 << INDTILE_TRIGGER_INDUSTRY_TICK,
+            animation_triggers: trigger.mask(),
             animation_special_flags: INDTILE_SPECIAL_NEXT_FRAME_RANDOM_BITS,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),
@@ -1411,6 +1418,42 @@ mod tests {
         );
         assert_eq!(dirty, vec![coord]);
         assert_eq!(map.get(coord).unwrap().m3hi, 3);
+    }
+
+    #[test]
+    fn newgrf_cargo_distributed_trigger_uses_its_own_mask() {
+        let coord = TileCoord::new(0, 0);
+        let mut map = Map::new_flat(1, 1, 0);
+        map.set_tile(coord, industry_tile(175, 0x80, 0)).unwrap();
+        let catalog = vec![newgrf_animated_spec_for_trigger(
+            INDTILE_CALLBACK_MASK_NEXT_FRAME,
+            IndustryAnimationTrigger::CargoDistributed,
+        )];
+        let mut active = HashSet::new();
+
+        // Un evento IndustryTick no debe activar una tesela que sólo declara
+        // CargoDistributed en Action0.
+        trigger_newgrf_industry_animation(
+            &mut map,
+            1,
+            &[coord],
+            &catalog,
+            9,
+            &mut active,
+            IndustryAnimationTrigger::IndustryTick,
+        );
+        assert!(active.is_empty());
+
+        trigger_newgrf_industry_animation(
+            &mut map,
+            1,
+            &[coord],
+            &catalog,
+            9,
+            &mut active,
+            IndustryAnimationTrigger::CargoDistributed,
+        );
+        assert!(active.contains(&coord));
     }
 
     #[test]

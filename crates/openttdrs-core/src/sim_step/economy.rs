@@ -741,12 +741,28 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
             .iter()
             .map(|station| station.cargo_stock)
             .collect();
-        let _moved = crate::industry::transport_industry_goods_with_settings(
+        let moved = crate::industry::transport_industry_goods_with_settings(
             &mut state.industries[i],
             &mut state.stations,
             state.order.selectgoods,
             state.serve_neutral_industries,
         );
+        if moved > 0 {
+            let dirty = crate::map::trigger_newgrf_industry_animation_with_world(
+                &mut state.map,
+                tick,
+                &footprint,
+                &mut state.industries,
+                &state.towns,
+                &state.industry_tile_spec_catalog,
+                &state.industry_spec_catalog,
+                state.climate,
+                state.world_seed,
+                &mut state.newgrf_animated_industry_tiles,
+                crate::map::IndustryAnimationTrigger::CargoDistributed,
+            );
+            state.runtime.industry_tile_dirty.extend(dirty);
+        }
         trigger_station_new_cargo_since(state, &station_stock_before);
     }
 }

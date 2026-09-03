@@ -297,6 +297,7 @@ fn deliver_goods_to_industries(
     cargo: CargoType,
     amount: u32,
     source: TileCoord,
+    company: crate::company::CompanyId,
 ) -> (u32, Vec<usize>) {
     if amount == 0 {
         return (0, Vec::new());
@@ -305,6 +306,10 @@ fn deliver_goods_to_industries(
         return (0, Vec::new());
     };
     let station_pos = station.pos;
+    let station_town = town::nearest_town_index(&state.towns, station_pos)
+        .filter(|(_, distance)| *distance <= town::TOWN_AUTHORITY_RADIUS)
+        .and_then(|(index, _)| state.towns.get(index).map(|town| town.id));
+    let cargo_source = cargo_source_for_monitor(state, cargo, source);
     let radius = station::station_catchment_radius(station);
     let mut candidates: Vec<(usize, u32, u16)> = state
         .industries
@@ -375,6 +380,14 @@ fn deliver_goods_to_industries(
         }
         state.industries[industry_idx].record_accepted_cargo(cargo, accepted, accepted_date);
         state.industries[industry_idx].was_cargo_delivered = true;
+        state.runtime.cargo_monitor.add_cargo_delivery(
+            cargo,
+            company,
+            accepted,
+            cargo_source,
+            station_town,
+            Some(state.industries[industry_idx].instance_id),
+        );
         // Keep one destination per station unload even when several packets of
         // the same consist carry this cargo; OpenTTD uses a set for this list.
         if !destinations.contains(&industry_idx) {
@@ -385,6 +398,45 @@ fn deliver_goods_to_industries(
     }
 
     (accepted_total, destinations)
+}
+
+/// Resuelve el origen de un packet al identificador que usa `CargoMonitor`.
+///
+/// Las cargas de industria conservan la tesela de producción en
+/// `CargoPacket::source`. Pasajeros/correo nacen en casas; para saves con
+/// `MAP2` se usa el `TownID` persistido y, como en el resto del modelo, se cae a
+/// la ciudad más cercana cuando ese dato no está disponible.
+fn cargo_source_for_monitor(
+    state: &GameState,
+    cargo: CargoType,
+    source: TileCoord,
+) -> crate::cargo_monitor::CargoSource {
+    if let Some(industry) = state
+        .industries
+        .iter()
+        .find(|industry| industry.contains_tile(source))
+    {
+        return crate::cargo_monitor::CargoSource::Industry(industry.instance_id);
+    }
+    if !cargo.is_town_cargo() {
+        return crate::cargo_monitor::CargoSource::Unknown;
+    }
+
+    let persisted_town_id = state
+        .map
+        .get(source)
+        .filter(|tile| tile.kind == TileKind::House)
+        .map(|tile| u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8))
+        .and_then(|town_id| state.towns.iter().find(|town| town.id == town_id))
+        .map(|town| town.id);
+    persisted_town_id
+        .or_else(|| {
+            town::nearest_town_index(&state.towns, source)
+                .and_then(|(index, _)| state.towns.get(index).map(|town| town.id))
+        })
+        .map_or(crate::cargo_monitor::CargoSource::Unknown, |town_id| {
+            crate::cargo_monitor::CargoSource::Town(town_id)
+        })
 }
 
 /// Consume the deferred `DeliverGoodsToIndustry` set after vehicle loading.
@@ -592,18 +644,36 @@ pub(super) fn unload_vehicles(
                     }
                 }
                 crate::cargo_packet::CargoUnloadAction::Deliver => {
-                    let (_, destinations) = deliver_goods_to_industries(
+                    let (accepted_industry, destinations) = deliver_goods_to_industries(
                         state,
                         station_idx,
                         packet.cargo,
                         u32::from(packet.count),
                         packet.source,
+                        vehicle_owner,
                     );
                     for industry_idx in destinations {
                         if !delivered_industries.contains(&industry_idx) {
                             delivered_industries.push(industry_idx);
                         }
                     }
+                    // `DeliverGoodsToIndustry` ya registró cada porción
+                    // aceptada por una industria. El remanente corresponde a
+                    // la aceptación de la estación/pueblo y debe pasar por la
+                    // segunda llamada nativa de `AddCargoDelivery`.
+                    let accepted_industry = accepted_industry.min(u32::from(packet.count));
+                    let station_town = town::nearest_town_index(&state.towns, station_pos)
+                        .filter(|(_, distance)| *distance <= town::TOWN_AUTHORITY_RADIUS)
+                        .and_then(|(index, _)| state.towns.get(index).map(|town| town.id));
+                    let cargo_source = cargo_source_for_monitor(state, packet.cargo, packet.source);
+                    state.runtime.cargo_monitor.add_cargo_delivery(
+                        packet.cargo,
+                        vehicle_owner,
+                        u32::from(packet.count).saturating_sub(accepted_industry),
+                        cargo_source,
+                        station_town,
+                        None,
+                    );
                     delivered_units = delivered_units.saturating_add(u32::from(packet.count));
                     let gross_part = part;
                     let mut deliverer_part = part;
@@ -1542,6 +1612,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn direct_delivery_skips_source_and_defers_industry_production() {
         let mut state = GameState::new(16, 16);
         let station_pos = TileCoord::new(5, 5);
@@ -1549,6 +1620,11 @@ mod tests {
             station_pos,
             crate::station::StopKind::TruckStop,
         ));
+        state.towns.push(crate::Town {
+            id: 7,
+            pos: station_pos,
+            ..crate::Town::default()
+        });
         let source_pos = TileCoord::new(5, 4);
         let destination_pos = TileCoord::new(5, 6);
         state.industries.push(
@@ -1572,8 +1648,42 @@ mod tests {
             .with_instance_id(4),
         );
 
-        let (accepted, destinations) =
-            deliver_goods_to_industries(&mut state, 0, CargoType::Livestock, 12, source_pos);
+        let source_monitor = crate::encode_cargo_industry_monitor(
+            crate::company::CompanyId::PLAYER,
+            CargoType::Livestock,
+            3,
+        );
+        let destination_monitor = crate::encode_cargo_industry_monitor(
+            crate::company::CompanyId::PLAYER,
+            CargoType::Livestock,
+            4,
+        );
+        let town_monitor = crate::encode_cargo_town_monitor(
+            crate::company::CompanyId::PLAYER,
+            CargoType::Livestock,
+            7,
+        );
+        let _ = state
+            .runtime
+            .cargo_monitor
+            .get_pickup_amount(source_monitor, true);
+        let _ = state
+            .runtime
+            .cargo_monitor
+            .get_delivery_amount(destination_monitor, true);
+        let _ = state
+            .runtime
+            .cargo_monitor
+            .get_delivery_amount(town_monitor, true);
+
+        let (accepted, destinations) = deliver_goods_to_industries(
+            &mut state,
+            0,
+            CargoType::Livestock,
+            12,
+            source_pos,
+            crate::company::CompanyId::PLAYER,
+        );
         assert_eq!(accepted, 12);
         assert_eq!(destinations, vec![1]);
         assert_eq!(
@@ -1587,6 +1697,27 @@ mod tests {
         assert_eq!(
             state.industries[1].last_accepted_date(CargoType::Livestock),
             crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR
+        );
+        assert_eq!(
+            state
+                .runtime
+                .cargo_monitor
+                .get_pickup_amount(source_monitor, true),
+            12
+        );
+        assert_eq!(
+            state
+                .runtime
+                .cargo_monitor
+                .get_delivery_amount(destination_monitor, true),
+            12
+        );
+        assert_eq!(
+            state
+                .runtime
+                .cargo_monitor
+                .get_delivery_amount(town_monitor, true),
+            12
         );
         assert!(state.industries[1].was_cargo_delivered);
         assert_eq!(state.industries[1].stock, 0);

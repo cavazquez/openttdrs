@@ -58,6 +58,11 @@ pub struct SimulationRuntime {
     /// consume justo después de `load_vehicles`.
     pub pending_industry_deliveries: Vec<usize>,
 
+    /// Monitores efímeros de `CargoMonitor` (`_cargo_pickups`/
+    /// `_cargo_deliveries`). No se persisten: los `GameScripts` vuelven a
+    /// activarlos después de cargar una partida.
+    pub cargo_monitor: crate::cargo_monitor::CargoMonitor,
+
     /// Teselas de paisaje (nieve estacional, etc.) mutadas este tick → remap cliente.
     pub landscape_tile_dirty: Vec<TileCoord>,
 
@@ -225,6 +230,7 @@ impl SimulationRuntime {
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
             pending_industry_deliveries: Vec::new(),
+            cargo_monitor: crate::cargo_monitor::CargoMonitor::default(),
             landscape_tile_dirty: Vec::new(),
             tile_loop_visited: Vec::new(),
             active_house_lifts: HashSet::new(),

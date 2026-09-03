@@ -18,6 +18,7 @@ pub mod badge;
 pub mod bridge_spec;
 pub mod canal_spec;
 pub mod cargo;
+pub mod cargo_monitor;
 pub mod cargo_packet;
 pub mod cargo_spec;
 pub mod cargodist;
@@ -169,6 +170,11 @@ pub use canal_spec::{
 pub use cargo::{
     ALL_CARGO_TYPES, ARCTIC_CARGO_TYPES, CargoStock, CargoType, NUM_ORIGINAL_CARGO, OrderSettings,
     TEMPERATE_CARGO_TYPES, TOYLAND_CARGO_TYPES, TROPIC_CARGO_TYPES, VANILLA_CARGO_COUNT,
+};
+pub use cargo_monitor::{
+    CargoMonitor, CargoMonitorId, CargoSource, decode_monitor_cargo, decode_monitor_company,
+    decode_monitor_industry, decode_monitor_town, encode_cargo_industry_monitor,
+    encode_cargo_town_monitor, monitor_monitors_industry,
 };
 pub use cargo_packet::{
     CargoPacket, CargoUnloadAction, StationCargoList, VehicleCargoList, choose_cargo_action,

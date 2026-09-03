@@ -704,6 +704,79 @@ fn default_interactive_random() -> crate::linkgraph_parity::Randomizer {
 }
 
 impl GameState {
+    /// Activa/consulta el acumulado de entregas de un pueblo.
+    ///
+    /// La lectura reinicia el contador; con `keep_monitoring = true` la clave
+    /// queda activa para futuras entregas, igual que `ScriptCargoMonitor`.
+    pub fn get_town_delivery_amount(
+        &mut self,
+        company: crate::company::CompanyId,
+        cargo: crate::cargo::CargoType,
+        town_id: u32,
+        keep_monitoring: bool,
+    ) -> i32 {
+        let monitor = crate::cargo_monitor::encode_cargo_town_monitor(company, cargo, town_id);
+        self.runtime
+            .cargo_monitor
+            .get_delivery_amount(monitor, keep_monitoring)
+    }
+
+    /// Activa/consulta el acumulado de entregas de una industria.
+    pub fn get_industry_delivery_amount(
+        &mut self,
+        company: crate::company::CompanyId,
+        cargo: crate::cargo::CargoType,
+        industry_id: u16,
+        keep_monitoring: bool,
+    ) -> i32 {
+        let monitor =
+            crate::cargo_monitor::encode_cargo_industry_monitor(company, cargo, industry_id);
+        self.runtime
+            .cargo_monitor
+            .get_delivery_amount(monitor, keep_monitoring)
+    }
+
+    /// Activa/consulta el acumulado de recogidas de un pueblo.
+    pub fn get_town_pickup_amount(
+        &mut self,
+        company: crate::company::CompanyId,
+        cargo: crate::cargo::CargoType,
+        town_id: u32,
+        keep_monitoring: bool,
+    ) -> i32 {
+        let monitor = crate::cargo_monitor::encode_cargo_town_monitor(company, cargo, town_id);
+        self.runtime
+            .cargo_monitor
+            .get_pickup_amount(monitor, keep_monitoring)
+    }
+
+    /// Activa/consulta el acumulado de recogidas de una industria.
+    pub fn get_industry_pickup_amount(
+        &mut self,
+        company: crate::company::CompanyId,
+        cargo: crate::cargo::CargoType,
+        industry_id: u16,
+        keep_monitoring: bool,
+    ) -> i32 {
+        let monitor =
+            crate::cargo_monitor::encode_cargo_industry_monitor(company, cargo, industry_id);
+        self.runtime
+            .cargo_monitor
+            .get_pickup_amount(monitor, keep_monitoring)
+    }
+
+    /// Borra monitores de recogida de una compañía o de todas (`None`).
+    pub fn clear_cargo_pickup_monitoring(&mut self, company: Option<crate::company::CompanyId>) {
+        self.runtime.cargo_monitor.clear_pickup_monitoring(company);
+    }
+
+    /// Borra monitores de entrega de una compañía o de todas (`None`).
+    pub fn clear_cargo_delivery_monitoring(&mut self, company: Option<crate::company::CompanyId>) {
+        self.runtime
+            .cargo_monitor
+            .clear_delivery_monitoring(company);
+    }
+
     #[must_use]
     #[allow(clippy::too_many_lines)]
     pub fn new(map_width: u32, map_height: u32) -> Self {

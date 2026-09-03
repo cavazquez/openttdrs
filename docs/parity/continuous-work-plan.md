@@ -25,9 +25,10 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-03
 
-Base funcional publicada en `origin/main`: **`56aa7858`** (`sav: rehydrate
-legacy farm fields afterload`). Este handoff documental se publica después de
-las etapas de rechazo temporal (`65682a42`), cargos dinámicos (`389109c1`) y
+Base funcional publicada en `origin/main`: **`9f2ecc31`** (`newgrf: preserve
+legacy empty industry cargo slots`). Este handoff documental incluye el
+afterload SAV de campos legacy (`56aa7858`) y se publica después de las etapas
+de rechazo temporal (`65682a42`), cargos dinámicos (`389109c1`) y
 `PlantOnBuild` manual (`628d1fb9`); es el punto de reanudación y el código
 publicado coincide con este árbol.
 
@@ -35,13 +36,13 @@ publicado coincide con este árbol.
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. Layouts `TileSeq`, parents/children, catenaria, PBS y varias capas ya tienen cobertura focal; foundations de rail pendiente/túnel, foundations/rotaciones de aeropuertos, sprite-stack/callbacks avanzados de vehículos y el orden completo de framebuffer siguen sin equivalencia global. | Medir la primera familia visible restante con `world-draw` y, si aplica, capturas en `0,12×`, `0,25×`, `0,50×` y `1×`. |
 | [#328](https://github.com/cavazquez/openttdrs/issues/328) | El round-trip preserva las tablas y campos escalares modelados, `CITY`/`INDY`/`STNN`/`PSAC`, `OBJS`/`OBID`, grupos, órdenes y autoreplace en el subconjunto documentado. Mutaciones de strings, listas/structs anidados, columnas desconocidas, pools nativos de casas/objetos y labels/cargos no representables todavía degradan al writer canónico o quedan pendientes. CB17 de casas y CB157 de objetos pueden crear/modificar PSA de pueblo y el writer les asigna una fila `PSAC`/referencia `CITY` al exportar. | Elegir una mutación SAV reproducible de lista/struct anidado y comparar bytes OpenTTD→Rust→OpenTTD. |
-| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17/CB157 evalúan y escriben el parent real. CB25/26/27, re-randomización, `IndustryTick` y `CargoReceived` comparten contexto y PSA por huella. Shape-check `CB2F`, foundations `CB30`, autoslope manual `CB3C`, color `CB14A`, rechazo `CB3D`, cargos dinámicos `CB14B`/`CB14C`, `CargoTypesUnlimited` (hasta 16 slots, con salidas extra procesadas/transportables/exportables), efectos especiales `CB3B`, `PlantOnBuild` manual/NewGRF y afterload SAV `<SLV_32` ya tienen call sites y regresiones; la ruta legacy conserva fallback explícito. El callback de efectos usa `Chance16(1,8)`/periodo 512 ante `CALLBACK_FAILED`. Sigue faltando materializar `DeliverGoodsToIndustry`, además de slots vacíos legacy, cargos custom, reatachación económica de tipos custom ausentes, historiales por salida, GUI/variables ilimitadas, autoslope en generación automática, sonido, historiales tras mutaciones y el resto de callbacks/scope. | Medir una divergencia reproducible de entrega directa, slots vacíos legacy o tipos custom SAV no instalados; no cerrar #329 por este subconjunto. |
+| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17/CB157 evalúan y escriben el parent real. CB25/26/27, re-randomización, `IndustryTick` y `CargoReceived` comparten contexto y PSA por huella. Shape-check `CB2F`, foundations `CB30`, autoslope manual `CB3C`, color `CB14A`, rechazo `CB3D`, cargos dinámicos `CB14B`/`CB14C`, `CargoTypesUnlimited` (hasta 16 slots, con salidas extra procesadas/transportables/exportables), slots vacíos `INVALID_CARGO` del modo legacy, efectos especiales `CB3B`, `PlantOnBuild` manual/NewGRF y afterload SAV `<SLV_32` ya tienen call sites y regresiones; la ruta legacy conserva fallback explícito. El callback de efectos usa `Chance16(1,8)`/periodo 512 ante `CALLBACK_FAILED`. Sigue faltando materializar `DeliverGoodsToIndustry`, cargos custom, reatachación económica de tipos custom ausentes, historiales por salida, GUI/variables ilimitadas, autoslope en generación automática, sonido, historiales tras mutaciones y el resto de callbacks/scope. | Medir una divergencia reproducible de entrega directa, tipos custom SAV no instalados o historiales por salida; no cerrar #329 por este subconjunto. |
 | [#330](https://github.com/cavazquez/openttdrs/issues/330) | Economía básica y movimiento funcionan, pero los oráculos externos todavía son acotados. Tráfico/colisiones/dirección vial exhaustivos, PBS/YAPF/presignals/consist ferroviarios y navegación aire/mar no tienen aún cobertura diferencial completa. | Tomar el primer fixture externo reproducible de movimiento y registrar tick, entidad y estado nativo divergente. |
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
 
-Última validación de `56aa7858`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **1.977** tests de core y **1.064** de cliente (2 ignorados); la matriz
+Última validación de `9f2ecc31`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **1.978** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.
@@ -194,6 +195,16 @@ definiciones custom se difiere hasta aplicar el catálogo NewGRF; si no está
 instalado se mantiene el fallback vanilla y queda pendiente la reatachación
 económica completa. El issue #329 continúa abierto por slots vacíos legacy,
 cargos custom, historiales/GUI, escalas/sonidos y goldens.
+
+Actualización #329-INDUSTRY-CARGO-TYPES-046 (2026-09-03, commit `9f2ecc31`):
+CB14B/CB14C conserva la posición de cada slot legacy: `INVALID_CARGO` deja
+`None` y permite consultar los slots siguientes, mientras los vectores
+económicos compactan sólo cargos válidos y preservan el índice estático para
+multiplicadores. El parser y el catálogo mantienen alineados los índices
+`0xFF`; `CargoTypesUnlimited` conserva la terminación estricta ante valores
+inválidos. La regresión cubre un hueco en el slot 0 seguido por COAL en el slot
+1 y verifica el multiplicador 128. #329 sigue abierto por cargos custom,
+rehidratación runtime SAV, historiales/GUI, escalas/sonidos y goldens.
 
 ## Orden recomendado
 

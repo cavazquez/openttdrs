@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `56aa7858`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `9f2ecc31`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -205,6 +205,15 @@ la resolución se difiere y sólo se usa fallback vanilla; la reatachación
 económica completa de tipos custom ausentes sigue pendiente. #329 permanece
 abierto por slots vacíos legacy, cargos custom, historiales/GUI, escalas/sonidos
 y goldens integrales.
+
+Actualización #329-INDUSTRY-CARGO-TYPES-046 (2026-09-03, `9f2ecc31`):
+CB14B/CB14C conserva los huecos `INVALID_CARGO` del modo legacy sin desplazar
+los slots posteriores. Los vectores visibles mantienen `None` por posición,
+los cargos válidos se compactan sólo para la economía y conservan su
+`source_index` para tasas/multiplicadores; el parser ya no filtra `0xFF` y
+`CargoTypesUnlimited` termina ante un inválido como OpenTTD. #329 permanece
+abierto por cargos custom, rehidratación runtime SAV, historiales/GUI,
+escalas/sonidos y goldens.
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

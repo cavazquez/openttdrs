@@ -42,13 +42,15 @@ pub use industry_construction::{
     advance_industry_construction_tile_loop_at, industry_construction_counter,
     industry_construction_stage, is_industry_completed, make_industry_tile_bigger,
     step_industry_tiles, step_industry_tiles_with_seed, step_industry_tiles_with_seed_and_catalog,
+    step_industry_tiles_with_seed_and_catalog_and_world,
 };
 pub use industry_link::{
     IndustryTileLink, industry_instance_id, industry_tile_link, industry_tiles_mergeable,
 };
 pub use industry_random::{
     INDUSTRY_RANDOM_TRIGGERS_MASK, IndustryRandomTrigger, advance_industry_tile_randomisation,
-    advance_industry_tile_randomisation_from_visits_with_catalog, industry_random_bits,
+    advance_industry_tile_randomisation_from_visits_with_catalog,
+    advance_industry_tile_randomisation_from_visits_with_catalog_and_world, industry_random_bits,
     industry_random_triggers, industry_tile_rng, init_industry_tile_random,
     set_industry_random_bits, set_industry_random_triggers, trigger_industry_randomisation_at,
     trigger_industry_tile_randomisation,

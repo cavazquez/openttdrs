@@ -6,10 +6,11 @@
 //! `ResolveRerandomisation`; la API sin catálogo conserva un fallback
 //! determinista para herramientas legacy.
 
-use super::{Map, Tile, TileCoord, TileKind, industry_gfx};
+use super::{Map, Tile, TileCoord, TileKind, industry_gfx, industry_instance_id};
 use crate::industry::Industry;
 use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::{IndustryTileSpecDef, industry_tile_spec_def};
+use crate::newgrf_callback::writeback_industry_tile_parent_persistent_registers;
 use crate::town::Town;
 use crate::world_gen::Climate;
 
@@ -161,6 +162,80 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog(
     industry_catalog: &[IndustrySpecDef],
     climate: Climate,
 ) -> Vec<TileCoord> {
+    advance_industry_tile_randomisation_from_visits_with_catalog_inner(
+        map,
+        tick,
+        world_seed,
+        visits,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        |_, _, _, _| {},
+    )
+}
+
+/// Variante con industrias mutables: la evaluación de `ResolveRerandomisation`
+/// puede escribir `\\2psto` en el scope parent de la industria propietaria.
+///
+/// El snapshot evita aliasar el slice mutable mientras se consultan variables
+/// globales. El PSA vivo se inyecta antes de cada grupo y se copia de vuelta
+/// después, por lo que varias teselas de la misma huella comparten el storage
+/// como en `IndustriesScopeResolver::StorePSA`.
+#[allow(clippy::too_many_arguments)]
+pub fn advance_industry_tile_randomisation_from_visits_with_catalog_and_world(
+    map: &mut Map,
+    tick: u64,
+    world_seed: u64,
+    visits: &[(TileCoord, Tile)],
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+) -> Vec<TileCoord> {
+    let snapshot = industries.to_vec();
+    advance_industry_tile_randomisation_from_visits_with_catalog_inner(
+        map,
+        tick,
+        world_seed,
+        visits,
+        &snapshot,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        |map, coord, ctx, write_back| {
+            if let Some(index) = industry_index_for_tile(map, &snapshot, coord) {
+                if write_back {
+                    writeback_industry_tile_parent_persistent_registers(
+                        &mut industries[index],
+                        ctx,
+                    );
+                } else {
+                    ctx.parent_persistent_registers
+                        .clone_from(&industries[index].newgrf_persistent_regs);
+                    ctx.parent_random_bits = u32::from(industries[index].newgrf_random);
+                }
+            }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn advance_industry_tile_randomisation_from_visits_with_catalog_inner(
+    map: &mut Map,
+    tick: u64,
+    world_seed: u64,
+    visits: &[(TileCoord, Tile)],
+    industries: &[Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+    mut sync_ctx: impl FnMut(&Map, TileCoord, &mut crate::newgrf_sprites::Action2EvalCtx, bool),
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for &(coord, snapshot) in visits {
         if snapshot.kind != TileKind::Industry {
@@ -201,6 +276,7 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog(
             Some(spec),
             &[],
         );
+        sync_ctx(&*map, coord, &mut ctx, false);
 
         let Some(runtime) = spec.newgrf_runtime.as_ref() else {
             // A static NewGRF sprite group has no rerandomisation graph. The
@@ -215,6 +291,7 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog(
             &mut ctx,
             waiting,
         );
+        sync_ctx(&*map, coord, &mut ctx, true);
         let Some(mut updated) = map.get(coord) else {
             continue;
         };
@@ -239,6 +316,25 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog(
     dirty.sort_by_key(|c| (c.x, c.y));
     dirty.dedup();
     dirty
+}
+
+fn industry_index_for_tile(map: &Map, industries: &[Industry], coord: TileCoord) -> Option<usize> {
+    let tile = map.get(coord)?;
+    if tile.kind != TileKind::Industry {
+        return None;
+    }
+    let instance_id = industry_instance_id(&tile);
+    industries
+        .iter()
+        .position(|industry| {
+            industry.contains_tile(coord)
+                && (instance_id == 0 || industry.instance_id == instance_id)
+        })
+        .or_else(|| {
+            industries
+                .iter()
+                .position(|industry| industry.instance_id == instance_id)
+        })
 }
 
 /// Tile loop: `IndustryRandomTrigger::TileLoop` en la franja (`tick % 256`).
@@ -281,7 +377,10 @@ pub fn trigger_industry_randomisation_at(
 mod tests {
     use super::*;
     use crate::map::{TileKind, set_industry_gfx};
-    use crate::newgrf_sprites::{Action2RandomEntry, TrainSpriteAssign, TrainSpriteGraphics};
+    use crate::newgrf_sprites::{
+        Action2RandomEntry, Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm,
+        TrainSpriteAssign, TrainSpriteGraphics,
+    };
 
     fn newgrf_spec(
         gfx: u16,
@@ -309,6 +408,46 @@ mod tests {
             newgrf_views: views,
             newgrf_runtime: runtime.map(Box::new),
         }
+    }
+
+    fn parent_psto_runtime() -> TrainSpriteGraphics {
+        let literal = |value: u8| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                shift: 0,
+                and_mask: u32::from(value),
+                ..Action2VarAdjust::default()
+            },
+        };
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: literal(42),
+                ops: vec![
+                    Action2VarOp {
+                        operator: 0x10,
+                        rhs: literal(5),
+                    },
+                    Action2VarOp {
+                        operator: 0x0F,
+                        rhs: literal(0),
+                    },
+                ],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        let entry = gfx.action2_var.get_mut(&2).unwrap();
+        entry.first.adjust.shift |= 0x80;
+        entry.ops[0].rhs.adjust.shift |= 0x80;
+        entry.ops[1].rhs.adjust.shift |= 0x80;
+        gfx
     }
 
     fn white_sprite() -> crate::newgrf_sprites::DecodedSprite {
@@ -339,6 +478,34 @@ mod tests {
         };
         set_industry_gfx(&mut t, gfx);
         t
+    }
+
+    #[test]
+    fn randomisation_writes_live_industry_parent_psa() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut tile = industry_tile(175);
+        tile.m3 = 0xA5;
+        map.set_tile(coord, tile).unwrap();
+        let spec = newgrf_spec(175, vec![white_sprite()], Some(parent_psto_runtime()));
+        let visits = vec![(coord, tile)];
+        let mut industries =
+            vec![Industry::new(coord, crate::industry::IndustryKind::CoalMine).with_instance_id(1)];
+
+        let dirty = advance_industry_tile_randomisation_from_visits_with_catalog_and_world(
+            &mut map,
+            1,
+            42,
+            &visits,
+            &mut industries,
+            &[],
+            std::slice::from_ref(&spec),
+            &[],
+            Climate::Temperate,
+        );
+
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(industries[0].newgrf_persistent_regs.get(&5), Some(&42));
     }
 
     #[test]

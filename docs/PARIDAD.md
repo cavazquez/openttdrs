@@ -34,7 +34,8 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-02 · `main` (`b7429397`, ver handoff de issues).
+**Corte canónico: 2026-09-02 · `main` (base funcional `b7429397`, handoff
+publicado en `f4274e14`).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el

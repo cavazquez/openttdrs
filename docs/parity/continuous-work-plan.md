@@ -25,9 +25,10 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-02
 
-Estado publicado en `origin/main`: **`b7429397`** (`town: feed native cargo
-histories into runtime`). Este es el punto de reanudación; los cambios de esta
-etapa están en el mismo árbol y se validaron contra las regresiones existentes.
+Base funcional publicada en `origin/main`: **`b7429397`** (`town: feed native
+cargo histories into runtime`); este handoff queda publicado en el commit
+`f4274e14`. Es el punto de reanudación: los cambios de la etapa funcional están
+en el mismo árbol y se validaron contra las regresiones existentes.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|

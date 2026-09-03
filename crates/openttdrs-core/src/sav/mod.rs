@@ -98,6 +98,7 @@ pub use entities::{
     SavStation, SavStationCargo, SavVehicle, SavVehicleKind, format_generated_station_name,
     resolve_sav_station_name,
 };
+pub(crate) use import::apply_legacy_sav_afterload;
 pub use import::{
     hydrate_industries_from_map_tiles, industry_group_from_gfx, industry_kind_from_gfx,
     industry_kind_from_ottd_type, industry_random_colour_from_instance, industry_spec_from_gfx,
@@ -1371,6 +1372,19 @@ impl GameState {
             &sav.industries,
             &sav.persistent_storages,
         );
+        // `AfterLoadGame()` de OpenTTD reconstruye los campos de granja de
+        // saves anteriores a `SLV_32`. Se difiere cuando el save lleva GRF
+        // custom para que `IndustryBehaviour::PlantOnBuild` pueda resolverse
+        // después de cargar su catálogo; una partida vanilla se puede cerrar
+        // aquí mismo sin depender del cliente.
+        import::queue_legacy_sav_afterload(&mut state, sav.version, &sav.industries);
+        if state
+            .newgrf_stack
+            .iter()
+            .all(|entry| !entry.enabled || entry.is_static)
+        {
+            import::apply_legacy_sav_afterload(&mut state);
+        }
         state.link_graph = sav.link_graph;
         if !matches!(
             state.cargo_dist.distribution,
@@ -2048,6 +2062,92 @@ mod tests {
         let state = GameState::from_sav_game(sav);
         assert!(state.construction.signals_on_right());
         assert_eq!(state.snow_line_height, 2);
+    }
+
+    #[test]
+    fn legacy_sav_afterload_replants_vanilla_farm_fields() {
+        let origin = TileCoord::new(32, 32);
+        let orphan_field = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(64, 64, 0);
+        let mut industry_tile = map.get(origin).expect("industry tile");
+        industry_tile.kind = TileKind::Industry;
+        industry_tile.mapt = 0x80;
+        industry_tile.m5 = 33;
+        industry_tile.m2 = 7;
+        map.set_tile(origin, industry_tile).expect("set industry");
+        let mut field = map.get(orphan_field).expect("legacy field");
+        field.mapt = 0x02;
+        field.m5 = crate::world_gen::clear_ground_m5(crate::world_gen::CLEAR_GROUND_FIELDS, 3);
+        field.m1 = 7;
+        field.m2 = 7;
+        field.m3 = 4;
+        map.set_tile(orphan_field, field).expect("set legacy field");
+
+        let mut sav = empty_sav(31, map);
+        sav.random_state = Some([0x1234_5678, 0x9ABC_DEF0]);
+        sav.industries.push(SavIndustry {
+            industry_id: 7,
+            pos: origin,
+            width: 1,
+            height: 1,
+            industry_type: 9,
+            random_colour: 0,
+            counter: 0,
+            selected_layout: 0,
+            random: 0,
+            last_prod_year: 0,
+            was_cargo_delivered: false,
+            control_flags: 0,
+            founder: None,
+            construction_date: 0,
+            construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,
+            prod_level: crate::industry::PRODLEVEL_DEFAULT,
+            valid_history: 0,
+            persistent_storage_id: None,
+            produced: Vec::new(),
+            accepted: Vec::new(),
+        });
+
+        let state = GameState::from_sav_game(sav);
+        let cleared = state.map.get(orphan_field).expect("cleared field");
+        assert_eq!(cleared.kind, TileKind::Grass);
+        assert_eq!(cleared.mapt, 0x02);
+        assert_eq!(
+            crate::map::tree_tile_loop::clear_ground_type(cleared.m5),
+            crate::world_gen::CLEAR_GROUND_GRASS
+        );
+        assert_eq!(cleared.m1, crate::company::OWNER_NONE_M1);
+        assert_eq!(cleared.m2, 0);
+        assert!(state.map.tiles().iter().any(|tile| {
+            tile.kind == TileKind::Grass
+                && crate::map::tree_tile_loop::clear_ground_type(tile.m5)
+                    == crate::world_gen::CLEAR_GROUND_FIELDS
+                && (u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8)) == 7
+        }));
+        assert!(state.runtime.legacy_sav_afterload.is_none());
+        assert!(state.runtime.industry_tile_dirty.contains(&orphan_field));
+    }
+
+    #[test]
+    fn modern_sav_keeps_persisted_farm_fields() {
+        let field_coord = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(8, 8, 0);
+        let mut field = map.get(field_coord).expect("field");
+        field.m5 = crate::world_gen::clear_ground_m5(crate::world_gen::CLEAR_GROUND_FIELDS, 3);
+        field.m2 = 9;
+        field.m3 = 6;
+        map.set_tile(field_coord, field).expect("set field");
+        let sav = empty_sav(32, map);
+
+        let state = GameState::from_sav_game(sav);
+        let loaded = state.map.get(field_coord).expect("loaded field");
+        assert_eq!(
+            crate::map::tree_tile_loop::clear_ground_type(loaded.m5),
+            crate::world_gen::CLEAR_GROUND_FIELDS
+        );
+        assert_eq!(loaded.m2, 9);
+        assert_eq!(loaded.m3, 6);
+        assert!(state.runtime.legacy_sav_afterload.is_none());
     }
 
     #[test]

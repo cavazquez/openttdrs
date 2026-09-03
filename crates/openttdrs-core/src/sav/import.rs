@@ -7,13 +7,218 @@
 
 use std::collections::{HashSet, VecDeque};
 
+use crate::company::OWNER_NONE_M1;
+use crate::game_state::{LegacySavAfterload, LegacySavIndustry};
 use crate::industry::{INDUSTRY_STOCK_CAPACITY, PRODLEVEL_DEFAULT};
 use crate::industry_tile::get_clean_industry_gfx;
+use crate::world_gen::{CLEAR_GROUND_FIELDS, CLEAR_GROUND_GRASS, clear_ground_m5};
 use crate::{
     Climate, GameState, Industry, IndustryKind, IndustrySpec, OttdmapExtras, TileCoord, TileKind,
 };
 
 use super::entities::SavIndustry;
+
+/// Desde `SLV_32` `OpenTTD` persiste el `IndustryID` que creó cada campo.
+/// Antes de esa versión `AfterLoadGame()` los elimina y los vuelve a plantar.
+pub(crate) const LEGACY_FARMLAND_SAVE_VERSION: u16 = 32;
+
+/// Conserva la información de industria que no forma parte de `GameState` y
+/// que el hook nativo de afterload necesita antes de tener el catálogo GRF.
+pub(crate) fn queue_legacy_sav_afterload(
+    state: &mut GameState,
+    save_version: u16,
+    sav_industries: &[SavIndustry],
+) {
+    if save_version >= LEGACY_FARMLAND_SAVE_VERSION {
+        return;
+    }
+    state.runtime.legacy_sav_afterload = Some(LegacySavAfterload {
+        version: save_version,
+        industries: sav_industries
+            .iter()
+            .map(|saved| LegacySavIndustry {
+                industry_id: saved.industry_id,
+                pos: saved.pos,
+                industry_type: u16::from(saved.industry_type),
+                width: i32::from(saved.width.max(1)),
+                height: i32::from(saved.height.max(1)),
+            })
+            .collect(),
+    });
+}
+
+/// Ejecuta la parte de `AfterLoadGame()` relativa a campos de SAV antiguos.
+///
+/// Se llama inmediatamente para partidas vanilla y desde el refresco de
+/// catálogos cuando el save llevaba un GRF custom. Devuelve `true` sólo cuando
+/// consumió una pasada pendiente, evitando volver a avanzar `Random()` si el
+/// stack se refresca más de una vez.
+#[allow(clippy::too_many_lines)]
+pub(crate) fn apply_legacy_sav_afterload(state: &mut GameState) -> bool {
+    let Some(pending) = state.runtime.legacy_sav_afterload.take() else {
+        return false;
+    };
+    debug_assert!(pending.version < LEGACY_FARMLAND_SAVE_VERSION);
+
+    // `MakeClear(t, CLEAR_GRASS, 3)` resetea todos los bytes auxiliares y
+    // conserva solamente altura y el nibble de zona de MAPT.
+    let (map_w, map_h) = state.map.dimensions();
+    let mut dirty = HashSet::new();
+    for y in 0..map_h.cast_signed() {
+        for x in 0..map_w.cast_signed() {
+            let coord = TileCoord::new(x, y);
+            let Some(previous) = state.map.get(coord) else {
+                continue;
+            };
+            if previous.kind != TileKind::Grass
+                || crate::map::tree_tile_loop::clear_ground_type(previous.m5) != CLEAR_GROUND_FIELDS
+            {
+                continue;
+            }
+            let cleared = crate::map::Tile {
+                height: previous.height,
+                kind: TileKind::Grass,
+                mapt: previous.mapt & 0x0F,
+                m5: clear_ground_m5(CLEAR_GROUND_GRASS, 3),
+                m1: OWNER_NONE_M1,
+                m6: 0,
+                m8: 0,
+                m3: 0,
+                m2: 0,
+                m2_hi: 0,
+                m7: 0,
+                m3hi: 0,
+            };
+            if state.map.set_tile(coord, cleared).is_ok() {
+                dirty.insert(coord);
+            }
+        }
+    }
+
+    // Las filas legacy no siempre conservan rectángulo; en ese caso el
+    // componente de tiles importado es la mejor reconstrucción disponible.
+    let plant_plans: Vec<(TileCoord, i32, i32, u16)> = state
+        .industries
+        .iter()
+        .enumerate()
+        .filter_map(|(index, industry)| {
+            let saved = pending
+                .industries
+                .iter()
+                .find(|saved| u16::try_from(saved.industry_id).ok() == Some(industry.instance_id))
+                .or_else(|| {
+                    pending
+                        .industries
+                        .iter()
+                        .find(|saved| saved.pos == industry.pos)
+                })
+                .or_else(|| pending.industries.get(index));
+
+            let custom_def = saved
+                .and_then(|saved| {
+                    let translated = crate::industry_spec::get_translated_industry_id(
+                        saved.industry_type,
+                        &state.industry_overrides,
+                    );
+                    state
+                        .industry_spec_catalog
+                        .iter()
+                        .find(|def| def.id == translated)
+                })
+                .or_else(|| {
+                    industry.newgrf_type_id.and_then(|type_id| {
+                        state
+                            .industry_spec_catalog
+                            .iter()
+                            .find(|def| def.id == type_id)
+                    })
+                });
+            let plant_on_build = custom_def.map_or(
+                matches!(
+                    industry.spec,
+                    Some(IndustrySpec::Farm | IndustrySpec::FarmTropic)
+                ),
+                |def| {
+                    def.behaviour & crate::industry_spec::INDUSTRY_BEHAVIOUR_PLANT_ON_BUILD_MASK
+                        != 0
+                },
+            );
+            if !plant_on_build {
+                return None;
+            }
+
+            let (origin, mut width, mut height) = saved.map_or((industry.pos, 1, 1), |saved| {
+                (saved.pos, saved.width, saved.height)
+            });
+            if width <= 1 && height <= 1 {
+                let (derived_width, derived_height) = industry_tiles_dimensions(industry);
+                width = derived_width;
+                height = derived_height;
+            }
+            Some((origin, width, height, industry.instance_id))
+        })
+        .collect();
+
+    let mut rng = state.random;
+    for (origin, width, height, industry_id) in plant_plans {
+        crate::world_gen::plant_random_farm_fields_runtime(
+            state,
+            origin,
+            width,
+            height,
+            industry_id,
+            &mut rng,
+        );
+    }
+    state.random = rng;
+
+    // El cliente remapea tanto campos eliminados como los nuevos; el barrido
+    // es barato frente a la carga del SAV y cubre cercas mutadas por cada lote.
+    for y in 0..map_h.cast_signed() {
+        for x in 0..map_w.cast_signed() {
+            let coord = TileCoord::new(x, y);
+            if state.map.get(coord).is_some_and(|tile| {
+                tile.kind == TileKind::Grass
+                    && crate::map::tree_tile_loop::clear_ground_type(tile.m5) == CLEAR_GROUND_FIELDS
+            }) {
+                dirty.insert(coord);
+            }
+        }
+    }
+    state.runtime.industry_tile_dirty.extend(dirty);
+    true
+}
+
+fn industry_tiles_dimensions(industry: &Industry) -> (i32, i32) {
+    let min_x = industry
+        .tiles
+        .iter()
+        .map(|tile| tile.x)
+        .min()
+        .unwrap_or(industry.pos.x);
+    let max_x = industry
+        .tiles
+        .iter()
+        .map(|tile| tile.x)
+        .max()
+        .unwrap_or(industry.pos.x);
+    let min_y = industry
+        .tiles
+        .iter()
+        .map(|tile| tile.y)
+        .min()
+        .unwrap_or(industry.pos.y);
+    let max_y = industry
+        .tiles
+        .iter()
+        .map(|tile| tile.y)
+        .max()
+        .unwrap_or(industry.pos.y);
+    (
+        max_x.saturating_sub(min_x).saturating_add(1).max(1),
+        max_y.saturating_sub(min_y).saturating_add(1).max(1),
+    )
+}
 
 /// Mapea los tipos vanilla de `IndustryType` a nuestro modelo económico
 /// reducido. El gfx de tesela, cuando está disponible, es más específico y

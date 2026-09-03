@@ -50,6 +50,10 @@ pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     // Industry tiles antes que industries (layouts `0xFE` → gfx global).
     industry::apply_newgrf_industry_tiles_default_dirs(state);
     industry::apply_newgrf_industries_default_dirs(state);
+    // Los SAV anteriores a `SLV_32` no guardaban qué industria creó cada
+    // campo. Esperar a este punto permite resolver `PlantOnBuild` de GRF
+    // custom antes de consumir el RNG global en la pasada de afterload.
+    crate::sav::apply_legacy_sav_afterload(state);
     // Airport tiles antes que airports (layouts `0xFE` → gfx global).
     airport::apply_newgrf_airport_tiles_default_dirs(state);
     airport::apply_newgrf_airports_default_dirs(state);

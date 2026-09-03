@@ -2,6 +2,26 @@ use crate::command::Command;
 use crate::map::{Tile, TileCoord};
 use std::collections::{HashSet, VecDeque};
 
+/// Metadatos mínimos que `AfterLoadGame()` necesita para reconstruir campos
+/// de partidas SAV anteriores a `SLV_32`.
+///
+/// Es deliberadamente efímero: una vez ejecutada la pasada, el save no debe
+/// volver a considerarse legacy ni consumir otra vez el stream de `Random()`.
+#[derive(Debug, Clone)]
+pub(crate) struct LegacySavIndustry {
+    pub(crate) industry_id: u32,
+    pub(crate) pos: TileCoord,
+    pub(crate) industry_type: u16,
+    pub(crate) width: i32,
+    pub(crate) height: i32,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct LegacySavAfterload {
+    pub(crate) version: u16,
+    pub(crate) industries: Vec<LegacySavIndustry>,
+}
+
 /// Campos efímeros de la simulación (no persistidos; reconstruidos tras carga).
 ///
 /// Todos los campos aquí tienen `#[serde(skip)]` implícito por no estar en
@@ -170,6 +190,12 @@ pub struct SimulationRuntime {
     /// Cola de reproducción `NewGRF` (drenable por cliente / tests; no se persiste).
     /// El cliente puede drenar a Bevy Audio más adelante; la AC se valida en core.
     pub pending_newgrf_sounds: Vec<crate::sound_effect::PendingNewgrfSound>,
+
+    /// Pasada diferida de `AfterLoadGame()` para SAV `< SLV_32`.
+    ///
+    /// Se mantiene hasta aplicar el catálogo `NewGRF` para poder resolver
+    /// `IndustryBehaviour::PlantOnBuild` de industrias custom. No se persiste.
+    pub(crate) legacy_sav_afterload: Option<LegacySavAfterload>,
 }
 
 impl Default for SimulationRuntime {
@@ -232,6 +258,7 @@ impl SimulationRuntime {
             newgrf_diagnostics: Vec::new(),
             sound_overrides: [None; crate::sound_id::SOUND_COUNT],
             pending_newgrf_sounds: Vec::new(),
+            legacy_sav_afterload: None,
         }
     }
 

@@ -2,6 +2,7 @@ mod canonical_hash;
 mod runtime;
 
 pub use runtime::SimulationRuntime;
+pub(crate) use runtime::{LegacySavAfterload, LegacySavIndustry};
 
 use crate::industry::Industry;
 use crate::map::{Map, TileCoord};

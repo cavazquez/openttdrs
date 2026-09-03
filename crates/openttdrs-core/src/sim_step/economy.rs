@@ -363,6 +363,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
         let tiles = state.industries[i].tiles.clone();
         let pos = state.industries[i].pos;
         let footprint: Vec<TileCoord> = if tiles.is_empty() { vec![pos] } else { tiles };
+        let production_tick = state.industries[i].produces_on_tick(tick);
         if state.industries[i].requires_station_inputs() {
             let processed = if callback_on_arrival || callback_on_tick {
                 state.industries[i].produce_from_nearby_stations_with_callback(
@@ -374,6 +375,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                 state.industries[i].produce_from_nearby_stations(&mut state.stations, tick)
             };
             if processed {
+                state.industries[i].was_cargo_delivered = true;
                 if callback_on_arrival && let Some(def) = newgrf_def.as_ref() {
                     crate::newgrf_callback::apply_industry_production_callback(
                         def,
@@ -382,17 +384,22 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                         &mut state.random,
                     );
                 }
-                let dirty = crate::map::trigger_industry_randomisation_at(
+                let dirty = crate::map::trigger_industry_randomisation_at_with_catalog_and_world(
                     &mut state.map,
                     &footprint,
                     crate::map::IndustryRandomTrigger::CargoReceived,
                     state.world_seed,
                     tick,
+                    &mut state.industries,
+                    &state.towns,
+                    &state.industry_tile_spec_catalog,
+                    &state.industry_spec_catalog,
+                    state.climate,
                 );
                 state.runtime.industry_tile_dirty.extend(dirty);
             }
             if callback_on_tick
-                && state.industries[i].produces_on_tick(tick)
+                && production_tick
                 && let Some(def) = newgrf_def.as_ref()
             {
                 crate::newgrf_callback::apply_industry_production_callback(
@@ -402,30 +409,36 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                     &mut state.random,
                 );
             }
+        } else if callback_on_tick
+            && production_tick
+            && let Some(def) = newgrf_def.as_ref()
+        {
+            crate::newgrf_callback::apply_industry_production_callback(
+                def,
+                &mut state.industries[i],
+                1,
+                &mut state.random,
+            );
         } else {
-            if callback_on_tick
-                && state.industries[i].produces_on_tick(tick)
-                && let Some(def) = newgrf_def.as_ref()
-            {
-                crate::newgrf_callback::apply_industry_production_callback(
-                    def,
-                    &mut state.industries[i],
-                    1,
-                    &mut state.random,
-                );
-            } else {
-                state.industries[i].produce(tick);
-            }
-            if state.industries[i].stock > before {
-                let dirty = crate::map::trigger_industry_randomisation_at(
-                    &mut state.map,
-                    &footprint,
-                    crate::map::IndustryRandomTrigger::IndustryTick,
-                    state.world_seed,
-                    tick,
-                );
-                state.runtime.industry_tile_dirty.extend(dirty);
-            }
+            state.industries[i].produce(tick);
+        }
+        // `TriggerIndustryRandomisation(i, IndustryTick)` ocurre en cada
+        // ciclo de 256 ticks, incluso cuando la industria no logró producir
+        // por falta de insumos o su callback devolvió cero.
+        if production_tick {
+            let dirty = crate::map::trigger_industry_randomisation_at_with_catalog_and_world(
+                &mut state.map,
+                &footprint,
+                crate::map::IndustryRandomTrigger::IndustryTick,
+                state.world_seed,
+                tick,
+                &mut state.industries,
+                &state.towns,
+                &state.industry_tile_spec_catalog,
+                &state.industry_spec_catalog,
+                state.climate,
+            );
+            state.runtime.industry_tile_dirty.extend(dirty);
         }
         let produced =
             u64::from(state.industries[i].stock.saturating_sub(before)).saturating_add(u64::from(

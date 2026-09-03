@@ -734,6 +734,39 @@ impl TrainSpriteGraphics {
         })
     }
 
+    /// Variante de [`Self::rerandomisation_for_local_id_u16`] que conserva el
+    /// scope del grupo que declara la máscara de randomización.
+    ///
+    /// `OpenTTD` usa `0x80` para los bits propios de la tesela y `0x83` para los
+    /// bits del parent. El resultado histórico de
+    /// [`Self::rerandomisation_for_local_id_u16`] es deliberadamente agregado
+    /// para los callers antiguos; los resolvers que mantienen ambos scopes
+    /// deben usar esta variante para no aplicar una máscara parent sobre el
+    /// objeto hijo.
+    #[must_use]
+    pub fn rerandomisation_for_local_id_u16_scoped(
+        &self,
+        local_id: u16,
+        ctx: &mut Action2EvalCtx,
+        waiting_triggers: u8,
+    ) -> (u32, u32, u8) {
+        let start = self
+            .extended_assigns
+            .iter()
+            .find(|(id, _)| *id == local_id)
+            .map(|(_, set_id)| *set_id)
+            .or_else(|| {
+                self.assigns
+                    .iter()
+                    .find(|assign| u16::from(assign.local_id) == local_id)
+                    .map(|assign| assign.set_id)
+            })
+            .or_else(|| (!self.sets.is_empty()).then_some(0));
+        start.map_or((0, 0, 0), |set_id| {
+            self.rerandomisation_for_action2_scoped(set_id, ctx, waiting_triggers, 0)
+        })
+    }
+
     fn rerandomisation_for_action2(
         &self,
         set_id: u16,
@@ -774,6 +807,57 @@ impl TrainSpriteGraphics {
             }
         }
         (0, 0)
+    }
+
+    fn rerandomisation_for_action2_scoped(
+        &self,
+        set_id: u16,
+        ctx: &mut Action2EvalCtx,
+        waiting_triggers: u8,
+        depth: u8,
+    ) -> (u32, u32, u8) {
+        if depth >= 8 {
+            return (0, 0, 0);
+        }
+        let a2 = u8::try_from(set_id).unwrap_or(u8::MAX);
+        if let Some(random) = self.action2_random.get(&a2) {
+            let (mut self_reseed, mut parent_reseed, mut used) = random
+                .matched_rerandomisation_triggers(waiting_triggers)
+                .map_or((0, 0, 0), |matched| {
+                    let mask = random.rerandomisation_mask();
+                    if random.typ == 0x83 {
+                        (0, mask, matched)
+                    } else {
+                        (mask, 0, matched)
+                    }
+                });
+            let next = eval_action2_random(random, ctx);
+            if next & 0x8000 == 0 {
+                let (child_self, child_parent, child_used) = self
+                    .rerandomisation_for_action2_scoped(
+                        next,
+                        ctx,
+                        waiting_triggers,
+                        depth.saturating_add(1),
+                    );
+                self_reseed |= child_self;
+                parent_reseed |= child_parent;
+                used |= child_used;
+            }
+            return (self_reseed, parent_reseed, used);
+        }
+        if let Some(var) = self.action2_var.get(&a2).cloned() {
+            let next = eval_action2_var(self, &var, ctx, depth);
+            if next & 0x8000 == 0 {
+                return self.rerandomisation_for_action2_scoped(
+                    next,
+                    ctx,
+                    waiting_triggers,
+                    depth.saturating_add(1),
+                );
+            }
+        }
+        (0, 0, 0)
     }
 
     /// Todas las vistas del set asignado al id local (ctx por defecto).

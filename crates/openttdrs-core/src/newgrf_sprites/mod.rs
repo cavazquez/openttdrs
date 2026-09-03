@@ -892,6 +892,30 @@ mod tests {
     }
 
     #[test]
+    fn scoped_rerandomisation_separates_parent_random_mask() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 1,
+        });
+        gfx.action2_random.insert(
+            1,
+            Action2RandomEntry {
+                typ: 0x83,
+                consist_count: 0,
+                triggers: 1 << 1,
+                randbit: 4,
+                sets: vec![2, 3],
+            },
+        );
+        let (self_mask, parent_mask, used) =
+            gfx.rerandomisation_for_local_id_u16_scoped(0, &mut Action2EvalCtx::default(), 1 << 1);
+        assert_eq!(self_mask, 0);
+        assert_eq!(parent_mask, 1 << 4);
+        assert_eq!(used, 1 << 1);
+    }
+
+    #[test]
     fn needs_runtime_resolve_for_any_variational() {
         let mut gfx = TrainSpriteGraphics::default();
         assert!(!gfx.needs_runtime_resolve());

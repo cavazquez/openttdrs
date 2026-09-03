@@ -75,6 +75,11 @@ pub fn industry_tile_rng(world_seed: u64, tick: u64, c: TileCoord, salt: u64) ->
     u8::try_from(x & 0xFF).unwrap_or(0)
 }
 
+fn industry_random_word(world_seed: u64, tick: u64, c: TileCoord, salt: u64) -> u16 {
+    u16::from(industry_tile_rng(world_seed, tick, c, salt))
+        | (u16::from(industry_tile_rng(world_seed, tick, c, salt ^ 0xA5A5_5A5A)) << 8)
+}
+
 /// Inicializa `m3` / triggers como `MakeIndustry` (triggers vacíos).
 pub fn init_industry_tile_random(tile: &mut Tile, random_bits: u8) {
     set_industry_random_bits(tile, random_bits);
@@ -172,7 +177,9 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog(
         tile_spec_catalog,
         industry_catalog,
         climate,
+        IndustryRandomTrigger::TileLoop,
         |_, _, _, _| {},
+        |_, _, _| {},
     )
 }
 
@@ -195,8 +202,70 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog_and_world(
     industry_catalog: &[IndustrySpecDef],
     climate: Climate,
 ) -> Vec<TileCoord> {
+    trigger_industry_randomisation_from_visits_with_catalog_and_world(
+        map,
+        tick,
+        world_seed,
+        visits,
+        IndustryRandomTrigger::TileLoop,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+    )
+}
+
+/// Dispara un trigger NewGRF sobre un conjunto de teselas y conserva el
+/// contexto parent de las industrias vivas. El `IndustryID`/footprint se
+/// resuelve por `m2` antes de aplicar cualquier reseed parent.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_industry_randomisation_at_with_catalog_and_world(
+    map: &mut Map,
+    tiles: &[TileCoord],
+    trigger: IndustryRandomTrigger,
+    world_seed: u64,
+    tick: u64,
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+) -> Vec<TileCoord> {
+    let visits: Vec<_> = tiles
+        .iter()
+        .filter_map(|&coord| map.get(coord).map(|tile| (coord, tile)))
+        .collect();
+    trigger_industry_randomisation_from_visits_with_catalog_and_world(
+        map,
+        tick,
+        world_seed,
+        &visits,
+        trigger,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn trigger_industry_randomisation_from_visits_with_catalog_and_world(
+    map: &mut Map,
+    tick: u64,
+    world_seed: u64,
+    visits: &[(TileCoord, Tile)],
+    trigger: IndustryRandomTrigger,
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+) -> Vec<TileCoord> {
     let snapshot = industries.to_vec();
-    advance_industry_tile_randomisation_from_visits_with_catalog_inner(
+    let mut parent_reseed_masks = std::collections::HashMap::<usize, u32>::new();
+    let dirty = advance_industry_tile_randomisation_from_visits_with_catalog_inner(
         map,
         tick,
         world_seed,
@@ -206,6 +275,7 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog_and_world(
         tile_spec_catalog,
         industry_catalog,
         climate,
+        trigger,
         |map, coord, ctx, write_back| {
             if let Some(index) = industry_index_for_tile(map, &snapshot, coord) {
                 if write_back {
@@ -220,7 +290,33 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog_and_world(
                 }
             }
         },
-    )
+        |map, coord, mask| {
+            if let Some(index) = industry_index_for_tile(map, &snapshot, coord) {
+                parent_reseed_masks
+                    .entry(index)
+                    .and_modify(|current| *current |= mask)
+                    .or_insert(mask);
+            }
+        },
+    );
+    for (index, mask) in parent_reseed_masks {
+        if mask == 0 {
+            continue;
+        }
+        let coord = snapshot[index].pos;
+        let random = industry_random_word(
+            world_seed,
+            tick,
+            coord,
+            u64::from(trigger.bit())
+                | (u64::from(mask) << 8)
+                | u64::from(snapshot[index].instance_id),
+        );
+        let before = industries[index].newgrf_random;
+        let reseed_mask = u16::try_from(mask & u32::from(u16::MAX)).unwrap_or(u16::MAX);
+        industries[index].newgrf_random = (before & !reseed_mask) | (random & reseed_mask);
+    }
+    dirty
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -234,7 +330,9 @@ fn advance_industry_tile_randomisation_from_visits_with_catalog_inner(
     tile_spec_catalog: &[IndustryTileSpecDef],
     industry_catalog: &[IndustrySpecDef],
     climate: Climate,
+    trigger: IndustryRandomTrigger,
     mut sync_ctx: impl FnMut(&Map, TileCoord, &mut crate::newgrf_sprites::Action2EvalCtx, bool),
+    mut sync_parent_reseed: impl FnMut(&Map, TileCoord, u32),
 ) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for &(coord, snapshot) in visits {
@@ -256,7 +354,7 @@ fn advance_industry_tile_randomisation_from_visits_with_catalog_inner(
         }
 
         let before = live;
-        let waiting = industry_random_triggers(&live) | IndustryRandomTrigger::TileLoop.bit();
+        let waiting = industry_random_triggers(&live) | trigger.bit();
         set_industry_random_triggers(&mut live, waiting);
 
         // The scope resolver reads the live MAP1/MAP2 fields. Publish the
@@ -286,30 +384,30 @@ fn advance_industry_tile_randomisation_from_visits_with_catalog_inner(
             }
             continue;
         };
-        let (reseed, used) = runtime.rerandomisation_for_local_id_u16(
+        let (reseed_self, reseed_parent, used) = runtime.rerandomisation_for_local_id_u16_scoped(
             u16::from(spec.newgrf_local_id),
             &mut ctx,
             waiting,
         );
         sync_ctx(&*map, coord, &mut ctx, true);
+        sync_parent_reseed(&*map, coord, reseed_parent);
         let Some(mut updated) = map.get(coord) else {
             continue;
         };
         set_industry_random_triggers(&mut updated, waiting & !used);
-        let reseed_mask = u8::try_from(reseed & 0xFF).unwrap_or(0);
+        let reseed_mask = u8::try_from(reseed_self & 0xFF).unwrap_or(0);
         if reseed_mask != 0 {
             let random = industry_tile_rng(
                 world_seed,
                 tick,
                 coord,
-                u64::from(IndustryRandomTrigger::TileLoop.bit()) | (u64::from(waiting) << 8),
+                u64::from(trigger.bit()) | (u64::from(waiting) << 8),
             );
             updated.m3 = (updated.m3 & !reseed_mask) | (random & reseed_mask);
         }
-        // `updated` may equal the pre-trigger tile when a callback reseeds to
-        // the same value; it still differs from the published waiting state,
-        // so always write it back after resolving the graph.
-        if map.set_tile(coord, updated).is_ok() && updated != before {
+        // OpenTTD marks the tile dirty for every resolved trigger, even when
+        // the selected mask happens to reproduce the previous random value.
+        if map.set_tile(coord, updated).is_ok() {
             dirty.push(coord);
         }
     }
@@ -506,6 +604,113 @@ mod tests {
 
         assert_eq!(dirty, vec![coord]);
         assert_eq!(industries[0].newgrf_persistent_regs.get(&5), Some(&42));
+    }
+
+    #[test]
+    fn industry_tick_and_cargo_triggers_use_live_parent_scope() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let tile = industry_tile(175);
+        map.set_tile(coord, tile).unwrap();
+        let spec = newgrf_spec(175, vec![white_sprite()], Some(parent_psto_runtime()));
+        let mut industries =
+            vec![Industry::new(coord, crate::industry::IndustryKind::CoalMine).with_instance_id(1)];
+        let catalog = std::slice::from_ref(&spec);
+
+        let dirty = trigger_industry_randomisation_at_with_catalog_and_world(
+            &mut map,
+            &[coord],
+            IndustryRandomTrigger::IndustryTick,
+            42,
+            7,
+            &mut industries,
+            &[],
+            catalog,
+            &[],
+            Climate::Temperate,
+        );
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(industries[0].newgrf_persistent_regs.get(&5), Some(&42));
+        assert_eq!(
+            industry_random_triggers(&map.get(coord).unwrap()),
+            IndustryRandomTrigger::IndustryTick.bit()
+        );
+
+        let dirty = trigger_industry_randomisation_at_with_catalog_and_world(
+            &mut map,
+            &[coord],
+            IndustryRandomTrigger::CargoReceived,
+            42,
+            8,
+            &mut industries,
+            &[],
+            catalog,
+            &[],
+            Climate::Temperate,
+        );
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(industries[0].newgrf_persistent_regs.get(&5), Some(&42));
+        assert_eq!(
+            industry_random_triggers(&map.get(coord).unwrap()),
+            IndustryRandomTrigger::IndustryTick.bit() | IndustryRandomTrigger::CargoReceived.bit()
+        );
+    }
+
+    #[test]
+    fn industry_parent_randomisation_reseeds_once_for_footprint() {
+        let origin = TileCoord::new(1, 1);
+        let second = TileCoord::new(2, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let tile = industry_tile(175);
+        map.set_tile(origin, tile).unwrap();
+        map.set_tile(second, tile).unwrap();
+        let mut runtime = TrainSpriteGraphics::default();
+        runtime.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 1,
+        });
+        runtime.action2_random.insert(
+            1,
+            Action2RandomEntry {
+                typ: 0x83,
+                consist_count: 0,
+                triggers: IndustryRandomTrigger::CargoReceived.bit(),
+                randbit: 0,
+                sets: vec![2, 2],
+            },
+        );
+        let spec = newgrf_spec(175, vec![white_sprite()], Some(runtime));
+        let mut industries = vec![
+            Industry::with_tiles(
+                origin,
+                crate::industry::IndustryKind::CoalMine,
+                vec![origin, second],
+            )
+            .with_instance_id(1)
+            .with_newgrf_random(0),
+        ];
+        let dirty = trigger_industry_randomisation_at_with_catalog_and_world(
+            &mut map,
+            &[origin, second],
+            IndustryRandomTrigger::CargoReceived,
+            42,
+            7,
+            &mut industries,
+            &[],
+            std::slice::from_ref(&spec),
+            &[],
+            Climate::Temperate,
+        );
+        assert_eq!(dirty, vec![origin, second]);
+        let expected = industry_random_word(
+            42,
+            7,
+            origin,
+            u64::from(IndustryRandomTrigger::CargoReceived.bit()) | (1_u64 << 8) | 1,
+        );
+        assert_eq!(industries[0].newgrf_random & 1, expected & 1);
+        assert_eq!(industry_random_triggers(&map.get(origin).unwrap()), 0);
+        assert_eq!(industry_random_triggers(&map.get(second).unwrap()), 0);
     }
 
     #[test]

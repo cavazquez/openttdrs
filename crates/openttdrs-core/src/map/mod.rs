@@ -53,7 +53,7 @@ pub use industry_random::{
     advance_industry_tile_randomisation_from_visits_with_catalog_and_world, industry_random_bits,
     industry_random_triggers, industry_tile_rng, init_industry_tile_random,
     set_industry_random_bits, set_industry_random_triggers, trigger_industry_randomisation_at,
-    trigger_industry_tile_randomisation,
+    trigger_industry_randomisation_at_with_catalog_and_world, trigger_industry_tile_randomisation,
 };
 pub use industry_terrain::{
     GFX_OILRIG_FIRST, GFX_OILRIG_LAST, SPR_FLAT_BARE_LAND, SPR_FLAT_GRASS_TILE,

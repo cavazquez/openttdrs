@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-03** (commit `036fda1f`, shape-check, foundations,
+Actualizada: **2026-09-03** (commit `470499ea`, shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
 `PlantOnBuild`, rehidratación SAV legacy, historiales aceptados runtime,
 reatachación de industrias al
@@ -548,6 +548,17 @@ aceptadas por industria y por el pueblo de la estación, y la recogida se
 acredita sólo en la entrega final; `GameState` expone las consultas y limpieza.
 La API Squirrel/GameScript equivalente, `exclusive_supplier`/neutral stations
 y cargos custom aún requieren trabajo.
+
+Actualización #329-INDUSTRY-EXCLUSIVE-SUPPLIER-052 (2026-09-03, commit
+`470499ea`): `DeliverGoodsToIndustry` compara `exclusive_supplier` con
+`Station::owner` y `station.serve_neutral_industries=false` restringe las
+industrias con `neutral_station` a su estación asociada. `STNN.base.owner`,
+`INDY.neutral_station` y `INDY.exclusive_supplier` se hidratan y se reemiten
+con las referencias nativas; la configuración se conserva en `PATS`, con el
+fallback histórico anterior a `SLV_SERVE_NEUTRAL_INDUSTRIES`. Las regresiones
+cubren selección de estación, exclusión por compañía y round-trip. El binding
+Squirrel/GameScript del monitor, cargos custom, scopes restantes y callbacks
+sin call site permanecen parciales.
 
 - Resto de CBs houses / airports / industries / objects (incluidos los huecos que aún no tienen call site), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.

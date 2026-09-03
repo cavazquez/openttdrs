@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `036fda1f`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `470499ea`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -78,6 +78,19 @@ la segunda llamada de entrega. Las recogidas se acreditan sólo al confirmar la
 entrega final. El runtime queda disponible desde `GameState`, sin persistencia
 en JSON/SAV; bindings de GameScript, exclusividad y cargos custom permanecen
 parciales.
+
+Actualización #329-INDUSTRY-EXCLUSIVE-SUPPLIER-052 (2026-09-03, `470499ea`):
+`INDY.neutral_station` y `INDY.exclusive_supplier` ya se importan, hidratan
+en las entidades vivas y se reemiten con la codificación nativa
+(`REF_STATION`/`Owner`). `STNN.base.owner` conserva compañías y
+`OWNER_NONE`; `station.serve_neutral_industries` se lee/escribe en `PATS` y
+respeta la compatibilidad anterior a `SLV_SERVE_NEUTRAL_INDUSTRIES`. La
+entrega directa y el transporte de producción aplican la asociación neutral y
+comparan la exclusividad contra el propietario de la estación, como
+`DeliverGoodsToIndustry`. Regresiones cubren importación, exportación,
+round-trip, selección de estación y rechazo por propietario. Permanecen los
+bindings de GameScript, cargos custom no representables, reatachación cuando
+falta el catálogo y los demás callbacks/scope; #329 continúa abierto.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

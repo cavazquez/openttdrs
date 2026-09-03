@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-03**,
-`main` con base funcional `036fda1f`, posterior al writeback canónico de `CITY`,
+`main` con base funcional `470499ea`, posterior al writeback canónico de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
@@ -36,6 +36,17 @@ deben activar otra vez. Las entregas runtime sí actualizan los mapas
 compatibles con `_cargo_pickups`/`_cargo_deliveries`; bindings de GameScript,
 exclusividad/neutral stations y cargos custom siguen fuera del formato
 representable.
+
+Actualización del corte `470499ea`: `STNN.base.owner` se importa y se
+reemite, `INDY.neutral_station` conserva la referencia `REF_STATION` y
+`INDY.exclusive_supplier` conserva `INVALID_OWNER` o el `Owner` de la
+compañía. `PATS.station.serve_neutral_industries` también forma parte del
+subconjunto semántico y aplica el fallback histórico de saves anteriores a
+`SLV_SERVE_NEUTRAL_INDUSTRIES`. El enlace inverso estación↔industria se
+rehidrata después de leer ambos pools; las referencias no válidas se rechazan
+al exportar para evitar un `.sav` que OpenTTD no pueda resolver. Esto cubre el
+wire format y la regla de entrega; bindings GameScript y cargos custom siguen
+fuera del formato representable.
 
 | Área | Importar `.sav` de OpenTTD | Exportar `.sav` para OpenTTD | Límite y evidencia |
 |---|---|---|---|

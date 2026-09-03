@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `916247a2`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `36662249`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -159,6 +159,15 @@ por el índice estático de origen y una lista de salida vacía no vuelve al car
 vanilla. El límite actual sigue siendo 3 entradas/2 salidas: faltan
 `CargoTypesUnlimited`, cargos custom y persistencia/rehidratación SAV; #329
 permanece abierto.
+
+Actualización #329-INDUSTRY-CARGO-TYPES-041 (2026-09-03, `36662249`):
+`prop 0x1A` de `Industries` se conserva como `IndustrySpecDef.behaviour` y el
+bit `CargoTypesUnlimited` (`1 << 18`) amplía `CBID_INDUSTRY_INPUT_CARGO_TYPES`
+y `CBID_INDUSTRY_OUTPUT_CARGO_TYPES` hasta 16 slots. La instancia conserva
+salidas desde el tercer slot en `newgrf_extra_output_cargos`; su buffer de
+stock ya se transporta y se exporta en `INDY`. Siguen pendientes el
+procesamiento normal multi-output (rates/matriz), slots vacíos legacy, cargos
+custom y rehidratación runtime de las listas desde SAV; #329 permanece abierto.
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

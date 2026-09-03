@@ -1349,10 +1349,10 @@ fn write_indy_produced(
         .unwrap_or(0);
     let mut entries: Vec<(u8, u16, u8)> = Vec::with_capacity(outputs.len() + 4);
     for (index, cargo) in outputs.iter().copied().enumerate() {
-        let waiting = if index == 0 {
-            industry.stock
-        } else {
-            industry.secondary_stock
+        let waiting = match index {
+            0 => industry.stock,
+            1 => industry.secondary_stock,
+            _ => industry.extra_produced_cargo(cargo),
         };
         let rate = if index == 0 {
             industry.production_rate()

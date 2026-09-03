@@ -548,6 +548,36 @@ pub fn build_action0_industry_payload(
     callback_mask: u16,
     name: &str,
 ) -> Vec<u8> {
+    build_action0_industry_payload_with_behaviour(
+        local_id,
+        subst_id,
+        override_of,
+        layout_tiles,
+        produced,
+        accepted,
+        production_rates,
+        callback_mask,
+        0,
+        name,
+    )
+}
+
+/// Variante de [`build_action0_industry_payload`] que incluye `prop 0x1A`
+/// (`IndustryBehaviour`) para fixtures de callbacks avanzados.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn build_action0_industry_payload_with_behaviour(
+    local_id: u8,
+    subst_id: u8,
+    override_of: Option<u8>,
+    layout_tiles: &[(i8, i8, u16)],
+    produced: &[u8],
+    accepted: &[u8],
+    production_rates: &[u8],
+    callback_mask: u16,
+    behaviour: u32,
+    name: &str,
+) -> Vec<u8> {
     let mut num_props = 3u8; // 08, 0A, FE
     if override_of.is_some() {
         num_props += 1;
@@ -563,6 +593,9 @@ pub fn build_action0_industry_payload(
     }
     if callback_mask != 0 {
         num_props += 2; // 21 + 22
+    }
+    if behaviour != 0 {
+        num_props += 1; // 1A
     }
     let mut p = vec![
         0x00,
@@ -611,6 +644,10 @@ pub fn build_action0_industry_payload(
         p.push((callback_mask & 0xFF) as u8);
         p.push(0x22);
         p.push((callback_mask >> 8) as u8);
+    }
+    if behaviour != 0 {
+        p.push(0x1A);
+        p.extend_from_slice(&behaviour.to_le_bytes());
     }
     p.push(0xFE);
     p.extend_from_slice(name.as_bytes());
@@ -5361,6 +5398,46 @@ mod tests {
             0x00,
             0x08,
         ]);
+    }
+
+    #[test]
+    fn industries_action0_preserves_cargo_types_unlimited_behaviour() {
+        let ind = build_action0_industry_payload_with_behaviour(
+            0,
+            0,
+            None,
+            &[(0, 0, 0)],
+            &[1, 5, 7],
+            &[2, 4, 6, 8],
+            &[8, 4, 2],
+            crate::INDUSTRY_CALLBACK_INPUT_CARGO_TYPES_MASK
+                | crate::INDUSTRY_CALLBACK_OUTPUT_CARGO_TYPES_MASK,
+            crate::INDUSTRY_BEHAVIOUR_CARGO_TYPES_UNLIMITED_MASK,
+            "Unlimited",
+        );
+        let meta = parse_action0_industry_meta(&ind).expect("industry metadata");
+        assert_eq!(
+            meta.behaviour,
+            crate::INDUSTRY_BEHAVIOUR_CARGO_TYPES_UNLIMITED_MASK
+        );
+
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[ind.as_slice()],
+            [b'U', b'N', 0, 1],
+            "unlimited",
+            "",
+        );
+        let dir = tempfile_dir_with("unlimited.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("unlimited.grf", 4));
+        apply_newgrf_industries(&mut state, &[&dir]);
+        assert_eq!(
+            state.industry_spec_catalog[0].behaviour,
+            crate::INDUSTRY_BEHAVIOUR_CARGO_TYPES_UNLIMITED_MASK
+        );
+        assert!(state.industry_spec_catalog[0].has_unlimited_cargo_types());
     }
 
     /// El CB28 debe venir del Action2 del GRF cargado, no solo de una fixture

@@ -2009,10 +2009,9 @@ fn industry_callback_multiplier(
 /// `OpenTTD` borra las listas estáticas antes de consultar cada slot (`param1`
 /// es el índice y `param2` es cero). Un resultado `CALLBACK_FAILED`, `0xFF` o
 /// un cargo inválido termina la secuencia; si no hay runtime se conserva el
-/// catálogo estático como fallback de saves/fixtures vanilla. Los dos límites
-/// históricos (3 entradas y 2 salidas) se mantienen aquí; la propiedad
-/// `CargoTypesUnlimited` todavía requiere transportar el comportamiento de
-/// `IndustrySpec` y por eso permanece fuera de este bloque.
+/// catálogo estático como fallback de saves/fixtures vanilla. Sin
+/// `CargoTypesUnlimited` se mantienen los límites históricos (3 entradas y 2
+/// salidas); con la propiedad `0x1A` se consultan hasta 16 slots.
 #[must_use]
 pub fn apply_industry_dynamic_cargo_callbacks(
     def: &IndustrySpecDef,
@@ -2028,13 +2027,18 @@ pub fn apply_industry_dynamic_cargo_callbacks(
     };
 
     let mut ctx = action2_eval_ctx_from_industry(industry, u32::from(industry.newgrf_random));
+    let unlimited = def.has_unlimited_cargo_types();
     let input_slots = if input_declared {
         callback_industry_cargo_slots(
             runtime,
             def,
             &mut ctx,
             CBID_INDUSTRY_INPUT_CARGO_TYPES,
-            crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS,
+            if unlimited {
+                crate::industry_spec::INDUSTRY_NUM_INPUTS
+            } else {
+                crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS
+            },
             &def.accepted_cargo_indices,
             &def.accepted_cargo_labels,
         )
@@ -2047,7 +2051,11 @@ pub fn apply_industry_dynamic_cargo_callbacks(
             def,
             &mut ctx,
             CBID_INDUSTRY_OUTPUT_CARGO_TYPES,
-            crate::industry_spec::INDUSTRY_ORIGINAL_NUM_OUTPUTS,
+            if unlimited {
+                crate::industry_spec::INDUSTRY_NUM_OUTPUTS
+            } else {
+                crate::industry_spec::INDUSTRY_ORIGINAL_NUM_OUTPUTS
+            },
             &def.produced_cargo_indices,
             &def.produced_cargo_labels,
         )
@@ -2058,6 +2066,8 @@ pub fn apply_industry_dynamic_cargo_callbacks(
     industry.newgrf_dynamic_cargo_types = true;
     industry.newgrf_output_cargo = output_slots.first().map(|slot| slot.cargo);
     industry.newgrf_secondary_output_cargo = output_slots.get(1).map(|slot| slot.cargo);
+    industry.newgrf_extra_output_cargos =
+        output_slots.iter().skip(2).map(|slot| slot.cargo).collect();
     industry.newgrf_secondary_production_rate = industry
         .newgrf_secondary_production_rate
         .filter(|_| output_slots.len() > 1);
@@ -4518,6 +4528,7 @@ mod tests {
             production_rates: Vec::new(),
             input_multipliers: Vec::new(),
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_LOCATION_MASK,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),
@@ -4552,6 +4563,7 @@ mod tests {
             production_rates: Vec::new(),
             input_multipliers: Vec::new(),
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_LOCATION_MASK,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),
@@ -4622,6 +4634,7 @@ mod tests {
             production_rates: vec![15],
             input_multipliers: Vec::new(),
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_PRODUCTION_CHANGE_MASK,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),
@@ -4676,6 +4689,7 @@ mod tests {
             production_rates: Vec::new(),
             input_multipliers: Vec::new(),
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_DECIDE_COLOUR_MASK,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),
@@ -4730,6 +4744,7 @@ mod tests {
             production_rates: Vec::new(),
             input_multipliers: Vec::new(),
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_DECIDE_COLOUR_MASK,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),
@@ -4767,6 +4782,7 @@ mod tests {
             production_rates: vec![0],
             input_multipliers: vec![256],
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_REFUSE_CARGO_MASK,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),
@@ -4814,6 +4830,7 @@ mod tests {
             production_rates: vec![0],
             input_multipliers: vec![256],
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_REFUSE_CARGO_MASK,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),
@@ -4874,6 +4891,7 @@ mod tests {
             production_rates: vec![0],
             input_multipliers: vec![64, 128, 192],
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_INPUT_CARGO_TYPES_MASK,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),
@@ -4918,6 +4936,7 @@ mod tests {
             production_rates: vec![0, 0],
             input_multipliers: vec![256, 64],
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_OUTPUT_CARGO_TYPES_MASK,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),
@@ -4941,6 +4960,61 @@ mod tests {
         assert!(apply_industry_dynamic_cargo_callbacks(&def, &mut industry));
         assert!(industry.produced_cargos().is_empty());
         assert_eq!(industry.newgrf_output_cargo, None);
+    }
+
+    #[test]
+    fn industry_dynamic_cargo_callbacks_honour_unlimited_capacity() {
+        let def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![0, 1, 2, 3],
+            produced_cargo_labels: vec!["PASS".into(), "COAL".into(), "MAIL".into(), "OIL".into()],
+            accepted_cargo_indices: vec![0, 1, 2, 3],
+            accepted_cargo_labels: vec!["PASS".into(), "COAL".into(), "MAIL".into(), "OIL".into()],
+            production_rates: vec![0; 4],
+            input_multipliers: vec![256; 16],
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_INPUT_CARGO_TYPES_MASK
+                | crate::industry_spec::INDUSTRY_CALLBACK_OUTPUT_CARGO_TYPES_MASK,
+            behaviour: crate::industry_spec::INDUSTRY_BEHAVIOUR_CARGO_TYPES_UNLIMITED_MASK,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "unlimited-cargo-callbacks".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_variable_byte(0x10, 0))),
+        };
+        let mut industry =
+            Industry::new(TileCoord::new(4, 5), crate::industry::IndustryKind::Factory)
+                .with_newgrf_spec(def.id, &def);
+
+        assert!(apply_industry_dynamic_cargo_callbacks(&def, &mut industry));
+        assert_eq!(
+            industry.station_input_requirements(),
+            vec![
+                (CargoType::Passengers, 8),
+                (CargoType::Coal, 8),
+                (CargoType::Mail, 8),
+                (CargoType::Oil, 8),
+            ]
+        );
+        assert_eq!(
+            industry.produced_cargos(),
+            vec![
+                CargoType::Passengers,
+                CargoType::Coal,
+                CargoType::Mail,
+                CargoType::Oil
+            ]
+        );
+        assert_eq!(
+            industry.newgrf_extra_output_cargos,
+            vec![CargoType::Mail, CargoType::Oil]
+        );
     }
 
     #[test]
@@ -4976,6 +5050,7 @@ mod tests {
             production_rates: vec![0],
             input_multipliers: Vec::new(),
             callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_PRODUCTION_CARGO_ARRIVAL_MASK,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),

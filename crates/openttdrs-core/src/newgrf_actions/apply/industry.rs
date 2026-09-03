@@ -218,6 +218,7 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
                 production_rates: meta.production_rates,
                 input_multipliers: meta.input_multipliers,
                 callback_mask: meta.callback_mask,
+                behaviour: meta.behaviour,
                 cost_multiplier: meta.cost_multiplier,
                 associated_badges,
                 newgrf_badge_translation,

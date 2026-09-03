@@ -743,6 +743,7 @@ mod tests {
             production_rates: Vec::new(),
             input_multipliers: Vec::new(),
             callback_mask: 0,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),

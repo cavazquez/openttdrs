@@ -509,6 +509,8 @@ pub struct ParsedIndustryMeta {
     pub production_rates: Vec<u8>,
     pub input_multipliers: Vec<u16>,
     pub callback_mask: u16,
+    /// `prop 0x1A`: bits de `IndustryBehaviour`.
+    pub behaviour: u32,
     pub cost_multiplier: u8,
     /// `prop 0x29`: índices locales de la tabla Badge Translation Table.
     pub badge_local_ids: Vec<u16>,
@@ -1699,6 +1701,7 @@ pub fn parse_action0_industry_meta(payload: &[u8]) -> Option<ParsedIndustryMeta>
     let mut production_rates = vec![0u8; crate::industry_spec::INDUSTRY_ORIGINAL_NUM_OUTPUTS];
     let mut input_multipliers = Vec::new();
     let mut callback_mask = 0u16;
+    let mut behaviour = 0u32;
     let mut cost_multiplier = 0u8;
     let mut badge_local_ids = Vec::new();
     let mut name = String::new();
@@ -1792,7 +1795,19 @@ pub fn parse_action0_industry_meta(payload: &[u8]) -> Option<ParsedIndustryMeta>
                 accepted_cargo_indices = payload[i..i + n].to_vec();
                 i += n + 1;
             }
-            0x1A | 0x1C | 0x1D | 0x1E | 0x20 | 0x23 => {
+            0x1A => {
+                if i + 4 > payload.len() {
+                    break;
+                }
+                behaviour = u32::from_le_bytes([
+                    payload[i],
+                    payload[i + 1],
+                    payload[i + 2],
+                    payload[i + 3],
+                ]);
+                i += 4;
+            }
+            0x1C | 0x1D | 0x1E | 0x20 | 0x23 => {
                 if i + 4 > payload.len() {
                     break;
                 }
@@ -1902,6 +1917,7 @@ pub fn parse_action0_industry_meta(payload: &[u8]) -> Option<ParsedIndustryMeta>
         production_rates,
         input_multipliers,
         callback_mask,
+        behaviour,
         cost_multiplier,
         badge_local_ids,
         name,

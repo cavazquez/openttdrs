@@ -25,6 +25,8 @@ pub const INDUSTRY_ORIGINAL_NUM_INPUTS: usize = 3;
 pub const INDUSTRY_NUM_INPUTS: usize = 16;
 /// Máximo moderno de cargos producidos por una industria (`INDUSTRY_NUM_OUTPUTS`).
 pub const INDUSTRY_NUM_OUTPUTS: usize = 16;
+/// Bit `IndustryBehaviour::CargoTypesUnlimited` de `prop 0x1A`.
+pub const INDUSTRY_BEHAVIOUR_CARGO_TYPES_UNLIMITED_MASK: u32 = 1 << 18;
 /// Bit `IndustryCallbackMask::ProductionCargoArrival`: callback al llegar carga.
 pub const INDUSTRY_CALLBACK_PRODUCTION_CARGO_ARRIVAL_MASK: u16 = 1 << 1;
 /// Bit `IndustryCallbackMask::Production256Ticks`: callback de producción periódico.
@@ -85,6 +87,9 @@ pub struct IndustrySpecDef {
     pub input_multipliers: Vec<u16>,
     /// Callback mask (`0x21` lo + `0x22` hi); call sites parciales #266.
     pub callback_mask: u16,
+    /// Behaviour flags (`prop 0x1A`), incluidos los cargos ilimitados.
+    #[serde(default)]
+    pub behaviour: u32,
     /// Cost multiplier (`0x0F`).
     pub cost_multiplier: u8,
     /// Badges asociados (`prop 0x29`) resueltos a ids globales.
@@ -169,6 +174,12 @@ impl IndustrySpecDef {
     #[must_use]
     pub const fn has_location_callback(&self) -> bool {
         self.callback_mask & INDUSTRY_CALLBACK_LOCATION_MASK != 0
+    }
+
+    /// ¿Puede el GRF declarar hasta 16 entradas/salidas desde `0x14B/0x14C`?
+    #[must_use]
+    pub const fn has_unlimited_cargo_types(&self) -> bool {
+        self.behaviour & INDUSTRY_BEHAVIOUR_CARGO_TYPES_UNLIMITED_MASK != 0
     }
 
     /// Primer layout (o vacío).
@@ -368,6 +379,7 @@ mod tests {
             production_rates: Vec::new(),
             input_multipliers: Vec::new(),
             callback_mask: 0,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),

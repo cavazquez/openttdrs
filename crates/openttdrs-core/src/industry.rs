@@ -895,6 +895,11 @@ pub struct Industry {
     /// Segundo cargo de salida `NewGRF`, si el label pudo resolverse.
     #[serde(default)]
     pub newgrf_secondary_output_cargo: Option<CargoType>,
+    /// Cargos de salida adicionales habilitados por `CargoTypesUnlimited`.
+    /// Las dos primeras salidas conservan los stocks legacy; las siguientes
+    /// utilizan `newgrf_extra_produced_cargo`.
+    #[serde(default)]
+    pub newgrf_extra_output_cargos: Vec<CargoType>,
     /// `true` cuando los callbacks `0x14B`/`0x14C` reemplazaron las listas
     /// estáticas al fundar la industria. Permite representar una lista
     /// callback vacía sin volver al fallback vanilla.
@@ -973,6 +978,7 @@ impl Industry {
             newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
             newgrf_secondary_output_cargo: None,
+            newgrf_extra_output_cargos: Vec::new(),
             newgrf_dynamic_cargo_types: false,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
@@ -1015,6 +1021,7 @@ impl Industry {
             newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
             newgrf_secondary_output_cargo: None,
+            newgrf_extra_output_cargos: Vec::new(),
             newgrf_dynamic_cargo_types: false,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
@@ -1063,6 +1070,7 @@ impl Industry {
             newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
             newgrf_secondary_output_cargo: None,
+            newgrf_extra_output_cargos: Vec::new(),
             newgrf_dynamic_cargo_types: false,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
@@ -1232,13 +1240,14 @@ impl Industry {
     #[must_use]
     pub fn produced_cargos(&self) -> Vec<CargoType> {
         if self.newgrf_type_id.is_some() {
-            let mut cargos = Vec::with_capacity(2);
+            let mut cargos = Vec::with_capacity(2 + self.newgrf_extra_output_cargos.len());
             if let Some(cargo) = self.newgrf_output_cargo {
                 cargos.push(cargo);
             }
             if let Some(cargo) = self.newgrf_secondary_output_cargo {
                 cargos.push(cargo);
             }
+            cargos.extend(self.newgrf_extra_output_cargos.iter().copied());
             if self.newgrf_dynamic_cargo_types || !cargos.is_empty() {
                 return cargos;
             }
@@ -1654,6 +1663,7 @@ impl Industry {
         self.newgrf_secondary_production_rate = None;
         self.newgrf_output_cargo = output_cargo;
         self.newgrf_secondary_output_cargo = None;
+        self.newgrf_extra_output_cargos.clear();
         self.newgrf_dynamic_cargo_types = false;
         self.newgrf_processing_inputs.clear();
         self.newgrf_processing_secondary_multipliers.clear();
@@ -1669,6 +1679,7 @@ impl Industry {
         self.newgrf_secondary_production_rate = def.secondary_production_rate();
         self.newgrf_output_cargo = outputs.first().copied();
         self.newgrf_secondary_output_cargo = outputs.get(1).copied();
+        self.newgrf_extra_output_cargos = outputs.iter().copied().skip(2).collect();
         self.newgrf_dynamic_cargo_types = false;
 
         let accepted = def.accepted_cargo_types();
@@ -2332,6 +2343,7 @@ mod tests {
             production_rates: vec![15, 7],
             input_multipliers: Vec::new(),
             callback_mask: 0,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),
@@ -2373,6 +2385,7 @@ mod tests {
             // One input × two outputs: 128/256 and 64/256.
             input_multipliers: vec![128, 64],
             callback_mask: 0,
+            behaviour: 0,
             cost_multiplier: 0,
             associated_badges: Vec::new(),
             newgrf_badge_translation: Vec::new(),

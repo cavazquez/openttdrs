@@ -1281,6 +1281,7 @@ fn append_indy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn write_indy_accepted(
     buf: &mut Vec<u8>,
     industry: &Industry,
@@ -1340,9 +1341,30 @@ fn write_indy_accepted(
             ))
         })
         .collect();
-    // At most 12 entries for the built-in climate catalog, well below the
-    // simple-gamma limit used by the TABLE codec.
-    write_gamma(entries.len() as u32, buf)?;
+    // A cargo slot outside the built-in climate catalog may belong to a
+    // NewGRF cargo whose spec is not installed locally.  Keep that row as an
+    // opaque SAV passthrough: the reduced runtime cannot simulate it, but
+    // dropping its waiting/history data would make a load→save cycle lossy.
+    let opaque_entries = saved
+        .into_iter()
+        .flat_map(|industry| industry.accepted.iter())
+        .filter(|entry| crate::CargoType::from_climate_slot(climate, entry.cargo_slot).is_none())
+        .collect::<Vec<_>>();
+    let entry_count =
+        entries
+            .len()
+            .checked_add(opaque_entries.len())
+            .ok_or(SavError::ValueOutOfRange {
+                field: "industry accepted cargo count",
+                value: u32::MAX,
+            })?;
+    write_gamma(
+        u32::try_from(entry_count).map_err(|_| SavError::ValueOutOfRange {
+            field: "industry accepted cargo count",
+            value: u32::MAX,
+        })?,
+        buf,
+    )?;
     for (cargo_slot, cargo_type, waiting, last_accepted) in entries {
         buf.push(cargo_slot);
         buf.extend_from_slice(&waiting.to_be_bytes());
@@ -1385,9 +1407,28 @@ fn write_indy_accepted(
             buf.extend_from_slice(&sample.waiting.to_be_bytes());
         }
     }
+    for entry in opaque_entries {
+        buf.push(entry.cargo_slot);
+        buf.extend_from_slice(&entry.waiting.to_be_bytes());
+        let last_accepted = i32::try_from(entry.last_accepted).unwrap_or(i32::MAX);
+        buf.extend_from_slice(&last_accepted.to_be_bytes());
+        buf.extend_from_slice(&entry.accumulated_waiting.to_be_bytes());
+        write_gamma(
+            u32::try_from(entry.history.len()).map_err(|_| SavError::ValueOutOfRange {
+                field: "industry accepted history length",
+                value: u32::MAX,
+            })?,
+            buf,
+        )?;
+        for sample in &entry.history {
+            buf.extend_from_slice(&sample.accepted.to_be_bytes());
+            buf.extend_from_slice(&sample.waiting.to_be_bytes());
+        }
+    }
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn write_indy_produced(
     buf: &mut Vec<u8>,
     industry: &Industry,
@@ -1418,6 +1459,14 @@ fn write_indy_produced(
             outputs.push(cargo);
         }
     }
+    // Preserve produced rows for cargo slots that cannot be resolved without
+    // the original NewGRF.  They remain intentionally opaque until the
+    // catalog is installed and the rehydration pass can attach them.
+    let opaque_entries = saved
+        .into_iter()
+        .flat_map(|industry| industry.produced.iter())
+        .filter(|entry| crate::CargoType::from_climate_slot(climate, entry.cargo_slot).is_none())
+        .collect::<Vec<_>>();
     let secondary_rate = industry
         .newgrf_secondary_production_rate
         .or_else(|| {
@@ -1476,7 +1525,21 @@ fn write_indy_produced(
             entries.push((slot, waiting.min(u32::from(u16::MAX)) as u16, rate, history));
         }
     }
-    write_gamma(entries.len() as u32, buf)?;
+    let entry_count =
+        entries
+            .len()
+            .checked_add(opaque_entries.len())
+            .ok_or(SavError::ValueOutOfRange {
+                field: "industry produced cargo count",
+                value: u32::MAX,
+            })?;
+    write_gamma(
+        u32::try_from(entry_count).map_err(|_| SavError::ValueOutOfRange {
+            field: "industry produced cargo count",
+            value: u32::MAX,
+        })?,
+        buf,
+    )?;
     for (cargo, waiting, rate, history) in entries {
         buf.push(cargo);
         buf.extend_from_slice(&waiting.to_be_bytes());
@@ -1489,6 +1552,22 @@ fn write_indy_produced(
             buf,
         )?;
         for sample in history {
+            buf.extend_from_slice(&sample.production.to_be_bytes());
+            buf.extend_from_slice(&sample.transported.to_be_bytes());
+        }
+    }
+    for entry in opaque_entries {
+        buf.push(entry.cargo_slot);
+        buf.extend_from_slice(&entry.waiting.to_be_bytes());
+        buf.push(entry.rate);
+        write_gamma(
+            u32::try_from(entry.history.len()).map_err(|_| SavError::ValueOutOfRange {
+                field: "industry produced history length",
+                value: u32::MAX,
+            })?,
+            buf,
+        )?;
+        for sample in &entry.history {
             buf.extend_from_slice(&sample.production.to_be_bytes());
             buf.extend_from_slice(&sample.transported.to_be_bytes());
         }

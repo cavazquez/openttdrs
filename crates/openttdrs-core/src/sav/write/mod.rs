@@ -1599,16 +1599,40 @@ mod tests {
             prod_level: crate::industry::PRODLEVEL_DEFAULT,
             valid_history: 0b11,
             persistent_storage_id: None,
-            produced: vec![crate::sav::SavIndustryProducedCargo {
-                cargo_slot: 1,
-                waiting: 7,
-                rate: 5,
-                history: vec![crate::sav::SavIndustryProducedHistory {
-                    production: 31,
-                    transported: 17,
+            produced: vec![
+                crate::sav::SavIndustryProducedCargo {
+                    cargo_slot: 1,
+                    waiting: 7,
+                    rate: 5,
+                    history: vec![crate::sav::SavIndustryProducedHistory {
+                        production: 31,
+                        transported: 17,
+                    }],
+                },
+                crate::sav::SavIndustryProducedCargo {
+                    // Slot 42 is a custom cargo.  The local catalog is empty, so
+                    // it must survive as an opaque INDY row until the GRF is
+                    // installed on a later load.
+                    cargo_slot: 42,
+                    waiting: 19,
+                    rate: 11,
+                    history: vec![crate::sav::SavIndustryProducedHistory {
+                        production: 23,
+                        transported: 7,
+                    }],
+                },
+            ],
+            accepted: vec![crate::sav::SavIndustryAcceptedCargo {
+                // Accepted custom cargo follows the same passthrough rule.
+                cargo_slot: 43,
+                waiting: 13,
+                last_accepted: 9001,
+                accumulated_waiting: 77,
+                history: vec![crate::sav::SavIndustryAcceptedHistory {
+                    accepted: 5,
+                    waiting: 9,
                 }],
             }],
-            accepted: Vec::new(),
         });
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
@@ -1626,6 +1650,23 @@ mod tests {
             resaved_game.industries[0].produced[0].history[0].transported,
             17
         );
+        let custom_produced = resaved_game.industries[0]
+            .produced
+            .iter()
+            .find(|entry| entry.cargo_slot == 42)
+            .expect("custom produced cargo passthrough");
+        assert_eq!(custom_produced.waiting, 19);
+        assert_eq!(custom_produced.rate, 11);
+        assert_eq!(custom_produced.history[0].production, 23);
+        let custom_accepted = resaved_game.industries[0]
+            .accepted
+            .iter()
+            .find(|entry| entry.cargo_slot == 43)
+            .expect("custom accepted cargo passthrough");
+        assert_eq!(custom_accepted.waiting, 13);
+        assert_eq!(custom_accepted.last_accepted, 9001);
+        assert_eq!(custom_accepted.accumulated_waiting, 77);
+        assert_eq!(custom_accepted.history[0].accepted, 5);
     }
 
     #[test]

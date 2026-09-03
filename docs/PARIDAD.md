@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `eaa3473d`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `12e6c751`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -224,6 +224,16 @@ multiplicadores, stocks y fechas de espera; la regresión cubre una salida con
 hueco inicial. Si falta el GRF o un cargo custom, se conserva el fallback y la
 fila opaca. #329 permanece abierto por esa ausencia, `DeliverGoodsToIndustry`,
 historiales/GUI, escalas/sonidos y goldens.
+
+Actualización #329-INDUSTRY-DELIVERY-048 (2026-09-03, `12e6c751`): la
+descarga normal materializa `DeliverGoodsToIndustry`: ordena industrias por
+`DistanceMax`, excluye la huella de origen, respeta el límite `uint16` de
+`accepted[].waiting`, consulta `CBID_INDUSTRY_REFUSE_CARGO` y actualiza fecha
+y flag de aceptación. Los destinos se procesan después de `load_vehicles`, con
+producción vanilla, CB1 de llegada o CB2 exclusivo diferido; la regresión cubre
+exclusión, fecha, diferimiento y producción. Monitor `AddCargoDelivery`,
+`exclusive_supplier`/neutral stations, aceptación exacta de estaciones,
+historiales por salida y cargos custom siguen pendientes; #329 continúa abierto.
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

@@ -25,8 +25,8 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-03
 
-Base funcional publicada en `origin/main`: **`eaa3473d`** (`sav: rehydrate
-industries after NewGRF catalog`). Este handoff documental incluye el afterload
+Base funcional publicada en `origin/main`: **`12e6c751`** (`industry: deliver
+station cargo directly to nearby industries`). Este handoff documental incluye el afterload
 SAV de campos legacy (`56aa7858`) y los slots vacíos legacy (`9f2ecc31`), y se publica después de las etapas
 de rechazo temporal (`65682a42`), cargos dinámicos (`389109c1`) y
 `PlantOnBuild` manual (`628d1fb9`); es el punto de reanudación y el código
@@ -36,13 +36,13 @@ publicado coincide con este árbol.
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. Layouts `TileSeq`, parents/children, catenaria, PBS y varias capas ya tienen cobertura focal; foundations de rail pendiente/túnel, foundations/rotaciones de aeropuertos, sprite-stack/callbacks avanzados de vehículos y el orden completo de framebuffer siguen sin equivalencia global. | Medir la primera familia visible restante con `world-draw` y, si aplica, capturas en `0,12×`, `0,25×`, `0,50×` y `1×`. |
 | [#328](https://github.com/cavazquez/openttdrs/issues/328) | El round-trip preserva las tablas y campos escalares modelados, `CITY`/`INDY`/`STNN`/`PSAC`, `OBJS`/`OBID`, grupos, órdenes y autoreplace en el subconjunto documentado. Mutaciones de strings, listas/structs anidados, columnas desconocidas, pools nativos de casas/objetos y labels/cargos no representables todavía degradan al writer canónico o quedan pendientes. CB17 de casas y CB157 de objetos pueden crear/modificar PSA de pueblo y el writer les asigna una fila `PSAC`/referencia `CITY` al exportar. | Elegir una mutación SAV reproducible de lista/struct anidado y comparar bytes OpenTTD→Rust→OpenTTD. |
-| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17/CB157 evalúan y escriben el parent real. CB25/26/27, re-randomización, `IndustryTick` y `CargoReceived` comparten contexto y PSA por huella. Shape-check `CB2F`, foundations `CB30`, autoslope manual `CB3C`, color `CB14A`, rechazo `CB3D`, cargos dinámicos `CB14B`/`CB14C`, `CargoTypesUnlimited` (hasta 16 slots, con salidas extra procesadas/transportables/exportables), slots vacíos `INVALID_CARGO` del modo legacy, rehidratación de filas `INDY` al aplicar el catálogo NewGRF, efectos especiales `CB3B`, `PlantOnBuild` manual/NewGRF y afterload SAV `<SLV_32` ya tienen call sites y regresiones; la ruta legacy conserva fallback explícito. El callback de efectos usa `Chance16(1,8)`/periodo 512 ante `CALLBACK_FAILED`. Sigue faltando materializar `DeliverGoodsToIndustry`, cargos custom no representables, reatachación económica cuando falta su catálogo, historiales por salida, GUI/variables ilimitadas, autoslope en generación automática, sonido, historiales tras mutaciones y el resto de callbacks/scope. | Medir una divergencia reproducible de entrega directa, un tipo/cargo custom SAV no instalado o historiales por salida; no cerrar #329 por este subconjunto. |
+| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17/CB157 evalúan y escriben el parent real. CB25/26/27, re-randomización, `IndustryTick` y `CargoReceived` comparten contexto y PSA por huella. Shape-check `CB2F`, foundations `CB30`, autoslope manual `CB3C`, color `CB14A`, rechazo `CB3D`, cargos dinámicos `CB14B`/`CB14C`, `CargoTypesUnlimited` (hasta 16 slots, con salidas extra procesadas/transportables/exportables), slots vacíos `INVALID_CARGO` del modo legacy, rehidratación de filas `INDY` al aplicar el catálogo NewGRF, efectos especiales `CB3B`, `PlantOnBuild` manual/NewGRF, afterload SAV `<SLV_32` y la entrega directa tipo `DeliverGoodsToIndustry` ya tienen call sites y regresiones. La descarga ordena por `DistanceMax`, excluye la industria de origen, respeta el límite `uint16` de waiting, consulta `CBID_INDUSTRY_REFUSE_CARGO`, actualiza fecha/flag de aceptación y difiere la producción hasta después de `load_vehicles`, con rutas CB1, CB2 exclusivo y matriz vanilla. Sigue faltando el monitor `AddCargoDelivery`, `exclusive_supplier`/neutral stations, cargos custom no representables, reatachación económica cuando falta su catálogo, historiales por salida, GUI/variables ilimitadas, autoslope en generación automática, sonido, historiales tras mutaciones y el resto de callbacks/scope. | Medir la siguiente divergencia reproducible de monitor/exclusividad, un tipo/cargo custom SAV no instalado o historiales por salida; no cerrar #329 por este subconjunto. |
 | [#330](https://github.com/cavazquez/openttdrs/issues/330) | Economía básica y movimiento funcionan, pero los oráculos externos todavía son acotados. Tráfico/colisiones/dirección vial exhaustivos, PBS/YAPF/presignals/consist ferroviarios y navegación aire/mar no tienen aún cobertura diferencial completa. | Tomar el primer fixture externo reproducible de movimiento y registrar tick, entidad y estado nativo divergente. |
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
 
-Última validación de `eaa3473d`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **1.979** tests de core y **1.064** de cliente (2 ignorados); la matriz
+Última validación de `12e6c751`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **1.980** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.
@@ -215,6 +215,21 @@ estático, stocks y fechas de espera. La regresión cubre una industria custom
 con hueco en la primera salida. Si falta el GRF o el cargo custom se conserva
 el fallback y la fila opaca; #329 sigue abierto por esa ausencia,
 `DeliverGoodsToIndustry`, historiales/GUI, escalas/sonidos y goldens.
+
+Actualización #329-INDUSTRY-DELIVERY-048 (2026-09-03, commit `12e6c751`):
+la descarga final ya materializa `DeliverGoodsToIndustry` antes de contabilizar
+la entrega: ordena las industrias cubiertas por la distancia `DistanceMax` de
+su tesela más cercana, excluye la industria de origen, recorre varios destinos
+hasta agotar la carga o el límite `uint16` de `accepted[].waiting`, consulta
+`CBID_INDUSTRY_REFUSE_CARGO` y registra `last_accepted`/`was_cargo_delivered`.
+La cola de destinos se consume después de `load_vehicles`, reproduciendo el
+orden de `LoadUnloadStation`; sin CB1 se aplica la matriz vanilla a las colas,
+con CB1 se ejecuta el callback de llegada y con CB2 exclusivo se difiere al
+ciclo de 256 ticks. `CargoReceived` y sus registros PSA se disparan por
+huella y la regresión cubre exclusión, fecha, diferimiento y producción. El
+monitor `AddCargoDelivery`, `exclusive_supplier`/neutral stations, cargos
+custom, historiales por salida y la aceptación exacta de estaciones siguen
+pendientes; `#329` permanece abierto.
 
 ## Orden recomendado
 

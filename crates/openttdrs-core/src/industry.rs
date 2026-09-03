@@ -792,6 +792,14 @@ pub struct Industry {
         CargoType,
         Vec<crate::entity_history::IndustryAcceptedHistorySample>,
     >,
+    /// Historial mensual nativo por cargo producido (`INDY.produced[].history`).
+    /// El índice cero es el mes actual; las posiciones restantes son meses,
+    /// trimestres y años anteriores en el orden que espera `OpenTTD`.
+    #[serde(default)]
+    pub produced_history: std::collections::HashMap<
+        CargoType,
+        Vec<crate::entity_history::IndustryProducedHistorySample>,
+    >,
     /// Suma diaria de `accepted[].waiting` usada para calcular el promedio
     /// mensual al cerrar la economía.
     #[serde(default)]
@@ -989,6 +997,7 @@ impl Industry {
             secondary_stock: 0,
             newgrf_accepted_cargo_waiting: CargoStock::default(),
             accepted_history: std::collections::HashMap::new(),
+            produced_history: std::collections::HashMap::new(),
             accepted_accumulated_waiting: CargoStock::default(),
             accepted_history_days: 0,
             valid_history: 0,
@@ -1040,6 +1049,7 @@ impl Industry {
             secondary_stock: 0,
             newgrf_accepted_cargo_waiting: CargoStock::default(),
             accepted_history: std::collections::HashMap::new(),
+            produced_history: std::collections::HashMap::new(),
             accepted_accumulated_waiting: CargoStock::default(),
             accepted_history_days: 0,
             valid_history: 0,
@@ -1097,6 +1107,7 @@ impl Industry {
             secondary_stock: 0,
             newgrf_accepted_cargo_waiting: CargoStock::default(),
             accepted_history: std::collections::HashMap::new(),
+            produced_history: std::collections::HashMap::new(),
             accepted_accumulated_waiting: CargoStock::default(),
             accepted_history_days: 0,
             valid_history: 0,
@@ -1400,6 +1411,30 @@ impl Industry {
             .saturating_add(u16::try_from(accepted.min(u32::from(u16::MAX))).unwrap_or(u16::MAX));
     }
 
+    /// Registra producción y transporte del cargo en el mes actual.
+    ///
+    /// `TransportIndustryGoods` actualiza ambos contadores cuando retira una
+    /// tanda del stock de la industria; la carga directa desde una industria
+    /// registra producción y transporte juntos porque no atraviesa el andén.
+    /// Los campos nativos son `uint16`, por lo que el runtime satura cada
+    /// incremento en vez de truncar silenciosamente un mes muy grande.
+    pub fn record_produced_cargo(&mut self, cargo: CargoType, production: u32, transported: u32) {
+        if production == 0 && transported == 0 {
+            return;
+        }
+        let history = self.produced_history.entry(cargo).or_default();
+        if history.is_empty() {
+            history.push(crate::entity_history::IndustryProducedHistorySample::default());
+        }
+        let sample = &mut history[0];
+        sample.production = sample
+            .production
+            .saturating_add(u16::try_from(production.min(u32::from(u16::MAX))).unwrap_or(u16::MAX));
+        sample.transported = sample.transported.saturating_add(
+            u16::try_from(transported.min(u32::from(u16::MAX))).unwrap_or(u16::MAX),
+        );
+    }
+
     /// Acumula el waiting actual una vez por día económico.
     ///
     /// `OnTick_Industry` de `OpenTTD` hace esta suma antes de calcular el
@@ -1414,14 +1449,14 @@ impl Industry {
         self.accepted_history_days = self.accepted_history_days.saturating_add(1);
     }
 
-    /// Cierra el mes de historiales aceptados y abre el registro actual.
+    /// Cierra el mes de historiales de entrada y salida y abre el registro actual.
     ///
     /// El registro cero conserva el mes que acaba de terminar y luego se
     /// desplaza a índice uno, manteniendo el orden nativo de `OpenTTD`.
     pub fn rollover_accepted_history(&mut self) {
         let days = u32::from(self.accepted_history_days.max(1));
-        let cargos: Vec<_> = self.accepted_history.keys().copied().collect();
-        for &cargo in &cargos {
+        let accepted_cargos: Vec<_> = self.accepted_history.keys().copied().collect();
+        for &cargo in &accepted_cargos {
             let average = u16::try_from(
                 self.accepted_accumulated_waiting
                     .get(cargo)
@@ -1440,9 +1475,21 @@ impl Industry {
             );
             history.truncate(crate::entity_history::INDUSTRY_HISTORY_RECORDS);
         }
+        let produced_cargos: Vec<_> = self.produced_history.keys().copied().collect();
+        for &cargo in &produced_cargos {
+            let history = self.produced_history.entry(cargo).or_default();
+            if history.is_empty() {
+                history.push(crate::entity_history::IndustryProducedHistorySample::default());
+            }
+            history.insert(
+                0,
+                crate::entity_history::IndustryProducedHistorySample::default(),
+            );
+            history.truncate(crate::entity_history::INDUSTRY_HISTORY_RECORDS);
+        }
         self.accepted_accumulated_waiting = CargoStock::default();
         self.accepted_history_days = 0;
-        if !cargos.is_empty() {
+        if !accepted_cargos.is_empty() || !produced_cargos.is_empty() {
             let mask = (1_u64 << crate::entity_history::INDUSTRY_HISTORY_RECORDS) - 1;
             self.valid_history = ((self.valid_history << 1) | (1_u64 << 1)) & mask;
         }
@@ -1455,6 +1502,15 @@ impl Industry {
         cargo: CargoType,
     ) -> Option<&[crate::entity_history::IndustryAcceptedHistorySample]> {
         self.accepted_history.get(&cargo).map(Vec::as_slice)
+    }
+
+    /// Devuelve el historial producido en orden nativo (mes actual primero).
+    #[must_use]
+    pub fn produced_history_for(
+        &self,
+        cargo: CargoType,
+    ) -> Option<&[crate::entity_history::IndustryProducedHistorySample]> {
+        self.produced_history.get(&cargo).map(Vec::as_slice)
     }
 
     /// Añade cargo a la cola de entradas de la industria.
@@ -2228,6 +2284,7 @@ fn transport_industry_cargo_stock(
         selectgoods,
         None,
     );
+    industry.record_produced_cargo(cargo, amount, moved);
     if moved > 0 {
         industry.transported_total = industry.transported_total.saturating_add(u64::from(moved));
     }
@@ -2263,6 +2320,7 @@ fn transport_industry_extra_cargo_stock(
         selectgoods,
         None,
     );
+    industry.record_produced_cargo(cargo, amount, moved);
     if moved > 0 {
         industry.transported_total = industry.transported_total.saturating_add(u64::from(moved));
     }
@@ -3006,6 +3064,43 @@ mod tests {
             0
         );
         assert_eq!(industry.valid_history & (1 << 1), 1 << 1);
+    }
+
+    #[test]
+    fn produced_history_tracks_per_output_transfer_and_rollover() {
+        let mut industry = Industry::new(TileCoord::new(2, 2), IndustryKind::CoalMine);
+        industry.stock = 255;
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(3, 2),
+            StopKind::RailStation,
+        )];
+
+        let moved = transport_industry_goods(&mut industry, &mut stations, false);
+        let history = industry
+            .produced_history_for(CargoType::Coal)
+            .unwrap_or(&[]);
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].production, 255);
+        assert_eq!(
+            history[0].transported,
+            u16::try_from(moved).unwrap_or(u16::MAX)
+        );
+
+        industry.rollover_accepted_history();
+        let history = industry
+            .produced_history_for(CargoType::Coal)
+            .unwrap_or(&[]);
+        assert_eq!(history.len(), 2);
+        assert_eq!(
+            history[0],
+            crate::entity_history::IndustryProducedHistorySample::default()
+        );
+        assert_eq!(history[1].production, 255);
+        assert_eq!(
+            history[1].transported,
+            u16::try_from(moved).unwrap_or(u16::MAX)
+        );
+        assert_eq!(crate::entity_history::INDUSTRY_HISTORY_RECORDS, 61);
     }
 
     /// Dos estaciones sobre la misma mina se reparten el carbón según el rating:

@@ -8,10 +8,11 @@ pub const ENTITY_HISTORY_MONTHS: usize = ECONOMY_HISTORY_MONTHS;
 /// Número de registros que `OpenTTD` reserva para los historiales de
 /// industrias (`HISTORY_RECORDS`: mes actual + meses/trimestres/años).
 ///
-/// El runtime reducido no expone todavía las vistas trimestrales/anuales,
-/// pero conserva los 37 registros nativos para que un `INDY` mutado pueda
-/// volver a escribirse sin truncar la ventana que espera `OpenTTD`.
-pub const INDUSTRY_HISTORY_RECORDS: usize = 37;
+/// La ventana nativa contiene el mes actual, 24 meses, 17 agregados
+/// trimestrales y 19 agregados anuales: 61 posiciones (`misc/history_type.hpp`).
+/// El runtime reducido todavía no expone las vistas trimestrales/anuales, pero
+/// conserva la longitud completa para que un `INDY` mutado no trunque el save.
+pub const INDUSTRY_HISTORY_RECORDS: usize = 61;
 
 /// Muestra mensual de un cargo aceptado por una industria.
 ///
@@ -21,6 +22,17 @@ pub const INDUSTRY_HISTORY_RECORDS: usize = 37;
 pub struct IndustryAcceptedHistorySample {
     pub accepted: u16,
     pub waiting: u16,
+}
+
+/// Muestra mensual de un cargo producido por una industria.
+///
+/// El orden es el nativo de `OpenTTD`: índice cero es el mes actual y los
+/// siguientes son meses anteriores. Ambos contadores son unidades de carga
+/// representables por los campos `uint16` de `SlIndustryProducedHistory`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct IndustryProducedHistorySample {
+    pub production: u16,
+    pub transported: u16,
 }
 
 /// Muestra mensual de un pueblo.

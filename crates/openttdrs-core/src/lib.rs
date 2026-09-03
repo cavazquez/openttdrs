@@ -263,7 +263,8 @@ pub use engine::{
 };
 pub use entity_history::{
     ENTITY_HISTORY_MONTHS, INDUSTRY_HISTORY_RECORDS, IndustryAcceptedHistorySample,
-    IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
+    IndustryHistory, IndustryHistorySample, IndustryProducedHistorySample, TownHistory,
+    TownHistorySample,
 };
 pub use fleet_index::{FleetIndex, TerminalSpatialIndex};
 pub use ground_crash::{

@@ -990,6 +990,7 @@ fn try_load_from_industry(
     state.vehicles[vehicle_idx].last_pickup_station = Some(station_pos);
     state.vehicles[vehicle_idx].last_depart_tick = Some(state.tick.get());
     state.industries[ind_idx].stock -= u32::from(count);
+    state.industries[ind_idx].record_produced_cargo(output, u32::from(count), u32::from(count));
     state.industries[ind_idx].transported_total = state.industries[ind_idx]
         .transported_total
         .saturating_add(u64::from(count));

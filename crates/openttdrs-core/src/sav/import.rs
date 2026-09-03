@@ -413,6 +413,22 @@ fn import_industry_output_stock(industry: &mut Industry, saved: &SavIndustry, cl
             continue;
         };
         let waiting = u32::from(produced.waiting);
+        if !produced.history.is_empty() {
+            industry.produced_history.insert(
+                cargo,
+                produced
+                    .history
+                    .iter()
+                    .take(crate::entity_history::INDUSTRY_HISTORY_RECORDS)
+                    .map(
+                        |sample| crate::entity_history::IndustryProducedHistorySample {
+                            production: sample.production,
+                            transported: sample.transported,
+                        },
+                    )
+                    .collect(),
+            );
+        }
         if outputs.first().copied() == Some(cargo) {
             industry.stock = waiting;
             continue;
@@ -603,10 +619,26 @@ pub(crate) fn rehydrate_sav_industries_with_catalog(state: &mut GameState) -> us
                 let mut valid_output_slot = 0usize;
                 for (slot, cargo) in output_slots.iter().enumerate() {
                     let Some(cargo) = cargo else { continue };
-                    let waiting = saved
-                        .produced
-                        .get(slot)
-                        .map_or(0, |entry| u32::from(entry.waiting));
+                    let Some(entry) = saved.produced.get(slot) else {
+                        continue;
+                    };
+                    if !entry.history.is_empty() {
+                        industry.produced_history.insert(
+                            *cargo,
+                            entry
+                                .history
+                                .iter()
+                                .take(crate::entity_history::INDUSTRY_HISTORY_RECORDS)
+                                .map(|sample| {
+                                    crate::entity_history::IndustryProducedHistorySample {
+                                        production: sample.production,
+                                        transported: sample.transported,
+                                    }
+                                })
+                                .collect(),
+                        );
+                    }
+                    let waiting = u32::from(entry.waiting);
                     match valid_output_slot {
                         0 => industry.stock = waiting,
                         1 => industry.secondary_stock = waiting,
@@ -967,6 +999,7 @@ mod tests {
 
     #[test]
     #[allow(clippy::expect_used)] // fixture fijo: una tesela ausente es un bug del test
+    #[allow(clippy::too_many_lines)] // fixture de round-trip cubre todos los campos de INDY
     fn indy_hydration_uses_real_rect_production_and_counter() {
         let mut state = GameState::from_map(Map::new_flat(8, 8, 0));
         state.climate = Climate::Temperate;
@@ -1002,7 +1035,10 @@ mod tests {
                     cargo_slot: 1,
                     waiting: 77,
                     rate: 15,
-                    history: Vec::new(),
+                    history: vec![super::super::entities::SavIndustryProducedHistory {
+                        production: 42,
+                        transported: 17,
+                    }],
                 },
                 super::super::entities::SavIndustryProducedCargo {
                     cargo_slot: 9,
@@ -1030,6 +1066,16 @@ mod tests {
         assert_eq!(industry.tiles.len(), 2);
         assert_eq!(industry.spec, Some(IndustrySpec::CoalMine));
         assert_eq!(industry.stock, 77);
+        assert_eq!(
+            industry.produced_history_for(crate::CargoType::Coal),
+            Some(
+                [crate::entity_history::IndustryProducedHistorySample {
+                    production: 42,
+                    transported: 17,
+                }]
+                .as_slice()
+            )
+        );
         assert_eq!(industry.extra_produced_cargo(crate::CargoType::Steel), 22);
         assert_eq!(industry.accepted_cargo_waiting(crate::CargoType::Grain), 15);
         assert_eq!(industry.last_accepted_date(crate::CargoType::Grain), 10_974);

@@ -50,6 +50,11 @@ pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     // Industry tiles antes que industries (layouts `0xFE` → gfx global).
     industry::apply_newgrf_industry_tiles_default_dirs(state);
     industry::apply_newgrf_industries_default_dirs(state);
+    // `INDY` guarda las listas efectivas de cargos de cada instancia. Tras
+    // cargar un SAV, volver a enlazar esas filas al catálogo activo evita
+    // perder tipos dinámicos, tasas y stocks al resolver el GRF después del
+    // importador (sin volver a ejecutar callbacks de fundación).
+    crate::sav::rehydrate_sav_industries_with_catalog(state);
     // Los SAV anteriores a `SLV_32` no guardaban qué industria creó cada
     // campo. Esperar a este punto permite resolver `PlantOnBuild` de GRF
     // custom antes de consumir el RNG global en la pasada de afterload.

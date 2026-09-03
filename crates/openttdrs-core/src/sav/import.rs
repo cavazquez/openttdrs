@@ -478,6 +478,237 @@ pub(crate) fn hydrate_sav_industry_persistent_storage(
     }
 }
 
+/// Reasocia las industrias importadas desde `INDY` al catálogo `NewGRF` activo.
+///
+/// `OpenTTD` no vuelve a ejecutar los callbacks de fundación al cargar una
+/// partida: las listas `Industry::accepted`/`Industry::produced` serializadas
+/// son la fuente de verdad. El importador conserva esas filas en
+/// `GameState::sav_industry_histories`; cuando el catálogo se aplica después
+/// del SAV, esta pasada vuelve a enlazar el `IndustrySpecDef` y reconstruye los
+/// cargos efectivos, tasas, multiplicadores y stocks sin consumir callbacks ni
+/// cambiar el estado aleatorio de la industria.
+#[allow(clippy::too_many_lines)]
+pub(crate) fn rehydrate_sav_industries_with_catalog(state: &mut GameState) -> usize {
+    if state.sav_industry_histories.is_empty() || state.industry_spec_catalog.is_empty() {
+        return 0;
+    }
+
+    let saved_rows = state.sav_industry_histories.clone();
+    let catalog = state.industry_spec_catalog.clone();
+    let overrides = state.industry_overrides.clone();
+    let cargo_catalog = state.cargo_spec_catalog.clone();
+    let climate = state.climate;
+    let mut rehydrated = 0;
+
+    for (index, industry) in state.industries.iter_mut().enumerate() {
+        let Some(saved) = saved_rows
+            .iter()
+            .find(|saved| u16::try_from(saved.industry_id).ok() == Some(industry.instance_id))
+            .or_else(|| saved_rows.iter().find(|saved| saved.pos == industry.pos))
+            .or_else(|| saved_rows.get(index))
+            .cloned()
+        else {
+            continue;
+        };
+
+        let clean_id = u16::from(saved.industry_type);
+        let translated_id = crate::industry_spec::get_translated_industry_id(clean_id, &overrides);
+        let Some(def) = catalog.iter().find(|def| def.id == translated_id).cloned() else {
+            // Uninstalled GRF: retain the explicit vanilla/fallback instance
+            // and its opaque INDY row. It can be retried if the stack changes.
+            continue;
+        };
+
+        let needs_rebind = industry.newgrf_type_id != Some(def.id);
+        let first_attachment = industry.newgrf_type_id.is_none();
+        if needs_rebind {
+            *industry = industry.clone().with_newgrf_spec(def.id, &def);
+        }
+
+        // A modern INDY row always contains the dynamic vectors, including
+        // vectors made exclusively of INVALID_CARGO placeholders. Empty
+        // vectors are left to `with_newgrf_spec` because old saves did not
+        // serialize the reorganised cargo lists.
+        let has_saved_slots = !saved.produced.is_empty() || !saved.accepted.is_empty();
+        let dynamic_callbacks =
+            def.has_input_cargo_types_callback() || def.has_output_cargo_types_callback();
+        industry.newgrf_dynamic_cargo_types = dynamic_callbacks;
+        if has_saved_slots {
+            let input_slots = saved
+                .accepted
+                .iter()
+                .map(|entry| cargo_from_sav_slot(entry.cargo_slot, climate, &cargo_catalog))
+                .collect::<Vec<_>>();
+            let output_slots = saved
+                .produced
+                .iter()
+                .map(|entry| cargo_from_sav_slot(entry.cargo_slot, climate, &cargo_catalog))
+                .collect::<Vec<_>>();
+            industry.newgrf_input_cargo_slots.clone_from(&input_slots);
+            industry.newgrf_output_cargo_slots.clone_from(&output_slots);
+
+            let valid_inputs = input_slots.iter().flatten().copied().collect::<Vec<_>>();
+            let valid_outputs = output_slots.iter().flatten().copied().collect::<Vec<_>>();
+            industry.newgrf_output_cargo = valid_outputs.first().copied();
+            industry.newgrf_secondary_output_cargo = valid_outputs.get(1).copied();
+            industry.newgrf_extra_output_cargos = valid_outputs.iter().copied().skip(2).collect();
+
+            let saved_rates = saved
+                .produced
+                .iter()
+                .zip(output_slots.iter())
+                .filter_map(|(entry, cargo)| cargo.map(|cargo| (cargo, entry.rate)))
+                .collect::<Vec<_>>();
+            if let Some(&(_, rate)) = saved_rates.first() {
+                industry.newgrf_production_rate = Some(rate);
+            }
+            if let Some(&(_, rate)) = saved_rates.get(1) {
+                industry.newgrf_secondary_production_rate = Some(rate);
+            }
+            industry.newgrf_extra_production_rates =
+                saved_rates.iter().skip(2).map(|(_, rate)| *rate).collect();
+
+            rebuild_sav_industry_processing(&def, industry, &valid_inputs, &valid_outputs);
+
+            // The first import may have classified custom output slots using
+            // the vanilla fallback. Rebuild all per-cargo stocks from their
+            // native positions exactly once, before the simulation starts.
+            if first_attachment {
+                industry.stock = 0;
+                industry.secondary_stock = 0;
+                industry.newgrf_extra_produced_cargo = crate::cargo::CargoStock::default();
+                industry.newgrf_accepted_cargo_waiting = crate::cargo::CargoStock::default();
+                industry.newgrf_last_accepted = crate::cargo::CargoStock::default();
+                let mut valid_output_slot = 0usize;
+                for (slot, cargo) in output_slots.iter().enumerate() {
+                    let Some(cargo) = cargo else { continue };
+                    let waiting = saved
+                        .produced
+                        .get(slot)
+                        .map_or(0, |entry| u32::from(entry.waiting));
+                    match valid_output_slot {
+                        0 => industry.stock = waiting,
+                        1 => industry.secondary_stock = waiting,
+                        _ => industry.newgrf_extra_produced_cargo.set(*cargo, waiting),
+                    }
+                    valid_output_slot += 1;
+                }
+                for (slot, cargo) in input_slots.iter().enumerate() {
+                    let Some(cargo) = cargo else { continue };
+                    let Some(entry) = saved.accepted.get(slot) else {
+                        continue;
+                    };
+                    industry
+                        .newgrf_accepted_cargo_waiting
+                        .set(*cargo, u32::from(entry.waiting));
+                    industry
+                        .newgrf_last_accepted
+                        .set(*cargo, entry.last_accepted);
+                }
+                industry.capacity =
+                    INDUSTRY_STOCK_CAPACITY.max(industry.stock.max(industry.secondary_stock));
+            }
+        }
+        rehydrated += 1;
+    }
+    rehydrated
+}
+
+fn cargo_from_sav_slot(
+    slot: u8,
+    climate: Climate,
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+) -> Option<crate::CargoType> {
+    crate::CargoType::from_climate_slot(climate, slot).or_else(|| {
+        cargo_catalog
+            .iter()
+            .find(|def| def.bitnum == slot)
+            .and_then(|def| crate::CargoType::from_label(&def.label))
+    })
+}
+
+fn industry_source_index(
+    def: &crate::industry_spec::IndustrySpecDef,
+    cargo: crate::CargoType,
+    output: bool,
+) -> Option<usize> {
+    let (indices, labels) = if output {
+        (&def.produced_cargo_indices, &def.produced_cargo_labels)
+    } else {
+        (&def.accepted_cargo_indices, &def.accepted_cargo_labels)
+    };
+    labels
+        .iter()
+        .position(|label| crate::industry_spec::cargo_type_from_label(Some(label)) == Some(cargo))
+        .or_else(|| {
+            indices
+                .iter()
+                .position(|&index| crate::CargoType::from_cargo_id(index) == Some(cargo))
+        })
+}
+
+fn industry_matrix_multiplier(
+    def: &crate::industry_spec::IndustrySpecDef,
+    input_source: usize,
+    output_source: usize,
+) -> u16 {
+    let output_count = def.produced_cargo_indices.len();
+    if output_count == 0 {
+        return 0;
+    }
+    def.input_multipliers
+        .get(input_source.saturating_mul(output_count) + output_source)
+        .copied()
+        .or_else(|| def.input_multipliers.get(input_source).copied())
+        .unwrap_or(256)
+}
+
+fn rebuild_sav_industry_processing(
+    def: &crate::industry_spec::IndustrySpecDef,
+    industry: &mut Industry,
+    inputs: &[crate::CargoType],
+    outputs: &[crate::CargoType],
+) {
+    let output_sources = outputs
+        .iter()
+        .map(|&cargo| industry_source_index(def, cargo, true))
+        .collect::<Vec<_>>();
+    let primary_output_source = output_sources.first().copied().flatten();
+    industry.newgrf_processing_inputs = inputs
+        .iter()
+        .filter_map(|&cargo| {
+            let source = industry_source_index(def, cargo, false)?;
+            Some(crate::industry::IndustryProcessingInput {
+                cargo,
+                batch: 8,
+                multiplier: primary_output_source.map_or(256, |output| {
+                    industry_matrix_multiplier(def, source, output)
+                }),
+            })
+        })
+        .collect();
+    industry.newgrf_processing_secondary_multipliers = inputs
+        .iter()
+        .filter_map(|&cargo| industry_source_index(def, cargo, false))
+        .map(|input| {
+            output_sources
+                .get(1)
+                .copied()
+                .flatten()
+                .map_or(0, |output| industry_matrix_multiplier(def, input, output))
+        })
+        .collect();
+    industry.newgrf_processing_extra_multipliers = inputs
+        .iter()
+        .filter_map(|&cargo| industry_source_index(def, cargo, false))
+        .flat_map(|input| {
+            output_sources.iter().skip(2).copied().map(move |output| {
+                output.map_or(0, |output| industry_matrix_multiplier(def, input, output))
+            })
+        })
+        .collect();
+}
+
 /// Hidrata los registros `7C` del aeropuerto de cada estación desde `PSAC`.
 ///
 /// `STNN.normal.airport.psa` referencia la misma tabla nativa que `INDY.psa`,

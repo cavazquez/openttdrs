@@ -98,7 +98,7 @@ pub use entities::{
     SavStation, SavStationCargo, SavVehicle, SavVehicleKind, format_generated_station_name,
     resolve_sav_station_name,
 };
-pub(crate) use import::apply_legacy_sav_afterload;
+pub(crate) use import::{apply_legacy_sav_afterload, rehydrate_sav_industries_with_catalog};
 pub use import::{
     hydrate_industries_from_map_tiles, industry_group_from_gfx, industry_kind_from_gfx,
     industry_kind_from_ottd_type, industry_random_colour_from_instance, industry_spec_from_gfx,
@@ -2148,6 +2148,108 @@ mod tests {
         assert_eq!(loaded.m2, 9);
         assert_eq!(loaded.m3, 6);
         assert!(state.runtime.legacy_sav_afterload.is_none());
+    }
+
+    #[test]
+    fn sav_industry_catalog_rehydrates_persisted_dynamic_cargo_slots() {
+        use crate::industry_spec::{
+            INDUSTRY_CALLBACK_INPUT_CARGO_TYPES_MASK, INDUSTRY_CALLBACK_OUTPUT_CARGO_TYPES_MASK,
+            IndustrySpecDef,
+        };
+
+        let pos = TileCoord::new(3, 3);
+        let mut state = GameState::new(8, 8);
+        state
+            .industries
+            .push(crate::Industry::new(pos, crate::IndustryKind::Factory).with_instance_id(7));
+        state.industry_overrides[0] = 37;
+        state.industry_spec_catalog.push(IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: Some(0),
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![1, 7],
+            produced_cargo_labels: vec!["COAL".into(), "WOOD".into()],
+            accepted_cargo_indices: vec![1],
+            accepted_cargo_labels: vec!["COAL".into()],
+            production_rates: vec![8, 12],
+            input_multipliers: vec![64, 128],
+            callback_mask: INDUSTRY_CALLBACK_INPUT_CARGO_TYPES_MASK
+                | INDUSTRY_CALLBACK_OUTPUT_CARGO_TYPES_MASK,
+            behaviour: 0,
+            cost_multiplier: 1,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "Saved dynamic industry".into(),
+            from_newgrf: true,
+            grfid: 0x5341_5601,
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        });
+        state.sav_industry_histories.push(SavIndustry {
+            industry_id: 7,
+            pos,
+            width: 1,
+            height: 1,
+            industry_type: 0,
+            random_colour: 0,
+            counter: 0,
+            selected_layout: 0,
+            random: 0x1234,
+            last_prod_year: 0,
+            was_cargo_delivered: false,
+            control_flags: 0,
+            founder: None,
+            construction_date: 0,
+            construction_type: crate::industry::INDUSTRY_CONSTRUCTION_UNKNOWN,
+            prod_level: crate::industry::PRODLEVEL_DEFAULT,
+            valid_history: 0,
+            persistent_storage_id: None,
+            produced: vec![
+                SavIndustryProducedCargo {
+                    cargo_slot: 0xFF,
+                    waiting: 3,
+                    rate: 0,
+                    history: Vec::new(),
+                },
+                SavIndustryProducedCargo {
+                    cargo_slot: 1,
+                    waiting: 23,
+                    rate: 7,
+                    history: Vec::new(),
+                },
+            ],
+            accepted: vec![SavIndustryAcceptedCargo {
+                cargo_slot: 1,
+                waiting: 11,
+                last_accepted: 19,
+                accumulated_waiting: 0,
+                history: Vec::new(),
+            }],
+        });
+
+        assert_eq!(
+            crate::sav::rehydrate_sav_industries_with_catalog(&mut state),
+            1
+        );
+        let industry = &state.industries[0];
+        assert_eq!(industry.newgrf_type_id, Some(37));
+        assert!(industry.newgrf_dynamic_cargo_types);
+        assert_eq!(
+            industry.newgrf_output_cargo_slots,
+            vec![None, Some(crate::CargoType::Coal)]
+        );
+        assert_eq!(industry.newgrf_output_cargo, Some(crate::CargoType::Coal));
+        assert_eq!(industry.stock, 23);
+        assert_eq!(
+            industry
+                .newgrf_accepted_cargo_waiting
+                .get(crate::CargoType::Coal),
+            11
+        );
+        assert_eq!(industry.newgrf_processing_inputs[0].multiplier, 64);
+        assert_eq!(industry.newgrf_production_rate, Some(7));
     }
 
     #[test]

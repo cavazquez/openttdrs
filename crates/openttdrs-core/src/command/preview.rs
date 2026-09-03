@@ -3,7 +3,7 @@
 use crate::bridge_spec::{bridge_available_at_tick_in, bridge_build_cost_in};
 use crate::{GameState, IndustrySpec, StopKind};
 
-use super::build_object::check_build_object_placement;
+use super::build_object::check_build_object_placement_with_towns;
 use super::buy_land::check_buy_land;
 use super::error::CommandError;
 use super::industry::{check_place_industry_spec, check_place_industry_spec_layout};
@@ -272,14 +272,21 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
                 Some(CommandError::CannotBuyLandHere)
             }
         }
-        Command::BuildObject { pos, object_type } => check_build_object_placement(
-            map,
-            *pos,
-            *object_type,
-            &state.object_spec_catalog,
-            state.climate,
-        )
-        .err(),
+        Command::BuildObject { pos, object_type } => {
+            // Los callbacks pueden escribir PSA del pueblo. El preview debe
+            // resolverlos con el mismo contexto, pero descartando cualquier
+            // mutación al no ejecutar el comando.
+            let mut callback_towns = state.towns.clone();
+            check_build_object_placement_with_towns(
+                map,
+                *pos,
+                *object_type,
+                &state.object_spec_catalog,
+                state.climate,
+                &mut callback_towns,
+            )
+            .err()
+        }
         Command::PlaceIndustry(_)
         | Command::PlaceIndustryKind(_, _)
         | Command::PlaceIndustrySpec(_, _)

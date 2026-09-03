@@ -9,6 +9,7 @@ use crate::map::{
     object_type_dims, object_type_from_tile, tile_slope_and_z,
 };
 use crate::object_spec::{DEFAULT_OBJECT_BUILD_COST_FACTOR, ObjectSpecDef, object_spec_def};
+use crate::town::Town;
 use crate::world_gen::Climate;
 
 use super::error::CommandError;
@@ -60,12 +61,13 @@ fn check_single_object_tile(map: &Map, c: TileCoord) -> Result<(), CommandError>
     }
 }
 
-pub(crate) fn check_build_object(
+pub(crate) fn check_build_object_with_towns(
     map: &Map,
     c: TileCoord,
     object_type: u8,
     catalog: &[ObjectSpecDef],
     climate: Climate,
+    towns: &mut [Town],
 ) -> Result<(), CommandError> {
     in_bounds(map, c)?;
     if !is_allowed_build_object_type(object_type, catalog) {
@@ -97,11 +99,25 @@ pub(crate) fn check_build_object(
             for dx in 0..w {
                 let tile = TileCoord::new(c.x + i32::from(dx), c.y + i32::from(dy));
                 let (slope, _) = tile_slope_and_z(map, tile).ok_or(CommandError::OutOfBounds)?;
-                if !crate::newgrf_callback::apply_object_slope_callback(
-                    def,
-                    slope,
-                    object_tile_offset_byte(dx, dy),
-                ) {
+                let offset = object_tile_offset_byte(dx, dy);
+                let nearest_town = towns
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|(_, town)| crate::house_spec::distance_square(town.pos, tile))
+                    .map(|(index, _)| index);
+                if let Some(index) = nearest_town {
+                    if !crate::newgrf_callback::apply_object_slope_callback_for_build(
+                        def,
+                        map,
+                        &mut towns[index],
+                        tile,
+                        slope,
+                        offset,
+                        climate,
+                    ) {
+                        return Err(CommandError::NewGrfCallbackDenied);
+                    }
+                } else if !crate::newgrf_callback::apply_object_slope_callback(def, slope, offset) {
                     return Err(CommandError::NewGrfCallbackDenied);
                 }
             }
@@ -129,14 +145,15 @@ fn count_objects_of_type(map: &Map, object_type: u8) -> usize {
 }
 
 /// Comprueba colocación; límite 1 faro / 1 transmisor (no aplica a ids `NewGRF` ≥5).
-pub(crate) fn check_build_object_placement(
+pub(crate) fn check_build_object_placement_with_towns(
     map: &Map,
     c: TileCoord,
     object_type: u8,
     catalog: &[ObjectSpecDef],
     climate: Climate,
+    towns: &mut [Town],
 ) -> Result<(), CommandError> {
-    check_build_object(map, c, object_type, catalog, climate)?;
+    check_build_object_with_towns(map, c, object_type, catalog, climate, towns)?;
     if !is_newgrf_object_type(object_type) && count_objects_of_type(map, object_type) >= 1 {
         return Err(CommandError::ObjectLimitReached);
     }
@@ -176,18 +193,24 @@ pub(crate) fn build_object(
     c: TileCoord,
     object_type: u8,
 ) -> Result<(), CommandError> {
-    check_build_object_placement(
+    // El callback se evalúa contra una copia de los pueblos. Así el preflight
+    // conserva sus efectos PSA para el execute, pero un fallo de fondos no
+    // muta el estado persistente.
+    let mut callback_towns = state.towns.clone();
+    check_build_object_placement_with_towns(
         &state.map,
         c,
         object_type,
         &state.object_spec_catalog,
         state.climate,
+        &mut callback_towns,
     )?;
     let (factor, tiles) = object_build_cost_params(object_type, &state.object_spec_catalog);
     let cost = build_object_cost_factored(&state.global_economy, factor, tiles);
     if state.economy.money < cost {
         return Err(CommandError::InsufficientFunds);
     }
+    state.towns = callback_towns;
     let (w, h) = object_type_dims(object_type, &state.object_spec_catalog);
     for dy in 0..h {
         for dx in 0..w {
@@ -230,16 +253,20 @@ pub(crate) fn build_object(
 pub(crate) fn build_object_quote(state: &GameState, cmd: &super::types::Command) -> i64 {
     use super::types::Command;
     match cmd {
-        Command::BuildObject { pos, object_type }
-            if check_build_object_placement(
+        Command::BuildObject { pos, object_type } => {
+            let mut callback_towns = state.towns.clone();
+            if check_build_object_placement_with_towns(
                 &state.map,
                 *pos,
                 *object_type,
                 &state.object_spec_catalog,
                 state.climate,
+                &mut callback_towns,
             )
-            .is_ok() =>
-        {
+            .is_err()
+            {
+                return 0;
+            }
             let (factor, tiles) =
                 object_build_cost_params(*object_type, &state.object_spec_catalog);
             build_object_cost_factored(&state.global_economy, factor, tiles)
@@ -261,7 +288,9 @@ mod tests {
         build_grf_v2_with_action0_and_action8,
     };
     use crate::newgrf_sprites::{
-        build_action2_callback_literal_payload, build_grf_v2_feature_with_action2_chain,
+        Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, TrainSpriteAssign,
+        TrainSpriteGraphics, build_action2_callback_literal_payload,
+        build_grf_v2_feature_with_action2_chain,
     };
     use crate::object_spec::{
         DEFAULT_OBJECT_CLIMATE_MASK, NEW_OBJECT_OFFSET, OBJECT_CALLBACK_SLOPE_CHECK_MASK,
@@ -287,6 +316,57 @@ mod tests {
             associated_badges: Vec::new(),
         });
         u8::try_from(id).expect("id fits m5")
+    }
+
+    fn parent_psto_runtime(reg: u8, value: u8, result: u8) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0x80,
+                        and_mask: u32::from(value),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: vec![
+                    Action2VarOp {
+                        operator: 0x10,
+                        rhs: Action2VarTerm {
+                            variable: 0x1A,
+                            param: None,
+                            adjust: Action2VarAdjust {
+                                shift: 0x80,
+                                and_mask: u32::from(reg),
+                                ..Action2VarAdjust::default()
+                            },
+                        },
+                    },
+                    Action2VarOp {
+                        operator: 0x0F,
+                        rhs: Action2VarTerm {
+                            variable: 0x1A,
+                            param: None,
+                            adjust: Action2VarAdjust {
+                                shift: 0x80,
+                                and_mask: u32::from(result),
+                                ..Action2VarAdjust::default()
+                            },
+                        },
+                    },
+                ],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
     }
 
     #[test]
@@ -499,6 +579,68 @@ mod tests {
         state.object_spec_catalog[0].newgrf_grf_version = 7;
         assert_eq!(command_would_fail(&state, &command), None);
         apply_command(&mut state, &command).expect("GRF 7 permite la pendiente");
+    }
+
+    #[test]
+    fn object_slope_callback_psa_commits_only_on_execute() {
+        let mut state = GameState::new(8, 8);
+        let object_type = push_spec(&mut state, OBJECT_SIZE_1X1, 1, DEFAULT_OBJECT_CLIMATE_MASK);
+        state.towns.push(crate::town::Town {
+            id: 12,
+            pos: TileCoord::new(3, 3),
+            ..Default::default()
+        });
+        let def = state.object_spec_catalog.first_mut().expect("object spec");
+        def.callback_mask = OBJECT_CALLBACK_SLOPE_CHECK_MASK;
+        def.grfid = 0x4F42_5053;
+        def.newgrf_grf_version = 7; // callback 0 = éxito en GRF < 8
+        def.newgrf_runtime = Some(Box::new(parent_psto_runtime(5, 42, 0)));
+        let command = Command::BuildObject {
+            pos: TileCoord::new(3, 3),
+            object_type,
+        };
+
+        assert_eq!(command_would_fail(&state, &command), None);
+        assert!(state.towns[0].newgrf_persistent_regs.is_empty());
+        apply_command(&mut state, &command).expect("build object");
+        assert_eq!(
+            state.towns[0]
+                .newgrf_persistent_regs
+                .get(&0x4F42_5053)
+                .and_then(|registers| registers.get(&5)),
+            Some(&42)
+        );
+
+        let mut no_money = GameState::new(8, 8);
+        let no_money_type = push_spec(
+            &mut no_money,
+            OBJECT_SIZE_1X1,
+            1,
+            DEFAULT_OBJECT_CLIMATE_MASK,
+        );
+        no_money.towns.push(crate::town::Town {
+            id: 13,
+            pos: TileCoord::new(4, 4),
+            ..Default::default()
+        });
+        let no_money_def = no_money
+            .object_spec_catalog
+            .first_mut()
+            .expect("object spec");
+        no_money_def.callback_mask = OBJECT_CALLBACK_SLOPE_CHECK_MASK;
+        no_money_def.grfid = 0x4F42_5054;
+        no_money_def.newgrf_grf_version = 7;
+        no_money_def.newgrf_runtime = Some(Box::new(parent_psto_runtime(5, 42, 0)));
+        no_money.economy.money = 0;
+        let no_money_command = Command::BuildObject {
+            pos: TileCoord::new(4, 4),
+            object_type: no_money_type,
+        };
+        assert_eq!(
+            apply_command(&mut no_money, &no_money_command),
+            Err(CommandError::InsufficientFunds)
+        );
+        assert!(no_money.towns[0].newgrf_persistent_regs.is_empty());
     }
 
     #[test]

@@ -13,6 +13,7 @@ use crate::house_spec::{HouseSpecDef, action2_eval_ctx_for_house_tile_with_towns
 use crate::industry::{Industry, IndustryProductionAction};
 use crate::industry_spec::{IndustrySpecDef, cargo_type_from_label};
 use crate::industry_tile::IndustryTileSpecDef;
+use crate::map::object::action2_eval_ctx_for_object_tile_with_towns;
 use crate::map::{Map, TileCoord, has_tile_water_ground};
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
@@ -1796,6 +1797,57 @@ pub fn apply_object_slope_callback(def: &ObjectSpecDef, slope: u8, footprint_off
         u32::from(slope),
         u32::from(footprint_offset),
     );
+    callback_allows_location_for_grf(result, def.grfid, def.newgrf_grf_version)
+}
+
+/// Call site de construcción de objetos con el `TownScopeResolver` parent.
+///
+/// Durante `CmdBuildObject` todavía no existe una instancia `Object`, pero
+/// `ObjectResolverObject::GetTown()` resuelve el pueblo más cercano a la
+/// tesela candidata. Los registros `\\2psto` pertenecen a ese pueblo (por
+/// GRFID), así que se cargan antes de evaluar CB157 y se escriben de vuelta
+/// incluso cuando el callback deniega la tesela. El caller puede pasar una
+/// copia de `Town` durante el preflight para conservar la semántica de
+/// consulta sin mutar el estado del juego.
+#[must_use]
+pub fn apply_object_slope_callback_for_build(
+    def: &ObjectSpecDef,
+    map: &Map,
+    town: &mut Town,
+    tile: TileCoord,
+    slope: u8,
+    footprint_offset: u8,
+    climate: crate::Climate,
+) -> bool {
+    if !def.has_slope_check_callback() {
+        return true;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return true;
+    };
+    let Some(mut map_tile) = map.get(tile) else {
+        return true;
+    };
+    // Antes de colocar el objeto MAP2 aún no contiene el desplazamiento de la
+    // tesela. El scope nativo expone igualmente `0x40` durante construcción;
+    // sembramos la misma codificación que tendrá el footprint persistido.
+    map_tile.m2 = footprint_offset;
+    let mut ctx = action2_eval_ctx_for_object_tile_with_towns(
+        map_tile,
+        slope,
+        climate,
+        tile,
+        std::slice::from_ref(&*town),
+    );
+    town.copy_newgrf_parent_scope(def.grfid, &mut ctx);
+    let result = runtime.resolve_callback_ctx(
+        def.local_id,
+        CBID_OBJECT_LAND_SLOPE_CHECK,
+        u32::from(slope),
+        u32::from(footprint_offset),
+        &mut ctx,
+    );
+    writeback_town_persistent_registers(town, def.grfid, &ctx);
     callback_allows_location_for_grf(result, def.grfid, def.newgrf_grf_version)
 }
 
@@ -4166,6 +4218,60 @@ mod tests {
                 .get(&0x5566_7788)
                 .and_then(|registers| registers.get(&3)),
             Some(&9)
+        );
+    }
+
+    #[test]
+    fn object_slope_callback_writes_town_parent_psa() {
+        let grfid = 0xAABB_CCDD;
+        let tile = TileCoord::new(1, 1);
+        let map = Map::new_flat(4, 4, 0);
+        let mut town = Town {
+            id: 9,
+            pos: tile,
+            ..Default::default()
+        };
+        town.newgrf_persistent_regs
+            .entry(0x0102_0304)
+            .or_default()
+            .insert(3, 11);
+        let def = ObjectSpecDef {
+            id: 5,
+            class_label: "OBJ ".into(),
+            name: "object-psa-cb157".into(),
+            size: crate::object_spec::OBJECT_SIZE_1X1,
+            from_newgrf: true,
+            local_id: 0,
+            grfid,
+            newgrf_grf_version: 8,
+            climate_mask: crate::object_spec::DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: 1,
+            callback_mask: crate::object_spec::OBJECT_CALLBACK_SLOPE_CHECK_MASK,
+            views: Vec::new(),
+            newgrf_runtime: Some(Box::new(gfx_callback_parent_psto(5, 42, 0))),
+            associated_badges: Vec::new(),
+        };
+
+        assert!(!apply_object_slope_callback_for_build(
+            &def,
+            &map,
+            &mut town,
+            tile,
+            0,
+            0x21,
+            crate::Climate::Temperate,
+        ));
+        assert_eq!(
+            town.newgrf_persistent_regs
+                .get(&grfid)
+                .and_then(|registers| registers.get(&5)),
+            Some(&42)
+        );
+        assert_eq!(
+            town.newgrf_persistent_regs
+                .get(&0x0102_0304)
+                .and_then(|registers| registers.get(&3)),
+            Some(&11)
         );
     }
 

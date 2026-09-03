@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-03** (commit `470499ea`, shape-check, foundations,
+Actualizada: **2026-09-03** (commit `8be6bbc6`, shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
 `PlantOnBuild`, rehidratación SAV legacy, historiales aceptados runtime,
 reatachación de industrias al
@@ -559,6 +559,15 @@ fallback histórico anterior a `SLV_SERVE_NEUTRAL_INDUSTRIES`. Las regresiones
 cubren selección de estación, exclusión por compañía y round-trip. El binding
 Squirrel/GameScript del monitor, cargos custom, scopes restantes y callbacks
 sin call site permanecen parciales.
+
+Actualización #329-SCRIPT-CARGO-MONITOR-053 (2026-09-03, commit
+`8be6bbc6`): la fachada `ScriptCargoMonitor` publica los cinco métodos de la
+API (`GetTown/IndustryDeliveryAmount`, `GetTown/IndustryPickupAmount` y
+`StopAllMonitoring`). Las cuatro consultas devuelven `-1` para una compañía,
+cargo o entidad fuera de rango y no activan una clave inválida; los monitores
+válidos mantienen reset, saturación y estado efímero nativos. El binding VM
+Squirrel/GameScript todavía no existe, ni se modelan cargos custom y scopes
+restantes.
 
 - Resto de CBs houses / airports / industries / objects (incluidos los huecos que aún no tienen call site), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.

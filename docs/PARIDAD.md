@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `470499ea`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `8be6bbc6`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -60,8 +60,7 @@ carga compatible con `_cargo_pickups`/`_cargo_deliveries`: codificación nativa
 de `CargoMonitorID`, activación explícita, reset al consultar y saturación a
 32 bits. Las entregas a industrias y pueblos actualizan los monitores y
 `GameState` expone las cuatro consultas y la limpieza por compañía. El mapa no
-se persiste; bindings de GameScript, exclusividad/neutral stations y cargos
-custom siguen fuera del alcance.
+se persiste; bindings de GameScript y cargos custom siguen fuera del alcance.
 
 Actualización #329-INDUSTRY-PRODUCED-HISTORY-050 (2026-09-03, `26a915db`):
 los historiales `INDY.produced[].history` se actualizan por salida al
@@ -91,6 +90,16 @@ comparan la exclusividad contra el propietario de la estación, como
 round-trip, selección de estación y rechazo por propietario. Permanecen los
 bindings de GameScript, cargos custom no representables, reatachación cuando
 falta el catálogo y los demás callbacks/scope; #329 continúa abierto.
+
+Actualización #329-SCRIPT-CARGO-MONITOR-053 (2026-09-03, `8be6bbc6`): la
+fachada pública `ScriptCargoMonitor` expone los cinco métodos de
+`OpenTTD` (`GetTown/IndustryDeliveryAmount`,
+`GetTown/IndustryPickupAmount` y `StopAllMonitoring`). Las consultas validan
+compañías 0–14, cargos válidos del clima y la existencia del pueblo/industria;
+ante un parámetro fuera de rango devuelven `-1` sin activar estado. El reset,
+la saturación y la efimeridad siguen delegados al monitor runtime. Quedan
+pendientes cargos custom, reatachación cuando falta el catálogo y los demás
+bindings/scope de `GameScript`; #329 continúa abierto.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

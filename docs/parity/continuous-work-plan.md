@@ -25,8 +25,8 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-03
 
-Base funcional publicada en `origin/main`: **`470499ea`** (`industry: preserve
-neutral stations and exclusive suppliers`). Este handoff documental incluye la entrega directa
+Base funcional publicada en `origin/main`: **`8be6bbc6`** (`script: expose cargo
+monitor contract`). Este handoff documental incluye la entrega directa
 SAV de campos legacy (`56aa7858`) y los slots vacíos legacy (`9f2ecc31`), y se publica después de las etapas
 de rechazo temporal (`65682a42`), cargos dinámicos (`389109c1`) y
 `PlantOnBuild` manual (`628d1fb9`); es el punto de reanudación y el código
@@ -35,9 +35,10 @@ publicado coincide con este árbol.
 Corrección de este handoff: `470499ea` ya cubre `STNN.base.owner`,
 `INDY.neutral_station`, `INDY.exclusive_supplier` y
 `station.serve_neutral_industries`, tanto en round-trip como en las rutas de
-entrega y transporte. La fila histórica de #329 que enumera esa brecha queda
-superada; la próxima tarea es la API de bindings GameScript o, si aparece
-antes en la matriz, cargos custom no representables.
+entrega y transporte. `8be6bbc6` añade la fachada `ScriptCargoMonitor` con
+validación de límites y `StopAllMonitoring`; la fila histórica de #329 que
+enumera esas dos brechas queda superada. La próxima tarea es cargos custom no
+representables o reatachación económica cuando falta el catálogo.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
@@ -48,8 +49,8 @@ antes en la matriz, cargos custom no representables.
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
 
-Última validación de `470499ea`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **1.991** tests de core y **1.064** de cliente (2 ignorados); la matriz
+Última validación de `8be6bbc6`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **1.993** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.

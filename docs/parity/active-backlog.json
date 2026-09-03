@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "cutoff": {
-    "date": "2026-09-02",
-    "main_commit": "b7429397",
+    "date": "2026-09-03",
+    "main_commit": "bd3ea9c1",
     "openttd_tag": "15.3",
     "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888"
   },

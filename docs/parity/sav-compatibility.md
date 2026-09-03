@@ -1,7 +1,8 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
-Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-02**,
-`main` con base funcional `b7429397` (handoff publicado en `f4274e14`), posterior al writeback canónico de `CITY`; referencia: **OpenTTD
+Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-03**,
+`main` con base funcional `bd3ea9c1`, posterior al writeback canónico de `CITY`
+y del callback CB17 de casas; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
 
 Esta es la única matriz de capacidad para importación y exportación `.sav`.
@@ -32,9 +33,9 @@ preserva. Importar un dato no implica que el exportador lo escriba.
 | Objetos | 🟡 lee las filas base de `OBJS` (ObjectID, ubicación, huella, town, fecha, color, vista y tipo) y el mapping `OBID` (GRFID, IDs local/sustituto), además de usar el pool para traducir tipos del mapa | 🟡 conserva `OBJS`/`OBID` sin cambios mientras no se muten objetos; tras construir/demoler reconstruye las filas base de `OBJS` y puede reconstruir `OBID` desde el catálogo; el cargador usa `OBID` para conservar IDs asignados | Las columnas futuras de `OBJS`, mappings faltantes y el runtime completo de specs/callbacks de objetos siguen pendientes |
 | Ajustes | 🟡 lee el subconjunto ejecutado por el core de `PATS`/`OPTS`: construcción, pathfinding, aceleración de trenes **y carretera**, averías, subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo | 🟡 escribe ese subconjunto en `PATS` y conserva `GSET`/`ENGN`/`SRND` nativos como passthrough | [`sav/settings.rs`](../../crates/openttdrs-core/src/sav/settings.rs), [`sav/landscape.rs`](../../crates/openttdrs-core/src/sav/landscape.rs) |
 | Compañías y noticias | 🟡 dinero/préstamo/límite de préstamo individual (`PLYR.max_loan`, incluido el centinela global), meses de bancarrota/color/nombre/presidente/`face`/`face_style`/indicador AI, `settings.*`, 23 `PLYR.liveries` e historial trimestral (`cur_economy` + hasta 24 `old_economy`, incluido `delivered_cargo`) | 🟡 `PLYR` con esos campos, incluidas las libreas nativas (SLV355) y el orden más-reciente-primero de `old_economy`; un override de préstamo no es reemplazado por inflación | Faltan flags completos. La cola propia completa queda en JSON; los consumidores de noticias siguen fuera del formato nativo |
-| NewGRF | ✅ lee `NGRF` como tabla y restaura archivo, GRFID, versión y hasta 128 parámetros activos; `ENGN`, `EIDS` y mappings no modelados siguen como chunks opacos; las colas `INDY.accepted`/`produced`, `accepted[].last_accepted`, `selected_layout`, `random`, metadata de fundador/fechas/tipo/flags/año y `INDY.psa`→`PSAC` se hidratan para CB1/CB2 y scopes; `STNN.normal.airport.psa` hidrata los registros no nulos en `Station`; `CITY.psa_list` conserva las referencias de cada pueblo y sus registros no nulos se hidratan por GRFID en `Town`; los historiales mensuales por cargo, `accepted[].accumulated_waiting` y `valid_history` se conservan para round-trip | ✅ reconstruye `NGRF` para entradas activas no estáticas, con el array fijo de 128 parámetros (`num_params` conserva la longitud usada); `INDY`, aeropuertos `STNN` y pueblos `CITY` emiten sus referencias PSA; `PSAC` reemite el pool con 256 registros por fila y conserva storages ajenos a entidades modeladas | La lectura de `7C` de pueblo ya cubre los scopes parent de casas y objetos; runtime/cargos custom, writeback de pueblos/casas/objetos, historiales tras mutaciones económicas y scopes de otras entidades continúan parciales; `OBJS`/`OBID` se reconstruyen sólo cuando se mutan y conservan columnas opacas fuera del modelo; los labels no representables en el catálogo fijo se omiten |
+| NewGRF | ✅ lee `NGRF` como tabla y restaura archivo, GRFID, versión y hasta 128 parámetros activos; `ENGN`, `EIDS` y mappings no modelados siguen como chunks opacos; las colas `INDY.accepted`/`produced`, `accepted[].last_accepted`, `selected_layout`, `random`, metadata de fundador/fechas/tipo/flags/año y `INDY.psa`→`PSAC` se hidratan para CB1/CB2 y scopes; `STNN.normal.airport.psa` hidrata los registros no nulos en `Station`; `CITY.psa_list` conserva las referencias de cada pueblo y sus registros no nulos se hidratan por GRFID en `Town`; los historiales mensuales por cargo, `accepted[].accumulated_waiting` y `valid_history` se conservan para round-trip | ✅ reconstruye `NGRF` para entradas activas no estáticas, con el array fijo de 128 parámetros (`num_params` conserva la longitud usada); `INDY`, aeropuertos `STNN` y pueblos `CITY` emiten sus referencias PSA; `PSAC` reemite el pool con 256 registros por fila y conserva storages ajenos a entidades modeladas; una casa que ejecuta CB17 puede crear/modificar el PSA de su pueblo y el writer asigna la referencia nativa al exportar | La lectura de `7C` de pueblo ya cubre los scopes parent de casas y objetos; el writeback de CB17 de construcción está cubierto; runtime/cargos custom, writeback de objetos/teselas, historiales tras mutaciones económicas y scopes de otras entidades continúan parciales; `OBJS`/`OBID` se reconstruyen sólo cuando se mutan y conservan columnas opacas fuera del modelo; los labels no representables en el catálogo fijo se omiten |
 
-Nota de corte 2026-09-02: `CITY` decodifica y vuelve a escribir sus escalares
+Nota de corte 2026-09-03: `CITY` decodifica y vuelve a escribir sus escalares
 nativos, arrays fijas y listas anidadas modeladas, y los expone al modelo
 `Town`; la caché de población sigue siendo deliberadamente derivada por
 OpenTTD. El pool `PSAC` de industria, aeropuerto y referencias
@@ -46,9 +47,11 @@ manteniendo índices y storages de entidades aún no modeladas. `CITY.psa_list`
 se decodifica como vector de referencias `REF_STORAGE` y se reemite sin
 compactar índices; casas y objetos ya leen ese estado en sus scopes parent
 Action2 cuando el pueblo está identificado. Una mutación económica futura
-deberá invalidar este snapshot para recalcular historiales y aún falta el
-writeback completo de los registros de pueblo; el callback CB17 de construcción
-todavía sólo lee el scope parent y no persiste `7C` de vuelta a `CITY.psa_list`.
+deberá invalidar este snapshot para recalcular historiales. El callback CB17 de
+construcción ya persiste los registros `7C` escritos por grupos Action2 parent
+en `Town.newgrf_persistent_regs`; al exportar, `PSAC` y `CITY.psa_list` reciben
+la fila nueva o actualizada. El writeback de objetos/teselas y los scopes de
+otros consumidores continúan pendientes.
 
 La misma importación conserva ahora `CITY.supplied` (cargo y muestras
 mensuales de producción/transporte) y `CITY.received` (contadores

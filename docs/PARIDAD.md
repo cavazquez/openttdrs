@@ -34,8 +34,8 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-02 · `main` (base funcional `b7429397`, handoff
-publicado en `f4274e14`).
+**Corte canónico: 2026-09-03 · `main` (base funcional `bd3ea9c1`, handoff
+documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -71,15 +71,17 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Render/UI vanilla | **Media funcional / baja de composición raster** | Hay cobertura OpenGFX y evidencia `world-draw` por tesela, pero no paridad global de framebuffer; la captura limpia vigente de Kale sigue siendo diferente. Véase [evidencia visual raster](#evidencia-visual-raster-vigente) |
 | Plataformas y release | **Preparada con gates** | `main` protegido y checks Windows/macOS; queda dry-run/smoke de `0.1.0-alpha.1` en [#296](https://github.com/cavazquez/openttdrs/issues/296) |
 
-Actualización SAV/NewGRF (2026-09-02, `b7429397`): `INDY.psa`,
+Actualización SAV/NewGRF (2026-09-03, `bd3ea9c1`): `INDY.psa`,
 `STNN.normal.airport.psa`, `CITY.psa_list` y el pool `PSAC` ya se importan,
 hidratan sus referencias y se reemiten para industrias, aeropuertos y pueblos,
 conservando índices y 256 registros por fila; el PSA no nulo de cada pueblo se
 expone por GRFID en los scopes parent de casas y objetos, mientras los storages
 propios de esas entidades y otros consumidores se mantienen como filas opacas.
-La lectura runtime está acotada a esos dos call sites; el writeback y el resto
-de la paridad están
-detallados en [`parity/sav-compatibility.md`](parity/sav-compatibility.md).
+CB17 de construcción de casas evalúa ahora el parent real y persiste `\2psto`
+en el PSA del pueblo por GRFID; el writer asigna/reemite la fila nativa al
+exportar. La lectura runtime y el writeback siguen acotados a esos call sites;
+el resto de la paridad queda
+detallado en [`parity/sav-compatibility.md`](parity/sav-compatibility.md).
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

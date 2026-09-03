@@ -323,19 +323,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if let Some(raw) = raw_city {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else {
-        let canonical = chunks::table_chunk(
-            *b"CITY",
-            &[
-                (6, "xy"),
-                (0x0A | 0x10, "name"),
-                (6, "cache.population"),
-                (6, "townnamegrfid"),
-                (4, "townnametype"),
-                (6, "townnameparts"),
-                (0x16, "psa_list"),
-            ],
-            &city,
-        )?;
+        let mut city_header = Vec::new();
+        entities::append_city_header(&mut city_header)?;
+        let canonical =
+            chunks::raw_table_chunk(*b"CITY", &city_header, &city, crate::sav::chunks::CH_TABLE)?;
         data.extend_from_slice(&chunks::table_chunk_with_passthrough(
             raw_tables.and_then(|tables| tables.city_chunk.as_ref()),
             canonical,
@@ -1444,6 +1435,128 @@ mod tests {
                 other => panic!("storage ausente: {other:?}"),
             },
             Some(u64::from(0x1020_3040u32))
+        );
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn ottn_roundtrip_writes_native_city_metadata_and_histories() {
+        let mut state = tiny_state();
+        let town = Town {
+            id: 4,
+            pos: TileCoord::new(12, 12),
+            name: "Native Town".into(),
+            townnamegrfid: 0x1122_3344,
+            townnametype: 0x20C0,
+            townnameparts: 0x5566_7788,
+            native_flags: 0x80,
+            authority_ratings: vec![-100, 250, 500],
+            have_ratings: 0x0005,
+            goals: [11, 22, 33, 44, 55],
+            supplied_cargo: vec![crate::town::TownSuppliedCargo {
+                cargo: 2,
+                history: vec![crate::town::TownSuppliedHistory {
+                    production: 1200,
+                    transported: 900,
+                }],
+            }],
+            received_cargo: vec![
+                crate::town::TownReceivedCargo {
+                    old_max: 300,
+                    new_max: 450,
+                    old_act: 200,
+                    new_act: 350,
+                },
+                crate::town::TownReceivedCargo::default(),
+                crate::town::TownReceivedCargo::default(),
+                crate::town::TownReceivedCargo::default(),
+                crate::town::TownReceivedCargo::default(),
+                crate::town::TownReceivedCargo::default(),
+            ],
+            time_until_rebuild: 17,
+            grow_counter: 1234,
+            growth_rate: 4321,
+            fund_buildings_months: 2,
+            road_build_months: 3,
+            exclusivity: Some(crate::CompanyId(7)),
+            exclusive_counter: 9,
+            larger_town: true,
+            layout: crate::town::TownLayout::Grid3x3,
+            valid_history: 0x0102_0304_0506_0708,
+            native_text: "script text".into(),
+            statues: 0x0021,
+            unwanted: vec![4, 0],
+            is_growing: true,
+            has_church: true,
+            has_stadium: true,
+            ..Default::default()
+        };
+        state.towns.push(town.clone());
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let chunks = crate::sav::chunks::parse_chunks(&bytes[8..]).expect("chunks");
+        let city = crate::sav::chunks::find_chunk(&chunks, "CITY").expect("CITY");
+        let rows = crate::sav::table::parse_table_chunk(&city.body, false).expect("CITY table");
+        let record = &rows[0].1;
+        assert!(crate::sav::table::record_get(record, "cache.population").is_none());
+        assert_eq!(
+            crate::sav::table::record_get(record, "townnamegrfid")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(u64::from(town.townnamegrfid))
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "townnametype")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(u64::from(town.townnametype))
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "townnameparts")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(u64::from(town.townnameparts))
+        );
+        assert_eq!(
+            crate::sav::table::record_get(record, "flags")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(0x87)
+        );
+        assert!(matches!(
+            crate::sav::table::record_get(record, "ratings"),
+            Some(crate::sav::table::SlValue::List(values))
+                if values.len() == crate::town::MAX_TOWN_AUTHORITY_COMPANIES
+        ));
+        assert!(matches!(
+            crate::sav::table::record_get(record, "supplied"),
+            Some(crate::sav::table::SlValue::Structs(values))
+                if values.len() == 1
+        ));
+        assert!(matches!(
+            crate::sav::table::record_get(record, "received"),
+            Some(crate::sav::table::SlValue::Structs(values))
+                if values.len() == crate::town::TOWN_GROWTH_EFFECT_COUNT + 1
+        ));
+
+        let loaded = GameState::from_sav_game(sav::load(&bytes).expect("load"));
+        assert_eq!(loaded.towns[0].townnamegrfid, town.townnamegrfid);
+        assert_eq!(loaded.towns[0].townnameparts, town.townnameparts);
+        assert_eq!(loaded.towns[0].native_flags, 0x87);
+        assert_eq!(loaded.towns[0].goals, town.goals);
+        assert_eq!(loaded.towns[0].supplied_cargo, town.supplied_cargo);
+        assert_eq!(loaded.towns[0].received_cargo, town.received_cargo);
+        assert_eq!(loaded.towns[0].native_text, town.native_text);
+
+        // Cambiar un escalar fuerza el encoder canónico y actualiza el byte de
+        // flags sin reutilizar el cuerpo CITY tomado como passthrough.
+        let mut changed = loaded;
+        changed.towns[0].has_stadium = false;
+        let changed_bytes = save_to_bytes_with(&changed, SavContainer::Ottn).expect("changed");
+        let changed_chunks = crate::sav::chunks::parse_chunks(&changed_bytes[8..]).expect("chunks");
+        let changed_city = crate::sav::chunks::find_chunk(&changed_chunks, "CITY").expect("CITY");
+        let changed_rows =
+            crate::sav::table::parse_table_chunk(&changed_city.body, false).expect("CITY table");
+        assert_eq!(
+            crate::sav::table::record_get(&changed_rows[0].1, "flags")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(0x83)
         );
     }
 

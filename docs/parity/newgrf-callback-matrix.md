@@ -271,18 +271,31 @@ de GameScript). `TownScopeResolver` usa los flags importados y expone también
 `0x40` (pueblo grande), `0x92`/`0x93` (flags), y `0xAE` (`have_ratings`) con
 fallbacks explícitos para saves antiguos. La prueba sintética reproduce la
 forma `CITY` de OpenTTD y verifica los escalares y listas decodificados. El
-writer canónico sigue siendo mínimo y aún no reemite esta metadata ni las
-listas/structs anidadas; el passthrough sin mutaciones conserva el cuerpo
-original, por lo que #328/#329 permanecen abiertos.
+writer canónico pasó a reemitir esta metadata y las listas/structs modelados en
+la actualización 029; el passthrough sin mutaciones conserva el cuerpo
+original. Persisten las columnas desconocidas, el writeback de PSA y los
+consumidores de crecimiento/economía, por lo que #328/#329 permanecen abiertos.
 
 Actualización #329-TOWN-CITY-028 (2026-09-02): `CITY.supplied` y
 `CITY.received` ya se decodifican en estructuras tipadas (`cargo` + historial
 mensual de producción/transporte y los cuatro contadores old/new max/act por
 efecto). Esto evita que el parser descarte los historiales nativos presentes
 en SAV reales; una regresión cubre cargos con y sin historial y más de un slot
-recibido. Aún no se conectan esos contadores al cálculo de crecimiento ni se
-reemiten desde el writer canónico, por lo que la interoperabilidad de ciudades
-continúa siendo parcial.
+recibido. El writer canónico los reemite con el formato nativo; aún no se
+conectan esos contadores al cálculo de crecimiento/economía y la
+interoperabilidad de ciudades continúa siendo parcial.
+
+Actualización #329-TOWN-CITY-029 (2026-09-02): el writer canónico de `CITY`
+reemite ahora la metadata nativa modelada (generador de nombres, flags,
+ratings, `have_ratings`, unwanted, metas, contadores, exclusividad, layout,
+estatuas, `valid_history` y texto), las listas `supplied`/`received` y
+`psa_list`. Las arrays fijas se escriben con los tamaños que exige OpenTTD
+(`MAX_COMPANIES` y `NUM_TAE`, con `TAE_NONE` en el slot 0), y una regresión
+valida el round-trip de escalares e historiales; un fixture generado se acepta
+con OpenTTD 15.3. La caché `cache.population` continúa fuera del writer porque
+OpenTTD la reconstruye desde las teselas. Mutaciones estructurales aún caen al
+header canónico y descartan columnas anidadas desconocidas; la conexión de
+estas series con crecimiento/economía y el writeback de PSA siguen pendientes.
 
 Actualización #329-TOWN-SCOPE-026 (2026-09-02): casas y objetos materializan
 ahora el scope parent de `TownScopeResolver` con las variables conservadas por

@@ -1148,7 +1148,12 @@ impl GameState {
             &persistent_storages,
         );
         for town in &mut state.towns {
-            town.init_growth_goals(state.climate);
+            // `CITY.goal` ya se importa desde el save. Sólo inicializar las
+            // metas cuando la tabla no las traía (por ejemplo, saves antiguos)
+            // evita borrar metas nativas o de GameScript al hidratar el estado.
+            if town.goals == [0; crate::town::TOWN_GROWTH_EFFECT_COUNT] {
+                town.init_growth_goals(state.climate);
+            }
         }
         if let Some(money) = sav.money {
             state.economy.money = money;

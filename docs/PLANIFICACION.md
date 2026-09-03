@@ -2143,7 +2143,11 @@ payload (zlib si OTTZ; raw si OTTN)
    - `MAPT`, `MAPH`, `MAPO` (m1), `MAP2` (u16 BE: hi=`m2_hi`, lo=`m2`),
    - `M3LO`, `M3HI` (= m4 OpenTTD), `MAP5`, `MAPE` (m6), `MAP7`, `MAP8` (u16 BE desde `Tile.m8` LE)
 3. `STNN` — `CH_TABLE` moderno (SAVEBYTE + structs; #226) desde `GameState.stations`
-4. `CITY` — `CH_TABLE` `xy` / `name` / `cache.population` / townname* desde `GameState.towns`
+4. `CITY` — `CH_TABLE` con metadata nativa de town (generador de nombres,
+   flags, ratings, metas, crecimiento, exclusividad, layout, estatuas,
+   historiales `supplied`/`received`, `valid_history`, texto y `psa_list`)
+   desde `GameState.towns`; `cache.population` no se exporta porque OpenTTD la
+   reconstruye desde las teselas
 5. `INDY` — `CH_TABLE` `location.tile` / `w` / `h` / `type` desde `GameState.industries`
 6. `ORDL` — `CH_TABLE` con struct `orders` (estación/waypoint/depósito/condicional); una lista por vehículo con órdenes
 7. `VEHS` — `CH_SPARSE_TABLE` de tren, bus/camión, barco y aeronaves (ala fija o helicóptero con sombra y rotor) + ref a ORDL; se conservan los campos FTA básicos

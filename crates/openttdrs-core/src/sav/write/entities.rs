@@ -11,6 +11,7 @@ use crate::game_state::GameState;
 use crate::industry::{Industry, IndustryKind, IndustrySpec};
 use crate::map::{Map, TileCoord, coord_to_linear_index};
 use crate::station::{RoadStopTileState, Station, StopKind};
+use crate::town::Town;
 use std::collections::{BTreeMap, HashMap};
 
 /// Bits `FACIL_*` al escribir `STNN` (alineados con el import).
@@ -434,6 +435,55 @@ pub(super) fn map_with_road_stop_indices(state: &GameState, map_w: u32) -> Resul
 fn append_field(header: &mut Vec<u8>, ftype: u8, name: &str) -> Result<(), SavError> {
     header.push(ftype);
     write_str(name, header)
+}
+
+/// Header `CITY` moderno (SLV 355), incluidos los structs anidados de
+/// historiales de carga. El orden coincide con `_town_desc` de `OpenTTD`.
+pub(super) fn append_city_header(header: &mut Vec<u8>) -> Result<(), SavError> {
+    append_field(header, 6, "xy")?;
+    append_field(header, 6, "townnamegrfid")?;
+    append_field(header, 4, "townnametype")?;
+    append_field(header, 6, "townnameparts")?;
+    append_field(header, 0x0A | 0x10, "name")?;
+    append_field(header, 2, "flags")?;
+    append_field(header, 4, "statues")?;
+    append_field(header, 4, "have_ratings")?;
+    append_field(header, 3 | 0x10, "ratings")?;
+    append_field(header, 1 | 0x10, "unwanted")?;
+    append_field(header, 6 | 0x10, "goal")?;
+    append_field(header, 0x0A | 0x10, "text")?;
+    append_field(header, 4, "time_until_rebuild")?;
+    append_field(header, 4, "grow_counter")?;
+    append_field(header, 4, "growth_rate")?;
+    append_field(header, 2, "fund_buildings_months")?;
+    append_field(header, 2, "road_build_months")?;
+    append_field(header, 2, "exclusivity")?;
+    append_field(header, 2, "exclusive_counter")?;
+    append_field(header, 1, "larger_town")?;
+    append_field(header, 2, "layout")?;
+    append_field(header, 8, "valid_history")?;
+    append_field(header, 0x16, "psa_list")?;
+    append_field(header, 0x1B, "supplied")?;
+    append_field(header, 0x1B, "received")?;
+    header.push(0);
+
+    // SlTownSupplied.
+    append_field(header, 2, "cargo")?;
+    append_field(header, 0x1B, "history")?;
+    header.push(0);
+
+    // SlTownSuppliedHistory.
+    append_field(header, 6, "production")?;
+    append_field(header, 6, "transported")?;
+    header.push(0);
+
+    // SlTownReceived.
+    append_field(header, 4, "old_max")?;
+    append_field(header, 4, "new_max")?;
+    append_field(header, 4, "old_act")?;
+    append_field(header, 4, "new_act")?;
+    header.push(0);
+    Ok(())
 }
 
 /// Header `STNN` moderno (SLV ≥ 340): SAVEBYTE + structs anidados.
@@ -925,20 +975,158 @@ pub(crate) fn capa_records(export: &CargoPacketExport) -> Vec<Vec<u8>> {
         .collect()
 }
 
-/// Record CITY mínimo (`OpenTTD` exige ≥1 municipio: `STR_ERROR_NO_TOWN_IN_SCENARIO`).
+/// Banderas `TownFlag` reconstruidas desde el modelo semántico.
+fn city_flags_for_save(town: &Town) -> u8 {
+    let mut flags = town.native_flags & !0x07;
+    if town.is_growing {
+        flags |= 1;
+    }
+    if town.has_church {
+        flags |= 1 << 1;
+    }
+    if town.has_stadium {
+        flags |= 1 << 2;
+    }
+    flags
+}
+
+fn write_city_supplied(
+    entries: &[crate::town::TownSuppliedCargo],
+    buf: &mut Vec<u8>,
+) -> Result<(), SavError> {
+    let count = u32::try_from(entries.len()).map_err(|_| SavError::ValueOutOfRange {
+        field: "town supplied cargo count",
+        value: u32::MAX,
+    })?;
+    write_gamma(count, buf)?;
+    for entry in entries {
+        buf.push(entry.cargo);
+        let history_count =
+            u32::try_from(entry.history.len()).map_err(|_| SavError::ValueOutOfRange {
+                field: "town supplied history count",
+                value: u32::MAX,
+            })?;
+        write_gamma(history_count, buf)?;
+        for sample in &entry.history {
+            buf.extend_from_slice(&sample.production.to_be_bytes());
+            buf.extend_from_slice(&sample.transported.to_be_bytes());
+        }
+    }
+    Ok(())
+}
+
+fn write_city_received(
+    entries: &[crate::town::TownReceivedCargo],
+    buf: &mut Vec<u8>,
+) -> Result<(), SavError> {
+    // `Town::received` es `std::array<..., NUM_TAE>` en OpenTTD, por lo que
+    // la longitud de la lista también es fija (6 con el slot `TAE_NONE`).
+    write_gamma(
+        u32::try_from(crate::town::TOWN_GROWTH_EFFECT_COUNT + 1).unwrap_or(u32::MAX),
+        buf,
+    )?;
+    for index in 0..=crate::town::TOWN_GROWTH_EFFECT_COUNT {
+        let entry = entries.get(index).cloned().unwrap_or_default();
+        buf.extend_from_slice(&entry.old_max.to_be_bytes());
+        buf.extend_from_slice(&entry.new_max.to_be_bytes());
+        buf.extend_from_slice(&entry.old_act.to_be_bytes());
+        buf.extend_from_slice(&entry.new_act.to_be_bytes());
+    }
+    Ok(())
+}
+
+/// Serializa una fila `CITY` moderna, incluidos los campos nativos que el
+/// importador conserva para scopes `NewGRF` y para el round-trip SAV.
+fn city_record(town: &Town, tile_idx: u32, psa_ids: &[u32]) -> Result<Vec<u8>, SavError> {
+    let mut rec = Vec::new();
+    rec.extend_from_slice(&tile_idx.to_be_bytes());
+    rec.extend_from_slice(&town.townnamegrfid.to_be_bytes());
+    // Las ciudades creadas por el runtime aún no tienen un generador nativo
+    // asignado. Usar el generador inglés vanilla evita que OpenTTD rechace la
+    // fila aunque el nombre visible sea custom.
+    let townname_type = if town.townnamegrfid == 0 && town.townnametype == 0 {
+        0x20C0
+    } else {
+        town.townnametype
+    };
+    rec.extend_from_slice(&townname_type.to_be_bytes());
+    rec.extend_from_slice(&town.townnameparts.to_be_bytes());
+    write_str(&town.name, &mut rec)?;
+    rec.push(city_flags_for_save(town));
+    rec.extend_from_slice(&town.statues.to_be_bytes());
+    rec.extend_from_slice(&town.have_ratings.to_be_bytes());
+
+    // `ratings` es un array de tamaño fijo (`MAX_COMPANIES`) aunque el
+    // header use `HAS_LENGTH`: OpenTTD valida exactamente 15 elementos.
+    write_gamma(
+        u32::try_from(crate::town::MAX_TOWN_AUTHORITY_COMPANIES).unwrap_or(u32::MAX),
+        &mut rec,
+    )?;
+    for index in 0..crate::town::MAX_TOWN_AUTHORITY_COMPANIES {
+        let rating = town
+            .authority_ratings
+            .get(index)
+            .copied()
+            .unwrap_or(crate::town::TOWN_RATING_INITIAL);
+        rec.extend_from_slice(&rating.to_be_bytes());
+    }
+
+    // Igual que `ratings`, `unwanted` es un array fijo por compañía.
+    write_gamma(
+        u32::try_from(crate::town::MAX_TOWN_AUTHORITY_COMPANIES).unwrap_or(u32::MAX),
+        &mut rec,
+    )?;
+    for index in 0..crate::town::MAX_TOWN_AUTHORITY_COMPANIES {
+        rec.push(town.unwanted.get(index).copied().unwrap_or(0));
+    }
+
+    // `NUM_TAE` es también fijo en la tabla nativa. OpenTTD reserva el slot 0
+    // para `TAE_NONE`; el modelo compacto guarda los cinco efectos restantes.
+    write_gamma(
+        u32::try_from(crate::town::TOWN_GROWTH_EFFECT_COUNT + 1).unwrap_or(u32::MAX),
+        &mut rec,
+    )?;
+    rec.extend_from_slice(&0_u32.to_be_bytes());
+    // TAE order: NONE, PASSENGERS, MAIL, GOODS, WATER, FOOD.
+    for index in [0, 1, 2, 4, 3] {
+        let goal = town.goals[index];
+        rec.extend_from_slice(&goal.to_be_bytes());
+    }
+
+    write_str(&town.native_text, &mut rec)?;
+    rec.extend_from_slice(&town.time_until_rebuild.to_be_bytes());
+    rec.extend_from_slice(&town.grow_counter.to_be_bytes());
+    rec.extend_from_slice(&town.growth_rate.to_be_bytes());
+    rec.push(town.fund_buildings_months);
+    rec.push(town.road_build_months);
+    rec.push(town.exclusivity.map_or(u8::MAX, |company| company.0));
+    rec.push(town.exclusive_counter);
+    rec.push(u8::from(town.larger_town));
+    rec.push(town.layout as u8);
+    rec.extend_from_slice(&town.valid_history.to_be_bytes());
+    write_persistent_storage_refs(psa_ids, &mut rec)?;
+    write_city_supplied(&town.supplied_cargo, &mut rec)?;
+    write_city_received(&town.received_cargo, &mut rec)?;
+    Ok(rec)
+}
+
+/// Record CITY canónico (`OpenTTD` exige ≥1 municipio:
+/// `STR_ERROR_NO_TOWN_IN_SCENARIO`).
 pub(super) fn default_city_record(map_w: u32, map_h: u32) -> Result<Vec<u8>, SavError> {
     let x = map_w / 2;
     let y = map_h / 2;
     let tile_idx = y.saturating_mul(map_w).saturating_add(x);
-    let mut rec = Vec::new();
-    rec.extend_from_slice(&tile_idx.to_be_bytes());
-    write_str("Town", &mut rec)?;
-    rec.extend_from_slice(&500u32.to_be_bytes()); // cache.population
-    rec.extend_from_slice(&0u32.to_be_bytes()); // townnamegrfid
-    rec.extend_from_slice(&0x20C0u16.to_be_bytes()); // townnametype (inglés)
-    rec.extend_from_slice(&0u32.to_be_bytes()); // townnameparts
-    write_persistent_storage_refs(&[], &mut rec)?;
-    Ok(rec)
+    let town = Town {
+        pos: TileCoord::new(
+            i32::try_from(x).unwrap_or(i32::MAX),
+            i32::try_from(y).unwrap_or(i32::MAX),
+        ),
+        name: "Town".into(),
+        townnametype: 0x20C0,
+        population: 500,
+        ..Default::default()
+    };
+    city_record(&town, tile_idx, &[])
 }
 
 /// Escribe un `REFVECTOR(REF_STORAGE)` usando índices cero basados en runtime.
@@ -972,15 +1160,6 @@ pub(super) fn city_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>
         let Some(tile_idx) = coord_to_linear_index(town.pos, map_w) else {
             continue;
         };
-        let mut rec = Vec::new();
-        rec.extend_from_slice(&tile_idx.to_be_bytes());
-        write_str(&town.name, &mut rec)?;
-        // cache.population: el import la pone en 0 y rebuild_town_populations la recalcula;
-        // igual la escribimos para roundtrip de lectura best-effort / fixtures.
-        rec.extend_from_slice(&town.population.to_be_bytes());
-        rec.extend_from_slice(&0u32.to_be_bytes()); // townnamegrfid
-        rec.extend_from_slice(&0x20C0u16.to_be_bytes()); // townnametype (inglés)
-        rec.extend_from_slice(&0u32.to_be_bytes()); // townnameparts
         let mut ids = state
             .sav_town_persistent_storage_ids
             .get(&town.id)
@@ -995,8 +1174,7 @@ pub(super) fn city_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>
                 }
             }
         }
-        write_persistent_storage_refs(&ids, &mut rec)?;
-        out.push(rec);
+        out.push(city_record(town, tile_idx, &ids)?);
     }
     if out.is_empty() {
         let (_, h) = state.map.dimensions();

@@ -759,14 +759,25 @@ exclusividad, layout, estatuas, `valid_history` y texto de GameScript. Los
 flags y las variables `0x40`, `0x92`, `0x93` y `0xAE` llegan al scope parent de
 casas/objetos, con una regresión sintética que comprueba la codificación de la
 tabla nativa. Esto reduce la divergencia de lectura/runtime, pero no cierra
-interoperabilidad: el writer canónico aún genera el `CITY` mínimo y no hace
-writeback de estos campos ni de `supplied`/`received`; un `CITY` importado sin
-mutaciones continúa protegido por passthrough. #328/#329 siguen abiertos.
+interoperabilidad completa: el writer canónico ahora reemite estos campos y
+las listas/structs modelados; un `CITY` importado sin mutaciones continúa
+protegido por passthrough. Persisten las columnas desconocidas, el writeback de
+PSA y la conexión con crecimiento/economía. #328/#329 siguen abiertos.
 
 Actualización #329-TOWN-CITY-028 (2026-09-02): la divergencia de listas
 anidadas de `CITY` quedó aislada y cubierta: `supplied` conserva cada cargo y
 sus muestras mensuales (`production`/`transported`) y `received` conserva los
 contadores `old_max`, `new_max`, `old_act` y `new_act` en el orden nativo. El
-modelo aún no usa estas series para crecimiento/economía y el writer canónico
-no las reemite; el passthrough de un save sin cambios sigue protegiendo el
+modelo aún no usa estas series para crecimiento/economía; el writer canónico
+ya las reemite y el passthrough de un save sin cambios sigue protegiendo el
 cuerpo original. #328/#329 permanecen abiertos.
+
+Actualización #329-TOWN-CITY-029 (2026-09-02): el writer canónico de `CITY`
+emite ahora la metadata nativa modelada, los arrays fijos `ratings`/
+`unwanted`/`goal`, las listas `supplied`/`received` y `psa_list`. El encoder
+respeta los tamaños de OpenTTD (`MAX_COMPANIES` y `NUM_TAE`, con el slot
+`TAE_NONE`) y un fixture generado fue aceptado por OpenTTD 15.3. La caché
+`cache.population` permanece derivada desde `MAP*`; una mutación estructural
+de listas todavía usa el fallback canónico y puede perder columnas anidadas
+desconocidas. La hidratación no conecta aún las series con crecimiento/economía
+ni hace writeback de PSA de pueblos, por lo que #328/#329 continúan abiertos.

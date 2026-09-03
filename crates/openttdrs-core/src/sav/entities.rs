@@ -846,9 +846,13 @@ fn native_town_metadata(record: &SlRecord) -> NativeTownMetadata {
     };
     let mut goals = [0_u32; TOWN_GROWTH_EFFECT_COUNT];
     if let Some(values) = list_values(record, "goal") {
-        for (slot, value) in values.iter().take(TOWN_GROWTH_EFFECT_COUNT).enumerate() {
-            goals[slot] = value
-                .as_u64()
+        // OpenTTD's `NUM_TAE` array includes slot 0 (`TAE_NONE`) and orders
+        // water before food. The runtime model omits the empty slot and keeps
+        // the user-facing food/water order.
+        for (native_slot, model_slot) in [0, 1, 2, 4, 3].into_iter().enumerate() {
+            goals[model_slot] = values
+                .get(native_slot + 1)
+                .and_then(SlValue::as_u64)
                 .and_then(|value| u32::try_from(value).ok())
                 .unwrap_or(0);
         }
@@ -2917,8 +2921,8 @@ mod tests {
         record.extend_from_slice(&345_i16.to_be_bytes());
         write_gamma(2, &mut record); // unwanted
         record.extend_from_slice(&[4, 0]);
-        write_gamma(5, &mut record); // goal
-        for value in [11_u32, 22, 33, 44, 55] {
+        write_gamma(6, &mut record); // goal (slot 0 = TAE_NONE)
+        for value in [0_u32, 11, 22, 33, 55, 44] {
             record.extend_from_slice(&value.to_be_bytes());
         }
         record.extend_from_slice(&17_u16.to_be_bytes()); // time_until_rebuild

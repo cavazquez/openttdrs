@@ -909,6 +909,17 @@ pub struct Industry {
     /// callback vacía sin volver al fallback vanilla.
     #[serde(default)]
     pub newgrf_dynamic_cargo_types: bool,
+    /// Cargos efectivos por slot de entrada (`None` = slot vacío legacy).
+    ///
+    /// `OpenTTD` conserva los huecos que los GRF antiguos crean devolviendo un
+    /// cargo inválido desde `CBID_INDUSTRY_INPUT_CARGO_TYPES`; no se deben
+    /// compactar porque los índices de los callbacks de sufijo/multiplicador
+    /// siguen siendo los originales.
+    #[serde(default)]
+    pub newgrf_input_cargo_slots: Vec<Option<CargoType>>,
+    /// Cargos efectivos por slot de salida (`None` = slot vacío legacy).
+    #[serde(default)]
+    pub newgrf_output_cargo_slots: Vec<Option<CargoType>>,
     /// Insumos y multiplicadores de una procesadora `NewGRF`.
     #[serde(default)]
     pub newgrf_processing_inputs: Vec<IndustryProcessingInput>,
@@ -989,6 +1000,8 @@ impl Industry {
             newgrf_extra_output_cargos: Vec::new(),
             newgrf_extra_production_rates: Vec::new(),
             newgrf_dynamic_cargo_types: false,
+            newgrf_input_cargo_slots: Vec::new(),
+            newgrf_output_cargo_slots: Vec::new(),
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
             newgrf_processing_extra_multipliers: Vec::new(),
@@ -1034,6 +1047,8 @@ impl Industry {
             newgrf_extra_output_cargos: Vec::new(),
             newgrf_extra_production_rates: Vec::new(),
             newgrf_dynamic_cargo_types: false,
+            newgrf_input_cargo_slots: Vec::new(),
+            newgrf_output_cargo_slots: Vec::new(),
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
             newgrf_processing_extra_multipliers: Vec::new(),
@@ -1085,6 +1100,8 @@ impl Industry {
             newgrf_extra_output_cargos: Vec::new(),
             newgrf_extra_production_rates: Vec::new(),
             newgrf_dynamic_cargo_types: false,
+            newgrf_input_cargo_slots: Vec::new(),
+            newgrf_output_cargo_slots: Vec::new(),
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
             newgrf_processing_extra_multipliers: Vec::new(),
@@ -1743,6 +1760,8 @@ impl Industry {
         self.newgrf_extra_output_cargos.clear();
         self.newgrf_extra_production_rates.clear();
         self.newgrf_dynamic_cargo_types = false;
+        self.newgrf_input_cargo_slots.clear();
+        self.newgrf_output_cargo_slots = output_cargo.map(Some).into_iter().collect();
         self.newgrf_processing_inputs.clear();
         self.newgrf_processing_secondary_multipliers.clear();
         self.newgrf_processing_extra_multipliers.clear();
@@ -1761,6 +1780,16 @@ impl Industry {
         self.newgrf_extra_output_cargos = outputs.iter().copied().skip(2).collect();
         self.newgrf_extra_production_rates = def.production_rates.iter().copied().skip(2).collect();
         self.newgrf_dynamic_cargo_types = false;
+        self.newgrf_input_cargo_slots = def
+            .accepted_cargo_labels
+            .iter()
+            .map(|label| crate::industry_spec::cargo_type_from_label(Some(label.as_str())))
+            .collect();
+        self.newgrf_output_cargo_slots = def
+            .produced_cargo_labels
+            .iter()
+            .map(|label| crate::industry_spec::cargo_type_from_label(Some(label.as_str())))
+            .collect();
 
         let accepted = def.accepted_cargo_types();
         let output_count = outputs.len();

@@ -171,18 +171,24 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
                         .collect()
                 })
                 .collect();
+            // Mantener una etiqueta vacía para cada slot que OpenTTD traduce
+            // como `INVALID_CARGO`; el índice de la lista es parte del
+            // contrato legacy y no puede compactarse antes de ejecutar CB14B/
+            // CB14C.
             let produced_cargo_labels: Vec<String> = meta
                 .produced_cargo_indices
                 .iter()
-                .filter_map(|&idx| {
+                .map(|&idx| {
                     get_cargo_translation_for_climate(idx, &state.cargo_spec_catalog, state.climate)
+                        .unwrap_or_default()
                 })
                 .collect();
             let accepted_cargo_labels: Vec<String> = meta
                 .accepted_cargo_indices
                 .iter()
-                .filter_map(|&idx| {
+                .map(|&idx| {
                     get_cargo_translation_for_climate(idx, &state.cargo_spec_catalog, state.climate)
+                        .unwrap_or_default()
                 })
                 .collect();
             if let Some(ovr) = meta.override_id {

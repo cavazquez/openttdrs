@@ -5358,6 +5358,21 @@ mod tests {
         assert_eq!(meta_i.produced_cargo_indices, vec![1, 9]);
         assert_eq!(meta_i.accepted_cargo_indices, vec![7, 5]);
 
+        let with_empty_slots = build_action0_industry_payload(
+            1,
+            0,
+            None,
+            &[(0, 0, 0)],
+            &[0xFF, 1],
+            &[0xFF, 7],
+            &[4, 8],
+            0,
+            "Empty slots",
+        );
+        let empty_meta = parse_action0_industry_meta(&with_empty_slots).unwrap();
+        assert_eq!(empty_meta.produced_cargo_indices, vec![0xFF, 1]);
+        assert_eq!(empty_meta.accepted_cargo_indices, vec![0xFF, 7]);
+
         let bytes = build_grf_v2_with_action0s_and_action8(
             &[tile.as_slice(), ind.as_slice()],
             [b'I', b'C', 0, 1],

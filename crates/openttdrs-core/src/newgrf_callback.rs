@@ -1950,17 +1950,29 @@ struct IndustryDynamicCargoSlot {
     source_index: usize,
 }
 
-fn static_industry_cargo_slots(indices: &[u8], labels: &[String]) -> Vec<IndustryDynamicCargoSlot> {
-    indices
-        .iter()
-        .enumerate()
-        .filter_map(|(source_index, &local)| {
-            cargo_for_group_index(local, indices, labels).map(|cargo| IndustryDynamicCargoSlot {
+#[derive(Debug, Default)]
+struct IndustryDynamicCargoSlots {
+    /// Slots válidos, compactados para el procesamiento económico.
+    valid: Vec<IndustryDynamicCargoSlot>,
+    /// Lista nativa por posición; `None` conserva un hueco legacy.
+    slots: Vec<Option<CargoType>>,
+}
+
+fn static_industry_cargo_slots(indices: &[u8], labels: &[String]) -> IndustryDynamicCargoSlots {
+    let mut result = IndustryDynamicCargoSlots {
+        slots: vec![None; indices.len()],
+        ..IndustryDynamicCargoSlots::default()
+    };
+    for (source_index, &local) in indices.iter().enumerate() {
+        if let Some(cargo) = cargo_for_group_index(local, indices, labels) {
+            result.slots[source_index] = Some(cargo);
+            result.valid.push(IndustryDynamicCargoSlot {
                 cargo,
                 source_index,
-            })
-        })
-        .collect()
+            });
+        }
+    }
+    result
 }
 
 fn callback_industry_cargo_slots(
@@ -1971,10 +1983,14 @@ fn callback_industry_cargo_slots(
     max_slots: usize,
     indices: &[u8],
     labels: &[String],
-) -> Vec<IndustryDynamicCargoSlot> {
-    let mut slots = Vec::new();
+) -> IndustryDynamicCargoSlots {
+    let mut result = IndustryDynamicCargoSlots::default();
+    let preserve_empty_slots = max_slots <= crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS;
+    // The caller passes the historical limit for both input/output callbacks;
+    // unlimited cargo lists use a larger limit and reject invalid entries
+    // instead of allocating placeholders.
     for slot in 0..max_slots {
-        let result = runtime.resolve_callback_ctx_u16(
+        let callback_result = runtime.resolve_callback_ctx_u16(
             u16::from(def.newgrf_local_id),
             callback,
             u32::try_from(slot).unwrap_or(u32::MAX),
@@ -1985,37 +2001,50 @@ fn callback_industry_cargo_slots(
         // missing Action2 (`CALLBACK_FAILED`) also ends the sequence; unlike
         // a missing runtime, this intentionally leaves the callback list
         // empty because OpenTTD cleared the native vector first.
-        if result == CALLBACK_FAILED || result > u16::from(u8::MAX) {
+        if callback_result == CALLBACK_FAILED || callback_result > u16::from(u8::MAX) {
             break;
         }
-        let local = u8::try_from(result).unwrap_or(u8::MAX);
+        let local = u8::try_from(callback_result).unwrap_or(u8::MAX);
         if local == u8::MAX {
             break;
         }
-        let Some(source_index) = indices.iter().position(|&candidate| candidate == local) else {
-            // OpenTTD reports an invalid cargo result and stops. Do not
-            // silently reattach it to a vanilla slot in the reduced model.
+        let source_index = indices.iter().position(|&candidate| candidate == local);
+        let cargo = source_index
+            .and_then(|index| {
+                labels
+                    .get(index)
+                    .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+            })
+            .or_else(|| CargoType::from_cargo_id(local));
+        let Some(cargo) = cargo else {
+            // In the legacy 3-in/2-out contract an undefined cargo allocates
+            // an INVALID_CARGO entry and the callback sequence continues. The
+            // unlimited contract instead treats it as an invalid result.
+            if preserve_empty_slots {
+                result.slots.push(None);
+                continue;
+            }
             break;
         };
-        let Some(cargo) = labels
-            .get(source_index)
-            .and_then(|label| cargo_type_from_label(Some(label.as_str())))
-            .or_else(|| CargoType::from_cargo_id(local))
-        else {
+        let Some(source_index) = source_index else {
+            // A known cargo that is not part of the static declaration is a
+            // malformed NewGRF result, not an empty slot.
             break;
         };
-        if slots
+        if result
+            .valid
             .iter()
             .any(|slot: &IndustryDynamicCargoSlot| slot.cargo == cargo)
         {
             break;
         }
-        slots.push(IndustryDynamicCargoSlot {
+        result.slots.push(Some(cargo));
+        result.valid.push(IndustryDynamicCargoSlot {
             cargo,
             source_index,
         });
     }
-    slots
+    result
 }
 
 fn industry_callback_multiplier(
@@ -2044,6 +2073,7 @@ fn industry_callback_multiplier(
 /// `CargoTypesUnlimited` se mantienen los límites históricos (3 entradas y 2
 /// salidas); con la propiedad `0x1A` se consultan hasta 16 slots.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn apply_industry_dynamic_cargo_callbacks(
     def: &IndustrySpecDef,
     industry: &mut Industry,
@@ -2095,6 +2125,10 @@ pub fn apply_industry_dynamic_cargo_callbacks(
     };
 
     industry.newgrf_dynamic_cargo_types = true;
+    industry.newgrf_input_cargo_slots = input_slots.slots;
+    industry.newgrf_output_cargo_slots = output_slots.slots;
+    let input_slots = input_slots.valid;
+    let output_slots = output_slots.valid;
     industry.newgrf_output_cargo = output_slots.first().map(|slot| slot.cargo);
     industry.newgrf_secondary_output_cargo = output_slots.get(1).map(|slot| slot.cargo);
     industry.newgrf_extra_output_cargos =
@@ -3212,6 +3246,62 @@ mod tests {
                 default: 0,
             },
         );
+        gfx
+    }
+
+    /// Callback por slot para fixtures legacy: el grupo raíz selecciona un
+    /// grupo terminal `nvar=0` y cada terminal devuelve el cargo solicitado.
+    fn gfx_callback_slot_results(results: &[(u8, u8, u8)]) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        let root_ranges = results
+            .iter()
+            .enumerate()
+            .map(|(index, &(_value, low, high))| {
+                let terminal = u16::try_from(3 + index).unwrap_or(u16::MAX);
+                (terminal, u32::from(low), u32::from(high))
+            })
+            .collect();
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x10,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: u32::from(u8::MAX),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: root_ranges,
+                default: 0,
+            },
+        );
+        for (index, &(value, _, _)) in results.iter().enumerate() {
+            let terminal = u8::try_from(3 + index).unwrap_or(u8::MAX);
+            gfx.action2_var.insert(
+                terminal,
+                Action2VarEntry {
+                    first: Action2VarTerm {
+                        variable: 0x1A,
+                        param: None,
+                        adjust: Action2VarAdjust {
+                            shift: 0,
+                            and_mask: u32::from(value),
+                            ..Action2VarAdjust::default()
+                        },
+                    },
+                    ops: Vec::new(),
+                    ranges: Vec::new(),
+                    default: 0,
+                },
+            );
+        }
         gfx
     }
 
@@ -5021,6 +5111,56 @@ mod tests {
                 (CargoType::Coal, 128),
                 (CargoType::Mail, 192)
             ]
+        );
+    }
+
+    #[test]
+    fn industry_dynamic_legacy_callback_preserves_empty_slot() {
+        // OpenTTD deja un `INVALID_CARGO` en el slot 0 y continúa consultando
+        // el slot 1 para GRF legacy (sin CargoTypesUnlimited). Compactar aquí
+        // cambiaría tanto el índice visible como la fila de multiplicadores.
+        let def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![5],
+            produced_cargo_labels: vec!["GOOD".into()],
+            accepted_cargo_indices: vec![0, 1],
+            accepted_cargo_labels: vec!["PASS".into(), "COAL".into()],
+            production_rates: vec![0],
+            input_multipliers: vec![64, 128],
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_INPUT_CARGO_TYPES_MASK,
+            behaviour: 0,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "legacy-empty-input".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_slot_results(&[
+                (0xFE, 0, 0),
+                (1, 1, 1),
+            ]))),
+        };
+        let mut industry =
+            Industry::new(TileCoord::new(4, 5), crate::industry::IndustryKind::Factory)
+                .with_newgrf_spec(def.id, &def);
+
+        assert!(apply_industry_dynamic_cargo_callbacks(&def, &mut industry));
+        assert_eq!(
+            industry.newgrf_input_cargo_slots,
+            vec![None, Some(CargoType::Coal)]
+        );
+        assert_eq!(
+            industry
+                .newgrf_processing_inputs
+                .iter()
+                .map(|input| (input.cargo, input.multiplier))
+                .collect::<Vec<_>>(),
+            vec![(CargoType::Coal, 128)]
         );
     }
 

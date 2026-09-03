@@ -758,16 +758,29 @@ fn industry_cargo_variable(
     let spec = industry
         .newgrf_type_id
         .and_then(|id| industry_spec_def(catalog, id));
-    let cargo_for_local = |indices: &[u8], labels: &[String]| {
-        indices
-            .iter()
-            .position(|&index| index == parameter)
-            .and_then(|index| labels.get(index))
-            .and_then(|label| CargoType::from_label(label))
-            .or_else(|| CargoType::from_cargo_id(parameter))
-    };
+    let cargo_for_local =
+        |indices: &[u8], labels: &[String], dynamic_slots: &[Option<CargoType>]| {
+            let index = indices
+                .iter()
+                .position(|&candidate| candidate == parameter)?;
+            if industry.newgrf_dynamic_cargo_types {
+                // A dynamic callback may have deliberately blanked this slot;
+                // never fall back to the static cargo in that case.
+                return dynamic_slots.get(index).copied().flatten();
+            }
+            labels
+                .get(index)
+                .and_then(|label| CargoType::from_label(label))
+                .or_else(|| CargoType::from_cargo_id(parameter))
+        };
     let produced = spec
-        .and_then(|spec| cargo_for_local(&spec.produced_cargo_indices, &spec.produced_cargo_labels))
+        .and_then(|spec| {
+            cargo_for_local(
+                &spec.produced_cargo_indices,
+                &spec.produced_cargo_labels,
+                &industry.newgrf_output_cargo_slots,
+            )
+        })
         .or_else(|| {
             industry
                 .produced_cargos()
@@ -775,7 +788,13 @@ fn industry_cargo_variable(
                 .find(|cargo| cargo.bitnum() == parameter)
         });
     let accepted = spec
-        .and_then(|spec| cargo_for_local(&spec.accepted_cargo_indices, &spec.accepted_cargo_labels))
+        .and_then(|spec| {
+            cargo_for_local(
+                &spec.accepted_cargo_indices,
+                &spec.accepted_cargo_labels,
+                &industry.newgrf_input_cargo_slots,
+            )
+        })
         .or_else(|| {
             industry
                 .station_input_requirements()

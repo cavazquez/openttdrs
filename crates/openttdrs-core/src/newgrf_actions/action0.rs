@@ -1904,9 +1904,9 @@ pub fn parse_action0_industry_meta(payload: &[u8]) -> Option<ParsedIndustryMeta>
     if name.is_empty() {
         name = format!("Industry {local_id}");
     }
-    // Filtrar cargos inválidos 0xFF.
-    produced_cargo_indices.retain(|&c| c != 0xFF);
-    accepted_cargo_indices.retain(|&c| c != 0xFF);
+    // Conservar los slots inválidos. OpenTTD necesita que los huecos de las
+    // listas legacy 3-in/2-out mantengan su posición para que los callbacks
+    // dinámicos puedan omitir un slot sin compactar los multiplicadores.
     Some(ParsedIndustryMeta {
         local_id,
         subst_id,

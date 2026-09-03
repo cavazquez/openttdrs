@@ -1187,6 +1187,8 @@ pub const CBID_INDUSTRY_MONTHLY_PROD_CHANGE: u16 = 0x35;
 pub const CBID_INDUSTRY_DECIDE_COLOUR: u16 = 0x14A;
 /// Callback industrias: nivel inicial al fundar (`CBID_INDUSTRY_PROD_CHANGE_BUILD`).
 pub const CBID_INDUSTRY_PROD_CHANGE_BUILD: u16 = 0x15F;
+/// Callback industrias: rechazar temporalmente un cargo (`CBID_INDUSTRY_REFUSE_CARGO`).
+pub const CBID_INDUSTRY_REFUSE_CARGO: u16 = 0x3D;
 /// Callback casas: permitir construcción (`CBID_HOUSE_ALLOW_CONSTRUCTION`).
 pub const CBID_HOUSE_ALLOW_CONSTRUCTION: u16 = 0x17;
 /// Callback casas: decidir si se dibuja la fundación (`CBID_HOUSE_DRAW_FOUNDATIONS`).

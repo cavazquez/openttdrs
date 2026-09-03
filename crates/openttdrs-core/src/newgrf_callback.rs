@@ -24,7 +24,7 @@ use crate::newgrf_sprites::{
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_AUTOSLOPE,
     CBID_INDTILE_SHAPE_CHECK, CBID_INDUSTRY_DECIDE_COLOUR, CBID_INDUSTRY_LOCATION,
     CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_PROD_CHANGE_BUILD,
-    CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_OBJECT_LAND_SLOPE_CHECK,
+    CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_INDUSTRY_REFUSE_CARGO, CBID_OBJECT_LAND_SLOPE_CHECK,
     CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
     CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_COLOUR_MAPPING,
@@ -1862,6 +1862,54 @@ pub fn resolve_industry_decide_colour_callback(
         .then(|| u8::try_from(result & 0x000F).unwrap_or(0))
 }
 
+/// Busca el índice de cargo que `GetIndustryCallback` recibiría en `param2`.
+///
+/// Los labels conservan la traducción CTT del GRF y son la fuente preferida:
+/// un slot local puede representar otro cargo según el clima. Cuando el
+/// catálogo no pudo resolver un label, el id vanilla es un fallback explícito
+/// para los GRF que sólo publican la tabla original.
+fn industry_local_cargo_index(def: &IndustrySpecDef, cargo: CargoType) -> Option<u8> {
+    for (index, label) in def.accepted_cargo_labels.iter().enumerate() {
+        if cargo_type_from_label(Some(label.as_str())) == Some(cargo) {
+            return def.accepted_cargo_indices.get(index).copied();
+        }
+    }
+    def.accepted_cargo_indices
+        .iter()
+        .copied()
+        .find(|&local| CargoType::from_cargo_id(local) == Some(cargo))
+}
+
+/// Ejecuta `CBID_INDUSTRY_REFUSE_CARGO` (`0x3D`) para una entrada conocida.
+///
+/// `OpenTTD` invierte el booleano convertido: un resultado no nulo significa
+/// que la industria acepta el cargo, mientras que cero lo rechaza. Un
+/// callback ausente, sin runtime, con un cargo no traducible o que devuelve
+/// `CALLBACK_FAILED` deja que el llamador conserve la aceptación vanilla.
+/// `Some(true)` significa «rechazar».
+#[must_use]
+pub fn resolve_industry_refuse_cargo_callback(
+    def: &IndustrySpecDef,
+    industry: &mut Industry,
+    cargo: CargoType,
+) -> Option<bool> {
+    if !def.has_refuse_cargo_callback() {
+        return None;
+    }
+    let runtime = def.newgrf_runtime.as_ref()?;
+    let local_cargo = industry_local_cargo_index(def, cargo)?;
+    let mut ctx = action2_eval_ctx_from_industry(industry, u32::from(industry.newgrf_random));
+    let result = runtime.resolve_callback_ctx_u16(
+        u16::from(def.newgrf_local_id),
+        CBID_INDUSTRY_REFUSE_CARGO,
+        0,
+        u32::from(local_cargo),
+        &mut ctx,
+    );
+    writeback_industry_persistent_registers(industry, &ctx);
+    (result != CALLBACK_FAILED).then_some(result == 0)
+}
+
 /// Call site house: CB `0x17` allow construction (#266).
 #[must_use]
 pub fn apply_house_construction_callback(def: &HouseSpecDef) -> bool {
@@ -2848,7 +2896,7 @@ mod tests {
         Action2RandomEntry, Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm,
         CBID_STATION_BUILD_TILE_LAYOUT, TrainSpriteAssign,
     };
-    use crate::{TileCoord, VehicleKind};
+    use crate::{Station, TileCoord, VehicleKind};
 
     fn gfx_callback_literal(value: u8) -> TrainSpriteGraphics {
         let mut gfx = TrainSpriteGraphics::default();
@@ -4525,6 +4573,113 @@ mod tests {
             .is_ok()
         );
         assert_eq!(state.industries[0].random_colour, 9);
+    }
+
+    #[test]
+    fn industry_refuse_cargo_callback_uses_local_index_and_inverts_boolean() {
+        let mut def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![5],
+            produced_cargo_labels: vec!["GOOD".into()],
+            accepted_cargo_indices: vec![7],
+            accepted_cargo_labels: vec!["WOOD".into()],
+            production_rates: vec![0],
+            input_multipliers: vec![256],
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_REFUSE_CARGO_MASK,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "refuse-cargo".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_allow_if_byte(0x18, 0, 7))),
+        };
+        let mut industry =
+            Industry::new(TileCoord::new(4, 5), crate::industry::IndustryKind::Factory)
+                .with_newgrf_spec(def.id, &def);
+
+        // The callback receives the GRF-local cargo id in param2. A non-zero
+        // result means acceptance; OpenTTD inverts it for this callback.
+        assert_eq!(
+            resolve_industry_refuse_cargo_callback(&def, &mut industry, CargoType::Wood),
+            Some(false)
+        );
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x18, 0, 8)));
+        assert_eq!(
+            resolve_industry_refuse_cargo_callback(&def, &mut industry, CargoType::Wood),
+            Some(true)
+        );
+        def.newgrf_runtime = Some(Box::default());
+        assert_eq!(
+            resolve_industry_refuse_cargo_callback(&def, &mut industry, CargoType::Wood),
+            None,
+            "CALLBACK_FAILED conserva la aceptación vanilla"
+        );
+    }
+
+    #[test]
+    fn industry_refuse_cargo_callback_keeps_station_stock_when_rejected() {
+        let mut def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![5],
+            produced_cargo_labels: vec!["GOOD".into()],
+            accepted_cargo_indices: vec![7],
+            accepted_cargo_labels: vec!["WOOD".into()],
+            production_rates: vec![0],
+            input_multipliers: vec![256],
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_REFUSE_CARGO_MASK,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "refuse-cargo-processing".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            // Expected 8 does not match the local cargo id 7, so the callback
+            // returns zero and the industry temporarily refuses the input.
+            newgrf_runtime: Some(Box::new(gfx_callback_allow_if_byte(0x18, 0, 8))),
+        };
+        let pos = TileCoord::new(4, 4);
+        let mut industry = Industry::new(pos, crate::industry::IndustryKind::Factory)
+            .with_newgrf_spec(def.id, &def);
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(5, 4),
+            crate::station::StopKind::TruckStop,
+        )];
+        stations[0].cargo_stock.wood = 8;
+
+        assert!(
+            !industry.produce_from_nearby_stations_with_callback_and_newgrf(
+                &mut stations,
+                512,
+                false,
+                Some(&def),
+            )
+        );
+        assert_eq!(stations[0].cargo_stock.wood, 8);
+        assert_eq!(industry.stock, 0);
+
+        // A matching non-zero result lets the same production cycle proceed.
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x18, 0, 7)));
+        assert!(
+            industry.produce_from_nearby_stations_with_callback_and_newgrf(
+                &mut stations,
+                512,
+                false,
+                Some(&def),
+            )
+        );
+        assert_eq!(stations[0].cargo_stock.wood, 0);
+        assert_eq!(industry.stock, 8);
     }
 
     #[test]

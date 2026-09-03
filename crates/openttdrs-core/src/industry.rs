@@ -1448,7 +1448,7 @@ impl Industry {
     ///
     /// Devuelve `true` si hubo un ciclo de procesamiento en este tick.
     pub fn produce_from_nearby_stations(&mut self, stations: &mut [Station], tick: u64) -> bool {
-        self.produce_from_nearby_stations_with_callback(stations, tick, false)
+        self.produce_from_nearby_stations_with_callback_and_newgrf(stations, tick, false, None)
     }
 
     /// Variante que deja las entradas en la cola de la industria para que el
@@ -1458,6 +1458,25 @@ impl Industry {
         stations: &mut [Station],
         tick: u64,
         callback_on_arrival: bool,
+    ) -> bool {
+        self.produce_from_nearby_stations_with_callback_and_newgrf(
+            stations,
+            tick,
+            callback_on_arrival,
+            None,
+        )
+    }
+
+    /// Variante de procesamiento que consulta `CBID_INDUSTRY_REFUSE_CARGO`
+    /// después de verificar que todas las entradas están disponibles y antes
+    /// de retirarlas de las estaciones. Esto conserva la cola intacta cuando
+    /// una industria `NewGRF` rechaza temporalmente uno de sus cargos.
+    pub fn produce_from_nearby_stations_with_callback_and_newgrf(
+        &mut self,
+        stations: &mut [Station],
+        tick: u64,
+        callback_on_arrival: bool,
+        newgrf_def: Option<&IndustrySpecDef>,
     ) -> bool {
         let inputs = self.processing_inputs();
         if inputs.is_empty() || self.is_closing() {
@@ -1494,6 +1513,15 @@ impl Industry {
             if available < amount {
                 return false;
             }
+        }
+
+        if let Some(def) = newgrf_def
+            && requirements.iter().any(|&(cargo, _)| {
+                crate::newgrf_callback::resolve_industry_refuse_cargo_callback(def, self, cargo)
+                    == Some(true)
+            })
+        {
+            return false;
         }
 
         for &(cargo, amount) in &requirements {

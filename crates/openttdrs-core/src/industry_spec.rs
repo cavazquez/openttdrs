@@ -35,6 +35,8 @@ pub const INDUSTRY_CALLBACK_LOCATION_MASK: u16 = 1 << 3;
 pub const INDUSTRY_CALLBACK_PRODUCTION_CHANGE_MASK: u16 = 1 << 4;
 /// Bit `IndustryCallbackMask::MonthlyProdChange`: cambio mensual de producción.
 pub const INDUSTRY_CALLBACK_MONTHLY_PROD_CHANGE_MASK: u16 = 1 << 5;
+/// Bit `IndustryCallbackMask::RefuseCargo`: rechazo temporal de un cargo.
+pub const INDUSTRY_CALLBACK_REFUSE_CARGO_MASK: u16 = 1 << 10;
 /// Bit `IndustryCallbackMask::DecideColour`: color al fundar la industria.
 pub const INDUSTRY_CALLBACK_DECIDE_COLOUR_MASK: u16 = 1 << 11;
 /// Bit `IndustryCallbackMask::ProdChangeBuild`: nivel inicial al fundar.
@@ -119,6 +121,12 @@ impl IndustrySpecDef {
     #[must_use]
     pub const fn has_monthly_production_change_callback(&self) -> bool {
         self.callback_mask & INDUSTRY_CALLBACK_MONTHLY_PROD_CHANGE_MASK != 0
+    }
+
+    /// ¿El GRF declaró callback para rechazar temporalmente una entrada?
+    #[must_use]
+    pub const fn has_refuse_cargo_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_CALLBACK_REFUSE_CARGO_MASK != 0
     }
 
     /// ¿El GRF declaró el callback de color al fundar (`0x14A`)?

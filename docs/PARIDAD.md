@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `26a915db`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `036fda1f`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -55,12 +55,29 @@ actualizan, y el writer los reemite. Las frases de tablas antiguas que indiquen
 que esos campos son sólo passthrough quedan superadas por este corte. Cargos
 custom y callbacks sin call site siguen siendo brechas reales.
 
+Actualización vigente del corte: `036fda1f` implementa el monitor efímero de
+carga compatible con `_cargo_pickups`/`_cargo_deliveries`: codificación nativa
+de `CargoMonitorID`, activación explícita, reset al consultar y saturación a
+32 bits. Las entregas a industrias y pueblos actualizan los monitores y
+`GameState` expone las cuatro consultas y la limpieza por compañía. El mapa no
+se persiste; bindings de GameScript, exclusividad/neutral stations y cargos
+custom siguen fuera del alcance.
+
 Actualización #329-INDUSTRY-PRODUCED-HISTORY-050 (2026-09-03, `26a915db`):
 los historiales `INDY.produced[].history` se actualizan por salida al
 transferir o cargar directamente, giran con la ventana nativa de 61 registros
 y se reemiten desde el estado runtime al guardar. La evidencia cubre
 importación, transferencia, rollover y chunk; cargos custom y callbacks sin
 call site siguen fuera del alcance.
+
+Actualización #329-INDUSTRY-CARGO-MONITOR-051 (2026-09-03, `036fda1f`):
+`CargoMonitor` reproduce el layout de bits y la semántica saturante/reset de
+OpenTTD. `DeliverGoodsToIndustry` registra cada porción aceptada en la entidad
+industria y en el pueblo de la estación; la aceptación restante se registra en
+la segunda llamada de entrega. Las recogidas se acreditan sólo al confirmar la
+entrega final. El runtime queda disponible desde `GameState`, sin persistencia
+en JSON/SAV; bindings de GameScript, exclusividad y cargos custom permanecen
+parciales.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

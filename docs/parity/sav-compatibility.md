@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-03**,
-`main` con base funcional `26a915db`, posterior al writeback canónico de `CITY`,
+`main` con base funcional `036fda1f`, posterior al writeback canónico de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
@@ -28,6 +28,14 @@ hidrata, se actualiza por salida durante transferencia/carga y se reemite con
 la ventana nativa de 61 registros. El writer conserva passthrough sólo cuando
 la salida no fue mutada en runtime; cargos custom y mutaciones fuera de estas
 rutas siguen siendo best-effort.
+
+Actualización del corte `036fda1f`: el monitor `CargoMonitor` es estado
+efímero y no añade columnas al `.sav`; sus consultas y limpieza vuelven vacías
+tras importar, igual que los mapas globales de `OpenTTD` que los GameScripts
+deben activar otra vez. Las entregas runtime sí actualizan los mapas
+compatibles con `_cargo_pickups`/`_cargo_deliveries`; bindings de GameScript,
+exclusividad/neutral stations y cargos custom siguen fuera del formato
+representable.
 
 | Área | Importar `.sav` de OpenTTD | Exportar `.sav` para OpenTTD | Límite y evidencia |
 |---|---|---|---|

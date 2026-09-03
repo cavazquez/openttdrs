@@ -12,14 +12,17 @@ use crate::engine::EngineDef;
 use crate::house_spec::{HouseSpecDef, action2_eval_ctx_for_house_tile_with_towns};
 use crate::industry::{Industry, IndustryProductionAction};
 use crate::industry_spec::{IndustrySpecDef, cargo_type_from_label};
-use crate::industry_tile::IndustryTileSpecDef;
-use crate::map::industry_action2::action2_eval_ctx_for_industry_tile_with_world;
+use crate::industry_tile::{IndustryTileSpecDef, industry_tile_slope_refused};
+use crate::map::industry_action2::{
+    action2_eval_ctx_for_industry_tile_with_world,
+    action2_eval_ctx_for_industry_tile_with_world_and_parent,
+};
 use crate::map::object::action2_eval_ctx_for_object_tile_with_towns;
 use crate::map::{Map, TileCoord, has_tile_water_ground};
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
-    CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
-    CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_PROD_CHANGE_BUILD,
+    CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_SHAPE_CHECK,
+    CBID_INDUSTRY_LOCATION, CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_PROD_CHANGE_BUILD,
     CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_OBJECT_LAND_SLOPE_CHECK,
     CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
@@ -37,7 +40,7 @@ use crate::station::Station;
 use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
 use crate::town::Town;
 use crate::vehicle::{Vehicle, VehicleKind, VehicleRandomTrigger};
-use crate::{CargoType, GameState, RoadType, SoundId, StopKind, VehicleSoundEvent};
+use crate::{CargoType, GameState, IndustryKind, RoadType, SoundId, StopKind, VehicleSoundEvent};
 use std::collections::HashSet;
 
 /// Contexto que el scheduler de callbacks necesita para reproducir los scopes
@@ -1279,6 +1282,122 @@ pub fn apply_industry_location_callback_for_build(
     let result =
         runtime.resolve_callback_ctx(def.newgrf_local_id, CBID_INDUSTRY_LOCATION, 0, 2, &mut ctx);
     callback_allows_location(result)
+}
+
+/// Resultado booleano de `CBID_INDTILE_SHAPE_CHECK`.
+///
+/// Para GRF anteriores a la versión 7 el callback era un booleano invertido:
+/// cualquier resultado distinto de cero admitía la pendiente. Desde la
+/// versión 7 el resultado usa `GetErrorMessageFromLocationCallbackResult`,
+/// donde sólo `0x400` representa éxito y los valores inferiores son textos de
+/// error `NewGRF`. `CALLBACK_FAILED` deja que el caller use `slopes_refused`.
+#[must_use]
+pub const fn industry_tile_shape_callback_allows(result: u16, grf_version: u8) -> bool {
+    if result == CALLBACK_FAILED {
+        return true;
+    }
+    if grf_version != 0 && grf_version < 7 {
+        result != 0
+    } else {
+        result == 0x400
+    }
+}
+
+fn requested_industry_tile_scope_vars(runtime: &TrainSpriteGraphics) -> Vec<(u8, u8)> {
+    let mut requested = Vec::new();
+    for entry in runtime.action2_var.values() {
+        for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+            if matches!(term.variable, 0x60..=0x63)
+                && let Some(parameter) = term.param
+                && !requested.contains(&(term.variable, parameter))
+            {
+                requested.push((term.variable, parameter));
+            }
+        }
+    }
+    requested.sort_unstable();
+    requested
+}
+
+/// Ejecuta `CBID_INDTILE_SHAPE_CHECK` para una tesela de un layout antes de
+/// materializar la industria.
+///
+/// El callback recibe el `layout_index` en el byte bajo de `param2` y el tipo
+/// de creación en el alto, igual que `PerformIndustryTileSlopeCheck`. El
+/// parent temporal conserva la huella, tipo, random inicial y fundador aunque
+/// el mapa todavía no tenga ninguna tesela `Industry`. Si el callback falla se
+/// aplica exactamente el fallback `IsSlopeRefused` de `OpenTTD`.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn apply_industry_tile_shape_callback_for_build(
+    tile_def: &IndustryTileSpecDef,
+    industry_def: &IndustrySpecDef,
+    state: &GameState,
+    base_tile: TileCoord,
+    tile: TileCoord,
+    layout_index: usize,
+    initial_random_bits: u16,
+    founder: Option<crate::company::CompanyId>,
+    creation_type: u8,
+) -> bool {
+    let slope = state
+        .map
+        .get(tile)
+        .and_then(|_| crate::map::tile_slope_and_z(&state.map, tile))
+        .map_or(crate::map::SLOPE_STEEP, |(tileh, _)| tileh);
+    if !tile_def.has_shape_check_callback() {
+        return !industry_tile_slope_refused(slope, tile_def.slopes_refused);
+    }
+    let Some(runtime) = tile_def.newgrf_runtime.as_ref() else {
+        return !industry_tile_slope_refused(slope, tile_def.slopes_refused);
+    };
+
+    let footprint = industry_def.footprint_at(base_tile, layout_index);
+    let tiles = footprint.iter().map(|(coord, _)| *coord).collect();
+    let kind = if industry_def.is_processor() {
+        IndustryKind::Factory
+    } else {
+        IndustryKind::CoalMine
+    };
+    // `PerformIndustryTileSlopeCheck` deja `selected_layout` en cero en el
+    // parent temporal; el índice real viaja sólo en `param2`.
+    let parent = Industry::with_tiles(base_tile, kind, tiles)
+        .with_newgrf_spec(industry_def.id, industry_def)
+        .with_newgrf_random(initial_random_bits)
+        .with_founder(founder);
+    let neighbor_params = requested_industry_tile_scope_vars(runtime);
+    let mut ctx = action2_eval_ctx_for_industry_tile_with_world_and_parent(
+        &state.map,
+        tile,
+        &state.industries,
+        &state.towns,
+        &state.industry_tile_spec_catalog,
+        &state.industry_spec_catalog,
+        state.climate,
+        Some(tile_def),
+        &neighbor_params,
+        Some(&parent),
+    );
+    ctx.random_bits = u32::from(initial_random_bits);
+    let param2 = (u32::from(creation_type) << 8)
+        | u32::try_from(layout_index & usize::from(u8::MAX)).unwrap_or(0);
+    let result = runtime.resolve_callback_ctx_u16(
+        u16::from(tile_def.newgrf_local_id),
+        CBID_INDTILE_SHAPE_CHECK,
+        0,
+        param2,
+        &mut ctx,
+    );
+    if result == CALLBACK_FAILED {
+        !industry_tile_slope_refused(slope, tile_def.slopes_refused)
+    } else {
+        let grf_version = state
+            .newgrf_stack
+            .iter()
+            .find(|entry| entry.grfid == tile_def.newgrf_grfid)
+            .map_or(0, |entry| entry.grf_version);
+        industry_tile_shape_callback_allows(result, grf_version)
+    }
 }
 
 /// Réplica acotada de `GetClosestWaterDistance(tile, true)` para el scope de
@@ -3871,6 +3990,22 @@ mod tests {
     }
 
     #[test]
+    fn industry_tile_shape_callback_matches_grf_version_semantics() {
+        // `CBID_INDTILE_SHAPE_CHECK` uses the old inverted boolean before
+        // GRF v7: any non-zero result accepts the slope.
+        assert!(industry_tile_shape_callback_allows(CALLBACK_FAILED, 6));
+        assert!(industry_tile_shape_callback_allows(1, 6));
+        assert!(!industry_tile_shape_callback_allows(0, 6));
+
+        // From v7, only `0x400` means success; lower values are error strings.
+        assert!(industry_tile_shape_callback_allows(0x400, 7));
+        assert!(!industry_tile_shape_callback_allows(1, 7));
+        assert!(!industry_tile_shape_callback_allows(0, 8));
+        // Fixtures without Action8 keep the modern interpretation.
+        assert!(industry_tile_shape_callback_allows(0x400, 0));
+    }
+
+    #[test]
     fn callback_result_uses_upstream_signed_15_bit_encoding() {
         assert_eq!(signed_15_bit_callback_result(0), 0);
         assert_eq!(signed_15_bit_callback_result(0x3FFF), 16_383);
@@ -4822,6 +4957,7 @@ mod tests {
             gfx: crate::industry_tile::IndustryTileGfxId(175),
             subst_id: 0,
             from_newgrf: true,
+            slopes_refused: 0,
             accepts_cargo_indices: Vec::new(),
             accepts_cargo_labels: Vec::new(),
             acceptance: Vec::new(),
@@ -4861,6 +4997,7 @@ mod tests {
             gfx: crate::industry_tile::IndustryTileGfxId(0),
             subst_id: 0,
             from_newgrf: false,
+            slopes_refused: 0,
             accepts_cargo_indices: Vec::new(),
             accepts_cargo_labels: Vec::new(),
             acceptance: Vec::new(),
@@ -4896,6 +5033,7 @@ mod tests {
             gfx: crate::industry_tile::IndustryTileGfxId(175),
             subst_id: 0,
             from_newgrf: true,
+            slopes_refused: 0,
             accepts_cargo_indices: Vec::new(),
             accepts_cargo_labels: Vec::new(),
             acceptance: Vec::new(),

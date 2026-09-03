@@ -40,6 +40,43 @@ pub fn action2_eval_ctx_for_industry_tile_with_world(
     current_spec: Option<&IndustryTileSpecDef>,
     neighbor_params: &[(u8, u8)],
 ) -> Action2EvalCtx {
+    action2_eval_ctx_for_industry_tile_with_world_and_parent(
+        map,
+        coord,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        current_spec,
+        neighbor_params,
+        None,
+    )
+}
+
+/// Variante de [`action2_eval_ctx_for_industry_tile_with_world`] que permite
+/// proporcionar una industria parent temporal durante la construcción.
+///
+/// `PerformIndustryTileSlopeCheck` upstream evalúa `IndustryTileResolverObject`
+/// antes de materializar la tesela en el mapa; en ese momento no existe aún
+/// un `IndustryID` que `find_industry` pueda encontrar. El parent explícito
+/// conserva, sin mutar el mapa, el tipo, layout, random y fundador que ve el
+/// callback `CBID_INDTILE_SHAPE_CHECK`.
+#[must_use]
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments)]
+pub fn action2_eval_ctx_for_industry_tile_with_world_and_parent(
+    map: &Map,
+    coord: TileCoord,
+    industries: &[Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+    current_spec: Option<&IndustryTileSpecDef>,
+    neighbor_params: &[(u8, u8)],
+    parent: Option<&Industry>,
+) -> Action2EvalCtx {
     let tile = map.get(coord);
     let mut ctx = Action2EvalCtx::default();
     let Some(tile) = tile else {
@@ -73,7 +110,7 @@ pub fn action2_eval_ctx_for_industry_tile_with_world(
     });
     ctx.vars.insert(0x42, u32::from(town_zone as u8));
 
-    let current = find_industry(industries, &tile, coord);
+    let current = parent.or_else(|| find_industry(industries, &tile, coord));
     let origin = current.map_or(coord, |industry| industry.pos);
     ctx.vars.insert(0x43, relative_position(coord, origin));
     // Unlike houses, an industry tile can expose the complete animation byte.
@@ -902,6 +939,7 @@ mod tests {
             gfx: crate::industry_tile::IndustryTileGfxId(175),
             subst_id: 0,
             from_newgrf: true,
+            slopes_refused: 0,
             accepts_cargo_indices: Vec::new(),
             accepts_cargo_labels: Vec::new(),
             acceptance: Vec::new(),

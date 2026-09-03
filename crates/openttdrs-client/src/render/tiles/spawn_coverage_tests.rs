@@ -1870,7 +1870,7 @@ fn newgrf_house_draw_foundations_callback_can_suppress_default() {
         .count();
     assert_eq!(
         foundation_count, 0,
-        "CB 0x150 = 0 debe suprimir la fundación"
+        "CB 0x30 = 0 debe suprimir la fundación"
     );
 }
 
@@ -3744,6 +3744,7 @@ fn sloped_newgrf_industry_overlay_is_child_of_foundation() {
         gfx: IndustryTileGfxId(175),
         subst_id: 0,
         from_newgrf: true,
+        slopes_refused: 0,
         accepts_cargo_indices: Vec::new(),
         accepts_cargo_labels: Vec::new(),
         acceptance: Vec::new(),
@@ -3850,6 +3851,7 @@ fn newgrf_industry_draw_foundations_callback_can_suppress_default() {
         gfx: IndustryTileGfxId(175),
         subst_id: 0,
         from_newgrf: true,
+        slopes_refused: 0,
         accepts_cargo_indices: Vec::new(),
         accepts_cargo_labels: Vec::new(),
         acceptance: Vec::new(),
@@ -3911,7 +3913,7 @@ fn newgrf_industry_draw_foundations_callback_can_suppress_default() {
         .count();
     assert_eq!(
         foundation_count, 0,
-        "CB 0x150 = 0 debe suprimir la fundación de industria"
+        "CB 0x30 = 0 debe suprimir la fundación de industria"
     );
 }
 

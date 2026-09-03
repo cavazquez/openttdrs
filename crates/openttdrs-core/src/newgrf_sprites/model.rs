@@ -1191,7 +1191,13 @@ pub const CBID_HOUSE_ALLOW_CONSTRUCTION: u16 = 0x17;
 pub const CBID_HOUSE_DRAW_FOUNDATIONS: u16 = 0x150;
 /// Callback teselas de industria: decidir si se dibuja la fundación
 /// (`CBID_INDTILE_DRAW_FOUNDATIONS`).
-pub const CBID_INDTILE_DRAW_FOUNDATIONS: u16 = 0x150;
+pub const CBID_INDTILE_DRAW_FOUNDATIONS: u16 = 0x30;
+/// Callback teselas de industria: comprobar la pendiente durante la creación
+/// (`CBID_INDTILE_SHAPE_CHECK`).
+pub const CBID_INDTILE_SHAPE_CHECK: u16 = 0x2F;
+/// Callback teselas de industria: permitir o bloquear autoslope
+/// (`CBID_INDTILE_AUTOSLOPE`).
+pub const CBID_INDTILE_AUTOSLOPE: u16 = 0x3C;
 /// Callback cargos: calcular ingreso de la entrega (`CBID_CARGO_PROFIT_CALC`).
 pub const CBID_CARGO_PROFIT_CALC: u16 = 0x39;
 /// Callback cargos: calcular rating de estación (`CBID_CARGO_STATION_RATING_CALC`).

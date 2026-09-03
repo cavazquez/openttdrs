@@ -36,7 +36,10 @@ pub use index::{
     coord_from_linear_index, coord_to_dense_index, coord_to_linear_index,
     openttd_tile_index_to_coord,
 };
-pub use industry_action2::action2_eval_ctx_for_industry_tile_with_world;
+pub use industry_action2::{
+    action2_eval_ctx_for_industry_tile_with_world,
+    action2_eval_ctx_for_industry_tile_with_world_and_parent,
+};
 pub use industry_construction::{
     INDUSTRY_CONSTRUCTION_COMPLETED, advance_industry_construction,
     advance_industry_construction_tile_loop_at, industry_construction_counter,

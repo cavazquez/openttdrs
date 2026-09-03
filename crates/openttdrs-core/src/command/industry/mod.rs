@@ -578,6 +578,7 @@ pub fn place_industry_spec_def_sandbox(
 /// mantiene layout cero;
 /// esta variante permite a la generación, SAV y UI pasar el valor real sin
 /// volver a inferirlo desde la geometría de la huella.
+#[allow(clippy::too_many_lines)]
 pub fn place_industry_spec_def_layout_sandbox(
     state: &mut GameState,
     c: TileCoord,
@@ -609,6 +610,31 @@ pub fn place_industry_spec_def_layout_sandbox(
     }
     check_place_industry_spec_def_layout(&state.map, c, &def, layout_index)?;
     let footprint = def.footprint_at(c, layout_index);
+    // `CheckIfIndustryTileSlopes` ejecuta el callback 0x2F por cada tesela
+    // después de las validaciones de ocupación y antes de escribir el mapa.
+    // El fallback de cada tile usa `slopes_refused` (prop 0x0D), de modo que
+    // una tesela inclinada no se admite sólo porque el runtime no tenga un
+    // Action2 resoluble.
+    for (tile, gfx) in &footprint {
+        if let Some(tile_def) = state
+            .industry_tile_spec_catalog
+            .iter()
+            .find(|candidate| candidate.gfx.as_u16() == *gfx)
+            && !crate::newgrf_callback::apply_industry_tile_shape_callback_for_build(
+                tile_def,
+                &def,
+                state,
+                c,
+                *tile,
+                layout_index,
+                random_bits,
+                Some(state.active_company),
+                2, // IACT_USERCREATION
+            )
+        {
+            return Err(CommandError::NewGrfCallbackDenied);
+        }
+    }
     let tiles: Vec<TileCoord> = footprint.iter().map(|(t, _)| *t).collect();
     let industry_id = next_industry_instance_id(state);
     let random_colour = u8::try_from(industry_id.wrapping_mul(5) % 16).unwrap_or(0);

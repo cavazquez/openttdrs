@@ -470,12 +470,37 @@ pub fn build_action0_industry_tile_payload_ex(
     acceptance: &[(u8, u8)],
     callback_mask: u8,
 ) -> Vec<u8> {
+    build_action0_industry_tile_payload_with_slope(
+        local_id,
+        subst_id,
+        override_of,
+        acceptance,
+        0,
+        callback_mask,
+    )
+}
+
+/// Variante de Action0 `IndustryTiles` que también codifica `prop 0x0D`
+/// (`slopes_refused`) para pruebas de shape-check y para GRF que no usan CB
+/// `0x2F`.
+#[must_use]
+pub fn build_action0_industry_tile_payload_with_slope(
+    local_id: u8,
+    subst_id: u8,
+    override_of: Option<u8>,
+    acceptance: &[(u8, u8)],
+    slopes_refused: u8,
+    callback_mask: u8,
+) -> Vec<u8> {
     let mut num_props = 1u8; // subst
     if override_of.is_some() {
         num_props += 1;
     }
     num_props += u8::try_from(acceptance.len().min(3)).unwrap_or(0);
     if callback_mask != 0 {
+        num_props += 1;
+    }
+    if slopes_refused != 0 {
         num_props += 1;
     }
     let mut p = vec![
@@ -499,6 +524,10 @@ pub fn build_action0_industry_tile_payload_ex(
     if callback_mask != 0 {
         p.push(0x0E);
         p.push(callback_mask);
+    }
+    if slopes_refused != 0 {
+        p.push(0x0D);
+        p.push(slopes_refused);
     }
     p
 }
@@ -5263,7 +5292,14 @@ mod tests {
     /// #256: `callback_mask` y cargo labels almacenados (sin ejecutar CBs).
     #[test]
     fn industries_ac_callback_mask_and_cargo_labels_stored() {
-        let tile = build_action0_industry_tile_payload_ex(0, 0, Some(10), &[(1, 4), (5, 8)], 0x3C);
+        let tile = build_action0_industry_tile_payload_with_slope(
+            0,
+            0,
+            Some(10),
+            &[(1, 4), (5, 8)],
+            0x12,
+            0x3C,
+        );
         let ind = build_action0_industry_payload(
             0,
             0,
@@ -5277,6 +5313,7 @@ mod tests {
         );
         let meta_t = parse_action0_industry_tile_meta(&tile).unwrap();
         assert_eq!(meta_t.callback_mask, 0x3C);
+        assert_eq!(meta_t.slopes_refused, 0x12);
         assert_eq!(meta_t.accepts_cargo_indices, vec![1, 5]);
         assert_eq!(meta_t.override_of, Some(10));
         let meta_i = parse_action0_industry_meta(&ind).unwrap();
@@ -5299,6 +5336,7 @@ mod tests {
         apply_newgrf_industries(&mut state, &[&dir]);
         let tdef = &state.industry_tile_spec_catalog[0];
         assert_eq!(tdef.callback_mask, 0x3C);
+        assert_eq!(tdef.slopes_refused, 0x12);
         assert_eq!(
             tdef.accepts_cargo_labels,
             vec!["COAL".to_string(), "GOOD".to_string()]

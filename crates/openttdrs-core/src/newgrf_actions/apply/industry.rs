@@ -86,6 +86,7 @@ pub fn apply_newgrf_industry_tiles(state: &mut GameState, search_dirs: &[&Path])
                 accepts_cargo_indices: meta.accepts_cargo_indices,
                 accepts_cargo_labels,
                 acceptance: meta.acceptance,
+                slopes_refused: meta.slopes_refused,
                 callback_mask: meta.callback_mask,
                 animation_frames: meta.animation_frames,
                 animation_status: meta.animation_status,

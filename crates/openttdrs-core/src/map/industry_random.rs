@@ -489,6 +489,7 @@ mod tests {
             gfx: crate::industry_tile::IndustryTileGfxId(gfx),
             subst_id: 0,
             from_newgrf: true,
+            slopes_refused: 0,
             accepts_cargo_indices: Vec::new(),
             accepts_cargo_labels: Vec::new(),
             acceptance: Vec::new(),

@@ -11,9 +11,49 @@ pub const NEW_INDUSTRY_TILE_OFFSET: u16 = 175;
 pub const NUM_INDUSTRY_TILES: u16 = 512;
 /// Id inválido (`OpenTTD` `INVALID_INDUSTRYTILE`).
 pub const INVALID_INDUSTRY_TILE: u16 = NUM_INDUSTRY_TILES;
-/// Bit `IndustryTileCallbackMask::DrawFoundations`: consulta CB `0x150` al
+/// Bit `IndustryTileCallbackMask::ShapeCheck`: consulta CB `0x2F` al
+/// comprobar la pendiente durante la creación.
+pub const INDUSTRY_TILE_CALLBACK_SHAPE_CHECK_MASK: u8 = 1 << 4;
+/// Bit `IndustryTileCallbackMask::DrawFoundations`: consulta CB `0x30` al
 /// dibujar una tesela de industria sobre una pendiente.
 pub const INDUSTRY_TILE_CALLBACK_DRAW_FOUNDATIONS_MASK: u8 = 1 << 5;
+/// Bit `IndustryTileCallbackMask::Autoslope`: consulta CB `0x3C` al
+/// terraformar una tesela de industria.
+pub const INDUSTRY_TILE_CALLBACK_AUTOSLOPE_MASK: u8 = 1 << 6;
+
+/// Réplica de `IsSlopeRefused` para el fallback de `IndustryTile`.
+///
+/// Las cuatro banderas bajas de `slopes_refused` describen la dirección que
+/// no puede quedar elevada; `SLOPE_STEEP` rechaza siempre una pendiente de dos
+/// niveles. `OpenTTD` compara contra la pendiente complementaria, por lo que no
+/// basta con hacer un `&` directo entre las dos máscaras.
+#[must_use]
+pub const fn industry_tile_slope_refused(current: u8, refused: u8) -> bool {
+    const SLOPE_STEEP: u8 = crate::map::SLOPE_STEEP;
+    const SLOPE_W: u8 = 1;
+    const SLOPE_S: u8 = 2;
+    const SLOPE_E: u8 = 4;
+    const SLOPE_N: u8 = 8;
+    const SLOPE_NW: u8 = crate::map::SLOPE_NW;
+    const SLOPE_NE: u8 = crate::map::SLOPE_NE;
+    const SLOPE_SW: u8 = crate::map::SLOPE_SW;
+    const SLOPE_SE: u8 = crate::map::SLOPE_SE;
+
+    if current & SLOPE_STEEP != 0 {
+        return true;
+    }
+    if current == 0 {
+        return false;
+    }
+    if refused & SLOPE_STEEP != 0 {
+        return true;
+    }
+    let complement = current ^ 0x0F;
+    (refused & SLOPE_W != 0 && complement & SLOPE_NW != 0)
+        || (refused & SLOPE_S != 0 && complement & SLOPE_NE != 0)
+        || (refused & SLOPE_E != 0 && complement & SLOPE_SW != 0)
+        || (refused & SLOPE_N != 0 && complement & SLOPE_SE != 0)
+}
 
 /// Identificador global de gfx de tesela de industria.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -34,6 +74,10 @@ pub struct IndustryTileSpecDef {
     /// Fallback vanilla (`subst_id` &lt; 175).
     pub subst_id: u16,
     pub from_newgrf: bool,
+    /// Máscara de pendientes rechazadas (`prop 0x0D`), usada cuando no hay
+    /// callback `CBID_INDTILE_SHAPE_CHECK`.
+    #[serde(default)]
+    pub slopes_refused: u8,
     /// Índices GRF-local de cargos aceptados (`0x0A`–`0x0C` / `0x13`).
     #[serde(default)]
     pub accepts_cargo_indices: Vec<u8>,
@@ -43,7 +87,9 @@ pub struct IndustryTileSpecDef {
     /// Cantidades de aceptación (octavos; `0x0A`–`0x0C` / `0x13`).
     #[serde(default)]
     pub acceptance: Vec<i8>,
-    /// Callback mask (`prop 0x0E`): bit 0 = next frame 0x26, bit 1 = speed 0x27.
+    /// Callback mask (`prop 0x0E`):
+    /// bit 0 = next frame 0x26, bit 1 = speed 0x27, bit 4 = shape check
+    /// 0x2F, bit 5 = foundations 0x30 y bit 6 = autoslope 0x3C.
     #[serde(default)]
     pub callback_mask: u8,
     /// `prop 0x0F`: último frame de animación permitido.
@@ -82,10 +128,22 @@ pub struct IndustryTileSpecDef {
 }
 
 impl IndustryTileSpecDef {
-    /// ¿El GRF decide si se dibuja la fundación nivelada (`CB 0x150`)?
+    /// ¿El GRF decide si se dibuja la fundación nivelada (`CB 0x30`)?
     #[must_use]
     pub const fn has_draw_foundations_callback(&self) -> bool {
         self.callback_mask & INDUSTRY_TILE_CALLBACK_DRAW_FOUNDATIONS_MASK != 0
+    }
+
+    /// ¿El GRF decide si la pendiente admite esta tesela (`CB 0x2F`)?
+    #[must_use]
+    pub const fn has_shape_check_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_TILE_CALLBACK_SHAPE_CHECK_MASK != 0
+    }
+
+    /// ¿El GRF permite o bloquea el autoslope de esta tesela (`CB 0x3C`)?
+    #[must_use]
+    pub const fn has_autoslope_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_TILE_CALLBACK_AUTOSLOPE_MASK != 0
     }
 
     #[must_use]
@@ -214,6 +272,7 @@ mod tests {
             gfx: IndustryTileGfxId(NEW_INDUSTRY_TILE_OFFSET),
             subst_id: 0,
             from_newgrf: true,
+            slopes_refused: 0,
             accepts_cargo_indices: Vec::new(),
             accepts_cargo_labels: Vec::new(),
             acceptance: Vec::new(),
@@ -237,12 +296,60 @@ mod tests {
     }
 
     #[test]
+    fn industry_tile_callback_masks_match_upstream() {
+        let mut def = IndustryTileSpecDef {
+            gfx: IndustryTileGfxId(NEW_INDUSTRY_TILE_OFFSET),
+            subst_id: 0,
+            from_newgrf: true,
+            slopes_refused: 0,
+            accepts_cargo_indices: Vec::new(),
+            accepts_cargo_labels: Vec::new(),
+            acceptance: Vec::new(),
+            callback_mask: INDUSTRY_TILE_CALLBACK_SHAPE_CHECK_MASK
+                | INDUSTRY_TILE_CALLBACK_DRAW_FOUNDATIONS_MASK
+                | INDUSTRY_TILE_CALLBACK_AUTOSLOPE_MASK,
+            animation_frames: 0,
+            animation_status: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_grfid: 1,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: None,
+        };
+        assert!(def.has_shape_check_callback());
+        assert!(def.has_draw_foundations_callback());
+        assert!(def.has_autoslope_callback());
+        def.callback_mask = 0;
+        assert!(!def.has_shape_check_callback());
+        assert!(!def.has_draw_foundations_callback());
+        assert!(!def.has_autoslope_callback());
+    }
+
+    #[test]
+    fn industry_tile_slope_refusal_matches_complement_rule() {
+        assert!(!industry_tile_slope_refused(0, 0xFF));
+        assert!(industry_tile_slope_refused(crate::map::SLOPE_NE, 1));
+        assert!(!industry_tile_slope_refused(crate::map::SLOPE_NE, 0));
+        assert!(industry_tile_slope_refused(crate::map::SLOPE_STEEP, 0));
+        assert!(industry_tile_slope_refused(
+            crate::map::SLOPE_NE,
+            crate::map::SLOPE_STEEP
+        ));
+    }
+
+    #[test]
     fn next_free_starts_at_175() {
         assert_eq!(next_free_industry_tile_gfx_id(&[]), Some(175));
         let catalog = vec![IndustryTileSpecDef {
             gfx: IndustryTileGfxId(175),
             subst_id: 0,
             from_newgrf: true,
+            slopes_refused: 0,
             accepts_cargo_indices: Vec::new(),
             accepts_cargo_labels: Vec::new(),
             acceptance: Vec::new(),
@@ -300,6 +407,7 @@ mod tests {
             gfx: IndustryTileGfxId(175),
             subst_id: 0,
             from_newgrf: true,
+            slopes_refused: 0,
             accepts_cargo_indices: Vec::new(),
             accepts_cargo_labels: Vec::new(),
             acceptance: Vec::new(),

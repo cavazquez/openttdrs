@@ -409,6 +409,8 @@ pub struct ParsedIndustryTileMeta {
     pub accepts_cargo_indices: Vec<u8>,
     /// Cantidades de aceptación (octavos; pueden ser negativas en `0x13`).
     pub acceptance: Vec<i8>,
+    /// Máscara de pendientes rechazadas (`prop 0x0D`).
+    pub slopes_refused: u8,
     /// Callback mask (`prop 0x0E`): bit 0 = next frame, bit 1 = speed.
     pub callback_mask: u8,
     /// `prop 0x0F`: frames y status de animación.
@@ -1509,6 +1511,7 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
     let mut override_of: Option<u8> = None;
     let mut accepts = [0xFFu8; 3];
     let mut acceptance = [0i8; 3];
+    let mut slopes_refused = 0u8;
     let mut callback_mask = 0u8;
     let mut animation_frames = 0u8;
     let mut animation_status = 0u8;
@@ -1564,6 +1567,7 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
                 if i >= payload.len() {
                     break;
                 }
+                slopes_refused = payload[i];
                 i += 1;
             }
             0x0F => {
@@ -1655,6 +1659,7 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
         override_of,
         accepts_cargo_indices,
         acceptance: acceptance_out,
+        slopes_refused,
         callback_mask,
         animation_frames,
         animation_status,

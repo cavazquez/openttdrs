@@ -201,6 +201,10 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
                     entry.filename, meta.local_id, badge
                 ));
             }
+            let callback_requires_runtime = meta.callback_mask
+                & (crate::industry_spec::INDUSTRY_CALLBACK_INPUT_CARGO_TYPES_MASK
+                    | crate::industry_spec::INDUSTRY_CALLBACK_OUTPUT_CARGO_TYPES_MASK)
+                != 0;
             catalog.push(IndustrySpecDef {
                 id: global_id,
                 local_id: meta.local_id,
@@ -221,7 +225,9 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
                 from_newgrf: true,
                 grfid: entry.grfid,
                 newgrf_local_id: meta.local_id,
-                newgrf_runtime: (gfx.needs_runtime_resolve() || gfx.has_tile_layouts())
+                newgrf_runtime: (gfx.needs_runtime_resolve()
+                    || gfx.has_tile_layouts()
+                    || callback_requires_runtime)
                     .then(|| Box::new(gfx.clone())),
             });
         }

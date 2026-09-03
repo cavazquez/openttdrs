@@ -1183,8 +1183,14 @@ pub const CBID_INDUSTRY_LOCATION: u16 = 0x28;
 pub const CBID_INDUSTRY_PRODUCTION_CHANGE: u16 = 0x29;
 /// Callback industrias: cambio mensual de producción (`CBID_INDUSTRY_MONTHLYPROD_CHANGE`).
 pub const CBID_INDUSTRY_MONTHLY_PROD_CHANGE: u16 = 0x35;
+/// Callback industrias: controla efectos especiales (`CBID_INDUSTRY_SPECIAL_EFFECT`).
+pub const CBID_INDUSTRY_SPECIAL_EFFECT: u16 = 0x3B;
 /// Callback industrias: decidir el color al fundar (`CBID_INDUSTRY_DECIDE_COLOUR`).
 pub const CBID_INDUSTRY_DECIDE_COLOUR: u16 = 0x14A;
+/// Callback industrias: cargos de entrada al fundar (`CBID_INDUSTRY_INPUT_CARGO_TYPES`).
+pub const CBID_INDUSTRY_INPUT_CARGO_TYPES: u16 = 0x14B;
+/// Callback industrias: cargos de salida al fundar (`CBID_INDUSTRY_OUTPUT_CARGO_TYPES`).
+pub const CBID_INDUSTRY_OUTPUT_CARGO_TYPES: u16 = 0x14C;
 /// Callback industrias: nivel inicial al fundar (`CBID_INDUSTRY_PROD_CHANGE_BUILD`).
 pub const CBID_INDUSTRY_PROD_CHANGE_BUILD: u16 = 0x15F;
 /// Callback industrias: rechazar temporalmente un cargo (`CBID_INDUSTRY_REFUSE_CARGO`).

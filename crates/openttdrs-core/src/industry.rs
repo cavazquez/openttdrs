@@ -895,6 +895,11 @@ pub struct Industry {
     /// Segundo cargo de salida `NewGRF`, si el label pudo resolverse.
     #[serde(default)]
     pub newgrf_secondary_output_cargo: Option<CargoType>,
+    /// `true` cuando los callbacks `0x14B`/`0x14C` reemplazaron las listas
+    /// estáticas al fundar la industria. Permite representar una lista
+    /// callback vacía sin volver al fallback vanilla.
+    #[serde(default)]
+    pub newgrf_dynamic_cargo_types: bool,
     /// Insumos y multiplicadores de una procesadora `NewGRF`.
     #[serde(default)]
     pub newgrf_processing_inputs: Vec<IndustryProcessingInput>,
@@ -968,6 +973,7 @@ impl Industry {
             newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
             newgrf_secondary_output_cargo: None,
+            newgrf_dynamic_cargo_types: false,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
         }
@@ -1009,6 +1015,7 @@ impl Industry {
             newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
             newgrf_secondary_output_cargo: None,
+            newgrf_dynamic_cargo_types: false,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
         }
@@ -1056,6 +1063,7 @@ impl Industry {
             newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
             newgrf_secondary_output_cargo: None,
+            newgrf_dynamic_cargo_types: false,
             newgrf_processing_inputs: Vec::new(),
             newgrf_processing_secondary_multipliers: Vec::new(),
         }
@@ -1231,7 +1239,7 @@ impl Industry {
             if let Some(cargo) = self.newgrf_secondary_output_cargo {
                 cargos.push(cargo);
             }
-            if !cargos.is_empty() {
+            if self.newgrf_dynamic_cargo_types || !cargos.is_empty() {
                 return cargos;
             }
         }
@@ -1362,6 +1370,9 @@ impl Industry {
         }
         let inputs = self.processing_inputs();
         if inputs.is_empty() {
+            return [0, 0];
+        }
+        if self.newgrf_dynamic_cargo_types && self.produced_cargos().is_empty() {
             return [0, 0];
         }
         if self.newgrf_type_id.is_none() {
@@ -1643,6 +1654,7 @@ impl Industry {
         self.newgrf_secondary_production_rate = None;
         self.newgrf_output_cargo = output_cargo;
         self.newgrf_secondary_output_cargo = None;
+        self.newgrf_dynamic_cargo_types = false;
         self.newgrf_processing_inputs.clear();
         self.newgrf_processing_secondary_multipliers.clear();
         self
@@ -1657,6 +1669,7 @@ impl Industry {
         self.newgrf_secondary_production_rate = def.secondary_production_rate();
         self.newgrf_output_cargo = outputs.first().copied();
         self.newgrf_secondary_output_cargo = outputs.get(1).copied();
+        self.newgrf_dynamic_cargo_types = false;
 
         let accepted = def.accepted_cargo_types();
         let output_count = outputs.len();

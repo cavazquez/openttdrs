@@ -10,7 +10,7 @@ use crate::cargo_spec::CargoSpecDef;
 use crate::cargodist::parity::Randomizer;
 use crate::engine::EngineDef;
 use crate::house_spec::{HouseSpecDef, action2_eval_ctx_for_house_tile_with_towns};
-use crate::industry::{Industry, IndustryProductionAction};
+use crate::industry::{Industry, IndustryProcessingInput, IndustryProductionAction};
 use crate::industry_spec::{IndustrySpecDef, cargo_type_from_label};
 use crate::industry_tile::{IndustryTileSpecDef, industry_tile_slope_refused};
 use crate::map::industry_action2::{
@@ -22,10 +22,10 @@ use crate::map::{Map, TileCoord, has_tile_water_ground};
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_AUTOSLOPE,
-    CBID_INDTILE_SHAPE_CHECK, CBID_INDUSTRY_DECIDE_COLOUR, CBID_INDUSTRY_LOCATION,
-    CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_PROD_CHANGE_BUILD,
-    CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_INDUSTRY_REFUSE_CARGO, CBID_OBJECT_LAND_SLOPE_CHECK,
-    CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
+    CBID_INDTILE_SHAPE_CHECK, CBID_INDUSTRY_DECIDE_COLOUR, CBID_INDUSTRY_INPUT_CARGO_TYPES,
+    CBID_INDUSTRY_LOCATION, CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_OUTPUT_CARGO_TYPES,
+    CBID_INDUSTRY_PROD_CHANGE_BUILD, CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_INDUSTRY_REFUSE_CARGO,
+    CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
     CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_COLOUR_MAPPING,
     CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY,
@@ -1908,6 +1908,183 @@ pub fn resolve_industry_refuse_cargo_callback(
     );
     writeback_industry_persistent_registers(industry, &ctx);
     (result != CALLBACK_FAILED).then_some(result == 0)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct IndustryDynamicCargoSlot {
+    cargo: CargoType,
+    /// Posición del cargo en la lista estática del `IndustrySpecDef`. Se usa
+    /// para conservar el multiplicador de la matriz `0x1C`–`0x1E` cuando el
+    /// callback cambia el orden o elimina un slot.
+    source_index: usize,
+}
+
+fn static_industry_cargo_slots(indices: &[u8], labels: &[String]) -> Vec<IndustryDynamicCargoSlot> {
+    indices
+        .iter()
+        .enumerate()
+        .filter_map(|(source_index, &local)| {
+            cargo_for_group_index(local, indices, labels).map(|cargo| IndustryDynamicCargoSlot {
+                cargo,
+                source_index,
+            })
+        })
+        .collect()
+}
+
+fn callback_industry_cargo_slots(
+    runtime: &TrainSpriteGraphics,
+    def: &IndustrySpecDef,
+    ctx: &mut Action2EvalCtx,
+    callback: u16,
+    max_slots: usize,
+    indices: &[u8],
+    labels: &[String],
+) -> Vec<IndustryDynamicCargoSlot> {
+    let mut slots = Vec::new();
+    for slot in 0..max_slots {
+        let result = runtime.resolve_callback_ctx_u16(
+            u16::from(def.newgrf_local_id),
+            callback,
+            u32::try_from(slot).unwrap_or(u32::MAX),
+            0,
+            ctx,
+        );
+        // `0xFF` is the documented terminator for the 8-bit callback. A
+        // missing Action2 (`CALLBACK_FAILED`) also ends the sequence; unlike
+        // a missing runtime, this intentionally leaves the callback list
+        // empty because OpenTTD cleared the native vector first.
+        if result == CALLBACK_FAILED || result > u16::from(u8::MAX) {
+            break;
+        }
+        let local = u8::try_from(result).unwrap_or(u8::MAX);
+        if local == u8::MAX {
+            break;
+        }
+        let Some(source_index) = indices.iter().position(|&candidate| candidate == local) else {
+            // OpenTTD reports an invalid cargo result and stops. Do not
+            // silently reattach it to a vanilla slot in the reduced model.
+            break;
+        };
+        let Some(cargo) = labels
+            .get(source_index)
+            .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+            .or_else(|| CargoType::from_cargo_id(local))
+        else {
+            break;
+        };
+        if slots
+            .iter()
+            .any(|slot: &IndustryDynamicCargoSlot| slot.cargo == cargo)
+        {
+            break;
+        }
+        slots.push(IndustryDynamicCargoSlot {
+            cargo,
+            source_index,
+        });
+    }
+    slots
+}
+
+fn industry_callback_multiplier(
+    def: &IndustrySpecDef,
+    input_source_index: usize,
+    output_source_index: usize,
+) -> u16 {
+    let output_count = def.produced_cargo_indices.len();
+    if output_count == 0 {
+        return 0;
+    }
+    def.input_multipliers
+        .get(input_source_index.saturating_mul(output_count) + output_source_index)
+        .copied()
+        .or_else(|| def.input_multipliers.get(input_source_index).copied())
+        .unwrap_or(256)
+}
+
+/// Ejecuta los callbacks de cargos dinámicos `0x14B`/`0x14C` al fundar una
+/// industria.
+///
+/// `OpenTTD` borra las listas estáticas antes de consultar cada slot (`param1`
+/// es el índice y `param2` es cero). Un resultado `CALLBACK_FAILED`, `0xFF` o
+/// un cargo inválido termina la secuencia; si no hay runtime se conserva el
+/// catálogo estático como fallback de saves/fixtures vanilla. Los dos límites
+/// históricos (3 entradas y 2 salidas) se mantienen aquí; la propiedad
+/// `CargoTypesUnlimited` todavía requiere transportar el comportamiento de
+/// `IndustrySpec` y por eso permanece fuera de este bloque.
+#[must_use]
+pub fn apply_industry_dynamic_cargo_callbacks(
+    def: &IndustrySpecDef,
+    industry: &mut Industry,
+) -> bool {
+    let input_declared = def.has_input_cargo_types_callback();
+    let output_declared = def.has_output_cargo_types_callback();
+    if !input_declared && !output_declared {
+        return false;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return false;
+    };
+
+    let mut ctx = action2_eval_ctx_from_industry(industry, u32::from(industry.newgrf_random));
+    let input_slots = if input_declared {
+        callback_industry_cargo_slots(
+            runtime,
+            def,
+            &mut ctx,
+            CBID_INDUSTRY_INPUT_CARGO_TYPES,
+            crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS,
+            &def.accepted_cargo_indices,
+            &def.accepted_cargo_labels,
+        )
+    } else {
+        static_industry_cargo_slots(&def.accepted_cargo_indices, &def.accepted_cargo_labels)
+    };
+    let output_slots = if output_declared {
+        callback_industry_cargo_slots(
+            runtime,
+            def,
+            &mut ctx,
+            CBID_INDUSTRY_OUTPUT_CARGO_TYPES,
+            crate::industry_spec::INDUSTRY_ORIGINAL_NUM_OUTPUTS,
+            &def.produced_cargo_indices,
+            &def.produced_cargo_labels,
+        )
+    } else {
+        static_industry_cargo_slots(&def.produced_cargo_indices, &def.produced_cargo_labels)
+    };
+
+    industry.newgrf_dynamic_cargo_types = true;
+    industry.newgrf_output_cargo = output_slots.first().map(|slot| slot.cargo);
+    industry.newgrf_secondary_output_cargo = output_slots.get(1).map(|slot| slot.cargo);
+    industry.newgrf_secondary_production_rate = industry
+        .newgrf_secondary_production_rate
+        .filter(|_| output_slots.len() > 1);
+    industry.newgrf_processing_inputs = input_slots
+        .iter()
+        .map(|slot| IndustryProcessingInput {
+            cargo: slot.cargo,
+            batch: 8,
+            multiplier: industry_callback_multiplier(
+                def,
+                slot.source_index,
+                output_slots.first().map_or(0, |output| output.source_index),
+            ),
+        })
+        .collect();
+    industry.newgrf_processing_secondary_multipliers = if output_slots.len() > 1 {
+        input_slots
+            .iter()
+            .map(|slot| {
+                industry_callback_multiplier(def, slot.source_index, output_slots[1].source_index)
+            })
+            .collect()
+    } else {
+        vec![0; input_slots.len()]
+    };
+    writeback_industry_persistent_registers(industry, &ctx);
+    true
 }
 
 /// Call site house: CB `0x17` allow construction (#266).
@@ -4680,6 +4857,90 @@ mod tests {
         );
         assert_eq!(stations[0].cargo_stock.wood, 0);
         assert_eq!(industry.stock, 8);
+    }
+
+    #[test]
+    fn industry_dynamic_input_cargo_callback_replaces_static_slots() {
+        let def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![5],
+            produced_cargo_labels: vec!["GOOD".into()],
+            accepted_cargo_indices: vec![0, 1, 2],
+            accepted_cargo_labels: vec!["PASS".into(), "COAL".into(), "MAIL".into()],
+            production_rates: vec![0],
+            input_multipliers: vec![64, 128, 192],
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_INPUT_CARGO_TYPES_MASK,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "dynamic-inputs".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_variable_byte(0x10, 0))),
+        };
+        let mut industry =
+            Industry::new(TileCoord::new(4, 5), crate::industry::IndustryKind::Factory)
+                .with_newgrf_spec(def.id, &def);
+
+        assert!(apply_industry_dynamic_cargo_callbacks(&def, &mut industry));
+        assert!(industry.newgrf_dynamic_cargo_types);
+        assert_eq!(
+            industry
+                .newgrf_processing_inputs
+                .iter()
+                .map(|input| (input.cargo, input.multiplier))
+                .collect::<Vec<_>>(),
+            vec![
+                (CargoType::Passengers, 64),
+                (CargoType::Coal, 128),
+                (CargoType::Mail, 192)
+            ]
+        );
+    }
+
+    #[test]
+    fn industry_dynamic_output_cargo_callback_replaces_outputs_and_honours_terminator() {
+        let mut def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![5, 9],
+            produced_cargo_labels: vec!["GOOD".into(), "STEL".into()],
+            accepted_cargo_indices: vec![7],
+            accepted_cargo_labels: vec!["WOOD".into()],
+            production_rates: vec![0, 0],
+            input_multipliers: vec![256, 64],
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_OUTPUT_CARGO_TYPES_MASK,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "dynamic-outputs".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_literal(9))),
+        };
+        let mut industry =
+            Industry::new(TileCoord::new(4, 5), crate::industry::IndustryKind::Factory)
+                .with_newgrf_spec(def.id, &def);
+
+        assert!(apply_industry_dynamic_cargo_callbacks(&def, &mut industry));
+        assert_eq!(industry.produced_cargos(), vec![CargoType::Steel]);
+        assert_eq!(industry.secondary_output_cargo(), None);
+
+        // `0xFF` on the first slot clears the native output list rather than
+        // silently restoring the static `GOOD`/`STEL` pair.
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal(u8::MAX)));
+        assert!(apply_industry_dynamic_cargo_callbacks(&def, &mut industry));
+        assert!(industry.produced_cargos().is_empty());
+        assert_eq!(industry.newgrf_output_cargo, None);
     }
 
     #[test]

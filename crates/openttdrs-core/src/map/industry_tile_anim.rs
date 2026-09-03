@@ -78,10 +78,48 @@ const MINE_TOWER_GFX_PAIRS: [(u16, u16); 3] = [
 /// Escala tick de sim (≈37 Hz) al contador de animación por tick de OpenTTD.
 const OTTD_ANIM_SCALE: u64 = 1;
 const MINE_TOWER_QUIET_MASK: u64 = 0x400;
-const INDTILE_TRIGGER_INDUSTRY_TICK: u8 = 2;
 const INDTILE_CALLBACK_MASK_NEXT_FRAME: u8 = 1 << 0;
 const INDTILE_CALLBACK_MASK_SPEED: u8 = 1 << 1;
 const INDTILE_SPECIAL_NEXT_FRAME_RANDOM_BITS: u8 = 1 << 0;
+
+/// Disparadores de animación de teselas de industria de `OpenTTD`.
+///
+/// Action0 almacena una máscara de estos ordinales y CB25 recibe el ordinal
+/// (más cualquier extensión en los bits altos de `var 18`). No se debe
+/// confundir esta máscara con [`IndustryRandomTrigger`], que pertenece al
+/// flujo independiente de randomización de `m3`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum IndustryAnimationTrigger {
+    /// Cambió la etapa de construcción de la tesela.
+    ConstructionStageChanged = 0,
+    /// La tesela fue visitada por `TileLoop_Industry`.
+    TileLoop = 1,
+    /// Venció el intervalo de producción de la industria.
+    IndustryTick = 2,
+    /// La industria recibió carga.
+    CargoReceived = 3,
+    /// `TransportIndustryGoods` distribuyó carga a estaciones.
+    CargoDistributed = 4,
+}
+
+impl IndustryAnimationTrigger {
+    /// Bit correspondiente en `IndustryAnimationTriggers` (Action0).
+    #[must_use]
+    pub const fn mask(self) -> u8 {
+        1_u8 << (self as u8)
+    }
+
+    /// `param2` (`var 18`) de CB25 para este disparador.
+    #[must_use]
+    pub const fn callback_param(self, extra: u32) -> u32 {
+        (self as u32) | extra
+    }
+}
+
+// Alias privado conservado para fixtures que construyen máscaras a mano.
+#[cfg(test)]
+const INDTILE_TRIGGER_INDUSTRY_TICK: u8 = IndustryAnimationTrigger::IndustryTick as u8;
 
 /// gfx de industria de 9 bits (`GetCleanIndustryGfx`).
 #[must_use]
@@ -738,6 +776,8 @@ pub fn advance_newgrf_industry_animated_tiles<S: BuildHasher>(
         catalog,
         world_seed,
         active_tiles,
+        Some(IndustryAnimationTrigger::IndustryTick),
+        true,
         |_, spec, callback, coord, param1, param2| {
             resolve_industry_tile_animation_callback(spec, callback, coord, param1, param2)
         },
@@ -771,6 +811,163 @@ pub fn advance_newgrf_industry_animated_tiles_with_world<S: BuildHasher>(
         tile_spec_catalog,
         world_seed,
         active_tiles,
+        Some(IndustryAnimationTrigger::IndustryTick),
+        true,
+        |map, spec, callback, coord, param1, param2| {
+            let Some(index) = industry_index_for_tile(map, &snapshot, coord) else {
+                return CALLBACK_FAILED;
+            };
+            resolve_industry_tile_animation_callback_with_world(
+                spec,
+                &mut industries[index],
+                map,
+                coord,
+                &snapshot,
+                towns,
+                tile_spec_catalog,
+                industry_catalog,
+                climate,
+                callback,
+                param1,
+                param2,
+            )
+        },
+    )
+}
+
+/// Avanza únicamente los frames de las teselas NewGRF ya activas.
+///
+/// Los callbacks de disparador (`CB25`) se ejecutan en los eventos que los
+/// originan (`IndustryTick`, `CargoReceived`, etc.), no en cada pasada visual.
+/// Esta variante es la que usa el scheduler de simulación; las funciones
+/// [`advance_newgrf_industry_animated_tiles`] históricas conservan el trigger
+/// `IndustryTick` para compatibilidad con herramientas y fixtures antiguos.
+#[allow(clippy::too_many_arguments)]
+pub fn advance_newgrf_industry_animation_frames<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    catalog: &[IndustryTileSpecDef],
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+) -> Vec<TileCoord> {
+    advance_newgrf_industry_animated_tiles_inner(
+        map,
+        tick,
+        coords,
+        catalog,
+        world_seed,
+        active_tiles,
+        None,
+        true,
+        |_, spec, callback, coord, param1, param2| {
+            resolve_industry_tile_animation_callback(spec, callback, coord, param1, param2)
+        },
+    )
+}
+
+/// Variante con el contexto completo de la industria viva para el avance de
+/// frames NewGRF, sin volver a disparar CB25.
+#[allow(clippy::too_many_arguments)]
+pub fn advance_newgrf_industry_animation_frames_with_world<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+) -> Vec<TileCoord> {
+    let snapshot = industries.to_vec();
+    advance_newgrf_industry_animated_tiles_inner(
+        map,
+        tick,
+        coords,
+        tile_spec_catalog,
+        world_seed,
+        active_tiles,
+        None,
+        true,
+        |map, spec, callback, coord, param1, param2| {
+            let Some(index) = industry_index_for_tile(map, &snapshot, coord) else {
+                return CALLBACK_FAILED;
+            };
+            resolve_industry_tile_animation_callback_with_world(
+                spec,
+                &mut industries[index],
+                map,
+                coord,
+                &snapshot,
+                towns,
+                tile_spec_catalog,
+                industry_catalog,
+                climate,
+                callback,
+                param1,
+                param2,
+            )
+        },
+    )
+}
+
+/// Ejecuta CB25 para un evento de la industria sin avanzar dos veces el frame.
+///
+/// El llamador debe pasar las teselas de la huella afectada. El resultado
+/// `0xFE`/`0xFF` actualiza la lista persistida de teselas activas y cualquier
+/// otro byte fija `m3hi`, igual que `AnimationBase::ChangeAnimationFrame`.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_industry_animation<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    catalog: &[IndustryTileSpecDef],
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+    trigger: IndustryAnimationTrigger,
+) -> Vec<TileCoord> {
+    advance_newgrf_industry_animated_tiles_inner(
+        map,
+        tick,
+        coords,
+        catalog,
+        world_seed,
+        active_tiles,
+        Some(trigger),
+        false,
+        |_, spec, callback, coord, param1, param2| {
+            resolve_industry_tile_animation_callback(spec, callback, coord, param1, param2)
+        },
+    )
+}
+
+/// Variante del disparador con el contexto completo de la industria viva.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_industry_animation_with_world<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+    trigger: IndustryAnimationTrigger,
+) -> Vec<TileCoord> {
+    let snapshot = industries.to_vec();
+    advance_newgrf_industry_animated_tiles_inner(
+        map,
+        tick,
+        coords,
+        tile_spec_catalog,
+        world_seed,
+        active_tiles,
+        Some(trigger),
+        false,
         |map, spec, callback, coord, param1, param2| {
             let Some(index) = industry_index_for_tile(map, &snapshot, coord) else {
                 return CALLBACK_FAILED;
@@ -801,6 +998,8 @@ fn advance_newgrf_industry_animated_tiles_inner<S: BuildHasher>(
     catalog: &[IndustryTileSpecDef],
     world_seed: u64,
     active_tiles: &mut HashSet<TileCoord, S>,
+    trigger: Option<IndustryAnimationTrigger>,
+    advance_frames: bool,
     mut resolve_callback: impl FnMut(&mut Map, &IndustryTileSpecDef, u16, TileCoord, u32, u32) -> u16,
 ) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
@@ -819,8 +1018,9 @@ fn advance_newgrf_industry_animated_tiles_inner<S: BuildHasher>(
         }
 
         let before = tile.m3hi;
-        let trigger_mask = 1_u8 << INDTILE_TRIGGER_INDUSTRY_TICK;
-        if spec.animation_triggers & trigger_mask != 0 {
+        if let Some(trigger) =
+            trigger.filter(|trigger| spec.animation_triggers & trigger.mask() != 0)
+        {
             let random = u32::from(super::industry_tile_rng(
                 world_seed,
                 tick,
@@ -833,7 +1033,7 @@ fn advance_newgrf_industry_animated_tiles_inner<S: BuildHasher>(
                 CBID_INDTILE_ANIMATION_TRIGGER,
                 coord,
                 random,
-                u32::from(INDTILE_TRIGGER_INDUSTRY_TICK),
+                trigger.callback_param(0),
             );
             if result != CALLBACK_FAILED {
                 match (result & 0xFF) as u8 {
@@ -852,7 +1052,7 @@ fn advance_newgrf_industry_animated_tiles_inner<S: BuildHasher>(
             }
         }
 
-        if active_tiles.contains(&coord) {
+        if advance_frames && active_tiles.contains(&coord) {
             let mut speed = spec.animation_speed.min(16);
             if spec.callback_mask & INDTILE_CALLBACK_MASK_SPEED != 0 {
                 let result = resolve_callback(map, spec, CBID_INDTILE_ANIMATION_SPEED, coord, 0, 0);
@@ -1165,6 +1365,52 @@ mod tests {
             map.get(coord).unwrap().m3hi
         );
         assert_eq!(reloaded_active, active);
+    }
+
+    #[test]
+    fn newgrf_frame_scheduler_waits_for_industry_tick_trigger() {
+        let coord = TileCoord::new(0, 0);
+        let mut map = Map::new_flat(1, 1, 0);
+        map.set_tile(coord, industry_tile(175, 0x80, 0)).unwrap();
+        let catalog = vec![newgrf_animated_spec(INDTILE_CALLBACK_MASK_NEXT_FRAME)];
+        let mut active = HashSet::new();
+
+        // Una pasada visual no puede activar CB25 por sí sola. En OpenTTD el
+        // callback llega cuando vence el intervalo de producción.
+        let dirty = advance_newgrf_industry_animation_frames(
+            &mut map,
+            1,
+            &[coord],
+            &catalog,
+            9,
+            &mut active,
+        );
+        assert!(dirty.is_empty());
+        assert_eq!(map.get(coord).unwrap().m3hi, 0);
+        assert!(active.is_empty());
+
+        let dirty = trigger_newgrf_industry_animation(
+            &mut map,
+            1,
+            &[coord],
+            &catalog,
+            9,
+            &mut active,
+            IndustryAnimationTrigger::IndustryTick,
+        );
+        assert!(dirty.is_empty(), "0xFE sólo cambia la lista activa");
+        assert!(active.contains(&coord));
+
+        let dirty = advance_newgrf_industry_animation_frames(
+            &mut map,
+            1,
+            &[coord],
+            &catalog,
+            9,
+            &mut active,
+        );
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(map.get(coord).unwrap().m3hi, 3);
     }
 
     #[test]

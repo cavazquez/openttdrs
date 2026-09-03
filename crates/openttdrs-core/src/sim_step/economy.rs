@@ -229,6 +229,7 @@ fn industry_special_effect(
 /// descargar/cargar todos los vehículos y recién entonces procesa el conjunto
 /// `_cargo_delivery_destinations`. El llamador mantiene ese orden mediante la
 /// cola efímera de [`SimulationRuntime`].
+#[allow(clippy::too_many_lines)]
 pub(super) fn trigger_delivered_industries(state: &mut GameState, destinations: &[usize]) {
     for &index in destinations {
         if index >= state.industries.len() {
@@ -323,6 +324,20 @@ pub(super) fn trigger_delivered_industries(state: &mut GameState, destinations: 
             &state.industry_tile_spec_catalog,
             &state.industry_spec_catalog,
             state.climate,
+        );
+        state.runtime.industry_tile_dirty.extend(dirty);
+        let dirty = crate::map::trigger_newgrf_industry_animation_with_world(
+            &mut state.map,
+            state.tick.get(),
+            &footprint,
+            &mut state.industries,
+            &state.towns,
+            &state.industry_tile_spec_catalog,
+            &state.industry_spec_catalog,
+            state.climate,
+            state.world_seed,
+            &mut state.newgrf_animated_industry_tiles,
+            crate::map::IndustryAnimationTrigger::CargoReceived,
         );
         state.runtime.industry_tile_dirty.extend(dirty);
     }
@@ -673,6 +688,20 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                 &state.industry_tile_spec_catalog,
                 &state.industry_spec_catalog,
                 state.climate,
+            );
+            state.runtime.industry_tile_dirty.extend(dirty);
+            let dirty = crate::map::trigger_newgrf_industry_animation_with_world(
+                &mut state.map,
+                tick,
+                &footprint,
+                &mut state.industries,
+                &state.towns,
+                &state.industry_tile_spec_catalog,
+                &state.industry_spec_catalog,
+                state.climate,
+                state.world_seed,
+                &mut state.newgrf_animated_industry_tiles,
+                crate::map::IndustryAnimationTrigger::IndustryTick,
             );
             state.runtime.industry_tile_dirty.extend(dirty);
         }

@@ -347,6 +347,11 @@ fn phase_timer_economy(state: &mut GameState) {
 fn phase_tile_animation(state: &mut GameState, t: u64) {
     let visits = std::mem::take(&mut state.runtime.tile_loop_visited);
     let bubble_spawns = crate::map::bubble_generator_spawns_from_visits(&visits);
+    let tile_loop_animation_coords: Vec<_> = visits
+        .iter()
+        .filter(|(_, tile)| tile.kind == crate::TileKind::Industry)
+        .map(|(coord, _)| *coord)
+        .collect();
     let _lift_dirty = crate::map::step_house_lifts(
         &mut state.map,
         t,
@@ -378,7 +383,22 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         })
         .collect();
     state.runtime.industry_tile_dirty.extend(
-        crate::map::advance_newgrf_industry_animated_tiles_with_world(
+        crate::map::trigger_newgrf_industry_animation_with_world(
+            &mut state.map,
+            t,
+            &tile_loop_animation_coords,
+            &mut state.industries,
+            &state.towns,
+            &state.industry_tile_spec_catalog,
+            &state.industry_spec_catalog,
+            state.climate,
+            state.world_seed,
+            &mut state.newgrf_animated_industry_tiles,
+            crate::map::IndustryAnimationTrigger::TileLoop,
+        ),
+    );
+    state.runtime.industry_tile_dirty.extend(
+        crate::map::advance_newgrf_industry_animation_frames_with_world(
             &mut state.map,
             t,
             &animation_coords,

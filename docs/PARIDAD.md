@@ -138,6 +138,16 @@ vanilla. El callback usa el parent inicializado, persiste `7C` y tiene
 regresiones de unidad y colocación. Efectos especiales, cargos dinámicos y
 generación automática siguen pendientes; #329 permanece abierto.
 
+Actualización #329-INDUSTRY-REFUSE-039 (2026-09-03, `65682a42`):
+`CBID_INDUSTRY_REFUSE_CARGO` (`0x3D`) ya se evalúa en el procesamiento de
+entradas NewGRF después de verificar disponibilidad y antes de consumir el
+lote de estación. `param2` lleva el índice local de cargo traducido por CTT;
+los resultados no nulos aceptan, cero rechaza y `CALLBACK_FAILED` conserva el
+fallback. Las regresiones cubren la inversión booleana y la conservación del
+stock ante rechazo. La entrega directa `DeliverGoodsToIndustry`, su monitor y
+su temporización todavía no están modelados; también siguen pendientes efectos
+especiales, cargos dinámicos, sonido y generación automática.
+
 ### Propiedad de cada estado (evitar trabajo duplicado)
 
 | Área | Fuente canónica | Qué no debe duplicarse |

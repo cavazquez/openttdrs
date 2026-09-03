@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `47afecd7`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `601e7685`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -71,7 +71,7 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Render/UI vanilla | **Media funcional / baja de composición raster** | Hay cobertura OpenGFX y evidencia `world-draw` por tesela, pero no paridad global de framebuffer; la captura limpia vigente de Kale sigue siendo diferente. Véase [evidencia visual raster](#evidencia-visual-raster-vigente) |
 | Plataformas y release | **Preparada con gates** | `main` protegido y checks Windows/macOS; queda dry-run/smoke de `0.1.0-alpha.1` en [#296](https://github.com/cavazquez/openttdrs/issues/296) |
 
-Actualización SAV/NewGRF (2026-09-03, `47afecd7`): `INDY.psa`,
+Actualización SAV/NewGRF (2026-09-03, `601e7685`): `INDY.psa`,
 `STNN.normal.airport.psa`, `CITY.psa_list` y el pool `PSAC` ya se importan,
 hidratan sus referencias y se reemiten para industrias, aeropuertos y pueblos,
 conservando índices y 256 registros por fila; el PSA no nulo de cada pueblo se
@@ -79,8 +79,9 @@ expone por GRFID en los scopes parent de casas y objetos, mientras los storages
 propios de esas entidades y otros consumidores se mantienen como filas opacas.
 CB17 de construcción de casas y CB157 de objetos evalúan ahora el parent real y
 persisten `\2psto` en el PSA del pueblo por GRFID; los callbacks CB25/26/27 de
-animación de teselas evalúan el scope parent de la `Industry` y persisten sus
-registros en la instancia viva durante la simulación. El writer asigna/reemite
+animación y la re-randomización `ResolveRerandomisation` de teselas evalúan el
+scope parent de la `Industry` y persisten sus registros en la instancia viva
+durante `TileLoop`. El writer asigna/reemite
 las filas nativas al exportar. El preflight de objetos usa copias de pueblos y
 sólo las conserva al ejecutar una orden financiada. La lectura runtime y el
 writeback siguen acotados a esos call sites;
@@ -93,6 +94,12 @@ y persiste `\\2psto` en su PSA vivo tras cada callback. La mención histórica a
 "writeback de teselas" en filas inferiores queda restringida a randomización,
 foundations y callbacks de sonido/slope/autoslope aún no conectados; no se
 declara cerrado el issue #329.
+
+Actualización #329-INDTILE-RANDOM-034 (2026-09-03, `601e7685`): la
+re-randomización `Action2` de `IndustryTile` hidrata y persiste el PSA parent
+de `Industry` durante `TileLoop`, manteniendo la asociación por `m2`/footprint.
+Los triggers `IndustryTick` y `CargoReceived`, además de foundations/sonido/
+slope/autoslope, siguen pendientes; #329 no se cierra por este subconjunto.
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

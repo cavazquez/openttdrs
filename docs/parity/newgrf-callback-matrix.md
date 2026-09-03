@@ -1,7 +1,7 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-03** (commit `47afecd7`, PSA parent de animación de
-teselas de industria).
+Actualizada: **2026-09-03** (commit `601e7685`, PSA parent de animación y
+re-randomización de teselas de industria).
 
 Referencia: commit `14ec60f248547d4d062a1160f0fc26d742319888`,
 `reference/openttd-upstream/src/newgrf_callbacks.h`.
@@ -40,6 +40,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_vehicle_visual_effect_callback`, `vehicle_visual_effect_kind`,
 `resolve_industry_tile_animation_callback`,
 `resolve_industry_tile_animation_callback_with_world`,
+`advance_industry_tile_randomisation_from_visits_with_catalog_and_world`,
 `resolve_industry_tile_random_trigger`
 (`crates/openttdrs-core/src/newgrf_callback.rs`).
 
@@ -102,19 +103,19 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 | Temporal (`7D` / `\2sto`) | Solo durante la evaluación Action2 | Descartado al terminar el ctx |
 | Persistente (`7C` / `\2psto`) | Vehículo: `Vehicle.newgrf_persistent_regs` | Writeback tras CB; round-trip JSON save |
 | Persistente estación | `Station.newgrf_persistent_regs` | **parcial**: API stateful + JSON round-trip; CB13 de construcción no puede hacer writeback porque OpenTTD lo evalúa sin estación/tesela |
-| Persistente industria | `Industry.newgrf_persistent_regs` | Writeback tras CB de producción y tras CB25/26/27 de tesela cuando el scheduler recibe pools de mundo; round-trip SAV/JSON, con `INDY.psa`/`PSAC` conservados |
-| Persistente pueblo (scope parent de casas/objetos) | `Town.newgrf_persistent_regs` | **parcial**: lectura `7C` por GRFID en Action2, `CITY`/`PSAC` y round-trip SAV/JSON; CB17 de casas y CB157 de objetos durante construcción hacen writeback parent por GRFID (con preflight aislado); callbacks de teselas de industria ya escriben el parent `Industry`, mientras randomización y scopes de otras entidades siguen pendientes |
+| Persistente industria | `Industry.newgrf_persistent_regs` | Writeback tras CB de producción, CB25/26/27 y `ResolveRerandomisation` de tesela cuando el scheduler recibe pools de mundo; round-trip SAV/JSON, con `INDY.psa`/`PSAC` conservados |
+| Persistente pueblo (scope parent de casas/objetos) | `Town.newgrf_persistent_regs` | **parcial**: lectura `7C` por GRFID en Action2, `CITY`/`PSAC` y round-trip SAV/JSON; CB17 de casas y CB157 de objetos durante construcción hacen writeback parent por GRFID (con preflight aislado); callbacks de teselas de industria y su re-randomización `TileLoop` ya escriben el parent `Industry`, mientras triggers de industria fuera de `TileLoop` y scopes de otras entidades siguen pendientes |
 | Persistente casa/objeto | — | **OOS** como entidad propia; consumen el PSA del pueblo asociado cuando existe |
 
 ## Triggers / random
 
 | Pieza | Estado |
 |---|---|
-| Industry tile `m3` random bits + `m6` triggers (reseed) | **Parcial runtime**: la ruta con catálogo conserva `m3`/triggers por tesela y deja vanilla en no-op; el fallback histórico sin catálogo sigue disponible para herramientas legacy |
-| `ResolveRerandomisation` / Action2 random sprite groups por trigger | **Parcial runtime** (#266): los grupos alcanzables consumen sólo sus triggers y reseedean la máscara declarada; layouts/variables no random y callbacks de sonido/slope/autoslope siguen pendientes |
+| Industry tile `m3` random bits + `m6` triggers (reseed) | **Parcial runtime**: la ruta con catálogo conserva `m3`/triggers por tesela y deja vanilla en no-op; `TileLoop` hidrata/escribe el PSA parent de la industria alrededor de `ResolveRerandomisation`; `IndustryTick`/`CargoReceived` aún no están conectados; el fallback histórico sin catálogo sigue disponible para herramientas legacy |
+| `ResolveRerandomisation` / Action2 random sprite groups por trigger | **Parcial runtime** (#266): los grupos alcanzables consumen sólo sus triggers y reseedean la máscara declarada, con writeback de `\2psto` del parent `Industry` en `TileLoop`; faltan los triggers de industria fuera de ese scheduler, layouts/variables no random y callbacks de sonido/slope/autoslope |
 | Vehicle/station random Action2 (`0x80`/`0x83`/`0x84`) en resolve de sprites | **Parcial** (eval con `random_bits` de 16 bits; reseed gameplay vía `trigger_vehicle_randomisation_chain`; vehículos consumen `Callback32`, `NewCargo` y `Empty`, y conservan triggers pendientes) |
 | RoadStops Action0 `0x0D` + Action2 random | **parcial runtime**: CTT/versión, eventos `NewCargo`/`CargoTaken`/llegada/salida/carga vial, `any`/`all`, reseed de bits base/tesela, JSON y selección visual Action2 dinámica con el contexto persistente. El renderer y los CB140–142 resuelven vars de mundo `45`/`46`/`47`, vars de carga `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` por offset; la randomización del scheduler también usa esos scopes y recibe los pools del mundo en `sim_step`. Spec/frame/activo/random son independientes por tesela en stops compuestos creados, JSON o importados desde `.sav` (`roadstopspeclist` + `roadstoptiledata`). El cliente reproduce los samples `NewGRF` de la cola global y los callbacks de sonido de vehículo cubren salida, marcha, avería, túnel, efecto visual, pago carga/descarga y despegue/aterrizaje; quedan las APIs legacy sin catálogo y GRF ausentes.
-| `CBID_RANDOM_TRIGGER` genérico | **OOS** |
+| `CBID_RANDOM_TRIGGER` genérico | **Parcial runtime**: la re-randomización de `IndustryTile` con catálogo/world ya ejecuta el contexto parent durante `TileLoop`; el disparo genérico de `IndustryTick`/`CargoReceived` y otros features sigue OOS |
 
 ## Call sites soportados (checklist)
 
@@ -340,6 +341,16 @@ normal de simulación. `\\2psto` se hidrata desde la industria viva y vuelve a
 la asociación por `m2`/footprint y la API legacy queda explícitamente sin
 writeback. `CBID_RANDOM_TRIGGER` y los callbacks de foundations, sonido,
 slope/autoslope siguen pendientes; #329 no se cierra.
+
+Actualización #329-INDTILE-RANDOM-034 (2026-09-03, commit `601e7685`): la
+re-randomización `Action2` de `IndustryTile` ya se ejecuta con el parent
+`Industry` vivo en la ruta `TileLoop`. El scheduler hidrata el PSA antes de
+`ResolveRerandomisation`, persiste `\\2psto` después de evaluar el grupo y
+mantiene la asociación por `m2`/footprint incluso cuando varias teselas
+comparten una industria. La API histórica sin catálogo/world continúa como
+fallback explícito. Siguen pendientes los triggers `IndustryTick` y
+`CargoReceived`, además de foundations/sonido/slope/autoslope; #329 no se
+cierra por este subconjunto.
 
 - Resto de CBs houses / airports / industries / objects (incluidos los huecos que aún no tienen call site), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.

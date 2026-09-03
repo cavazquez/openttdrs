@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-03**,
-`main` con base funcional `aa289076`, posterior al writeback canónico de `CITY`,
+`main` con base funcional `ca2939a7`, posterior al writeback canónico de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
 separan de la pasada visual CB26/CB27; referencia: **OpenTTD
@@ -61,12 +61,20 @@ de animación de `IndustryTile`: CB25 `TileLoop` sólo se ejecuta para visitas,
 CB25 `IndustryTick` al intervalo de producción y CB25 `CargoReceived` después
 de confirmar una entrega. La pasada visual avanza CB26/CB27 sólo sobre la
 lista persistida de teselas activas; `CargoDistributed` y
-`ConstructionStageChanged` todavía no tienen call site.
+`ConstructionStageChanged` ya tienen call sites; el detalle de sus ventanas
+de ejecución y límites está documentado en la actualización `ca2939a7`.
 
 Actualización del corte `aa289076`: `CargoDistributed` se conecta al retorno
 positivo de `TransportIndustryGoods`; la huella NewGRF recibe CB25 sólo cuando
 la distribución llegó a una estación, mientras la pasada visual sigue
 avanzando CB26/CB27 sobre activos.
+
+Actualización del corte `ca2939a7`: `ConstructionStageChanged` se ejecuta al
+crear una industria (la primera llamada lleva `var 18 |= 0x100`) y cuando una
+tesela cambia de etapa durante `TileLoop`. El contexto parent/PSA se hidrata y
+se reemite junto con el estado de la industria; la pasada visual CB26/CB27
+continúa separada. La compatibilidad SAV no convierte todavía cargos custom en
+ejecutables si falta su catálogo.
 
 | Área | Importar `.sav` de OpenTTD | Exportar `.sav` para OpenTTD | Límite y evidencia |
 |---|---|---|---|

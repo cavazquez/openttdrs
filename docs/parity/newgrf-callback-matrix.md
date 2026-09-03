@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-03** (commit `aa289076`, shape-check, foundations,
+Actualizada: **2026-09-03** (commit `ca2939a7`, shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
 `PlantOnBuild`, rehidratación SAV legacy, historiales aceptados runtime,
 reatachación de industrias al
@@ -43,6 +43,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_vehicle_visual_effect_callback`, `vehicle_visual_effect_kind`,
 `resolve_industry_tile_animation_callback`,
 `resolve_industry_tile_animation_callback_with_world`,
+`trigger_newgrf_industry_animation_with_world_and_extra`,
 `apply_industry_tile_shape_callback_for_build`,
 `advance_industry_tile_randomisation_from_visits_with_catalog_and_world`,
 `resolve_industry_tile_random_trigger`
@@ -53,6 +54,13 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 `step_newgrf_airport_tiles` (`crates/openttdrs-core/src/map/station_tile_anim.rs`).
 
 ## Por feature
+
+Corrección de la fila `Industry tiles (09)` en este corte (`ca2939a7`): además de
+los tres eventos ya descritos, `CargoDistributed` se dispara tras una
+transferencia efectiva y `ConstructionStageChanged` se dispara al crear una
+industria (con `var 18 |= 0x100`) y después de cada cambio de etapa. Ambos
+call sites usan el contexto parent/PSA de la industria; la pasada visual CB26/
+CB27 sigue separada. La API legacy sin mundo mantiene su fallback explícito.
 
 | Feature | CBID (ejemplos) | Estado | Notas |
 |---|---|---|---|
@@ -596,6 +604,14 @@ estaciones; sólo se dispara cuando `TransportIndustryGoods` devuelve unidades
 movidas y conserva el contexto parent de la huella. La regresión comprueba que
 la máscara `CargoDistributed` no responde a `IndustryTick`. `ConstructionStageChanged`,
 sonido y scopes restantes siguen parciales.
+
+Actualización #329-INDTILE-ANIMATION-057 (2026-09-03, commit `ca2939a7`):
+`ConstructionStageChanged` ya tiene call sites en la construcción inicial y en
+los cambios de etapa observados por `TileLoop`. La primera llamada conserva el
+flag upstream `var 18 |= 0x100`; las transiciones posteriores usan el ordinal
+sin extensión. Ambos caminos hidratan el parent/PSA de la industria y tienen
+regresión del callback. Quedan sonido, scopes restantes, cargos custom y la
+generación automática fuera de este call site.
 
 - Resto de CBs houses / airports / industries / objects (incluidos los huecos que aún no tienen call site), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.

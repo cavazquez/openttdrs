@@ -25,8 +25,8 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-03
 
-Base funcional publicada en `origin/main`: **`aa289076`** (`newgrf: trigger industry
-animation on cargo distribution`). Este handoff documental incluye la entrega directa
+Base funcional publicada en `origin/main`: **`ca2939a7`** (`newgrf: trigger industry
+animation on construction stages`). Este handoff documental incluye la entrega directa
 SAV de campos legacy (`56aa7858`) y los slots vacíos legacy (`9f2ecc31`), y se publica después de las etapas
 de rechazo temporal (`65682a42`), cargos dinámicos (`389109c1`) y
 `PlantOnBuild` manual (`628d1fb9`); es el punto de reanudación y el código
@@ -44,8 +44,10 @@ datos al reexportarse sin el GRF. `c88518c4` separa además la pasada visual de
 frames de los callbacks CB25: `TileLoop` sólo se dispara sobre visitas,
 `IndustryTick` al intervalo de producción y `CargoReceived` al confirmar la
 entrega. `aa289076` conecta también `CargoDistributed` con el retorno real de
-`TransportIndustryGoods` cuando la carga llega a una estación. La próxima tarea sigue siendo cargos custom ejecutables/rehidratación
-económica cuando el catálogo está ausente.
+`TransportIndustryGoods` cuando la carga llega a una estación. `ca2939a7` conecta
+`ConstructionStageChanged` tanto al alta inicial (con `var 18 |= 0x100`) como a
+los cambios de etapa posteriores. La próxima tarea sigue siendo cargos custom
+ejecutables/rehidratación económica cuando el catálogo está ausente.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
@@ -56,7 +58,7 @@ económica cuando el catálogo está ausente.
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
 
-Última validación de `aa289076`: `cargo fmt --all -- --check`, clippy estricto
+Última validación de `ca2939a7`: `cargo fmt --all -- --check`, clippy estricto
 de core y cliente, **1.995** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
@@ -128,8 +130,17 @@ Actualización #329-INDTILE-ANIMATION-056 (2026-09-03, commit `aa289076`):
 `TransportIndustryGoods` devuelve unidades realmente entregadas a estaciones;
 el callback recorre la huella de la industria y conserva el mismo contexto
 parent/PSA. La máscara y el ordinal son independientes de `IndustryTick`, con
-regresión directa para ambos caminos. `ConstructionStageChanged`, sonido,
-scopes restantes y cargos custom siguen pendientes; #329 no se cierra.
+regresión directa para ambos caminos. La nota 057 conecta después
+`ConstructionStageChanged`; sonido, scopes restantes y cargos custom siguen
+pendientes; #329 no se cierra.
+
+Actualización #329-INDTILE-ANIMATION-057 (2026-09-03, commit `ca2939a7`):
+`ConstructionStageChanged` ya tiene call sites en la construcción inicial y en
+los cambios de etapa observados por `TileLoop`. La primera llamada conserva el
+flag upstream `var 18 |= 0x100`; las transiciones posteriores usan el ordinal
+sin extensión. Ambos caminos hidratan el parent/PSA de la industria y tienen
+regresión de callback. Quedan sonido, scopes restantes, cargos custom y
+mutaciones económicas fuera de estos caminos; #329 no se cierra.
 
 Actualización #329-INDTILE-SLOPE-036 (2026-09-03, commit `9e01c1a9`): el
 parser de `IndustryTiles` conserva `prop 0x0D` (`slopes_refused`) y los bits

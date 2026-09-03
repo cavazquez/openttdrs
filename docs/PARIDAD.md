@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `36662249`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `0fddd2f4`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -168,6 +168,13 @@ salidas desde el tercer slot en `newgrf_extra_output_cargos`; su buffer de
 stock ya se transporta y se exporta en `INDY`. Siguen pendientes el
 procesamiento normal multi-output (rates/matriz), slots vacíos legacy, cargos
 custom y rehidratación runtime de las listas desde SAV; #329 permanece abierto.
+
+Actualización #329-INDUSTRY-CARGO-TYPES-042 (2026-09-03, `0fddd2f4`): la
+producción y el procesamiento NewGRF ya recorren todas las salidas declaradas.
+Se aplican tasas y multiplicadores por slot, la capacidad contempla los stocks
+extra y `INDY` exporta sus esperas/tasas desde la tercera salida. La prueba de
+cuatro entradas/salidas verifica 32 unidades por salida; quedan pendientes el
+historial/GUI de slots ilimitados, cargos custom y rehidratación runtime SAV.
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

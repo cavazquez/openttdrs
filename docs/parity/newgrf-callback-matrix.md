@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-03** (commit `bd3ea9c1`, runtime PSA parent de CB17).
+Actualizada: **2026-09-03** (commit `9303cf65`, runtime PSA parent de CB157).
 
 Referencia: commit `14ec60f248547d4d062a1160f0fc26d742319888`,
 `reference/openttd-upstream/src/newgrf_callbacks.h`.
@@ -20,7 +20,7 @@ Estados:
 API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_vehicle_callback`, `writeback_*_persistent_registers`,
 `apply_industry_location_callback`, `apply_house_construction_callback`,
-`apply_object_slope_callback`,
+`apply_object_slope_callback`/`apply_object_slope_callback_for_build`,
 `resolve_cargo_profit_callback`,
 `resolve_cargo_station_rating_callback`,
 `apply_station_availability_callback_for_build`,
@@ -88,7 +88,7 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 | RoadStops / Stations | Action2 `TileLayoutSpriteGroup` (`TileSeq`) | **parcial runtime** | Se parsean `type`, ground, origen/extents, children, referencias custom Action1 y los índices de registros. Action3/2 se resuelve por vista, random y variables de la tesela. El renderer materializa layouts de road stops, waypoints y estaciones rail con suelo propio, cajas parent `M(...)`, children relativos y caché por fingerprint, incluyendo pendientes niveladas; el procesador aplica `DODRAW`, offsets de sprite, offsets de cajas/children, `var10` y draw mode `0x100`. Sprites base y paletas custom siguen en fallback vanilla atómico; callbacks avanzados y paletas fuera de la rampa de compañía continúan pendientes. |
 | Objects | Action2 `TileLayoutSpriteGroup` (`TileSeq`) | **parcial runtime** | El catálogo conserva el grafo cuando el objeto publica layouts aunque no tenga callbacks variables. El renderer resuelve la tesela del footprint, materializa suelo y secuencia de parents/children con cajas `M(...)`, consulta `0x42` (fecha), `0x45` (zona/distancia Manhattan) y `0x46` (distancia euclídea al cuadrado), y expone `0x47` (color) y `0x48` (vista) desde la instancia `OBJS`; `0x60`/`0x61`/`0x62`/`0x63` consultan id, random, información y frame de teselas vecinas del mismo footprint, y `0x64` devuelve cantidad/distancia de instancias por tipo. La asociación objeto↔pueblo usa `Object::town` importado o el pueblo más cercano como fallback; cuando existe `CITY.psa_list`, el scope parent copia los registros `7C` del pueblo por GRFID. Los offsets solicitados se cachean por fingerprint de registros. Sprites base, paletas custom y layouts incompletos usan fallback vanilla atómico. Faltan writeback `7C`, callbacks de objeto (salvo el slope check), conteos por clase/catchment y layouts 16-bit completos. |
 | Industry tiles | Action2 `TileLayoutSpriteGroup` (`TileSeq`) | **parcial runtime** | El catálogo conserva layouts aunque la tesela no tenga callbacks variables. El renderer resuelve Action2 con etapa, random y parámetros GRF, reemplaza el suelo/agua cuando el layout es completo, emite parents/children con cajas `M(...)` sobre la superficie que decide `CB0x150` y cachea cada pieza por fingerprint y color de compañía. Sprites base, paletas especiales y layouts incompletos mantienen fallback vanilla atómico; faltan scopes avanzados, callbacks de sonido/slope y variantes de animación/layout por etapa. |
-| Objects (`0F`) | `0x157` `CBID_OBJECT_LAND_SLOPE_CHECK` | **parcial runtime** | Máscara Action0 `0x15` WORD, Action3→Action2 y call site query+execute de `BuildObject` por tesela. `param1=slope`, `param2=dy<<4\|dx`; el resultado aplica la inversión de bit 10 para GRF <8. El objeto conserva ahora town/build date/color/view y las variables de alcance `0x40`–`0x48`, `0x60`–`0x64` durante el render. Faltan callbacks de objeto adicionales, scopes/vecinos, string de error GRF y el fallback de pendiente completo de OpenTTD. |
+| Objects (`0F`) | `0x157` `CBID_OBJECT_LAND_SLOPE_CHECK` | **parcial runtime** | Máscara Action0 `0x15` WORD, Action3→Action2 y call site query+execute de `BuildObject` por tesela. `param1=slope`, `param2=dy<<4\|dx`; el resultado aplica la inversión de bit 10 para GRF <8. Durante construcción el resolver recibe el pueblo más cercano como parent, carga sus registros `7C` por GRFID y persiste `\\2psto` en una copia de `Town` durante el preflight; el execute la conserva sólo después de comprobar fondos. El objeto conserva además town/build date/color/view y las variables de alcance `0x40`–`0x48`, `0x60`–`0x64` durante el render. Faltan callbacks de objeto adicionales, writeback de `7C` propio de tesela/instancia, scopes/vecinos completos, string de error GRF y el fallback de pendiente completo de OpenTTD. |
 | Cargoes (`0B`) | `0x39` `CBID_CARGO_PROFIT_CALC`; `0x145` `CBID_CARGO_STATION_RATING_CALC` | **parcial runtime** | Máscara Action0 `0x1A`, Action3→Action2: CB39 paga cada packet en `unload_vehicles` (`param1=0`, distancia/cantidad/tránsito, multiplicador signed-15); CB145 sustituye el target durante `update_station_ratings` (`param1` tipo histórico de vehículo; `param2` días/espera/velocidad, resultado signed-15). Faltan scopes avanzados y demás CBs. |
 | Cargoes (resto) / Types | varios | **OOS** | Sin ejecución de CB en este corte |
 | Generic | `0x01` `CBID_RANDOM_TRIGGER` | **OOS** | Ver triggers abajo |
@@ -101,7 +101,7 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 | Persistente (`7C` / `\2psto`) | Vehículo: `Vehicle.newgrf_persistent_regs` | Writeback tras CB; round-trip JSON save |
 | Persistente estación | `Station.newgrf_persistent_regs` | **parcial**: API stateful + JSON round-trip; CB13 de construcción no puede hacer writeback porque OpenTTD lo evalúa sin estación/tesela |
 | Persistente industria | `Industry.newgrf_persistent_regs` | Writeback tras CB; round-trip SAV/JSON, con `INDY.psa`/`PSAC` conservados |
-| Persistente pueblo (scope parent de casas/objetos) | `Town.newgrf_persistent_regs` | **parcial**: lectura `7C` por GRFID en Action2, `CITY`/`PSAC` y round-trip SAV/JSON; CB17 de construcción hace writeback parent por GRFID; callbacks de objetos/teselas y scopes de otras entidades siguen pendientes |
+| Persistente pueblo (scope parent de casas/objetos) | `Town.newgrf_persistent_regs` | **parcial**: lectura `7C` por GRFID en Action2, `CITY`/`PSAC` y round-trip SAV/JSON; CB17 de casas y CB157 de objetos durante construcción hacen writeback parent por GRFID (con preflight aislado); callbacks de teselas y scopes de otras entidades siguen pendientes |
 | Persistente casa/objeto | — | **OOS** como entidad propia; consumen el PSA del pueblo asociado cuando existe |
 
 ## Triggers / random
@@ -312,7 +312,7 @@ el modelo (`0x41`, posición `0x80`/`0x81`, población `0x82`/`0x83`, crecimient
 radios, ratings, estatuas, cantidad de casas, historial de pasajeros/correo,
 entregas de comida/agua y meses de financiación), además de seleccionar `7C`
 por GRFID desde `CITY.psa_list`. Los flags/cache de cargos no representados,
-writeback de town PSA y scopes completos de estación/aeropuerto siguen
+writeback de town PSA de callbacks de tesela y scopes completos de estación/aeropuerto siguen
 pendientes.
 
 Actualización #329-TOWN-PSA-031 (2026-09-03, commit `bd3ea9c1`): CB17 de
@@ -320,11 +320,18 @@ construcción evalúa el `TownScopeResolver` parent real antes de reservar el
 footprint. El operador `\2psto` de un grupo Action2 parent escribe ahora el
 PSA del pueblo por GRFID y una regresión verifica que no contamine el storage
 propio de la casa; el writer puede asignar/reemitir la fila `PSAC` y su
-referencia `CITY.psa_list`. El writeback de objetos y teselas, además de los
+referencia `CITY.psa_list`. El writeback de callbacks de teselas, además de los
 callbacks de pueblo restantes, sigue pendiente.
+
+Actualización #329-OBJECT-PSA-032 (2026-09-03, commit `9303cf65`): CB157 de
+construcción recibe el pueblo más cercano como `TownScopeResolver` parent y
+persiste `\\2psto` por GRFID. Query/preview evalúan sobre copias de pueblos y
+el execute sólo conserva la copia después de comprobar fondos; la regresión
+cubre writeback, aislamiento por GRFID y rechazo sin fondos. El writeback de
+callbacks de teselas y los demás callbacks/scope de objetos siguen pendientes.
 
 - Resto de CBs houses / airports / industries / objects (incluidos los huecos que aún no tienen call site), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.
-- Storage persistente de industria/aeropuerto/pueblo: `INDY.psa`, `STNN.normal.airport.psa`, `CITY.psa_list` y `PSAC` se importan, hidratan sus referencias y exportan para los registros `7C` conocidos; casas y objetos leen el PSA del pueblo desde su scope parent y CB17 de construcción ya hace writeback por GRFID. Siguen pendientes el writeback de objetos/teselas, la invalidación tras mutaciones y los callbacks PSA de pueblo restantes. CB140–142 preserva `7C` de la estación pero no los scopes/áreas completos de `BaseStation`; CB14 aún no aporta el scope/regs de `BaseStation` ni layout 16-bit exacto; CB149 aún no aporta scope/vecinos ni strings GRF.
+- Storage persistente de industria/aeropuerto/pueblo: `INDY.psa`, `STNN.normal.airport.psa`, `CITY.psa_list` y `PSAC` se importan, hidratan sus referencias y exportan para los registros `7C` conocidos; casas y objetos leen el PSA del pueblo desde su scope parent y CB17/CB157 de construcción ya hacen writeback por GRFID. Siguen pendientes el writeback de callbacks de teselas, la invalidación tras mutaciones y los callbacks PSA de pueblo restantes. CB140–142 preserva `7C` de la estación pero no los scopes/áreas completos de `BaseStation`; CB14 aún no aporta el scope/regs de `BaseStation` ni layout 16-bit exacto; CB149 aún no aporta scope/vecinos ni strings GRF.
 - Goldens tick-a-tick vs OpenTTD 15.3 para todos los features.
 - Textos GRF de string (`0x40F` / `regs100`) en CB31: denegación genérica `NewGrfCallbackDenied`.

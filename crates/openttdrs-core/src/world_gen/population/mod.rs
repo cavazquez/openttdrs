@@ -13,6 +13,8 @@
 mod industries;
 mod towns;
 
+pub(crate) use industries::plant_random_farm_field_runtime;
+
 use crate::cargodist::parity::Randomizer;
 use crate::game_state::GameState;
 use crate::map::{Map, TileCoord, TileKind, tile_slope_and_z};

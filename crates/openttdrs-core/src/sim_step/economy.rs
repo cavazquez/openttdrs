@@ -164,6 +164,62 @@ fn roll_station_newgrf_month(stations: &mut [crate::Station]) {
     }
 }
 
+const INDUSTRY_CUT_TREE_TICKS: u64 = crate::industry::INDUSTRY_PRODUCE_TICKS * 2;
+
+fn industry_behaviour(industry: &crate::Industry, def: Option<&crate::IndustrySpecDef>) -> u32 {
+    if let Some(def) = def {
+        return def.behaviour;
+    }
+    match industry.spec {
+        Some(crate::IndustrySpec::Farm | crate::IndustrySpec::FarmTropic) => {
+            crate::INDUSTRY_BEHAVIOUR_PLANT_FIELDS_MASK
+        }
+        Some(crate::IndustrySpec::LumberMill) => crate::INDUSTRY_BEHAVIOUR_CUT_TREES_MASK,
+        _ => 0,
+    }
+}
+
+fn industry_footprint_dimensions(footprint: &[TileCoord], origin: TileCoord) -> (i32, i32) {
+    let max_x = footprint
+        .iter()
+        .map(|coord| coord.x.saturating_sub(origin.x))
+        .max()
+        .unwrap_or(0);
+    let max_y = footprint
+        .iter()
+        .map(|coord| coord.y.saturating_sub(origin.y))
+        .max()
+        .unwrap_or(0);
+    (
+        max_x.saturating_add(1).max(1),
+        max_y.saturating_add(1).max(1),
+    )
+}
+
+/// Ejecuta la elección de `ProduceIndustryGoods` conservando el consumo RNG
+/// de `OpenTTD`: si hay callback se consume primero su `Random()` y sólo un
+/// `CALLBACK_FAILED` cae al algoritmo vanilla.
+fn industry_special_effect(
+    rng: &mut crate::linkgraph_parity::Randomizer,
+    industry: &mut crate::Industry,
+    def: Option<&crate::IndustrySpecDef>,
+    effect: u8,
+    fallback_chance: Option<u32>,
+) -> bool {
+    let callback = def
+        .filter(|def| def.has_special_effect_callback())
+        .and_then(|def| {
+            let random = rng.next();
+            crate::newgrf_callback::resolve_industry_special_effect_callback(
+                def, industry, random, effect,
+            )
+        });
+    match callback {
+        Some(value) => value,
+        None => fallback_chance.is_some_and(|denominator| rng.random_range(denominator) == 0),
+    }
+}
+
 fn apply_monthly_inflation_and_fluctuations(state: &mut GameState) {
     let calendar_year = state.calendar.year;
     if !state
@@ -360,6 +416,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
             .is_some_and(crate::industry_spec::IndustrySpecDef::has_production_256_ticks_callback);
         let before = state.industries[i].stock;
         let secondary_before = state.industries[i].secondary_stock;
+        let extra_before = state.industries[i].newgrf_extra_produced_cargo;
         let tiles = state.industries[i].tiles.clone();
         let pos = state.industries[i].pos;
         let footprint: Vec<TileCoord> = if tiles.is_empty() { vec![pos] } else { tiles };
@@ -428,6 +485,71 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
         } else {
             state.industries[i].produce(tick);
         }
+        if production_tick {
+            let behaviour = industry_behaviour(&state.industries[i], newgrf_def.as_ref());
+            if behaviour & crate::INDUSTRY_BEHAVIOUR_PLANT_FIELDS_MASK != 0
+                && industry_special_effect(
+                    &mut state.random,
+                    &mut state.industries[i],
+                    newgrf_def.as_ref(),
+                    0,
+                    Some(8),
+                )
+            {
+                let (width, height) = industry_footprint_dimensions(&footprint, pos);
+                let industry_id = state.industries[i].instance_id;
+                // `PopCtx` recibe el RNG como referencia separada del
+                // `GameState`; clonar su estado de dos palabras permite
+                // mutar el mapa y devolver exactamente el stream consumido
+                // sin crear dos fuentes aleatorias.
+                let mut effect_rng = state.random;
+                crate::world_gen::plant_random_farm_field_runtime(
+                    state,
+                    pos,
+                    width,
+                    height,
+                    industry_id,
+                    &mut effect_rng,
+                );
+                state.random = effect_rng;
+            }
+            if behaviour & crate::INDUSTRY_BEHAVIOUR_CUT_TREES_MASK != 0 {
+                let cut = if let Some(def) = newgrf_def
+                    .as_ref()
+                    .filter(|def| def.has_special_effect_callback())
+                {
+                    let random = state.random.next();
+                    crate::newgrf_callback::resolve_industry_special_effect_callback(
+                        def,
+                        &mut state.industries[i],
+                        random,
+                        1,
+                    )
+                    .unwrap_or_else(|| {
+                        (tick + u64::from(state.industries[i].counter))
+                            .is_multiple_of(INDUSTRY_CUT_TREE_TICKS)
+                    })
+                } else {
+                    // `i->counter` is represented by the fixed phase in the
+                    // local model; adding it to the global tick reproduces the
+                    // decremented counter used by OpenTTD's modulo check.
+                    (tick + u64::from(state.industries[i].counter))
+                        .is_multiple_of(INDUSTRY_CUT_TREE_TICKS)
+                };
+                if cut
+                    && !state.industries[i].produced_cargos().is_empty()
+                    && let Some(cut_tile) = crate::map::tree_tile_loop::chop_lumber_mill_tree(
+                        &mut state.map,
+                        pos,
+                        &footprint,
+                    )
+                {
+                    let cargo = state.industries[i].produced_cargos()[0];
+                    state.industries[i].add_newgrf_produced_cargo(cargo, 45);
+                    state.runtime.landscape_tile_dirty.push(cut_tile);
+                }
+            }
+        }
         // `TriggerIndustryRandomisation(i, IndustryTick)` ocurre en cada
         // ciclo de 256 ticks, incluso cuando la industria no logró producir
         // por falta de insumos o su callback devolvió cero.
@@ -446,12 +568,25 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
             );
             state.runtime.industry_tile_dirty.extend(dirty);
         }
-        let produced =
-            u64::from(state.industries[i].stock.saturating_sub(before)).saturating_add(u64::from(
+        let extra_produced = state.industries[i]
+            .produced_cargos()
+            .iter()
+            .skip(2)
+            .map(|&cargo| {
+                u64::from(
+                    state.industries[i]
+                        .extra_produced_cargo(cargo)
+                        .saturating_sub(extra_before.get(cargo)),
+                )
+            })
+            .sum::<u64>();
+        let produced = u64::from(state.industries[i].stock.saturating_sub(before))
+            .saturating_add(u64::from(
                 state.industries[i]
                     .secondary_stock
                     .saturating_sub(secondary_before),
-            ));
+            ))
+            .saturating_add(extra_produced);
         state.stats.industry_cargo_units_produced += produced;
         state.industries[i].produced_total =
             state.industries[i].produced_total.saturating_add(produced);

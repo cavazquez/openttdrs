@@ -11,6 +11,7 @@
 use crate::GameState;
 use crate::cargodist::parity::Randomizer;
 use crate::company::OWNER_NONE_M1;
+use crate::map::industry_construction::is_industry_completed;
 use crate::map::tile_loop::{MAP_TILE_LOOP_STRIDE, TileLoopState, collect_tile_loop_visits};
 use crate::map::water_class::{
     WaterClass, is_coast_tile, set_water_class_m1, tile_has_water_class, water_class_from_m1,
@@ -1080,6 +1081,89 @@ pub fn clear_tree(
     Ok(())
 }
 
+/// Despeja por completo una tesela de bosque sin pasar por el comando del
+/// jugador.
+///
+/// `ChopLumberMillTrees` usa `CMD_LANDSCAPE_CLEAR`, que elimina todos los
+/// árboles de la tesela encontrada (no reduce sólo la densidad). Este helper
+/// expone esa misma mutación para los efectos periódicos de industrias y
+/// conserva el suelo/costa mediante [`clear_dead_tree_tile`].
+pub(crate) fn clear_tree_tile_completely(map: &mut Map, c: TileCoord) -> bool {
+    let Some(tile) = map.get(c) else {
+        return false;
+    };
+    if tile.kind != TileKind::Forest {
+        return false;
+    }
+    clear_dead_tree_tile(map, c, tree_m2_word(tile));
+    map.get(c) != Some(tile)
+}
+
+/// Busca y corta el primer árbol adulto alrededor de un aserradero.
+///
+/// La secuencia reproduce el orden de `SpiralTileSequence(location.tile, 40)`
+/// de OpenTTD (diámetro par: empieza al este del origen y recorre anillos
+/// antihorarios). Sólo se inspeccionan árboles en etapa `Grown` o posterior;
+/// la huella incompleta de la industria bloquea el efecto completo.
+pub(crate) fn chop_lumber_mill_tree(
+    map: &mut Map,
+    origin: TileCoord,
+    footprint: &[TileCoord],
+) -> Option<TileCoord> {
+    if footprint.is_empty()
+        || footprint.iter().any(|&coord| {
+            map.get(coord).is_some_and(|tile| {
+                tile.kind == TileKind::Industry && !is_industry_completed(tile.m1)
+            })
+        })
+    {
+        return None;
+    }
+
+    let (width, height) = map.dimensions();
+    let max_x = i32::try_from(width).unwrap_or(i32::MAX);
+    let max_y = i32::try_from(height).unwrap_or(i32::MAX);
+    // `SpiralTileSequence` is bounded by a 40×40 area. Keep the generated
+    // coordinates in map bounds; unlike a command this effect never wraps.
+    let radius = 20_i32;
+    let mut candidates = Vec::with_capacity(40 * 40);
+    let mut x = origin.x + 1;
+    let mut y = origin.y;
+    let mut ring = 0_i32;
+    let mut direction = 0_usize;
+    let dirs = [(-1_i32, 0_i32), (0, 1), (1, 0), (0, -1)];
+    let mut position = 1_i32;
+    while ring < radius {
+        if x >= 0 && y >= 0 && x < max_x && y < max_y {
+            candidates.push(TileCoord::new(x, y));
+        }
+        let (dx, dy) = dirs[direction];
+        x += dx;
+        y += dy;
+        position -= 1;
+        if position > 0 {
+            continue;
+        }
+        direction += 1;
+        if direction == dirs.len() {
+            x += 1;
+            y -= 1;
+            ring += 1;
+            direction = 0;
+            if ring == radius {
+                break;
+            }
+        }
+        position = ring * 2 + 1;
+    }
+
+    candidates.into_iter().find(|&coord| {
+        map.get(coord).is_some_and(|tile| {
+            tile.kind == TileKind::Forest && tree_or_field_stage(tile.m5) >= TREE_GROWTH_GROWN
+        }) && clear_tree_tile_completely(map, coord)
+    })
+}
+
 /// Hook combinado para `sim_step` (usa `runtime.tile_loop_visited` del tick).
 pub fn tick_tree_tile_loop(state: &mut GameState) {
     let tick = state.tick.get();
@@ -1874,5 +1958,27 @@ mod tests {
             CLEAR_GROUND_GRASS
         );
         assert_ne!(map.get(TileCoord::new(10, 10)).unwrap().m3 & 0x10, 0);
+    }
+
+    #[test]
+    fn lumber_mill_effect_cuts_first_mature_tree_in_spiral() {
+        let mut map = Map::new_flat(64, 64, 0);
+        let origin = TileCoord::new(32, 32);
+        let mut industry = map.get(origin).unwrap();
+        industry.kind = TileKind::Industry;
+        industry.m1 = 0x80;
+        map.set_tile(origin, industry).unwrap();
+        let tree = TileCoord::new(33, 32);
+        force_forest(
+            &mut map,
+            tree,
+            with_tree_or_field_stage(with_tree_count(0, 0), TREE_GROWTH_GROWN),
+        );
+
+        assert_eq!(
+            chop_lumber_mill_tree(&mut map, origin, &[origin]),
+            Some(tree)
+        );
+        assert_eq!(map.get_kind(tree), Some(TileKind::Grass));
     }
 }

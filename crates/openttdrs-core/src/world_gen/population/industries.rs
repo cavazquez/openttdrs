@@ -1230,6 +1230,44 @@ fn plant_farm_fields(
     }
 }
 
+/// Ejecuta `PlantRandomFarmField` para una industria ya existente durante la
+/// simulación.
+///
+/// La rutina de generación y la de `ProduceIndustryGoods` comparten la misma
+/// geometría/consumo RNG de `PlantFarmField`; el runtime no tiene rectángulos
+/// de preservación ni una especie procedural, por lo que recibe las
+/// dimensiones reales de la huella de la instancia.
+pub(crate) fn plant_random_farm_field_runtime(
+    state: &mut GameState,
+    origin: TileCoord,
+    location_width: i32,
+    location_height: i32,
+    industry_id: u16,
+    rng: &mut crate::cargodist::parity::Randomizer,
+) {
+    let (map_width, map_height) = state.map.dimensions();
+    let map_w = i32::try_from(map_width).unwrap_or(i32::MAX);
+    let map_h = i32::try_from(map_height).unwrap_or(i32::MAX);
+    if map_w == 0 || map_h == 0 {
+        return;
+    }
+    let dx = location_width.max(1) / 2 + i32::try_from(rng.next() % 31).unwrap_or(0) - 16;
+    let dy = location_height.max(1) / 2 + i32::try_from(rng.next() % 31).unwrap_or(0) - 16;
+    let Some(center) = farm_field_tile_add_wrap(origin, dx, dy, map_w, map_h) else {
+        return;
+    };
+    let mut ctx = PopCtx {
+        state,
+        preserve: &[],
+        rng,
+        mw: map_width,
+        mh: map_height,
+        industry_platform: 0,
+        multiple_industry_per_town: false,
+    };
+    plant_farm_field(&mut ctx, center, industry_id);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

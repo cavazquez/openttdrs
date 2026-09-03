@@ -25,12 +25,13 @@ use crate::newgrf_sprites::{
     CBID_INDTILE_SHAPE_CHECK, CBID_INDUSTRY_DECIDE_COLOUR, CBID_INDUSTRY_INPUT_CARGO_TYPES,
     CBID_INDUSTRY_LOCATION, CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_OUTPUT_CARGO_TYPES,
     CBID_INDUSTRY_PROD_CHANGE_BUILD, CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_INDUSTRY_REFUSE_CARGO,
-    CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
-    CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
-    CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_COLOUR_MAPPING,
-    CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY,
-    CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK,
-    CBID_VEHICLE_VISUAL_EFFECT, IndustryProductionGroup, TrainSpriteGraphics,
+    CBID_INDUSTRY_SPECIAL_EFFECT, CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME,
+    CBID_STATION_ANIMATION_SPEED, CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY,
+    CBID_STATION_LAND_SLOPE_CHECK, CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE,
+    CBID_VEHICLE_COLOUR_MAPPING, CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT,
+    CBID_VEHICLE_MODIFY_PROPERTY, CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT,
+    CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT, IndustryProductionGroup,
+    TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -1860,6 +1861,36 @@ pub fn resolve_industry_decide_colour_callback(
     writeback_industry_persistent_registers(industry, &ctx);
     (result != CALLBACK_FAILED && result & 0x7FF0 == 0)
         .then(|| u8::try_from(result & 0x000F).unwrap_or(0))
+}
+
+/// Ejecuta `CBID_INDUSTRY_SPECIAL_EFFECT` (`0x3B`) para una industria viva.
+///
+/// `param1` es la palabra aleatoria que `ProduceIndustryGoods` obtiene con
+/// `Random()` y `param2` distingue la variante (`0` = plantar campos, `1` =
+/// cortar árboles). Un resultado válido se convierte con la variante completa
+/// de `ConvertBooleanCallback`; `CALLBACK_FAILED` devuelve `None` para que el
+/// caller aplique el fallback vanilla y conserve el consumo RNG upstream.
+#[must_use]
+pub fn resolve_industry_special_effect_callback(
+    def: &IndustrySpecDef,
+    industry: &mut Industry,
+    random: u32,
+    effect: u8,
+) -> Option<bool> {
+    if !def.has_special_effect_callback() {
+        return None;
+    }
+    let runtime = def.newgrf_runtime.as_ref()?;
+    let mut ctx = action2_eval_ctx_from_industry(industry, random);
+    let result = runtime.resolve_callback_ctx_u16(
+        u16::from(def.newgrf_local_id),
+        CBID_INDUSTRY_SPECIAL_EFFECT,
+        random,
+        u32::from(effect),
+        &mut ctx,
+    );
+    writeback_industry_persistent_registers(industry, &ctx);
+    (result != CALLBACK_FAILED).then_some(result != 0)
 }
 
 /// Busca el índice de cargo que `GetIndustryCallback` recibiría en `param2`.
@@ -4743,6 +4774,57 @@ mod tests {
             None
         );
         assert_eq!(industry.random_colour, 3);
+    }
+
+    #[test]
+    fn industry_special_effect_callback_uses_random_and_effect_parameters() {
+        let mut def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: Vec::new(),
+            produced_cargo_labels: Vec::new(),
+            accepted_cargo_indices: Vec::new(),
+            accepted_cargo_labels: Vec::new(),
+            production_rates: Vec::new(),
+            input_multipliers: Vec::new(),
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_SPECIAL_EFFECT_MASK,
+            behaviour: 0,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "special-effect".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_variable_byte(0x10, 0))),
+        };
+        let mut industry = Industry::new(TileCoord::new(4, 5), IndustryKind::CoalMine);
+
+        assert_eq!(
+            resolve_industry_special_effect_callback(&def, &mut industry, 0xABCD, 0),
+            Some(true),
+            "var10 debe recibir la palabra Random() del callback"
+        );
+        def.newgrf_runtime = Some(Box::new(gfx_callback_variable_byte(0x18, 0)));
+        assert_eq!(
+            resolve_industry_special_effect_callback(&def, &mut industry, 0xABCD, 0),
+            Some(false),
+            "param2=0 (plant fields) debe convertirse a false"
+        );
+        assert_eq!(
+            resolve_industry_special_effect_callback(&def, &mut industry, 0xABCD, 1),
+            Some(true),
+            "param2=1 (cut trees) debe llegar al runtime"
+        );
+        def.newgrf_runtime = Some(Box::default());
+        assert_eq!(
+            resolve_industry_special_effect_callback(&def, &mut industry, 0xABCD, 0),
+            None,
+            "CALLBACK_FAILED conserva el fallback vanilla"
+        );
     }
 
     #[test]

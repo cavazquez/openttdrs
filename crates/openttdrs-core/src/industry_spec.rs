@@ -27,6 +27,12 @@ pub const INDUSTRY_NUM_INPUTS: usize = 16;
 pub const INDUSTRY_NUM_OUTPUTS: usize = 16;
 /// Bit `IndustryBehaviour::CargoTypesUnlimited` de `prop 0x1A`.
 pub const INDUSTRY_BEHAVIOUR_CARGO_TYPES_UNLIMITED_MASK: u32 = 1 << 18;
+/// Bit `IndustryBehaviour::PlantFields` de `prop 0x1A`.
+pub const INDUSTRY_BEHAVIOUR_PLANT_FIELDS_MASK: u32 = 1 << 0;
+/// Bit `IndustryBehaviour::CutTrees` de `prop 0x1A`.
+pub const INDUSTRY_BEHAVIOUR_CUT_TREES_MASK: u32 = 1 << 1;
+/// Bit `IndustryBehaviour::PlantOnBuild` de `prop 0x1A`.
+pub const INDUSTRY_BEHAVIOUR_PLANT_ON_BUILD_MASK: u32 = 1 << 6;
 /// Bit `IndustryCallbackMask::ProductionCargoArrival`: callback al llegar carga.
 pub const INDUSTRY_CALLBACK_PRODUCTION_CARGO_ARRIVAL_MASK: u16 = 1 << 1;
 /// Bit `IndustryCallbackMask::Production256Ticks`: callback de producción periódico.

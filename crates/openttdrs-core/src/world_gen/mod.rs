@@ -36,6 +36,7 @@ pub use config::{
 pub use heightmap::{HeightmapData, apply_heightmap, parse_hmap, serialize_heightmap};
 use landcover::{mark_tropic_desert_zones, mark_tropic_rainforest_zones};
 pub use objects::generate_objects_with_rng;
+pub(crate) use population::plant_random_farm_field_runtime;
 pub use population::{
     IndustryDensity, NUM_INITIAL_INDUSTRIES, NUM_INITIAL_TOWNS, PopulationGenConfig, TownDensity,
     apply_population_gen, apply_population_gen_with_rng, ceil_div, generate_industries,

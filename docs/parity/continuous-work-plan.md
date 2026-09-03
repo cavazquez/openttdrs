@@ -34,7 +34,7 @@ funcional están en el mismo árbol.
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. Layouts `TileSeq`, parents/children, catenaria, PBS y varias capas ya tienen cobertura focal; foundations de rail pendiente/túnel, foundations/rotaciones de aeropuertos, sprite-stack/callbacks avanzados de vehículos y el orden completo de framebuffer siguen sin equivalencia global. | Medir la primera familia visible restante con `world-draw` y, si aplica, capturas en `0,12×`, `0,25×`, `0,50×` y `1×`. |
 | [#328](https://github.com/cavazquez/openttdrs/issues/328) | El round-trip preserva las tablas y campos escalares modelados, `CITY`/`INDY`/`STNN`/`PSAC`, `OBJS`/`OBID`, grupos, órdenes y autoreplace en el subconjunto documentado. Mutaciones de strings, listas/structs anidados, columnas desconocidas, pools nativos de casas/objetos y labels/cargos no representables todavía degradan al writer canónico o quedan pendientes. CB17 de casas y CB157 de objetos pueden crear/modificar PSA de pueblo y el writer les asigna una fila `PSAC`/referencia `CITY` al exportar. | Elegir una mutación SAV reproducible de lista/struct anidado y comparar bytes OpenTTD→Rust→OpenTTD. |
-| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17 durante crecimiento físico y CB157 durante construcción de objetos evalúan ahora el parent real y persisten `\2psto` por GRFID. CB25/26/27 de animación y la re-randomización `ResolveRerandomisation` de teselas evalúan el contexto completo y escriben el PSA parent de `Industry` en la instancia viva; `IndustryTick` y `CargoReceived` usan ahora la misma ruta con reseed parent una vez por footprint; la ruta legacy sin world conserva fallback explícito. Siguen pendientes foundations de render, historiales tras mutaciones, cargos custom y el resto de callbacks/scope. | Cubrir foundations/sonido/slope/autoslope de `IndustryTile` con una regresión diferencial; no cerrar #329 por este subconjunto. |
+| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17 durante crecimiento físico y CB157 durante construcción de objetos evalúan ahora el parent real y persisten `\2psto` por GRFID. CB25/26/27 de animación y la re-randomización `ResolveRerandomisation` de teselas evalúan el contexto completo y escriben el PSA parent de `Industry` en la instancia viva; `IndustryTick` y `CargoReceived` usan ahora la misma ruta con reseed parent una vez por footprint. Shape-check `CB2F`, `slopes_refused` y el ID correcto `CB30` de foundations ya tienen call sites y regresiones; la ruta legacy sin world conserva fallback explícito. Siguen pendientes autoslope/sonido, generación automática, historiales tras mutaciones, cargos custom y el resto de callbacks/scope. | Cubrir `CB3C` autoslope y sonido de `IndustryTile` con regresiones diferenciales; no cerrar #329 por este subconjunto. |
 | [#330](https://github.com/cavazquez/openttdrs/issues/330) | Economía básica y movimiento funcionan, pero los oráculos externos todavía son acotados. Tráfico/colisiones/dirección vial exhaustivos, PBS/YAPF/presignals/consist ferroviarios y navegación aire/mar no tienen aún cobertura diferencial completa. | Tomar el primer fixture externo reproducible de movimiento y registrar tick, entidad y estado nativo divergente. |
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
@@ -95,6 +95,18 @@ sola vez en `Industry.newgrf_random` después de evaluar toda la huella. La
 regresión cubre ambos triggers, el writeback PSA y una huella de dos teselas.
 Siguen pendientes foundations/sonido/slope/autoslope, historiales mutables y
 cargos custom; #329 continúa abierto.
+
+Actualización #329-INDTILE-SLOPE-036 (2026-09-03, commit `9e01c1a9`): el
+parser de `IndustryTiles` conserva `prop 0x0D` (`slopes_refused`) y los bits
+upstream de shape-check (`0x2F`), foundations (`0x30`) y autoslope (`0x3C`).
+La colocación NewGRF ejecuta `CBID_INDTILE_SHAPE_CHECK` por tesela con el tipo
+de creación y layout en `param2`, un parent temporal que conserva huella,
+tipo, random y fundador, y el fallback `IsSlopeRefused` cuando el callback
+falla. La inversión de booleano anterior a GRF v7 y la aceptación exclusiva
+de `0x400` desde v7 tienen regresiones; el renderer ya usa el ID correcto
+`0x30` para foundations. El call site de terraformación/autoslope, la
+generación automática y los callbacks de sonido siguen pendientes; #329 no se
+cierra.
 
 ## Orden recomendado
 
@@ -383,7 +395,7 @@ secundarias fuera de ese contrato.
   fundación nivelada vanilla.
 - Industria NewGRF: la vista Action2 runtime usa también sus offsets resueltos
   y, cuando la tesela se nivela, el overlay se adjunta al último parent de
-  `DrawFoundation`. El callback `CBID_INDTILE_DRAW_FOUNDATIONS` (`0x150`) se
+  `DrawFoundation`. El callback `CBID_INDTILE_DRAW_FOUNDATIONS` (`0x30`) se
   evalúa en pendientes y puede conservar el relieve original; siguen abiertos
   los callbacks de sonido/slope y los layouts/children múltiples fuera del
   subconjunto cubierto.
@@ -544,7 +556,8 @@ abierta la cobertura combinatoria, otros climas/tamaños y ticks posteriores.
 
 Actualización #326-FND-001 (2026-09-02): la comparación con
 `newgrf_house.cpp` y `newgrf_industrytiles.cpp` confirmó que OpenTTD consulta
-`CBID_HOUSE_DRAW_FOUNDATIONS` y `CBID_INDTILE_DRAW_FOUNDATIONS` (`0x150`) sólo
+`CBID_HOUSE_DRAW_FOUNDATIONS` (`0x150`) y `CBID_INDTILE_DRAW_FOUNDATIONS`
+(`0x30`) sólo
 para teselas inclinadas; `CALLBACK_FAILED` conserva la fundación vanilla y un
 resultado booleano cero la suprime. El renderer Rust incorpora ambos bits de
 callback, evalúa el contexto Action2 existente y deja el layout custom sobre

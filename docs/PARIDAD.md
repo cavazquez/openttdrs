@@ -111,6 +111,16 @@ cubre ambos triggers y una industria de dos teselas. Siguen pendientes
 foundations/sonido/slope/autoslope, historiales mutables y cargos custom; #329
 continúa abierto.
 
+Actualización #329-INDTILE-SLOPE-036 (2026-09-03, `9e01c1a9`): `IndustryTiles`
+conserva `prop 0x0D` (`slopes_refused`) y ejecuta `CBID_INDTILE_SHAPE_CHECK`
+(`0x2F`) por tesela durante la colocación NewGRF, con el tipo de creación y
+layout en `param2`, parent temporal de industria y fallback `IsSlopeRefused`.
+La semántica de GRF anteriores a v7 (booleano invertido) y de v7+ (éxito sólo
+`0x400`) tiene regresiones. El renderer usa el ID correcto
+`CBID_INDTILE_DRAW_FOUNDATIONS` (`0x30`); `CBID_INDTILE_AUTOSLOPE` (`0x3C`),
+generación automática, sonido e historiales mutables siguen pendientes, por lo
+que #329 permanece abierto.
+
 ### Propiedad de cada estado (evitar trabajo duplicado)
 
 | Área | Fuente canónica | Qué no debe duplicarse |

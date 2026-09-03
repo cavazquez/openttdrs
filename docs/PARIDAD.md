@@ -148,6 +148,18 @@ stock ante rechazo. La entrega directa `DeliverGoodsToIndustry`, su monitor y
 su temporización todavía no están modelados; también siguen pendientes efectos
 especiales, cargos dinámicos, sonido y generación automática.
 
+Actualización #329-INDUSTRY-CARGO-TYPES-040 (2026-09-03, `389109c1`):
+`CBID_INDUSTRY_INPUT_CARGO_TYPES` (`0x14B`) y
+`CBID_INDUSTRY_OUTPUT_CARGO_TYPES` (`0x14C`) se ejecutan al fundar la
+industria cuando el GRF declara las máscaras. Cada slot recibe su `param1`,
+se valida contra la tabla CTT y reemplaza la lista estática de la instancia;
+`0xFF`/`CALLBACK_FAILED` terminan la secuencia, y un runtime ausente conserva
+el fallback estático. Se mantienen los multiplicadores de la matriz de inputs
+por el índice estático de origen y una lista de salida vacía no vuelve al cargo
+vanilla. El límite actual sigue siendo 3 entradas/2 salidas: faltan
+`CargoTypesUnlimited`, cargos custom y persistencia/rehidratación SAV; #329
+permanece abierto.
+
 ### Propiedad de cada estado (evitar trabajo duplicado)
 
 | Área | Fuente canónica | Qué no debe duplicarse |

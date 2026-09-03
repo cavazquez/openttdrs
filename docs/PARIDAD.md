@@ -34,8 +34,9 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `ca2939a7`, handoff
-documental actualizado en este corte).
+**Corte canónico: 2026-09-03 · `main` (base funcional local `67ef8101`; el push
+de este hash se reintentará tras el rechazo externo 404, handoff documental
+actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -131,6 +132,15 @@ Ambos caminos hidratan el parent/PSA de la industria y tienen regresión del
 callback. Sonido, scopes restantes, cargos custom y generación automática
 siguen parciales; #329 continúa abierto.
 
+Actualización #329-INDTILE-CARGO-ACCEPTANCE-058 (2026-09-03, `67ef8101`):
+la aceptación exacta de carga de teselas de industria NewGRF ya se evalúa en
+runtime. CB2C selecciona los tres slots locales de 5 bits y CB2B sus cantidades
+de 4 bits con contexto de tesela/industria, CTT y writeback de PSA. La tabla
+exacta alimenta la cobertura de estaciones y `unload_vehicles`, evitando que
+un callback cero vuelva a aceptar `Goods` por el proxy genérico. Cargos custom
+no resolubles, reatachación económica y callbacks restantes siguen parciales;
+#329 continúa abierto.
+
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía
 no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
@@ -149,13 +159,14 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Guardado propio JSON | **Alta** | Formato versionado con migraciones y determinismo mid-run |
 | Compatibilidad `.sav` | **Inicial-media** | Import/export interoperable de un subconjunto. La cobertura exacta, incluyendo la diferencia import vs export, está en [`parity/sav-compatibility.md`](parity/sav-compatibility.md); release ejecuta la matriz OpenTTD 15.3 sin `SKIP` |
 | NewGRF | **Media de parseo / media de runtime** | Catálogos Action0/3/5 amplios y callbacks reales de estaciones, road stops, casas, industrias, cargos y vehículos (CB10/11/12/13/15/16/24/25–28/31/33/140–149). Los layouts estáticos de aeropuertos `Airports` conservan el `gfx` global de cada `AirportTile` y el renderer los consume por tesela con fallback vanilla; SAV conserva además tipo, layout, rotación y huella, y reatacha la variante exacta cuando el catálogo coincide. `AirportTiles` ya parsea frames/status/speed/triggers y badges de Action0 y ejecuta `CB0x152` (Built/TileLoop/NewCargo/CargoTaken/AcceptanceTick), `CB0x153` (next frame) y `CB0x154` (speed), con lista animada persistida, parámetros de cargo en `var18` traducidos por la CTT del GRF, variable `0x42` con la zona del pueblo más cercano, variable `0x7A` por la tabla de badges y `AirplaneTouchdown` conectado a las fases de vuelo; quedan foundations de compositor, rotaciones runtime y sonidos. Vehículos ya resuelven Action2 real por carga, sprite-stack de hasta ocho capas, wagon overrides de Action3 y CB16 con codificación GRF <8/≥8, espejo, IDs locales byte y extendidos (`ExtendedByte`, hasta 14 bits) y writeback `7C`; la compra y el autoreemplazo de trenes y vehículos de carretera materializan las cadenas, enlazan unidades, conservan unidades del jugador y usan el catálogo activo. El movimiento vial sincroniza las piezas detrás de la cabeza con historial persistido multi-tesela y el renderer consulta la dirección invertida para las unidades marcadas como children. Los Action2 deterministas de vehículos ya respetan los tipos de scope parent (`0x82/0x86/0x8A`) y los random parent/relative (`0x83/0x84`) con contexto del padre inmediato, offsets firmados y el tramo especial del primer vehículo contiguo con el mismo motor. Variable `61` puede consultar var `62` con un segundo offset relativo del vehículo seleccionado y var `0x60` cuenta los IDs locales presentes desde esa unidad. Las listas de badges nativas de vehículos, tipos de vía y aeropuertos se traducen mediante GlobalVar `0x18`, se guardan en sus catálogos y alimentan las variables soportadas. Las industrias NewGRF aplican las dos tasas/cargos de salida, stocks separados y la matriz de multiplicadores de insumos al fundarse; las teselas de industria comparten ahora un contexto runtime entre vistas planas y `TileSeq` con random `m3`, etapa, terreno, zona/posición/frame, vecinos `0x60`–`0x62`, badges `0x7A` y variables parent de stock/producción. CB29/CB35 ejecutan los cambios de producción diarios/mensuales y CB15F el nivel inicial. Los grupos Action2 `IndustryProductionSpriteGroup` v0/v1/v2 se parsean, se resuelven desde Action3 y se consumen parcialmente en CB1/CB2: entradas pendientes, salidas legacy/adicionales y `again`; al importar y exportar `INDY`, las listas `accepted`/`produced` conocidas conservan sus entradas, stocks, rates y metadata de fundador/fechas/tipo/flags/año, incluida la fecha de última aceptación por cargo. El scope padre reexpone esos campos y `0xB4`/`0x6E` con los offsets nativos. `INDY.psa` y el pool `PSAC` ya se importan, hidratan y reemiten para las industrias, conservando índices y 256 registros por fila; `INDY.accepted[].history`, `accepted[].accumulated_waiting`, `INDY.produced[].history` y `valid_history` se hidratan y actualizan en runtime para cargos representables, con la ventana nativa completa de 61 registros, y se reemiten al guardar. Quedan pendientes el writeback de teselas, storages de otras entidades, scope/escala completa, mutaciones económicas fuera de esos caminos y cargos custom no mapeables. Los labels vanilla respetan el clima activo; los labels de cargos custom siguen limitados por el modelo de `CargoType` fijo. Los roadtypes resuelven `ROTSG_BRIDGE`/`ROTSG_OVERLAY`/`ROTSG_CATENARY_BACK/FRONT` tanto en superficie como en paradas viales y waypoints, incluyen el fallback vanilla `SPR_TRAMWAY_BASE` con sus 119 sprites extraídos, y respetan `NoCatenary`; la configuración activa `NGRF` ya se reconstruye desde SAV (archivo, GRFID, versión y parámetros); siguen pendientes `OBJS`/`OBID` estructurales. Ver las [matrices Action0/3/5](parity/newgrf-action0-matrix.md) y de [callbacks](parity/newgrf-callback-matrix.md) |
-Corrección del renglón NewGRF en este corte (`ca2939a7`): el writeback de
+Corrección del renglón NewGRF en este corte (`67ef8101`): el writeback de
 CB25/26/27 de `IndustryTile` ya está conectado para `TileLoop`,
 `IndustryTick` y `CargoReceived`, y la pasada visual ya no dispara CB25 por
 tick. `CargoDistributed` y `ConstructionStageChanged` también tienen ahora
 call sites con contexto parent/PSA; la primera llamada de construcción lleva
-`var 18 |= 0x100`. El residual real son sonido, scopes y mutaciones aún
-parciales.
+`var 18 |= 0x100`. La aceptación CB2B/CB2C de teselas de industria también
+alimenta ahora la cobertura exacta de estaciones y la descarga. El residual
+real son cargos custom/CTT, sonido, scopes y mutaciones aún parciales.
 
 | Multijugador | **Media propia** | Lockstep TCP, dedicated, late join y host migration; el servidor asigna empresa por peer, valida antes de secuenciar, rechaza issuer inválido y resincroniza desync por snapshot. Sigue siendo protocolo propio, sin lobby, auth, cifrado ni interoperabilidad OpenTTD |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |

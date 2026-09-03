@@ -1,7 +1,8 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-03**,
-`main` con base funcional `ca2939a7`, posterior al writeback canónico de `CITY`,
+`main` con base funcional local `67ef8101` (el push de este hash se reintentará
+tras el rechazo externo 404), posterior al writeback canónico de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
 separan de la pasada visual CB26/CB27; referencia: **OpenTTD
@@ -75,6 +76,13 @@ tesela cambia de etapa durante `TileLoop`. El contexto parent/PSA se hidrata y
 se reemite junto con el estado de la industria; la pasada visual CB26/CB27
 continúa separada. La compatibilidad SAV no convierte todavía cargos custom en
 ejecutables si falta su catálogo.
+
+Actualización del corte `67ef8101`: la aceptación de carga declarada por una
+tesela de industria NewGRF se evalúa ahora con CB2C (slots locales) y CB2B
+(cantidades) durante la cobertura de estaciones y la descarga de vehículos.
+Esto es una mejora de runtime, no un cambio de wire format: `INDY`/`PSAC` se
+siguen serializando igual y los cargos custom/CTT sin `CargoSpec` continúan como
+passthrough opaco, sin simulación ejecutable.
 
 | Área | Importar `.sav` de OpenTTD | Exportar `.sav` para OpenTTD | Límite y evidencia |
 |---|---|---|---|

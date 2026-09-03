@@ -25,12 +25,15 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-03
 
-Base funcional publicada en `origin/main`: **`ca2939a7`** (`newgrf: trigger industry
-animation on construction stages`). Este handoff documental incluye la entrega directa
+Base funcional local: **`67ef8101`** (`newgrf: evaluate industry tile cargo acceptance`),
+encima de `ca2939a7` (`newgrf: trigger industry animation on construction stages`).
+El push de `67ef8101` quedó pendiente por un rechazo 404 del revisor externo; el
+commit y sus pruebas permanecen en este árbol y se reintentará en el próximo límite.
+Este handoff documental incluye la entrega directa
 SAV de campos legacy (`56aa7858`) y los slots vacíos legacy (`9f2ecc31`), y se publica después de las etapas
 de rechazo temporal (`65682a42`), cargos dinámicos (`389109c1`) y
-`PlantOnBuild` manual (`628d1fb9`); es el punto de reanudación y el código
-publicado coincide con este árbol.
+`PlantOnBuild` manual (`628d1fb9`); es el punto de reanudación y el código local
+coincide con este árbol.
 
 Corrección de este handoff: `470499ea` ya cubre `STNN.base.owner`,
 `INDY.neutral_station`, `INDY.exclusive_supplier` y
@@ -46,20 +49,23 @@ frames de los callbacks CB25: `TileLoop` sólo se dispara sobre visitas,
 entrega. `aa289076` conecta también `CargoDistributed` con el retorno real de
 `TransportIndustryGoods` cuando la carga llega a una estación. `ca2939a7` conecta
 `ConstructionStageChanged` tanto al alta inicial (con `var 18 |= 0x100`) como a
-los cambios de etapa posteriores. La próxima tarea sigue siendo cargos custom
+los cambios de etapa posteriores. `67ef8101` conecta además la aceptación exacta
+de carga de teselas de industria (`CBID_INDTILE_CARGO_ACCEPTANCE`/`CBID_INDTILE_ACCEPT_CARGO`)
+con la cobertura de estación y la descarga real, manteniendo el fallback legacy.
+La próxima tarea sigue siendo cargos custom
 ejecutables/rehidratación económica cuando el catálogo está ausente.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. Layouts `TileSeq`, parents/children, catenaria, PBS y varias capas ya tienen cobertura focal; foundations de rail pendiente/túnel, foundations/rotaciones de aeropuertos, sprite-stack/callbacks avanzados de vehículos y el orden completo de framebuffer siguen sin equivalencia global. | Medir la primera familia visible restante con `world-draw` y, si aplica, capturas en `0,12×`, `0,25×`, `0,50×` y `1×`. |
 | [#328](https://github.com/cavazquez/openttdrs/issues/328) | El round-trip preserva las tablas y campos escalares modelados, `CITY`/`INDY`/`STNN`/`PSAC`, `OBJS`/`OBID`, grupos, órdenes y autoreplace en el subconjunto documentado. Mutaciones de strings, listas/structs anidados, columnas desconocidas, pools nativos de casas/objetos y labels/cargos no representables todavía degradan al writer canónico o quedan pendientes. CB17 de casas y CB157 de objetos pueden crear/modificar PSA de pueblo y el writer les asigna una fila `PSAC`/referencia `CITY` al exportar. | Elegir una mutación SAV reproducible de lista/struct anidado y comparar bytes OpenTTD→Rust→OpenTTD. |
-| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17/CB157 evalúan y escriben el parent real. CB25/26/27 comparten contexto y PSA por huella: `TileLoop` sólo sobre visitas, `IndustryTick` al intervalo de producción, `CargoReceived` al completar la entrega y el avance de frames queda separado por tick. Shape-check `CB2F`, foundations `CB30`, autoslope manual `CB3C`, color `CB14A`, rechazo `CB3D`, cargos dinámicos `CB14B`/`CB14C`, `CargoTypesUnlimited` (hasta 16 slots, con salidas extra procesadas/transportables/exportables), slots vacíos `INVALID_CARGO` del modo legacy, rehidratación de filas `INDY` al aplicar el catálogo NewGRF, efectos especiales `CB3B`, `PlantOnBuild` manual/NewGRF, afterload SAV `<SLV_32`, entrega directa tipo `DeliverGoodsToIndustry` y el monitor runtime `AddCargoDelivery` ya tienen call sites y regresiones. La descarga ordena por `DistanceMax`, excluye la industria de origen, respeta el límite `uint16` de waiting, consulta `CBID_INDUSTRY_REFUSE_CARGO`, actualiza fecha/flag de aceptación y difiere la producción hasta después de `load_vehicles`, con rutas CB1, CB2 exclusivo y matriz vanilla. Los historiales aceptados y producidos por salida giran 61 registros nativos y se reemiten para cargos representables; el monitor empaqueta IDs con el layout nativo, exige activación, satura a `i32` y reinicia al consultar. `STNN.base.owner`, `INDY.neutral_station`/`exclusive_supplier` y `serve_neutral_industries` ya tienen importación, runtime y round-trip. Las filas `INDY` de cargos no resolubles se conservan ahora como passthrough opaco (slot, stock, rate e historial), pero no son ejecutables sin su catálogo. Sigue faltando el modelo de cargos custom ejecutables, bindings de GameScript equivalentes a `ScriptCargoMonitor`, reatachación económica cuando falta su catálogo, GUI/variables ilimitadas, `CargoDistributed`/cambio de etapa de construcción, autoslope en generación automática, sonido, mutaciones económicas fuera de esos caminos y el resto de callbacks/scope. | Medir una primera divergencia reproducible de cargo custom con catálogo instalado o una mutación económica fuera de los historiales; no cerrar #329 por este subconjunto. |
+| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17/CB157 evalúan y escriben el parent real. CB25/26/27 comparten contexto y PSA por huella: `TileLoop` sólo sobre visitas, `IndustryTick` al intervalo de producción, `CargoReceived` al completar la entrega y el avance de frames queda separado por tick. Shape-check `CB2F`, foundations `CB30`, autoslope manual `CB3C`, color `CB14A`, rechazo `CB3D`, cargos dinámicos `CB14B`/`CB14C`, `CargoTypesUnlimited` (hasta 16 slots, con salidas extra procesadas/transportables/exportables), slots vacíos `INVALID_CARGO` del modo legacy, rehidratación de filas `INDY` al aplicar el catálogo NewGRF, efectos especiales `CB3B`, `PlantOnBuild` manual/NewGRF, afterload SAV `<SLV_32`, entrega directa tipo `DeliverGoodsToIndustry` y el monitor runtime `AddCargoDelivery` ya tienen call sites y regresiones. La descarga ordena por `DistanceMax`, excluye la industria de origen, respeta el límite `uint16` de waiting, consulta `CBID_INDUSTRY_REFUSE_CARGO`, actualiza fecha/flag de aceptación y difiere la producción hasta después de `load_vehicles`, con rutas CB1, CB2 exclusivo y matriz vanilla. Los historiales aceptados y producidos por salida giran 61 registros nativos y se reemiten para cargos representables; el monitor empaqueta IDs con el layout nativo, exige activación, satura a `i32` y reinicia al consultar. `STNN.base.owner`, `INDY.neutral_station`/`exclusive_supplier` y `serve_neutral_industries` ya tienen importación, runtime y round-trip. Las filas `INDY` de cargos no resolubles se conservan ahora como passthrough opaco (slot, stock, rate e historial), pero no son ejecutables sin su catálogo. `CargoDistributed`/`ConstructionStageChanged` ya tienen call sites y la aceptación exacta de teselas de industria (`CBID_INDTILE_CARGO_ACCEPTANCE`/`CBID_INDTILE_ACCEPT_CARGO`) ya alimenta la cobertura de estación y la descarga. Sigue faltando el modelo de cargos custom ejecutables/CTT completo, bindings de GameScript equivalentes a `ScriptCargoMonitor`, reatachación económica cuando falta su catálogo, GUI/variables ilimitadas, autoslope en generación automática, sonido, mutaciones económicas fuera de esos caminos y el resto de callbacks/scope. | Medir una primera divergencia reproducible de cargo custom con catálogo instalado o una mutación económica fuera de los historiales; no cerrar #329 por este subconjunto. |
 | [#330](https://github.com/cavazquez/openttdrs/issues/330) | Economía básica y movimiento funcionan, pero los oráculos externos todavía son acotados. Tráfico/colisiones/dirección vial exhaustivos, PBS/YAPF/presignals/consist ferroviarios y navegación aire/mar no tienen aún cobertura diferencial completa. | Tomar el primer fixture externo reproducible de movimiento y registrar tick, entidad y estado nativo divergente. |
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
 
-Última validación de `ca2939a7`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **1.995** tests de core y **1.064** de cliente (2 ignorados); la matriz
+Última validación de `67ef8101`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **1.998** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.
@@ -1082,3 +1088,16 @@ actualiza `supplied` y sus dos muestras mensuales, y los scopes parent exponen
 producción/transporte (`0xBA`–`0xCB`) desde esas series. Las columnas custom,
 los cargos NewGRF y el writeback de PSA de pueblos siguen pendientes; #328/#329
 continúan abiertos.
+
+Actualización #329-INDTILE-CARGO-ACCEPTANCE-058 (2026-09-03, commit `67ef8101`):
+`IndustryTileSpecDef` conserva las máscaras `0x2B`/`0x2C` y el flag
+`AcceptsAllCargo`. La ruta runtime evalúa primero `CBID_INDTILE_ACCEPT_CARGO`
+(tres slots de cargo locales de 5 bits) y luego
+`CBID_INDTILE_CARGO_ACCEPTANCE` (tres cantidades de 4 bits), con el contexto
+completo de tesela/industria, CTT y writeback de PSA. `station_coverage_at_with_newgrf`
+usa esa tabla exacta por tesela y `unload_vehicles` la consulta antes de aceptar
+el lote; por eso un callback que devuelve cero no vuelve a aceptar `Goods` por el
+proxy genérico de fábricas. La regresión cubre el reemplazo de slots/cantidades y
+la aceptación/rechazo efectiva en una estación. El fallback estático y las APIs
+legacy permanecen intactos; cargos custom/CTT no resolubles, reatachación económica,
+sonido y callbacks restantes siguen pendientes y #329 no se cierra.

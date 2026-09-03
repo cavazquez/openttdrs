@@ -1,10 +1,11 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-03** (commit `ca2939a7`, shape-check, foundations,
+Actualizada: **2026-09-03** (commit `67ef8101`, shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
 `PlantOnBuild`, rehidratación SAV legacy, historiales aceptados runtime,
 reatachación de industrias al
-catálogo NewGRF; triggers, PSA parent y `CargoTypesUnlimited` ya publicados).
+catálogo NewGRF; triggers, PSA parent, aceptación exacta de carga de teselas y
+`CargoTypesUnlimited` ya publicados).
 
 Referencia: commit `14ec60f248547d4d062a1160f0fc26d742319888`,
 `reference/openttd-upstream/src/newgrf_callbacks.h`.
@@ -44,6 +45,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_industry_tile_animation_callback`,
 `resolve_industry_tile_animation_callback_with_world`,
 `trigger_newgrf_industry_animation_with_world_and_extra`,
+`resolve_industry_tile_cargo_acceptance_callback_with_world`,
 `apply_industry_tile_shape_callback_for_build`,
 `advance_industry_tile_randomisation_from_visits_with_catalog_and_world`,
 `resolve_industry_tile_random_trigger`
@@ -55,12 +57,15 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 
 ## Por feature
 
-Corrección de la fila `Industry tiles (09)` en este corte (`ca2939a7`): además de
+Corrección de la fila `Industry tiles (09)` en este corte (`67ef8101`): además de
 los tres eventos ya descritos, `CargoDistributed` se dispara tras una
 transferencia efectiva y `ConstructionStageChanged` se dispara al crear una
 industria (con `var 18 |= 0x100`) y después de cada cambio de etapa. Ambos
 call sites usan el contexto parent/PSA de la industria; la pasada visual CB26/
-CB27 sigue separada. La API legacy sin mundo mantiene su fallback explícito.
+CB27 sigue separada. La aceptación exacta de carga de teselas también se evalúa
+en runtime: CB2C selecciona los tres slots locales y CB2B sus cantidades, y la
+tabla resultante alimenta la cobertura de estación y `unload_vehicles`. La API
+legacy sin mundo mantiene su fallback explícito.
 
 | Feature | CBID (ejemplos) | Estado | Notas |
 |---|---|---|---|
@@ -86,12 +91,12 @@ CB27 sigue separada. La API legacy sin mundo mantiene su fallback explícito.
 | Houses (`07`) | `0x150` `CBID_HOUSE_DRAW_FOUNDATIONS` | **parcial runtime** | El renderer evalúa el callback con el scope de casa (etapa, edad, random, pueblo y parámetros GRF) antes de `FOUNDATION_LEVELED`; `CALLBACK_FAILED` conserva la fundación y un resultado cero la suprime, como `ConvertBooleanCallback` upstream. La regresión `newgrf_house_draw_foundations_callback_can_suppress_default` cubre una casa inclinada custom sin parent vanilla. Falta el resto de callbacks de casa y layouts/rotaciones avanzados. |
 | Houses | resto `0x1A`–`0x1C`, `0x1E`–`0x21`, … | **almacenado** | `HouseSpecDef.callback_mask` |
 | Houses | Action2 `TileLayoutSpriteGroup` (`TileSeq`) | **parcial runtime** | El catálogo conserva el grafo aunque la casa no tenga callbacks variables. El renderer resuelve la etapa/edad/terreno/random de la tesela y `0x42` consulta la zona del pueblo cuyo `TownID` está persistido en `MAP2` (con fallback al más cercano en mapas legacy); `0x44`, `0x60`/`0x61` calculan conteos por `HouseID` global y por pueblo desde una instantánea del mapa, y `0x62`/`0x63` consultan información/frame de teselas vecinas con wrap. Cuando el pueblo tiene una fila `CITY.psa_list`, el scope parent copia sus registros `7C` por GRFID para que `0x7C` lea el mismo PSA que OpenTTD. Sustituye `s1`/`s2` cuando el layout es completo y materializa ground, parents y children con cajas `M(...)`, incluyendo la superficie de una fundación nivelada; layouts incompletos, sprites base y paletas especiales mantienen fallback vanilla atómico. El writeback de `7C` está cubierto en CB17 de construcción; faltan el callback de dibujo/tesela, conteos por clase, aceptación de estaciones y layouts 16-bit completos.
-| Industry tiles (`09`) | `0x25` trigger, `0x26` next frame, `0x27` speed | **parcial runtime** | `phase_tile_animation` separa el disparador de la pasada visual: `TileLoop` se ejecuta sólo para teselas visitadas, `IndustryTick` al intervalo de producción y `CargoReceived` después de procesar la entrega; CB25 recibe el ordinal correspondiente y la ruta con pools de mundo construye el scope completo de tesela/industria y escribe `\\2psto` parent en `Industry.newgrf_persistent_regs`. CB26/CB27 avanzan sólo teselas activas y respetan `animation_speed`/`animation_frames`. `CargoDistributed` y `ConstructionStageChanged` aún no tienen call site; la API legacy conserva el trigger IndustryTick para herramientas antiguas y no puede hacer writeback de una industria ausente |
+| Industry tiles (`09`) | `0x25` trigger, `0x26` next frame, `0x27` speed | **parcial runtime** | `phase_tile_animation` separa el disparador de la pasada visual: `TileLoop` se ejecuta sólo para teselas visitadas, `IndustryTick` al intervalo de producción y `CargoReceived` después de procesar la entrega; CB25 recibe el ordinal correspondiente y la ruta con pools de mundo construye el scope completo de tesela/industria y escribe `\\2psto` parent en `Industry.newgrf_persistent_regs`. CB26/CB27 avanzan sólo teselas activas y respetan `animation_speed`/`animation_frames`. `CargoDistributed` se dispara después de una transferencia efectiva y `ConstructionStageChanged` al construir y cambiar de etapa; ambos usan el mismo contexto parent/PSA. La API legacy conserva el trigger IndustryTick para herramientas antiguas y no puede hacer writeback de una industria ausente |
 | Industry tiles (`09`) | `0x2F` `CBID_INDTILE_SHAPE_CHECK` | **parcial runtime** | `prop 0x0E` activa el callback durante `place_industry_spec_def_layout_sandbox`, una vez por tesela del layout y antes de escribir el mapa; `param1=0` y `param2=(creation_type << 8) | layout_index`, con parent temporal que conserva huella, tipo, random y fundador. `CALLBACK_FAILED` cae a `prop 0x0D` (`slopes_refused`) mediante `IsSlopeRefused`; GRF <7 usa el booleano invertido y GRF ≥7 acepta sólo `0x400`. Las regresiones de máscaras, parser y semántica cubren el contrato. Faltan otros tipos de creación, mensajes de error y el call site de generación automática. |
 | Industry tiles (`09`) | `0x30` `CBID_INDTILE_DRAW_FOUNDATIONS` | **parcial runtime** | El renderer evalúa el callback con el scope de tesela/industria padre (etapa, random, terreno, pueblo, posición y parámetros GRF) antes de `FOUNDATION_LEVELED`; `CALLBACK_FAILED` conserva la fundación y cero la suprime, igual que `DrawNewIndustryTile` upstream. La regresión `newgrf_industry_draw_foundations_callback_can_suppress_default` cubre una tesela inclinada custom sin cimiento vanilla. Faltan callbacks de sonido, autoslope y scopes avanzados. |
 | Industry tiles (`09`) | `0x3C` `CBID_INDTILE_AUTOSLOPE` | **parcial runtime** | `IndustryTileSpecDef` conserva la máscara `IndustryTileCallbackMask::Autoslope`; `raise_land`, `lower_land` y `level_land` ejecutan ahora el callback sólo cuando la pendiente vieja/nueva no es empinada y el máximo absoluto se conserva, siguiendo `TerraformTile_Industry`. `CALLBACK_FAILED` o cero permiten el autoslope; cualquier resultado no nulo deja que la limpieza normal rechace la tesela. El contexto usa la industria viva, asocia por `m2`/huella y escribe de vuelta el PSA `7C`; las regresiones cubren semántica y rechazo. La generación automática aún no invoca este call site. |
 | Industry tiles | Action2 vars `0x40`–`0x44`, `0x60`–`0x62`, `0x7A` | **parcial runtime** | El renderer, shape-check, autoslope y los callbacks de animación construyen el scope por tesela con `m3` como random (incluidos triggers), etapa de obra, terreno, zona del pueblo más cercano, posición relativa, frame completo `m3hi`, información/frame/id de teselas vecinas y presencia de badges mediante GlobalVar `0x18`; el scope parent comparte stock/producción/historial de la `Industry` y sus registros PSA. El mismo contexto alimenta vistas planas y layouts `TileSeq`, con caché por fingerprint. `0x62` conserva los sentinelas `0xFFFF`/`0xFFFE` y traduce el local del mismo GRF. Faltan el resto de variables específicas del tile, callbacks de sonido y el call site de generación automática. |
-| Industry tiles | `0x2B`–`0x2C`, … | **almacenado** | `IndustryTileSpecDef.callback_mask` |
+| Industry tiles (`09`) | `0x2B` `CBID_INDTILE_CARGO_ACCEPTANCE`; `0x2C` `CBID_INDTILE_ACCEPT_CARGO` | **parcial runtime** | `IndustryTileSpecDef` conserva ambas máscaras y `AcceptsAllCargo`. CB2C se ejecuta primero y desempaqueta tres cargos locales de 5 bits; CB2B desempaqueta tres cantidades de 4 bits. El contexto incluye tesela, industria padre, CTT y PSA con writeback. La cobertura exacta por tesela llega a `station_coverage_at_with_newgrf` y la descarga la consulta; `CALLBACK_FAILED`/máscara ausente conserva el fallback estático. Cargos custom no resolubles y scopes restantes siguen pendientes. |
 | Industries (`0A`) | `0x28` `CBID_INDUSTRY_LOCATION` | **parcial runtime** (#266) | Call site: `place_industry_spec_def_layout_sandbox` (la variante histórica usa layout 0); respeta el bit `Location`, valida y materializa el layout elegido, carga Action3→Action2, pasa `IACT_USERCREATION` (`param2=2`) y expone el scope de construcción con `0x7A` (badges), `0x80`/`0x81` (TileIndex), `0x82` (pueblo), `0x86` (layout cero-based), `0x87` (terreno), `0x88` (zona), `0x89`/`0x8D` (distancia), `0x8A` (altura), `0x8B` (distancia a agua) y `0x8F` (random). La instancia conserva `selected_layout` uno-based, `random`, fundador, fecha/tipo de construcción, año de última producción y flags para el scope padre y `INDY`; se permiten sólo `FAILED`/`0x400`. Siguen pendientes otros tipos de creación, strings de error GRF y la semántica de callbacks de GameScript |
 | Industries | `0x29` `CBID_INDUSTRY_PRODUCTION_CHANGE`; `0x35` `CBID_INDUSTRY_MONTHLYPROD_CHANGE`; `0x14A` `CBID_INDUSTRY_DECIDE_COLOUR`; `0x15F` `CBID_INDUSTRY_PROD_CHANGE_BUILD` | **parcial runtime** | CB29 se ejecuta en el cambio diario de una industria NewGRF y CB35 después de actualizar las estadísticas mensuales; se decodifican `no-op`, halve/double, divide/multiply, increment/decrement, cierre, cambio estándar y set de `prod_level` vía registro `0x100`. CB15F fija el nivel inicial al fundar si el resultado está en `PRODLEVEL_MINIMUM..MAXIMUM`. CB14A se ejecuta al fundar, acepta sólo un resultado con bits 4..14 en cero y aplica el nibble de color; `CALLBACK_FAILED`/resultados inválidos conservan el color sorteado. Los Action2 `IndustryProductionSpriteGroup` v0/v1/v2 se parsean, se conservan y se resuelven a través de Action3→Action2 (incluidos grupos random/variational). Textos y la escala `ProdMultiHandling` siguen pendientes. |
 | Industries | `0x3D` `CBID_INDUSTRY_REFUSE_CARGO` | **parcial runtime** | El callback se ejecuta para cada entrada de una procesadora NewGRF después de comprobar que el lote requerido está disponible y antes de retirarlo de las estaciones. `param1=0` y `param2` recibe el índice de cargo local traducido por el label CTT; un resultado no nulo acepta y cero rechaza (OpenTTD invierte `ConvertBooleanCallback`); `CALLBACK_FAILED`, runtime ausente o cargo no traducible conserva la aceptación. La ruta normal de descarga ya materializa `DeliverGoodsToIndustry`: ordena por `DistanceMax`, excluye la industria de origen, recorre destinos hasta agotar la carga o `u16::MAX`, y registra `last_accepted`/`was_cargo_delivered`; los destinos se disparan después de `load_vehicles`, con producción vanilla, CB1 de llegada o diferimiento CB2 exclusivo. La negativa deja intacto el stock de estación y no dispara CB1/CB2 ni `CargoReceived`. Los historiales aceptados y producidos por salida y el monitor runtime `AddCargoDelivery` se actualizan y se reemiten para cargos representables; faltan `exclusive_supplier`/neutral stations, bindings de GameScript, aceptación exacta de estaciones y cargos custom. |
@@ -612,6 +617,17 @@ flag upstream `var 18 |= 0x100`; las transiciones posteriores usan el ordinal
 sin extensión. Ambos caminos hidratan el parent/PSA de la industria y tienen
 regresión del callback. Quedan sonido, scopes restantes, cargos custom y la
 generación automática fuera de este call site.
+
+Actualización #329-INDTILE-CARGO-ACCEPTANCE-058 (2026-09-03, commit `67ef8101`):
+las máscaras `0x2B`/`0x2C` de `IndustryTileSpecDef` ya tienen evaluación runtime.
+CB2C selecciona tres slots locales de cargo de 5 bits y CB2B sus cantidades de
+4 bits, usando el contexto completo de tesela e industria padre, CTT y writeback
+de PSA. La tabla exacta alimenta `station_coverage_at_with_newgrf` y el call site
+normal de `unload_vehicles`; un resultado cero no cae al proxy genérico de
+`Goods`. `CALLBACK_FAILED`, máscara ausente y las APIs legacy mantienen el
+fallback estático. La regresión cubre slots/cantidades y aceptación efectiva;
+los cargos custom no resolubles, la reatachación económica y callbacks restantes
+siguen pendientes, por lo que #329 continúa abierto.
 
 - Resto de CBs houses / airports / industries / objects (incluidos los huecos que aún no tienen call site), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.

@@ -130,6 +130,14 @@ normal. Se hidrata la instancia viva por `m2`/huella y se persiste su PSA `7C`.
 La generación automática, sonido e historiales mutables continúan pendientes;
 #329 permanece abierto.
 
+Actualización #329-INDUSTRY-COLOUR-038 (2026-09-03, `63d37f04`):
+`CBID_INDUSTRY_DECIDE_COLOUR` (`0x14A`) se ejecuta al fundar industrias
+NewGRF. Sólo un resultado con bits 4..14 en cero reemplaza el color aleatorio
+por su nibble bajo; `CALLBACK_FAILED`/resultados inválidos conservan el color
+vanilla. El callback usa el parent inicializado, persiste `7C` y tiene
+regresiones de unidad y colocación. Efectos especiales, cargos dinámicos y
+generación automática siguen pendientes; #329 permanece abierto.
+
 ### Propiedad de cada estado (evitar trabajo duplicado)
 
 | Área | Fuente canónica | Qué no debe duplicarse |

@@ -1183,6 +1183,8 @@ pub const CBID_INDUSTRY_LOCATION: u16 = 0x28;
 pub const CBID_INDUSTRY_PRODUCTION_CHANGE: u16 = 0x29;
 /// Callback industrias: cambio mensual de producción (`CBID_INDUSTRY_MONTHLYPROD_CHANGE`).
 pub const CBID_INDUSTRY_MONTHLY_PROD_CHANGE: u16 = 0x35;
+/// Callback industrias: decidir el color al fundar (`CBID_INDUSTRY_DECIDE_COLOUR`).
+pub const CBID_INDUSTRY_DECIDE_COLOUR: u16 = 0x14A;
 /// Callback industrias: nivel inicial al fundar (`CBID_INDUSTRY_PROD_CHANGE_BUILD`).
 pub const CBID_INDUSTRY_PROD_CHANGE_BUILD: u16 = 0x15F;
 /// Callback casas: permitir construcción (`CBID_HOUSE_ALLOW_CONSTRUCTION`).

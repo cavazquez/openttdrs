@@ -22,8 +22,9 @@ use crate::map::{Map, TileCoord, has_tile_water_ground};
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_AUTOSLOPE,
-    CBID_INDTILE_SHAPE_CHECK, CBID_INDUSTRY_LOCATION, CBID_INDUSTRY_MONTHLY_PROD_CHANGE,
-    CBID_INDUSTRY_PROD_CHANGE_BUILD, CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_OBJECT_LAND_SLOPE_CHECK,
+    CBID_INDTILE_SHAPE_CHECK, CBID_INDUSTRY_DECIDE_COLOUR, CBID_INDUSTRY_LOCATION,
+    CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_PROD_CHANGE_BUILD,
+    CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_OBJECT_LAND_SLOPE_CHECK,
     CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
     CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_COLOUR_MAPPING,
@@ -1832,6 +1833,33 @@ pub fn resolve_industry_production_change_build_callback(
             ..=u16::from(crate::industry::PRODLEVEL_MAXIMUM))
             .contains(&result))
     .then(|| u8::try_from(result).unwrap_or(crate::industry::PRODLEVEL_DEFAULT))
+}
+
+/// Ejecuta `CBID_INDUSTRY_DECIDE_COLOUR` (`0x14A`) al fundar una industria.
+///
+/// `OpenTTD` acepta sólo los cuatro bits bajos del resultado cuando los bits
+/// 4..14 son cero; un resultado fallido o inválido conserva el color sorteado
+/// por la construcción. El callback no consume un `Random()` propio: `var
+/// 0x8F`/el random del parent siguen siendo los de la industria inicializada.
+pub fn resolve_industry_decide_colour_callback(
+    def: &IndustrySpecDef,
+    industry: &mut Industry,
+) -> Option<u8> {
+    if !def.has_decide_colour_callback() {
+        return None;
+    }
+    let runtime = def.newgrf_runtime.as_ref()?;
+    let mut ctx = action2_eval_ctx_from_industry(industry, u32::from(industry.newgrf_random));
+    let result = runtime.resolve_callback_ctx_u16(
+        u16::from(def.newgrf_local_id),
+        CBID_INDUSTRY_DECIDE_COLOUR,
+        0,
+        0,
+        &mut ctx,
+    );
+    writeback_industry_persistent_registers(industry, &ctx);
+    (result != CALLBACK_FAILED && result & 0x7FF0 == 0)
+        .then(|| u8::try_from(result & 0x000F).unwrap_or(0))
 }
 
 /// Call site house: CB `0x17` allow construction (#266).
@@ -4406,6 +4434,97 @@ mod tests {
             None,
             "niveles fuera del rango válido conservan el valor vanilla"
         );
+    }
+
+    #[test]
+    fn industry_decide_colour_callback_accepts_only_a_valid_nibble() {
+        let mut def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: Vec::new(),
+            produced_cargo_labels: Vec::new(),
+            accepted_cargo_indices: Vec::new(),
+            accepted_cargo_labels: Vec::new(),
+            production_rates: Vec::new(),
+            input_multipliers: Vec::new(),
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_DECIDE_COLOUR_MASK,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "colour-callback".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_literal(0x000B))),
+        };
+        let mut industry = Industry::new(
+            TileCoord::new(4, 5),
+            crate::industry::IndustryKind::CoalMine,
+        )
+        .with_random_colour(3);
+        assert_eq!(
+            resolve_industry_decide_colour_callback(&def, &mut industry),
+            Some(11)
+        );
+
+        // Bits 4..14 carry an error/result payload and invalidate the color;
+        // CALLBACK_FAILED also leaves the construction's random color intact.
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal(0x001B)));
+        assert_eq!(
+            resolve_industry_decide_colour_callback(&def, &mut industry),
+            None
+        );
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(CALLBACK_FAILED)));
+        assert_eq!(
+            resolve_industry_decide_colour_callback(&def, &mut industry),
+            None
+        );
+        assert_eq!(industry.random_colour, 3);
+    }
+
+    #[test]
+    fn industry_decide_colour_callback_is_applied_during_newgrf_placement() {
+        let mut state = crate::GameState::new(16, 16);
+        state.industry_spec_catalog.push(IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: vec![vec![crate::industry_spec::IndustryLayoutTile {
+                x: 0,
+                y: 0,
+                gfx: 175,
+            }]],
+            produced_cargo_indices: Vec::new(),
+            produced_cargo_labels: Vec::new(),
+            accepted_cargo_indices: Vec::new(),
+            accepted_cargo_labels: Vec::new(),
+            production_rates: Vec::new(),
+            input_multipliers: Vec::new(),
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_DECIDE_COLOUR_MASK,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "placement-colour".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_literal(9))),
+        });
+        assert!(
+            crate::command::place_industry_spec_def_layout_sandbox(
+                &mut state,
+                TileCoord::new(4, 4),
+                37,
+                0,
+                0x1234,
+            )
+            .is_ok()
+        );
+        assert_eq!(state.industries[0].random_colour, 9);
     }
 
     #[test]

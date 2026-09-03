@@ -705,6 +705,11 @@ pub fn place_industry_spec_def_layout_sandbox(
     {
         industry.prod_level = initial_level;
     }
+    if let Some(random_colour) =
+        crate::newgrf_callback::resolve_industry_decide_colour_callback(&def, &mut industry)
+    {
+        industry.random_colour = random_colour;
+    }
     state.industries.push(industry);
     state.economy.money -= 250;
     Ok(())

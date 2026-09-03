@@ -1,8 +1,9 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-03** (commit `12e6c751`, shape-check, foundations,
+Actualizada: **2026-09-03** (commit `a4dba228`, shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
-`PlantOnBuild`, rehidratación SAV legacy, reatachación de industrias al
+`PlantOnBuild`, rehidratación SAV legacy, historiales aceptados runtime,
+reatachación de industrias al
 catálogo NewGRF; triggers, PSA parent y `CargoTypesUnlimited` ya publicados).
 
 Referencia: commit `14ec60f248547d4d062a1160f0fc26d742319888`,
@@ -514,6 +515,23 @@ CB1 de llegada, CB2 exclusivo diferido y matriz vanilla sin callback; la
 regresión cubre exclusión, fecha, diferimiento y producción. Monitor,
 exclusividad/neutral stations, aceptación exacta de estaciones, historiales de
 salida y cargos custom siguen pendientes; `#329` continúa abierto.
+
+Actualización #329-INDUSTRY-HISTORY-049 (2026-09-03, commit `a4dba228`):
+`INDY.accepted[].history` ya se conecta al runtime. La entrega incrementa el
+mes actual y `last_accepted`; el barrido diario acumula waiting y el rollover
+calcula el promedio, rota 37 registros nativos y actualiza `valid_history`.
+Importación y exportación hidratan/reemiten historial, acumulador y máscara;
+las regresiones cubren entrega, rollover, SAV y chunk `INDY`. Los historiales
+de producción por salida, monitor/exclusividad y cargos custom permanecen
+parciales; `#329` continúa abierto.
+
+Corrección vigente del scope de industrias: en `a4dba228`,
+`INDY.accepted[].history`, `accepted[].accumulated_waiting` y `valid_history`
+ya alimentan el runtime para cargos representables y vuelven al chunk `INDY`
+al exportar. Las menciones anteriores que los describen como sólo conservados
+en round-trip son históricas; permanecen parciales los historiales de
+producción por salida, los cargos custom y los callbacks que todavía no tienen
+call site.
 
 - Resto de CBs houses / airports / industries / objects (incluidos los huecos que aún no tienen call site), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.

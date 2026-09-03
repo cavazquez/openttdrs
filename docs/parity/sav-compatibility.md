@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-03**,
-`main` con base funcional `12e6c751`, posterior al writeback canónico de `CITY`,
+`main` con base funcional `a4dba228`, posterior al writeback canónico de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
@@ -15,6 +15,13 @@ cambia la prioridad global, la fila resumida de `PARIDAD.md`.
 
 `✅` cubierto en el corte indicado; `🟡` best-effort o subconjunto; `❌` no se
 preserva. Importar un dato no implica que el exportador lo escriba.
+
+Corrección vigente: desde `a4dba228`, `INDY.accepted[].history`,
+`accepted[].accumulated_waiting` y `valid_history` se hidratan desde SAV,
+participan del runtime de entrega/barrido/rollover y se reemiten al guardar
+para cargos representables. Las referencias históricas a un mero passthrough
+no describen este corte; los historiales de producción por salida y cargos
+custom continúan parciales.
 
 | Área | Importar `.sav` de OpenTTD | Exportar `.sav` para OpenTTD | Límite y evidencia |
 |---|---|---|---|

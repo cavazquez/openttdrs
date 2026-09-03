@@ -25,8 +25,8 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-03
 
-Base funcional publicada en `origin/main`: **`12e6c751`** (`industry: deliver
-station cargo directly to nearby industries`). Este handoff documental incluye el afterload
+Base funcional publicada en `origin/main`: **`a4dba228`** (`industry: update
+accepted cargo histories at runtime`). Este handoff documental incluye la entrega directa
 SAV de campos legacy (`56aa7858`) y los slots vacíos legacy (`9f2ecc31`), y se publica después de las etapas
 de rechazo temporal (`65682a42`), cargos dinámicos (`389109c1`) y
 `PlantOnBuild` manual (`628d1fb9`); es el punto de reanudación y el código
@@ -41,8 +41,8 @@ publicado coincide con este árbol.
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
 
-Última validación de `12e6c751`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **1.980** tests de core y **1.064** de cliente (2 ignorados); la matriz
+Última validación de `a4dba228`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **1.982** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.
@@ -230,6 +230,24 @@ huella y la regresión cubre exclusión, fecha, diferimiento y producción. El
 monitor `AddCargoDelivery`, `exclusive_supplier`/neutral stations, cargos
 custom, historiales por salida y la aceptación exacta de estaciones siguen
 pendientes; `#329` permanece abierto.
+
+Actualización #329-INDUSTRY-HISTORY-049 (2026-09-03, commit `a4dba228`):
+`INDY.accepted[].history` ya forma parte del estado runtime. Cada entrega
+incrementa el registro del mes actual y conserva `last_accepted`; el barrido
+diario suma `accepted[].waiting` y el cierre mensual calcula el promedio,
+rota hasta los 37 registros nativos y actualiza `valid_history`. El importador
+hidrata historial, acumulador y máscara desde SAV, y el writer usa esos valores
+cuando la industria fue mutada, manteniendo el passthrough para filas opacas.
+La regresión cubre entrega/rollover, hidratación y emisión del chunk `INDY`.
+Los historiales de producción por salida, cargos custom y `AddCargoDelivery`
+siguen pendientes; `#329` no se cierra.
+
+Corrección del corte canónico: cualquier fila histórica que todavía describa
+`accepted[].history`, `accepted[].accumulated_waiting` o `valid_history` como
+simple passthrough queda superada por `a4dba228`. Esos tres campos se hidratan,
+actualizan y reemiten para cargos representables; sólo los historiales de
+producción por salida, cargos custom y mutaciones fuera de ese camino siguen
+parciales.
 
 ## Orden recomendado
 

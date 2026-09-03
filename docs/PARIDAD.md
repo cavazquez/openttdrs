@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `12e6c751`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `a4dba228`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -46,6 +46,14 @@ fila antigua en el mismo cambio.
 El pin es la referencia de evidencia: un checkout local de OpenTTD con otro
 commit o cambios sin confirmar sirve para investigar, pero no para declarar
 paridad hasta regenerar la evidencia contra este pin.
+
+Corrección vigente del corte: `a4dba228` conecta al runtime los campos
+`INDY.accepted[].history`, `accepted[].accumulated_waiting` y `valid_history`
+para cargos representables; las entregas, el barrido diario y el rollover
+mensual los actualizan, y el writer los reemite. Las frases de tablas antiguas
+que indiquen que esos campos son sólo passthrough quedan superadas por este
+corte. Historiales de producción por salida, cargos custom y callbacks sin
+call site siguen siendo brechas reales.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

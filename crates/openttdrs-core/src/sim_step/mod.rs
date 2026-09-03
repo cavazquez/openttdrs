@@ -211,6 +211,7 @@ pub(crate) fn step(state: &mut GameState) {
     // OpenTTD: LoadUnloadStation antes de Vehicle::Tick (movimiento).
     cargo_transfer::unload_vehicles(state, t, &loaded_this_tick, &mut unloaded_this_tick);
     cargo_transfer::load_vehicles(state, &mut loaded_this_tick, &unloaded_this_tick);
+    cargo_transfer::trigger_pending_industry_deliveries(state);
     // Ops que pueden cambiar destino van tras la carga (p. ej. wander orderless).
     let _ = phase_vehicle_ops_pre_move(state);
     trigger_pending_train_station_departures(state);
@@ -283,6 +284,7 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     let cargo_phase = Instant::now();
     cargo_transfer::load_vehicles(state, &mut loaded_this_tick, &unloaded_this_tick);
     timings.cargo_load_ns = nanos(cargo_phase);
+    cargo_transfer::trigger_pending_industry_deliveries(state);
     timings.cargo_transfer_ns = nanos(p0);
 
     let p0 = Instant::now();

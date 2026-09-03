@@ -220,6 +220,112 @@ fn industry_special_effect(
     }
 }
 
+/// Ejecuta `TriggerIndustryProduction` para las industrias que recibieron
+/// carga durante la pasada de una estación.
+///
+/// `OpenTTD` no produce en mitad de `LoadUnloadStation`: primero termina de
+/// descargar/cargar todos los vehículos y recién entonces procesa el conjunto
+/// `_cargo_delivery_destinations`. El llamador mantiene ese orden mediante la
+/// cola efímera de [`SimulationRuntime`].
+pub(super) fn trigger_delivered_industries(state: &mut GameState, destinations: &[usize]) {
+    for &index in destinations {
+        if index >= state.industries.len() {
+            continue;
+        }
+        let newgrf_def = state.industries[index].newgrf_type_id.and_then(|type_id| {
+            state
+                .industry_spec_catalog
+                .iter()
+                .find(|def| def.id == type_id)
+                .cloned()
+        });
+        let callback_on_arrival = newgrf_def.as_ref().is_some_and(
+            crate::industry_spec::IndustrySpecDef::has_production_cargo_arrival_callback,
+        );
+        let callback_on_tick = newgrf_def
+            .as_ref()
+            .is_some_and(crate::industry_spec::IndustrySpecDef::has_production_256_ticks_callback);
+
+        state.industries[index].was_cargo_delivered = true;
+        let output_cargos = state.industries[index].produced_cargos();
+        let output_before: Vec<u32> = output_cargos
+            .iter()
+            .map(|&cargo| {
+                if Some(cargo) == state.industries[index].newgrf_output_cargo
+                    || cargo == state.industries[index].output_cargo()
+                {
+                    state.industries[index].stock
+                } else if Some(cargo) == state.industries[index].newgrf_secondary_output_cargo
+                    || Some(cargo) == state.industries[index].secondary_output_cargo()
+                {
+                    state.industries[index].secondary_stock
+                } else {
+                    state.industries[index].extra_produced_cargo(cargo)
+                }
+            })
+            .collect();
+
+        if callback_on_arrival {
+            if let Some(def) = newgrf_def.as_ref() {
+                crate::newgrf_callback::apply_industry_production_callback(
+                    def,
+                    &mut state.industries[index],
+                    0,
+                    &mut state.random,
+                );
+            }
+        } else if !callback_on_tick {
+            state.industries[index].process_accepted_cargo_without_callback();
+        }
+
+        let produced = output_cargos
+            .iter()
+            .enumerate()
+            .map(|(output_idx, &cargo)| {
+                let current = if Some(cargo) == state.industries[index].newgrf_output_cargo
+                    || cargo == state.industries[index].output_cargo()
+                {
+                    state.industries[index].stock
+                } else if Some(cargo) == state.industries[index].newgrf_secondary_output_cargo
+                    || Some(cargo) == state.industries[index].secondary_output_cargo()
+                {
+                    state.industries[index].secondary_stock
+                } else {
+                    state.industries[index].extra_produced_cargo(cargo)
+                };
+                current.saturating_sub(output_before[output_idx])
+            })
+            .sum::<u32>();
+        if produced > 0 {
+            state.stats.industry_cargo_units_produced = state
+                .stats
+                .industry_cargo_units_produced
+                .saturating_add(u64::from(produced));
+            state.industries[index].produced_total = state.industries[index]
+                .produced_total
+                .saturating_add(u64::from(produced));
+            state.industries[index].last_prod_year = state.economy_timer.year;
+        }
+
+        let tiles = state.industries[index].tiles.clone();
+        let pos = state.industries[index].pos;
+        let footprint = if tiles.is_empty() { vec![pos] } else { tiles };
+        let dirty = crate::map::trigger_industry_randomisation_at_with_catalog_and_world(
+            &mut state.map,
+            &footprint,
+            crate::map::IndustryRandomTrigger::CargoReceived,
+            state.world_seed,
+            state.tick.get(),
+            &mut state.industries,
+            &state.towns,
+            &state.industry_tile_spec_catalog,
+            &state.industry_spec_catalog,
+            state.climate,
+        );
+        state.runtime.industry_tile_dirty.extend(dirty);
+    }
+}
+
 fn apply_monthly_inflation_and_fluctuations(state: &mut GameState) {
     let calendar_year = state.calendar.year;
     if !state

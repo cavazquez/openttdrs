@@ -283,6 +283,122 @@ fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
     }
 }
 
+/// Entrega carga a las industrias cubiertas por una estación.
+///
+/// Es el equivalente reducido de `DeliverGoodsToIndustry`: las industrias se
+/// ordenan por la menor distancia `DistanceMax` de cualquiera de sus teselas,
+/// se excluye la industria de origen y se recorren los slots hasta agotar la
+/// cantidad o la capacidad `uint16` de `AcceptedCargo::waiting`. El callback
+/// `CBID_INDUSTRY_REFUSE_CARGO` puede omitir una industria temporalmente; la
+/// producción se difiere hasta terminar toda la fase de carga/descarga.
+fn deliver_goods_to_industries(
+    state: &mut GameState,
+    station_idx: usize,
+    cargo: CargoType,
+    amount: u32,
+    source: TileCoord,
+) -> (u32, Vec<usize>) {
+    if amount == 0 {
+        return (0, Vec::new());
+    }
+    let Some(station) = state.stations.get(station_idx) else {
+        return (0, Vec::new());
+    };
+    let station_pos = station.pos;
+    let radius = station::station_catchment_radius(station);
+    let mut candidates: Vec<(usize, u32, u16)> = state
+        .industries
+        .iter()
+        .enumerate()
+        .filter(|(_, industry)| {
+            !industry.contains_tile(source)
+                && industry.accepts_cargo(cargo)
+                && station::industry_in_station_coverage(industry, station_pos, radius)
+        })
+        .map(|(index, industry)| {
+            let distance = industry
+                .tiles
+                .iter()
+                .copied()
+                .chain(std::iter::once(industry.pos))
+                .map(|tile| {
+                    let dx = (tile.x - station_pos.x).unsigned_abs();
+                    let dy = (tile.y - station_pos.y).unsigned_abs();
+                    dx.max(dy)
+                })
+                .min()
+                .unwrap_or(0);
+            (index, distance, industry.instance_id)
+        })
+        .collect();
+    // `IndustryCompare` uses distance then the pool index as a tie breaker.
+    // `instance_id` is the native pool index for SAV entities, while the
+    // vector index remains a deterministic fallback for procedural games.
+    candidates
+        .sort_unstable_by_key(|&(index, distance, instance_id)| (distance, instance_id, index));
+
+    let mut remaining = amount;
+    let mut accepted_total = 0_u32;
+    let mut destinations = Vec::new();
+    let accepted_date = state
+        .economy_timer
+        .date
+        .saturating_add(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR);
+    for (industry_idx, _, _) in candidates {
+        if remaining == 0 {
+            break;
+        }
+        let newgrf_def = state.industries[industry_idx]
+            .newgrf_type_id
+            .and_then(|type_id| {
+                state
+                    .industry_spec_catalog
+                    .iter()
+                    .find(|def| def.id == type_id)
+                    .cloned()
+            });
+        if newgrf_def.as_ref().and_then(|def| {
+            crate::newgrf_callback::resolve_industry_refuse_cargo_callback(
+                def,
+                &mut state.industries[industry_idx],
+                cargo,
+            )
+        }) == Some(true)
+        {
+            continue;
+        }
+        let waiting = state.industries[industry_idx].accepted_cargo_waiting(cargo);
+        let room = u32::from(u16::MAX).saturating_sub(waiting);
+        let accepted = remaining.min(room);
+        if accepted == 0 {
+            continue;
+        }
+        state.industries[industry_idx].record_accepted_cargo(cargo, accepted, accepted_date);
+        state.industries[industry_idx].was_cargo_delivered = true;
+        // Keep one destination per station unload even when several packets of
+        // the same consist carry this cargo; OpenTTD uses a set for this list.
+        if !destinations.contains(&industry_idx) {
+            destinations.push(industry_idx);
+        }
+        remaining -= accepted;
+        accepted_total = accepted_total.saturating_add(accepted);
+    }
+
+    (accepted_total, destinations)
+}
+
+/// Consume the deferred `DeliverGoodsToIndustry` set after vehicle loading.
+///
+/// This ordering mirrors `LoadUnloadStation`: production triggered by a
+/// delivery cannot be loaded by another vehicle until the next station pass.
+pub(super) fn trigger_pending_industry_deliveries(state: &mut GameState) {
+    let pending = std::mem::take(&mut state.runtime.pending_industry_deliveries);
+    if pending.is_empty() {
+        return;
+    }
+    super::economy::trigger_delivered_industries(state, &pending);
+}
+
 #[allow(clippy::too_many_lines)]
 pub(super) fn unload_vehicles(
     state: &mut GameState,
@@ -292,6 +408,7 @@ pub(super) fn unload_vehicles(
 ) {
     refresh_runtime_vehicle_capacities(state);
     let mut link_graph_dirty = false;
+    let mut delivered_industries = Vec::new();
     for (i, loaded_flag) in loaded_this_tick
         .iter()
         .enumerate()
@@ -475,6 +592,18 @@ pub(super) fn unload_vehicles(
                     }
                 }
                 crate::cargo_packet::CargoUnloadAction::Deliver => {
+                    let (_, destinations) = deliver_goods_to_industries(
+                        state,
+                        station_idx,
+                        packet.cargo,
+                        u32::from(packet.count),
+                        packet.source,
+                    );
+                    for industry_idx in destinations {
+                        if !delivered_industries.contains(&industry_idx) {
+                            delivered_industries.push(industry_idx);
+                        }
+                    }
                     delivered_units = delivered_units.saturating_add(u32::from(packet.count));
                     let gross_part = part;
                     let mut deliverer_part = part;
@@ -513,13 +642,17 @@ pub(super) fn unload_vehicles(
         }
 
         let town_cargo = cargo_type.is_town_cargo();
-        if town_cargo && delivered_units > 0 {
-            let entry = state.stations[station_idx].goods.get_mut(cargo_type);
+        if delivered_units > 0 {
             // `GoodsEntry::State` mirrors the upstream station flags used by
-            // NewGRF var 69. A final delivery is the event that marks cargo
-            // as ever/currently accepted; the bigtick flag is cleared by the
-            // next acceptance interval.
-            entry.mark_final_delivery();
+            // NewGRF var 69. A final delivery (including direct delivery to
+            // an industry) marks cargo as ever/currently accepted; the
+            // bigtick flag is cleared by the next acceptance interval.
+            state.stations[station_idx]
+                .goods
+                .get_mut(cargo_type)
+                .mark_final_delivery();
+        }
+        if town_cargo && delivered_units > 0 {
             town::record_delivery_near_town(
                 &mut state.towns,
                 station_pos,
@@ -644,6 +777,16 @@ pub(super) fn unload_vehicles(
         }
         if state.vehicles[i].cargo == 0 {
             trigger_vehicle_empty_if_consist_empty(state, i);
+        }
+    }
+
+    for industry_idx in delivered_industries {
+        if !state
+            .runtime
+            .pending_industry_deliveries
+            .contains(&industry_idx)
+        {
+            state.runtime.pending_industry_deliveries.push(industry_idx);
         }
     }
 
@@ -1395,6 +1538,66 @@ mod tests {
         assert_eq!(positive_money(0), 0);
         assert_eq!(positive_money(42), 42);
         assert_eq!(positive_money(i64::MAX), i64::MAX as u64);
+    }
+
+    #[test]
+    fn direct_delivery_skips_source_and_defers_industry_production() {
+        let mut state = GameState::new(16, 16);
+        let station_pos = TileCoord::new(5, 5);
+        state.stations.push(crate::Station::new_with_kind(
+            station_pos,
+            crate::station::StopKind::TruckStop,
+        ));
+        let source_pos = TileCoord::new(5, 4);
+        let destination_pos = TileCoord::new(5, 6);
+        state.industries.push(
+            crate::Industry::with_tiles_spec(
+                source_pos,
+                crate::IndustryKind::Factory,
+                crate::IndustrySpec::Factory,
+                vec![source_pos],
+                0,
+            )
+            .with_instance_id(3),
+        );
+        state.industries.push(
+            crate::Industry::with_tiles_spec(
+                destination_pos,
+                crate::IndustryKind::Factory,
+                crate::IndustrySpec::Factory,
+                vec![destination_pos],
+                0,
+            )
+            .with_instance_id(4),
+        );
+
+        let (accepted, destinations) =
+            deliver_goods_to_industries(&mut state, 0, CargoType::Livestock, 12, source_pos);
+        assert_eq!(accepted, 12);
+        assert_eq!(destinations, vec![1]);
+        assert_eq!(
+            state.industries[0].accepted_cargo_waiting(CargoType::Livestock),
+            0
+        );
+        assert_eq!(
+            state.industries[1].accepted_cargo_waiting(CargoType::Livestock),
+            12
+        );
+        assert_eq!(
+            state.industries[1].last_accepted_date(CargoType::Livestock),
+            crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR
+        );
+        assert!(state.industries[1].was_cargo_delivered);
+        assert_eq!(state.industries[1].stock, 0);
+
+        state.runtime.pending_industry_deliveries = destinations;
+        trigger_pending_industry_deliveries(&mut state);
+        assert_eq!(
+            state.industries[1].accepted_cargo_waiting(CargoType::Livestock),
+            0
+        );
+        assert_eq!(state.industries[1].stock, 12);
+        assert_eq!(state.stats.industry_cargo_units_produced, 12);
     }
 
     #[test]

@@ -1373,6 +1373,151 @@ impl Industry {
         self.newgrf_accepted_cargo_waiting.take(cargo, amount)
     }
 
+    /// ¿La industria tiene un slot de entrada para `cargo`?
+    ///
+    /// `DeliverGoodsToIndustry` consulta la lista efectiva de `accepted`, no
+    /// la lista de insumos que casualmente se usa en un ciclo de producción.
+    /// Esto importa para sumideros y para GRF que dejan huecos `INVALID_CARGO`
+    /// o declaran entradas que no tienen multiplicador de salida.
+    #[must_use]
+    pub fn accepts_cargo(&self, cargo: CargoType) -> bool {
+        if !self.newgrf_input_cargo_slots.is_empty() {
+            return self
+                .newgrf_input_cargo_slots
+                .iter()
+                .flatten()
+                .any(|&candidate| candidate == cargo);
+        }
+        if self.newgrf_type_id.is_some() {
+            return self
+                .newgrf_processing_inputs
+                .iter()
+                .any(|input| input.cargo == cargo);
+        }
+        if let Some(spec) = self.spec {
+            return spec.accepted_cargos().contains(&cargo);
+        }
+        match self.kind {
+            IndustryKind::Factory => IndustrySpec::Factory.accepted_cargos().contains(&cargo),
+            _ => false,
+        }
+    }
+
+    /// Aplica la ruta vanilla de `TriggerIndustryProduction` a las entradas
+    /// que ya fueron aceptadas por la industria.
+    ///
+    /// La función se usa después de descargar vehículos, cuando no hay CB1
+    /// de llegada. Consume cada cola `accepted[i].waiting` y agrega la salida
+    /// de cada columna de la matriz de multiplicadores. Devuelve las unidades
+    /// realmente añadidas a los stocks (respetando la capacidad), para que el
+    /// llamador actualice estadísticas y deltas mensuales.
+    pub fn process_accepted_cargo_without_callback(&mut self) -> u32 {
+        let inputs = self.processing_inputs().to_vec();
+        let outputs = self.produced_cargos();
+        if inputs.is_empty() {
+            // Un sumidero sin matriz todavía debe retirar la entrega de su
+            // cola; de lo contrario la misma carga se volvería a procesar en
+            // cada callback posterior.
+            for cargo in ALL_CARGO_TYPES {
+                let _ = self.take_accepted_cargo_waiting(cargo, u32::MAX);
+            }
+            return 0;
+        }
+
+        let mut waiting = Vec::with_capacity(inputs.len());
+        for input in &inputs {
+            let amount = self.take_accepted_cargo_waiting(input.cargo, u32::MAX);
+            waiting.push(amount);
+        }
+        // La tabla vanilla puede aceptar cargos con multiplicador cero (por
+        // ejemplo Fruit/Maize en la planta de alimentos). `TriggerIndustryProduction`
+        // también retira esos slots aunque no generen salida; no dejarlos en
+        // la cola evita que una entrega vieja se procese indefinidamente.
+        for cargo in ALL_CARGO_TYPES {
+            let _ = self.take_accepted_cargo_waiting(cargo, u32::MAX);
+        }
+        if outputs.is_empty() {
+            return 0;
+        }
+
+        let stock_before: Vec<u32> = outputs
+            .iter()
+            .map(|&cargo| self.output_stock(cargo))
+            .collect();
+        for (input_idx, amount) in waiting.into_iter().enumerate() {
+            if amount == 0 {
+                continue;
+            }
+            for (output_idx, &cargo) in outputs.iter().enumerate() {
+                let multiplier = self.processing_multiplier_for_output(
+                    &inputs,
+                    input_idx,
+                    output_idx,
+                    outputs.len(),
+                );
+                let produced = amount
+                    .saturating_mul(u32::from(multiplier))
+                    .saturating_div(256);
+                if produced == 0 {
+                    continue;
+                }
+                if self.newgrf_type_id.is_some() {
+                    self.add_newgrf_produced_cargo(cargo, produced);
+                } else if output_idx == 0 {
+                    self.stock = self.stock.saturating_add(produced).min(self.capacity);
+                } else if output_idx == 1 {
+                    self.secondary_stock = self
+                        .secondary_stock
+                        .saturating_add(produced)
+                        .min(self.capacity);
+                }
+            }
+        }
+        outputs
+            .iter()
+            .enumerate()
+            .map(|(index, &cargo)| self.output_stock(cargo).saturating_sub(stock_before[index]))
+            .sum()
+    }
+
+    fn output_stock(&self, cargo: CargoType) -> u32 {
+        if Some(cargo) == self.newgrf_output_cargo || cargo == self.output_cargo() {
+            self.stock
+        } else if Some(cargo) == self.newgrf_secondary_output_cargo
+            || Some(cargo) == self.secondary_output_cargo()
+        {
+            self.secondary_stock
+        } else {
+            self.extra_produced_cargo(cargo)
+        }
+    }
+
+    fn processing_multiplier_for_output(
+        &self,
+        inputs: &[IndustryProcessingInput],
+        input_idx: usize,
+        output_idx: usize,
+        output_count: usize,
+    ) -> u16 {
+        if output_idx == 0 {
+            return inputs.get(input_idx).map_or(0, |input| input.multiplier);
+        }
+        if self.newgrf_type_id.is_none() {
+            return 0;
+        }
+        if output_idx == 1 {
+            return self
+                .newgrf_processing_secondary_multipliers
+                .get(input_idx)
+                .copied()
+                .unwrap_or(0);
+        }
+        self.newgrf_processing_extra_multipliers
+            .get(input_idx.saturating_mul(output_count.saturating_sub(2)) + output_idx - 2)
+            .copied()
+            .unwrap_or(0)
+    }
+
     /// Registra una salida de callback. Las dos salidas legacy se reflejan en
     /// `stock`/`secondary_stock`; el resto queda disponible para el transporte
     /// `NewGRF` sin alterar el formato histórico del estado.

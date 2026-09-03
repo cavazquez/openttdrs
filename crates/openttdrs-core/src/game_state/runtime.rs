@@ -50,6 +50,14 @@ pub struct SimulationRuntime {
     /// Teselas industriales con `m1` mutado este tick (obra P6 → remap cliente).
     pub industry_tile_dirty: Vec<TileCoord>,
 
+    /// Industrias que recibieron una entrega directa durante `LoadUnloadStation`.
+    ///
+    /// `OpenTTD` difiere `TriggerIndustryProduction` hasta que terminó de
+    /// descargar/cargar todos los vehículos de la estación. El vector evita
+    /// producir la carga nueva antes de la fase de carga del mismo tick y se
+    /// consume justo después de `load_vehicles`.
+    pub pending_industry_deliveries: Vec<usize>,
+
     /// Teselas de paisaje (nieve estacional, etc.) mutadas este tick → remap cliente.
     pub landscape_tile_dirty: Vec<TileCoord>,
 
@@ -216,6 +224,7 @@ impl SimulationRuntime {
             pending_income_popups: Vec::new(),
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
+            pending_industry_deliveries: Vec::new(),
             landscape_tile_dirty: Vec::new(),
             tile_loop_visited: Vec::new(),
             active_house_lifts: HashSet::new(),
@@ -279,6 +288,7 @@ impl SimulationRuntime {
         self.pending_income_popups.clear();
         self.pending_sim_events.discard_all();
         self.industry_tile_dirty.clear();
+        self.pending_industry_deliveries.clear();
         self.landscape_tile_dirty.clear();
         self.tile_loop_visited.clear();
         self.signal_tile_dirty.clear();

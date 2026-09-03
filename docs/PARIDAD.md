@@ -121,6 +121,15 @@ La semántica de GRF anteriores a v7 (booleano invertido) y de v7+ (éxito sólo
 generación automática, sonido e historiales mutables siguen pendientes, por lo
 que #329 permanece abierto.
 
+Actualización #329-INDTILE-AUTOSLOPE-037 (2026-09-03, `fe70a433`): el
+preflight de `raise_land`, `lower_land` y `level_land` ejecuta ahora
+`CBID_INDTILE_AUTOSLOPE` (`0x3C`) con la guarda de `TerraformTile_Industry`:
+tesela vieja/nueva no empinada y máximo absoluto sin cambio. `CALLBACK_FAILED` o
+cero conservan la industria y el autoslope; un valor no nulo cae en la limpieza
+normal. Se hidrata la instancia viva por `m2`/huella y se persiste su PSA `7C`.
+La generación automática, sonido e historiales mutables continúan pendientes;
+#329 permanece abierto.
+
 ### Propiedad de cada estado (evitar trabajo duplicado)
 
 | Área | Fuente canónica | Qué no debe duplicarse |

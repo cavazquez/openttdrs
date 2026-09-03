@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `6e3ad37a`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `628d1fb9`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -185,6 +185,14 @@ acepta resultados booleanos válidos y aplica fallback nativo ante
 geometría de campos, se corta un árbol adulto de la espiral 40×40 y se agregan
 45 unidades al primer output. `PlantOnBuild`, escalas/sonidos y goldens
 integrales siguen pendientes; #329 permanece abierto.
+
+Actualización #329-INDUSTRY-PLANT-ON-BUILD-044 (2026-09-03, `628d1fb9`):
+la colocación manual vanilla de `Farm`/`FarmTropic` y la fundación NewGRF que
+declara `IndustryBehaviour::PlantOnBuild` ejecutan 50 intentos de
+`PlantRandomFarmField` después de materializar la industria. Se comparte la
+geometría, cercas, límites climáticos y consumo del RNG global con generación
+y efectos periódicos; cada campo conserva el `IndustryID` en MAP2. Falta el
+hook de afterload/rehidratación SAV, además de escalas/sonidos y goldens.
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

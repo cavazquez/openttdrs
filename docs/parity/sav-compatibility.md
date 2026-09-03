@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-03**,
-`main` con base funcional `a4dba228`, posterior al writeback canónico de `CITY`,
+`main` con base funcional `26a915db`, posterior al writeback canónico de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
@@ -16,12 +16,18 @@ cambia la prioridad global, la fila resumida de `PARIDAD.md`.
 `✅` cubierto en el corte indicado; `🟡` best-effort o subconjunto; `❌` no se
 preserva. Importar un dato no implica que el exportador lo escriba.
 
-Corrección vigente: desde `a4dba228`, `INDY.accepted[].history`,
-`accepted[].accumulated_waiting` y `valid_history` se hidratan desde SAV,
-participan del runtime de entrega/barrido/rollover y se reemiten al guardar
-para cargos representables. Las referencias históricas a un mero passthrough
-no describen este corte; los historiales de producción por salida y cargos
-custom continúan parciales.
+Corrección vigente: desde `26a915db`, `INDY.accepted[].history`,
+`accepted[].accumulated_waiting`, `INDY.produced[].history` y `valid_history`
+se hidratan desde SAV, participan del runtime de entrega/transferencia/barrido/
+rollover y se reemiten al guardar para cargos representables. Las referencias
+históricas a un mero passthrough no describen este corte; cargos custom y
+mutaciones económicas fuera de esos caminos continúan parciales.
+
+Actualización del corte `26a915db`: `INDY.produced[].history` también se
+hidrata, se actualiza por salida durante transferencia/carga y se reemite con
+la ventana nativa de 61 registros. El writer conserva passthrough sólo cuando
+la salida no fue mutada en runtime; cargos custom y mutaciones fuera de estas
+rutas siguen siendo best-effort.
 
 | Área | Importar `.sav` de OpenTTD | Exportar `.sav` para OpenTTD | Límite y evidencia |
 |---|---|---|---|
@@ -41,7 +47,7 @@ custom continúan parciales.
 | Objetos | 🟡 lee las filas base de `OBJS` (ObjectID, ubicación, huella, town, fecha, color, vista y tipo) y el mapping `OBID` (GRFID, IDs local/sustituto), además de usar el pool para traducir tipos del mapa | 🟡 conserva `OBJS`/`OBID` sin cambios mientras no se muten objetos; tras construir/demoler reconstruye las filas base de `OBJS` y puede reconstruir `OBID` desde el catálogo; el cargador usa `OBID` para conservar IDs asignados | Las columnas futuras de `OBJS`, mappings faltantes y el runtime completo de specs/callbacks de objetos siguen pendientes |
 | Ajustes | 🟡 lee el subconjunto ejecutado por el core de `PATS`/`OPTS`: construcción, pathfinding, aceleración de trenes **y carretera**, averías, subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo | 🟡 escribe ese subconjunto en `PATS` y conserva `GSET`/`ENGN`/`SRND` nativos como passthrough | [`sav/settings.rs`](../../crates/openttdrs-core/src/sav/settings.rs), [`sav/landscape.rs`](../../crates/openttdrs-core/src/sav/landscape.rs) |
 | Compañías y noticias | 🟡 dinero/préstamo/límite de préstamo individual (`PLYR.max_loan`, incluido el centinela global), meses de bancarrota/color/nombre/presidente/`face`/`face_style`/indicador AI, `settings.*`, 23 `PLYR.liveries` e historial trimestral (`cur_economy` + hasta 24 `old_economy`, incluido `delivered_cargo`) | 🟡 `PLYR` con esos campos, incluidas las libreas nativas (SLV355) y el orden más-reciente-primero de `old_economy`; un override de préstamo no es reemplazado por inflación | Faltan flags completos. La cola propia completa queda en JSON; los consumidores de noticias siguen fuera del formato nativo |
-| NewGRF | ✅ lee `NGRF` como tabla y restaura archivo, GRFID, versión y hasta 128 parámetros activos; `ENGN`, `EIDS` y mappings no modelados siguen como chunks opacos; las colas `INDY.accepted`/`produced`, `accepted[].last_accepted`, `selected_layout`, `random`, metadata de fundador/fechas/tipo/flags/año y `INDY.psa`→`PSAC` se hidratan para CB1/CB2 y scopes; `STNN.normal.airport.psa` hidrata los registros no nulos en `Station`; `CITY.psa_list` conserva las referencias de cada pueblo y sus registros no nulos se hidratan por GRFID en `Town`; los historiales mensuales por cargo, `accepted[].accumulated_waiting` y `valid_history` se conservan para round-trip | ✅ reconstruye `NGRF` para entradas activas no estáticas, con el array fijo de 128 parámetros (`num_params` conserva la longitud usada); `INDY`, aeropuertos `STNN` y pueblos `CITY` emiten sus referencias PSA; `PSAC` reemite el pool con 256 registros por fila y conserva storages ajenos a entidades modeladas; una casa que ejecuta CB17 y un objeto que ejecuta CB157 durante construcción pueden crear/modificar el PSA de su pueblo, y CB25/26/27 de animación y `ResolveRerandomisation` de `IndustryTile` escriben el PSA de la industria durante `TileLoop`; el writer asigna las referencias nativas al exportar | La lectura de `7C` de pueblo ya cubre los scopes parent de casas y objetos; el writeback de CB17, CB157, la animación y la re-randomización `TileLoop` de teselas de industria está cubierto en sus call sites; `IndustryTick`/`CargoReceived`, cargos custom, historiales tras mutaciones económicas y scopes de otras entidades continúan parciales; `OBJS`/`OBID` se reconstruyen sólo cuando se mutan y conservan columnas opacas fuera del modelo; los labels no representables en el catálogo fijo se omiten |
+| NewGRF | ✅ lee `NGRF` como tabla y restaura archivo, GRFID, versión y hasta 128 parámetros activos; `ENGN`, `EIDS` y mappings no modelados siguen como chunks opacos; las colas `INDY.accepted`/`produced`, `accepted[].last_accepted`, `selected_layout`, `random`, metadata de fundador/fechas/tipo/flags/año y `INDY.psa`→`PSAC` se hidratan para CB1/CB2 y scopes; `STNN.normal.airport.psa` hidrata los registros no nulos en `Station`; `CITY.psa_list` conserva las referencias de cada pueblo y sus registros no nulos se hidratan por GRFID en `Town`; `INDY.accepted[].history`, `accepted[].accumulated_waiting`, `INDY.produced[].history` y `valid_history` se hidratan para cargos representables | ✅ reconstruye `NGRF` para entradas activas no estáticas, con el array fijo de 128 parámetros (`num_params` conserva la longitud usada); `INDY`, aeropuertos `STNN` y pueblos `CITY` emiten sus referencias PSA; `PSAC` reemite el pool con 256 registros por fila y conserva storages ajenos a entidades modeladas; una casa que ejecuta CB17 y un objeto que ejecuta CB157 durante construcción pueden crear/modificar el PSA de su pueblo, y CB25/26/27 de animación y `ResolveRerandomisation` de `IndustryTile` escriben el PSA de la industria durante `TileLoop`; las entregas/transferencias, el barrido diario y el rollover mensual actualizan y reemiten los historiales de industria en su ventana nativa de 61 registros; el writer asigna las referencias nativas al exportar | La lectura de `7C` de pueblo ya cubre los scopes parent de casas y objetos; el writeback de CB17, CB157, la animación y la re-randomización `TileLoop` de teselas de industria está cubierto en sus call sites; `IndustryTick`/`CargoReceived`, cargos custom, mutaciones económicas fuera de las rutas de historiales y scopes de otras entidades continúan parciales; `OBJS`/`OBID` se reconstruyen sólo cuando se mutan y conservan columnas opacas fuera del modelo; los labels no representables en el catálogo fijo se omiten |
 
 Nota de corte 2026-09-03: `CITY` decodifica y vuelve a escribir sus escalares
 nativos, arrays fijas y listas anidadas modeladas, y los expone al modelo

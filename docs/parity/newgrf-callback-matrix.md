@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-02** (scope/metadata nativa de industrias).
+Actualizada: **2026-09-02** (commit `b7429397`, runtime `CITY` recibido/suplido).
 
 Referencia: commit `14ec60f248547d4d062a1160f0fc26d742319888`,
 `reference/openttd-upstream/src/newgrf_callbacks.h`.
@@ -67,7 +67,7 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 | RailTypes (`06`) | Action3 `RailSpriteType::Depot` (`RTSG_DEPOT`, selector `8`) | **parcial runtime** | `apply_newgrf_rail_signals` conserva un grupo por `RailType`; el renderer consume el bloque relocatable desde `SPR_RAIL_DEPOT_SE_1` en el orden nativo `SE_1`, `SE_2`, `SW_1`, `SW_2`, `NE`, `NW`, resuelve Action2 con variables de tesela/fecha/random y conserva offsets NFO, profundidad y children de `FOUNDATION_LEVELED`. Una vista ausente cae sólo esa capa al sprite OpenGFX. |
 | RailTypes (`06`) | Action3 `RailSpriteType::Tunnel` / `TunnelPortal` (`RTSG_TUNNEL`, selector `3`; `RTSG_TUNNEL_PORTAL`, selector `10`) | **parcial runtime** | El parser conserva ambos grupos por `RailType`; en bocas con `UsesOverlay()` el renderer resuelve `RTSG_TUNNEL` por dirección y dibuja la superficie custom con ancla NFO como `DrawGroundSprite`, manteniendo PBS, catenaria y separadores, aunque el grupo de superficie es independiente del portal. La base de césped Action5 `0x17` (`SPR_RAILTYPE_TUNNEL_BASE`) se extrae por `LandscapeType` y slots normal/nieve, y la fachada `RTSG_TUNNEL_PORTAL` se resuelve por dirección con centro NFO como child sortable de esa base; una vista/asset ausente cae atómicamente a OpenGFX sólo para esa capa. Aún faltan pendientes/rotaciones y paletas especiales. |
 | Vehicles | `0x16`, `0x19`, `0x1D`, `0x23`, `0x34`–`0x35`, … | **OOS** | Evaluador Action2 listo; sin call sites |
-| Houses (`07`) | `0x17` `CBID_HOUSE_ALLOW_CONSTRUCTION` | **soportado** (#266) | Call site: crecimiento físico del pueblo (`try_build_town_house`), antes de reservar el footprint; respeta su máscara y booleano de 8 bits |
+| Houses (`07`) | `0x17` `CBID_HOUSE_ALLOW_CONSTRUCTION` | **soportado** (#266) | Call site: crecimiento físico del pueblo (`try_build_town_house`), antes de reservar el footprint; respeta su máscara y booleano de 8 bits. En este corte el callback aún no tiene writeback de `7C` al `Town`; esa es la siguiente brecha de #329. |
 | Houses (`07`) | `0x150` `CBID_HOUSE_DRAW_FOUNDATIONS` | **parcial runtime** | El renderer evalúa el callback con el scope de casa (etapa, edad, random, pueblo y parámetros GRF) antes de `FOUNDATION_LEVELED`; `CALLBACK_FAILED` conserva la fundación y un resultado cero la suprime, como `ConvertBooleanCallback` upstream. La regresión `newgrf_house_draw_foundations_callback_can_suppress_default` cubre una casa inclinada custom sin parent vanilla. Falta el resto de callbacks de casa y layouts/rotaciones avanzados. |
 | Houses | resto `0x1A`–`0x1C`, `0x1E`–`0x21`, … | **almacenado** | `HouseSpecDef.callback_mask` |
 | Houses | Action2 `TileLayoutSpriteGroup` (`TileSeq`) | **parcial runtime** | El catálogo conserva el grafo aunque la casa no tenga callbacks variables. El renderer resuelve la etapa/edad/terreno/random de la tesela y `0x42` consulta la zona del pueblo cuyo `TownID` está persistido en `MAP2` (con fallback al más cercano en mapas legacy); `0x44`, `0x60`/`0x61` calculan conteos por `HouseID` global y por pueblo desde una instantánea del mapa, y `0x62`/`0x63` consultan información/frame de teselas vecinas con wrap. Cuando el pueblo tiene una fila `CITY.psa_list`, el scope parent copia sus registros `7C` por GRFID para que `0x7C` lea el mismo PSA que OpenTTD. Sustituye `s1`/`s2` cuando el layout es completo y materializa ground, parents y children con cajas `M(...)`, incluyendo la superficie de una fundación nivelada; layouts incompletos, sprites base y paletas especiales mantienen fallback vanilla atómico. Faltan writeback `7C`, conteos por clase, aceptación de estaciones y layouts 16-bit completos.
@@ -101,7 +101,7 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 | Persistente (`7C` / `\2psto`) | Vehículo: `Vehicle.newgrf_persistent_regs` | Writeback tras CB; round-trip JSON save |
 | Persistente estación | `Station.newgrf_persistent_regs` | **parcial**: API stateful + JSON round-trip; CB13 de construcción no puede hacer writeback porque OpenTTD lo evalúa sin estación/tesela |
 | Persistente industria | `Industry.newgrf_persistent_regs` | Writeback tras CB; round-trip SAV/JSON, con `INDY.psa`/`PSAC` conservados |
-| Persistente pueblo (scope parent de casas/objetos) | `Town.newgrf_persistent_regs` | **parcial**: lectura `7C` por GRFID en Action2 y round-trip SAV/JSON; writeback y scopes de otras entidades pendientes |
+| Persistente pueblo (scope parent de casas/objetos) | `Town.newgrf_persistent_regs` | **parcial**: lectura `7C` por GRFID en Action2, `CITY`/`PSAC` y round-trip SAV/JSON; writeback desde callbacks y scopes de otras entidades pendientes |
 | Persistente casa/objeto | — | **OOS** como entidad propia; consumen el PSA del pueblo asociado cuando existe |
 
 ## Triggers / random
@@ -297,7 +297,7 @@ OpenTTD la reconstruye desde las teselas. Mutaciones estructurales aún caen al
 header canónico y descartan columnas anidadas desconocidas; el writeback de PSA
 y los consumidores de cargos custom siguen pendientes.
 
-Actualización #329-TOWN-CITY-030 (2026-09-03): `CITY.received.old_act/new_act`
+Actualización #329-TOWN-CITY-030 (2026-09-02, commit `b7429397`): `CITY.received.old_act/new_act`
 se hidrata ahora en las ventanas runtime que consulta `UpdateTownGrowth`, y
 el rollover mensual mantiene sincronizados los arrays semánticos y el vector
 nativo. La producción de casas registra `CITY.supplied` por cargo y actualiza

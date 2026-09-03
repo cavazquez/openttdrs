@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-02**,
-`main` posterior al writeback canónico de `CITY`; referencia: **OpenTTD
+`main` en `b7429397`, posterior al writeback canónico de `CITY`; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
 
 Esta es la única matriz de capacidad para importación y exportación `.sav`.
@@ -47,7 +47,8 @@ se decodifica como vector de referencias `REF_STORAGE` y se reemite sin
 compactar índices; casas y objetos ya leen ese estado en sus scopes parent
 Action2 cuando el pueblo está identificado. Una mutación económica futura
 deberá invalidar este snapshot para recalcular historiales y aún falta el
-writeback completo de los registros de pueblo.
+writeback completo de los registros de pueblo; el callback CB17 de construcción
+todavía sólo lee el scope parent y no persiste `7C` de vuelta a `CITY.psa_list`.
 
 La misma importación conserva ahora `CITY.supplied` (cargo y muestras
 mensuales de producción/transporte) y `CITY.received` (contadores

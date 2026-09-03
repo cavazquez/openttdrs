@@ -23,6 +23,27 @@ El bloque termina sólo con `git commit` y `git push`. La captura raster se usa
 cuando hay compositor WGPU; si el entorno no lo permite, se registra el bloqueo
 y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
+## Handoff de issues — 2026-09-02
+
+Estado publicado en `origin/main`: **`b7429397`** (`town: feed native cargo
+histories into runtime`). Este es el punto de reanudación; los cambios de esta
+etapa están en el mismo árbol y se validaron contra las regresiones existentes.
+
+| Issue | Situación real al dejar este corte | Próxima brecha acotada |
+|---|---|---|
+| [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. Layouts `TileSeq`, parents/children, catenaria, PBS y varias capas ya tienen cobertura focal; foundations de rail pendiente/túnel, foundations/rotaciones de aeropuertos, sprite-stack/callbacks avanzados de vehículos y el orden completo de framebuffer siguen sin equivalencia global. | Medir la primera familia visible restante con `world-draw` y, si aplica, capturas en `0,12×`, `0,25×`, `0,50×` y `1×`. |
+| [#328](https://github.com/cavazquez/openttdrs/issues/328) | El round-trip preserva las tablas y campos escalares modelados, `CITY`/`INDY`/`STNN`/`PSAC`, `OBJS`/`OBID`, grupos, órdenes y autoreplace en el subconjunto documentado. Mutaciones de strings, listas/structs anidados, columnas desconocidas, pools nativos de casas/objetos y labels/cargos no representables todavía degradan al writer canónico o quedan pendientes. | Elegir una mutación SAV reproducible de lista/struct anidado y comparar bytes OpenTTD→Rust→OpenTTD. |
+| [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. El writeback de PSA desde callbacks de casas/objetos/teselas, historiales tras mutaciones, cargos custom y el resto de callbacks/scope siguen pendientes. | Implementar y probar el writeback de PSA de pueblo del callback CB17 durante construcción; no cerrar #329 por este subconjunto. |
+| [#330](https://github.com/cavazquez/openttdrs/issues/330) | Economía básica y movimiento funcionan, pero los oráculos externos todavía son acotados. Tráfico/colisiones/dirección vial exhaustivos, PBS/YAPF/presignals/consist ferroviarios y navegación aire/mar no tienen aún cobertura diferencial completa. | Tomar el primer fixture externo reproducible de movimiento y registrar tick, entidad y estado nativo divergente. |
+| [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
+| RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
+
+Última validación de `b7429397`: `cargo fmt --all -- --check`, clippy estricto
+de core/cliente, **1.947** tests de core, **1.064** tests de cliente,
+`check_parity_docs_fresh.sh` y `git diff --check` pasan. El siguiente commit
+debe actualizar esta sección y la matriz canónica con su propio hash; las
+fechas y afirmaciones históricas inferiores no sustituyen este handoff.
+
 ## Orden recomendado
 
 | Orden | Bloque | Estado | Criterio de cierre |
@@ -782,7 +803,7 @@ de listas todavía usa el fallback canónico y puede perder columnas anidadas
 desconocidas. La hidratación no conecta aún las series con crecimiento/economía
 ni hace writeback de PSA de pueblos, por lo que #328/#329 continúan abiertos.
 
-Actualización #329-TOWN-CITY-030 (2026-09-03): al importar `CITY`, los
+Actualización #329-TOWN-CITY-030 (2026-09-02, commit `b7429397`): al importar `CITY`, los
 contadores `received.old_act/new_act` hidratan las ventanas de crecimiento y
 se desplazan junto con el rollover mensual; las entregas runtime actualizan
 también el vector nativo antes de serializarlo. La producción de pasajeros y

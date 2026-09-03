@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-02 · `main` (ver commit publicado más reciente).
+**Corte canónico: 2026-09-02 · `main` (`b7429397`, ver handoff de issues).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -70,7 +70,7 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Render/UI vanilla | **Media funcional / baja de composición raster** | Hay cobertura OpenGFX y evidencia `world-draw` por tesela, pero no paridad global de framebuffer; la captura limpia vigente de Kale sigue siendo diferente. Véase [evidencia visual raster](#evidencia-visual-raster-vigente) |
 | Plataformas y release | **Preparada con gates** | `main` protegido y checks Windows/macOS; queda dry-run/smoke de `0.1.0-alpha.1` en [#296](https://github.com/cavazquez/openttdrs/issues/296) |
 
-Actualización SAV/NewGRF (2026-09-02): `INDY.psa`,
+Actualización SAV/NewGRF (2026-09-02, `b7429397`): `INDY.psa`,
 `STNN.normal.airport.psa`, `CITY.psa_list` y el pool `PSAC` ya se importan,
 hidratan sus referencias y se reemiten para industrias, aeropuertos y pueblos,
 conservando índices y 256 registros por fila; el PSA no nulo de cada pueblo se

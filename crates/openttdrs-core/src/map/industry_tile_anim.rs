@@ -10,12 +10,16 @@
 
 use super::tile_loop::TileLoopState;
 use super::{Map, Tile, TileCoord, TileKind};
+use crate::industry::Industry;
 use crate::industry_tile::{IndustryTileSpecDef, industry_tile_spec_def};
-use crate::newgrf_callback::resolve_industry_tile_animation_callback;
+use crate::newgrf_callback::{
+    resolve_industry_tile_animation_callback, resolve_industry_tile_animation_callback_with_world,
+};
 use crate::newgrf_sprites::{
     CALLBACK_FAILED, CBID_INDTILE_ANIMATION_NEXT_FRAME, CBID_INDTILE_ANIMATION_SPEED,
     CBID_INDTILE_ANIMATION_TRIGGER,
 };
+use crate::town::Town;
 use std::collections::HashSet;
 use std::hash::BuildHasher;
 
@@ -727,6 +731,78 @@ pub fn advance_newgrf_industry_animated_tiles<S: BuildHasher>(
     world_seed: u64,
     active_tiles: &mut HashSet<TileCoord, S>,
 ) -> Vec<TileCoord> {
+    advance_newgrf_industry_animated_tiles_inner(
+        map,
+        tick,
+        coords,
+        catalog,
+        world_seed,
+        active_tiles,
+        |_, spec, callback, coord, param1, param2| {
+            resolve_industry_tile_animation_callback(spec, callback, coord, param1, param2)
+        },
+    )
+}
+
+/// Variante del scheduler que resuelve cada callback con la industria viva
+/// como scope parent y conserva sus registros `7C`.
+///
+/// La copia de `industries` se usa sólo para las consultas globales del
+/// resolver (`var 64..71`). La instancia mutable recibe el writeback después
+/// de cada callback, igual que `IndustriesScopeResolver::StorePSA`.
+#[allow(clippy::too_many_arguments)]
+pub fn advance_newgrf_industry_animated_tiles_with_world<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+) -> Vec<TileCoord> {
+    let snapshot = industries.to_vec();
+    advance_newgrf_industry_animated_tiles_inner(
+        map,
+        tick,
+        coords,
+        tile_spec_catalog,
+        world_seed,
+        active_tiles,
+        |map, spec, callback, coord, param1, param2| {
+            let Some(index) = industry_index_for_tile(map, &snapshot, coord) else {
+                return CALLBACK_FAILED;
+            };
+            resolve_industry_tile_animation_callback_with_world(
+                spec,
+                &mut industries[index],
+                map,
+                coord,
+                &snapshot,
+                towns,
+                tile_spec_catalog,
+                industry_catalog,
+                climate,
+                callback,
+                param1,
+                param2,
+            )
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn advance_newgrf_industry_animated_tiles_inner<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    catalog: &[IndustryTileSpecDef],
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+    mut resolve_callback: impl FnMut(&mut Map, &IndustryTileSpecDef, u16, TileCoord, u32, u32) -> u16,
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for &coord in coords {
         let Some(mut tile) = map.get(coord) else {
@@ -751,7 +827,8 @@ pub fn advance_newgrf_industry_animated_tiles<S: BuildHasher>(
                 coord,
                 u64::from(CBID_INDTILE_ANIMATION_TRIGGER),
             ));
-            let result = resolve_industry_tile_animation_callback(
+            let result = resolve_callback(
+                map,
                 spec,
                 CBID_INDTILE_ANIMATION_TRIGGER,
                 coord,
@@ -778,13 +855,7 @@ pub fn advance_newgrf_industry_animated_tiles<S: BuildHasher>(
         if active_tiles.contains(&coord) {
             let mut speed = spec.animation_speed.min(16);
             if spec.callback_mask & INDTILE_CALLBACK_MASK_SPEED != 0 {
-                let result = resolve_industry_tile_animation_callback(
-                    spec,
-                    CBID_INDTILE_ANIMATION_SPEED,
-                    coord,
-                    0,
-                    0,
-                );
+                let result = resolve_callback(map, spec, CBID_INDTILE_ANIMATION_SPEED, coord, 0, 0);
                 if result != CALLBACK_FAILED {
                     speed = u8::try_from(result.min(16)).unwrap_or(16);
                 }
@@ -798,7 +869,8 @@ pub fn advance_newgrf_industry_animated_tiles<S: BuildHasher>(
                         0
                     };
                 let result = if spec.callback_mask & INDTILE_CALLBACK_MASK_NEXT_FRAME != 0 {
-                    resolve_industry_tile_animation_callback(
+                    resolve_callback(
+                        map,
                         spec,
                         CBID_INDTILE_ANIMATION_NEXT_FRAME,
                         coord,
@@ -834,6 +906,25 @@ pub fn advance_newgrf_industry_animated_tiles<S: BuildHasher>(
         }
     }
     dirty
+}
+
+fn industry_index_for_tile(map: &Map, industries: &[Industry], coord: TileCoord) -> Option<usize> {
+    let tile = map.get(coord)?;
+    if tile.kind != TileKind::Industry {
+        return None;
+    }
+    let instance_id = super::industry_instance_id(&tile);
+    industries
+        .iter()
+        .position(|industry| {
+            industry.contains_tile(coord)
+                && (instance_id == 0 || industry.instance_id == instance_id)
+        })
+        .or_else(|| {
+            industries
+                .iter()
+                .position(|industry| industry.instance_id == instance_id)
+        })
 }
 
 fn advance_newgrf_industry_frame(tile: &mut Tile, spec: &IndustryTileSpecDef) -> bool {
@@ -877,7 +968,8 @@ mod tests {
     use super::*;
     use crate::industry_tile::IndustryTileGfxId;
     use crate::newgrf_sprites::{
-        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+        Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, TrainSpriteAssign,
+        TrainSpriteGraphics,
     };
     use std::collections::HashSet;
 
@@ -973,6 +1065,47 @@ mod tests {
         }
     }
 
+    fn parent_psto_animation_callbacks() -> TrainSpriteGraphics {
+        let literal = |value: u8| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                shift: 0,
+                and_mask: u32::from(value),
+                ..Action2VarAdjust::default()
+            },
+        };
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: literal(42),
+                ops: vec![
+                    Action2VarOp {
+                        operator: 0x10,
+                        rhs: literal(5),
+                    },
+                    Action2VarOp {
+                        operator: 0x0F,
+                        rhs: literal(0),
+                    },
+                ],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        // El valor, el índice y el resultado usan el scope parent Industry.
+        let entry = gfx.action2_var.get_mut(&2).unwrap();
+        entry.first.adjust.shift |= 0x80;
+        entry.ops[0].rhs.adjust.shift |= 0x80;
+        entry.ops[1].rhs.adjust.shift |= 0x80;
+        gfx
+    }
+
     #[test]
     fn newgrf_animation_uses_distinct_trigger_and_next_frame_callback_ids() {
         let coord = TileCoord::new(0, 0);
@@ -1031,6 +1164,56 @@ mod tests {
             map.get(coord).unwrap().m3hi
         );
         assert_eq!(reloaded_active, active);
+    }
+
+    #[test]
+    fn newgrf_animation_scheduler_writes_live_industry_parent_psa() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut tile = industry_tile(175, 0x80, 0);
+        tile.m2 = 1;
+        map.set_tile(coord, tile).unwrap();
+
+        let spec = IndustryTileSpecDef {
+            gfx: IndustryTileGfxId(175),
+            subst_id: 0,
+            from_newgrf: true,
+            accepts_cargo_indices: Vec::new(),
+            accepts_cargo_labels: Vec::new(),
+            acceptance: Vec::new(),
+            callback_mask: 0,
+            animation_frames: 3,
+            animation_status: 1,
+            animation_speed: 0,
+            animation_triggers: 1 << INDTILE_TRIGGER_INDUSTRY_TICK,
+            animation_special_flags: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_grfid: 0x1234_5678,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(parent_psto_animation_callbacks())),
+        };
+        let mut industries =
+            vec![Industry::new(coord, crate::industry::IndustryKind::CoalMine).with_instance_id(1)];
+        let mut active = HashSet::new();
+
+        advance_newgrf_industry_animated_tiles_with_world(
+            &mut map,
+            1,
+            &[coord],
+            &mut industries,
+            &[],
+            std::slice::from_ref(&spec),
+            &[],
+            crate::Climate::Temperate,
+            42,
+            &mut active,
+        );
+
+        assert!(active.contains(&coord));
+        assert_eq!(industries[0].newgrf_persistent_regs.get(&5), Some(&42));
     }
 
     #[test]

@@ -13,6 +13,7 @@ use crate::house_spec::{HouseSpecDef, action2_eval_ctx_for_house_tile_with_towns
 use crate::industry::{Industry, IndustryProductionAction};
 use crate::industry_spec::{IndustrySpecDef, cargo_type_from_label};
 use crate::industry_tile::IndustryTileSpecDef;
+use crate::map::industry_action2::action2_eval_ctx_for_industry_tile_with_world;
 use crate::map::object::action2_eval_ctx_for_object_tile_with_towns;
 use crate::map::{Map, TileCoord, has_tile_water_ground};
 use crate::newgrf_sprites::{
@@ -107,6 +108,24 @@ pub fn writeback_industry_persistent_registers(industry: &mut Industry, ctx: &Ac
     industry
         .newgrf_persistent_regs
         .clone_from(&ctx.persistent_registers);
+}
+
+/// Escribe el storage persistente del parent `Industry` de una tesela
+/// `NewGRF`.
+///
+/// `IndustryTileResolverObject` usa la tesela como scope propio (sin PSA) y
+/// la industria que la contiene como scope parent. Por eso un `\\2psto` con
+/// el selector de parent termina en `parent_persistent_registers`, no en el
+/// mapa de la tesela. La copia explícita mantiene la semántica de
+/// `IndustriesScopeResolver::StorePSA` y deja el registro disponible en la
+/// siguiente evaluación.
+pub fn writeback_industry_tile_parent_persistent_registers(
+    industry: &mut Industry,
+    ctx: &Action2EvalCtx,
+) {
+    industry
+        .newgrf_persistent_regs
+        .clone_from(&ctx.parent_persistent_registers);
 }
 
 /// Escribe el storage persistente del scope parent de un pueblo (`CITY.psa_list`).
@@ -2529,6 +2548,62 @@ pub fn resolve_industry_tile_animation_callback(
     runtime.resolve_callback_ctx(def.newgrf_local_id, callback, param1, param2, &mut ctx)
 }
 
+/// Resuelve un callback de animación de tesela con los scopes reales de
+/// `IndustryTileResolverObject` y persiste los `7C` escritos en la industria
+/// parent.
+///
+/// La evaluación recibe un snapshot inmutable del pool para calcular
+/// variables de vecinos/industrias, mientras `industry` es la instancia viva
+/// que debe recibir el writeback. El caller debe incluir esa instancia en
+/// `industries`; así el resolver conserva el mismo `IndustryID` y footprint
+/// que `OpenTTD` usa para asociar la tesela.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_industry_tile_animation_callback_with_world(
+    def: &IndustryTileSpecDef,
+    industry: &mut Industry,
+    map: &Map,
+    coord: TileCoord,
+    industries: &[Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: crate::Climate,
+    callback: u16,
+    param1: u32,
+    param2: u32,
+) -> u16 {
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return CALLBACK_FAILED;
+    };
+    if map.get(coord).is_none() {
+        return CALLBACK_FAILED;
+    }
+
+    let mut ctx = action2_eval_ctx_for_industry_tile_with_world(
+        map,
+        coord,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        Some(def),
+        &[],
+    );
+    // The snapshot is intentionally read-only. Seed the parent PSA from the
+    // live instance so a callback can read a value written by the previous
+    // frame even when another callback updated the snapshot later.
+    ctx.parent_persistent_registers
+        .clone_from(&industry.newgrf_persistent_regs);
+    ctx.parent_random_bits = u32::from(industry.newgrf_random);
+    ctx.random_bits = param1;
+    let result =
+        runtime.resolve_callback_ctx(def.newgrf_local_id, callback, param1, param2, &mut ctx);
+    writeback_industry_tile_parent_persistent_registers(industry, &ctx);
+    result
+}
+
 /// Compatibilidad con el helper anterior: consulta next-frame sin contexto.
 #[must_use]
 pub fn apply_industry_tile_anim_callback(def: &IndustryTileSpecDef) -> u16 {
@@ -4804,5 +4879,62 @@ mod tests {
             newgrf_runtime: None,
         };
         assert_eq!(apply_industry_tile_anim_callback(&tile), CALLBACK_FAILED);
+    }
+
+    #[test]
+    fn industry_tile_animation_writes_parent_industry_psa() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut map_tile = map.get(coord).unwrap();
+        map_tile.kind = crate::map::TileKind::Industry;
+        map_tile.m1 = 0x80;
+        map_tile.m2 = 1;
+        crate::map::set_industry_gfx(&mut map_tile, 175);
+        map.set_tile(coord, map_tile).unwrap();
+
+        let def = IndustryTileSpecDef {
+            gfx: crate::industry_tile::IndustryTileGfxId(175),
+            subst_id: 0,
+            from_newgrf: true,
+            accepts_cargo_indices: Vec::new(),
+            accepts_cargo_labels: Vec::new(),
+            acceptance: Vec::new(),
+            callback_mask: 0,
+            animation_frames: 3,
+            animation_status: 1,
+            animation_speed: 0,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_grfid: 0x1234_5678,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(gfx_callback_parent_psto(5, 42, 0))),
+        };
+        let mut industry =
+            Industry::new(coord, crate::industry::IndustryKind::CoalMine).with_instance_id(1);
+        industry.newgrf_persistent_regs.insert(3, 9);
+        let industries = vec![industry.clone()];
+
+        let result = resolve_industry_tile_animation_callback_with_world(
+            &def,
+            &mut industry,
+            &map,
+            coord,
+            &industries,
+            &[],
+            std::slice::from_ref(&def),
+            &[],
+            crate::Climate::Temperate,
+            crate::newgrf_sprites::CBID_INDTILE_ANIMATION_NEXT_FRAME,
+            0,
+            0,
+        );
+
+        assert_eq!(result, 0);
+        assert_eq!(industry.newgrf_persistent_regs.get(&5), Some(&42));
+        assert_eq!(industry.newgrf_persistent_regs.get(&3), Some(&9));
     }
 }

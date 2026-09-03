@@ -445,7 +445,8 @@ pub use newgrf_callback::{
     engine_for_vehicle_catalog, resolve_callback_or_failed, resolve_cargo_profit_callback,
     resolve_cargo_station_rating_callback, resolve_industry_production_change_build_callback,
     resolve_industry_production_change_callback, resolve_industry_tile_animation_callback,
-    resolve_industry_tile_random_trigger, resolve_vehicle_32day_callback, resolve_vehicle_callback,
+    resolve_industry_tile_animation_callback_with_world, resolve_industry_tile_random_trigger,
+    resolve_vehicle_32day_callback, resolve_vehicle_callback,
     resolve_vehicle_capacity_property_callback, resolve_vehicle_colour_mapping_callback,
     resolve_vehicle_modify_property_callback, resolve_vehicle_sound_callback,
     resolve_vehicle_visual_effect_callback, trigger_road_stop_animation,
@@ -453,8 +454,9 @@ pub use newgrf_callback::{
     trigger_vehicle_randomisation, trigger_vehicle_randomisation_chain, vehicle_cost_factor,
     vehicle_max_speed, vehicle_power_hp, vehicle_start_stop_callback_allows,
     vehicle_tractive_effort, vehicle_visual_effect_kind, vehicle_weight_t,
-    writeback_industry_persistent_registers, writeback_station_persistent_registers,
-    writeback_town_persistent_registers, writeback_vehicle_persistent_registers,
+    writeback_industry_persistent_registers, writeback_industry_tile_parent_persistent_registers,
+    writeback_station_persistent_registers, writeback_town_persistent_registers,
+    writeback_vehicle_persistent_registers,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,

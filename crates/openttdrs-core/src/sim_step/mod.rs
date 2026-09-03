@@ -374,17 +374,20 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             }
         })
         .collect();
-    state
-        .runtime
-        .industry_tile_dirty
-        .extend(crate::map::advance_newgrf_industry_animated_tiles(
+    state.runtime.industry_tile_dirty.extend(
+        crate::map::advance_newgrf_industry_animated_tiles_with_world(
             &mut state.map,
             t,
             &animation_coords,
+            &mut state.industries,
+            &state.towns,
             &state.industry_tile_spec_catalog,
+            &state.industry_spec_catalog,
+            state.climate,
             state.world_seed,
             &mut state.newgrf_animated_industry_tiles,
-        ));
+        ),
+    );
     state
         .runtime
         .industry_tile_dirty

@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `9f2ecc31`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `eaa3473d`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -214,6 +214,16 @@ los cargos válidos se compactan sólo para la economía y conservan su
 `CargoTypesUnlimited` termina ante un inválido como OpenTTD. #329 permanece
 abierto por cargos custom, rehidratación runtime SAV, historiales/GUI,
 escalas/sonidos y goldens.
+
+Actualización #329-INDUSTRY-SAV-047 (2026-09-03, `eaa3473d`):
+al aplicar el catálogo NewGRF después de importar un SAV, las filas `INDY` se
+reatan a su `IndustrySpecDef` por `IndustryType` y overrides sin ejecutar
+callbacks de fundación. Se usan las listas serializadas `accepted`/`produced`,
+se conservan huecos `INVALID_CARGO` y se reconstruyen cargos, tasas,
+multiplicadores, stocks y fechas de espera; la regresión cubre una salida con
+hueco inicial. Si falta el GRF o un cargo custom, se conserva el fallback y la
+fila opaca. #329 permanece abierto por esa ausencia, `DeliverGoodsToIndustry`,
+historiales/GUI, escalas/sonidos y goldens.
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

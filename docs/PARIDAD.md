@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional `628d1fb9`, handoff
+**Corte canónico: 2026-09-03 · `main` (base funcional `56aa7858`, handoff
 documental actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
@@ -193,6 +193,18 @@ declara `IndustryBehaviour::PlantOnBuild` ejecutan 50 intentos de
 geometría, cercas, límites climáticos y consumo del RNG global con generación
 y efectos periódicos; cada campo conserva el `IndustryID` en MAP2. Falta el
 hook de afterload/rehidratación SAV, además de escalas/sonidos y goldens.
+
+Actualización #329-INDUSTRY-PLANT-ON-BUILD-045 (2026-09-03, `56aa7858`):
+el importador SAV conserva la identidad, posición, tipo y tamaño de las
+industrias de versiones `< SLV_32` y ejecuta su afterload una sola vez. Se
+limpian los campos legacy con `MakeClear(CLEAR_GRASS, 3)`, se realizan 50
+intentos de `PlantRandomFarmField` para cada industria `PlantOnBuild`, se
+reatan los campos al `IndustryID`, se marcan las teselas para remap y se
+preserva el RNG global. Si el catálogo NewGRF custom todavía no está aplicado,
+la resolución se difiere y sólo se usa fallback vanilla; la reatachación
+económica completa de tipos custom ausentes sigue pendiente. #329 permanece
+abierto por slots vacíos legacy, cargos custom, historiales/GUI, escalas/sonidos
+y goldens integrales.
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
 

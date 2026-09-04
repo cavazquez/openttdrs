@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `9606544b`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `b80b8362`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
 ferroviario y la CTT de scopes de estación/parada quedan actualizados en este corte).
 Referencia: OpenTTD 15.3, commit
@@ -261,6 +261,15 @@ GRF; construcción y descarga pasan por la variante catálogo-aware y la
 regresión `TOFU` verifica el índice local 6. Las APIs directas legacy siguen
 disponibles sin catálogo; quedan pendientes industria y GUI/variables
 ilimitadas, además de foundations/rotaciones/sonidos de AirportTile.
+
+Actualización #329-CARGO-CTT-069 (2026-09-04, `b80b8362`): `CB3D`
+(`IndustryRefuseCargo`) resuelve labels de cargas custom contra el catálogo
+`CargoSpec` activo. La ruta cubre tanto la descarga de estaciones como el
+procesamiento de insumos de la industria, incluso para instancias SAV que aún
+no hidrataron sus slots; la API legacy sin catálogo conserva el fallback. La
+regresión `TOFU` verifica el `param2` CTT 6. Producción CB1/CB2, callbacks de
+tipos dinámicos y aceptación de `IndustryTile` siguen requiriendo una auditoría
+catalogue-aware completa; #329 continúa abierto.
 
 | Multijugador | **Media propia** | Lockstep TCP, dedicated, late join y host migration; el servidor asigna empresa por peer, valida antes de secuenciar, rechaza issuer inválido y resincroniza desync por snapshot. Sigue siendo protocolo propio, sin lobby, auth, cifrado ni interoperabilidad OpenTTD |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |

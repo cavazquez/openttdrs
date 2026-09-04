@@ -34,8 +34,9 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `fd573da5`; el
-runtime de cargos custom, la frontera SAV, el monitor de carga y el peso vial quedan actualizados en este corte).
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `b32b87f4`; el
+runtime de cargos custom, la frontera SAV, el monitor de carga y los pesos vial
+y ferroviario quedan actualizados en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -71,12 +72,23 @@ valida el mismo límite que OpenTTD y acumula entregas/recogidas usando el ID
 global de seis bits. Sin `CargoSpec` el cargo continúa rechazándose (`-1`), y la
 integración Squirrel/GameScript completa, textos y demás scopes siguen abiertos.
 
-Actualización vigente adicional (`fd573da5`): la física de carretera recibe el
-catálogo `CargoSpec` activo y aplica `prop 0x0F` (`weight`) a la masa cargada de
-buses, camiones y tranvías. Un peso NewGRF explícito ya modifica aceleración y
-esfuerzo tractor; si falta la spec o el peso es cero se conserva el fallback
-vanilla. El cálculo ferroviario y la configuración `freight_trains` permanecen
-como la siguiente brecha económica acotada.
+Actualización vigente adicional (`b32b87f4`): la física de carretera y la
+ferroviaria reciben el catálogo `CargoSpec` activo y aplican `prop 0x0F`
+(`weight`) a la masa cargada de buses, camiones, tranvías y consist ferroviarios.
+Un peso NewGRF explícito ya modifica aceleración, esfuerzo tractor y
+`cached_weight_t`; si falta la spec o el peso es cero se conserva el fallback
+vanilla. La multiplicación `freight_trains`, el resto de settings económicos y
+las propiedades CTT siguen siendo la siguiente brecha acotada.
+
+Actualización #329-CARGO-TRAIN-WEIGHT-063 (2026-09-04, `b32b87f4`):
+`ConsistChanged` suma el peso de cada unidad cargada con `CargoSpec::weight` y
+recalcula `cached_weight_t`/esfuerzo tractor después de `LoadUnloadStation`,
+incluidos motores vanilla, vagones y cargos custom registrados. La carga ya
+afecta la aceleración ferroviaria del mismo tick sin reconstruir la topología
+antes de cargar; la regresión `consist_changed_includes_active_custom_cargo_weight`
+fija 8 unidades de peso 32 como 16 toneladas. El setting
+`vehicle.freight_trains` todavía no está modelado, por lo que la escala de
+trenes de carga y el resto de propiedades económicas siguen parciales.
 
 Actualización vigente del corte: `036fda1f` implementa el monitor efímero de
 carga compatible con `_cargo_pickups`/`_cargo_deliveries`: codificación nativa

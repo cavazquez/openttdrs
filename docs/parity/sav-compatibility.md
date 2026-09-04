@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
-`main` con base funcional publicada `fd573da5`, posterior al writeback canónico
+`main` con base funcional publicada `b32b87f4`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
@@ -209,3 +209,10 @@ wire format ni la conversión legacy de `566ce56a`.
 Actualización `fd573da5` (2026-09-04): el catálogo de `CargoSpec` se propaga a
 la física vial al abrir una partida, de modo que `prop 0x0F` de un cargo custom
 afecta la masa y no altera ninguna tabla ni campo del wire format SAV.
+
+Actualización `b32b87f4` (2026-09-04): el mismo `CargoSpec::weight` se aplica a
+las unidades de cada consist ferroviario al terminar la fase de carga/descarga
+y se recalculan sus cachés de peso/esfuerzo antes del movimiento. No cambia el
+wire format SAV: `cached_weight_t` sigue siendo derivado y se reconstruye al
+hidratar o avanzar el estado; `freight_trains` y propiedades CTT que requieran
+settings persistidos todavía quedan fuera del subconjunto.

@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`fd573da5`** (`movement: apply custom cargo weight to road vehicles`),
+Base funcional local y publicada: **`b32b87f4`** (`movement: include cargo weight in train consists`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -66,8 +66,10 @@ mantienen activación/reset y registran entregas y recogidas. La fachada Squirre
 completa y los cargos sin catálogo siguen fuera del alcance.
 `fd573da5` pasa también el catálogo de `CargoSpec` a la física de carretera y
 usa `prop 0x0F` para el peso de carga custom; los callers legacy conservan el
-fallback vanilla. Queda pendiente aplicar el mismo peso al consist ferroviario
-y replicar la multiplicación `freight_trains` en todos los modelos de aceleración.
+fallback vanilla. `b32b87f4` aplica el mismo peso a todas las unidades de un
+consist ferroviario y recalcula la caché después de cargar/descargar, sin
+alterar el orden de señales. Queda pendiente replicar la multiplicación
+`freight_trains` en todos los modelos de aceleración y el resto de settings.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
@@ -83,8 +85,16 @@ cargos modernos en SAV y conserva los slots climáticos de saves anteriores a
 `SLV_55`. Esta nota prevalece sobre las filas históricas que todavía describen
 los cargos custom como exclusivamente opacos.
 
-Última validación de `fd573da5`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **2.012** tests de core y **1.064** de cliente (2 ignorados); la matriz
+Actualización #329-CARGO-TRAIN-WEIGHT-063 (2026-09-04, commit `b32b87f4`):
+`ConsistChanged` acumula `CargoSpec::weight` por unidad y refresca
+`cached_weight_t`/esfuerzo tractor después de `LoadUnloadStation`. Esto cubre
+trenes vanilla y NewGRF, incluida carga custom con catálogo activo, y conserva
+las APIs legacy que no reciben catálogo. La regresión usa 8 unidades de peso
+32 (16 toneladas) y el probe de señales sigue pasando; `freight_trains` y las
+propiedades CTT/económicas restantes siguen pendientes.
+
+Última validación de `b32b87f4`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **2.013** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.

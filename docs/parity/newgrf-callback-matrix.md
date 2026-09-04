@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `fd573da5`, cargos custom ejecutables,
+Actualizada: **2026-09-04** (commit `b32b87f4`, cargos custom ejecutables,
 shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
 `PlantOnBuild`, rehidratación SAV legacy, historiales aceptados runtime,
@@ -673,3 +673,12 @@ no están cerrados.
 - Storage persistente de industria/aeropuerto/pueblo: `INDY.psa`, `STNN.normal.airport.psa`, `CITY.psa_list` y `PSAC` se importan, hidratan sus referencias y exportan para los registros `7C` conocidos; casas y objetos leen el PSA del pueblo desde su scope parent y CB17/CB157 de construcción ya hacen writeback por GRFID. Los callbacks CB25/26/27 y la re-randomización de `IndustryTile` también escriben el PSA de la industria en `TileLoop`, `IndustryTick` y `CargoReceived`; siguen pendientes la invalidación tras mutaciones y los callbacks PSA de pueblo restantes. CB140–142 preserva `7C` de la estación pero no los scopes/áreas completos de `BaseStation`; CB14 aún no aporta el scope/regs de `BaseStation` ni layout 16-bit exacto; CB149 aún no aporta scope/vecinos ni strings GRF.
 - Goldens tick-a-tick vs OpenTTD 15.3 para todos los features.
 - Textos GRF de string (`0x40F` / `regs100`) en CB31: denegación genérica `NewGrfCallbackDenied`.
+
+Actualización #329-CARGO-TRAIN-WEIGHT-063 (2026-09-04, commit `b32b87f4`):
+`ConsistChanged` suma `CargoSpec::weight` por unidad cargada y actualiza
+`cached_weight_t` y `cached_max_te_n` para la cabeza del tren después de
+`LoadUnloadStation`. El catálogo activo se propaga tanto a motores vanilla como
+a vagones NewGRF y cargos custom; la física ferroviaria usa esa masa en
+aceleración y esfuerzo tractor. El refresh se hace después de cargar para no
+alterar el lookahead de señales; `freight_trains`, CTT completa y otros
+settings/propiedades económicos permanecen parciales.

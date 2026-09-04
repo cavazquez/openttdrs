@@ -117,42 +117,100 @@ pub fn resolve_rule_for_company(
     })
 }
 
+fn refit_target_cargo(
+    engine: &EngineDef,
+    vehicle: &Vehicle,
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    climate: crate::Climate,
+) -> Option<crate::CargoType> {
+    if let Some(cargo) = engine.cargo {
+        return Some(cargo);
+    }
+    vehicle.cargo_type.and_then(|current| {
+        let options = refittable_cargo_types_for_engine_with_catalog_and_climate(
+            engine,
+            cargo_catalog,
+            climate,
+        );
+        options
+            .contains(&current)
+            .then_some(current)
+            .or_else(|| options.first().copied())
+    })
+}
+
+fn refit_cost_for_replacement(state: &GameState, vehicle: &Vehicle, new_engine: &EngineDef) -> i64 {
+    let Some(target_cargo) = refit_target_cargo(
+        new_engine,
+        vehicle,
+        &state.cargo_spec_catalog,
+        state.climate,
+    ) else {
+        return 0;
+    };
+    if vehicle.cargo_type == Some(target_cargo) {
+        return 0;
+    }
+    let mut refit_probe = vehicle.clone();
+    refit_probe.engine_id = Some(new_engine.id);
+    economy::vehicle_refit_cost_with_callbacks(
+        &state.global_economy,
+        new_engine,
+        &mut refit_probe,
+        target_cargo,
+        vehicle.cargo_subtype,
+        state.climate,
+        &state.cargo_spec_catalog,
+    )
+    .0
+}
+
 fn autoreplace_cost(state: &GameState, vehicle: &Vehicle, new_engine: &EngineDef) -> i64 {
     let mut probe = vehicle.clone();
     probe.engine_id = Some(new_engine.id);
     let purchase = economy::vehicle_purchase_cost_with_callbacks(new_engine, &mut probe);
     let mut total =
         purchase - economy::vehicle_sell_refund_with_catalog(vehicle, &state.engine_catalog);
-    let target_cargo = if let Some(cargo) = new_engine.cargo {
-        Some(cargo)
-    } else {
-        vehicle.cargo_type.and_then(|current| {
-            let options = refittable_cargo_types_for_engine_with_catalog_and_climate(
-                new_engine,
-                &state.cargo_spec_catalog,
-                state.climate,
-            );
-            options
-                .contains(&current)
-                .then_some(current)
-                .or_else(|| options.first().copied())
-        })
-    };
-    if let Some(target_cargo) = target_cargo
-        && vehicle.cargo_type != Some(target_cargo)
-    {
-        let mut refit_probe = vehicle.clone();
-        refit_probe.engine_id = Some(new_engine.id);
-        let (refit_cost, _auto_refit_allowed) = economy::vehicle_refit_cost_with_callbacks(
-            &state.global_economy,
-            new_engine,
-            &mut refit_probe,
-            target_cargo,
-            vehicle.cargo_subtype,
-            state.climate,
-            &state.cargo_spec_catalog,
-        );
-        total = total.saturating_add(refit_cost);
+    total = total.saturating_add(refit_cost_for_replacement(state, vehicle, new_engine));
+
+    // `ReplaceChain` reconstruye también las unidades con una regla propia
+    // (vagones/unidades articuladas compradas). El coste de refit debe
+    // estimarse para cada una, no sólo para la cabeza, porque CB15E puede
+    // devolver un factor distinto por motor/cargo/subtipo.
+    if matches!(
+        vehicle.kind,
+        VehicleKind::Train | VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) {
+        for unit_id in consist_unit_ids(&state.vehicles, vehicle.id) {
+            if unit_id == vehicle.id {
+                continue;
+            }
+            let Some(unit) = state
+                .vehicles
+                .iter()
+                .find(|candidate| candidate.id == unit_id)
+            else {
+                continue;
+            };
+            if unit.newgrf_articulated {
+                continue;
+            }
+            let is_dual_head =
+                vehicle.other_multiheaded_part == Some(unit_id) && new_engine.is_dual_headed();
+            let replacement = if is_dual_head {
+                Some(new_engine.clone())
+            } else {
+                let from = unit
+                    .engine_id
+                    .unwrap_or(crate::engine::default_engine_id(unit.kind));
+                resolve_rule_for_company(&state.autoreplace_rules, unit.owner, from, unit.group_id)
+                    .filter(|rule| rule.from_engine_id != rule.to_engine_id)
+                    .and_then(|rule| engine_for_state(state, rule.to_engine_id))
+            };
+            if let Some(replacement) = replacement {
+                total = total.saturating_add(refit_cost_for_replacement(state, unit, &replacement));
+            }
+        }
     }
     total
 }
@@ -992,6 +1050,55 @@ mod tests {
             -10,
         );
         assert_eq!(with_refit - without_refit, expected_refit);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn autoreplace_cost_includes_refit_cost_for_each_replaced_unit() {
+        let depot = TileCoord::new(2, 2);
+        let mut state = GameState::new(8, 8);
+        let mut old_engine = crate::engine::engine_by_id(crate::engine::ENGINE_TRUCK_MPS)
+            .unwrap()
+            .clone();
+        old_engine.id = 1_420;
+        let mut new_engine = old_engine.clone();
+        new_engine.id = 1_421;
+        new_engine.cargo = Some(crate::CargoType::Coal);
+        new_engine.refit_cost = 4;
+        state
+            .engine_catalog
+            .extend([old_engine, new_engine.clone()]);
+        state
+            .autoreplace_rules
+            .push(AutoReplaceRule::new(1_420, 1_421));
+
+        let mut head = Vehicle::new(1, VehicleKind::Truck, depot, depot);
+        head.engine_id = Some(1_420);
+        head.cargo_type = Some(crate::CargoType::Mail);
+        head.next_unit = Some(2);
+        let mut tail = Vehicle::new(2, VehicleKind::Truck, depot, depot);
+        tail.engine_id = Some(1_420);
+        tail.cargo_type = Some(crate::CargoType::Mail);
+        tail.prev_unit = Some(1);
+        state.vehicles.extend([head, tail]);
+
+        let with_refit = autoreplace_cost(&state, &state.vehicles[0], &new_engine);
+        if let Some(engine) = state
+            .engine_catalog
+            .iter_mut()
+            .find(|engine| engine.id == 1_421)
+        {
+            engine.refit_cost = 0;
+        }
+        new_engine.refit_cost = 0;
+        let without_refit = autoreplace_cost(&state, &state.vehicles[0], &new_engine);
+        let expected_refit = crate::economy::pricebase::get_price(
+            &state.global_economy,
+            crate::economy::pricebase::PriceIndex::BuildVehicleRoad,
+            4,
+            -10,
+        );
+        assert_eq!(with_refit - without_refit, expected_refit * 2);
     }
 
     #[test]

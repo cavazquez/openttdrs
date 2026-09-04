@@ -130,6 +130,12 @@ pub enum VehicleOrder {
         travel_ticks: u32,
         /// Techo de velocidad del tramo (`Order::max_speed`); 0 = sin límite.
         max_speed: u16,
+        /// Tipo de carga solicitado al llegar a la estación (`CARGO_NO_REFIT`
+        /// cuando es `None`).
+        refit_cargo: Option<CargoType>,
+        /// Refit automático según la carga que espera en la estación
+        /// (`CARGO_AUTO_REFIT`).
+        auto_refit: bool,
         /// Orden implícita (`OT_IMPLICIT`) insertada al visitar una estación.
         implicit: bool,
     },
@@ -191,6 +197,10 @@ enum VehicleOrderSerde {
         travel_ticks: u32,
         #[serde(default)]
         max_speed: u16,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refit_cargo: Option<CargoType>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        auto_refit: bool,
         #[serde(default)]
         implicit: bool,
     },
@@ -241,6 +251,8 @@ impl From<VehicleOrder> for VehicleOrderSerde {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             } => Self::Station {
                 station,
@@ -256,6 +268,8 @@ impl From<VehicleOrder> for VehicleOrderSerde {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             },
             VehicleOrder::Waypoint {
@@ -315,6 +329,8 @@ impl From<VehicleOrderSerde> for VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             } => Self::Station {
                 station,
@@ -343,6 +359,8 @@ impl From<VehicleOrderSerde> for VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             },
             VehicleOrderSerde::Waypoint {
@@ -689,6 +707,8 @@ impl VehicleOrder {
             wait_ticks: 0,
             travel_ticks: 0,
             max_speed: 0,
+            refit_cargo: None,
+            auto_refit: false,
             implicit: false,
         }
     }
@@ -705,6 +725,8 @@ impl VehicleOrder {
             wait_ticks: 0,
             travel_ticks: 0,
             max_speed: 0,
+            refit_cargo: None,
+            auto_refit: false,
             implicit: true,
         }
     }
@@ -884,6 +906,8 @@ impl VehicleOrder {
             wait_ticks: 0,
             travel_ticks: 0,
             max_speed: 0,
+            refit_cargo: None,
+            auto_refit: false,
             implicit: false,
         }
     }
@@ -936,6 +960,8 @@ impl VehicleOrder {
             wait_ticks: 0,
             travel_ticks: 0,
             max_speed: 0,
+            refit_cargo: None,
+            auto_refit: false,
             implicit: false,
         }
     }
@@ -1113,6 +1139,60 @@ impl VehicleOrder {
         }
     }
 
+    /// Tipo de carga solicitado por una orden de estación. `None` conserva la
+    /// carga actual; el sentinel `CARGO_AUTO_REFIT` se expone por separado en
+    /// [`Self::station_auto_refit`].
+    #[must_use]
+    pub const fn station_refit_cargo(self) -> Option<CargoType> {
+        match self {
+            Self::Station { refit_cargo, .. } => refit_cargo,
+            _ => None,
+        }
+    }
+
+    /// Indica que la orden usa `CARGO_AUTO_REFIT` en vez de un cargo fijo.
+    #[must_use]
+    pub const fn station_auto_refit(self) -> bool {
+        matches!(
+            self,
+            Self::Station {
+                auto_refit: true,
+                ..
+            }
+        )
+    }
+
+    /// Indica que la parada contiene cualquier instrucción de refit.
+    #[must_use]
+    pub const fn station_refit_requested(self) -> bool {
+        self.station_auto_refit() || self.station_refit_cargo().is_some()
+    }
+
+    /// Construye una orden de estación con refit manual o automático.
+    #[must_use]
+    pub const fn station_with_refit(
+        station: TileCoord,
+        load_type: OrderLoadType,
+        unload_type: OrderUnloadType,
+        non_stop: OrderNonStop,
+        refit_cargo: Option<CargoType>,
+        auto_refit: bool,
+    ) -> Self {
+        Self::Station {
+            station,
+            load_type,
+            unload_type,
+            non_stop,
+            stop_location: OrderStopLocation::Middle,
+            wait_ticks: 0,
+            travel_ticks: 0,
+            max_speed: 0,
+            refit_cargo,
+            auto_refit,
+            implicit: false,
+        }
+    }
+
     /// Cicla Near → Middle → Far en una orden de estación.
     #[must_use]
     pub fn with_cycled_stop_location(self) -> Option<Self> {
@@ -1126,6 +1206,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             } => Some(Self::Station {
                 station,
@@ -1136,6 +1218,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             }),
             _ => None,
@@ -1155,6 +1239,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             } => Some(Self::Station {
                 station,
@@ -1168,6 +1254,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             }),
             _ => None,
@@ -1242,6 +1330,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             } => Some(Self::Station {
                 station,
@@ -1252,6 +1342,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             }),
             _ => None,
@@ -1271,6 +1363,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             } => Some(Self::Station {
                 station,
@@ -1281,6 +1375,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             }),
             _ => None,
@@ -1377,6 +1473,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             } => Some(Self::Station {
                 station,
@@ -1387,6 +1485,8 @@ impl VehicleOrder {
                 wait_ticks: cycle_wait_ticks(wait_ticks),
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             }),
             Self::Depot {
@@ -1421,6 +1521,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             } => Self::Station {
                 station,
@@ -1431,6 +1533,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks: cycle_travel_ticks(travel_ticks),
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             },
             Self::Waypoint {
@@ -1484,6 +1588,8 @@ impl VehicleOrder {
                 wait_ticks: _,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             } => Some(Self::Station {
                 station,
@@ -1494,6 +1600,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             }),
             Self::Depot {
@@ -1527,6 +1635,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks: _,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             } => Self::Station {
                 station,
@@ -1537,6 +1647,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             },
             Self::Waypoint {
@@ -1587,6 +1699,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed: _,
+                refit_cargo,
+                auto_refit,
                 implicit,
             } => Self::Station {
                 station,
@@ -1597,6 +1711,8 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 max_speed,
+                refit_cargo,
+                auto_refit,
                 implicit,
             },
             Self::Waypoint {
@@ -1682,6 +1798,26 @@ mod tests {
         assert!(toggled.depot_stops());
         let station = VehicleOrder::station(TileCoord::new(1, 1)).with_max_speed(80);
         assert_eq!(station.max_speed_limit(), 80);
+    }
+
+    #[test]
+    fn station_refit_fields_are_backward_compatible_in_json() {
+        let station = TileCoord::new(4, 5);
+        let order = VehicleOrder::station_with_refit(
+            station,
+            OrderLoadType::FullLoad,
+            OrderUnloadType::Transfer,
+            OrderNonStop::StopAtIntermediate,
+            Some(CargoType::Coal),
+            false,
+        );
+        let json = serde_json::to_string(&order).unwrap();
+        let decoded: VehicleOrder = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, order);
+
+        let old = r#"{"station":{"x":4,"y":5}}"#.to_string();
+        let decoded_old: VehicleOrder = serde_json::from_str(&old).unwrap();
+        assert_eq!(decoded_old, VehicleOrder::station(station));
     }
 
     #[test]

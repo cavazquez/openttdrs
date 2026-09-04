@@ -276,6 +276,9 @@ fn apply_engine_with_refit(
         // la unidad sustituida (p. ej. una pieza articulada no transportable).
         vehicle.capacity = 0;
     }
+    if vehicle.cargo_type.is_some() {
+        vehicle.refit_capacity = u16::try_from(vehicle.capacity).unwrap_or(u16::MAX);
+    }
     vehicle.build_tick = current_tick;
     crate::vehicle::init_vehicle_reliability_from_engine(vehicle, new_engine);
 }

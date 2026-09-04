@@ -117,6 +117,8 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
         }
         for (idx, _cost) in refits {
             state.vehicles[idx].cargo_type = Some(cargo);
+            state.vehicles[idx].refit_capacity =
+                u16::try_from(state.vehicles[idx].capacity).unwrap_or(u16::MAX);
         }
         state.economy.money -= total_cost;
     }

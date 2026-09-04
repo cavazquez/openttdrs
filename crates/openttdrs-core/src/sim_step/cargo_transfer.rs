@@ -892,7 +892,14 @@ pub(super) fn load_vehicles(
     // Un vehículo que ya estaba en carga debe seguir pasando por la lógica
     // normal para cerrar correctamente una orden `full_load` sin mercancía.
     let has_loadable_supply = has_loadable_supply(state);
-    if !has_loadable_supply && !state.vehicles.iter().any(|vehicle| vehicle.cargo_loading) {
+    if !has_loadable_supply
+        && !state.vehicles.iter().any(|vehicle| vehicle.cargo_loading)
+        && !state.vehicles.iter().any(|vehicle| {
+            vehicle
+                .current_order_ref()
+                .is_some_and(|order| order.station_refit_requested())
+        })
+    {
         return;
     }
 
@@ -901,6 +908,12 @@ pub(super) fn load_vehicles(
         .enumerate()
         .take(state.vehicles.len())
     {
+        // El refit de estación se evalúa antes de los filtros de capacidad y
+        // de locomotora sin vagón: `HandleStationRefit` forma parte de la
+        // misma fase que la carga y no depende de que haya stock disponible.
+        if let Some(station_idx) = station_index_at_vehicle(state, &state.vehicles[i]) {
+            maybe_refit_at_station(state, i, station_idx);
+        }
         let allow_top_up = state.vehicles[i]
             .orders
             .get(state.vehicles[i].current_order)
@@ -976,6 +989,220 @@ pub(super) fn load_vehicles(
             try_load_from_station_waiting_cargo(state, i, station_idx, loaded_flag);
         }
     }
+}
+
+/// Aplica el refit de una orden de estación al consist completo.
+///
+/// `OpenTTD` ejecuta esta operación fuera del depósito con `auto_refit=true`,
+/// incluso cuando la orden contiene un cargo fijo. Por eso el callback
+/// `CBID_VEHICLE_REFIT_COST` debe conceder explícitamente el bit 14; las
+/// unidades que no lo conceden conservan su configuración y no abortan el
+/// resto del consist. El coste se cobra una sola vez por cada unidad que se
+/// cambia, antes de mutar ninguna de ellas.
+#[allow(clippy::too_many_lines)]
+fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx: usize) -> bool {
+    let Some(order) = state.vehicles[vehicle_idx].current_order_ref().copied() else {
+        return false;
+    };
+    let crate::VehicleOrder::Station {
+        station: order_station,
+        refit_cargo,
+        auto_refit,
+        implicit,
+        ..
+    } = order
+    else {
+        return false;
+    };
+    if implicit || (!auto_refit && refit_cargo.is_none()) {
+        return false;
+    }
+    // La función se llama después de verificar la tesela física, pero deja la
+    // guarda aquí para que los tests y callers futuros no puedan refitar fuera
+    // de una terminal.
+    if station_idx >= state.stations.len()
+        || state.stations[station_idx].pos != order_station
+        || !station::vehicle_physically_at_station(
+            &state.map,
+            &state.vehicles[vehicle_idx],
+            &state.stations[station_idx],
+        )
+    {
+        return false;
+    }
+    let head_id = crate::consist_head_id(&state.vehicles, state.vehicles[vehicle_idx].id)
+        .unwrap_or(state.vehicles[vehicle_idx].id);
+    // Una orden pertenece a la cabeza. Las unidades articuladas pueden tener
+    // la misma tesela, pero no deben iniciar una segunda operación.
+    if state.vehicles[vehicle_idx].id != head_id {
+        return false;
+    }
+    let unit_ids = {
+        let indexed = state.runtime.fleet_index.consist(head_id);
+        if indexed.is_empty() {
+            crate::consist_unit_ids(&state.vehicles, head_id)
+        } else {
+            indexed.to_vec()
+        }
+    };
+    if unit_ids.is_empty() {
+        return false;
+    }
+    // Igual que `IsEmptyAction`: un consist parcialmente cargado no cambia de
+    // tipo a mitad de una visita.
+    for unit_id in &unit_ids {
+        let Some(idx) = state.vehicles.iter().position(|v| v.id == *unit_id) else {
+            return false;
+        };
+        state.vehicles[idx].ensure_packets_from_legacy();
+        if state.vehicles[idx].cargo > 0 {
+            return false;
+        }
+    }
+
+    let target = refit_cargo.or_else(|| {
+        let station = state.stations.get(station_idx)?;
+        let mut candidates = crate::cargo::ALL_CARGO_TYPES.to_vec();
+        candidates.extend(station.cargo_stock.custom_entries().map(|(cargo, _)| cargo));
+        candidates
+            .into_iter()
+            .filter(|cargo| station.cargo_stock.get(*cargo) > 0)
+            .filter(|cargo| station.accepts_cargo(*cargo))
+            .filter(|cargo| {
+                unit_ids.iter().any(|unit_id| {
+                    state
+                        .vehicles
+                        .iter()
+                        .position(|v| v.id == *unit_id)
+                        .is_some_and(|idx| {
+                            refit_options_for_station_unit(state, idx).contains(cargo)
+                        })
+                })
+            })
+            .max_by_key(|cargo| station.cargo_stock.get(*cargo))
+    });
+    let Some(target) = target else {
+        return false;
+    };
+
+    let mut refits = Vec::new();
+    let mut total_cost = 0_i64;
+    for unit_id in &unit_ids {
+        let Some(idx) = state.vehicles.iter().position(|v| v.id == *unit_id) else {
+            continue;
+        };
+        if state.vehicles[idx].cargo_type == Some(target) {
+            continue;
+        }
+        if !refit_options_for_station_unit(state, idx).contains(&target) {
+            continue;
+        }
+        let engine = state.vehicles[idx]
+            .engine_id
+            .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+            .cloned()
+            .or_else(|| {
+                state.vehicles[idx]
+                    .engine_id
+                    .and_then(crate::engine::engine_by_id)
+                    .cloned()
+            });
+        let Some(engine) = engine else {
+            // Vehículos de escenarios sin motor catalogado no tienen callback
+            // de coste; conservamos la capacidad legacy sin cobrar.
+            refits.push((idx, 0_i64));
+            continue;
+        };
+        let subtype = state.vehicles[idx].cargo_subtype;
+        let (cost, auto_allowed) = crate::economy::vehicle_refit_cost_with_callbacks(
+            &state.global_economy,
+            &engine,
+            &mut state.vehicles[idx],
+            target,
+            subtype,
+            state.climate,
+            &state.cargo_spec_catalog,
+        );
+        // Station refit siempre pasa por la ruta automática de OpenTTD; el
+        // bit 14 no se aplica sólo al sentinel `CARGO_AUTO_REFIT`.
+        if !auto_allowed {
+            continue;
+        }
+        total_cost = total_cost.saturating_add(cost);
+        refits.push((idx, cost));
+    }
+    if refits.is_empty() || total_cost > state.economy.money {
+        return false;
+    }
+
+    for (idx, _cost) in refits {
+        let engine = state.vehicles[idx]
+            .engine_id
+            .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+            .cloned();
+        state.vehicles[idx].cargo_type = Some(target);
+        if let Some(engine) = engine {
+            let callback_capacity = crate::newgrf_callback::resolve_vehicle_refit_capacity_callback(
+                &engine,
+                &mut state.vehicles[idx],
+                target,
+            );
+            let property_capacity =
+                crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
+                    &engine,
+                    &mut state.vehicles[idx],
+                )
+                .map(|capacity| {
+                    crate::cargo_spec::apply_cargo_capacity_multiplier(
+                        capacity,
+                        &state.cargo_spec_catalog,
+                        target,
+                    )
+                })
+                .or_else(|| {
+                    (engine.capacity > 0).then(|| {
+                        crate::cargo_spec::apply_cargo_capacity_multiplier(
+                            engine.capacity,
+                            &state.cargo_spec_catalog,
+                            target,
+                        )
+                    })
+                });
+            if let Some(capacity) = callback_capacity.or(property_capacity) {
+                state.vehicles[idx].capacity = capacity;
+                state.vehicles[idx].refit_capacity = u16::try_from(capacity).unwrap_or(u16::MAX);
+            }
+        }
+        if state.vehicles[idx].refit_capacity == 0 {
+            state.vehicles[idx].refit_capacity =
+                u16::try_from(state.vehicles[idx].capacity).unwrap_or(u16::MAX);
+        }
+    }
+    state.economy.money -= total_cost;
+    true
+}
+
+fn refit_options_for_station_unit(state: &GameState, vehicle_idx: usize) -> Vec<CargoType> {
+    state.vehicles[vehicle_idx]
+        .engine_id
+        .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+        .map_or_else(
+            || {
+                crate::refit::refittable_cargo_types_with_catalog_and_climate(
+                    &state.vehicles[vehicle_idx],
+                    &state.engine_catalog,
+                    &state.cargo_spec_catalog,
+                    state.climate,
+                )
+            },
+            |engine| {
+                crate::refit::refittable_cargo_types_for_engine_with_catalog_and_climate(
+                    engine,
+                    &state.cargo_spec_catalog,
+                    state.climate,
+                )
+            },
+        )
 }
 
 /// Sólo una industria con stock o una estación con paquetes en espera puede
@@ -1612,6 +1839,80 @@ mod tests {
         station.cargo_stock.passengers = 1;
         state.stations.push(station);
         assert!(has_loadable_supply(&state));
+    }
+
+    #[test]
+    fn station_refit_runs_without_waiting_stock_and_before_loading() {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(4, 4);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(pos, tile).unwrap();
+        state.stations.push(crate::Station::new_with_kind(
+            pos,
+            crate::StopKind::TruckStop,
+        ));
+
+        let mut truck = crate::Vehicle::new(31, VehicleKind::Truck, pos, pos);
+        truck.orders = vec![crate::VehicleOrder::station_with_refit(
+            pos,
+            crate::OrderLoadType::LoadIfPossible,
+            crate::OrderUnloadType::UnloadIfPossible,
+            crate::OrderNonStop::NonStopDestination,
+            Some(CargoType::Coal),
+            false,
+        )];
+        state.vehicles.push(truck);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        let money_before = state.economy.money;
+        let mut loaded = vec![false];
+        load_vehicles(&mut state, &mut loaded, &[false]);
+
+        assert_eq!(state.vehicles[0].cargo_type, Some(CargoType::Coal));
+        assert_eq!(state.vehicles[0].cargo, 0);
+        assert_eq!(state.economy.money, money_before);
+    }
+
+    #[test]
+    fn station_auto_refit_selects_waiting_cargo() {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(4, 4);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 2 << 3;
+        tile.m3 = 1;
+        state.map.set_tile(pos, tile).unwrap();
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::TruckStop);
+        station.rating = 100;
+        station.add_waiting_cargo(CargoType::Goods, 7);
+        state.stations.push(station);
+
+        let mut truck = crate::Vehicle::new(32, VehicleKind::Truck, pos, pos);
+        truck.orders = vec![crate::VehicleOrder::station_with_refit(
+            pos,
+            crate::OrderLoadType::LoadIfPossible,
+            crate::OrderUnloadType::UnloadIfPossible,
+            crate::OrderNonStop::NonStopDestination,
+            None,
+            true,
+        )];
+        state.vehicles.push(truck);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        let mut loaded = vec![false];
+        load_vehicles(&mut state, &mut loaded, &[false]);
+
+        assert_eq!(state.vehicles[0].cargo_type, Some(CargoType::Goods));
+        assert!(
+            state.vehicles[0].cargo > 0,
+            "el refit debe preceder a la carga"
+        );
+        assert!(loaded[0]);
     }
 
     #[test]

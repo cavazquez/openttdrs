@@ -62,13 +62,20 @@ impl super::model::Vehicle {
     pub fn sync_cargo_from_packets(&mut self) {
         self.cargo = self.cargo_packets.total();
         if self.cargo == 0 {
+            // El tipo elegido por un refit permanece en la unidad aun cuando
+            // todavía no haya packets. `refit_capacity` distingue ese estado
+            // de los vehículos legacy que dejan que la próxima estación
+            // seleccione cualquier carga compatible.
+            let refitted_type = (self.refit_capacity > 0)
+                .then_some(self.cargo_type)
+                .flatten();
             self.cargo_type = match self.kind {
                 super::model::VehicleKind::Bus
                 | super::model::VehicleKind::Tram
                 | super::model::VehicleKind::Aircraft => Some(CargoType::Passengers),
                 super::model::VehicleKind::Truck
                 | super::model::VehicleKind::Train
-                | super::model::VehicleKind::Ship => None,
+                | super::model::VehicleKind::Ship => refitted_type,
             };
             self.cargo_source = None;
             self.cargo_transit_ticks = 0;
@@ -113,6 +120,9 @@ impl super::model::Vehicle {
     }
 
     pub(crate) fn clear_cargo(&mut self) {
+        let refitted_type = (self.refit_capacity > 0)
+            .then_some(self.cargo_type)
+            .flatten();
         self.cargo_packets.clear();
         self.cargo_loading = false;
         self.cargo_unloading = false;
@@ -123,7 +133,7 @@ impl super::model::Vehicle {
             | super::model::VehicleKind::Aircraft => Some(CargoType::Passengers),
             super::model::VehicleKind::Truck
             | super::model::VehicleKind::Train
-            | super::model::VehicleKind::Ship => None,
+            | super::model::VehicleKind::Ship => refitted_type,
         };
         self.cargo_source = None;
         self.cargo_transit_ticks = 0;

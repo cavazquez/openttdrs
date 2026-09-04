@@ -25,6 +25,23 @@ pub(crate) const OT_IMPLICIT: u8 = 4;
 pub(crate) const OT_GOTO_WAYPOINT: u8 = 6;
 pub(crate) const OT_CONDITIONAL: u8 = 7;
 
+/// Sentinel `Order::refit_cargo` para autorefit durante la carga en estación.
+pub(crate) const CARGO_AUTO_REFIT: u8 = 0xFD;
+/// Sentinel `Order::refit_cargo` que indica que la orden no refita.
+pub(crate) const CARGO_NO_REFIT: u8 = 0xFF;
+
+/// Traduce el byte de refit de ORDL conservando los IDs vanilla templados y
+/// los slots globales custom. Los IDs 11..30 dependen del clima y siguen
+/// requiriendo la tabla de cargos del save para no confundirlos entre mapas.
+#[must_use]
+pub(crate) fn cargo_from_order_refit_id(id: u8) -> Option<CargoType> {
+    CargoType::from_temperate_id(id).or_else(|| {
+        (id >= crate::cargo::CUSTOM_CARGO_OFFSET)
+            .then(|| CargoType::from_cargo_id(id))
+            .flatten()
+    })
+}
+
 pub(crate) const OTTD_DEPOT_SERVICE: u8 = 1 << 0;
 pub(crate) const OTTD_DEPOT_PART_OF_ORDERS: u8 = 1 << 1;
 pub(crate) const OTTD_DEPOT_HALT: u8 = 1 << 3;
@@ -57,11 +74,15 @@ pub(crate) const ORDER_WIRE_LEN: usize = 11;
 pub struct SavOrder {
     pub order_type: u8,
     pub dest: u16,
-    /// Cargo de refit del depósito; `None` representa el sentinel `0xFF`.
+    /// Cargo de refit de la orden; `None` representa `CARGO_NO_REFIT` o
+    /// `CARGO_AUTO_REFIT` (este último se distingue en [`Self::auto_refit`]).
     ///
-    /// El wire conserva IDs vanilla de clima templado. Cargos `NewGRF` que no
-    /// tienen un `CargoType` local siguen siendo un residual explícito.
+    /// El wire conserva los IDs vanilla y los slots globales custom que puede
+    /// representar el runtime. Los IDs dependientes del clima sin entrada en
+    /// la tabla local siguen siendo un residual explícito.
     pub refit_cargo: Option<CargoType>,
+    /// La orden usa el sentinel `CARGO_AUTO_REFIT` (0xFD).
+    pub auto_refit: bool,
     /// Byte `Order::flags` (`order_base.h`: unload bits 0–2, load bits 4–6).
     pub flags: u8,
     /// `Order::wait_time` (ticks).
@@ -235,9 +256,10 @@ pub(crate) fn decode_order_wire(bytes: &[u8]) -> Option<(SavOrder, u8)> {
             order_type: bytes[0],
             flags: bytes[1],
             dest: u16::from_be_bytes([bytes[2], bytes[3]]),
-            refit_cargo: (bytes[4] != 0xFF)
-                .then(|| CargoType::from_temperate_id(bytes[4]))
+            refit_cargo: (bytes[4] != CARGO_NO_REFIT && bytes[4] != CARGO_AUTO_REFIT)
+                .then(|| cargo_from_order_refit_id(bytes[4]))
                 .flatten(),
+            auto_refit: bytes[4] == CARGO_AUTO_REFIT,
             wait_time,
             travel_time,
             max_speed,
@@ -250,6 +272,7 @@ pub(crate) fn decode_order_wire(bytes: &[u8]) -> Option<(SavOrder, u8)> {
 ///
 /// `station_id` resuelve el índice STNN de una tesela de estación/waypoint.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub(crate) fn encode_vehicle_order(
     order: &VehicleOrder,
     station_id: impl Fn(TileCoord) -> Option<u16>,
@@ -263,15 +286,24 @@ pub(crate) fn encode_vehicle_order(
             travel_ticks,
             max_speed,
             implicit,
+            refit_cargo,
+            auto_refit,
             ..
         } => {
             let id = station_id(station)?;
+            let refit = if implicit {
+                CARGO_NO_REFIT
+            } else if auto_refit {
+                CARGO_AUTO_REFIT
+            } else {
+                refit_cargo.map_or(CARGO_NO_REFIT, CargoType::temperate_id)
+            };
             if implicit {
                 (
                     OT_IMPLICIT,
                     id,
                     0,
-                    0xFFu8,
+                    refit,
                     u16::try_from(wait_ticks).unwrap_or(u16::MAX),
                     u16::try_from(travel_ticks).unwrap_or(u16::MAX),
                     wire_max_speed(max_speed),
@@ -282,7 +314,7 @@ pub(crate) fn encode_vehicle_order(
                     order_type,
                     id,
                     flags,
-                    0xFFu8,
+                    refit,
                     u16::try_from(wait_ticks).unwrap_or(u16::MAX),
                     u16::try_from(travel_ticks).unwrap_or(u16::MAX),
                     wire_max_speed(max_speed),
@@ -399,6 +431,8 @@ pub(crate) fn vehicle_orders_from_sav(
                             wait_ticks: u32::from(order.wait_time),
                             travel_ticks: u32::from(order.travel_time),
                             max_speed: limit,
+                            refit_cargo: order.refit_cargo,
+                            auto_refit: order.auto_refit,
                             implicit: false,
                         });
                     }
@@ -669,6 +703,80 @@ mod tests {
     }
 
     #[test]
+    fn station_refit_and_auto_refit_use_open_ttd_sentinels() {
+        let station = TileCoord::new(3, 4);
+        let mut stations = HashMap::new();
+        stations.insert(
+            1,
+            SavStationIndex {
+                pos: station,
+                owner: crate::company::CompanyId::PLAYER.0,
+                is_waypoint: false,
+                facilities: 1,
+                name: None,
+                string_id: None,
+                town_id: None,
+                airport_type: 0,
+                airport_w: 0,
+                airport_h: 0,
+                airport_layout: 0,
+                airport_rotation: 0,
+                airport_blocks: 0,
+                airport_persistent_storage_id: None,
+            },
+        );
+        let manual = VehicleOrder::station_with_refit(
+            station,
+            OrderLoadType::LoadIfPossible,
+            OrderUnloadType::UnloadIfPossible,
+            OrderNonStop::NonStopDestination,
+            Some(CargoType::Coal),
+            false,
+        );
+        let automatic = VehicleOrder::station_with_refit(
+            station,
+            OrderLoadType::LoadIfPossible,
+            OrderUnloadType::UnloadIfPossible,
+            OrderNonStop::NonStopDestination,
+            None,
+            true,
+        );
+        let manual_wire = encode_vehicle_order(&manual, |_| Some(1), 64).unwrap();
+        assert_eq!(manual_wire[4], CargoType::Coal.temperate_id());
+        let (manual_sav, _) = decode_order_wire(&manual_wire).unwrap();
+        assert!(!manual_sav.auto_refit);
+        assert_eq!(
+            vehicle_orders_from_sav(&[manual_sav], &stations, 64),
+            vec![manual]
+        );
+
+        let automatic_wire = encode_vehicle_order(&automatic, |_| Some(1), 64).unwrap();
+        assert_eq!(automatic_wire[4], CARGO_AUTO_REFIT);
+        let (automatic_sav, _) = decode_order_wire(&automatic_wire).unwrap();
+        assert!(automatic_sav.auto_refit);
+        assert_eq!(
+            vehicle_orders_from_sav(&[automatic_sav], &stations, 64),
+            vec![automatic]
+        );
+
+        let custom = VehicleOrder::station_with_refit(
+            station,
+            OrderLoadType::LoadIfPossible,
+            OrderUnloadType::UnloadIfPossible,
+            OrderNonStop::NonStopDestination,
+            Some(CargoType::Custom(32)),
+            false,
+        );
+        let custom_wire = encode_vehicle_order(&custom, |_| Some(1), 64).unwrap();
+        let (custom_sav, _) = decode_order_wire(&custom_wire).unwrap();
+        assert_eq!(custom_sav.refit_cargo, Some(CargoType::Custom(32)));
+        assert_eq!(
+            vehicle_orders_from_sav(&[custom_sav], &stations, 64),
+            vec![custom]
+        );
+    }
+
+    #[test]
     fn station_order_falls_back_to_only_station_for_modern_pool_offset() {
         let mut stations = HashMap::new();
         stations.insert(
@@ -695,6 +803,7 @@ mod tests {
             order_type: OT_GOTO_STATION | (1 << 4),
             dest: 0,
             refit_cargo: None,
+            auto_refit: false,
             flags: 0,
             wait_time: 0,
             travel_time: 0,

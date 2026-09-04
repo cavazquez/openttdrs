@@ -1107,6 +1107,10 @@ pub(super) fn refit_vehicle(
         if let Some(capacity) = callback_capacity.or(property_capacity) {
             vehicle.capacity = capacity;
         }
+        // `Vehicle::refit_cap` conserva el tipo elegido aunque todavía no
+        // haya packets a bordo; de lo contrario la siguiente fase de carga
+        // volvería a borrar el cargo refitado antes de usarlo.
+        vehicle.refit_capacity = u16::try_from(vehicle.capacity).unwrap_or(u16::MAX);
         if let Some(engine) = engine.as_ref() {
             vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(engine, vehicle);
         }

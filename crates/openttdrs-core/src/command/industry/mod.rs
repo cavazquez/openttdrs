@@ -757,7 +757,11 @@ pub fn place_industry_spec_def_layout_sandbox(
     // OpenTTD evalúa `CBID_INDUSTRY_INPUT/OUTPUT_CARGO_TYPES` después de
     // inicializar color y nivel, reemplazando las listas estáticas de la
     // instancia. Sin runtime se conserva el fallback de `with_newgrf_spec`.
-    let _ = crate::newgrf_callback::apply_industry_dynamic_cargo_callbacks(&def, &mut industry);
+    let _ = crate::newgrf_callback::apply_industry_dynamic_cargo_callbacks_with_catalog(
+        &def,
+        &mut industry,
+        &state.cargo_spec_catalog,
+    );
     state.industries.push(industry);
     let initial_animation_tiles = state
         .industries

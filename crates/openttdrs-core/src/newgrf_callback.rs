@@ -1607,11 +1607,12 @@ pub struct IndustryProductionCallbackResult {
     pub outputs_added: u32,
 }
 
-fn cargo_for_group_index(
+fn cargo_for_group_index_with_catalog(
     raw: u8,
     indices: &[u8],
     labels: &[String],
     slots: Option<&[Option<CargoType>]>,
+    cargo_catalog: &[CargoSpecDef],
 ) -> Option<CargoType> {
     indices
         .iter()
@@ -1622,7 +1623,7 @@ fn cargo_for_group_index(
                 .or_else(|| {
                     labels
                         .get(idx)
-                        .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+                        .and_then(|label| cargo_type_from_label_with_catalog(label, cargo_catalog))
                 })
         })
         .or_else(|| CargoType::from_cargo_id(raw))
@@ -1660,6 +1661,20 @@ pub fn apply_industry_production_callback(
     industry: &mut Industry,
     reason: u8,
     rng: &mut Randomizer,
+) -> IndustryProductionCallbackResult {
+    apply_industry_production_callback_with_catalog(def, industry, reason, rng, &[])
+}
+
+/// Variante que entrega el catálogo de `CargoSpec` al resolver los índices
+/// locales de los grupos de producción CB1/CB2. Las instancias runtime suelen
+/// tener esos slots hidratados; el catálogo cubre también saves que aún no los
+/// reconstruyeron.
+pub fn apply_industry_production_callback_with_catalog(
+    def: &IndustrySpecDef,
+    industry: &mut Industry,
+    reason: u8,
+    rng: &mut Randomizer,
+    cargo_catalog: &[CargoSpecDef],
 ) -> IndustryProductionCallbackResult {
     let declared = match reason {
         0 => def.has_production_cargo_arrival_callback(),
@@ -1720,11 +1735,12 @@ pub fn apply_industry_production_callback(
             }
         } else {
             for (idx, &raw_cargo) in group.cargo_input.iter().enumerate() {
-                let Some(cargo) = cargo_for_group_index(
+                let Some(cargo) = cargo_for_group_index_with_catalog(
                     raw_cargo,
                     &def.accepted_cargo_indices,
                     &def.accepted_cargo_labels,
                     Some(&accepted_slot_map),
+                    cargo_catalog,
                 ) else {
                     continue;
                 };
@@ -1736,11 +1752,12 @@ pub fn apply_industry_production_callback(
                     .saturating_add(apply_industry_group_input(industry, cargo, amount));
             }
             for (idx, &raw_cargo) in group.cargo_output.iter().enumerate() {
-                let Some(cargo) = cargo_for_group_index(
+                let Some(cargo) = cargo_for_group_index_with_catalog(
                     raw_cargo,
                     &def.produced_cargo_indices,
                     &def.produced_cargo_labels,
                     Some(&produced_slot_map),
+                    cargo_catalog,
                 ) else {
                     continue;
                 };
@@ -2008,10 +2025,11 @@ struct IndustryDynamicCargoSlots {
     slots: Vec<Option<CargoType>>,
 }
 
-fn static_industry_cargo_slots(
+fn static_industry_cargo_slots_with_catalog(
     indices: &[u8],
     labels: &[String],
     existing_slots: &[Option<CargoType>],
+    cargo_catalog: &[CargoSpecDef],
 ) -> IndustryDynamicCargoSlots {
     let mut result = IndustryDynamicCargoSlots {
         slots: vec![None; indices.len()],
@@ -2022,7 +2040,9 @@ fn static_industry_cargo_slots(
             .get(source_index)
             .copied()
             .flatten()
-            .or_else(|| cargo_for_group_index(local, indices, labels, None))
+            .or_else(|| {
+                cargo_for_group_index_with_catalog(local, indices, labels, None, cargo_catalog)
+            })
         {
             result.slots[source_index] = Some(cargo);
             result.valid.push(IndustryDynamicCargoSlot {
@@ -2044,6 +2064,7 @@ fn callback_industry_cargo_slots(
     indices: &[u8],
     labels: &[String],
     existing_slots: &[Option<CargoType>],
+    cargo_catalog: &[CargoSpecDef],
 ) -> IndustryDynamicCargoSlots {
     let mut result = IndustryDynamicCargoSlots::default();
     let preserve_empty_slots = max_slots <= crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS;
@@ -2075,7 +2096,7 @@ fn callback_industry_cargo_slots(
                 existing_slots.get(index).copied().flatten().or_else(|| {
                     labels
                         .get(index)
-                        .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+                        .and_then(|label| cargo_type_from_label_with_catalog(label, cargo_catalog))
                 })
             })
             .or_else(|| CargoType::from_cargo_id(local));
@@ -2141,6 +2162,17 @@ pub fn apply_industry_dynamic_cargo_callbacks(
     def: &IndustrySpecDef,
     industry: &mut Industry,
 ) -> bool {
+    apply_industry_dynamic_cargo_callbacks_with_catalog(def, industry, &[])
+}
+
+/// Variante catálogo-aware de [`apply_industry_dynamic_cargo_callbacks`].
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn apply_industry_dynamic_cargo_callbacks_with_catalog(
+    def: &IndustrySpecDef,
+    industry: &mut Industry,
+    cargo_catalog: &[CargoSpecDef],
+) -> bool {
     let input_declared = def.has_input_cargo_types_callback();
     let output_declared = def.has_output_cargo_types_callback();
     if !input_declared && !output_declared {
@@ -2168,12 +2200,14 @@ pub fn apply_industry_dynamic_cargo_callbacks(
             &def.accepted_cargo_indices,
             &def.accepted_cargo_labels,
             &input_static_slots,
+            cargo_catalog,
         )
     } else {
-        static_industry_cargo_slots(
+        static_industry_cargo_slots_with_catalog(
             &def.accepted_cargo_indices,
             &def.accepted_cargo_labels,
             &input_static_slots,
+            cargo_catalog,
         )
     };
     let output_slots = if output_declared {
@@ -2190,12 +2224,14 @@ pub fn apply_industry_dynamic_cargo_callbacks(
             &def.produced_cargo_indices,
             &def.produced_cargo_labels,
             &output_static_slots,
+            cargo_catalog,
         )
     } else {
-        static_industry_cargo_slots(
+        static_industry_cargo_slots_with_catalog(
             &def.produced_cargo_indices,
             &def.produced_cargo_labels,
             &output_static_slots,
+            cargo_catalog,
         )
     };
 
@@ -5516,6 +5552,129 @@ mod tests {
                 (CargoType::Mail, 192)
             ]
         );
+    }
+
+    #[test]
+    fn industry_dynamic_input_callback_resolves_custom_label_with_catalog() {
+        let custom = CargoType::Custom(0);
+        let cargo_catalog = vec![CargoSpecDef {
+            id: custom.cargo_id(),
+            label: "TOFU".into(),
+            name: "Tofu".into(),
+            from_newgrf: true,
+            ..CargoSpecDef::default()
+        }];
+        let def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![5],
+            produced_cargo_labels: vec!["GOOD".into()],
+            accepted_cargo_indices: vec![6],
+            accepted_cargo_labels: vec!["TOFU".into()],
+            production_rates: vec![0],
+            input_multipliers: vec![64],
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_INPUT_CARGO_TYPES_MASK,
+            behaviour: 0,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "dynamic-custom-input".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_literal(6))),
+        };
+        let mut industry =
+            Industry::new(TileCoord::new(4, 5), crate::industry::IndustryKind::Factory)
+                .with_newgrf_spec(def.id, &def);
+
+        assert!(apply_industry_dynamic_cargo_callbacks_with_catalog(
+            &def,
+            &mut industry,
+            &cargo_catalog,
+        ));
+        assert_eq!(industry.newgrf_input_cargo_slots, vec![Some(custom)]);
+        assert_eq!(
+            industry
+                .newgrf_processing_inputs
+                .iter()
+                .map(|input| (input.cargo, input.multiplier))
+                .collect::<Vec<_>>(),
+            vec![(custom, 64)]
+        );
+    }
+
+    #[test]
+    fn industry_production_callback_preserves_custom_catalog_cargo() {
+        let custom = CargoType::Custom(0);
+        let cargo_catalog = vec![CargoSpecDef {
+            id: custom.cargo_id(),
+            label: "TOFU".into(),
+            name: "Tofu".into(),
+            from_newgrf: true,
+            ..CargoSpecDef::default()
+        }];
+        let mut runtime = TrainSpriteGraphics::default();
+        runtime
+            .assigns
+            .push(crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 0,
+                set_id: 7,
+            });
+        runtime.industry_production.insert(
+            7,
+            IndustryProductionGroup {
+                version: 0,
+                subtract_input: vec![3],
+                cargo_input: Vec::new(),
+                add_output: vec![4],
+                cargo_output: Vec::new(),
+                again: 0,
+            },
+        );
+        let def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![5],
+            produced_cargo_labels: vec!["GOOD".into()],
+            accepted_cargo_indices: vec![6],
+            accepted_cargo_labels: vec!["TOFU".into()],
+            production_rates: vec![0],
+            input_multipliers: vec![256],
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_PRODUCTION_CARGO_ARRIVAL_MASK,
+            behaviour: 0,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "production-custom-group".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+        let mut industry =
+            Industry::new(TileCoord::new(4, 5), crate::industry::IndustryKind::Factory)
+                .with_newgrf_spec_and_cargo_catalog(def.id, &def, &cargo_catalog);
+        industry.add_accepted_cargo_waiting(custom, 10);
+        let mut rng = Randomizer::new(42);
+
+        let result = apply_industry_production_callback_with_catalog(
+            &def,
+            &mut industry,
+            0,
+            &mut rng,
+            &cargo_catalog,
+        );
+        assert_eq!(result.inputs_consumed, 3);
+        assert_eq!(result.outputs_added, 4);
+        assert_eq!(industry.accepted_cargo_waiting(custom), 7);
+        assert_eq!(industry.stock, 4);
     }
 
     #[test]

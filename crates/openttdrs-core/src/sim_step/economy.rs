@@ -287,11 +287,12 @@ pub(super) fn trigger_delivered_industries(state: &mut GameState, destinations: 
 
         if callback_on_arrival {
             if let Some(def) = newgrf_def.as_ref() {
-                crate::newgrf_callback::apply_industry_production_callback(
+                crate::newgrf_callback::apply_industry_production_callback_with_catalog(
                     def,
                     &mut state.industries[index],
                     0,
                     &mut state.random,
+                    &state.cargo_spec_catalog,
                 );
             }
         } else if !callback_on_tick {
@@ -584,11 +585,12 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
             if processed {
                 state.industries[i].was_cargo_delivered = true;
                 if callback_on_arrival && let Some(def) = newgrf_def.as_ref() {
-                    crate::newgrf_callback::apply_industry_production_callback(
+                    crate::newgrf_callback::apply_industry_production_callback_with_catalog(
                         def,
                         &mut state.industries[i],
                         0,
                         &mut state.random,
+                        &state.cargo_spec_catalog,
                     );
                 }
                 let dirty = crate::map::trigger_industry_randomisation_at_with_catalog_and_world(
@@ -609,22 +611,24 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                 && production_tick
                 && let Some(def) = newgrf_def.as_ref()
             {
-                crate::newgrf_callback::apply_industry_production_callback(
+                crate::newgrf_callback::apply_industry_production_callback_with_catalog(
                     def,
                     &mut state.industries[i],
                     1,
                     &mut state.random,
+                    &state.cargo_spec_catalog,
                 );
             }
         } else if callback_on_tick
             && production_tick
             && let Some(def) = newgrf_def.as_ref()
         {
-            crate::newgrf_callback::apply_industry_production_callback(
+            crate::newgrf_callback::apply_industry_production_callback_with_catalog(
                 def,
                 &mut state.industries[i],
                 1,
                 &mut state.random,
+                &state.cargo_spec_catalog,
             );
         } else {
             state.industries[i].produce(tick);

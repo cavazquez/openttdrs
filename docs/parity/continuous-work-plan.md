@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`b80b8362`** (`newgrf: resolve custom cargo in industry refusal callbacks`),
+Base funcional local y publicada: **`391b35d9`** (`newgrf: propagate cargo catalog to industry production callbacks`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -121,6 +121,15 @@ rehidratados; los wrappers legacy mantienen el fallback sin catálogo. La
 regresión `TOFU` fija `param2=6`. CB1/CB2 de producción, tipos dinámicos y
 aceptación de `IndustryTile` siguen pendientes de la misma propagación.
 
+Actualización #329-CARGO-CTT-070 (2026-09-04, commit `391b35d9`): las rutas
+runtime de producción industrial CB1/CB2 (`IndustryProductionSpriteGroup`) y de
+tipos dinámicos CB14B/CB14C reciben el catálogo activo de `CargoSpec`. Labels
+custom como `TOFU` se resuelven en slots, multiplicadores y grupos de producción
+incluso para instancias SAV sin slots previamente hidratados; los wrappers legacy
+mantienen el fallback histórico. La aceptación de `IndustryTile`, GUI/variables
+ilimitadas y el resto de callbacks de industria siguen pendientes; #329 continúa
+abierto.
+
 Actualización #329-CARGO-TRAIN-WEIGHT-063 (2026-09-04, commit `b32b87f4`):
 `ConsistChanged` acumula `CargoSpec::weight` por unidad y refresca
 `cached_weight_t`/esfuerzo tractor después de `LoadUnloadStation`. Esto cubre
@@ -155,8 +164,8 @@ Quedan por propagar el catálogo a CB140–142, `AirportTiles`, industria y la
 GUI/variables ilimitadas; #329 sigue abierto y esta etapa no cierra el issue
 padre.
 
-Última validación de `7782568d`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **2.022** tests de core y **1.065** de cliente (2 ignorados); la matriz
+Última validación de `391b35d9`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **2.025** tests de core y **1.065** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.

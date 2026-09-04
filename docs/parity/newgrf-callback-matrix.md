@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `b80b8362`, CTT de cargos custom en scopes
+Actualizada: **2026-09-04** (commit `391b35d9`, CTT de cargos custom en scopes
 de estación/parada,
 shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
@@ -734,3 +734,11 @@ insumos pasan ese catálogo, por lo que una instancia SAV sin slots hidratados
 también recibe el índice CTT correcto en `param2`; la regresión `TOFU` fija el
 valor 6. CB1/CB2, callbacks de tipos dinámicos y aceptación de `IndustryTile`
 mantienen el residual catalogue-aware pendiente.
+
+Actualización #329-CARGO-CTT-070 (2026-09-04, commit `391b35d9`): las rutas
+runtime de producción industrial CB1/CB2 (`IndustryProductionSpriteGroup`) y de
+tipos dinámicos CB14B/CB14C reciben el catálogo activo de `CargoSpec`. Labels
+custom como `TOFU` se resuelven en slots, multiplicadores y grupos de producción
+aunque una instancia SAV no tuviera slots hidratados; los wrappers legacy
+mantienen el fallback histórico. La aceptación de `IndustryTile` y la GUI/
+variables ilimitadas siguen pendientes, por lo que #329 continúa abierto.

@@ -1,6 +1,7 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `5e0938ff`, cargos custom ejecutables,
+Actualizada: **2026-09-04** (commit `b25a2362`, CTT de cargos custom en scopes
+de estación/parada,
 shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
 `PlantOnBuild`, rehidratación SAV legacy, historiales aceptados runtime,
@@ -699,3 +700,12 @@ los consist ferroviarios sin modificar el mapa. Ajustes muestra y cicla los
 presets `1/2/4/8/16/32/64/128/255`, sincronizados con `GameState`; quedan
 pendientes el control avanzado de valores arbitrarios y la UI del resto de
 settings.
+
+Actualización #329-CARGO-CTT-066 (2026-09-04, commit `b25a2362`):
+`local_cargo_id_with_catalog`/`cargo_from_local_id_with_catalog` invierten la
+CTT usando el label real del `CargoSpec`, incluidos cargos custom. Las vars de
+carga `60`–`65`/`69` de estaciones y paradas viales recorren esos cargos cuando
+el contexto de mundo lleva el catálogo activo; las APIs legacy siguen usando
+el fallback sin catálogo. Los callbacks de animación, `AirportTiles`,
+industria y variables ilimitadas todavía necesitan la misma propagación, por
+lo que #329 continúa abierto.

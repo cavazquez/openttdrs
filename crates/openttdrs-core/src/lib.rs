@@ -539,8 +539,8 @@ pub use newgrf_sprites::{
     merge_twocc_action5_block, oneway_action5_slot, roadstop_action5_slot, signal_action5_slot,
 };
 pub use newgrf_type_tables::{
-    GrfTypeTranslationTables, TypeLabel, collect_type_tables_from_grf,
-    cargo_from_local_id_with_catalog, local_cargo_id_with_catalog,
+    GrfTypeTranslationTables, TypeLabel, cargo_from_local_id_with_catalog,
+    collect_type_tables_from_grf, local_cargo_id_with_catalog,
     parse_action0_type_translation_tables, reverse_rail_type, reverse_road_type,
 };
 pub use news::{

@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`5e0938ff`** (`ui: expose freight train weight setting`),
+Base funcional local y publicada: **`b25a2362`** (`newgrf: resolve custom cargo CTT in station scopes`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -88,6 +88,12 @@ cargos modernos en SAV y conserva los slots climáticos de saves anteriores a
 `SLV_55`. Esta nota prevalece sobre las filas históricas que todavía describen
 los cargos custom como exclusivamente opacos.
 
+Corrección de la tabla en `b25a2362`: la CTT de cargos custom ya es ejecutable
+en las variables parametrizadas de estaciones y paradas viales cuando el
+catálogo está instalado. El residual de `#329` queda acotado a callbacks
+CB140–142, `AirportTiles`, industria, GUI/variables ilimitadas y otros scopes
+que todavía no reciben ese catálogo.
+
 Actualización #329-CARGO-TRAIN-WEIGHT-063 (2026-09-04, commit `b32b87f4`):
 `ConsistChanged` acumula `CargoSpec::weight` por unidad y refresca
 `cached_weight_t`/esfuerzo tractor después de `LoadUnloadStation`. Esto cubre
@@ -113,8 +119,17 @@ actual y vuelve a `1` tras `255`; las regresiones cubren ciclo, wrap y refresco
 de peso. Falta la ventana avanzada con edición arbitraria y el resto de
 settings económicos.
 
-Última validación de `5e0938ff`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **2.018** tests de core y **1.065** de cliente (2 ignorados); la matriz
+Actualización #329-CARGO-CTT-066 (2026-09-04, commit `b25a2362`): las CTT
+explícitas ya se invierten contra el label real del `CargoSpec` para cargos
+custom; `StationScopeResolver` y `RoadStopScopeResolver` recorren esos cargos
+en las variables parametrizadas `60`–`65`/`69` cuando el renderer aporta el
+catálogo activo. Las APIs legacy sin catálogo mantienen el fallback histórico.
+Quedan por propagar el catálogo a CB140–142, `AirportTiles`, industria y la
+GUI/variables ilimitadas; #329 sigue abierto y esta etapa no cierra el issue
+padre.
+
+Última validación de `b25a2362`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **2.021** tests de core y **1.065** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.

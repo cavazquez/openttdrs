@@ -436,6 +436,12 @@ Fuente: `newgrf_act0_roadstops.cpp` / `newgrf_roadstop.h`.
 | `grfid` + `newgrf_local_id` | **runtime** (save/load + rebind tras re-apply multi-GRF) |
 | resto (`0x0A`–`0x0B`, `0x13`–`0x16`) | consumidas (ancho fijo) / pendiente |
 
+Precisión de la CTT en este corte (`b25a2362`): los scopes de carga de
+estaciones y paradas viales ya resuelven labels custom mediante el catálogo
+activo. Los parámetros de cargo de callbacks de animación y los scopes de
+`AirportTiles`/industria todavía usan las rutas legacy hasta que reciban ese
+catálogo.
+
 ## Sound effects (`0C`)
 
 Fuente: `newgrf_act0_sound.cpp` / Action11 (`newgrf_sound.cpp`).

@@ -34,9 +34,9 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `5e0938ff`; el
-runtime de cargos custom, la frontera SAV, el monitor de carga y los pesos vial
-y ferroviario quedan actualizados en este corte).
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `b25a2362`; el
+runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
+ferroviario y la CTT de scopes de estación/parada quedan actualizados en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -106,6 +106,16 @@ los consist ferroviarios. El menú Ajustes expone el ciclo
 `1/2/4/8/16/32/64/128/255` con etiqueta sincronizada al estado y conserva el
 valor elegido al guardar JSON/SAV. La secuencia es un control compacto, no una
 declaración de paridad completa de la ventana avanzada de settings.
+
+Actualización #329-CARGO-CTT-066 (2026-09-04, `b25a2362`): las tablas CTT
+explícitas ya invierten el label real de un `CargoSpec` custom (por ejemplo,
+`TOFU`) en vez del label sintético `CSTM`. Las variables parametrizadas de
+`StationScopeResolver` y `RoadStopScopeResolver` (`60`–`65`/`69`) recorren los
+cargos custom registrados y sólo publican pares local↔global con ida y vuelta
+válida; el renderer pasa el catálogo activo a ambos contextos. Las APIs legacy
+sin catálogo conservan el fallback vanilla y no inventan una identidad.
+CB140/141/142, `AirportTiles`, industria y GUI ilimitada todavía requieren
+propagar el catálogo en sus propios call sites; #329 sigue abierto.
 
 Actualización vigente del corte: `036fda1f` implementa el monitor efímero de
 carga compatible con `_cargo_pickups`/`_cargo_deliveries`: codificación nativa
@@ -226,6 +236,11 @@ call sites con contexto parent/PSA; la primera llamada de construcción lleva
 `var 18 |= 0x100`. La aceptación CB2B/CB2C de teselas de industria también
 alimenta ahora la cobertura exacta de estaciones y la descarga. El residual
 real son cargos custom/CTT, sonido, scopes y mutaciones aún parciales.
+
+Precisión CTT de este corte (`b25a2362`): los cargos custom dejan de estar
+limitados al label sintético en las variables de estación y parada vial cuando
+el `CargoSpec` activo está disponible; el residual de la fila anterior se
+refiere sólo a callbacks/scopes que todavía no reciben ese catálogo.
 
 | Multijugador | **Media propia** | Lockstep TCP, dedicated, late join y host migration; el servidor asigna empresa por peer, valida antes de secuenciar, rechaza issuer inválido y resincroniza desync por snapshot. Sigue siendo protocolo propio, sin lobby, auth, cifrado ni interoperabilidad OpenTTD |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |

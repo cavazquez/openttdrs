@@ -221,12 +221,13 @@ pub(super) fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
         .collect();
 
     for head_id in train_heads {
-        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo(
+        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
             &mut state.vehicles,
             head_id,
             Some(&state.map),
             &state.engine_catalog,
             &state.cargo_spec_catalog,
+            state.freight_trains,
         );
     }
 

@@ -314,6 +314,8 @@ pub struct SavGame {
     pub pathfinding: crate::PathfindingSettings,
     /// Modelo de aceleración de tren persistido en `PATS` / `OPTS`.
     pub train_acceleration_model: crate::engine::TrainAccelerationModel,
+    /// Multiplicador de peso de carga freight en trenes (`PATS` / `OPTS`).
+    pub freight_trains: u8,
     /// Modelo de aceleración vial persistido en `PATS` / `OPTS`.
     pub road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel,
     /// Límite de ruido de aeropuerto persistido en `PATS` / `OPTS`.
@@ -396,6 +398,8 @@ pub struct SavGame {
 /// `SLV_100`: desde esta versión `OpenTTD` persiste las reservas PBS de
 /// depósitos. `AfterLoadGame()` sólo limpia el bit en saves anteriores.
 const SLV_DEPOT_RESERVATION_PERSISTED: u16 = 100;
+/// `vehicle.freight_trains` se introdujo en `SLV_39`.
+const SLV_FREIGHT_TRAINS: u16 = 39;
 /// `SLV_SERVE_NEUTRAL_INDUSTRIES` de `OpenTTD` (210). Antes de esta versión el
 /// comportamiento histórico siempre permitía a estaciones de compañías
 /// servir industrias con estación neutral.
@@ -556,6 +560,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         construction: parsed_settings.construction,
         pathfinding: parsed_settings.pathfinding,
         train_acceleration_model: parsed_settings.train_acceleration_model,
+        freight_trains: parsed_settings.freight_trains,
         road_vehicle_acceleration_model: parsed_settings.road_vehicle_acceleration_model,
         station_noise_level: parsed_settings.station_noise_level,
         serve_neutral_industries: parsed_settings.serve_neutral_industries,
@@ -1121,6 +1126,11 @@ impl GameState {
         state.construction = sav.construction;
         state.pathfinding = sav.pathfinding;
         state.train_acceleration_model = sav.train_acceleration_model;
+        state.freight_trains = if sav.version < SLV_FREIGHT_TRAINS {
+            1
+        } else {
+            sav.freight_trains.max(1)
+        };
         state.road_vehicle_acceleration_model = sav.road_vehicle_acceleration_model;
         state.station_noise_level = sav.station_noise_level;
         state.serve_neutral_industries = if sav.version < SLV_SERVE_NEUTRAL_INDUSTRIES {
@@ -1833,11 +1843,13 @@ impl GameState {
             .map(|vehicle| vehicle.id)
             .collect();
         for head in train_heads {
-            crate::train_consist::consist_changed_with_map_and_catalog(
+            crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
                 &mut state.vehicles,
                 head,
                 Some(&state.map),
                 &state.engine_catalog,
+                &state.cargo_spec_catalog,
+                state.freight_trains,
             );
         }
 
@@ -1995,6 +2007,7 @@ mod tests {
             construction: crate::ConstructionSettings::default(),
             pathfinding: crate::PathfindingSettings::default(),
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
+            freight_trains: 1,
             road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel::Realistic,
             station_noise_level: false,
             serve_neutral_industries: true,
@@ -2105,6 +2118,26 @@ mod tests {
         let state = GameState::from_sav_game(sav);
         assert!(state.construction.signals_on_right());
         assert_eq!(state.snow_line_height, 2);
+    }
+
+    #[test]
+    fn legacy_sav_uses_default_freight_train_weight_multiplier() {
+        let mut sav = empty_sav(SLV_FREIGHT_TRAINS - 1, Map::new_flat(4, 4, 0));
+        sav.freight_trains = 9;
+
+        let state = GameState::from_sav_game(sav);
+
+        assert_eq!(state.freight_trains, 1);
+    }
+
+    #[test]
+    fn modern_sav_clamps_freight_train_weight_multiplier() {
+        let mut sav = empty_sav(SLV_FREIGHT_TRAINS, Map::new_flat(4, 4, 0));
+        sav.freight_trains = 0;
+
+        let state = GameState::from_sav_game(sav);
+
+        assert_eq!(state.freight_trains, 1);
     }
 
     #[test]
@@ -3239,6 +3272,7 @@ mod tests {
             construction: crate::ConstructionSettings::default(),
             pathfinding: crate::PathfindingSettings::default(),
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
+            freight_trains: 1,
             road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel::Realistic,
             station_noise_level: false,
             serve_neutral_industries: true,

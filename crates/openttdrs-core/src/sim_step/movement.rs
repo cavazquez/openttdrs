@@ -453,11 +453,13 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 // el motor del catálogo activo para no perder los callbacks
                 // CB36 (peso, potencia, capacidad y velocidad) en el primer
                 // tick de movimiento.
-                crate::train_consist::consist_changed_with_map_and_catalog(
+                crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
                     &mut state.vehicles,
                     vehicle_id,
                     Some(&state.map),
                     &state.engine_catalog,
+                    &state.cargo_spec_catalog,
+                    state.freight_trains,
                 );
             } else {
                 crate::train_consist::propagate_consist_unit_poses_with_map_indexed(

@@ -4,7 +4,7 @@ use crate::engine::{EngineDef, engine_by_id};
 use crate::rail_type::{RailType, powered_railtypes_mask, required_rail_type_for_engine};
 use crate::vehicle::{Vehicle, VehicleKind};
 
-use super::metrics::cargo_weight_t;
+use super::metrics::train_cargo_weight_t;
 
 /// ¿El motor es un vagón (sin potencia, con capacidad de carga)?
 #[must_use]
@@ -89,6 +89,27 @@ pub fn consist_changed_with_map_and_catalog_and_cargo(
     engine_catalog: &[EngineDef],
     cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
 ) {
+    consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
+        vehicles,
+        head_id,
+        map,
+        engine_catalog,
+        cargo_catalog,
+        1,
+    );
+}
+
+/// Como [`consist_changed_with_map_and_catalog_and_cargo`], aplicando el
+/// multiplicador de peso ferroviario `vehicle.freight_trains`.
+#[allow(clippy::too_many_lines)]
+pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
+    vehicles: &mut [Vehicle],
+    head_id: u32,
+    map: Option<&crate::map::Map>,
+    engine_catalog: &[EngineDef],
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    freight_trains: u8,
+) {
     let ids = consist_unit_ids(vehicles, head_id);
     if ids.is_empty() {
         return;
@@ -155,7 +176,8 @@ pub fn consist_changed_with_map_and_catalog_and_cargo(
         }
         let speed = crate::newgrf_callback::vehicle_max_speed(eng, v);
         let unit_weight = crate::newgrf_callback::vehicle_weight_t(eng, v);
-        let cargo_weight = cargo_weight_t(v.cargo, v.cargo_type, cargo_catalog);
+        let cargo_weight =
+            train_cargo_weight_t(v.cargo, v.cargo_type, cargo_catalog, freight_trains);
         total_weight = total_weight
             .saturating_add(unit_weight)
             .saturating_add(cargo_weight);

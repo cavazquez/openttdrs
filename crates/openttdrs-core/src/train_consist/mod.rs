@@ -29,8 +29,10 @@ pub use newgrf_vars::{
 pub use pose::{TrainUnitPose, consist_unit_poses};
 pub use topology::{
     consist_changed, consist_changed_with_map, consist_changed_with_map_and_catalog,
-    consist_changed_with_map_and_catalog_and_cargo, consist_head_id, consist_unit_ids,
-    consist_unit_ids_indexed, engine_is_train_engine, engine_is_wagon, same_consist,
+    consist_changed_with_map_and_catalog_and_cargo,
+    consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier, consist_head_id,
+    consist_unit_ids, consist_unit_ids_indexed, engine_is_train_engine, engine_is_wagon,
+    same_consist,
 };
 
 /// Longitud de una unidad de tren en fracciones de tesela (`OpenTTD` `VEHICLE_LENGTH`).
@@ -337,7 +339,7 @@ mod tests {
             .engine_id
             .and_then(crate::engine::engine_by_id)
             .map_or(0, |engine| engine.weight_t);
-        let catalog = vec![crate::CargoSpecDef {
+        let mut catalog = vec![crate::CargoSpecDef {
             id: cargo.cargo_id(),
             label: "TEST".to_owned(),
             name: "Carga de prueba".to_owned(),
@@ -349,6 +351,18 @@ mod tests {
         consist_changed_with_map_and_catalog_and_cargo(&mut vs, 1, None, &[], &catalog);
 
         assert_eq!(vs[0].cached_weight_t, engine_weight.saturating_add(16));
+
+        catalog[0].weight = 16;
+        catalog[0].is_freight = true;
+        consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
+            &mut vs,
+            1,
+            None,
+            &[],
+            &catalog,
+            3,
+        );
+        assert_eq!(vs[0].cached_weight_t, engine_weight.saturating_add(24));
     }
 
     #[test]

@@ -268,12 +268,14 @@ pub(super) fn build_vehicle_at_depot(
             spawn_newgrf_articulated_parts(state, next_id, &engine);
         }
         if engine.kind == VehicleKind::Train {
-            crate::train_consist::consist_changed_with_map_and_catalog(
-                &mut state.vehicles,
-                next_id,
-                Some(&state.map),
-                &state.engine_catalog,
-            );
+            crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
+            &mut state.vehicles,
+            next_id,
+            Some(&state.map),
+            &state.engine_catalog,
+            &state.cargo_spec_catalog,
+            state.freight_trains,
+        );
         }
     }
     state.economy.money -= purchase_cost;
@@ -613,11 +615,13 @@ fn attach_wagon_to_consist_ex(
     };
     attach(&mut state.vehicles, head_id, wagon_id)
         .map_err(|()| CommandError::VehicleKindNotAllowed)?;
-    crate::train_consist::consist_changed_with_map_and_catalog(
+    crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
         &mut state.vehicles,
         head_id,
         Some(&state.map),
         &state.engine_catalog,
+        &state.cargo_spec_catalog,
+        state.freight_trains,
     );
     Ok(())
 }
@@ -648,11 +652,13 @@ pub(super) fn detach_consist_unit(state: &mut GameState, unit_id: u32) -> Result
             .iter()
             .any(|vehicle| vehicle.id == head_id && vehicle.is_consist_head())
         {
-            crate::train_consist::consist_changed_with_map_and_catalog(
+            crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
                 &mut state.vehicles,
                 head_id,
                 Some(&state.map),
                 &state.engine_catalog,
+                &state.cargo_spec_catalog,
+                state.freight_trains,
             );
         }
     }
@@ -699,11 +705,13 @@ pub(super) fn move_rail_vehicle(
             .iter()
             .any(|vehicle| vehicle.id == old_head && vehicle.is_consist_head())
     {
-        crate::train_consist::consist_changed_with_map_and_catalog(
+        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
             &mut state.vehicles,
             old_head,
             Some(&state.map),
             &state.engine_catalog,
+            &state.cargo_spec_catalog,
+            state.freight_trains,
         );
     }
     Ok(())
@@ -752,11 +760,13 @@ pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(),
         .map(|v| v.id)
         .collect();
     for hid in heads {
-        crate::train_consist::consist_changed_with_map_and_catalog(
+        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
             &mut state.vehicles,
             hid,
             Some(&state.map),
             &state.engine_catalog,
+            &state.cargo_spec_catalog,
+            state.freight_trains,
         );
     }
     state.credit_company(owner, refund_total);

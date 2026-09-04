@@ -698,6 +698,7 @@ mod tests {
         state.pathfinding.wait_twoway_signal = 10;
         state.pathfinding.reserve_paths = true;
         state.train_acceleration_model = crate::engine::TrainAccelerationModel::Original;
+        state.freight_trains = 4;
         state.road_vehicle_acceleration_model =
             crate::engine::RoadVehicleAccelerationModel::Original;
         state.station_noise_level = true;
@@ -737,6 +738,7 @@ mod tests {
             sav_game.train_acceleration_model,
             state.train_acceleration_model
         );
+        assert_eq!(sav_game.freight_trains, state.freight_trains);
         assert_eq!(
             sav_game.road_vehicle_acceleration_model,
             state.road_vehicle_acceleration_model

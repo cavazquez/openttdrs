@@ -208,7 +208,14 @@ fn migrate_state_v11_to_v12(state: &mut GameState) {
                 v.cached_total_length = u16::from(v.unit_length);
             }
         }
-        crate::train_consist::consist_changed(&mut state.vehicles, id);
+        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
+            &mut state.vehicles,
+            id,
+            Some(&state.map),
+            &state.engine_catalog,
+            &state.cargo_spec_catalog,
+            state.freight_trains,
+        );
     }
 }
 

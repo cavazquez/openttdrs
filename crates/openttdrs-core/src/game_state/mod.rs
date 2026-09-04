@@ -556,6 +556,10 @@ pub struct GameState {
     /// Modelo de aceleración de trenes (`vehicle.train_acceleration_model`).
     #[serde(default)]
     pub train_acceleration_model: crate::engine::TrainAccelerationModel,
+    /// Multiplicador del peso de cargas freight en trenes
+    /// (`vehicle.freight_trains`, 1..=255).
+    #[serde(default = "default_freight_trains")]
+    pub freight_trains: u8,
     /// Modelo de aceleración vial (`vehicle.roadveh_acceleration_model`).
     #[serde(default)]
     pub road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel,
@@ -684,6 +688,10 @@ const fn default_snow_line_height() -> u8 {
 
 const fn default_vehicle_breakdowns() -> u8 {
     2
+}
+
+const fn default_freight_trains() -> u8 {
+    1
 }
 
 const fn default_subsidy_duration() -> u16 {
@@ -919,6 +927,7 @@ impl GameState {
             disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             train_acceleration_model: crate::engine::TrainAccelerationModel::Original,
+            freight_trains: default_freight_trains(),
             road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel::Original,
             ai: crate::ai::AiSettings::default(),
             cheats: crate::cheats::CheatsState::default(),
@@ -1059,6 +1068,7 @@ impl GameState {
             disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             train_acceleration_model: crate::engine::TrainAccelerationModel::Original,
+            freight_trains: default_freight_trains(),
             road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel::Original,
             ai: crate::ai::AiSettings::default(),
             cheats: crate::cheats::CheatsState::default(),

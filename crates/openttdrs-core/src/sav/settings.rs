@@ -54,6 +54,7 @@ pub(crate) struct ParsedSettings {
     pub construction: ConstructionSettings,
     pub pathfinding: PathfindingSettings,
     pub train_acceleration_model: TrainAccelerationModel,
+    pub freight_trains: u8,
     pub road_vehicle_acceleration_model: RoadVehicleAccelerationModel,
     pub station_noise_level: bool,
     pub serve_neutral_industries: bool,
@@ -74,6 +75,7 @@ impl Default for ParsedSettings {
             construction: ConstructionSettings::default(),
             pathfinding: PathfindingSettings::default(),
             train_acceleration_model: TrainAccelerationModel::Realistic,
+            freight_trains: 1,
             road_vehicle_acceleration_model: RoadVehicleAccelerationModel::Realistic,
             station_noise_level: false,
             serve_neutral_industries: true,
@@ -187,6 +189,13 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                     1 => TrainAccelerationModel::Realistic,
                     _ => parsed.train_acceleration_model,
                 };
+                found = true;
+            }
+            if let Some(value) = record_get(&record, "vehicle.freight_trains")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+            {
+                parsed.freight_trains = value.max(1);
                 found = true;
             }
             if let Some(value) =
@@ -358,11 +367,12 @@ mod tests {
                 (2, "pf.wait_twoway_signal"),
                 (2, "pf.reserve_paths"),
                 (2, "vehicle.train_acceleration_model"),
+                (2, "vehicle.freight_trains"),
                 (2, "vehicle.roadveh_acceleration_model"),
                 (2, "economy.station_noise_level"),
                 (2, "difficulty.vehicle_breakdowns"),
             ],
-            &[vec![2, 3, 0, 4, 5, 1, 0, 0, 1, 2]],
+            &[vec![2, 3, 0, 4, 5, 1, 0, 4, 0, 1, 2]],
         );
         let chunk = RawChunk {
             name: *b"PATS",
@@ -380,6 +390,7 @@ mod tests {
             parsed.train_acceleration_model,
             TrainAccelerationModel::Original
         );
+        assert_eq!(parsed.freight_trains, 4);
         assert_eq!(
             parsed.road_vehicle_acceleration_model,
             RoadVehicleAccelerationModel::Original
@@ -397,6 +408,17 @@ mod tests {
         };
         let parsed = settings_from_chunks(&[chunk]);
         assert!(!parsed.serve_neutral_industries);
+    }
+
+    #[test]
+    fn freight_train_weight_multiplier_has_minimum_one() {
+        let chunk = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(2, "vehicle.freight_trains")], &[vec![0]]),
+        };
+
+        assert_eq!(settings_from_chunks(&[chunk]).freight_trains, 1);
     }
 
     #[test]

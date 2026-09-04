@@ -61,6 +61,31 @@ pub(crate) fn cargo_weight_t(
     u16::try_from(sixteenths / 16).unwrap_or(u16::MAX)
 }
 
+/// Peso de carga ferroviaria aplicando `vehicle.freight_trains`.
+///
+/// `OpenTTD` multiplica sólo los cargos cuyo `CargoSpec::is_freight` está activo;
+/// para cargos vanilla o specs ausentes se conserva la clasificación conocida
+/// de [`CargoType`]. El ajuste mínimo válido del setting es uno.
+#[must_use]
+pub(crate) fn train_cargo_weight_t(
+    cargo: u32,
+    cargo_type: Option<CargoType>,
+    catalog: &[crate::cargo_spec::CargoSpecDef],
+    freight_trains: u8,
+) -> u16 {
+    let multiplier = if cargo_type.is_some_and(|cargo_type| {
+        catalog
+            .iter()
+            .find(|spec| spec.cargo_type() == Some(cargo_type))
+            .map_or(cargo_type.is_freight(), |spec| spec.is_freight)
+    }) {
+        u32::from(freight_trains.max(1))
+    } else {
+        1
+    };
+    cargo_weight_t(cargo.saturating_mul(multiplier), cargo_type, catalog)
+}
+
 /// Capacidad total del consist (cabeza).
 #[must_use]
 pub fn consist_capacity(vehicles: &[Vehicle], head_id: u32) -> u32 {
@@ -177,5 +202,36 @@ mod tests {
             ..crate::cargo_spec::CargoSpecDef::default()
         }];
         assert_eq!(cargo_weight_t(9, Some(CargoType::Custom(3)), &catalog), 9);
+    }
+
+    #[test]
+    fn train_cargo_weight_applies_freight_multiplier_only_to_freight_specs() {
+        let freight = [crate::cargo_spec::CargoSpecDef {
+            id: CargoType::Custom(3).cargo_id(),
+            label: "FRT".to_owned(),
+            name: "Carga freight".to_owned(),
+            weight: 16,
+            is_freight: true,
+            from_newgrf: true,
+            ..crate::cargo_spec::CargoSpecDef::default()
+        }];
+        assert_eq!(
+            train_cargo_weight_t(4, Some(CargoType::Custom(3)), &freight, 3),
+            12
+        );
+
+        let non_freight = [crate::cargo_spec::CargoSpecDef {
+            id: CargoType::Custom(3).cargo_id(),
+            label: "PAX".to_owned(),
+            name: "Carga no freight".to_owned(),
+            weight: 16,
+            is_freight: false,
+            from_newgrf: true,
+            ..crate::cargo_spec::CargoSpecDef::default()
+        }];
+        assert_eq!(
+            train_cargo_weight_t(4, Some(CargoType::Custom(3)), &non_freight, 3),
+            4
+        );
     }
 }

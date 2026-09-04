@@ -721,6 +721,10 @@ impl GameState {
 
     fn valid_script_cargo_monitor_cargo(&self, cargo: crate::cargo::CargoType) -> bool {
         crate::cargo::CargoType::for_climate(self.climate).contains(&cargo)
+            || self
+                .cargo_spec_catalog
+                .iter()
+                .any(|spec| spec.cargo_type() == Some(cargo))
     }
 
     /// Activa/consulta el acumulado de entregas de un pueblo.

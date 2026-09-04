@@ -64,7 +64,9 @@ impl ScriptCargoMonitor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Industry, IndustryKind, TileCoord, Town};
+    use crate::{
+        CargoSpecDef, Industry, IndustryKind, TileCoord, Town, cargo_monitor::CargoSource,
+    };
 
     #[test]
     fn rejects_invalid_script_parameters_without_activating_monitor() {
@@ -160,5 +162,87 @@ mod tests {
 
         ScriptCargoMonitor::stop_all_monitoring(&mut state);
         assert_eq!(state.runtime.cargo_monitor.active_counts(), (0, 0));
+    }
+
+    #[test]
+    fn registered_custom_cargo_is_valid_for_monitoring() {
+        let mut state = GameState::new(8, 8);
+        state.towns.push(Town {
+            id: 4,
+            pos: TileCoord::new(2, 2),
+            ..Town::default()
+        });
+        state
+            .industries
+            .push(Industry::new(TileCoord::new(4, 4), IndustryKind::CoalMine).with_instance_id(7));
+
+        let cargo = CargoType::Custom(11);
+        assert_eq!(
+            ScriptCargoMonitor::get_town_delivery_amount(
+                &mut state,
+                CompanyId::PLAYER,
+                cargo,
+                4,
+                true,
+            ),
+            -1
+        );
+
+        state.cargo_spec_catalog.push(CargoSpecDef {
+            id: cargo.cargo_id(),
+            label: "TEST".to_owned(),
+            name: "Carga de prueba".to_owned(),
+            from_newgrf: true,
+            ..CargoSpecDef::default()
+        });
+
+        assert_eq!(
+            ScriptCargoMonitor::get_town_delivery_amount(
+                &mut state,
+                CompanyId::PLAYER,
+                cargo,
+                4,
+                true,
+            ),
+            0
+        );
+        assert_eq!(
+            ScriptCargoMonitor::get_industry_pickup_amount(
+                &mut state,
+                CompanyId::PLAYER,
+                cargo,
+                7,
+                true,
+            ),
+            0
+        );
+        state.runtime.cargo_monitor.add_cargo_delivery(
+            cargo,
+            CompanyId::PLAYER,
+            17,
+            CargoSource::Industry(7),
+            Some(4),
+            Some(7),
+        );
+        assert_eq!(
+            ScriptCargoMonitor::get_town_delivery_amount(
+                &mut state,
+                CompanyId::PLAYER,
+                cargo,
+                4,
+                false,
+            ),
+            17
+        );
+        assert_eq!(
+            ScriptCargoMonitor::get_industry_pickup_amount(
+                &mut state,
+                CompanyId::PLAYER,
+                cargo,
+                7,
+                false,
+            ),
+            17
+        );
     }
 }

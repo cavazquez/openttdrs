@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `d6b4c5fc`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `5fa655d1`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
 ferroviario, la CTT de scopes de estación/parada e `IndustryTile` y la CTT de
 vehículos/refit quedan actualizados en este corte).
@@ -45,8 +45,8 @@ mapeo y la evidencia de auditorías anteriores; fechas anteriores son contexto
 histórico. Ante una contradicción prevalece este bloque y debe corregirse la
 fila antigua en el mismo cambio.
 
-Validación de este corte: formatter y clippy estricto en core/cliente, **2.029**
-tests de core y **1.065** tests ejecutados del cliente (2 ignorados), además de
+Validación de este corte: formatter y clippy estricto en core/cliente, **2.031**
+tests de core y **1.067** tests ejecutados del cliente (2 ignorados), además de
 la regresión integrada de CTT de vehículos; los conteos anteriores son
 históricos.
 
@@ -335,9 +335,14 @@ queda en `EngineDef.cargo`, en las listas de refit y en la selección de sprites
 por carga. La ventana de refit y el botón de vehículo usan las opciones
 catalogue-aware y muestran el nombre del `CargoSpec`; el orden del catálogo
 completo aplica `Cargoes` antes de vehículos. La regresión integrada cubre
-default+include custom en un tren; la semántica de clases/required, slots `63+`,
-callbacks de refit y la UI/variables ilimitadas siguen pendientes. #329 no se
-cierra.
+default+include custom en un tren. El bloque siguiente (`97571c10`) completa
+además las clases `allowed`, `disallowed` y `required` de los cuatro features:
+se preservan en `EngineDef`, se resuelven contra `CargoSpecDef::classes` (o la
+tabla vanilla) y se aplican con la semántica XOR de `refit_mask` antes de CTT
+include/exclude. `vehicle_cargo_class_properties_parse_for_all_features` y
+`vehicle_cargo_classes_filter_custom_catalog` cubren parser, runtime y refit
+custom. Siguen abiertos slots `63+`, callback de refit, UI/variables ilimitadas
+y scopes económicos restantes; #329 no se cierra.
 
 | Multijugador | **Media propia** | Lockstep TCP, dedicated, late join y host migration; el servidor asigna empresa por peer, valida antes de secuenciar, rechaza issuer inválido y resincroniza desync por snapshot. Sigue siendo protocolo propio, sin lobby, auth, cifrado ni interoperabilidad OpenTTD |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |

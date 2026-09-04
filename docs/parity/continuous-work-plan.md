@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`d6b4c5fc`** (`newgrf: resolve vehicle cargo translation and refit CTT`),
+Base funcional local y publicada: **`5fa655d1`** (`core: reexport cargo class masks`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -75,7 +75,13 @@ consist de inmediato. Quedan pendientes la edición arbitraria tipo slider, CTT
 completa y el resto de settings económicos. `d6b4c5fc` completa ahora la
 primera ruta de CTT de vehículos: default cargo y listas include/exclude de los
 cuatro features de vehículos se traducen contra GlobalVar `0x09` y el catálogo
-`CargoSpec`; refit y la UI ya consumen esos cargos custom.
+`CargoSpec`; refit y la UI ya consumen esos cargos custom. `97571c10` añade las
+clases Action0 `allowed`/`disallowed`/`required` de trenes, vehículos de
+carretera, barcos y aeronaves: la máscara se aplica contra las clases vanilla o
+el `CargoSpecDef` custom, conserva el XOR de `refit_mask` y deja CTT
+include/exclude como última capa. La regresión cubre los cuatro parsers y un
+`TOFU` custom. Slots `63+`, callback de refit, UI/variables ilimitadas y scopes
+económicos siguen pendientes.
 
 Actualización #329-VEHICLE-CARGO-CTT-075 (2026-09-04, commit `d6b4c5fc`): el
 parser Action0 conserva los índices locales de cargo por defecto y las listas
@@ -86,9 +92,21 @@ ejecutable. `EngineDef` guarda default, inclusión y exclusión; la consulta de
 refit, la compra por carga y la selección de sprites usan la identidad global;
 la ventana de refit y el botón de vehículo muestran el nombre del `CargoSpec`.
 La regresión `vehicle_ctt_resolves_custom_default_and_refit_cargo` cubre
-`TOFU` como default e include. Clases/required, slots `63+`, callbacks de
-refit, UI/variables ilimitadas y scopes económicos restantes siguen abiertos;
-#329 no se cierra.
+`TOFU` como default e include. Clases/required se completan en el siguiente
+commit publicado `97571c10`.
+
+Actualización #329-VEHICLE-CARGO-CLASS-076 (2026-09-04, commit `97571c10`):
+Action0 ya parsea `allowed`, `disallowed` y `required` con el ancho WORD nativo:
+trenes `0x28/0x29/0x32`, carretera `0x1D/0x1E/0x29`, barcos `0x18/0x19/0x25` y
+aeronaves `0x18/0x19/0x23`. `EngineDef` conserva las tres máscaras y distingue
+una declaración explícita vacía del fallback vanilla. Refit calcula la máscara
+por clases (`Any(allowed)`, `All(required)`, sin `disallowed`), aplica el XOR de
+la máscara legacy cuando corresponde y luego las listas CTT; con catálogo usa
+las clases declaradas por cada `CargoSpecDef`, incluidos cargos custom. Las
+regresiones `vehicle_cargo_class_properties_parse_for_all_features` y
+`vehicle_cargo_classes_filter_custom_catalog` fijan parser, aplicación y filtro
+de refit. #329 sigue abierto por slots `63+`, callback de refit, GUI/variables
+ilimitadas, scopes económicos y otras propiedades Action0.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|

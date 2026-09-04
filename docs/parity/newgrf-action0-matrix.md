@@ -83,6 +83,7 @@ Fuente: `newgrf_act0_trains.cpp`.
 | `17` cost factor | **runtime** |
 | `1B` powered wagon power | **runtime** |
 | `1D` refit mask WORD | **runtime** (`refit_mask` → `refittable_cargo_types_for_engine`) |
+| `28`/`29`/`32` cargo classes allowed/disallowed/required WORD | **runtime** (`EngineDef` + refit por `CargoClass`, XOR de `refit_mask`) |
 | `1F` tractive effort BYTE | **runtime** (`tractive_effort` → `engine_tractive_effort`) |
 | `20` air drag BYTE | **runtime** (`air_drag` → `engine_air_drag` / consist) |
 | `21` shorten factor BYTE | **runtime** (almacenado en `EngineDef.shorten_factor`) |
@@ -91,7 +92,7 @@ Fuente: `newgrf_act0_trains.cpp`.
 | `27` misc flags (bit0 `RailTilts`, bit1 `Uses2CC`, bit2 `RailIsMU`, bit7 `SpriteStack`) | **runtime parcial** (`rail_tilts`, `uses_2cc`, `rail_is_mu`, `sprite_stack`; trenes y vehículos con `uses_2cc` aplican ambas rampas y mapas Action5 en la caché visual) |
 | `2E` curve speed mod | **runtime** |
 | `1E` callback mask BYTE / `31` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
-| `0E`, `08`, `0A`, `0C`, `0F`–`11`, `18`, `1A`, `1C`, `22`, `25`–`26`, `28`–`2D`, `2F`–`30` | consumidas (ancho fijo / CTT) |
+| `0E`, `08`, `0A`, `0C`, `0F`–`11`, `18`, `1A`, `1C`, `22`, `25`–`26`, `2A`–`2D`, `2F`–`30` | consumidas (ancho fijo / CTT) |
 
 ## Road vehicles (`01`)
 
@@ -109,7 +110,8 @@ Fuente: `newgrf_act0_roadvehs.cpp`.
 | `13` potencia (×10 HP) | **runtime** |
 | `14` peso (cuartos de tonelada) | **runtime** |
 | `1C` misc flags (bit1 `Uses2CC`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |
-| `05`, `0A`, `0E`, `16`, `18`–`1B`, `1D`–`1F`, `21`–`27`, `29` | consumidas cuando tienen ancho fijo; semántica pendiente |
+| `1D`/`1E`/`29` cargo classes allowed/disallowed/required WORD | **runtime** (`EngineDef` + refit por `CargoClass`, XOR de `refit_mask`) |
+| `05`, `0A`, `0E`, `16`, `18`–`1B`, `21`–`27` | consumidas cuando tienen ancho fijo; semántica pendiente |
 | `20`, `24`, `25`, `2A` | pendiente: extended/listas variables |
 
 ## Ships (`02`)
@@ -128,7 +130,8 @@ Fuente: `newgrf_act0_ships.cpp`.
 | `14` ocean speed fraction | **runtime** (`ocean_speed_frac` → `ship_speed_for_tile`) |
 | `15` canal speed fraction | **runtime** (`canal_speed_frac` → `ship_speed_for_tile`) |
 | `17` misc flags (bit1 `Uses2CC`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |
-| `08`, `09`, `11`, `13`, `16`, `18`–`1D`, `20`–`21`, `23`–`26` restantes | consumidas si tienen ancho fijo; semántica pendiente |
+| `18`/`19`/`25` cargo classes allowed/disallowed/required WORD | **runtime** (`EngineDef` + refit por `CargoClass`, XOR de `refit_mask`) |
+| `08`, `09`, `11`, `13`, `16`, `1A`, `1B`, `1D`, `20`–`21`, `23`–`24`, `26` restantes | consumidas si tienen ancho fijo; semántica pendiente |
 | `1E` CTT include (lista variable) | **runtime** (`refit_mask` → `refittable_cargo_types_for_engine`; #274) |
 | `1F` CTT exclude (lista variable) | **runtime**: la máscara se resta del `include` (o de la lista vanilla cuando no hay `include`) al ofrecer cargas de refit (#274) |
 
@@ -147,7 +150,8 @@ Fuente: `newgrf_act0_aircraft.cpp`.
 | `12` sound effect BYTE | **runtime** (`sound_effect`) |
 | `14` callback mask BYTE / `22` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
 | `17` misc flags (bit1 `Uses2CC`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |
-| `08`, `0D`, `11`, `13`, `15`–`16`, `18`–`1C`, `1F`–`21`, `23`–`24` restantes | consumidas si tienen ancho fijo; semántica pendiente |
+| `18`/`19`/`23` cargo classes allowed/disallowed/required WORD | **runtime** (`EngineDef` + refit por `CargoClass`, XOR de `refit_mask`) |
+| `08`, `0D`, `11`, `13`, `15`–`16`, `1A`, `1B`, `1F`–`21`, `24` restantes | consumidas si tienen ancho fijo; semántica pendiente |
 | `1D`, `1E` | pendiente: listas CTT variables |
 
 ## Stations (`04`)

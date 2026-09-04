@@ -110,6 +110,10 @@ pub struct EngineDef {
     /// Action0 train `0x1D`: bitmask de cargos temperate (`0` = lista vanilla por kind).
     #[serde(default)]
     pub refit_mask: u32,
+    /// Action0 `refit_cost` (factor de coste de conversión; `0` permite
+    /// autorefit sin coste). Se conserva para el fallback de `CBID_VEHICLE_REFIT_COST`.
+    #[serde(default)]
+    pub refit_cost: u8,
     /// Cargos que el GRF incluye explícitamente mediante su CTT.
     ///
     /// A diferencia de [`Self::refit_mask`], esta lista conserva cargos

@@ -429,6 +429,7 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         shorten_factor: 0,
         required_rail_type: None,
         refit_mask: 0,
+        refit_cost: 0,
         ctt_include_cargos: Vec::new(),
         ctt_exclude_cargos: Vec::new(),
         cargo_classes_allowed: 0,

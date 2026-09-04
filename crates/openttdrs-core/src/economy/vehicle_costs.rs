@@ -4,6 +4,7 @@ use super::global::GlobalEconomy;
 use crate::engine::EngineDef;
 use crate::train_consist::consist_unit_ids;
 use crate::vehicle::{Vehicle, VehicleKind};
+use crate::{CargoType, Climate};
 
 /// Ticks de calendario en un año (`365 * DAY_TICKS`).
 pub const YEAR_TICKS: u64 = 27_010;
@@ -34,6 +35,64 @@ fn running_price_base(engine: &EngineDef) -> i64 {
         VehicleKind::Ship => 5_600,
         VehicleKind::Aircraft => 9_600,
     }
+}
+
+fn refit_price_index(engine: &EngineDef) -> super::pricebase::PriceIndex {
+    match engine.kind {
+        VehicleKind::Train if crate::train_consist::engine_is_wagon(engine) => {
+            super::pricebase::PriceIndex::BuildVehicleWagon
+        }
+        VehicleKind::Train => super::pricebase::PriceIndex::BuildVehicleTrain,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => {
+            super::pricebase::PriceIndex::BuildVehicleRoad
+        }
+        VehicleKind::Ship => super::pricebase::PriceIndex::BuildVehicleShip,
+        VehicleKind::Aircraft => super::pricebase::PriceIndex::BuildVehicleAircraft,
+    }
+}
+
+/// Coste/factor de conversión de carga de una unidad.
+///
+/// `CBID_VEHICLE_REFIT_COST` devuelve un factor signed de 14 bits y el bit 14
+/// permite autorefit. Sin callback se conserva `EngineDef::refit_cost`; el
+/// coste de trenes usa el doble del factor, como `GetRefitCost` upstream.
+#[must_use]
+pub fn vehicle_refit_cost_with_callbacks(
+    ge: &GlobalEconomy,
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+    cargo: CargoType,
+    new_subtype: u8,
+    climate: Climate,
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+) -> (i64, bool) {
+    let (factor, auto_refit_allowed) = crate::newgrf_callback::resolve_vehicle_refit_cost_callback(
+        engine,
+        vehicle,
+        cargo,
+        new_subtype,
+        climate,
+        cargo_catalog,
+    )
+    .map_or_else(
+        || {
+            (
+                if vehicle.cargo_type == Some(cargo) {
+                    0
+                } else {
+                    i16::from(engine.refit_cost)
+                },
+                engine.refit_cost == 0,
+            )
+        },
+        |result| (result.factor, result.auto_refit_allowed),
+    );
+    let mut factor = i64::from(factor);
+    if engine.kind == VehicleKind::Train {
+        factor = factor.saturating_mul(2);
+    }
+    let cost = super::pricebase::get_price(ge, refit_price_index(engine), factor, -10);
+    (cost, auto_refit_allowed)
 }
 
 /// Precio de compra aplicando CB36 (`0x17`, `0x11`, `0x0A` o `0x0B`).
@@ -242,6 +301,35 @@ mod tests {
         gfx
     }
 
+    fn callback_runtime_literal_u16(value: u16) -> crate::newgrf_sprites::TrainSpriteGraphics {
+        use crate::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
+        };
+
+        let mut gfx = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::from(value),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     #[test]
     fn running_cost_prorates_yearly_catalog_cost() {
         let mut bus = Vehicle::new(
@@ -326,5 +414,68 @@ mod tests {
             engine_running_cost_year_with_callbacks(&engine, &mut vehicle),
             engine.running_cost_year
         );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn refit_cost_uses_action0_fallback_and_cb15e_autorefit_flag() {
+        let ge = GlobalEconomy::new();
+        let mut engine = crate::engine::engines_table()
+            .iter()
+            .find(|candidate| candidate.kind == VehicleKind::Bus)
+            .cloned()
+            .unwrap();
+        engine.id = 65_103;
+        engine.refit_cost = 4;
+        let mut vehicle = Vehicle::new(
+            4,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        vehicle.engine_id = Some(engine.id);
+        vehicle.cargo_type = Some(CargoType::Passengers);
+
+        let (fallback_cost, fallback_auto) = vehicle_refit_cost_with_callbacks(
+            &ge,
+            &engine,
+            &mut vehicle,
+            CargoType::Coal,
+            0,
+            Climate::Temperate,
+            &[],
+        );
+        assert_eq!(
+            fallback_cost,
+            super::super::pricebase::get_price(
+                &ge,
+                super::super::pricebase::PriceIndex::BuildVehicleRoad,
+                4,
+                -10
+            )
+        );
+        assert!(!fallback_auto);
+
+        engine.newgrf_grfid = 0x5243_4F53;
+        engine.newgrf_runtime = Some(Box::new(callback_runtime_literal_u16(0x4000 | 6)));
+        let (callback_cost, callback_auto) = vehicle_refit_cost_with_callbacks(
+            &ge,
+            &engine,
+            &mut vehicle,
+            CargoType::Coal,
+            0,
+            Climate::Temperate,
+            &[],
+        );
+        assert_eq!(
+            callback_cost,
+            super::super::pricebase::get_price(
+                &ge,
+                super::super::pricebase::PriceIndex::BuildVehicleRoad,
+                6,
+                -10
+            )
+        );
+        assert!(callback_auto);
     }
 }

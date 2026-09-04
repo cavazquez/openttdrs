@@ -4286,6 +4286,38 @@ mod tests {
         );
     }
 
+    #[test]
+    fn vehicles_ac_refit_cost_property_is_preserved_for_all_features() {
+        let train = [0x00, ACTION0_FEATURE_TRAINS, 0x01, 0x01, 0x00, 0x1C, 37];
+        assert_eq!(parse_action0_train_meta(&train).unwrap().refit_cost, 37);
+
+        let road = [
+            0x00,
+            ACTION0_FEATURE_ROAD_VEHICLES,
+            0x01,
+            0x01,
+            0x00,
+            0x1A,
+            41,
+        ];
+        assert_eq!(
+            parse_action0_vehicle_metas(&road).unwrap()[0].refit_cost,
+            41
+        );
+
+        let ship = [0x00, ACTION0_FEATURE_SHIPS, 0x01, 0x01, 0x00, 0x13, 23];
+        assert_eq!(
+            parse_action0_vehicle_metas(&ship).unwrap()[0].refit_cost,
+            23
+        );
+
+        let aircraft = [0x00, ACTION0_FEATURE_AIRCRAFT, 0x01, 0x01, 0x00, 0x15, 19];
+        assert_eq!(
+            parse_action0_vehicle_metas(&aircraft).unwrap()[0].refit_cost,
+            19
+        );
+    }
+
     /// #274: Ships Action0 `0x1E` CTT include list → `refit_mask` runtime.
     #[test]
     fn ships_ctt_include_list_wires_refit_mask() {

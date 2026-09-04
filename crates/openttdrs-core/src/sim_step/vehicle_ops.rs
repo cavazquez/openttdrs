@@ -54,6 +54,8 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
             v.pending_depot_order_refit = None;
         }
         let unit_ids = state.runtime.fleet_index.consist(head_id).to_vec();
+        let mut refits = Vec::new();
+        let mut total_cost = 0_i64;
         for unit_id in unit_ids {
             let Some(idx) = state.runtime.fleet_index.slot(unit_id) else {
                 continue;
@@ -84,8 +86,39 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
             if !allowed.contains(&cargo) {
                 continue;
             }
+            let engine = state.vehicles[idx]
+                .engine_id
+                .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+                .cloned()
+                .or_else(|| {
+                    state.vehicles[idx]
+                        .engine_id
+                        .and_then(crate::engine::engine_by_id)
+                        .cloned()
+                });
+            let cost = engine.as_ref().map_or(0, |engine| {
+                let subtype = state.vehicles[idx].cargo_subtype;
+                crate::economy::vehicle_refit_cost_with_callbacks(
+                    &state.global_economy,
+                    engine,
+                    &mut state.vehicles[idx],
+                    cargo,
+                    subtype,
+                    state.climate,
+                    &state.cargo_spec_catalog,
+                )
+                .0
+            });
+            total_cost = total_cost.saturating_add(cost);
+            refits.push((idx, cost));
+        }
+        if total_cost > state.economy.money {
+            continue;
+        }
+        for (idx, _cost) in refits {
             state.vehicles[idx].cargo_type = Some(cargo);
         }
+        state.economy.money -= total_cost;
     }
 }
 

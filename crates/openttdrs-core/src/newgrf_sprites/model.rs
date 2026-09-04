@@ -1165,6 +1165,8 @@ pub const CBID_VEHICLE_LOAD_AMOUNT: u16 = 0x12;
 pub const CBID_VEHICLE_ARTIC_ENGINE: u16 = 0x16;
 /// Callback vehículos: capacidad efectiva después de un refit (`CBID_VEHICLE_REFIT_CAPACITY`).
 pub const CBID_VEHICLE_REFIT_CAPACITY: u16 = 0x15;
+/// Callback vehículos: factor de coste y permiso de autorefit (`0x15E`).
+pub const CBID_VEHICLE_REFIT_COST: u16 = 0x15E;
 /// Callback vehículos: incluir/excluir un cargo del refit (`CBID_VEHICLE_CUSTOM_REFIT`).
 pub const CBID_VEHICLE_CUSTOM_REFIT: u16 = 0x163;
 /// Callback vehículos: permitir start/stop (`CBID_VEHICLE_START_STOP_CHECK`).

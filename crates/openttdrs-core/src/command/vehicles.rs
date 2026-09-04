@@ -981,6 +981,7 @@ pub(super) fn sell_all_vehicles_at_depot(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 pub(super) fn refit_vehicle(
     state: &mut GameState,
     vehicle_id: u32,
@@ -999,6 +1000,11 @@ pub(super) fn refit_vehicle(
             return Err(CommandError::RefitNotAllowed);
         }
     }
+    // `CMD_REFIT_VEHICLE` cobra por unidad antes de mutar el consist. El
+    // callback `0x15E` se evalúa con el cargo/subtipo anterior; una consulta
+    // fallida conserva el factor Action0 y los motores vanilla siguen siendo
+    // gratuitos (`refit_cost = 0`).
+    let mut refit_cost = 0_i64;
     for &tid in &targets {
         let Some(vehicle) = state.vehicles.iter().find(|v| v.id == tid) else {
             return Err(CommandError::VehicleNotFound);
@@ -1033,6 +1039,39 @@ pub(super) fn refit_vehicle(
             return Err(CommandError::RefitNotAllowed);
         }
     }
+
+    for &tid in &targets {
+        let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == tid) else {
+            return Err(CommandError::VehicleNotFound);
+        };
+        let engine = state.vehicles[vehicle_idx]
+            .engine_id
+            .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+            .cloned()
+            .or_else(|| {
+                state.vehicles[vehicle_idx]
+                    .engine_id
+                    .and_then(crate::engine::engine_by_id)
+                    .cloned()
+            });
+        if let Some(engine) = engine {
+            let subtype = state.vehicles[vehicle_idx].cargo_subtype;
+            let (cost, _auto_refit_allowed) = crate::economy::vehicle_refit_cost_with_callbacks(
+                &state.global_economy,
+                &engine,
+                &mut state.vehicles[vehicle_idx],
+                cargo,
+                subtype,
+                state.climate,
+                &state.cargo_spec_catalog,
+            );
+            refit_cost = refit_cost.saturating_add(cost);
+        }
+    }
+    if refit_cost > state.economy.money {
+        return Err(CommandError::InsufficientFunds);
+    }
+
     for &tid in &targets {
         let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == tid) else {
             return Err(CommandError::VehicleNotFound);
@@ -1072,6 +1111,7 @@ pub(super) fn refit_vehicle(
             vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(engine, vehicle);
         }
     }
+    state.economy.money -= refit_cost;
     Ok(())
 }
 

@@ -31,8 +31,8 @@ use crate::newgrf_sprites::{
     CBID_STATION_LAND_SLOPE_CHECK, CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE,
     CBID_VEHICLE_COLOUR_MAPPING, CBID_VEHICLE_CUSTOM_REFIT, CBID_VEHICLE_LENGTH,
     CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY, CBID_VEHICLE_REFIT_CAPACITY,
-    CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT,
-    IndustryProductionGroup, TrainSpriteGraphics,
+    CBID_VEHICLE_REFIT_COST, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK,
+    CBID_VEHICLE_VISUAL_EFFECT, IndustryProductionGroup, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -254,6 +254,67 @@ pub fn resolve_vehicle_custom_refit_callback(
         u32::from(local_slot),
     );
     decode_vehicle_custom_refit_result(result)
+}
+
+/// Resultado normalizado de `CBID_VEHICLE_REFIT_COST` (`0x15E`).
+///
+/// Los 14 bits bajos son un factor signed (dos complementos de 14 bits) y el
+/// bit 14 permite el autorefit. `CALLBACK_FAILED` se representa con `None` para
+/// que el caller pueda conservar la propiedad Action0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VehicleRefitCostResult {
+    pub factor: i16,
+    pub auto_refit_allowed: bool,
+}
+
+/// Decodifica el retorno bruto del callback de coste de refit según upstream.
+#[must_use]
+pub const fn decode_vehicle_refit_cost_result(result: u16) -> Option<VehicleRefitCostResult> {
+    if result == CALLBACK_FAILED {
+        return None;
+    }
+    let raw_factor = result & 0x3FFF;
+    let factor = if raw_factor >= 0x2000 {
+        raw_factor.cast_signed() - 0x4000
+    } else {
+        raw_factor.cast_signed()
+    };
+    Some(VehicleRefitCostResult {
+        factor,
+        auto_refit_allowed: result & 0x4000 != 0,
+    })
+}
+
+/// Ejecuta `CBID_VEHICLE_REFIT_COST` para un cargo/subtipo.
+///
+/// `OpenTTD` empaqueta `CargoClass` en los bits 16..31, el subtipo en 8..15 y
+/// el índice local CTT en 0..7 de `param1`; `param2` permanece en cero. El
+/// callback no tiene bit propio en `VehicleCallbackMask`: su presencia se
+/// determina por el runtime Action2 del motor `NewGRF`.
+#[must_use]
+pub fn resolve_vehicle_refit_cost_callback(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+    cargo: CargoType,
+    new_subtype: u8,
+    climate: Climate,
+    cargo_catalog: &[CargoSpecDef],
+) -> Option<VehicleRefitCostResult> {
+    if engine.newgrf_grfid == 0 || engine.newgrf_runtime.is_none() {
+        return None;
+    }
+    let classes = crate::cargo_spec::cargo_spec_for_type(cargo_catalog, cargo)
+        .map_or_else(|| cargo.classes(), |spec| spec.classes);
+    let local_slot = crate::newgrf_type_tables::local_cargo_id_with_catalog(
+        engine.newgrf_type_tables.as_ref(),
+        engine.newgrf_grf_version,
+        cargo,
+        climate,
+        cargo_catalog,
+    );
+    let param1 = (u32::from(classes) << 16) | (u32::from(new_subtype) << 8) | u32::from(local_slot);
+    let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_REFIT_COST, param1, 0);
+    decode_vehicle_refit_cost_result(result)
 }
 
 /// Semántica `OpenTTD` 15.3 para `CBID_VEHICLE_START_STOP_CHECK` (MVP):
@@ -3801,6 +3862,41 @@ mod tests {
         gfx
     }
 
+    fn gfx_callback_compare_u32(variable: u8, expected: u32) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: vec![Action2VarOp {
+                    operator: 0x12,
+                    rhs: Action2VarTerm {
+                        variable: 0x1A,
+                        param: None,
+                        adjust: Action2VarAdjust {
+                            and_mask: expected,
+                            ..Action2VarAdjust::default()
+                        },
+                    },
+                }],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     /// Callback por slot para fixtures legacy: el grupo raíz selecciona un
     /// grupo terminal `nvar=0` y cada terminal devuelve el cargo solicitado.
     fn gfx_callback_slot_results(results: &[(u8, u8, u8)]) -> TrainSpriteGraphics {
@@ -5020,6 +5116,108 @@ mod tests {
             crate::Climate::Temperate,
         );
         assert!(!options.contains(&CargoType::Passengers));
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_refit_cost_decodes_signed_factor_and_autorefit_bit() {
+        assert_eq!(decode_vehicle_refit_cost_result(CALLBACK_FAILED), None);
+        assert_eq!(
+            decode_vehicle_refit_cost_result(0x0005),
+            Some(VehicleRefitCostResult {
+                factor: 5,
+                auto_refit_allowed: false,
+            })
+        );
+        assert_eq!(
+            decode_vehicle_refit_cost_result(0x7FFF),
+            Some(VehicleRefitCostResult {
+                factor: -1,
+                auto_refit_allowed: true,
+            })
+        );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_refit_cost_packs_class_subtype_and_ctt_slot() {
+        use crate::newgrf_type_tables::GrfTypeTranslationTables;
+
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x5243_4F53;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_grf_version = 8;
+        engine.newgrf_type_tables = Some(GrfTypeTranslationTables {
+            cargo: vec![*b"PASS", *b"COAL", *b"TOFU"],
+            ..GrfTypeTranslationTables::default()
+        });
+        let custom = CargoType::Custom(0);
+        let cargo_catalog = vec![CargoSpecDef {
+            local_id: 7,
+            id: custom.cargo_id(),
+            bitnum: custom.bitnum(),
+            label: "TOFU".into(),
+            name: "Tofu".into(),
+            from_newgrf: true,
+            classes: crate::cargo::CARGO_CLASS_PIECE_GOODS,
+            is_freight: true,
+            ..CargoSpecDef::default()
+        }];
+        let mut vehicle = Vehicle::new(
+            17,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.cargo_type = Some(CargoType::Passengers);
+
+        let packed =
+            (u32::from(crate::cargo::CARGO_CLASS_PIECE_GOODS) << 16) | (u32::from(7_u8) << 8) | 2;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_compare_u32(0x10, packed)));
+        assert_eq!(
+            resolve_vehicle_refit_cost_callback(
+                &engine,
+                &mut vehicle,
+                custom,
+                7,
+                crate::Climate::Temperate,
+                &cargo_catalog,
+            ),
+            Some(VehicleRefitCostResult {
+                factor: 1,
+                auto_refit_allowed: false,
+            })
+        );
+        assert_eq!(vehicle.cargo_type, Some(CargoType::Passengers));
+
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(0x4000 | 6)));
+        assert_eq!(
+            resolve_vehicle_refit_cost_callback(
+                &engine,
+                &mut vehicle,
+                custom,
+                7,
+                crate::Climate::Temperate,
+                &cargo_catalog,
+            )
+            .unwrap()
+            .factor,
+            6
+        );
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(CALLBACK_FAILED)));
+        assert_eq!(
+            resolve_vehicle_refit_cost_callback(
+                &engine,
+                &mut vehicle,
+                custom,
+                7,
+                crate::Climate::Temperate,
+                &cargo_catalog,
+            ),
+            None
+        );
     }
 
     #[test]

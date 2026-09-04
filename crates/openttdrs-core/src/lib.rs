@@ -479,8 +479,9 @@ pub use newgrf_actions::{
 };
 pub use newgrf_callback::{
     IndustryProductionCallbackResult, IndustryTileCargoAcceptance, RoadStopCallbackWorld,
-    Vehicle32DayCallback, VehicleColourMapping, VehicleRefitCostResult, VehicleSoundOverride,
-    VehicleVisualEffectKind, action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle,
+    Vehicle32DayCallback, VehicleAdvancedVisualEffect, VehicleAdvancedVisualEffectSpawn,
+    VehicleColourMapping, VehicleRefitCostResult, VehicleSoundOverride, VehicleVisualEffectKind,
+    VehicleVisualEffectSpec, action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle,
     advance_road_stop_animation, advance_road_stop_animation_at_with_world,
     apply_house_construction_callback, apply_house_construction_callback_for_build,
     apply_industry_dynamic_cargo_callbacks, apply_industry_dynamic_cargo_callbacks_with_catalog,
@@ -506,12 +507,13 @@ pub use newgrf_callback::{
     resolve_industry_tile_random_trigger, resolve_vehicle_32day_callback, resolve_vehicle_callback,
     resolve_vehicle_capacity_property_callback, resolve_vehicle_colour_mapping_callback,
     resolve_vehicle_modify_property_callback, resolve_vehicle_refit_cost_callback,
-    resolve_vehicle_sound_callback, resolve_vehicle_visual_effect_callback,
+    resolve_vehicle_sound_callback, resolve_vehicle_spawn_visual_effect_callback,
+    resolve_vehicle_visual_effect_callback, resolve_vehicle_visual_effect_spec_callback,
     trigger_road_stop_animation, trigger_road_stop_animation_at_with_world,
     trigger_road_stop_randomisation_at_with_world, trigger_vehicle_randomisation,
     trigger_vehicle_randomisation_chain, vehicle_cost_factor, vehicle_max_speed, vehicle_power_hp,
     vehicle_start_stop_callback_allows, vehicle_tractive_effort, vehicle_visual_effect_kind,
-    vehicle_weight_t, writeback_industry_persistent_registers,
+    vehicle_visual_effect_spec, vehicle_weight_t, writeback_industry_persistent_registers,
     writeback_industry_tile_parent_persistent_registers, writeback_station_persistent_registers,
     writeback_town_persistent_registers, writeback_vehicle_persistent_registers,
 };

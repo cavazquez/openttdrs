@@ -31,8 +31,9 @@ use crate::newgrf_sprites::{
     CBID_STATION_LAND_SLOPE_CHECK, CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE,
     CBID_VEHICLE_COLOUR_MAPPING, CBID_VEHICLE_CUSTOM_REFIT, CBID_VEHICLE_LENGTH,
     CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY, CBID_VEHICLE_REFIT_CAPACITY,
-    CBID_VEHICLE_REFIT_COST, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK,
-    CBID_VEHICLE_VISUAL_EFFECT, IndustryProductionGroup, TrainSpriteGraphics,
+    CBID_VEHICLE_REFIT_COST, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_SPAWN_VISUAL_EFFECT,
+    CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT, IndustryProductionGroup,
+    TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -719,6 +720,30 @@ pub fn resolve_vehicle_visual_effect_callback(
     engine: &EngineDef,
     vehicle: &mut Vehicle,
 ) -> Option<VehicleVisualEffectKind> {
+    resolve_vehicle_visual_effect_spec_callback(engine, vehicle).map(|spec| spec.kind)
+}
+
+/// Resultado completo de `CBID_VEHICLE_VISUAL_EFFECT` (`0x10`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VehicleVisualEffectSpec {
+    /// Tipo/modelo de humo o chispa. En modo avanzado identifica el modelo
+    /// usado para decidir si se invoca `CBID_VEHICLE_SPAWN_VISUAL_EFFECT`.
+    pub kind: VehicleVisualEffectKind,
+    /// Offset Action0 de 0 (frente) a 15 (parte trasera), crudo.
+    pub offset: u8,
+    /// `true` cuando el resultado usa el modelo avanzado (bit 6).
+    pub advanced: bool,
+    /// Bit 7: la unidad no aporta potencia de vagón.
+    pub wagon_power_disabled: bool,
+}
+
+/// Resuelve el callback visual básico conservando offset, modo avanzado y
+/// permiso de potencia de vagón.
+#[must_use]
+pub fn resolve_vehicle_visual_effect_spec_callback(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+) -> Option<VehicleVisualEffectSpec> {
     if engine.newgrf_grfid == 0
         || engine.vehicle_callback_mask & (1 << 0) == 0
         || engine.newgrf_runtime.is_none()
@@ -729,21 +754,125 @@ pub fn resolve_vehicle_visual_effect_callback(
     if result == CALLBACK_FAILED || result >= 0x100 {
         return None;
     }
-    Some(decode_vehicle_visual_effect(u8::try_from(result).ok()?))
+    Some(decode_vehicle_visual_effect_spec(
+        u8::try_from(result).ok()?,
+    ))
 }
 
-fn decode_vehicle_visual_effect(value: u8) -> VehicleVisualEffectKind {
+/// Un efecto solicitado por `CBID_VEHICLE_SPAWN_VISUAL_EFFECT`.
+///
+/// Los cuatro registros `0x100..0x103` se codifican como
+/// `type | (x << 8) | (y << 16) | (z << 24)`, con offsets signed de ocho bits.
+/// Los tipos `0xF1..0xF3` y `0xFA` son los efectos vanilla que el cliente puede
+/// materializar; se conserva el byte completo para que un renderer futuro no
+/// pierda efectos locales de un GRF.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct VehicleAdvancedVisualEffectSpawn {
+    pub effect_type: u8,
+    pub x: i8,
+    pub y: i8,
+    pub z: i8,
+}
+
+/// Resultado normalizado del callback visual avanzado (`0x160`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VehicleAdvancedVisualEffect {
+    /// Cantidad válida de registros solicitados (`0..=4`).
+    pub count: u8,
+    /// Centrar automáticamente el efecto en el vehículo.
+    pub auto_center: bool,
+    /// Rotar X/Y según la dirección del vehículo.
+    pub auto_rotate: bool,
+    /// Los registros `0x100..0x103` con el tipo y offsets relativos.
+    pub spawns: [VehicleAdvancedVisualEffectSpawn; 4],
+}
+
+/// Ejecuta `CBID_VEHICLE_SPAWN_VISUAL_EFFECT` (`0x160`) y decodifica sus
+/// registros de salida.
+///
+/// `param1` upstream es cero y `param2` es el RNG de la evaluación. No se
+/// exige un bit adicional de `VehicleCallbackMask`: igual que `OpenTTD`, la
+/// presencia de una cadena Action2 asignada al motor es la condición efectiva.
+#[must_use]
+pub fn resolve_vehicle_spawn_visual_effect_callback(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+    random: u16,
+) -> Option<VehicleAdvancedVisualEffect> {
+    if engine.newgrf_grfid == 0 {
+        return None;
+    }
+    let runtime = engine.newgrf_runtime.as_ref()?;
+    let mut ctx = action2_eval_ctx_from_vehicle(vehicle);
+    let result = runtime.resolve_callback_ctx_u16(
+        engine.newgrf_local_id,
+        CBID_VEHICLE_SPAWN_VISUAL_EFFECT,
+        0,
+        u32::from(random),
+        &mut ctx,
+    );
+    writeback_vehicle_persistent_registers(vehicle, &ctx);
+    if result == CALLBACK_FAILED {
+        return None;
+    }
+    let count = u8::try_from(result & 0x03).unwrap_or(0);
+    let spawns = std::array::from_fn(|index| {
+        let raw = ctx
+            .registers_100
+            .get(&(0x100 + u16::try_from(index).unwrap_or(0)))
+            .copied()
+            .unwrap_or(0);
+        VehicleAdvancedVisualEffectSpawn {
+            effect_type: (raw & 0xFF) as u8,
+            x: u8::try_from((raw >> 8) & 0xFF)
+                .unwrap_or_default()
+                .cast_signed(),
+            y: u8::try_from((raw >> 16) & 0xFF)
+                .unwrap_or_default()
+                .cast_signed(),
+            z: u8::try_from((raw >> 24) & 0xFF)
+                .unwrap_or_default()
+                .cast_signed(),
+        }
+    });
+    Some(VehicleAdvancedVisualEffect {
+        count,
+        auto_center: result & (1 << 13) != 0,
+        auto_rotate: result & (1 << 14) == 0,
+        spawns,
+    })
+}
+
+fn decode_vehicle_visual_effect_spec(value: u8) -> VehicleVisualEffectSpec {
     if value == crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT {
-        return VehicleVisualEffectKind::Default;
+        return VehicleVisualEffectSpec {
+            kind: VehicleVisualEffectKind::Default,
+            offset: 8,
+            advanced: false,
+            wagon_power_disabled: true,
+        };
     }
-    if value & (1 << 6) != 0 {
-        return VehicleVisualEffectKind::Disabled;
-    }
-    match (value >> 4) & 0x03 {
-        1 => VehicleVisualEffectKind::Steam,
-        2 => VehicleVisualEffectKind::Diesel,
-        3 => VehicleVisualEffectKind::Electric,
-        _ => VehicleVisualEffectKind::Default,
+    let advanced = value & (1 << 6) != 0;
+    let kind = if advanced {
+        match value & 0x3F {
+            1 => VehicleVisualEffectKind::Steam,
+            2 => VehicleVisualEffectKind::Diesel,
+            3 => VehicleVisualEffectKind::Electric,
+            _ => VehicleVisualEffectKind::Disabled,
+        }
+    } else {
+        match (value >> 4) & 0x03 {
+            1 => VehicleVisualEffectKind::Steam,
+            2 => VehicleVisualEffectKind::Diesel,
+            3 => VehicleVisualEffectKind::Electric,
+            _ => VehicleVisualEffectKind::Default,
+        }
+    };
+    VehicleVisualEffectSpec {
+        kind,
+        offset: value & 0x0F,
+        advanced,
+        wagon_power_disabled: value & (1 << 7) != 0,
     }
 }
 
@@ -757,8 +886,17 @@ pub fn vehicle_visual_effect_kind(
     engine: &EngineDef,
     vehicle: &mut Vehicle,
 ) -> VehicleVisualEffectKind {
-    resolve_vehicle_visual_effect_callback(engine, vehicle)
-        .unwrap_or_else(|| decode_vehicle_visual_effect(engine.visual_effect))
+    vehicle_visual_effect_spec(engine, vehicle).kind
+}
+
+/// Obtiene la especificación efectiva, aplicando CB10 o Action0.
+#[must_use]
+pub fn vehicle_visual_effect_spec(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+) -> VehicleVisualEffectSpec {
+    resolve_vehicle_visual_effect_spec_callback(engine, vehicle)
+        .unwrap_or_else(|| decode_vehicle_visual_effect_spec(engine.visual_effect))
 }
 
 /// Resuelve `CBID_VEHICLE_LOAD_AMOUNT` (`0x12`) para carga gradual.
@@ -4633,6 +4771,15 @@ mod tests {
             VehicleVisualEffectKind::Diesel
         );
 
+        // Bit 6 selecciona el modelo avanzado; los bits bajos (no 4..5)
+        // contienen el tipo y el nibble bajo conserva el offset.
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0x41)));
+        let advanced = resolve_vehicle_visual_effect_spec_callback(&engine, &mut vehicle).unwrap();
+        assert_eq!(advanced.kind, VehicleVisualEffectKind::Steam);
+        assert!(advanced.advanced);
+        assert_eq!(advanced.offset, 1);
+        assert!(!advanced.wagon_power_disabled);
+
         // El bit 6 desactiva humo/chispas, incluso si los bits de tipo están puestos.
         engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0x70)));
         assert_eq!(
@@ -4669,6 +4816,104 @@ mod tests {
         assert_eq!(
             vehicle_visual_effect_kind(&engine, &mut vehicle),
             VehicleVisualEffectKind::Default
+        );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_spawn_visual_effect_decodes_regs_and_flags() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x5350_574E;
+        engine.newgrf_local_id = 0;
+
+        let spawn = |effect_type: u8, x: i8, y: i8, z: i8| {
+            u32::from(effect_type)
+                | (u32::from(x.cast_unsigned()) << 8)
+                | (u32::from(y.cast_unsigned()) << 16)
+                | (u32::from(z.cast_unsigned()) << 24)
+        };
+        let values = [
+            spawn(0xF1, 2, -3, 4),
+            spawn(0xF2, -5, 6, -7),
+            spawn(0xFA, 8, 9, 10),
+        ];
+        let mut gfx = gfx_callback_literal_u16(0x6003);
+        let mut ops = Vec::new();
+        for (index, value) in values.into_iter().enumerate() {
+            ops.push(Action2VarOp {
+                operator: 0x0F,
+                rhs: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: value,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+            });
+            ops.push(Action2VarOp {
+                operator: 0x0E,
+                rhs: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: 0x100 + u32::try_from(index).unwrap(),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+            });
+        }
+        // Restaurar el retorno después de llenar los registros 0x100..0x102.
+        ops.push(Action2VarOp {
+            operator: 0x0F,
+            rhs: Action2VarTerm {
+                variable: 0x1A,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: 0x6003,
+                    ..Action2VarAdjust::default()
+                },
+            },
+        });
+        gfx.action2_var.get_mut(&2).unwrap().ops = ops;
+        engine.newgrf_runtime = Some(Box::new(gfx));
+
+        let mut vehicle = Vehicle::new(
+            45,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        let result =
+            resolve_vehicle_spawn_visual_effect_callback(&engine, &mut vehicle, 0xBEEF).unwrap();
+        assert_eq!(result.count, 3);
+        assert!(result.auto_center);
+        assert!(!result.auto_rotate);
+        assert_eq!(
+            result.spawns[0],
+            VehicleAdvancedVisualEffectSpawn {
+                effect_type: 0xF1,
+                x: 2,
+                y: -3,
+                z: 4,
+            }
+        );
+        assert_eq!(
+            result.spawns[1],
+            VehicleAdvancedVisualEffectSpawn {
+                effect_type: 0xF2,
+                x: -5,
+                y: 6,
+                z: -7,
+            }
+        );
+        assert_eq!(result.spawns[2].effect_type, 0xFA);
+        assert_eq!(
+            result.spawns[3],
+            VehicleAdvancedVisualEffectSpawn::default()
         );
     }
 

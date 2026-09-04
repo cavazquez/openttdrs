@@ -1155,6 +1155,8 @@ impl TrainSpriteGraphics {
 pub const CALLBACK_FAILED: u16 = 0xFFFF;
 /// Callback vehículos: seleccionar humo/chispas y potencia visual (`0x10`).
 pub const CBID_VEHICLE_VISUAL_EFFECT: u16 = 0x10;
+/// Callback vehículos: solicitar efectos visuales avanzados (`0x160`).
+pub const CBID_VEHICLE_SPAWN_VISUAL_EFFECT: u16 = 0x160;
 /// Callback estaciones: layout de tesela al construir (`CBID_STATION_BUILD_TILE_LAYOUT`).
 pub const CBID_STATION_BUILD_TILE_LAYOUT: u16 = 0x24;
 /// Callback vehículos: acortar la longitud visual (`CBID_VEHICLE_LENGTH`).

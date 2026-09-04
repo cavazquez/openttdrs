@@ -7,8 +7,9 @@ use bevy::prelude::*;
 
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    EngineDef, Vehicle, VehicleOrder, VehicleVisualEffectKind, extrapolate_vehicle_pose,
-    retreat_vehicle_pose, train_smoke_kind, vehicle_visual_effect_kind,
+    EngineDef, Vehicle, VehicleAdvancedVisualEffectSpawn, VehicleOrder, VehicleVisualEffectKind,
+    extrapolate_vehicle_pose, resolve_vehicle_spawn_visual_effect_callback, retreat_vehicle_pose,
+    train_smoke_kind, vehicle_visual_effect_spec,
 };
 
 use crate::audio::{PlayWorldSfx, play_vehicle_event_sound_with_default};
@@ -57,6 +58,8 @@ pub(crate) struct TrainSmokeEffect {
     base_z: u8,
     tile: (i32, i32),
     set: TrainSmokeSet,
+    /// Desplazamiento adicional de un registro `0x100` avanzado.
+    advanced_offset: Vec3,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +67,7 @@ enum TrainSmokeSet {
     Steam,
     Diesel,
     Electric,
+    Breakdown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +81,7 @@ fn sprite_set<'a>(frames: &'a EffectVehicleFrames, kind: TrainSmokeSet) -> Effec
         TrainSmokeSet::Steam => frames.steam_set(),
         TrainSmokeSet::Diesel => frames.diesel_set(),
         TrainSmokeSet::Electric => frames.electric_set(),
+        TrainSmokeSet::Breakdown => frames.breakdown_set(),
     }
 }
 
@@ -102,7 +107,7 @@ fn effect_tick_state(kind: TrainSmokeSet, age_ticks: u64) -> Option<EffectTickSt
                 }
             }
         }
-        TrainSmokeSet::Diesel => {
+        TrainSmokeSet::Diesel | TrainSmokeSet::Breakdown => {
             let mut progress = 0_u8;
             for _ in 0..age_ticks.min(64) {
                 progress = progress.wrapping_add(1);
@@ -201,7 +206,7 @@ fn train_smoke_to_emit_with_engine(
         vehicle.cached_max_speed.max(1)
     };
     let speed = vehicle.cur_speed.min(max_speed);
-    let smoke_kind = match vehicle_visual_effect_kind(engine, vehicle) {
+    let smoke_kind = match vehicle_visual_effect_spec(engine, vehicle).kind {
         VehicleVisualEffectKind::Disabled => return None,
         VehicleVisualEffectKind::Steam => openttdrs_core::TrainSmokeKind::Steam,
         VehicleVisualEffectKind::Diesel => openttdrs_core::TrainSmokeKind::Diesel,
@@ -252,6 +257,40 @@ fn train_smoke_to_emit_with_engine(
     }
 }
 
+fn advanced_effect_set(effect_type: u8) -> Option<TrainSmokeSet> {
+    match effect_type {
+        0xF1 => Some(TrainSmokeSet::Steam),
+        0xF2 => Some(TrainSmokeSet::Diesel),
+        0xF3 => Some(TrainSmokeSet::Electric),
+        0xFA => Some(TrainSmokeSet::Breakdown),
+        _ => None,
+    }
+}
+
+/// Convierte offsets NFO relativos en un desplazamiento de overlay. La
+/// posición recibida por `vehicle_draw_anchor_from_pose` ya está centrada, por
+/// lo que `auto_center` no agrega un sesgo adicional; sí respetamos
+/// `auto_rotate`, que es la parte observable para X/Y.
+#[must_use]
+fn advanced_effect_offset(
+    vehicle: &Vehicle,
+    spawn: VehicleAdvancedVisualEffectSpawn,
+    auto_rotate: bool,
+) -> Vec3 {
+    let mut x = i32::from(spawn.x);
+    let mut y = i32::from(spawn.y);
+    if auto_rotate {
+        const SMOKE_POS: [i32; 8] = [1, 1, 1, 0, -1, -1, -1, 0];
+        let longitudinal = usize::from(vehicle.direction & 7);
+        let transverse = (longitudinal + 2) & 7;
+        let local_x = x;
+        let local_y = y;
+        x = SMOKE_POS[longitudinal] * local_x + SMOKE_POS[transverse] * local_y;
+        y = SMOKE_POS[transverse] * local_x - SMOKE_POS[longitudinal] * local_y;
+    }
+    Vec3::new(x as f32, y as f32, f32::from(spawn.z))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_train_smoke(
     mut sim: ResMut<SimWorld>,
@@ -290,6 +329,65 @@ fn spawn_train_smoke(
         else {
             continue;
         };
+        let visual_spec = vehicle_visual_effect_spec(engine, vehicle);
+        if visual_spec.advanced {
+            // Un modelo avanzado todavía puede resolver a `Disabled` (por
+            // ejemplo, un valor reservado del GRF). En ese caso OpenTTD no
+            // invoca CB160: el vehículo queda sin efecto visual.
+            if matches!(visual_spec.kind, VehicleVisualEffectKind::Disabled) {
+                continue;
+            }
+            // `ShowVisualEffect` no emite el modelo vanilla cuando el bit 6
+            // pide el callback avanzado: si el callback falla, el resultado
+            // correcto es no crear efectos, no degradar a humo estándar.
+            let random = deterministic_random16(vehicle.id, tick, 0x1600_0000);
+            let advanced = resolve_vehicle_spawn_visual_effect_callback(engine, vehicle, random);
+            let Some(advanced) = advanced else {
+                continue;
+            };
+            let pose = extrapolate_vehicle_pose(vehicle, sim_clock.tick_alpha);
+            let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(vehicle, map, pose);
+            let mut emitted = false;
+            for spawn in advanced.spawns.iter().take(usize::from(advanced.count)) {
+                let Some(set_kind) = advanced_effect_set(spawn.effect_type) else {
+                    continue;
+                };
+                if active_count >= MAX_TRAIN_SMOKE_EFFECTS {
+                    break;
+                }
+                let effect_set = sprite_set(&frames, set_kind);
+                let Some(atlas) = effect_set.frames.first() else {
+                    continue;
+                };
+                let advanced_offset = advanced_effect_offset(vehicle, *spawn, advanced.auto_rotate);
+                let mut sprite = atlas.sprite();
+                if matches!(set_kind, TrainSmokeSet::Electric) {
+                    sprite.color = Color::srgb(0.85, 0.92, 1.0);
+                }
+                let pos = effect_overlay_pos(anchor, 0, &effect_set, base_z, (tx, ty), 0.38, 0.0)
+                    + advanced_offset;
+                commands.spawn((
+                    MapVisualLayer,
+                    TrainSmokeEffect {
+                        started_tick: tick,
+                        anchor,
+                        base_z,
+                        tile: (tx, ty),
+                        set: set_kind,
+                        advanced_offset,
+                    },
+                    sprite,
+                    Transform::from_translation(pos),
+                    Visibility::Visible,
+                ));
+                emitted = true;
+                active_count += 1;
+            }
+            if emitted && hud.sound_vehicle && vehicle.is_consist_head() {
+                visual_sound_events.push((vehicle.id, vehicle.pos));
+            }
+            continue;
+        }
         let Some(set_kind) =
             train_smoke_to_emit_with_engine(map, vehicle, engine, tick, prefs.smoke_amount)
         else {
@@ -318,6 +416,7 @@ fn spawn_train_smoke(
                 base_z,
                 tile: (tx, ty),
                 set: set_kind,
+                advanced_offset: Vec3::ZERO,
             },
             sprite,
             Transform::from_translation(pos),
@@ -381,7 +480,7 @@ fn animate_train_smoke(
             smoke.tile,
             0.38,
             f32::from(state.rise),
-        );
+        ) + smoke.advanced_offset;
         if transform.translation != pos {
             transform.translation = pos;
         }
@@ -455,6 +554,26 @@ mod tests {
         // CB10 bit 6 = VE_DISABLE_EFFECT.
         engine.newgrf_runtime = Some(Box::new(callback_literal(0x40)));
         assert!(train_smoke_to_emit_with_engine(&map, &mut vehicle, &engine, 0, 2).is_none());
+    }
+
+    #[test]
+    fn advanced_effect_offsets_rotate_with_vehicle_direction() {
+        let mut vehicle = running_train(ENGINE_TRAIN_KIRBY);
+        vehicle.direction = 0;
+        let spawn = VehicleAdvancedVisualEffectSpawn {
+            effect_type: 0xF1,
+            x: 2,
+            y: 3,
+            z: -4,
+        };
+        assert_eq!(
+            advanced_effect_offset(&vehicle, spawn, false),
+            Vec3::new(2.0, 3.0, -4.0)
+        );
+        assert_eq!(
+            advanced_effect_offset(&vehicle, spawn, true),
+            Vec3::new(5.0, -1.0, -4.0)
+        );
     }
 
     #[test]

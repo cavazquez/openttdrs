@@ -4,7 +4,7 @@
 //! wagon removal (`renew_keep_length`).
 
 use crate::engine::{EngineDef, engine_available_in_year, engine_by_id};
-use crate::refit::{refittable_cargo_types_for_engine_with_catalog, vehicle_in_depot};
+use crate::refit::{refittable_cargo_types_for_engine_with_catalog_and_climate, vehicle_in_depot};
 use crate::train_consist::{consist_unit_ids, detach_unit, engine_is_wagon};
 use crate::vehicle::{Vehicle, VehicleKind};
 use crate::{CompanyId, GameState, economy};
@@ -141,14 +141,18 @@ fn apply_engine_with_refit(
     new_engine: &EngineDef,
     current_tick: u64,
     cargo_spec_catalog: &[crate::cargo_spec::CargoSpecDef],
+    climate: crate::Climate,
 ) {
     vehicle.engine_id = Some(new_engine.id);
     vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(new_engine, vehicle);
     if let Some(c) = new_engine.cargo {
         vehicle.cargo_type = Some(c);
     } else if let Some(current) = vehicle.cargo_type {
-        let refittable =
-            refittable_cargo_types_for_engine_with_catalog(new_engine, cargo_spec_catalog);
+        let refittable = refittable_cargo_types_for_engine_with_catalog_and_climate(
+            new_engine,
+            cargo_spec_catalog,
+            climate,
+        );
         if !refittable.contains(&current)
             && let Some(&first) = refittable.first()
         {
@@ -399,6 +403,7 @@ fn replace_chain(
         new_engine,
         current_tick,
         &state.cargo_spec_catalog,
+        state.climate,
     );
 
     if !is_train && !is_road {
@@ -437,7 +442,13 @@ fn replace_chain(
             continue;
         };
         if let Some(unit) = state.vehicles.iter_mut().find(|v| v.id == uid) {
-            apply_engine_with_refit(unit, &eng, current_tick, &state.cargo_spec_catalog);
+            apply_engine_with_refit(
+                unit,
+                &eng,
+                current_tick,
+                &state.cargo_spec_catalog,
+                state.climate,
+            );
         }
     }
 
@@ -506,7 +517,13 @@ fn sync_dual_head_after_replace(
             if let Some(rid) = rear_id
                 && let Some(rear) = state.vehicles.iter_mut().find(|v| v.id == rid)
             {
-                apply_engine_with_refit(rear, new_engine, current_tick, &state.cargo_spec_catalog);
+                apply_engine_with_refit(
+                    rear,
+                    new_engine,
+                    current_tick,
+                    &state.cargo_spec_catalog,
+                    state.climate,
+                );
             }
             return;
         }
@@ -539,6 +556,7 @@ fn sync_dual_head_after_replace(
             new_engine,
             current_tick,
             &state.cargo_spec_catalog,
+            state.climate,
         );
         rear.build_tick = current_tick;
         rear.owner = owner;

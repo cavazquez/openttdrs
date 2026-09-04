@@ -446,6 +446,8 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         newgrf_local_id: 0,
         newgrf_runtime: None,
         newgrf_grfid: 0,
+        newgrf_grf_version: 0,
+        newgrf_type_tables: None,
         vehicle_callback_mask: 0,
         badges: Vec::new(),
         newgrf_badge_translation: Vec::new(),

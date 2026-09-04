@@ -4,6 +4,7 @@ use crate::cargo::CargoType;
 use crate::depot::{rail_depot_for_entrance_tile, rail_depot_mouth_dir};
 use crate::map::{Map, TileKind};
 use crate::vehicle::{Vehicle, VehicleKind};
+use crate::world_gen::Climate;
 
 const TRUCK_FREIGHT: [CargoType; 29] = [
     CargoType::Mail,
@@ -151,6 +152,26 @@ pub fn refittable_cargo_types_for_engine_with_catalog(
     engine: &crate::engine::EngineDef,
     cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
 ) -> Vec<CargoType> {
+    refittable_cargo_types_for_engine_with_catalog_and_climate(
+        engine,
+        cargo_catalog,
+        Climate::Temperate,
+    )
+}
+
+/// Variante de [`refittable_cargo_types_for_engine_with_catalog`] que usa el
+/// clima de la partida para callbacks de vehículos GRF v1..6.
+///
+/// Después de resolver la máscara base y la CTT, ejecuta
+/// `CBID_VEHICLE_CUSTOM_REFIT` para todos los cargos conocidos. Esto permite
+/// que un callback incluya un cargo que la máscara no enumeraba o quite uno
+/// que la máscara sí incluía, igual que `Vehicle::GetRefitMask` de `OpenTTD`.
+#[must_use]
+pub fn refittable_cargo_types_for_engine_with_catalog_and_climate(
+    engine: &crate::engine::EngineDef,
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    climate: Climate,
+) -> Vec<CargoType> {
     let mut cargos = if engine.cargo_classes_specified {
         let mut candidates = crate::cargo::ALL_CARGO_TYPES.to_vec();
         for cargo in cargo_catalog
@@ -200,6 +221,36 @@ pub fn refittable_cargo_types_for_engine_with_catalog(
         base
     };
     cargos.retain(|cargo| !engine.ctt_exclude_cargos.contains(cargo));
+    if engine.vehicle_callback_mask & (1 << 9) != 0 {
+        let mut callback_candidates = crate::cargo::ALL_CARGO_TYPES.to_vec();
+        for cargo in cargo_catalog
+            .iter()
+            .filter_map(crate::cargo_spec::CargoSpecDef::cargo_type)
+        {
+            if !callback_candidates.contains(&cargo) {
+                callback_candidates.push(cargo);
+            }
+        }
+        for cargo in callback_candidates {
+            match crate::newgrf_callback::resolve_vehicle_custom_refit_callback(
+                engine,
+                cargo,
+                climate,
+                cargo_catalog,
+            ) {
+                crate::newgrf_callback::VehicleCustomRefitDecision::Include => {
+                    if !cargos.contains(&cargo) {
+                        cargos.push(cargo);
+                    }
+                }
+                crate::newgrf_callback::VehicleCustomRefitDecision::Exclude => {
+                    cargos.retain(|candidate| *candidate != cargo);
+                }
+                crate::newgrf_callback::VehicleCustomRefitDecision::NoChange
+                | crate::newgrf_callback::VehicleCustomRefitDecision::Invalid(_) => {}
+            }
+        }
+    }
     cargos
 }
 
@@ -235,11 +286,31 @@ pub fn refittable_cargo_types_with_catalog(
     engine_catalog: &[crate::engine::EngineDef],
     cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
 ) -> Vec<CargoType> {
+    refittable_cargo_types_with_catalog_and_climate(
+        vehicle,
+        engine_catalog,
+        cargo_catalog,
+        Climate::Temperate,
+    )
+}
+
+/// Variante de [`refittable_cargo_types_with_catalog`] con el clima activo.
+#[must_use]
+pub fn refittable_cargo_types_with_catalog_and_climate(
+    vehicle: &Vehicle,
+    engine_catalog: &[crate::engine::EngineDef],
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    climate: Climate,
+) -> Vec<CargoType> {
     if let Some(engine) = vehicle
         .engine_id
         .and_then(|id| crate::engine::engine_in_catalog(engine_catalog, id))
     {
-        return refittable_cargo_types_for_engine_with_catalog(engine, cargo_catalog);
+        return refittable_cargo_types_for_engine_with_catalog_and_climate(
+            engine,
+            cargo_catalog,
+            climate,
+        );
     }
     let mut cargos = refittable_cargo_types(vehicle).to_vec();
     let allows_freight = matches!(
@@ -396,10 +467,31 @@ pub fn refit_allowed_with_catalog(
     engine_catalog: &[crate::engine::EngineDef],
     cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
 ) -> bool {
+    refit_allowed_with_catalog_and_climate(
+        vehicle,
+        map,
+        engine_catalog,
+        cargo_catalog,
+        Climate::Temperate,
+    )
+}
+
+/// Variante de [`refit_allowed_with_catalog`] que evalúa la CTT/callback con
+/// el clima de la partida.
+#[must_use]
+pub fn refit_allowed_with_catalog_and_climate(
+    vehicle: &Vehicle,
+    map: &Map,
+    engine_catalog: &[crate::engine::EngineDef],
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    climate: Climate,
+) -> bool {
     if vehicle.cargo != 0 || !vehicle_in_depot(map, vehicle.pos) {
         return false;
     }
-    refittable_cargo_types_with_catalog(vehicle, engine_catalog, cargo_catalog).len() > 1
+    refittable_cargo_types_with_catalog_and_climate(vehicle, engine_catalog, cargo_catalog, climate)
+        .len()
+        > 1
 }
 
 #[cfg(test)]

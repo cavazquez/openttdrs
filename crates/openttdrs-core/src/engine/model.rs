@@ -171,6 +171,16 @@ pub struct EngineDef {
     /// GRFID del `NewGRF` que definió este motor (0 = vanilla).
     #[serde(default, skip)]
     pub newgrf_grfid: u32,
+    /// Versión del formato `NewGRF` que declaró el motor (Action8).
+    ///
+    /// Se conserva sólo en runtime: `CBID_VEHICLE_CUSTOM_REFIT` necesita
+    /// distinguir el fallback de CTT de GRF v1..6 del `bitnum` de v7+.
+    #[serde(default, skip)]
+    pub newgrf_grf_version: u8,
+    /// Tablas de traducción del GRF que definió el motor. La CTT es parte del
+    /// contexto de la evaluación de callbacks y no se serializa en saves.
+    #[serde(default, skip)]
+    pub newgrf_type_tables: Option<crate::newgrf_type_tables::GrfTypeTranslationTables>,
     /// Máscara Action0 de callbacks de vehículo; bit 7 = `SoundEffect`.
     #[serde(default)]
     pub vehicle_callback_mask: u16,

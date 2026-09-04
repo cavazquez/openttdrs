@@ -634,10 +634,12 @@ pub use rail_type::{
     required_rail_type_for_engine, set_rail_type_on_tile, tile_usable_by_rail_type,
 };
 pub use refit::{
-    next_refit_cargo, refit_allowed, refit_allowed_with_catalog, refittable_cargo_types,
+    next_refit_cargo, refit_allowed, refit_allowed_with_catalog,
+    refit_allowed_with_catalog_and_climate, refittable_cargo_types,
     refittable_cargo_types_for_engine, refittable_cargo_types_for_engine_with_catalog,
-    refittable_cargo_types_with_catalog, vehicle_hidden_from_view, vehicle_hidden_in_tunnel,
-    vehicle_hidden_on_map, vehicle_in_depot,
+    refittable_cargo_types_for_engine_with_catalog_and_climate,
+    refittable_cargo_types_with_catalog, refittable_cargo_types_with_catalog_and_climate,
+    vehicle_hidden_from_view, vehicle_hidden_in_tunnel, vehicle_hidden_on_map, vehicle_in_depot,
 };
 pub use road_action2::action2_eval_ctx_for_road_tile;
 pub use road_movement::{

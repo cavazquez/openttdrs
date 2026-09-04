@@ -29,10 +29,10 @@ use crate::newgrf_sprites::{
     CBID_INDUSTRY_SPECIAL_EFFECT, CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME,
     CBID_STATION_ANIMATION_SPEED, CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY,
     CBID_STATION_LAND_SLOPE_CHECK, CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE,
-    CBID_VEHICLE_COLOUR_MAPPING, CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT,
-    CBID_VEHICLE_MODIFY_PROPERTY, CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT,
-    CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT, IndustryProductionGroup,
-    TrainSpriteGraphics,
+    CBID_VEHICLE_COLOUR_MAPPING, CBID_VEHICLE_CUSTOM_REFIT, CBID_VEHICLE_LENGTH,
+    CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY, CBID_VEHICLE_REFIT_CAPACITY,
+    CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT,
+    IndustryProductionGroup, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -43,7 +43,9 @@ use crate::station::Station;
 use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
 use crate::town::Town;
 use crate::vehicle::{Vehicle, VehicleKind, VehicleRandomTrigger};
-use crate::{CargoType, GameState, IndustryKind, RoadType, SoundId, StopKind, VehicleSoundEvent};
+use crate::{
+    CargoType, Climate, GameState, IndustryKind, RoadType, SoundId, StopKind, VehicleSoundEvent,
+};
 use std::collections::HashSet;
 
 /// Contexto que el scheduler de callbacks necesita para reproducir los scopes
@@ -173,6 +175,85 @@ pub fn resolve_vehicle_callback(
     );
     writeback_vehicle_persistent_registers(vehicle, &ctx);
     result
+}
+
+/// Resultado normalizado de `CBID_VEHICLE_CUSTOM_REFIT` (`0x163`).
+///
+/// `OpenTTD` reserva `CALLBACK_FAILED` y `0` para “sin cambio”, `1` para
+/// incluir el cargo y `2` para excluirlo. Los valores restantes son resultados
+/// inválidos y no deben modificar la máscara efectiva.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VehicleCustomRefitDecision {
+    NoChange,
+    Include,
+    Exclude,
+    Invalid(u16),
+}
+
+/// Decodifica el retorno bruto de `CBID_VEHICLE_CUSTOM_REFIT` sin ejecutar un
+/// runtime. Mantener esta función pura hace explícita la frontera de valores
+/// aceptados por el callback y permite cubrir también `CALLBACK_FAILED`.
+#[must_use]
+pub const fn decode_vehicle_custom_refit_result(result: u16) -> VehicleCustomRefitDecision {
+    match result {
+        CALLBACK_FAILED | 0 => VehicleCustomRefitDecision::NoChange,
+        1 => VehicleCustomRefitDecision::Include,
+        2 => VehicleCustomRefitDecision::Exclude,
+        other => VehicleCustomRefitDecision::Invalid(other),
+    }
+}
+
+/// Ejecuta un callback cuyo resolver tiene alcance de motor, sin contaminar el
+/// estado de una unidad concreta. `GetRefitMask` de `OpenTTD` pasa `nullptr`
+/// como vehículo al resolver; los parámetros del callback siguen estando
+/// disponibles como variables `0x10`/`0x18` del contexto Action2.
+fn resolve_engine_callback(engine: &EngineDef, callback: u16, param1: u32, param2: u32) -> u16 {
+    let Some(runtime) = engine.newgrf_runtime.as_ref() else {
+        return CALLBACK_FAILED;
+    };
+    runtime.resolve_callback_ctx_u16(
+        engine.newgrf_local_id,
+        callback,
+        param1,
+        param2,
+        &mut Action2EvalCtx::default(),
+    )
+}
+
+/// Ejecuta `CBID_VEHICLE_CUSTOM_REFIT` para un cargo candidato.
+///
+/// Los parámetros siguen `Vehicle::GetRefitMask` de `OpenTTD` 15.3:
+/// `param1` es la máscara base de `CargoClass` y `param2` el slot local de la
+/// CTT (con fallback por versión de GRF cuando no hay tabla explícita).
+#[must_use]
+pub fn resolve_vehicle_custom_refit_callback(
+    engine: &EngineDef,
+    cargo: CargoType,
+    climate: Climate,
+    cargo_catalog: &[CargoSpecDef],
+) -> VehicleCustomRefitDecision {
+    if engine.newgrf_grfid == 0
+        || engine.vehicle_callback_mask & (1 << 9) == 0
+        || engine.newgrf_runtime.is_none()
+    {
+        return VehicleCustomRefitDecision::NoChange;
+    }
+    let classes = crate::cargo_spec::cargo_spec_for_type(cargo_catalog, cargo)
+        .map_or_else(|| cargo.classes(), |spec| spec.classes);
+    let local_slot = crate::newgrf_type_tables::local_cargo_id_with_catalog(
+        engine.newgrf_type_tables.as_ref(),
+        engine.newgrf_grf_version,
+        cargo,
+        climate,
+        cargo_catalog,
+    );
+    let result = resolve_engine_callback(
+        engine,
+        CBID_VEHICLE_CUSTOM_REFIT,
+        u32::from(classes),
+        u32::from(local_slot),
+    );
+    decode_vehicle_custom_refit_result(result)
 }
 
 /// Semántica `OpenTTD` 15.3 para `CBID_VEHICLE_START_STOP_CHECK` (MVP):
@@ -3682,6 +3763,44 @@ mod tests {
         gfx
     }
 
+    /// Devuelve `1` cuando una variable de callback coincide exactamente con
+    /// un byte; al no tener rangos, el `nvar=0` devuelve el acumulador como
+    /// resultado bruto del callback.
+    fn gfx_callback_compare_byte(variable: u8, expected: u8) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::from(u8::MAX),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: vec![Action2VarOp {
+                    operator: 0x12,
+                    rhs: Action2VarTerm {
+                        variable: 0x1A,
+                        param: None,
+                        adjust: Action2VarAdjust {
+                            and_mask: u32::from(expected),
+                            ..Action2VarAdjust::default()
+                        },
+                    },
+                }],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     /// Callback por slot para fixtures legacy: el grupo raíz selecciona un
     /// grupo terminal `nvar=0` y cada terminal devuelve el cargo solicitado.
     fn gfx_callback_slot_results(results: &[(u8, u8, u8)]) -> TrainSpriteGraphics {
@@ -4780,6 +4899,127 @@ mod tests {
             resolve_vehicle_refit_capacity_callback(&engine, &mut vehicle, CargoType::Coal),
             None
         );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_custom_refit_decodes_contract() {
+        assert_eq!(
+            decode_vehicle_custom_refit_result(CALLBACK_FAILED),
+            VehicleCustomRefitDecision::NoChange
+        );
+        assert_eq!(
+            decode_vehicle_custom_refit_result(0),
+            VehicleCustomRefitDecision::NoChange
+        );
+        assert_eq!(
+            decode_vehicle_custom_refit_result(1),
+            VehicleCustomRefitDecision::Include
+        );
+        assert_eq!(
+            decode_vehicle_custom_refit_result(2),
+            VehicleCustomRefitDecision::Exclude
+        );
+        assert_eq!(
+            decode_vehicle_custom_refit_result(0x400),
+            VehicleCustomRefitDecision::Invalid(0x400)
+        );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_custom_refit_passes_cargo_class_and_ctt_slot() {
+        use crate::newgrf_type_tables::GrfTypeTranslationTables;
+
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x4352_4654;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_grf_version = 8;
+        engine.vehicle_callback_mask = 1 << 9;
+        engine.newgrf_type_tables = Some(GrfTypeTranslationTables {
+            cargo: vec![*b"PASS", *b"COAL", *b"TOFU"],
+            ..GrfTypeTranslationTables::default()
+        });
+        let custom = CargoType::Custom(0);
+        let cargo_catalog = vec![CargoSpecDef {
+            local_id: 7,
+            id: custom.cargo_id(),
+            bitnum: custom.bitnum(),
+            label: "TOFU".into(),
+            name: "Tofu".into(),
+            from_newgrf: true,
+            classes: crate::cargo::CARGO_CLASS_PIECE_GOODS,
+            is_freight: true,
+            ..CargoSpecDef::default()
+        }];
+
+        // The explicit CTT maps TOFU to local slot 2. A callback comparing
+        // 0x18 proves that the caller does not pass the global cargo id.
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_compare_byte(0x18, 2)));
+        assert_eq!(
+            resolve_vehicle_custom_refit_callback(
+                &engine,
+                custom,
+                crate::Climate::Temperate,
+                &cargo_catalog,
+            ),
+            VehicleCustomRefitDecision::Include
+        );
+        assert_eq!(
+            resolve_vehicle_custom_refit_callback(
+                &engine,
+                CargoType::Coal,
+                crate::Climate::Temperate,
+                &cargo_catalog,
+            ),
+            VehicleCustomRefitDecision::NoChange
+        );
+
+        // The class mask is the other callback parameter (`0x10`).
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_compare_byte(
+            0x10,
+            (crate::cargo::CARGO_CLASS_PIECE_GOODS & 0xFF) as u8,
+        )));
+        assert_eq!(
+            resolve_vehicle_custom_refit_callback(
+                &engine,
+                custom,
+                crate::Climate::Temperate,
+                &cargo_catalog,
+            ),
+            VehicleCustomRefitDecision::Include
+        );
+
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(2)));
+        assert_eq!(
+            resolve_vehicle_custom_refit_callback(
+                &engine,
+                custom,
+                crate::Climate::Temperate,
+                &cargo_catalog,
+            ),
+            VehicleCustomRefitDecision::Exclude
+        );
+
+        // The refit catalogue applies the decision to the complete cargo
+        // universe, including candidates absent from the vanilla kind list.
+        engine.kind = VehicleKind::Bus;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(1)));
+        let options = crate::refit::refittable_cargo_types_for_engine_with_catalog_and_climate(
+            &engine,
+            &cargo_catalog,
+            crate::Climate::Temperate,
+        );
+        assert!(options.contains(&custom));
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(2)));
+        let options = crate::refit::refittable_cargo_types_for_engine_with_catalog_and_climate(
+            &engine,
+            &cargo_catalog,
+            crate::Climate::Temperate,
+        );
+        assert!(!options.contains(&CargoType::Passengers));
     }
 
     #[test]

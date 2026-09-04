@@ -1014,16 +1014,18 @@ pub(super) fn refit_vehicle(
             .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
             .map_or_else(
                 || {
-                    crate::refit::refittable_cargo_types_with_catalog(
+                    crate::refit::refittable_cargo_types_with_catalog_and_climate(
                         vehicle,
                         &state.engine_catalog,
                         &state.cargo_spec_catalog,
+                        state.climate,
                     )
                 },
                 |engine| {
-                    crate::refit::refittable_cargo_types_for_engine_with_catalog(
+                    crate::refit::refittable_cargo_types_for_engine_with_catalog_and_climate(
                         engine,
                         &state.cargo_spec_catalog,
+                        state.climate,
                     )
                 },
             );
@@ -1090,16 +1092,18 @@ pub(super) fn cycle_vehicle_order_depot_refit(
         .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
         .map_or_else(
             || {
-                crate::refit::refittable_cargo_types_with_catalog(
+                crate::refit::refittable_cargo_types_with_catalog_and_climate(
                     &state.vehicles[vehicle_idx],
                     &state.engine_catalog,
                     &state.cargo_spec_catalog,
+                    state.climate,
                 )
             },
             |engine| {
-                crate::refit::refittable_cargo_types_for_engine_with_catalog(
+                crate::refit::refittable_cargo_types_for_engine_with_catalog_and_climate(
                     engine,
                     &state.cargo_spec_catalog,
+                    state.climate,
                 )
             },
         );

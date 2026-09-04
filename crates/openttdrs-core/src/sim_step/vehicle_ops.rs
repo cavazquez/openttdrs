@@ -66,16 +66,18 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
                 .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
                 .map_or_else(
                     || {
-                        crate::refit::refittable_cargo_types_with_catalog(
+                        crate::refit::refittable_cargo_types_with_catalog_and_climate(
                             &state.vehicles[idx],
                             &state.engine_catalog,
                             &state.cargo_spec_catalog,
+                            state.climate,
                         )
                     },
                     |engine| {
-                        crate::refit::refittable_cargo_types_for_engine_with_catalog(
+                        crate::refit::refittable_cargo_types_for_engine_with_catalog_and_climate(
                             engine,
                             &state.cargo_spec_catalog,
+                            state.climate,
                         )
                     },
                 );

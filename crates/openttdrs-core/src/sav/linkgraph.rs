@@ -22,17 +22,22 @@ use super::chunks::{RawChunk, find_chunk};
 use super::entities::SavStationIndex;
 use super::table::{SlRecord, SlValue, parse_table_chunk, record_get};
 
-/// Slot climate 0..11 del `.sav` → [`CargoType`] (temperate por defecto).
+/// ID global de cargo del `.sav` moderno → [`CargoType`].
 #[must_use]
 #[allow(dead_code)]
 pub(crate) fn cargo_from_openttd_id(id: u8) -> Option<CargoType> {
     cargo_from_openttd_id_in(Climate::Temperate, id)
 }
 
-/// Resuelve el cargo del slot `OpenTTD` según landscape (#224).
+/// Resuelve el cargo del ID global de `OpenTTD`.
+///
+/// `LGRP` sólo existe en el formato de tablas (`SLV_295+`), cuando los cargos
+/// ya dejaron de ser slots relativos al clima. Se mantiene `climate` en la
+/// firma para no romper los callers históricos y como fallback para fixtures
+/// que construyen registros legacy a mano.
 #[must_use]
-pub(crate) fn cargo_from_openttd_id_in(climate: Climate, id: u8) -> Option<CargoType> {
-    CargoType::from_climate_slot(climate, id)
+pub(crate) fn cargo_from_openttd_id_in(_climate: Climate, id: u8) -> Option<CargoType> {
+    CargoType::from_cargo_id(id)
 }
 
 #[must_use]
@@ -41,8 +46,8 @@ pub(crate) fn cargo_to_openttd_id(cargo: CargoType) -> u8 {
 }
 
 #[must_use]
-pub(crate) fn cargo_to_openttd_id_in(climate: Climate, cargo: CargoType) -> u8 {
-    cargo.climate_slot(climate).unwrap_or(0)
+pub(crate) fn cargo_to_openttd_id_in(_climate: Climate, cargo: CargoType) -> u8 {
+    cargo.cargo_id()
 }
 
 fn node_tile(
@@ -385,6 +390,26 @@ mod tests {
     use super::*;
     use crate::sav::chunks::{CH_TABLE, RawChunk};
     use crate::sav::table::tests::write_gamma as tg;
+
+    #[test]
+    fn modern_lgrp_uses_global_cargo_ids() {
+        assert_eq!(
+            cargo_from_openttd_id_in(Climate::SubArctic, 6),
+            Some(CargoType::Grain)
+        );
+        assert_eq!(
+            cargo_from_openttd_id_in(Climate::Temperate, 42),
+            Some(CargoType::Custom(11))
+        );
+        assert_eq!(
+            cargo_to_openttd_id_in(Climate::SubArctic, CargoType::Wheat),
+            11
+        );
+        assert_eq!(
+            cargo_to_openttd_id_in(Climate::Temperate, CargoType::Custom(11)),
+            42
+        );
+    }
 
     #[test]
     fn decode_synthetic_lgrp_coal_edge() {

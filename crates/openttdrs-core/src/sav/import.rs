@@ -22,6 +22,51 @@ use super::entities::SavIndustry;
 /// Antes de esa versión `AfterLoadGame()` los elimina y los vuelve a plantar.
 pub(crate) const LEGACY_FARMLAND_SAVE_VERSION: u16 = 32;
 
+/// Desde `SLV_55` los campos de cargo de las tablas nativas dejaron de usar
+/// el índice local del landscape y pasaron a guardar el `CargoType` global.
+///
+/// `STNN.goods`, `INDY.{accepted,produced}` y `VEHS.common.cargo_type` tienen
+/// el mismo corte de versión. Antes de él, por ejemplo, el slot 6 era trigo
+/// en el ártico y grano en el templado; después ambos valores usan sus IDs
+/// globales (`WHEA = 11`, `GRAI = 6`).
+pub(crate) const SAV_GLOBAL_CARGO_SLOTS_VERSION: u16 = 55;
+
+/// Resuelve un byte de cargo según la codificación nativa del `.sav`.
+///
+/// Los saves anteriores a [`SAV_GLOBAL_CARGO_SLOTS_VERSION`] codifican el
+/// slot relativo al clima. Los modernos usan el ID global de `CargoType` y
+/// por eso también pueden transportar cargos `NewGRF` (`31..62`) aunque el
+/// catálogo del GRF todavía no esté instalado. El catálogo sólo actúa como
+/// fallback para IDs que el runtime no materializa (por ejemplo `63`).
+#[must_use]
+pub(crate) fn cargo_from_sav_slot(
+    slot: u8,
+    climate: Climate,
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    save_version: u16,
+) -> Option<crate::CargoType> {
+    let from_catalog = || {
+        cargo_catalog
+            .iter()
+            .find(|def| def.id == slot || def.bitnum == slot)
+            .and_then(|def| {
+                def.cargo_type()
+                    .or_else(|| crate::CargoType::from_label(&def.label))
+            })
+    };
+
+    if save_version < SAV_GLOBAL_CARGO_SLOTS_VERSION {
+        crate::CargoType::from_climate_slot(climate, slot).or_else(from_catalog)
+    } else {
+        crate::CargoType::from_cargo_id(slot)
+            .or_else(from_catalog)
+            // `from_cargo_id` is authoritative for modern saves. Keep the
+            // climate fallback only for malformed/hand-built fixtures whose
+            // row carries a legacy slot despite a modern version header.
+            .or_else(|| crate::CargoType::from_climate_slot(climate, slot))
+    }
+}
+
 /// Conserva la información de industria que no forma parte de `GameState` y
 /// que el hook nativo de afterload necesita antes de tener el catálogo GRF.
 pub(crate) fn queue_legacy_sav_afterload(
@@ -403,15 +448,26 @@ pub(crate) fn hydrate_sav_industries(
         industry.construction_date = saved.construction_date;
         industry.construction_type = saved.construction_type;
         industry.prod_level = saved.prod_level;
-        import_industry_output_stock(&mut industry, saved, state.climate);
+        import_industry_output_stock(
+            &mut industry,
+            saved,
+            state.climate,
+            state.sav_version.unwrap_or(SAV_GLOBAL_CARGO_SLOTS_VERSION),
+        );
         state.industries.push(industry);
     }
 }
 
-fn import_industry_output_stock(industry: &mut Industry, saved: &SavIndustry, climate: Climate) {
+fn import_industry_output_stock(
+    industry: &mut Industry,
+    saved: &SavIndustry,
+    climate: Climate,
+    save_version: u16,
+) {
     let outputs = industry.produced_cargos();
     for produced in &saved.produced {
-        let Some(cargo) = crate::CargoType::from_climate_slot(climate, produced.cargo_slot) else {
+        let Some(cargo) = cargo_from_sav_slot(produced.cargo_slot, climate, &[], save_version)
+        else {
             continue;
         };
         let waiting = u32::from(produced.waiting);
@@ -450,7 +506,8 @@ fn import_industry_output_stock(industry: &mut Industry, saved: &SavIndustry, cl
     // espera de CB1/CB2. El parser ya conserva esa lista; hidratarla aquí
     // evita perderla al abrir un `.sav` y permite que el callback la consuma.
     for accepted in &saved.accepted {
-        let Some(cargo) = crate::CargoType::from_climate_slot(climate, accepted.cargo_slot) else {
+        let Some(cargo) = cargo_from_sav_slot(accepted.cargo_slot, climate, &[], save_version)
+        else {
             continue;
         };
         industry.add_accepted_cargo_waiting(cargo, u32::from(accepted.waiting));
@@ -535,6 +592,7 @@ pub(crate) fn rehydrate_sav_industries_with_catalog(state: &mut GameState) -> us
     let overrides = state.industry_overrides.clone();
     let cargo_catalog = state.cargo_spec_catalog.clone();
     let climate = state.climate;
+    let save_version = state.sav_version.unwrap_or(SAV_GLOBAL_CARGO_SLOTS_VERSION);
     let mut rehydrated = 0;
 
     for (index, industry) in state.industries.iter_mut().enumerate() {
@@ -579,12 +637,16 @@ pub(crate) fn rehydrate_sav_industries_with_catalog(state: &mut GameState) -> us
             let input_slots = saved
                 .accepted
                 .iter()
-                .map(|entry| cargo_from_sav_slot(entry.cargo_slot, climate, &cargo_catalog))
+                .map(|entry| {
+                    cargo_from_sav_slot(entry.cargo_slot, climate, &cargo_catalog, save_version)
+                })
                 .collect::<Vec<_>>();
             let output_slots = saved
                 .produced
                 .iter()
-                .map(|entry| cargo_from_sav_slot(entry.cargo_slot, climate, &cargo_catalog))
+                .map(|entry| {
+                    cargo_from_sav_slot(entry.cargo_slot, climate, &cargo_catalog, save_version)
+                })
                 .collect::<Vec<_>>();
             industry.newgrf_input_cargo_slots.clone_from(&input_slots);
             industry.newgrf_output_cargo_slots.clone_from(&output_slots);
@@ -688,22 +750,6 @@ pub(crate) fn rehydrate_sav_industries_with_catalog(state: &mut GameState) -> us
         rehydrated += 1;
     }
     rehydrated
-}
-
-fn cargo_from_sav_slot(
-    slot: u8,
-    climate: Climate,
-    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
-) -> Option<crate::CargoType> {
-    crate::CargoType::from_climate_slot(climate, slot).or_else(|| {
-        cargo_catalog
-            .iter()
-            .find(|def| def.bitnum == slot)
-            .and_then(|def| {
-                def.cargo_type()
-                    .or_else(|| crate::CargoType::from_label(&def.label))
-            })
-    })
 }
 
 fn industry_source_index(
@@ -1003,6 +1049,40 @@ mod tests {
         assert_eq!(industry_spec_from_gfx(33), Some(IndustrySpec::Farm));
         assert_eq!(industry_kind_from_gfx(48), IndustryKind::CoalMine);
         assert_eq!(industry_group_from_gfx(142), "Toy Factory");
+    }
+
+    #[test]
+    fn cargo_slots_follow_save_version_and_global_custom_ids() {
+        assert_eq!(
+            cargo_from_sav_slot(
+                6,
+                Climate::SubArctic,
+                &[],
+                SAV_GLOBAL_CARGO_SLOTS_VERSION - 1,
+            ),
+            Some(crate::CargoType::Wheat)
+        );
+        assert_eq!(
+            cargo_from_sav_slot(6, Climate::SubArctic, &[], SAV_GLOBAL_CARGO_SLOTS_VERSION),
+            Some(crate::CargoType::Grain)
+        );
+        assert_eq!(
+            cargo_from_sav_slot(11, Climate::SubArctic, &[], SAV_GLOBAL_CARGO_SLOTS_VERSION),
+            Some(crate::CargoType::Wheat)
+        );
+        assert_eq!(
+            cargo_from_sav_slot(42, Climate::Temperate, &[], SAV_GLOBAL_CARGO_SLOTS_VERSION),
+            Some(crate::CargoType::Custom(11))
+        );
+        assert_eq!(
+            cargo_from_sav_slot(
+                42,
+                Climate::Temperate,
+                &[],
+                SAV_GLOBAL_CARGO_SLOTS_VERSION - 1
+            ),
+            None
+        );
     }
 
     #[test]

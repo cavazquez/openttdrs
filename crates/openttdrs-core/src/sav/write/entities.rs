@@ -136,11 +136,14 @@ fn station_id_for_index(state: &GameState, index: usize) -> Option<u16> {
         .or_else(|| u16::try_from(index).ok())
 }
 
-fn cargo_slot_for_climate(climate: crate::Climate, cargo: CargoType) -> Option<u8> {
-    crate::cargo::CargoType::for_climate(climate)
-        .iter()
-        .position(|candidate| *candidate == cargo)
-        .and_then(|slot| u8::try_from(slot).ok())
+/// ID global de cargo que `OpenTTD` espera en los chunks modernos (`SLV_55+`).
+///
+/// El writer siempre emite la versión moderna (`EXPORT_SAVE_VERSION`), aunque
+/// el estado provenga de un SAV antiguo cuyos rows se hayan interpretado con
+/// slots locales por clima.
+fn cargo_slot_for_sav(cargo: CargoType) -> Option<u8> {
+    let slot = cargo.cargo_id();
+    (u32::from(slot) < NUM_CARGO).then_some(slot)
 }
 
 fn source_for_packet(state: &GameState, packet: &CargoPacket) -> (u8, u16) {
@@ -214,7 +217,7 @@ pub(crate) fn cargo_packet_export(state: &GameState, map_w: u32) -> CargoPacketE
         station.ensure_packets_from_stock();
         let mut groups: BTreeMap<(u8, u16), Vec<u32>> = BTreeMap::new();
         for packet in station.cargo_packets.packets() {
-            let Some(cargo_slot) = cargo_slot_for_climate(state.climate, packet.cargo) else {
+            let Some(cargo_slot) = cargo_slot_for_sav(packet.cargo) else {
                 continue;
             };
             let Some(packet_id) = push_cargo_packet(&mut export, state, map_w, packet) else {
@@ -710,7 +713,6 @@ fn write_stnn_normal(
     owner: crate::company::CompanyId,
     station_id: u32,
     cargo_export: &CargoPacketExport,
-    climate: crate::Climate,
     persistent_storage_id: Option<u32>,
 ) -> Result<(), SavError> {
     let name = st.name.as_deref().unwrap_or("");
@@ -781,7 +783,7 @@ fn write_stnn_normal(
     write_gamma(NUM_CARGO, buf)?;
     for slot in 0..NUM_CARGO {
         let slot_u8 = u8::try_from(slot).ok();
-        let cargo = slot_u8.and_then(|slot| CargoType::from_climate_slot(climate, slot));
+        let cargo = slot_u8.and_then(CargoType::from_cargo_id);
         let saved = slot_u8.and_then(|slot| {
             cargo_export
                 .station_refs
@@ -905,7 +907,6 @@ pub(crate) fn stnn_records_with_cargo(
                 st.owner,
                 station_id,
                 cargo_export,
-                state.climate,
                 station_persistent_storage_ids
                     .get(station_index)
                     .copied()
@@ -1281,12 +1282,26 @@ fn append_indy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     Ok(())
 }
 
+fn cargo_from_saved_slot(
+    slot: u8,
+    climate: crate::Climate,
+    save_version: Option<u16>,
+) -> Option<CargoType> {
+    crate::sav::import::cargo_from_sav_slot(
+        slot,
+        climate,
+        &[],
+        save_version.unwrap_or(crate::sav::import::SAV_GLOBAL_CARGO_SLOTS_VERSION),
+    )
+}
+
 #[allow(clippy::too_many_lines)]
 fn write_indy_accepted(
     buf: &mut Vec<u8>,
     industry: &Industry,
     climate: crate::Climate,
     saved: Option<&crate::sav::SavIndustry>,
+    save_version: Option<u16>,
 ) -> Result<(), SavError> {
     let mut cargos = crate::cargo::CargoType::for_climate(climate).to_vec();
     for &cargo in industry.accepted_history.keys() {
@@ -1296,7 +1311,7 @@ fn write_indy_accepted(
     }
     if let Some(saved_industry) = saved {
         for entry in &saved_industry.accepted {
-            let Some(cargo) = crate::CargoType::from_climate_slot(climate, entry.cargo_slot) else {
+            let Some(cargo) = cargo_from_saved_slot(entry.cargo_slot, climate, save_version) else {
                 continue;
             };
             if !cargos.contains(&cargo) {
@@ -1307,14 +1322,24 @@ fn write_indy_accepted(
     let entries: Vec<(u8, crate::CargoType, u16, u32)> = cargos
         .into_iter()
         .filter_map(|cargo| {
-            let slot = cargo_slot_for_climate(climate, cargo)?;
-            let waiting = industry.accepted_cargo_waiting(cargo);
-            let last_accepted = industry.last_accepted_date(cargo);
+            let slot = cargo_slot_for_sav(cargo)?;
             let saved_entry = saved.and_then(|saved_industry| {
                 saved_industry.accepted.iter().find(|entry| {
-                    crate::CargoType::from_climate_slot(climate, entry.cargo_slot) == Some(cargo)
+                    cargo_from_saved_slot(entry.cargo_slot, climate, save_version) == Some(cargo)
                 })
             });
+            let runtime_waiting = industry.accepted_cargo_waiting(cargo);
+            let waiting = if runtime_waiting == 0 && save_version.is_none() {
+                saved_entry.map_or(0, |entry| u32::from(entry.waiting))
+            } else {
+                runtime_waiting
+            };
+            let runtime_last_accepted = industry.last_accepted_date(cargo);
+            let last_accepted = if runtime_last_accepted == 0 && save_version.is_none() {
+                saved_entry.map_or(0, |entry| entry.last_accepted)
+            } else {
+                runtime_last_accepted
+            };
             let has_runtime_history = industry
                 .accepted_history
                 .get(&cargo)
@@ -1348,7 +1373,7 @@ fn write_indy_accepted(
     let opaque_entries = saved
         .into_iter()
         .flat_map(|industry| industry.accepted.iter())
-        .filter(|entry| crate::CargoType::from_climate_slot(climate, entry.cargo_slot).is_none())
+        .filter(|entry| cargo_from_saved_slot(entry.cargo_slot, climate, save_version).is_none())
         .collect::<Vec<_>>();
     let entry_count =
         entries
@@ -1372,7 +1397,7 @@ fn write_indy_accepted(
         buf.extend_from_slice(&last_accepted.to_be_bytes());
         let saved_entry = saved.and_then(|industry| {
             industry.accepted.iter().find(|entry| {
-                crate::CargoType::from_climate_slot(climate, entry.cargo_slot) == Some(cargo_type)
+                cargo_from_saved_slot(entry.cargo_slot, climate, save_version) == Some(cargo_type)
             })
         });
         let accumulated_waiting = if industry.accepted_history.contains_key(&cargo_type) {
@@ -1434,6 +1459,7 @@ fn write_indy_produced(
     industry: &Industry,
     climate: crate::Climate,
     saved: Option<&crate::sav::SavIndustry>,
+    save_version: Option<u16>,
 ) -> Result<(), SavError> {
     let mut outputs = industry.produced_cargos();
     for &cargo in industry.produced_history.keys() {
@@ -1443,7 +1469,7 @@ fn write_indy_produced(
     }
     if let Some(saved_industry) = saved {
         for entry in &saved_industry.produced {
-            let Some(cargo) = crate::CargoType::from_climate_slot(climate, entry.cargo_slot) else {
+            let Some(cargo) = cargo_from_saved_slot(entry.cargo_slot, climate, save_version) else {
                 continue;
             };
             if !outputs.contains(&cargo) {
@@ -1465,7 +1491,7 @@ fn write_indy_produced(
     let opaque_entries = saved
         .into_iter()
         .flat_map(|industry| industry.produced.iter())
-        .filter(|entry| crate::CargoType::from_climate_slot(climate, entry.cargo_slot).is_none())
+        .filter(|entry| cargo_from_saved_slot(entry.cargo_slot, climate, save_version).is_none())
         .collect::<Vec<_>>();
     let secondary_rate = industry
         .newgrf_secondary_production_rate
@@ -1482,16 +1508,21 @@ fn write_indy_produced(
             .produced_cargos()
             .iter()
             .position(|&output| output == cargo);
-        let waiting = match output_index {
+        let saved_entry = saved.and_then(|saved_industry| {
+            saved_industry.produced.iter().find(|entry| {
+                cargo_from_saved_slot(entry.cargo_slot, climate, save_version) == Some(cargo)
+            })
+        });
+        let runtime_waiting = match output_index {
             Some(0) => industry.stock,
             Some(1) => industry.secondary_stock,
             Some(_) | None => industry.extra_produced_cargo(cargo),
         };
-        let saved_entry = saved.and_then(|saved_industry| {
-            saved_industry.produced.iter().find(|entry| {
-                crate::CargoType::from_climate_slot(climate, entry.cargo_slot) == Some(cargo)
-            })
-        });
+        let waiting = if runtime_waiting == 0 && save_version.is_none() {
+            saved_entry.map_or(0, |entry| u32::from(entry.waiting))
+        } else {
+            runtime_waiting
+        };
         let rate = match output_index {
             Some(0) => industry.production_rate(),
             Some(1) => secondary_rate,
@@ -1521,7 +1552,7 @@ fn write_indy_produced(
         if waiting == 0 && history.is_empty() && saved_entry.is_none() {
             continue;
         }
-        if let Some(slot) = cargo_slot_for_climate(climate, cargo) {
+        if let Some(slot) = cargo_slot_for_sav(cargo) {
             entries.push((slot, waiting.min(u32::from(u16::MAX)) as u16, rate, history));
         }
     }
@@ -1672,8 +1703,8 @@ pub(super) fn indy_records_with_cargo(
             saved.map_or(0, |saved| saved.valid_history)
         };
         rec.extend_from_slice(&valid_history.to_be_bytes());
-        write_indy_accepted(&mut rec, ind, state.climate, saved)?;
-        write_indy_produced(&mut rec, ind, state.climate, saved)?;
+        write_indy_accepted(&mut rec, ind, state.climate, saved, state.sav_version)?;
+        write_indy_produced(&mut rec, ind, state.climate, saved, state.sav_version)?;
         out.push(rec);
     }
     Ok(out)

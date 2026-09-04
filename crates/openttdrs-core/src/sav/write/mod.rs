@@ -2844,6 +2844,35 @@ mod tests {
     }
 
     #[test]
+    fn export_roundtrip_preserves_custom_vehicle_cargo_id() {
+        use crate::cargo::CargoType;
+        use crate::cargo_packet::CargoPacket;
+
+        let mut state = mvp_train_state();
+        let source = TileCoord::new(28, 39);
+        let train = state.vehicles.first_mut().expect("train MVP");
+        train.cargo_type = Some(CargoType::Custom(11));
+        train
+            .cargo_packets
+            .push(CargoPacket::new(CargoType::Custom(11), 13, source));
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.version, EXPORT_SAVE_VERSION);
+        assert_eq!(sav_game.vehicles[0].cargo_type, 42);
+        assert_eq!(sav_game.vehicles[0].cargo_packet_ids.len(), 1);
+
+        let loaded = GameState::from_sav_game(sav_game);
+        let train = &loaded.vehicles[0];
+        assert_eq!(train.cargo_type, Some(CargoType::Custom(11)));
+        assert_eq!(train.cargo_packets.total(), 13);
+        assert_eq!(
+            train.cargo_packets.primary_type(),
+            Some(CargoType::Custom(11))
+        );
+    }
+
+    #[test]
     fn export_roundtrip_preserves_object_pool_instances() {
         let mut state = tiny_state();
         state.objects.push(crate::sav::SavObject {

@@ -118,6 +118,10 @@ pub struct SavRoadStopStationData {
 }
 
 /// Referencias de una entrada `Station::goods[cargo_slot]`.
+///
+/// En saves modernos (`SLV_55+`) `cargo_slot` es el ID global de cargo; en
+/// saves anteriores conserva el índice local del landscape y se traduce con
+/// la versión del contenedor durante la hidratación.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavStationCargo {
     /// Slot de cargo del landscape activo (`0..11` para vanilla).

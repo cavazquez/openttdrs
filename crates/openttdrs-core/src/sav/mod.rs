@@ -886,12 +886,14 @@ fn hydrate_sav_station_cargo(
     packets_by_id: &HashMap<u32, &entities::SavCargoPacket>,
     station_positions: &HashMap<u32, TileCoord>,
     climate: crate::Climate,
+    save_version: u16,
 ) {
     let mut imported = Vec::new();
     let mut reserved = 0_u32;
     for entry in saved_cargo {
         reserved = reserved.saturating_add(entry.reserved);
-        let Some(cargo) = crate::CargoType::from_climate_slot(climate, entry.cargo_slot) else {
+        let Some(cargo) = import::cargo_from_sav_slot(entry.cargo_slot, climate, &[], save_version)
+        else {
             continue;
         };
         for packet_id in &entry.packet_ids {
@@ -922,8 +924,9 @@ fn hydrate_sav_vehicle_cargo(
     packets_by_id: &HashMap<u32, &entities::SavCargoPacket>,
     station_positions: &HashMap<u32, TileCoord>,
     climate: crate::Climate,
+    save_version: u16,
 ) {
-    let cargo = crate::CargoType::from_climate_slot(climate, saved.cargo_type);
+    let cargo = import::cargo_from_sav_slot(saved.cargo_type, climate, &[], save_version);
     vehicle.cargo_packets.action_counts = saved.cargo_action_counts;
     if let Some(cargo) = cargo {
         for packet_id in &saved.cargo_packet_ids {
@@ -1098,6 +1101,11 @@ impl GameState {
             crate::depot::clear_all_depot_reservations(&mut map);
         }
         let mut state = Self::from_map(map);
+        // La codificación de cargo cambió de slots por clima a IDs globales
+        // en `SLV_55`; conservar la versión permite hidratar correctamente
+        // las filas nativas durante este load y cualquier rehidratación de
+        // catálogos posterior.
+        state.sav_version = Some(sav.version);
         if let Some(random_state) = random_state {
             state.random = crate::linkgraph_parity::Randomizer {
                 state: random_state,
@@ -1370,6 +1378,7 @@ impl GameState {
                 &cargo_packets_by_id,
                 &station_positions,
                 state.climate,
+                sav.version,
             );
             state.stations.push(station);
         }
@@ -1484,7 +1493,8 @@ impl GameState {
                 vehicle.subspeed = v.subspeed;
                 vehicle.motion_counter = v.motion_counter;
                 vehicle.direction = v.direction;
-                vehicle.cargo_type = crate::CargoType::from_climate_slot(sav.climate, v.cargo_type);
+                vehicle.cargo_type =
+                    import::cargo_from_sav_slot(v.cargo_type, sav.climate, &[], sav.version);
                 vehicle.cargo_subtype = v.cargo_subtype;
                 vehicle.cargo_age_counter = v.cargo_age_counter;
                 hydrate_sav_vehicle_cargo(
@@ -1493,6 +1503,7 @@ impl GameState {
                     &cargo_packets_by_id,
                     &station_positions,
                     sav.climate,
+                    sav.version,
                 );
                 if v.max_age_days != 0 {
                     vehicle.max_age_days = v.max_age_days;
@@ -1680,13 +1691,15 @@ impl GameState {
                 }));
                 vehicle.ship_tick_counter = v.tick_counter;
             }
-            vehicle.cargo_type = crate::CargoType::from_climate_slot(sav.climate, v.cargo_type);
+            vehicle.cargo_type =
+                import::cargo_from_sav_slot(v.cargo_type, sav.climate, &[], sav.version);
             hydrate_sav_vehicle_cargo(
                 &mut vehicle,
                 v,
                 &cargo_packets_by_id,
                 &station_positions,
                 sav.climate,
+                sav.version,
             );
             if matches!(kind, VehicleKind::Bus | VehicleKind::Truck)
                 && let Some(candidate) = vanilla_road_engine_id(v.engine_type, kind)
@@ -2561,6 +2574,94 @@ mod tests {
         assert_eq!(packet.next_hop, Some(destination));
         assert_eq!(packet.periods_in_transit, 7);
         assert_eq!(packet.feeder_share, 11);
+    }
+
+    #[test]
+    fn from_sav_game_resolves_modern_station_cargo_as_global_ids() {
+        let station_pos = TileCoord::new(2, 2);
+        let mut sav = empty_sav(352, Map::new_flat(8, 8, 0));
+        sav.climate = crate::Climate::SubArctic;
+        sav.stations.push(SavStation {
+            station_id: 0,
+            pos: station_pos,
+            owner: crate::company::CompanyId::PLAYER.0,
+            name: Some("Global".to_string()),
+            facilities: FACIL_TRAIN,
+            string_id: None,
+            town_id: None,
+            airport_type: 0,
+            airport_w: 0,
+            airport_h: 0,
+            airport_layout: 0,
+            airport_rotation: 0,
+            airport_blocks: 0,
+            airport_persistent_storage_id: None,
+            cargo: vec![
+                entities::SavStationCargo {
+                    // Modern slot 6 is global GRAI, not arctic WHEA.
+                    cargo_slot: 6,
+                    packet_ids: vec![1],
+                    reserved: 0,
+                },
+                entities::SavStationCargo {
+                    cargo_slot: 11,
+                    packet_ids: vec![2],
+                    reserved: 0,
+                },
+                entities::SavStationCargo {
+                    cargo_slot: 42,
+                    packet_ids: vec![3],
+                    reserved: 0,
+                },
+            ],
+        });
+        sav.cargo_packets = vec![
+            entities::SavCargoPacket {
+                packet_id: 1,
+                source_station_id: None,
+                source_xy: Some(station_pos),
+                next_hop_station_id: None,
+                count: 4,
+                periods_in_transit: 0,
+                feeder_share: 0,
+                source_type: 0,
+                source_id: None,
+                travelled_x: 0,
+                travelled_y: 0,
+            },
+            entities::SavCargoPacket {
+                packet_id: 2,
+                source_station_id: None,
+                source_xy: Some(station_pos),
+                next_hop_station_id: None,
+                count: 7,
+                periods_in_transit: 0,
+                feeder_share: 0,
+                source_type: 0,
+                source_id: None,
+                travelled_x: 0,
+                travelled_y: 0,
+            },
+            entities::SavCargoPacket {
+                packet_id: 3,
+                source_station_id: None,
+                source_xy: Some(station_pos),
+                next_hop_station_id: None,
+                count: 9,
+                periods_in_transit: 0,
+                feeder_share: 0,
+                source_type: 0,
+                source_id: None,
+                travelled_x: 0,
+                travelled_y: 0,
+            },
+        ];
+
+        let state = GameState::from_sav_game(sav);
+        let station = &state.stations[0];
+        assert_eq!(station.cargo_stock.grain, 4);
+        assert_eq!(station.cargo_stock.wheat, 7);
+        assert_eq!(station.cargo_stock.custom[11], 9);
     }
 
     #[test]

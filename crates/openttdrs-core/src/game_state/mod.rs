@@ -595,6 +595,13 @@ pub struct GameState {
     /// haya recalculado todavía ese cargo concreto.
     #[serde(skip, default)]
     pub(crate) sav_industry_histories: Vec<crate::sav::SavIndustry>,
+    /// Versión `SLV` del SAV actualmente hidratado.
+    ///
+    /// No forma parte del formato JSON propio: sólo hace falta mientras se
+    /// conserva un passthrough nativo para distinguir los slots de cargo por
+    /// clima de los IDs globales introducidos en `SLV_55`.
+    #[serde(skip, default)]
+    pub(crate) sav_version: Option<u16>,
     /// Tablas nativas reconstruidas conservadas mientras sus filas semánticas
     /// no cambian.
     /// `serde(skip)` evita copiar el payload crudo al formato JSON propio.
@@ -917,6 +924,7 @@ impl GameState {
             sav_persistent_storages: Vec::new(),
             sav_town_persistent_storage_ids: std::collections::HashMap::new(),
             sav_industry_histories: Vec::new(),
+            sav_version: None,
             sav_table_passthrough: None,
             sav_objects_dirty: false,
             sav_object_mappings_dirty: false,
@@ -1056,6 +1064,7 @@ impl GameState {
             sav_persistent_storages: Vec::new(),
             sav_town_persistent_storage_ids: std::collections::HashMap::new(),
             sav_industry_histories: Vec::new(),
+            sav_version: None,
             sav_table_passthrough: None,
             sav_objects_dirty: false,
             sav_object_mappings_dirty: false,

@@ -89,7 +89,27 @@ pub fn refittable_cargo_types(vehicle: &Vehicle) -> &'static [CargoType] {
 /// (Action0 train `0x1D`) o listas vanilla.
 #[must_use]
 pub fn refittable_cargo_types_for_engine(engine: &crate::engine::EngineDef) -> Vec<CargoType> {
-    let mut cargos = if engine.refit_mask != 0 {
+    let mut cargos = if engine.cargo_classes_specified {
+        let mut class_cargos = crate::cargo::ALL_CARGO_TYPES
+            .iter()
+            .copied()
+            .filter(|cargo| cargo_matches_classes(*cargo, engine, None))
+            .collect::<Vec<_>>();
+        // OpenTTD applies the legacy refit mask as an XOR over the class mask.
+        // Older Rust callers that do not declare classes retain the historical
+        // direct-mask behavior in the branch below.
+        if engine.refit_mask != 0 {
+            class_cargos = crate::cargo::ALL_CARGO_TYPES
+                .iter()
+                .copied()
+                .filter(|cargo| {
+                    cargo_matches_classes(*cargo, engine, None)
+                        ^ (engine.refit_mask & (1u32 << cargo.temperate_id()) != 0)
+                })
+                .collect();
+        }
+        class_cargos
+    } else if engine.refit_mask != 0 {
         crate::cargo::ALL_CARGO_TYPES
             .iter()
             .copied()
@@ -131,30 +151,79 @@ pub fn refittable_cargo_types_for_engine_with_catalog(
     engine: &crate::engine::EngineDef,
     cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
 ) -> Vec<CargoType> {
-    let mut cargos = refittable_cargo_types_for_engine(engine);
-    if engine.ctt_include_cargos.is_empty() {
-        let custom = cargo_catalog.iter().filter_map(|def| {
-            let cargo = def.cargo_type()?;
-            let vehicle_allows_freight = match engine.kind {
-                VehicleKind::Truck | VehicleKind::Ship => true,
-                VehicleKind::Train => {
-                    !matches!(engine.cargo, Some(CargoType::Passengers | CargoType::Mail))
-                }
-                VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => false,
-            };
-            (cargo.is_freight() && vehicle_allows_freight).then_some(cargo)
-        });
-        for cargo in custom {
-            let mask_allows = engine.refit_mask == 0
-                || (u32::from(cargo.cargo_id()) < u32::BITS
-                    && engine.refit_mask & (1_u32 << cargo.cargo_id()) != 0);
-            if mask_allows && !cargos.contains(&cargo) {
-                cargos.push(cargo);
+    let mut cargos = if engine.cargo_classes_specified {
+        let mut candidates = crate::cargo::ALL_CARGO_TYPES.to_vec();
+        for cargo in cargo_catalog
+            .iter()
+            .filter_map(crate::cargo_spec::CargoSpecDef::cargo_type)
+        {
+            if !candidates.contains(&cargo) {
+                candidates.push(cargo);
             }
         }
-    }
+        candidates
+            .into_iter()
+            .filter(|cargo| {
+                let class_match = cargo_matches_classes(*cargo, engine, Some(cargo_catalog));
+                if engine.refit_mask == 0 {
+                    class_match
+                } else {
+                    class_match
+                        ^ (u32::from(cargo.cargo_id()) < u32::BITS
+                            && engine.refit_mask & (1_u32 << cargo.cargo_id()) != 0)
+                }
+            })
+            .collect()
+    } else {
+        let mut base = refittable_cargo_types_for_engine(engine);
+        if engine.ctt_include_cargos.is_empty() {
+            let custom = cargo_catalog.iter().filter_map(|def| {
+                let cargo = def.cargo_type()?;
+                let vehicle_allows_freight = match engine.kind {
+                    VehicleKind::Truck | VehicleKind::Ship => true,
+                    VehicleKind::Train => {
+                        !matches!(engine.cargo, Some(CargoType::Passengers | CargoType::Mail))
+                    }
+                    VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => false,
+                };
+                (cargo.is_freight() && vehicle_allows_freight).then_some(cargo)
+            });
+            for cargo in custom {
+                let mask_allows = engine.refit_mask == 0
+                    || (u32::from(cargo.cargo_id()) < u32::BITS
+                        && engine.refit_mask & (1_u32 << cargo.cargo_id()) != 0);
+                if mask_allows && !base.contains(&cargo) {
+                    base.push(cargo);
+                }
+            }
+        }
+        base
+    };
     cargos.retain(|cargo| !engine.ctt_exclude_cargos.contains(cargo));
     cargos
+}
+
+/// Devuelve las clases efectivas de un cargo. Los `CargoSpecDef` del catálogo
+/// tienen prioridad para cargos custom y para overrides vanilla; si no existe
+/// spec, se usa la tabla vanilla de [`CargoType`].
+fn cargo_classes(
+    cargo: CargoType,
+    cargo_catalog: Option<&[crate::cargo_spec::CargoSpecDef]>,
+) -> u16 {
+    cargo_catalog
+        .and_then(|catalog| crate::cargo_spec::cargo_spec_for_type(catalog, cargo))
+        .map_or_else(|| cargo.classes(), |def| def.classes)
+}
+
+fn cargo_matches_classes(
+    cargo: CargoType,
+    engine: &crate::engine::EngineDef,
+    cargo_catalog: Option<&[crate::cargo_spec::CargoSpecDef]>,
+) -> bool {
+    let classes = cargo_classes(cargo, cargo_catalog);
+    classes & engine.cargo_classes_allowed != 0
+        && classes & engine.cargo_classes_required == engine.cargo_classes_required
+        && classes & engine.cargo_classes_disallowed == 0
 }
 
 /// Resuelve las opciones de un vehículo usando su motor efectivo y el

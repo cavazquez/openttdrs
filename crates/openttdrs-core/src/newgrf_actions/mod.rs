@@ -4363,6 +4363,174 @@ mod tests {
         );
     }
 
+    /// #329: Action0 conserva las clases allowed/disallowed/required de cada
+    /// feature de vehículos, en vez de consumirlas como propiedades opacas.
+    #[test]
+    fn vehicle_cargo_class_properties_parse_for_all_features() {
+        let allowed = crate::cargo::CARGO_CLASS_BULK | crate::cargo::CARGO_CLASS_LIQUID;
+        let disallowed = crate::cargo::CARGO_CLASS_LIQUID;
+        let required = crate::cargo::CARGO_CLASS_POTABLE;
+
+        let train = [
+            0x00,
+            ACTION0_FEATURE_TRAINS,
+            0x03,
+            0x01,
+            0x00,
+            0x28,
+            (allowed & 0xFF) as u8,
+            (allowed >> 8) as u8,
+            0x29,
+            (disallowed & 0xFF) as u8,
+            (disallowed >> 8) as u8,
+            0x32,
+            (required & 0xFF) as u8,
+            (required >> 8) as u8,
+        ];
+        let train_meta = parse_action0_train_meta(&train).unwrap();
+        assert_eq!(train_meta.cargo_classes_allowed, allowed);
+        assert_eq!(train_meta.cargo_classes_disallowed, disallowed);
+        assert_eq!(train_meta.cargo_classes_required, required);
+        assert!(train_meta.cargo_classes_specified);
+
+        let road = [
+            0x00,
+            ACTION0_FEATURE_ROAD_VEHICLES,
+            0x03,
+            0x01,
+            0x00,
+            0x1D,
+            (allowed & 0xFF) as u8,
+            (allowed >> 8) as u8,
+            0x1E,
+            (disallowed & 0xFF) as u8,
+            (disallowed >> 8) as u8,
+            0x29,
+            (required & 0xFF) as u8,
+            (required >> 8) as u8,
+        ];
+        let road_meta = parse_action0_vehicle_metas(&road).unwrap().remove(0);
+        assert_eq!(road_meta.cargo_classes_allowed, allowed);
+        assert_eq!(road_meta.cargo_classes_disallowed, disallowed);
+        assert_eq!(road_meta.cargo_classes_required, required);
+        assert!(road_meta.cargo_classes_specified);
+
+        let ship = [
+            0x00,
+            ACTION0_FEATURE_SHIPS,
+            0x03,
+            0x01,
+            0x00,
+            0x18,
+            (allowed & 0xFF) as u8,
+            (allowed >> 8) as u8,
+            0x19,
+            (disallowed & 0xFF) as u8,
+            (disallowed >> 8) as u8,
+            0x25,
+            (required & 0xFF) as u8,
+            (required >> 8) as u8,
+        ];
+        let ship_meta = parse_action0_vehicle_metas(&ship).unwrap().remove(0);
+        assert_eq!(ship_meta.cargo_classes_allowed, allowed);
+        assert_eq!(ship_meta.cargo_classes_disallowed, disallowed);
+        assert_eq!(ship_meta.cargo_classes_required, required);
+        assert!(ship_meta.cargo_classes_specified);
+
+        let aircraft = [
+            0x00,
+            ACTION0_FEATURE_AIRCRAFT,
+            0x03,
+            0x01,
+            0x00,
+            0x18,
+            (allowed & 0xFF) as u8,
+            (allowed >> 8) as u8,
+            0x19,
+            (disallowed & 0xFF) as u8,
+            (disallowed >> 8) as u8,
+            0x23,
+            (required & 0xFF) as u8,
+            (required >> 8) as u8,
+        ];
+        let aircraft_meta = parse_action0_vehicle_metas(&aircraft).unwrap().remove(0);
+        assert_eq!(aircraft_meta.cargo_classes_allowed, allowed);
+        assert_eq!(aircraft_meta.cargo_classes_disallowed, disallowed);
+        assert_eq!(aircraft_meta.cargo_classes_required, required);
+        assert!(aircraft_meta.cargo_classes_specified);
+    }
+
+    /// #329: el catálogo custom participa en allowed/required igual que un
+    /// cargo vanilla y las clases disallowed se siguen aplicando después.
+    #[test]
+    fn vehicle_cargo_classes_filter_custom_catalog() {
+        use crate::newgrf_type_tables::{
+            PROP_CARGO_TRANSLATION, build_action0_type_translation_payload,
+        };
+
+        let cargo_a0 = build_action0_cargo_payload_full(
+            4,
+            27,
+            b"TOFU",
+            "Tofu",
+            0,
+            0,
+            0,
+            0,
+            true,
+            crate::cargo::CARGO_CLASS_PIECE_GOODS,
+            0x100,
+        );
+        let translation_a0 =
+            build_action0_type_translation_payload(PROP_CARGO_TRANSLATION, &[*b"TOFU"]);
+        let train_a0 = vec![
+            0x00,
+            ACTION0_FEATURE_TRAINS,
+            0x02,
+            0x01,
+            0x00,
+            0x28,
+            (crate::cargo::CARGO_CLASS_PIECE_GOODS & 0xFF) as u8,
+            (crate::cargo::CARGO_CLASS_PIECE_GOODS >> 8) as u8,
+            0x32,
+            (crate::cargo::CARGO_CLASS_PIECE_GOODS & 0xFF) as u8,
+            (crate::cargo::CARGO_CLASS_PIECE_GOODS >> 8) as u8,
+            0xFE,
+            b'C',
+            b'L',
+            b'S',
+            0,
+        ];
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&cargo_a0, &translation_a0, &train_a0],
+            [b'C', b'L', 0, 2],
+            "class-filter",
+            "",
+        );
+        let dir = tempfile_dir_with("class-filter.grf", &bytes);
+        let grfid = crate::newgrf_config::grfid_from_bytes(*b"CL02");
+        let mut state = GameState::new(4, 4);
+        let mut entry = crate::NewGrfEntry::new("class-filter.grf", grfid);
+        entry.grf_version = 8;
+        state.newgrf_stack.push(entry);
+
+        apply_newgrf_cargoes(&mut state, &[&dir]);
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|e| e.from_newgrf && e.kind == VehicleKind::Train)
+            .unwrap();
+        assert!(engine.cargo_classes_specified);
+        let options = crate::refittable_cargo_types_for_engine_with_catalog(
+            engine,
+            &state.cargo_spec_catalog,
+        );
+        assert!(options.contains(&crate::CargoType::Custom(0)));
+        assert!(options.contains(&crate::CargoType::Wood));
+        assert!(!options.contains(&crate::CargoType::Coal));
+    }
+
     /// #329: la CTT debe conservar cargos custom al aplicar un vehículo.
     #[test]
     fn vehicle_ctt_resolves_custom_default_and_refit_cargo() {

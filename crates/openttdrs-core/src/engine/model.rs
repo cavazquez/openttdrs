@@ -119,6 +119,20 @@ pub struct EngineDef {
     /// Cargos que el GRF excluye explícitamente mediante su CTT.
     #[serde(default)]
     pub ctt_exclude_cargos: Vec<CargoType>,
+    /// Action0 `cargo classes allowed` (`0x28` train, `0x1D` road, `0x18`
+    /// ship/aircraft), conservado como máscara `CargoClass` de `OpenTTD`.
+    #[serde(default)]
+    pub cargo_classes_allowed: u16,
+    /// Action0 `cargo classes disallowed`.
+    #[serde(default)]
+    pub cargo_classes_disallowed: u16,
+    /// Action0 `cargo classes required` (`0x32`/`0x29`/`0x25`/`0x23`).
+    #[serde(default)]
+    pub cargo_classes_required: u16,
+    /// `true` si el GRF escribió alguna propiedad de clases. Es necesario
+    /// distinguir una máscara explícitamente vacía del fallback vanilla.
+    #[serde(default)]
+    pub cargo_classes_specified: bool,
     /// Action0 aircraft `0x09`: helicóptero.
     #[serde(default)]
     pub is_helicopter: bool,

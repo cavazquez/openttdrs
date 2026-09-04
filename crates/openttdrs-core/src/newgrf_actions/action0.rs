@@ -239,6 +239,14 @@ pub struct ParsedTrainMeta {
     pub shorten_factor: u8,
     pub required_rail_type: Option<u8>,
     pub refit_mask: u32,
+    /// Action0 train `0x28`: clases de carga que pueden refitarse.
+    pub cargo_classes_allowed: u16,
+    /// Action0 train `0x29`: clases de carga excluidas del refit.
+    pub cargo_classes_disallowed: u16,
+    /// Action0 train `0x32`: clases que deben estar todas presentes.
+    pub cargo_classes_required: u16,
+    /// Indica que el GRF declaró alguna propiedad de clases de carga.
+    pub cargo_classes_specified: bool,
     /// Listas CTT (`0x2C`/`0x2D`) antes de resolverlas contra el catálogo.
     pub ctt_include_cargo_indices: Vec<u8>,
     pub ctt_exclude_cargo_indices: Vec<u8>,
@@ -291,6 +299,12 @@ pub struct ParsedVehicleMeta {
     /// `refit_mask` cuando el GRF declara ambas listas y de la lista vanilla
     /// cuando sólo declara exclusiones.
     pub refit_exclude_mask: u32,
+    /// Propiedades Action0 de clases de carga (los ids cambian por feature).
+    pub cargo_classes_allowed: u16,
+    pub cargo_classes_disallowed: u16,
+    pub cargo_classes_required: u16,
+    /// `true` cuando el GRF declaró `allowed`, `disallowed` o `required`.
+    pub cargo_classes_specified: bool,
     /// Listas CTT antes de traducirlas con la tabla del GRF.
     pub ctt_include_cargo_indices: Vec<u8>,
     pub ctt_exclude_cargo_indices: Vec<u8>,
@@ -377,6 +391,10 @@ impl ParsedVehicleMeta {
             visual_effect: crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT,
             refit_mask: 0,
             refit_exclude_mask: 0,
+            cargo_classes_allowed: 0,
+            cargo_classes_disallowed: 0,
+            cargo_classes_required: 0,
+            cargo_classes_specified: false,
             ctt_include_cargo_indices: Vec::new(),
             ctt_exclude_cargo_indices: Vec::new(),
             callback_mask: 0,
@@ -3099,6 +3117,10 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut shorten_factor = 0u8;
     let mut required_rail_type = None;
     let mut refit_mask = 0u32;
+    let mut cargo_classes_allowed = 0u16;
+    let mut cargo_classes_disallowed = 0u16;
+    let mut cargo_classes_required = 0u16;
+    let mut cargo_classes_specified = false;
     let mut ctt_include_cargo_indices = Vec::new();
     let mut ctt_exclude_cargo_indices = Vec::new();
     let mut callback_mask = 0u16;
@@ -3200,6 +3222,14 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
                 // Fixtures locales: WORD (bits bajos del bitmask temperate).
                 refit_mask = u32::from(read_u16(payload, &mut i)?);
             }
+            0x28 => {
+                cargo_classes_allowed = read_u16(payload, &mut i)?;
+                cargo_classes_specified = true;
+            }
+            0x29 => {
+                cargo_classes_disallowed = read_u16(payload, &mut i)?;
+                cargo_classes_specified = true;
+            }
             0x1F => {
                 tractive_effort = read_u8(payload, &mut i)?;
             }
@@ -3244,7 +3274,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
                 // Extended byte sort order: BYTE en fixtures locales.
                 skip_bytes(payload, &mut i, 1)?;
             }
-            0x28 | 0x29 | 0x2B | 0x2F => {
+            0x2B | 0x2F => {
                 skip_bytes(payload, &mut i, 2)?;
             }
             // 0x0E running cost base; 0x2A/0x30 listas/DWORD: consumidas.
@@ -3269,6 +3299,10 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
             0x31 => {
                 callback_mask =
                     (callback_mask & 0x00FF) | (u16::from(read_u8(payload, &mut i)?) << 8);
+            }
+            0x32 => {
+                cargo_classes_required = read_u16(payload, &mut i)?;
+                cargo_classes_specified = true;
             }
             PROP_TRAIN_SPEED => {
                 if i + 2 > payload.len() {
@@ -3328,6 +3362,10 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         shorten_factor,
         required_rail_type,
         refit_mask,
+        cargo_classes_allowed,
+        cargo_classes_disallowed,
+        cargo_classes_required,
+        cargo_classes_specified,
         ctt_include_cargo_indices,
         ctt_exclude_cargo_indices,
         callback_mask,
@@ -3438,6 +3476,7 @@ fn parse_common_vehicle_property(
     Some(true)
 }
 
+#[allow(clippy::too_many_lines)]
 fn parse_road_vehicle_property(
     prop: u8,
     payload: &[u8],
@@ -3467,6 +3506,24 @@ fn parse_road_vehicle_property(
         // 0x05 translation table; 0x20/0x28 extended byte (fixtures usan BYTE).
         0x05 | 0x0E | 0x18 | 0x19 | 0x1A | 0x1B | 0x20 | 0x23 | 0x28 => {
             skip_bytes(payload, i, metas.len())?;
+        }
+        0x1D => {
+            for meta in metas {
+                meta.cargo_classes_allowed = read_u16(payload, i)?;
+                meta.cargo_classes_specified = true;
+            }
+        }
+        0x1E => {
+            for meta in metas {
+                meta.cargo_classes_disallowed = read_u16(payload, i)?;
+                meta.cargo_classes_specified = true;
+            }
+        }
+        0x29 => {
+            for meta in metas {
+                meta.cargo_classes_required = read_u16(payload, i)?;
+                meta.cargo_classes_specified = true;
+            }
         }
         0x2A => {
             for meta in metas {
@@ -3536,7 +3593,7 @@ fn parse_road_vehicle_property(
                 }
             }
         }
-        0x1D | 0x1E | 0x22 | 0x26 | 0x29 => {
+        0x22 | 0x26 => {
             skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
         }
         _ => return None,
@@ -3616,7 +3673,18 @@ fn parse_ship_property(
                 meta.canal_speed_frac = read_u8(payload, i)?;
             }
         }
-        0x18 | 0x19 | 0x1D | 0x20 | 0x25 => {
+        0x18 | 0x19 => {
+            for meta in metas {
+                let classes = read_u16(payload, i)?;
+                if prop == 0x18 {
+                    meta.cargo_classes_allowed = classes;
+                } else {
+                    meta.cargo_classes_disallowed = classes;
+                }
+                meta.cargo_classes_specified = true;
+            }
+        }
+        0x1D | 0x20 => {
             skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
         }
         0x26 => {
@@ -3658,11 +3726,18 @@ fn parse_ship_property(
                 meta.max_speed = read_u16(payload, i)?.max(1);
             }
         }
+        0x25 => {
+            for meta in metas {
+                meta.cargo_classes_required = read_u16(payload, i)?;
+                meta.cargo_classes_specified = true;
+            }
+        }
         _ => return None,
     }
     Some(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn parse_aircraft_property(
     prop: u8,
     payload: &[u8],
@@ -3744,12 +3819,29 @@ fn parse_aircraft_property(
             }
         }
         0x13 | 0x1A | 0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
-        0x18 | 0x19 | 0x1F | 0x20 | 0x23 => {
+        0x18 | 0x19 => {
+            for meta in metas {
+                let classes = read_u16(payload, i)?;
+                if prop == 0x18 {
+                    meta.cargo_classes_allowed = classes;
+                } else {
+                    meta.cargo_classes_disallowed = classes;
+                }
+                meta.cargo_classes_specified = true;
+            }
+        }
+        0x1F | 0x20 => {
             skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
         }
         0x24 => {
             for meta in metas {
                 meta.badge_local_ids = read_badge_local_ids(payload, i)?;
+            }
+        }
+        0x23 => {
+            for meta in metas {
+                meta.cargo_classes_required = read_u16(payload, i)?;
+                meta.cargo_classes_specified = true;
             }
         }
         _ => return None,

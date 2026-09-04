@@ -26,6 +26,27 @@ pub const CUSTOM_CARGO_COUNT: usize = 32;
 #[allow(clippy::cast_possible_truncation)]
 pub const MAX_CARGO_ID: u8 = CUSTOM_CARGO_OFFSET + CUSTOM_CARGO_COUNT as u8 - 1;
 
+/// Bits de `CargoClass` usados por las propiedades Action0 de vehículos.
+///
+/// Mantenerlos como `u16` replica el tipo de `OpenTTD` y permite aplicar las
+/// máscaras a cargos vanilla y a los `CargoSpecDef` definidos por un GRF.
+pub const CARGO_CLASS_PASSENGERS: u16 = 1 << 0;
+pub const CARGO_CLASS_MAIL: u16 = 1 << 1;
+pub const CARGO_CLASS_EXPRESS: u16 = 1 << 2;
+pub const CARGO_CLASS_ARMOURED: u16 = 1 << 3;
+pub const CARGO_CLASS_BULK: u16 = 1 << 4;
+pub const CARGO_CLASS_PIECE_GOODS: u16 = 1 << 5;
+pub const CARGO_CLASS_LIQUID: u16 = 1 << 6;
+pub const CARGO_CLASS_REFRIGERATED: u16 = 1 << 7;
+pub const CARGO_CLASS_HAZARDOUS: u16 = 1 << 8;
+pub const CARGO_CLASS_COVERED: u16 = 1 << 9;
+pub const CARGO_CLASS_OVERSIZED: u16 = 1 << 10;
+pub const CARGO_CLASS_POWDERIZED: u16 = 1 << 11;
+pub const CARGO_CLASS_NOT_POURABLE: u16 = 1 << 12;
+pub const CARGO_CLASS_POTABLE: u16 = 1 << 13;
+pub const CARGO_CLASS_NON_POTABLE: u16 = 1 << 14;
+pub const CARGO_CLASS_SPECIAL: u16 = 1 << 15;
+
 /// Construye un cargo custom desde un índice de colección sin truncamientos
 /// implícitos (los callers de runtime usan rangos acotados a 32 slots).
 #[must_use]
@@ -408,6 +429,38 @@ impl CargoStock {
 }
 
 impl CargoType {
+    /// Clases vanilla de `CargoSpec` (`cargo_const.h`).
+    ///
+    /// Los cargos custom deben tomar sus clases desde `CargoSpecDef::classes`,
+    /// ya que su combinación es parte del contrato del GRF.
+    #[must_use]
+    pub const fn classes(self) -> u16 {
+        match self {
+            Self::Passengers => CARGO_CLASS_PASSENGERS,
+            Self::Coal | Self::IronOre | Self::CopperOre => {
+                CARGO_CLASS_BULK | CARGO_CLASS_NON_POTABLE
+            }
+            Self::Mail => CARGO_CLASS_MAIL,
+            Self::Oil | Self::Rubber => CARGO_CLASS_LIQUID | CARGO_CLASS_NON_POTABLE,
+            Self::Livestock => CARGO_CLASS_PIECE_GOODS | CARGO_CLASS_NON_POTABLE,
+            Self::Goods | Self::Candy => CARGO_CLASS_EXPRESS,
+            Self::Grain | Self::Wheat | Self::Maize | Self::Sugar => {
+                CARGO_CLASS_BULK | CARGO_CLASS_POTABLE
+            }
+            Self::Wood | Self::Steel | Self::Paper | Self::Toys | Self::Batteries => {
+                CARGO_CLASS_PIECE_GOODS
+            }
+            Self::Valuables | Self::Gold | Self::Diamonds => CARGO_CLASS_ARMOURED,
+            Self::Food => CARGO_CLASS_EXPRESS | CARGO_CLASS_REFRIGERATED | CARGO_CLASS_POTABLE,
+            Self::Fruit => CARGO_CLASS_BULK | CARGO_CLASS_REFRIGERATED | CARGO_CLASS_POTABLE,
+            Self::Water => CARGO_CLASS_LIQUID | CARGO_CLASS_POTABLE,
+            Self::Toffee | Self::CottonCandy => CARGO_CLASS_BULK,
+            Self::Cola | Self::Plastic => CARGO_CLASS_LIQUID,
+            Self::Bubbles | Self::FizzyDrinks => CARGO_CLASS_PIECE_GOODS,
+            Self::Custom(_) => 0,
+        }
+    }
+
     #[must_use]
     pub const fn cargo_id(self) -> u8 {
         match self {

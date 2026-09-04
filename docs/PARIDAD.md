@@ -34,9 +34,8 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-03 · `main` (base funcional local `67ef8101`; el push
-de este hash se reintentará tras el rechazo externo 404, handoff documental
-actualizado en este corte).
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `bd613e2a`; el
+runtime de cargos custom queda actualizado en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -140,6 +139,14 @@ exacta alimenta la cobertura de estaciones y `unload_vehicles`, evitando que
 un callback cero vuelva a aceptar `Goods` por el proxy genérico. Cargos custom
 no resolubles, reatachación económica y callbacks restantes siguen parciales;
 #329 continúa abierto.
+
+Actualización #329-CUSTOM-CARGO-RUNTIME-059 (2026-09-04, `bd613e2a`): los
+`CargoSpec` NewGRF conservan `(GRFID, local_id)` y reciben slots globales
+`31..62`. Esos 32 cargos ya atraviesan `CargoStock`, `StationGoods`, packets,
+industria, cobertura, producción/entrega, pagos, ratings, cargodist, refit y
+autoreplace cuando el catálogo está instalado. No cambia el wire format SAV:
+las filas custom sin catálogo, los slots `63+`, la CTT/GUI/variables completa y
+los callbacks sin call site siguen parciales y no se declaran paridad completa.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

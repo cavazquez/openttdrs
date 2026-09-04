@@ -23,12 +23,12 @@ El bloque termina sólo con `git commit` y `git push`. La captura raster se usa
 cuando hay compositor WGPU; si el entorno no lo permite, se registra el bloqueo
 y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
-## Handoff de issues — 2026-09-03
+## Handoff de issues — 2026-09-04
 
-Base funcional local: **`67ef8101`** (`newgrf: evaluate industry tile cargo acceptance`),
-encima de `ca2939a7` (`newgrf: trigger industry animation on construction stages`).
-El push de `67ef8101` quedó pendiente por un rechazo 404 del revisor externo; el
-commit y sus pruebas permanecen en este árbol y se reintentará en el próximo límite.
+Base funcional local y publicada: **`bd613e2a`** (`newgrf: transport custom cargo through runtime`),
+encima de `933042ca` (documentación de aceptación exacta) y `67ef8101`
+(`newgrf: evaluate industry tile cargo acceptance`). Los tres commits ya están
+en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
 Este handoff documental incluye la entrega directa
 SAV de campos legacy (`56aa7858`) y los slots vacíos legacy (`9f2ecc31`), y se publica después de las etapas
 de rechazo temporal (`65682a42`), cargos dinámicos (`389109c1`) y
@@ -52,8 +52,12 @@ entrega. `aa289076` conecta también `CargoDistributed` con el retorno real de
 los cambios de etapa posteriores. `67ef8101` conecta además la aceptación exacta
 de carga de teselas de industria (`CBID_INDTILE_CARGO_ACCEPTANCE`/`CBID_INDTILE_ACCEPT_CARGO`)
 con la cobertura de estación y la descarga real, manteniendo el fallback legacy.
-La próxima tarea sigue siendo cargos custom
-ejecutables/rehidratación económica cuando el catálogo está ausente.
+`bd613e2a` materializa hasta 32 cargos custom como `CargoType::Custom`, los
+asigna de forma estable por `(GRFID, local_id)` y los transporta por stocks,
+packets, cobertura, estaciones, industria, producción, pagos, ratings,
+cargodist, refit y autoreplace. La próxima tarea es la rehidratación económica
+de esas filas cuando el catálogo no está instalado, además de ampliar CTT/SAV
+nativo y los callbacks restantes.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
@@ -64,8 +68,8 @@ ejecutables/rehidratación económica cuando el catálogo está ausente.
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
 
-Última validación de `67ef8101`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **1.998** tests de core y **1.064** de cliente (2 ignorados); la matriz
+Última validación de `bd613e2a`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **2.005** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.
@@ -1101,3 +1105,16 @@ proxy genérico de fábricas. La regresión cubre el reemplazo de slots/cantidad
 la aceptación/rechazo efectiva en una estación. El fallback estático y las APIs
 legacy permanecen intactos; cargos custom/CTT no resolubles, reatachación económica,
 sonido y callbacks restantes siguen pendientes y #329 no se cierra.
+
+Actualización #329-CUSTOM-CARGO-RUNTIME-059 (2026-09-04, commit `bd613e2a`):
+los `CargoSpec` definidos por `NewGRF` reciben un ID global estable en el rango
+`31..62`, conservando `(GRFID, local_id)` para resolver la CTT. Hasta 32 slots
+se transportan como `CargoType::Custom` por `CargoStock`, `StationGoods`,
+`CargoTimeSincePickup`, packets, cobertura exacta, producción/entrega de
+industrias, pagos, ratings, cargodist, refit y autoreplace. Las regresiones
+cubren asignación de slot, round-trip stock→packet, aceptación de tesela y un
+ciclo de producción económico. El límite sigue siendo deliberado: el SAV nativo
+no tiene todavía columnas custom rehidratables, los slots `63+` continúan
+opacos, la semántica completa de CTT/GUI/variables y el binding GameScript del
+monitor no están cerrados; sin el GRF instalado las filas `INDY` se conservan
+pero no se ejecutan. #329 permanece abierto.

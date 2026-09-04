@@ -1,12 +1,16 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
-Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-03**,
-`main` con base funcional local `67ef8101` (el push de este hash se reintentará
-tras el rechazo externo 404), posterior al writeback canónico de `CITY`,
+Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
+`main` con base funcional publicada `bd613e2a`, posterior al writeback canónico
+de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
 separan de la pasada visual CB26/CB27; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
+
+El runtime de cargos custom de `bd613e2a` no cambia el wire format: hasta 32
+cargos se ejecutan si el `CargoSpec` está instalado, pero sus filas continúan
+opacas dentro de `.sav` hasta completar el writer y la rehidratación nativos.
 
 Esta es la única matriz de capacidad para importación y exportación `.sav`.
 [`PARIDAD.md`](../PARIDAD.md) sólo resume su madurez; la guía de wire format en
@@ -178,3 +182,10 @@ La matriz no garantiza compatibilidad binaria general, multijugador ni
 ejecución de NewGRF. Para runtime de NewGRF, usar las matrices de
 [Action0/3/5](newgrf-action0-matrix.md) y de
 [callbacks](newgrf-callback-matrix.md).
+
+Actualización `bd613e2a` (2026-09-04): el catálogo NewGRF asigna slots globales
+`31..62` a cargos custom y el runtime los transporta por industria, estaciones,
+packets, pagos, ratings, cargodist, refit y autoreplace. Este bloque no altera
+la codificación `.sav`: una fila `INDY` custom o una entrada de carga sin
+`CargoSpec` instalado se conserva como passthrough opaco para round-trip, pero
+no puede reatacharse a la economía hasta completar las columnas nativas CTT/SAV.

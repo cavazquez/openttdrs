@@ -1,11 +1,13 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-03** (commit `67ef8101`, shape-check, foundations,
+Actualizada: **2026-09-04** (commit `bd613e2a`, cargos custom ejecutables,
+shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
 `PlantOnBuild`, rehidratación SAV legacy, historiales aceptados runtime,
 reatachación de industrias al
 catálogo NewGRF; triggers, PSA parent, aceptación exacta de carga de teselas y
-`CargoTypesUnlimited` ya publicados).
+`CargoTypesUnlimited` y el transporte runtime de hasta 32 cargos custom ya
+publicados).
 
 Referencia: commit `14ec60f248547d4d062a1160f0fc26d742319888`,
 `reference/openttd-upstream/src/newgrf_callbacks.h`.
@@ -57,7 +59,8 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 
 ## Por feature
 
-Corrección de la fila `Industry tiles (09)` en este corte (`67ef8101`): además de
+Corrección de la fila `Industry tiles (09)` en este corte (`bd613e2a`, sobre
+`67ef8101`): además de
 los tres eventos ya descritos, `CargoDistributed` se dispara tras una
 transferencia efectiva y `ConstructionStageChanged` se dispara al crear una
 industria (con `var 18 |= 0x100`) y después de cada cambio de etapa. Ambos
@@ -628,6 +631,15 @@ normal de `unload_vehicles`; un resultado cero no cae al proxy genérico de
 fallback estático. La regresión cubre slots/cantidades y aceptación efectiva;
 los cargos custom no resolubles, la reatachación económica y callbacks restantes
 siguen pendientes, por lo que #329 continúa abierto.
+
+Actualización #329-CUSTOM-CARGO-RUNTIME-059 (2026-09-04, commit `bd613e2a`):
+`CargoSpec` conserva el `local_id` del GRF y asigna un ID global estable
+(`31..62`) para que producción, aceptación y carga resuelvan
+`CargoType::Custom`. Hasta 32 slots atraviesan stocks, packets, cobertura,
+pagos, ratings, cargodist, refit y autoreplace cuando el catálogo está instalado.
+El SAV nativo todavía no rehidrata esos slots, los cargos `63+` quedan opacos y
+la CTT/GUI completa y los callbacks sin call site siguen parciales; una fila sin
+`CargoSpec` se conserva para round-trip pero no se ejecuta.
 
 - Resto de CBs houses / airports / industries / objects (incluidos los huecos que aún no tienen call site), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.

@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`b1df2500`** (`newgrf: match advanced effect vehicle positioning`),
+Base funcional local y publicada: **`5682ef1c`** (`newgrf: render standard vehicle visual effects`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -182,15 +182,26 @@ una cobertura parcial: faltan sprites y sonidos locales de GRF, la semántica
 completa de consist y la proyección exacta de offsets en todas las escalas del
 viewport. #329 permanece abierto.
 
+Actualización #329-VEHICLE-VISUAL-EFFECT-083 (2026-09-04, commit `5682ef1c`):
+la ruta estándar de CB10 (`0x10`) comparte ahora la emisión vanilla de vapor,
+diésel y chispa para carretera, barcos y aeronaves cuando el GRF la selecciona.
+El renderer conserva el offset `0..15`, corrige la longitud de unidades de tren
+y respeta la inversión visual; la supresión por velocidad, humo, depósitos,
+túneles, puentes y visibilidad queda alineada con `ShowVisualEffect`. Los
+valores `VE_DEFAULT` de vehículos no ferroviarios continúan desactivados. El
+bloque no cierra #329: quedan sprites/sonidos locales, consist completo y la
+proyección de offsets en todos los zooms.
+
 Corrección vigente de este corte: CB160 ya tiene call site compartido para
 trenes, carretera, barcos y aeronaves, con auto-centro, rotación y supresión
-de estados no visibles alineados al upstream. La brecha restante de #326/#329
-es la composición exacta (sprites/sonidos locales, consist y sorter/viewport),
-no la ausencia de un call site por tipo de vehículo.
+de estados no visibles alineados al upstream. CB10 estándar también tiene una
+ruta compartida para los cuatro tipos cuando el modelo no es `VE_DEFAULT`. La
+brecha restante de #326/#329 es la composición exacta (sprites/sonidos locales,
+consist y sorter/viewport), no la ausencia de un call site por tipo.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
-| [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. Layouts `TileSeq`, parents/children, catenaria, PBS y varias capas ya tienen cobertura focal; foundations de rail pendiente/túnel, foundations/rotaciones de aeropuertos, sprite-stack y efectos avanzados de vehículos (CB160 sólo en trenes) y el orden completo de framebuffer siguen sin equivalencia global. | Medir la primera familia visible restante con `world-draw` y, si aplica, capturas en `0,12×`, `0,25×`, `0,50×` y `1×`. |
+| [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. Layouts `TileSeq`, parents/children, catenaria, PBS y varias capas ya tienen cobertura focal; foundations de rail pendiente/túnel, foundations/rotaciones de aeropuertos, sprite-stack y la composición completa de efectos CB160/CB10 y el orden completo de framebuffer siguen sin equivalencia global. | Medir la primera familia visible restante con `world-draw` y, si aplica, capturas en `0,12×`, `0,25×`, `0,50×` y `1×`. |
 | [#328](https://github.com/cavazquez/openttdrs/issues/328) | El round-trip preserva las tablas y campos escalares modelados, `CITY`/`INDY`/`STNN`/`PSAC`, `OBJS`/`OBID`, grupos, órdenes y autoreplace en el subconjunto documentado. Mutaciones de strings, listas/structs anidados, columnas desconocidas, pools nativos de casas/objetos y labels/cargos no representables todavía degradan al writer canónico o quedan pendientes. CB17 de casas y CB157 de objetos pueden crear/modificar PSA de pueblo y el writer les asigna una fila `PSAC`/referencia `CITY` al exportar. | Elegir una mutación SAV reproducible de lista/struct anidado y comparar bytes OpenTTD→Rust→OpenTTD. |
 | [#329](https://github.com/cavazquez/openttdrs/issues/329) | `CITY.received` hidrata crecimiento; la producción de casas escribe `CITY.supplied`; `0xBA`–`0xCB` leen producción/transporte y el PSA de pueblo se selecciona por GRFID en scopes parent de casas/objetos. CB17/CB157 evalúan y escriben el parent real. CB25/26/27 comparten contexto y PSA por huella: `TileLoop` sólo sobre visitas, `IndustryTick` al intervalo de producción, `CargoReceived` al completar la entrega y el avance de frames queda separado por tick. Shape-check `CB2F`, foundations `CB30`, autoslope manual `CB3C`, color `CB14A`, rechazo `CB3D`, cargos dinámicos `CB14B`/`CB14C`, `CargoTypesUnlimited` (hasta 16 slots, con salidas extra procesadas/transportables/exportables), slots vacíos `INVALID_CARGO` del modo legacy, rehidratación de filas `INDY` al aplicar el catálogo NewGRF, efectos especiales `CB3B`, `PlantOnBuild` manual/NewGRF, afterload SAV `<SLV_32`, entrega directa tipo `DeliverGoodsToIndustry` y el monitor runtime `AddCargoDelivery` ya tienen call sites y regresiones. La descarga ordena por `DistanceMax`, excluye la industria de origen, respeta el límite `uint16` de waiting, consulta `CBID_INDUSTRY_REFUSE_CARGO`, actualiza fecha/flag de aceptación y difiere la producción hasta después de `load_vehicles`, con rutas CB1, CB2 exclusivo y matriz vanilla. Los historiales aceptados y producidos por salida giran 61 registros nativos y se reemiten para cargos representables; el monitor empaqueta IDs con el layout nativo, exige activación, satura a `i32` y reinicia al consultar. `STNN.base.owner`, `INDY.neutral_station`/`exclusive_supplier` y `serve_neutral_industries` ya tienen importación, runtime y round-trip. Las filas `INDY` de cargos no resolubles se conservan ahora como passthrough opaco (slot, stock, rate e historial), pero no son ejecutables sin su catálogo. `CargoDistributed`/`ConstructionStageChanged` ya tienen call sites y la aceptación exacta de teselas de industria (`CBID_INDTILE_CARGO_ACCEPTANCE`/`CBID_INDTILE_ACCEPT_CARGO`) ya alimenta la cobertura de estación y la descarga. Las órdenes de estación ya ejecutan refit manual/auto antes de cargar y conservan sentinels SAV; el callback visual avanzado `CB160` ya decodifica registros/flags y se materializa en el renderer de trenes, pero quedan el balanceo/reserva completo de `HandleStationRefit`, siguiente estación, articulados heterogéneos y UI, además de road/ship/air, sprites/sonidos locales y auto-centrado exacto de efectos. Sigue faltando el modelo de cargos custom ejecutables/CTT completo, bindings de GameScript equivalentes a `ScriptCargoMonitor`, reatachación económica cuando falta su catálogo, GUI/variables ilimitadas, autoslope en generación automática, sonido, mutaciones económicas fuera de esos caminos y el resto de callbacks/scope. | Medir con el oráculo un caso de auto-refit con dos unidades/cargos distintos y una siguiente estación; no cerrar #329 por este subconjunto. |
 | [#330](https://github.com/cavazquez/openttdrs/issues/330) | Economía básica y movimiento funcionan, pero los oráculos externos todavía son acotados. Tráfico/colisiones/dirección vial exhaustivos, PBS/YAPF/presignals/consist ferroviarios y navegación aire/mar no tienen aún cobertura diferencial completa. | Tomar el primer fixture externo reproducible de movimiento y registrar tick, entidad y estado nativo divergente. |
@@ -213,6 +224,12 @@ en las variables parametrizadas de estaciones y paradas viales cuando el
 catálogo está instalado. El residual de `#329` queda acotado a callbacks
 CB140–142, `AirportTiles`, industria, GUI/variables ilimitadas y otros scopes
 que todavía no reciben ese catálogo.
+
+Corrección vigente de la fila visual (`5682ef1c`): la frase histórica que
+limitaba CB160 a trenes y la ruta estándar CB10 a trenes queda superada. Ambos
+call sites comparten ahora la emisión vanilla entre trenes, carretera, barcos y
+aeronaves; siguen pendientes la composición de sprites/sonidos locales,
+consists y sorter/viewport.
 
 Actualización #329-CARGO-CTT-067 (2026-09-04, commit `7782568d`): las rutas
 runtime de animación de estaciones ferroviarias/waypoints (`CB140`–`CB142`)

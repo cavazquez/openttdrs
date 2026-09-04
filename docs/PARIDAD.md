@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `b1df2500`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `5682ef1c`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
 ferroviario, la CTT de scopes de estación/parada e `IndustryTile`, la CTT de
 vehículos/refit y las órdenes de refit de estación, incluido
@@ -46,8 +46,8 @@ mapeo y la evidencia de auditorías anteriores; fechas anteriores son contexto
 histórico. Ante una contradicción prevalece este bloque y debe corregirse la
 fila antigua en el mismo cambio.
 
-Validación de este corte: formatter y clippy estricto en core/cliente, **2.045**
-tests de core y **1.065** tests ejecutados del cliente (2 ignorados), además de
+Validación de este corte: formatter y clippy estricto en core/cliente, **2.046**
+tests de core y **1.071** tests ejecutados del cliente (2 ignorados), además de
 la regresión integrada de CTT de vehículos; los conteos anteriores son
 históricos.
 
@@ -280,13 +280,24 @@ Actualización #329-VEHICLE-VISUAL-EFFECT-082 (2026-09-04, `b1df2500`): el
 runtime ejecuta `CBID_VEHICLE_SPAWN_VISUAL_EFFECT` (`0x160`) para el modelo
 avanzado elegido por CB10. Core decodifica contador, centrado/rotación y los
 cuatro registros `0x100..0x103` (tipo y offsets signed X/Y/Z), persiste `7C` y
-el renderer ferroviario materializa `F1`/`F2`/`F3`/`FA` con rotación según la
+el renderer compartido materializa `F1`/`F2`/`F3`/`FA` con rotación según la
 dirección. Los modelos reservados/desactivados no llaman CB160 y un fallo no
 degrada a humo vanilla; depósitos, túneles, puentes, vehículos ocultos,
 parados y trenes que revierten quedan suprimidos como en OpenTTD. El call site
 compartido ya cubre trenes, carretera, barcos y aeronaves. Sigue siendo
 parcial por sprites/sonidos locales, consist completo y la proyección exacta
 de `auto_center`/offsets en todas las escalas; #329 permanece abierto.
+
+Actualización #329-VEHICLE-VISUAL-EFFECT-083 (2026-09-04, `5682ef1c`): la ruta
+estándar de `CBID_VEHICLE_VISUAL_EFFECT` (`0x10`) ya no queda limitada a
+trenes. Cuando un GRF selecciona vapor, diésel o chispa sin el bit avanzado,
+el renderer emite el efecto para carretera, barcos y aeronaves, conserva el
+offset `0..15`, aplica la corrección de longitud de tren y respeta la inversión
+visual. La decisión de velocidad, humo y estados ocultos comparte las reglas
+de `ShowVisualEffect`; los valores `VE_DEFAULT` de vehículos no ferroviarios
+siguen desactivados como en OpenTTD. Persisten como brechas los sprites/sonidos
+locales, consist completo y la proyección exacta de offsets en todos los zooms;
+#329 permanece abierto.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

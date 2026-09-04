@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `4a80e6d3`, clases de carga Action0, CTT y
+Actualizada: **2026-09-04** (commit `acbc3675`, clases de carga Action0, CTT y
 callback de refit de vehículos; CTT de cargos custom en scopes
 de estación/parada,
 shape-check, foundations,
@@ -814,3 +814,11 @@ precio se calcula con la tabla por tipo y el doble de factor ferroviario, y se
 aplica en refit manual, órdenes de depósito y autoreplace con comprobación
 atómica de fondos. La cobertura de cadenas articuladas completas, GUI y APIs
 legacy sin catálogo sigue pendiente; #329 permanece abierto.
+
+Actualización #329-VEHICLE-REFIT-COST-080 (2026-09-04, commit `acbc3675`):
+`autoreplace_cost` aplica el cálculo CB15E a cada unidad que `ReplaceChain`
+reemplaza (reglas por grupo/motor y trasera dual-head), en lugar de limitarlo a
+la cabeza. Las piezas articuladas NewGRF creadas por CB16 se omiten del cálculo
+porque se eliminan y vuelven a crear durante la reconstrucción. La regresión
+de consist de dos unidades cubre la suma por unidad; auto-refit de estación,
+GUI y APIs legacy sin catálogo permanecen parciales.

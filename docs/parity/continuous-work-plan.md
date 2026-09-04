@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`4a80e6d3`** (`newgrf: apply vehicle refit cost callback`),
+Base funcional local y publicada: **`acbc3675`** (`autoreplace: charge refit cost per consist unit`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -144,6 +144,14 @@ y cálculo de autoreplace, con rechazo atómico por fondos insuficientes. Las
 regresiones cubren parser, CTT custom, signo/autorefit y diferencia de coste.
 La aplicación del permiso de autorefit a cadenas articuladas completas y la UI
 siguen abiertas; #329 no se cierra.
+
+Actualización #329-VEHICLE-REFIT-COST-080 (2026-09-04, commit `acbc3675`):
+el cálculo de autoreplace recorre el consist que `ReplaceChain` reconstruirá y
+agrega el coste de refit de cada unidad que tiene una regla efectiva, además
+de la cabeza; la trasera dual-head usa el motor nuevo y las piezas generadas
+por CB16 no se cobran porque se recrean. Una regresión de dos camiones fija el
+doble coste ante el mismo factor Action0/CB15E. La semántica de auto-refit en
+estaciones y la UI siguen pendientes; #329 no se cierra.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|

@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `4a80e6d3`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `acbc3675`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
 ferroviario, la CTT de scopes de estación/parada e `IndustryTile` y la CTT de
 vehículos/refit, incluido `CBID_VEHICLE_CUSTOM_REFIT`, quedan actualizados en
@@ -252,6 +252,15 @@ firmado, CTT custom y diferencia de coste en autoreplace. El permiso de
 autorefit y las cadenas articuladas multiunidad aún requieren cobertura
 completa; GUI/variables ilimitadas, scopes económicos y callbacks restantes
 mantienen #329 abierto.
+
+Actualización #329-VEHICLE-REFIT-COST-080 (2026-09-04, `acbc3675`):
+`autoreplace_cost` recorre ahora la cadena que `ReplaceChain` va a reconstruir
+y suma el coste CB15E de cada unidad con regla de reemplazo, incluida la
+trasera dual-head. Las piezas articuladas generadas por CB16 se excluyen porque
+se destruyen y materializan de nuevo; no se cobra dos veces por ellas. La
+regresión de dos unidades verifica que el coste pasa de una a dos conversiones
+cuando ambas cambian de motor/carga. El permiso de autorefit para estaciones y
+las cadenas articuladas completas siguen pendientes; #329 permanece abierto.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

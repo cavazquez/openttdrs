@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
-`main` con base funcional publicada `4a80e6d3`, posterior al writeback canónico
+`main` con base funcional publicada `acbc3675`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
@@ -254,3 +254,9 @@ motor, cargo, subtipo y órdenes mantienen su representación. Al importar un
 save, el cálculo dinámico se vuelve a ejecutar únicamente cuando están
 instalados el `CargoSpec` y el GRF correspondientes; sin ellos se conserva el
 fallback documentado y el estado SAV sigue siendo reexportable.
+
+Actualización `acbc3675` (2026-09-04): el coste CB15E por unidad durante
+autoreplace se deriva del motor, cargo y reglas ya existentes; no cambia el
+wire format SAV. La cadena, los enlaces y los campos de cargo se reemiten con
+la representación actual, y el coste se vuelve a calcular sólo durante el
+runtime con los catálogos disponibles.

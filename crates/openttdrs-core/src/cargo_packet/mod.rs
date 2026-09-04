@@ -38,6 +38,20 @@ mod tests {
     }
 
     #[test]
+    fn station_stock_migrates_custom_cargo_to_packet() {
+        let custom = CargoType::Custom(4);
+        let source = TileCoord::new(2, 3);
+        let mut stock = crate::CargoStock::default();
+        stock.add(custom, 19);
+        let list = StationCargoList::from_stock(stock, source);
+        assert_eq!(list.total_of(custom), 19);
+        assert_eq!(
+            list.packets().next().map(|packet| packet.source),
+            Some(source)
+        );
+    }
+
+    #[test]
     fn vehicle_take_amount_preserves_source() {
         let mut list = VehicleCargoList::default();
         list.push(CargoPacket::new(CargoType::Goods, 5, TileCoord::new(0, 0)));

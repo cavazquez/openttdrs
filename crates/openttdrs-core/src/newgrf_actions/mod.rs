@@ -3472,6 +3472,25 @@ mod tests {
     }
 
     #[test]
+    fn custom_cargo_gets_runtime_slot_and_preserves_local_identity() {
+        let action0 = build_action0_cargo_payload(4, 27, b"TOFU", "Tofu");
+        let bytes =
+            build_grf_v2_with_action0_and_action8(&action0, [b'C', b'T', 0, 1], "custom-cargo", "");
+        let dir = tempfile_dir_with("custom-cargo.grf", &bytes);
+        let grfid = crate::newgrf_config::grfid_from_bytes(*b"CT01");
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("custom-cargo.grf", grfid));
+        apply_newgrf_cargoes(&mut state, &[&dir]);
+
+        let spec = crate::cargo_spec_by_label(&state.cargo_spec_catalog, "TOFU").unwrap();
+        assert_eq!(spec.local_id, 4);
+        assert_eq!(spec.cargo_type(), Some(crate::CargoType::Custom(0)));
+        assert_eq!(spec.id, crate::cargo::CUSTOM_CARGO_OFFSET);
+    }
+
+    #[test]
     fn parse_object_meta_and_apply_registers() {
         let a0 = build_action0_object_payload_with_callback_mask(
             0,

@@ -739,7 +739,7 @@ pub fn place_industry_spec_def_layout_sandbox(
         .with_construction_type(crate::industry::INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY)
         .with_last_prod_year(state.economy_timer.year)
         .with_counter(counter)
-        .with_newgrf_spec(def.id, &def);
+        .with_newgrf_spec_and_cargo_catalog(def.id, &def, &state.cargo_spec_catalog);
     if let Some(initial_level) =
         crate::newgrf_callback::resolve_industry_production_change_build_callback(
             &def,

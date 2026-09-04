@@ -1,4 +1,4 @@
-use crate::{ALL_CARGO_TYPES, GameState, TileCoord, economy, town};
+use crate::{ALL_CARGO_TYPES, CUSTOM_CARGO_COUNT, GameState, TileCoord, economy, town};
 
 /// Dispara `NewCargo` sólo para las colas que crecieron durante una operación
 /// de producción/distribución. La economía puede repartir un lote entre varias
@@ -10,9 +10,18 @@ fn trigger_station_new_cargo_since(state: &mut GameState, before: &[crate::Cargo
         .iter()
         .zip(before)
         .flat_map(|(station, before)| {
-            ALL_CARGO_TYPES.iter().copied().filter_map(move |cargo| {
-                (station.cargo_stock.get(cargo) > before.get(cargo)).then_some((station.pos, cargo))
-            })
+            ALL_CARGO_TYPES
+                .iter()
+                .copied()
+                .filter_map(move |cargo| {
+                    (station.cargo_stock.get(cargo) > before.get(cargo))
+                        .then_some((station.pos, cargo))
+                })
+                .chain((0..CUSTOM_CARGO_COUNT).filter_map(move |slot| {
+                    let cargo = crate::cargo::custom_cargo(slot);
+                    (station.cargo_stock.get(cargo) > before.get(cargo))
+                        .then_some((station.pos, cargo))
+                }))
         })
         .collect();
     for (station_pos, cargo) in arrivals {
@@ -162,6 +171,12 @@ fn roll_station_newgrf_month(stations: &mut [crate::Station]) {
     for station in stations {
         for cargo in crate::ALL_CARGO_TYPES {
             station.goods.get_mut(cargo).roll_newgrf_month();
+        }
+        for slot in 0..CUSTOM_CARGO_COUNT {
+            station
+                .goods
+                .get_mut(crate::cargo::custom_cargo(slot))
+                .roll_newgrf_month();
         }
     }
 }

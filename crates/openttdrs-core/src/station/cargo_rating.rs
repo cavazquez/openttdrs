@@ -1,5 +1,5 @@
-use crate::cargo::{ALL_CARGO_TYPES, CargoType};
-use crate::cargo_spec::{CargoSpecDef, cargo_spec_by_label, cargo_type_label};
+use crate::cargo::{ALL_CARGO_TYPES, CUSTOM_CARGO_COUNT, CargoType};
+use crate::cargo_spec::{CargoSpecDef, cargo_spec_for_type};
 use crate::cargodist::parity::Randomizer;
 use crate::company::CompanyId;
 use crate::industry::Industry;
@@ -56,18 +56,16 @@ pub fn station_rating_for_company_cargo(
 #[must_use]
 fn station_rating_target(station: &Station, cargo: CargoType, cargo_specs: &[CargoSpecDef]) -> i16 {
     let entry = station.goods.get(cargo);
-    if let Some(rating) =
-        cargo_spec_by_label(cargo_specs, cargo_type_label(cargo)).and_then(|def| {
-            resolve_cargo_station_rating_callback(
-                def,
-                station.time_since_pickup.get(cargo),
-                entry.max_waiting_cargo,
-                entry.has_vehicle_ever_tried_loading(),
-                entry.last_speed,
-                station.last_vehicle_type,
-            )
-        })
-    {
+    if let Some(rating) = cargo_spec_for_type(cargo_specs, cargo).and_then(|def| {
+        resolve_cargo_station_rating_callback(
+            def,
+            station.time_since_pickup.get(cargo),
+            entry.max_waiting_cargo,
+            entry.has_vehicle_ever_tried_loading(),
+            entry.last_speed,
+            station.last_vehicle_type,
+        )
+    }) {
         return rating;
     }
     let mut rating: i16 = 0;
@@ -165,6 +163,21 @@ pub fn modify_station_rating_around(
             station_changed = true;
             touched += 1;
         }
+        for slot in 0..CUSTOM_CARGO_COUNT {
+            let cargo = crate::cargo::custom_cargo(slot);
+            let entry = station.goods.get(cargo);
+            let active = entry.has_rating
+                || entry.has_vehicle_ever_tried_loading()
+                || station.cargo_stock.get(cargo) > 0;
+            if !active {
+                continue;
+            }
+            let entry = station.goods.get_mut(cargo);
+            entry.rating = entry.rating.saturating_add(amount);
+            entry.has_rating = true;
+            station_changed = true;
+            touched += 1;
+        }
         if station_changed {
             recompute_station_rating(station);
         }
@@ -177,6 +190,14 @@ pub fn recompute_station_rating(station: &mut Station) {
     let mut min_rating = 255u8;
     let mut any_rated = false;
     for cargo in ALL_CARGO_TYPES {
+        if !station.goods.get(cargo).has_rating {
+            continue;
+        }
+        any_rated = true;
+        min_rating = min_rating.min(station.goods.rating(cargo));
+    }
+    for slot in 0..CUSTOM_CARGO_COUNT {
+        let cargo = crate::cargo::custom_cargo(slot);
         if !station.goods.get(cargo).has_rating {
             continue;
         }
@@ -216,6 +237,15 @@ pub fn update_station_ratings_with_cargo_callbacks(
         }
         for cargo in ALL_CARGO_TYPES {
             update_cargo_rating(station, cargo, cargo_specs, selectgoods, rng);
+        }
+        for slot in 0..CUSTOM_CARGO_COUNT {
+            update_cargo_rating(
+                station,
+                crate::cargo::custom_cargo(slot),
+                cargo_specs,
+                selectgoods,
+                rng,
+            );
         }
         station.sync_stock_from_packets();
         recompute_station_rating(station);

@@ -94,6 +94,15 @@ fn migrate_state_v21_to_v22(state: &mut GameState) {
             entry.has_rating = true;
             entry.rating = station.rating;
         }
+        for slot in 0..crate::cargo::CUSTOM_CARGO_COUNT {
+            let cargo = crate::cargo::custom_cargo(slot);
+            if station.cargo_stock.get(cargo) == 0 {
+                continue;
+            }
+            let entry = station.goods.get_mut(cargo);
+            entry.has_rating = true;
+            entry.rating = station.rating;
+        }
     }
 }
 

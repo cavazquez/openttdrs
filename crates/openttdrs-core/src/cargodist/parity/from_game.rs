@@ -10,8 +10,7 @@
     clippy::should_implement_trait
 )]
 
-use crate::cargo::ALL_CARGO_TYPES;
-use crate::cargo::CargoType;
+use crate::cargo::{ALL_CARGO_TYPES, CUSTOM_CARGO_COUNT, CargoType};
 use crate::cargodist::legacy::flow_stat::DistributionType as GameDistribution;
 use crate::cargodist::legacy::link_graph::LinkGraphStats;
 use crate::map::TileCoord;
@@ -53,8 +52,27 @@ pub fn build_jobs_from_game(
         return Vec::new();
     }
 
+    let mut cargos = ALL_CARGO_TYPES.to_vec();
+    for station in stations {
+        for (cargo, _) in station.cargo_stock.custom_entries() {
+            if !cargos.contains(&cargo) {
+                cargos.push(cargo);
+            }
+        }
+    }
+    for key in link_graph.edges.keys() {
+        if !cargos.contains(&key.cargo) {
+            cargos.push(key.cargo);
+        }
+    }
+    for slot in 0..CUSTOM_CARGO_COUNT {
+        let cargo = crate::cargo::custom_cargo(slot);
+        if !cargos.contains(&cargo) {
+            cargos.push(cargo);
+        }
+    }
     let mut out = Vec::new();
-    for &cargo in &ALL_CARGO_TYPES {
+    for cargo in cargos {
         if let Some(job) = build_job_for_cargo(stations, link_graph, cargo, settings) {
             out.push((cargo, job));
         }

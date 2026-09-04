@@ -13,6 +13,30 @@ pub const NUM_ORIGINAL_CARGO: usize = 12;
 
 /// Cantidad de cargos vanilla distintos (todos los climas).
 pub const VANILLA_CARGO_COUNT: usize = 31;
+/// Primer ID disponible para un cargo definido por `NewGRF`.
+#[allow(clippy::cast_possible_truncation)]
+pub const CUSTOM_CARGO_OFFSET: u8 = VANILLA_CARGO_COUNT as u8;
+/// Slots de cargos custom que el runtime puede transportar.
+///
+/// `OpenTTD` reserva 64 IDs de cargo. El modelo actual deja el último ID
+/// reservado para sentinelas legacy y expone 32 slots ejecutables (`31..62`);
+/// el resto continúa como passthrough hasta ampliar los chunks de UI.
+pub const CUSTOM_CARGO_COUNT: usize = 32;
+/// Límite inclusivo de IDs de cargo materializados por el runtime.
+#[allow(clippy::cast_possible_truncation)]
+pub const MAX_CARGO_ID: u8 = CUSTOM_CARGO_OFFSET + CUSTOM_CARGO_COUNT as u8 - 1;
+
+/// Construye un cargo custom desde un índice de colección sin truncamientos
+/// implícitos (los callers de runtime usan rangos acotados a 32 slots).
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
+pub const fn custom_cargo(slot: usize) -> CargoType {
+    CargoType::Custom(if slot > u8::MAX as usize {
+        u8::MAX
+    } else {
+        slot as u8
+    })
+}
 
 /// Los 11 cargos activos del clima templado (slot 11 es void).
 pub const TEMPERATE_CARGO_TYPES: [CargoType; 11] = [
@@ -162,6 +186,11 @@ pub enum CargoType {
     Bubbles,
     Plastic,
     FizzyDrinks,
+    /// Cargo definido por un `NewGRF`, identificado por su slot global.
+    ///
+    /// El payload es `id - CUSTOM_CARGO_OFFSET`, no el `local_id` del GRF.
+    /// La etiqueta y las propiedades se resuelven desde `CargoSpecDef`.
+    Custom(u8),
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -217,6 +246,9 @@ pub struct CargoStock {
     pub plastic: u32,
     #[serde(default)]
     pub fizzy_drinks: u32,
+    /// Stocks de cargos `NewGRF` (`Custom(0)` corresponde al ID 31).
+    #[serde(default)]
+    pub custom: [u32; CUSTOM_CARGO_COUNT],
 }
 
 impl CargoStock {
@@ -254,6 +286,14 @@ impl CargoStock {
             CargoType::Bubbles => self.bubbles,
             CargoType::Plastic => self.plastic,
             CargoType::FizzyDrinks => self.fizzy_drinks,
+            CargoType::Custom(slot) => {
+                let index = slot as usize;
+                if index < CUSTOM_CARGO_COUNT {
+                    self.custom[index]
+                } else {
+                    0
+                }
+            }
         }
     }
 
@@ -276,6 +316,12 @@ impl CargoStock {
         let taken = (*slot).min(amount);
         *slot -= taken;
         taken
+    }
+
+    /// Vacía todos los slots custom. Los cargos vanilla se limpian en los
+    /// bucles históricos que recorren [`ALL_CARGO_TYPES`].
+    pub fn clear_custom(&mut self) {
+        self.custom.fill(0);
     }
 
     fn slot_mut(&mut self, cargo: CargoType) -> &mut u32 {
@@ -311,6 +357,9 @@ impl CargoStock {
             CargoType::Bubbles => &mut self.bubbles,
             CargoType::Plastic => &mut self.plastic,
             CargoType::FizzyDrinks => &mut self.fizzy_drinks,
+            CargoType::Custom(slot) => {
+                &mut self.custom[usize::from(slot).min(CUSTOM_CARGO_COUNT - 1)]
+            }
         }
     }
 
@@ -322,11 +371,39 @@ impl CargoStock {
             }
             return None;
         }
-        ALL_CARGO_TYPES
+        let vanilla = ALL_CARGO_TYPES
             .iter()
             .copied()
             .filter(|cargo| cargo.is_freight() && self.get(*cargo) > 0)
+            .max_by_key(|cargo| self.get(*cargo));
+        let custom = self
+            .custom_entries()
+            .map(|(cargo, _)| cargo)
+            .max_by_key(|cargo| self.get(*cargo));
+        vanilla
+            .into_iter()
+            .chain(custom)
             .max_by_key(|cargo| self.get(*cargo))
+    }
+
+    /// Total de stocks custom, útil para los agregados legacy de estación.
+    #[must_use]
+    pub const fn custom_total(self) -> u32 {
+        let mut total: u32 = 0;
+        let mut i = 0;
+        while i < CUSTOM_CARGO_COUNT {
+            total = total.saturating_add(self.custom[i]);
+            i += 1;
+        }
+        total
+    }
+
+    /// Itera los slots custom no vacíos.
+    pub fn custom_entries(self) -> impl Iterator<Item = (CargoType, u32)> {
+        self.custom
+            .into_iter()
+            .enumerate()
+            .filter_map(|(slot, amount)| (amount > 0).then_some((custom_cargo(slot), amount)))
     }
 }
 
@@ -365,6 +442,7 @@ impl CargoType {
             Self::Bubbles => 28,
             Self::Plastic => 29,
             Self::FizzyDrinks => 30,
+            Self::Custom(slot) => CUSTOM_CARGO_OFFSET.saturating_add(slot),
         }
     }
 
@@ -403,6 +481,7 @@ impl CargoType {
             Self::Bubbles => 24,
             Self::Plastic => 25,
             Self::FizzyDrinks => 26,
+            Self::Custom(slot) => CUSTOM_CARGO_OFFSET.saturating_add(slot),
         }
     }
 
@@ -440,6 +519,9 @@ impl CargoType {
             28 => Some(Self::Bubbles),
             29 => Some(Self::Plastic),
             30 => Some(Self::FizzyDrinks),
+            id if id >= CUSTOM_CARGO_OFFSET && id <= MAX_CARGO_ID => {
+                Some(Self::Custom(id - CUSTOM_CARGO_OFFSET))
+            }
             _ => None,
         }
     }
@@ -492,6 +574,7 @@ impl CargoType {
             Self::Bubbles => "BUBL",
             Self::Plastic => "PLST",
             Self::FizzyDrinks => "FZDR",
+            Self::Custom(_) => "CSTM",
         }
     }
 
@@ -693,6 +776,7 @@ impl CargoType {
             Self::Bubbles => "burbujas",
             Self::Plastic => "plástico",
             Self::FizzyDrinks => "refrescos",
+            Self::Custom(_) => "carga personalizada",
         }
     }
 }
@@ -793,5 +877,20 @@ mod tests {
         assert_eq!(stock.get(CargoType::Wood), 0);
         assert_eq!(stock.get(CargoType::Coal), 0);
         assert_eq!(stock.get(CargoType::Batteries), 3);
+    }
+
+    #[test]
+    fn custom_cargo_roundtrips_through_id_and_stock() {
+        let cargo = CargoType::Custom(7);
+        assert_eq!(cargo.cargo_id(), CUSTOM_CARGO_OFFSET + 7);
+        assert_eq!(CargoType::from_cargo_id(cargo.cargo_id()), Some(cargo));
+
+        let mut stock = CargoStock::default();
+        stock.add(cargo, 23);
+        assert_eq!(stock.get(cargo), 23);
+        assert_eq!(stock.custom_total(), 23);
+        assert_eq!(stock.pick_freight_to_load(None), Some(cargo));
+        assert_eq!(stock.take(cargo, 8), 8);
+        assert_eq!(stock.get(cargo), 15);
     }
 }

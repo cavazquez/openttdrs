@@ -61,7 +61,25 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
             if state.vehicles[idx].cargo > 0 {
                 continue;
             }
-            if !crate::refit::refittable_cargo_types(&state.vehicles[idx]).contains(&cargo) {
+            let allowed = state.vehicles[idx]
+                .engine_id
+                .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+                .map_or_else(
+                    || {
+                        crate::refit::refittable_cargo_types_with_catalog(
+                            &state.vehicles[idx],
+                            &state.engine_catalog,
+                            &state.cargo_spec_catalog,
+                        )
+                    },
+                    |engine| {
+                        crate::refit::refittable_cargo_types_for_engine_with_catalog(
+                            engine,
+                            &state.cargo_spec_catalog,
+                        )
+                    },
+                );
+            if !allowed.contains(&cargo) {
                 continue;
             }
             state.vehicles[idx].cargo_type = Some(cargo);

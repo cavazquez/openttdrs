@@ -610,20 +610,18 @@ pub(super) fn unload_vehicles(
             );
             let current_payment =
                 economy::cargo_current_payment(pay_spec, state.global_economy.inflation_payment);
-            let part = crate::cargo_spec::cargo_spec_by_label(
-                &state.cargo_spec_catalog,
-                crate::cargo_spec::cargo_type_label(packet.cargo),
-            )
-            .and_then(|def| {
-                crate::newgrf_callback::resolve_cargo_profit_callback(
-                    def,
-                    u32::from(packet.count),
-                    distance,
-                    packet.periods_in_transit,
-                    current_payment,
-                )
-            })
-            .unwrap_or(part);
+            let part =
+                crate::cargo_spec::cargo_spec_for_type(&state.cargo_spec_catalog, packet.cargo)
+                    .and_then(|def| {
+                        crate::newgrf_callback::resolve_cargo_profit_callback(
+                            def,
+                            u32::from(packet.count),
+                            distance,
+                            packet.periods_in_transit,
+                            current_payment,
+                        )
+                    })
+                    .unwrap_or(part);
             let _ = crate::subsidy::try_award_subsidy(
                 state,
                 station_pos,

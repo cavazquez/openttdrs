@@ -58,6 +58,8 @@ pub struct CargoTimeSincePickup {
     pub plastic: u8,
     #[serde(default)]
     pub fizzy_drinks: u8,
+    #[serde(default)]
+    pub custom: [u8; crate::cargo::CUSTOM_CARGO_COUNT],
 }
 
 impl CargoTimeSincePickup {
@@ -95,6 +97,14 @@ impl CargoTimeSincePickup {
             CargoType::Bubbles => self.bubbles,
             CargoType::Plastic => self.plastic,
             CargoType::FizzyDrinks => self.fizzy_drinks,
+            CargoType::Custom(slot) => {
+                let index = slot as usize;
+                if index < crate::cargo::CUSTOM_CARGO_COUNT {
+                    self.custom[index]
+                } else {
+                    0
+                }
+            }
         }
     }
 
@@ -140,6 +150,9 @@ impl CargoTimeSincePickup {
             CargoType::Bubbles => &mut self.bubbles,
             CargoType::Plastic => &mut self.plastic,
             CargoType::FizzyDrinks => &mut self.fizzy_drinks,
+            CargoType::Custom(slot) => {
+                &mut self.custom[usize::from(slot).min(crate::cargo::CUSTOM_CARGO_COUNT - 1)]
+            }
         }
     }
 }
@@ -558,7 +571,7 @@ impl Station {
             .copied()
             .filter(|c| c.is_freight())
             .map(|c| self.cargo_stock.get(c))
-            .fold(0_u32, u32::saturating_add);
+            .fold(self.cargo_stock.custom_total(), u32::saturating_add);
     }
 
     /// Añade carga en espera (producción pueblo / descarga freight).

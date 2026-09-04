@@ -1003,8 +1003,19 @@ pub(super) fn refit_vehicle(
             .engine_id
             .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
             .map_or_else(
-                || crate::refit::refittable_cargo_types(vehicle).to_vec(),
-                crate::refit::refittable_cargo_types_for_engine,
+                || {
+                    crate::refit::refittable_cargo_types_with_catalog(
+                        vehicle,
+                        &state.engine_catalog,
+                        &state.cargo_spec_catalog,
+                    )
+                },
+                |engine| {
+                    crate::refit::refittable_cargo_types_for_engine_with_catalog(
+                        engine,
+                        &state.cargo_spec_catalog,
+                    )
+                },
             );
         if !allowed.contains(&cargo) {
             return Err(CommandError::RefitNotAllowed);
@@ -1068,8 +1079,19 @@ pub(super) fn cycle_vehicle_order_depot_refit(
     let options = engine_id
         .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
         .map_or_else(
-            || crate::refit::refittable_cargo_types(&state.vehicles[vehicle_idx]).to_vec(),
-            crate::refit::refittable_cargo_types_for_engine,
+            || {
+                crate::refit::refittable_cargo_types_with_catalog(
+                    &state.vehicles[vehicle_idx],
+                    &state.engine_catalog,
+                    &state.cargo_spec_catalog,
+                )
+            },
+            |engine| {
+                crate::refit::refittable_cargo_types_for_engine_with_catalog(
+                    engine,
+                    &state.cargo_spec_catalog,
+                )
+            },
         );
     let Some(updated) = state.vehicles[vehicle_idx].orders[index].with_cycled_depot_refit(&options)
     else {

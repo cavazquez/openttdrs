@@ -561,7 +561,10 @@ pub(crate) fn rehydrate_sav_industries_with_catalog(state: &mut GameState) -> us
         let needs_rebind = industry.newgrf_type_id != Some(def.id);
         let first_attachment = industry.newgrf_type_id.is_none();
         if needs_rebind {
-            *industry = industry.clone().with_newgrf_spec(def.id, &def);
+            *industry =
+                industry
+                    .clone()
+                    .with_newgrf_spec_and_cargo_catalog(def.id, &def, &cargo_catalog);
         }
 
         // A modern INDY row always contains the dynamic vectors, including
@@ -696,7 +699,10 @@ fn cargo_from_sav_slot(
         cargo_catalog
             .iter()
             .find(|def| def.bitnum == slot)
-            .and_then(|def| crate::CargoType::from_label(&def.label))
+            .and_then(|def| {
+                def.cargo_type()
+                    .or_else(|| crate::CargoType::from_label(&def.label))
+            })
     })
 }
 

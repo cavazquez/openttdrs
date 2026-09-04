@@ -7,7 +7,7 @@ use crate::GameState;
 use crate::badge::resolve_badge_local_ids;
 use crate::industry_spec::{
     IndustryLayoutTile, IndustrySpecDef, empty_industry_overrides, empty_industry_spec_catalog,
-    get_cargo_translation_for_climate, next_free_industry_id,
+    get_cargo_translation_for_grf, next_free_industry_id,
 };
 use crate::industry_tile::{
     IndustryTileGfxId, IndustryTileSpecDef, empty_industry_tile_overrides,
@@ -76,7 +76,12 @@ pub fn apply_newgrf_industry_tiles(state: &mut GameState, search_dirs: &[&Path])
                 .accepts_cargo_indices
                 .iter()
                 .filter_map(|&idx| {
-                    get_cargo_translation_for_climate(idx, &state.cargo_spec_catalog, state.climate)
+                    get_cargo_translation_for_grf(
+                        idx,
+                        &state.cargo_spec_catalog,
+                        state.climate,
+                        entry.grfid,
+                    )
                 })
                 .collect();
             catalog.push(IndustryTileSpecDef {
@@ -179,16 +184,26 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
                 .produced_cargo_indices
                 .iter()
                 .map(|&idx| {
-                    get_cargo_translation_for_climate(idx, &state.cargo_spec_catalog, state.climate)
-                        .unwrap_or_default()
+                    get_cargo_translation_for_grf(
+                        idx,
+                        &state.cargo_spec_catalog,
+                        state.climate,
+                        entry.grfid,
+                    )
+                    .unwrap_or_default()
                 })
                 .collect();
             let accepted_cargo_labels: Vec<String> = meta
                 .accepted_cargo_indices
                 .iter()
                 .map(|&idx| {
-                    get_cargo_translation_for_climate(idx, &state.cargo_spec_catalog, state.climate)
-                        .unwrap_or_default()
+                    get_cargo_translation_for_grf(
+                        idx,
+                        &state.cargo_spec_catalog,
+                        state.climate,
+                        entry.grfid,
+                    )
+                    .unwrap_or_default()
                 })
                 .collect();
             if let Some(ovr) = meta.override_id {

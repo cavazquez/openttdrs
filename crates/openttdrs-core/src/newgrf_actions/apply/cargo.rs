@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use crate::GameState;
+use crate::cargo::{CUSTOM_CARGO_OFFSET, CargoType, MAX_CARGO_ID};
 use crate::cargo_spec::{
     CargoSpecDef, DEFAULT_CARGO_CAPACITY_MULTIPLIER, empty_cargo_spec_catalog,
 };
@@ -34,12 +35,36 @@ pub fn apply_newgrf_cargoes(state: &mut GameState, search_dirs: &[&Path]) {
         let gfx = crate::newgrf_sprites::collect_cargo_sprite_graphics(&data).unwrap_or_default();
         let newgrf_runtime = gfx.needs_runtime_resolve().then(|| Box::new(gfx.clone()));
         for meta in collect_cargo_metas_from_grf(&data) {
+            // Los cargos vanilla conservan su ID nativo. Un label nuevo recibe
+            // un slot global estable para que packets, stocks y estaciones
+            // puedan transportar `CargoType::Custom` sin confundirlo con el
+            // `local_id` de otro GRF.
+            let id = CargoType::from_label(&meta.label)
+                .map(CargoType::cargo_id)
+                .or_else(|| {
+                    catalog
+                        .iter()
+                        .find(|d| d.grfid == entry.grfid && d.local_id == meta.local_id)
+                        .map(|d| d.id)
+                })
+                .or_else(|| {
+                    (CUSTOM_CARGO_OFFSET..=MAX_CARGO_ID)
+                        .find(|candidate| !catalog.iter().any(|d| d.id == *candidate))
+                });
+            let Some(id) = id else {
+                state.runtime.newgrf_diagnostics.push(format!(
+                    "{}: cargo {} sin slot global disponible",
+                    entry.filename, meta.label
+                ));
+                continue;
+            };
             let views = gfx
                 .views_for_local_id(meta.local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
             let def = CargoSpecDef {
-                id: meta.local_id,
+                local_id: meta.local_id,
+                id,
                 bitnum: meta.bitnum,
                 label: meta.label,
                 name: meta.name,

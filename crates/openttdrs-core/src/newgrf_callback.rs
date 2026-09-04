@@ -1376,7 +1376,11 @@ pub fn apply_industry_tile_shape_callback_for_build(
     // `PerformIndustryTileSlopeCheck` deja `selected_layout` en cero en el
     // parent temporal; el índice real viaja sólo en `param2`.
     let parent = Industry::with_tiles(base_tile, kind, tiles)
-        .with_newgrf_spec(industry_def.id, industry_def)
+        .with_newgrf_spec_and_cargo_catalog(
+            industry_def.id,
+            industry_def,
+            &state.cargo_spec_catalog,
+        )
         .with_newgrf_random(initial_random_bits)
         .with_founder(founder);
     let neighbor_params = requested_industry_tile_scope_vars(runtime);
@@ -1576,6 +1580,10 @@ fn action2_eval_ctx_from_industry(industry: &Industry, random: u32) -> Action2Ev
     let last_accepted = crate::ALL_CARGO_TYPES
         .iter()
         .map(|&cargo| industry.last_accepted_date(cargo))
+        .chain(
+            (0..crate::CUSTOM_CARGO_COUNT)
+                .map(|slot| industry.last_accepted_date(crate::cargo::custom_cargo(slot))),
+        )
         .max()
         .unwrap_or(0);
     ctx.vars.insert(
@@ -1598,12 +1606,24 @@ pub struct IndustryProductionCallbackResult {
     pub outputs_added: u32,
 }
 
-fn cargo_for_group_index(raw: u8, indices: &[u8], labels: &[String]) -> Option<CargoType> {
+fn cargo_for_group_index(
+    raw: u8,
+    indices: &[u8],
+    labels: &[String],
+    slots: Option<&[Option<CargoType>]>,
+) -> Option<CargoType> {
     indices
         .iter()
         .position(|&index| index == raw)
-        .and_then(|idx| labels.get(idx))
-        .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+        .and_then(|idx| {
+            slots
+                .and_then(|slots| slots.get(idx).copied().flatten())
+                .or_else(|| {
+                    labels
+                        .get(idx)
+                        .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+                })
+        })
         .or_else(|| CargoType::from_cargo_id(raw))
 }
 
@@ -1661,6 +1681,8 @@ pub fn apply_industry_production_callback(
         .map(|(cargo, _)| cargo)
         .collect();
     let produced_slots = industry.produced_cargos();
+    let accepted_slot_map = industry.newgrf_input_cargo_slots.clone();
+    let produced_slot_map = industry.newgrf_output_cargo_slots.clone();
 
     for loop_index in 0..=u16::MAX {
         ctx.vars
@@ -1701,6 +1723,7 @@ pub fn apply_industry_production_callback(
                     raw_cargo,
                     &def.accepted_cargo_indices,
                     &def.accepted_cargo_labels,
+                    Some(&accepted_slot_map),
                 ) else {
                     continue;
                 };
@@ -1716,6 +1739,7 @@ pub fn apply_industry_production_callback(
                     raw_cargo,
                     &def.produced_cargo_indices,
                     &def.produced_cargo_labels,
+                    Some(&produced_slot_map),
                 ) else {
                     continue;
                 };
@@ -1900,9 +1924,20 @@ pub fn resolve_industry_special_effect_callback(
 /// un slot local puede representar otro cargo según el clima. Cuando el
 /// catálogo no pudo resolver un label, el id vanilla es un fallback explícito
 /// para los GRF que sólo publican la tabla original.
-fn industry_local_cargo_index(def: &IndustrySpecDef, cargo: CargoType) -> Option<u8> {
+fn industry_local_cargo_index(
+    def: &IndustrySpecDef,
+    industry: &Industry,
+    cargo: CargoType,
+) -> Option<u8> {
     for (index, label) in def.accepted_cargo_labels.iter().enumerate() {
-        if cargo_type_from_label(Some(label.as_str())) == Some(cargo) {
+        if industry
+            .newgrf_input_cargo_slots
+            .get(index)
+            .copied()
+            .flatten()
+            == Some(cargo)
+            || cargo_type_from_label(Some(label.as_str())) == Some(cargo)
+        {
             return def.accepted_cargo_indices.get(index).copied();
         }
     }
@@ -1929,7 +1964,7 @@ pub fn resolve_industry_refuse_cargo_callback(
         return None;
     }
     let runtime = def.newgrf_runtime.as_ref()?;
-    let local_cargo = industry_local_cargo_index(def, cargo)?;
+    let local_cargo = industry_local_cargo_index(def, industry, cargo)?;
     let mut ctx = action2_eval_ctx_from_industry(industry, u32::from(industry.newgrf_random));
     let result = runtime.resolve_callback_ctx_u16(
         u16::from(def.newgrf_local_id),
@@ -1959,13 +1994,22 @@ struct IndustryDynamicCargoSlots {
     slots: Vec<Option<CargoType>>,
 }
 
-fn static_industry_cargo_slots(indices: &[u8], labels: &[String]) -> IndustryDynamicCargoSlots {
+fn static_industry_cargo_slots(
+    indices: &[u8],
+    labels: &[String],
+    existing_slots: &[Option<CargoType>],
+) -> IndustryDynamicCargoSlots {
     let mut result = IndustryDynamicCargoSlots {
         slots: vec![None; indices.len()],
         ..IndustryDynamicCargoSlots::default()
     };
     for (source_index, &local) in indices.iter().enumerate() {
-        if let Some(cargo) = cargo_for_group_index(local, indices, labels) {
+        if let Some(cargo) = existing_slots
+            .get(source_index)
+            .copied()
+            .flatten()
+            .or_else(|| cargo_for_group_index(local, indices, labels, None))
+        {
             result.slots[source_index] = Some(cargo);
             result.valid.push(IndustryDynamicCargoSlot {
                 cargo,
@@ -1976,6 +2020,7 @@ fn static_industry_cargo_slots(indices: &[u8], labels: &[String]) -> IndustryDyn
     result
 }
 
+#[allow(clippy::too_many_arguments)]
 fn callback_industry_cargo_slots(
     runtime: &TrainSpriteGraphics,
     def: &IndustrySpecDef,
@@ -1984,6 +2029,7 @@ fn callback_industry_cargo_slots(
     max_slots: usize,
     indices: &[u8],
     labels: &[String],
+    existing_slots: &[Option<CargoType>],
 ) -> IndustryDynamicCargoSlots {
     let mut result = IndustryDynamicCargoSlots::default();
     let preserve_empty_slots = max_slots <= crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS;
@@ -2012,9 +2058,11 @@ fn callback_industry_cargo_slots(
         let source_index = indices.iter().position(|&candidate| candidate == local);
         let cargo = source_index
             .and_then(|index| {
-                labels
-                    .get(index)
-                    .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+                existing_slots.get(index).copied().flatten().or_else(|| {
+                    labels
+                        .get(index)
+                        .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+                })
             })
             .or_else(|| CargoType::from_cargo_id(local));
         let Some(cargo) = cargo else {
@@ -2090,6 +2138,8 @@ pub fn apply_industry_dynamic_cargo_callbacks(
 
     let mut ctx = action2_eval_ctx_from_industry(industry, u32::from(industry.newgrf_random));
     let unlimited = def.has_unlimited_cargo_types();
+    let input_static_slots = industry.newgrf_input_cargo_slots.clone();
+    let output_static_slots = industry.newgrf_output_cargo_slots.clone();
     let input_slots = if input_declared {
         callback_industry_cargo_slots(
             runtime,
@@ -2103,9 +2153,14 @@ pub fn apply_industry_dynamic_cargo_callbacks(
             },
             &def.accepted_cargo_indices,
             &def.accepted_cargo_labels,
+            &input_static_slots,
         )
     } else {
-        static_industry_cargo_slots(&def.accepted_cargo_indices, &def.accepted_cargo_labels)
+        static_industry_cargo_slots(
+            &def.accepted_cargo_indices,
+            &def.accepted_cargo_labels,
+            &input_static_slots,
+        )
     };
     let output_slots = if output_declared {
         callback_industry_cargo_slots(
@@ -2120,9 +2175,14 @@ pub fn apply_industry_dynamic_cargo_callbacks(
             },
             &def.produced_cargo_indices,
             &def.produced_cargo_labels,
+            &output_static_slots,
         )
     } else {
-        static_industry_cargo_slots(&def.produced_cargo_indices, &def.produced_cargo_labels)
+        static_industry_cargo_slots(
+            &def.produced_cargo_indices,
+            &def.produced_cargo_labels,
+            &output_static_slots,
+        )
     };
 
     industry.newgrf_dynamic_cargo_types = true;
@@ -2276,7 +2336,7 @@ pub fn resolve_cargo_profit_callback(
     let param2 = distance.min(u32::from(u16::MAX))
         | (count.min(u32::from(u8::MAX)) << 16)
         | (u32::from(transit_periods.min(u16::from(u8::MAX))) << 24);
-    let result = runtime.resolve_callback(def.id, CBID_CARGO_PROFIT_CALC, 0, param2);
+    let result = runtime.resolve_callback(def.local_id, CBID_CARGO_PROFIT_CALC, 0, param2);
     if result == CALLBACK_FAILED {
         return None;
     }
@@ -2328,7 +2388,7 @@ pub fn resolve_cargo_station_rating_callback(
         | (max_waiting_cargo.min(u32::from(u16::MAX)) << 8)
         | (u32::from(speed) << 24);
     let result = runtime.resolve_callback(
-        def.id,
+        def.local_id,
         CBID_CARGO_STATION_RATING_CALC,
         cargo_station_rating_vehicle_param(last_vehicle_kind),
         param2,
@@ -3081,7 +3141,31 @@ pub struct IndustryTileCargoAcceptance {
     pub amounts: [i16; crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS],
 }
 
-fn industry_tile_static_cargo(def: &IndustryTileSpecDef, slot: usize) -> Option<CargoType> {
+fn industry_parent_cargo_for_local(
+    industry: &Industry,
+    industry_catalog: &[IndustrySpecDef],
+    local: u8,
+) -> Option<CargoType> {
+    let industry_def = industry
+        .newgrf_type_id
+        .and_then(|id| industry_catalog.iter().find(|def| def.id == id))?;
+    let index = industry_def
+        .accepted_cargo_indices
+        .iter()
+        .position(|&candidate| candidate == local)?;
+    industry
+        .newgrf_input_cargo_slots
+        .get(index)
+        .copied()
+        .flatten()
+}
+
+fn industry_tile_static_cargo(
+    def: &IndustryTileSpecDef,
+    industry: &Industry,
+    industry_catalog: &[IndustrySpecDef],
+    slot: usize,
+) -> Option<CargoType> {
     let local = *def.accepts_cargo_indices.get(slot)?;
     if local == u8::MAX {
         return None;
@@ -3089,10 +3173,16 @@ fn industry_tile_static_cargo(def: &IndustryTileSpecDef, slot: usize) -> Option<
     def.accepts_cargo_labels
         .get(slot)
         .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+        .or_else(|| industry_parent_cargo_for_local(industry, industry_catalog, local))
         .or_else(|| CargoType::from_cargo_id(local))
 }
 
-fn industry_tile_cargo_for_local(def: &IndustryTileSpecDef, local: u8) -> Option<CargoType> {
+fn industry_tile_cargo_for_local(
+    def: &IndustryTileSpecDef,
+    industry: &Industry,
+    industry_catalog: &[IndustrySpecDef],
+    local: u8,
+) -> Option<CargoType> {
     if local == 0x1F {
         return None;
     }
@@ -3104,16 +3194,18 @@ fn industry_tile_cargo_for_local(def: &IndustryTileSpecDef, local: u8) -> Option
                 .get(slot)
                 .and_then(|label| cargo_type_from_label(Some(label.as_str())))
         })
+        .or_else(|| industry_parent_cargo_for_local(industry, industry_catalog, local))
         .or_else(|| CargoType::from_cargo_id(local))
 }
 
 fn static_industry_tile_cargo_acceptance(
     def: &IndustryTileSpecDef,
     industry: &Industry,
+    industry_catalog: &[IndustrySpecDef],
 ) -> IndustryTileCargoAcceptance {
     let mut result = IndustryTileCargoAcceptance::default();
     for slot in 0..result.cargos.len() {
-        result.cargos[slot] = industry_tile_static_cargo(def, slot);
+        result.cargos[slot] = industry_tile_static_cargo(def, industry, industry_catalog, slot);
         result.amounts[slot] = def.acceptance.get(slot).copied().unwrap_or(0).into();
     }
 
@@ -3159,7 +3251,7 @@ pub fn resolve_industry_tile_cargo_acceptance_callback_with_world(
     industry_catalog: &[IndustrySpecDef],
     climate: crate::Climate,
 ) -> IndustryTileCargoAcceptance {
-    let mut result = static_industry_tile_cargo_acceptance(def, industry);
+    let mut result = static_industry_tile_cargo_acceptance(def, industry, industry_catalog);
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return result;
     };
@@ -3200,7 +3292,8 @@ pub fn resolve_industry_tile_cargo_acceptance_callback_with_world(
                 let shift = u32::try_from(slot * 5).unwrap_or(0);
                 let local =
                     u8::try_from((u32::from(callback_result) >> shift) & 0x1F).unwrap_or(0x1F);
-                result.cargos[slot] = industry_tile_cargo_for_local(def, local);
+                result.cargos[slot] =
+                    industry_tile_cargo_for_local(def, industry, industry_catalog, local);
             }
         }
     }

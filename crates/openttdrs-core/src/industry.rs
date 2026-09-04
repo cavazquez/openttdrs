@@ -1592,6 +1592,7 @@ impl Industry {
             for cargo in ALL_CARGO_TYPES {
                 let _ = self.take_accepted_cargo_waiting(cargo, u32::MAX);
             }
+            self.newgrf_accepted_cargo_waiting.clear_custom();
             return 0;
         }
 
@@ -1607,6 +1608,7 @@ impl Industry {
         for cargo in ALL_CARGO_TYPES {
             let _ = self.take_accepted_cargo_waiting(cargo, u32::MAX);
         }
+        self.newgrf_accepted_cargo_waiting.clear_custom();
         if outputs.is_empty() {
             return 0;
         }
@@ -2086,8 +2088,21 @@ impl Industry {
 
     /// Asocia todos los productores/insumos resueltos de un `IndustrySpecDef`.
     #[must_use]
-    pub fn with_newgrf_spec(mut self, type_id: u16, def: &IndustrySpecDef) -> Self {
-        let outputs = def.produced_cargo_types();
+    pub fn with_newgrf_spec(self, type_id: u16, def: &IndustrySpecDef) -> Self {
+        self.with_newgrf_spec_and_cargo_catalog(type_id, def, &[])
+    }
+
+    /// Igual que [`Self::with_newgrf_spec`], resolviendo labels custom contra
+    /// el catálogo `CargoSpec` activo. El catálogo no se copia: sólo se usa
+    /// para materializar los IDs en los slots de la instancia.
+    #[must_use]
+    pub fn with_newgrf_spec_and_cargo_catalog(
+        mut self,
+        type_id: u16,
+        def: &IndustrySpecDef,
+        cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    ) -> Self {
+        let outputs = def.produced_cargo_types_with_catalog(cargo_catalog);
         self.newgrf_type_id = Some(type_id);
         self.newgrf_production_rate = Some(def.primary_production_rate());
         self.newgrf_secondary_production_rate = def.secondary_production_rate();
@@ -2099,15 +2114,19 @@ impl Industry {
         self.newgrf_input_cargo_slots = def
             .accepted_cargo_labels
             .iter()
-            .map(|label| crate::industry_spec::cargo_type_from_label(Some(label.as_str())))
+            .map(|label| {
+                crate::cargo_spec::cargo_type_from_label_with_catalog(label, cargo_catalog)
+            })
             .collect();
         self.newgrf_output_cargo_slots = def
             .produced_cargo_labels
             .iter()
-            .map(|label| crate::industry_spec::cargo_type_from_label(Some(label.as_str())))
+            .map(|label| {
+                crate::cargo_spec::cargo_type_from_label_with_catalog(label, cargo_catalog)
+            })
             .collect();
 
-        let accepted = def.accepted_cargo_types();
+        let accepted = def.accepted_cargo_types_with_catalog(cargo_catalog);
         let output_count = outputs.len();
         self.newgrf_processing_secondary_multipliers = accepted
             .iter()
@@ -2274,6 +2293,25 @@ pub fn transport_industry_goods_with_settings(
     let primary = industry.output_cargo();
     let secondary = industry.secondary_output_cargo();
     for cargo in ALL_CARGO_TYPES {
+        if cargo == primary || Some(cargo) == secondary {
+            continue;
+        }
+        total = total.saturating_add(transport_industry_extra_cargo_stock(
+            industry,
+            stations,
+            selectgoods,
+            serve_neutral_industries,
+            cargo,
+        ));
+    }
+    // Los cargos custom no forman parte de `ALL_CARGO_TYPES`, pero sí pueden
+    // vivir en el mismo stock adicional que las salidas vanilla desde CB1/CB2.
+    let custom_cargos: Vec<_> = industry
+        .newgrf_extra_produced_cargo
+        .custom_entries()
+        .map(|(cargo, _)| cargo)
+        .collect();
+    for cargo in custom_cargos {
         if cargo == primary || Some(cargo) == secondary {
             continue;
         }
@@ -2967,6 +3005,57 @@ mod tests {
         );
         assert_eq!(industry.extra_produced_cargo(CargoType::Paper), 0);
         assert!(stations[0].cargo_stock.paper > 0);
+    }
+
+    #[test]
+    fn newgrf_custom_cargo_flows_through_processor() {
+        let custom = CargoType::Custom(0);
+        let cargo_catalog = vec![crate::CargoSpecDef {
+            id: crate::cargo::CUSTOM_CARGO_OFFSET,
+            local_id: 3,
+            label: "TOFU".into(),
+            name: "Tofu".into(),
+            from_newgrf: true,
+            is_freight: true,
+            ..crate::CargoSpecDef::default()
+        }];
+        let def = IndustrySpecDef {
+            id: 99,
+            local_id: 2,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![3],
+            produced_cargo_labels: vec!["TOFU".into()],
+            accepted_cargo_indices: vec![3],
+            accepted_cargo_labels: vec!["TOFU".into()],
+            production_rates: vec![0],
+            input_multipliers: vec![256],
+            callback_mask: 0,
+            behaviour: 0,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "Tofu plant".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 2,
+            newgrf_runtime: None,
+        };
+        let pos = TileCoord::new(4, 4);
+        let mut processor = Industry::new(pos, IndustryKind::Factory)
+            .with_newgrf_spec_and_cargo_catalog(def.id, &def, &cargo_catalog);
+        assert_eq!(processor.produced_cargos(), vec![custom]);
+        assert_eq!(processor.station_input_requirements(), vec![(custom, 8)]);
+
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(5, 4),
+            StopKind::TruckStop,
+        )];
+        stations[0].cargo_stock.add(custom, 8);
+        assert!(processor.produce_from_nearby_stations(&mut stations, INDUSTRY_PRODUCE_TICKS * 2));
+        assert_eq!(processor.stock, 8);
+        assert_eq!(stations[0].cargo_stock.get(custom), 0);
     }
 
     #[test]

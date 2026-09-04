@@ -201,6 +201,7 @@ fn action2_eval_ctx_for_station_tile_impl(
 /// fallback de versión que `param2` de CB140; los slots desconocidos (cargos
 /// definidos por un GRF y ausentes del modelo) quedan deliberadamente sin
 /// valor en vez de reutilizar otro cargo.
+#[allow(clippy::large_types_passed_by_value)]
 pub(crate) fn populate_station_cargo_vars(
     ctx: &mut Action2EvalCtx,
     station: &Station,
@@ -225,6 +226,7 @@ pub(crate) fn populate_station_cargo_vars(
     }
 }
 
+#[allow(clippy::large_types_passed_by_value)]
 fn station_cargo_var(
     station: &Station,
     cargo: CargoType,
@@ -269,6 +271,7 @@ fn station_cargo_var(
     }
 }
 
+#[allow(clippy::large_types_passed_by_value)]
 fn cargo_is_accepted(
     station: &Station,
     cargo: CargoType,

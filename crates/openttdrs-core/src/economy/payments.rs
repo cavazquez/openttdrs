@@ -152,6 +152,13 @@ impl CargoType {
                 transit_fast_days: 30,
                 transit_slow_days: 50,
             },
+            Self::Custom(_) => CargoPaymentSpec {
+                // Un catálogo NewGRF sustituye este valor antes de calcular
+                // el ingreso; el fallback sólo evita un match parcial.
+                base_rate: 0,
+                transit_fast_days: 0,
+                transit_slow_days: 0,
+            },
         }
     }
 

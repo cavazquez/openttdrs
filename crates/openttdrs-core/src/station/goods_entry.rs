@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::cargo::{ALL_CARGO_TYPES, CargoType, VANILLA_CARGO_COUNT};
+use crate::cargo::{ALL_CARGO_TYPES, CargoType, MAX_CARGO_ID};
 
 /// Rating con el que nace cada entrada de carga (`INITIAL_STATION_RATING`).
 pub const INITIAL_STATION_RATING: u8 = 175;
@@ -89,16 +89,17 @@ impl GoodsEntry {
     }
 }
 
-/// Entradas de carga de una estación. Acepta arrays legacy de 11 al deserializar.
+/// Entradas de carga de una estación. Acepta arrays legacy de 11 al deserializar
+/// y hasta el límite de IDs custom que mantiene el runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StationGoods {
-    entries: [GoodsEntry; VANILLA_CARGO_COUNT],
+    entries: [GoodsEntry; (MAX_CARGO_ID as usize) + 1],
 }
 
 impl Default for StationGoods {
     fn default() -> Self {
         Self {
-            entries: [GoodsEntry::default(); VANILLA_CARGO_COUNT],
+            entries: [GoodsEntry::default(); (MAX_CARGO_ID as usize) + 1],
         }
     }
 }
@@ -112,14 +113,15 @@ impl Serialize for StationGoods {
 impl<'de> Deserialize<'de> for StationGoods {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let mut v = Vec::<GoodsEntry>::deserialize(deserializer)?;
-        if v.len() > VANILLA_CARGO_COUNT {
+        if v.len() > (MAX_CARGO_ID as usize) + 1 {
             return Err(serde::de::Error::custom(format!(
-                "StationGoods: {} entradas > {VANILLA_CARGO_COUNT}",
-                v.len()
+                "StationGoods: {} entradas > {}",
+                v.len(),
+                (MAX_CARGO_ID as usize) + 1,
             )));
         }
-        v.resize(VANILLA_CARGO_COUNT, GoodsEntry::default());
-        let entries: [GoodsEntry; VANILLA_CARGO_COUNT] = v
+        v.resize((MAX_CARGO_ID as usize) + 1, GoodsEntry::default());
+        let entries: [GoodsEntry; (MAX_CARGO_ID as usize) + 1] = v
             .try_into()
             .map_err(|_| serde::de::Error::custom("StationGoods pad failed"))?;
         Ok(Self { entries })
@@ -129,11 +131,12 @@ impl<'de> Deserialize<'de> for StationGoods {
 impl StationGoods {
     #[must_use]
     pub fn get(&self, cargo: CargoType) -> &GoodsEntry {
-        &self.entries[cargo.cargo_id() as usize]
+        &self.entries[usize::from(cargo.cargo_id()).min(self.entries.len() - 1)]
     }
 
     pub fn get_mut(&mut self, cargo: CargoType) -> &mut GoodsEntry {
-        &mut self.entries[cargo.cargo_id() as usize]
+        let index = usize::from(cargo.cargo_id()).min(self.entries.len() - 1);
+        &mut self.entries[index]
     }
 
     #[must_use]

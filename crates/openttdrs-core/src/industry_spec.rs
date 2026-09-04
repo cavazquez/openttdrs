@@ -8,7 +8,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::cargo::CargoType;
-use crate::cargo_spec::{CargoSpecDef, cargo_spec_def, cargo_type_label};
+use crate::cargo_spec::{
+    CargoSpecDef, cargo_spec_by_local_id, cargo_spec_def, cargo_type_from_label_with_catalog,
+    cargo_type_label,
+};
 use crate::map::TileCoord;
 
 /// Primer tipo de industria definido por `NewGRF` (`OpenTTD` `NEW_INDUSTRYOFFSET`).
@@ -232,10 +235,33 @@ impl IndustrySpecDef {
         cargo_type_from_label(self.produced_cargo_labels.first().map(String::as_str))
     }
 
+    /// Primer cargo de salida, resolviendo también labels definidos por el
+    /// catálogo `NewGRF` activo.
+    #[must_use]
+    pub fn primary_output_cargo_with_catalog(
+        &self,
+        cargo_catalog: &[CargoSpecDef],
+    ) -> Option<CargoType> {
+        self.produced_cargo_labels
+            .first()
+            .and_then(|label| cargo_type_from_label_with_catalog(label, cargo_catalog))
+    }
+
     /// Segundo cargo de salida mapeable a [`CargoType`] conocido.
     #[must_use]
     pub fn secondary_output_cargo(&self) -> Option<CargoType> {
         cargo_type_from_label(self.produced_cargo_labels.get(1).map(String::as_str))
+    }
+
+    /// Segundo cargo de salida, incluyendo cargos custom del catálogo.
+    #[must_use]
+    pub fn secondary_output_cargo_with_catalog(
+        &self,
+        cargo_catalog: &[CargoSpecDef],
+    ) -> Option<CargoType> {
+        self.produced_cargo_labels
+            .get(1)
+            .and_then(|label| cargo_type_from_label_with_catalog(label, cargo_catalog))
     }
 
     /// Cargos de salida mapeables, conservando el orden declarado por el GRF.
@@ -247,12 +273,36 @@ impl IndustrySpecDef {
             .collect()
     }
 
+    /// Cargos de salida con resolución contra `CargoSpecDef` custom.
+    #[must_use]
+    pub fn produced_cargo_types_with_catalog(
+        &self,
+        cargo_catalog: &[CargoSpecDef],
+    ) -> Vec<CargoType> {
+        self.produced_cargo_labels
+            .iter()
+            .filter_map(|label| cargo_type_from_label_with_catalog(label, cargo_catalog))
+            .collect()
+    }
+
     /// Cargos de entrada mapeables a [`CargoType`].
     #[must_use]
     pub fn accepted_cargo_types(&self) -> Vec<CargoType> {
         self.accepted_cargo_labels
             .iter()
             .filter_map(|l| cargo_type_from_label(Some(l.as_str())))
+            .collect()
+    }
+
+    /// Cargos aceptados con resolución contra `CargoSpecDef` custom.
+    #[must_use]
+    pub fn accepted_cargo_types_with_catalog(
+        &self,
+        cargo_catalog: &[CargoSpecDef],
+    ) -> Vec<CargoType> {
+        self.accepted_cargo_labels
+            .iter()
+            .filter_map(|label| cargo_type_from_label_with_catalog(label, cargo_catalog))
             .collect()
     }
 
@@ -355,6 +405,32 @@ pub fn cargo_type_from_label(label: Option<&str>) -> Option<CargoType> {
     CargoType::from_label(label)
 }
 
+/// Resuelve un índice local de cargo conservando la identidad del GRF.
+#[must_use]
+pub fn cargo_type_from_local_id(
+    local_id: u8,
+    grfid: u32,
+    cargo_catalog: &[CargoSpecDef],
+) -> Option<CargoType> {
+    cargo_spec_by_local_id(cargo_catalog, grfid, local_id)
+        .and_then(CargoSpecDef::cargo_type)
+        .or_else(|| CargoType::from_cargo_id(local_id))
+}
+
+/// Traduce un índice de cargo usando primero el `CargoSpec` del GRF que lo
+/// declaró y después la tabla climate-dependent legacy.
+#[must_use]
+pub fn get_cargo_translation_for_grf(
+    cargo: u8,
+    catalog: &[CargoSpecDef],
+    climate: crate::Climate,
+    grfid: u32,
+) -> Option<String> {
+    cargo_spec_by_local_id(catalog, grfid, cargo)
+        .map(|def| def.label.clone())
+        .or_else(|| get_cargo_translation_for_climate(cargo, catalog, climate))
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -435,5 +511,26 @@ mod tests {
         assert_eq!(cargo_type_from_label(Some("rubr")), Some(CargoType::Rubber));
         assert_eq!(cargo_type_from_label(Some("TOFF")), Some(CargoType::Toffee));
         assert_eq!(cargo_type_from_label(Some("unknown")), None);
+    }
+
+    #[test]
+    fn cargo_translation_prefers_grf_local_custom_slot() {
+        let catalog = vec![CargoSpecDef {
+            local_id: 6,
+            id: crate::cargo::CUSTOM_CARGO_OFFSET + 1,
+            label: "TOFU".into(),
+            from_newgrf: true,
+            grfid: 0x1234,
+            ..CargoSpecDef::default()
+        }];
+        assert_eq!(
+            get_cargo_translation_for_grf(6, &catalog, crate::Climate::Temperate, 0x1234)
+                .as_deref(),
+            Some("TOFU")
+        );
+        assert_eq!(
+            cargo_type_from_local_id(6, 0x1234, &catalog),
+            Some(CargoType::Custom(1))
+        );
     }
 }

@@ -169,8 +169,9 @@ pub use canal_spec::{
     vanilla_canal_feature_catalog,
 };
 pub use cargo::{
-    ALL_CARGO_TYPES, ARCTIC_CARGO_TYPES, CargoStock, CargoType, NUM_ORIGINAL_CARGO, OrderSettings,
-    TEMPERATE_CARGO_TYPES, TOYLAND_CARGO_TYPES, TROPIC_CARGO_TYPES, VANILLA_CARGO_COUNT,
+    ALL_CARGO_TYPES, ARCTIC_CARGO_TYPES, CUSTOM_CARGO_COUNT, CUSTOM_CARGO_OFFSET, CargoStock,
+    CargoType, MAX_CARGO_ID, NUM_ORIGINAL_CARGO, OrderSettings, TEMPERATE_CARGO_TYPES,
+    TOYLAND_CARGO_TYPES, TROPIC_CARGO_TYPES, VANILLA_CARGO_COUNT, custom_cargo,
 };
 pub use cargo_monitor::{
     CargoMonitor, CargoMonitorId, CargoSource, decode_monitor_cargo, decode_monitor_company,
@@ -184,7 +185,8 @@ pub use cargo_packet::{
 pub use cargo_spec::{
     CARGO_CALLBACK_PROFIT_CALC_MASK, CARGO_CALLBACK_STATION_RATING_CALC_MASK, CargoSpecDef,
     DEFAULT_CARGO_CAPACITY_MULTIPLIER, apply_cargo_capacity_multiplier, cargo_spec_by_label,
-    cargo_spec_def, cargo_spec_display_name, cargo_type_label, empty_cargo_spec_catalog,
+    cargo_spec_by_local_id, cargo_spec_def, cargo_spec_display_name, cargo_spec_for_type,
+    cargo_type_from_label_with_catalog, cargo_type_label, empty_cargo_spec_catalog,
     payment_spec_for_cargo, payment_spec_for_cargo_climate,
 };
 pub use cheats::CheatsState;
@@ -608,6 +610,7 @@ pub use rail_type::{
 };
 pub use refit::{
     next_refit_cargo, refit_allowed, refittable_cargo_types, refittable_cargo_types_for_engine,
+    refittable_cargo_types_for_engine_with_catalog, refittable_cargo_types_with_catalog,
     vehicle_hidden_from_view, vehicle_hidden_in_tunnel, vehicle_hidden_on_map, vehicle_in_depot,
 };
 pub use road_action2::action2_eval_ctx_for_road_tile;

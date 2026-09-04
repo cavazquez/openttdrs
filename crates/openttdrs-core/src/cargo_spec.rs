@@ -21,6 +21,9 @@ pub const CARGO_CALLBACK_STATION_RATING_CALC_MASK: u8 = 1 << 1;
 /// Spec de cargo definido por Action0.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CargoSpecDef {
+    /// ID local dentro del GRF (`CargoSpec` conserva además el ID global).
+    #[serde(default)]
+    pub local_id: u8,
     pub id: u8,
     pub bitnum: u8,
     pub label: String,
@@ -74,6 +77,7 @@ const fn default_capacity_multiplier() -> u16 {
 impl Default for CargoSpecDef {
     fn default() -> Self {
         Self {
+            local_id: 0,
             id: 0,
             bitnum: 0xFF,
             label: String::new(),
@@ -97,6 +101,12 @@ impl Default for CargoSpecDef {
 }
 
 impl CargoSpecDef {
+    /// Cargo runtime que corresponde al ID global de `OpenTTD`.
+    #[must_use]
+    pub const fn cargo_type(&self) -> Option<CargoType> {
+        CargoType::from_cargo_id(self.id)
+    }
+
     /// `true` si el cargo solicita CB `0x39` para calcular el ingreso de entrega.
     #[must_use]
     pub const fn has_profit_calc_callback(&self) -> bool {
@@ -134,6 +144,17 @@ pub fn cargo_spec_def(catalog: &[CargoSpecDef], id: u8) -> Option<&CargoSpecDef>
     catalog.iter().find(|d| d.id == id)
 }
 
+/// Busca la spec por el ID runtime, con fallback por label para cargos vanilla
+/// cuyos IDs comparten slot entre climas.
+#[must_use]
+pub fn cargo_spec_for_type(catalog: &[CargoSpecDef], cargo: CargoType) -> Option<&CargoSpecDef> {
+    cargo_spec_def(catalog, cargo.cargo_id()).or_else(|| {
+        catalog
+            .iter()
+            .find(|def| def.label.eq_ignore_ascii_case(cargo.label()))
+    })
+}
+
 /// Busca por label 4 chars (case-insensitive).
 #[must_use]
 pub fn cargo_spec_by_label<'a>(
@@ -143,6 +164,37 @@ pub fn cargo_spec_by_label<'a>(
     catalog
         .iter()
         .find(|d| d.label.eq_ignore_ascii_case(label.trim()))
+}
+
+/// Busca un cargo por el índice que el GRF usa en sus tablas locales.
+///
+/// Los índices locales se repiten entre GRF, por lo que el `grfid` forma parte
+/// de la clave siempre que el llamador lo conozca. El fallback por índice sin
+/// GRFID sólo se usa para catálogos legacy que no conservaban esa columna.
+#[must_use]
+pub fn cargo_spec_by_local_id(
+    catalog: &[CargoSpecDef],
+    grfid: u32,
+    local_id: u8,
+) -> Option<&CargoSpecDef> {
+    catalog
+        .iter()
+        .find(|d| d.grfid == grfid && d.local_id == local_id)
+        .or_else(|| (grfid == 0).then(|| catalog.iter().find(|d| d.local_id == local_id))?)
+}
+
+/// Resuelve un label vanilla o uno definido por `NewGRF` al ID runtime.
+///
+/// `CargoType::from_label` deliberadamente sólo conoce los cargos vanilla; este
+/// helper es el punto que debe usar cualquier runtime que tenga el catálogo a
+/// mano para no convertir cargos custom en `INVALID_CARGO`.
+#[must_use]
+pub fn cargo_type_from_label_with_catalog(
+    label: &str,
+    catalog: &[CargoSpecDef],
+) -> Option<CargoType> {
+    CargoType::from_label(label)
+        .or_else(|| cargo_spec_by_label(catalog, label).and_then(CargoSpecDef::cargo_type))
 }
 
 /// Label `OpenTTD` `FourCC` del `CargoType` (`PASS`, `COAL`, `CTCD`, …).
@@ -165,7 +217,7 @@ pub fn payment_spec_for_cargo_climate(
     climate: crate::Climate,
 ) -> CargoPaymentSpec {
     let vanilla = cargo.payment_spec_for_climate(climate);
-    let Some(def) = cargo_spec_by_label(catalog, cargo_type_label(cargo)) else {
+    let Some(def) = cargo_spec_for_type(catalog, cargo) else {
         return vanilla;
     };
     CargoPaymentSpec {
@@ -203,16 +255,13 @@ pub fn apply_cargo_capacity_multiplier(
     if base_capacity == 0 {
         return 0;
     }
-    let mult = cargo_spec_by_label(catalog, cargo_type_label(cargo)).map_or(
-        DEFAULT_CARGO_CAPACITY_MULTIPLIER,
-        |d| {
-            if d.capacity_multiplier == 0 {
-                DEFAULT_CARGO_CAPACITY_MULTIPLIER
-            } else {
-                d.capacity_multiplier
-            }
-        },
-    );
+    let mult = cargo_spec_for_type(catalog, cargo).map_or(DEFAULT_CARGO_CAPACITY_MULTIPLIER, |d| {
+        if d.capacity_multiplier == 0 {
+            DEFAULT_CARGO_CAPACITY_MULTIPLIER
+        } else {
+            d.capacity_multiplier
+        }
+    });
     let scaled =
         (u64::from(base_capacity) * u64::from(mult)) / u64::from(DEFAULT_CARGO_CAPACITY_MULTIPLIER);
     u32::try_from(scaled).unwrap_or(u32::MAX).max(1)
@@ -221,7 +270,7 @@ pub fn apply_cargo_capacity_multiplier(
 /// Nombre UI: prioriza el spec `NewGRF` si existe.
 #[must_use]
 pub fn cargo_spec_display_name(cargo: CargoType, catalog: &[CargoSpecDef]) -> String {
-    cargo_spec_by_label(catalog, cargo_type_label(cargo))
+    cargo_spec_for_type(catalog, cargo)
         .map(|d| d.name.clone())
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| cargo.display_name().to_string())
@@ -271,5 +320,30 @@ mod tests {
             ..CargoSpecDef::default()
         }];
         assert!(cargo_spec_by_label(&catalog, "COAL").is_some());
+    }
+
+    #[test]
+    fn custom_label_resolves_to_global_runtime_slot() {
+        let catalog = vec![CargoSpecDef {
+            id: crate::cargo::CUSTOM_CARGO_OFFSET + 2,
+            local_id: 4,
+            label: "TOFU".into(),
+            name: "Tofu".into(),
+            from_newgrf: true,
+            initial_payment: 7777,
+            ..CargoSpecDef::default()
+        }];
+        assert_eq!(
+            cargo_type_from_label_with_catalog("tofu", &catalog),
+            Some(CargoType::Custom(2))
+        );
+        assert_eq!(
+            payment_spec_for_cargo(CargoType::Custom(2), &catalog).base_rate,
+            7777
+        );
+        assert_eq!(
+            cargo_spec_display_name(CargoType::Custom(2), &catalog),
+            "Tofu"
+        );
     }
 }

@@ -357,6 +357,9 @@ impl StationCargoList {
         for cargo in ALL_CARGO_TYPES {
             list.add_amount(cargo, stock.get(cargo), source);
         }
+        for (cargo, amount) in stock.custom_entries() {
+            list.add_amount(cargo, amount, source);
+        }
         list
     }
 

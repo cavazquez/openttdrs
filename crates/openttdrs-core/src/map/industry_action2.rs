@@ -528,6 +528,10 @@ fn populate_industry_parent_scope(
     let last_accepted = crate::ALL_CARGO_TYPES
         .iter()
         .map(|&cargo| industry.last_accepted_date(cargo))
+        .chain(
+            (0..crate::CUSTOM_CARGO_COUNT)
+                .map(|slot| industry.last_accepted_date(crate::cargo::custom_cargo(slot))),
+        )
         .max()
         .unwrap_or(0);
     ctx.parent_vars.insert(
@@ -771,6 +775,7 @@ fn industry_cargo_variable(
             labels
                 .get(index)
                 .and_then(|label| CargoType::from_label(label))
+                .or_else(|| dynamic_slots.get(index).copied().flatten())
                 .or_else(|| CargoType::from_cargo_id(parameter))
         };
     let produced = spec

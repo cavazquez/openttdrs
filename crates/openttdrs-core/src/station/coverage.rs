@@ -63,6 +63,11 @@ impl StationCoverage {
                     .iter()
                     .copied()
                     .any(|cargo| self.accepted_cargo.get(cargo) >= STATION_ACCEPTANCE_THRESHOLD)
+            || self.exact_cargo_acceptance
+                && self
+                    .accepted_cargo
+                    .custom_entries()
+                    .any(|(_, amount)| amount >= STATION_ACCEPTANCE_THRESHOLD)
     }
 
     /// ¿La estación acepta mercancías urbanas? (`amt >= 8`).
@@ -620,6 +625,109 @@ mod tests {
                 CargoType::Goods,
             ),
             "CB2C reemplaza Goods por Coal; no debe quedar el proxy genérico"
+        );
+    }
+
+    #[test]
+    fn newgrf_industry_tile_acceptance_can_return_custom_cargo() {
+        let coord = TileCoord::new(8, 8);
+        let mut map = Map::new_flat(16, 16, 0);
+        let mut tile = map.get(coord).expect("tile");
+        tile.kind = TileKind::Industry;
+        tile.m1 = 0x80;
+        tile.m2 = 7;
+        crate::map::set_industry_gfx(&mut tile, 175);
+        map.set_tile(coord, tile).unwrap();
+
+        let tile_def = IndustryTileSpecDef {
+            gfx: crate::industry_tile::IndustryTileGfxId(175),
+            subst_id: 0,
+            from_newgrf: true,
+            slopes_refused: 0,
+            accepts_cargo_indices: vec![5],
+            accepts_cargo_labels: vec!["GOOD".into()],
+            acceptance: vec![8],
+            callback_mask: crate::industry_tile::INDUSTRY_TILE_CALLBACK_ACCEPT_CARGO_MASK
+                | crate::industry_tile::INDUSTRY_TILE_CALLBACK_CARGO_ACCEPTANCE_MASK,
+            animation_frames: 0,
+            animation_status: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_grfid: 1,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(industry_tile_acceptance_runtime(3, 8))),
+        };
+        let cargo_catalog = vec![crate::CargoSpecDef {
+            id: crate::cargo::CUSTOM_CARGO_OFFSET,
+            local_id: 3,
+            label: "TOFU".into(),
+            from_newgrf: true,
+            grfid: 1,
+            is_freight: true,
+            ..crate::CargoSpecDef::default()
+        }];
+        let industry_def = crate::IndustrySpecDef {
+            id: 7,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: Vec::new(),
+            produced_cargo_labels: Vec::new(),
+            accepted_cargo_indices: vec![3],
+            accepted_cargo_labels: vec!["TOFU".into()],
+            production_rates: Vec::new(),
+            input_multipliers: Vec::new(),
+            callback_mask: 0,
+            behaviour: 0,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "Tofu plant".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        };
+        let custom = CargoType::Custom(0);
+        let mut industries = vec![
+            Industry::new(coord, IndustryKind::Factory)
+                .with_instance_id(7)
+                .with_newgrf_spec_and_cargo_catalog(7, &industry_def, &cargo_catalog),
+        ];
+        let station = Station::new_with_kind(TileCoord::new(9, 8), StopKind::TruckStop);
+        assert!(station_accepts_cargo_with_newgrf(
+            &map,
+            &mut industries,
+            &[],
+            std::slice::from_ref(&tile_def),
+            std::slice::from_ref(&industry_def),
+            Climate::Temperate,
+            &station,
+            custom,
+        ));
+        assert!(
+            !station_accepts_cargo_with_newgrf(
+                &map,
+                &mut industries,
+                &[],
+                &[IndustryTileSpecDef {
+                    accepts_cargo_indices: vec![5],
+                    accepts_cargo_labels: vec!["GOOD".into()],
+                    newgrf_runtime: Some(Box::new(industry_tile_acceptance_runtime(3, 0))),
+                    ..tile_def.clone()
+                }],
+                std::slice::from_ref(&industry_def),
+                Climate::Temperate,
+                &station,
+                CargoType::Goods,
+            ),
+            "el callback custom no debe volver a aceptar Goods por proxy"
         );
     }
 }

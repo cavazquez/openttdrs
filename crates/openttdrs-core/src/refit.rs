@@ -109,6 +109,73 @@ pub fn refittable_cargo_types_for_engine(engine: &crate::engine::EngineDef) -> V
     }
 }
 
+/// Variante que añade los cargos custom registrados por los `NewGRF` activos.
+///
+/// Las máscaras históricas de `EngineDef` sólo tienen 32 bits; los cargos con
+/// ID superior a 31 no pueden expresarse allí y se admiten por la misma regla
+/// de clase que el resto del vehículo. El límite coincide con los slots que
+/// `CargoStock` puede transportar.
+#[must_use]
+pub fn refittable_cargo_types_for_engine_with_catalog(
+    engine: &crate::engine::EngineDef,
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+) -> Vec<CargoType> {
+    let mut cargos = refittable_cargo_types_for_engine(engine);
+    let custom = cargo_catalog.iter().filter_map(|def| {
+        let cargo = def.cargo_type()?;
+        let vehicle_allows_freight = match engine.kind {
+            VehicleKind::Truck | VehicleKind::Ship => true,
+            VehicleKind::Train => {
+                !matches!(engine.cargo, Some(CargoType::Passengers | CargoType::Mail))
+            }
+            VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => false,
+        };
+        (cargo.is_freight() && vehicle_allows_freight).then_some(cargo)
+    });
+    for cargo in custom {
+        let mask_allows = engine.refit_mask == 0
+            || (u32::from(cargo.cargo_id()) < u32::BITS
+                && engine.refit_mask & (1_u32 << cargo.cargo_id()) != 0);
+        if mask_allows && !cargos.contains(&cargo) {
+            cargos.push(cargo);
+        }
+    }
+    cargos
+}
+
+/// Resuelve las opciones de un vehículo usando su motor efectivo y el
+/// catálogo de cargos custom. Es la entrada para comandos que ya poseen
+/// `GameState`; las APIs históricas sin catálogo quedan sin cambios.
+#[must_use]
+pub fn refittable_cargo_types_with_catalog(
+    vehicle: &Vehicle,
+    engine_catalog: &[crate::engine::EngineDef],
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+) -> Vec<CargoType> {
+    if let Some(engine) = vehicle
+        .engine_id
+        .and_then(|id| crate::engine::engine_in_catalog(engine_catalog, id))
+    {
+        return refittable_cargo_types_for_engine_with_catalog(engine, cargo_catalog);
+    }
+    let mut cargos = refittable_cargo_types(vehicle).to_vec();
+    let allows_freight = matches!(
+        vehicle.kind,
+        VehicleKind::Truck | VehicleKind::Train | VehicleKind::Ship
+    );
+    if allows_freight {
+        for def in cargo_catalog {
+            let Some(cargo) = def.cargo_type() else {
+                continue;
+            };
+            if cargo.is_freight() && !cargos.contains(&cargo) {
+                cargos.push(cargo);
+            }
+        }
+    }
+    cargos
+}
+
 #[must_use]
 pub fn vehicle_in_depot(map: &Map, pos: crate::TileCoord) -> bool {
     matches!(

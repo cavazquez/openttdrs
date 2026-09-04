@@ -4,7 +4,7 @@
 //! wagon removal (`renew_keep_length`).
 
 use crate::engine::{EngineDef, engine_available_in_year, engine_by_id};
-use crate::refit::{refittable_cargo_types, vehicle_in_depot};
+use crate::refit::{refittable_cargo_types_for_engine_with_catalog, vehicle_in_depot};
 use crate::train_consist::{consist_unit_ids, detach_unit, engine_is_wagon};
 use crate::vehicle::{Vehicle, VehicleKind};
 use crate::{CompanyId, GameState, economy};
@@ -147,10 +147,10 @@ fn apply_engine_with_refit(
     if let Some(c) = new_engine.cargo {
         vehicle.cargo_type = Some(c);
     } else if let Some(current) = vehicle.cargo_type {
-        let mut probe = vehicle.clone();
-        probe.engine_id = Some(new_engine.id);
-        if !refittable_cargo_types(&probe).contains(&current)
-            && let Some(&first) = refittable_cargo_types(&probe).first()
+        let refittable =
+            refittable_cargo_types_for_engine_with_catalog(new_engine, cargo_spec_catalog);
+        if !refittable.contains(&current)
+            && let Some(&first) = refittable.first()
         {
             vehicle.cargo_type = Some(first);
         }

@@ -1191,7 +1191,7 @@ impl GameState {
 
     /// Reasigna `next_hop` de packets cuya vía ya no existe en los flows.
     fn reroute_stale_cargo_hops(&mut self) {
-        use crate::cargo::ALL_CARGO_TYPES;
+        use crate::cargo::{ALL_CARGO_TYPES, CUSTOM_CARGO_COUNT};
         use crate::cargo_packet::StationHopKey;
         use crate::flow_stat::DistributionType;
 
@@ -1209,7 +1209,11 @@ impl GameState {
                 .filter_map(|StationHopKey(h)| *h)
                 .collect();
             for avoid in hops {
-                for cargo in ALL_CARGO_TYPES {
+                for cargo in ALL_CARGO_TYPES
+                    .iter()
+                    .copied()
+                    .chain((0..CUSTOM_CARGO_COUNT).map(crate::cargo::custom_cargo))
+                {
                     // ¿Algún share sigue apuntando a `avoid`?
                     let still_valid = self
                         .runtime

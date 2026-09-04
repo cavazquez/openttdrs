@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `b32b87f4`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `15c8bfcf`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga y los pesos vial
 y ferroviario quedan actualizados en este corte).
 Referencia: OpenTTD 15.3, commit
@@ -78,7 +78,7 @@ ferroviaria reciben el catálogo `CargoSpec` activo y aplican `prop 0x0F`
 Un peso NewGRF explícito ya modifica aceleración, esfuerzo tractor y
 `cached_weight_t`; si falta la spec o el peso es cero se conserva el fallback
 vanilla. La multiplicación `freight_trains`, el resto de settings económicos y
-las propiedades CTT siguen siendo la siguiente brecha acotada.
+las propiedades CTT fueron separadas en el bloque siguiente.
 
 Actualización #329-CARGO-TRAIN-WEIGHT-063 (2026-09-04, `b32b87f4`):
 `ConsistChanged` suma el peso de cada unidad cargada con `CargoSpec::weight` y
@@ -89,6 +89,15 @@ antes de cargar; la regresión `consist_changed_includes_active_custom_cargo_wei
 fija 8 unidades de peso 32 como 16 toneladas. El setting
 `vehicle.freight_trains` todavía no está modelado, por lo que la escala de
 trenes de carga y el resto de propiedades económicas siguen parciales.
+
+Actualización #329-CARGO-FREIGHT-SETTING-064 (2026-09-04, `15c8bfcf`):
+`GameState` persiste `vehicle.freight_trains` con el rango nativo `1..=255` y
+default `1`; `PATS` lo lee/escribe con la versión `SLV_39` y los saves legacy
+anteriores a esa frontera vuelven al default. `CargoSpec::is_freight` decide
+qué cargas reciben el multiplicador, por lo que pasajeros y otros cargos no se
+alteran. La masa resultante se usa en todos los rebuilds de consist y se
+refresca después de cargar/descargar; las propiedades CTT, la GUI de settings y
+los demás settings económicos continúan parciales.
 
 Actualización vigente del corte: `036fda1f` implementa el monitor efímero de
 carga compatible con `_cargo_pickups`/`_cargo_deliveries`: codificación nativa

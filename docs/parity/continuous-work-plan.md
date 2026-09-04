@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`b32b87f4`** (`movement: include cargo weight in train consists`),
+Base funcional local y publicada: **`15c8bfcf`** (`settings: apply freight train cargo weight multiplier`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -68,8 +68,10 @@ completa y los cargos sin catálogo siguen fuera del alcance.
 usa `prop 0x0F` para el peso de carga custom; los callers legacy conservan el
 fallback vanilla. `b32b87f4` aplica el mismo peso a todas las unidades de un
 consist ferroviario y recalcula la caché después de cargar/descargar, sin
-alterar el orden de señales. Queda pendiente replicar la multiplicación
-`freight_trains` en todos los modelos de aceleración y el resto de settings.
+alterar el orden de señales. `15c8bfcf` añade `vehicle.freight_trains` con
+persistencia `PATS`/JSON, frontera `SLV_39` y aplicación exclusiva a cargas
+freight. Quedan pendientes la GUI del setting, CTT completa y el resto de
+settings económicos.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
@@ -93,8 +95,17 @@ las APIs legacy que no reciben catálogo. La regresión usa 8 unidades de peso
 32 (16 toneladas) y el probe de señales sigue pasando; `freight_trains` y las
 propiedades CTT/económicas restantes siguen pendientes.
 
-Última validación de `b32b87f4`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **2.013** tests de core y **1.064** de cliente (2 ignorados); la matriz
+Actualización #329-CARGO-FREIGHT-SETTING-064 (2026-09-04, commit `15c8bfcf`):
+`vehicle.freight_trains` ya forma parte de `GameState` y del JSON propio con
+default 1. El parser/escritor `PATS` usa el tipo `UINT8`, respeta `1..=255` y
+la compatibilidad `SLV_39`; un save legacy conserva el valor histórico por
+default. `CargoSpec::is_freight` limita la escala a cargas freight y todos los
+rebuilds de consist reciben el multiplicador, incluido el refresh posterior a
+`LoadUnloadStation`. Regresiones cubren parser, round-trip, saves legacy y
+peso; la GUI, CTT y otros settings siguen abiertos.
+
+Última validación de `15c8bfcf`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **2.017** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.

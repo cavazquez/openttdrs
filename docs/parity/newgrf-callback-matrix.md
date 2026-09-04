@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `b32b87f4`, cargos custom ejecutables,
+Actualizada: **2026-09-04** (commit `15c8bfcf`, cargos custom ejecutables,
 shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
 `PlantOnBuild`, rehidratación SAV legacy, historiales aceptados runtime,
@@ -682,3 +682,12 @@ a vagones NewGRF y cargos custom; la física ferroviaria usa esa masa en
 aceleración y esfuerzo tractor. El refresh se hace después de cargar para no
 alterar el lookahead de señales; `freight_trains`, CTT completa y otros
 settings/propiedades económicos permanecen parciales.
+
+Actualización #329-CARGO-FREIGHT-SETTING-064 (2026-09-04, commit `15c8bfcf`):
+el setting `vehicle.freight_trains` se persiste en `GameState`/JSON y en
+`PATS` como `UINT8`, con rango `1..=255`, default 1 y frontera de compatibilidad
+`SLV_39`. El peso ferroviario aplica el multiplicador sólo cuando la
+`CargoSpec` activa marca `is_freight`; las cargas no freight conservan su peso
+normal. Todos los call sites de reconstrucción de consist y el refresh posterior
+a carga/descarga reciben el valor persistido. La GUI del setting, la CTT
+completa y los demás settings económicos aún no tienen paridad.

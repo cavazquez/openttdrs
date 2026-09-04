@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
-`main` con base funcional publicada `61e0c53b`, posterior al writeback canónico
+`main` con base funcional publicada `4a80e6d3`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
@@ -246,3 +246,11 @@ ejecuta después de hidratar/aplicar el catálogo NewGRF, pero no cambia el wire
 format SAV. Los campos de motor, cargo y órdenes conservan la representación
 documentada; la decisión dinámica de incluir/excluir cargas sólo vuelve a
 evaluarse en runtime cuando el `CargoSpec` y el GRF están instalados.
+
+Actualización `4a80e6d3` (2026-09-04): la propiedad Action0 `refit_cost` y el
+callback `CBID_VEHICLE_REFIT_COST` sólo afectan el coste y permiso de autorefit
+en runtime; no añaden campos al wire format SAV. Los campos existentes de
+motor, cargo, subtipo y órdenes mantienen su representación. Al importar un
+save, el cálculo dinámico se vuelve a ejecutar únicamente cuando están
+instalados el `CargoSpec` y el GRF correspondientes; sin ellos se conserva el
+fallback documentado y el estado SAV sigue siendo reexportable.

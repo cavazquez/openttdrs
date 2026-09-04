@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `61e0c53b`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `4a80e6d3`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
 ferroviario, la CTT de scopes de estación/parada e `IndustryTile` y la CTT de
 vehículos/refit, incluido `CBID_VEHICLE_CUSTOM_REFIT`, quedan actualizados en
@@ -46,7 +46,7 @@ mapeo y la evidencia de auditorías anteriores; fechas anteriores son contexto
 histórico. Ante una contradicción prevalece este bloque y debe corregirse la
 fila antigua en el mismo cambio.
 
-Validación de este corte: formatter y clippy estricto en core/cliente, **2.033**
+Validación de este corte: formatter y clippy estricto en core/cliente, **2.040**
 tests de core y **1.065** tests ejecutados del cliente (2 ignorados), además de
 la regresión integrada de CTT de vehículos; los conteos anteriores son
 históricos.
@@ -238,6 +238,20 @@ comando de refit, el ciclo de órdenes de depósito, los refits pendientes y
 cuatro retornos y la frontera sin runtime. GUI/variables ilimitadas, scopes
 económicos y otras callbacks/propiedades de vehículos siguen abiertos; #329
 continúa abierto.
+
+Actualización #329-VEHICLE-REFIT-COST-079 (2026-09-04, `4a80e6d3`): el parser
+conserva la propiedad Action0 `refit_cost` (tren `0x1C`, road `0x1A`, barco
+`0x13`, aeronave `0x15`) en `EngineDef`. El runtime ejecuta
+`CBID_VEHICLE_REFIT_COST` (`0x15E`) con `CargoClass`, subtipo y slot local CTT;
+decodifica el factor signed de 14 bits y el bit 14 de permiso de autorefit, y
+usa la propiedad Action0 cuando el callback falla o no está instalado. El
+factor se convierte al índice de precio correcto (doble para trenes) y se cobra
+por unidad en refit manual, órdenes de depósito y autoreplace, respetando
+fondos insuficientes. Las regresiones cubren los cuatro parsers, retorno
+firmado, CTT custom y diferencia de coste en autoreplace. El permiso de
+autorefit y las cadenas articuladas multiunidad aún requieren cobertura
+completa; GUI/variables ilimitadas, scopes económicos y callbacks restantes
+mantienen #329 abierto.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

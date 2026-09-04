@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`61e0c53b`** (`newgrf: execute vehicle custom refit callback`),
+Base funcional local y publicada: **`4a80e6d3`** (`newgrf: apply vehicle refit cost callback`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -133,6 +133,17 @@ diagnosticable. Refit manual, órdenes de depósito, refit pendiente y
 autoreplace comparten la función catalogue-aware y tienen regresiones de
 inclusión/exclusión y parámetros CTT. #329 sigue abierto por GUI/variables
 ilimitadas, scopes económicos y el resto de callbacks/propiedades de vehículos.
+
+Actualización #329-VEHICLE-REFIT-COST-079 (2026-09-04, commit `4a80e6d3`):
+Action0 conserva `refit_cost` para tren, road, barco y aeronave. El resolver
+`CBID_VEHICLE_REFIT_COST` (`0x15E`) empaqueta `CargoClass`, subtipo y CTT local,
+y decodifica el factor signed de 14 bits junto con el permiso de autorefit del
+bit 14; `CALLBACK_FAILED` vuelve al factor Action0. El precio usa el índice por
+tipo (factor doble en trenes) y se integra en refit manual, órdenes de depósito
+y cálculo de autoreplace, con rechazo atómico por fondos insuficientes. Las
+regresiones cubren parser, CTT custom, signo/autorefit y diferencia de coste.
+La aplicación del permiso de autorefit a cadenas articuladas completas y la UI
+siguen abiertas; #329 no se cierra.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|

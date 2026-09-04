@@ -7,6 +7,7 @@
 //! partir de `MAP1/MAP2/MAP3/MAP4` y de los pools vivos de industrias.
 
 use crate::cargo::CargoType;
+use crate::cargo_spec::{CargoSpecDef, cargo_type_from_label_with_catalog};
 use crate::house_spec::get_town_radius_group;
 use crate::industry::{Industry, IndustrySpec};
 use crate::industry_spec::{IndustrySpecDef, industry_spec_def};
@@ -40,7 +41,37 @@ pub fn action2_eval_ctx_for_industry_tile_with_world(
     current_spec: Option<&IndustryTileSpecDef>,
     neighbor_params: &[(u8, u8)],
 ) -> Action2EvalCtx {
-    action2_eval_ctx_for_industry_tile_with_world_and_parent(
+    action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog(
+        map,
+        coord,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        current_spec,
+        neighbor_params,
+        &[],
+    )
+}
+
+/// Variante catálogo-aware de [`action2_eval_ctx_for_industry_tile_with_world`].
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
+pub fn action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog(
+    map: &Map,
+    coord: TileCoord,
+    industries: &[Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+    current_spec: Option<&IndustryTileSpecDef>,
+    neighbor_params: &[(u8, u8)],
+    cargo_spec_catalog: &[CargoSpecDef],
+) -> Action2EvalCtx {
+    action2_eval_ctx_for_industry_tile_with_world_and_parent_and_cargo_catalog(
         map,
         coord,
         industries,
@@ -51,6 +82,7 @@ pub fn action2_eval_ctx_for_industry_tile_with_world(
         current_spec,
         neighbor_params,
         None,
+        cargo_spec_catalog,
     )
 }
 
@@ -76,6 +108,39 @@ pub fn action2_eval_ctx_for_industry_tile_with_world_and_parent(
     current_spec: Option<&IndustryTileSpecDef>,
     neighbor_params: &[(u8, u8)],
     parent: Option<&Industry>,
+) -> Action2EvalCtx {
+    action2_eval_ctx_for_industry_tile_with_world_and_parent_and_cargo_catalog(
+        map,
+        coord,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        current_spec,
+        neighbor_params,
+        parent,
+        &[],
+    )
+}
+
+/// Variante catálogo-aware de
+/// [`action2_eval_ctx_for_industry_tile_with_world_and_parent`].
+#[must_use]
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments)]
+pub fn action2_eval_ctx_for_industry_tile_with_world_and_parent_and_cargo_catalog(
+    map: &Map,
+    coord: TileCoord,
+    industries: &[Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+    current_spec: Option<&IndustryTileSpecDef>,
+    neighbor_params: &[(u8, u8)],
+    parent: Option<&Industry>,
+    cargo_spec_catalog: &[CargoSpecDef],
 ) -> Action2EvalCtx {
     let tile = map.get(coord);
     let mut ctx = Action2EvalCtx::default();
@@ -124,7 +189,14 @@ pub fn action2_eval_ctx_for_industry_tile_with_world_and_parent(
     );
 
     if let Some(industry) = current {
-        populate_industry_parent_scope(&mut ctx, map, coord, industry, industry_catalog);
+        populate_industry_parent_scope(
+            &mut ctx,
+            map,
+            coord,
+            industry,
+            industry_catalog,
+            cargo_spec_catalog,
+        );
         ctx.parent_persistent_registers
             .clone_from(&industry.newgrf_persistent_regs);
     }
@@ -214,7 +286,13 @@ pub fn action2_eval_ctx_for_industry_tile_with_world_and_parent(
                 industry_catalog,
                 &ctx,
             ),
-            0x69..=0x71 => industry_cargo_variable(variable, parameter, current, industry_catalog),
+            0x69..=0x71 => industry_cargo_variable(
+                variable,
+                parameter,
+                current,
+                industry_catalog,
+                cargo_spec_catalog,
+            ),
             0x7A => child_value.unwrap_or(u32::MAX),
             _ => continue,
         };
@@ -400,11 +478,12 @@ fn populate_industry_parent_scope(
     coord: TileCoord,
     industry: &Industry,
     industry_catalog: &[IndustrySpecDef],
+    cargo_spec_catalog: &[CargoSpecDef],
 ) {
     let spec = industry
         .newgrf_type_id
         .and_then(|id| industry_spec_def(industry_catalog, id));
-    let inputs = industry.station_input_requirements();
+    let inputs = industry_input_requirements(industry, spec, cargo_spec_catalog);
     for (slot, (cargo, _)) in inputs.iter().take(3).enumerate() {
         ctx.parent_vars.insert(
             0x40 + u8::try_from(slot).unwrap_or(0),
@@ -442,7 +521,7 @@ fn populate_industry_parent_scope(
     let (width, height) = industry_dimensions(industry);
     ctx.parent_vars.insert(0x86, u32::from(width));
     ctx.parent_vars.insert(0x87, u32::from(height));
-    let outputs = industry.produced_cargos();
+    let outputs = industry_output_cargos(industry, spec, cargo_spec_catalog);
     let output_waiting = [industry.stock, industry.secondary_stock];
     let output_rates = [
         industry.production_rate(),
@@ -755,6 +834,7 @@ fn industry_cargo_variable(
     parameter: u8,
     current: Option<&Industry>,
     catalog: &[IndustrySpecDef],
+    cargo_spec_catalog: &[CargoSpecDef],
 ) -> u32 {
     let Some(industry) = current else {
         return 0;
@@ -774,7 +854,7 @@ fn industry_cargo_variable(
             }
             labels
                 .get(index)
-                .and_then(|label| CargoType::from_label(label))
+                .and_then(|label| cargo_type_from_label_with_catalog(label, cargo_spec_catalog))
                 .or_else(|| dynamic_slots.get(index).copied().flatten())
                 .or_else(|| CargoType::from_cargo_id(parameter))
         };
@@ -787,8 +867,7 @@ fn industry_cargo_variable(
             )
         })
         .or_else(|| {
-            industry
-                .produced_cargos()
+            industry_output_cargos(industry, spec, cargo_spec_catalog)
                 .into_iter()
                 .find(|cargo| cargo.bitnum() == parameter)
         });
@@ -801,14 +880,16 @@ fn industry_cargo_variable(
             )
         })
         .or_else(|| {
-            industry
-                .station_input_requirements()
+            industry_input_requirements(industry, spec, cargo_spec_catalog)
                 .into_iter()
                 .find(|(cargo, _)| cargo.bitnum() == parameter)
                 .map(|(cargo, _)| cargo)
         });
     match variable {
-        0x69 => produced.map_or(0, |cargo| industry_stock_for_cargo(industry, cargo)),
+        0x69 => produced.map_or(0, |cargo| {
+            let outputs = industry_output_cargos(industry, spec, cargo_spec_catalog);
+            industry_stock_for_cargo(industry, cargo, &outputs)
+        }),
         0x6A => produced.map_or(0, |_| {
             industry
                 .history
@@ -832,8 +913,51 @@ fn industry_cargo_variable(
     }
 }
 
-fn industry_stock_for_cargo(industry: &Industry, cargo: CargoType) -> u32 {
+fn industry_input_requirements(
+    industry: &Industry,
+    spec: Option<&IndustrySpecDef>,
+    cargo_spec_catalog: &[CargoSpecDef],
+) -> Vec<(CargoType, u32)> {
+    if !industry.newgrf_processing_inputs.is_empty() {
+        return industry
+            .newgrf_processing_inputs
+            .iter()
+            .map(|input| (input.cargo, input.batch))
+            .collect();
+    }
+    if let Some(cargos) = spec
+        .map(|def| def.accepted_cargo_types_with_catalog(cargo_spec_catalog))
+        .filter(|cargos| !cargos.is_empty())
+    {
+        return cargos.into_iter().map(|cargo| (cargo, 8)).collect();
+    }
+    industry.station_input_requirements()
+}
+
+fn industry_output_cargos(
+    industry: &Industry,
+    spec: Option<&IndustrySpecDef>,
+    cargo_spec_catalog: &[CargoSpecDef],
+) -> Vec<CargoType> {
+    if industry.newgrf_type_id.is_some()
+        && industry.newgrf_output_cargo.is_none()
+        && !industry.newgrf_dynamic_cargo_types
+        && let Some(outputs) = spec
+            .map(|def| def.produced_cargo_types_with_catalog(cargo_spec_catalog))
+            .filter(|outputs| !outputs.is_empty())
+    {
+        return outputs;
+    }
     let outputs = industry.produced_cargos();
+    if !outputs.is_empty() {
+        return outputs;
+    }
+    spec.map(|def| def.produced_cargo_types_with_catalog(cargo_spec_catalog))
+        .filter(|outputs| !outputs.is_empty())
+        .unwrap_or(outputs)
+}
+
+fn industry_stock_for_cargo(industry: &Industry, cargo: CargoType, outputs: &[CargoType]) -> u32 {
     match outputs.iter().position(|candidate| *candidate == cargo) {
         Some(0) => industry.stock,
         Some(1) => industry.secondary_stock,
@@ -943,6 +1067,75 @@ mod tests {
             Some(&(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR + 23)),
         );
         assert_eq!(ctx.parent_random_bits, 0xBEEF);
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn industry_parent_scope_resolves_custom_cargo_without_hydrated_slots() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(1, 1);
+        let mut tile = map.get(coord).unwrap();
+        tile.kind = TileKind::Industry;
+        tile.m2 = 7;
+        set_industry_gfx(&mut tile, 175);
+        map.set_tile(coord, tile).unwrap();
+
+        let custom = CargoType::Custom(0);
+        let cargo_catalog = vec![crate::CargoSpecDef {
+            id: crate::cargo::CUSTOM_CARGO_OFFSET,
+            local_id: 3,
+            label: "TOFU".into(),
+            name: "Tofu".into(),
+            from_newgrf: true,
+            grfid: 1,
+            ..crate::CargoSpecDef::default()
+        }];
+        let industry_def = IndustrySpecDef {
+            id: 7,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![3],
+            produced_cargo_labels: vec!["TOFU".into()],
+            accepted_cargo_indices: vec![3],
+            accepted_cargo_labels: vec!["TOFU".into()],
+            production_rates: vec![4],
+            input_multipliers: vec![256],
+            callback_mask: 0,
+            behaviour: 0,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "Tofu plant".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        };
+        let mut industry = Industry::new(coord, IndustryKind::Factory)
+            .with_instance_id(7)
+            .with_newgrf_spec(7, &industry_def);
+        industry.stock = 23;
+        industry.add_accepted_cargo_waiting(custom, 11);
+
+        let ctx = action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog(
+            &map,
+            coord,
+            std::slice::from_ref(&industry),
+            &[],
+            &[],
+            std::slice::from_ref(&industry_def),
+            Climate::Temperate,
+            None,
+            &[(0x40, 0), (0x69, 3), (0x6F, 3), (0x90, 0)],
+            &cargo_catalog,
+        );
+
+        assert_eq!(ctx.parent_vars.get(&0x40), Some(&11));
+        assert_eq!(ctx.parent_vars.get(&0x90), Some(&31));
+        assert_eq!(ctx.parent_parameterized_vars.get(&(0x69, 3)), Some(&23));
+        assert_eq!(ctx.parent_parameterized_vars.get(&(0x6F, 3)), Some(&11));
     }
 
     #[test]

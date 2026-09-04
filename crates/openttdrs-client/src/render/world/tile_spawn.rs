@@ -433,6 +433,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     climate,
                     &sim.state.towns,
                     &sim.state.industry_spec_catalog,
+                    &sim.state.cargo_spec_catalog,
                     company,
                     images,
                     &sim.state.industry_tile_spec_catalog,

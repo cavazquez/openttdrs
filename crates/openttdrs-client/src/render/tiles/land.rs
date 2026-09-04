@@ -1298,6 +1298,7 @@ pub(crate) fn spawn_industry_tile(
         Climate::Temperate,
         &[],
         &[],
+        &[],
         company,
         images,
         industry_catalog,
@@ -1322,6 +1323,7 @@ pub(crate) fn spawn_industry_tile_with_world(
     climate: Climate,
     towns: &[openttdrs_core::Town],
     industry_specs: &[openttdrs_core::IndustrySpecDef],
+    cargo_spec_catalog: &[openttdrs_core::CargoSpecDef],
     company: &mut CompanyColoredSprites,
     images: &mut Assets<Image>,
     industry_catalog: &[openttdrs_core::IndustryTileSpecDef],
@@ -1362,6 +1364,7 @@ pub(crate) fn spawn_industry_tile_with_world(
                 industries,
                 towns,
                 industry_specs,
+                cargo_spec_catalog,
                 climate,
                 industry_catalog,
                 def,
@@ -1384,7 +1387,7 @@ pub(crate) fn spawn_industry_tile_with_world(
                     let neighbor_params =
                         requested_industry_scope_vars(def.newgrf_runtime.as_deref());
                     let mut callback_ctx =
-                        openttdrs_core::action2_eval_ctx_for_industry_tile_with_world(
+                        openttdrs_core::action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog(
                             map,
                             ctx.coord,
                             industries,
@@ -1394,6 +1397,7 @@ pub(crate) fn spawn_industry_tile_with_world(
                             climate,
                             Some(def),
                             &neighbor_params,
+                            cargo_spec_catalog,
                         );
                     callback_ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
                         newgrf_stack,
@@ -1574,17 +1578,19 @@ pub(crate) fn spawn_industry_tile_with_world(
     {
         let colour = Some(palette_colour);
         let neighbor_params = requested_industry_scope_vars(def.newgrf_runtime.as_deref());
-        let mut a2 = openttdrs_core::action2_eval_ctx_for_industry_tile_with_world(
-            map,
-            ctx.coord,
-            industries,
-            towns,
-            industry_catalog,
-            industry_specs,
-            climate,
-            Some(def),
-            &neighbor_params,
-        );
+        let mut a2 =
+            openttdrs_core::action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog(
+                map,
+                ctx.coord,
+                industries,
+                towns,
+                industry_catalog,
+                industry_specs,
+                climate,
+                Some(def),
+                &neighbor_params,
+                cargo_spec_catalog,
+            );
         a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
             newgrf_stack,
             def.newgrf_grfid,
@@ -1805,6 +1811,7 @@ fn resolve_newgrf_industry_layout<'a>(
     industries: &[openttdrs_core::Industry],
     towns: &[openttdrs_core::Town],
     industry_specs: &[openttdrs_core::IndustrySpecDef],
+    cargo_spec_catalog: &[openttdrs_core::CargoSpecDef],
     climate: Climate,
     tile_catalog: &[openttdrs_core::IndustryTileSpecDef],
     def: &'a openttdrs_core::IndustryTileSpecDef,
@@ -1816,17 +1823,19 @@ fn resolve_newgrf_industry_layout<'a>(
     u32,
 )> {
     let neighbor_params = requested_industry_scope_vars(def.newgrf_runtime.as_deref());
-    let mut action2 = openttdrs_core::action2_eval_ctx_for_industry_tile_with_world(
-        map,
-        coord,
-        industries,
-        towns,
-        tile_catalog,
-        industry_specs,
-        climate,
-        Some(def),
-        &neighbor_params,
-    );
+    let mut action2 =
+        openttdrs_core::action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog(
+            map,
+            coord,
+            industries,
+            towns,
+            tile_catalog,
+            industry_specs,
+            climate,
+            Some(def),
+            &neighbor_params,
+            cargo_spec_catalog,
+        );
     action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
         newgrf_stack,
         def.newgrf_grfid,

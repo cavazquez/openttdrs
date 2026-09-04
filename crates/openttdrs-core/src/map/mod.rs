@@ -38,7 +38,9 @@ pub use index::{
 };
 pub use industry_action2::{
     action2_eval_ctx_for_industry_tile_with_world,
+    action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog,
     action2_eval_ctx_for_industry_tile_with_world_and_parent,
+    action2_eval_ctx_for_industry_tile_with_world_and_parent_and_cargo_catalog,
 };
 pub use industry_construction::{
     INDUSTRY_CONSTRUCTION_COMPLETED, advance_industry_construction,

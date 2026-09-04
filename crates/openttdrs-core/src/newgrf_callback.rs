@@ -15,7 +15,7 @@ use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::{IndustryTileSpecDef, industry_tile_slope_refused};
 use crate::map::industry_action2::{
     action2_eval_ctx_for_industry_tile_with_world,
-    action2_eval_ctx_for_industry_tile_with_world_and_parent,
+    action2_eval_ctx_for_industry_tile_with_world_and_parent_and_cargo_catalog,
 };
 use crate::map::object::action2_eval_ctx_for_object_tile_with_towns;
 use crate::map::{Map, TileCoord, has_tile_water_ground};
@@ -1224,7 +1224,7 @@ pub fn apply_industry_location_callback_for_build(
 
     // Reutilizar el contexto de tesela mantiene la codificación de terreno y
     // los fallbacks de mapas importados en un único sitio.
-    let mut ctx = crate::map::action2_eval_ctx_for_industry_tile_with_world(
+    let mut ctx = crate::map::action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog(
         &state.map,
         pos,
         &state.industries,
@@ -1234,6 +1234,7 @@ pub fn apply_industry_location_callback_for_build(
         state.climate,
         None,
         &[],
+        &state.cargo_spec_catalog,
     );
     ctx.random_bits = random_bits;
     let map_index = crate::map::coord_to_linear_index(pos, state.map.dimensions().0).unwrap_or(0);
@@ -1385,18 +1386,20 @@ pub fn apply_industry_tile_shape_callback_for_build(
         .with_newgrf_random(initial_random_bits)
         .with_founder(founder);
     let neighbor_params = requested_industry_tile_scope_vars(runtime);
-    let mut ctx = action2_eval_ctx_for_industry_tile_with_world_and_parent(
-        &state.map,
-        tile,
-        &state.industries,
-        &state.towns,
-        &state.industry_tile_spec_catalog,
-        &state.industry_spec_catalog,
-        state.climate,
-        Some(tile_def),
-        &neighbor_params,
-        Some(&parent),
-    );
+    let mut ctx =
+        crate::map::action2_eval_ctx_for_industry_tile_with_world_and_parent_and_cargo_catalog(
+            &state.map,
+            tile,
+            &state.industries,
+            &state.towns,
+            &state.industry_tile_spec_catalog,
+            &state.industry_spec_catalog,
+            state.climate,
+            Some(tile_def),
+            &neighbor_params,
+            Some(&parent),
+            &state.cargo_spec_catalog,
+        );
     ctx.random_bits = u32::from(initial_random_bits);
     let param2 = (u32::from(creation_type) << 8)
         | u32::try_from(layout_index & usize::from(u8::MAX)).unwrap_or(0);
@@ -1453,7 +1456,7 @@ pub fn apply_industry_tile_autoslope_callback(state: &mut GameState, coord: Tile
             && (tile_instance_id == 0 || industry.instance_id == tile_instance_id)
     });
     let neighbor_params = requested_industry_tile_scope_vars(runtime);
-    let mut ctx = action2_eval_ctx_for_industry_tile_with_world(
+    let mut ctx = crate::map::action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog(
         &state.map,
         coord,
         &snapshot,
@@ -1463,6 +1466,7 @@ pub fn apply_industry_tile_autoslope_callback(state: &mut GameState, coord: Tile
         state.climate,
         Some(spec),
         &neighbor_params,
+        &state.cargo_spec_catalog,
     );
     if let Some(index) = industry_index {
         ctx.parent_persistent_registers
@@ -3391,7 +3395,7 @@ pub fn resolve_industry_tile_cargo_acceptance_callback_with_world_and_cargo_cata
     // deliberadamente inmutable; el `Industry` vivo recibe el writeback de
     // PSA al finalizar ambos callbacks.
     let neighbor_params = requested_industry_tile_scope_vars(runtime);
-    let mut ctx = action2_eval_ctx_for_industry_tile_with_world_and_parent(
+    let mut ctx = action2_eval_ctx_for_industry_tile_with_world_and_parent_and_cargo_catalog(
         map,
         coord,
         industries,
@@ -3402,6 +3406,7 @@ pub fn resolve_industry_tile_cargo_acceptance_callback_with_world_and_cargo_cata
         Some(def),
         &neighbor_params,
         Some(industry),
+        cargo_catalog,
     );
     ctx.parent_persistent_registers
         .clone_from(&industry.newgrf_persistent_regs);

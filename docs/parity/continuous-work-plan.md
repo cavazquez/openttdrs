@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`1d20248f`** (`newgrf: execute advanced vehicle visual effects`),
+Base funcional local y publicada: **`b1df2500`** (`newgrf: match advanced effect vehicle positioning`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -167,17 +167,26 @@ el balanceo de capacidad/reserva de `HandleStationRefit`, la elección de
 siguiente estación, todos los consist articulados ni la edición UI. #329 sigue
 abierto y el siguiente bloque debe medir uno de esos casos con el oráculo.
 
-Actualización #329-VEHICLE-VISUAL-EFFECT-082 (2026-09-04, commit `1d20248f`):
+Actualización #329-VEHICLE-VISUAL-EFFECT-082 (2026-09-04, commit `b1df2500`):
 el core ejecuta `CBID_VEHICLE_SPAWN_VISUAL_EFFECT` (`0x160`) cuando el callback
 visual selecciona el modelo avanzado. Se decodifican el contador, los bits de
 centrado/rotación y los cuatro registros `0x100..0x103` (tipo y offsets
-signed X/Y/Z), con writeback de `7C`; el renderer ferroviario materializa los
-tipos vanilla `F1`/`F2`/`F3`/`FA`, rota X/Y según la dirección y conserva cada
-spawn como entidad de efecto independiente. Los modelos reservados/desactivados
-no invocan CB160 y el fallo no degrada silenciosamente a humo vanilla. Sigue
-siendo una cobertura parcial: falta conectar el call site a road vehicles,
-barcos y aeronaves, resolver sprites/sonidos locales de GRF, y reproducir con
-exactitud el anclaje `auto_center`/offsets del viewport. #329 permanece abierto.
+signed X/Y/Z), con writeback de `7C`; el renderer compartido materializa los
+tipos vanilla `F1`/`F2`/`F3`/`FA` para trenes, carretera, barcos y aeronaves,
+rota X/Y según la dirección visual, aplica el centro de unidades cortas y
+conserva cada spawn como entidad de efecto independiente. Los modelos
+reservados/desactivados no invocan CB160 y el fallo no degrada silenciosamente
+a humo vanilla; depósitos, túneles, puentes, vehículos ocultos, parados y
+trenes que revierten quedan suprimidos como en `ShowVisualEffect`. Sigue siendo
+una cobertura parcial: faltan sprites y sonidos locales de GRF, la semántica
+completa de consist y la proyección exacta de offsets en todas las escalas del
+viewport. #329 permanece abierto.
+
+Corrección vigente de este corte: CB160 ya tiene call site compartido para
+trenes, carretera, barcos y aeronaves, con auto-centro, rotación y supresión
+de estados no visibles alineados al upstream. La brecha restante de #326/#329
+es la composición exacta (sprites/sonidos locales, consist y sorter/viewport),
+no la ausencia de un call site por tipo de vehículo.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|

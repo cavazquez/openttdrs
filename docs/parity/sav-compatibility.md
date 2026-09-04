@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
-`main` con base funcional publicada `1d20248f`, posterior al writeback canónico
+`main` con base funcional publicada `b1df2500`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
@@ -271,7 +271,7 @@ refit de estación antes de cargar y reemite la capacidad calculada; el stock,
 balanceo de consist y callbacks que requieren un GRF ausente permanecen
 parciales.
 
-Actualización `1d20248f` (2026-09-04): el callback visual avanzado `CB160` y
+Actualización `b1df2500` (2026-09-04): el callback visual avanzado `CB160` y
 sus registros `0x100..0x103` son estado runtime derivado del catálogo NewGRF;
 no agregan columnas ni cambian el wire format `.sav`. Al reabrir un save, los
 efectos sólo se vuelven a calcular si el GRF y sus callbacks están instalados;

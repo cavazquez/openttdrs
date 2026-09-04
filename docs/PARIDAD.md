@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `1d20248f`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `b1df2500`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
 ferroviario, la CTT de scopes de estación/parada e `IndustryTile`, la CTT de
 vehículos/refit y las órdenes de refit de estación, incluido
@@ -276,15 +276,17 @@ un recorte determinista: faltan la reserva de siguiente estación, la selección
 completa de `HandleStationRefit`, cadenas articuladas con tipos heterogéneos y
 la UI que crea/edita este modo. #329 permanece abierto.
 
-Actualización #329-VEHICLE-VISUAL-EFFECT-082 (2026-09-04, `1d20248f`): el
+Actualización #329-VEHICLE-VISUAL-EFFECT-082 (2026-09-04, `b1df2500`): el
 runtime ejecuta `CBID_VEHICLE_SPAWN_VISUAL_EFFECT` (`0x160`) para el modelo
 avanzado elegido por CB10. Core decodifica contador, centrado/rotación y los
 cuatro registros `0x100..0x103` (tipo y offsets signed X/Y/Z), persiste `7C` y
 el renderer ferroviario materializa `F1`/`F2`/`F3`/`FA` con rotación según la
 dirección. Los modelos reservados/desactivados no llaman CB160 y un fallo no
-degrada a humo vanilla. Sigue siendo parcial: road/ship/air, sprites/sonidos
-locales y la proyección exacta de `auto_center`/offsets aún no tienen call site;
-#329 permanece abierto.
+degrada a humo vanilla; depósitos, túneles, puentes, vehículos ocultos,
+parados y trenes que revierten quedan suprimidos como en OpenTTD. El call site
+compartido ya cubre trenes, carretera, barcos y aeronaves. Sigue siendo
+parcial por sprites/sonidos locales, consist completo y la proyección exacta
+de `auto_center`/offsets en todas las escalas; #329 permanece abierto.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

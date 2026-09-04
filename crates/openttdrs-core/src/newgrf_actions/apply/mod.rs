@@ -44,9 +44,9 @@ pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     station::apply_newgrf_stations_default_dirs(state);
     // Badges ya fueron aplicados para resolver asociaciones `0xFD`.
     roadstop::apply_newgrf_roadstops_default_dirs(state);
-    train::apply_newgrf_vehicles_trains_default_dirs(state);
-    // Cargoes antes de industries/tiles para `GetCargoTranslation` (#224).
+    // Cargoes antes de vehículos e industries para `GetCargoTranslation` (#224).
     cargo::apply_newgrf_cargoes_default_dirs(state);
+    train::apply_newgrf_vehicles_trains_default_dirs(state);
     // Industry tiles antes que industries (layouts `0xFE` → gfx global).
     industry::apply_newgrf_industry_tiles_default_dirs(state);
     industry::apply_newgrf_industries_default_dirs(state);

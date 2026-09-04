@@ -176,7 +176,12 @@ pub(crate) fn sync_vehicle_window(
             }
         }
 
-        let refit_display = if openttdrs_core::refit_allowed(vehicle, &sim.state.map) {
+        let refit_display = if openttdrs_core::refit_allowed_with_catalog(
+            vehicle,
+            &sim.state.map,
+            &sim.state.engine_catalog,
+            &sim.state.cargo_spec_catalog,
+        ) {
             Display::Flex
         } else {
             Display::None

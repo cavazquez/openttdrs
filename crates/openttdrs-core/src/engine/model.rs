@@ -110,6 +110,15 @@ pub struct EngineDef {
     /// Action0 train `0x1D`: bitmask de cargos temperate (`0` = lista vanilla por kind).
     #[serde(default)]
     pub refit_mask: u32,
+    /// Cargos que el GRF incluye explícitamente mediante su CTT.
+    ///
+    /// A diferencia de [`Self::refit_mask`], esta lista conserva cargos
+    /// custom cuyo ID global está fuera de los 32 bits históricos.
+    #[serde(default)]
+    pub ctt_include_cargos: Vec<CargoType>,
+    /// Cargos que el GRF excluye explícitamente mediante su CTT.
+    #[serde(default)]
+    pub ctt_exclude_cargos: Vec<CargoType>,
     /// Action0 aircraft `0x09`: helicóptero.
     #[serde(default)]
     pub is_helicopter: bool,

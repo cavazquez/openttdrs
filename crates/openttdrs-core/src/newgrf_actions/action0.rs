@@ -224,6 +224,9 @@ pub struct ParsedTrainMeta {
     pub uses_2cc: bool,
     pub capacity: u32,
     pub cargo: Option<crate::cargo::CargoType>,
+    /// Índice local de `0x15` antes de aplicar la CTT del GRF.
+    #[allow(clippy::struct_field_names)]
+    pub default_cargo_local_id: Option<u8>,
     pub weight_t: u16,
     pub price_factor: u8,
     pub running_cost_factor: u8,
@@ -236,6 +239,9 @@ pub struct ParsedTrainMeta {
     pub shorten_factor: u8,
     pub required_rail_type: Option<u8>,
     pub refit_mask: u32,
+    /// Listas CTT (`0x2C`/`0x2D`) antes de resolverlas contra el catálogo.
+    pub ctt_include_cargo_indices: Vec<u8>,
+    pub ctt_exclude_cargo_indices: Vec<u8>,
     /// Máscara de callbacks de vehículo (bit 7 = `SoundEffect`).
     pub callback_mask: u16,
     /// Action0 train `0x22`: efecto visual bit-stuffed.
@@ -262,6 +268,9 @@ pub struct ParsedVehicleMeta {
     pub running_cost_factor: u8,
     pub capacity: u32,
     pub cargo: Option<crate::cargo::CargoType>,
+    /// Índice local de la propiedad de cargo por defecto (`0x10`/`0x0C`).
+    #[allow(clippy::struct_field_names)]
+    pub default_cargo_local_id: Option<u8>,
     pub power_hp: u32,
     pub weight_t: u16,
     pub lifelength_years: u8,
@@ -282,6 +291,9 @@ pub struct ParsedVehicleMeta {
     /// `refit_mask` cuando el GRF declara ambas listas y de la lista vanilla
     /// cuando sólo declara exclusiones.
     pub refit_exclude_mask: u32,
+    /// Listas CTT antes de traducirlas con la tabla del GRF.
+    pub ctt_include_cargo_indices: Vec<u8>,
+    pub ctt_exclude_cargo_indices: Vec<u8>,
     /// Máscara de callbacks de vehículo (bit 7 = `SoundEffect`).
     pub callback_mask: u16,
     /// Action0 misc flags bit 1: usa la segunda rampa de compañía (2CC).
@@ -345,6 +357,7 @@ impl ParsedVehicleMeta {
             running_cost_factor: running,
             capacity,
             cargo,
+            default_cargo_local_id: None,
             power_hp: power,
             weight_t: weight,
             lifelength_years: life,
@@ -364,6 +377,8 @@ impl ParsedVehicleMeta {
             visual_effect: crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT,
             refit_mask: 0,
             refit_exclude_mask: 0,
+            ctt_include_cargo_indices: Vec::new(),
+            ctt_exclude_cargo_indices: Vec::new(),
             callback_mask: 0,
             uses_2cc: false,
             sprite_stack: false,
@@ -3071,6 +3086,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut uses_2cc = false;
     let mut capacity = 0u32;
     let mut cargo = None;
+    let mut default_cargo_local_id = None;
     let mut weight_t = 80u16;
     let mut price_factor = 20u8;
     let mut running_cost_factor = 80u8;
@@ -3083,6 +3099,8 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut shorten_factor = 0u8;
     let mut required_rail_type = None;
     let mut refit_mask = 0u32;
+    let mut ctt_include_cargo_indices = Vec::new();
+    let mut ctt_exclude_cargo_indices = Vec::new();
     let mut callback_mask = 0u16;
     let mut sprite_stack = false;
     let mut visual_effect = crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT;
@@ -3153,6 +3171,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
             }
             0x15 => {
                 let ctype = read_u8(payload, &mut i)?;
+                default_cargo_local_id = Some(ctype);
                 cargo = if ctype == 0xFF {
                     None
                 } else {
@@ -3234,7 +3253,15 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
             }
             0x2C | 0x2D => {
                 let count = usize::from(read_u8(payload, &mut i)?);
-                skip_bytes(payload, &mut i, count)?;
+                let mut indices = Vec::with_capacity(count);
+                for _ in 0..count {
+                    indices.push(read_u8(payload, &mut i)?);
+                }
+                if prop == 0x2C {
+                    ctt_include_cargo_indices = indices;
+                } else {
+                    ctt_exclude_cargo_indices = indices;
+                }
             }
             0x33 => {
                 badge_local_ids = read_badge_local_ids(payload, &mut i)?;
@@ -3288,6 +3315,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         uses_2cc,
         capacity,
         cargo,
+        default_cargo_local_id,
         weight_t,
         price_factor,
         running_cost_factor,
@@ -3300,6 +3328,8 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         shorten_factor,
         required_rail_type,
         refit_mask,
+        ctt_include_cargo_indices,
+        ctt_exclude_cargo_indices,
         callback_mask,
         visual_effect,
         sprite_stack,
@@ -3460,7 +3490,9 @@ fn parse_road_vehicle_property(
         }
         0x10 => {
             for meta in metas {
-                let cargo = crate::cargo::CargoType::from_temperate_id(read_u8(payload, i)?);
+                let local_id = read_u8(payload, i)?;
+                meta.default_cargo_local_id = Some(local_id);
+                let cargo = crate::cargo::CargoType::from_temperate_id(local_id);
                 meta.cargo = cargo;
                 meta.kind = if cargo == Some(crate::cargo::CargoType::Passengers) {
                     VehicleKind::Bus
@@ -3487,6 +3519,21 @@ fn parse_road_vehicle_property(
         0x14 => {
             for meta in metas {
                 meta.weight_t = u16::from(read_u8(payload, i)?).div_ceil(4);
+            }
+        }
+        // CTT refit include (`0x24`) / exclude (`0x25`).
+        0x24 | 0x25 => {
+            for meta in metas {
+                let count = usize::from(read_u8(payload, i)?);
+                let mut indices = Vec::with_capacity(count);
+                for _ in 0..count {
+                    indices.push(read_u8(payload, i)?);
+                }
+                if prop == 0x24 {
+                    meta.ctt_include_cargo_indices = indices;
+                } else {
+                    meta.ctt_exclude_cargo_indices = indices;
+                }
             }
         }
         0x1D | 0x1E | 0x22 | 0x26 | 0x29 => {
@@ -3538,7 +3585,9 @@ fn parse_ship_property(
         }
         0x0C => {
             for meta in metas {
-                meta.cargo = crate::cargo::CargoType::from_temperate_id(read_u8(payload, i)?);
+                let local_id = read_u8(payload, i)?;
+                meta.default_cargo_local_id = Some(local_id);
+                meta.cargo = crate::cargo::CargoType::from_temperate_id(local_id);
             }
         }
         0x0D => {
@@ -3586,17 +3635,21 @@ fn parse_ship_property(
         0x1E | 0x1F => {
             for meta in metas {
                 let count = usize::from(read_u8(payload, i)?);
+                let mut indices = Vec::with_capacity(count);
                 let mut mask = 0u32;
                 for _ in 0..count {
                     let ctype = read_u8(payload, i)?;
+                    indices.push(ctype);
                     if let Some(cargo) = crate::cargo::CargoType::from_temperate_id(ctype) {
                         mask |= 1u32 << cargo.temperate_id();
                     }
                 }
                 if prop == 0x1E && count > 0 {
                     meta.refit_mask = mask;
+                    meta.ctt_include_cargo_indices = indices;
                 } else if prop == 0x1F {
                     meta.refit_exclude_mask = mask;
+                    meta.ctt_exclude_cargo_indices = indices;
                 }
             }
         }
@@ -3675,8 +3728,23 @@ fn parse_aircraft_property(
                 meta.sound_effect = read_u8(payload, i)?;
             }
         }
+        // CTT refit include (`0x1D`) / exclude (`0x1E`).
+        0x1D | 0x1E => {
+            for meta in metas {
+                let count = usize::from(read_u8(payload, i)?);
+                let mut indices = Vec::with_capacity(count);
+                for _ in 0..count {
+                    indices.push(read_u8(payload, i)?);
+                }
+                if prop == 0x1D {
+                    meta.ctt_include_cargo_indices = indices;
+                } else {
+                    meta.ctt_exclude_cargo_indices = indices;
+                }
+            }
+        }
         0x13 | 0x1A | 0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
-        0x18 | 0x19 | 0x1C | 0x1F | 0x20 | 0x23 => {
+        0x18 | 0x19 | 0x1F | 0x20 | 0x23 => {
             skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
         }
         0x24 => {

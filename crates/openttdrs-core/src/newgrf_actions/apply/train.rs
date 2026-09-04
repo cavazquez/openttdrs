@@ -3,7 +3,10 @@
 use std::path::Path;
 
 use crate::GameState;
+use crate::cargo::CargoType;
+use crate::cargo_spec::CargoSpecDef;
 use crate::engine::{EngineDef, next_free_engine_id, vanilla_engine_catalog};
+use crate::newgrf_type_tables::{GrfTypeTranslationTables, cargo_from_local_id_with_catalog};
 use crate::vehicle::VehicleKind;
 
 use super::super::action0::{
@@ -29,7 +32,55 @@ fn resolve_vehicle_badges(
     crate::badge::resolve_badge_local_ids(local_ids, badge_labels, badge_catalog, grfid)
 }
 
-#[allow(clippy::too_many_arguments)]
+fn resolve_ctt_cargo_indices(
+    indices: &[u8],
+    tables: &GrfTypeTranslationTables,
+    grf_version: u8,
+    climate: crate::world_gen::Climate,
+    cargo_catalog: &[CargoSpecDef],
+) -> Vec<CargoType> {
+    let mut cargos = Vec::new();
+    for &local_id in indices {
+        let Some(cargo) = cargo_from_local_id_with_catalog(
+            Some(tables),
+            grf_version,
+            local_id,
+            climate,
+            cargo_catalog,
+        ) else {
+            continue;
+        };
+        if !cargos.contains(&cargo) {
+            cargos.push(cargo);
+        }
+    }
+    cargos
+}
+
+fn resolve_vehicle_default_cargo(
+    parsed: Option<CargoType>,
+    local_id: Option<u8>,
+    tables: &GrfTypeTranslationTables,
+    grf_version: u8,
+    climate: crate::world_gen::Climate,
+    cargo_catalog: &[CargoSpecDef],
+) -> Option<CargoType> {
+    local_id.map_or(parsed, |local_id| {
+        (local_id != u8::MAX)
+            .then(|| {
+                cargo_from_local_id_with_catalog(
+                    Some(tables),
+                    grf_version,
+                    local_id,
+                    climate,
+                    cargo_catalog,
+                )
+            })
+            .flatten()
+    })
+}
+
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn push_feature_vehicles(
     catalog: &mut Vec<EngineDef>,
     data: &[u8],
@@ -38,6 +89,10 @@ fn push_feature_vehicles(
     climate_bit: u8,
     badge_catalog: &[crate::badge::BadgeDef],
     badge_labels: &[String],
+    cargo_tables: &GrfTypeTranslationTables,
+    grf_version: u8,
+    climate: crate::world_gen::Climate,
+    cargo_catalog: &[CargoSpecDef],
     diagnostics: &mut Vec<String>,
 ) {
     let metas = collect_vehicle_metas_from_grf(data, feature);
@@ -50,9 +105,31 @@ fn push_feature_vehicles(
         let Some(id) = next_free_engine_id(catalog) else {
             break;
         };
+        let cargo = resolve_vehicle_default_cargo(
+            meta.cargo,
+            meta.default_cargo_local_id,
+            cargo_tables,
+            grf_version,
+            climate,
+            cargo_catalog,
+        );
+        let ctt_include_cargos = resolve_ctt_cargo_indices(
+            &meta.ctt_include_cargo_indices,
+            cargo_tables,
+            grf_version,
+            climate,
+            cargo_catalog,
+        );
+        let ctt_exclude_cargos = resolve_ctt_cargo_indices(
+            &meta.ctt_exclude_cargo_indices,
+            cargo_tables,
+            grf_version,
+            climate,
+            cargo_catalog,
+        );
         let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
         let views = gfx
-            .views_for_local_id_cargo_u16_ctx(meta.local_id, meta.cargo, &mut ctx)
+            .views_for_local_id_cargo_u16_ctx(meta.local_id, cargo, &mut ctx)
             .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
             .unwrap_or_default();
         let has_cargo_groups = gfx
@@ -94,7 +171,7 @@ fn push_feature_vehicles(
             price: (price_base * i64::from(meta.price_factor)) >> 8,
             running_cost_year: (running_base * i64::from(meta.running_cost_factor)) >> 8,
             capacity: meta.capacity,
-            cargo: meta.cargo,
+            cargo,
             power_hp: meta.power_hp,
             weight_t: meta.weight_t,
             intro_year: meta.intro_year,
@@ -118,6 +195,8 @@ fn push_feature_vehicles(
             shorten_factor: 0,
             required_rail_type: None,
             refit_mask: meta.refit_mask & !meta.refit_exclude_mask,
+            ctt_include_cargos,
+            ctt_exclude_cargos,
             is_helicopter: meta.is_helicopter,
             is_large_aircraft: meta.is_large_aircraft,
             sprite_stack: meta.sprite_stack,
@@ -159,7 +238,9 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
             continue;
         };
         let metas = collect_train_metas_from_grf(&data);
-        let badge_labels = crate::newgrf_type_tables::collect_type_tables_from_grf(&data).badges;
+        let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
+        let badge_labels = type_tables.badges.clone();
+        let cargo_tables = type_tables;
         let gfx = crate::newgrf_sprites::collect_train_sprite_graphics(&data).unwrap_or_default();
         // Action0 conserva el id local del primer vehículo del bloque; no lo
         // sustituimos por el índice de aparición porque CB16 necesita volver a
@@ -172,6 +253,28 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 break;
             };
             let local_id = meta.local_id;
+            let cargo = resolve_vehicle_default_cargo(
+                meta.cargo,
+                meta.default_cargo_local_id,
+                &cargo_tables,
+                entry.grf_version,
+                state.climate,
+                &state.cargo_spec_catalog,
+            );
+            let ctt_include_cargos = resolve_ctt_cargo_indices(
+                &meta.ctt_include_cargo_indices,
+                &cargo_tables,
+                entry.grf_version,
+                state.climate,
+                &state.cargo_spec_catalog,
+            );
+            let ctt_exclude_cargos = resolve_ctt_cargo_indices(
+                &meta.ctt_exclude_cargo_indices,
+                &cargo_tables,
+                entry.grf_version,
+                state.climate,
+                &state.cargo_spec_catalog,
+            );
             let views = gfx
                 .views_for_local_id_u16(local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
@@ -205,7 +308,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 price: (400_000_i64 * i64::from(meta.price_factor)) >> 8,
                 running_cost_year: (5_200 * i64::from(meta.running_cost_factor)) >> 8,
                 capacity: meta.capacity,
-                cargo: meta.cargo,
+                cargo,
                 power_hp: meta.power_hp,
                 weight_t: meta.weight_t,
                 intro_year: meta.intro_year,
@@ -229,6 +332,8 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 shorten_factor: meta.shorten_factor,
                 required_rail_type: meta.required_rail_type,
                 refit_mask: meta.refit_mask,
+                ctt_include_cargos,
+                ctt_exclude_cargos,
                 is_helicopter: false,
                 is_large_aircraft: false,
                 sprite_stack: meta.sprite_stack,
@@ -259,6 +364,10 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 climate_bit,
                 &badge_catalog,
                 &badge_labels,
+                &cargo_tables,
+                entry.grf_version,
+                state.climate,
+                &state.cargo_spec_catalog,
                 &mut state.runtime.newgrf_diagnostics,
             );
         }

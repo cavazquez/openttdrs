@@ -4,8 +4,11 @@ use bevy::prelude::*;
 use openttdrs_core::Command;
 #[cfg(test)]
 use openttdrs_core::prelude::*;
+#[cfg(test)]
+use openttdrs_core::refittable_cargo_types;
 use openttdrs_core::{
-    CargoType, cargo_display_name, consist_unit_ids, refit_allowed, refittable_cargo_types,
+    CargoType, cargo_spec_display_name, consist_unit_ids, refit_allowed_with_catalog,
+    refittable_cargo_types_with_catalog,
 };
 
 use crate::render::RemapMapVisualsPending;
@@ -375,8 +378,17 @@ pub(crate) fn sync_refit_window(
             }
         }
 
-        let allowed = refit_allowed(vehicle, &sim.state.map);
-        let options = refittable_cargo_types(vehicle);
+        let allowed = refit_allowed_with_catalog(
+            vehicle,
+            &sim.state.map,
+            &sim.state.engine_catalog,
+            &sim.state.cargo_spec_catalog,
+        );
+        let options = refittable_cargo_types_with_catalog(
+            vehicle,
+            &sim.state.engine_catalog,
+            &sim.state.cargo_spec_catalog,
+        );
         let unit_ids = consist_unit_ids(&sim.state.vehicles, vehicle.id);
         let show_units = unit_ids.len() > 1;
         let target_ids = refit_target_unit_ids(vehicle.id, &slot_state.selected_unit_ids);
@@ -467,7 +479,7 @@ pub(crate) fn sync_refit_window(
                 let mark = if cargo == current { " ●" } else { "" };
                 **text = format!(
                     "{} · cap. {result_capacity} · gratis{mark}",
-                    cargo_display_name(cargo)
+                    cargo_spec_display_name(cargo, &sim.state.cargo_spec_catalog)
                 );
             } else {
                 **text = String::new();
@@ -536,16 +548,14 @@ pub(crate) fn handle_refit_window_buttons(
             (vehicle_id, slot.selected_unit_ids.clone())
         };
         state.focused = Some(vehicle_id);
-        let Some(options) = sim
-            .state
-            .vehicles
-            .iter()
-            .find(|v| v.id == vehicle_id)
-            .map(refittable_cargo_types)
-        else {
+        let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
             continue;
         };
-        let options: Vec<CargoType> = options.to_vec();
+        let options = refittable_cargo_types_with_catalog(
+            vehicle,
+            &sim.state.engine_catalog,
+            &sim.state.cargo_spec_catalog,
+        );
         let Some(cargo) = options.get(row.slot).copied() else {
             continue;
         };
@@ -663,13 +673,9 @@ mod tests {
 
     #[test]
     fn cargo_row_label_includes_capacity_and_cost() {
-        let label = format!(
-            "{} · cap. {} · gratis",
-            cargo_display_name(CargoType::Coal),
-            40
-        );
+        let label = format!("{} · cap. {} · gratis", CargoType::Coal.display_name(), 40);
         assert!(label.contains("cap."));
         assert!(label.contains("gratis"));
-        assert!(label.contains(cargo_display_name(CargoType::Coal)));
+        assert!(label.contains(CargoType::Coal.display_name()));
     }
 }

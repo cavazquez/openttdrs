@@ -89,24 +89,35 @@ pub fn refittable_cargo_types(vehicle: &Vehicle) -> &'static [CargoType] {
 /// (Action0 train `0x1D`) o listas vanilla.
 #[must_use]
 pub fn refittable_cargo_types_for_engine(engine: &crate::engine::EngineDef) -> Vec<CargoType> {
-    if engine.refit_mask != 0 {
-        return crate::cargo::ALL_CARGO_TYPES
+    let mut cargos = if engine.refit_mask != 0 {
+        crate::cargo::ALL_CARGO_TYPES
             .iter()
             .copied()
             .filter(|c| engine.refit_mask & (1u32 << c.temperate_id()) != 0)
-            .collect();
+            .collect()
+    } else {
+        match engine.kind {
+            VehicleKind::Bus | VehicleKind::Tram => vec![CargoType::Passengers],
+            VehicleKind::Truck => TRUCK_FREIGHT.to_vec(),
+            VehicleKind::Ship => vec![CargoType::Goods, CargoType::Oil, CargoType::Valuables],
+            VehicleKind::Aircraft => vec![CargoType::Passengers, CargoType::Mail],
+            VehicleKind::Train => match engine.cargo {
+                Some(CargoType::Passengers) => vec![CargoType::Passengers],
+                Some(CargoType::Mail) => vec![CargoType::Mail],
+                _ => TRAIN_FREIGHT.to_vec(),
+            },
+        }
+    };
+    // CTT include/exclude se aplica sobre la máscara base. Esto conserva los
+    // cargos por clases del vehículo y, a la vez, materializa ids custom que
+    // no caben en el bitmask histórico de 32 bits.
+    for &cargo in &engine.ctt_include_cargos {
+        if !cargos.contains(&cargo) {
+            cargos.push(cargo);
+        }
     }
-    match engine.kind {
-        VehicleKind::Bus | VehicleKind::Tram => vec![CargoType::Passengers],
-        VehicleKind::Truck => TRUCK_FREIGHT.to_vec(),
-        VehicleKind::Ship => vec![CargoType::Goods, CargoType::Oil, CargoType::Valuables],
-        VehicleKind::Aircraft => vec![CargoType::Passengers, CargoType::Mail],
-        VehicleKind::Train => match engine.cargo {
-            Some(CargoType::Passengers) => vec![CargoType::Passengers],
-            Some(CargoType::Mail) => vec![CargoType::Mail],
-            _ => TRAIN_FREIGHT.to_vec(),
-        },
-    }
+    cargos.retain(|cargo| !engine.ctt_exclude_cargos.contains(cargo));
+    cargos
 }
 
 /// Variante que añade los cargos custom registrados por los `NewGRF` activos.
@@ -121,25 +132,28 @@ pub fn refittable_cargo_types_for_engine_with_catalog(
     cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
 ) -> Vec<CargoType> {
     let mut cargos = refittable_cargo_types_for_engine(engine);
-    let custom = cargo_catalog.iter().filter_map(|def| {
-        let cargo = def.cargo_type()?;
-        let vehicle_allows_freight = match engine.kind {
-            VehicleKind::Truck | VehicleKind::Ship => true,
-            VehicleKind::Train => {
-                !matches!(engine.cargo, Some(CargoType::Passengers | CargoType::Mail))
+    if engine.ctt_include_cargos.is_empty() {
+        let custom = cargo_catalog.iter().filter_map(|def| {
+            let cargo = def.cargo_type()?;
+            let vehicle_allows_freight = match engine.kind {
+                VehicleKind::Truck | VehicleKind::Ship => true,
+                VehicleKind::Train => {
+                    !matches!(engine.cargo, Some(CargoType::Passengers | CargoType::Mail))
+                }
+                VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => false,
+            };
+            (cargo.is_freight() && vehicle_allows_freight).then_some(cargo)
+        });
+        for cargo in custom {
+            let mask_allows = engine.refit_mask == 0
+                || (u32::from(cargo.cargo_id()) < u32::BITS
+                    && engine.refit_mask & (1_u32 << cargo.cargo_id()) != 0);
+            if mask_allows && !cargos.contains(&cargo) {
+                cargos.push(cargo);
             }
-            VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => false,
-        };
-        (cargo.is_freight() && vehicle_allows_freight).then_some(cargo)
-    });
-    for cargo in custom {
-        let mask_allows = engine.refit_mask == 0
-            || (u32::from(cargo.cargo_id()) < u32::BITS
-                && engine.refit_mask & (1_u32 << cargo.cargo_id()) != 0);
-        if mask_allows && !cargos.contains(&cargo) {
-            cargos.push(cargo);
         }
     }
+    cargos.retain(|cargo| !engine.ctt_exclude_cargos.contains(cargo));
     cargos
 }
 
@@ -302,6 +316,21 @@ pub fn refit_allowed(vehicle: &Vehicle, map: &Map) -> bool {
     vehicle.cargo == 0
         && vehicle_in_depot(map, vehicle.pos)
         && refittable_cargo_types(vehicle).len() > 1
+}
+
+/// Variante de [`refit_allowed`] que incluye CTT y cargos custom del catálogo
+/// activo al decidir si la ventana de depósito debe ofrecer refit.
+#[must_use]
+pub fn refit_allowed_with_catalog(
+    vehicle: &Vehicle,
+    map: &Map,
+    engine_catalog: &[crate::engine::EngineDef],
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+) -> bool {
+    if vehicle.cargo != 0 || !vehicle_in_depot(map, vehicle.pos) {
+        return false;
+    }
+    refittable_cargo_types_with_catalog(vehicle, engine_catalog, cargo_catalog).len() > 1
 }
 
 #[cfg(test)]

@@ -4363,6 +4363,77 @@ mod tests {
         );
     }
 
+    /// #329: la CTT debe conservar cargos custom al aplicar un vehículo.
+    #[test]
+    fn vehicle_ctt_resolves_custom_default_and_refit_cargo() {
+        use crate::newgrf_type_tables::{
+            PROP_CARGO_TRANSLATION, build_action0_type_translation_payload,
+        };
+
+        let cargo_a0 = build_action0_cargo_payload(4, 27, b"TOFU", "Tofu");
+        let translation_a0 =
+            build_action0_type_translation_payload(PROP_CARGO_TRANSLATION, &[*b"TOFU"]);
+        // Train default cargo (0x15) y CTT include (0x2C) usan el índice local
+        // 0, que sólo puede resolverse mediante la tabla explícita del GRF.
+        let train_a0 = vec![
+            0x00,
+            ACTION0_FEATURE_TRAINS,
+            0x03,
+            0x01,
+            0x00,
+            0x15,
+            0x00,
+            0x2C,
+            0x01,
+            0x00,
+            0xFE,
+            b'T',
+            b'o',
+            b'f',
+            b'u',
+            0,
+        ];
+        let parsed = parse_action0_train_meta(&train_a0).unwrap();
+        assert_eq!(parsed.default_cargo_local_id, Some(0));
+        assert_eq!(parsed.ctt_include_cargo_indices, vec![0]);
+
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&cargo_a0, &translation_a0, &train_a0],
+            [b'C', b'T', 0, 2],
+            "ctt-custom",
+            "",
+        );
+        let dir = tempfile_dir_with("ctt-custom.grf", &bytes);
+        let grfid = crate::newgrf_config::grfid_from_bytes(*b"CT02");
+        let mut state = GameState::new(4, 4);
+        let mut entry = crate::NewGrfEntry::new("ctt-custom.grf", grfid);
+        // La CTT es la ruta usada por GRF v7+ y no por el fallback climático.
+        entry.grf_version = 8;
+        state.newgrf_stack.push(entry);
+
+        apply_newgrf_cargoes(&mut state, &[&dir]);
+        let custom = crate::cargo_spec_by_label(&state.cargo_spec_catalog, "TOFU").unwrap();
+        assert_eq!(custom.cargo_type(), Some(crate::CargoType::Custom(0)));
+
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|e| e.from_newgrf && e.kind == crate::VehicleKind::Train)
+            .unwrap();
+        assert_eq!(engine.cargo, Some(crate::CargoType::Custom(0)));
+        assert_eq!(engine.ctt_include_cargos, vec![crate::CargoType::Custom(0)]);
+        let options = crate::refittable_cargo_types_for_engine_with_catalog(
+            engine,
+            &state.cargo_spec_catalog,
+        );
+        assert!(options.contains(&crate::CargoType::Custom(0)));
+        assert_eq!(
+            crate::cargo_spec_display_name(crate::CargoType::Custom(0), &state.cargo_spec_catalog),
+            "Tofu"
+        );
+    }
+
     /// #249: Vehicles AC — flag helicóptero aircraft prop 0x09.
     #[test]
     fn vehicles_ac_aircraft_heli_flag() {

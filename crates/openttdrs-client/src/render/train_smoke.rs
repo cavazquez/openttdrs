@@ -275,20 +275,118 @@ fn advanced_effect_set(effect_type: u8) -> Option<TrainSmokeSet> {
 fn advanced_effect_offset(
     vehicle: &Vehicle,
     spawn: VehicleAdvancedVisualEffectSpawn,
+    auto_center: bool,
     auto_rotate: bool,
 ) -> Vec3 {
     let mut x = i32::from(spawn.x);
     let mut y = i32::from(spawn.y);
+    let direction = if vehicle.kind == VehicleKind::Train && vehicle.train_flags & (1 << 4) != 0 {
+        vehicle.direction.wrapping_add(4) & 7
+    } else {
+        vehicle.direction & 7
+    };
     if auto_rotate {
         const SMOKE_POS: [i32; 8] = [1, 1, 1, 0, -1, -1, -1, 0];
-        let longitudinal = usize::from(vehicle.direction & 7);
+        let longitudinal = usize::from(direction);
         let transverse = (longitudinal + 2) & 7;
         let local_x = x;
         let local_y = y;
         x = SMOKE_POS[longitudinal] * local_x + SMOKE_POS[transverse] * local_y;
         y = SMOKE_POS[transverse] * local_x - SMOKE_POS[longitudinal] * local_y;
     }
+    if auto_center {
+        // OpenTTD centra los efectos de carretera respecto del frente de la
+        // unidad y los de tren respecto de la posición de su sprite. Barcos y
+        // aeronaves ya reciben una posición centrada de `CreateEffectVehicle`.
+        // El centro se suma después de rotar el registro, como en
+        // `SpawnAdvancedVisualEffect` upstream.
+        let length_delta = i32::from(openttdrs_core::train_consist::VEHICLE_LENGTH)
+            - i32::from(vehicle.unit_length.max(1));
+        let longitudinal = match vehicle.kind {
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => -length_delta / 2,
+            VehicleKind::Train => length_delta / 2,
+            VehicleKind::Ship | VehicleKind::Aircraft => 0,
+        };
+        const SMOKE_POS: [i32; 8] = [1, 1, 1, 0, -1, -1, -1, 0];
+        let transverse = (usize::from(direction) + 2) & 7;
+        x += SMOKE_POS[usize::from(direction)] * longitudinal;
+        y += SMOKE_POS[transverse] * longitudinal;
+    }
     Vec3::new(x as f32, y as f32, f32::from(spawn.z))
+}
+
+/// Replica la decisión de `Vehicle::ShowVisualEffect` que precede a CB160.
+/// El callback avanzado no debe ejecutarse para un vehículo detenido, oculto,
+/// dentro de un depósito/túnel o cubierto por un puente.
+#[must_use]
+fn advanced_effect_should_emit(
+    map: &Map,
+    vehicle: &Vehicle,
+    engine: &EngineDef,
+    kind: VehicleVisualEffectKind,
+    tick: u64,
+    smoke_amount: u8,
+) -> bool {
+    let amount = smoke_amount.min(2);
+    if amount == 0
+        || !vehicle.running
+        || vehicle.crashed
+        || vehicle.cur_speed < 2
+        || openttdrs_core::vehicle_hidden_from_view(map, vehicle, vehicle.pos, vehicle.progress)
+        || openttdrs_core::vehicle_in_depot(map, vehicle.pos)
+        || map
+            .get_kind(vehicle.pos)
+            .is_some_and(|tile| matches!(tile, TileKind::RailTunnel | TileKind::RoadTunnel))
+        || map
+            .get(vehicle.pos)
+            .is_some_and(|tile| openttdrs_core::bridge_above_axis_from_mapt(tile.mapt).is_some())
+    {
+        return false;
+    }
+    if vehicle.kind == VehicleKind::Train
+        && (vehicle.train_flags & 1 != 0 || train_is_stopping_at_station(map, vehicle))
+    {
+        return false;
+    }
+    let max_speed = if vehicle.cached_max_speed == 0 || vehicle.cached_max_speed == u16::MAX {
+        engine.max_speed.max(1)
+    } else {
+        vehicle.cached_max_speed.max(1)
+    };
+    let speed = vehicle.cur_speed.min(max_speed);
+    match kind {
+        VehicleVisualEffectKind::Steam => {
+            let bits = u32::from((4_u8 >> amount) + (speed.saturating_mul(3) / max_speed) as u8);
+            tick & (1_u64 << bits.min(63)).saturating_sub(1) == 0
+        }
+        VehicleVisualEffectKind::Diesel => {
+            let power_weight_effect = if vehicle.kind == VehicleKind::Train {
+                let power_shift = (vehicle.cached_power_hp >> 10).min(31);
+                let weight_shift = (u32::from(vehicle.cached_weight_t) >> 9).min(31);
+                (32_u32 >> power_shift) as i32 - (32_u32 >> weight_shift) as i32
+            } else {
+                0
+            };
+            let speed_limit = max_speed >> (2_u8 >> amount);
+            let numerator = 64 - i32::from(speed) * 32 / i32::from(max_speed) + power_weight_effect;
+            speed < speed_limit
+                && chance16(
+                    deterministic_random16(vehicle.id, tick, 0xD1E5_E100),
+                    numerator,
+                    512_u32 >> amount,
+                )
+        }
+        VehicleVisualEffectKind::Electric => {
+            let numerator = 6 - i32::from(speed) * 4 / i32::from(max_speed);
+            tick & 3 == 0
+                && chance16(
+                    deterministic_random16(vehicle.id, tick, 0xE1EC_7A1C),
+                    numerator,
+                    360_u32 >> amount,
+                )
+        }
+        VehicleVisualEffectKind::Default | VehicleVisualEffectKind::Disabled => false,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -337,6 +435,16 @@ fn spawn_train_smoke(
             if matches!(visual_spec.kind, VehicleVisualEffectKind::Disabled) {
                 continue;
             }
+            if !advanced_effect_should_emit(
+                map,
+                vehicle,
+                engine,
+                visual_spec.kind,
+                tick,
+                prefs.smoke_amount,
+            ) {
+                continue;
+            }
             // `ShowVisualEffect` no emite el modelo vanilla cuando el bit 6
             // pide el callback avanzado: si el callback falla, el resultado
             // correcto es no crear efectos, no degradar a humo estándar.
@@ -359,7 +467,12 @@ fn spawn_train_smoke(
                 let Some(atlas) = effect_set.frames.first() else {
                     continue;
                 };
-                let advanced_offset = advanced_effect_offset(vehicle, *spawn, advanced.auto_rotate);
+                let advanced_offset = advanced_effect_offset(
+                    vehicle,
+                    *spawn,
+                    advanced.auto_center,
+                    advanced.auto_rotate,
+                );
                 let mut sprite = atlas.sprite();
                 if matches!(set_kind, TrainSmokeSet::Electric) {
                     sprite.color = Color::srgb(0.85, 0.92, 1.0);
@@ -567,13 +680,98 @@ mod tests {
             z: -4,
         };
         assert_eq!(
-            advanced_effect_offset(&vehicle, spawn, false),
+            advanced_effect_offset(&vehicle, spawn, false, false),
             Vec3::new(2.0, 3.0, -4.0)
         );
         assert_eq!(
-            advanced_effect_offset(&vehicle, spawn, true),
+            advanced_effect_offset(&vehicle, spawn, false, true),
             Vec3::new(5.0, -1.0, -4.0)
         );
+    }
+
+    #[test]
+    fn advanced_effect_offset_applies_vehicle_center_by_kind() {
+        let spawn = VehicleAdvancedVisualEffectSpawn {
+            effect_type: 0xF1,
+            ..VehicleAdvancedVisualEffectSpawn::default()
+        };
+        let mut train = running_train(ENGINE_TRAIN_KIRBY);
+        train.unit_length = 4;
+        train.direction = 0;
+        assert_eq!(
+            advanced_effect_offset(&train, spawn, true, false),
+            Vec3::new(2.0, 2.0, 0.0)
+        );
+        assert_eq!(
+            advanced_effect_offset(
+                &train,
+                VehicleAdvancedVisualEffectSpawn {
+                    x: 2,
+                    y: 3,
+                    ..spawn
+                },
+                true,
+                true,
+            ),
+            Vec3::new(7.0, 1.0, 0.0)
+        );
+
+        let mut bus = Vehicle::new(
+            8,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        bus.unit_length = 4;
+        bus.direction = 0;
+        assert_eq!(
+            advanced_effect_offset(&bus, spawn, true, false),
+            Vec3::new(-2.0, -2.0, 0.0)
+        );
+
+        let mut ship = Vehicle::new(
+            9,
+            VehicleKind::Ship,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        ship.unit_length = 4;
+        assert_eq!(
+            advanced_effect_offset(&ship, spawn, true, false),
+            Vec3::ZERO
+        );
+    }
+
+    #[test]
+    fn advanced_effect_emission_works_for_non_train_vehicles_and_stops_when_hidden() {
+        let map = Map::new_flat(8, 8, 0);
+        for kind in [VehicleKind::Bus, VehicleKind::Ship, VehicleKind::Aircraft] {
+            let mut vehicle = Vehicle::new(
+                30 + kind as u32,
+                kind,
+                TileCoord::new(2, 2),
+                TileCoord::new(3, 2),
+            );
+            vehicle.cur_speed = 24;
+            let engine = vehicle.effective_engine();
+            assert!(advanced_effect_should_emit(
+                &map,
+                &vehicle,
+                engine,
+                VehicleVisualEffectKind::Steam,
+                0,
+                2
+            ));
+            vehicle.running = false;
+            assert!(!advanced_effect_should_emit(
+                &map,
+                &vehicle,
+                engine,
+                VehicleVisualEffectKind::Steam,
+                0,
+                2
+            ));
+        }
     }
 
     #[test]

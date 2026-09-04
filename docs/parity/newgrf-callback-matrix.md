@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `85db7852`, CTT de cargos custom en scopes
+Actualizada: **2026-09-04** (commit `e1f698d3`, CTT de cargos custom en scopes
 de estación/parada,
 shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
@@ -760,3 +760,12 @@ shape-check, autoslope y construcción pasan el catálogo explícito; la regresi
 Los wrappers legacy mantienen el fallback sin catálogo. Animación,
 randomización, GUI/variables ilimitadas, sonidos y scopes restantes continúan
 pendientes; #329 permanece abierto.
+
+Actualización #329-CARGO-CTT-073 (2026-09-04, commit `e1f698d3`): los callbacks
+de animación `IndustryTile` (`CB25`/`CB26`/`CB27`) y el avance de frames reciben
+el catálogo `CargoSpec` activo en los eventos de simulación y construcción. El
+resolver descubre las variables Action2 parent usadas por cada grafo, incluidas
+`0x69`–`0x71`, y conserva la CTT de cargos custom con slots SAV vacíos. La
+regresión `TOFU` comprueba stock=23 al resolver CB26; wrappers legacy mantienen
+el fallback sin catálogo. Randomización, sonidos, GUI/variables ilimitadas y
+scopes restantes siguen pendientes; #329 continúa abierto.

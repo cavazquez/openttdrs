@@ -34,16 +34,21 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `a6f561b6`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `d6b4c5fc`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
-ferroviario y la CTT de scopes de estación/parada e `IndustryTile` quedan
-actualizados en este corte).
+ferroviario, la CTT de scopes de estación/parada e `IndustryTile` y la CTT de
+vehículos/refit quedan actualizados en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
 mapeo y la evidencia de auditorías anteriores; fechas anteriores son contexto
 histórico. Ante una contradicción prevalece este bloque y debe corregirse la
 fila antigua en el mismo cambio.
+
+Validación de este corte: formatter y clippy estricto en core/cliente, **2.029**
+tests de core y **1.065** tests ejecutados del cliente (2 ignorados), además de
+la regresión integrada de CTT de vehículos; los conteos anteriores son
+históricos.
 
 El pin es la referencia de evidencia: un checkout local de OpenTTD con otro
 commit o cambios sin confirmar sirve para investigar, pero no para declarar
@@ -319,6 +324,20 @@ SAV; la regresión `TOFU` comprueba que la rama catalogue-aware reseedea el PSA
 parent y que el wrapper sin catálogo conserva el fallback. GUI/variables
 ilimitadas, sonidos, reatachación sin GRF y scopes restantes siguen pendientes;
 #329 continúa abierto.
+
+Actualización #329-VEHICLE-CARGO-CTT-075 (2026-09-04, `d6b4c5fc`): Action0
+conserva el índice local del cargo por defecto (`0x15` trenes, `0x10` carretera,
+`0x0C` barcos) y las listas CTT de inclusión/exclusión de trenes (`0x2C`/`0x2D`),
+carretera (`0x24`/`0x25`), barcos (`0x1E`/`0x1F`) y aeronaves (`0x1D`/`0x1E`).
+La aplicación de vehículos traduce esos índices mediante la tabla GlobalVar
+`0x09` y el catálogo `CargoSpec`, por lo que un cargo custom como `TOFU` ya
+queda en `EngineDef.cargo`, en las listas de refit y en la selección de sprites
+por carga. La ventana de refit y el botón de vehículo usan las opciones
+catalogue-aware y muestran el nombre del `CargoSpec`; el orden del catálogo
+completo aplica `Cargoes` antes de vehículos. La regresión integrada cubre
+default+include custom en un tren; la semántica de clases/required, slots `63+`,
+callbacks de refit y la UI/variables ilimitadas siguen pendientes. #329 no se
+cierra.
 
 | Multijugador | **Media propia** | Lockstep TCP, dedicated, late join y host migration; el servidor asigna empresa por peer, valida antes de secuenciar, rechaza issuer inválido y resincroniza desync por snapshot. Sigue siendo protocolo propio, sin lobby, auth, cifrado ni interoperabilidad OpenTTD |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |

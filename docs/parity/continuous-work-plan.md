@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`a6f561b6`** (`newgrf: propagate cargo catalog to industry randomisation`),
+Base funcional local y publicada: **`d6b4c5fc`** (`newgrf: resolve vehicle cargo translation and refit CTT`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -72,7 +72,23 @@ alterar el orden de señales. `15c8bfcf` añade `vehicle.freight_trains` con
 persistencia `PATS`/JSON, frontera `SLV_39` y aplicación exclusiva a cargas
 freight. `5e0938ff` expone presets del setting en Ajustes y refresca los
 consist de inmediato. Quedan pendientes la edición arbitraria tipo slider, CTT
-completa y el resto de settings económicos.
+completa y el resto de settings económicos. `d6b4c5fc` completa ahora la
+primera ruta de CTT de vehículos: default cargo y listas include/exclude de los
+cuatro features de vehículos se traducen contra GlobalVar `0x09` y el catálogo
+`CargoSpec`; refit y la UI ya consumen esos cargos custom.
+
+Actualización #329-VEHICLE-CARGO-CTT-075 (2026-09-04, commit `d6b4c5fc`): el
+parser Action0 conserva los índices locales de cargo por defecto y las listas
+CTT de trenes, carretera, barcos y aeronaves. `apply_newgrf_vehicles_trains`
+resuelve esos índices con la versión/tabla del GRF y el catálogo activo, y el
+catálogo completo aplica primero `Cargoes` para que un label custom sea
+ejecutable. `EngineDef` guarda default, inclusión y exclusión; la consulta de
+refit, la compra por carga y la selección de sprites usan la identidad global;
+la ventana de refit y el botón de vehículo muestran el nombre del `CargoSpec`.
+La regresión `vehicle_ctt_resolves_custom_default_and_refit_cargo` cubre
+`TOFU` como default e include. Clases/required, slots `63+`, callbacks de
+refit, UI/variables ilimitadas y scopes económicos restantes siguen abiertos;
+#329 no se cierra.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|

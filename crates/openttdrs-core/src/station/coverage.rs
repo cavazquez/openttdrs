@@ -1,13 +1,15 @@
 use crate::Climate;
 use crate::airport_class::airport_spec_def;
 use crate::cargo::{ALL_CARGO_TYPES, CargoStock, CargoType};
+use crate::cargo_spec::CargoSpecDef;
 use crate::house_spec::{STATION_ACCEPTANCE_THRESHOLD, add_accepted_cargo_of_house};
 use crate::industry::{Industry, IndustryKind};
 use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::{IndustryTileSpecDef, industry_tile_spec_def};
 use crate::map::{Map, TileCoord, TileKind};
 use crate::newgrf_callback::{
-    IndustryTileCargoAcceptance, resolve_industry_tile_cargo_acceptance_callback_with_world,
+    IndustryTileCargoAcceptance,
+    resolve_industry_tile_cargo_acceptance_callback_with_world_and_cargo_catalog,
 };
 use crate::town::Town;
 
@@ -296,6 +298,37 @@ pub fn station_coverage_at_with_newgrf(
     pos: TileCoord,
     radius: i32,
 ) -> StationCoverage {
+    station_coverage_at_with_newgrf_and_cargo_catalog(
+        map,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        pos,
+        radius,
+        &[],
+    )
+}
+
+/// Variante catálogo-aware de [`station_coverage_at_with_newgrf`].
+///
+/// El catálogo se entrega al callback de aceptación de cada `IndustryTile`
+/// para que labels custom se puedan resolver aunque el SAV no haya hidratado
+/// los slots de cargos de la industria parent.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn station_coverage_at_with_newgrf_and_cargo_catalog(
+    map: &Map,
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+    pos: TileCoord,
+    radius: i32,
+    cargo_catalog: &[CargoSpecDef],
+) -> StationCoverage {
     let mut coverage = StationCoverage::default();
     let mut snapshot = industries.to_vec();
     let mut exact_industries = vec![false; industries.len()];
@@ -340,7 +373,7 @@ pub fn station_coverage_at_with_newgrf(
                         if def.from_newgrf {
                             exact_industries[index] = true;
                         }
-                        let value = resolve_industry_tile_cargo_acceptance_callback_with_world(
+                        let value = resolve_industry_tile_cargo_acceptance_callback_with_world_and_cargo_catalog(
                             def,
                             &mut industries[index],
                             map,
@@ -350,6 +383,7 @@ pub fn station_coverage_at_with_newgrf(
                             tile_spec_catalog,
                             industry_catalog,
                             climate,
+                            cargo_catalog,
                         );
                         snapshot[index] = industries[index].clone();
                         value
@@ -401,10 +435,37 @@ pub fn station_accepts_cargo_with_newgrf(
     station: &Station,
     cargo: CargoType,
 ) -> bool {
+    station_accepts_cargo_with_newgrf_and_cargo_catalog(
+        map,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        station,
+        cargo,
+        &[],
+    )
+}
+
+/// Variante catálogo-aware de [`station_accepts_cargo_with_newgrf`].
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn station_accepts_cargo_with_newgrf_and_cargo_catalog(
+    map: &Map,
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+    station: &Station,
+    cargo: CargoType,
+    cargo_catalog: &[CargoSpecDef],
+) -> bool {
     if !station.accepts_cargo(cargo) {
         return false;
     }
-    let coverage = station_coverage_at_with_newgrf(
+    let coverage = station_coverage_at_with_newgrf_and_cargo_catalog(
         map,
         industries,
         towns,
@@ -413,6 +474,7 @@ pub fn station_accepts_cargo_with_newgrf(
         climate,
         station.pos,
         station_catchment_radius(station),
+        cargo_catalog,
     );
     if coverage.exact_cargo_acceptance {
         coverage.accepted_cargo.get(cargo) >= STATION_ACCEPTANCE_THRESHOLD
@@ -629,6 +691,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn newgrf_industry_tile_acceptance_can_return_custom_cargo() {
         let coord = TileCoord::new(8, 8);
         let mut map = Map::new_flat(16, 16, 0);
@@ -695,13 +758,32 @@ mod tests {
             newgrf_runtime: None,
         };
         let custom = CargoType::Custom(0);
+        let station = Station::new_with_kind(TileCoord::new(9, 8), StopKind::TruckStop);
+        let mut legacy_industries = vec![
+            Industry::new(coord, IndustryKind::Factory)
+                .with_instance_id(7)
+                .with_newgrf_spec(7, &industry_def),
+        ];
+        assert!(
+            !station_accepts_cargo_with_newgrf(
+                &map,
+                &mut legacy_industries,
+                &[],
+                std::slice::from_ref(&tile_def),
+                std::slice::from_ref(&industry_def),
+                Climate::Temperate,
+                &station,
+                custom,
+            ),
+            "sin catálogo, el label custom del parent no puede resolverse"
+        );
+
         let mut industries = vec![
             Industry::new(coord, IndustryKind::Factory)
                 .with_instance_id(7)
-                .with_newgrf_spec_and_cargo_catalog(7, &industry_def, &cargo_catalog),
+                .with_newgrf_spec(7, &industry_def),
         ];
-        let station = Station::new_with_kind(TileCoord::new(9, 8), StopKind::TruckStop);
-        assert!(station_accepts_cargo_with_newgrf(
+        assert!(station_accepts_cargo_with_newgrf_and_cargo_catalog(
             &map,
             &mut industries,
             &[],
@@ -710,9 +792,10 @@ mod tests {
             Climate::Temperate,
             &station,
             custom,
+            &cargo_catalog,
         ));
         assert!(
-            !station_accepts_cargo_with_newgrf(
+            !station_accepts_cargo_with_newgrf_and_cargo_catalog(
                 &map,
                 &mut industries,
                 &[],
@@ -726,6 +809,7 @@ mod tests {
                 Climate::Temperate,
                 &station,
                 CargoType::Goods,
+                &cargo_catalog,
             ),
             "el callback custom no debe volver a aceptar Goods por proxy"
         );

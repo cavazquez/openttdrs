@@ -11,7 +11,7 @@ use crate::cargodist::parity::Randomizer;
 use crate::engine::EngineDef;
 use crate::house_spec::{HouseSpecDef, action2_eval_ctx_for_house_tile_with_towns};
 use crate::industry::{Industry, IndustryProcessingInput, IndustryProductionAction};
-use crate::industry_spec::{IndustrySpecDef, cargo_type_from_label};
+use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::{IndustryTileSpecDef, industry_tile_slope_refused};
 use crate::map::industry_action2::{
     action2_eval_ctx_for_industry_tile_with_world,
@@ -3210,6 +3210,7 @@ fn industry_parent_cargo_for_local(
     industry: &Industry,
     industry_catalog: &[IndustrySpecDef],
     local: u8,
+    cargo_catalog: &[CargoSpecDef],
 ) -> Option<CargoType> {
     let industry_def = industry
         .newgrf_type_id
@@ -3223,12 +3224,19 @@ fn industry_parent_cargo_for_local(
         .get(index)
         .copied()
         .flatten()
+        .or_else(|| {
+            industry_def
+                .accepted_cargo_labels
+                .get(index)
+                .and_then(|label| cargo_type_from_label_with_catalog(label, cargo_catalog))
+        })
 }
 
 fn industry_tile_static_cargo(
     def: &IndustryTileSpecDef,
     industry: &Industry,
     industry_catalog: &[IndustrySpecDef],
+    cargo_catalog: &[CargoSpecDef],
     slot: usize,
 ) -> Option<CargoType> {
     let local = *def.accepts_cargo_indices.get(slot)?;
@@ -3237,8 +3245,10 @@ fn industry_tile_static_cargo(
     }
     def.accepts_cargo_labels
         .get(slot)
-        .and_then(|label| cargo_type_from_label(Some(label.as_str())))
-        .or_else(|| industry_parent_cargo_for_local(industry, industry_catalog, local))
+        .and_then(|label| cargo_type_from_label_with_catalog(label, cargo_catalog))
+        .or_else(|| {
+            industry_parent_cargo_for_local(industry, industry_catalog, local, cargo_catalog)
+        })
         .or_else(|| CargoType::from_cargo_id(local))
 }
 
@@ -3246,6 +3256,7 @@ fn industry_tile_cargo_for_local(
     def: &IndustryTileSpecDef,
     industry: &Industry,
     industry_catalog: &[IndustrySpecDef],
+    cargo_catalog: &[CargoSpecDef],
     local: u8,
 ) -> Option<CargoType> {
     if local == 0x1F {
@@ -3257,9 +3268,11 @@ fn industry_tile_cargo_for_local(
         .and_then(|slot| {
             def.accepts_cargo_labels
                 .get(slot)
-                .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+                .and_then(|label| cargo_type_from_label_with_catalog(label, cargo_catalog))
         })
-        .or_else(|| industry_parent_cargo_for_local(industry, industry_catalog, local))
+        .or_else(|| {
+            industry_parent_cargo_for_local(industry, industry_catalog, local, cargo_catalog)
+        })
         .or_else(|| CargoType::from_cargo_id(local))
 }
 
@@ -3267,10 +3280,12 @@ fn static_industry_tile_cargo_acceptance(
     def: &IndustryTileSpecDef,
     industry: &Industry,
     industry_catalog: &[IndustrySpecDef],
+    cargo_catalog: &[CargoSpecDef],
 ) -> IndustryTileCargoAcceptance {
     let mut result = IndustryTileCargoAcceptance::default();
     for slot in 0..result.cargos.len() {
-        result.cargos[slot] = industry_tile_static_cargo(def, industry, industry_catalog, slot);
+        result.cargos[slot] =
+            industry_tile_static_cargo(def, industry, industry_catalog, cargo_catalog, slot);
         result.amounts[slot] = def.acceptance.get(slot).copied().unwrap_or(0).into();
     }
 
@@ -3278,7 +3293,20 @@ fn static_industry_tile_cargo_acceptance(
     // with the cargos currently accepted by the parent industry. OpenTTD adds
     // 8/8 to an existing slot and otherwise consumes the first invalid slot.
     if def.accepts_all_cargo() {
-        for (cargo, _) in industry.station_input_requirements() {
+        let parent_cargos = industry
+            .newgrf_type_id
+            .and_then(|id| industry_catalog.iter().find(|def| def.id == id))
+            .filter(|def| !def.accepted_cargo_labels.is_empty())
+            .map(|def| def.accepted_cargo_types_with_catalog(cargo_catalog))
+            .filter(|cargos| !cargos.is_empty())
+            .unwrap_or_else(|| {
+                industry
+                    .station_input_requirements()
+                    .into_iter()
+                    .map(|(cargo, _)| cargo)
+                    .collect()
+            });
+        for cargo in parent_cargos {
             if let Some(slot) = result
                 .cargos
                 .iter()
@@ -3316,7 +3344,42 @@ pub fn resolve_industry_tile_cargo_acceptance_callback_with_world(
     industry_catalog: &[IndustrySpecDef],
     climate: crate::Climate,
 ) -> IndustryTileCargoAcceptance {
-    let mut result = static_industry_tile_cargo_acceptance(def, industry, industry_catalog);
+    resolve_industry_tile_cargo_acceptance_callback_with_world_and_cargo_catalog(
+        def,
+        industry,
+        map,
+        coord,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        &[],
+    )
+}
+
+/// Variante catálogo-aware de
+/// [`resolve_industry_tile_cargo_acceptance_callback_with_world`].
+///
+/// Los labels de `IndustryTile` y de su industria parent se resuelven contra
+/// el catálogo activo, de modo que una instancia importada desde SAV sin sus
+/// slots materializados todavía puede aceptar cargos custom mediante CTT.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_industry_tile_cargo_acceptance_callback_with_world_and_cargo_catalog(
+    def: &IndustryTileSpecDef,
+    industry: &mut Industry,
+    map: &Map,
+    coord: TileCoord,
+    industries: &[Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: crate::Climate,
+    cargo_catalog: &[CargoSpecDef],
+) -> IndustryTileCargoAcceptance {
+    let mut result =
+        static_industry_tile_cargo_acceptance(def, industry, industry_catalog, cargo_catalog);
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return result;
     };
@@ -3357,8 +3420,13 @@ pub fn resolve_industry_tile_cargo_acceptance_callback_with_world(
                 let shift = u32::try_from(slot * 5).unwrap_or(0);
                 let local =
                     u8::try_from((u32::from(callback_result) >> shift) & 0x1F).unwrap_or(0x1F);
-                result.cargos[slot] =
-                    industry_tile_cargo_for_local(def, industry, industry_catalog, local);
+                result.cargos[slot] = industry_tile_cargo_for_local(
+                    def,
+                    industry,
+                    industry_catalog,
+                    cargo_catalog,
+                    local,
+                );
             }
         }
     }

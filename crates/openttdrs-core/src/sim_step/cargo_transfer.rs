@@ -517,7 +517,7 @@ pub(super) fn unload_vehicles(
             station_pos,
             Some(cargo_pct),
         );
-        let accepted = crate::station::station_accepts_cargo_with_newgrf(
+        let accepted = crate::station::station_accepts_cargo_with_newgrf_and_cargo_catalog(
             &state.map,
             &mut state.industries,
             &state.towns,
@@ -526,6 +526,7 @@ pub(super) fn unload_vehicles(
             state.climate,
             &state.stations[station_idx],
             cargo_type,
+            &state.cargo_spec_catalog,
         );
         let will_unload = crate::cargo_packet::prepare_unload(
             &mut state.vehicles[i].cargo_packets,

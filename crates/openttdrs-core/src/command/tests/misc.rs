@@ -530,6 +530,37 @@ fn disabling_breakdowns_clears_pending_and_active_failures() {
 }
 
 #[test]
+fn set_freight_trains_clamps_and_refreshes_train_weight() {
+    let mut state = GameState::new(8, 8);
+    let mut train = crate::Vehicle::new(
+        1,
+        crate::VehicleKind::Train,
+        TileCoord::new(1, 1),
+        TileCoord::new(1, 1),
+    );
+    train.capacity = 4;
+    train.cargo = 4;
+    train.cargo_type = Some(crate::CargoType::Coal);
+    train.engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+    state.vehicles.push(train);
+    crate::train_consist::consist_changed_with_map_and_catalog_and_cargo(
+        &mut state.vehicles,
+        1,
+        Some(&state.map),
+        &state.engine_catalog,
+        &state.cargo_spec_catalog,
+    );
+    let before = state.vehicles[0].cached_weight_t;
+
+    apply_command(&mut state, &Command::SetFreightTrains(4)).unwrap();
+    assert_eq!(state.freight_trains, 4);
+    assert!(state.vehicles[0].cached_weight_t > before);
+
+    apply_command(&mut state, &Command::SetFreightTrains(0)).unwrap();
+    assert_eq!(state.freight_trains, 1);
+}
+
+#[test]
 fn set_cargo_dist_distribution_rebuilds_flows() {
     use crate::flow_stat::DistributionType;
 

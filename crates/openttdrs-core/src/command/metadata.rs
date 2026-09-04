@@ -268,6 +268,7 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         Command::SetPathfindingSettings(..)
         | Command::SetConstructionSettings(..)
         | Command::SetVehicleBreakdowns(..)
+        | Command::SetFreightTrains(..)
         | Command::SetCargoDistDistribution(..)
         | Command::SetCompanyColour(..)
         | Command::SetCurrentRailType(..)

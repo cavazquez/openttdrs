@@ -373,6 +373,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::SetPathfindingSettings(..)
         | Command::SetConstructionSettings(..)
         | Command::SetVehicleBreakdowns(..)
+        | Command::SetFreightTrains(..)
         | Command::SetCargoDistDistribution(..)
         | Command::SetCompanyColour(..)
         | Command::SetCurrentRailType(..)

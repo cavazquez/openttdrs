@@ -577,6 +577,32 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             }
             Ok(())
         }
+        Command::SetFreightTrains(multiplier) => {
+            let multiplier = (*multiplier).max(1);
+            if state.freight_trains == multiplier {
+                return Ok(());
+            }
+            state.freight_trains = multiplier;
+            let train_heads: Vec<u32> = state
+                .vehicles
+                .iter()
+                .filter(|vehicle| {
+                    vehicle.kind == crate::VehicleKind::Train && vehicle.is_consist_head()
+                })
+                .map(|vehicle| vehicle.id)
+                .collect();
+            for head_id in train_heads {
+                crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
+                    &mut state.vehicles,
+                    head_id,
+                    Some(&state.map),
+                    &state.engine_catalog,
+                    &state.cargo_spec_catalog,
+                    multiplier,
+                );
+            }
+            Ok(())
+        }
         Command::SetCargoDistDistribution(mode) => {
             if state.cargo_dist.distribution == *mode {
                 return Ok(());

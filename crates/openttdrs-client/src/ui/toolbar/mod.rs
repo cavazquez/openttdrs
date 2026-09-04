@@ -101,11 +101,11 @@ pub(crate) use road_type_selector::{
     sync_road_type_popovers,
 };
 pub(crate) use settings::{
-    handle_cheats_menu_button, handle_company_colour_swatches,
+    handle_cheats_menu_button, handle_company_colour_swatches, handle_freight_trains_menu_button,
     handle_road_driving_side_menu_button, handle_settings_menu_buttons,
     handle_settings_zoom_buttons, handle_vehicle_breakdowns_menu_button,
-    sync_company_colour_swatch_visuals, sync_road_driving_side_button_label,
-    sync_vehicle_breakdowns_button_label,
+    sync_company_colour_swatch_visuals, sync_freight_trains_button_label,
+    sync_road_driving_side_button_label, sync_vehicle_breakdowns_button_label,
 };
 pub(crate) use signal_picker_window::{
     handle_signal_picker_buttons, setup_signal_picker, signal_picker_on_closed, sync_signal_picker,
@@ -662,6 +662,8 @@ pub(crate) enum SaveMenuAction {
     NewsSettings,
     PathfindingSettings,
     CycleVehicleBreakdowns,
+    /// Cicla el multiplicador de carga freight ferroviaria (`1..=255`).
+    CycleFreightTrains,
     /// Cicla circulación vial izquierda / derecha (`vehicle.road_side`).
     ToggleRoadDrivingSide,
     CargoDistSettings,
@@ -709,6 +711,7 @@ impl SaveMenuAction {
         Self::NewsSettings,
         Self::PathfindingSettings,
         Self::CycleVehicleBreakdowns,
+        Self::CycleFreightTrains,
         Self::ToggleRoadDrivingSide,
         Self::CargoDistSettings,
         Self::AiSettings,

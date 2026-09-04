@@ -424,6 +424,8 @@ pub enum Command {
     SetConstructionSettings(crate::construction_settings::ConstructionSettings),
     /// Nivel de averías de vehículos: 0=ninguna, 1=reducidas, 2=normales.
     SetVehicleBreakdowns(u8),
+    /// Multiplicador de peso de cargas freight en trenes (`1..=255`).
+    SetFreightTrains(u8),
     /// Cambia el modo `CargoDist` y reconstruye flows de estación.
     SetCargoDistDistribution(crate::flow_stat::DistributionType),
     /// Color de la compañía activa (0..=15).

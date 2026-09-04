@@ -158,6 +158,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             SaveMenuAction::CycleVehicleBreakdowns,
         ),
         (
+            "Carga trenes: x1",
+            "Multiplicador freight ferroviario (1 / 2 / 4 / ... / 255)",
+            SaveMenuAction::CycleFreightTrains,
+        ),
+        (
             "Pathfinding / PBS...",
             "Espera path, giro en señales y look-ahead (pf.*)",
             SaveMenuAction::PathfindingSettings,

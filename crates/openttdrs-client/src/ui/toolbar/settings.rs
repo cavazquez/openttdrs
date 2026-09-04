@@ -136,6 +136,9 @@ pub(crate) fn handle_settings_menu_buttons(
             SaveMenuAction::CycleVehicleBreakdowns => {
                 // Aplicado en un sistema separado para no superar SystemParam.
             }
+            SaveMenuAction::CycleFreightTrains => {
+                // Aplicado en un sistema separado para no superar SystemParam.
+            }
             SaveMenuAction::ToggleRoadDrivingSide => {
                 // Aplicado en un sistema separado para no superar SystemParam.
             }
@@ -336,6 +339,58 @@ pub(crate) fn sync_vehicle_breakdowns_button_label(
     }
 }
 
+const FREIGHT_TRAIN_PRESETS: &[u8] = &[1, 2, 4, 8, 16, 32, 64, 128, 255];
+
+/// Cicla los valores visibles del setting `vehicle.freight_trains`.
+///
+/// OpenTTD permite cualquier valor `1..=255`; la toolbar expone los valores
+/// más habituales en una secuencia corta y conserva el rango completo en el
+/// comando del core.
+pub(crate) fn handle_freight_trains_menu_button(
+    mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut sim: ResMut<SimWorld>,
+) {
+    for (interaction, action) in &mut q {
+        if *interaction != Interaction::Pressed
+            || !matches!(action, SaveMenuAction::CycleFreightTrains)
+        {
+            continue;
+        }
+        let current = sim.state.freight_trains.max(1);
+        let next = FREIGHT_TRAIN_PRESETS
+            .iter()
+            .copied()
+            .find(|value| *value > current)
+            .unwrap_or(FREIGHT_TRAIN_PRESETS[0]);
+        if let Err(error) = crate::network::apply_player_command(
+            &mut sim.state,
+            &openttdrs_core::Command::SetFreightTrains(next),
+        ) {
+            warn!("No se pudo cambiar el multiplicador freight ferroviario: {error}");
+        }
+    }
+}
+
+pub(crate) fn sync_freight_trains_button_label(
+    sim: Res<SimWorld>,
+    buttons: Query<(&SaveMenuAction, &Children), With<Button>>,
+    mut texts: Query<&mut Text>,
+) {
+    let label = format!("Carga trenes: x{}", sim.state.freight_trains.max(1));
+    for (action, children) in &buttons {
+        if !matches!(action, SaveMenuAction::CycleFreightTrains) {
+            continue;
+        }
+        for child in children.iter() {
+            if let Ok(mut text) = texts.get_mut(child)
+                && text.as_str() != label
+            {
+                **text = label.clone();
+            }
+        }
+    }
+}
+
 /// Cicla circulación vial izquierda/derecha (`construction.road_vehicle_driving_side`).
 pub(crate) fn handle_road_driving_side_menu_button(
     mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
@@ -477,7 +532,8 @@ mod tests {
     use crate::ui::toolbar::{CompanyColourSwatch, SaveMenuAction, ZoomButton};
 
     use super::{
-        handle_company_colour_swatches, handle_settings_menu_buttons, handle_settings_zoom_buttons,
+        handle_company_colour_swatches, handle_freight_trains_menu_button,
+        handle_settings_menu_buttons, handle_settings_zoom_buttons,
         handle_vehicle_breakdowns_menu_button,
     };
 
@@ -664,6 +720,43 @@ mod tests {
             );
             world.despawn(entity);
         }
+    }
+
+    #[test]
+    fn freight_trains_button_cycles_presets_and_wraps() {
+        let mut world = World::new();
+        let mut sim = SimWorld::default();
+        sim.state.freight_trains = 1;
+        world.insert_resource(sim);
+
+        for expected in [2, 4, 8] {
+            let entity = world
+                .spawn((
+                    Button,
+                    SaveMenuAction::CycleFreightTrains,
+                    Interaction::Pressed,
+                ))
+                .id();
+            world
+                .run_system_once(handle_freight_trains_menu_button)
+                .unwrap();
+            assert_eq!(world.resource::<SimWorld>().state.freight_trains, expected);
+            world.despawn(entity);
+        }
+
+        world.resource_mut::<SimWorld>().state.freight_trains = 255;
+        let entity = world
+            .spawn((
+                Button,
+                SaveMenuAction::CycleFreightTrains,
+                Interaction::Pressed,
+            ))
+            .id();
+        world
+            .run_system_once(handle_freight_trains_menu_button)
+            .unwrap();
+        assert_eq!(world.resource::<SimWorld>().state.freight_trains, 1);
+        world.despawn(entity);
     }
 
     #[test]

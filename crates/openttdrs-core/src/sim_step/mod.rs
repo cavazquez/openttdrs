@@ -490,6 +490,7 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         Some(crate::RoadStopCallbackWorld {
             map: &state.map,
             road_stop_catalog: &state.road_stop_spec_catalog,
+            cargo_spec_catalog: &state.cargo_spec_catalog,
             towns: &state.towns,
             companies: &state.companies,
             industries: &state.industries,
@@ -758,6 +759,7 @@ pub(super) fn trigger_road_stop_animation_at(
                     Some(crate::RoadStopCallbackWorld {
                         map: &state.map,
                         road_stop_catalog: &state.road_stop_spec_catalog,
+                        cargo_spec_catalog: &state.cargo_spec_catalog,
                         towns: &state.towns,
                         companies: &state.companies,
                         industries: &state.industries,
@@ -777,6 +779,7 @@ pub(super) fn trigger_road_stop_animation_at(
             Some(crate::RoadStopCallbackWorld {
                 map: &state.map,
                 road_stop_catalog: &state.road_stop_spec_catalog,
+                cargo_spec_catalog: &state.cargo_spec_catalog,
                 towns: &state.towns,
                 companies: &state.companies,
                 industries: &state.industries,

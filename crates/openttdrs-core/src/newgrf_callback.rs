@@ -53,6 +53,7 @@ use std::collections::HashSet;
 pub struct RoadStopCallbackWorld<'a> {
     pub map: &'a Map,
     pub road_stop_catalog: &'a [RoadStopSpecDef],
+    pub cargo_spec_catalog: &'a [CargoSpecDef],
     pub towns: &'a [Town],
     pub companies: &'a [crate::company::Company],
     pub industries: &'a [crate::industry::Industry],
@@ -2815,6 +2816,7 @@ fn action2_eval_ctx_from_road_stop_with_world(
             companies: world.companies,
             industries: world.industries,
             road_type_catalog: world.road_type_catalog,
+            cargo_spec_catalog: world.cargo_spec_catalog,
         },
         tile,
         view,
@@ -6015,6 +6017,7 @@ mod tests {
             Some(RoadStopCallbackWorld {
                 map: &map,
                 road_stop_catalog: &catalog,
+                cargo_spec_catalog: &[],
                 towns: &towns,
                 companies: &companies,
                 industries: &[],
@@ -6102,6 +6105,7 @@ mod tests {
         let world = Some(RoadStopCallbackWorld {
             map: &map,
             road_stop_catalog: &catalog,
+            cargo_spec_catalog: &[],
             towns: &towns,
             companies: &companies,
             industries: &[],

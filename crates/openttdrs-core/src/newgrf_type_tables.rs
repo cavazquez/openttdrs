@@ -5,6 +5,7 @@
 //! (cargo); road `45` (`__RRttrr`).
 
 use crate::cargo::CargoType;
+use crate::cargo_spec::{CargoSpecDef, cargo_spec_for_type, cargo_type_from_label_with_catalog};
 use crate::rail_type::RailType;
 use crate::road_type::{RoadTramType, RoadType, RoadTypeDef};
 use crate::world_gen::Climate;
@@ -143,10 +144,29 @@ pub fn local_cargo_id(
     cargo: CargoType,
     climate: Climate,
 ) -> u8 {
+    local_cargo_id_with_catalog(tables, grf_version, cargo, climate, &[])
+}
+
+/// Variante de [`local_cargo_id`] que conoce el catálogo de `CargoSpec` de la
+/// partida. `CargoType::Custom` no puede proporcionar su etiqueta por sí solo
+/// (su label sintético es `CSTM`), por lo que el catálogo es necesario para
+/// invertir una CTT explícita y obtener el índice local correcto.
+#[must_use]
+pub fn local_cargo_id_with_catalog(
+    tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
+    cargo: CargoType,
+    climate: Climate,
+    cargo_catalog: &[CargoSpecDef],
+) -> u8 {
     if let Some(tables) = tables
         && !tables.cargo.is_empty()
     {
-        return reverse_in_table(&tables.cargo, cargo.label_u32().to_be_bytes());
+        let label = cargo_spec_for_type(cargo_catalog, cargo).map_or_else(
+            || cargo.label_u32().to_be_bytes(),
+            |def| label_from_short(&def.label),
+        );
+        return reverse_in_table(&tables.cargo, label);
     }
     if (1..7).contains(&grf_version) {
         cargo.climate_slot(climate).unwrap_or(0xFF)
@@ -168,6 +188,19 @@ pub fn cargo_from_local_id(
     local_id: u8,
     climate: Climate,
 ) -> Option<CargoType> {
+    cargo_from_local_id_with_catalog(tables, grf_version, local_id, climate, &[])
+}
+
+/// Variante de [`cargo_from_local_id`] que puede reconstruir cargos definidos
+/// por `NewGRF` desde su label y el catálogo global de la partida.
+#[must_use]
+pub fn cargo_from_local_id_with_catalog(
+    tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
+    local_id: u8,
+    climate: Climate,
+    cargo_catalog: &[CargoSpecDef],
+) -> Option<CargoType> {
     if let Some(tables) = tables
         && !tables.cargo.is_empty()
     {
@@ -175,7 +208,10 @@ pub fn cargo_from_local_id(
         if label == INVALID_LABEL {
             return None;
         }
-        return CargoType::from_label(std::str::from_utf8(&label).ok()?);
+        return cargo_type_from_label_with_catalog(
+            std::str::from_utf8(&label).ok()?,
+            cargo_catalog,
+        );
     }
     if (1..7).contains(&grf_version) {
         return CargoType::from_climate_slot(climate, local_id);
@@ -442,6 +478,43 @@ mod tests {
             Some(CargoType::Paper)
         );
         assert_eq!(cargo_from_local_id(None, 8, 0xFF, Climate::Temperate), None);
+    }
+
+    #[test]
+    fn cargo_translation_resolves_custom_label_with_catalog() {
+        let tables = GrfTypeTranslationTables {
+            cargo: vec![*b"PASS", *b"TOFU"],
+            ..GrfTypeTranslationTables::default()
+        };
+        let catalog = vec![CargoSpecDef {
+            id: crate::cargo::CUSTOM_CARGO_OFFSET,
+            label: "TOFU".into(),
+            from_newgrf: true,
+            ..CargoSpecDef::default()
+        }];
+        assert_eq!(
+            local_cargo_id_with_catalog(
+                Some(&tables),
+                8,
+                CargoType::Custom(0),
+                Climate::Temperate,
+                &catalog,
+            ),
+            1
+        );
+        assert_eq!(
+            cargo_from_local_id_with_catalog(Some(&tables), 8, 1, Climate::Temperate, &catalog,),
+            Some(CargoType::Custom(0))
+        );
+        // Las APIs legacy no inventan una identidad para `CSTM` sin catálogo.
+        assert_eq!(
+            local_cargo_id(Some(&tables), 8, CargoType::Custom(0), Climate::Temperate),
+            0xFF
+        );
+        assert_eq!(
+            cargo_from_local_id(Some(&tables), 8, 1, Climate::Temperate),
+            None
+        );
     }
 
     #[test]

@@ -1,13 +1,15 @@
 //! Contexto Action2 para teselas de estación (vars de runtime).
 
 use crate::cargo::{ALL_CARGO_TYPES, CargoType};
+use crate::cargo_spec::CargoSpecDef;
 use crate::industry::Industry;
 use crate::map::{
     Map, TileCoord, TileKind, rail_bits_touching_side, rail_traversal_bits, tile_slope_and_z,
 };
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::newgrf_type_tables::{
-    GrfTypeTranslationTables, cargo_from_local_id, local_cargo_id, reverse_rail_type,
+    GrfTypeTranslationTables, cargo_from_local_id_with_catalog, local_cargo_id_with_catalog,
+    reverse_rail_type,
 };
 use crate::rail_type::rail_type_from_tile;
 use crate::station::{
@@ -71,6 +73,9 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
 #[derive(Debug, Clone, Copy)]
 pub struct StationAction2WorldContext<'a> {
     pub industries: &'a [Industry],
+    /// Catálogo activo para que vars `60`–`69` puedan resolver cargos custom
+    /// mediante la etiqueta de la CTT del GRF.
+    pub cargo_spec_catalog: &'a [CargoSpecDef],
 }
 
 /// Variante con pools de mundo para los call sites reales de render y
@@ -191,7 +196,20 @@ fn action2_eval_ctx_for_station_tile_impl(
 
     let coverage =
         world.map(|world| crate::station::station_coverage_for(map, world.industries, st));
-    populate_station_cargo_vars(&mut ctx, st, type_tables, grf_version, climate, coverage);
+    let cargo_catalog = world.map_or(&[][..], |world| world.cargo_spec_catalog);
+    if cargo_catalog.is_empty() {
+        populate_station_cargo_vars(&mut ctx, st, type_tables, grf_version, climate, coverage);
+    } else {
+        populate_station_cargo_vars_with_catalog(
+            &mut ctx,
+            st,
+            type_tables,
+            grf_version,
+            climate,
+            coverage,
+            cargo_catalog,
+        );
+    }
 
     ctx
 }
@@ -210,10 +228,48 @@ pub(crate) fn populate_station_cargo_vars(
     climate: Climate,
     coverage: Option<StationCoverage>,
 ) {
-    for cargo in ALL_CARGO_TYPES {
-        let local_id = local_cargo_id(type_tables, grf_version, cargo, climate);
+    populate_station_cargo_vars_with_catalog(
+        ctx,
+        station,
+        type_tables,
+        grf_version,
+        climate,
+        coverage,
+        &[],
+    );
+}
+
+/// Variante que incluye los cargos definidos por `NewGRF` en el catálogo de
+/// la partida. Las variables parametrizadas siguen usando sólo los ids que
+/// tienen una ida y vuelta válida en la CTT, igual que el camino vanilla.
+#[allow(clippy::large_types_passed_by_value)]
+pub(crate) fn populate_station_cargo_vars_with_catalog(
+    ctx: &mut Action2EvalCtx,
+    station: &Station,
+    type_tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
+    climate: Climate,
+    coverage: Option<StationCoverage>,
+    cargo_catalog: &[CargoSpecDef],
+) {
+    let mut cargos = Vec::with_capacity(ALL_CARGO_TYPES.len() + cargo_catalog.len());
+    cargos.extend(ALL_CARGO_TYPES);
+    for cargo in cargo_catalog.iter().filter_map(CargoSpecDef::cargo_type) {
+        if !cargos.contains(&cargo) {
+            cargos.push(cargo);
+        }
+    }
+    for cargo in cargos {
+        let local_id =
+            local_cargo_id_with_catalog(type_tables, grf_version, cargo, climate, cargo_catalog);
         if local_id == 0xFF
-            || cargo_from_local_id(type_tables, grf_version, local_id, climate) != Some(cargo)
+            || cargo_from_local_id_with_catalog(
+                type_tables,
+                grf_version,
+                local_id,
+                climate,
+                cargo_catalog,
+            ) != Some(cargo)
         {
             continue;
         }
@@ -752,6 +808,42 @@ mod tests {
     }
 
     #[test]
+    fn station_world_scope_exposes_custom_cargo_through_ctt() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(1, 1);
+        map.set_tile(coord, rail_station_tile(0)).unwrap();
+        let custom = CargoType::Custom(0);
+        let mut station = Station::new_with_kind(coord, StopKind::RailStation);
+        station.cargo_stock.add(custom, 17);
+        station.push_waiting_packets([CargoPacket::new(custom, 5, coord)]);
+        let tables = GrfTypeTranslationTables {
+            cargo: vec![*b"TOFU"],
+            ..GrfTypeTranslationTables::default()
+        };
+        let cargo_catalog = vec![CargoSpecDef {
+            id: crate::cargo::CUSTOM_CARGO_OFFSET,
+            label: "TOFU".into(),
+            from_newgrf: true,
+            ..CargoSpecDef::default()
+        }];
+        let ctx = action2_eval_ctx_for_station_tile_with_world(
+            &map,
+            std::slice::from_ref(&station),
+            coord,
+            0,
+            Climate::Temperate,
+            Some(&tables),
+            8,
+            StationAction2WorldContext {
+                industries: &[],
+                cargo_spec_catalog: &cargo_catalog,
+            },
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x60, 0)), Some(&22));
+        assert_eq!(ctx.parameterized_vars.get(&(0x63, 0)), Some(&0));
+    }
+
+    #[test]
     fn station_world_scope_uses_live_catchment_for_acceptance() {
         let mut map = Map::new_flat(5, 5, 0);
         let coord = TileCoord::new(2, 2);
@@ -777,7 +869,10 @@ mod tests {
             Climate::Temperate,
             None,
             8,
-            StationAction2WorldContext { industries: &[] },
+            StationAction2WorldContext {
+                industries: &[],
+                cargo_spec_catalog: &[],
+            },
         );
         assert_eq!(
             world_without_house.parameterized_vars.get(&(0x65, 0)),
@@ -795,7 +890,10 @@ mod tests {
             Climate::Temperate,
             None,
             8,
-            StationAction2WorldContext { industries: &[] },
+            StationAction2WorldContext {
+                industries: &[],
+                cargo_spec_catalog: &[],
+            },
         );
         assert_eq!(
             world_with_house.parameterized_vars.get(&(0x65, 0)),

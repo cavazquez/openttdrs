@@ -8,6 +8,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::cargo_spec::CargoSpecDef;
 use crate::company::{Company, CompanyId};
 use crate::house_spec::{distance_square, get_town_radius_group};
 use crate::industry::Industry;
@@ -21,7 +22,7 @@ use crate::road_type::{
     RoadTypeDef, road_type_from_tile, tram_road_type_from_tile, vanilla_road_type_catalog,
 };
 use crate::station::{Station, StopKind, station_at_tile};
-use crate::station_action2::populate_station_cargo_vars;
+use crate::station_action2::populate_station_cargo_vars_with_catalog;
 use crate::town::{HouseZone, Town};
 use crate::world_gen::Climate;
 
@@ -174,6 +175,8 @@ pub struct RoadStopWorldContext<'a> {
     pub companies: &'a [Company],
     pub industries: &'a [Industry],
     pub road_type_catalog: &'a [RoadTypeDef],
+    /// Catálogo activo de cargos para invertir labels CTT en vars `60`–`69`.
+    pub cargo_spec_catalog: &'a [CargoSpecDef],
 }
 
 /// Datos opcionales que diferencian el contexto local legacy del renderer
@@ -269,7 +272,10 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
     // disponibilidad); esta ruta siempre resuelve una instancia en el mapa.
     ctx.vars.insert(0x50, 0);
     if let Some(spec) = resolution.current_spec {
-        populate_station_cargo_vars(
+        let cargo_catalog = resolution
+            .world
+            .map_or(&[][..], |world| world.cargo_spec_catalog);
+        populate_station_cargo_vars_with_catalog(
             &mut ctx,
             station,
             resolution.type_tables,
@@ -278,6 +284,7 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
             resolution
                 .world
                 .map(|world| crate::station::station_coverage_for(map, world.industries, station)),
+            cargo_catalog,
         );
         RoadStopNeighbourScope {
             map,
@@ -769,6 +776,48 @@ mod tests {
     }
 
     #[test]
+    fn road_stop_world_scope_exposes_custom_cargo_through_ctt() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(1, 1);
+        map.set_tile(coord, road_stop_tile(4, 3 << 3)).unwrap();
+        let custom = crate::CargoType::Custom(0);
+        let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+        station.road_stop_spec = Some(7);
+        station.cargo_stock.add(custom, 19);
+        let spec = {
+            let mut spec = road_stop_spec(7, 1, 0, None);
+            spec.newgrf_type_tables = Some(crate::GrfTypeTranslationTables {
+                cargo: vec![*b"TOFU"],
+                ..crate::GrfTypeTranslationTables::default()
+            });
+            spec
+        };
+        let catalog = vec![spec];
+        let cargo_catalog = vec![CargoSpecDef {
+            id: crate::cargo::CUSTOM_CARGO_OFFSET,
+            label: "TOFU".into(),
+            from_newgrf: true,
+            ..CargoSpecDef::default()
+        }];
+        let ctx = action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
+            &map,
+            std::slice::from_ref(&station),
+            &catalog,
+            RoadStopWorldContext {
+                towns: &[],
+                companies: &[],
+                industries: &[],
+                road_type_catalog: &[],
+                cargo_spec_catalog: &cargo_catalog,
+            },
+            coord,
+            0,
+            Climate::Temperate,
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x60, 0)), Some(&19));
+    }
+
+    #[test]
     fn road_stop_ctx_exposes_town_and_company_scopes_with_world() {
         let mut map = Map::new_flat(8, 8, 0);
         let coord = TileCoord::new(1, 2);
@@ -793,6 +842,7 @@ mod tests {
                 companies: &companies,
                 industries: &[],
                 road_type_catalog: &[],
+                cargo_spec_catalog: &[],
             },
             coord,
             0,
@@ -827,6 +877,7 @@ mod tests {
                 companies: &companies,
                 industries: &industries,
                 road_type_catalog: &[],
+                cargo_spec_catalog: &[],
             },
             coord,
             0,
@@ -847,6 +898,7 @@ mod tests {
                 companies: &companies,
                 industries: &industries,
                 road_type_catalog: &[],
+                cargo_spec_catalog: &[],
             },
             coord,
             0,
@@ -886,6 +938,7 @@ mod tests {
                 companies: &[],
                 industries: &[],
                 road_type_catalog: &road_types,
+                cargo_spec_catalog: &[],
             },
             coord,
             0,

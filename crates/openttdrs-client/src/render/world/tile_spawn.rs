@@ -401,6 +401,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     companies: &sim.state.companies,
                     industries: &sim.state.industries,
                     road_type_catalog: &sim.state.road_type_catalog,
+                    cargo_spec_catalog: &sim.state.cargo_spec_catalog,
                 }),
             ),
             TileKind::House => spawn_house_tile(

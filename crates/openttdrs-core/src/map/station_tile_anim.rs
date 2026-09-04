@@ -741,7 +741,10 @@ fn station_animation_context(
                 climate,
                 def.newgrf_type_tables.as_ref(),
                 def.newgrf_grf_version,
-                StationAction2WorldContext { industries },
+                StationAction2WorldContext {
+                    industries,
+                    cargo_spec_catalog: &[],
+                },
             )
         },
     );

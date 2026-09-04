@@ -10,10 +10,12 @@
 
 use super::tile_loop::TileLoopState;
 use super::{Map, Tile, TileCoord, TileKind};
+use crate::cargo_spec::CargoSpecDef;
 use crate::industry::Industry;
 use crate::industry_tile::{IndustryTileSpecDef, industry_tile_spec_def};
 use crate::newgrf_callback::{
-    resolve_industry_tile_animation_callback, resolve_industry_tile_animation_callback_with_world,
+    resolve_industry_tile_animation_callback,
+    resolve_industry_tile_animation_callback_with_world_and_cargo_catalog,
 };
 use crate::newgrf_sprites::{
     CALLBACK_FAILED, CBID_INDTILE_ANIMATION_NEXT_FRAME, CBID_INDTILE_ANIMATION_SPEED,
@@ -803,6 +805,37 @@ pub fn advance_newgrf_industry_animated_tiles_with_world<S: BuildHasher>(
     world_seed: u64,
     active_tiles: &mut HashSet<TileCoord, S>,
 ) -> Vec<TileCoord> {
+    advance_newgrf_industry_animated_tiles_with_world_and_cargo_catalog(
+        map,
+        tick,
+        coords,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        world_seed,
+        active_tiles,
+        &[],
+    )
+}
+
+/// Variante catálogo-aware de
+/// [`advance_newgrf_industry_animated_tiles_with_world`].
+#[allow(clippy::too_many_arguments)]
+pub fn advance_newgrf_industry_animated_tiles_with_world_and_cargo_catalog<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+    cargo_spec_catalog: &[CargoSpecDef],
+) -> Vec<TileCoord> {
     let snapshot = industries.to_vec();
     advance_newgrf_industry_animated_tiles_inner(
         map,
@@ -817,7 +850,7 @@ pub fn advance_newgrf_industry_animated_tiles_with_world<S: BuildHasher>(
             let Some(index) = industry_index_for_tile(map, &snapshot, coord) else {
                 return CALLBACK_FAILED;
             };
-            resolve_industry_tile_animation_callback_with_world(
+            resolve_industry_tile_animation_callback_with_world_and_cargo_catalog(
                 spec,
                 &mut industries[index],
                 map,
@@ -830,6 +863,7 @@ pub fn advance_newgrf_industry_animated_tiles_with_world<S: BuildHasher>(
                 callback,
                 param1,
                 param2,
+                cargo_spec_catalog,
             )
         },
     )
@@ -881,6 +915,37 @@ pub fn advance_newgrf_industry_animation_frames_with_world<S: BuildHasher>(
     world_seed: u64,
     active_tiles: &mut HashSet<TileCoord, S>,
 ) -> Vec<TileCoord> {
+    advance_newgrf_industry_animation_frames_with_world_and_cargo_catalog(
+        map,
+        tick,
+        coords,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        world_seed,
+        active_tiles,
+        &[],
+    )
+}
+
+/// Variante catálogo-aware de
+/// [`advance_newgrf_industry_animation_frames_with_world`].
+#[allow(clippy::too_many_arguments)]
+pub fn advance_newgrf_industry_animation_frames_with_world_and_cargo_catalog<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+    cargo_spec_catalog: &[CargoSpecDef],
+) -> Vec<TileCoord> {
     let snapshot = industries.to_vec();
     advance_newgrf_industry_animated_tiles_inner(
         map,
@@ -895,7 +960,7 @@ pub fn advance_newgrf_industry_animation_frames_with_world<S: BuildHasher>(
             let Some(index) = industry_index_for_tile(map, &snapshot, coord) else {
                 return CALLBACK_FAILED;
             };
-            resolve_industry_tile_animation_callback_with_world(
+            resolve_industry_tile_animation_callback_with_world_and_cargo_catalog(
                 spec,
                 &mut industries[index],
                 map,
@@ -908,6 +973,7 @@ pub fn advance_newgrf_industry_animation_frames_with_world<S: BuildHasher>(
                 callback,
                 param1,
                 param2,
+                cargo_spec_catalog,
             )
         },
     )
@@ -958,7 +1024,40 @@ pub fn trigger_newgrf_industry_animation_with_world<S: BuildHasher>(
     active_tiles: &mut HashSet<TileCoord, S>,
     trigger: IndustryAnimationTrigger,
 ) -> Vec<TileCoord> {
-    trigger_newgrf_industry_animation_with_world_and_extra(
+    trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
+        map,
+        tick,
+        coords,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        world_seed,
+        active_tiles,
+        trigger,
+        &[],
+    )
+}
+
+/// Variante catálogo-aware de
+/// [`trigger_newgrf_industry_animation_with_world`].
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_industry_animation_with_world_and_cargo_catalog<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+    trigger: IndustryAnimationTrigger,
+    cargo_spec_catalog: &[CargoSpecDef],
+) -> Vec<TileCoord> {
+    trigger_newgrf_industry_animation_with_world_and_extra_and_cargo_catalog(
         map,
         tick,
         coords,
@@ -971,6 +1070,7 @@ pub fn trigger_newgrf_industry_animation_with_world<S: BuildHasher>(
         active_tiles,
         trigger,
         0,
+        cargo_spec_catalog,
     )
 }
 
@@ -992,6 +1092,41 @@ pub fn trigger_newgrf_industry_animation_with_world_and_extra<S: BuildHasher>(
     trigger: IndustryAnimationTrigger,
     trigger_extra: u32,
 ) -> Vec<TileCoord> {
+    trigger_newgrf_industry_animation_with_world_and_extra_and_cargo_catalog(
+        map,
+        tick,
+        coords,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        world_seed,
+        active_tiles,
+        trigger,
+        trigger_extra,
+        &[],
+    )
+}
+
+/// Variante catálogo-aware de
+/// [`trigger_newgrf_industry_animation_with_world_and_extra`].
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_industry_animation_with_world_and_extra_and_cargo_catalog<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+    trigger: IndustryAnimationTrigger,
+    trigger_extra: u32,
+    cargo_spec_catalog: &[CargoSpecDef],
+) -> Vec<TileCoord> {
     let snapshot = industries.to_vec();
     advance_newgrf_industry_animated_tiles_inner(
         map,
@@ -1006,7 +1141,7 @@ pub fn trigger_newgrf_industry_animation_with_world_and_extra<S: BuildHasher>(
             let Some(index) = industry_index_for_tile(map, &snapshot, coord) else {
                 return CALLBACK_FAILED;
             };
-            resolve_industry_tile_animation_callback_with_world(
+            resolve_industry_tile_animation_callback_with_world_and_cargo_catalog(
                 spec,
                 &mut industries[index],
                 map,
@@ -1019,6 +1154,7 @@ pub fn trigger_newgrf_industry_animation_with_world_and_extra<S: BuildHasher>(
                 callback,
                 param1,
                 param2,
+                cargo_spec_catalog,
             )
         },
     )

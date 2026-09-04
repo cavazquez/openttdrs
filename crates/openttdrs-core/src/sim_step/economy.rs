@@ -344,7 +344,7 @@ pub(super) fn trigger_delivered_industries(state: &mut GameState, destinations: 
             state.climate,
         );
         state.runtime.industry_tile_dirty.extend(dirty);
-        let dirty = crate::map::trigger_newgrf_industry_animation_with_world(
+        let dirty = crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
             &mut state.map,
             state.tick.get(),
             &footprint,
@@ -356,6 +356,7 @@ pub(super) fn trigger_delivered_industries(state: &mut GameState, destinations: 
             state.world_seed,
             &mut state.newgrf_animated_industry_tiles,
             crate::map::IndustryAnimationTrigger::CargoReceived,
+            &state.cargo_spec_catalog,
         );
         state.runtime.industry_tile_dirty.extend(dirty);
     }
@@ -715,7 +716,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                 state.climate,
             );
             state.runtime.industry_tile_dirty.extend(dirty);
-            let dirty = crate::map::trigger_newgrf_industry_animation_with_world(
+            let dirty = crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
                 &mut state.map,
                 tick,
                 &footprint,
@@ -727,6 +728,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                 state.world_seed,
                 &mut state.newgrf_animated_industry_tiles,
                 crate::map::IndustryAnimationTrigger::IndustryTick,
+                &state.cargo_spec_catalog,
             );
             state.runtime.industry_tile_dirty.extend(dirty);
         }
@@ -773,7 +775,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
             state.serve_neutral_industries,
         );
         if moved > 0 {
-            let dirty = crate::map::trigger_newgrf_industry_animation_with_world(
+            let dirty = crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
                 &mut state.map,
                 tick,
                 &footprint,
@@ -785,6 +787,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                 state.world_seed,
                 &mut state.newgrf_animated_industry_tiles,
                 crate::map::IndustryAnimationTrigger::CargoDistributed,
+                &state.cargo_spec_catalog,
             );
             state.runtime.industry_tile_dirty.extend(dirty);
         }

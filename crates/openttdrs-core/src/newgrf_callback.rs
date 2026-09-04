@@ -14,7 +14,7 @@ use crate::industry::{Industry, IndustryProcessingInput, IndustryProductionActio
 use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::{IndustryTileSpecDef, industry_tile_slope_refused};
 use crate::map::industry_action2::{
-    action2_eval_ctx_for_industry_tile_with_world,
+    action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog,
     action2_eval_ctx_for_industry_tile_with_world_and_parent_and_cargo_catalog,
 };
 use crate::map::object::action2_eval_ctx_for_object_tile_with_towns;
@@ -1323,7 +1323,7 @@ fn requested_industry_tile_scope_vars(runtime: &TrainSpriteGraphics) -> Vec<(u8,
     let mut requested = Vec::new();
     for entry in runtime.action2_var.values() {
         for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
-            if matches!(term.variable, 0x60..=0x63)
+            if ((0x60..=0x71).contains(&term.variable) || term.variable == 0x7A)
                 && let Some(parameter) = term.param
                 && !requested.contains(&(term.variable, parameter))
             {
@@ -3508,6 +3508,46 @@ pub fn resolve_industry_tile_animation_callback_with_world(
     param1: u32,
     param2: u32,
 ) -> u16 {
+    resolve_industry_tile_animation_callback_with_world_and_cargo_catalog(
+        def,
+        industry,
+        map,
+        coord,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        callback,
+        param1,
+        param2,
+        &[],
+    )
+}
+
+/// Variante catálogo-aware de
+/// [`resolve_industry_tile_animation_callback_with_world`].
+///
+/// El catálogo activo es necesario para que las variables parametrizadas del
+/// scope parent (`0x69`–`0x71`) y los cargos de una instancia SAV sin slots
+/// hidratados usen la CTT del GRF durante CB25/CB26/CB27.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_industry_tile_animation_callback_with_world_and_cargo_catalog(
+    def: &IndustryTileSpecDef,
+    industry: &mut Industry,
+    map: &Map,
+    coord: TileCoord,
+    industries: &[Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: crate::Climate,
+    callback: u16,
+    param1: u32,
+    param2: u32,
+    cargo_spec_catalog: &[CargoSpecDef],
+) -> u16 {
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return CALLBACK_FAILED;
     };
@@ -3515,7 +3555,8 @@ pub fn resolve_industry_tile_animation_callback_with_world(
         return CALLBACK_FAILED;
     }
 
-    let mut ctx = action2_eval_ctx_for_industry_tile_with_world(
+    let neighbor_params = requested_industry_tile_scope_vars(runtime);
+    let mut ctx = action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog(
         map,
         coord,
         industries,
@@ -3524,7 +3565,8 @@ pub fn resolve_industry_tile_animation_callback_with_world(
         industry_catalog,
         climate,
         Some(def),
-        &[],
+        &neighbor_params,
+        cargo_spec_catalog,
     );
     // The snapshot is intentionally read-only. Seed the parent PSA from the
     // live instance so a callback can read a value written by the previous
@@ -6708,6 +6750,121 @@ mod tests {
         assert_eq!(result, 0);
         assert_eq!(industry.newgrf_persistent_regs.get(&5), Some(&42));
         assert_eq!(industry.newgrf_persistent_regs.get(&3), Some(&9));
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn industry_tile_animation_scope_resolves_custom_parent_cargo_with_catalog() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut map_tile = map.get(coord).unwrap();
+        map_tile.kind = crate::map::TileKind::Industry;
+        map_tile.m1 = 0x80;
+        map_tile.m2 = 1;
+        crate::map::set_industry_gfx(&mut map_tile, 175);
+        map.set_tile(coord, map_tile).unwrap();
+
+        let custom = CargoType::Custom(0);
+        let cargo_catalog = vec![CargoSpecDef {
+            id: custom.cargo_id(),
+            local_id: 3,
+            label: "TOFU".into(),
+            name: "Tofu".into(),
+            from_newgrf: true,
+            grfid: 1,
+            ..CargoSpecDef::default()
+        }];
+        let industry_def = IndustrySpecDef {
+            id: 7,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![3],
+            produced_cargo_labels: vec!["TOFU".into()],
+            accepted_cargo_indices: vec![3],
+            accepted_cargo_labels: vec!["TOFU".into()],
+            production_rates: vec![4],
+            input_multipliers: vec![256],
+            callback_mask: 0,
+            behaviour: 0,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "Tofu plant".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        };
+        let mut industry = Industry::new(coord, IndustryKind::Factory)
+            .with_instance_id(1)
+            .with_newgrf_spec(industry_def.id, &industry_def);
+        industry.stock = 23;
+
+        let mut runtime = TrainSpriteGraphics::default();
+        runtime.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        runtime.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x69,
+                    param: Some(3),
+                    adjust: Action2VarAdjust {
+                        shift: 0x80,
+                        and_mask: u32::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        let tile_def = IndustryTileSpecDef {
+            gfx: crate::industry_tile::IndustryTileGfxId(175),
+            subst_id: 0,
+            from_newgrf: true,
+            slopes_refused: 0,
+            accepts_cargo_indices: Vec::new(),
+            accepts_cargo_labels: Vec::new(),
+            acceptance: Vec::new(),
+            callback_mask: 1,
+            animation_frames: 1,
+            animation_status: 1,
+            animation_speed: 0,
+            animation_triggers: 1,
+            animation_special_flags: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_grfid: 1,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+
+        let industries = vec![industry.clone()];
+        let result = resolve_industry_tile_animation_callback_with_world_and_cargo_catalog(
+            &tile_def,
+            &mut industry,
+            &map,
+            coord,
+            &industries,
+            &[],
+            std::slice::from_ref(&tile_def),
+            std::slice::from_ref(&industry_def),
+            crate::Climate::Temperate,
+            crate::newgrf_sprites::CBID_INDTILE_ANIMATION_NEXT_FRAME,
+            0,
+            0,
+            &cargo_catalog,
+        );
+
+        assert_eq!(result, 23);
     }
 
     #[test]

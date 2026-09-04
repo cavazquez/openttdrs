@@ -407,7 +407,7 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         })
         .collect();
     state.runtime.industry_tile_dirty.extend(
-        crate::map::trigger_newgrf_industry_animation_with_world(
+        crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
             &mut state.map,
             t,
             &construction_stage_changed,
@@ -419,10 +419,11 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             state.world_seed,
             &mut state.newgrf_animated_industry_tiles,
             crate::map::IndustryAnimationTrigger::ConstructionStageChanged,
+            &state.cargo_spec_catalog,
         ),
     );
     state.runtime.industry_tile_dirty.extend(
-        crate::map::trigger_newgrf_industry_animation_with_world(
+        crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
             &mut state.map,
             t,
             &tile_loop_animation_coords,
@@ -434,10 +435,11 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             state.world_seed,
             &mut state.newgrf_animated_industry_tiles,
             crate::map::IndustryAnimationTrigger::TileLoop,
+            &state.cargo_spec_catalog,
         ),
     );
     state.runtime.industry_tile_dirty.extend(
-        crate::map::advance_newgrf_industry_animation_frames_with_world(
+        crate::map::advance_newgrf_industry_animation_frames_with_world_and_cargo_catalog(
             &mut state.map,
             t,
             &animation_coords,
@@ -448,6 +450,7 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             state.climate,
             state.world_seed,
             &mut state.newgrf_animated_industry_tiles,
+            &state.cargo_spec_catalog,
         ),
     );
     state

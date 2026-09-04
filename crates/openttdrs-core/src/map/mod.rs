@@ -71,11 +71,16 @@ pub use industry_tile_anim::{
     GFX_OILWELL_ANIMATED_3, IndustryAnimationTrigger, advance_industry_animated_tiles,
     advance_industry_tile_animations, advance_industry_tile_loop_events,
     advance_industry_tile_loop_events_from_visits_with_rng, advance_newgrf_industry_animated_tiles,
-    advance_newgrf_industry_animated_tiles_with_world, advance_newgrf_industry_animation_frames,
-    advance_newgrf_industry_animation_frames_with_world, bubble_generator_spawns_from_visits,
-    industry_animation_frame, industry_gfx, industry_tile_anim_state, set_industry_gfx,
-    trigger_newgrf_industry_animation, trigger_newgrf_industry_animation_with_world,
+    advance_newgrf_industry_animated_tiles_with_world,
+    advance_newgrf_industry_animated_tiles_with_world_and_cargo_catalog,
+    advance_newgrf_industry_animation_frames, advance_newgrf_industry_animation_frames_with_world,
+    advance_newgrf_industry_animation_frames_with_world_and_cargo_catalog,
+    bubble_generator_spawns_from_visits, industry_animation_frame, industry_gfx,
+    industry_tile_anim_state, set_industry_gfx, trigger_newgrf_industry_animation,
+    trigger_newgrf_industry_animation_with_world,
+    trigger_newgrf_industry_animation_with_world_and_cargo_catalog,
     trigger_newgrf_industry_animation_with_world_and_extra,
+    trigger_newgrf_industry_animation_with_world_and_extra_and_cargo_catalog,
 };
 pub use level_crossing::is_road_level_crossing;
 pub use object::{

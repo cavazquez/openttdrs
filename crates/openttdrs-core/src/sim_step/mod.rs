@@ -385,7 +385,7 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         })
         .collect();
     state.runtime.industry_tile_dirty =
-        crate::map::step_industry_tiles_with_seed_and_catalog_and_world(
+        crate::map::step_industry_tiles_with_seed_and_catalog_and_world_and_cargo_catalog(
             &mut state.map,
             t,
             &visits,
@@ -395,6 +395,7 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             &state.industry_tile_spec_catalog,
             &state.industry_spec_catalog,
             state.climate,
+            &state.cargo_spec_catalog,
         );
     let construction_stage_changed: Vec<_> = construction_stage_before
         .into_iter()

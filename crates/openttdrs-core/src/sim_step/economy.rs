@@ -331,18 +331,20 @@ pub(super) fn trigger_delivered_industries(state: &mut GameState, destinations: 
         let tiles = state.industries[index].tiles.clone();
         let pos = state.industries[index].pos;
         let footprint = if tiles.is_empty() { vec![pos] } else { tiles };
-        let dirty = crate::map::trigger_industry_randomisation_at_with_catalog_and_world(
-            &mut state.map,
-            &footprint,
-            crate::map::IndustryRandomTrigger::CargoReceived,
-            state.world_seed,
-            state.tick.get(),
-            &mut state.industries,
-            &state.towns,
-            &state.industry_tile_spec_catalog,
-            &state.industry_spec_catalog,
-            state.climate,
-        );
+        let dirty =
+            crate::map::trigger_industry_randomisation_at_with_catalog_and_world_and_cargo_catalog(
+                &mut state.map,
+                &footprint,
+                crate::map::IndustryRandomTrigger::CargoReceived,
+                state.world_seed,
+                state.tick.get(),
+                &mut state.industries,
+                &state.towns,
+                &state.industry_tile_spec_catalog,
+                &state.industry_spec_catalog,
+                state.climate,
+                &state.cargo_spec_catalog,
+            );
         state.runtime.industry_tile_dirty.extend(dirty);
         let dirty = crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
             &mut state.map,
@@ -594,7 +596,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                         &state.cargo_spec_catalog,
                     );
                 }
-                let dirty = crate::map::trigger_industry_randomisation_at_with_catalog_and_world(
+                let dirty = crate::map::trigger_industry_randomisation_at_with_catalog_and_world_and_cargo_catalog(
                     &mut state.map,
                     &footprint,
                     crate::map::IndustryRandomTrigger::CargoReceived,
@@ -605,6 +607,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                     &state.industry_tile_spec_catalog,
                     &state.industry_spec_catalog,
                     state.climate,
+                    &state.cargo_spec_catalog,
                 );
                 state.runtime.industry_tile_dirty.extend(dirty);
             }
@@ -703,7 +706,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
         // ciclo de 256 ticks, incluso cuando la industria no logró producir
         // por falta de insumos o su callback devolvió cero.
         if production_tick {
-            let dirty = crate::map::trigger_industry_randomisation_at_with_catalog_and_world(
+            let dirty = crate::map::trigger_industry_randomisation_at_with_catalog_and_world_and_cargo_catalog(
                 &mut state.map,
                 &footprint,
                 crate::map::IndustryRandomTrigger::IndustryTick,
@@ -714,6 +717,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                 &state.industry_tile_spec_catalog,
                 &state.industry_spec_catalog,
                 state.climate,
+                &state.cargo_spec_catalog,
             );
             state.runtime.industry_tile_dirty.extend(dirty);
             let dirty = crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(

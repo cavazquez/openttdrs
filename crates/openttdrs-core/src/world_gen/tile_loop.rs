@@ -234,7 +234,7 @@ fn dispatch_generation_tile_loop_tile(
             }
             let one = [(coord, live_tile)];
             let _ = crate::map::industry_random::
-                advance_industry_tile_randomisation_from_visits_with_catalog(
+                advance_industry_tile_randomisation_from_visits_with_catalog_and_cargo_catalog(
                     &mut state.map,
                     tick,
                     state.world_seed,
@@ -244,6 +244,7 @@ fn dispatch_generation_tile_loop_tile(
                     &state.industry_tile_spec_catalog,
                     &state.industry_spec_catalog,
                     state.climate,
+                    &state.cargo_spec_catalog,
                 );
             // `MakeIndustryTileBigger` muta sólo la tesela visitada. La
             // simulación económica puede sincronizar un footprint, pero la

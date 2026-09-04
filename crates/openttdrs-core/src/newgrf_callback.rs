@@ -1319,7 +1319,7 @@ pub const fn industry_tile_autoslope_callback_allows(result: u16) -> bool {
     result == CALLBACK_FAILED || result == 0
 }
 
-fn requested_industry_tile_scope_vars(runtime: &TrainSpriteGraphics) -> Vec<(u8, u8)> {
+pub(crate) fn requested_industry_tile_scope_vars(runtime: &TrainSpriteGraphics) -> Vec<(u8, u8)> {
     let mut requested = Vec::new();
     for entry in runtime.action2_var.values() {
         for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {

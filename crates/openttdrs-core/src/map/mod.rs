@@ -47,7 +47,9 @@ pub use industry_construction::{
     advance_industry_construction_tile_loop_at, industry_construction_counter,
     industry_construction_stage, is_industry_completed, make_industry_tile_bigger,
     step_industry_tiles, step_industry_tiles_with_seed, step_industry_tiles_with_seed_and_catalog,
+    step_industry_tiles_with_seed_and_catalog_and_cargo_catalog,
     step_industry_tiles_with_seed_and_catalog_and_world,
+    step_industry_tiles_with_seed_and_catalog_and_world_and_cargo_catalog,
 };
 pub use industry_link::{
     IndustryTileLink, industry_instance_id, industry_tile_link, industry_tiles_mergeable,
@@ -55,10 +57,14 @@ pub use industry_link::{
 pub use industry_random::{
     INDUSTRY_RANDOM_TRIGGERS_MASK, IndustryRandomTrigger, advance_industry_tile_randomisation,
     advance_industry_tile_randomisation_from_visits_with_catalog,
-    advance_industry_tile_randomisation_from_visits_with_catalog_and_world, industry_random_bits,
-    industry_random_triggers, industry_tile_rng, init_industry_tile_random,
+    advance_industry_tile_randomisation_from_visits_with_catalog_and_cargo_catalog,
+    advance_industry_tile_randomisation_from_visits_with_catalog_and_world,
+    advance_industry_tile_randomisation_from_visits_with_catalog_and_world_and_cargo_catalog,
+    industry_random_bits, industry_random_triggers, industry_tile_rng, init_industry_tile_random,
     set_industry_random_bits, set_industry_random_triggers, trigger_industry_randomisation_at,
-    trigger_industry_randomisation_at_with_catalog_and_world, trigger_industry_tile_randomisation,
+    trigger_industry_randomisation_at_with_catalog_and_world,
+    trigger_industry_randomisation_at_with_catalog_and_world_and_cargo_catalog,
+    trigger_industry_tile_randomisation,
 };
 pub use industry_terrain::{
     GFX_OILRIG_FIRST, GFX_OILRIG_LAST, SPR_FLAT_BARE_LAND, SPR_FLAT_GRASS_TILE,

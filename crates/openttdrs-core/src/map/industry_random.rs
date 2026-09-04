@@ -7,6 +7,7 @@
 //! determinista para herramientas legacy.
 
 use super::{Map, Tile, TileCoord, TileKind, industry_gfx, industry_instance_id};
+use crate::cargo_spec::CargoSpecDef;
 use crate::industry::Industry;
 use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::{IndustryTileSpecDef, industry_tile_spec_def};
@@ -167,6 +168,35 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog(
     industry_catalog: &[IndustrySpecDef],
     climate: Climate,
 ) -> Vec<TileCoord> {
+    advance_industry_tile_randomisation_from_visits_with_catalog_and_cargo_catalog(
+        map,
+        tick,
+        world_seed,
+        visits,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        &[],
+    )
+}
+
+/// Variante que mantiene el catálogo de cargos activo durante la evaluación
+/// de las variables parametrizadas del parent `IndustryTile`.
+#[allow(clippy::too_many_arguments)]
+pub fn advance_industry_tile_randomisation_from_visits_with_catalog_and_cargo_catalog(
+    map: &mut Map,
+    tick: u64,
+    world_seed: u64,
+    visits: &[(TileCoord, Tile)],
+    industries: &[Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+    cargo_spec_catalog: &[CargoSpecDef],
+) -> Vec<TileCoord> {
     advance_industry_tile_randomisation_from_visits_with_catalog_inner(
         map,
         tick,
@@ -177,6 +207,7 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog(
         tile_spec_catalog,
         industry_catalog,
         climate,
+        cargo_spec_catalog,
         IndustryRandomTrigger::TileLoop,
         |_, _, _, _| {},
         |_, _, _| {},
@@ -202,6 +233,35 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog_and_world(
     industry_catalog: &[IndustrySpecDef],
     climate: Climate,
 ) -> Vec<TileCoord> {
+    advance_industry_tile_randomisation_from_visits_with_catalog_and_world_and_cargo_catalog(
+        map,
+        tick,
+        world_seed,
+        visits,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        &[],
+    )
+}
+
+/// Variante mutable catálogo-aware que hidrata y persiste el scope parent de
+/// la industria durante `ResolveRerandomisation`.
+#[allow(clippy::too_many_arguments)]
+pub fn advance_industry_tile_randomisation_from_visits_with_catalog_and_world_and_cargo_catalog(
+    map: &mut Map,
+    tick: u64,
+    world_seed: u64,
+    visits: &[(TileCoord, Tile)],
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+    cargo_spec_catalog: &[CargoSpecDef],
+) -> Vec<TileCoord> {
     trigger_industry_randomisation_from_visits_with_catalog_and_world(
         map,
         tick,
@@ -213,6 +273,7 @@ pub fn advance_industry_tile_randomisation_from_visits_with_catalog_and_world(
         tile_spec_catalog,
         industry_catalog,
         climate,
+        cargo_spec_catalog,
     )
 }
 
@@ -232,6 +293,36 @@ pub fn trigger_industry_randomisation_at_with_catalog_and_world(
     industry_catalog: &[IndustrySpecDef],
     climate: Climate,
 ) -> Vec<TileCoord> {
+    trigger_industry_randomisation_at_with_catalog_and_world_and_cargo_catalog(
+        map,
+        tiles,
+        trigger,
+        world_seed,
+        tick,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        &[],
+    )
+}
+
+/// Variante catálogo-aware del disparador de randomización por footprint.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_industry_randomisation_at_with_catalog_and_world_and_cargo_catalog(
+    map: &mut Map,
+    tiles: &[TileCoord],
+    trigger: IndustryRandomTrigger,
+    world_seed: u64,
+    tick: u64,
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[IndustrySpecDef],
+    climate: Climate,
+    cargo_spec_catalog: &[CargoSpecDef],
+) -> Vec<TileCoord> {
     let visits: Vec<_> = tiles
         .iter()
         .filter_map(|&coord| map.get(coord).map(|tile| (coord, tile)))
@@ -247,6 +338,7 @@ pub fn trigger_industry_randomisation_at_with_catalog_and_world(
         tile_spec_catalog,
         industry_catalog,
         climate,
+        cargo_spec_catalog,
     )
 }
 
@@ -262,6 +354,7 @@ fn trigger_industry_randomisation_from_visits_with_catalog_and_world(
     tile_spec_catalog: &[IndustryTileSpecDef],
     industry_catalog: &[IndustrySpecDef],
     climate: Climate,
+    cargo_spec_catalog: &[CargoSpecDef],
 ) -> Vec<TileCoord> {
     let snapshot = industries.to_vec();
     let mut parent_reseed_masks = std::collections::HashMap::<usize, u32>::new();
@@ -275,6 +368,7 @@ fn trigger_industry_randomisation_from_visits_with_catalog_and_world(
         tile_spec_catalog,
         industry_catalog,
         climate,
+        cargo_spec_catalog,
         trigger,
         |map, coord, ctx, write_back| {
             if let Some(index) = industry_index_for_tile(map, &snapshot, coord) {
@@ -330,6 +424,7 @@ fn advance_industry_tile_randomisation_from_visits_with_catalog_inner(
     tile_spec_catalog: &[IndustryTileSpecDef],
     industry_catalog: &[IndustrySpecDef],
     climate: Climate,
+    cargo_spec_catalog: &[CargoSpecDef],
     trigger: IndustryRandomTrigger,
     mut sync_ctx: impl FnMut(&Map, TileCoord, &mut crate::newgrf_sprites::Action2EvalCtx, bool),
     mut sync_parent_reseed: impl FnMut(&Map, TileCoord, u32),
@@ -363,7 +458,12 @@ fn advance_industry_tile_randomisation_from_visits_with_catalog_inner(
         if map.set_tile(coord, live).is_err() {
             continue;
         }
-        let mut ctx = crate::map::industry_action2::action2_eval_ctx_for_industry_tile_with_world(
+        let neighbor_params = spec
+            .newgrf_runtime
+            .as_deref()
+            .map(crate::newgrf_callback::requested_industry_tile_scope_vars)
+            .unwrap_or_default();
+        let mut ctx = crate::map::industry_action2::action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog(
             map,
             coord,
             industries,
@@ -372,7 +472,8 @@ fn advance_industry_tile_randomisation_from_visits_with_catalog_inner(
             industry_catalog,
             climate,
             Some(spec),
-            &[],
+            &neighbor_params,
+            cargo_spec_catalog,
         );
         sync_ctx(&*map, coord, &mut ctx, false);
 
@@ -712,6 +813,125 @@ mod tests {
         assert_eq!(industries[0].newgrf_random & 1, expected & 1);
         assert_eq!(industry_random_triggers(&map.get(origin).unwrap()), 0);
         assert_eq!(industry_random_triggers(&map.get(second).unwrap()), 0);
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn randomisation_scope_resolves_custom_parent_cargo_with_catalog() {
+        let coord = TileCoord::new(1, 1);
+        let tile = industry_tile(175);
+        let custom = crate::cargo::CargoType::Custom(0);
+        let cargo_catalog = vec![CargoSpecDef {
+            id: custom.cargo_id(),
+            local_id: 3,
+            label: "TOFU".into(),
+            name: "Tofu".into(),
+            from_newgrf: true,
+            grfid: 1,
+            ..CargoSpecDef::default()
+        }];
+        let industry_def = IndustrySpecDef {
+            id: 7,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![3],
+            produced_cargo_labels: vec!["TOFU".into()],
+            accepted_cargo_indices: vec![3],
+            accepted_cargo_labels: vec!["TOFU".into()],
+            production_rates: vec![4],
+            input_multipliers: vec![256],
+            callback_mask: 0,
+            behaviour: 0,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "Tofu plant".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        };
+        let mut runtime = TrainSpriteGraphics::default();
+        runtime.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 1,
+        });
+        runtime.action2_var.insert(
+            1,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x69,
+                    param: Some(3),
+                    adjust: Action2VarAdjust {
+                        shift: 0x80,
+                        and_mask: u32::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(2, 20, u32::from(u16::MAX))],
+                default: 3,
+            },
+        );
+        runtime.action2_random.insert(
+            2,
+            Action2RandomEntry {
+                typ: 0x83,
+                consist_count: 0,
+                triggers: IndustryRandomTrigger::CargoReceived.bit(),
+                randbit: 0,
+                sets: vec![3, 3],
+            },
+        );
+        let spec = newgrf_spec(175, vec![white_sprite()], Some(runtime));
+        let mut map = Map::new_flat(4, 4, 0);
+        map.set_tile(coord, tile).unwrap();
+        let industry = Industry::new(coord, crate::industry::IndustryKind::Factory)
+            .with_instance_id(1)
+            .with_newgrf_spec(industry_def.id, &industry_def);
+        let mut industries = vec![industry.clone()];
+        industries[0].stock = 23;
+
+        let _ = trigger_industry_randomisation_at_with_catalog_and_world_and_cargo_catalog(
+            &mut map,
+            &[coord],
+            IndustryRandomTrigger::CargoReceived,
+            42,
+            7,
+            &mut industries,
+            &[],
+            std::slice::from_ref(&spec),
+            std::slice::from_ref(&industry_def),
+            Climate::Temperate,
+            &cargo_catalog,
+        );
+        let expected = industry_random_word(
+            42,
+            7,
+            coord,
+            u64::from(IndustryRandomTrigger::CargoReceived.bit()) | (1_u64 << 8) | 1,
+        );
+        assert_eq!(industries[0].newgrf_random & 1, expected & 1);
+
+        let mut legacy_map = Map::new_flat(4, 4, 0);
+        legacy_map.set_tile(coord, tile).unwrap();
+        let mut legacy_industries = vec![industry];
+        legacy_industries[0].stock = 23;
+        let _ = trigger_industry_randomisation_at_with_catalog_and_world(
+            &mut legacy_map,
+            &[coord],
+            IndustryRandomTrigger::CargoReceived,
+            42,
+            7,
+            &mut legacy_industries,
+            &[],
+            std::slice::from_ref(&spec),
+            std::slice::from_ref(&industry_def),
+            Climate::Temperate,
+        );
+        assert_eq!(legacy_industries[0].newgrf_random, 0);
     }
 
     #[test]

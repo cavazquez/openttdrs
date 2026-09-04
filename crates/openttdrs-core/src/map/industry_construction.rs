@@ -125,6 +125,35 @@ pub fn step_industry_tiles_with_seed_and_catalog(
     industry_catalog: &[crate::industry_spec::IndustrySpecDef],
     climate: crate::world_gen::Climate,
 ) -> Vec<TileCoord> {
+    step_industry_tiles_with_seed_and_catalog_and_cargo_catalog(
+        map,
+        tick,
+        visits,
+        world_seed,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        &[],
+    )
+}
+
+/// Variante que propaga el catálogo de cargos al scope parent de las
+/// randomizaciones `IndustryTile` durante la pasada de construcción.
+#[allow(clippy::too_many_arguments)]
+pub fn step_industry_tiles_with_seed_and_catalog_and_cargo_catalog(
+    map: &mut Map,
+    tick: u64,
+    visits: &[(TileCoord, super::Tile)],
+    world_seed: u64,
+    industries: &[Industry],
+    towns: &[crate::town::Town],
+    tile_spec_catalog: &[crate::industry_tile::IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    cargo_spec_catalog: &[crate::cargo_spec::CargoSpecDef],
+) -> Vec<TileCoord> {
     let mut dirty = advance_industry_construction_from_visits(map, visits, industries);
     dirty.extend(
         super::industry_tile_anim::advance_industry_tile_loop_events_from_visits(map, tick, visits),
@@ -136,7 +165,7 @@ pub fn step_industry_tiles_with_seed_and_catalog(
         &anim_coords,
     ));
     dirty.extend(
-        super::industry_random::advance_industry_tile_randomisation_from_visits_with_catalog(
+        super::industry_random::advance_industry_tile_randomisation_from_visits_with_catalog_and_cargo_catalog(
             map,
             tick,
             world_seed,
@@ -146,6 +175,7 @@ pub fn step_industry_tiles_with_seed_and_catalog(
             tile_spec_catalog,
             industry_catalog,
             climate,
+            cargo_spec_catalog,
         ),
     );
     dirty.sort_by_key(|c| (c.x, c.y));
@@ -170,6 +200,35 @@ pub fn step_industry_tiles_with_seed_and_catalog_and_world(
     industry_catalog: &[crate::industry_spec::IndustrySpecDef],
     climate: crate::world_gen::Climate,
 ) -> Vec<TileCoord> {
+    step_industry_tiles_with_seed_and_catalog_and_world_and_cargo_catalog(
+        map,
+        tick,
+        visits,
+        world_seed,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        &[],
+    )
+}
+
+/// Variante mutable que propaga el catálogo de cargos al scope parent durante
+/// la randomización `IndustryTile` y conserva el writeback PSA.
+#[allow(clippy::too_many_arguments)]
+pub fn step_industry_tiles_with_seed_and_catalog_and_world_and_cargo_catalog(
+    map: &mut Map,
+    tick: u64,
+    visits: &[(TileCoord, super::Tile)],
+    world_seed: u64,
+    industries: &mut [Industry],
+    towns: &[crate::town::Town],
+    tile_spec_catalog: &[crate::industry_tile::IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    cargo_spec_catalog: &[crate::cargo_spec::CargoSpecDef],
+) -> Vec<TileCoord> {
     let mut dirty = advance_industry_construction_from_visits(map, visits, industries);
     dirty.extend(
         super::industry_tile_anim::advance_industry_tile_loop_events_from_visits(map, tick, visits),
@@ -181,7 +240,7 @@ pub fn step_industry_tiles_with_seed_and_catalog_and_world(
         &anim_coords,
     ));
     dirty.extend(
-        super::industry_random::advance_industry_tile_randomisation_from_visits_with_catalog_and_world(
+        super::industry_random::advance_industry_tile_randomisation_from_visits_with_catalog_and_world_and_cargo_catalog(
             map,
             tick,
             world_seed,
@@ -191,6 +250,7 @@ pub fn step_industry_tiles_with_seed_and_catalog_and_world(
             tile_spec_catalog,
             industry_catalog,
             climate,
+            cargo_spec_catalog,
         ),
     );
     dirty.sort_by_key(|c| (c.x, c.y));

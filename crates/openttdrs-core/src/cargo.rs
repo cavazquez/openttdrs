@@ -18,10 +18,10 @@ pub const VANILLA_CARGO_COUNT: usize = 31;
 pub const CUSTOM_CARGO_OFFSET: u8 = VANILLA_CARGO_COUNT as u8;
 /// Slots de cargos custom que el runtime puede transportar.
 ///
-/// `OpenTTD` reserva 64 IDs de cargo. El modelo actual deja el último ID
-/// reservado para sentinelas legacy y expone 32 slots ejecutables (`31..62`);
-/// el resto continúa como passthrough hasta ampliar los chunks de UI.
-pub const CUSTOM_CARGO_COUNT: usize = 32;
+/// `OpenTTD` reserva 64 IDs de cargo (`0..63`). Los 31 cargos vanilla ocupan
+/// `0..30`, por lo que quedan 33 slots ejecutables para cargos definidos por
+/// `NewGRF` (`31..63`).
+pub const CUSTOM_CARGO_COUNT: usize = 33;
 /// Límite inclusivo de IDs de cargo materializados por el runtime.
 #[allow(clippy::cast_possible_truncation)]
 pub const MAX_CARGO_ID: u8 = CUSTOM_CARGO_OFFSET + CUSTOM_CARGO_COUNT as u8 - 1;
@@ -48,7 +48,7 @@ pub const CARGO_CLASS_NON_POTABLE: u16 = 1 << 14;
 pub const CARGO_CLASS_SPECIAL: u16 = 1 << 15;
 
 /// Construye un cargo custom desde un índice de colección sin truncamientos
-/// implícitos (los callers de runtime usan rangos acotados a 32 slots).
+/// implícitos (los callers de runtime usan rangos acotados a 33 slots).
 #[must_use]
 #[allow(clippy::cast_possible_truncation)]
 pub const fn custom_cargo(slot: usize) -> CargoType {
@@ -214,7 +214,7 @@ pub enum CargoType {
     Custom(u8),
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CargoStock {
     pub passengers: u32,
     pub coal: u32,
@@ -268,8 +268,86 @@ pub struct CargoStock {
     #[serde(default)]
     pub fizzy_drinks: u32,
     /// Stocks de cargos `NewGRF` (`Custom(0)` corresponde al ID 31).
-    #[serde(default)]
+    #[serde(
+        default = "default_custom_stock",
+        serialize_with = "serialize_custom_stock",
+        deserialize_with = "deserialize_custom_stock"
+    )]
     pub custom: [u32; CUSTOM_CARGO_COUNT],
+}
+
+impl Default for CargoStock {
+    fn default() -> Self {
+        Self {
+            passengers: 0,
+            coal: 0,
+            mail: 0,
+            oil: 0,
+            livestock: 0,
+            goods: 0,
+            grain: 0,
+            wood: 0,
+            iron_ore: 0,
+            steel: 0,
+            valuables: 0,
+            wheat: 0,
+            paper: 0,
+            gold: 0,
+            food: 0,
+            rubber: 0,
+            fruit: 0,
+            maize: 0,
+            copper_ore: 0,
+            water: 0,
+            diamonds: 0,
+            sugar: 0,
+            toys: 0,
+            batteries: 0,
+            candy: 0,
+            toffee: 0,
+            cola: 0,
+            cotton_candy: 0,
+            bubbles: 0,
+            plastic: 0,
+            fizzy_drinks: 0,
+            custom: [0; CUSTOM_CARGO_COUNT],
+        }
+    }
+}
+
+fn default_custom_stock() -> [u32; CUSTOM_CARGO_COUNT] {
+    [0; CUSTOM_CARGO_COUNT]
+}
+
+fn serialize_custom_stock<S>(
+    custom: &[u32; CUSTOM_CARGO_COUNT],
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    custom.as_slice().serialize(serializer)
+}
+
+/// Deserializa el array custom aceptando también el formato propio anterior,
+/// que sólo emitía 32 slots (`31..62`). El slot nuevo 63 queda en cero cuando
+/// falta en un save antiguo; arrays mayores que el contrato actual se
+/// rechazan para no truncar carga silenciosamente.
+fn deserialize_custom_stock<'de, D>(deserializer: D) -> Result<[u32; CUSTOM_CARGO_COUNT], D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let values = Vec::<u32>::deserialize(deserializer)?;
+    if values.len() > CUSTOM_CARGO_COUNT {
+        return Err(serde::de::Error::custom(format!(
+            "CargoStock.custom: {} entradas > {}",
+            values.len(),
+            CUSTOM_CARGO_COUNT
+        )));
+    }
+    let mut custom = [0; CUSTOM_CARGO_COUNT];
+    custom[..values.len()].copy_from_slice(&values);
+    Ok(custom)
 }
 
 impl CargoStock {
@@ -945,5 +1023,27 @@ mod tests {
         assert_eq!(stock.pick_freight_to_load(None), Some(cargo));
         assert_eq!(stock.take(cargo, 8), 8);
         assert_eq!(stock.get(cargo), 15);
+    }
+
+    #[test]
+    fn final_custom_slot_matches_openttd_num_cargo_and_legacy_json() {
+        assert_eq!(MAX_CARGO_ID, 63);
+        let cargo = CargoType::Custom(32);
+        assert_eq!(cargo.cargo_id(), 63);
+        assert_eq!(CargoType::from_cargo_id(63), Some(cargo));
+
+        let mut stock = CargoStock::default();
+        stock.add(cargo, 41);
+        assert_eq!(stock.get(cargo), 41);
+        let json = serde_json::to_string(&stock).expect("serialize stock");
+        let loaded: CargoStock = serde_json::from_str(&json).expect("deserialize stock");
+        assert_eq!(loaded.get(cargo), 41);
+
+        let mut legacy: serde_json::Value = serde_json::from_str(&json).expect("stock value");
+        legacy["custom"] = serde_json::json!(vec![0_u32; 32]);
+        let loaded_legacy: CargoStock =
+            serde_json::from_value(legacy).expect("deserialize legacy stock");
+        assert_eq!(loaded_legacy.get(CargoType::Custom(31)), 0);
+        assert_eq!(loaded_legacy.get(cargo), 0);
     }
 }

@@ -3,9 +3,10 @@ use crate::cargo_packet::StationCargoList;
 use crate::company::CompanyId;
 use crate::map::TileCoord;
 use crate::vehicle::VehicleKind;
+use serde::{Deserialize, Serialize};
 
 /// Días desde la última recogida por tipo de carga (0 = reciente).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CargoTimeSincePickup {
     pub passengers: u8,
     pub coal: u8,
@@ -58,8 +59,86 @@ pub struct CargoTimeSincePickup {
     pub plastic: u8,
     #[serde(default)]
     pub fizzy_drinks: u8,
-    #[serde(default)]
+    #[serde(
+        default = "default_custom_time_since_pickup",
+        serialize_with = "serialize_custom_time_since_pickup",
+        deserialize_with = "deserialize_custom_time_since_pickup"
+    )]
     pub custom: [u8; crate::cargo::CUSTOM_CARGO_COUNT],
+}
+
+impl Default for CargoTimeSincePickup {
+    fn default() -> Self {
+        Self {
+            passengers: 0,
+            coal: 0,
+            mail: 0,
+            oil: 0,
+            livestock: 0,
+            goods: 0,
+            grain: 0,
+            wood: 0,
+            iron_ore: 0,
+            steel: 0,
+            valuables: 0,
+            wheat: 0,
+            paper: 0,
+            gold: 0,
+            food: 0,
+            rubber: 0,
+            fruit: 0,
+            maize: 0,
+            copper_ore: 0,
+            water: 0,
+            diamonds: 0,
+            sugar: 0,
+            toys: 0,
+            batteries: 0,
+            candy: 0,
+            toffee: 0,
+            cola: 0,
+            cotton_candy: 0,
+            bubbles: 0,
+            plastic: 0,
+            fizzy_drinks: 0,
+            custom: [0; crate::cargo::CUSTOM_CARGO_COUNT],
+        }
+    }
+}
+
+fn default_custom_time_since_pickup() -> [u8; crate::cargo::CUSTOM_CARGO_COUNT] {
+    [0; crate::cargo::CUSTOM_CARGO_COUNT]
+}
+
+fn serialize_custom_time_since_pickup<S>(
+    custom: &[u8; crate::cargo::CUSTOM_CARGO_COUNT],
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    custom.as_slice().serialize(serializer)
+}
+
+/// Acepta snapshots propios anteriores que sólo tenían 32 slots custom y
+/// rellena el slot 63 con el valor por defecto.
+fn deserialize_custom_time_since_pickup<'de, D>(
+    deserializer: D,
+) -> Result<[u8; crate::cargo::CUSTOM_CARGO_COUNT], D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let values = Vec::<u8>::deserialize(deserializer)?;
+    if values.len() > crate::cargo::CUSTOM_CARGO_COUNT {
+        return Err(serde::de::Error::custom(format!(
+            "CargoTimeSincePickup.custom: {} entradas > {}",
+            values.len(),
+            crate::cargo::CUSTOM_CARGO_COUNT
+        )));
+    }
+    let mut custom = [0; crate::cargo::CUSTOM_CARGO_COUNT];
+    custom[..values.len()].copy_from_slice(&values);
+    Ok(custom)
 }
 
 impl CargoTimeSincePickup {
@@ -671,5 +750,29 @@ impl Station {
             StopKind::Airport => matches!(cargo, CargoType::Passengers | CargoType::Mail),
             StopKind::RailWaypoint | StopKind::Buoy | StopKind::RoadWaypoint => false,
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::CargoTimeSincePickup;
+    use crate::CargoType;
+
+    #[test]
+    fn final_custom_time_slot_roundtrips_and_accepts_legacy_json() {
+        let cargo = CargoType::Custom(32);
+        let mut waiting = CargoTimeSincePickup::default();
+        waiting.set(cargo, 37);
+        let json = serde_json::to_string(&waiting).expect("serialize waiting age");
+        let loaded: CargoTimeSincePickup =
+            serde_json::from_str(&json).expect("deserialize waiting age");
+        assert_eq!(loaded.get(cargo), 37);
+
+        let mut legacy: serde_json::Value = serde_json::from_str(&json).expect("waiting age value");
+        legacy["custom"] = serde_json::json!(vec![0_u8; 32]);
+        let loaded_legacy: CargoTimeSincePickup =
+            serde_json::from_value(legacy).expect("deserialize legacy waiting age");
+        assert_eq!(loaded_legacy.get(cargo), 0);
     }
 }

@@ -35,9 +35,9 @@ pub(crate) const SAV_GLOBAL_CARGO_SLOTS_VERSION: u16 = 55;
 ///
 /// Los saves anteriores a [`SAV_GLOBAL_CARGO_SLOTS_VERSION`] codifican el
 /// slot relativo al clima. Los modernos usan el ID global de `CargoType` y
-/// por eso también pueden transportar cargos `NewGRF` (`31..62`) aunque el
+/// por eso también pueden transportar cargos `NewGRF` (`31..63`) aunque el
 /// catálogo del GRF todavía no esté instalado. El catálogo sólo actúa como
-/// fallback para IDs que el runtime no materializa (por ejemplo `63`).
+/// fallback para IDs fuera del rango materializado.
 #[must_use]
 pub(crate) fn cargo_from_sav_slot(
     slot: u8,

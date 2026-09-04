@@ -2610,6 +2610,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn from_sav_game_resolves_modern_station_cargo_as_global_ids() {
         let station_pos = TileCoord::new(2, 2);
         let mut sav = empty_sav(352, Map::new_flat(8, 8, 0));
@@ -2644,6 +2645,12 @@ mod tests {
                 entities::SavStationCargo {
                     cargo_slot: 42,
                     packet_ids: vec![3],
+                    reserved: 0,
+                },
+                entities::SavStationCargo {
+                    // Modern slot 63 is the final executable CargoSpec slot.
+                    cargo_slot: 63,
+                    packet_ids: vec![4],
                     reserved: 0,
                 },
             ],
@@ -2688,6 +2695,19 @@ mod tests {
                 travelled_x: 0,
                 travelled_y: 0,
             },
+            entities::SavCargoPacket {
+                packet_id: 4,
+                source_station_id: None,
+                source_xy: Some(station_pos),
+                next_hop_station_id: None,
+                count: 13,
+                periods_in_transit: 0,
+                feeder_share: 0,
+                source_type: 0,
+                source_id: None,
+                travelled_x: 0,
+                travelled_y: 0,
+            },
         ];
 
         let state = GameState::from_sav_game(sav);
@@ -2695,6 +2715,7 @@ mod tests {
         assert_eq!(station.cargo_stock.grain, 4);
         assert_eq!(station.cargo_stock.wheat, 7);
         assert_eq!(station.cargo_stock.custom[11], 9);
+        assert_eq!(station.cargo_stock.custom[32], 13);
     }
 
     #[test]

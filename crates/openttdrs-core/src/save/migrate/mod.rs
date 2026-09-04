@@ -19,7 +19,7 @@ pub(super) fn migrate_loaded_state(
                 crate::command::normalize_synthetic_rail_crossings(&mut state.map);
             }
             3 => migrate_state_v3_to_v4(&mut state),
-            4 | 6 | 7 | 8 | 9 | 15 | 24 => {}
+            4 | 6 | 7 | 8 | 9 | 15 | 24 | 26 => {}
             25 => migrate_state_v25_to_v26(&mut state),
             5 => migrate_state_v5_to_v6(&mut state),
             10 => migrate_state_v10_to_v11(&mut state),

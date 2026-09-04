@@ -42,7 +42,9 @@ pub use io::{load, load_from_str, save};
 /// de lado de circulación y de señales (con defaults compatibles).
 /// v26: separa el límite efectivo de préstamo de un override individual
 /// (`CompanyEconomy.max_loan_override`); migra el valor único de JSON antiguo.
-pub const CURRENT_SAVE_VERSION: u32 = 26;
+/// v27: completa el último slot custom de cargo (`CargoType` 63) y acepta
+/// arrays propios de 32 slots al deserializar estados anteriores.
+pub const CURRENT_SAVE_VERSION: u32 = 27;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 

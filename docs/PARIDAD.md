@@ -34,8 +34,8 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `bd613e2a`; el
-runtime de cargos custom queda actualizado en este corte).
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `566ce56a`; el
+runtime de cargos custom y la frontera de IDs SAV quedan actualizados en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -54,6 +54,16 @@ entregas, transferencias, el barrido diario y el rollover mensual los
 actualizan, y el writer los reemite. Las frases de tablas antiguas que indiquen
 que esos campos son sólo passthrough quedan superadas por este corte. Cargos
 custom y callbacks sin call site siguen siendo brechas reales.
+
+Corrección vigente adicional (`566ce56a`): el importador distingue la frontera
+`SLV_55`; los saves anteriores usan slots relativos al clima y los modernos usan
+IDs globales en `STNN`, `INDY`, `VEHS` y `LGRP`. Los cargos custom `31..62` se
+rehidratan como `CargoType::Custom` aun sin catálogo, se conservan en stocks,
+packets e historiales y el writer moderno vuelve a emitir los 64 IDs globales.
+Los IDs fuera de ese rango siguen siendo opacos y nombre, peso, CTT y callbacks
+económicos todavía dependen del `CargoSpec` activo. Este corte valida **2.009**
+tests de core y **1.064** de cliente (2 ignorados), además de formatter, clippy y
+la batería documental.
 
 Actualización vigente del corte: `036fda1f` implementa el monitor efímero de
 carga compatible con `_cargo_pickups`/`_cargo_deliveries`: codificación nativa

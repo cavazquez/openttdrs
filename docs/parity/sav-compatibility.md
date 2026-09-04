@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
-`main` con base funcional publicada `bd613e2a`, posterior al writeback canónico
+`main` con base funcional publicada `566ce56a`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
@@ -9,8 +9,11 @@ separan de la pasada visual CB26/CB27; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
 
 El runtime de cargos custom de `bd613e2a` no cambia el wire format: hasta 32
-cargos se ejecutan si el `CargoSpec` está instalado, pero sus filas continúan
-opacas dentro de `.sav` hasta completar el writer y la rehidratación nativos.
+cargos se ejecutan si el `CargoSpec` está instalado. `566ce56a` completa la
+frontera de IDs del import/export: `SLV<55` usa slots por clima y `SLV≥55`
+usa IDs globales para `STNN`, `INDY`, `VEHS` y `LGRP`; `Custom(0..31)` se
+rehidrata por ID aun sin catálogo, mientras `63+` sigue opaco. El nombre,
+peso, CTT y callbacks económicos requieren el `CargoSpec` activo.
 
 Esta es la única matriz de capacidad para importación y exportación `.sav`.
 [`PARIDAD.md`](../PARIDAD.md) sólo resume su madurez; la guía de wire format en
@@ -189,3 +192,11 @@ packets, pagos, ratings, cargodist, refit y autoreplace. Este bloque no altera
 la codificación `.sav`: una fila `INDY` custom o una entrada de carga sin
 `CargoSpec` instalado se conserva como passthrough opaco para round-trip, pero
 no puede reatacharse a la economía hasta completar las columnas nativas CTT/SAV.
+
+Actualización `566ce56a` (2026-09-04): el cargador usa la versión `SLV_55`
+para distinguir slots climáticos legacy de IDs globales modernos. Se conservan
+en runtime los cargos `31..62` en estaciones, vehículos, industrias, packets e
+historiales, y el writer emite la lista moderna de 64 slots; los saves legacy
+se convierten al exportar sin reinterpretar trigo/grano entre climas. Las
+propiedades de `CargoSpec`, CTT, textos y callbacks que dependen del catálogo
+siguen siendo parciales.

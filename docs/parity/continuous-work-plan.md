@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`bd613e2a`** (`newgrf: transport custom cargo through runtime`),
+Base funcional local y publicada: **`566ce56a`** (`sav: preserve global cargo ids across load and export`),
 encima de `933042ca` (documentación de aceptación exacta) y `67ef8101`
 (`newgrf: evaluate industry tile cargo acceptance`). Los tres commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -55,9 +55,11 @@ con la cobertura de estación y la descarga real, manteniendo el fallback legacy
 `bd613e2a` materializa hasta 32 cargos custom como `CargoType::Custom`, los
 asigna de forma estable por `(GRFID, local_id)` y los transporta por stocks,
 packets, cobertura, estaciones, industria, producción, pagos, ratings,
-cargodist, refit y autoreplace. La próxima tarea es la rehidratación económica
-de esas filas cuando el catálogo no está instalado, además de ampliar CTT/SAV
-nativo y los callbacks restantes.
+cargodist, refit y autoreplace. `566ce56a` corrige además la frontera nativa
+de SAV: `SLV<55` se interpreta por slot climático y `SLV≥55` por ID global,
+incluidos los cargos custom `31..62`, para `STNN`, `INDY`, `VEHS` y `LGRP`;
+el exportador emite siempre la tabla moderna de 64 IDs. La economía completa
+de una carga aún requiere su `CargoSpec` para nombre, peso, CTT y callbacks.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
@@ -68,8 +70,13 @@ nativo y los callbacks restantes.
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas y errores de comandos cambian en vivo; siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
 
-Última validación de `bd613e2a`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **2.005** tests de core y **1.064** de cliente (2 ignorados); la matriz
+Corrección vigente de la tabla: `566ce56a` resuelve la codificación global de
+cargos modernos en SAV y conserva los slots climáticos de saves anteriores a
+`SLV_55`. Esta nota prevalece sobre las filas históricas que todavía describen
+los cargos custom como exclusivamente opacos.
+
+Última validación de `566ce56a`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **2.009** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.
@@ -1118,3 +1125,15 @@ no tiene todavía columnas custom rehidratables, los slots `63+` continúan
 opacos, la semántica completa de CTT/GUI/variables y el binding GameScript del
 monitor no están cerrados; sin el GRF instalado las filas `INDY` se conservan
 pero no se ejecutan. #329 permanece abierto.
+
+Actualización #329-SAV-GLOBAL-CARGO-060 (2026-09-04, commit `566ce56a`):
+el importador centraliza la frontera `SLV_55`: las tablas antiguas conservan
+slots relativos al clima, mientras `STNN.goods`, `INDY.accepted/produced`,
+`VEHS.common.cargo_type` y `LGRP.cargo` modernos usan el ID global. Los IDs
+`31..62` se hidratan como `CargoType::Custom` aun sin catálogo, por lo que
+stocks, packets, historiales y vehículos no se descartan; `63` y valores fuera
+del runtime siguen siendo opacos. El writer emite siempre `NUM_CARGO=64` con
+IDs globales y convierte correctamente filas legacy al reexportar. Las
+regresiones cubren slots árticos antiguos/modernos, custom en estaciones,
+vehículos, industrias y linkgraph. #328/#329 siguen abiertos por propiedades,
+CTT, textos y callbacks económicos que requieren el `CargoSpec` activo.

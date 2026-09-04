@@ -390,6 +390,7 @@ pub fn road_vehicle_tick_side(
         RoadVehicleAccelerationModel::Original,
         None,
         &[],
+        &[],
     );
 }
 
@@ -446,6 +447,32 @@ pub fn road_vehicle_tick_side_indexed_with_acceleration_and_catalog(
     engine_catalog: &[crate::engine::EngineDef],
     traffic: &mut RoadTrafficIndex,
 ) {
+    road_vehicle_tick_side_indexed_with_acceleration_and_catalogs(
+        vehicles,
+        v_idx,
+        map,
+        drive_on_right,
+        acceleration_model,
+        engine_catalog,
+        &[],
+        traffic,
+    );
+}
+
+/// Variante que propaga tanto el catálogo de motores como el de cargos. Esto
+/// permite aplicar `CargoSpec::weight` a la física vial de cargos `NewGRF` sin
+/// romper la API histórica que sólo recibía el catálogo de motores.
+#[allow(clippy::too_many_arguments)]
+pub fn road_vehicle_tick_side_indexed_with_acceleration_and_catalogs(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    drive_on_right: bool,
+    acceleration_model: RoadVehicleAccelerationModel,
+    engine_catalog: &[crate::engine::EngineDef],
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    traffic: &mut RoadTrafficIndex,
+) {
     let previous = vehicles
         .get(v_idx)
         .map_or(crate::TileCoord::new(0, 0), |v| v.pos);
@@ -457,11 +484,12 @@ pub fn road_vehicle_tick_side_indexed_with_acceleration_and_catalog(
         acceleration_model,
         Some(traffic),
         engine_catalog,
+        cargo_catalog,
     );
     traffic.update_vehicle(vehicles, v_idx, previous);
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn road_vehicle_tick_side_with_traffic(
     vehicles: &mut [Vehicle],
     v_idx: usize,
@@ -470,6 +498,7 @@ fn road_vehicle_tick_side_with_traffic(
     acceleration_model: RoadVehicleAccelerationModel,
     traffic: Option<&RoadTrafficIndex>,
     engine_catalog: &[crate::engine::EngineDef],
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
 ) {
     if !is_road_vehicle_kind(vehicles[v_idx].kind) {
         return;
@@ -512,7 +541,7 @@ fn road_vehicle_tick_side_with_traffic(
         super::slope::current_road_max_speed_with_callbacks_in_catalog(v, map, engine_catalog);
 
     let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
-    let cargo_weight = crate::train_consist::cargo_weight_t(v.cargo, v.cargo_type);
+    let cargo_weight = crate::train_consist::cargo_weight_t(v.cargo, v.cargo_type, cargo_catalog);
     let weight = crate::newgrf_callback::vehicle_weight_t(engine, v)
         .saturating_add(cargo_weight)
         .max(1);

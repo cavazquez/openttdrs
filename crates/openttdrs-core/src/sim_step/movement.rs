@@ -198,13 +198,14 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             let road_acceleration_model = state.road_vehicle_acceleration_model;
             // Split borrow: tick road con flota completa para FindCloseTo.
             let mut vehicles = std::mem::take(&mut state.vehicles);
-            crate::road_movement::road_vehicle_tick_side_indexed_with_acceleration_and_catalog(
+            crate::road_movement::road_vehicle_tick_side_indexed_with_acceleration_and_catalogs(
                 &mut vehicles,
                 i,
                 map,
                 drive_on_right,
                 road_acceleration_model,
                 &state.engine_catalog,
+                &state.cargo_spec_catalog,
                 &mut road_traffic,
             );
             state.vehicles = vehicles;

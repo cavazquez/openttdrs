@@ -8,7 +8,14 @@ use crate::vehicle::Vehicle;
 use super::topology::consist_unit_ids;
 
 pub(crate) fn cargo_unit_weight_16ths(cargo: Option<CargoType>) -> u8 {
-    match cargo {
+    cargo_unit_weight_16ths_with_catalog(cargo, &[])
+}
+
+pub(crate) fn cargo_unit_weight_16ths_with_catalog(
+    cargo: Option<CargoType>,
+    catalog: &[crate::cargo_spec::CargoSpecDef],
+) -> u8 {
+    let fallback = match cargo {
         Some(CargoType::Passengers) => 1,
         Some(
             CargoType::Mail
@@ -27,7 +34,15 @@ pub(crate) fn cargo_unit_weight_16ths(cargo: Option<CargoType>) -> u8 {
         ) => 8,
         Some(_) => 16,
         None => 0,
-    }
+    };
+    let Some(cargo) = cargo else {
+        return fallback;
+    };
+    catalog
+        .iter()
+        .find(|spec| spec.cargo_type() == Some(cargo))
+        .and_then(|spec| (spec.weight > 0).then_some(spec.weight))
+        .unwrap_or(fallback)
 }
 
 /// Peso de una carga en toneladas enteras como `CargoSpec::WeightOfNUnits`.
@@ -36,8 +51,13 @@ pub(crate) fn cargo_unit_weight_16ths(cargo: Option<CargoType>) -> u8 {
 /// `RoadVehicle::GetWeight`; centralizarla evita que trenes y carretera
 /// redondeen distinto un mismo `CargoSpec` vanilla.
 #[must_use]
-pub(crate) fn cargo_weight_t(cargo: u32, cargo_type: Option<CargoType>) -> u16 {
-    let sixteenths = u64::from(cargo) * u64::from(cargo_unit_weight_16ths(cargo_type));
+pub(crate) fn cargo_weight_t(
+    cargo: u32,
+    cargo_type: Option<CargoType>,
+    catalog: &[crate::cargo_spec::CargoSpecDef],
+) -> u16 {
+    let sixteenths =
+        u64::from(cargo) * u64::from(cargo_unit_weight_16ths_with_catalog(cargo_type, catalog));
     u16::try_from(sixteenths / 16).unwrap_or(u16::MAX)
 }
 
@@ -128,4 +148,34 @@ pub fn consist_occupied_tiles_indexed(
         }
     }
     tiles
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_cargo_weight_uses_active_cargo_spec() {
+        let catalog = [crate::cargo_spec::CargoSpecDef {
+            id: CargoType::Custom(3).cargo_id(),
+            label: "TEST".to_owned(),
+            name: "Carga de prueba".to_owned(),
+            weight: 32,
+            from_newgrf: true,
+            ..crate::cargo_spec::CargoSpecDef::default()
+        }];
+        assert_eq!(cargo_weight_t(9, Some(CargoType::Custom(3)), &catalog), 18);
+    }
+
+    #[test]
+    fn zero_spec_weight_keeps_vanilla_fallback() {
+        let catalog = [crate::cargo_spec::CargoSpecDef {
+            id: CargoType::Custom(3).cargo_id(),
+            label: "TEST".to_owned(),
+            name: "Carga de prueba".to_owned(),
+            from_newgrf: true,
+            ..crate::cargo_spec::CargoSpecDef::default()
+        }];
+        assert_eq!(cargo_weight_t(9, Some(CargoType::Custom(3)), &catalog), 9);
+    }
 }

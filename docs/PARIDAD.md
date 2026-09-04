@@ -34,11 +34,11 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `acbc3675`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `92e8aee2`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
-ferroviario, la CTT de scopes de estación/parada e `IndustryTile` y la CTT de
-vehículos/refit, incluido `CBID_VEHICLE_CUSTOM_REFIT`, quedan actualizados en
-este corte).
+ferroviario, la CTT de scopes de estación/parada e `IndustryTile`, la CTT de
+vehículos/refit y las órdenes de refit de estación, incluido
+`CARGO_AUTO_REFIT`, quedan actualizados en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -46,7 +46,7 @@ mapeo y la evidencia de auditorías anteriores; fechas anteriores son contexto
 histórico. Ante una contradicción prevalece este bloque y debe corregirse la
 fila antigua en el mismo cambio.
 
-Validación de este corte: formatter y clippy estricto en core/cliente, **2.040**
+Validación de este corte: formatter y clippy estricto en core/cliente, **2.045**
 tests de core y **1.065** tests ejecutados del cliente (2 ignorados), además de
 la regresión integrada de CTT de vehículos; los conteos anteriores son
 históricos.
@@ -262,6 +262,20 @@ regresión de dos unidades verifica que el coste pasa de una a dos conversiones
 cuando ambas cambian de motor/carga. El permiso de autorefit para estaciones y
 las cadenas articuladas completas siguen pendientes; #329 permanece abierto.
 
+Actualización #329-VEHICLE-STATION-REFIT-081 (2026-09-04, `92e8aee2`): las
+órdenes de estación conservan `refit_cargo`/`auto_refit` en JSON y en `ORDL`;
+`0xFD` (`CARGO_AUTO_REFIT`) y `0xFF` se distinguen al importar/exportar y los
+IDs globales custom `31..63` se rehidratan cuando el slot es representable. La
+fase de carga ejecuta el refit antes de filtrar capacidad o seleccionar stock,
+incluso sin mercancía esperando; el auto-refit elige el cargo aceptado con más
+stock, aplica `CBID_VEHICLE_REFIT_COST` y el bit 14 por unidad, recalcula CB36 y
+descuenta el coste de forma atómica. También se conserva `Vehicle::refit_cap`
+en refit manual, refit de depósito y autoreplace para que el tipo no se pierda
+antes del primer packet. La selección de stock y el balanceo de capacidad son
+un recorte determinista: faltan la reserva de siguiente estación, la selección
+completa de `HandleStationRefit`, cadenas articuladas con tipos heterogéneos y
+la UI que crea/edita este modo. #329 permanece abierto.
+
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía
 no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
@@ -273,7 +287,7 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Ferrocarril | **Alta funcional / media exacta** | Consists, railtypes, ENTRY/EXIT/COMBO, PBS/YAPF, túneles/puentes y plataformas. Los oráculos externos aún cubren escenarios acotados |
 | Economía y carga | **Media** | Catálogo multi-clima (#224/#273): pagos Oil/Wood tropic, Farm dual-output, packets/transfer/CargoDist; los contadores acumulativos `u64` saturan pagos NewGRF negativos a cero sin alterar el crédito firmado; NewGRF/cargos custom incompletos |
 | Pueblos e industrias | **Media** | I/O por clima (#224/#273): UI fundación Arctic/Tropic/Toyland; layouts/gráficos aún parciales |
-| Órdenes y horarios | **Media-alta en core / media en UI** | Full-load all/any, no-load/no-unload, transfer, non-stop/go-via, stop-location, refit de depósito, condicionales y timetable-start; la UI no expone todo |
+| Órdenes y horarios | **Media-alta en core / media en UI** | Full-load all/any, no-load/no-unload, transfer, non-stop/go-via, stop-location, refit de depósito y de estación (`CARGO_AUTO_REFIT` incluido), condicionales y timetable-start; la UI no expone todo |
 | Fiabilidad y servicio | **Media en core / inicial en UI** | Averías normales/reducidas/OFF configurables desde Ajustes, intervalos días/porcentaje, servicio y autoenvío a depósito; falta el editor completo de intervalos/unbunch |
 | Aviones | **Media** | Aeropuertos FTA, compra, vuelo, ruido y crashes; presentación y casos límite incompletos |
 | Barcos | **Parcial → media MVP (#268)** | Infra acuática + `ChooseShipTrack`-like (path A*/cache), `FindClosestShipDepot` BFS, arrival dock/depot (8,8) / buoy ≤3, ocupación esclusa (bitset), golden interno tick pos/dir/z/orden. Residual: YAPF ship/water regions completas, goldens externos vs OpenTTD 15.3 |

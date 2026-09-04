@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
-`main` con base funcional publicada `acbc3675`, posterior al writeback canónico
+`main` con base funcional publicada `92e8aee2`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
@@ -105,7 +105,7 @@ passthrough opaco, sin simulación ejecutable.
 | Aeropuertos y AirportTiles NewGRF | 🟡 conserva `STNN.airport.type/layout/rotation` globales, la huella `airport.tile/w/h` y reatacha los gfx por tesela cuando el layout activo coincide exactamente | 🟡 emite `FACIL_AIRPORT`, tipo custom, layout/rotación y huella materializada; el cliente dibuja Action1/3 estático y degrada si falta el GRF | Runtime, FTA/callbacks y columnas desconocidas de `STNN` siguen fuera del subconjunto; una huella ambigua se deja vanilla |
 | Barcos | 🟡 `VEH_SHIP` se hidrata como `Ship`, conservando `state`/`rotation`, el caché `path` de `Trackdir` y la proyección `TrackBits` | 🟡 sólo sobre agua o ship depot; reemite `SlVehicleShip.state`, `path` y `rotation` | La semántica YAPF/wormhole completa y otros estados de navegación siguen best-effort |
 | Aviones y helicópteros | 🟡 aeronaves y FTA se hidratan; reconoce helicóptero | 🟡 emite ala fija + sombra, o helicóptero + sombra + rotor, y conserva los campos FTA (`pos`, `targetairport`, `state`, `previous_pos`, dirección, `crashed_counter`, `number_consecutive_turns`, `turn_counter` y `flags`) | También conserva la ventana de carga/descarga, el calendario común, `motion_counter`, edad económica, fecha de servicio NewGRF y ventanas unbunching; el runtime FTA y parte de la identificación de motores siguen siendo best-effort; [`sav/entities.rs`](../../crates/openttdrs-core/src/sav/entities.rs), [`sav/write/vehicles.rs`](../../crates/openttdrs-core/src/sav/write/vehicles.rs) |
-| Órdenes | 🟡 estación, waypoint, depósito, condicionales, refit vanilla y flags soportados; `VEHS.current_order` cruda | 🟡 mismo subconjunto, una lista `ORDL` por vehículo y `StationID` nativo cuando proviene de un `.sav`; reemite `current_order.type/flags/dest/refit_cargo/wait_time/travel_time/max_speed` | El refit vanilla de depósito (`0..10`) se restaura; cargos NewGRF, destinos/contextos no soportados y variantes avanzadas se degradan; estaciones nuevas sin ID importado usan índice denso como fallback |
+| Órdenes | 🟡 estación, waypoint, depósito, condicionales, refit vanilla y flags soportados; `VEHS.current_order` cruda | 🟡 mismo subconjunto, una lista `ORDL` por vehículo y `StationID` nativo cuando proviene de un `.sav`; reemite `current_order.type/flags/dest/refit_cargo/wait_time/travel_time/max_speed`, incluyendo `0xFD` auto-refit y cargos globales `31..63` representables | El refit vanilla de depósito (`0..10`) y el de estación manual/auto se restauran; la selección de stock/balanceo de consist, cargos climáticos residuales, destinos/contextos no soportados y variantes avanzadas se degradan; estaciones nuevas sin ID importado usan índice denso como fallback |
 | Horarios | 🟡 lee `wait_time`, `travel_time`, límite de velocidad por orden, inicio, tiempo de orden, lateness, muestras derivadas, `current_order` cruda y contadores diarios | 🟡 escribe esos campos por orden, `current_order`, `day_counter`, `tick_counter`, `running_ticks`, `service_interval` y el bitset de `VehicleFlags` (con bits de horario sincronizados) | La espera activa es estado efímero; reparto `timetable_all`, livery y metadatos de órdenes avanzadas siguen reducidos |
 | Shared orders | ✅ reconstruye `shared_order_id` agrupando los vehículos por su índice `ORDL` | ✅ reutiliza una única `ORDL` para vehículos que comparten lista | Persisten limitaciones de horarios/órdenes avanzadas, pero la identidad compartida se conserva |
 | Grupos y autoreplace | 🟡 lee `GRPS` y el pool `ERNW` con índice, enlaces, owner desde `PLYR` y scopes `ALL_GROUP`/`DEFAULT_GROUP` | 🟡 reemite `GRPS`, `VEHS.group_id` y cadenas `ERNW` densas con referencias `u32` y cabecera por compañía | Livery/historial de grupos y la edición UI completa siguen reducidos; el runtime no cubre todas las reglas avanzadas |
@@ -260,3 +260,13 @@ autoreplace se deriva del motor, cargo y reglas ya existentes; no cambia el
 wire format SAV. La cadena, los enlaces y los campos de cargo se reemiten con
 la representación actual, y el coste se vuelve a calcular sólo durante el
 runtime con los catálogos disponibles.
+
+Actualización `92e8aee2` (2026-09-04): `ORDL` conserva el sentinel nativo
+`0xFD` (`CARGO_AUTO_REFIT`) separado de `0xFF` (`CARGO_NO_REFIT`) y el modelo
+JSON mantiene ambos campos sin romper saves antiguos. Los IDs globales custom
+`31..63` se traducen cuando existe `CargoType` local; los slots climáticos
+residuales sin tabla siguen siendo explícitos. El writer no cambia el tamaño de
+la orden: sólo emite el byte `refit_cargo` ya presente. El runtime ejecuta el
+refit de estación antes de cargar y reemite la capacidad calculada; el stock,
+balanceo de consist y callbacks que requieren un GRF ausente permanecen
+parciales.

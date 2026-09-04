@@ -2901,18 +2901,32 @@ pub fn trigger_road_stop_randomisation_at_with_world(
     if !def.has_random_cargo_triggers() {
         return false;
     }
-    if cargo.is_some_and(|cargo| !def.cargo_triggers_randomisation(cargo, context.climate)) {
+    let cargo_catalog = world.map_or(&[][..], |world| world.cargo_spec_catalog);
+    if cargo.is_some_and(|cargo| {
+        !def.cargo_triggers_randomisation_with_catalog(cargo, context.climate, cargo_catalog)
+    }) {
         return false;
     }
     // `CargoTaken` sólo ocurre cuando *todos* los cargos que declaró este
     // spec ya se vaciaron; no basta con que se haya retirado el cargo recibido.
-    if trigger == StationRandomTrigger::CargoTaken
-        && crate::ALL_CARGO_TYPES.iter().copied().any(|candidate| {
-            def.cargo_triggers_randomisation(candidate, context.climate)
+    if trigger == StationRandomTrigger::CargoTaken {
+        let vanilla_pending = crate::ALL_CARGO_TYPES.iter().copied().any(|candidate| {
+            def.cargo_triggers_randomisation_with_catalog(candidate, context.climate, cargo_catalog)
                 && station.cargo_stock.get(candidate) != 0
-        })
-    {
-        return false;
+        });
+        let custom_pending = cargo_catalog
+            .iter()
+            .filter_map(CargoSpecDef::cargo_type)
+            .any(|candidate| {
+                def.cargo_triggers_randomisation_with_catalog(
+                    candidate,
+                    context.climate,
+                    cargo_catalog,
+                ) && station.cargo_stock.get(candidate) != 0
+            });
+        if vanilla_pending || custom_pending {
+            return false;
+        }
     }
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return false;

@@ -180,11 +180,24 @@ impl RoadStopSpecDef {
     /// `local_cargo_id` trata como formato moderno seguro (bitnum global).
     #[must_use]
     pub fn newgrf_cargo_local_id(&self, cargo: crate::CargoType, climate: crate::Climate) -> u8 {
-        crate::newgrf_type_tables::local_cargo_id(
+        self.newgrf_cargo_local_id_with_catalog(cargo, climate, &[])
+    }
+
+    /// Variante que resuelve labels custom usando el catálogo de `CargoSpec`
+    /// activo. El método histórico conserva el fallback sin catálogo.
+    #[must_use]
+    pub fn newgrf_cargo_local_id_with_catalog(
+        &self,
+        cargo: crate::CargoType,
+        climate: crate::Climate,
+        cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    ) -> u8 {
+        crate::newgrf_type_tables::local_cargo_id_with_catalog(
             self.newgrf_type_tables.as_ref(),
             self.newgrf_grf_version,
             cargo,
             climate,
+            cargo_catalog,
         )
     }
 
@@ -195,7 +208,18 @@ impl RoadStopSpecDef {
         cargo: crate::CargoType,
         climate: crate::Climate,
     ) -> bool {
-        let local_id = self.newgrf_cargo_local_id(cargo, climate);
+        self.cargo_triggers_randomisation_with_catalog(cargo, climate, &[])
+    }
+
+    /// Variante catálogo-aware de [`Self::cargo_triggers_randomisation`].
+    #[must_use]
+    pub fn cargo_triggers_randomisation_with_catalog(
+        &self,
+        cargo: crate::CargoType,
+        climate: crate::Climate,
+        cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    ) -> bool {
+        let local_id = self.newgrf_cargo_local_id_with_catalog(cargo, climate, cargo_catalog);
         local_id < 32 && self.random_cargo_triggers & (1_u32 << local_id) != 0
     }
 
@@ -561,6 +585,36 @@ mod tests {
         def.random_cargo_triggers = 1 << 9;
         assert!(
             def.cargo_triggers_randomisation(crate::CargoType::Paper, crate::Climate::SubArctic)
+        );
+    }
+
+    #[test]
+    fn random_cargo_trigger_resolves_custom_label_with_catalog() {
+        let mut def = sample_spec(ROADSTOP_TYPE_BUS, 0);
+        def.newgrf_grf_version = 8;
+        def.newgrf_type_tables = Some(crate::newgrf_type_tables::GrfTypeTranslationTables {
+            cargo: vec![*b"TOFU"],
+            ..Default::default()
+        });
+        def.random_cargo_triggers = 1;
+        let catalog = vec![crate::cargo_spec::CargoSpecDef {
+            id: crate::cargo::CUSTOM_CARGO_OFFSET,
+            label: "TOFU".into(),
+            from_newgrf: true,
+            ..crate::cargo_spec::CargoSpecDef::default()
+        }];
+        assert!(def.cargo_triggers_randomisation_with_catalog(
+            crate::CargoType::Custom(0),
+            crate::Climate::Temperate,
+            &catalog,
+        ));
+        assert_eq!(
+            def.newgrf_cargo_local_id_with_catalog(
+                crate::CargoType::Custom(0),
+                crate::Climate::Temperate,
+                &catalog,
+            ),
+            0
         );
     }
 

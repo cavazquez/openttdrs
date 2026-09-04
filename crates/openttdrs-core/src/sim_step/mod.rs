@@ -742,7 +742,9 @@ pub(super) fn trigger_road_stop_animation_at(
         else {
             continue;
         };
-        let cargo_local_id = cargo.map(|cargo| def.newgrf_cargo_local_id(cargo, climate));
+        let cargo_local_id = cargo.map(|cargo| {
+            def.newgrf_cargo_local_id_with_catalog(cargo, climate, &state.cargo_spec_catalog)
+        });
         let randomisation_changed = crate::StationRandomTrigger::from_animation_trigger(trigger)
             .is_some_and(|random_trigger| {
                 crate::newgrf_callback::trigger_road_stop_randomisation_at_with_world(

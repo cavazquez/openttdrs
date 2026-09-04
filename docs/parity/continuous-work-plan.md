@@ -25,9 +25,9 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`566ce56a`** (`sav: preserve global cargo ids across load and export`),
-encima de `933042ca` (documentación de aceptación exacta) y `67ef8101`
-(`newgrf: evaluate industry tile cargo acceptance`). Los tres commits ya están
+Base funcional local y publicada: **`6266171f`** (`script: accept registered custom cargo monitors`),
+encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
+y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
 Este handoff documental incluye la entrega directa
 SAV de campos legacy (`56aa7858`) y los slots vacíos legacy (`9f2ecc31`), y se publica después de las etapas
@@ -60,6 +60,10 @@ de SAV: `SLV<55` se interpreta por slot climático y `SLV≥55` por ID global,
 incluidos los cargos custom `31..62`, para `STNN`, `INDY`, `VEHS` y `LGRP`;
 el exportador emite siempre la tabla moderna de 64 IDs. La economía completa
 de una carga aún requiere su `CargoSpec` para nombre, peso, CTT y callbacks.
+`6266171f` completa además la validación de `ScriptCargoMonitor` para cargos
+custom cuyo `CargoSpec` está activo: las cuatro consultas aceptan el ID global,
+mantienen activación/reset y registran entregas y recogidas. La fachada Squirrel
+completa y los cargos sin catálogo siguen fuera del alcance.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
@@ -75,8 +79,8 @@ cargos modernos en SAV y conserva los slots climáticos de saves anteriores a
 `SLV_55`. Esta nota prevalece sobre las filas históricas que todavía describen
 los cargos custom como exclusivamente opacos.
 
-Última validación de `566ce56a`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **2.009** tests de core y **1.064** de cliente (2 ignorados); la matriz
+Última validación de `6266171f`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **2.010** tests de core y **1.064** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.
@@ -1137,3 +1141,12 @@ IDs globales y convierte correctamente filas legacy al reexportar. Las
 regresiones cubren slots árticos antiguos/modernos, custom en estaciones,
 vehículos, industrias y linkgraph. #328/#329 siguen abiertos por propiedades,
 CTT, textos y callbacks económicos que requieren el `CargoSpec` activo.
+
+Actualización #329-SCRIPT-CARGO-MONITOR-061 (2026-09-04, commit `6266171f`):
+la validación de `ScriptCargoMonitor` ya reconoce los cargos custom registrados
+en `GameState.cargo_spec_catalog`, además de los cargos vanilla del clima. Las
+consultas de pueblo/industria mantienen el contrato nativo de `-1` para un cargo
+sin `CargoSpec`, activación explícita, reset al leer y saturación a `i32`; una
+entrega final con `CargoSource` custom actualiza pickup y delivery con el mismo
+ID global. La integración Squirrel/GameScript completa y propiedades económicas
+de catálogo siguen pendientes; #329 continúa abierto.

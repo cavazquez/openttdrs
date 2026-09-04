@@ -34,8 +34,8 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `566ce56a`; el
-runtime de cargos custom y la frontera de IDs SAV quedan actualizados en este corte).
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `6266171f`; el
+runtime de cargos custom, la frontera de IDs SAV y el monitor de carga quedan actualizados en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -61,9 +61,15 @@ IDs globales en `STNN`, `INDY`, `VEHS` y `LGRP`. Los cargos custom `31..62` se
 rehidratan como `CargoType::Custom` aun sin catálogo, se conservan en stocks,
 packets e historiales y el writer moderno vuelve a emitir los 64 IDs globales.
 Los IDs fuera de ese rango siguen siendo opacos y nombre, peso, CTT y callbacks
-económicos todavía dependen del `CargoSpec` activo. Este corte valida **2.009**
+económicos todavía dependen del `CargoSpec` activo. El corte SAV validó **2.009**
 tests de core y **1.064** de cliente (2 ignorados), además de formatter, clippy y
 la batería documental.
+
+Actualización vigente adicional (`6266171f`): `ScriptCargoMonitor` acepta un
+`CargoType::Custom` cuando su `CargoSpec` está registrado en el catálogo activo,
+valida el mismo límite que OpenTTD y acumula entregas/recogidas usando el ID
+global de seis bits. Sin `CargoSpec` el cargo continúa rechazándose (`-1`), y la
+integración Squirrel/GameScript completa, textos y demás scopes siguen abiertos.
 
 Actualización vigente del corte: `036fda1f` implementa el monitor efímero de
 carga compatible con `_cargo_pickups`/`_cargo_deliveries`: codificación nativa

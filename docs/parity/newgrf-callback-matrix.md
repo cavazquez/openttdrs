@@ -652,6 +652,14 @@ legacy al formato moderno de 64 IDs. La semántica de peso, CTT, textos y
 callbacks económicos todavía requiere `CargoSpec` y mantiene esta matriz
 parcial para cargos sin definición NewGRF.
 
+Actualización #329-SCRIPT-CARGO-MONITOR-061 (2026-09-04, commit `6266171f`):
+las cuatro consultas de `ScriptCargoMonitor` aceptan `CargoType::Custom` cuando
+el catálogo activo contiene su `CargoSpec`, y rechazan con `-1` los IDs custom
+sin spec, como `ScriptCargo::IsValidCargo` de OpenTTD. El monitor conserva el
+layout `CargoMonitorID` global de seis bits y registra entregas/recogidas custom
+con activación, reset y saturación nativos. La fachada Squirrel/GameScript y
+los callbacks económicos dependientes del catálogo siguen parciales.
+
 - Resto de CBs houses / airports / industries / objects (incluidos los huecos que aún no tienen call site), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.
 - Storage persistente de industria/aeropuerto/pueblo: `INDY.psa`, `STNN.normal.airport.psa`, `CITY.psa_list` y `PSAC` se importan, hidratan sus referencias y exportan para los registros `7C` conocidos; casas y objetos leen el PSA del pueblo desde su scope parent y CB17/CB157 de construcción ya hacen writeback por GRFID. Los callbacks CB25/26/27 y la re-randomización de `IndustryTile` también escriben el PSA de la industria en `TileLoop`, `IndustryTick` y `CargoReceived`; siguen pendientes la invalidación tras mutaciones y los callbacks PSA de pueblo restantes. CB140–142 preserva `7C` de la estación pero no los scopes/áreas completos de `BaseStation`; CB14 aún no aporta el scope/regs de `BaseStation` ni layout 16-bit exacto; CB149 aún no aporta scope/vecinos ni strings GRF.

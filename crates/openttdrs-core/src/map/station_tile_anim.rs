@@ -151,22 +151,43 @@ fn airport_cargo_local_id(
     climate: Climate,
     coord: TileCoord,
     cargo: Option<CargoType>,
+    cargo_catalog: &[CargoSpecDef],
 ) -> u8 {
     let Some(cargo) = cargo else {
         return 0;
     };
     let Some(station_index) = airport_station_index(stations, coord) else {
-        return crate::newgrf_type_tables::local_cargo_id(None, 0, cargo, climate);
+        return crate::newgrf_type_tables::local_cargo_id_with_catalog(
+            None,
+            0,
+            cargo,
+            climate,
+            cargo_catalog,
+        );
     };
     let Some(gfx) = airport_tile_gfx(&stations[station_index], map, coord) else {
-        return crate::newgrf_type_tables::local_cargo_id(None, 0, cargo, climate);
+        return crate::newgrf_type_tables::local_cargo_id_with_catalog(
+            None,
+            0,
+            cargo,
+            climate,
+            cargo_catalog,
+        );
     };
     catalog
         .iter()
         .find(|candidate| candidate.gfx.as_u16() == gfx && candidate.from_newgrf)
         .map_or_else(
-            || crate::newgrf_type_tables::local_cargo_id(None, 0, cargo, climate),
-            |def| def.newgrf_cargo_local_id(cargo, climate),
+            || {
+                crate::newgrf_type_tables::local_cargo_id_with_catalog(
+                    None,
+                    0,
+                    cargo,
+                    climate,
+                    cargo_catalog,
+                )
+            },
+            |def| def.newgrf_cargo_local_id_with_catalog(cargo, climate, cargo_catalog),
         )
 }
 
@@ -339,6 +360,39 @@ pub fn trigger_newgrf_airport_animation_for_station_with_towns<S: BuildHasher>(
     trigger: AirportAnimationTrigger,
     cargo: Option<CargoType>,
 ) -> Vec<TileCoord> {
+    trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog(
+        map,
+        tick,
+        stations,
+        towns,
+        &[],
+        climate,
+        catalog,
+        active_tiles,
+        newgrf_stack,
+        station_anchor,
+        trigger,
+        cargo,
+    )
+}
+
+/// Variante que entrega el catálogo global de `CargoSpec` para traducir
+/// cargos custom a los índices CTT de cada `AirportTile`.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    towns: &[crate::town::Town],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    station_anchor: TileCoord,
+    trigger: AirportAnimationTrigger,
+    cargo: Option<CargoType>,
+) -> Vec<TileCoord> {
     let Some(station) = stations
         .iter()
         .find(|station| station.pos == station_anchor && station.stop_kind == StopKind::Airport)
@@ -355,8 +409,15 @@ pub fn trigger_newgrf_airport_animation_for_station_with_towns<S: BuildHasher>(
     coords
         .into_iter()
         .filter(|coord| {
-            let var18_extra =
-                airport_cargo_local_id(map, stations, catalog, climate, *coord, cargo);
+            let var18_extra = airport_cargo_local_id(
+                map,
+                stations,
+                catalog,
+                climate,
+                *coord,
+                cargo,
+                cargo_catalog,
+            );
             trigger_newgrf_airport_tile_animation_with_towns(
                 map,
                 tick,
@@ -1885,7 +1946,9 @@ mod tests {
         // `var18` para cada AirportTile del GRF.
         catalog[0].newgrf_grf_version = 8;
         catalog[0].newgrf_type_tables = Some(crate::newgrf_type_tables::GrfTypeTranslationTables {
-            cargo: vec![*b"PASS", *b"MAIL", *b"GOOD", *b"WOOD", *b"GRAI", *b"COAL"],
+            cargo: vec![
+                *b"PASS", *b"MAIL", *b"GOOD", *b"WOOD", *b"GRAI", *b"COAL", *b"TOFU",
+            ],
             ..Default::default()
         });
         catalog[0].newgrf_runtime = Some(Box::new(station_trigger_parameter_callbacks(8)));
@@ -1904,6 +1967,30 @@ mod tests {
         assert_eq!(dirty, vec![coord]);
         assert_eq!(map.get(coord).unwrap().m7, 5);
 
+        let cargo_catalog = vec![crate::CargoSpecDef {
+            id: CargoType::Custom(0).cargo_id(),
+            label: "TOFU".to_owned(),
+            name: "Tofu".to_owned(),
+            from_newgrf: true,
+            ..crate::CargoSpecDef::default()
+        }];
+        let dirty = trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog(
+            &mut map,
+            6,
+            &mut stations,
+            &[],
+            &cargo_catalog,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            &stack,
+            coord,
+            AirportAnimationTrigger::NewCargo,
+            Some(CargoType::Custom(0)),
+        );
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(map.get(coord).unwrap().m7, 6);
+
         let mut state = crate::GameState::from_map(map);
         state.stations = stations;
         state.airport_tile_spec_catalog = catalog;
@@ -1911,7 +1998,7 @@ mod tests {
         state.newgrf_animated_airport_tiles = active;
         let json = state.save_json().unwrap();
         let loaded = crate::GameState::load_json(&json).unwrap();
-        assert_eq!(loaded.map.get(coord).unwrap().m7, 5);
+        assert_eq!(loaded.map.get(coord).unwrap().m7, 6);
         assert!(loaded.newgrf_animated_airport_tiles.contains(&coord));
     }
 

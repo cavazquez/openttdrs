@@ -685,19 +685,21 @@ pub(super) fn trigger_airport_animation_at(
     else {
         return;
     };
-    let dirty = crate::map::trigger_newgrf_airport_animation_for_station_with_towns(
-        &mut state.map,
-        state.tick.get(),
-        &mut state.stations,
-        &state.towns,
-        state.climate,
-        &state.airport_tile_spec_catalog,
-        &mut state.newgrf_animated_airport_tiles,
-        &state.newgrf_stack,
-        station_anchor,
-        trigger,
-        cargo,
-    );
+    let dirty =
+        crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog(
+            &mut state.map,
+            state.tick.get(),
+            &mut state.stations,
+            &state.towns,
+            &state.cargo_spec_catalog,
+            state.climate,
+            &state.airport_tile_spec_catalog,
+            &mut state.newgrf_animated_airport_tiles,
+            &state.newgrf_stack,
+            station_anchor,
+            trigger,
+            cargo,
+        );
     state.runtime.industry_tile_dirty.extend(dirty);
 }
 

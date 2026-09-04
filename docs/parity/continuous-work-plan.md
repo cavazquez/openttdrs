@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`a2a0ce35`** (`sav: materialize final custom cargo slot`),
+Base funcional local y publicada: **`61e0c53b`** (`newgrf: execute vehicle custom refit callback`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -81,8 +81,9 @@ clases Action0 `allowed`/`disallowed`/`required` de trenes, vehículos de
 carretera, barcos y aeronaves: la máscara se aplica contra las clases vanilla o
 el `CargoSpecDef` custom, conserva el XOR de `refit_mask` y deja CTT
 include/exclude como última capa. La regresión cubre los cuatro parsers y un
-`TOFU` custom. El slot global 63 ya está materializado; siguen pendientes el
-callback de refit, UI/variables ilimitadas y scopes económicos.
+`TOFU` custom. El slot global 63 ya está materializado; el callback de refit se
+completa en `61e0c53b`; siguen pendientes UI/variables ilimitadas, scopes
+económicos y otras propiedades Action0.
 
 Actualización #329-VEHICLE-CARGO-CTT-075 (2026-09-04, commit `d6b4c5fc`): el
 parser Action0 conserva los índices locales de cargo por defecto y las listas
@@ -106,8 +107,8 @@ la máscara legacy cuando corresponde y luego las listas CTT; con catálogo usa
 las clases declaradas por cada `CargoSpecDef`, incluidos cargos custom. Las
 regresiones `vehicle_cargo_class_properties_parse_for_all_features` y
 `vehicle_cargo_classes_filter_custom_catalog` fijan parser, aplicación y filtro
-de refit. #329 sigue abierto por el callback de refit, GUI/variables
-ilimitadas, scopes económicos y otras propiedades Action0.
+de refit. #329 sigue abierto por GUI/variables ilimitadas, scopes económicos y
+otras propiedades Action0.
 
 Actualización #329-VEHICLE-CARGO-SLOT-077 (2026-09-04, commit `a2a0ce35`): el
 runtime alinea la frontera de cargos con `NUM_CARGO = 64` de OpenTTD y
@@ -119,8 +120,19 @@ aceptan arrays custom legacy de 32 entradas y dejan el nuevo slot en cero. Las
 regresiones `final_custom_slot_matches_openttd_num_cargo_and_legacy_json`,
 `final_custom_time_slot_roundtrips_and_accepts_legacy_json` y la estación SAV
 global verifican el límite y el round-trip. No se inventan IDs `64+`: el
-callback de refit, GUI/variables ilimitadas y scopes económicos siguen
-pendientes, por lo que #329 permanece abierto.
+GUI/variables ilimitadas y scopes económicos siguen pendientes, por lo que
+#329 permanece abierto.
+
+Actualización #329-VEHICLE-CUSTOM-REFIT-078 (2026-09-04, commit `61e0c53b`):
+el runtime ejecuta `CBID_VEHICLE_CUSTOM_REFIT` (`0x163`) con el bit 9 de la
+máscara Action0. Para cada `CargoSpec` candidato se pasan `CargoClass` en
+`param1` y el índice local CTT en `param2`, con fallback climático/`bitnum`
+según la versión del GRF. El resultado `0`/`CALLBACK_FAILED` conserva la
+selección base, `1` agrega el cargo y `2` lo retira; el resto queda como no-op
+diagnosticable. Refit manual, órdenes de depósito, refit pendiente y
+autoreplace comparten la función catalogue-aware y tienen regresiones de
+inclusión/exclusión y parámetros CTT. #329 sigue abierto por GUI/variables
+ilimitadas, scopes económicos y el resto de callbacks/propiedades de vehículos.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|

@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
-`main` con base funcional publicada `a2a0ce35`, posterior al writeback canónico
+`main` con base funcional publicada `61e0c53b`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
@@ -240,3 +240,9 @@ stock al hidratar y reexportar `STNN`. La frontera coincide con
 `NUM_CARGO = 64` de OpenTTD; no se inventan IDs posteriores. El esquema JSON
 propio se versiona a v27, pero sus arrays custom de 32 entradas se rellenan con
 cero para mantener la carga de saves anteriores.
+
+Actualización `61e0c53b` (2026-09-04): el callback de refit de vehículos se
+ejecuta después de hidratar/aplicar el catálogo NewGRF, pero no cambia el wire
+format SAV. Los campos de motor, cargo y órdenes conservan la representación
+documentada; la decisión dinámica de incluir/excluir cargas sólo vuelve a
+evaluarse en runtime cuando el `CargoSpec` y el GRF están instalados.

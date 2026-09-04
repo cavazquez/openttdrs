@@ -4,6 +4,8 @@ use crate::engine::{EngineDef, engine_by_id};
 use crate::rail_type::{RailType, powered_railtypes_mask, required_rail_type_for_engine};
 use crate::vehicle::{Vehicle, VehicleKind};
 
+use super::metrics::cargo_weight_t;
+
 /// ¿El motor es un vagón (sin potencia, con capacidad de carga)?
 #[must_use]
 pub fn engine_is_wagon(engine: &EngineDef) -> bool {
@@ -73,6 +75,20 @@ pub fn consist_changed_with_map_and_catalog(
     map: Option<&crate::map::Map>,
     engine_catalog: &[EngineDef],
 ) {
+    consist_changed_with_map_and_catalog_and_cargo(vehicles, head_id, map, engine_catalog, &[]);
+}
+
+/// Como [`consist_changed_with_map_and_catalog`], incluyendo el peso de la
+/// carga a bordo según `CargoSpec::weight`. `cargo_catalog` puede estar vacío
+/// para conservar el peso vanilla de los escenarios legacy.
+#[allow(clippy::too_many_lines)]
+pub fn consist_changed_with_map_and_catalog_and_cargo(
+    vehicles: &mut [Vehicle],
+    head_id: u32,
+    map: Option<&crate::map::Map>,
+    engine_catalog: &[EngineDef],
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+) {
     let ids = consist_unit_ids(vehicles, head_id);
     if ids.is_empty() {
         return;
@@ -139,7 +155,10 @@ pub fn consist_changed_with_map_and_catalog(
         }
         let speed = crate::newgrf_callback::vehicle_max_speed(eng, v);
         let unit_weight = crate::newgrf_callback::vehicle_weight_t(eng, v);
-        total_weight = total_weight.saturating_add(unit_weight);
+        let cargo_weight = cargo_weight_t(v.cargo, v.cargo_type, cargo_catalog);
+        total_weight = total_weight
+            .saturating_add(unit_weight)
+            .saturating_add(cargo_weight);
         if v.powered_wagon {
             total_weight = total_weight.saturating_add(head_pow_wag_weight);
             total_power = total_power.saturating_add(head_pow_wag_power);

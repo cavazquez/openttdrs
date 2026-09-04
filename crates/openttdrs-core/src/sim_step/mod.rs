@@ -211,6 +211,10 @@ pub(crate) fn step(state: &mut GameState) {
     // OpenTTD: LoadUnloadStation antes de Vehicle::Tick (movimiento).
     cargo_transfer::unload_vehicles(state, t, &loaded_this_tick, &mut unloaded_this_tick);
     cargo_transfer::load_vehicles(state, &mut loaded_this_tick, &unloaded_this_tick);
+    // El peso de la carga se conoce después de `LoadUnloadStation`; actualizar
+    // ahora evita reconstruir la topología antes de cargar y deja la física
+    // del mismo tick con el `cached_weight_t` correcto.
+    cargo_transfer::refresh_runtime_vehicle_capacities(state);
     cargo_transfer::trigger_pending_industry_deliveries(state);
     // Ops que pueden cambiar destino van tras la carga (p. ej. wander orderless).
     let _ = phase_vehicle_ops_pre_move(state);
@@ -283,6 +287,7 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     timings.cargo_unload_ns = nanos(cargo_phase);
     let cargo_phase = Instant::now();
     cargo_transfer::load_vehicles(state, &mut loaded_this_tick, &unloaded_this_tick);
+    cargo_transfer::refresh_runtime_vehicle_capacities(state);
     timings.cargo_load_ns = nanos(cargo_phase);
     cargo_transfer::trigger_pending_industry_deliveries(state);
     timings.cargo_transfer_ns = nanos(p0);

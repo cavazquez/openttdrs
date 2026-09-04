@@ -209,39 +209,24 @@ fn vehicle_load_unload_speed(state: &mut GameState, vehicle_idx: usize, cargo: C
 /// cargo actual, de registros persistentes o del estado del vehículo. Los
 /// consist ferroviarios se recalculan de una vez (la cabeza conserva la suma y
 /// cada vagón recibe su capacidad propia); las otras clases actualizan su
-/// unidad directamente. Los motores vanilla y los `NewGRF` sin runtime quedan
-/// intactos para preservar el camino legacy.
-fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
+/// unidad directamente. Los callbacks de capacidad de los motores vanilla y
+/// los `NewGRF` sin runtime siguen por el camino legacy; el peso de la carga
+/// se refresca para todas las formaciones porque sí afecta a la física.
+pub(super) fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
     let train_heads: Vec<u32> = state
         .vehicles
         .iter()
         .filter(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
-        .filter_map(|vehicle| {
-            let ids = state.runtime.fleet_index.consist(vehicle.id);
-            let has_newgrf_capacity = ids.iter().any(|id| {
-                state
-                    .runtime
-                    .fleet_index
-                    .slot(*id)
-                    .and_then(|slot| state.vehicles.get(slot))
-                    .and_then(|unit| unit.engine_id)
-                    .and_then(|engine_id| {
-                        crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
-                    })
-                    .is_some_and(|engine| {
-                        engine.newgrf_grfid != 0 && engine.newgrf_runtime.is_some()
-                    })
-            });
-            has_newgrf_capacity.then_some(vehicle.id)
-        })
+        .map(|vehicle| vehicle.id)
         .collect();
 
     for head_id in train_heads {
-        crate::train_consist::consist_changed_with_map_and_catalog(
+        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo(
             &mut state.vehicles,
             head_id,
             Some(&state.map),
             &state.engine_catalog,
+            &state.cargo_spec_catalog,
         );
     }
 
@@ -472,7 +457,6 @@ pub(super) fn unload_vehicles(
     loaded_this_tick: &[bool],
     unloaded_this_tick: &mut [bool],
 ) {
-    refresh_runtime_vehicle_capacities(state);
     let mut link_graph_dirty = false;
     let mut delivered_industries = Vec::new();
     for (i, loaded_flag) in loaded_this_tick

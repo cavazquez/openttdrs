@@ -1905,6 +1905,26 @@ impl Industry {
         callback_on_arrival: bool,
         newgrf_def: Option<&IndustrySpecDef>,
     ) -> bool {
+        self.produce_from_nearby_stations_with_callback_and_newgrf_and_catalog(
+            stations,
+            tick,
+            callback_on_arrival,
+            newgrf_def,
+            &[],
+        )
+    }
+
+    /// Variante de procesamiento que entrega el catálogo de `CargoSpec` a
+    /// `CBID_INDUSTRY_REFUSE_CARGO`, permitiendo resolver cargos custom aunque
+    /// una instancia importada todavía no haya hidratado sus slots de entrada.
+    pub fn produce_from_nearby_stations_with_callback_and_newgrf_and_catalog(
+        &mut self,
+        stations: &mut [Station],
+        tick: u64,
+        callback_on_arrival: bool,
+        newgrf_def: Option<&IndustrySpecDef>,
+        cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    ) -> bool {
         let inputs = self.processing_inputs();
         if inputs.is_empty() || self.is_closing() {
             return false;
@@ -1942,8 +1962,12 @@ impl Industry {
 
         if let Some(def) = newgrf_def
             && requirements.iter().any(|&(cargo, _)| {
-                crate::newgrf_callback::resolve_industry_refuse_cargo_callback(def, self, cargo)
-                    == Some(true)
+                crate::newgrf_callback::resolve_industry_refuse_cargo_callback_with_catalog(
+                    def,
+                    self,
+                    cargo,
+                    cargo_catalog,
+                ) == Some(true)
             })
         {
             return false;

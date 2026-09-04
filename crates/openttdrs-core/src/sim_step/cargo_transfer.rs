@@ -367,10 +367,11 @@ fn deliver_goods_to_industries(
                     .cloned()
             });
         if newgrf_def.as_ref().and_then(|def| {
-            crate::newgrf_callback::resolve_industry_refuse_cargo_callback(
+            crate::newgrf_callback::resolve_industry_refuse_cargo_callback_with_catalog(
                 def,
                 &mut state.industries[industry_idx],
                 cargo,
+                &state.cargo_spec_catalog,
             )
         }) == Some(true)
         {

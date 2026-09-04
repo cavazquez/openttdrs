@@ -563,19 +563,23 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
         let production_tick = state.industries[i].produces_on_tick(tick);
         if state.industries[i].requires_station_inputs() {
             let processed = if callback_on_arrival || callback_on_tick {
-                state.industries[i].produce_from_nearby_stations_with_callback_and_newgrf(
-                    &mut state.stations,
-                    tick,
-                    true,
-                    newgrf_def.as_ref(),
-                )
+                state.industries[i]
+                    .produce_from_nearby_stations_with_callback_and_newgrf_and_catalog(
+                        &mut state.stations,
+                        tick,
+                        true,
+                        newgrf_def.as_ref(),
+                        &state.cargo_spec_catalog,
+                    )
             } else {
-                state.industries[i].produce_from_nearby_stations_with_callback_and_newgrf(
-                    &mut state.stations,
-                    tick,
-                    false,
-                    newgrf_def.as_ref(),
-                )
+                state.industries[i]
+                    .produce_from_nearby_stations_with_callback_and_newgrf_and_catalog(
+                        &mut state.stations,
+                        tick,
+                        false,
+                        newgrf_def.as_ref(),
+                        &state.cargo_spec_catalog,
+                    )
             };
             if processed {
                 state.industries[i].was_cargo_delivered = true;

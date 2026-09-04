@@ -6,7 +6,7 @@
 //! - Call sites #266: industry location, house/object construction, station availability,
 //!   industry-tile trigger → Action2 random.
 
-use crate::cargo_spec::CargoSpecDef;
+use crate::cargo_spec::{CargoSpecDef, cargo_type_from_label_with_catalog};
 use crate::cargodist::parity::Randomizer;
 use crate::engine::EngineDef;
 use crate::house_spec::{HouseSpecDef, action2_eval_ctx_for_house_tile_with_towns};
@@ -1925,10 +1925,11 @@ pub fn resolve_industry_special_effect_callback(
 /// un slot local puede representar otro cargo según el clima. Cuando el
 /// catálogo no pudo resolver un label, el id vanilla es un fallback explícito
 /// para los GRF que sólo publican la tabla original.
-fn industry_local_cargo_index(
+fn industry_local_cargo_index_with_catalog(
     def: &IndustrySpecDef,
     industry: &Industry,
     cargo: CargoType,
+    cargo_catalog: &[CargoSpecDef],
 ) -> Option<u8> {
     for (index, label) in def.accepted_cargo_labels.iter().enumerate() {
         if industry
@@ -1937,7 +1938,7 @@ fn industry_local_cargo_index(
             .copied()
             .flatten()
             == Some(cargo)
-            || cargo_type_from_label(Some(label.as_str())) == Some(cargo)
+            || cargo_type_from_label_with_catalog(label, cargo_catalog) == Some(cargo)
         {
             return def.accepted_cargo_indices.get(index).copied();
         }
@@ -1961,11 +1962,23 @@ pub fn resolve_industry_refuse_cargo_callback(
     industry: &mut Industry,
     cargo: CargoType,
 ) -> Option<bool> {
+    resolve_industry_refuse_cargo_callback_with_catalog(def, industry, cargo, &[])
+}
+
+/// Variante que resuelve labels custom del cargo contra el catálogo activo.
+/// La API histórica conserva el fallback sin catálogo.
+#[must_use]
+pub fn resolve_industry_refuse_cargo_callback_with_catalog(
+    def: &IndustrySpecDef,
+    industry: &mut Industry,
+    cargo: CargoType,
+    cargo_catalog: &[CargoSpecDef],
+) -> Option<bool> {
     if !def.has_refuse_cargo_callback() {
         return None;
     }
     let runtime = def.newgrf_runtime.as_ref()?;
-    let local_cargo = industry_local_cargo_index(def, industry, cargo)?;
+    let local_cargo = industry_local_cargo_index_with_catalog(def, industry, cargo, cargo_catalog)?;
     let mut ctx = action2_eval_ctx_from_industry(industry, u32::from(industry.newgrf_random));
     let result = runtime.resolve_callback_ctx_u16(
         u16::from(def.newgrf_local_id),
@@ -5341,6 +5354,61 @@ mod tests {
             resolve_industry_refuse_cargo_callback(&def, &mut industry, CargoType::Wood),
             None,
             "CALLBACK_FAILED conserva la aceptación vanilla"
+        );
+    }
+
+    #[test]
+    fn industry_refuse_cargo_callback_resolves_custom_label_with_catalog() {
+        let custom = CargoType::Custom(0);
+        let cargo_catalog = vec![CargoSpecDef {
+            id: custom.cargo_id(),
+            label: "TOFU".into(),
+            name: "Tofu".into(),
+            from_newgrf: true,
+            ..CargoSpecDef::default()
+        }];
+        let def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![1],
+            produced_cargo_labels: vec!["GOOD".into()],
+            accepted_cargo_indices: vec![6],
+            accepted_cargo_labels: vec!["TOFU".into()],
+            production_rates: vec![0],
+            input_multipliers: vec![256],
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_REFUSE_CARGO_MASK,
+            behaviour: 0,
+            cost_multiplier: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            name: "refuse-custom-cargo".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_allow_if_byte(0x18, 0, 6))),
+        };
+        // Simula una instancia importada que aún no rehidrató los slots; con
+        // el catálogo el callback sigue pudiendo invertir el label CTT.
+        let mut industry =
+            Industry::new(TileCoord::new(4, 5), crate::industry::IndustryKind::Factory)
+                .with_newgrf_spec(def.id, &def);
+
+        assert_eq!(
+            resolve_industry_refuse_cargo_callback(&def, &mut industry, custom),
+            None,
+            "la API legacy no inventa identidad para cargos custom"
+        );
+        assert_eq!(
+            resolve_industry_refuse_cargo_callback_with_catalog(
+                &def,
+                &mut industry,
+                custom,
+                &cargo_catalog,
+            ),
+            Some(false)
         );
     }
 

@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
-`main` con base funcional publicada `5fa655d1`, posterior al writeback canónico
+`main` con base funcional publicada `a2a0ce35`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
@@ -9,11 +9,14 @@ separan de la pasada visual CB26/CB27; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
 
 El runtime de cargos custom de `bd613e2a` no cambia el wire format: hasta 32
-cargos se ejecutan si el `CargoSpec` está instalado. `566ce56a` completa la
-frontera de IDs del import/export: `SLV<55` usa slots por clima y `SLV≥55`
-usa IDs globales para `STNN`, `INDY`, `VEHS` y `LGRP`; `Custom(0..31)` se
-rehidrata por ID aun sin catálogo, mientras `63+` sigue opaco. El nombre,
-peso, CTT y callbacks económicos requieren el `CargoSpec` activo.
+cargos se ejecutan si el `CargoSpec` está instalado. `a2a0ce35` materializa el
+slot custom restante y conserva la compatibilidad JSON propia. `566ce56a`
+completa la frontera de IDs del import/export: `SLV<55` usa slots por clima y
+`SLV≥55` usa IDs globales para `STNN`, `INDY`, `VEHS` y `LGRP`; `Custom(0..32)`
+se rehidrata por ID aun sin catálogo. El JSON v27 acepta arrays custom legacy
+de 32 entradas y el writer moderno conserva las 64 filas nativas. El nombre,
+peso, CTT y callbacks económicos requieren el `CargoSpec` activo; sólo IDs
+fuera de `0..63` quedan opacos.
 
 Esta es la única matriz de capacidad para importación y exportación `.sav`.
 [`PARIDAD.md`](../PARIDAD.md) sólo resume su madurez; la guía de wire format en
@@ -230,3 +233,10 @@ Actualización `5e0938ff` (2026-09-04): el comando `SetFreightTrains` normaliza
 el rango y reconstruye las cachés derivadas inmediatamente; el control de
 Ajustes cicla los presets `1/2/4/8/16/32/64/128/255`. El cambio no añade campos
 al wire format ni modifica la compatibilidad `SLV_39`.
+
+Actualización `a2a0ce35` (2026-09-04): el importador moderno materializa
+`CargoType::Custom(32)` (ID 63), y una estación SAV con ese slot conserva su
+stock al hidratar y reexportar `STNN`. La frontera coincide con
+`NUM_CARGO = 64` de OpenTTD; no se inventan IDs posteriores. El esquema JSON
+propio se versiona a v27, pero sus arrays custom de 32 entradas se rellenan con
+cero para mantener la carga de saves anteriores.

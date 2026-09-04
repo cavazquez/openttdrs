@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `5fa655d1`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `a2a0ce35`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
 ferroviario, la CTT de scopes de estación/parada e `IndustryTile` y la CTT de
 vehículos/refit quedan actualizados en este corte).
@@ -45,8 +45,8 @@ mapeo y la evidencia de auditorías anteriores; fechas anteriores son contexto
 histórico. Ante una contradicción prevalece este bloque y debe corregirse la
 fila antigua en el mismo cambio.
 
-Validación de este corte: formatter y clippy estricto en core/cliente, **2.031**
-tests de core y **1.067** tests ejecutados del cliente (2 ignorados), además de
+Validación de este corte: formatter y clippy estricto en core/cliente, **2.033**
+tests de core y **1.065** tests ejecutados del cliente (2 ignorados), además de
 la regresión integrada de CTT de vehículos; los conteos anteriores son
 históricos.
 
@@ -62,13 +62,14 @@ actualizan, y el writer los reemite. Las frases de tablas antiguas que indiquen
 que esos campos son sólo passthrough quedan superadas por este corte. Cargos
 custom y callbacks sin call site siguen siendo brechas reales.
 
-Corrección vigente adicional (`566ce56a`): el importador distingue la frontera
+Corrección vigente adicional (`566ce56a`, completada en `a2a0ce35`): el importador distingue la frontera
 `SLV_55`; los saves anteriores usan slots relativos al clima y los modernos usan
-IDs globales en `STNN`, `INDY`, `VEHS` y `LGRP`. Los cargos custom `31..62` se
+IDs globales en `STNN`, `INDY`, `VEHS` y `LGRP`. Los cargos custom `31..63` se
 rehidratan como `CargoType::Custom` aun sin catálogo, se conservan en stocks,
 packets e historiales y el writer moderno vuelve a emitir los 64 IDs globales.
-Los IDs fuera de ese rango siguen siendo opacos y nombre, peso, CTT y callbacks
-económicos todavía dependen del `CargoSpec` activo. El corte SAV validó **2.009**
+El esquema JSON v27 acepta arrays custom de 32 entradas de saves anteriores y
+materializa el slot 63 en el runtime. Nombre, peso, CTT y callbacks económicos
+todavía dependen del `CargoSpec` activo. El corte SAV validó **2.033**
 tests de core y **1.064** de cliente (2 ignorados), además de formatter, clippy y
 la batería documental.
 
@@ -216,6 +217,14 @@ autoreplace cuando el catálogo está instalado. No cambia el wire format SAV:
 las filas custom sin catálogo, los slots `63+`, la CTT/GUI/variables completa y
 los callbacks sin call site siguen parciales y no se declaran paridad completa.
 
+Actualización #329-VEHICLE-CARGO-SLOT-077 (2026-09-04, `a2a0ce35`): el rango
+ejecutable se alinea con `NUM_CARGO = 64` de OpenTTD; `CargoType::Custom(32)`
+(ID global 63) ya atraviesa stocks, antigüedad de espera, `StationGoods`,
+packets y las filas modernas de SAV. El JSON propio sube a v27 y acepta arrays
+custom legacy de 32 entradas. Los IDs `64+` no son cargos válidos de OpenTTD;
+callback de refit, GUI/variables ilimitadas y scopes económicos restantes
+siguen pendientes.
+
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía
 no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
@@ -341,8 +350,8 @@ se preservan en `EngineDef`, se resuelven contra `CargoSpecDef::classes` (o la
 tabla vanilla) y se aplican con la semántica XOR de `refit_mask` antes de CTT
 include/exclude. `vehicle_cargo_class_properties_parse_for_all_features` y
 `vehicle_cargo_classes_filter_custom_catalog` cubren parser, runtime y refit
-custom. Siguen abiertos slots `63+`, callback de refit, UI/variables ilimitadas
-y scopes económicos restantes; #329 no se cierra.
+custom. El slot global 63 ya está materializado; siguen abiertos el callback de
+refit, UI/variables ilimitadas y scopes económicos restantes; #329 no se cierra.
 
 | Multijugador | **Media propia** | Lockstep TCP, dedicated, late join y host migration; el servidor asigna empresa por peer, valida antes de secuenciar, rechaza issuer inválido y resincroniza desync por snapshot. Sigue siendo protocolo propio, sin lobby, auth, cifrado ni interoperabilidad OpenTTD |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |

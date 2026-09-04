@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`5fa655d1`** (`core: reexport cargo class masks`),
+Base funcional local y publicada: **`a2a0ce35`** (`sav: materialize final custom cargo slot`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -52,12 +52,13 @@ entrega. `aa289076` conecta también `CargoDistributed` con el retorno real de
 los cambios de etapa posteriores. `67ef8101` conecta además la aceptación exacta
 de carga de teselas de industria (`CBID_INDTILE_CARGO_ACCEPTANCE`/`CBID_INDTILE_ACCEPT_CARGO`)
 con la cobertura de estación y la descarga real, manteniendo el fallback legacy.
-`bd613e2a` materializa hasta 32 cargos custom como `CargoType::Custom`, los
+`bd613e2a` materializa hasta 32 cargos custom como `CargoType::Custom`; `a2a0ce35`
+materializa también el último slot nativo (`CargoType` 63), los
 asigna de forma estable por `(GRFID, local_id)` y los transporta por stocks,
 packets, cobertura, estaciones, industria, producción, pagos, ratings,
 cargodist, refit y autoreplace. `566ce56a` corrige además la frontera nativa
 de SAV: `SLV<55` se interpreta por slot climático y `SLV≥55` por ID global,
-incluidos los cargos custom `31..62`, para `STNN`, `INDY`, `VEHS` y `LGRP`;
+incluidos los cargos custom `31..63`, para `STNN`, `INDY`, `VEHS` y `LGRP`;
 el exportador emite siempre la tabla moderna de 64 IDs. La economía completa
 de una carga aún requiere su `CargoSpec` para nombre, peso, CTT y callbacks.
 `6266171f` completa además la validación de `ScriptCargoMonitor` para cargos
@@ -80,8 +81,8 @@ clases Action0 `allowed`/`disallowed`/`required` de trenes, vehículos de
 carretera, barcos y aeronaves: la máscara se aplica contra las clases vanilla o
 el `CargoSpecDef` custom, conserva el XOR de `refit_mask` y deja CTT
 include/exclude como última capa. La regresión cubre los cuatro parsers y un
-`TOFU` custom. Slots `63+`, callback de refit, UI/variables ilimitadas y scopes
-económicos siguen pendientes.
+`TOFU` custom. El slot global 63 ya está materializado; siguen pendientes el
+callback de refit, UI/variables ilimitadas y scopes económicos.
 
 Actualización #329-VEHICLE-CARGO-CTT-075 (2026-09-04, commit `d6b4c5fc`): el
 parser Action0 conserva los índices locales de cargo por defecto y las listas
@@ -105,8 +106,21 @@ la máscara legacy cuando corresponde y luego las listas CTT; con catálogo usa
 las clases declaradas por cada `CargoSpecDef`, incluidos cargos custom. Las
 regresiones `vehicle_cargo_class_properties_parse_for_all_features` y
 `vehicle_cargo_classes_filter_custom_catalog` fijan parser, aplicación y filtro
-de refit. #329 sigue abierto por slots `63+`, callback de refit, GUI/variables
+de refit. #329 sigue abierto por el callback de refit, GUI/variables
 ilimitadas, scopes económicos y otras propiedades Action0.
+
+Actualización #329-VEHICLE-CARGO-SLOT-077 (2026-09-04, commit `a2a0ce35`): el
+runtime alinea la frontera de cargos con `NUM_CARGO = 64` de OpenTTD y
+materializa `CargoType::Custom(32)` (ID global 63) en stocks, antigüedad de
+espera, `StationGoods`, packets, producción y las tablas SAV modernas. El
+importador `SLV_55` conserva el ID 63 aun sin catálogo y el writer sigue
+emitiendo las 64 filas nativas. El JSON propio sube a v27; sus deserializadores
+aceptan arrays custom legacy de 32 entradas y dejan el nuevo slot en cero. Las
+regresiones `final_custom_slot_matches_openttd_num_cargo_and_legacy_json`,
+`final_custom_time_slot_roundtrips_and_accepts_legacy_json` y la estación SAV
+global verifican el límite y el round-trip. No se inventan IDs `64+`: el
+callback de refit, GUI/variables ilimitadas y scopes económicos siguen
+pendientes, por lo que #329 permanece abierto.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
@@ -121,6 +135,12 @@ Corrección vigente de la tabla: `566ce56a` resuelve la codificación global de
 cargos modernos en SAV y conserva los slots climáticos de saves anteriores a
 `SLV_55`. Esta nota prevalece sobre las filas históricas que todavía describen
 los cargos custom como exclusivamente opacos.
+
+Corrección vigente adicional (`a2a0ce35`): el rango ejecutable de cargos
+custom es `31..63`, alineado con `NUM_CARGO = 64`; el slot 63 ya se hidrata y
+se reemite en las tablas SAV modernas. El JSON propio usa v27 y acepta los
+arrays de 32 slots de versiones anteriores. Sólo permanecen opacos los IDs
+fuera de la tabla nativa (`64+`), que no son CargoType válidos de OpenTTD.
 
 Corrección de la tabla en `b25a2362`: la CTT de cargos custom ya es ejecutable
 en las variables parametrizadas de estaciones y paradas viales cuando el

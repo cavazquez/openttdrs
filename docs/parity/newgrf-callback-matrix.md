@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `5fa655d1`, clases de carga Action0 y CTT
+Actualizada: **2026-09-04** (commit `a2a0ce35`, clases de carga Action0 y CTT
 de vehículos; CTT de cargos custom en scopes
 de estación/parada,
 shape-check, foundations,
@@ -8,7 +8,7 @@ autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
 `PlantOnBuild`, rehidratación SAV legacy, historiales aceptados runtime,
 reatachación de industrias al
 catálogo NewGRF; triggers, PSA parent, aceptación exacta de carga de teselas y
-`CargoTypesUnlimited` y el transporte runtime de hasta 32 cargos custom ya
+`CargoTypesUnlimited` y el transporte runtime de hasta 33 cargos custom ya
 publicados; IDs globales SAV `SLV≥55` y slots climáticos legacy `SLV<55`
 también se distinguen al hidratar `INDY`/`STNN`/`VEHS`/`LGRP`).
 
@@ -83,7 +83,7 @@ legacy sin mundo mantiene su fallback explícito.
 | Vehicles (`00`–`03`) | `0x12` `CBID_VEHICLE_LOAD_AMOUNT` | **parcial runtime** | `vehicle_load_unload_speed` ejecuta el callback para carga gradual con `param1=0`; un byte no nulo sustituye `EngineInfo::load_amount`, mientras `CALLBACK_FAILED`, cero, resultado fuera de rango, máscara ausente o GRF ausente conservan la propiedad base y escriben `7C` del vehículo |
 | Vehicles (`00`–`03`) | `0x11` `CBID_VEHICLE_LENGTH` | **parcial runtime** | `vehicle_unit_length` ejecuta el callback con `param1=param2=0` al comprar/refrescar una unidad; convierte el acortamiento `0..7` a longitud `8−shorten`, conserva `CALLBACK_FAILED`/resultados inválidos y usa la propiedad `shorten_factor` como fallback. La longitud se persiste en la unidad y participa en la geometría de consist; faltan callbacks de longitud dependientes de propiedades `0x36` y refresco diferencial de cadenas importadas |
 | Vehicles (`00`–`03`) | `0x15` `CBID_VEHICLE_REFIT_CAPACITY` | **parcial runtime** | `refit_vehicle` evalúa el callback con el cargo objetivo en `Vehicle::cargo_type`; un resultado distinto de `CALLBACK_FAILED` fija la capacidad final (incluido cero), conserva el tipo original durante la consulta y escribe `7C`. Sin callback se aplica la propiedad `capacity` y el multiplicador de cargo; faltan cadenas articuladas, subtipo y la capacidad secundaria de aeronaves |
-| Vehicles (`00`–`03`) | Action0 cargo por defecto/CTT (`0x15`/`0x10`/`0x0C`, `0x2C`–`0x2D`, `0x24`–`0x25`, `0x1E`–`0x1F`, `0x1D`–`0x1E`) | **parcial runtime** | El parser conserva los índices locales y la aplicación los traduce por la CTT GlobalVar `0x09` y `CargoSpec`, incluidos cargos custom; `EngineDef` conserva default, inclusión y exclusión. La compra, sprites por carga, refit y autoreplace consultan esas listas, y la UI muestra nombres custom. Las clases `allowed`/`disallowed`/`required` se parsean para los cuatro features y filtran refit por `CargoSpecDef::classes`, con XOR de `refit_mask` y CTT como capa final. Faltan slots `63+`, callback de refit y otras propiedades económicas |
+| Vehicles (`00`–`03`) | Action0 cargo por defecto/CTT (`0x15`/`0x10`/`0x0C`, `0x2C`–`0x2D`, `0x24`–`0x25`, `0x1E`–`0x1F`, `0x1D`–`0x1E`) | **parcial runtime** | El parser conserva los índices locales y la aplicación los traduce por la CTT GlobalVar `0x09` y `CargoSpec`, incluidos cargos custom; `EngineDef` conserva default, inclusión y exclusión. La compra, sprites por carga, refit y autoreplace consultan esas listas, y la UI muestra nombres custom. Las clases `allowed`/`disallowed`/`required` se parsean para los cuatro features y filtran refit por `CargoSpecDef::classes`, con XOR de `refit_mask` y CTT como capa final. La frontera ejecutable ya incluye el slot 63 (`NUM_CARGO=64`); faltan callback de refit y otras propiedades económicas. |
 | Vehicles (`00`–`03`) | `0x16` `CBID_VEHICLE_ARTIC_ENGINE` | **parcial runtime** | `decode_vehicle_articulated_part` implementa la codificación upstream de 8 bits (GRF < 8: `0xFF`/bit 7) y 15 bits (GRF ≥ 8: `0x7FFF`/bit 14); `resolve_vehicle_articulated_part_callback` ejecuta el callback con `index` en `param1`, hace writeback de `7C` y devuelve el id local más el espejo. La compra y el autoreemplazo de trenes, buses, camiones y tranvías materializan la cadena hasta el terminador, enlazan `prev_unit`/`next_unit`, conservan los vagones/unidades del jugador y resuelven el catálogo activo. El movimiento vial procesa sólo la cabeza, persiste su historial de teselas y sincroniza las unidades generadas (incluido el estado oculto de depósito y separaciones de varias teselas); cada unidad conserva el bit de espejo y el renderer consulta la vista invertida, las crea como children de la cabeza y el índice de tráfico no las cuenta como vehículos independientes. Action0 y Action3 de vehículos aceptan ahora `ExtendedByte` (IDs locales hasta 14 bits), y esos IDs se conservan en el catálogo y la resolución runtime. Los grupos Action3 con bit de wagon override conservan la cadena de motores anterior y se resuelven por cargo/default para cada unidad cuyo GRFID coincide. Los Action2 deterministas `0x82/0x86/0x8A` ya consultan `parent_vars`, los random `0x83` usan `parent_random_bits` y `0x84` resuelve offsets relativos en ambos sentidos, incluido el tramo especial que empieza en el primer vehículo contiguo con el mismo motor; el constructor del contexto de consist alimenta el padre inmediato, la cadena firmada y ese tramo. Variable `61` puede consultar var `62` con un segundo offset relativo del vehículo seleccionado y var `0x60` cuenta los IDs locales presentes desde esa unidad; las variables de badges `0x64`/`0x65`/`0x7A` se traducen mediante GlobalVar `0x18`, y `0x65` consulta el tipo de vía de la tesela; siguen pendientes los callbacks avanzados. |
 | Vehicles (`00`–`03`) | `0x10` `CBID_VEHICLE_VISUAL_EFFECT` | **parcial runtime** | `resolve_vehicle_visual_effect_callback` ejecuta el callback con `param1=param2=0`, normaliza bits de tipo (vapor/diésel/chispa) y `VE_DISABLE_EFFECT`, y escribe `7C`. La propiedad Action0 (`train 0x22`, `road 0x21`, `ship 0x1C`) se conserva en el catálogo y actúa como fallback cuando el callback falla. El emisor de humo ferroviario usa el catálogo activo (incluidos motores NewGRF) y respeta el resultado; faltan el offset/potencia de vagones y `CBID_VEHICLE_SPAWN_VISUAL_EFFECT` avanzado. |
 | Vehicles (`00`–`03`) | `0x31` `CBID_VEHICLE_START_STOP_CHECK` | **soportado** | Call site: `toggle_vehicle_running_checked`; deniega → `NewGrfCallbackDenied` |
@@ -780,3 +780,13 @@ variables realmente usadas por Action2, incluidas `0x69`–`0x71`, por lo que un
 label custom se resuelve aunque el SAV no haya hidratado sus slots. La
 regresión `TOFU` cubre el reseed parent catálogo-aware y el fallback legacy sin
 catálogo; GUI/variables ilimitadas, sonidos y scopes restantes siguen abiertos.
+
+Actualización #329-VEHICLE-CARGO-SLOT-077 (2026-09-04, commit `a2a0ce35`): el
+modelo de cargos alinea `CargoType` con `NUM_CARGO = 64` de OpenTTD y ejecuta el
+último slot custom, ID global 63, en `CargoStock`, `CargoTimeSincePickup`,
+`StationGoods`, packets y las filas modernas de `STNN`. El importador conserva
+el ID 63 en `SLV_55` aunque el catálogo no esté instalado y el writer sigue
+emitiendo las 64 entradas nativas. El JSON propio sube a v27 y sus
+deserializadores aceptan el array legacy de 32 slots. No se crean IDs `64+`;
+el callback de refit, GUI/variables ilimitadas, sonidos y scopes económicos
+continúan parciales, por lo que #329 permanece abierto.

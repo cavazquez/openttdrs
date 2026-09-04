@@ -8,6 +8,7 @@ use crate::airport_tile_spec::{
     AirportAnimationTrigger, AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET,
 };
 use crate::cargo::CargoType;
+use crate::cargo_spec::CargoSpecDef;
 use crate::company::Company;
 use crate::industry::Industry;
 use crate::map::{Map, TileCoord, TileKind};
@@ -682,6 +683,7 @@ pub fn step_newgrf_road_stop_tiles_with_world(
 /// persistentes siguen perteneciendo a la estación lógica. El contexto sale
 /// de la misma ruta que usa el renderer, de modo que CB140–142 y Action2 ven
 /// `40`/`42`/`43`/`4A`/`5F` de la tesela real.
+#[allow(clippy::too_many_arguments)]
 fn station_animation_context(
     map: &Map,
     stations: &[Station],
@@ -689,6 +691,7 @@ fn station_animation_context(
     industries: Option<&[Industry]>,
     climate: Climate,
     catalog: &[StationSpecDef],
+    cargo_catalog: &[CargoSpecDef],
     coord: TileCoord,
 ) -> Option<(usize, crate::newgrf_sprites::Action2EvalCtx)> {
     let tile = map.get(coord)?;
@@ -743,7 +746,7 @@ fn station_animation_context(
                 def.newgrf_grf_version,
                 StationAction2WorldContext {
                     industries,
-                    cargo_spec_catalog: &[],
+                    cargo_spec_catalog: cargo_catalog,
                 },
             )
         },
@@ -795,13 +798,21 @@ fn trigger_newgrf_station_animation_inner<S: BuildHasher>(
     industries: Option<&[Industry]>,
     climate: Climate,
     catalog: &[StationSpecDef],
+    cargo_catalog: &[CargoSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
     coord: TileCoord,
     trigger: StationAnimationTrigger,
     cargo: Option<CargoType>,
 ) -> bool {
     let Some((station_index, mut ctx)) = station_animation_context(
-        map, stations, companies, industries, climate, catalog, coord,
+        map,
+        stations,
+        companies,
+        industries,
+        climate,
+        catalog,
+        cargo_catalog,
+        coord,
     ) else {
         active_tiles.remove(&coord);
         return false;
@@ -827,7 +838,10 @@ fn trigger_newgrf_station_animation_inner<S: BuildHasher>(
         &mut ctx,
         CBID_STATION_ANIMATION_TRIGGER,
         random,
-        trigger.callback_param(cargo.map(|cargo| def.newgrf_cargo_local_id(cargo, climate))),
+        trigger
+            .callback_param(cargo.map(|cargo| {
+                def.newgrf_cargo_local_id_with_catalog(cargo, climate, cargo_catalog)
+            })),
     );
     if result == CALLBACK_FAILED {
         return false;
@@ -875,6 +889,7 @@ pub fn trigger_newgrf_station_animation<S: BuildHasher>(
         None,
         climate,
         catalog,
+        &[],
         active_tiles,
         coord,
         trigger,
@@ -904,6 +919,38 @@ pub fn trigger_newgrf_station_animation_with_world<S: BuildHasher>(
         Some(industries),
         climate,
         catalog,
+        &[],
+        active_tiles,
+        coord,
+        trigger,
+    )
+}
+
+/// Variante de [`trigger_newgrf_station_animation_with_world`] que propaga el
+/// catálogo de cargos para `param2` y las variables `60`–`69` de CB140.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_station_animation_with_world_and_cargo_catalog<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: &[Industry],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    coord: TileCoord,
+    trigger: StationAnimationTrigger,
+) -> bool {
+    trigger_newgrf_station_animation_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        Some(industries),
+        climate,
+        catalog,
+        cargo_catalog,
         active_tiles,
         coord,
         trigger,
@@ -919,6 +966,7 @@ fn trigger_newgrf_station_animation_with_industries<S: BuildHasher>(
     industries: Option<&[Industry]>,
     climate: Climate,
     catalog: &[StationSpecDef],
+    cargo_catalog: &[CargoSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
     coord: TileCoord,
     trigger: StationAnimationTrigger,
@@ -931,6 +979,7 @@ fn trigger_newgrf_station_animation_with_industries<S: BuildHasher>(
         industries,
         climate,
         catalog,
+        cargo_catalog,
         active_tiles,
         coord,
         trigger,
@@ -997,6 +1046,7 @@ pub fn trigger_newgrf_station_animation_for_station<S: BuildHasher>(
         None,
         climate,
         catalog,
+        &[],
         active_tiles,
         station_anchor,
         trigger,
@@ -1027,6 +1077,39 @@ pub fn trigger_newgrf_station_animation_for_station_with_world<S: BuildHasher>(
         Some(industries),
         climate,
         catalog,
+        &[],
+        active_tiles,
+        station_anchor,
+        trigger,
+        cargo,
+    )
+}
+
+/// Variante catálogo-aware de [`trigger_newgrf_station_animation_for_station_with_world`].
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_station_animation_for_station_with_world_and_cargo_catalog<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: &[Industry],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger: StationAnimationTrigger,
+    cargo: Option<CargoType>,
+) -> Vec<TileCoord> {
+    trigger_newgrf_station_animation_for_station_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        Some(industries),
+        climate,
+        catalog,
+        cargo_catalog,
         active_tiles,
         station_anchor,
         trigger,
@@ -1043,6 +1126,7 @@ fn trigger_newgrf_station_animation_for_station_with_industries<S: BuildHasher>(
     industries: Option<&[Industry]>,
     climate: Climate,
     catalog: &[StationSpecDef],
+    cargo_catalog: &[CargoSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
     station_anchor: TileCoord,
     trigger: StationAnimationTrigger,
@@ -1059,6 +1143,7 @@ fn trigger_newgrf_station_animation_for_station_with_industries<S: BuildHasher>(
             industries,
             climate,
             catalog,
+            cargo_catalog,
             active_tiles,
             coord,
             trigger,
@@ -1096,6 +1181,7 @@ pub fn trigger_newgrf_station_animation_for_platform<S: BuildHasher>(
         None,
         climate,
         catalog,
+        &[],
         active_tiles,
         station_anchor,
         trigger_tile,
@@ -1126,6 +1212,41 @@ pub fn trigger_newgrf_station_animation_for_platform_with_world<S: BuildHasher>(
         Some(industries),
         climate,
         catalog,
+        &[],
+        active_tiles,
+        station_anchor,
+        trigger_tile,
+        trigger,
+    )
+}
+
+/// Variante catálogo-aware de [`trigger_newgrf_station_animation_for_platform_with_world`].
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_station_animation_for_platform_with_world_and_cargo_catalog<
+    S: BuildHasher,
+>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: &[Industry],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger_tile: TileCoord,
+    trigger: StationAnimationTrigger,
+) -> Vec<TileCoord> {
+    trigger_newgrf_station_animation_for_platform_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        Some(industries),
+        climate,
+        catalog,
+        cargo_catalog,
         active_tiles,
         station_anchor,
         trigger_tile,
@@ -1142,6 +1263,7 @@ fn trigger_newgrf_station_animation_for_platform_with_industries<S: BuildHasher>
     industries: Option<&[Industry]>,
     climate: Climate,
     catalog: &[StationSpecDef],
+    cargo_catalog: &[CargoSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
     station_anchor: TileCoord,
     trigger_tile: TileCoord,
@@ -1175,6 +1297,7 @@ fn trigger_newgrf_station_animation_for_platform_with_industries<S: BuildHasher>
             industries,
             climate,
             catalog,
+            cargo_catalog,
             active_tiles,
             coord,
             trigger,
@@ -1195,11 +1318,19 @@ fn advance_newgrf_station_tile<S: BuildHasher>(
     industries: Option<&[Industry]>,
     climate: Climate,
     catalog: &[StationSpecDef],
+    cargo_catalog: &[CargoSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
     coord: TileCoord,
 ) -> bool {
     let Some((station_index, mut ctx)) = station_animation_context(
-        map, stations, companies, industries, climate, catalog, coord,
+        map,
+        stations,
+        companies,
+        industries,
+        climate,
+        catalog,
+        cargo_catalog,
+        coord,
     ) else {
         active_tiles.remove(&coord);
         return false;
@@ -1301,6 +1432,7 @@ pub fn step_newgrf_station_tiles<S: BuildHasher>(
         None,
         climate,
         catalog,
+        &[],
         active_tiles,
         tile_loop_visits,
     )
@@ -1327,6 +1459,36 @@ pub fn step_newgrf_station_tiles_with_world<S: BuildHasher>(
         Some(industries),
         climate,
         catalog,
+        &[],
+        active_tiles,
+        tile_loop_visits,
+    )
+}
+
+/// Variante del scheduler que entrega el catálogo de cargos a cada CB140–142
+/// de estación ferroviaria/waypoint.
+#[allow(clippy::too_many_arguments)]
+pub fn step_newgrf_station_tiles_with_world_and_cargo_catalog<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: &[Industry],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    tile_loop_visits: &[(TileCoord, crate::map::Tile)],
+) -> Vec<TileCoord> {
+    step_newgrf_station_tiles_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        Some(industries),
+        climate,
+        catalog,
+        cargo_catalog,
         active_tiles,
         tile_loop_visits,
     )
@@ -1341,6 +1503,7 @@ fn step_newgrf_station_tiles_with_industries<S: BuildHasher>(
     industries: Option<&[Industry]>,
     climate: Climate,
     catalog: &[StationSpecDef],
+    cargo_catalog: &[CargoSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
     tile_loop_visits: &[(TileCoord, crate::map::Tile)],
 ) -> Vec<TileCoord> {
@@ -1354,6 +1517,7 @@ fn step_newgrf_station_tiles_with_industries<S: BuildHasher>(
             industries,
             climate,
             catalog,
+            cargo_catalog,
             active_tiles,
             *coord,
             StationAnimationTrigger::TileLoop,
@@ -1373,6 +1537,7 @@ fn step_newgrf_station_tiles_with_industries<S: BuildHasher>(
             industries,
             climate,
             catalog,
+            cargo_catalog,
             active_tiles,
             coord,
         ) {
@@ -1927,7 +2092,9 @@ mod tests {
             | crate::STATION_ANIMATION_TRIGGER_TILE_LOOP;
         def.newgrf_grf_version = 8;
         def.newgrf_type_tables = Some(crate::newgrf_type_tables::GrfTypeTranslationTables {
-            cargo: vec![*b"PASS", *b"MAIL", *b"GOOD", *b"WOOD", *b"GRAI", *b"COAL"],
+            cargo: vec![
+                *b"PASS", *b"MAIL", *b"GOOD", *b"WOOD", *b"GRAI", *b"COAL", *b"TOFU",
+            ],
             ..Default::default()
         });
         def.newgrf_runtime = Some(Box::new(station_trigger_parameter_callbacks(0)));
@@ -1991,6 +2158,35 @@ mod tests {
         assert_eq!(dirty, vec![first, second]);
         assert_eq!(map.get(first).unwrap().m7, 5);
         assert_eq!(map.get(second).unwrap().m7, 5);
+
+        // Los cargos Action0 definidos por un GRF no tienen label en
+        // `CargoType`; el catálogo global debe resolverlo para que CB140 vea
+        // el índice local CTT (TOFU=6), en vez del fallback sintético CSTM.
+        let cargo_catalog = vec![crate::CargoSpecDef {
+            id: CargoType::Custom(0).cargo_id(),
+            label: "TOFU".to_owned(),
+            name: "Tofu".to_owned(),
+            from_newgrf: true,
+            ..crate::CargoSpecDef::default()
+        }];
+        active.clear();
+        let dirty = trigger_newgrf_station_animation_for_station_with_world_and_cargo_catalog(
+            &mut map,
+            4,
+            &mut stations,
+            &companies,
+            &[],
+            &cargo_catalog,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            first,
+            StationAnimationTrigger::NewCargo,
+            Some(CargoType::Custom(0)),
+        );
+        assert_eq!(dirty, vec![first, second]);
+        assert_eq!(map.get(first).unwrap().m7, 6);
+        assert_eq!(map.get(second).unwrap().m7, 6);
 
         catalog[0].newgrf_runtime = Some(Box::new(station_trigger_parameter_callbacks(0)));
         active.clear();

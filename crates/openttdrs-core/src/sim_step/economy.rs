@@ -25,19 +25,21 @@ fn trigger_station_new_cargo_since(state: &mut GameState, before: &[crate::Cargo
         })
         .collect();
     for (station_pos, cargo) in arrivals {
-        let dirty = crate::map::trigger_newgrf_station_animation_for_station_with_world(
-            &mut state.map,
-            state.tick.get(),
-            &mut state.stations,
-            &state.companies,
-            &state.industries,
-            state.climate,
-            &state.station_spec_catalog,
-            &mut state.newgrf_animated_station_tiles,
-            station_pos,
-            crate::StationAnimationTrigger::NewCargo,
-            Some(cargo),
-        );
+        let dirty =
+            crate::map::trigger_newgrf_station_animation_for_station_with_world_and_cargo_catalog(
+                &mut state.map,
+                state.tick.get(),
+                &mut state.stations,
+                &state.companies,
+                &state.industries,
+                &state.cargo_spec_catalog,
+                state.climate,
+                &state.station_spec_catalog,
+                &mut state.newgrf_animated_station_tiles,
+                station_pos,
+                crate::StationAnimationTrigger::NewCargo,
+                Some(cargo),
+            );
         state.runtime.industry_tile_dirty.extend(dirty);
         super::trigger_airport_animation_at(
             state,

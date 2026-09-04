@@ -388,7 +388,8 @@ pub use map::{
     set_industry_random_triggers, set_water_class_m1, slope_dz_at_subtile, slope_dz_on_tile,
     slope_pixel_z, step_airport_tiles, step_industry_tiles, step_industry_tiles_with_seed,
     step_industry_tiles_with_seed_and_catalog, step_industry_tiles_with_seed_and_catalog_and_world,
-    step_newgrf_station_tiles, step_newgrf_station_tiles_with_world, step_tree_and_field_growth,
+    step_newgrf_station_tiles, step_newgrf_station_tiles_with_world,
+    step_newgrf_station_tiles_with_world_and_cargo_catalog, step_tree_and_field_growth,
     tick_tree_tile_loop, tick_water_flood, tile_adjacent_to_water, tile_has_water_class,
     tile_loop_clear_desert, tile_loop_water_at, tile_slope_and_z, tree_or_field_stage,
     trigger_industry_randomisation_at, trigger_industry_randomisation_at_with_catalog_and_world,
@@ -397,10 +398,13 @@ pub use map::{
     trigger_newgrf_industry_animation_with_world_and_extra, trigger_newgrf_station_animation,
     trigger_newgrf_station_animation_for_platform,
     trigger_newgrf_station_animation_for_platform_with_world,
+    trigger_newgrf_station_animation_for_platform_with_world_and_cargo_catalog,
     trigger_newgrf_station_animation_for_station,
     trigger_newgrf_station_animation_for_station_with_world,
-    trigger_newgrf_station_animation_with_world, tunnel_entrance_m5, tunnel_preview_path,
-    water_class, water_class_from_m1,
+    trigger_newgrf_station_animation_for_station_with_world_and_cargo_catalog,
+    trigger_newgrf_station_animation_with_world,
+    trigger_newgrf_station_animation_with_world_and_cargo_catalog, tunnel_entrance_m5,
+    tunnel_preview_path, water_class, water_class_from_m1,
 };
 // Runtime NewGRF en raíz; builders/fixtures vía `newgrf_actions` / `newgrf_sprites::fixture` (#157).
 pub use house_spec::{

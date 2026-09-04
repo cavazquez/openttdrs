@@ -250,11 +250,24 @@ impl StationSpecDef {
     /// Id local de un cargo para callbacks de este GRF (`var 18`, bits 8..15).
     #[must_use]
     pub fn newgrf_cargo_local_id(&self, cargo: crate::CargoType, climate: crate::Climate) -> u8 {
-        crate::newgrf_type_tables::local_cargo_id(
+        self.newgrf_cargo_local_id_with_catalog(cargo, climate, &[])
+    }
+
+    /// Variante que resuelve labels de cargos custom mediante el catálogo
+    /// activo; la API histórica conserva el fallback sin catálogo.
+    #[must_use]
+    pub fn newgrf_cargo_local_id_with_catalog(
+        &self,
+        cargo: crate::CargoType,
+        climate: crate::Climate,
+        cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    ) -> u8 {
+        crate::newgrf_type_tables::local_cargo_id_with_catalog(
             self.newgrf_type_tables.as_ref(),
             self.newgrf_grf_version,
             cargo,
             climate,
+            cargo_catalog,
         )
     }
 

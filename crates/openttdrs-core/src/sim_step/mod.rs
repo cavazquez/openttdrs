@@ -499,12 +499,13 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         }),
     );
     state.runtime.industry_tile_dirty.extend(road_stop_dirty);
-    let station_dirty = crate::map::step_newgrf_station_tiles_with_world(
+    let station_dirty = crate::map::step_newgrf_station_tiles_with_world_and_cargo_catalog(
         &mut state.map,
         t,
         &mut state.stations,
         &state.companies,
         &state.industries,
+        &state.cargo_spec_catalog,
         state.climate,
         &state.station_spec_catalog,
         &mut state.newgrf_animated_station_tiles,
@@ -646,19 +647,21 @@ pub(super) fn trigger_station_platform_animation(
     else {
         return;
     };
-    let dirty = crate::map::trigger_newgrf_station_animation_for_platform_with_world(
-        &mut state.map,
-        state.tick.get(),
-        &mut state.stations,
-        &state.companies,
-        &state.industries,
-        state.climate,
-        &state.station_spec_catalog,
-        &mut state.newgrf_animated_station_tiles,
-        station_anchor,
-        trigger_tile,
-        trigger,
-    );
+    let dirty =
+        crate::map::trigger_newgrf_station_animation_for_platform_with_world_and_cargo_catalog(
+            &mut state.map,
+            state.tick.get(),
+            &mut state.stations,
+            &state.companies,
+            &state.industries,
+            &state.cargo_spec_catalog,
+            state.climate,
+            &state.station_spec_catalog,
+            &mut state.newgrf_animated_station_tiles,
+            station_anchor,
+            trigger_tile,
+            trigger,
+        );
     state.runtime.industry_tile_dirty.extend(dirty);
 }
 

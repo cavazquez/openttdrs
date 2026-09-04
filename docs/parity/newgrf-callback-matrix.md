@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `e67b1171`, CTT de cargos custom en scopes
+Actualizada: **2026-09-04** (commit `85db7852`, CTT de cargos custom en scopes
 de estación/parada,
 shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
@@ -750,3 +750,13 @@ labels custom del tile y de la industria parent se resuelven sin depender de
 `newgrf_input_cargo_slots` hidratados; la regresión `TOFU` evita el alias
 vanilla `Mail`. Los wrappers legacy conservan el fallback sin catálogo y #329
 permanece abierto por GUI/variables ilimitadas, sonidos y scopes restantes.
+
+Actualización #329-CARGO-CTT-072 (2026-09-04, commit `85db7852`): las variables
+de scope parent de `IndustryTile` (`0x40`–`0x47`, `0x69`–`0x71`, `0x88`–`0x90` y
+sus historiales) resuelven labels custom contra el catálogo `CargoSpec` activo,
+incluso si una instancia SAV no tiene hidratados sus slots. Renderer,
+shape-check, autoslope y construcción pasan el catálogo explícito; la regresión
+`TOFU` verifica stock, waiting y cargos producidos/aceptados sin alias a `Mail`.
+Los wrappers legacy mantienen el fallback sin catálogo. Animación,
+randomización, GUI/variables ilimitadas, sonidos y scopes restantes continúan
+pendientes; #329 permanece abierto.

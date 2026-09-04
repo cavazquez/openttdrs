@@ -34,9 +34,10 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `e67b1171`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `85db7852`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
-ferroviario y la CTT de scopes de estación/parada quedan actualizados en este corte).
+ferroviario y la CTT de scopes de estación/parada e `IndustryTile` quedan
+actualizados en este corte).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -288,6 +289,16 @@ legacy conserva el fallback sin catálogo y la regresión `TOFU` confirma que el
 flujo catálogo-aware acepta el cargo correcto y no lo confunde con `Mail`.
 Quedan GUI/variables ilimitadas, callbacks de sonido, scopes avanzados y cargos
 sin catálogo; #329 continúa abierto.
+
+Actualización #329-CARGO-CTT-072 (2026-09-04, `85db7852`): las variables de
+scope parent de `IndustryTile` (`0x40`–`0x47`, `0x69`–`0x71`, `0x88`–`0x90` y
+sus historiales) resuelven labels custom contra el catálogo `CargoSpec` activo,
+incluso cuando un SAV dejó vacíos los slots runtime. Renderer, shape-check,
+autoslope y construcción pasan esa misma tabla; una regresión `TOFU` evita el
+alias vanilla en stock, waiting y cargos producidos/aceptados. Los wrappers
+legacy conservan su fallback sin catálogo. Animación/randomización, variables
+GUI ilimitadas, sonidos y scopes restantes todavía requieren propagación; #329
+continúa abierto.
 
 | Multijugador | **Media propia** | Lockstep TCP, dedicated, late join y host migration; el servidor asigna empresa por peer, valida antes de secuenciar, rechaza issuer inválido y resincroniza desync por snapshot. Sigue siendo protocolo propio, sin lobby, auth, cifrado ni interoperabilidad OpenTTD |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |

@@ -389,6 +389,32 @@ fn advanced_effect_should_emit(
     }
 }
 
+/// Offset de `CreateEffectVehicleRel` para el modelo vanilla de CB10.
+/// `offset=8` es el centro de una unidad estándar; OpenTTD corrige las
+/// unidades ferroviarias acortadas y respeta la inversión visual de trenes.
+#[must_use]
+fn standard_effect_offset(vehicle: &Vehicle, offset: u8) -> Vec3 {
+    let direction = if vehicle.kind == VehicleKind::Train && vehicle.train_flags & (1 << 4) != 0 {
+        vehicle.direction.wrapping_add(4) & 7
+    } else {
+        vehicle.direction & 7
+    };
+    let mut longitudinal =
+        i32::from(offset) - i32::from(openttdrs_core::train_consist::VEHICLE_LENGTH);
+    if vehicle.kind == VehicleKind::Train {
+        longitudinal += (i32::from(openttdrs_core::train_consist::VEHICLE_LENGTH)
+            - i32::from(vehicle.unit_length.max(1)))
+            / 2;
+    }
+    const SMOKE_POS: [i32; 8] = [1, 1, 1, 0, -1, -1, -1, 0];
+    let transverse = (usize::from(direction) + 2) & 7;
+    Vec3::new(
+        (SMOKE_POS[usize::from(direction)] * longitudinal) as f32,
+        (SMOKE_POS[transverse] * longitudinal) as f32,
+        10.0,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_train_smoke(
     mut sim: ResMut<SimWorld>,
@@ -501,26 +527,57 @@ fn spawn_train_smoke(
             }
             continue;
         }
-        let Some(set_kind) =
+        let set_kind = if vehicle.kind == VehicleKind::Train {
             train_smoke_to_emit_with_engine(map, vehicle, engine, tick, prefs.smoke_amount)
-        else {
+        } else if matches!(
+            visual_spec.kind,
+            VehicleVisualEffectKind::Steam
+                | VehicleVisualEffectKind::Diesel
+                | VehicleVisualEffectKind::Electric
+        ) && advanced_effect_should_emit(
+            map,
+            vehicle,
+            engine,
+            visual_spec.kind,
+            tick,
+            prefs.smoke_amount,
+        ) {
+            Some(match visual_spec.kind {
+                VehicleVisualEffectKind::Steam => TrainSmokeSet::Steam,
+                VehicleVisualEffectKind::Diesel => TrainSmokeSet::Diesel,
+                VehicleVisualEffectKind::Electric => TrainSmokeSet::Electric,
+                VehicleVisualEffectKind::Default | VehicleVisualEffectKind::Disabled => {
+                    unreachable!("standard model was checked above")
+                }
+            })
+        } else {
+            None
+        };
+        let Some(set_kind) = set_kind else {
             continue;
         };
         let effect_set = sprite_set(&frames, set_kind);
         let Some(atlas) = effect_set.frames.first() else {
             continue;
         };
-        let pose = retreat_vehicle_pose(
-            vehicle,
-            extrapolate_vehicle_pose(vehicle, sim_clock.tick_alpha),
-            TRAIN_SMOKE_EMIT_BACK_PROGRESS,
-        );
+        let pose = if vehicle.kind == VehicleKind::Train && visual_spec.offset == 8 {
+            // Conserva el pequeño retraso visual de la ruta vanilla para no
+            // cambiar la cadencia de humo de motores sin Action0 custom.
+            retreat_vehicle_pose(
+                vehicle,
+                extrapolate_vehicle_pose(vehicle, sim_clock.tick_alpha),
+                TRAIN_SMOKE_EMIT_BACK_PROGRESS,
+            )
+        } else {
+            extrapolate_vehicle_pose(vehicle, sim_clock.tick_alpha)
+        };
         let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(vehicle, map, pose);
         let mut sprite = atlas.sprite();
         if matches!(set_kind, TrainSmokeSet::Electric) {
             sprite.color = Color::srgb(0.85, 0.92, 1.0);
         }
-        let pos = effect_overlay_pos(anchor, 0, &effect_set, base_z, (tx, ty), 0.38, 0.0);
+        let pos = effect_overlay_pos(anchor, 0, &effect_set, base_z, (tx, ty), 0.38, 0.0)
+            + standard_effect_offset(vehicle, visual_spec.offset);
         commands.spawn((
             MapVisualLayer,
             TrainSmokeEffect {
@@ -772,6 +829,28 @@ mod tests {
                 2
             ));
         }
+    }
+
+    #[test]
+    fn standard_effect_offset_uses_cb10_offset_and_train_flip() {
+        let mut train = running_train(ENGINE_TRAIN_KIRBY);
+        train.direction = 0;
+        train.unit_length = 4;
+        assert_eq!(standard_effect_offset(&train, 8), Vec3::new(2.0, 2.0, 10.0));
+        train.train_flags |= 1 << 4;
+        assert_eq!(
+            standard_effect_offset(&train, 8),
+            Vec3::new(-2.0, -2.0, 10.0)
+        );
+
+        let mut bus = Vehicle::new(
+            40,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        bus.direction = 0;
+        assert_eq!(standard_effect_offset(&bus, 4), Vec3::new(-4.0, -4.0, 10.0));
     }
 
     #[test]

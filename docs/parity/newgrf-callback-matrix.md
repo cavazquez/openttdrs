@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `b25a2362`, CTT de cargos custom en scopes
+Actualizada: **2026-09-04** (commit `7782568d`, CTT de cargos custom en scopes
 de estación/parada,
 shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
@@ -709,3 +709,12 @@ el contexto de mundo lleva el catálogo activo; las APIs legacy siguen usando
 el fallback sin catálogo. Los callbacks de animación, `AirportTiles`,
 industria y variables ilimitadas todavía necesitan la misma propagación, por
 lo que #329 continúa abierto.
+
+Actualización #329-CARGO-CTT-067 (2026-09-04, commit `7782568d`): las rutas
+runtime de CB140–142 para estaciones ferroviarias y waypoints reciben el
+catálogo `CargoSpec` activo. `NewCargo`/`CargoTaken` codifican `param2` mediante
+la CTT del GRF, y el contexto Action2 de cada tesela publica las variables
+`60`–`69` con ese mismo catálogo; construcción, carga de vehículos, eventos de
+economía y `TileLoop` usan las variantes catálogo-aware. La regresión `TOFU`
+comprueba el índice CTT local 6 en toda la plataforma. AirportTiles, industria
+y GUI/variables ilimitadas permanecen pendientes.

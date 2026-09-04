@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
-`main` con base funcional publicada `6266171f`, posterior al writeback canónico
+`main` con base funcional publicada `fd573da5`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
@@ -205,3 +205,7 @@ Actualización `6266171f` (2026-09-04): la API runtime de
 `ScriptCargoMonitor` reconoce los `CargoType::Custom` que tienen `CargoSpec`
 activo y utiliza el mismo ID global que las tablas SAV modernas; no cambia el
 wire format ni la conversión legacy de `566ce56a`.
+
+Actualización `fd573da5` (2026-09-04): el catálogo de `CargoSpec` se propaga a
+la física vial al abrir una partida, de modo que `prop 0x0F` de un cargo custom
+afecta la masa y no altera ninguna tabla ni campo del wire format SAV.

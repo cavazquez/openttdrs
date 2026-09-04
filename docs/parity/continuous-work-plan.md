@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`15c8bfcf`** (`settings: apply freight train cargo weight multiplier`),
+Base funcional local y publicada: **`5e0938ff`** (`ui: expose freight train weight setting`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -70,8 +70,9 @@ fallback vanilla. `b32b87f4` aplica el mismo peso a todas las unidades de un
 consist ferroviario y recalcula la caché después de cargar/descargar, sin
 alterar el orden de señales. `15c8bfcf` añade `vehicle.freight_trains` con
 persistencia `PATS`/JSON, frontera `SLV_39` y aplicación exclusiva a cargas
-freight. Quedan pendientes la GUI del setting, CTT completa y el resto de
-settings económicos.
+freight. `5e0938ff` expone presets del setting en Ajustes y refresca los
+consist de inmediato. Quedan pendientes la edición arbitraria tipo slider, CTT
+completa y el resto de settings económicos.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
@@ -104,8 +105,16 @@ rebuilds de consist reciben el multiplicador, incluido el refresh posterior a
 `LoadUnloadStation`. Regresiones cubren parser, round-trip, saves legacy y
 peso; la GUI, CTT y otros settings siguen abiertos.
 
-Última validación de `15c8bfcf`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **2.017** tests de core y **1.064** de cliente (2 ignorados); la matriz
+Actualización #329-CARGO-FREIGHT-UI-065 (2026-09-04, commit `5e0938ff`):
+`SetFreightTrains` quedó disponible como comando de partida: normaliza a
+`1..=255`, recalcula todos los consist ferroviarios y no modifica el mapa. La
+toolbar de Ajustes ofrece presets `1/2/4/8/16/32/64/128/255`, etiqueta el valor
+actual y vuelve a `1` tras `255`; las regresiones cubren ciclo, wrap y refresco
+de peso. Falta la ventana avanzada con edición arbitraria y el resto de
+settings económicos.
+
+Última validación de `5e0938ff`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **2.018** tests de core y **1.065** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.

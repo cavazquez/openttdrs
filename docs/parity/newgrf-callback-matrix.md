@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `15c8bfcf`, cargos custom ejecutables,
+Actualizada: **2026-09-04** (commit `5e0938ff`, cargos custom ejecutables,
 shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
 `PlantOnBuild`, rehidratación SAV legacy, historiales aceptados runtime,
@@ -689,5 +689,13 @@ el setting `vehicle.freight_trains` se persiste en `GameState`/JSON y en
 `SLV_39`. El peso ferroviario aplica el multiplicador sólo cuando la
 `CargoSpec` activa marca `is_freight`; las cargas no freight conservan su peso
 normal. Todos los call sites de reconstrucción de consist y el refresh posterior
-a carga/descarga reciben el valor persistido. La GUI del setting, la CTT
-completa y los demás settings económicos aún no tienen paridad.
+a carga/descarga reciben el valor persistido. La toolbar expone presets, pero la
+edición arbitraria tipo slider, la CTT completa y los demás settings económicos
+aún no tienen paridad.
+
+Actualización #329-CARGO-FREIGHT-UI-065 (2026-09-04, commit `5e0938ff`):
+`SetFreightTrains` valida y aplica el setting en runtime, reconstruyendo todos
+los consist ferroviarios sin modificar el mapa. Ajustes muestra y cicla los
+presets `1/2/4/8/16/32/64/128/255`, sincronizados con `GameState`; quedan
+pendientes el control avanzado de valores arbitrarios y la UI del resto de
+settings.

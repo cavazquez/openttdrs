@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
-`main` con base funcional publicada `15c8bfcf`, posterior al writeback canónico
+`main` con base funcional publicada `5e0938ff`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
@@ -222,5 +222,11 @@ Actualización `15c8bfcf` (2026-09-04): `PATS` importa y exporta
 y compatibilidad `SLV_39`; los saves anteriores a esa versión vuelven al
 default. El valor se conserva también en el JSON propio y se aplica a la masa
 de cargas cuyo `CargoSpec::is_freight` es verdadero. `cached_weight_t` continúa
-siendo derivado y no agrega columnas al wire format de vehículos; la GUI del
-setting, CTT completa y el resto de settings económicos siguen parciales.
+siendo derivado y no agrega columnas al wire format de vehículos; la toolbar
+expone presets del setting, mientras la edición arbitraria, CTT completa y el
+resto de settings económicos siguen parciales.
+
+Actualización `5e0938ff` (2026-09-04): el comando `SetFreightTrains` normaliza
+el rango y reconstruye las cachés derivadas inmediatamente; el control de
+Ajustes cicla los presets `1/2/4/8/16/32/64/128/255`. El cambio no añade campos
+al wire format ni modifica la compatibilidad `SLV_39`.

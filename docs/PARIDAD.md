@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `15c8bfcf`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `5e0938ff`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga y los pesos vial
 y ferroviario quedan actualizados en este corte).
 Referencia: OpenTTD 15.3, commit
@@ -96,8 +96,16 @@ default `1`; `PATS` lo lee/escribe con la versión `SLV_39` y los saves legacy
 anteriores a esa frontera vuelven al default. `CargoSpec::is_freight` decide
 qué cargas reciben el multiplicador, por lo que pasajeros y otros cargos no se
 alteran. La masa resultante se usa en todos los rebuilds de consist y se
-refresca después de cargar/descargar; las propiedades CTT, la GUI de settings y
-los demás settings económicos continúan parciales.
+refresca después de cargar/descargar. La toolbar ya permite cambiar presets
+habituales; la edición arbitraria tipo slider, las propiedades CTT y los demás
+settings económicos continúan parciales.
+
+Actualización #329-CARGO-FREIGHT-UI-065 (2026-09-04, `5e0938ff`):
+`SetFreightTrains` valida el rango nativo y recalcula inmediatamente la masa de
+los consist ferroviarios. El menú Ajustes expone el ciclo
+`1/2/4/8/16/32/64/128/255` con etiqueta sincronizada al estado y conserva el
+valor elegido al guardar JSON/SAV. La secuencia es un control compacto, no una
+declaración de paridad completa de la ventana avanzada de settings.
 
 Actualización vigente del corte: `036fda1f` implementa el monitor efímero de
 carga compatible con `_cargo_pickups`/`_cargo_deliveries`: codificación nativa

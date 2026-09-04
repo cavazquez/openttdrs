@@ -34,7 +34,7 @@ temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `e1f698d3`; el
+**Corte canónico: 2026-09-04 · `main` (base funcional publicada `a6f561b6`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
 ferroviario y la CTT de scopes de estación/parada e `IndustryTile` quedan
 actualizados en este corte).
@@ -309,6 +309,16 @@ Action2, por lo que `0x69`–`0x71` también mantienen la CTT de cargos custom a
 sin slots hidratados en el SAV. La regresión de `TOFU` fija stock=23 a través
 del callback; wrappers sin catálogo conservan su fallback y #329 sigue abierto
 por randomización, GUI/variables ilimitadas, sonidos y scopes restantes.
+
+Actualización #329-CARGO-CTT-074 (2026-09-04, `a6f561b6`): la randomización
+`IndustryTile` (`ResolveRerandomisation`/`CBID_RANDOM_TRIGGER`) propaga el
+catálogo `CargoSpec` al scope parent en generación de mapa, `TileLoop`, tick de
+industria y eventos `CargoReceived`/`IndustryTick`. Las ramas Action2 que usan
+`0x69`–`0x71` ya seleccionan el cargo custom por CTT aun con slots vacíos en un
+SAV; la regresión `TOFU` comprueba que la rama catalogue-aware reseedea el PSA
+parent y que el wrapper sin catálogo conserva el fallback. GUI/variables
+ilimitadas, sonidos, reatachación sin GRF y scopes restantes siguen pendientes;
+#329 continúa abierto.
 
 | Multijugador | **Media propia** | Lockstep TCP, dedicated, late join y host migration; el servidor asigna empresa por peer, valida antes de secuenciar, rechaza issuer inválido y resincroniza desync por snapshot. Sigue siendo protocolo propio, sin lobby, auth, cifrado ni interoperabilidad OpenTTD |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |

@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`e1f698d3`** (`newgrf: propagate cargo catalog to industry animation`),
+Base funcional local y publicada: **`a6f561b6`** (`newgrf: propagate cargo catalog to industry randomisation`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -159,6 +159,15 @@ slots. La regresión `TOFU` comprueba stock=23 en CB26; APIs legacy sin catálog
 mantienen fallback. Randomización, GUI/variables ilimitadas, sonido y scopes
 avanzados son el siguiente bloque; #329 sigue abierto.
 
+Actualización #329-CARGO-CTT-074 (2026-09-04, commit `a6f561b6`): la ruta de
+randomización `IndustryTile` (`ResolveRerandomisation`) recibe el catálogo
+`CargoSpec` en generación, `TileLoop`, `IndustryTick` y los eventos de carga.
+El helper descubre las variables parent que usa el grafo, de modo que
+`0x69`–`0x71` seleccionan cargos custom por CTT aunque falten slots hidratados en
+un SAV. La regresión `TOFU` verifica el reseed parent con catálogo y que el
+wrapper legacy sin catálogo no tome la rama custom. GUI/variables ilimitadas,
+sonidos, reatachación sin GRF y scopes restantes continúan abiertos.
+
 Actualización #329-CARGO-TRAIN-WEIGHT-063 (2026-09-04, commit `b32b87f4`):
 `ConsistChanged` acumula `CargoSpec::weight` por unidad y refresca
 `cached_weight_t`/esfuerzo tractor después de `LoadUnloadStation`. Esto cubre
@@ -193,8 +202,8 @@ Quedan por propagar el catálogo a CB140–142, `AirportTiles`, industria y la
 GUI/variables ilimitadas; #329 sigue abierto y esta etapa no cierra el issue
 padre.
 
-Última validación de `e1f698d3`: `cargo fmt --all -- --check`, clippy estricto
-de core y cliente, **2.027** tests de core y **1.067** de cliente (2 ignorados); la matriz
+Última validación de `a6f561b6`: `cargo fmt --all -- --check`, clippy estricto
+de core y cliente, **2.028** tests de core y **1.067** de cliente (2 ignorados); la matriz
 documental se actualiza en este corte,
 `check_parity_docs_fresh.sh` y `git diff --check` pasan. Las fechas y
 afirmaciones históricas inferiores no sustituyen este handoff.

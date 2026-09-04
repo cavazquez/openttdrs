@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `e1f698d3`, CTT de cargos custom en scopes
+Actualizada: **2026-09-04** (commit `a6f561b6`, CTT de cargos custom en scopes
 de estación/parada,
 shape-check, foundations,
 autoslope, color, rechazo temporal, cargos dinámicos, efectos especiales,
@@ -769,3 +769,12 @@ resolver descubre las variables Action2 parent usadas por cada grafo, incluidas
 regresión `TOFU` comprueba stock=23 al resolver CB26; wrappers legacy mantienen
 el fallback sin catálogo. Randomización, sonidos, GUI/variables ilimitadas y
 scopes restantes siguen pendientes; #329 continúa abierto.
+
+Actualización #329-CARGO-CTT-074 (2026-09-04, commit `a6f561b6`):
+`ResolveRerandomisation` de `IndustryTile` y `CBID_RANDOM_TRIGGER` reciben el
+catálogo `CargoSpec` activo en la generación de mapas y en los eventos
+`TileLoop`, `IndustryTick` y carga. El scope parent se prepara con las
+variables realmente usadas por Action2, incluidas `0x69`–`0x71`, por lo que un
+label custom se resuelve aunque el SAV no haya hidratado sus slots. La
+regresión `TOFU` cubre el reseed parent catálogo-aware y el fallback legacy sin
+catálogo; GUI/variables ilimitadas, sonidos y scopes restantes siguen abiertos.

@@ -46,6 +46,12 @@ Estados:
 | `14` | Road stops | runtime parcial | runtime parcial | auto-select / construcción / render (`road_stop_spec`) |
 | `15` | Badges | runtime | no aplica | catálogo `badge` (merge por label); asociaciones roadstops/objects |
 
+Precisión CTT de AirportTiles (2026-09-04, `9606544b`): los callbacks de
+animación disparados por estación traducen `NewCargo`/`CargoTaken` con el
+label real de `CargoSpec` cuando el catálogo está activo; la API legacy sin
+catálogo conserva el fallback global. Foundations, rotaciones runtime y
+sonidos siguen fuera de esta cobertura.
+
 ## Propiedades comunes de vehículos
 
 Fuente: `newgrf_act0.cpp::CommonVehicleChangeInfo`.

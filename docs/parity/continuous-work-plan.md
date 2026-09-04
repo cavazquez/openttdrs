@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`7782568d`** (`newgrf: propagate custom cargo CTT to station callbacks`),
+Base funcional local y publicada: **`9606544b`** (`newgrf: propagate custom cargo CTT to airport callbacks`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -103,6 +103,15 @@ propagación cubre construcción, eventos económicos, carga de vehículos y el
 scheduler `TileLoop`. La regresión de `TOFU` fija el índice local 6 en ambas
 teselas de una plataforma. AirportTiles, industria y GUI/variables ilimitadas
 siguen pendientes y #329 no se cierra.
+
+Actualización #329-CARGO-CTT-068 (2026-09-04, commit `9606544b`): los eventos
+de animación `AirportTile` que recorren una estación propagan el catálogo
+`CargoSpec` activo. `NewCargo`/`CargoTaken` traducen cargos custom mediante la
+CTT del GRF para `param2`; construcción y descarga utilizan la variante
+catálogo-aware y la regresión de `TOFU` fija el índice local 6. Las APIs
+directas sin catálogo mantienen el fallback legacy. Industria,
+GUI/variables ilimitadas, foundations, rotaciones y sonidos aún permanecen
+abiertos.
 
 Actualización #329-CARGO-TRAIN-WEIGHT-063 (2026-09-04, commit `b32b87f4`):
 `ConsistChanged` acumula `CargoSpec::weight` por unidad y refresca

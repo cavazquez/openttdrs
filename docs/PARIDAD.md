@@ -1004,6 +1004,13 @@ provenientes de GameScript o jugadores siguen sin traducirse. Este corte no
 abarca titulares/cuerpos generados ni los catálogos upstream completos, por lo
 que #331 permanece abierto.
 
+Actualización posterior de #331 (2026-09-05): el cuerpo completo de Ayuda
+ahora alterna `es`/`en` en vivo y preserva nombres de comandos y hotkeys. La
+captura real en inglés confirma la superficie; el contenido puede exceder una
+pantalla baja porque la ventana todavía no tiene scroll. Esa accesibilidad,
+junto con titulares/cuerpos generados y los catálogos upstream, permanece
+fuera de este corte.
+
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate
 pixel-perfect: mientras el orden global de composición siga divergente, la

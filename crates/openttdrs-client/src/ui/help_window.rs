@@ -2,6 +2,8 @@
 
 use bevy::prelude::*;
 
+use crate::i18n::Locale;
+use crate::settings::ClientPreferences;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
     spawn_floating_window, window_text_font,
@@ -12,7 +14,7 @@ use crate::ui::window_lifecycle::{
     close_floating_window_on_message, sync_floating_window_visibility,
 };
 
-const HELP_BODY: &str = "\
+const HELP_BODY_ES: &str = "\
 openttdrs — cliente Rust de OpenTTD (paridad single-player)\n\
 Gráficos base: OpenGFX · Sonido: OpenSFX · Música: OpenMSX\n\
 \n\
@@ -44,10 +46,52 @@ Ajustes → Display: presets Clásico / Rendimiento / Dev.\n\
 Con gizmos ON, el tile seleccionado muestra bounds (aligner lite).\n\
 ";
 
+const HELP_BODY_EN: &str = "\
+openttdrs — Rust OpenTTD client (single-player parity)\n\
+Base graphics: OpenGFX · Sound: OpenSFX · Music: OpenMSX\n\
+\n\
+Keyboard shortcuts\n\
+  P          Pause / resume simulation\n\
+  M          Show / hide minimap\n\
+  R          Visual map remap\n\
+  1 / 2 / 3 / 4   Quick toolbar tools\n\
+  C          Demolish (Clear)\n\
+  F1 / ?     This help\n\
+  F2         Tile inspector\n\
+  F3 / `     Console / Dev (FPS, commands)\n\
+  Ctrl+Alt+C Cheats (money, year, bulldozer, company)\n\
+  + / −      Zoom camera in / out\n\
+  Ctrl+Alt+Z Toggle fixed (initial) / free zoom\n\
+  Ctrl+H     Show / hide information HUD\n\
+  F4         Toggle JSON save path\n\
+  F5 / F9    Quick save / load game\n\
+  Esc        Close top window / cancel tool\n\
+\n\
+Settings → Console: help|list, fps, overlay, gizmos, tile, newgrf, cheat, cheats, endgame, clear.\n\
+Settings → Cheats: formal window (also `cheats` in console).\n\
+Settings → Save scenario: JSON in save/scenarios/ (Editor menu).\n\
+Menu → Scenario editor: sandbox (∞$, bulldozer) + Landscape/Found town.\n\
+Economy → Goals / League · World → Story: GameScript-lite (#43).\n\
+Settings → End game: voluntary retirement → endscreen / high score.\n\
+Settings → NewGRF: stack + Inspect (scan/validate; no Action0–14).\n\
+Settings → Display: Classic / Performance / Dev presets.\n\
+With gizmos ON, the selected tile shows bounds (aligner lite).\n\
+";
+
+fn help_body(locale: Locale) -> &'static str {
+    match locale {
+        Locale::Es => HELP_BODY_ES,
+        Locale::En => HELP_BODY_EN,
+    }
+}
+
 #[derive(Resource, Default)]
 pub(crate) struct HelpWindowState {
     pub(crate) open: bool,
 }
+
+#[derive(Component)]
+pub(crate) struct HelpBodyText;
 
 pub(crate) fn setup_help_window(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -62,7 +106,8 @@ pub(crate) fn setup_help_window(mut commands: Commands, asset_server: Res<AssetS
     );
     commands.entity(content).with_children(|body| {
         body.spawn((
-            Text::new(HELP_BODY),
+            HelpBodyText,
+            Text::new(HELP_BODY_ES),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
             BuildMenuUi,
@@ -76,9 +121,17 @@ pub(crate) fn setup_help_window(mut commands: Commands, asset_server: Res<AssetS
 
 pub(crate) fn sync_help_window(
     state: Res<HelpWindowState>,
+    prefs: Res<ClientPreferences>,
     mut windows: Query<(&FloatingWindow, &mut Visibility)>,
+    mut bodies: Query<&mut Text, With<HelpBodyText>>,
 ) {
     sync_floating_window_visibility(&mut windows, FloatingWindowId::Help, state.open);
+    let body = help_body(prefs.locale());
+    for mut text in &mut bodies {
+        if text.as_str() != body {
+            **text = body.to_owned();
+        }
+    }
 }
 
 pub(crate) fn help_window_on_closed(
@@ -101,5 +154,40 @@ pub(crate) fn handle_help_hotkey(
     }
     if keyboard.just_pressed(KeyCode::F1) || keyboard.just_pressed(KeyCode::Slash) {
         state.open = !state.open;
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use bevy::prelude::*;
+
+    use super::{HELP_BODY_EN, HELP_BODY_ES, HelpBodyText, HelpWindowState, sync_help_window};
+    use crate::settings::ClientPreferences;
+
+    #[test]
+    fn help_body_follows_the_live_locale_without_translating_commands() {
+        let mut world = World::new();
+        world.insert_resource(HelpWindowState { open: true });
+        world.insert_resource(ClientPreferences {
+            language: "en".into(),
+            ..ClientPreferences::default()
+        });
+        let body = world.spawn((HelpBodyText, Text::new(HELP_BODY_ES))).id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sync_help_window);
+        schedule.run(&mut world);
+        let english = world.entity(body).get::<Text>().unwrap().as_str();
+        assert_eq!(english, HELP_BODY_EN);
+        assert!(english.contains("Ctrl+Alt+C Cheats"));
+        assert!(english.contains("help|list"));
+
+        world.resource_mut::<ClientPreferences>().language = "es-AR".into();
+        schedule.run(&mut world);
+        assert_eq!(
+            world.entity(body).get::<Text>().unwrap().as_str(),
+            HELP_BODY_ES
+        );
     }
 }

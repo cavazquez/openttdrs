@@ -1500,6 +1500,12 @@ pub struct SavCompany {
     pub is_ai: Option<bool>,
     /// Meses consecutivos de bancarrota (`PLYR.months_of_bankruptcy`).
     pub bankruptcy_months: Option<u8>,
+    /// Máscara de compañías consultadas (`PLYR.bankrupt_asked`).
+    pub bankruptcy_asked: Option<u16>,
+    /// Tiempo pendiente para una oferta (`PLYR.bankrupt_timeout`).
+    pub bankruptcy_timeout: Option<i16>,
+    /// Valor de adquisición almacenado (`PLYR.bankrupt_value`).
+    pub bankruptcy_value: Option<i64>,
     /// Acumulador del trimestre actual (`PLYR.cur_economy`).
     pub cur_economy: Option<SavCompanyEconomy>,
     /// Trimestres cerrados en orden `OpenTTD`: más reciente primero (`PLYR.old_economy`).
@@ -1701,6 +1707,12 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let bankruptcy_months = record_get(&record, "months_of_bankruptcy")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value).ok());
+            let bankruptcy_asked = record_get(&record, "bankrupt_asked")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok());
+            let bankruptcy_timeout =
+                record_i64(&record, "bankrupt_timeout").and_then(|value| i16::try_from(value).ok());
+            let bankruptcy_value = record_i64(&record, "bankrupt_value");
             let liveries = company_liveries_from_record(&record, colour, save_version);
             let settings = nested_struct(&record, "settings");
             let setting = |name: &str, legacy: &str| {
@@ -1762,6 +1774,9 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 inaugurated_year_calendar,
                 is_ai,
                 bankruptcy_months,
+                bankruptcy_asked,
+                bankruptcy_timeout,
+                bankruptcy_value,
                 cur_economy: company_cur_economy_from_record(&record),
                 old_economy: company_old_economy_from_record(&record),
                 liveries,

@@ -1264,6 +1264,15 @@ impl GameState {
                 if let Some(months) = company.bankruptcy_months {
                     target.bankruptcy_months = months;
                 }
+                if let Some(value) = company.bankruptcy_asked {
+                    target.bankruptcy_asked = value;
+                }
+                if let Some(value) = company.bankruptcy_timeout {
+                    target.bankruptcy_timeout = value;
+                }
+                if let Some(value) = company.bankruptcy_value {
+                    target.bankruptcy_value = value;
+                }
                 hydrate_company_economy_history(
                     target,
                     company.cur_economy.as_ref(),

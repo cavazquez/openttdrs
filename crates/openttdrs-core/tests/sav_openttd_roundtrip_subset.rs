@@ -254,6 +254,27 @@ fn openttd_resaved_preserves_requested_company_location_metadata() {
     assert_eq!(company.last_build_tile, Some(1_300));
 }
 
+/// Contrato opcional para el bloque pasivo de bancarrota. La máscara queda en
+/// cero para que OpenTTD no inicie una negociación durante el smoke; timeout
+/// y valor no triviales prueban los tipos firmados y de 64 bits del wire.
+#[test]
+fn openttd_resaved_preserves_requested_company_passive_bankruptcy_state() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_COMPANY_BANKRUPTCY").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PLYR");
+    let raw = std::fs::read(&path).expect("leer SAV re-guardado");
+    let game = sav::load(&raw).expect("import openttdrs");
+    let company = game
+        .companies
+        .first()
+        .expect("PLYR de compañía activa tras re-guardado OpenTTD");
+    assert_eq!(company.bankruptcy_asked, Some(0));
+    assert_eq!(company.bankruptcy_timeout, Some(-17));
+    assert_eq!(company.bankruptcy_value, Some(87_654_321));
+}
+
 /// Contrato opcional para el límite de préstamo individual. OpenTTD representa
 /// el default con `INT64_MIN`, pero una compañía marcada por deity conserva un
 /// valor concreto incluso si cambia el límite global por inflación.

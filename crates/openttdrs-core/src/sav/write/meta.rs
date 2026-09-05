@@ -175,6 +175,9 @@ pub(super) fn plyr_records(
         rec.extend_from_slice(&company.inaugurated_year_calendar.to_be_bytes());
         rec.push(0);
         rec.push(company.bankruptcy_months);
+        rec.extend_from_slice(&company.bankruptcy_asked.to_be_bytes());
+        rec.extend_from_slice(&company.bankruptcy_timeout.to_be_bytes());
+        rec.extend_from_slice(&company.bankruptcy_value.to_be_bytes());
         append_company_settings(
             &mut rec,
             &company,
@@ -230,6 +233,9 @@ pub(super) fn plyr_records(
             rec.extend_from_slice(&company_to_write.inaugurated_year_calendar.to_be_bytes());
             rec.push(u8::from(company.is_ai));
             rec.push(company.bankruptcy_months);
+            rec.extend_from_slice(&company_to_write.bankruptcy_asked.to_be_bytes());
+            rec.extend_from_slice(&company_to_write.bankruptcy_timeout.to_be_bytes());
+            rec.extend_from_slice(&company_to_write.bankruptcy_value.to_be_bytes());
             append_company_settings(
                 &mut rec,
                 &company_to_write,
@@ -282,6 +288,12 @@ pub(super) fn plyr_chunk(
     write_str("is_ai", &mut header)?;
     header.push(2);
     write_str("months_of_bankruptcy", &mut header)?;
+    header.push(4);
+    write_str("bankrupt_asked", &mut header)?;
+    header.push(3);
+    write_str("bankrupt_timeout", &mut header)?;
+    header.push(7);
+    write_str("bankrupt_value", &mut header)?;
     header.push(0x1B);
     write_str("settings", &mut header)?;
     header.push(0x1B);

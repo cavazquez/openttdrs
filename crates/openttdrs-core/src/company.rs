@@ -257,6 +257,23 @@ pub struct Company {
     /// Meses consecutivos en quiebra (rivales; el jugador usa `GameState::bankruptcy_streak`).
     #[serde(default)]
     pub bankruptcy_months: u8,
+    /// Máscara de compañías ya consultadas por una adquisición por quiebra
+    /// (`PLYR.bankrupt_asked`).
+    ///
+    /// Se conserva para interoperabilidad, pero el runtime propio todavía no
+    /// ejecuta la negociación ni interpreta sus bits como oferta activa.
+    #[serde(default)]
+    pub bankruptcy_asked: u16,
+    /// Contador nativo de espera para una oferta de adquisición
+    /// (`PLYR.bankrupt_timeout`).
+    #[serde(default)]
+    pub bankruptcy_timeout: i16,
+    /// Valor calculado de adquisición por quiebra (`PLYR.bankrupt_value`).
+    ///
+    /// Es metadata persistida: el core aún no calcula el valor ni adquiere la
+    /// compañía correspondiente.
+    #[serde(default)]
+    pub bankruptcy_value: i64,
     /// Autorenovación de vehículos viejos (`settings.engine_renew`).
     #[serde(default = "default_engine_renew")]
     pub engine_renew: bool,
@@ -332,6 +349,9 @@ impl Company {
             economy_history: crate::game_state::EconomyHistory::default(),
             quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
             bankruptcy_months: 0,
+            bankruptcy_asked: 0,
+            bankruptcy_timeout: 0,
+            bankruptcy_value: 0,
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,
@@ -369,6 +389,9 @@ impl Company {
             economy_history: crate::game_state::EconomyHistory::default(),
             quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
             bankruptcy_months: 0,
+            bankruptcy_asked: 0,
+            bankruptcy_timeout: 0,
+            bankruptcy_value: 0,
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,
@@ -406,6 +429,9 @@ impl Company {
             economy_history: crate::game_state::EconomyHistory::default(),
             quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
             bankruptcy_months: 0,
+            bankruptcy_asked: 0,
+            bankruptcy_timeout: 0,
+            bankruptcy_value: 0,
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,

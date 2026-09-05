@@ -2028,6 +2028,9 @@ mod tests {
             rival.last_build_tile = 1_300;
             rival.inaugurated_year = 1967;
             rival.inaugurated_year_calendar = 2067;
+            rival.bankruptcy_asked = 0;
+            rival.bankruptcy_timeout = -17;
+            rival.bankruptcy_value = 87_654_321;
             rival.liveries[1] = crate::CompanyLivery {
                 in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY,
                 colour1: 7,
@@ -2065,6 +2068,9 @@ mod tests {
         assert_table_field_type(&plyr.body, 6, "last_build_coordinate");
         assert_table_field_type(&plyr.body, 5, "inaugurated_year");
         assert_table_field_type(&plyr.body, 5, "inaugurated_year_calendar");
+        assert_table_field_type(&plyr.body, 4, "bankrupt_asked");
+        assert_table_field_type(&plyr.body, 3, "bankrupt_timeout");
+        assert_table_field_type(&plyr.body, 7, "bankrupt_value");
         assert_table_field_type(&plyr.body, 0x1B, "liveries");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.companies.len(), 2);
@@ -2094,6 +2100,9 @@ mod tests {
         assert_eq!(sav_game.companies[1].last_build_tile, Some(1_300));
         assert_eq!(sav_game.companies[1].inaugurated_year, Some(1967));
         assert_eq!(sav_game.companies[1].inaugurated_year_calendar, Some(2067));
+        assert_eq!(sav_game.companies[1].bankruptcy_asked, Some(0));
+        assert_eq!(sav_game.companies[1].bankruptcy_timeout, Some(-17));
+        assert_eq!(sav_game.companies[1].bankruptcy_value, Some(87_654_321));
         assert_eq!(sav_game.companies[1].is_ai, Some(true));
         assert_eq!(sav_game.companies[1].engine_renew, Some(false));
         assert_eq!(sav_game.companies[1].engine_renew_months, Some(-3));
@@ -2127,6 +2136,9 @@ mod tests {
         assert_eq!(loaded_rival.last_build_tile, 1_300);
         assert_eq!(loaded_rival.inaugurated_year, 1967);
         assert_eq!(loaded_rival.inaugurated_year_calendar, 2067);
+        assert_eq!(loaded_rival.bankruptcy_asked, 0);
+        assert_eq!(loaded_rival.bankruptcy_timeout, -17);
+        assert_eq!(loaded_rival.bankruptcy_value, 87_654_321);
         assert!(loaded_rival.is_ai);
         assert!(!loaded_rival.engine_renew);
         assert_eq!(loaded_rival.engine_renew_months, -3);
@@ -2604,6 +2616,9 @@ mod tests {
         state.companies[0].last_build_tile = 1_300;
         state.companies[0].inaugurated_year = 1967;
         state.companies[0].inaugurated_year_calendar = 2067;
+        state.companies[0].bankruptcy_asked = 0;
+        state.companies[0].bankruptcy_timeout = -17;
+        state.companies[0].bankruptcy_value = 87_654_321;
         state.companies[0].reset_liveries();
         // Ejercita el valor distinto del centinela global de `PLYR.max_loan`.
         // El smoke OpenTTD opcional re-guarda este valor para acreditar tanto
@@ -2684,6 +2699,9 @@ mod tests {
         assert_eq!(sav_game.companies[0].last_build_tile, Some(1_300));
         assert_eq!(sav_game.companies[0].inaugurated_year, Some(1967));
         assert_eq!(sav_game.companies[0].inaugurated_year_calendar, Some(2067));
+        assert_eq!(sav_game.companies[0].bankruptcy_asked, Some(0));
+        assert_eq!(sav_game.companies[0].bankruptcy_timeout, Some(-17));
+        assert_eq!(sav_game.companies[0].bankruptcy_value, Some(87_654_321));
         assert_eq!(sav_game.companies[0].max_loan, Some(450_000));
         assert_eq!(sav_game.vehicles.len(), 2, "tren + bus");
         assert_eq!(sav_game.companies[0].liveries[14], custom_bus_livery);

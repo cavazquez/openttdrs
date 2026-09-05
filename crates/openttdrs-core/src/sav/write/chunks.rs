@@ -86,28 +86,18 @@ pub(super) fn raw_table_chunk(
 }
 
 /// Selecciona el chunk canónico o una variante fusionada con un chunk
-/// importado.
+/// importado, usando opcionalmente el snapshot semántico tomado al importar
+/// para saber qué campos cambiaron realmente.
 ///
 /// Los saves de `OpenTTD` suelen añadir columnas al final de una tabla sin
 /// cambiar los campos que conoce el runtime. Cuando un campo conocido conserva
 /// su schema y el tamaño codificado de cada registro, podemos copiar sus bytes
-/// dentro del registro original y dejar intactas esas columnas futuras. Si
-/// cambian filas, índices, schema o tamaño codificado, devolvemos el writer
-/// canónico: conservar un valor viejo en ese caso sería peor que perder una
-/// columna no interpretada.
-pub(super) fn table_chunk_with_passthrough(
-    raw: Option<&SavOpaqueChunk>,
-    canonical: Vec<u8>,
-) -> Result<Vec<u8>, SavError> {
-    table_chunk_with_passthrough_from_snapshot(raw, canonical, None)
-}
-
-/// Igual que [`table_chunk_with_passthrough`], pero usa el snapshot semántico
-/// tomado al importar para saber qué campos cambiaron realmente.
-///
-/// Esto permite actualizar un campo presente en un schema SAV antiguo sin
-/// añadir los campos nuevos que el runtime conoce hoy. Si cambia cualquiera de
-/// esos campos ausentes o incompatibles, se conserva el fallback canónico.
+/// dentro del registro original y dejar intactas esas columnas futuras. El
+/// snapshot permite además actualizar un campo presente en un schema SAV
+/// antiguo sin añadir campos nuevos que no cambiaron. Si cambian filas,
+/// índices, schema o tamaños incompatibles, devolvemos el writer canónico:
+/// conservar un valor viejo en ese caso sería peor que perder una columna no
+/// interpretada.
 pub(super) fn table_chunk_with_passthrough_from_snapshot(
     raw: Option<&SavOpaqueChunk>,
     canonical: Vec<u8>,
@@ -515,7 +505,8 @@ mod tests {
         let canonical =
             table_chunk(*b"TEST", &[(2, "known")], &[vec![9]]).expect("canonical table");
 
-        let merged = table_chunk_with_passthrough(Some(&raw_chunk), canonical).expect("merge");
+        let merged = table_chunk_with_passthrough_from_snapshot(Some(&raw_chunk), canonical, None)
+            .expect("merge");
         let chunks = crate::sav::chunks::parse_chunks(&merged).expect("parse merged");
         let body = &chunks[0].body;
         let (_, _, fields) = parse_table_layout(body).expect("merged header");
@@ -630,7 +621,8 @@ mod tests {
         )
         .expect("canonical table");
 
-        let merged = table_chunk_with_passthrough(Some(&raw_chunk), canonical).expect("merge");
+        let merged = table_chunk_with_passthrough_from_snapshot(Some(&raw_chunk), canonical, None)
+            .expect("merge");
         let chunks = crate::sav::chunks::parse_chunks(&merged).expect("parse merged");
         let rows =
             crate::sav::table::parse_table_chunk(&chunks[0].body, false).expect("merged row");
@@ -684,7 +676,8 @@ mod tests {
         let canonical = raw_table_chunk(*b"TEST", &canonical_header, &[canonical_record], CH_TABLE)
             .expect("canonical table");
 
-        let merged = table_chunk_with_passthrough(Some(&raw_chunk), canonical).expect("merge");
+        let merged = table_chunk_with_passthrough_from_snapshot(Some(&raw_chunk), canonical, None)
+            .expect("merge");
         let chunks = crate::sav::chunks::parse_chunks(&merged).expect("parse merged");
         let rows =
             crate::sav::table::parse_table_chunk(&chunks[0].body, false).expect("merged row");
@@ -725,7 +718,8 @@ mod tests {
         .expect("canonical table");
 
         let merged =
-            table_chunk_with_passthrough(Some(&raw_chunk), canonical.clone()).expect("merge");
+            table_chunk_with_passthrough_from_snapshot(Some(&raw_chunk), canonical.clone(), None)
+                .expect("merge");
         assert_eq!(merged, canonical);
     }
 }

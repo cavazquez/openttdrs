@@ -306,9 +306,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else if !stnn.is_empty() {
         let canonical = entities::stnn_chunk(&stnn)?;
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.stnn_chunk.as_ref()),
             canonical,
+            raw_tables.map(|tables| tables.stnn_semantic_records.as_slice()),
         )?);
     }
 
@@ -347,9 +348,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else if !indy.is_empty() {
         let canonical = entities::indy_chunk(state, w)?;
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.indy_chunk.as_ref()),
             canonical,
+            raw_tables.map(|tables| tables.indy_semantic_records.as_slice()),
         )?);
     }
 
@@ -365,9 +367,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else if !ordl.is_empty() {
         let canonical = vehicles::ordl_chunk(&ordl)?;
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.ordl_chunk.as_ref()),
             canonical,
+            raw_tables.map(|tables| tables.ordl_semantic_records.as_slice()),
         )?);
     }
     let raw_vehs = raw_tables.and_then(|passthrough| {
@@ -381,9 +384,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else if !vehs.is_empty() {
         let canonical = vehicles::vehs_chunk(&vehs)?;
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.vehs_chunk.as_ref()),
             canonical,
+            raw_tables.map(|tables| tables.vehs_semantic_records.as_slice()),
         )?);
     }
     let capa_records = entities::capa_records(&cargo_export);
@@ -397,9 +401,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if let Some(raw) = raw_capa {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else if let Some(capa) = entities::capa_chunk(&cargo_export)? {
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.capa_chunk.as_ref()),
             capa,
+            raw_tables.map(|tables| tables.capa_semantic_records.as_slice()),
         )?);
     }
 
@@ -436,9 +441,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else {
         let canonical = meta::pats_chunk(state)?;
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.pats_chunk.as_ref()),
             canonical,
+            raw_tables.map(|tables| tables.pats_semantic_records.as_slice()),
         )?);
     }
 
@@ -454,9 +460,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else {
         let canonical = meta::ecmy_chunk(state)?;
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.ecmy_chunk.as_ref()),
             canonical,
+            raw_tables.map(|tables| tables.ecmy_semantic_records.as_slice()),
         )?);
     }
 
@@ -471,9 +478,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if let Some(raw) = raw_capy_payments {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else if let Some(capy) = meta::capy_chunk(state)? {
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.capy_chunk.as_ref()),
             capy,
+            raw_tables.map(|tables| tables.capy_semantic_records.as_slice()),
         )?);
     }
     let grps = fleet::group_records(&state.vehicle_groups)?;
@@ -487,9 +495,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if let Some(raw) = raw_grps {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else if let Some(groups) = fleet::groups_chunk(&state.vehicle_groups)? {
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.grps_chunk.as_ref()),
             groups,
+            raw_tables.map(|tables| tables.grps_semantic_records.as_slice()),
         )?);
     }
 
@@ -504,9 +513,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if let Some(raw) = raw_ernw {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else if let Some(renew) = fleet::autoreplace_chunk(&autoreplace_export)? {
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.ernw_chunk.as_ref()),
             renew,
+            raw_tables.map(|tables| tables.ernw_semantic_records.as_slice()),
         )?);
     }
     let ngrf = newgrf::newgrf_records(state)?;
@@ -520,9 +530,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if let Some(raw) = raw_ngrf {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else if let Some(ngrf) = newgrf::newgrf_chunk(state)? {
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.ngrf_chunk.as_ref()),
             ngrf,
+            raw_tables.map(|tables| tables.ngrf_semantic_records.as_slice()),
         )?);
     }
     if rebuild_objects && let Some(objs) = objects::objects_chunk(state, w, h)? {
@@ -572,9 +583,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
             ],
             &date_records,
         )?;
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.date_chunk.as_ref()),
             canonical,
+            raw_tables.map(|tables| tables.date_semantic_records.as_slice()),
         )?);
     }
     let plyr = meta::plyr_records(state, &autoreplace_export)?;

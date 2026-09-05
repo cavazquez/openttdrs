@@ -459,6 +459,13 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Industria" => "Industry",
         "Finanzas…" => "Finances…",
         "Reglas de autoreemplazo." => "Autoreplace rules.",
+        "Reglas" => "Rules",
+        "Desde" => "From",
+        "Hacia" => "To",
+        "Añadir" => "Add",
+        "Solo viejos" => "Only old",
+        "Borrar" => "Clear",
+        "Aplicar depósito" => "Apply depot",
         "Sin páginas de historia." => "No story pages.",
         "Sin historia" => "No story",
         "Este escenario no tiene páginas Story (GS demo desactivado)." => {
@@ -535,6 +542,7 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Autoreemplazo no permitido para este vehículo o motor." => {
             "Autoreplace is not allowed for this vehicle or engine."
         }
+        "Autoreemplazo" => "Autoreplace",
         "No hay regla de autoreemplazo para ese motor." => {
             "No autoreplace rule exists for that engine."
         }

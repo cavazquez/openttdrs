@@ -8,7 +8,9 @@ use openttdrs_core::{
     engine_by_id, engines_for_depot_kind,
 };
 
+use crate::i18n::{Locale, localized_text};
 use crate::render::RemapMapVisualsPending;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
@@ -98,7 +100,9 @@ pub(crate) fn setup_autoreplace_window(mut commands: Commands, asset_server: Res
     commands.entity(content).with_children(|panel| {
         panel.spawn((
             AutoreplaceHintText,
-            Text::new("Reglas de autoreemplazo."),
+            // El estado se vuelve a materializar al elegir motores; no lo
+            // registramos como etiqueta estática del catálogo genérico.
+            Text::new("—"),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
         ));
@@ -348,18 +352,29 @@ fn depot_engines(sim: &SimWorld, depot_pos: TileCoord) -> Vec<u16> {
     .collect()
 }
 
-fn rule_label(rule: &AutoReplaceRule) -> String {
+fn autoreplace_hint(locale: Locale, from: &str, to: &str) -> String {
+    match locale {
+        Locale::Es => format!("Desde: {from} · Hacia: {to}"),
+        Locale::En => format!("From: {from} · To: {to}"),
+    }
+}
+
+fn rule_label(locale: Locale, rule: &AutoReplaceRule) -> String {
     let from = engine_by_id(rule.from_engine_id)
         .map(|e| e.name.as_str())
         .unwrap_or("?");
     let to = engine_by_id(rule.to_engine_id)
         .map(|e| e.name.as_str())
         .unwrap_or("?");
-    let flags = match (rule.enabled, rule.only_when_old) {
-        (true, true) => "on · viejos",
-        (true, false) => "on",
-        (false, true) => "off · viejos",
-        (false, false) => "off",
+    let flags = match (locale, rule.enabled, rule.only_when_old) {
+        (Locale::Es, true, true) => "activo · viejos",
+        (Locale::Es, true, false) => "activo",
+        (Locale::Es, false, true) => "inactivo · viejos",
+        (Locale::Es, false, false) => "inactivo",
+        (Locale::En, true, true) => "on · old",
+        (Locale::En, true, false) => "on",
+        (Locale::En, false, true) => "off · old",
+        (Locale::En, false, false) => "off",
     };
     format!("{from} → {to} ({flags})")
 }
@@ -368,6 +383,7 @@ fn rule_label(rule: &AutoReplaceRule) -> String {
 pub(crate) fn sync_autoreplace_window(
     state: Res<AutoreplaceWindowState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<
         (&FloatingWindowTitleText, &mut Text),
@@ -451,12 +467,13 @@ pub(crate) fn sync_autoreplace_window(
         return;
     }
     *vis = Visibility::Visible;
+    let locale = prefs.locale();
 
     if let Some((_, mut title)) = title_q
         .iter_mut()
         .find(|(text, _)| text.0 == FloatingWindowId::Autoreplace)
     {
-        **title = "Autoreemplazo".to_string();
+        **title = localized_text(locale, "Autoreemplazo");
     }
     if let Ok(mut hint) = hint_q.single_mut() {
         let from = state
@@ -469,7 +486,7 @@ pub(crate) fn sync_autoreplace_window(
             .and_then(engine_by_id)
             .map(|e| e.name.as_str())
             .unwrap_or("—");
-        **hint = format!("Desde: {from} · Hacia: {to}");
+        **hint = autoreplace_hint(locale, from, to);
     }
 
     let rules = &sim.state.autoreplace_rules;
@@ -490,7 +507,7 @@ pub(crate) fn sync_autoreplace_window(
     }
     for (row_text, mut text) in &mut rule_texts {
         if let Some(rule) = rules.get(row_text.slot) {
-            **text = rule_label(rule);
+            **text = rule_label(locale, rule);
         } else {
             **text = String::new();
         }
@@ -732,6 +749,8 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::ENGINE_TRUCK_MPS;
 
+    use crate::i18n::localized_text;
+
     #[test]
     fn add_rule_stores_autoreplace() {
         let mut world = World::new();
@@ -761,5 +780,37 @@ mod tests {
                 .iter()
                 .any(|r| r.from_engine_id == ENGINE_TRUCK_MPS && r.to_engine_id == TO)
         );
+    }
+
+    #[test]
+    fn autoreplace_labels_follow_locale_without_translating_engine_names() {
+        const TO: u16 = 11;
+        let mut rule = AutoReplaceRule::new(ENGINE_TRUCK_MPS, TO);
+        rule.enabled = false;
+        rule.only_when_old = true;
+        let from = engine_by_id(ENGINE_TRUCK_MPS).unwrap().name.clone();
+        let to = engine_by_id(TO).unwrap().name.clone();
+
+        assert_eq!(
+            autoreplace_hint(Locale::En, &from, &to),
+            format!("From: {from} · To: {to}")
+        );
+        let english = rule_label(Locale::En, &rule);
+        assert!(english.contains(&from));
+        assert!(english.contains(&to));
+        assert!(english.ends_with("(off · old)"));
+        assert_eq!(
+            localized_text(Locale::En, "Aplicar depósito"),
+            "Apply depot"
+        );
+
+        assert_eq!(
+            autoreplace_hint(Locale::Es, &from, &to),
+            format!("Desde: {from} · Hacia: {to}")
+        );
+        let spanish = rule_label(Locale::Es, &rule);
+        assert!(spanish.contains(&from));
+        assert!(spanish.contains(&to));
+        assert!(spanish.ends_with("(inactivo · viejos)"));
     }
 }

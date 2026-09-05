@@ -1,0 +1,134 @@
+{
+  "date": "2026-09-05",
+  "contract": "RMAP-146 town cache while industries replace houses",
+  "reproducer": {
+    "size": 512,
+    "seed": 1330935380,
+    "climate": "tropic",
+    "generation_settings": {
+      "amount_of_rivers": 1,
+      "min_river_length": 2,
+      "river_route_random": 1,
+      "water_borders": 0
+    },
+    "phases": [
+      "landscape",
+      "clear",
+      "towns",
+      "industries",
+      "objects",
+      "trees"
+    ]
+  },
+  "reference": {
+    "openttd_release_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "instrumented_exporter_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+    "binary_sha256": "82b925079ad2e3896d059f88095692adde7c5985e4c6706914c9d918195441be",
+    "exporter_sha256": "995eca2a5b49b55bb0cddbb07c08ee40b2b8bfb29afc6207ab27db7109a369ae"
+  },
+  "before_fix": {
+    "candidate_source_commit": "213fc3b84fe03da5f912451e0f773fd749dd6096",
+    "candidate_binary_sha256": "227d544cb70d5bf20ad06d49e0a8a99d16c13ad4fa8206d2cfdfa75e67960bad",
+    "first_divergent_stage": "industries",
+    "tile_difference_count": 0,
+    "changed_block_count": 0,
+    "rng_exact": true,
+    "town_difference_count": 45,
+    "reference_totals": {
+      "towns": 98,
+      "population": 36924,
+      "houses": 2350
+    },
+    "candidate_totals": {
+      "towns": 98,
+      "population": 38154,
+      "houses": 2424
+    },
+    "first_town_difference": {
+      "id": 1,
+      "position": [214, 171],
+      "reference": {
+        "population": 552,
+        "houses": 29
+      },
+      "candidate": {
+        "population": 559,
+        "houses": 30
+      }
+    }
+  },
+  "fix": {
+    "rule": "All vanilla industry paths that replace a house use the town-owned ClearTownHouse equivalent, including OnlyInTown and OnlyNearTown.",
+    "regression": "only_in_town_industry_clears_a_multitile_house_and_updates_cache_once"
+  },
+  "after_fix": {
+    "candidate_source_commit": "213fc3b84fe03da5f912451e0f773fd749dd6096",
+    "candidate_source_tracked_changes": [
+      "M crates/openttdrs-core/src/command/industry/mod.rs"
+    ],
+    "candidate_binary_sha256": "452a3bd1d2635e50ec5fde6eb063037270328b5488b23ba391055c2748430824",
+    "all_exact": true,
+    "first_divergent_stage": null,
+    "block_size": 4,
+    "block_grid": {
+      "width": 128,
+      "height": 128,
+      "count": 16384
+    },
+    "phase_results": [
+      {
+        "phase": "landscape",
+        "tile_difference_count": 0,
+        "changed_block_count": 0,
+        "random_state": [4163415730, 2298960756],
+        "town_count": 0
+      },
+      {
+        "phase": "clear",
+        "tile_difference_count": 0,
+        "changed_block_count": 0,
+        "random_state": [2203928443, 2112881359],
+        "town_count": 0
+      },
+      {
+        "phase": "towns",
+        "tile_difference_count": 0,
+        "changed_block_count": 0,
+        "random_state": [3697426249, 3192394782],
+        "town_count": 98
+      },
+      {
+        "phase": "industries",
+        "tile_difference_count": 0,
+        "changed_block_count": 0,
+        "random_state": [1234748255, 1358958707],
+        "town_count": 98
+      },
+      {
+        "phase": "objects",
+        "tile_difference_count": 0,
+        "changed_block_count": 0,
+        "random_state": [3899294086, 1593191862],
+        "town_count": 98
+      },
+      {
+        "phase": "trees",
+        "tile_difference_count": 0,
+        "changed_block_count": 0,
+        "random_state": [3325069790, 2747377369],
+        "town_count": 98
+      }
+    ],
+    "town_summary_at_trees": {
+      "count": 98,
+      "total_population": 36924,
+      "total_houses": 2350,
+      "ordered_sequence_sha256": "fcf2976f79d7bba9e88d736181df0e30ab6d05951d9be6d04ed987adb4fa6c2b"
+    }
+  },
+  "not_observed": [
+    "industry pool identities and fields",
+    "object pool identities and fields",
+    "startup and subsequent simulation ticks"
+  ]
+}

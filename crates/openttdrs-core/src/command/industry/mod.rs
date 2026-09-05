@@ -166,6 +166,14 @@ const fn industry_allows_house_tiles(spec: IndustrySpec) -> bool {
     matches!(spec, IndustrySpec::ToyShop)
 }
 
+/// El clear nativo usa `OWNER_TOWN` para los dos casos que pueden sustituir
+/// una casa: las industrias que deben construirse dentro del pueblo y la
+/// rama `OnlyNearTown` cuando encuentra una casa. Ambos deben pasar por
+/// `ClearTownHouse`, no sólo dejar que `MakeIndustry` reemplace los bytes.
+const fn industry_replaces_house_tiles(spec: IndustrySpec) -> bool {
+    industry_requires_house_tiles(spec) || industry_allows_house_tiles(spec)
+}
+
 /// Errores no negociables de `CMD_LANDSCAPE_CLEAR` con `DoCommandFlag::Auto`
 /// dentro de `CheckIfIndustryTilesAreFree`.
 ///
@@ -312,13 +320,14 @@ fn place_industry_spec_template_sandbox(
     let random_colour = u8::try_from(industry_id.wrapping_mul(5) % 16).unwrap_or(0);
     let mut cleared_house_tiles = Vec::new();
     for (tile, m5) in template {
-        // `OnlyNearTown` allows Toy Shops to replace houses. The native clear
-        // command receives the sub-tile, resolves the northern/base tile of a
-        // multi-tile house, and clears every part before `MakeIndustry`
-        // writes the selected layout. Without this collateral clear a house
-        // part outside the industry footprint survives and shifts the raw
-        // MAPT/MAP8 bytes (for example Toyland seed 1330935380 at 426,140).
-        if spec == IndustrySpec::ToyShop {
+        // `OnlyInTown`/`OnlyNearTown` use the native town-owned clear path.
+        // It receives the sub-tile, resolves the northern/base tile of a
+        // multi-tile house, decrements the cache once per building and clears
+        // every part before `MakeIndustry` writes the selected layout.
+        // Without this collateral clear a house part outside the industry
+        // footprint survives and shifts raw MAPT/MAP8; without the cache
+        // update the bytes may match while town population does not.
+        if industry_replaces_house_tiles(spec) {
             clear_town_house_for_industry(state, *tile, &mut cleared_house_tiles);
         }
         let low_mapt = state
@@ -411,7 +420,7 @@ fn place_industry_spec_template_sandbox(
 }
 
 /// Despeja la casa municipal completa que `CMD_LANDSCAPE_CLEAR` encuentra al
-/// crear una Toy Shop sobre una subtesela de `OnlyNearTown`.
+/// crear una industria `OnlyInTown` o una `OnlyNearTown` sobre una casa.
 ///
 /// `GetHouseNorthPart` no guarda un puntero al origen en el mapa: deduce la
 /// tesela norte mirando los tres IDs consecutivos anteriores y sus flags de
@@ -1150,6 +1159,57 @@ mod tests {
         assert_eq!(state.map.get(TileCoord::new(5, 4)).unwrap().m8, 0);
         assert_eq!(state.map.get(origin).unwrap().m6 & 0x04, 0);
         assert_eq!(state.map.get(TileCoord::new(5, 4)).unwrap().m6 & 0x04, 0);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn only_in_town_industry_clears_a_multitile_house_and_updates_cache_once() {
+        let origin = TileCoord::new(6, 6);
+        let mut state = GameState::new(16, 16);
+        state.climate = crate::Climate::SubArctic;
+        state.towns.push(crate::town::Town {
+            id: 0,
+            pos: origin,
+            population: 1_000,
+            num_houses: 1,
+            ..Default::default()
+        });
+        state
+            .map
+            .make_town_house_footprint(
+                origin,
+                crate::map::TownHouseSpec {
+                    // House 74 is a vanilla completed 2x1 building with 250
+                    // inhabitants; the Bank layout covers both sub-tiles.
+                    house_id: 74,
+                    town_id: 0,
+                    random_bits: 7,
+                    construction_counter: 0,
+                    construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                    is_protected: false,
+                    processing_time: 0,
+                },
+                crate::map::TownHouseFootprint::TwoByOne,
+            )
+            .unwrap();
+
+        apply_command(
+            &mut state,
+            &Command::PlaceIndustrySpecLayout(origin, IndustrySpec::BankArcticTropic, 0),
+        )
+        .unwrap();
+
+        assert_eq!(state.map.get(origin).unwrap().kind, TileKind::Industry);
+        assert_eq!(
+            state
+                .map
+                .get(TileCoord::new(origin.x + 1, origin.y))
+                .unwrap()
+                .kind,
+            TileKind::Industry
+        );
+        assert_eq!(state.towns[0].num_houses, 0);
+        assert_eq!(state.towns[0].population, 750);
     }
 
     #[test]

@@ -40,6 +40,11 @@ RMAP-145 / #360 agrega la cohorte Toyland 512² de la seed `1330935381`: las
 seis fronteras son exactas por bytes raw, bloques 4×4, RNG y demografía de
 pueblos. El alcance y los pools que aún no observa quedan únicamente en
 `random-map-issues.md` y `evidence/rmap-145.json`; #338 sigue abierto.
+RMAP-146 / #361 corrige una divergencia de cache que no alteraba el raster:
+al sustituir una casa, las industrias `OnlyInTown` ahora usan el clear completo
+de pueblo. La cohorte Tropic 512² con settings de río explícitos vuelve a ser
+exacta; la evidencia y sus límites están en `random-map-issues.md` y
+`evidence/rmap-146.json`.
 
 Estado CI observado de `712ec4ba`: Parity docs, Platform check y Fuzz replay
 pasan; CI supera formato, Clippy, rustdoc y auditorías, pero falla en

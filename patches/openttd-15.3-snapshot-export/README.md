@@ -18,6 +18,12 @@ desde el pool vivo de objetos, en vez de confundirlo con bytes MAP*. Contrato:
 
 ## Integrar en el clon local
 
+Las cabeceras de `OPENTTDRS_GENERATION_STAGE_DIR` incluyen las dos palabras
+del RNG global y el conteo/secuencia ID/posición de pueblos (RMAP-143).
+El comparador por fases exige esos campos; si se compiló una versión anterior
+del exportador, volver a integrar el parche y recompilar. No basta con
+actualizar solamente el ejecutable Rust.
+
 ```bash
 ./scripts/fetch-openttd-reference.sh
 ./patches/openttd-15.3-snapshot-export/integrate.sh

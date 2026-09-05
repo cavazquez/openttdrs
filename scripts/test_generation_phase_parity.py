@@ -4,12 +4,65 @@
 from __future__ import annotations
 
 import tempfile
+import copy
 import sys
 from pathlib import Path
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generation_phase_parity as phase  # noqa: E402
+
+
+def test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles() -> None:
+    reference = {"random_state_0": 10, "random_state_1": 20, "town_count": 2,
+                 "town_positions": [{"id": 0, "x": 2, "y": 3}, {"id": 1, "x": 4, "y": 5}]}
+    tiles = {"exact_match": True, "tile_difference_count": 0}
+    assert phase.include_generation_state(tiles, reference, reference)["exact_match"]
+    for key in ("random_state_0", "random_state_1", "id", "x", "y", "order", "count"):
+        candidate = copy.deepcopy(reference)
+        if key.startswith("random"):
+            candidate[key] += 1
+        elif key == "order":
+            candidate["town_positions"].reverse()
+        elif key == "count":
+            candidate["town_positions"].pop()
+            candidate["town_count"] -= 1
+        else:
+            candidate["town_positions"][0][key] += 10
+        result = phase.include_generation_state(tiles, reference, candidate)
+        assert result["tiles_exact_match"] and not result["exact_match"], key
+        assert phase.first_divergent_stage({"towns": result}) == "towns"
+    assert not phase.include_generation_state({"exact_match": False}, reference, reference)["exact_match"]
+
+
+def test_state_gate_fails_closed_for_unobserved_or_malformed_state() -> None:
+    valid = {"random_state_0": 0, "random_state_1": 1, "town_count": 0, "town_positions": []}
+    invalid = [{}, {**valid, "random_state_0": None}, {**valid, "random_state_1": True},
+               {**valid, "town_count": 1}, {**valid, "town_positions": None},
+               {**valid, "town_count": 1, "town_positions": [{"id": 0, "x": -1, "y": 0}]},
+               {**valid, "town_count": 2, "town_positions": [{"id": 0, "x": 1, "y": 0}] * 2}]
+    for bad in invalid:
+        for reference, candidate in ((bad, valid), (valid, bad)):
+            try:
+                phase.compare_generation_state(reference, candidate)
+            except phase.GenerationPhaseError:
+                continue
+            raise AssertionError(f"el estado inválido debería fallar: {bad}")
+
+
+def test_versioned_oracle_exports_generation_state() -> None:
+    source = (phase.ROOT / "patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp").read_text()
+    stage = source.split("void OpenttdrsMaybeCaptureGenerationStage(const char *stage)", 1)[1]
+    stage = stage.split("void OpenttdrsTraceTreePlacement", 1)[0]
+    assert '#include "town.h"' in source
+    for statement in (
+        'metadata["random_state_0"] = _random.state[0];',
+        'metadata["random_state_1"] = _random.state[1];',
+        'metadata["town_count"] = Town::GetNumItems();',
+        'metadata["town_positions"] = town_positions;',
+        'Town::Iterate()', 'town->index.base()', 'TileX(town->xy)', 'TileY(town->xy)',
+    ):
+        assert statement in stage, statement
 
 
 def test_parse_phases_rejects_reordered_or_unknown_values() -> None:
@@ -77,6 +130,9 @@ def test_river_settings_reject_values_outside_openttd_ranges() -> None:
 
 
 if __name__ == "__main__":
+    test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles()
+    test_state_gate_fails_closed_for_unobserved_or_malformed_state()
+    test_versioned_oracle_exports_generation_state()
     test_parse_phases_rejects_reordered_or_unknown_values()
     test_first_divergent_stage_uses_pipeline_order()
     test_river_settings_are_written_for_non_default_oracle_runs()

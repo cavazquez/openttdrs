@@ -4,7 +4,8 @@
 OpenTTD escribe `world-raw` directamente tras las fronteras
 ``GenerateClearTile``, pueblos, industrias, objetos y árboles. El candidato
 ejecuta exactamente hasta cada una de esas fases; luego se comparan los diez
-bytes de todas las teselas y se agrupan diferencias en bloques 4×4. No es un
+bytes de todas las teselas, RNG y secuencia ID/posición de pueblos; las
+diferencias de teselas se agrupan en bloques 4×4. No es un
 oráculo raster: una divergencia en esta herramienta identifica la fase que la
 introdujo.
 """
@@ -65,6 +66,46 @@ def first_divergent_stage(comparisons: dict[str, dict[str, Any]]) -> str | None:
         if comparison is not None and not comparison["exact_match"]:
             return phase
     return None
+
+
+def compare_generation_state(reference: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    """No confundir tiles iguales con estado generador igual o no observado."""
+    fields = ("random_state_0", "random_state_1", "town_count", "town_positions")
+    for label, metadata in (("reference", reference), ("candidate", candidate)):
+        missing = [field for field in fields if field not in metadata]
+        if missing:
+            raise GenerationPhaseError(
+                f"{label}: falta estado de generación {missing}; reconstruir el exportador instrumentado"
+            )
+        for field in fields[:3]:
+            value = metadata[field]
+            if type(value) is not int or not 0 <= value <= 0xFFFFFFFF:
+                raise GenerationPhaseError(f"{label}: {field} inválido")
+        towns = metadata["town_positions"]
+        if not isinstance(towns, list) or len(towns) != metadata["town_count"]:
+            raise GenerationPhaseError(f"{label}: town_count no corresponde a town_positions")
+        ids = set()
+        for town in towns:
+            if not isinstance(town, dict) or any(
+                type(town.get(key)) is not int or not 0 <= town[key] <= 0xFFFFFFFF
+                for key in ("id", "x", "y")
+            ):
+                raise GenerationPhaseError(f"{label}: posición de pueblo inválida")
+            if town["id"] in ids:
+                raise GenerationPhaseError(f"{label}: ID de pueblo repetido")
+            ids.add(town["id"])
+    differing = [field for field in fields if reference[field] != candidate[field]]
+    return {"exact_match": not differing, "compared_fields": list(fields), "differing_fields": differing}
+
+
+def include_generation_state(tile_comparison: dict[str, Any], reference: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    state = compare_generation_state(reference, candidate)
+    return {
+        **tile_comparison,
+        "tiles_exact_match": tile_comparison["exact_match"],
+        "generation_state": state,
+        "exact_match": tile_comparison["exact_match"] and state["exact_match"],
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -272,7 +313,7 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = args.report.resolve() if args.report else out_dir / "report.json"
     report: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "contract": "generation-phase-parity",
         "reference": {"binary": str(reference), "commit": commit},
         "candidate": matrix.candidate_provenance(candidate, managed=args.candidate_bin is None),
@@ -333,6 +374,7 @@ def main() -> int:
             if (reference_metadata["width"], reference_metadata["height"]) != (args.size, args.size):
                 raise GenerationPhaseError(f"{phase}: OpenTTD no conserva {args.size}x{args.size}")
             comparison = matrix.compare_tiles(reference_tiles, candidate_tiles, args.size, args.size)
+            comparison = include_generation_state(comparison, reference_metadata, candidate_metadata)
             comparisons[phase] = {
                 "reference_raw": str(reference_raw),
                 "reference_metadata": reference_metadata,
@@ -344,7 +386,8 @@ def main() -> int:
             print(
                 f"phase {phase}: {'OK' if comparison['exact_match'] else 'DIVERGE'} "
                 f"tiles={comparison['tile_difference_count']} "
-                f"blocks4={comparison['changed_block_count']}/{comparison['block_grid']['count']}"
+                f"blocks4={comparison['changed_block_count']}/{comparison['block_grid']['count']} "
+                f"state={','.join(comparison['generation_state']['differing_fields']) or 'OK'}"
             )
         first = first_divergent_stage(comparisons)
         report.update(

@@ -170,9 +170,16 @@ python3 scripts/generation_phase_parity.py --size 64 --seed 1330935378 \
   --out-dir /tmp/openttdrs-generation-phase
 ```
 
-Compara `clear`, pueblos, industrias, objetos y árboles por bytes y bloques
-4×4; `landscape.reference.raw.jsonl` queda como la frontera C++ previa a
-`GenerateClearTile`. El candidato se detiene con
+Compara `landscape`, `clear`, pueblos, industrias, objetos y árboles por bytes
+y bloques 4×4. Desde RMAP-143 (2026-09-04), el reporte de fases v2 exige
+además `random_state_0`, `random_state_1`, `town_count` y `town_positions`
+(secuencia de objetos `{id,x,y}` en orden de pool). Ambos exportadores
+generan estos campos en la cabecera; son opcionales en `world-raw` para no
+cambiar el contrato de carga SAV, pero obligatorios para el gate de generación.
+Si faltan, el comparador falla y pide reconstruir el exportador. La igualdad
+de teselas se conserva en `tiles_exact_match`; `exact_match` requiere también
+igualdad del estado observado. Esto no compara población, casas ni el estado
+completo de los pools de entidades. El candidato se detiene con
 `world_raw_dumper --generate-until FASE`, así el informe declara la primera
 fase divergente sin intentar cargar un `.sav` que aún no tiene pueblos.
 

@@ -1,0 +1,763 @@
+{
+  "date": "2026-09-04",
+  "contract": "RMAP-143 generation state gate",
+  "reference_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "cases": [
+    {
+      "size": 64,
+      "seed": 1330935378,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "7ae4d229e065e9f90693fa0d245dbcd17656fe06a0b75a155041f207b7ff9136",
+        "build": "cargo-build-locked",
+        "source_commit": "712ec4baad00cb5128c903cf6016d48ebfe26fc5",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/bin/world_raw_dumper.rs",
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            2994197790,
+            149651104
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            1168016413,
+            2955223551
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            11204508,
+            1784072412
+          ],
+          "town_count": 3
+        },
+        "industries": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            4143723930,
+            1958000374
+          ],
+          "town_count": 3
+        },
+        "objects": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            125930589,
+            1207908532
+          ],
+          "town_count": 3
+        },
+        "trees": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            3034308606,
+            3846580214
+          ],
+          "town_count": 3
+        }
+      }
+    },
+    {
+      "size": 128,
+      "seed": 1330935378,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "7ae4d229e065e9f90693fa0d245dbcd17656fe06a0b75a155041f207b7ff9136",
+        "build": "cargo-build-locked",
+        "source_commit": "712ec4baad00cb5128c903cf6016d48ebfe26fc5",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/bin/world_raw_dumper.rs",
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            1925256455,
+            4086419622
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            450853093,
+            2874156269
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            2842429897,
+            3751322834
+          ],
+          "town_count": 8
+        },
+        "industries": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            150853085,
+            1944512621
+          ],
+          "town_count": 8
+        },
+        "objects": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            1644320292,
+            2756781257
+          ],
+          "town_count": 8
+        },
+        "trees": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            2382491280,
+            2523639316
+          ],
+          "town_count": 8
+        }
+      }
+    },
+    {
+      "size": 256,
+      "seed": 1330935378,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "7ae4d229e065e9f90693fa0d245dbcd17656fe06a0b75a155041f207b7ff9136",
+        "build": "cargo-build-locked",
+        "source_commit": "712ec4baad00cb5128c903cf6016d48ebfe26fc5",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/bin/world_raw_dumper.rs",
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            3042738850,
+            548013437
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            358007681,
+            4244363834
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            3103527164,
+            3544881434
+          ],
+          "town_count": 27
+        },
+        "industries": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            4165007911,
+            1130690727
+          ],
+          "town_count": 27
+        },
+        "objects": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            1032664682,
+            2794363973
+          ],
+          "town_count": 27
+        },
+        "trees": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            3571548063,
+            2801507999
+          ],
+          "town_count": 27
+        }
+      }
+    },
+    {
+      "size": 512,
+      "seed": 1330935378,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "7ae4d229e065e9f90693fa0d245dbcd17656fe06a0b75a155041f207b7ff9136",
+        "build": "cargo-build-locked",
+        "source_commit": "712ec4baad00cb5128c903cf6016d48ebfe26fc5",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/bin/world_raw_dumper.rs",
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            1625730734,
+            2670277509
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            2136014406,
+            4131917108
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            3279532020,
+            2573110008
+          ],
+          "town_count": 96
+        }
+      }
+    },
+    {
+      "size": 512,
+      "seed": 1330935379,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "7ae4d229e065e9f90693fa0d245dbcd17656fe06a0b75a155041f207b7ff9136",
+        "build": "cargo-build-locked",
+        "source_commit": "712ec4baad00cb5128c903cf6016d48ebfe26fc5",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/bin/world_raw_dumper.rs",
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M docs/parity/WORLD_RAW_SCHEMA.md",
+          " M docs/parity/random-map-issues.md",
+          " M patches/openttd-15.3-snapshot-export/README.md",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            43620271,
+            2466469031
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            873401591,
+            1332021821
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            1253468098,
+            2465397113
+          ],
+          "town_count": 95
+        }
+      }
+    },
+    {
+      "size": 512,
+      "seed": 1330935380,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "7ae4d229e065e9f90693fa0d245dbcd17656fe06a0b75a155041f207b7ff9136",
+        "build": "cargo-build-locked",
+        "source_commit": "712ec4baad00cb5128c903cf6016d48ebfe26fc5",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/bin/world_raw_dumper.rs",
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M docs/parity/WORLD_RAW_SCHEMA.md",
+          " M docs/parity/random-map-issues.md",
+          " M patches/openttd-15.3-snapshot-export/README.md",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            1425264289,
+            149051139
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            2764760287,
+            2169614636
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            871809811,
+            2911715824
+          ],
+          "town_count": 90
+        }
+      }
+    },
+    {
+      "size": 512,
+      "seed": 1330935381,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "7ae4d229e065e9f90693fa0d245dbcd17656fe06a0b75a155041f207b7ff9136",
+        "build": "cargo-build-locked",
+        "source_commit": "712ec4baad00cb5128c903cf6016d48ebfe26fc5",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/bin/world_raw_dumper.rs",
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M docs/parity/WORLD_RAW_SCHEMA.md",
+          " M docs/parity/random-map-issues.md",
+          " M patches/openttd-15.3-snapshot-export/README.md",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            4132929813,
+            1426827899
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            2657396054,
+            1762131921
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": []
+          },
+          "rng": [
+            3774246427,
+            4190850924
+          ],
+          "town_count": 85
+        }
+      }
+    }
+  ]
+}

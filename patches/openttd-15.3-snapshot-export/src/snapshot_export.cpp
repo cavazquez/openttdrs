@@ -23,6 +23,7 @@
 #include "tile_map.h"
 #include "tile_type.h"
 #include "timer/timer_game_tick.h"
+#include "town.h"
 #include "train.h"
 #include "vehicle_base.h"
 #include "vehicle_func.h"
@@ -738,6 +739,14 @@ void OpenttdrsMaybeCaptureGenerationStage(const char *stage)
 	metadata["tile_count"] = static_cast<uint64_t>(width) * height;
 	metadata["emitted_tile_count"] = WorldRawTileCount(bounds);
 	metadata["region"] = nullptr;
+	metadata["random_state_0"] = _random.state[0];
+	metadata["random_state_1"] = _random.state[1];
+	metadata["town_count"] = Town::GetNumItems();
+	nlohmann::json town_positions = nlohmann::json::array();
+	for (const Town *town : Town::Iterate()) {
+		town_positions.push_back({{"id", town->index.base()}, {"x", TileX(town->xy)}, {"y", TileY(town->xy)}});
+	}
+	metadata["town_positions"] = town_positions;
 	out << metadata.dump() << '\n';
 	for (uint y = 0; y < height; y++) {
 		for (uint x = 0; x < width; x++) {

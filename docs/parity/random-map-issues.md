@@ -168,9 +168,30 @@ externo y metadata de árbol modificado. [Evidencia versionada](evidence/rmap-14
 `landscape,clear,towns` (0 teselas/0 bloques 4×4). La matriz de carga y
 generación 64²/seed `1330928978` también da 0/0 en ambos contratos. El binario
 auditado tiene SHA-256 `2c042dccd156f1e312f01200984d485356c477463411862dd3cdfccbb1f69ca0`.
-Este cierre no implica validar RNG ni pools de entidades: el comparador
-todavía decide `exact_match` por bytes de teselas. #336/#338 conservan esos
-criterios adicionales pendientes.
+Este cierre no implica validar RNG ni pools de entidades: en esa corrida
+`exact_match` sólo exigía bytes de teselas. RMAP-143 amplía el gate a RNG y
+secuencia ID/posición de pueblos, sin validar todavía los pools completos.
+
+### RMAP-143 — Gate de estado RNG y secuencia de pueblos
+
+Cerrado como sub-issue [#346](https://github.com/cavazquez/openttdrs/issues/346)
+(2026-09-04). El candidato exporta ambas palabras RNG y la secuencia de
+pueblos con ID/posición desde el `GameState` real. La instrumentación C++
+equivalente queda en el parche versionado. El gate de fases v2 exige esos
+campos y no admite metadatos ausentes como igualdad. Regresiones mutan cada
+palabra, ID, coordenada, orden y cantidad manteniendo las teselas idénticas;
+también rechazan datos incompletos, tipos inválidos e IDs duplicados.
+
+[Evidencia versionada](evidence/rmap-143.json): 64²/128²/256² con seed
+`1330935378` pasan las seis fases; 512² con seeds `1330935378`–`1330935381`
+pasa `landscape,clear,towns`. Las **30 fronteras** coinciden en teselas,
+bloques 4×4, RNG y secuencia de pueblos. Pasan 2047 tests unitarios core,
+sus integraciones, 1071 tests client (2 ignorados), Clippy estricto core/client,
+formato, pruebas Python focalizadas y gate documental. El exportador C++
+versionado pasa `-fsyntax-only` con las opciones del oracle 15.3.
+
+El alcance no comprende población/casas, industrias, estado íntegro de
+entidades ni startup. #336/#338 siguen abiertos por esos criterios.
 
 El avance de código de RMAP-004 deja un contrato reproducible para aislar
 terreno: `OPENTTDRS_GENERATE_POPULATION=0` omite pueblos/industrias,

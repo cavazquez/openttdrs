@@ -25,6 +25,21 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
+Última etapa: RMAP-143 / #346 amplía el gate por fases a RNG y secuencia
+ID/posición de pueblos, además de bytes de teselas; las 30 fronteras de la
+cohorte 64²→512² pasan. Evidencia y alcance en
+[random-map-issues.md](random-map-issues.md#rmap-143--gate-de-estado-rng-y-secuencia-de-pueblos).
+#336 todavía requiere comparar población/casas. RMAP-142 / `712ec4ba`
+evita candidatos obsoletos y conserva hash/procedencia de los binarios.
+
+Estado CI observado de `712ec4ba`: Parity docs, Platform check y Fuzz replay
+pasan; CI supera formato, Clippy, rustdoc y auditorías, pero falla en
+`world_assets_load_hits_all_paths`: el recoloreado de casas depende de PNGs
+sueltos ignorados por Git. La suite local pasa porque esos assets existen.
+El manifiesto Python completo local ya pasó después de `19a07913`. #333
+permanece abierto; la siguiente reparación debe cubrir un checkout limpio,
+sin borrar ni debilitar la aserción de paletas.
+
 Etapa #333 — reparación de gates (2026-09-04): se reprodujeron los fallos de
 CI de `b47163d1`. Rustdoc tenía dos enlaces rotos (`IndustryRandomTrigger` y
 `[LandscapeType][slot]`); las referencias ya están corregidas y el comando
@@ -42,7 +57,7 @@ Seguimiento #333: el manifiesto Python completo detectó una expectativa vieja
 `actions/cache@v5` en el test de release, mientras Dependabot ya actualizó el
 workflow a v6. El test comprueba ahora el uso de `actions/cache` conservando
 los gates de versión OpenTTD, checksum, matriz estricta y artefactos. La
-regresión focalizada de release pasa; el resto del manifiesto sigue en curso.
+regresión focalizada de release y el manifiesto completo pasan localmente.
 
 Base funcional local y publicada: **`25d026a7`** (`render: project vehicle effects in isometric space`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)

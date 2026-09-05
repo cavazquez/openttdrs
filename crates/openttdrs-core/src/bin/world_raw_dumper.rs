@@ -7,7 +7,8 @@ use std::process::ExitCode;
 
 use openttdrs_core::sav;
 use openttdrs_core::world_raw::{
-    WorldRawContext, WorldRawMetadata, WorldRawRegion, sha256_hex, write_world_raw_jsonl,
+    WorldRawContext, WorldRawGeneration, WorldRawMetadata, WorldRawRegion, sha256_hex,
+    write_world_raw_jsonl,
 };
 use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, TreePlacement, WorldGenConfig,
@@ -499,10 +500,14 @@ fn dump_map(
         region: args.region,
     };
     let metadata = WorldRawMetadata::for_map(map, &context);
+    dump_with_metadata(map, args, &metadata)
+}
+
+fn dump_with_metadata(map: &Map, args: &Args, metadata: &WorldRawMetadata) -> Result<u64, String> {
     let file = File::create(&args.out)
         .map_err(|error| format!("no se pudo crear {}: {error}", args.out.display()))?;
     let mut writer = BufWriter::new(file);
-    let summary = write_world_raw_jsonl(&mut writer, &metadata, map)
+    let summary = write_world_raw_jsonl(&mut writer, metadata, map)
         .map_err(|error| format!("no se pudo escribir {}: {error}", args.out.display()))?;
     writer
         .flush()
@@ -656,22 +661,28 @@ fn run(args: &Args) -> Result<(), String> {
             }
         }
         state.random = generation_rng;
+        let generation = WorldRawGeneration::from_state(&state);
         map = state.map;
         let source = format!(
             "generated:{width}x{height}:seed={seed}:climate={}:until={}",
             climate_code(climate),
             args.generate_until.as_str(),
         );
-        let emitted = dump_map(
-            &map,
-            args,
-            source.clone(),
-            sha256_hex(source.as_bytes()),
-            0,
-            (matches!(args.generate_until, GenerateUntil::Startup) && startup_ticks != 0)
+        let context = WorldRawContext {
+            producer: "openttdrs".to_string(),
+            stage: args.stage.as_str().to_string(),
+            source_path: source.clone(),
+            save_sha256: sha256_hex(source.as_bytes()),
+            save_version: Some(0),
+            tick: (matches!(args.generate_until, GenerateUntil::Startup) && startup_ticks != 0)
                 .then_some(u64::from(startup_ticks) + 1),
-            climate_code(climate),
-        )?;
+            climate: Some(climate_code(climate)),
+            openttd_commit: args.openttd_commit.clone(),
+            region: args.region,
+        };
+        let mut metadata = WorldRawMetadata::for_map(&map, &context);
+        metadata.generation = Some(generation);
+        let emitted = dump_with_metadata(&map, args, &metadata)?;
         println!(
             "world-raw {}: {} teselas ({source}) → {}",
             args.stage.as_str(),

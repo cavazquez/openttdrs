@@ -69,6 +69,45 @@ pub struct WorldRawMetadata {
     pub emitted_tile_count: u64,
     /// Filtro solicitado; `null` significa el mapa completo.
     pub region: Option<WorldRawRegion>,
+    /// Sólo generación: estado que no puede deducirse de las teselas.
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub generation: Option<WorldRawGeneration>,
+}
+
+/// Frontera del RNG global y secuencia de pueblos (no su estado completo).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WorldRawGeneration {
+    pub random_state_0: u32,
+    pub random_state_1: u32,
+    pub town_count: usize,
+    pub town_positions: Vec<WorldRawTownPosition>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WorldRawTownPosition {
+    pub id: u32,
+    pub x: i32,
+    pub y: i32,
+}
+
+impl WorldRawGeneration {
+    #[must_use]
+    pub fn from_state(state: &crate::GameState) -> Self {
+        Self {
+            random_state_0: state.random.state[0],
+            random_state_1: state.random.state[1],
+            town_count: state.towns.len(),
+            town_positions: state
+                .towns
+                .iter()
+                .map(|town| WorldRawTownPosition {
+                    id: town.id,
+                    x: town.pos.x,
+                    y: town.pos.y,
+                })
+                .collect(),
+        }
+    }
 }
 
 /// Contexto de un dump `world-raw` que no se obtiene del mapa en sí.
@@ -107,6 +146,7 @@ impl WorldRawMetadata {
             tile_count: u64::from(width) * u64::from(height),
             emitted_tile_count: emitted_tile_count(width, height, context.region),
             region: context.region,
+            generation: None,
         }
     }
 }
@@ -285,6 +325,39 @@ mod tests {
         WorldRawContext, WorldRawMetadata, WorldRawRegion, sha256_hex, write_world_raw_jsonl,
     };
     use crate::map::{Map, TileCoord};
+
+    #[test]
+    fn generation_metadata_preserves_rng_and_town_sequence_without_affecting_sav() {
+        let mut state = crate::GameState::from_map(Map::new_flat(64, 64, 0));
+        state.random.state = [u32::MAX, 123];
+        state.towns = vec![
+            crate::Town {
+                id: 7,
+                pos: TileCoord::new(23, 11),
+                ..Default::default()
+            },
+            crate::Town {
+                id: 2,
+                pos: TileCoord::new(5, 31),
+                ..Default::default()
+            },
+        ];
+        let mut header = metadata(&state.map, None);
+        let sav = serde_json::to_value(&header).expect("sav metadata");
+        assert!(sav.get("random_state_0").is_none());
+        assert!(sav.get("town_positions").is_none());
+        header.generation = Some(super::WorldRawGeneration::from_state(&state));
+        let generated = serde_json::to_value(&header).expect("generation metadata");
+        assert_eq!(generated["random_state_0"], u32::MAX);
+        assert_eq!(generated["random_state_1"], 123);
+        assert_eq!(generated["town_count"], 2);
+        assert_eq!(
+            generated["town_positions"],
+            serde_json::json!([
+                {"id": 7, "x": 23, "y": 11}, {"id": 2, "x": 5, "y": 31}
+            ])
+        );
+    }
 
     fn metadata(map: &Map, region: Option<WorldRawRegion>) -> WorldRawMetadata {
         let context = WorldRawContext {

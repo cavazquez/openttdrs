@@ -82,6 +82,13 @@ pub const MAX_COMPANIES: u8 = 0x0F;
 /// por el comando deity `SetCompanyMaxLoan`.
 pub const COMPANY_MAX_LOAN_DEFAULT: i64 = i64::MIN;
 
+/// Centinela `INVALID_TILE` de `OpenTTD` para una sede de compañía inexistente.
+///
+/// `PLYR.location_of_HQ` conserva el `TileIndex` crudo porque el core aún no
+/// implementa la construcción ni el renderizado de sedes. Mantener el valor
+/// nativo evita confundir la ausencia de HQ con la tesela `(0, 0)`.
+pub const INVALID_COMPANY_HQ_TILE: u32 = u32::MAX;
+
 /// Escribe el owner de infraestructura en `m1` (vía / carretera / depósitos).
 #[must_use]
 pub fn tile_with_owner(mut tile: crate::map::Tile, owner: CompanyId) -> crate::map::Tile {
@@ -198,6 +205,20 @@ pub struct Company {
     /// exclusiva de motor (`PLYR.block_preview`).
     #[serde(default)]
     pub block_preview: u8,
+    /// `TileIndex` crudo de la tesela norte de la sede (`PLYR.location_of_HQ`).
+    ///
+    /// El centinela [`INVALID_COMPANY_HQ_TILE`] indica que no hay sede. Es
+    /// metadata de interoperabilidad: la semántica de construir, mover y
+    /// actualizar HQ sigue fuera del runtime propio.
+    #[serde(default = "default_company_hq_tile")]
+    pub hq_tile: u32,
+    /// `TileIndex` crudo de la última construcción (`PLYR.last_build_coordinate`).
+    ///
+    /// `OpenTTD` lo usa, entre otros casos, al nombrar una compañía recién
+    /// fundada. El core lo retiene durante SAV round-trips, pero todavía no lo
+    /// actualiza desde sus comandos de construcción.
+    #[serde(default)]
+    pub last_build_tile: u32,
     /// Año económico en que se fundó la compañía (`PLYR.inaugurated_year`).
     ///
     /// El valor cero es el estado nativo no inicializado y conserva la
@@ -282,6 +303,10 @@ const fn default_engine_renew_money() -> i64 {
     100_000
 }
 
+const fn default_company_hq_tile() -> u32 {
+    INVALID_COMPANY_HQ_TILE
+}
+
 impl Company {
     #[must_use]
     pub fn player(economy: CompanyEconomy, colour: u8) -> Self {
@@ -294,6 +319,8 @@ impl Company {
             colour,
             money_fraction: 0,
             block_preview: 0,
+            hq_tile: INVALID_COMPANY_HQ_TILE,
+            last_build_tile: 0,
             inaugurated_year: 0,
             inaugurated_year_calendar: 0,
             liveries: default_company_liveries(colour),
@@ -329,6 +356,8 @@ impl Company {
             colour,
             money_fraction: 0,
             block_preview: 0,
+            hq_tile: INVALID_COMPANY_HQ_TILE,
+            last_build_tile: 0,
             inaugurated_year: 0,
             inaugurated_year_calendar: 0,
             liveries: default_company_liveries(colour),
@@ -364,6 +393,8 @@ impl Company {
             colour,
             money_fraction: 0,
             block_preview: 0,
+            hq_tile: INVALID_COMPANY_HQ_TILE,
+            last_build_tile: 0,
             inaugurated_year: 0,
             inaugurated_year_calendar: 0,
             liveries: default_company_liveries(colour),

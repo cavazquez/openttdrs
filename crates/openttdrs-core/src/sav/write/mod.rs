@@ -2024,6 +2024,8 @@ mod tests {
             rival.manager_face_style = Some("modern".into());
             rival.money_fraction = 197;
             rival.block_preview = 19;
+            rival.hq_tile = 1_038;
+            rival.last_build_tile = 1_300;
             rival.inaugurated_year = 1967;
             rival.inaugurated_year_calendar = 2067;
             rival.liveries[1] = crate::CompanyLivery {
@@ -2059,11 +2061,19 @@ mod tests {
         assert_table_field_type(&plyr.body, 0x1A, "face_style");
         assert_table_field_type(&plyr.body, 2, "money_fraction");
         assert_table_field_type(&plyr.body, 2, "block_preview");
+        assert_table_field_type(&plyr.body, 6, "location_of_HQ");
+        assert_table_field_type(&plyr.body, 6, "last_build_coordinate");
         assert_table_field_type(&plyr.body, 5, "inaugurated_year");
         assert_table_field_type(&plyr.body, 5, "inaugurated_year_calendar");
         assert_table_field_type(&plyr.body, 0x1B, "liveries");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.companies.len(), 2);
+        assert_eq!(
+            sav_game.companies[0].hq_tile,
+            Some(crate::company::INVALID_COMPANY_HQ_TILE),
+            "el jugador nuevo conserva INVALID_TILE en lugar de la tesela 0"
+        );
+        assert_eq!(sav_game.companies[0].last_build_tile, Some(0));
         assert_eq!(sav_game.companies[1].money, 456_789);
         assert_eq!(sav_game.companies[1].loan, Some(123_000));
         assert_eq!(sav_game.companies[1].bankruptcy_months, Some(4));
@@ -2080,6 +2090,8 @@ mod tests {
         );
         assert_eq!(sav_game.companies[1].money_fraction, Some(197));
         assert_eq!(sav_game.companies[1].block_preview, Some(19));
+        assert_eq!(sav_game.companies[1].hq_tile, Some(1_038));
+        assert_eq!(sav_game.companies[1].last_build_tile, Some(1_300));
         assert_eq!(sav_game.companies[1].inaugurated_year, Some(1967));
         assert_eq!(sav_game.companies[1].inaugurated_year_calendar, Some(2067));
         assert_eq!(sav_game.companies[1].is_ai, Some(true));
@@ -2111,6 +2123,8 @@ mod tests {
         assert_eq!(loaded_rival.manager_face_style.as_deref(), Some("modern"));
         assert_eq!(loaded_rival.money_fraction, 197);
         assert_eq!(loaded_rival.block_preview, 19);
+        assert_eq!(loaded_rival.hq_tile, 1_038);
+        assert_eq!(loaded_rival.last_build_tile, 1_300);
         assert_eq!(loaded_rival.inaugurated_year, 1967);
         assert_eq!(loaded_rival.inaugurated_year_calendar, 2067);
         assert!(loaded_rival.is_ai);
@@ -2586,6 +2600,8 @@ mod tests {
         // que una salida aparentemente válida silencie este estado.
         state.companies[0].money_fraction = 197;
         state.companies[0].block_preview = 19;
+        state.companies[0].hq_tile = 1_038;
+        state.companies[0].last_build_tile = 1_300;
         state.companies[0].inaugurated_year = 1967;
         state.companies[0].inaugurated_year_calendar = 2067;
         state.companies[0].reset_liveries();
@@ -2664,6 +2680,8 @@ mod tests {
         );
         assert_eq!(sav_game.companies[0].money_fraction, Some(197));
         assert_eq!(sav_game.companies[0].block_preview, Some(19));
+        assert_eq!(sav_game.companies[0].hq_tile, Some(1_038));
+        assert_eq!(sav_game.companies[0].last_build_tile, Some(1_300));
         assert_eq!(sav_game.companies[0].inaugurated_year, Some(1967));
         assert_eq!(sav_game.companies[0].inaugurated_year_calendar, Some(2067));
         assert_eq!(sav_game.companies[0].max_loan, Some(450_000));

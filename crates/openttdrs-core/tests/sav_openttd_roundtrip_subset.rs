@@ -233,6 +233,27 @@ fn openttd_resaved_preserves_requested_company_inauguration_years() {
     assert_eq!(company.inaugurated_year_calendar, Some(2067));
 }
 
+/// Contrato opcional para los dos `TileIndex` de ciclo de vida de compañía.
+/// El fixture usa índices dentro de su mapa 64×64; esta prueba acredita que
+/// OpenTTD los conserva al re-guardar, no que el runtime propio ya construya
+/// una sede o actualice la última construcción.
+#[test]
+fn openttd_resaved_preserves_requested_company_location_metadata() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_COMPANY_LOCATION").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PLYR");
+    let raw = std::fs::read(&path).expect("leer SAV re-guardado");
+    let game = sav::load(&raw).expect("import openttdrs");
+    let company = game
+        .companies
+        .first()
+        .expect("PLYR de compañía activa tras re-guardado OpenTTD");
+    assert_eq!(company.hq_tile, Some(1_038));
+    assert_eq!(company.last_build_tile, Some(1_300));
+}
+
 /// Contrato opcional para el límite de préstamo individual. OpenTTD representa
 /// el default con `INT64_MIN`, pero una compañía marcada por deity conserva un
 /// valor concreto incluso si cambia el límite global por inflación.

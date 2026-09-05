@@ -240,6 +240,8 @@ mod tests {
             manager_face_style: None,
             money_fraction: None,
             block_preview: None,
+            hq_tile: None,
+            last_build_tile: None,
             inaugurated_year: None,
             inaugurated_year_calendar: None,
             is_ai: None,

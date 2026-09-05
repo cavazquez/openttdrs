@@ -839,7 +839,7 @@ de GameScript, exclusividad/neutral stations y cargos custom.
 | 6 | Movimiento y economía diferencial (#330) | Abierto | Oráculos externos para carretera (tráfico/colisiones/dirección), rail (PBS/YAPF/presignals/consist) y aire/mar, incluyendo casos límite. El perfilador de `Kale_TitleGame.sav` ya no aborta cuando un callback devuelve un pago negativo: los contadores `u64` de estación/empresa/estadística saturan ese ajuste a cero y el crédito firmado conserva la penalización; quedan pendientes los oráculos diferenciales y sus casos límite. |
 | 7 | Idiomas y settings (#331) | Abierto | Catálogo de idiomas, locale, settings y textos guardados se cargan y se comparan con OpenTTD sin colisiones ECS ni regresiones de UI. |
 
-Actualización #371–#376 (2026-09-05): la fila de interoperabilidad SAV de este
+Actualización #371–#377 (2026-09-05): la fila de interoperabilidad SAV de este
 orden permite reencuadrar strings, listas escalares y struct-lists de raíz con
 descriptor recursivamente idéntico sin perder columnas importadas. Las pruebas
 nativas son `CITY.psa_list` + `PSAC` y `CITY.supplied`; esta última usa SLV 358
@@ -853,7 +853,9 @@ pendientes en #328. Ver [evidencia #374](sav-indy-history-374.md).
 `PLYR` conserva además `money_fraction`/`block_preview` y los años de
 inauguración económico/wallclock; el runtime de esos campos y los demás datos
 de ciclo de vida siguen fuera del corte. Ver [#375](sav-company-preview-375.md)
-y [#376](sav-company-inauguration-376.md).
+y [#376](sav-company-inauguration-376.md). También conserva los `TileIndex`
+de HQ y última construcción como metadata, no como implementación de HQ; ver
+[#377](sav-company-location-377.md).
 
 Actualización #329-INDUSTRY-CB28-021 (2026-09-02): CB28 mantiene la semántica
 exacta de OpenTTD (sin invertir el bit 10), y el call site de construcción

@@ -1246,6 +1246,12 @@ impl GameState {
                 if let Some(value) = company.block_preview {
                     target.block_preview = value;
                 }
+                if let Some(value) = company.hq_tile {
+                    target.hq_tile = value;
+                }
+                if let Some(value) = company.last_build_tile {
+                    target.last_build_tile = value;
+                }
                 if let Some(value) = company.inaugurated_year {
                     target.inaugurated_year = value;
                 }

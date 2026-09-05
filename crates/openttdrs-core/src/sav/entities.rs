@@ -1487,6 +1487,11 @@ pub struct SavCompany {
     pub money_fraction: Option<u8>,
     /// Contador de bloqueo de preview exclusiva (`PLYR.block_preview`).
     pub block_preview: Option<u8>,
+    /// Tesela norte de la sede (`PLYR.location_of_HQ`), incluido
+    /// `INVALID_TILE` como `u32::MAX`.
+    pub hq_tile: Option<u32>,
+    /// Tesela de la última construcción (`PLYR.last_build_coordinate`).
+    pub last_build_tile: Option<u32>,
     /// Año económico de inauguración (`PLYR.inaugurated_year`).
     pub inaugurated_year: Option<i32>,
     /// Año calendario de inauguración (`PLYR.inaugurated_year_calendar`).
@@ -1680,6 +1685,12 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let block_preview = record_get(&record, "block_preview")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value).ok());
+            let hq_tile = record_get(&record, "location_of_HQ")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok());
+            let last_build_tile = record_get(&record, "last_build_coordinate")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok());
             let inaugurated_year =
                 record_i64(&record, "inaugurated_year").and_then(|value| i32::try_from(value).ok());
             let inaugurated_year_calendar = record_i64(&record, "inaugurated_year_calendar")
@@ -1745,6 +1756,8 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 manager_face_style,
                 money_fraction,
                 block_preview,
+                hq_tile,
+                last_build_tile,
                 inaugurated_year,
                 inaugurated_year_calendar,
                 is_ai,

@@ -4,7 +4,7 @@
 OpenTTD escribe `world-raw` directamente tras las fronteras
 ``GenerateClearTile``, pueblos, industrias, objetos y árboles. El candidato
 ejecuta exactamente hasta cada una de esas fases; luego se comparan los diez
-bytes de todas las teselas, RNG y secuencia ID/posición de pueblos; las
+bytes de todas las teselas, RNG y secuencia ID/posición/población/casas de pueblos; las
 diferencias de teselas se agrupan en bloques 4×4. No es un
 oráculo raster: una divergencia en esta herramienta identifica la fase que la
 introdujo.
@@ -88,14 +88,22 @@ def compare_generation_state(reference: dict[str, Any], candidate: dict[str, Any
         for town in towns:
             if not isinstance(town, dict) or any(
                 type(town.get(key)) is not int or not 0 <= town[key] <= 0xFFFFFFFF
-                for key in ("id", "x", "y")
+                for key in ("id", "x", "y", "population", "num_houses")
             ):
                 raise GenerationPhaseError(f"{label}: posición de pueblo inválida")
             if town["id"] in ids:
                 raise GenerationPhaseError(f"{label}: ID de pueblo repetido")
             ids.add(town["id"])
     differing = [field for field in fields if reference[field] != candidate[field]]
-    return {"exact_match": not differing, "compared_fields": list(fields), "differing_fields": differing}
+    first_town = None
+    for index in range(max(reference["town_count"], candidate["town_count"])):
+        ref_town = reference["town_positions"][index] if index < reference["town_count"] else None
+        cand_town = candidate["town_positions"][index] if index < candidate["town_count"] else None
+        if ref_town != cand_town:
+            first_town = {"index": index, "reference": ref_town, "candidate": cand_town}
+            break
+    return {"exact_match": not differing, "compared_fields": list(fields),
+            "differing_fields": differing, "first_town_difference": first_town}
 
 
 def include_generation_state(tile_comparison: dict[str, Any], reference: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
@@ -313,7 +321,7 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = args.report.resolve() if args.report else out_dir / "report.json"
     report: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "contract": "generation-phase-parity",
         "reference": {"binary": str(reference), "commit": commit},
         "candidate": matrix.candidate_provenance(candidate, managed=args.candidate_bin is None),

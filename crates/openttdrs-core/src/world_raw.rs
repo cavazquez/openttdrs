@@ -74,7 +74,7 @@ pub struct WorldRawMetadata {
     pub generation: Option<WorldRawGeneration>,
 }
 
-/// Frontera del RNG global y secuencia de pueblos (no su estado completo).
+/// Frontera del RNG global y secuencia/demografía de pueblos (no el CITY completo).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WorldRawGeneration {
     pub random_state_0: u32,
@@ -88,6 +88,8 @@ pub struct WorldRawTownPosition {
     pub id: u32,
     pub x: i32,
     pub y: i32,
+    pub population: u32,
+    pub num_houses: u16,
 }
 
 impl WorldRawGeneration {
@@ -104,6 +106,8 @@ impl WorldRawGeneration {
                     id: town.id,
                     x: town.pos.x,
                     y: town.pos.y,
+                    population: town.population,
+                    num_houses: town.num_houses,
                 })
                 .collect(),
         }
@@ -334,6 +338,8 @@ mod tests {
             crate::Town {
                 id: 7,
                 pos: TileCoord::new(23, 11),
+                population: 12_345,
+                num_houses: 87,
                 ..Default::default()
             },
             crate::Town {
@@ -354,7 +360,8 @@ mod tests {
         assert_eq!(
             generated["town_positions"],
             serde_json::json!([
-                {"id": 7, "x": 23, "y": 11}, {"id": 2, "x": 5, "y": 31}
+                {"id": 7, "x": 23, "y": 11, "population": 12345, "num_houses": 87},
+                {"id": 2, "x": 5, "y": 31, "population": 0, "num_houses": 0}
             ])
         );
     }

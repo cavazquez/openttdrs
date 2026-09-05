@@ -190,8 +190,40 @@ sus integraciones, 1071 tests client (2 ignorados), Clippy estricto core/client,
 formato, pruebas Python focalizadas y gate documental. El exportador C++
 versionado pasa `-fsyntax-only` con las opciones del oracle 15.3.
 
-El alcance no comprende población/casas, industrias, estado íntegro de
-entidades ni startup. #336/#338 siguen abiertos por esos criterios.
+Esta etapa no comparaba población/casas; RMAP-144 completa esa observación.
+No comprende industrias, estado íntegro de entidades ni startup.
+
+### RMAP-144 — Población y cantidad de casas por pueblo
+
+Cerrado como sub-issue [#348](https://github.com/cavazquez/openttdrs/issues/348)
+(2026-09-04). El oracle C++ recompilado exporta
+`Town::cache.population/num_houses`; Rust exporta los campos reales de cada
+`GameState::towns`. El gate v3 exige ambos valores por entidad, informa el
+primer pueblo distinto y rechaza su ausencia incluso cuando ambos lados la
+omiten. Las pruebas mutan población/casas manteniendo RNG/tiles/posiciones
+idénticos, además de comprobar serialización desde el estado real.
+
+[Evidencia versionada](evidence/rmap-144.json), con ambas palabras RNG,
+secuencias ID/posición/población/casas, hash del binario C++ y del exportador:
+
+| Seed temperate/default 512² | Pueblos | Población total | Casas |
+|---|---:|---:|---:|
+| 1330935378 | 96 | 74524 | 2222 |
+| 1330935379 | 95 | 78450 | 2288 |
+| 1330935380 | 90 | 73183 | 2172 |
+| 1330935381 | 85 | 66174 | 1936 |
+
+Coinciden **por entidad**, no sólo las sumas. Las cuatro semillas pasan
+`landscape,clear,towns`: 0 teselas/0 bloques 4×4, RNG y demografía exactos.
+64²/128²/256² con seed `1330935378` conservan las seis fases exactas bajo
+el contrato reforzado: 30 fronteras en total. Las correcciones productivas de
+RMAP-084–089 conservan sus regresiones (incluida
+`town_tunnel_clears_municipal_start_and_levels_steep_exit`).
+
+Esto completa **#336**, limitado a su cohorte temperate/default de cuatro
+semillas 512². RMAP-024/027/030/032/034/082 y #338 permanecen abiertos: no
+se certifican todos los campos CITY, otros climas/settings, industrias ni
+startup. La metadata por sí sola no cambia el algoritmo de generación.
 
 El avance de código de RMAP-004 deja un contrato reproducible para aislar
 terreno: `OPENTTDRS_GENERATE_POPULATION=0` omite pueblos/industrias,

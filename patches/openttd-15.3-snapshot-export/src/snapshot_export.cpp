@@ -744,7 +744,8 @@ void OpenttdrsMaybeCaptureGenerationStage(const char *stage)
 	metadata["town_count"] = Town::GetNumItems();
 	nlohmann::json town_positions = nlohmann::json::array();
 	for (const Town *town : Town::Iterate()) {
-		town_positions.push_back({{"id", town->index.base()}, {"x", TileX(town->xy)}, {"y", TileY(town->xy)}});
+		town_positions.push_back({{"id", town->index.base()}, {"x", TileX(town->xy)}, {"y", TileY(town->xy)},
+			{"population", town->cache.population}, {"num_houses", town->cache.num_houses}});
 	}
 	metadata["town_positions"] = town_positions;
 	out << metadata.dump() << '\n';

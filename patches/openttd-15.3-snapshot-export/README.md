@@ -19,7 +19,8 @@ desde el pool vivo de objetos, en vez de confundirlo con bytes MAP*. Contrato:
 ## Integrar en el clon local
 
 Las cabeceras de `OPENTTDRS_GENERATION_STAGE_DIR` incluyen las dos palabras
-del RNG global y el conteo/secuencia ID/posición de pueblos (RMAP-143).
+del RNG global y el conteo/secuencia ID/posición de pueblos (RMAP-143),
+además de población y cantidad de casas por pueblo (RMAP-144).
 El comparador por fases exige esos campos; si se compiló una versión anterior
 del exportador, volver a integrar el parche y recompilar. No basta con
 actualizar solamente el ejecutable Rust.

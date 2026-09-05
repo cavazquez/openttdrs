@@ -1,0 +1,3670 @@
+{
+  "date": "2026-09-04",
+  "contract": "RMAP-144 town demographics",
+  "reference_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "cases": [
+    {
+      "size": 64,
+      "seed": 1330935378,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "4ecb38bad7922f6cff14d54752bb4581aca8bcb332ef324575f00a957edfdba8",
+        "build": "cargo-build-locked",
+        "source_commit": "608315fb6f6ed23853d484892a8e802b27cafd09",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "town_columns": [
+        "id",
+        "x",
+        "y",
+        "population",
+        "num_houses"
+      ],
+      "towns": [
+        [
+          0,
+          47,
+          23,
+          1181,
+          29
+        ],
+        [
+          1,
+          16,
+          51,
+          815,
+          20
+        ],
+        [
+          2,
+          28,
+          36,
+          327,
+          16
+        ]
+      ],
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            2994197790,
+            149651104
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            1168016413,
+            2955223551
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            11204508,
+            1784072412
+          ],
+          "town_count": 3
+        },
+        "industries": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            4143723930,
+            1958000374
+          ],
+          "town_count": 3
+        },
+        "objects": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            125930589,
+            1207908532
+          ],
+          "town_count": 3
+        },
+        "trees": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            3034308606,
+            3846580214
+          ],
+          "town_count": 3
+        }
+      }
+    },
+    {
+      "size": 128,
+      "seed": 1330935378,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "4ecb38bad7922f6cff14d54752bb4581aca8bcb332ef324575f00a957edfdba8",
+        "build": "cargo-build-locked",
+        "source_commit": "608315fb6f6ed23853d484892a8e802b27cafd09",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "town_columns": [
+        "id",
+        "x",
+        "y",
+        "population",
+        "num_houses"
+      ],
+      "towns": [
+        [
+          0,
+          46,
+          103,
+          1972,
+          54
+        ],
+        [
+          1,
+          76,
+          51,
+          741,
+          24
+        ],
+        [
+          2,
+          75,
+          83,
+          332,
+          15
+        ],
+        [
+          3,
+          21,
+          27,
+          983,
+          26
+        ],
+        [
+          4,
+          102,
+          102,
+          2010,
+          48
+        ],
+        [
+          5,
+          15,
+          59,
+          495,
+          16
+        ],
+        [
+          6,
+          83,
+          32,
+          306,
+          12
+        ],
+        [
+          7,
+          36,
+          45,
+          467,
+          18
+        ]
+      ],
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            1925256455,
+            4086419622
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            450853093,
+            2874156269
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            2842429897,
+            3751322834
+          ],
+          "town_count": 8
+        },
+        "industries": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            150853085,
+            1944512621
+          ],
+          "town_count": 8
+        },
+        "objects": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            1644320292,
+            2756781257
+          ],
+          "town_count": 8
+        },
+        "trees": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            2382491280,
+            2523639316
+          ],
+          "town_count": 8
+        }
+      }
+    },
+    {
+      "size": 256,
+      "seed": 1330935378,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "4ecb38bad7922f6cff14d54752bb4581aca8bcb332ef324575f00a957edfdba8",
+        "build": "cargo-build-locked",
+        "source_commit": "608315fb6f6ed23853d484892a8e802b27cafd09",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "town_columns": [
+        "id",
+        "x",
+        "y",
+        "population",
+        "num_houses"
+      ],
+      "towns": [
+        [
+          0,
+          172,
+          56,
+          361,
+          17
+        ],
+        [
+          1,
+          107,
+          239,
+          160,
+          10
+        ],
+        [
+          2,
+          118,
+          136,
+          1707,
+          30
+        ],
+        [
+          3,
+          27,
+          73,
+          369,
+          14
+        ],
+        [
+          4,
+          138,
+          206,
+          388,
+          16
+        ],
+        [
+          5,
+          192,
+          62,
+          251,
+          12
+        ],
+        [
+          6,
+          139,
+          186,
+          892,
+          31
+        ],
+        [
+          7,
+          18,
+          129,
+          495,
+          21
+        ],
+        [
+          8,
+          220,
+          189,
+          915,
+          21
+        ],
+        [
+          9,
+          181,
+          196,
+          429,
+          20
+        ],
+        [
+          10,
+          123,
+          231,
+          2092,
+          42
+        ],
+        [
+          11,
+          213,
+          174,
+          335,
+          14
+        ],
+        [
+          12,
+          224,
+          94,
+          1291,
+          33
+        ],
+        [
+          13,
+          112,
+          183,
+          334,
+          17
+        ],
+        [
+          14,
+          196,
+          26,
+          1398,
+          34
+        ],
+        [
+          15,
+          83,
+          170,
+          162,
+          8
+        ],
+        [
+          16,
+          242,
+          199,
+          263,
+          17
+        ],
+        [
+          17,
+          144,
+          110,
+          1229,
+          28
+        ],
+        [
+          18,
+          32,
+          143,
+          2080,
+          47
+        ],
+        [
+          19,
+          90,
+          127,
+          1160,
+          33
+        ],
+        [
+          20,
+          12,
+          19,
+          219,
+          14
+        ],
+        [
+          21,
+          83,
+          238,
+          711,
+          24
+        ],
+        [
+          22,
+          102,
+          99,
+          1725,
+          43
+        ],
+        [
+          23,
+          85,
+          111,
+          1229,
+          34
+        ],
+        [
+          24,
+          82,
+          200,
+          531,
+          17
+        ],
+        [
+          25,
+          217,
+          78,
+          475,
+          19
+        ],
+        [
+          26,
+          160,
+          38,
+          806,
+          27
+        ]
+      ],
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            3042738850,
+            548013437
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            358007681,
+            4244363834
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            3103527164,
+            3544881434
+          ],
+          "town_count": 27
+        },
+        "industries": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            4165007911,
+            1130690727
+          ],
+          "town_count": 27
+        },
+        "objects": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            1032664682,
+            2794363973
+          ],
+          "town_count": 27
+        },
+        "trees": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            3571548063,
+            2801507999
+          ],
+          "town_count": 27
+        }
+      }
+    },
+    {
+      "size": 512,
+      "seed": 1330935378,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "4ecb38bad7922f6cff14d54752bb4581aca8bcb332ef324575f00a957edfdba8",
+        "build": "cargo-build-locked",
+        "source_commit": "608315fb6f6ed23853d484892a8e802b27cafd09",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "town_columns": [
+        "id",
+        "x",
+        "y",
+        "population",
+        "num_houses"
+      ],
+      "towns": [
+        [
+          0,
+          75,
+          374,
+          241,
+          12
+        ],
+        [
+          1,
+          404,
+          342,
+          256,
+          12
+        ],
+        [
+          2,
+          487,
+          254,
+          1335,
+          34
+        ],
+        [
+          3,
+          40,
+          38,
+          875,
+          25
+        ],
+        [
+          4,
+          268,
+          330,
+          163,
+          9
+        ],
+        [
+          5,
+          481,
+          302,
+          761,
+          24
+        ],
+        [
+          6,
+          136,
+          230,
+          1673,
+          36
+        ],
+        [
+          7,
+          287,
+          454,
+          535,
+          18
+        ],
+        [
+          8,
+          402,
+          289,
+          168,
+          8
+        ],
+        [
+          9,
+          497,
+          331,
+          1017,
+          27
+        ],
+        [
+          10,
+          320,
+          485,
+          316,
+          19
+        ],
+        [
+          11,
+          209,
+          82,
+          1035,
+          24
+        ],
+        [
+          12,
+          151,
+          93,
+          767,
+          26
+        ],
+        [
+          13,
+          349,
+          124,
+          819,
+          25
+        ],
+        [
+          14,
+          104,
+          315,
+          1090,
+          31
+        ],
+        [
+          15,
+          412,
+          43,
+          821,
+          27
+        ],
+        [
+          16,
+          455,
+          246,
+          558,
+          24
+        ],
+        [
+          17,
+          413,
+          453,
+          169,
+          9
+        ],
+        [
+          18,
+          210,
+          330,
+          1669,
+          37
+        ],
+        [
+          19,
+          412,
+          495,
+          497,
+          9
+        ],
+        [
+          20,
+          385,
+          425,
+          539,
+          26
+        ],
+        [
+          21,
+          44,
+          109,
+          245,
+          12
+        ],
+        [
+          22,
+          151,
+          377,
+          1357,
+          34
+        ],
+        [
+          23,
+          19,
+          488,
+          1090,
+          27
+        ],
+        [
+          24,
+          67,
+          253,
+          293,
+          14
+        ],
+        [
+          25,
+          446,
+          282,
+          809,
+          32
+        ],
+        [
+          26,
+          243,
+          65,
+          1986,
+          42
+        ],
+        [
+          27,
+          327,
+          205,
+          607,
+          25
+        ],
+        [
+          28,
+          111,
+          53,
+          584,
+          20
+        ],
+        [
+          29,
+          214,
+          385,
+          427,
+          18
+        ],
+        [
+          30,
+          461,
+          392,
+          1830,
+          41
+        ],
+        [
+          31,
+          265,
+          495,
+          337,
+          9
+        ],
+        [
+          32,
+          388,
+          194,
+          452,
+          15
+        ],
+        [
+          33,
+          141,
+          258,
+          44,
+          5
+        ],
+        [
+          34,
+          241,
+          495,
+          608,
+          22
+        ],
+        [
+          35,
+          454,
+          482,
+          908,
+          26
+        ],
+        [
+          36,
+          109,
+          390,
+          471,
+          21
+        ],
+        [
+          37,
+          482,
+          396,
+          613,
+          20
+        ],
+        [
+          38,
+          183,
+          37,
+          1459,
+          37
+        ],
+        [
+          39,
+          224,
+          347,
+          1215,
+          36
+        ],
+        [
+          40,
+          154,
+          488,
+          1397,
+          31
+        ],
+        [
+          41,
+          371,
+          315,
+          353,
+          19
+        ],
+        [
+          42,
+          268,
+          154,
+          857,
+          25
+        ],
+        [
+          43,
+          355,
+          274,
+          706,
+          19
+        ],
+        [
+          44,
+          460,
+          226,
+          109,
+          9
+        ],
+        [
+          45,
+          402,
+          21,
+          818,
+          24
+        ],
+        [
+          46,
+          174,
+          109,
+          1153,
+          31
+        ],
+        [
+          47,
+          347,
+          493,
+          330,
+          18
+        ],
+        [
+          48,
+          26,
+          317,
+          230,
+          13
+        ],
+        [
+          49,
+          257,
+          421,
+          647,
+          21
+        ],
+        [
+          50,
+          297,
+          149,
+          935,
+          25
+        ],
+        [
+          51,
+          208,
+          167,
+          509,
+          20
+        ],
+        [
+          52,
+          238,
+          452,
+          1313,
+          28
+        ],
+        [
+          53,
+          384,
+          74,
+          255,
+          12
+        ],
+        [
+          54,
+          470,
+          81,
+          507,
+          21
+        ],
+        [
+          55,
+          413,
+          366,
+          1221,
+          31
+        ],
+        [
+          56,
+          289,
+          377,
+          330,
+          14
+        ],
+        [
+          57,
+          222,
+          124,
+          1465,
+          30
+        ],
+        [
+          58,
+          26,
+          244,
+          2214,
+          46
+        ],
+        [
+          59,
+          42,
+          80,
+          415,
+          15
+        ],
+        [
+          60,
+          492,
+          292,
+          218,
+          12
+        ],
+        [
+          61,
+          388,
+          221,
+          743,
+          24
+        ],
+        [
+          62,
+          215,
+          303,
+          2026,
+          45
+        ],
+        [
+          63,
+          368,
+          129,
+          312,
+          15
+        ],
+        [
+          64,
+          52,
+          410,
+          365,
+          15
+        ],
+        [
+          65,
+          292,
+          168,
+          939,
+          21
+        ],
+        [
+          66,
+          159,
+          180,
+          990,
+          35
+        ],
+        [
+          67,
+          268,
+          132,
+          241,
+          16
+        ],
+        [
+          68,
+          137,
+          418,
+          1075,
+          24
+        ],
+        [
+          69,
+          432,
+          217,
+          208,
+          10
+        ],
+        [
+          70,
+          110,
+          82,
+          544,
+          20
+        ],
+        [
+          71,
+          181,
+          76,
+          561,
+          21
+        ],
+        [
+          72,
+          475,
+          463,
+          1074,
+          29
+        ],
+        [
+          73,
+          192,
+          383,
+          377,
+          21
+        ],
+        [
+          74,
+          41,
+          471,
+          1388,
+          32
+        ],
+        [
+          75,
+          256,
+          393,
+          609,
+          20
+        ],
+        [
+          76,
+          373,
+          17,
+          715,
+          28
+        ],
+        [
+          77,
+          88,
+          248,
+          1180,
+          31
+        ],
+        [
+          78,
+          113,
+          499,
+          1402,
+          39
+        ],
+        [
+          79,
+          499,
+          92,
+          127,
+          10
+        ],
+        [
+          80,
+          243,
+          407,
+          426,
+          21
+        ],
+        [
+          81,
+          273,
+          188,
+          577,
+          25
+        ],
+        [
+          82,
+          94,
+          481,
+          1754,
+          44
+        ],
+        [
+          83,
+          245,
+          437,
+          559,
+          21
+        ],
+        [
+          84,
+          305,
+          254,
+          447,
+          20
+        ],
+        [
+          85,
+          226,
+          213,
+          508,
+          13
+        ],
+        [
+          86,
+          57,
+          443,
+          2170,
+          55
+        ],
+        [
+          87,
+          412,
+          322,
+          239,
+          13
+        ],
+        [
+          88,
+          54,
+          45,
+          1404,
+          29
+        ],
+        [
+          89,
+          498,
+          114,
+          197,
+          9
+        ],
+        [
+          90,
+          369,
+          176,
+          1511,
+          39
+        ],
+        [
+          91,
+          485,
+          135,
+          440,
+          16
+        ],
+        [
+          92,
+          174,
+          284,
+          840,
+          18
+        ],
+        [
+          93,
+          235,
+          364,
+          483,
+          20
+        ],
+        [
+          94,
+          13,
+          395,
+          977,
+          23
+        ],
+        [
+          95,
+          450,
+          12,
+          495,
+          18
+        ]
+      ],
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            1625730734,
+            2670277509
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            2136014406,
+            4131917108
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            3279532020,
+            2573110008
+          ],
+          "town_count": 96
+        }
+      }
+    },
+    {
+      "size": 512,
+      "seed": 1330935379,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "4ecb38bad7922f6cff14d54752bb4581aca8bcb332ef324575f00a957edfdba8",
+        "build": "cargo-build-locked",
+        "source_commit": "608315fb6f6ed23853d484892a8e802b27cafd09",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "town_columns": [
+        "id",
+        "x",
+        "y",
+        "population",
+        "num_houses"
+      ],
+      "towns": [
+        [
+          0,
+          188,
+          471,
+          667,
+          20
+        ],
+        [
+          1,
+          472,
+          200,
+          218,
+          14
+        ],
+        [
+          2,
+          362,
+          49,
+          562,
+          17
+        ],
+        [
+          3,
+          246,
+          339,
+          1625,
+          28
+        ],
+        [
+          4,
+          489,
+          417,
+          554,
+          19
+        ],
+        [
+          5,
+          143,
+          206,
+          558,
+          21
+        ],
+        [
+          6,
+          14,
+          88,
+          240,
+          14
+        ],
+        [
+          7,
+          323,
+          313,
+          2752,
+          54
+        ],
+        [
+          8,
+          16,
+          280,
+          741,
+          23
+        ],
+        [
+          9,
+          432,
+          463,
+          759,
+          23
+        ],
+        [
+          10,
+          14,
+          301,
+          912,
+          21
+        ],
+        [
+          11,
+          151,
+          135,
+          1647,
+          53
+        ],
+        [
+          12,
+          426,
+          427,
+          1120,
+          32
+        ],
+        [
+          13,
+          45,
+          271,
+          709,
+          24
+        ],
+        [
+          14,
+          325,
+          391,
+          281,
+          10
+        ],
+        [
+          15,
+          75,
+          315,
+          1891,
+          43
+        ],
+        [
+          16,
+          394,
+          401,
+          1019,
+          29
+        ],
+        [
+          17,
+          194,
+          427,
+          390,
+          15
+        ],
+        [
+          18,
+          28,
+          367,
+          230,
+          12
+        ],
+        [
+          19,
+          193,
+          372,
+          1738,
+          49
+        ],
+        [
+          20,
+          137,
+          227,
+          484,
+          16
+        ],
+        [
+          21,
+          496,
+          58,
+          654,
+          24
+        ],
+        [
+          22,
+          160,
+          106,
+          212,
+          15
+        ],
+        [
+          23,
+          365,
+          72,
+          942,
+          29
+        ],
+        [
+          24,
+          416,
+          348,
+          303,
+          13
+        ],
+        [
+          25,
+          487,
+          153,
+          1321,
+          35
+        ],
+        [
+          26,
+          278,
+          107,
+          436,
+          15
+        ],
+        [
+          27,
+          138,
+          469,
+          2856,
+          60
+        ],
+        [
+          28,
+          316,
+          19,
+          268,
+          10
+        ],
+        [
+          29,
+          70,
+          168,
+          144,
+          11
+        ],
+        [
+          30,
+          222,
+          394,
+          110,
+          7
+        ],
+        [
+          31,
+          237,
+          278,
+          1048,
+          29
+        ],
+        [
+          32,
+          385,
+          90,
+          443,
+          18
+        ],
+        [
+          33,
+          45,
+          50,
+          520,
+          21
+        ],
+        [
+          34,
+          459,
+          445,
+          974,
+          26
+        ],
+        [
+          35,
+          490,
+          127,
+          1848,
+          46
+        ],
+        [
+          36,
+          494,
+          288,
+          238,
+          11
+        ],
+        [
+          37,
+          89,
+          445,
+          422,
+          19
+        ],
+        [
+          38,
+          86,
+          52,
+          446,
+          19
+        ],
+        [
+          39,
+          245,
+          381,
+          526,
+          19
+        ],
+        [
+          40,
+          334,
+          434,
+          541,
+          21
+        ],
+        [
+          41,
+          449,
+          124,
+          229,
+          12
+        ],
+        [
+          42,
+          471,
+          307,
+          65,
+          5
+        ],
+        [
+          43,
+          405,
+          301,
+          2062,
+          50
+        ],
+        [
+          44,
+          404,
+          272,
+          734,
+          22
+        ],
+        [
+          45,
+          397,
+          80,
+          180,
+          10
+        ],
+        [
+          46,
+          204,
+          127,
+          615,
+          22
+        ],
+        [
+          47,
+          352,
+          27,
+          2345,
+          53
+        ],
+        [
+          48,
+          40,
+          417,
+          510,
+          22
+        ],
+        [
+          49,
+          300,
+          321,
+          180,
+          11
+        ],
+        [
+          50,
+          160,
+          304,
+          120,
+          8
+        ],
+        [
+          51,
+          96,
+          395,
+          731,
+          30
+        ],
+        [
+          52,
+          346,
+          336,
+          401,
+          18
+        ],
+        [
+          53,
+          333,
+          469,
+          847,
+          29
+        ],
+        [
+          54,
+          499,
+          175,
+          190,
+          10
+        ],
+        [
+          55,
+          276,
+          169,
+          1441,
+          33
+        ],
+        [
+          56,
+          102,
+          227,
+          1081,
+          26
+        ],
+        [
+          57,
+          467,
+          394,
+          984,
+          26
+        ],
+        [
+          58,
+          359,
+          138,
+          1044,
+          29
+        ],
+        [
+          59,
+          177,
+          387,
+          1726,
+          42
+        ],
+        [
+          60,
+          171,
+          123,
+          83,
+          7
+        ],
+        [
+          61,
+          86,
+          465,
+          1002,
+          28
+        ],
+        [
+          62,
+          153,
+          489,
+          996,
+          32
+        ],
+        [
+          63,
+          341,
+          85,
+          1655,
+          34
+        ],
+        [
+          64,
+          271,
+          57,
+          459,
+          17
+        ],
+        [
+          65,
+          364,
+          258,
+          535,
+          17
+        ],
+        [
+          66,
+          141,
+          376,
+          124,
+          5
+        ],
+        [
+          67,
+          197,
+          140,
+          2246,
+          51
+        ],
+        [
+          68,
+          287,
+          272,
+          1290,
+          31
+        ],
+        [
+          69,
+          450,
+          296,
+          1174,
+          34
+        ],
+        [
+          70,
+          368,
+          468,
+          749,
+          28
+        ],
+        [
+          71,
+          140,
+          123,
+          1269,
+          33
+        ],
+        [
+          72,
+          177,
+          422,
+          780,
+          31
+        ],
+        [
+          73,
+          487,
+          301,
+          1264,
+          24
+        ],
+        [
+          74,
+          342,
+          161,
+          526,
+          17
+        ],
+        [
+          75,
+          251,
+          252,
+          1362,
+          53
+        ],
+        [
+          76,
+          164,
+          75,
+          283,
+          13
+        ],
+        [
+          77,
+          310,
+          490,
+          816,
+          21
+        ],
+        [
+          78,
+          270,
+          398,
+          252,
+          12
+        ],
+        [
+          79,
+          302,
+          146,
+          1942,
+          38
+        ],
+        [
+          80,
+          22,
+          331,
+          370,
+          18
+        ],
+        [
+          81,
+          213,
+          274,
+          483,
+          20
+        ],
+        [
+          82,
+          349,
+          106,
+          322,
+          18
+        ],
+        [
+          83,
+          384,
+          161,
+          797,
+          25
+        ],
+        [
+          84,
+          305,
+          394,
+          284,
+          13
+        ],
+        [
+          85,
+          212,
+          109,
+          1006,
+          24
+        ],
+        [
+          86,
+          198,
+          199,
+          1090,
+          29
+        ],
+        [
+          87,
+          419,
+          440,
+          967,
+          29
+        ],
+        [
+          88,
+          134,
+          298,
+          246,
+          14
+        ],
+        [
+          89,
+          175,
+          250,
+          362,
+          11
+        ],
+        [
+          90,
+          117,
+          271,
+          890,
+          25
+        ],
+        [
+          91,
+          115,
+          397,
+          1800,
+          33
+        ],
+        [
+          92,
+          431,
+          111,
+          789,
+          25
+        ],
+        [
+          93,
+          484,
+          346,
+          920,
+          19
+        ],
+        [
+          94,
+          316,
+          404,
+          483,
+          16
+        ]
+      ],
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            43620271,
+            2466469031
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            873401591,
+            1332021821
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            1253468098,
+            2465397113
+          ],
+          "town_count": 95
+        }
+      }
+    },
+    {
+      "size": 512,
+      "seed": 1330935380,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "4ecb38bad7922f6cff14d54752bb4581aca8bcb332ef324575f00a957edfdba8",
+        "build": "cargo-build-locked",
+        "source_commit": "608315fb6f6ed23853d484892a8e802b27cafd09",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "town_columns": [
+        "id",
+        "x",
+        "y",
+        "population",
+        "num_houses"
+      ],
+      "towns": [
+        [
+          0,
+          495,
+          345,
+          1914,
+          43
+        ],
+        [
+          1,
+          159,
+          151,
+          842,
+          21
+        ],
+        [
+          2,
+          80,
+          258,
+          180,
+          11
+        ],
+        [
+          3,
+          35,
+          456,
+          511,
+          20
+        ],
+        [
+          4,
+          296,
+          160,
+          2914,
+          59
+        ],
+        [
+          5,
+          24,
+          326,
+          317,
+          11
+        ],
+        [
+          6,
+          74,
+          401,
+          780,
+          29
+        ],
+        [
+          7,
+          493,
+          90,
+          1018,
+          28
+        ],
+        [
+          8,
+          325,
+          167,
+          975,
+          26
+        ],
+        [
+          9,
+          212,
+          139,
+          538,
+          21
+        ],
+        [
+          10,
+          230,
+          147,
+          240,
+          13
+        ],
+        [
+          11,
+          33,
+          260,
+          354,
+          16
+        ],
+        [
+          12,
+          355,
+          398,
+          3563,
+          66
+        ],
+        [
+          13,
+          453,
+          132,
+          971,
+          33
+        ],
+        [
+          14,
+          74,
+          187,
+          767,
+          21
+        ],
+        [
+          15,
+          177,
+          142,
+          647,
+          20
+        ],
+        [
+          16,
+          286,
+          75,
+          666,
+          16
+        ],
+        [
+          17,
+          232,
+          477,
+          185,
+          9
+        ],
+        [
+          18,
+          399,
+          274,
+          348,
+          15
+        ],
+        [
+          19,
+          271,
+          366,
+          499,
+          20
+        ],
+        [
+          20,
+          183,
+          42,
+          1645,
+          43
+        ],
+        [
+          21,
+          351,
+          30,
+          267,
+          14
+        ],
+        [
+          22,
+          489,
+          21,
+          682,
+          29
+        ],
+        [
+          23,
+          249,
+          63,
+          260,
+          10
+        ],
+        [
+          24,
+          333,
+          294,
+          1183,
+          35
+        ],
+        [
+          25,
+          96,
+          12,
+          273,
+          11
+        ],
+        [
+          26,
+          367,
+          308,
+          351,
+          19
+        ],
+        [
+          27,
+          166,
+          369,
+          893,
+          28
+        ],
+        [
+          28,
+          373,
+          375,
+          1148,
+          33
+        ],
+        [
+          29,
+          41,
+          111,
+          144,
+          14
+        ],
+        [
+          30,
+          77,
+          479,
+          572,
+          24
+        ],
+        [
+          31,
+          364,
+          94,
+          551,
+          21
+        ],
+        [
+          32,
+          186,
+          87,
+          553,
+          19
+        ],
+        [
+          33,
+          383,
+          232,
+          1302,
+          29
+        ],
+        [
+          34,
+          158,
+          497,
+          229,
+          11
+        ],
+        [
+          35,
+          169,
+          36,
+          508,
+          18
+        ],
+        [
+          36,
+          400,
+          221,
+          629,
+          16
+        ],
+        [
+          37,
+          54,
+          401,
+          600,
+          23
+        ],
+        [
+          38,
+          151,
+          375,
+          601,
+          12
+        ],
+        [
+          39,
+          495,
+          108,
+          838,
+          28
+        ],
+        [
+          40,
+          399,
+          39,
+          2621,
+          45
+        ],
+        [
+          41,
+          369,
+          40,
+          270,
+          14
+        ],
+        [
+          42,
+          99,
+          370,
+          231,
+          11
+        ],
+        [
+          43,
+          137,
+          110,
+          909,
+          22
+        ],
+        [
+          44,
+          255,
+          174,
+          1381,
+          33
+        ],
+        [
+          45,
+          463,
+          427,
+          684,
+          21
+        ],
+        [
+          46,
+          348,
+          110,
+          662,
+          23
+        ],
+        [
+          47,
+          389,
+          201,
+          826,
+          25
+        ],
+        [
+          48,
+          177,
+          317,
+          1461,
+          34
+        ],
+        [
+          49,
+          470,
+          172,
+          200,
+          12
+        ],
+        [
+          50,
+          12,
+          318,
+          486,
+          21
+        ],
+        [
+          51,
+          103,
+          161,
+          822,
+          28
+        ],
+        [
+          52,
+          449,
+          355,
+          1335,
+          47
+        ],
+        [
+          53,
+          269,
+          208,
+          245,
+          15
+        ],
+        [
+          54,
+          476,
+          41,
+          442,
+          20
+        ],
+        [
+          55,
+          424,
+          214,
+          950,
+          24
+        ],
+        [
+          56,
+          62,
+          202,
+          1176,
+          34
+        ],
+        [
+          57,
+          336,
+          190,
+          383,
+          21
+        ],
+        [
+          58,
+          391,
+          499,
+          570,
+          22
+        ],
+        [
+          59,
+          122,
+          363,
+          1154,
+          33
+        ],
+        [
+          60,
+          62,
+          46,
+          1029,
+          25
+        ],
+        [
+          61,
+          122,
+          187,
+          1032,
+          32
+        ],
+        [
+          62,
+          343,
+          366,
+          813,
+          28
+        ],
+        [
+          63,
+          260,
+          347,
+          443,
+          16
+        ],
+        [
+          64,
+          356,
+          179,
+          867,
+          27
+        ],
+        [
+          65,
+          431,
+          435,
+          344,
+          15
+        ],
+        [
+          66,
+          58,
+          124,
+          349,
+          18
+        ],
+        [
+          67,
+          402,
+          325,
+          615,
+          20
+        ],
+        [
+          68,
+          128,
+          233,
+          2013,
+          54
+        ],
+        [
+          69,
+          120,
+          412,
+          462,
+          18
+        ],
+        [
+          70,
+          457,
+          150,
+          341,
+          16
+        ],
+        [
+          71,
+          23,
+          69,
+          512,
+          22
+        ],
+        [
+          72,
+          492,
+          179,
+          2134,
+          41
+        ],
+        [
+          73,
+          53,
+          260,
+          387,
+          15
+        ],
+        [
+          74,
+          347,
+          461,
+          309,
+          15
+        ],
+        [
+          75,
+          242,
+          101,
+          167,
+          8
+        ],
+        [
+          76,
+          492,
+          390,
+          1794,
+          43
+        ],
+        [
+          77,
+          365,
+          256,
+          657,
+          24
+        ],
+        [
+          78,
+          414,
+          97,
+          102,
+          6
+        ],
+        [
+          79,
+          107,
+          331,
+          885,
+          29
+        ],
+        [
+          80,
+          215,
+          42,
+          1704,
+          46
+        ],
+        [
+          81,
+          339,
+          209,
+          778,
+          18
+        ],
+        [
+          82,
+          174,
+          72,
+          443,
+          16
+        ],
+        [
+          83,
+          126,
+          46,
+          1001,
+          21
+        ],
+        [
+          84,
+          235,
+          292,
+          2314,
+          52
+        ],
+        [
+          85,
+          196,
+          204,
+          163,
+          8
+        ],
+        [
+          86,
+          194,
+          284,
+          607,
+          27
+        ],
+        [
+          87,
+          262,
+          221,
+          770,
+          19
+        ],
+        [
+          88,
+          162,
+          413,
+          1375,
+          32
+        ],
+        [
+          89,
+          416,
+          469,
+          507,
+          21
+        ]
+      ],
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            1425264289,
+            149051139
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            2764760287,
+            2169614636
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            871809811,
+            2911715824
+          ],
+          "town_count": 90
+        }
+      }
+    },
+    {
+      "size": 512,
+      "seed": 1330935381,
+      "climate": "temperate",
+      "candidate": {
+        "binary": "/home/cristian/repos/propios/ProyectoOpenTtd/openttdrs/target/debug/world_raw_dumper",
+        "binary_sha256": "4ecb38bad7922f6cff14d54752bb4581aca8bcb332ef324575f00a957edfdba8",
+        "build": "cargo-build-locked",
+        "source_commit": "608315fb6f6ed23853d484892a8e802b27cafd09",
+        "source_tracked_changes": [
+          " M crates/openttdrs-core/src/world_raw.rs",
+          " M patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+          " M scripts/generation_phase_parity.py",
+          " M scripts/test_generation_phase_parity.py"
+        ]
+      },
+      "exact_match": true,
+      "town_columns": [
+        "id",
+        "x",
+        "y",
+        "population",
+        "num_houses"
+      ],
+      "towns": [
+        [
+          0,
+          373,
+          129,
+          2476,
+          49
+        ],
+        [
+          1,
+          330,
+          169,
+          1024,
+          24
+        ],
+        [
+          2,
+          95,
+          292,
+          142,
+          6
+        ],
+        [
+          3,
+          243,
+          107,
+          519,
+          22
+        ],
+        [
+          4,
+          28,
+          493,
+          806,
+          26
+        ],
+        [
+          5,
+          423,
+          272,
+          292,
+          13
+        ],
+        [
+          6,
+          168,
+          184,
+          1161,
+          25
+        ],
+        [
+          7,
+          28,
+          16,
+          247,
+          14
+        ],
+        [
+          8,
+          412,
+          263,
+          746,
+          25
+        ],
+        [
+          9,
+          405,
+          455,
+          360,
+          19
+        ],
+        [
+          10,
+          400,
+          23,
+          687,
+          21
+        ],
+        [
+          11,
+          200,
+          56,
+          821,
+          23
+        ],
+        [
+          12,
+          372,
+          88,
+          909,
+          21
+        ],
+        [
+          13,
+          401,
+          170,
+          397,
+          16
+        ],
+        [
+          14,
+          493,
+          199,
+          1066,
+          28
+        ],
+        [
+          15,
+          218,
+          298,
+          865,
+          35
+        ],
+        [
+          16,
+          100,
+          146,
+          2533,
+          55
+        ],
+        [
+          17,
+          85,
+          395,
+          451,
+          15
+        ],
+        [
+          18,
+          417,
+          91,
+          699,
+          21
+        ],
+        [
+          19,
+          163,
+          364,
+          614,
+          23
+        ],
+        [
+          20,
+          498,
+          488,
+          1162,
+          28
+        ],
+        [
+          21,
+          337,
+          328,
+          700,
+          17
+        ],
+        [
+          22,
+          341,
+          104,
+          681,
+          26
+        ],
+        [
+          23,
+          470,
+          384,
+          605,
+          20
+        ],
+        [
+          24,
+          166,
+          347,
+          1141,
+          24
+        ],
+        [
+          25,
+          462,
+          66,
+          850,
+          28
+        ],
+        [
+          26,
+          373,
+          469,
+          234,
+          14
+        ],
+        [
+          27,
+          458,
+          144,
+          167,
+          8
+        ],
+        [
+          28,
+          55,
+          391,
+          2684,
+          58
+        ],
+        [
+          29,
+          480,
+          119,
+          697,
+          16
+        ],
+        [
+          30,
+          467,
+          366,
+          725,
+          25
+        ],
+        [
+          31,
+          407,
+          59,
+          372,
+          15
+        ],
+        [
+          32,
+          40,
+          131,
+          1753,
+          42
+        ],
+        [
+          33,
+          101,
+          436,
+          338,
+          21
+        ],
+        [
+          34,
+          314,
+          157,
+          483,
+          22
+        ],
+        [
+          35,
+          108,
+          273,
+          352,
+          16
+        ],
+        [
+          36,
+          179,
+          148,
+          328,
+          16
+        ],
+        [
+          37,
+          263,
+          98,
+          427,
+          11
+        ],
+        [
+          38,
+          326,
+          345,
+          745,
+          21
+        ],
+        [
+          39,
+          199,
+          222,
+          850,
+          21
+        ],
+        [
+          40,
+          428,
+          245,
+          1102,
+          27
+        ],
+        [
+          41,
+          86,
+          493,
+          342,
+          12
+        ],
+        [
+          42,
+          14,
+          287,
+          261,
+          18
+        ],
+        [
+          43,
+          261,
+          132,
+          405,
+          16
+        ],
+        [
+          44,
+          266,
+          76,
+          1429,
+          39
+        ],
+        [
+          45,
+          441,
+          17,
+          268,
+          4
+        ],
+        [
+          46,
+          140,
+          238,
+          407,
+          21
+        ],
+        [
+          47,
+          216,
+          342,
+          916,
+          27
+        ],
+        [
+          48,
+          202,
+          202,
+          1627,
+          41
+        ],
+        [
+          49,
+          383,
+          296,
+          201,
+          10
+        ],
+        [
+          50,
+          473,
+          296,
+          863,
+          26
+        ],
+        [
+          51,
+          229,
+          41,
+          177,
+          9
+        ],
+        [
+          52,
+          202,
+          429,
+          1953,
+          52
+        ],
+        [
+          53,
+          218,
+          254,
+          421,
+          23
+        ],
+        [
+          54,
+          220,
+          499,
+          232,
+          12
+        ],
+        [
+          55,
+          461,
+          481,
+          840,
+          21
+        ],
+        [
+          56,
+          272,
+          320,
+          1767,
+          38
+        ],
+        [
+          57,
+          174,
+          412,
+          188,
+          10
+        ],
+        [
+          58,
+          20,
+          82,
+          387,
+          15
+        ],
+        [
+          59,
+          94,
+          67,
+          302,
+          14
+        ],
+        [
+          60,
+          126,
+          110,
+          1054,
+          31
+        ],
+        [
+          61,
+          316,
+          303,
+          842,
+          23
+        ],
+        [
+          62,
+          162,
+          390,
+          768,
+          21
+        ],
+        [
+          63,
+          136,
+          323,
+          747,
+          22
+        ],
+        [
+          64,
+          76,
+          137,
+          718,
+          24
+        ],
+        [
+          65,
+          497,
+          351,
+          376,
+          17
+        ],
+        [
+          66,
+          192,
+          330,
+          788,
+          26
+        ],
+        [
+          67,
+          40,
+          244,
+          333,
+          16
+        ],
+        [
+          68,
+          55,
+          105,
+          1025,
+          31
+        ],
+        [
+          69,
+          354,
+          301,
+          276,
+          16
+        ],
+        [
+          70,
+          207,
+          283,
+          423,
+          16
+        ],
+        [
+          71,
+          270,
+          485,
+          1048,
+          23
+        ],
+        [
+          72,
+          25,
+          471,
+          1890,
+          35
+        ],
+        [
+          73,
+          148,
+          352,
+          904,
+          25
+        ],
+        [
+          74,
+          247,
+          81,
+          774,
+          25
+        ],
+        [
+          75,
+          238,
+          142,
+          691,
+          19
+        ],
+        [
+          76,
+          483,
+          443,
+          1392,
+          30
+        ],
+        [
+          77,
+          69,
+          195,
+          745,
+          23
+        ],
+        [
+          78,
+          23,
+          62,
+          272,
+          8
+        ],
+        [
+          79,
+          327,
+          46,
+          463,
+          19
+        ],
+        [
+          80,
+          41,
+          478,
+          1491,
+          39
+        ],
+        [
+          81,
+          135,
+          82,
+          678,
+          18
+        ],
+        [
+          82,
+          394,
+          183,
+          767,
+          29
+        ],
+        [
+          83,
+          482,
+          402,
+          158,
+          11
+        ],
+        [
+          84,
+          388,
+          218,
+          1354,
+          24
+        ]
+      ],
+      "comparisons": {
+        "landscape": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            4132929813,
+            1426827899
+          ],
+          "town_count": 0
+        },
+        "clear": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            2657396054,
+            1762131921
+          ],
+          "town_count": 0
+        },
+        "towns": {
+          "tiles_exact_match": true,
+          "tile_difference_count": 0,
+          "changed_block_count": 0,
+          "generation_state": {
+            "exact_match": true,
+            "compared_fields": [
+              "random_state_0",
+              "random_state_1",
+              "town_count",
+              "town_positions"
+            ],
+            "differing_fields": [],
+            "first_town_difference": null
+          },
+          "rng": [
+            3774246427,
+            4190850924
+          ],
+          "town_count": 85
+        }
+      }
+    }
+  ],
+  "reference_binary_sha256": "cde4c739b40c175dcceaa7f9713405e1d9315727592dd694159f7fd7697c47bb",
+  "reference_exporter_sha256": "995eca2a5b49b55bb0cddbb07c08ee40b2b8bfb29afc6207ab27db7109a369ae"
+}

@@ -15,10 +15,11 @@ import generation_phase_parity as phase  # noqa: E402
 
 def test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles() -> None:
     reference = {"random_state_0": 10, "random_state_1": 20, "town_count": 2,
-                 "town_positions": [{"id": 0, "x": 2, "y": 3}, {"id": 1, "x": 4, "y": 5}]}
+                 "town_positions": [{"id": 0, "x": 2, "y": 3, "population": 40, "num_houses": 3},
+                                    {"id": 1, "x": 4, "y": 5, "population": 50, "num_houses": 4}]}
     tiles = {"exact_match": True, "tile_difference_count": 0}
     assert phase.include_generation_state(tiles, reference, reference)["exact_match"]
-    for key in ("random_state_0", "random_state_1", "id", "x", "y", "order", "count"):
+    for key in ("random_state_0", "random_state_1", "id", "x", "y", "population", "num_houses", "order", "count"):
         candidate = copy.deepcopy(reference)
         if key.startswith("random"):
             candidate[key] += 1
@@ -32,6 +33,10 @@ def test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles() -> Non
         result = phase.include_generation_state(tiles, reference, candidate)
         assert result["tiles_exact_match"] and not result["exact_match"], key
         assert phase.first_divergent_stage({"towns": result}) == "towns"
+        if key in ("population", "num_houses"):
+            first = result["generation_state"]["first_town_difference"]
+            assert first["index"] == 0
+            assert first["reference"][key] + 10 == first["candidate"][key]
     assert not phase.include_generation_state({"exact_match": False}, reference, reference)["exact_match"]
 
 
@@ -39,8 +44,8 @@ def test_state_gate_fails_closed_for_unobserved_or_malformed_state() -> None:
     valid = {"random_state_0": 0, "random_state_1": 1, "town_count": 0, "town_positions": []}
     invalid = [{}, {**valid, "random_state_0": None}, {**valid, "random_state_1": True},
                {**valid, "town_count": 1}, {**valid, "town_positions": None},
-               {**valid, "town_count": 1, "town_positions": [{"id": 0, "x": -1, "y": 0}]},
-               {**valid, "town_count": 2, "town_positions": [{"id": 0, "x": 1, "y": 0}] * 2}]
+               {**valid, "town_count": 1, "town_positions": [{"id": 0, "x": -1, "y": 0, "population": 0, "num_houses": 0}]},
+               {**valid, "town_count": 2, "town_positions": [{"id": 0, "x": 1, "y": 0, "population": 0, "num_houses": 0}] * 2}]
     for bad in invalid:
         for reference, candidate in ((bad, valid), (valid, bad)):
             try:
@@ -48,6 +53,26 @@ def test_state_gate_fails_closed_for_unobserved_or_malformed_state() -> None:
             except phase.GenerationPhaseError:
                 continue
             raise AssertionError(f"el estado inválido debería fallar: {bad}")
+
+
+def test_state_gate_rejects_missing_demographics_even_when_both_sides_omit_them() -> None:
+    town = {"id": 0, "x": 2, "y": 3, "population": 40, "num_houses": 3}
+    for key in ("population", "num_houses"):
+        for value in (None, -1, True, 1 << 32):
+            bad = {"random_state_0": 0, "random_state_1": 1, "town_count": 1,
+                   "town_positions": [{**town, key: value}]}
+            try:
+                phase.compare_generation_state(bad, bad)
+            except phase.GenerationPhaseError:
+                continue
+            raise AssertionError(f"demografía inválida debería fallar: {key}={value}")
+        old = {k: v for k, v in town.items() if k != key}
+        bad = {"random_state_0": 0, "random_state_1": 1, "town_count": 1, "town_positions": [old]}
+        try:
+            phase.compare_generation_state(bad, bad)
+        except phase.GenerationPhaseError:
+            continue
+        raise AssertionError(f"el exportador debe observar {key}")
 
 
 def test_versioned_oracle_exports_generation_state() -> None:
@@ -61,6 +86,7 @@ def test_versioned_oracle_exports_generation_state() -> None:
         'metadata["town_count"] = Town::GetNumItems();',
         'metadata["town_positions"] = town_positions;',
         'Town::Iterate()', 'town->index.base()', 'TileX(town->xy)', 'TileY(town->xy)',
+        'town->cache.population', 'town->cache.num_houses',
     ):
         assert statement in stage, statement
 
@@ -133,6 +159,7 @@ if __name__ == "__main__":
     test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles()
     test_state_gate_fails_closed_for_unobserved_or_malformed_state()
     test_versioned_oracle_exports_generation_state()
+    test_state_gate_rejects_missing_demographics_even_when_both_sides_omit_them()
     test_parse_phases_rejects_reordered_or_unknown_values()
     test_first_divergent_stage_uses_pipeline_order()
     test_river_settings_are_written_for_non_default_oracle_runs()

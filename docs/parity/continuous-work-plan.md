@@ -29,7 +29,12 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 ID/posición de pueblos, además de bytes de teselas; las 30 fronteras de la
 cohorte 64²→512² pasan. Evidencia y alcance en
 [random-map-issues.md](random-map-issues.md#rmap-143--gate-de-estado-rng-y-secuencia-de-pueblos).
-#336 todavía requiere comparar población/casas. RMAP-142 / `712ec4ba`
+#336 completa después la comparación de población/casas con RMAP-144 / #348:
+las cuatro semillas temperate/default 512² y el control 64²/128²/256²
+coinciden por entidad además de tiles/RNG. Su cierre queda limitado a esa
+cohorte; #338 y los padres de worldgen conservan la generalización pendiente.
+La evidencia canónica está en `docs/parity/evidence/rmap-144.json` y
+`random-map-issues.md`. RMAP-142 / `712ec4ba`
 evita candidatos obsoletos y conserva hash/procedencia de los binarios.
 
 Estado CI observado de `712ec4ba`: Parity docs, Platform check y Fuzz replay
@@ -53,6 +58,11 @@ niveles; las capturas usan los assets locales y no sustituyen la prueba
 aislada sin PNGs ni certifican raster exacto. Persisten marcas negras pequeñas
 en agua al alejar a 0.5×/0.25×, pendientes del diagnóstico de #326. #333
 espera el resultado remoto del nuevo commit.
+
+Brechas identificadas al verificar el cliente: #349 aísla marcas negras de
+agua en 0.5×/0.25×; #350 debe unificar la raíz de assets de paletas con
+`resolve_asset_root`, porque todavía apunta al checkout de compilación en
+paquetes trasladados. La corrección del atlas de #347 no cierra esos casos.
 
 Etapa #333 — reparación de gates (2026-09-04): se reprodujeron los fallos de
 CI de `b47163d1`. Rustdoc tenía dos enlaces rotos (`IndustryRandomTrigger` y

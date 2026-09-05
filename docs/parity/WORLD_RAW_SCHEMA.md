@@ -171,15 +171,19 @@ python3 scripts/generation_phase_parity.py --size 64 --seed 1330935378 \
 ```
 
 Compara `landscape`, `clear`, pueblos, industrias, objetos y árboles por bytes
-y bloques 4×4. Desde RMAP-143 (2026-09-04), el reporte de fases v2 exige
+y bloques 4×4. RMAP-143 añadió al reporte de fases v2
 además `random_state_0`, `random_state_1`, `town_count` y `town_positions`
-(secuencia de objetos `{id,x,y}` en orden de pool). Ambos exportadores
+(secuencia de objetos `{id,x,y}` en orden de pool). Desde RMAP-144
+(2026-09-04), el reporte v3 exige además `population` y `num_houses` dentro
+de cada pueblo y registra `first_town_difference` para localizar la primera
+entidad distinta. Ambos exportadores
 generan estos campos en la cabecera; son opcionales en `world-raw` para no
 cambiar el contrato de carga SAV, pero obligatorios para el gate de generación.
 Si faltan, el comparador falla y pide reconstruir el exportador. La igualdad
 de teselas se conserva en `tiles_exact_match`; `exact_match` requiere también
-igualdad del estado observado. Esto no compara población, casas ni el estado
-completo de los pools de entidades. El candidato se detiene con
+igualdad del estado observado. Esto compara población/cantidad de casas,
+pero no todos los campos CITY ni el estado completo de los demás pools de
+entidades. El candidato se detiene con
 `world_raw_dumper --generate-until FASE`, así el informe declara la primera
 fase divergente sin intentar cargar un `.sav` que aún no tiene pueblos.
 

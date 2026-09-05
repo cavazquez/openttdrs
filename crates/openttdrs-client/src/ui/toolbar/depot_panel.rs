@@ -11,7 +11,9 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{consist_unit_ids, engine_by_id};
 
 use crate::camera::tile_camera_world_pos;
+use crate::i18n::{Locale, localized_text};
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::autoreplace_window::AutoreplaceWindowState;
 use crate::ui::buy_window::BuyVehicleWindowState;
@@ -467,14 +469,19 @@ fn depot_is_rail(sim: &SimWorld, depot_pos: TileCoord) -> bool {
     sim.state.map.get_kind(depot_pos) == Some(TileKind::RailDepot)
 }
 
-fn depot_title(sim: &SimWorld, depot_pos: TileCoord) -> String {
+fn depot_title(locale: Locale, sim: &SimWorld, depot_pos: TileCoord) -> String {
     let nombre = match sim.state.map.get_kind(depot_pos) {
         Some(TileKind::RailDepot) => "Depósito de Trenes",
         Some(TileKind::ShipDepot) => "Depósito de Barcos",
         Some(TileKind::Airport) => "Hangar de Aviones",
         _ => "Depósito de Carretera",
     };
-    format!("{nombre} ({}, {})", depot_pos.x, depot_pos.y)
+    format!(
+        "{} ({}, {})",
+        localized_text(locale, nombre),
+        depot_pos.x,
+        depot_pos.y
+    )
 }
 
 fn vehicles_at_depot(sim: &SimWorld, depot_pos: TileCoord) -> Vec<&openttdrs_core::Vehicle> {
@@ -494,7 +501,11 @@ fn vehicles_at_depot(sim: &SimWorld, depot_pos: TileCoord) -> Vec<&openttdrs_cor
     vehicles
 }
 
-fn depot_vehicle_row_label(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) -> String {
+fn depot_vehicle_row_label(
+    locale: Locale,
+    sim: &SimWorld,
+    vehicle: &openttdrs_core::Vehicle,
+) -> String {
     let age = vehicle.vehicle_age_years(sim.state.tick.get());
     let units = if vehicle.kind == VehicleKind::Train {
         let n = openttdrs_core::consist_unit_ids(&sim.state.vehicles, vehicle.id).len();
@@ -506,8 +517,12 @@ fn depot_vehicle_row_label(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) ->
     } else {
         String::new()
     };
+    let age_suffix = match locale {
+        Locale::Es => "a",
+        Locale::En => "y",
+    };
     format!(
-        "{}{}  ({}a)  {}/{}",
+        "{}{}  ({}{age_suffix})  {}/{}",
         vehicle.display_name(),
         units,
         age,
@@ -520,6 +535,7 @@ fn depot_vehicle_row_label(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) ->
 pub(crate) fn sync_depot_panel(
     depot_state: Res<DepotPanelState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
@@ -578,6 +594,7 @@ pub(crate) fn sync_depot_panel(
         ),
     >,
 ) {
+    let locale = prefs.locale();
     let Some((_, mut vis)) = root_q
         .iter_mut()
         .find(|(w, _)| w.id == FloatingWindowId::Depot)
@@ -596,10 +613,10 @@ pub(crate) fn sync_depot_panel(
         .iter_mut()
         .find(|(t, _)| t.0 == FloatingWindowId::Depot)
     {
-        **title = depot_title(&sim, depot_pos);
+        **title = depot_title(locale, &sim, depot_pos);
     }
     if let Ok(mut label) = clone_label_q.single_mut() {
-        **label = "Clonar".to_string();
+        **label = localized_text(locale, "Clonar");
     }
     let vehicles_here = vehicles_at_depot(&sim, depot_pos);
     let drag_from = depot_state.list_drag_from;
@@ -636,7 +653,7 @@ pub(crate) fn sync_depot_panel(
     }
     for (row_text, mut text) in &mut row_text_q {
         if let Some(vehicle) = vehicles_here.get(row_text.slot) {
-            **text = depot_vehicle_row_label(&sim, vehicle);
+            **text = depot_vehicle_row_label(locale, &sim, vehicle);
         } else {
             **text = String::new();
         }
@@ -1364,5 +1381,23 @@ mod tests {
                 .unwrap()
                 .running
         );
+    }
+
+    #[test]
+    fn depot_chrome_uses_locale_without_translating_vehicle_data() {
+        let (sim, depot, _) = world_with_bus();
+        let vehicle = &sim.state.vehicles[0];
+
+        assert_eq!(depot_title(Locale::En, &sim, depot), "Road depot (2, 2)");
+        let english_row = depot_vehicle_row_label(Locale::En, &sim, vehicle);
+        assert!(english_row.contains(&vehicle.display_name()));
+        assert!(english_row.contains("(0y)"));
+        assert!(english_row.ends_with(&format!("{}/{}", vehicle.cargo, vehicle.capacity)));
+
+        assert_eq!(
+            depot_title(Locale::Es, &sim, depot),
+            "Depósito de Carretera (2, 2)"
+        );
+        assert!(depot_vehicle_row_label(Locale::Es, &sim, vehicle).contains("(0a)"));
     }
 }

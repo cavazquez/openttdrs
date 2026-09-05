@@ -357,6 +357,15 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Depósito (serv. si hace falta)" => "Depot (service if needed)",
         "Depósito" => "Depot",
         "Depósito vía" => "Rail depot",
+        "Depósito de Trenes" => "Train depot",
+        "Depósito de Barcos" => "Ship depot",
+        "Depósito de Carretera" => "Road depot",
+        "Hangar de Aviones" => "Aircraft hangar",
+        "Vender" => "Sell",
+        "Cadena" => "Chain",
+        "Nuevos" => "New",
+        "Clonar" => "Clone",
+        "Deseng." => "Detach",
         "Casilla" => "Tile",
         "Cond." => "If",
         "ord." => "order",
@@ -890,6 +899,23 @@ mod tests {
             ),
             "Wait for path without reservation (days). 255 = never turn around."
         );
+    }
+
+    #[test]
+    fn catalog_translates_depot_chrome() {
+        for (spanish, english) in [
+            ("Depósito de Trenes", "Train depot"),
+            ("Depósito de Barcos", "Ship depot"),
+            ("Depósito de Carretera", "Road depot"),
+            ("Hangar de Aviones", "Aircraft hangar"),
+            ("Vender", "Sell"),
+            ("Cadena", "Chain"),
+            ("Nuevos", "New"),
+            ("Clonar", "Clone"),
+            ("Deseng.", "Detach"),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+        }
     }
 
     #[test]

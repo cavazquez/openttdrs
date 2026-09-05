@@ -250,6 +250,11 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Liga" => "League",
         "Sonido y música" => "Sound and music",
         "Distribución de carga" => "Cargo distribution",
+        "Manual: hop desde órdenes del vehículo.\nAsimétrica: Demand + MCF OpenTTD (Dijkstra distancia/capacidad).\nSimétrica: Demand Symmetric OpenTTD (geografía + supply) + MCF." => {
+            "Manual: hop from vehicle orders.\nAsymmetric: OpenTTD Demand + MCF (distance/capacity Dijkstra).\nSymmetric: OpenTTD Demand Symmetric (geography + supply) + MCF."
+        }
+        "Asimétrica" => "Asymmetric",
+        "Simétrica" => "Symmetric",
         "IA / TransCargo" => "AI / TransCargo",
         "Noticias" => "News",
         "Entrega de carga" => "Cargo delivery",
@@ -853,6 +858,19 @@ mod tests {
         ] {
             assert_eq!(localized_text(Locale::En, spanish), english);
         }
+    }
+
+    #[test]
+    fn catalog_translates_cargo_distribution_modes_and_explanation() {
+        assert_eq!(localized_text(Locale::En, "Asimétrica"), "Asymmetric");
+        assert_eq!(localized_text(Locale::En, "Simétrica"), "Symmetric");
+        assert_eq!(
+            localized_text(
+                Locale::En,
+                "Manual: hop desde órdenes del vehículo.\nAsimétrica: Demand + MCF OpenTTD (Dijkstra distancia/capacidad).\nSimétrica: Demand Symmetric OpenTTD (geografía + supply) + MCF."
+            ),
+            "Manual: hop from vehicle orders.\nAsymmetric: OpenTTD Demand + MCF (distance/capacity Dijkstra).\nSymmetric: OpenTTD Demand Symmetric (geography + supply) + MCF."
+        );
     }
 
     #[test]

@@ -41,11 +41,12 @@ se cuenta como evidencia.
 ## Estado canónico actual
 
 **Corte canónico: 2026-09-05 · `main`, validado localmente hasta el commit
-publicado `41e39931` (base funcional `25d026a7`; el runtime de cargos custom,
+publicado `dc3602b5` (base funcional `25d026a7`; el runtime de cargos custom,
 la frontera SAV, el monitor de carga, los pesos vial y ferroviario, la CTT de
 scopes de estación/parada e `IndustryTile`, la CTT de vehículos/refit y las
 órdenes de refit de estación, incluido `CARGO_AUTO_REFIT`, quedan actualizados
-en este corte).
+en este corte; RMAP-147–152 además observan pools, estado constructor y la
+traza ordenada de intentos industriales por fase).
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -53,10 +54,10 @@ mapeo y la evidencia de auditorías anteriores; fechas anteriores son contexto
 histórico. Ante una contradicción prevalece este bloque y debe corregirse la
 fila antigua en el mismo cambio.
 
-Validación de este corte: formatter y clippy estricto en core/cliente, **2.047**
-tests de core y **1.078** tests ejecutados del cliente (2 ignorados), además de
-la regresión integrada de CTT de vehículos; los conteos anteriores son
-históricos.
+Validación de este corte: formatter y clippy estricto en core/cliente, **2.048**
+tests de core y **1.081** tests ejecutados del cliente (2 ignorados), además de
+la regresión integrada de CTT de vehículos y RMAP-152; los conteos anteriores
+son históricos.
 
 El manifiesto [`active-backlog.json`](parity/active-backlog.json) registra la
 misma fecha, pin y `main_commit`. Ese hash siempre refiere al último commit ya

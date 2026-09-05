@@ -186,6 +186,14 @@ afirmación obsoleta en cada fuente tanto con `rg` como con el fallback
 que cita el último commit ya publicado en vez de auto-referenciar el commit
 documental. #337 sigue abierto por la auditoría semántica de las demás matrices.
 
+Sub-issue #368 de #337 (2026-09-05): el corte canónico avanza a `dc3602b5`,
+última etapa publicada antes de su commit documental, y actualiza sus conteos
+de validación. El gate exige que RMAP-056 y RMAP-082 continúen abiertos como
+padres de cobertura aunque sus sub-issues estén cerrados; las pruebas cubren
+ambos cierres falsos con `rg` y `grep -E`, además de un hash sintácticamente
+válido que no coincide con el bloque canónico. #337 sigue abierto para la
+auditoría semántica completa de las fuentes restantes.
+
 Sub-issue #353 de #337 (2026-09-05): la matriz Action0 distingue la FTA custom
 todavía bloqueada de los callbacks `AirportTile` ya conectados, y este plan
 describe CB36 e historiales `INDY` según sus call sites actuales. El gate

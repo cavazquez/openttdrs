@@ -29,6 +29,7 @@ class ParityDocsPortabilityTest(unittest.TestCase):
         stale_path=None,
         stale_text=None,
         corrupt_cutoff_field=None,
+        corrupt_cutoff_value=None,
         corrupt_raster_field=None,
     ):
         with tempfile.TemporaryDirectory(prefix="parity-docs-portability-") as directory:
@@ -58,7 +59,11 @@ class ParityDocsPortabilityTest(unittest.TestCase):
                     "main_commit_role": "",
                     "date": "2026-99-99",
                 }
-                manifest["cutoff"][corrupt_cutoff_field] = values[corrupt_cutoff_field]
+                manifest["cutoff"][corrupt_cutoff_field] = (
+                    corrupt_cutoff_value
+                    if corrupt_cutoff_value is not None
+                    else values[corrupt_cutoff_field]
+                )
                 manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             if corrupt_raster_field:
                 baseline_path = root / "docs/parity/evidence/kale-189-126/baseline-2026-09-05.json"
@@ -179,6 +184,27 @@ class ParityDocsPortabilityTest(unittest.TestCase):
         for field in ("main_commit", "main_commit_role", "date"):
             with self.subTest(field=field):
                 self.run_gate(with_rg=True, corrupt_cutoff_field=field)
+
+    def test_valid_but_undocumented_cutoff_hash_is_rejected(self):
+        self.run_gate(
+            with_rg=True,
+            corrupt_cutoff_field="main_commit",
+            corrupt_cutoff_value="deadbeef",
+        )
+
+    def test_rmap_parent_closures_are_rejected_with_both_searchers(self):
+        stale_claims = (
+            "| **RMAP-056** | selección de industrias | **Cerrado** | cierre falso |",
+            "| **RMAP-082** | secuencia urbana | **Cerrado** | cierre falso |",
+        )
+        for with_rg in (True, False):
+            for stale_text in stale_claims:
+                with self.subTest(with_rg=with_rg, stale_text=stale_text):
+                    self.run_gate(
+                        with_rg=with_rg,
+                        stale_path="docs/parity/random-map-issues.md",
+                        stale_text=stale_text,
+                    )
 
     def test_invalid_raster_baseline_is_rejected(self):
         for field in ("recorded_on", "candidate_commit", "results"):

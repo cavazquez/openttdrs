@@ -77,6 +77,8 @@ require_pat 'baseline-2026-09-05\.json' docs/PARIDAD.md
 require_pat '155\.322 / 921\.600' docs/PARIDAD.md
 require_pat 'cd3c424108be4c8ed285169db2daa4829066d8be' docs/PARIDAD.md
 require_pat 'c2661164bcb6cbf5ab97b56ccbee7506a3b26833' docs/PARIDAD.md
+require_pat '^\| \*\*RMAP-056\*\* \|.*\*\*Abierto' docs/parity/random-map-issues.md
+require_pat '^\| \*\*RMAP-082\*\* \|.*\*\*Abierto' docs/parity/random-map-issues.md
 python3 scripts/check_active_parity_backlog.py
 python3 scripts/check_raster_baseline.py
 
@@ -133,6 +135,10 @@ check_pat '60\.774/921\.600 píxeles distintos'
 check_pat '129\.724 de 921\.600 píxeles distintos'
 check_pat '7\.264/122\.880'
 check_pat '6\.195/122\.880'
+# Estos son padres de cobertura; sub-issues cerrados no deben convertirlos en
+# cierres globales por accidente dentro de la tabla canónica RMAP.
+check_pat '^\| \*\*RMAP-056\*\* \|.*\*\*Cerrado'
+check_pat '^\| \*\*RMAP-082\*\* \|.*\*\*Cerrado'
 
 if [[ "$FAIL" -ne 0 ]]; then
   err "docs de paridad desactualizadas (#125)"

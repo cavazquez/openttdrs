@@ -25,7 +25,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
-Base funcional local y publicada: **`5682ef1c`** (`newgrf: render standard vehicle visual effects`),
+Base funcional local y publicada: **`25d026a7`** (`render: project vehicle effects in isometric space`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están
 en `origin/main`; el rechazo 404 anterior quedó resuelto por el reintento posterior.
@@ -192,6 +192,14 @@ valores `VE_DEFAULT` de vehículos no ferroviarios continúan desactivados. El
 bloque no cierra #329: quedan sprites/sonidos locales, consist completo y la
 proyección de offsets en todos los zooms.
 
+Actualización #329-VEHICLE-VISUAL-EFFECT-084 (2026-09-05, commit `25d026a7`):
+los offsets `x/y/z` de CB10 y CB160 pasan por la proyección isométrica común del
+cliente. `z` modifica ahora la altura visual proyectada y no el tercer
+componente sortable de Bevy, por lo que el orden de teselas permanece estable;
+la corrección cubre el humo vanilla (`z=10`) y los registros avanzados en todos
+los zooms. El issue sigue abierto por sprites/sonidos locales, composición
+completa de consist y sorter/viewport.
+
 Corrección vigente de este corte: CB160 ya tiene call site compartido para
 trenes, carretera, barcos y aeronaves, con auto-centro, rotación y supresión
 de estados no visibles alineados al upstream. CB10 estándar también tiene una
@@ -225,11 +233,12 @@ catálogo está instalado. El residual de `#329` queda acotado a callbacks
 CB140–142, `AirportTiles`, industria, GUI/variables ilimitadas y otros scopes
 que todavía no reciben ese catálogo.
 
-Corrección vigente de la fila visual (`5682ef1c`): la frase histórica que
+Corrección vigente de la fila visual (`25d026a7`): la frase histórica que
 limitaba CB160 a trenes y la ruta estándar CB10 a trenes queda superada. Ambos
 call sites comparten ahora la emisión vanilla entre trenes, carretera, barcos y
 aeronaves; siguen pendientes la composición de sprites/sonidos locales,
-consists y sorter/viewport.
+consists y sorter/viewport. La proyección isométrica de `x/y/z` ya se aplica a
+CB10 y CB160, con `z` reservado a la altura visual y no al orden sortable.
 
 Actualización #329-CARGO-CTT-067 (2026-09-04, commit `7782568d`): las rutas
 runtime de animación de estaciones ferroviarias/waypoints (`CB140`–`CB142`)

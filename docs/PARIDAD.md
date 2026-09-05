@@ -31,10 +31,16 @@ generalización del clima permanece abierta. RMAP-139 agrega al comparador los
 ajustes explícitos de ríos (`amount_of_rivers`, `min_river_length`,
 `river_route_random`) y `water_borders`; las combinaciones verificadas en
 temperate 256²/512² dan cero diferencias raw y 4×4 en las seis fronteras.
+La ampliación RMAP-140/141 comprobó además `arctic` 512² (seed
+`1330935378`, por defecto y con `amount_of_rivers=1`, `min_river_length=2`,
+`river_route_random=1`, `water_borders=0`) y `tropic` 512² (seed
+`1330935380`): las seis fronteras dieron 0 teselas y 0 bloques 4×4 distintos.
+Toyland 1024² (seed `1330935381`) excedió el timeout de 120 s del oráculo y no
+se cuenta como evidencia.
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-09-04 · `main` (base funcional publicada `5682ef1c`; el
+**Corte canónico: 2026-09-05 · `main` (base funcional publicada `25d026a7`; el
 runtime de cargos custom, la frontera SAV, el monitor de carga, los pesos vial y
 ferroviario, la CTT de scopes de estación/parada e `IndustryTile`, la CTT de
 vehículos/refit y las órdenes de refit de estación, incluido
@@ -298,6 +304,15 @@ de `ShowVisualEffect`; los valores `VE_DEFAULT` de vehículos no ferroviarios
 siguen desactivados como en OpenTTD. Persisten como brechas los sprites/sonidos
 locales, consist completo y la proyección exacta de offsets en todos los zooms;
 #329 permanece abierto.
+
+Actualización #329-VEHICLE-VISUAL-EFFECT-084 (2026-09-05, `25d026a7`): los
+offsets `x/y/z` de CB10 y CB160 se convierten ahora desde coordenadas de mundo
+OpenTTD mediante la proyección isométrica del cliente. El `z` del efecto ya no
+se mezcla con el tercer componente sortable de Bevy: desplaza la altura visual,
+mientras el orden de dibujo sigue siendo el de la tesela. Esto corrige la
+posición del humo vanilla (`z=10`) y de registros avanzados en todos los zooms;
+quedan pendientes sprites/sonidos locales, composición completa de consist y
+sorter/viewport.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (commit `5682ef1c`, CB10 estándar y CB160 de efectos visuales
+Actualizada: **2026-09-05** (commit `25d026a7`, CB10 estándar y CB160 de efectos visuales
 avanzados de vehículos en trenes; órdenes de refit de estación,
 clases de carga Action0, CTT y
 callback de refit de vehículos; CTT de cargos custom en scopes
@@ -860,3 +860,10 @@ reglas de emisión de `ShowVisualEffect`, aplica el offset `0..15`, corrige la
 longitud de trenes y respeta la inversión visual; los vehículos no ferroviarios
 con `VE_DEFAULT` siguen sin efecto. La matriz mantiene el estado parcial por
 sprites/sonidos locales, composición de consist y viewport.
+
+Actualización #329-VEHICLE-VISUAL-EFFECT-084 (2026-09-05, commit `25d026a7`):
+CB10 y CB160 convierten sus offsets `x/y/z` desde coordenadas de mundo mediante
+la proyección isométrica común. `z` desplaza la altura visual y no el tercer
+componente sortable de Bevy, manteniendo estable el orden por tesela en todos
+los zooms. La matriz sigue parcial por sprites/sonidos locales, composición de
+consist y sorter/viewport.

@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
-Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-04**,
-`main` con base funcional publicada `5682ef1c`, posterior al writeback canónico
+Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-05**,
+`main` con base funcional publicada `25d026a7`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
 `TileLoop`/`IndustryTick`/`CargoReceived` de teselas; los disparadores CB25 se
@@ -282,3 +282,10 @@ vanilla) también es estado runtime derivado del catálogo NewGRF; no agrega
 columnas ni altera el wire format. Al reabrir un save se recalcula para los
 vehículos cuyo GRF está instalado, mientras `VE_DEFAULT` no ferroviario sigue
 sin crear efectos como en OpenTTD.
+
+Actualización `25d026a7` (2026-09-05): la conversión isométrica de los offsets
+`x/y/z` de CB10 y CB160 es estado runtime exclusivamente visual. No agrega
+columnas ni altera el wire format `.sav`; al reabrir se vuelve a proyectar con
+el viewport y el catálogo NewGRF disponibles. La paridad binaria del save queda
+sin cambios y la brecha visual de #329 continúa abierta por sprites/sonidos,
+consist y sorter/viewport.

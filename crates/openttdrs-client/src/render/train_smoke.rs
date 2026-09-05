@@ -14,7 +14,7 @@ use openttdrs_core::{
 
 use crate::audio::{PlayWorldSfx, play_vehicle_event_sound_with_default};
 use crate::bevy_app::UpdateSet;
-use crate::iso::wang_hash;
+use crate::iso::{remap_tile_offset, wang_hash};
 use crate::render::effect_vehicle::{
     EffectSpriteSet, EffectVehicleFrames, apply_effect_frame, effect_overlay_pos,
 };
@@ -312,7 +312,17 @@ fn advanced_effect_offset(
         x += SMOKE_POS[usize::from(direction)] * longitudinal;
         y += SMOKE_POS[transverse] * longitudinal;
     }
-    Vec3::new(x as f32, y as f32, f32::from(spawn.z))
+    vehicle_effect_overlay_offset(x, y, i32::from(spawn.z))
+}
+
+/// Convierte la posición relativa de `CreateEffectVehicleRel` a la escala del
+/// viewport. OpenTTD entrega `x/y/z` en píxeles de mundo; el renderer usa la
+/// proyección isométrica del cliente y reserva el tercer componente de `Vec3`
+/// para el orden sortable, no para la altura visual del efecto.
+#[must_use]
+fn vehicle_effect_overlay_offset(x: i32, y: i32, z: i32) -> Vec3 {
+    let screen = remap_tile_offset(x as f32, y as f32, z as f32);
+    Vec3::new(screen.x, screen.y, 0.0)
 }
 
 /// Replica la decisión de `Vehicle::ShowVisualEffect` que precede a CB160.
@@ -408,10 +418,10 @@ fn standard_effect_offset(vehicle: &Vehicle, offset: u8) -> Vec3 {
     }
     const SMOKE_POS: [i32; 8] = [1, 1, 1, 0, -1, -1, -1, 0];
     let transverse = (usize::from(direction) + 2) & 7;
-    Vec3::new(
-        (SMOKE_POS[usize::from(direction)] * longitudinal) as f32,
-        (SMOKE_POS[transverse] * longitudinal) as f32,
-        10.0,
+    vehicle_effect_overlay_offset(
+        SMOKE_POS[usize::from(direction)] * longitudinal,
+        SMOKE_POS[transverse] * longitudinal,
+        10,
     )
 }
 
@@ -738,11 +748,11 @@ mod tests {
         };
         assert_eq!(
             advanced_effect_offset(&vehicle, spawn, false, false),
-            Vec3::new(2.0, 3.0, -4.0)
+            Vec3::new(4.0, -18.0, 0.0)
         );
         assert_eq!(
             advanced_effect_offset(&vehicle, spawn, false, true),
-            Vec3::new(5.0, -1.0, -4.0)
+            Vec3::new(-24.0, -16.0, 0.0)
         );
     }
 
@@ -757,7 +767,7 @@ mod tests {
         train.direction = 0;
         assert_eq!(
             advanced_effect_offset(&train, spawn, true, false),
-            Vec3::new(2.0, 2.0, 0.0)
+            Vec3::new(0.0, -8.0, 0.0)
         );
         assert_eq!(
             advanced_effect_offset(
@@ -770,7 +780,7 @@ mod tests {
                 true,
                 true,
             ),
-            Vec3::new(7.0, 1.0, 0.0)
+            Vec3::new(-24.0, -16.0, 0.0)
         );
 
         let mut bus = Vehicle::new(
@@ -783,7 +793,7 @@ mod tests {
         bus.direction = 0;
         assert_eq!(
             advanced_effect_offset(&bus, spawn, true, false),
-            Vec3::new(-2.0, -2.0, 0.0)
+            Vec3::new(0.0, 8.0, 0.0)
         );
 
         let mut ship = Vehicle::new(
@@ -836,12 +846,9 @@ mod tests {
         let mut train = running_train(ENGINE_TRAIN_KIRBY);
         train.direction = 0;
         train.unit_length = 4;
-        assert_eq!(standard_effect_offset(&train, 8), Vec3::new(2.0, 2.0, 10.0));
+        assert_eq!(standard_effect_offset(&train, 8), Vec3::new(0.0, 12.0, 0.0));
         train.train_flags |= 1 << 4;
-        assert_eq!(
-            standard_effect_offset(&train, 8),
-            Vec3::new(-2.0, -2.0, 10.0)
-        );
+        assert_eq!(standard_effect_offset(&train, 8), Vec3::new(0.0, 28.0, 0.0));
 
         let mut bus = Vehicle::new(
             40,
@@ -850,7 +857,7 @@ mod tests {
             TileCoord::new(2, 1),
         );
         bus.direction = 0;
-        assert_eq!(standard_effect_offset(&bus, 4), Vec3::new(-4.0, -4.0, 10.0));
+        assert_eq!(standard_effect_offset(&bus, 4), Vec3::new(0.0, 36.0, 0.0));
     }
 
     #[test]

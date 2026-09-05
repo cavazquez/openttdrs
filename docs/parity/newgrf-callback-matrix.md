@@ -1,7 +1,7 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-05** (commit `25d026a7`, CB10 estándar y CB160 de efectos visuales
-avanzados de vehículos en trenes; órdenes de refit de estación,
+Actualizada: **2026-09-04** (base publicada `25d026a7`; corrección de posición
+CB10/CB160 documentada en VEHICLE-VISUAL-EFFECT-085; órdenes de refit de estación,
 clases de carga Action0, CTT y
 callback de refit de vehículos; CTT de cargos custom en scopes
 de estación/parada,
@@ -861,9 +861,48 @@ longitud de trenes y respeta la inversión visual; los vehículos no ferroviario
 con `VE_DEFAULT` siguen sin efecto. La matriz mantiene el estado parcial por
 sprites/sonidos locales, composición de consist y viewport.
 
-Actualización #329-VEHICLE-VISUAL-EFFECT-084 (2026-09-05, commit `25d026a7`):
+Actualización histórica #329-VEHICLE-VISUAL-EFFECT-084 (commit `25d026a7`):
 CB10 y CB160 convierten sus offsets `x/y/z` desde coordenadas de mundo mediante
 la proyección isométrica común. `z` desplaza la altura visual y no el tercer
 componente sortable de Bevy, manteniendo estable el orden por tesela en todos
 los zooms. La matriz sigue parcial por sprites/sonidos locales, composición de
 consist y sorter/viewport.
+
+### #329-VEHICLE-VISUAL-EFFECT-085 — Posición y continuidad de efectos
+
+Estado: cerrado como sub-issue [#344](https://github.com/cavazquez/openttdrs/issues/344)
+(2026-09-04). Reemplaza
+las afirmaciones de posición exacta de 082–084: se detectó una escala doble
+respecto de `road_vehicle_tile_anchor`, el bit `auto_center` invertido para
+trenes cortos y la pérdida del offset estándar en `animate_train_smoke`.
+
+El renderer usa ahora la misma escala que el vehículo, conserva el offset
+CB10 durante toda la animación y elimina el retroceso artificial de 28 unidades
+de progreso. CB160 centra carretera cuando el bit 13 está activo y corrige
+trenes cortos cuando está desactivado; la rotación vuelve a `int8_t` antes de
+sumar el centro, como en OpenTTD.
+
+`scripts/vehicle_effect_position_oracle.py` extrae y ejecuta sin modificar
+`SpawnAdvancedVisualEffect` de OpenTTD 15.3, pin
+`14ec60f248547d4d062a1160f0fc26d742319888`. Su fixture versionada contiene
+640 casos (tipos, direcciones, longitudes, inversión, flags y offsets extremos).
+La regresión del cliente compara esas posiciones con las seis proyecciones
+ortográficas; otra ejecuta los sistemas ECS de emisión y animación para
+comprobar que la posición inicial se conserve al subir/cambiar de frame.
+
+Validación: 640/640 casos nativos y 3.840/3.840 proyecciones, 12 pruebas
+focalizadas, 2.046 pruebas unitarias core y 1.071 cliente (2 ignoradas), suites
+de integración core, Clippy estricto, formato y checker documental correctos.
+El cliente real abrió Kale en Wayland y se inspeccionaron capturas 1280×720
+centradas en `(189,126)` a 1×, 0,50×, 0,25× y 0,125×: mapa visible en las
+cuatro. Las capturas pausadas son diagnóstico de arranque/zoom, no prueba de
+la animación ni de igualdad de framebuffer. Xvfb falló al crear la superficie
+Vulkan (sin modos de presentación); Wayland completó las cuatro capturas.
+Los logs remotos también revelaron fallos previos de rustdoc y lockfile fuzz;
+se mantienen pendientes en la siguiente etapa de #333.
+
+Límite vigente: siguen pendientes el RNG/cadencia por vehículo, filtros y
+semántica completa de consist, altura de aeronaves y sorter/raster global.
+El upstream de referencia sólo materializa los tipos `F1/F2/F3/FA`: sus tipos
+locales de efecto no se ejecutan tampoco en OpenTTD 15.3 y no constituyen un
+criterio de paridad pendiente. #326 y #329 permanecen abiertos.

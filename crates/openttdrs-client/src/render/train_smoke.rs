@@ -8,13 +8,13 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     EngineDef, Vehicle, VehicleAdvancedVisualEffectSpawn, VehicleOrder, VehicleVisualEffectKind,
-    extrapolate_vehicle_pose, resolve_vehicle_spawn_visual_effect_callback, retreat_vehicle_pose,
-    train_smoke_kind, vehicle_visual_effect_spec,
+    extrapolate_vehicle_pose, resolve_vehicle_spawn_visual_effect_callback, train_smoke_kind,
+    vehicle_visual_effect_spec,
 };
 
 use crate::audio::{PlayWorldSfx, play_vehicle_event_sound_with_default};
 use crate::bevy_app::UpdateSet;
-use crate::iso::{remap_tile_offset, wang_hash};
+use crate::iso::{road_vehicle_tile_anchor, wang_hash};
 use crate::render::effect_vehicle::{
     EffectSpriteSet, EffectVehicleFrames, apply_effect_frame, effect_overlay_pos,
 };
@@ -26,8 +26,6 @@ use crate::simulation::SimClock;
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
 
-/// Desplazamiento sub-tesela hacia atrás respecto a la locomotora.
-const TRAIN_SMOKE_EMIT_BACK_PROGRESS: u8 = 28;
 const MAX_TRAIN_SMOKE_EFFECTS: usize = 48;
 
 pub(crate) struct TrainSmokePlugin;
@@ -58,8 +56,8 @@ pub(crate) struct TrainSmokeEffect {
     base_z: u8,
     tile: (i32, i32),
     set: TrainSmokeSet,
-    /// Desplazamiento adicional de un registro `0x100` avanzado.
-    advanced_offset: Vec3,
+    /// Offset de emisión CB10/CB160, conservado durante toda la animación.
+    emission_offset: Vec3,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -267,10 +265,8 @@ fn advanced_effect_set(effect_type: u8) -> Option<TrainSmokeSet> {
     }
 }
 
-/// Convierte offsets NFO relativos en un desplazamiento de overlay. La
-/// posición recibida por `vehicle_draw_anchor_from_pose` ya está centrada, por
-/// lo que `auto_center` no agrega un sesgo adicional; sí respetamos
-/// `auto_rotate`, que es la parte observable para X/Y.
+/// Proyecta `SpawnAdvancedVisualEffect`: rotación signed de 8 bits y centro
+/// dependiente del tipo de vehículo y del bit 13 del callback.
 #[must_use]
 fn advanced_effect_offset(
     vehicle: &Vehicle,
@@ -291,10 +287,11 @@ fn advanced_effect_offset(
         let transverse = (longitudinal + 2) & 7;
         let local_x = x;
         let local_y = y;
-        x = SMOKE_POS[longitudinal] * local_x + SMOKE_POS[transverse] * local_y;
-        y = SMOKE_POS[transverse] * local_x - SMOKE_POS[longitudinal] * local_y;
+        // Upstream asigna el resultado a int8_t antes de sumar el centro.
+        x = i32::from((SMOKE_POS[longitudinal] * local_x + SMOKE_POS[transverse] * local_y) as i8);
+        y = i32::from((SMOKE_POS[transverse] * local_x - SMOKE_POS[longitudinal] * local_y) as i8);
     }
-    if auto_center {
+    {
         // OpenTTD centra los efectos de carretera respecto del frente de la
         // unidad y los de tren respecto de la posición de su sprite. Barcos y
         // aeronaves ya reciben una posición centrada de `CreateEffectVehicle`.
@@ -303,9 +300,11 @@ fn advanced_effect_offset(
         let length_delta = i32::from(openttdrs_core::train_consist::VEHICLE_LENGTH)
             - i32::from(vehicle.unit_length.max(1));
         let longitudinal = match vehicle.kind {
-            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => -length_delta / 2,
-            VehicleKind::Train => length_delta / 2,
-            VehicleKind::Ship | VehicleKind::Aircraft => 0,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram if auto_center => {
+                -length_delta / 2
+            }
+            VehicleKind::Train if !auto_center => length_delta / 2,
+            _ => 0,
         };
         const SMOKE_POS: [i32; 8] = [1, 1, 1, 0, -1, -1, -1, 0];
         let transverse = (usize::from(direction) + 2) & 7;
@@ -321,7 +320,7 @@ fn advanced_effect_offset(
 /// para el orden sortable, no para la altura visual del efecto.
 #[must_use]
 fn vehicle_effect_overlay_offset(x: i32, y: i32, z: i32) -> Vec3 {
-    let screen = remap_tile_offset(x as f32, y as f32, z as f32);
+    let screen = road_vehicle_tile_anchor(0, 0, x as f32, y as f32, z as f32);
     Vec3::new(screen.x, screen.y, 0.0)
 }
 
@@ -523,7 +522,7 @@ fn spawn_train_smoke(
                         base_z,
                         tile: (tx, ty),
                         set: set_kind,
-                        advanced_offset,
+                        emission_offset: advanced_offset,
                     },
                     sprite,
                     Transform::from_translation(pos),
@@ -570,24 +569,15 @@ fn spawn_train_smoke(
         let Some(atlas) = effect_set.frames.first() else {
             continue;
         };
-        let pose = if vehicle.kind == VehicleKind::Train && visual_spec.offset == 8 {
-            // Conserva el pequeño retraso visual de la ruta vanilla para no
-            // cambiar la cadencia de humo de motores sin Action0 custom.
-            retreat_vehicle_pose(
-                vehicle,
-                extrapolate_vehicle_pose(vehicle, sim_clock.tick_alpha),
-                TRAIN_SMOKE_EMIT_BACK_PROGRESS,
-            )
-        } else {
-            extrapolate_vehicle_pose(vehicle, sim_clock.tick_alpha)
-        };
+        let pose = extrapolate_vehicle_pose(vehicle, sim_clock.tick_alpha);
         let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(vehicle, map, pose);
         let mut sprite = atlas.sprite();
         if matches!(set_kind, TrainSmokeSet::Electric) {
             sprite.color = Color::srgb(0.85, 0.92, 1.0);
         }
+        let emission_offset = standard_effect_offset(vehicle, visual_spec.offset);
         let pos = effect_overlay_pos(anchor, 0, &effect_set, base_z, (tx, ty), 0.38, 0.0)
-            + standard_effect_offset(vehicle, visual_spec.offset);
+            + emission_offset;
         commands.spawn((
             MapVisualLayer,
             TrainSmokeEffect {
@@ -596,7 +586,7 @@ fn spawn_train_smoke(
                 base_z,
                 tile: (tx, ty),
                 set: set_kind,
-                advanced_offset: Vec3::ZERO,
+                emission_offset,
             },
             sprite,
             Transform::from_translation(pos),
@@ -660,7 +650,7 @@ fn animate_train_smoke(
             smoke.tile,
             0.38,
             f32::from(state.rise),
-        ) + smoke.advanced_offset;
+        ) + smoke.emission_offset;
         if transform.translation != pos {
             transform.translation = pos;
         }
@@ -748,11 +738,11 @@ mod tests {
         };
         assert_eq!(
             advanced_effect_offset(&vehicle, spawn, false, false),
-            Vec3::new(4.0, -18.0, 0.0)
+            Vec3::new(2.0, -9.0, 0.0)
         );
         assert_eq!(
             advanced_effect_offset(&vehicle, spawn, false, true),
-            Vec3::new(-24.0, -16.0, 0.0)
+            Vec3::new(-12.0, -8.0, 0.0)
         );
     }
 
@@ -766,8 +756,8 @@ mod tests {
         train.unit_length = 4;
         train.direction = 0;
         assert_eq!(
-            advanced_effect_offset(&train, spawn, true, false),
-            Vec3::new(0.0, -8.0, 0.0)
+            advanced_effect_offset(&train, spawn, false, false),
+            Vec3::new(0.0, -4.0, 0.0)
         );
         assert_eq!(
             advanced_effect_offset(
@@ -777,10 +767,10 @@ mod tests {
                     y: 3,
                     ..spawn
                 },
-                true,
+                false,
                 true,
             ),
-            Vec3::new(-24.0, -16.0, 0.0)
+            Vec3::new(-12.0, -8.0, 0.0)
         );
 
         let mut bus = Vehicle::new(
@@ -793,7 +783,7 @@ mod tests {
         bus.direction = 0;
         assert_eq!(
             advanced_effect_offset(&bus, spawn, true, false),
-            Vec3::new(0.0, 8.0, 0.0)
+            Vec3::new(0.0, 4.0, 0.0)
         );
 
         let mut ship = Vehicle::new(
@@ -846,9 +836,9 @@ mod tests {
         let mut train = running_train(ENGINE_TRAIN_KIRBY);
         train.direction = 0;
         train.unit_length = 4;
-        assert_eq!(standard_effect_offset(&train, 8), Vec3::new(0.0, 12.0, 0.0));
+        assert_eq!(standard_effect_offset(&train, 8), Vec3::new(0.0, 6.0, 0.0));
         train.train_flags |= 1 << 4;
-        assert_eq!(standard_effect_offset(&train, 8), Vec3::new(0.0, 28.0, 0.0));
+        assert_eq!(standard_effect_offset(&train, 8), Vec3::new(0.0, 14.0, 0.0));
 
         let mut bus = Vehicle::new(
             40,
@@ -857,7 +847,146 @@ mod tests {
             TileCoord::new(2, 1),
         );
         bus.direction = 0;
-        assert_eq!(standard_effect_offset(&bus, 4), Vec3::new(0.0, 36.0, 0.0));
+        assert_eq!(standard_effect_offset(&bus, 4), Vec3::new(0.0, 18.0, 0.0));
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn cb160_positions_match_native_oracle_at_every_zoom() {
+        use bevy::camera::CameraProjection;
+
+        // Generated by executing SpawnAdvancedVisualEffect from OpenTTD 15.3.
+        let fixture = include_str!("../../tests/fixtures/vehicle_effect_positions.tsv");
+        for line in fixture.lines().skip(1) {
+            let fields: Vec<i32> = line
+                .split('\t')
+                .map(|value| value.parse().unwrap())
+                .collect();
+            assert_eq!(fields.len(), 12);
+            let kind = [
+                VehicleKind::Train,
+                VehicleKind::Bus,
+                VehicleKind::Ship,
+                VehicleKind::Aircraft,
+            ][fields[0] as usize];
+            let mut vehicle = Vehicle::new(1, kind, TileCoord::new(1, 1), TileCoord::new(2, 1));
+            vehicle.direction = fields[1] as u8;
+            vehicle.unit_length = fields[2] as u8;
+            vehicle.train_flags = (fields[3] as u16) << 4;
+            let actual = advanced_effect_offset(
+                &vehicle,
+                VehicleAdvancedVisualEffectSpawn {
+                    effect_type: 0xF1,
+                    x: fields[6] as i8,
+                    y: fields[7] as i8,
+                    z: fields[8] as i8,
+                },
+                fields[4] != 0,
+                fields[5] != 0,
+            );
+            // RemapCoords / ZOOM_BASE, Y inverted for Bevy, at Normal zoom.
+            let expected = Vec3::new(
+                ((fields[10] - fields[9]) * 2) as f32,
+                (fields[11] - fields[9] - fields[10]) as f32,
+                0.0,
+            );
+            assert_eq!(actual, expected, "oracle row: {line}");
+            for scale in [0.25, 0.5, 1.0, 2.0, 4.0, 8.0] {
+                let mut projection = OrthographicProjection {
+                    scale,
+                    ..OrthographicProjection::default_2d()
+                };
+                projection.update(1280.0, 720.0);
+                let matrix = projection.get_clip_from_view();
+                let projected = matrix.project_point3(actual) - matrix.project_point3(Vec3::ZERO);
+                let pixels = projected.truncate() * Vec2::new(640.0, 360.0);
+                assert!(
+                    pixels.distance(expected.truncate() / scale) < 0.001,
+                    "scale={scale}, oracle row: {line}, pixels={pixels:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn standard_smoke_keeps_spawn_offset_through_animation() {
+        use crate::render::AtlasSprite;
+
+        let mut state = GameState::from_map(Map::new_flat(4, 4, 0));
+        let mut vehicle = running_train(ENGINE_TRAIN_KIRBY);
+        vehicle.direction = 0;
+        vehicle.unit_length = 4;
+        state.vehicles.push(vehicle.clone());
+        let frames = EffectVehicleFrames {
+            steam: (0..5)
+                .map(|index| AtlasSprite {
+                    image: Handle::default(),
+                    atlas: TextureAtlas {
+                        layout: Handle::default(),
+                        index,
+                    },
+                    size: Vec2::splat(16.0),
+                })
+                .collect(),
+            diesel: Vec::new(),
+            electric_spark: Vec::new(),
+            explosion_large: Vec::new(),
+            breakdown: Vec::new(),
+        };
+        let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(
+            &vehicle,
+            &state.map,
+            openttdrs_core::VehiclePose::from_vehicle(&vehicle),
+        );
+        let mut app = App::new();
+        app.insert_resource(SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        })
+        .insert_resource(frames.clone())
+        .insert_resource(SimHudControls {
+            sound_vehicle: false,
+            ..default()
+        })
+        .init_resource::<ClientPreferences>()
+        .init_resource::<SimClock>()
+        .init_resource::<TrainSmokeSpawnClock>()
+        .add_message::<PlayWorldSfx>()
+        .add_systems(Update, (spawn_train_smoke, animate_train_smoke).chain());
+        app.update();
+        let mut query = app
+            .world_mut()
+            .query::<(Entity, &Transform, &TrainSmokeEffect)>();
+        let (entity, transform, smoke) = query.single(app.world()).unwrap();
+        let emission_offset = standard_effect_offset(&vehicle, 8);
+        assert_eq!(smoke.emission_offset, emission_offset);
+        assert_eq!(
+            transform.translation,
+            effect_overlay_pos(anchor, 0, &frames.steam_set(), base_z, (tx, ty), 0.38, 0.0)
+                + emission_offset
+        );
+
+        // Stop further emissions; the existing effect continues to rise and
+        // change atlas frames from its original world position.
+        app.world_mut().resource_mut::<SimWorld>().state.vehicles[0].running = false;
+        for (tick, frame, rise) in [(1, 0, 0.0), (4, 0, 1.0), (8, 1, 1.0)] {
+            app.world_mut().resource_mut::<SimWorld>().state.tick = GameTick::new(tick);
+            app.update();
+            assert_eq!(
+                app.world().get::<Transform>(entity).unwrap().translation,
+                effect_overlay_pos(
+                    anchor,
+                    frame,
+                    &frames.steam_set(),
+                    base_z,
+                    (tx, ty),
+                    0.38,
+                    rise
+                ) + emission_offset
+            );
+        }
     }
 
     #[test]

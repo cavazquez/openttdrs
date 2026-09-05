@@ -192,13 +192,21 @@ valores `VE_DEFAULT` de vehículos no ferroviarios continúan desactivados. El
 bloque no cierra #329: quedan sprites/sonidos locales, consist completo y la
 proyección de offsets en todos los zooms.
 
-Actualización #329-VEHICLE-VISUAL-EFFECT-084 (2026-09-05, commit `25d026a7`):
+Actualización histórica #329-VEHICLE-VISUAL-EFFECT-084 (commit `25d026a7`):
 los offsets `x/y/z` de CB10 y CB160 pasan por la proyección isométrica común del
 cliente. `z` modifica ahora la altura visual proyectada y no el tercer
 componente sortable de Bevy, por lo que el orden de teselas permanece estable;
 la corrección cubre el humo vanilla (`z=10`) y los registros avanzados en todos
 los zooms. El issue sigue abierto por sprites/sonidos locales, composición
 completa de consist y sorter/viewport.
+
+Corrección vigente (2026-09-04): la auditoría #329-VEHICLE-VISUAL-EFFECT-085
+encontró y corrige tres defectos que invalidaban la afirmación de posición
+exacta de 082–084, además del desbordamiento signed durante la rotación.
+La evidencia y los límites se mantienen únicamente en
+[la matriz de callbacks](newgrf-callback-matrix.md#329-vehicle-visual-effect-085--posición-y-continuidad-de-efectos).
+El siguiente corte visual debe resolver cadencia/RNG, filtros o altura aérea;
+los padres #326/#329 siguen abiertos.
 
 Corrección vigente de este corte: CB160 ya tiene call site compartido para
 trenes, carretera, barcos y aeronaves, con auto-centro, rotación y supresión

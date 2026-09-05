@@ -305,7 +305,7 @@ siguen desactivados como en OpenTTD. Persisten como brechas los sprites/sonidos
 locales, consist completo y la proyección exacta de offsets en todos los zooms;
 #329 permanece abierto.
 
-Actualización #329-VEHICLE-VISUAL-EFFECT-084 (2026-09-05, `25d026a7`): los
+Actualización histórica #329-VEHICLE-VISUAL-EFFECT-084 (`25d026a7`): los
 offsets `x/y/z` de CB10 y CB160 se convierten ahora desde coordenadas de mundo
 OpenTTD mediante la proyección isométrica del cliente. El `z` del efecto ya no
 se mezcla con el tercer componente sortable de Bevy: desplaza la altura visual,
@@ -313,6 +313,13 @@ mientras el orden de dibujo sigue siendo el de la tesela. Esto corrige la
 posición del humo vanilla (`z=10`) y de registros avanzados en todos los zooms;
 quedan pendientes sprites/sonidos locales, composición completa de consist y
 sorter/viewport.
+
+Corrección vigente (2026-09-04): la auditoría posterior encontró escala doble,
+centrado invertido de trenes cortos y pérdida del offset al animar. El estado y
+la evidencia independiente se mantienen en
+[VEHICLE-VISUAL-EFFECT-085](parity/newgrf-callback-matrix.md#329-vehicle-visual-effect-085--posición-y-continuidad-de-efectos).
+Las afirmaciones anteriores de posición exacta quedan reemplazadas por ese
+alcance; #326/#329 siguen abiertos.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía

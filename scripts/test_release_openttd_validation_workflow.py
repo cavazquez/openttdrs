@@ -34,7 +34,8 @@ def main() -> int:
     for needle in (
         "openttd-validation:",
         'OPENTTD_VERSION: "15.3"',
-        "actions/cache@v5",
+        # The gate requires caching, not a stale action major after Dependabot.
+        "uses: actions/cache@",
         "curl --fail --location --retry 3 --retry-all-errors",
         "sha256sum --check --strict",
         'mkdir -p "$RUNNER_TEMP/openttd-validation/baseset"',

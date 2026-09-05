@@ -38,6 +38,12 @@ de ptrace impedía finalizar LSan). Formato, Clippy workspace, rustdoc completo,
 gate documental y pruebas Python focalizadas pasan. #333 permanece abierto
 hasta comprobar los workflows del commit publicado.
 
+Seguimiento #333: el manifiesto Python completo detectó una expectativa vieja
+`actions/cache@v5` en el test de release, mientras Dependabot ya actualizó el
+workflow a v6. El test comprueba ahora el uso de `actions/cache` conservando
+los gates de versión OpenTTD, checksum, matriz estricta y artefactos. La
+regresión focalizada de release pasa; el resto del manifiesto sigue en curso.
+
 Base funcional local y publicada: **`25d026a7`** (`render: project vehicle effects in isometric space`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están

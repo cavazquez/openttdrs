@@ -588,9 +588,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else {
         let canonical = meta::plyr_chunk(state, &autoreplace_export)?;
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.plyr_chunk.as_ref()),
             canonical,
+            raw_tables.map(|tables| tables.plyr_semantic_records.as_slice()),
         )?);
     }
 
@@ -1244,6 +1245,65 @@ mod tests {
             crate::sav::table::record_get(active_row, "name")
                 .and_then(crate::sav::table::SlValue::as_str),
             Some(replacement.as_str())
+        );
+    }
+
+    /// Un `PLYR` histórico sólo expone `money`/`colour`. Cambiar el color,
+    /// que sí pertenece a ese schema, no debe obligar a insertar nombres y
+    /// settings modernos ni a perder el cuerpo original.
+    #[test]
+    fn legacy_imported_plyr_compatible_colour_change_keeps_raw_header() {
+        let original = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/mvp_openttd_rich.sav"
+        ))
+        .expect("fixture rich histórico");
+        let (original_payload, _) =
+            crate::sav::container::decompress(&original).expect("payload original");
+        let original_chunks =
+            crate::sav::chunks::parse_chunks(&original_payload).expect("chunks originales");
+        let original_plyr =
+            crate::sav::chunks::find_chunk(&original_chunks, "PLYR").expect("PLYR original");
+        let (_, original_header_end, _) =
+            crate::sav::table::parse_table_layout(&original_plyr.body).expect("header PLYR");
+
+        let mut loaded = GameState::from_sav_game(sav::load(&original).expect("import fixture"));
+        let active_company = loaded.active_company;
+        let replacement = loaded.company_colour.wrapping_add(1) % 16;
+        loaded.company_colour = replacement;
+        loaded
+            .companies
+            .iter_mut()
+            .find(|company| company.id == active_company)
+            .expect("compañía activa")
+            .colour = replacement;
+
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave changed");
+        if let Ok(path) = std::env::var("OPENTTDRS_DUMP_LEGACY_PLYR_COLOUR_SAV") {
+            std::fs::write(path, &resaved).expect("dump legacy PLYR changed");
+        }
+        let (resaved_payload, _) =
+            crate::sav::container::decompress(&resaved).expect("payload resaved");
+        let resaved_chunks =
+            crate::sav::chunks::parse_chunks(&resaved_payload).expect("chunks resaved");
+        let resaved_plyr =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "PLYR").expect("PLYR resaved");
+        assert_eq!(resaved_plyr.ch_type, original_plyr.ch_type);
+        assert_eq!(
+            &resaved_plyr.body[..original_header_end],
+            &original_plyr.body[..original_header_end],
+            "la mutación compatible conserva el schema histórico"
+        );
+        let reloaded = GameState::from_sav_game(sav::load(&resaved).expect("reimport changed"));
+        assert_eq!(reloaded.company_colour, replacement);
+        assert_eq!(
+            reloaded
+                .companies
+                .iter()
+                .find(|company| company.id == active_company)
+                .expect("compañía activa reimportada")
+                .colour,
+            replacement
         );
     }
 

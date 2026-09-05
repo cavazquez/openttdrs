@@ -1094,14 +1094,16 @@ aeronaves, `crashed_counter`, `number_consecutive_turns`, `turn_counter` y
 `flags` también se conservan en el subregistro FTA. Siguen pendientes el
 path/tcache y la geometría completa de tren y barco, además del runtime FTA.
 
-Desde 2026-09-02 el escritor común de tablas también fusiona cambios de campos
+Desde 2026-09-05 el escritor común de tablas también fusiona cambios de campos
 con schema y tamaño codificado idénticos sobre el cuerpo SAV importado, siempre
 que las filas y sus índices permanezcan iguales. Esto conserva columnas futuras
 y huecos en `STNN`, `CITY`, `INDY`, `ORDL`, `VEHS`, `CAPA`, `PATS`, `ECMY`,
 `CAPY`, `GRPS`, `ERNW`, `NGRF`, `DATE` y `PLYR`; incluye strings, listas y
-structs/campos anidados cuando no cambian su forma codificada. Los cambios de
-longitud, estructura o pools nativos no modelados siguen usando el writer
-canónico o permanecen pendientes; por eso #328/#329 continúan abiertos.
+structs/campos anidados cuando no cambian su forma codificada. Para `PLYR`, el
+snapshot semántico de importación también permite cambiar un campo compatible
+de un schema legacy sin insertar campos modernos que no cambiaron; una mutación
+de un campo ausente, incompatible, de longitud distinta o de pools nativos no
+modelados sigue usando el writer canónico. Por eso #328/#329 continúan abiertos.
 
 <!-- active-parity-backlog:end -->
 

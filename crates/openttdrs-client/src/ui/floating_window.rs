@@ -754,6 +754,9 @@ pub(crate) fn spawn_floating_window_keyed(
                 Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(TITLE_BAR_H),
+                    // El contenido desplazable puede tener una altura fija;
+                    // el caption nunca debe ceder su chrome para acomodarlo.
+                    flex_shrink: 0.0,
                     flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     border: UiRect::bottom(Val::Px(1.0)),

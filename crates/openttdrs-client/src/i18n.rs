@@ -197,6 +197,24 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Minimapa" => "Minimap",
         "Mapa ampliado" => "Expanded map",
         "Opciones de visualización" => "Display options",
+        "Nombres de pueblos" => "Town names",
+        "Nombres de estaciones" => "Station names",
+        "Nombres de puntos de paso" => "Waypoint names",
+        "Nombres de competidores" => "Competitor names",
+        "Animación completa" => "Full animation",
+        "Detalle completo" => "Full detail",
+        "Reservas PBS" => "PBS reservations",
+        "Overlay Link Graph" => "Link graph overlay",
+        "Gizmos de depuración" => "Debug gizmos",
+        "Overlay de diagnóstico" => "Diagnostics overlay",
+        "Clásico" => "Classic",
+        "Árboles" => "Trees",
+        "Casas" => "Houses",
+        "Edificios" => "Buildings",
+        "Puentes" => "Bridges",
+        "Estructuras" => "Structures",
+        "Catenaria" => "Catenary",
+        "Textos" => "Text",
         "Vista extra" => "Extra viewport",
         "Carteles" => "Signs",
         "Guardar partida" => "Save game",
@@ -804,6 +822,34 @@ mod tests {
             ("Cierre de industria", "Industry closure"),
             ("Economía", "Economy"),
             ("Cartel", "Newspaper"),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+        }
+    }
+
+    #[test]
+    fn catalog_translates_display_options_and_transparency_categories() {
+        for (spanish, english) in [
+            ("Nombres de pueblos", "Town names"),
+            ("Nombres de estaciones", "Station names"),
+            ("Nombres de puntos de paso", "Waypoint names"),
+            ("Nombres de competidores", "Competitor names"),
+            ("Animación completa", "Full animation"),
+            ("Detalle completo", "Full detail"),
+            ("Reservas PBS", "PBS reservations"),
+            ("Overlay Link Graph", "Link graph overlay"),
+            ("Gizmos de depuración", "Debug gizmos"),
+            ("Overlay de diagnóstico", "Diagnostics overlay"),
+            ("Clásico", "Classic"),
+            ("Carteles", "Signs"),
+            ("Árboles", "Trees"),
+            ("Casas", "Houses"),
+            ("Industrias", "Industries"),
+            ("Edificios", "Buildings"),
+            ("Puentes", "Bridges"),
+            ("Estructuras", "Structures"),
+            ("Catenaria", "Catenary"),
+            ("Textos", "Text"),
         ] {
             assert_eq!(localized_text(Locale::En, spanish), english);
         }

@@ -11,11 +11,18 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::SimHudControls;
+use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::toolbar::BuildMenuUi;
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
 const BTN_ACTIVE: Color = Color::srgb(0.98, 0.92, 0.35);
+// El contenido incluye once toggles y las nueve categorías TO_*. Mantenerlo
+// en un viewport evita que los presets inferiores queden fuera de pantallas
+// bajas y conserva el chrome de scrollbar clásico usado por Help.
+const DISPLAY_OPTIONS_SCROLL_HEIGHT: f32 = 320.0;
+const DISPLAY_OPTIONS_SCROLL_BG: Color = Color::srgb(0.22, 0.18, 0.12);
+const DISPLAY_OPTIONS_SCROLL_BORDER: Color = Color::srgb(0.45, 0.39, 0.27);
 
 #[derive(Resource, Default)]
 pub(crate) struct DisplayOptionsWindowState {
@@ -61,69 +68,99 @@ pub(crate) fn setup_display_options_window(mut commands: Commands, asset_server:
         460.0,
     );
     commands.entity(content).with_children(|body| {
-        body.spawn((
-            Text::new("Preferencias de cliente (se guardan al salir)"),
-            window_text_font(asset_server, UiFontRole::Caption),
-            TextColor(Color::srgb(0.82, 0.78, 0.68)),
-        ));
-        for (label, toggle) in [
-            ("Minimapa", DisplayOptionsToggle::Minimap),
-            ("Nombres de pueblos", DisplayOptionsToggle::TownLabels),
-            ("Nombres de estaciones", DisplayOptionsToggle::StationLabels),
-            (
-                "Nombres de puntos de paso",
-                DisplayOptionsToggle::WaypointLabels,
-            ),
-            (
-                "Nombres de competidores",
-                DisplayOptionsToggle::CompetitorLabels,
-            ),
-            ("Animación completa", DisplayOptionsToggle::FullAnimation),
-            ("Detalle completo", DisplayOptionsToggle::FullDetail),
-            ("Reservas PBS", DisplayOptionsToggle::PbsOverlay),
-            ("Overlay Link Graph", DisplayOptionsToggle::LinkGraphOverlay),
-            ("Gizmos de depuración", DisplayOptionsToggle::DebugGizmos),
-            ("Overlay de diagnóstico", DisplayOptionsToggle::Diagnostics),
-        ] {
-            spawn_toggle_row(body, asset_server, label, toggle);
-        }
-        body.spawn((
-            Text::new("Presets de cliente"),
-            window_text_font(asset_server, UiFontRole::Caption),
-            TextColor(WINDOW_TEXT),
+        spawn_classic_scroll_area_with(
+            body,
+            asset_server,
             Node {
-                margin: UiRect::top(Val::Px(10.0)),
+                flex_grow: 1.0,
+                min_width: Val::Px(0.0),
+                overflow: Overflow::scroll_y(),
                 ..default()
             },
-        ));
-        body.spawn(Node {
-            width: Val::Percent(100.0),
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(4.0),
-            ..default()
-        })
-        .with_children(|row| {
-            spawn_preset_btn(row, asset_server, DisplayOptionsPreset::Classic, "Clásico");
-            spawn_preset_btn(
-                row,
-                asset_server,
-                DisplayOptionsPreset::Performance,
-                "Rendimiento",
-            );
-            spawn_preset_btn(row, asset_server, DisplayOptionsPreset::Dev, "Dev");
-        });
-        body.spawn((
-            Text::new("Transparencia / invisibilidad (TO_*)"),
-            window_text_font(asset_server, UiFontRole::Caption),
-            TextColor(WINDOW_TEXT),
             Node {
-                margin: UiRect::top(Val::Px(10.0)),
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(4.0),
+                padding: UiRect::all(Val::Px(4.0)),
                 ..default()
             },
-        ));
-        for option in TransparencyOption::ALL {
-            spawn_transparency_row(body, asset_server, option);
-        }
+            DISPLAY_OPTIONS_SCROLL_BG,
+            DISPLAY_OPTIONS_SCROLL_BORDER,
+            (),
+            (),
+            |scroll| {
+                scroll.spawn((
+                    Text::new("Preferencias de cliente (se guardan al salir)"),
+                    window_text_font(asset_server, UiFontRole::Caption),
+                    TextColor(Color::srgb(0.82, 0.78, 0.68)),
+                ));
+                for (label, toggle) in [
+                    ("Minimapa", DisplayOptionsToggle::Minimap),
+                    ("Nombres de pueblos", DisplayOptionsToggle::TownLabels),
+                    ("Nombres de estaciones", DisplayOptionsToggle::StationLabels),
+                    (
+                        "Nombres de puntos de paso",
+                        DisplayOptionsToggle::WaypointLabels,
+                    ),
+                    (
+                        "Nombres de competidores",
+                        DisplayOptionsToggle::CompetitorLabels,
+                    ),
+                    ("Animación completa", DisplayOptionsToggle::FullAnimation),
+                    ("Detalle completo", DisplayOptionsToggle::FullDetail),
+                    ("Reservas PBS", DisplayOptionsToggle::PbsOverlay),
+                    ("Overlay Link Graph", DisplayOptionsToggle::LinkGraphOverlay),
+                    ("Gizmos de depuración", DisplayOptionsToggle::DebugGizmos),
+                    ("Overlay de diagnóstico", DisplayOptionsToggle::Diagnostics),
+                ] {
+                    spawn_toggle_row(scroll, asset_server, label, toggle);
+                }
+                scroll.spawn((
+                    Text::new("Presets de cliente"),
+                    window_text_font(asset_server, UiFontRole::Caption),
+                    TextColor(WINDOW_TEXT),
+                    Node {
+                        margin: UiRect::top(Val::Px(10.0)),
+                        ..default()
+                    },
+                ));
+                scroll
+                    .spawn(Node {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Row,
+                        column_gap: Val::Px(4.0),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        spawn_preset_btn(
+                            row,
+                            asset_server,
+                            DisplayOptionsPreset::Classic,
+                            "Clásico",
+                        );
+                        spawn_preset_btn(
+                            row,
+                            asset_server,
+                            DisplayOptionsPreset::Performance,
+                            "Rendimiento",
+                        );
+                        spawn_preset_btn(row, asset_server, DisplayOptionsPreset::Dev, "Dev");
+                    });
+                scroll.spawn((
+                    Text::new("Transparencia / invisibilidad (TO_*)"),
+                    window_text_font(asset_server, UiFontRole::Caption),
+                    TextColor(WINDOW_TEXT),
+                    Node {
+                        margin: UiRect::top(Val::Px(10.0)),
+                        ..default()
+                    },
+                ));
+                for option in TransparencyOption::ALL {
+                    spawn_transparency_row(scroll, asset_server, option);
+                }
+            },
+            DISPLAY_OPTIONS_SCROLL_HEIGHT,
+        );
     });
 }
 

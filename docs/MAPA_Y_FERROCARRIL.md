@@ -1051,7 +1051,7 @@ está centralizada en [la matriz SAV](parity/sav-compatibility.md); esta secció
 describe sólo el pipeline y las normalizaciones del mapa.
 
 **Export:** `sav::save` / `sav::save_to_bytes` escriben el subconjunto
-interoperable documentado por esa matriz (OTTZ, versión 355). La UI guarda `.sav`
+interoperable documentado por esa matriz (OTTZ, versión 358). La UI guarda `.sav`
 por defecto; usar sufijo `.json` para el save nativo completo. Wire format y
 handoff: [PLANIFICACION.md](PLANIFICACION.md#export-sav).
 

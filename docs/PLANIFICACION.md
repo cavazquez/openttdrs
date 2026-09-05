@@ -2121,7 +2121,9 @@ python3 scripts/gen_demo_sav.py crates/openttdrs-core/tests/fixtures/demo_opentt
 | `./scripts/check.sh openttd-smoke` | Gate load+round-trip fixture rico |
 | `docs/MAPA_Y_FERROCARRIL.md` §16–17 | Formato chunks / import |
 
-Versión de export: `EXPORT_SAVE_VERSION = 355` (≥ 348 HouseID en MAP8; ≥ 300 tick u64; ≥355 `PLYR.face_style`).
+Versión de export: `EXPORT_SAVE_VERSION = 358` (≥ 348 HouseID en MAP8; ≥ 300
+tick u64; ≥355 `PLYR.face_style`; ≥358 `CITY.valid_history` y
+`CITY.supplied`/`SlTownSupplied`).
 
 ---
 
@@ -2131,7 +2133,7 @@ Versión de export: `EXPORT_SAVE_VERSION = 355` (≥ 348 HouseID en MAP8; ≥ 30
 
 ```
 OTTZ | OTTN
-u16 BE version (= 355)
+u16 BE version (= 358)
 u16 BE unused (= 0)
 payload (zlib si OTTZ; raw si OTTN)
 ```

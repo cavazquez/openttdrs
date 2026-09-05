@@ -145,8 +145,15 @@ pub enum TownGrowthEffect {
 
 pub const TOWN_GROWTH_EFFECT_COUNT: usize = 5;
 
-/// Cantidad de muestras que `Town::SuppliedCargo::history` mantiene en
-/// `OpenTTD` (`LAST_MONTH` y `THIS_MONTH`).
+/// Cantidad de posiciones que serializa `HistoryData<Town::SuppliedHistory>`
+/// en `CITY.supplied`: mes actual, meses anteriores y agregados trimestrales/
+/// anuales (`HISTORY_RECORDS` en `OpenTTD`).
+pub const TOWN_SUPPLIED_HISTORY_RECORDS: usize = 61;
+
+/// Ventana mínima que el runtime propio actualiza directamente: mes actual y
+/// mes anterior. No es la longitud del vector SAV; el writer completa los
+/// demás registros hasta [`TOWN_SUPPLIED_HISTORY_RECORDS`] para mantener el
+/// layout nativo.
 pub const TOWN_SUPPLIED_HISTORY_MONTHS: usize = 2;
 
 /// Meta especial: comida solo en invierno (`TOWN_GROWTH_WINTER`).

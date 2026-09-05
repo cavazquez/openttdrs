@@ -440,7 +440,7 @@ fn append_field(header: &mut Vec<u8>, ftype: u8, name: &str) -> Result<(), SavEr
     write_str(name, header)
 }
 
-/// Header `CITY` moderno (SLV 355), incluidos los structs anidados de
+/// Header `CITY` moderno (SLV 358), incluidos los structs anidados de
 /// historiales de carga. El orden coincide con `_town_desc` de `OpenTTD`.
 pub(super) fn append_city_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 6, "xy")?;
@@ -1006,13 +1006,18 @@ fn write_city_supplied(
     write_gamma(count, buf)?;
     for entry in entries {
         buf.push(entry.cargo);
-        let history_count =
-            u32::try_from(entry.history.len()).map_err(|_| SavError::ValueOutOfRange {
-                field: "town supplied history count",
-                value: u32::MAX,
-            })?;
-        write_gamma(history_count, buf)?;
-        for sample in &entry.history {
+        // `Town::SuppliedCargo::history` es `HistoryData`, un array fijo de
+        // 61 posiciones. El estado compacto puede mantener sólo los meses que
+        // actualiza activamente, pero el wire format moderno debe conservar el
+        // tamaño nativo: OpenTTD lee como máximo ese array y re-guarda los 61
+        // registros. Truncar una entrada editada a mano evita dejar bytes sin
+        // consumir detrás de un `SlTownSuppliedHistory` fijo.
+        write_gamma(
+            u32::try_from(crate::town::TOWN_SUPPLIED_HISTORY_RECORDS).unwrap_or(u32::MAX),
+            buf,
+        )?;
+        for index in 0..crate::town::TOWN_SUPPLIED_HISTORY_RECORDS {
+            let sample = entry.history.get(index).cloned().unwrap_or_default();
             buf.extend_from_slice(&sample.production.to_be_bytes());
             buf.extend_from_slice(&sample.transported.to_be_bytes());
         }

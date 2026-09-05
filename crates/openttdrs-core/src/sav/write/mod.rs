@@ -46,12 +46,16 @@ use crate::game_state::GameState;
 
 /// Versión SLV del export.
 ///
-/// Se mantiene en **355** (mínimo viable actual): ≥294 `MAPS` `CH_TABLE`, ≥295
-/// tablas, ≥300 tick u64, ≥348 `HouseID` en MAP8 y ≥355 `PLYR.face_style`.
-/// `OpenTTD` 15.3 (`SAVEGAME_VERSION` 362) carga saves más antiguos; subir a
-/// 362 no aporta al MVP de load y obligaría campos DATE/economía posteriores
-/// sin ganancia.
-pub const EXPORT_SAVE_VERSION: u16 = 355;
+/// Se mantiene en **358** (mínimo viable actual): ≥294 `MAPS` `CH_TABLE`, ≥295
+/// tablas, ≥300 tick u64, ≥348 `HouseID` en MAP8, ≥355 `PLYR.face_style` y
+/// ≥358 `CITY.valid_history` / `CITY.supplied` con `SlTownSupplied`.
+///
+/// El writer ya emite el schema moderno de historial de pueblo; anunciar 355
+/// hacía que `OpenTTD` lo interpretase como el formato anterior
+/// `SlTownOldSupplied` y descartase las entradas al re-guardar. `358` es el
+/// menor `SLV` que nombra ese schema, sin adelantar campos DATE/economía que
+/// requiere la versión 362.
+pub const EXPORT_SAVE_VERSION: u16 = 358;
 
 /// Contenedor exterior del `.sav`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1721,6 +1725,11 @@ mod tests {
             crate::sav::table::record_get(record, "supplied"),
             Some(crate::sav::table::SlValue::Structs(values))
                 if values.len() == 1
+                    && matches!(
+                        crate::sav::table::record_get(&values[0], "history"),
+                        Some(crate::sav::table::SlValue::Structs(history))
+                            if history.len() == crate::town::TOWN_SUPPLIED_HISTORY_RECORDS
+                    )
         ));
         assert!(matches!(
             crate::sav::table::record_get(record, "received"),
@@ -1733,7 +1742,14 @@ mod tests {
         assert_eq!(loaded.towns[0].townnameparts, town.townnameparts);
         assert_eq!(loaded.towns[0].native_flags, 0x87);
         assert_eq!(loaded.towns[0].goals, town.goals);
-        assert_eq!(loaded.towns[0].supplied_cargo, town.supplied_cargo);
+        let mut expected_supplied = town.supplied_cargo.clone();
+        for entry in &mut expected_supplied {
+            entry.history.resize(
+                crate::town::TOWN_SUPPLIED_HISTORY_RECORDS,
+                crate::town::TownSuppliedHistory::default(),
+            );
+        }
+        assert_eq!(loaded.towns[0].supplied_cargo, expected_supplied);
         assert_eq!(loaded.towns[0].received_cargo, town.received_cargo);
         assert_eq!(loaded.towns[0].native_text, town.native_text);
 

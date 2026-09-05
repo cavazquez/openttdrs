@@ -305,17 +305,17 @@ struct FieldReplacement<'a> {
     bytes: &'a [u8],
 }
 
-/// Los headers de tabla de `OpenTTD` codifican `SL_ARR`, `SL_VECTOR` y
-/// `SL_REFVECTOR` con el mismo bit `HAS_LENGTH`; los writers propios mantienen
-/// sus arrays fijos en tamaño nativo. Por ello sólo la lista raíz de escalares
-/// puede reencuadrarse aquí. Los structs anidados llevan su propia topología y
-/// quedan deliberadamente fuera de este corte. Esta función no transforma un
-/// array fijo en vector: su writer sigue siendo responsable de emitir el
-/// tamaño que `OpenTTD` acepta.
+/// Los headers de tabla de `OpenTTD` codifican `SL_ARR`, `SL_VECTOR`,
+/// `SL_REFVECTOR` y `SL_STRUCTLIST` con el mismo bit `HAS_LENGTH`; los writers
+/// propios mantienen sus arrays fijos en tamaño nativo. La comparación del
+/// descriptor ya exige recursivamente que un struct tenga exactamente el mismo
+/// esquema interno antes de llegar aquí, por lo que su cantidad puede
+/// reencuadrarse sin ocultar un subcampo desconocido. Esta función no
+/// transforma un array fijo en vector: su writer sigue siendo responsable de
+/// emitir el tamaño que `OpenTTD` acepta.
 fn root_field_allows_length_change(field: &TableField) -> bool {
     const SLE_FILE_STRING: u8 = 10;
-    const SLE_FILE_STRUCT: u8 = 11;
-    field.base == SLE_FILE_STRING || (field.has_length && field.base != SLE_FILE_STRUCT)
+    field.base == SLE_FILE_STRING || field.has_length
 }
 
 fn replace_field_in_raw<'a>(
@@ -334,7 +334,8 @@ fn replace_field_in_raw<'a>(
     }
     if raw_bytes.len() != canonical_bytes.len() && !root_field_allows_length_change(canonical_field)
     {
-        // Structs/listas anidadas requieren validar su topología por separado.
+        // Campos sin longitud codificada no se pueden reencuadrar de forma
+        // local; los structs sólo llegan aquí con sub-schema compatible.
         return None;
     }
     replacements.push(FieldReplacement {

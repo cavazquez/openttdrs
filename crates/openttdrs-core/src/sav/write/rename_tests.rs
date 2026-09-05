@@ -1,4 +1,4 @@
-//! #371/#372: mutar filas SAV sin perder columnas no modeladas.
+//! #371–#373: mutar filas SAV sin perder columnas no modeladas.
 
 #![allow(clippy::expect_used)]
 
@@ -254,7 +254,7 @@ fn rename_preserves_large_unknown_column_across_three_byte_row_length() {
 }
 
 #[test]
-fn rename_falls_back_when_row_identity_or_nested_struct_size_changes() {
+fn struct_list_growth_preserves_root_unknown_column() {
     let mut raw_header = Vec::new();
     raw_header.push(0x1B);
     codec::write_str("entries", &mut raw_header).expect("struct field");
@@ -279,6 +279,63 @@ fn rename_falls_back_when_row_identity_or_nested_struct_size_changes() {
         ch_type: super::super::chunks::CH_TABLE,
         body: raw[5..].to_vec(),
     };
+    let mut canonical_header = Vec::new();
+    canonical_header.push(0x1B);
+    codec::write_str("entries", &mut canonical_header).expect("struct field");
+    canonical_header.push(0);
+    canonical_header.push(2);
+    codec::write_str("value", &mut canonical_header).expect("nested field");
+    canonical_header.push(0);
+    let mut canonical_record = Vec::new();
+    codec::write_gamma(2, &mut canonical_record).expect("struct count");
+    canonical_record.extend_from_slice(&[7, 8]);
+    let canonical = chunks::raw_table_chunk(
+        *b"TEST",
+        &canonical_header,
+        &[canonical_record],
+        super::super::chunks::CH_TABLE,
+    )
+    .expect("canonical");
+    let merged =
+        chunks::table_chunk_with_passthrough_from_snapshot(Some(&source), canonical.clone(), None)
+            .expect("merge");
+    let expected = chunks::raw_table_chunk(
+        *b"TEST",
+        &raw_header,
+        &[vec![2, 7, 8, 0xAA]],
+        super::super::chunks::CH_TABLE,
+    )
+    .expect("expected");
+    assert_eq!(merged, expected);
+}
+
+#[test]
+fn rename_falls_back_when_row_identity_or_nested_struct_schema_changes() {
+    let mut raw_header = Vec::new();
+    raw_header.push(0x1B);
+    codec::write_str("entries", &mut raw_header).expect("struct field");
+    raw_header.push(0);
+    raw_header.push(2);
+    codec::write_str("value", &mut raw_header).expect("nested field");
+    raw_header.push(2);
+    codec::write_str("future", &mut raw_header).expect("nested future field");
+    raw_header.push(0);
+    let mut raw_record = Vec::new();
+    codec::write_gamma(1, &mut raw_record).expect("struct count");
+    raw_record.extend_from_slice(&[7, 0xAA]);
+    let raw = chunks::raw_table_chunk(
+        *b"TEST",
+        &raw_header,
+        &[raw_record],
+        super::super::chunks::CH_TABLE,
+    )
+    .expect("raw");
+    let source = super::super::SavOpaqueChunk {
+        name: *b"TEST",
+        ch_type: super::super::chunks::CH_TABLE,
+        body: raw[5..].to_vec(),
+    };
+
     let mut canonical_header = Vec::new();
     canonical_header.push(0x1B);
     codec::write_str("entries", &mut canonical_header).expect("struct field");
@@ -420,6 +477,108 @@ fn native_town_psa_list_growth_preserves_other_city_fields() {
         .expect("new PSAC row");
     assert!(refs.contains(&storage_id));
     if let Ok(path) = std::env::var("OPENTTDRS_DUMP_TOWN_PSA_NATIVE_SAV") {
+        std::fs::write(path, output).expect("dump for OpenTTD");
+    }
+}
+
+#[test]
+fn native_town_supplied_growth_preserves_other_city_fields() {
+    let original = include_bytes!("../../../tests/fixtures/train_pbs_15_3.sav");
+    let (original_payload, _) = super::super::container::decompress(original).expect("container");
+    let original_chunks = super::super::chunks::parse_chunks(&original_payload).expect("chunks");
+    let original_city =
+        super::super::chunks::find_chunk(&original_chunks, "CITY").expect("native CITY");
+    assert_eq!(original_city.ch_type, super::super::chunks::CH_TABLE);
+    let (_, header_end, fields) = parse_table_layout(&original_city.body).expect("header");
+    let supplied_field = fields
+        .iter()
+        .find(|field| field.name == "supplied")
+        .expect("CITY.supplied");
+    assert_eq!(supplied_field.base, 11);
+    assert!(supplied_field.has_length);
+    assert_eq!(
+        supplied_field
+            .sub
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["cargo", "history"]
+    );
+
+    let mut state = GameState::from_sav_game(super::super::load(original).expect("native SAV"));
+    let town = state.towns.first_mut().expect("native town");
+    let town_id = town.id;
+    let old_supplied = town.supplied_cargo.clone();
+    let cargo = (0_u8..64)
+        .find(|candidate| old_supplied.iter().all(|entry| entry.cargo != *candidate))
+        .expect("free native cargo slot");
+    let history = vec![
+        crate::town::TownSuppliedHistory {
+            production: 123,
+            transported: 45,
+        },
+        crate::town::TownSuppliedHistory {
+            production: 678,
+            transported: 90,
+        },
+    ];
+    let insertion = town
+        .supplied_cargo
+        .partition_point(|entry| entry.cargo < cargo);
+    town.supplied_cargo.insert(
+        insertion,
+        crate::town::TownSuppliedCargo {
+            cargo,
+            history: history.clone(),
+        },
+    );
+    let output = save_to_bytes_with(&state, SavContainer::Ottn).expect("SAV with supplied cargo");
+    let (payload, _) = super::super::container::decompress(&output).expect("output container");
+    let output_chunks = super::super::chunks::parse_chunks(&payload).expect("output chunks");
+    let output_city =
+        super::super::chunks::find_chunk(&output_chunks, "CITY").expect("output CITY");
+    assert_eq!(output_city.ch_type, original_city.ch_type);
+    assert_eq!(
+        &output_city.body[..header_end],
+        &original_city.body[..header_end]
+    );
+    let old_rows = dense_row_payloads(&original_city.body);
+    let new_rows = dense_row_payloads(&output_city.body);
+    assert_eq!(old_rows.len(), new_rows.len());
+    for (old_row, new_row) in old_rows.iter().zip(&new_rows) {
+        let old_ranges = field_byte_ranges(&fields, old_row).expect("native ranges");
+        let new_ranges = field_byte_ranges(&fields, new_row).expect("output ranges");
+        for ((field, start, end), (_, new_start, new_end)) in old_ranges.iter().zip(&new_ranges) {
+            if field != "supplied" {
+                assert_eq!(
+                    &old_row[*start..*end],
+                    &new_row[*new_start..*new_end],
+                    "{field}"
+                );
+            }
+        }
+    }
+    let reloaded = super::super::load(&output).expect("reimport");
+    let reloaded_town = reloaded
+        .towns
+        .iter()
+        .find(|town| town.id == town_id)
+        .expect("reloaded town");
+    assert_eq!(reloaded_town.supplied_cargo.len(), old_supplied.len() + 1);
+    let mut native_history = history.clone();
+    native_history.resize(
+        crate::town::TOWN_SUPPLIED_HISTORY_RECORDS,
+        crate::town::TownSuppliedHistory::default(),
+    );
+    assert_eq!(
+        reloaded_town
+            .supplied_cargo
+            .iter()
+            .find(|entry| entry.cargo == cargo)
+            .map(|entry| &entry.history),
+        Some(&native_history)
+    );
+    if let Ok(path) = std::env::var("OPENTTDRS_DUMP_TOWN_SUPPLIED_NATIVE_SAV") {
         std::fs::write(path, output).expect("dump for OpenTTD");
     }
 }

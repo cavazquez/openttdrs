@@ -46,6 +46,37 @@ fn openttd_resaved_preserves_added_town_psa_list() {
     );
 }
 
+/// #373: ejecutar sobre el SAV que OpenTTD re-guardó después de añadir una
+/// entrada `CITY.supplied` con su lista interna de historial.
+#[test]
+#[ignore = "requiere OPENTTDRS_ROUNDTRIP_SAV re-guardado por OpenTTD dedicado"]
+fn openttd_resaved_preserves_added_town_supplied_entry() {
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV").expect("SAV re-guardado requerido");
+    let bytes = std::fs::read(path).expect("leer SAV re-guardado");
+    let game = sav::load(&bytes).expect("cargar SAV re-guardado");
+    let supplied = game
+        .towns
+        .iter()
+        .flat_map(|town| &town.supplied_cargo)
+        .map(|entry| {
+            (
+                entry.cargo,
+                entry
+                    .history
+                    .iter()
+                    .map(|sample| (sample.production, sample.transported))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        supplied.iter().any(|(_, history)| {
+            history.len() == 61 && history.starts_with(&[(123, 45), (678, 90)])
+        }),
+        "OpenTTD conserva y normaliza los 61 registros de CITY.supplied: {supplied:?}"
+    );
+}
+
 #[test]
 fn openttd_resaved_preserves_declared_subset() {
     let Ok(path) = std::env::var("OPENTTDRS_ROUNDTRIP_SAV") else {

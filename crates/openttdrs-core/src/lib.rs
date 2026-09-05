@@ -772,8 +772,9 @@ pub use town::{
     AUTHORITY_MIN_STATION, FUND_BUILDINGS_COST, FUND_BUILDINGS_MONTHS, HouseZone, MAIL_PER_HOUSE,
     NUM_HOUSE_ZONES, PASSENGERS_PER_HOUSE, STATION_TOWN_CARGO_CAPACITY, TOWN_ADVERTISE_COST,
     TOWN_AUTHORITY_RADIUS, TOWN_GROWTH_DESERT, TOWN_GROWTH_TICKS, TOWN_GROWTH_WINTER,
-    TOWN_PRODUCE_TICKS, TOWN_RATING_INITIAL, TOWN_SUPPLIED_HISTORY_MONTHS, Town, TownGrowthEffect,
-    TownLayout, authority_allows_new_station, grow_town_if_served, grow_town_if_served_with_ctx,
+    TOWN_PRODUCE_TICKS, TOWN_RATING_INITIAL, TOWN_SUPPLIED_HISTORY_MONTHS,
+    TOWN_SUPPLIED_HISTORY_RECORDS, Town, TownGrowthEffect, TownLayout,
+    authority_allows_new_station, grow_town_if_served, grow_town_if_served_with_ctx,
     process_town_monthly_growth, produce_town_cargo, produce_town_cargo_with_towns,
     town_goal_satisfied, update_town_growth_state, update_town_radius,
 };

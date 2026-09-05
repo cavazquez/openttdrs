@@ -1107,11 +1107,15 @@ modernos intactos; las regresiones directas cubren `PLYR` y `CITY`. El corte
 longitud sin perder columnas ajenas. [#372](parity/sav-vector-372.md) extiende
 ese merge a listas raíz escalares: `CITY.psa_list` se contrastó en un SAV
 nativo, conserva los demás bytes `CITY` y OpenTTD dedicado vuelve a guardar el
-`PSAC` añadido. El header no distingue vector de array fijo, por lo que cada
-writer conserva los tamaños nativos de sus arrays. Una mutación de un campo
-ausente/incompatible, de structs/listas anidadas de otra longitud, de forma de
-filas o de pools nativos no modelados sigue usando el writer canónico. Por eso
-#328/#329 continúan abiertos.
+`PSAC` añadido. [#373](parity/sav-struct-373.md) extiende el mismo criterio a
+un struct-list raíz con descriptor recursivamente idéntico: añadir un
+`CITY.supplied` conserva sus campos hermanos y OpenTTD re-guarda sus 61
+registros de historia cuando el contenedor declara SLV 358. El header no
+distingue vector de array fijo, por lo que cada writer conserva los tamaños
+nativos de sus arrays. Un subcampo desconocido/incompatible, cambio de forma,
+filas, índices o pools nativos no modelados sigue usando el writer canónico;
+la agregación runtime completa de esos historiales pertenece a #329/#330. Por
+eso #328/#329 continúan abiertos.
 
 <!-- active-parity-backlog:end -->
 

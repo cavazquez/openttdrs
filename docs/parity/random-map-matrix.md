@@ -67,6 +67,9 @@ La evidencia compacta está en
 [`evidence/random-map-matrix/report.json`](evidence/random-map-matrix/report.json).
 El checkout de referencia usado para esta corrida coincide con el pin canónico
 documentado de OpenTTD 15.3: `14ec60f248547d4d062a1160f0fc26d742319888`.
+El artefacto versionado fija además fecha (`2026-08-30`), fixture procedural
+Temperate, semilla base, matriz y commit candidato `03a63208`; el hash del
+binario histórico no se conservó y se declara como tal, en vez de inventarlo.
 La evidencia se considera válida para esta cohorte; las configuraciones y
 fases que quedan fuera de ella deben medirse antes de convertirse en gate de
 release.

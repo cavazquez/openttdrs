@@ -3,9 +3,10 @@
 
 from __future__ import annotations
 
-import tempfile
 import hashlib
+import json
 import subprocess
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -103,8 +104,48 @@ def test_managed_candidate_records_revision_and_dirty_source() -> None:
         with patch.object(matrix.subprocess, "check_output", side_effect=["abc123\n", " M src/map.rs\n"]):
             provenance = matrix.candidate_provenance(binary, managed=True)
         assert provenance["source_commit"] == "abc123"
-        assert provenance["source_tracked_changes"] == [" M src/map.rs"]
-        assert provenance["build"] == "cargo-build-locked"
+    assert provenance["source_tracked_changes"] == [" M src/map.rs"]
+    assert provenance["build"] == "cargo-build-locked"
+
+
+def test_versioned_matrix_evidence_records_reproducible_provenance() -> None:
+    """La cohorte 15/15 conserva fixture, fecha, pin y commit sin inventar hashes."""
+    evidence = json.loads(
+        (matrix.ROOT / "docs/parity/evidence/random-map-matrix/report.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert evidence["recorded_on"] == "2026-08-30"
+    assert evidence["fixture"] == {
+        "kind": "procedural-new-game",
+        "climate": "temperate",
+        "base_seed": 1330922578,
+        "matrix": "64:8,128:4,256:2,512:1",
+        "reference_startup_tile_loops": 1280,
+    }
+    assert evidence["reference"] == {
+        "tag": "15.3",
+        "checkout_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+        "canonical_pin": "14ec60f248547d4d062a1160f0fc26d742319888",
+        "status": "canonical-pin-validated",
+    }
+    assert evidence["candidate"] == {
+        "source_commit": "03a6320817c391860670bf2358bcad8ffb9edc07",
+        "source_commit_role": (
+            "Commit publicado que registró la cohorte después de alinear el primer "
+            "StateGameLoop; el hash del binario histórico no se conservó."
+        ),
+        "build": "cargo-build-locked",
+    }
+    assert evidence["matrix"] == [
+        {"size": "64x64", "maps": 8, "tiles_per_map": 4096, "blocks4_per_map": 256},
+        {"size": "128x128", "maps": 4, "tiles_per_map": 16384, "blocks4_per_map": 1024},
+        {"size": "256x256", "maps": 2, "tiles_per_map": 65536, "blocks4_per_map": 4096},
+        {"size": "512x512", "maps": 1, "tiles_per_map": 262144, "blocks4_per_map": 16384},
+    ]
+    for result in (evidence["loader_from_openttd_sav"], evidence["same_seed_generator"]):
+        assert result["cases"] == result["exact_cases"] == 15
+        assert result["divergent_cases"] == 0
 
 
 if __name__ == "__main__":
@@ -115,4 +156,5 @@ if __name__ == "__main__":
     test_existing_candidate_is_rebuilt_and_failed_build_is_not_reused()
     test_explicit_candidate_is_not_replaced_or_attributed_to_local_source()
     test_managed_candidate_records_revision_and_dirty_source()
+    test_versioned_matrix_evidence_records_reproducible_provenance()
     print("OK: random_map_parity tests")

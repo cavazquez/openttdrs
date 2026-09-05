@@ -31,6 +31,7 @@ class ParityDocsPortabilityTest(unittest.TestCase):
         corrupt_cutoff_field=None,
         corrupt_cutoff_value=None,
         corrupt_raster_field=None,
+        corrupt_random_matrix_field=None,
     ):
         with tempfile.TemporaryDirectory(prefix="parity-docs-portability-") as directory:
             root = Path(directory)
@@ -40,8 +41,11 @@ class ParityDocsPortabilityTest(unittest.TestCase):
                 str(CHECKER),
                 "scripts/check_active_parity_backlog.py",
                 "scripts/check_raster_baseline.py",
+                "scripts/random_map_parity.py",
+                "scripts/test_random_map_parity.py",
                 "docs/parity/active-backlog.json",
                 "docs/parity/evidence/kale-189-126/baseline-2026-09-05.json",
+                "docs/parity/evidence/random-map-matrix/report.json",
             ]
             for relative in paths:
                 target = root / relative
@@ -75,6 +79,16 @@ class ParityDocsPortabilityTest(unittest.TestCase):
                 elif corrupt_raster_field == "results":
                     baseline["results"] = []
                 baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+            if corrupt_random_matrix_field:
+                matrix_path = root / "docs/parity/evidence/random-map-matrix/report.json"
+                matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
+                if corrupt_random_matrix_field == "recorded_on":
+                    matrix["recorded_on"] = "2026-99-99"
+                elif corrupt_random_matrix_field == "fixture":
+                    matrix["fixture"] = {}
+                elif corrupt_random_matrix_field == "candidate_commit":
+                    matrix["candidate"]["source_commit"] = "not-a-hash"
+                matrix_path.write_text(json.dumps(matrix), encoding="utf-8")
             binary_dir = root / "bin"
             binary_dir.mkdir()
             for tool in ["bash", "dirname", "grep", "python3"] + (["rg"] if with_rg else []):
@@ -90,7 +104,12 @@ class ParityDocsPortabilityTest(unittest.TestCase):
             output = result.stdout + result.stderr
             self.assertEqual(
                 result.returncode,
-                1 if stale_path or corrupt_cutoff_field or corrupt_raster_field else 0,
+                1
+                if stale_path
+                or corrupt_cutoff_field
+                or corrupt_raster_field
+                or corrupt_random_matrix_field
+                else 0,
                 output,
             )
             if not with_rg:
@@ -101,6 +120,8 @@ class ParityDocsPortabilityTest(unittest.TestCase):
                 self.assertIn(f"cutoff.{corrupt_cutoff_field}", output)
             if corrupt_raster_field:
                 self.assertIn("raster baseline", output)
+            if corrupt_random_matrix_field:
+                self.assertIn("test_versioned_matrix_evidence", output)
 
     def test_clean_docs_with_ripgrep(self):
         self.run_gate(with_rg=True)
@@ -210,6 +231,11 @@ class ParityDocsPortabilityTest(unittest.TestCase):
         for field in ("recorded_on", "candidate_commit", "results"):
             with self.subTest(field=field):
                 self.run_gate(with_rg=True, corrupt_raster_field=field)
+
+    def test_invalid_random_map_matrix_evidence_is_rejected(self):
+        for field in ("recorded_on", "fixture", "candidate_commit"):
+            with self.subTest(field=field):
+                self.run_gate(with_rg=True, corrupt_random_matrix_field=field)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,24 @@
 {
   "schema_version": 1,
   "contract": "random-map-parity-evidence",
+  "recorded_on": "2026-08-30",
+  "fixture": {
+    "kind": "procedural-new-game",
+    "climate": "temperate",
+    "base_seed": 1330922578,
+    "matrix": "64:8,128:4,256:2,512:1",
+    "reference_startup_tile_loops": 1280
+  },
   "reference": {
     "tag": "15.3",
     "checkout_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
     "canonical_pin": "14ec60f248547d4d062a1160f0fc26d742319888",
     "status": "canonical-pin-validated"
+  },
+  "candidate": {
+    "source_commit": "03a6320817c391860670bf2358bcad8ffb9edc07",
+    "source_commit_role": "Commit publicado que registró la cohorte después de alinear el primer StateGameLoop; el hash del binario histórico no se conservó.",
+    "build": "cargo-build-locked"
   },
   "matrix": [
     { "size": "64x64", "maps": 8, "tiles_per_map": 4096, "blocks4_per_map": 256 },

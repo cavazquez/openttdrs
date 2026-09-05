@@ -194,6 +194,13 @@ ambos cierres falsos con `rg` y `grep -E`, además de un hash sintácticamente
 válido que no coincide con el bloque canónico. #337 sigue abierto para la
 auditoría semántica completa de las fuentes restantes.
 
+Sub-issue #369 de #337 (2026-09-05): la evidencia compacta de la cohorte de
+mapas 15/15 ya registra fecha, fixture procedural, pin OpenTTD y commit de la
+candidata. El hash del binario histórico no se inventa: queda declarado como
+no conservado. El gate ejecuta su prueba pura y rechaza mutaciones de fecha,
+fixture o commit. Esto conserva trazabilidad de esa cohorte, no cierra
+RMAP-004/#338 ni sustituye una regeneración futura.
+
 Sub-issue #353 de #337 (2026-09-05): la matriz Action0 distingue la FTA custom
 todavía bloqueada de los callbacks `AirportTile` ya conectados, y este plan
 describe CB36 e historiales `INDY` según sus call sites actuales. El gate

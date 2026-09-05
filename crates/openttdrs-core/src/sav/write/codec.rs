@@ -14,13 +14,32 @@ pub(crate) fn write_gamma(v: u32, buf: &mut Vec<u8>) -> Result<(), SavError> {
             value: v,
         });
     }
-    if v < (1 << 7) {
-        buf.push(v as u8);
-    } else {
-        buf.push(0x80 | ((v >> 8) as u8));
-        buf.push((v & 0xFF) as u8);
-    }
+    write_full_gamma(v, buf);
     Ok(())
+}
+
+/// `SlWriteSimpleGamma` nativo, hasta u32. Una fila importada puede contener
+/// columnas opacas grandes aunque los campos que escribe el MVP sean cortos.
+pub(super) fn write_full_gamma(value: u32, buf: &mut Vec<u8>) {
+    match value {
+        0..0x80 => buf.push(value as u8),
+        0x80..0x4000 => {
+            buf.push(0x80 | (value >> 8) as u8);
+            buf.push(value as u8);
+        }
+        0x4000..0x20_0000 => {
+            buf.push(0xC0 | (value >> 16) as u8);
+            buf.extend_from_slice(&value.to_be_bytes()[2..]);
+        }
+        0x20_0000..0x1000_0000 => {
+            buf.push(0xE0 | (value >> 24) as u8);
+            buf.extend_from_slice(&value.to_be_bytes()[1..]);
+        }
+        _ => {
+            buf.push(0xF0);
+            buf.extend_from_slice(&value.to_be_bytes());
+        }
+    }
 }
 
 /// Escribe string prefijado con su longitud gamma.
@@ -37,6 +56,52 @@ pub(crate) fn write_str(s: &str, buf: &mut Vec<u8>) -> Result<(), SavError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_gamma_boundaries_match_openttd_encoding() {
+        let cases: &[(u32, &[u8])] = &[
+            (0x7F, &[0x7F]),
+            (0x80, &[0x80, 0x80]),
+            (0x3FFF, &[0xBF, 0xFF]),
+            (0x4000, &[0xC0, 0x40, 0x00]),
+            (0x1F_FFFF, &[0xDF, 0xFF, 0xFF]),
+            (0x20_0000, &[0xE0, 0x20, 0x00, 0x00]),
+            (0x0FFF_FFFF, &[0xEF, 0xFF, 0xFF, 0xFF]),
+            (0x1000_0000, &[0xF0, 0x10, 0, 0, 0]),
+            (u32::MAX, &[0xF0, 0xFF, 0xFF, 0xFF, 0xFF]),
+        ];
+        for &(value, expected) in cases {
+            let mut bytes = Vec::new();
+            write_full_gamma(value, &mut bytes);
+            assert_eq!(bytes, expected);
+            let mut offset = 0;
+            assert_eq!(
+                crate::tnbp_decode::read_sl_gamma(&bytes, &mut offset),
+                Ok(value)
+            );
+            assert_eq!(offset, bytes.len());
+        }
+    }
+
+    #[test]
+    fn full_gamma_rejects_truncation_and_unsupported_prefix() {
+        for bytes in [
+            &[0x80, 0x80][..],
+            &[0xC0, 0x40, 0],
+            &[0xE0, 0x20, 0, 0],
+            &[0xF0, 0x10, 0, 0, 0],
+        ] {
+            for length in 0..bytes.len() {
+                assert!(crate::tnbp_decode::read_sl_gamma(&bytes[..length], &mut 0).is_err());
+            }
+        }
+        assert!(crate::tnbp_decode::read_sl_gamma(&[0xF8, 0, 0, 0, 0], &mut 0).is_err());
+        // OpenTTD ignora los tres bits no usados del prefijo 11110---.
+        assert_eq!(
+            crate::tnbp_decode::read_sl_gamma(&[0xF7, 0x12, 0x34, 0x56, 0x78], &mut 0),
+            Ok(0x1234_5678)
+        );
+    }
 
     #[test]
     fn write_gamma_127_succeeds() {

@@ -254,7 +254,7 @@ fn skip_record_fields(fields: &[TableField], data: &[u8], off: &mut usize) -> Re
 ///
 /// Los offsets son relativos al payload de la fila (sin el índice gamma de
 /// una tabla sparse). Los campos de longitud variable también se incluyen,
-/// aunque el escritor sólo parchea escalares de tamaño fijo.
+/// para que el escritor preserve columnas ajenas al reconstruir una fila.
 pub(crate) fn field_byte_ranges(
     fields: &[TableField],
     record: &[u8],

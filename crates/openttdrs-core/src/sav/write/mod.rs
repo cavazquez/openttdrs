@@ -32,6 +32,9 @@ mod object_mappings;
 mod objects;
 mod vehicles;
 
+#[cfg(test)]
+mod rename_tests;
+
 use std::io::Write;
 use std::path::Path;
 

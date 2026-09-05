@@ -91,8 +91,9 @@ pub(super) fn raw_table_chunk(
 ///
 /// Los saves de `OpenTTD` suelen añadir columnas al final de una tabla sin
 /// cambiar los campos que conoce el runtime. Cuando un campo conocido conserva
-/// su schema y el tamaño codificado de cada registro, podemos copiar sus bytes
-/// dentro del registro original y dejar intactas esas columnas futuras. El
+/// su schema y tamaño codificado, podemos copiar sus bytes y dejar intactas
+/// esas columnas futuras. Las strings raíz admiten otra longitud: se
+/// reconstruye la fila y su prefijo gamma, preservando el resto de bytes. El
 /// snapshot permite además actualizar un campo presente en un schema SAV
 /// antiguo sin añadir campos nuevos que no cambiaron. Si cambian filas,
 /// índices, schema o tamaños incompatibles, devolvemos el writer canónico:
@@ -158,6 +159,8 @@ fn table_body_with_snapshot_records(
 #[derive(Debug, Clone, Copy)]
 struct TableRecordRange {
     index: u32,
+    start: usize,
+    payload_start: usize,
     field_start: usize,
     end: usize,
 }
@@ -168,6 +171,7 @@ fn table_records(body: &[u8], sparse: bool) -> Result<(usize, Vec<TableRecordRan
     let mut dense_index = 0u32;
     let mut records = Vec::new();
     loop {
+        let start = offset;
         let length = read_gamma(body, &mut offset)?;
         if length == 0 {
             break;
@@ -189,6 +193,8 @@ fn table_records(body: &[u8], sparse: bool) -> Result<(usize, Vec<TableRecordRan
         };
         records.push(TableRecordRange {
             index,
+            start,
+            payload_start,
             field_start,
             end,
         });
@@ -287,16 +293,21 @@ fn named_range(ranges: &[(String, usize, usize)], name: &str) -> Option<(usize, 
 }
 
 struct RecordMergeInput<'a> {
-    raw_record: TableRecordRange,
     raw_slice: &'a [u8],
     raw_ranges: &'a [(String, usize, usize)],
     canonical_slice: &'a [u8],
     canonical_ranges: &'a [(String, usize, usize)],
 }
 
-fn replace_field_in_raw(
-    merged: &mut [u8],
-    input: &RecordMergeInput<'_>,
+struct FieldReplacement<'a> {
+    start: usize,
+    end: usize,
+    bytes: &'a [u8],
+}
+
+fn replace_field_in_raw<'a>(
+    replacements: &mut Vec<FieldReplacement<'a>>,
+    input: &RecordMergeInput<'a>,
     raw_field: &TableField,
     canonical_field: &TableField,
 ) -> Option<()> {
@@ -308,31 +319,32 @@ fn replace_field_in_raw(
     if raw_bytes == canonical_bytes {
         return Some(());
     }
-    if raw_bytes.len() != canonical_bytes.len() {
-        // El payload debe conservar exactamente el mismo tamaño. Así una
-        // string, lista o struct con forma codificada distinta no puede
-        // desplazar las columnas desconocidas que siguen.
+    if raw_bytes.len() != canonical_bytes.len() && canonical_field.base != 10 {
+        // Sólo SLE_FILE_STRING puede cambiar de longitud en este corte.
+        // Listas/structs requieren validar su topología por separado.
         return None;
     }
-    let destination_start = input.raw_record.field_start + raw_start;
-    let destination_end = input.raw_record.field_start + raw_end;
-    merged[destination_start..destination_end].copy_from_slice(canonical_bytes);
+    replacements.push(FieldReplacement {
+        start: raw_start,
+        end: raw_end,
+        bytes: canonical_bytes,
+    });
     Some(())
 }
 
-fn merge_strict_record(
-    merged: &mut [u8],
-    input: &RecordMergeInput<'_>,
+fn merge_strict_record<'a>(
+    replacements: &mut Vec<FieldReplacement<'a>>,
+    input: &RecordMergeInput<'a>,
     matches: &[(&TableField, &TableField)],
 ) -> bool {
     matches.iter().all(|(raw_field, canonical_field)| {
-        replace_field_in_raw(merged, input, raw_field, canonical_field).is_some()
+        replace_field_in_raw(replacements, input, raw_field, canonical_field).is_some()
     })
 }
 
-fn merge_snapshot_record(
-    merged: &mut [u8],
-    input: &RecordMergeInput<'_>,
+fn merge_snapshot_record<'a>(
+    replacements: &mut Vec<FieldReplacement<'a>>,
+    input: &RecordMergeInput<'a>,
     snapshot_slice: &[u8],
     snapshot_ranges: &[(String, usize, usize)],
     compatible_fields: &[(Option<&TableField>, &TableField)],
@@ -359,11 +371,72 @@ fn merge_snapshot_record(
             // ocultar esa mutación.
             return false;
         };
-        if replace_field_in_raw(merged, input, raw_field, canonical_field).is_none() {
+        if replace_field_in_raw(replacements, input, raw_field, canonical_field).is_none() {
             return false;
         }
     }
     true
+}
+
+/// Copia las columnas originales en su orden físico y sustituye únicamente
+/// los rangos elegidos. El schema canónico puede ordenar sus campos de otra
+/// manera. También se preserva cualquier sufijo opaco de la fila.
+fn apply_record_replacements(
+    raw: &[u8],
+    replacements: &mut [FieldReplacement<'_>],
+) -> Option<Vec<u8>> {
+    replacements.sort_unstable_by_key(|replacement| replacement.start);
+    let mut output = Vec::with_capacity(raw.len());
+    let mut offset = 0;
+    for replacement in replacements {
+        if replacement.start < offset {
+            return None;
+        }
+        output.extend_from_slice(&raw[offset..replacement.start]);
+        output.extend_from_slice(replacement.bytes);
+        offset = replacement.end;
+    }
+    output.extend_from_slice(&raw[offset..]);
+    Some(output)
+}
+
+fn append_merged_record(
+    output: &mut Vec<u8>,
+    raw_body: &[u8],
+    raw_record: TableRecordRange,
+    replacements: &mut [FieldReplacement<'_>],
+) -> Option<()> {
+    if replacements.is_empty() {
+        output.extend_from_slice(&raw_body[raw_record.start..raw_record.end]);
+        return Some(());
+    }
+    let raw_slice = &raw_body[raw_record.field_start..raw_record.end];
+    let record = apply_record_replacements(raw_slice, replacements)?;
+    // La longitud de fila incluye el índice sparse, cuya codificación
+    // original se conserva; no incluye su propio prefijo gamma.
+    let index_bytes = &raw_body[raw_record.payload_start..raw_record.field_start];
+    if record.len() == raw_slice.len() {
+        output.extend_from_slice(&raw_body[raw_record.start..raw_record.field_start]);
+    } else {
+        let length = record
+            .len()
+            .checked_add(index_bytes.len())?
+            .checked_add(1)?;
+        let length = u32::try_from(length).ok()?;
+        super::codec::write_full_gamma(length, output);
+        output.extend_from_slice(index_bytes);
+    }
+    output.extend_from_slice(&record);
+    Some(())
+}
+
+fn table_fields_and_records(
+    body: &[u8],
+    sparse: bool,
+) -> Result<(Vec<TableRecordRange>, Vec<TableField>), SavError> {
+    let (_, records) = table_records(body, sparse)?;
+    let (_, _, fields) = parse_table_layout(body)?;
+    Ok((records, fields))
 }
 
 fn merge_table_body_preserving_unknown(
@@ -377,11 +450,7 @@ fn merge_table_body_preserving_unknown(
     let (_, _, raw_fields) = parse_table_layout(raw_body)?;
     let (_, _, canonical_fields) = parse_table_layout(canonical_body)?;
     let snapshot = snapshot_body
-        .map(|body| {
-            let (_, records) = table_records(body, sparse)?;
-            let (_, _, fields) = parse_table_layout(body)?;
-            Ok::<_, SavError>((records, fields))
-        })
+        .map(|body| table_fields_and_records(body, sparse))
         .transpose()?;
 
     if let Some((snapshot_records, snapshot_fields)) = &snapshot
@@ -407,13 +476,13 @@ fn merge_table_body_preserving_unknown(
         .as_ref()
         .map(|_| compatible_raw_fields(&raw_fields, &canonical_fields));
 
-    // No insertar/retirar filas con una fusión in-place. Esto también cubre
+    // No insertar/retirar filas durante la fusión. Esto también cubre
     // los huecos densos de pools y evita dejar entidades huérfanas.
     if !record_indices_match(&raw_records, &canonical_records) {
         return Ok(None);
     }
 
-    let mut merged = raw_body.to_vec();
+    let mut merged = raw_body[..raw_header_end].to_vec();
     for (record_index, (raw_record, canonical_record)) in
         raw_records.iter().zip(&canonical_records).enumerate()
     {
@@ -430,6 +499,7 @@ fn merge_table_body_preserving_unknown(
             && canonical_slice.is_empty()
             && snapshot_slice.is_none_or(<[u8]>::is_empty)
         {
+            merged.extend_from_slice(&raw_body[raw_record.start..raw_record.end]);
             continue;
         }
         if raw_slice.is_empty()
@@ -445,15 +515,15 @@ fn merge_table_body_preserving_unknown(
             return Ok(None);
         };
         let input = RecordMergeInput {
-            raw_record: *raw_record,
             raw_slice,
             raw_ranges: &raw_ranges,
             canonical_slice,
             canonical_ranges: &canonical_ranges,
         };
 
+        let mut replacements = Vec::new();
         let merged_record = if let Some(matches) = &matches {
-            merge_strict_record(&mut merged, &input, matches)
+            merge_strict_record(&mut replacements, &input, matches)
         } else if let (Some(compatible_fields), Some(snapshot_slice)) =
             (&compatible_fields, snapshot_slice)
         {
@@ -461,7 +531,7 @@ fn merge_table_body_preserving_unknown(
                 return Ok(None);
             };
             merge_snapshot_record(
-                &mut merged,
+                &mut replacements,
                 &input,
                 snapshot_slice,
                 &snapshot_ranges,
@@ -473,11 +543,15 @@ fn merge_table_body_preserving_unknown(
         if !merged_record {
             return Ok(None);
         }
+        if append_merged_record(&mut merged, raw_body, *raw_record, &mut replacements).is_none() {
+            return Ok(None);
+        }
     }
 
-    // La comparación anterior trabaja sobre payloads, pero conserva el
-    // header original y los bytes gamma de cada fila (incluidos los huecos).
-    debug_assert_eq!(raw_header_end, parse_table_layout(raw_body)?.1);
+    let tail_start = raw_records
+        .last()
+        .map_or(raw_header_end, |record| record.end);
+    merged.extend_from_slice(&raw_body[tail_start..]);
     Ok(Some(merged))
 }
 
@@ -696,7 +770,7 @@ mod tests {
     }
 
     #[test]
-    fn passthrough_falls_back_when_variable_field_changes_length() {
+    fn passthrough_preserves_future_column_when_string_changes_length() {
         let mut raw_record = Vec::new();
         write_str("old", &mut raw_record).expect("string");
         raw_record.push(0xAA);
@@ -709,17 +783,20 @@ mod tests {
         };
         let mut canonical_name = Vec::new();
         write_str("new name", &mut canonical_name).expect("string");
-        canonical_name.push(0xBB);
-        let canonical = table_chunk(
-            *b"TEST",
-            &[(0x0A, "name"), (2, "future")],
-            &[canonical_name],
-        )
-        .expect("canonical table");
+        let canonical =
+            table_chunk(*b"TEST", &[(0x0A, "name")], &[canonical_name]).expect("canonical table");
 
         let merged =
             table_chunk_with_passthrough_from_snapshot(Some(&raw_chunk), canonical.clone(), None)
                 .expect("merge");
-        assert_eq!(merged, canonical);
+        let rows = crate::sav::table::parse_table_chunk(&merged[5..], false).expect("merged rows");
+        assert_eq!(
+            crate::sav::table::record_get(&rows[0].1, "name").and_then(SlValue::as_str),
+            Some("new name")
+        );
+        assert_eq!(
+            crate::sav::table::record_get(&rows[0].1, "future").and_then(SlValue::as_u64),
+            Some(0xAA)
+        );
     }
 }

@@ -9,6 +9,21 @@ use openttdrs_core::{
     COMPANY_LIVERY_FLAG_PRIMARY, COMPANY_LIVERY_FLAG_SECONDARY, CompanyLivery, SavVehicleKind, sav,
 };
 
+/// #371: ejecutar sobre el SAV que OpenTTD re-guardó después del renombrado
+/// producido por `native_company_rename_preserves_other_plyr_fields`.
+#[test]
+#[ignore = "requiere OPENTTDRS_ROUNDTRIP_SAV re-guardado por OpenTTD dedicado"]
+fn openttd_resaved_preserves_renamed_company() {
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV").expect("SAV re-guardado requerido");
+    let bytes = std::fs::read(path).expect("leer SAV re-guardado");
+    let game = sav::load(&bytes).expect("cargar SAV re-guardado");
+    assert_eq!(game.companies.len(), 1);
+    assert_eq!(
+        game.companies[0].name.as_deref(),
+        Some("Transportes del Sur y del Litoral")
+    );
+}
+
 #[test]
 fn openttd_resaved_preserves_declared_subset() {
     let Ok(path) = std::env::var("OPENTTDRS_ROUNDTRIP_SAV") else {

@@ -108,15 +108,9 @@ pub fn read_sl_gamma(data: &[u8], off: &mut usize) -> Result<u32, TnbpDecodeErro
     if b & 0x08 != 0 {
         return Err(TnbpDecodeError::GammaNoSoportado);
     }
-    let o = *off;
-    let word = u32::from_be_bytes([
-        b,
-        *data.get(o).ok_or(TnbpDecodeError::Truncado)?,
-        *data.get(o + 1).ok_or(TnbpDecodeError::Truncado)?,
-        *data.get(o + 2).ok_or(TnbpDecodeError::Truncado)?,
-    ]);
-    *off += 3;
-    Ok(word)
+    // 11110--- es sólo el prefijo: SlReadSimpleGamma descarta sus tres
+    // bits bajos y consume los cuatro bytes siguientes como valor de 32 bits.
+    read_u32_be(data, off)
 }
 
 fn read_u16_be(data: &[u8], off: &mut usize) -> Result<u16, TnbpDecodeError> {

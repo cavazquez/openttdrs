@@ -28,6 +28,14 @@ cambia la prioridad global, la fila resumida de `PARIDAD.md`.
 `✅` cubierto en el corte indicado; `🟡` best-effort o subconjunto; `❌` no se
 preserva. Importar un dato no implica que el exportador lo escriba.
 
+Actualización #371 (2026-09-05): el merge de tablas importadas conserva columnas
+desconocidas al renombrar strings raíz con otra longitud, siempre que su
+descriptor y las identidades de fila no cambien. Reencuadra la fila con gamma
+nativo, incluidos registros de más de 16 KiB; el lector corrige también la
+variante gamma de cinco bytes. [Evidencia y reproducción](sav-rename-371.md).
+Listas/structs de distinta longitud y cambios de topología continúan fuera de
+ese merge conservador; #328 permanece abierto.
+
 Corrección vigente: desde `26a915db`, `INDY.accepted[].history`,
 `accepted[].accumulated_waiting`, `INDY.produced[].history` y `valid_history`
 se hidratan desde SAV, participan del runtime de entrega/transferencia/barrido/

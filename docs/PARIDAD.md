@@ -1102,10 +1102,13 @@ y huecos en `STNN`, `CITY`, `INDY`, `ORDL`, `VEHS`, `CAPA`, `PATS`, `ECMY`,
 structs/campos anidados cuando no cambian su forma codificada. El escritor
 entrega el snapshot semántico a cada tabla reconstruida por esa fusión, de modo
 que un campo compatible de un schema legacy puede cambiar sin insertar campos
-modernos intactos; las regresiones directas cubren `PLYR` y `CITY`. Una
-mutación de un campo ausente, incompatible, de longitud distinta o de pools
-nativos no modelados sigue usando el writer canónico. Por eso #328/#329
-continúan abiertos.
+modernos intactos; las regresiones directas cubren `PLYR` y `CITY`. El corte
+[#371](parity/sav-rename-371.md) permite además renombrar strings raíz con otra
+longitud sin perder columnas ajenas, reconstruyendo sólo la fila y su longitud
+gamma; está contrastado con un `PLYR` nativo y re-guardado por OpenTTD. Una
+mutación de un campo ausente/incompatible, de longitud de lista/struct anidado
+o de pools nativos no modelados sigue usando el writer canónico. Por eso
+#328/#329 continúan abiertos.
 
 <!-- active-parity-backlog:end -->
 

@@ -3,6 +3,7 @@
 build-essential
 mold
 pkg-config
+python3-pil
 libx11-dev
 libxcursor-dev
 libxi-dev

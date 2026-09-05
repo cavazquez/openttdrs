@@ -123,6 +123,15 @@ workflow a v6. El test comprueba ahora el uso de `actions/cache` conservando
 los gates de versión OpenTTD, checksum, matriz estricta y artefactos. La
 regresión focalizada de release y el manifiesto completo pasan localmente.
 
+Seguimiento #333 (2026-09-05): los workflows de plataforma, fuzz y Parity docs
+de `04c44bbf` están verdes; CI llegó hasta el último bloque Python y falló sólo
+porque `test_opengfx_palette.py` importa Pillow sin que el conjunto APT
+compartido instale `python3-pil`. El arreglo añade ese paquete a la misma lista
+que consume el composite de Rust y una regresión de `test_ci_workflow_parity`
+lo exige. `check.sh ci-python` pasa completo fuera del sandbox local (la prueba
+de release abre un socket localhost que el sandbox prohíbe). #333 permanece
+abierto hasta observar CI verde del commit que publique esta corrección.
+
 Base funcional local y publicada: **`25d026a7`** (`render: project vehicle effects in isometric space`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están

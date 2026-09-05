@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "scripts" / "ci_python_manifest.json"
 CHECK_SH = ROOT / "scripts" / "check.sh"
 CI_YML = ROOT / ".github" / "workflows" / "ci.yml"
+APT_PACKAGES = ROOT / ".github" / "apt-packages.txt"
 
 # Invocaciones directas que no deben reaparecer en ci.yml (listas duplicadas).
 FORBIDDEN_INLINE = (
@@ -74,6 +75,16 @@ def main() -> int:
         errors.append("ci.yml perdió cargo deny (excepción documentada GHA-only)")
     if "working-directory: fuzz" not in yml:
         errors.append("ci.yml no valida licencias/advisories del workspace de fuzz")
+
+    apt_packages = {
+        line.strip()
+        for line in APT_PACKAGES.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    if "python3-pil" not in apt_packages:
+        errors.append(
+            "apt-packages.txt no instala python3-pil, requerido por los checks Python OpenGFX"
+        )
 
     if errors:
         print("FAIL: drift CI local/remoto (#120)", file=sys.stderr)

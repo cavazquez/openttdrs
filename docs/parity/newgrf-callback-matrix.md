@@ -899,7 +899,8 @@ cuatro. Las capturas pausadas son diagnóstico de arranque/zoom, no prueba de
 la animación ni de igualdad de framebuffer. Xvfb falló al crear la superficie
 Vulkan (sin modos de presentación); Wayland completó las cuatro capturas.
 Los logs remotos también revelaron fallos previos de rustdoc y lockfile fuzz;
-se mantienen pendientes en la siguiente etapa de #333.
+se repararon en #333, que se cerró el 2026-09-05 después de CI, Parity docs,
+Fuzz replay y Platform check verdes.
 
 Límite vigente: siguen pendientes el RNG/cadencia por vehículo, filtros y
 semántica completa de consist, altura de aeronaves y sorter/raster global.

@@ -180,14 +180,17 @@ entidad distinta. RMAP-147 (2026-09-05) eleva el reporte a v4: también exige
 `industry_count`/`industry_positions` (`id`, tipo, origen y
 `selected_layout`) y `object_count`/`object_positions` (`id`, tipo, origen,
 huella y `view`), con `first_industry_difference` y
-`first_object_difference`. Las secuencias deben ser únicas y ascender por ID;
-metadata ausente, malformada o desordenada falla cerrado. Ambos exportadores
-generan estos campos en la cabecera; son opcionales en `world-raw` para no
-cambiar el contrato de carga SAV, pero obligatorios para el gate de generación.
-Si faltan, el comparador falla y pide reconstruir el exportador. La igualdad
-de teselas se conserva en `tiles_exact_match`; `exact_match` requiere también
-igualdad del estado observado. No compara todavía todos los campos CITY,
-INDY u OBJS ni las trazas de intentos. El candidato se detiene con
+`first_object_difference`. RMAP-151 (2026-09-05) eleva el reporte a v5:
+cada industria añade los bits `random`, `random_colour`, `counter`,
+`prod_level` y `town_id`; el puntero de pueblo nulo se normaliza a
+`u32::MAX`. Las secuencias deben ser únicas y ascender por ID; metadata
+ausente, malformada o desordenada falla cerrado. Ambos exportadores generan
+estos campos en la cabecera; son opcionales en `world-raw` para no cambiar el
+contrato de carga SAV, pero obligatorios para el gate de generación. Si faltan,
+el comparador falla y pide reconstruir el exportador. La igualdad de teselas
+se conserva en `tiles_exact_match`; `exact_match` requiere también igualdad
+del estado observado. No compara todavía todos los campos CITY, INDY u OBJS
+ni las trazas de intentos. El candidato se detiene con
 `world_raw_dumper --generate-until FASE`, así el informe declara la primera
 fase divergente sin intentar cargar un `.sav` que aún no tiene pueblos.
 

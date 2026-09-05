@@ -1,0 +1,144 @@
+{
+  "date": "2026-09-05",
+  "issue": 366,
+  "contract": "RMAP-151 industry constructor state at generation boundaries",
+  "scope": {
+    "size": 512,
+    "seed": 1330935378,
+    "climate": "temperate",
+    "generation_settings": {
+      "amount_of_rivers": null,
+      "min_river_length": null,
+      "river_route_random": null,
+      "water_borders": null
+    },
+    "phases": [
+      "landscape",
+      "clear",
+      "towns",
+      "industries",
+      "objects",
+      "trees"
+    ]
+  },
+  "reference": {
+    "openttd_release_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "instrumented_exporter_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+    "binary_sha256": "b59dc95b431fa948cb515a39d6f5542943d0f557987d339fa2db48eee3464a5f",
+    "exporter_sha256": "bc24b1bd7bd99b0125ffd13fde686999e2d1289a27afbafc939460b59a8c07d5"
+  },
+  "candidate": {
+    "source_commit_before_publication": "eb47e7dea485c974434e8cf501413af59e296bab",
+    "source_tracked_changes": [
+      "crates/openttdrs-core/src/world_gen/population/industries.rs",
+      "crates/openttdrs-core/src/world_raw.rs",
+      "patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp",
+      "scripts/generation_phase_parity.py",
+      "scripts/test_generation_phase_parity.py"
+    ],
+    "build": "cargo-build-locked",
+    "binary_sha256": "421c7c3b4204d9216d2b1483d6966c38b05a201e3e016dd24e9c28c493bc97c4"
+  },
+  "comparison": {
+    "report_schema_version": 5,
+    "raw_tile_fields": [
+      "height",
+      "type",
+      "m1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "m7",
+      "m8"
+    ],
+    "block_size": 4,
+    "block_grid": {
+      "width": 128,
+      "height": 128,
+      "count": 16384
+    },
+    "generation_state_fields": [
+      "random_state_0",
+      "random_state_1",
+      "town_count",
+      "town_positions[id,x,y,population,num_houses]",
+      "industry_count",
+      "industry_positions[id,type,x,y,selected_layout,random,random_colour,counter,prod_level,town_id]",
+      "object_count",
+      "object_positions[id,type,x,y,width,height,view]"
+    ],
+    "all_exact": true,
+    "first_divergent_stage": null
+  },
+  "phase_results": [
+    {
+      "phase": "landscape",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [1625730734, 2670277509],
+      "town_count": 0,
+      "industry_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "clear",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [2136014406, 4131917108],
+      "town_count": 0,
+      "industry_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "towns",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [3279532020, 2573110008],
+      "town_count": 96,
+      "industry_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "industries",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [2260638308, 1954690765],
+      "town_count": 96,
+      "industry_count": 213,
+      "object_count": 0
+    },
+    {
+      "phase": "objects",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [16404620, 2073028440],
+      "town_count": 96,
+      "industry_count": 213,
+      "object_count": 65
+    },
+    {
+      "phase": "trees",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [4011646430, 2251252150],
+      "town_count": 96,
+      "industry_count": 213,
+      "object_count": 65
+    }
+  ],
+  "ordered_sequence_sha256": {
+    "towns_at_towns": "5c1ee9c1d4636273d07a37a09c755be87f9c4d129aa7c0a50f26422aaf149ca4",
+    "industries_at_industries": "500252c397d4a48a4d384c76d317318fcf1f564df19acc65267397bd1833c67e",
+    "objects_at_objects": "3b316aa6be59ac419968119e6f2dce5670f938a53141fd44fcb55847ff9cd305"
+  },
+  "not_observed": [
+    "industry fields outside identity, constructor random/colour/counter/level/town and selected_layout",
+    "object fields outside identity, type, origin, footprint and view",
+    "industry placement attempt traces",
+    "aquatic industries including IT_OIL_RIG",
+    "startup and subsequent simulation ticks",
+    "other seeds, sizes, climates and generation setting combinations"
+  ]
+}

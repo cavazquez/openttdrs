@@ -759,6 +759,11 @@ void OpenttdrsMaybeCaptureGenerationStage(const char *stage)
 			{"x", TileX(industry->location.tile)},
 			{"y", TileY(industry->location.tile)},
 			{"selected_layout", industry->selected_layout},
+			{"random", industry->random},
+			{"random_colour", static_cast<uint8_t>(industry->random_colour)},
+			{"counter", industry->counter},
+			{"prod_level", industry->prod_level},
+			{"town_id", industry->town == nullptr ? std::numeric_limits<uint32_t>::max() : static_cast<uint32_t>(industry->town->index.base())},
 		});
 	}
 	metadata["industry_positions"] = industry_positions;

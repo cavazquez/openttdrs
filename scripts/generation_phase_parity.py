@@ -67,6 +67,11 @@ GENERATION_ENTITY_POOLS = (
             ("x", 0xFFFFFFFF),
             ("y", 0xFFFFFFFF),
             ("selected_layout", 0xFF),
+            ("random", 0xFFFF),
+            ("random_colour", 0xFF),
+            ("counter", 0xFFFF),
+            ("prod_level", 0xFF),
+            ("town_id", 0xFFFFFFFF),
         ),
     ),
     (
@@ -408,7 +413,7 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = args.report.resolve() if args.report else out_dir / "report.json"
     report: dict[str, Any] = {
-        "schema_version": 4,
+        "schema_version": 5,
         "contract": "generation-phase-parity",
         "reference": {"binary": str(reference), "commit": commit},
         "candidate": matrix.candidate_provenance(candidate, managed=args.candidate_bin is None),

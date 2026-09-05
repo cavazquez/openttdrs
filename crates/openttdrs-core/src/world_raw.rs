@@ -101,7 +101,7 @@ pub struct WorldRawTownPosition {
     pub num_houses: u16,
 }
 
-/// Identidad observable de una fila del pool `Industry` durante generación.
+/// Estado constructor observable de una fila del pool `Industry` durante generación.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WorldRawIndustryPosition {
     pub id: u32,
@@ -112,6 +112,16 @@ pub struct WorldRawIndustryPosition {
     pub y: i32,
     /// Ordinal uno-based de `Industry::selected_layout` (cero es legacy).
     pub selected_layout: u8,
+    /// Bits iniciales `Industry::random`, usados por callbacks y persistencia `INDY`.
+    pub random: u16,
+    /// Color constructor `Industry::random_colour` (`Colours` 0–15).
+    pub random_colour: u8,
+    /// Fase de producción/animación `Industry::counter` de doce bits.
+    pub counter: u16,
+    /// Nivel inicial de producción `Industry::prod_level`.
+    pub prod_level: u8,
+    /// Pueblo asociado; `u32::MAX` representa el puntero nulo nativo.
+    pub town_id: u32,
 }
 
 /// Identidad observable de una fila del pool `Object` durante generación.
@@ -157,6 +167,11 @@ impl WorldRawGeneration {
                 x: industry.pos.x,
                 y: industry.pos.y,
                 selected_layout: industry.selected_layout,
+                random: industry.newgrf_random,
+                random_colour: industry.random_colour,
+                counter: industry.counter,
+                prod_level: industry.prod_level,
+                town_id: industry.town_id.unwrap_or(u32::MAX),
             })
             .collect();
         let object_positions: Vec<_> = state
@@ -430,7 +445,11 @@ mod tests {
                 0,
             )
             .with_instance_id(3)
-            .with_selected_layout(2),
+            .with_town_id(Some(7))
+            .with_random_colour(13)
+            .with_selected_layout(2)
+            .with_newgrf_random(0xBEEF)
+            .with_counter(0x345),
         ];
         state.objects = vec![SavObject {
             object_id: 5,
@@ -465,7 +484,9 @@ mod tests {
         assert_eq!(
             generated["industry_positions"],
             serde_json::json!([
-                {"id": 3, "type": 6, "x": 17, "y": 19, "selected_layout": 2}
+                {"id": 3, "type": 6, "x": 17, "y": 19, "selected_layout": 2,
+                 "random": 0xBEEF, "random_colour": 13, "counter": 0x345,
+                 "prod_level": crate::industry::PRODLEVEL_DEFAULT, "town_id": 7}
             ])
         );
         assert_eq!(generated["object_count"], 1);

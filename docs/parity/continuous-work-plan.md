@@ -65,14 +65,20 @@ coinciden ordenados; el pool de objetos es vacío en ambos lados y se valida
 explícitamente. La evidencia y sus límites están en `random-map-issues.md` y
 `evidence/rmap-150.json`; no equivale a cobertura no vacía de objetos Toyland
 ni cierra #338.
+RMAP-151 / #366 eleva el gate a v5 para que cada industria compare, además de
+su identidad y layout, los bits `random`, color, contador, nivel de producción
+y pueblo asociado. Corrige una pérdida real de los 16 bits iniciales de
+`CreateNewIndustry` sin modificar el stream RNG: Temperate/default 512² de la
+seed `1330935378` queda exacto en las seis fronteras por tiles, bloques 4×4,
+RNG, pueblos, pools y ese estado constructor (96/213/65 desde `objects`). La
+evidencia canónica y sus límites están sólo en `random-map-issues.md` y
+`evidence/rmap-151.json`; siguen pendientes campos INDY restantes, intentos,
+industrias acuáticas, otras matrices y ticks de #338.
 
-Estado CI observado de `712ec4ba`: Parity docs, Platform check y Fuzz replay
-pasan; CI supera formato, Clippy, rustdoc y auditorías, pero falla en
-`world_assets_load_hits_all_paths`: el recoloreado de casas depende de PNGs
-sueltos ignorados por Git. La suite local pasa porque esos assets existen.
-El manifiesto Python completo local ya pasó después de `19a07913`. #333
-permanece abierto; la siguiente reparación debe cubrir un checkout limpio,
-sin borrar ni debilitar la aserción de paletas.
+Actualizado el 2026-09-05: el último `main` observado antes de RMAP-151
+(`eb47e7de`) completó CI, Parity docs, Fuzz replay y Platform check en verde.
+La reparación del checkout limpio está incluida y #333 se cerró con esa
+evidencia; los gates continúan siendo obligatorios para cada etapa posterior.
 
 Reparación #347 validada (2026-09-04): las casas sin PNG suelto se recortan
 del atlas distribuido y conservan la misma paleta; las páginas se decodifican
@@ -86,8 +92,8 @@ capturas a 1×/0.5×/0.25×/0.125×, revisadas en
 niveles; las capturas usan los assets locales y no sustituyen la prueba
 aislada sin PNGs ni certifican raster exacto. Persisten marcas negras pequeñas
 en agua al alejar a 0.5×/0.25×, aisladas como el sub-issue visual #349 de
-#326. #333
-espera el resultado remoto del nuevo commit.
+#326. El resultado remoto posterior quedó verde y #333 ya se cerró; #349
+mantiene separado el diagnóstico visual pendiente.
 
 Brechas identificadas al verificar el cliente: #349 aísla marcas negras de
 agua en 0.5×/0.25×. #350 queda reparado el 2026-09-05: la carga síncrona de
@@ -124,14 +130,14 @@ frente a la captura previa. Se revisaron los seis zooms. Esto resuelve sólo la
 costura negra de #349; las diferencias de composición, sprites y cámara siguen
 abiertas en el padre #326.
 
-Seguimiento #347 / #333 (2026-09-05): el primer workflow limpio encontró un
+Seguimiento histórico #347 / #333 (2026-09-05): el primer workflow limpio encontró un
 defecto en el *bootstrap* de la propia regresión, no una ausencia del atlas
 versionado. La prueba construía `tiles/../atlas`; como `tiles/` es opcional e
 ignorado, el kernel no puede recorrer esa ruta en CI. El loader y la prueba
 obtienen ahora el padre léxico de `tiles` antes de añadir `atlas`, y una
-regresión exige que funcione cuando `tiles/` no existe. #347 se reabre hasta
-publicar esta corrección; #333 sigue abierto hasta que el workflow remoto del
-commit corregido quede verde.
+regresión exige que funcione cuando `tiles/` no existe. La corrección se
+publicó posteriormente, #347 se cerró y el workflow remoto verde de
+`eb47e7de` permitió cerrar #333.
 
 Etapa #333 — reparación de gates (2026-09-04): se reprodujeron los fallos de
 CI de `b47163d1`. Rustdoc tenía dos enlaces rotos (`IndustryRandomTrigger` y
@@ -143,8 +149,9 @@ documental con y sin `rg`, admiten documentación correcta y rechazan un dato
 obsoleto; se integran a CI y Parity docs. El replay sanitizer pasó los 800
 inputs y el SAV ancla, con ASan/LSan activos fuera del sandbox (su restricción
 de ptrace impedía finalizar LSan). Formato, Clippy workspace, rustdoc completo,
-gate documental y pruebas Python focalizadas pasan. #333 permanece abierto
-hasta comprobar los workflows del commit publicado.
+gate documental y pruebas Python focalizadas pasan. La verificación remota
+posterior de `eb47e7de` dejó todos los workflows requeridos verdes y #333 se
+cerró el 2026-09-05.
 
 Seguimiento #333: el manifiesto Python completo detectó una expectativa vieja
 `actions/cache@v5` en el test de release, mientras Dependabot ya actualizó el
@@ -158,8 +165,10 @@ porque `test_opengfx_palette.py` importa Pillow sin que el conjunto APT
 compartido instale `python3-pil`. El arreglo añade ese paquete a la misma lista
 que consume el composite de Rust y una regresión de `test_ci_workflow_parity`
 lo exige. `check.sh ci-python` pasa completo fuera del sandbox local (la prueba
-de release abre un socket localhost que el sandbox prohíbe). #333 permanece
-abierto hasta observar CI verde del commit que publique esta corrección.
+de release abre un socket localhost que el sandbox prohíbe). Las correcciones
+posteriores, incluido el contrato de estación para el checkout limpio, llevaron
+a CI, Parity docs, Fuzz replay y Platform check verdes en `eb47e7de`; #333 se
+cerró con esa evidencia.
 
 Sub-issue #352 de #337 (2026-09-05): el gate documental ahora incluye el plan
 continuo, la matriz RMAP y su registro de issues; sus pruebas inyectan una
@@ -182,7 +191,7 @@ importado participa al reaplicar el catálogo de objetos NewGRF. #328 permanece
 abierto por columnas no modeladas tras mutación, cambios estructurales,
 listas/structs, pools nativos y runtime de objetos.
 
-Sub-issue #355 de #337 (2026-09-05): la evidencia raster separa ahora el
+Sub-issue #355 de #337, cerrado el 2026-09-05: la evidencia raster separa ahora el
 baseline global reproducible de `Kale_TitleGame.sav` (`cd3c4241`, OpenTTD 15.3
 pin `14ec60f` y oracle `c2661164`) de los diagnósticos focales históricos. La
 matriz de seis zooms conserva cámara, hashes y métricas en

@@ -731,6 +731,12 @@ fn try_place_industry(
         );
         if let Some(industry) = ctx.state.industries.last_mut() {
             industry.town_id = associated_town_id;
+            // `CreateNewIndustry` pasa GB(seed2, 0, 16) al constructor y
+            // `DoCreateNewIndustry` lo persiste en `Industry::random` antes
+            // de los callbacks. Ya consumíamos la palabra completa para no
+            // desplazar el RNG; conservar sus 16 bits evita que el estado
+            // NewGRF de una industria procedural difiera silenciosamente.
+            industry.newgrf_random = attempt.initial_random_bits;
         }
         // `DoCreateNewIndustry` planta 50 campos alrededor de una granja con
         // `PlantRandomFarmField`. El mapa generado debe conservar el contrato
@@ -761,6 +767,7 @@ fn try_place_industry(
 struct GeneratedIndustryAttempt {
     origin: TileCoord,
     layout_index: usize,
+    initial_random_bits: u16,
 }
 
 fn generated_industry_attempt(
@@ -771,12 +778,13 @@ fn generated_industry_attempt(
 ) -> GeneratedIndustryAttempt {
     let origin = random_tile(rng.next(), map_w, map_h);
     let _random_var8f = rng.next();
-    let _initial_random_bits = rng.next();
+    let initial_random_bits = u16::try_from(rng.next() & u32::from(u16::MAX)).unwrap_or(0);
     let layout_limit = u32::try_from(layout_count.max(1)).unwrap_or(1);
     let layout_index = usize::try_from(rng.random_range(layout_limit)).unwrap_or(0);
     GeneratedIndustryAttempt {
         origin,
         layout_index,
+        initial_random_bits,
     }
 }
 
@@ -1742,6 +1750,7 @@ mod tests {
             GeneratedIndustryAttempt {
                 origin: TileCoord::new(50, 59),
                 layout_index: 0,
+                initial_random_bits: 0xFFDC,
             }
         );
         assert_eq!(rng.state, [1_957_844_100, 95_334_821]);
@@ -1760,6 +1769,7 @@ mod tests {
         let mut accepted = GeneratedIndustryAttempt {
             origin: TileCoord::new(0, 0),
             layout_index: 0,
+            initial_random_bits: 0,
         };
         for _ in 0..13 {
             accepted = generated_industry_attempt(&mut rng, 64, 64, 4);
@@ -1805,6 +1815,7 @@ mod tests {
         assert_eq!(industry.instance_id, 0);
         assert_eq!(industry.random_colour, 13);
         assert_eq!(industry.counter, 1_347);
+        assert_eq!(industry.newgrf_random, 0xC518);
         let expected_random = [0x61, 0xE1, 0xBD, 0x41, 0x1E, 0x2E, 0xDD, 0xD7, 0x09, 0x57];
         let layout = industry_template_with_layout(industry.pos, IndustrySpec::CoalMine, 3)
             .expect("native coal layout");

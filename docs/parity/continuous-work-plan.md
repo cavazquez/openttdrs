@@ -201,6 +201,12 @@ no conservado. El gate ejecuta su prueba pura y rechaza mutaciones de fecha,
 fixture o commit. Esto conserva trazabilidad de esa cohorte, no cierra
 RMAP-004/#338 ni sustituye una regeneración futura.
 
+Auditoría #337 cerrada (2026-09-05): #352–356 y #368–369 dejan una fuente
+canónica por área, separan las mediciones históricas de los baselines vigentes
+y cubren en el gate las contradicciones conocidas de corte/backlog, RMAP,
+SAV/OBID, NewGRF y raster. El cierre es exclusivamente documental: #326,
+#328–331 y #338 siguen abiertos con sus criterios técnicos y de paridad.
+
 Sub-issue #353 de #337 (2026-09-05): la matriz Action0 distingue la FTA custom
 todavía bloqueada de los callbacks `AirportTile` ya conectados, y este plan
 describe CB36 e historiales `INDY` según sus call sites actuales. El gate

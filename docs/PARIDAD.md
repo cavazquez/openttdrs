@@ -41,7 +41,7 @@ se cuenta como evidencia.
 ## Estado canónico actual
 
 **Corte canónico: 2026-09-05 · `main`, validado localmente hasta el commit
-publicado `dc3602b5` (base funcional `25d026a7`; el runtime de cargos custom,
+publicado `ad369c46` (base funcional `25d026a7`; el runtime de cargos custom,
 la frontera SAV, el monitor de carga, los pesos vial y ferroviario, la CTT de
 scopes de estación/parada e `IndustryTile`, la CTT de vehículos/refit y las
 órdenes de refit de estación, incluido `CARGO_AUTO_REFIT`, quedan actualizados

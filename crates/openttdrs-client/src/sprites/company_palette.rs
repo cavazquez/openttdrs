@@ -188,8 +188,10 @@ fn remap_table_cached(target: CompanyColour) -> &'static HashMap<[u8; 3], [u8; 3
 }
 
 #[must_use]
+/// Comparte la selección de recursos del cliente (override/paquete/cwd/dev).
+/// No debe retener la ruta de compilación en un ejecutable trasladado.
 pub fn tiles_assets_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/opengfx/tiles")
+    crate::resolve_asset_root().join("assets/opengfx/tiles")
 }
 
 /// Carga `filename` desde `assets/opengfx/tiles/`, recolorea y registra en Bevy.
@@ -417,6 +419,62 @@ impl CompanyColoredSprites {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn recolor_uses_runtime_asset_root_in_an_isolated_process() {
+        const PROBE: &str = "OPENTTDRS_TEST_PALETTE_ROOT";
+        if let Some(root) = std::env::var_os(PROBE) {
+            let expected = PathBuf::from(root).join("assets/opengfx/tiles");
+            assert_eq!(tiles_assets_dir(), expected);
+            let mut images = Assets::<Image>::default();
+            let handle = load_recolored_png("palette_probe.png", CompanyColour::Red, &mut images)
+                .expect("PNG in selected asset root");
+            let image = images.get(&handle).expect("image");
+            assert_eq!(image.data.as_deref(), Some([1, 2, 3, 255].as_slice()));
+            return;
+        }
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("package");
+        let tiles = root.join("assets/opengfx/tiles");
+        std::fs::create_dir_all(&tiles).expect("tiles");
+        std::fs::create_dir_all(root.join("static/fonts")).expect("fonts");
+        std::fs::write(root.join("static/fonts/DejaVuSansMono.ttf"), b"probe")
+            .expect("font marker");
+        image::RgbaImage::from_pixel(1, 1, image::Rgba([1, 2, 3, 255]))
+            .save(tiles.join("palette_probe.png"))
+            .expect("png");
+        for mode in ["cwd", "override", "relocated"] {
+            let original = std::env::current_exe().expect("test binary");
+            let executable = if mode == "relocated" {
+                let moved = root.join(format!("palette-tests{}", std::env::consts::EXE_SUFFIX));
+                std::fs::copy(&original, &moved).expect("relocate test executable");
+                moved
+            } else {
+                original
+            };
+            let mut command = std::process::Command::new(executable);
+            command.args(["--exact", "sprites::company_palette::tests::recolor_uses_runtime_asset_root_in_an_isolated_process", "--nocapture"])
+                .env(PROBE, &root).env_remove("OPENTTDRS_ASSET_ROOT");
+            if mode == "override" {
+                command
+                    .env("OPENTTDRS_ASSET_ROOT", &root)
+                    .current_dir(dir.path());
+            } else if mode == "cwd" {
+                command.current_dir(&root);
+            } else {
+                command.current_dir(dir.path());
+            }
+            let output = command.output().expect("isolated test");
+            assert!(
+                output.status.success(),
+                "mode={mode}\n{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
 
     #[test]
     fn foreign_company_ramp_is_not_inferred_from_rgb() {

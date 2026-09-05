@@ -60,9 +60,13 @@ en agua al alejar a 0.5×/0.25×, pendientes del diagnóstico de #326. #333
 espera el resultado remoto del nuevo commit.
 
 Brechas identificadas al verificar el cliente: #349 aísla marcas negras de
-agua en 0.5×/0.25×; #350 debe unificar la raíz de assets de paletas con
-`resolve_asset_root`, porque todavía apunta al checkout de compilación en
-paquetes trasladados. La corrección del atlas de #347 no cierra esos casos.
+agua en 0.5×/0.25×. #350 queda reparado el 2026-09-05: la carga síncrona de
+paletas (casas, compañía y estructuras de puente) deriva `tiles_assets_dir`
+de `resolve_asset_root`, igual que `AssetServer`, en vez de retener
+`CARGO_MANIFEST_DIR`. La regresión se ejecuta en subprocesos con layout de
+paquete para cwd, override y ejecutable trasladado, sin mutar el entorno del
+proceso de pruebas; los assets realmente ausentes siguen devolviendo fallback.
+La corrección del atlas de #347 no sustituye el diagnóstico visual de #349.
 
 Etapa #333 — reparación de gates (2026-09-04): se reprodujeron los fallos de
 CI de `b47163d1`. Rustdoc tenía dos enlaces rotos (`IndustryRandomTrigger` y

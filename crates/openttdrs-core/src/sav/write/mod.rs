@@ -328,9 +328,10 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         entities::append_city_header(&mut city_header)?;
         let canonical =
             chunks::raw_table_chunk(*b"CITY", &city_header, &city, crate::sav::chunks::CH_TABLE)?;
-        data.extend_from_slice(&chunks::table_chunk_with_passthrough(
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.city_chunk.as_ref()),
             canonical,
+            raw_tables.map(|tables| tables.city_semantic_records.as_slice()),
         )?);
     }
 
@@ -1305,6 +1306,50 @@ mod tests {
                 .colour,
             replacement
         );
+    }
+
+    /// Un `CITY` histórico puede no contener la totalidad de los campos que
+    /// escribe el modelo actual. Una mutación de `townnameparts`, que sí está
+    /// presente y mantiene su ancho nativo, debe conservar esa cabecera.
+    #[test]
+    fn legacy_imported_city_compatible_name_parts_change_keeps_raw_header() {
+        let original = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/mvp_openttd_rich.sav"
+        ))
+        .expect("fixture rich histórico");
+        let (original_payload, _) =
+            crate::sav::container::decompress(&original).expect("payload original");
+        let original_chunks =
+            crate::sav::chunks::parse_chunks(&original_payload).expect("chunks originales");
+        let original_city =
+            crate::sav::chunks::find_chunk(&original_chunks, "CITY").expect("CITY original");
+        let (_, original_header_end, _) =
+            crate::sav::table::parse_table_layout(&original_city.body).expect("header CITY");
+
+        let mut loaded = GameState::from_sav_game(sav::load(&original).expect("import fixture"));
+        let original_parts = loaded.towns[0].townnameparts;
+        let replacement = original_parts.wrapping_add(1);
+        loaded.towns[0].townnameparts = replacement;
+
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave changed");
+        if let Ok(path) = std::env::var("OPENTTDRS_DUMP_LEGACY_CITY_SAV") {
+            std::fs::write(path, &resaved).expect("dump legacy CITY changed");
+        }
+        let (resaved_payload, _) =
+            crate::sav::container::decompress(&resaved).expect("payload resaved");
+        let resaved_chunks =
+            crate::sav::chunks::parse_chunks(&resaved_payload).expect("chunks resaved");
+        let resaved_city =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "CITY").expect("CITY resaved");
+        assert_eq!(resaved_city.ch_type, original_city.ch_type);
+        assert_eq!(
+            &resaved_city.body[..original_header_end],
+            &original_city.body[..original_header_end],
+            "la mutación compatible conserva el schema histórico"
+        );
+        let reloaded = GameState::from_sav_game(sav::load(&resaved).expect("reimport changed"));
+        assert_eq!(reloaded.towns[0].townnameparts, replacement);
     }
 
     #[test]

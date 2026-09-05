@@ -50,6 +50,11 @@ la cohorte Temperate/default 512² de `1330935378` es exacta por tiles, bloques
 4×4, RNG, pueblos, 213 industrias y 65 objetos. La evidencia canónica y los
 límites (campos restantes, intentos y ticks) están sólo en
 `random-map-issues.md` y `evidence/rmap-147.json`; #338 sigue abierto.
+RMAP-148 / #363 aplica el mismo gate a la cohorte Tropic 512² con ríos
+explícitos de RMAP-146: también es exacta por tiles, bloques 4×4, RNG y pools
+ordenados (98 pueblos, 213 industrias y 60 objetos). La configuración,
+evidencia y límites están en `random-map-issues.md` y
+`evidence/rmap-148.json`; no amplía el cierre de #338.
 
 Estado CI observado de `712ec4ba`: Parity docs, Platform check y Fuzz replay
 pasan; CI supera formato, Clippy, rustdoc y auditorías, pero falla en

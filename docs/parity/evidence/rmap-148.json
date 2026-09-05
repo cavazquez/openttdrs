@@ -1,0 +1,137 @@
+{
+  "date": "2026-09-05",
+  "issue": 363,
+  "contract": "RMAP-148 Tropic river ordered entity pools at generation boundaries",
+  "scope": {
+    "size": 512,
+    "seed": 1330935380,
+    "climate": "tropic",
+    "generation_settings": {
+      "amount_of_rivers": 1,
+      "min_river_length": 2,
+      "river_route_random": 1,
+      "water_borders": 0
+    },
+    "phases": [
+      "landscape",
+      "clear",
+      "towns",
+      "industries",
+      "objects",
+      "trees"
+    ]
+  },
+  "reference": {
+    "openttd_release_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "instrumented_exporter_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+    "binary_sha256": "c709f8a347072be96ba3359c1ded624be13eb98106573662842acad80e0206a3b",
+    "exporter_sha256": "da9aa69e4847715ba8e968c84689a15e202b8dc0b1acf05aabcd9afe8c6519c7"
+  },
+  "candidate": {
+    "source_commit_before_documentation": "0c22c6bd3868939da7c5cf08785e5118c71eb236",
+    "source_tracked_changes": [],
+    "build": "cargo-build-locked",
+    "binary_sha256": "7a124ec4756d3652892a507d91e229393ab3ba276c13de032ad6f304ef666084"
+  },
+  "comparison": {
+    "report_schema_version": 4,
+    "raw_tile_fields": [
+      "height",
+      "type",
+      "m1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "m7",
+      "m8"
+    ],
+    "block_size": 4,
+    "block_grid": {
+      "width": 128,
+      "height": 128,
+      "count": 16384
+    },
+    "generation_state_fields": [
+      "random_state_0",
+      "random_state_1",
+      "town_count",
+      "town_positions[id,x,y,population,num_houses]",
+      "industry_count",
+      "industry_positions[id,type,x,y,selected_layout]",
+      "object_count",
+      "object_positions[id,type,x,y,width,height,view]"
+    ],
+    "all_exact": true,
+    "first_divergent_stage": null
+  },
+  "phase_results": [
+    {
+      "phase": "landscape",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [4163415730, 2298960756],
+      "town_count": 0,
+      "industry_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "clear",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [2203928443, 2112881359],
+      "town_count": 0,
+      "industry_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "towns",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [3697426249, 3192394782],
+      "town_count": 98,
+      "industry_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "industries",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [1234748255, 1358958707],
+      "town_count": 98,
+      "industry_count": 213,
+      "object_count": 0
+    },
+    {
+      "phase": "objects",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [3899294086, 1593191862],
+      "town_count": 98,
+      "industry_count": 213,
+      "object_count": 60
+    },
+    {
+      "phase": "trees",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [3325069790, 2747377369],
+      "town_count": 98,
+      "industry_count": 213,
+      "object_count": 60
+    }
+  ],
+  "ordered_sequence_sha256": {
+    "towns_at_towns": "aa5dee4a2aec5d9c1e06f5fcae274ecca266588569932f672fcd5e089e9eb722",
+    "industries_at_industries": "19713da567b1c23ca0abb4b541722eb5d53ca535520462614a4bcaa128792845",
+    "objects_at_objects": "9d1ee4aaa1340b002825283e97b08f81715d4bc6348d4cdb34354f204ed85c8a"
+  },
+  "not_observed": [
+    "industry fields outside identity, type, origin and selected_layout",
+    "object fields outside identity, type, origin, footprint and view",
+    "industry placement attempt traces and aquatic industries",
+    "startup and subsequent simulation ticks",
+    "other seeds, sizes, climates and generation setting combinations"
+  ]
+}

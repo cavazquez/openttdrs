@@ -365,6 +365,69 @@ def test_rmap_147_evidence_records_ordered_industry_and_object_pools() -> None:
     ]
 
 
+def test_rmap_148_evidence_extends_ordered_pools_to_tropic_rivers() -> None:
+    """La cohorte publicada conserva configuración explícita y límites honestos."""
+    evidence = json.loads(
+        (phase.ROOT / "docs/parity/evidence/rmap-148.json").read_text(encoding="utf-8")
+    )
+    assert evidence["issue"] == 363
+    assert evidence["contract"] == "RMAP-148 Tropic river ordered entity pools at generation boundaries"
+    assert evidence["scope"] == {
+        "size": 512,
+        "seed": 1330935380,
+        "climate": "tropic",
+        "generation_settings": {
+            "amount_of_rivers": 1,
+            "min_river_length": 2,
+            "river_route_random": 1,
+            "water_borders": 0,
+        },
+        "phases": ["landscape", "clear", "towns", "industries", "objects", "trees"],
+    }
+    comparison = evidence["comparison"]
+    assert comparison["report_schema_version"] == 4
+    assert comparison["all_exact"] and comparison["first_divergent_stage"] is None
+    assert comparison["block_size"] == 4
+    assert comparison["block_grid"] == {"width": 128, "height": 128, "count": 16384}
+    assert comparison["generation_state_fields"] == [
+        "random_state_0",
+        "random_state_1",
+        "town_count",
+        "town_positions[id,x,y,population,num_houses]",
+        "industry_count",
+        "industry_positions[id,type,x,y,selected_layout]",
+        "object_count",
+        "object_positions[id,type,x,y,width,height,view]",
+    ]
+    results = evidence["phase_results"]
+    assert [result["phase"] for result in results] == evidence["scope"]["phases"]
+    assert all(
+        result["tile_difference_count"] == 0 and result["changed_block_count"] == 0
+        for result in results
+    )
+    assert [(result["town_count"], result["industry_count"], result["object_count"])
+            for result in results] == [
+        (0, 0, 0),
+        (0, 0, 0),
+        (98, 0, 0),
+        (98, 213, 0),
+        (98, 213, 60),
+        (98, 213, 60),
+    ]
+    assert set(evidence["ordered_sequence_sha256"]) == {
+        "towns_at_towns",
+        "industries_at_industries",
+        "objects_at_objects",
+    }
+    assert evidence["not_observed"] == [
+        "industry fields outside identity, type, origin and selected_layout",
+        "object fields outside identity, type, origin, footprint and view",
+        "industry placement attempt traces and aquatic industries",
+        "startup and subsequent simulation ticks",
+        "other seeds, sizes, climates and generation setting combinations",
+    ]
+
+
 if __name__ == "__main__":
     test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles()
     test_state_gate_fails_closed_for_unobserved_or_malformed_state()
@@ -377,4 +440,5 @@ if __name__ == "__main__":
     test_river_settings_reject_values_outside_openttd_ranges()
     test_rmap_145_toyland_512_evidence_keeps_its_exact_and_limited_scope()
     test_rmap_147_evidence_records_ordered_industry_and_object_pools()
+    test_rmap_148_evidence_extends_ordered_pools_to_tropic_rivers()
     print("OK: generation_phase_parity tests")

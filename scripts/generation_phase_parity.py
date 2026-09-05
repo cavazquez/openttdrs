@@ -275,7 +275,7 @@ def main() -> int:
         "schema_version": 1,
         "contract": "generation-phase-parity",
         "reference": {"binary": str(reference), "commit": commit},
-        "candidate": {"binary": str(candidate)},
+        "candidate": matrix.candidate_provenance(candidate, managed=args.candidate_bin is None),
         "size": args.size,
         "seed": args.seed,
         "climate": args.climate,

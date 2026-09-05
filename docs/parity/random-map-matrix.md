@@ -22,6 +22,14 @@ teselas desde Rust. La comparación primaria es exacta sobre `height`, `type` y
 teselas en bloques de 4×4; no se usa una captura de pantalla grande como
 criterio de igualdad.
 
+El candidato administrado se verifica con `cargo build --locked` antes de
+cada corrida, aunque `world_raw_dumper` ya exista. Un error de compilación
+aborta la comparación. Los reportes registran SHA-256 del ejecutable, commit
+y cambios locales de archivos versionados; el commit solo no identifica un
+árbol modificado. `--candidate-bin` permite un ejecutable externo explícito:
+se registra su hash sin atribuirlo al código de este checkout. Esta protección
+también se aplica al comparador por fases (RMAP-142).
+
 La corrida completa usa muchas semillas en el tamaño mínimo y reduce la
 cantidad al crecer:
 

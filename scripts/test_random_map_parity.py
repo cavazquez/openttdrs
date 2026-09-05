@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import tempfile
+import hashlib
+import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import random_map_parity as matrix
 
@@ -60,9 +63,56 @@ def test_write_config_accepts_each_openttd_landscape() -> None:
             raise AssertionError("un landscape fuera de 0..3 debe rechazarse")
 
 
+def test_existing_candidate_is_rebuilt_and_failed_build_is_not_reused() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        binary = root / "target/debug/world_raw_dumper"
+        binary.parent.mkdir(parents=True)
+        binary.write_bytes(b"old binary")
+        with patch.object(matrix, "ROOT", root), patch.object(matrix.subprocess, "run") as build:
+            assert matrix.ensure_candidate_binary(None) == binary
+            build.assert_called_once()
+            assert "--locked" in build.call_args.args[0]
+            assert build.call_args.kwargs["check"]
+            build.side_effect = subprocess.CalledProcessError(101, "cargo")
+            try:
+                matrix.ensure_candidate_binary(None)
+            except subprocess.CalledProcessError:
+                pass
+            else:
+                raise AssertionError("a failed build must not reuse the old binary")
+
+
+def test_explicit_candidate_is_not_replaced_or_attributed_to_local_source() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        binary = Path(tmp) / "external"
+        binary.write_bytes(b"external binary")
+        with patch.object(matrix.subprocess, "run") as build:
+            assert matrix.ensure_candidate_binary(binary) == binary
+            build.assert_not_called()
+        provenance = matrix.candidate_provenance(binary, managed=False)
+        assert provenance["build"] == "external"
+        assert provenance["binary_sha256"] == hashlib.sha256(b"external binary").hexdigest()
+        assert "source_commit" not in provenance
+
+
+def test_managed_candidate_records_revision_and_dirty_source() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        binary = Path(tmp) / "candidate"
+        binary.write_bytes(b"fresh binary")
+        with patch.object(matrix.subprocess, "check_output", side_effect=["abc123\n", " M src/map.rs\n"]):
+            provenance = matrix.candidate_provenance(binary, managed=True)
+        assert provenance["source_commit"] == "abc123"
+        assert provenance["source_tracked_changes"] == [" M src/map.rs"]
+        assert provenance["build"] == "cargo-build-locked"
+
+
 if __name__ == "__main__":
     test_parse_matrix_sorts_and_validates()
     test_compare_tiles_reports_4x4_blocks()
     test_write_ottdmap_preserves_dense_planes()
     test_write_config_accepts_each_openttd_landscape()
+    test_existing_candidate_is_rebuilt_and_failed_build_is_not_reused()
+    test_explicit_candidate_is_not_replaced_or_attributed_to_local_source()
+    test_managed_candidate_records_revision_and_dirty_source()
     print("OK: random_map_parity tests")

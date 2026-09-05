@@ -151,6 +151,27 @@ tiene un criterio verificable y apunta a la evidencia; no se declaran como
 | **RMAP-140** | Ampliar la matriz de generación a otros climas en 512². | **Cerrado (sub-issue acotado de RMAP-004/RMAP-024/RMAP-056/RMAP-018)** | `generation_phase_parity.py --size 512 --seed 1330935378 --climate arctic` y `--size 512 --seed 1330935380 --climate tropic` dejan exactas las seis fronteras (`landscape`→`trees`): **0 teselas y 0 bloques 4×4** distintos en las 12 comparaciones. Toyland 1024²/seed `1330935381` no se cuenta: el oráculo superó el timeout de 120 s. La cohorte no cierra los padres, que conservan abierta la matriz completa de climas, tamaños, settings y ticks posteriores. |
 | **RMAP-141** | Auditar configuración de ríos no predeterminada en clima ártico 512². | **Cerrado (sub-issue acotado de RMAP-018/RMAP-004)** | `generation_phase_parity.py --size 512 --seed 1330935379 --climate arctic --amount-of-rivers 1 --min-river-length 2 --river-route-random 1 --water-borders 0` da **0 teselas y 0 bloques 4×4** distintos en las seis fronteras. El caso verifica settings explícitos sin generalizar la matriz combinatoria ni cerrar RMAP-018/RMAP-004. |
 
+### RMAP-142 — Candidato actualizado y trazabilidad del ejecutable
+
+Estado: cerrado como sub-issue [#345](https://github.com/cavazquez/openttdrs/issues/345)
+(2026-09-04), acotado a #334/#338. `ensure_candidate_binary` devolvía un binario existente sin
+verificar si precedía a la corrección bajo prueba. Ahora ejecuta
+`cargo build --locked` y propaga el fallo sin reutilizar el ejecutable viejo.
+Los dos comparadores registran SHA-256, commit y cambios versionados del
+candidato administrado; un binario externo explícito se identifica por hash
+y nunca se atribuye automáticamente al checkout local.
+
+Las regresiones cubren ejecutable previo, compilación fallida, binario
+externo y metadata de árbol modificado. [Evidencia versionada](evidence/rmap-142.json):
+64²/seed `1330935378` tiene seis fronteras exactas; las cuatro seeds 512²
+`1330935378`–`1330935381` dan 12/12 fronteras exactas en
+`landscape,clear,towns` (0 teselas/0 bloques 4×4). La matriz de carga y
+generación 64²/seed `1330928978` también da 0/0 en ambos contratos. El binario
+auditado tiene SHA-256 `2c042dccd156f1e312f01200984d485356c477463411862dd3cdfccbb1f69ca0`.
+Este cierre no implica validar RNG ni pools de entidades: el comparador
+todavía decide `exact_match` por bytes de teselas. #336/#338 conservan esos
+criterios adicionales pendientes.
+
 El avance de código de RMAP-004 deja un contrato reproducible para aislar
 terreno: `OPENTTDRS_GENERATE_POPULATION=0` omite pueblos/industrias,
 `OPENTTDRS_GENERATE_STARTUP_TICKS=N` reproduce los ciclos de tile loop y

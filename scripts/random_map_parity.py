@@ -13,6 +13,7 @@ un directorio temporal y sólo se conservan cuando se pasa ``--keep-artifacts``.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -297,13 +298,32 @@ def ensure_candidate_binary(path: Path | None) -> Path:
             raise MatrixError(f"no existe el binario candidato {path}")
         return path
     candidate = ROOT / "target/debug/world_raw_dumper"
-    if candidate.is_file():
-        return candidate
-    command = ["cargo", "build", "-q", "-p", "openttdrs-core", "--bin", "world_raw_dumper"]
+    # An existing executable may predate the fix under test. Let Cargo check
+    # source/dependency freshness, and never fall back to it after a failed build.
+    command = ["cargo", "build", "--locked", "-q", "-p", "openttdrs-core", "--bin", "world_raw_dumper"]
     subprocess.run(command, cwd=ROOT, env={**os.environ, "CARGO_NET_OFFLINE": "true"}, check=True)
     if not candidate.is_file():
         raise MatrixError(f"cargo no produjo {candidate}")
     return candidate
+
+
+def candidate_provenance(path: Path, *, managed: bool) -> dict[str, Any]:
+    """Identify the tested executable; external binaries need not match this checkout."""
+    with path.open("rb") as stream:
+        digest = hashlib.file_digest(stream, "sha256").hexdigest()
+    provenance: dict[str, Any] = {
+        "binary": str(path),
+        "binary_sha256": digest,
+        "build": "cargo-build-locked" if managed else "external",
+    }
+    if managed:
+        provenance["source_commit"] = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+        ).strip()
+        provenance["source_tracked_changes"] = subprocess.check_output(
+            ["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT, text=True
+        ).splitlines()
+    return provenance
 
 
 def parse_args() -> argparse.Namespace:
@@ -337,6 +357,7 @@ def main() -> int:
         if not reference_bin.is_file():
             raise MatrixError(f"no existe el binario OpenTTD {reference_bin}")
         candidate_bin = ensure_candidate_binary(args.candidate_bin.resolve() if args.candidate_bin else None)
+        candidate_info = candidate_provenance(candidate_bin, managed=args.candidate_bin is None)
         commit = args.reference_commit or load_manifest_commit()
     except (MatrixError, subprocess.CalledProcessError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
@@ -495,7 +516,10 @@ def main() -> int:
             "schema_version": 1,
             "contract": "random-map-parity-matrix",
             "reference": {"binary": str(reference_bin), "commit": commit},
-            "candidate": {"binary": str(candidate_bin), "loader": "world_raw_dumper MAP1"},
+            "candidate": {
+                **candidate_info,
+                "loader": "world_raw_dumper MAP1",
+            },
             "matrix": [{"size": size, "maps": count} for size, count in matrix],
             "block_size": 4,
             "cases": cases,

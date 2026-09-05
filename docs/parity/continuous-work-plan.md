@@ -75,8 +75,17 @@ evidencia canónica y sus límites están sólo en `random-map-issues.md` y
 `evidence/rmap-151.json`; siguen pendientes campos INDY restantes, intentos,
 industrias acuáticas, otras matrices y ticks de #338.
 
-Actualizado el 2026-09-05: el último `main` observado antes de RMAP-151
-(`eb47e7de`) completó CI, Parity docs, Fuzz replay y Platform check en verde.
+RMAP-152 / #367 eleva el gate a v6 con la secuencia ordenada de todos los
+intentos de `CreateNewIndustry`: ordinal, tipo, origen, `random_var8f`, los
+16 bits iniciales, layout y resultado. La cohorte Temperate/default 512² de
+la seed `1330935378` conserva sus 409 intentos, incluidos rechazos, exactos
+en las seis fronteras junto a tiles, bloques 4×4, RNG y pools. La evidencia
+canónica y sus límites quedan en `random-map-issues.md` y
+`evidence/rmap-152.json`; #338 sigue abierto para diagnósticos de rechazo,
+campos INDY restantes, agua/OilRig, matriz ampliada y ticks.
+
+Actualizado el 2026-09-05: el último `main` observado antes de RMAP-152
+(`3a4736fd`) completó CI, Parity docs, Fuzz replay y Platform check en verde.
 La reparación del checkout limpio está incluida y #333 se cerró con esa
 evidencia; los gates continúan siendo obligatorios para cada etapa posterior.
 

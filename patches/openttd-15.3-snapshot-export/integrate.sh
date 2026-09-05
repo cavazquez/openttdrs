@@ -771,6 +771,48 @@ def integrate_tree_generation_trace(dest: Path) -> None:
         print("tree_cmd: traza de pase rainforest ya presente")
     tree_cmd.write_text(text, encoding="utf-8")
 
+
+def integrate_industry_generation_trace(dest: Path) -> None:
+    """Conecta la traza de cada `CreateNewIndustry` al oráculo por fases."""
+    industry_cmd = dest / "src" / "industry_cmd.cpp"
+    text = industry_cmd.read_text(encoding="utf-8")
+    if '#include "snapshot_export.h"' not in text:
+        anchor = '#include "industry.h"\n'
+        if anchor not in text:
+            raise SystemExit("no encuentro include industry.h en industry_cmd.cpp")
+        text = text.replace(anchor, anchor + '#include "snapshot_export.h"\n', 1)
+
+    hook = "OpenttdrsTraceIndustryCreationAttempt("
+    if hook not in text:
+        marker = (
+            "\tuint32_t seed = Random();\n"
+            "\tuint32_t seed2 = Random();\n"
+            "\tIndustry *i = nullptr;\n"
+            "\tsize_t layout_index = RandomRange((uint32_t)indspec->layouts.size());\n"
+            "\t[[maybe_unused]] CommandCost ret = CreateNewIndustryHelper(tile, type, DoCommandFlag::Execute, indspec, layout_index, seed, GB(seed2, 0, 16), OWNER_NONE, creation_type, &i);\n"
+            "\tassert(i != nullptr || ret.Failed());\n"
+            "\treturn i;\n"
+        )
+        replacement = (
+            "\tuint32_t seed = Random();\n"
+            "\tuint32_t seed2 = Random();\n"
+            "\tconst uint16_t initial_random_bits = GB(seed2, 0, 16);\n"
+            "\tIndustry *i = nullptr;\n"
+            "\tsize_t layout_index = RandomRange((uint32_t)indspec->layouts.size());\n"
+            "\t[[maybe_unused]] CommandCost ret = CreateNewIndustryHelper(tile, type, DoCommandFlag::Execute, indspec, layout_index, seed, initial_random_bits, OWNER_NONE, creation_type, &i);\n"
+            "\tassert(i != nullptr || ret.Failed());\n"
+            "\tOpenttdrsTraceIndustryCreationAttempt(static_cast<uint16_t>(type), static_cast<uint32_t>(TileX(tile)), static_cast<uint32_t>(TileY(tile)), seed, initial_random_bits, static_cast<uint32_t>(layout_index), i != nullptr);\n"
+            "\treturn i;\n"
+        )
+        if marker not in text:
+            raise SystemExit("no encuentro CreateNewIndustry para trazar intentos")
+        text = text.replace(marker, replacement, 1)
+        print("industry_cmd: traza CreateNewIndustry")
+    else:
+        print("industry_cmd: traza CreateNewIndustry ya presente")
+    industry_cmd.write_text(text, encoding="utf-8")
+
+
 if mode == "world_raw_only":
     # Un árbol no pinneado nuevo sólo recibe world-raw/semantic/draw/raster.
     # Pero un fork que ya descendía del pin puede contener los hooks de
@@ -782,12 +824,14 @@ if mode == "world_raw_only":
         "OpenttdrsMaybeCaptureGenerationStage",
         "OpenttdrsMaybeCaptureTreeGenerationStage",
         "OpenttdrsTraceTreePlacement",
+        "OpenttdrsTraceIndustryCreationAttempt",
         "OpenttdrsMaybeExportPbsTraceTick",
         "OpenttdrsMaybeExportAirportFtaTraceTick",
     )
     snapshot_dependent_files = (
         dest / "src" / "genworld.cpp",
         dest / "src" / "tree_cmd.cpp",
+        dest / "src" / "industry_cmd.cpp",
         dest / "src" / "openttd.cpp",
     )
     preserve_snapshot_export = snapshot_source.exists() and any(
@@ -807,6 +851,7 @@ if mode == "world_raw_only":
             if target.read_bytes() != source.read_bytes():
                 target.write_bytes(source.read_bytes())
                 print(f"snapshot_export: {name} sincronizado desde el parche")
+        integrate_industry_generation_trace(dest)
 
     cmake = dest / "src" / "CMakeLists.txt"
     text = cmake.read_text(encoding="utf-8")
@@ -1009,6 +1054,7 @@ text = add_cmake_source(cmake, text, "world_screenshot_export.cpp")
 cmake.write_text(text, encoding="utf-8")
 
 integrate_tree_generation_trace(dest)
+integrate_industry_generation_trace(dest)
 
 after = dest / "src" / "saveload" / "afterload.cpp"
 at = after.read_text(encoding="utf-8")

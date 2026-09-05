@@ -4,8 +4,8 @@
 OpenTTD escribe `world-raw` directamente tras las fronteras
 ``GenerateClearTile``, pueblos, industrias, objetos y árboles. El candidato
 ejecuta exactamente hasta cada una de esas fases; luego se comparan los diez
-bytes de todas las teselas, RNG y las secuencias de los pools de pueblos,
-industrias y objetos; las diferencias de teselas se agrupan en bloques 4×4. No es un
+bytes de todas las teselas, RNG, pools de entidades y los intentos industriales;
+las diferencias de teselas se agrupan en bloques 4×4. No es un
 oráculo raster: una divergencia en esta herramienta identifica la fase que la
 introdujo.
 """
@@ -40,8 +40,20 @@ GENERATION_STATE_FIELDS = (
     "town_positions",
     "industry_count",
     "industry_positions",
+    "industry_attempt_count",
+    "industry_attempts",
     "object_count",
     "object_positions",
+)
+
+GENERATION_INDUSTRY_ATTEMPT_FIELDS = (
+    ("ordinal", 0xFFFFFFFF),
+    ("type", 0xFFFF),
+    ("x", 0xFFFFFFFF),
+    ("y", 0xFFFFFFFF),
+    ("random_var8f", 0xFFFFFFFF),
+    ("initial_random_bits", 0xFFFF),
+    ("layout_index", 0xFFFFFFFF),
 )
 
 GENERATION_ENTITY_POOLS = (
@@ -156,6 +168,34 @@ def _validate_generation_pool(
         previous_id = entity_id
 
 
+def _validate_industry_attempts(metadata: dict[str, Any], source: str) -> None:
+    """Exige la traza completa de intentos, incluido orden y resultado booleano."""
+    count = metadata["industry_attempt_count"]
+    attempts = metadata["industry_attempts"]
+    if type(count) is not int or not 0 <= count <= 0xFFFFFFFF:
+        raise GenerationPhaseError(f"{source}: industry_attempt_count inválido")
+    if not isinstance(attempts, list) or len(attempts) != count:
+        raise GenerationPhaseError(
+            f"{source}: industry_attempt_count no corresponde a industry_attempts"
+        )
+    for index, attempt in enumerate(attempts):
+        if not isinstance(attempt, dict) or any(
+            type(attempt.get(field)) is not int or not 0 <= attempt[field] <= maximum
+            for field, maximum in GENERATION_INDUSTRY_ATTEMPT_FIELDS
+        ):
+            raise GenerationPhaseError(
+                f"{source}: intento industrial inválido en índice {index}"
+            )
+        if attempt["ordinal"] != index:
+            raise GenerationPhaseError(
+                f"{source}: ordinal industrial inválido en índice {index}: {attempt['ordinal']}"
+            )
+        if type(attempt.get("succeeded")) is not bool:
+            raise GenerationPhaseError(
+                f"{source}: resultado industrial inválido en índice {index}"
+            )
+
+
 def _first_pool_difference(
     reference: dict[str, Any], candidate: dict[str, Any], count_field: str, positions_field: str
 ) -> dict[str, Any] | None:
@@ -181,6 +221,7 @@ def compare_generation_state(reference: dict[str, Any], candidate: dict[str, Any
                 raise GenerationPhaseError(f"{source}: {field} inválido")
         for pool in GENERATION_ENTITY_POOLS:
             _validate_generation_pool(metadata, source, *pool)
+        _validate_industry_attempts(metadata, source)
     differing = [
         field for field in GENERATION_STATE_FIELDS if reference[field] != candidate[field]
     ]
@@ -194,6 +235,12 @@ def compare_generation_state(reference: dict[str, Any], candidate: dict[str, Any
         "differing_fields": differing,
         "first_town_difference": first_differences["town"],
         "first_industry_difference": first_differences["industry"],
+        "first_industry_attempt_difference": _first_pool_difference(
+            reference,
+            candidate,
+            "industry_attempt_count",
+            "industry_attempts",
+        ),
         "first_object_difference": first_differences["object"],
     }
 
@@ -413,7 +460,7 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = args.report.resolve() if args.report else out_dir / "report.json"
     report: dict[str, Any] = {
-        "schema_version": 5,
+        "schema_version": 6,
         "contract": "generation-phase-parity",
         "reference": {"binary": str(reference), "commit": commit},
         "candidate": matrix.candidate_provenance(candidate, managed=args.candidate_bin is None),

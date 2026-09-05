@@ -1,7 +1,7 @@
 mod canonical_hash;
 mod runtime;
 
-pub use runtime::SimulationRuntime;
+pub use runtime::{GenerationIndustryAttempt, SimulationRuntime};
 pub(crate) use runtime::{LegacySavAfterload, LegacySavIndustry};
 
 use crate::industry::Industry;

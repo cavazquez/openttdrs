@@ -37,6 +37,15 @@ bool OpenttdrsMaybeExportWorldRaw(const std::string &source_path);
 void OpenttdrsMaybeCaptureGenerationStage(const char *stage);
 
 /**
+ * Registra un intento completo de `CreateNewIndustry` mientras está armado el
+ * exportador por fases. Es inerte fuera de los fixtures de generación y no
+ * modifica el stream de `Random()`.
+ */
+void OpenttdrsTraceIndustryCreationAttempt(
+	uint16_t industry_type, uint32_t x, uint32_t y, uint32_t random_var8f,
+	uint16_t initial_random_bits, uint32_t layout_index, bool succeeded);
+
+/**
  * Saves an otherwise normal generation snapshot immediately before or after
  * `GenerateTrees()` when the matching `OPENTTDRS_TREE_*_SAVE_OUT` variable is
  * set. It also brackets `OPENTTDRS_TREE_TRACE_OUT` when that trace is enabled.

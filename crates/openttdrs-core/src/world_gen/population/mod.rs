@@ -250,6 +250,10 @@ pub fn generate_industries_with_rng(
     preserve: &[PreserveRect],
     rng: &mut Randomizer,
 ) -> usize {
+    // Cada invocación representa una única fase `GenerateIndustries`. La
+    // traza es efímera y debe describir sólo los intentos de esta corrida,
+    // incluso si una fixture reutiliza el mismo `GameState`.
+    state.runtime.industry_generation_attempts.clear();
     let (mw, mh) = state.map.dimensions();
     let town_centers: Vec<TileCoord> = state.towns.iter().map(|t| t.pos).collect();
     let mut ctx = PopCtx {

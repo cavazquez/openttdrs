@@ -2,6 +2,23 @@ use crate::command::Command;
 use crate::map::{Tile, TileCoord};
 use std::collections::{HashSet, VecDeque};
 
+/// Un intento de `CreateNewIndustry` durante la creación procedural del mundo.
+///
+/// Es diagnóstico efímero: conserva exactamente el prefijo que gobierna el
+/// RNG y si el constructor creó la industria, pero nunca se serializa en un
+/// `.sav` ni participa de la simulación ordinaria.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GenerationIndustryAttempt {
+    pub ordinal: u32,
+    pub industry_type: u16,
+    pub x: u32,
+    pub y: u32,
+    pub random_var8f: u32,
+    pub initial_random_bits: u16,
+    pub layout_index: u32,
+    pub succeeded: bool,
+}
+
 /// Metadatos mínimos que `AfterLoadGame()` necesita para reconstruir campos
 /// de partidas SAV anteriores a `SLV_32`.
 ///
@@ -49,6 +66,12 @@ pub struct SimulationRuntime {
 
     /// Teselas industriales con `m1` mutado este tick (obra P6 → remap cliente).
     pub industry_tile_dirty: Vec<TileCoord>,
+
+    /// Traza ordenada de intentos `CreateNewIndustry` de la generación actual.
+    ///
+    /// Sólo la consulta `world-raw --generate` la exporta para comparar contra
+    /// `OpenTTD`; una partida cargada o un `.sav` no conserva este diagnóstico.
+    pub industry_generation_attempts: Vec<GenerationIndustryAttempt>,
 
     /// Industrias que recibieron una entrega directa durante `LoadUnloadStation`.
     ///
@@ -229,6 +252,7 @@ impl SimulationRuntime {
             pending_income_popups: Vec::new(),
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
+            industry_generation_attempts: Vec::new(),
             pending_industry_deliveries: Vec::new(),
             cargo_monitor: crate::cargo_monitor::CargoMonitor::default(),
             landscape_tile_dirty: Vec::new(),
@@ -294,6 +318,7 @@ impl SimulationRuntime {
         self.pending_income_popups.clear();
         self.pending_sim_events.discard_all();
         self.industry_tile_dirty.clear();
+        self.industry_generation_attempts.clear();
         self.pending_industry_deliveries.clear();
         self.landscape_tile_dirty.clear();
         self.tile_loop_visited.clear();

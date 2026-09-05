@@ -6,7 +6,7 @@ use crate::command::{
     industry_template_with_layout, simulate_generated_terraform_north_corner,
 };
 use crate::company::OWNER_NONE_M1;
-use crate::game_state::GameState;
+use crate::game_state::{GameState, GenerationIndustryAttempt};
 use crate::industry::IndustrySpec;
 use crate::map::tree_tile_loop::{clear_ground_type, with_clear_counter};
 use crate::map::{
@@ -614,6 +614,7 @@ fn generated_industry_is_near_edge(state: &GameState, origin: TileCoord) -> bool
 ///
 /// El límite pertenece a la llamada, no a una selección global. Incluso los
 /// rechazos consumen el prefijo de `CreateNewIndustry`, tal como RMAP-058.
+#[allow(clippy::too_many_lines)] // Mantiene visible el orden nativo de los gates y sus rechazos.
 fn try_place_industry(
     ctx: &mut PopCtx<'_>,
     spec: IndustrySpec,
@@ -630,9 +631,11 @@ fn try_place_industry(
         );
         let origin = attempt.origin;
         if in_preserve(ctx.preserve, origin.x, origin.y) {
+            record_generated_industry_attempt(ctx.state, spec, attempt, false);
             continue;
         }
         if !generated_industry_check_proc_allows(ctx.state, origin, spec) {
+            record_generated_industry_attempt(ctx.state, spec, attempt, false);
             continue;
         }
         // `ClosestTownFromTile` debe observar MAP2 antes de que la orden
@@ -650,6 +653,7 @@ fn try_place_industry(
             ctx.multiple_industry_per_town,
         );
         if has_conflict || !can_use_town {
+            record_generated_industry_attempt(ctx.state, spec, attempt, false);
             continue;
         }
         // `EnsureNoVehicleOnGround` runs before the clear pass in
@@ -658,9 +662,11 @@ fn try_place_industry(
         // occupied by a moving or stopped vehicle without consuming another
         // random draw.
         let Some(layout) = industry_template_with_layout(origin, spec, attempt.layout_index) else {
+            record_generated_industry_attempt(ctx.state, spec, attempt, false);
             continue;
         };
         if generated_industry_has_vehicle(ctx.state, &layout) {
+            record_generated_industry_attempt(ctx.state, spec, attempt, false);
             continue;
         }
         let clear_check =
@@ -672,6 +678,7 @@ fn try_place_industry(
             // the strict slope contract; only this generation path may carry
             // the one deferred error forward to the platform check.
             if !matches!(error, crate::command::CommandError::InvalidTerrainSlope) {
+                record_generated_industry_attempt(ctx.state, spec, attempt, false);
                 continue;
             }
         }
@@ -685,9 +692,11 @@ fn try_place_industry(
             max_height,
         );
         if !platform_valid {
+            record_generated_industry_attempt(ctx.state, spec, attempt, false);
             continue;
         }
         let Ok(layout_index) = u8::try_from(attempt.layout_index) else {
+            record_generated_industry_attempt(ctx.state, spec, attempt, false);
             continue;
         };
         let Some(leveled_map) = level_generated_industry_platform_with_limit(
@@ -698,6 +707,7 @@ fn try_place_industry(
             ctx.industry_platform,
             max_height,
         ) else {
+            record_generated_industry_attempt(ctx.state, spec, attempt, false);
             continue;
         };
         let original_map = std::mem::replace(&mut ctx.state.map, leveled_map);
@@ -710,6 +720,7 @@ fn try_place_industry(
             // candidate (for example when a pool limit is reached). Restore
             // the pre-platform map just like OpenTTD's command transaction.
             ctx.state.map = original_map;
+            record_generated_industry_attempt(ctx.state, spec, attempt, false);
             continue;
         }
         // La cola de `DoCreateNewIndustry` consume producción smooth,
@@ -750,6 +761,7 @@ fn try_place_industry(
                 .map_or(0, |industry| industry.instance_id);
             plant_farm_fields(ctx, origin, spec, attempt.layout_index, industry_id);
         }
+        record_generated_industry_attempt(ctx.state, spec, attempt, true);
         industry_origins.push(origin);
         return true;
     }
@@ -766,6 +778,7 @@ fn try_place_industry(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct GeneratedIndustryAttempt {
     origin: TileCoord,
+    random_var8f: u32,
     layout_index: usize,
     initial_random_bits: u16,
 }
@@ -777,15 +790,40 @@ fn generated_industry_attempt(
     layout_count: usize,
 ) -> GeneratedIndustryAttempt {
     let origin = random_tile(rng.next(), map_w, map_h);
-    let _random_var8f = rng.next();
+    let random_var8f = rng.next();
     let initial_random_bits = u16::try_from(rng.next() & u32::from(u16::MAX)).unwrap_or(0);
     let layout_limit = u32::try_from(layout_count.max(1)).unwrap_or(1);
     let layout_index = usize::try_from(rng.random_range(layout_limit)).unwrap_or(0);
     GeneratedIndustryAttempt {
         origin,
+        random_var8f,
         layout_index,
         initial_random_bits,
     }
+}
+
+/// Añade un intento sin modificar el RNG ni el estado persistente.
+fn record_generated_industry_attempt(
+    state: &mut GameState,
+    spec: IndustrySpec,
+    attempt: GeneratedIndustryAttempt,
+    succeeded: bool,
+) {
+    let ordinal =
+        u32::try_from(state.runtime.industry_generation_attempts.len()).unwrap_or(u32::MAX);
+    state
+        .runtime
+        .industry_generation_attempts
+        .push(GenerationIndustryAttempt {
+            ordinal,
+            industry_type: u16::from(spec.native_type()),
+            x: u32::try_from(attempt.origin.x).unwrap_or(0),
+            y: u32::try_from(attempt.origin.y).unwrap_or(0),
+            random_var8f: attempt.random_var8f,
+            initial_random_bits: attempt.initial_random_bits,
+            layout_index: u32::try_from(attempt.layout_index).unwrap_or(u32::MAX),
+            succeeded,
+        });
 }
 
 /// Consumo RNG de la parte vanilla de `DoCreateNewIndustry` posterior a una
@@ -1307,7 +1345,7 @@ pub(crate) fn plant_random_farm_fields_runtime(
 mod tests {
     use super::*;
     use crate::cargodist::parity::Randomizer;
-    use crate::game_state::GameState;
+    use crate::game_state::{GameState, GenerationIndustryAttempt};
     use crate::industry::{Industry, IndustryKind};
     use crate::map::{
         Map, TOWN_HOUSE_COMPLETED, Tile, TownHouseSpec, tree_tile_loop::clear_density,
@@ -1749,6 +1787,7 @@ mod tests {
             generated_industry_attempt(&mut rng, 64, 64, 4),
             GeneratedIndustryAttempt {
                 origin: TileCoord::new(50, 59),
+                random_var8f: 1_223_915_418,
                 layout_index: 0,
                 initial_random_bits: 0xFFDC,
             }
@@ -1768,6 +1807,7 @@ mod tests {
         };
         let mut accepted = GeneratedIndustryAttempt {
             origin: TileCoord::new(0, 0),
+            random_var8f: 0,
             layout_index: 0,
             initial_random_bits: 0,
         };
@@ -1810,6 +1850,37 @@ mod tests {
             &mut origins,
         ));
         assert_eq!(origins, [TileCoord::new(21, 41)]);
+
+        // La traza observa cada prefijo de `CreateNewIndustry`, incluidos los
+        // doce rechazos que no materializan una industria. Es deliberadamente
+        // independiente de los bytes persistentes que se comprueban abajo.
+        assert_eq!(ctx.state.runtime.industry_generation_attempts.len(), 13);
+        assert_eq!(
+            ctx.state.runtime.industry_generation_attempts[0],
+            GenerationIndustryAttempt {
+                ordinal: 0,
+                industry_type: 0,
+                x: 50,
+                y: 59,
+                random_var8f: 1_223_915_418,
+                initial_random_bits: 0xFFDC,
+                layout_index: 0,
+                succeeded: false,
+            }
+        );
+        assert_eq!(
+            ctx.state.runtime.industry_generation_attempts[12],
+            GenerationIndustryAttempt {
+                ordinal: 12,
+                industry_type: 0,
+                x: 21,
+                y: 41,
+                random_var8f: 416_451_629,
+                initial_random_bits: 50_456,
+                layout_index: 3,
+                succeeded: true,
+            }
+        );
 
         let industry = ctx.state.industries.last().expect("created industry");
         assert_eq!(industry.instance_id, 0);

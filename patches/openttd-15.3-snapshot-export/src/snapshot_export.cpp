@@ -53,6 +53,27 @@ namespace {
 constexpr uint64_t FNV_OFFSET = 0xcbf29ce484222325ULL;
 constexpr uint64_t FNV_PRIME = 0x100000001b3ULL;
 
+struct IndustryGenerationAttemptTrace {
+	uint16_t industry_type;
+	uint32_t x;
+	uint32_t y;
+	uint32_t random_var8f;
+	uint16_t initial_random_bits;
+	uint32_t layout_index;
+	bool succeeded;
+};
+
+std::vector<IndustryGenerationAttemptTrace> _openttdrs_industry_generation_attempts;
+
+bool OpenttdrsGenerationCaptureEnabled()
+{
+	static const bool enabled = [] {
+		const char *out_dir = std::getenv("OPENTTDRS_GENERATION_STAGE_DIR");
+		return out_dir != nullptr && out_dir[0] != '\0';
+	}();
+	return enabled;
+}
+
 struct Fnv1a64 {
 	uint64_t h = FNV_OFFSET;
 	void write_u8(uint8_t v)
@@ -706,6 +727,7 @@ void OpenttdrsMaybeCaptureGenerationStage(const char *stage)
 {
 	const char *out_dir = std::getenv("OPENTTDRS_GENERATION_STAGE_DIR");
 	if (out_dir == nullptr || out_dir[0] == '\0' || stage == nullptr || stage[0] == '\0') return;
+	if (std::string(stage) == "landscape") _openttdrs_industry_generation_attempts.clear();
 
 	std::string raw_out(out_dir);
 	if (raw_out.back() != '/') raw_out += '/';
@@ -767,6 +789,22 @@ void OpenttdrsMaybeCaptureGenerationStage(const char *stage)
 		});
 	}
 	metadata["industry_positions"] = industry_positions;
+	metadata["industry_attempt_count"] = _openttdrs_industry_generation_attempts.size();
+	nlohmann::json industry_attempts = nlohmann::json::array();
+	for (size_t ordinal = 0; ordinal < _openttdrs_industry_generation_attempts.size(); ordinal++) {
+		const auto &attempt = _openttdrs_industry_generation_attempts[ordinal];
+		industry_attempts.push_back({
+			{"ordinal", ordinal},
+			{"type", attempt.industry_type},
+			{"x", attempt.x},
+			{"y", attempt.y},
+			{"random_var8f", attempt.random_var8f},
+			{"initial_random_bits", attempt.initial_random_bits},
+			{"layout_index", attempt.layout_index},
+			{"succeeded", attempt.succeeded},
+		});
+	}
+	metadata["industry_attempts"] = industry_attempts;
 	metadata["object_count"] = Object::GetNumItems();
 	nlohmann::json object_positions = nlohmann::json::array();
 	for (const Object *object : Object::Iterate()) {
@@ -807,6 +845,22 @@ void OpenttdrsMaybeCaptureGenerationStage(const char *stage)
 	if (!out) {
 		std::fprintf(stderr, "openttdrs generation fixture: failed to write %s\n", raw_out.c_str());
 	}
+}
+
+void OpenttdrsTraceIndustryCreationAttempt(
+	uint16_t industry_type, uint32_t x, uint32_t y, uint32_t random_var8f,
+	uint16_t initial_random_bits, uint32_t layout_index, bool succeeded)
+{
+	if (!OpenttdrsGenerationCaptureEnabled()) return;
+	_openttdrs_industry_generation_attempts.push_back({
+		.industry_type = industry_type,
+		.x = x,
+		.y = y,
+		.random_var8f = random_var8f,
+		.initial_random_bits = initial_random_bits,
+		.layout_index = layout_index,
+		.succeeded = succeeded,
+	});
 }
 
 void OpenttdrsTraceTreePlacement(

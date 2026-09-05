@@ -88,6 +88,9 @@ pub struct WorldRawGeneration {
     pub town_positions: Vec<WorldRawTownPosition>,
     pub industry_count: usize,
     pub industry_positions: Vec<WorldRawIndustryPosition>,
+    /// Intentos ordenados de `CreateNewIndustry` que llevaron al pool final.
+    pub industry_attempt_count: usize,
+    pub industry_attempts: Vec<WorldRawIndustryAttempt>,
     pub object_count: usize,
     pub object_positions: Vec<WorldRawObjectPosition>,
 }
@@ -122,6 +125,28 @@ pub struct WorldRawIndustryPosition {
     pub prod_level: u8,
     /// Pueblo asociado; `u32::MAX` representa el puntero nulo nativo.
     pub town_id: u32,
+}
+
+/// Prefijo observable de una llamada `CreateNewIndustry` durante generación.
+///
+/// La fila no sustituye el pool final: registra también los rechazos que ya
+/// consumieron RNG y pueden desfasar todas las industrias posteriores.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WorldRawIndustryAttempt {
+    pub ordinal: u32,
+    /// `IndustryType` que `PlaceIndustry` intentó construir.
+    #[serde(rename = "type")]
+    pub industry_type: u16,
+    pub x: u32,
+    pub y: u32,
+    /// Semilla `random_var8f` entregada al helper nativo.
+    pub random_var8f: u32,
+    /// Los 16 bits bajos de la segunda semilla del constructor.
+    pub initial_random_bits: u16,
+    /// Layout inicial sorteado antes de validar la ubicación.
+    pub layout_index: u32,
+    /// Si el helper materializó la industria antes de volver a `PlaceIndustry`.
+    pub succeeded: bool,
 }
 
 /// Identidad observable de una fila del pool `Object` durante generación.
@@ -187,6 +212,21 @@ impl WorldRawGeneration {
                 view: object.view,
             })
             .collect();
+        let industry_attempts: Vec<_> = state
+            .runtime
+            .industry_generation_attempts
+            .iter()
+            .map(|attempt| WorldRawIndustryAttempt {
+                ordinal: attempt.ordinal,
+                industry_type: attempt.industry_type,
+                x: attempt.x,
+                y: attempt.y,
+                random_var8f: attempt.random_var8f,
+                initial_random_bits: attempt.initial_random_bits,
+                layout_index: attempt.layout_index,
+                succeeded: attempt.succeeded,
+            })
+            .collect();
         Self {
             random_state_0: state.random.state[0],
             random_state_1: state.random.state[1],
@@ -194,6 +234,8 @@ impl WorldRawGeneration {
             town_positions,
             industry_count: industry_positions.len(),
             industry_positions,
+            industry_attempt_count: industry_attempts.len(),
+            industry_attempts,
             object_count: object_positions.len(),
             object_positions,
         }
@@ -414,6 +456,7 @@ mod tests {
     use super::{
         WorldRawContext, WorldRawMetadata, WorldRawRegion, sha256_hex, write_world_raw_jsonl,
     };
+    use crate::game_state::GenerationIndustryAttempt;
     use crate::map::{Map, TileCoord};
     use crate::sav::SavObject;
     use crate::{Industry, IndustryKind, IndustrySpec};
@@ -462,11 +505,22 @@ mod tests {
             view: 1,
             object_type: 1,
         }];
+        state.runtime.industry_generation_attempts = vec![GenerationIndustryAttempt {
+            ordinal: 0,
+            industry_type: 6,
+            x: 17,
+            y: 19,
+            random_var8f: 0xDEAD_BEEF,
+            initial_random_bits: 0xBEEF,
+            layout_index: 2,
+            succeeded: true,
+        }];
         let mut header = metadata(&state.map, None);
         let sav = serde_json::to_value(&header).expect("sav metadata");
         assert!(sav.get("random_state_0").is_none());
         assert!(sav.get("town_positions").is_none());
         assert!(sav.get("industry_positions").is_none());
+        assert!(sav.get("industry_attempts").is_none());
         assert!(sav.get("object_positions").is_none());
         header.generation = Some(super::WorldRawGeneration::from_state(&state));
         let generated = serde_json::to_value(&header).expect("generation metadata");
@@ -487,6 +541,15 @@ mod tests {
                 {"id": 3, "type": 6, "x": 17, "y": 19, "selected_layout": 2,
                  "random": 0xBEEF, "random_colour": 13, "counter": 0x345,
                  "prod_level": crate::industry::PRODLEVEL_DEFAULT, "town_id": 7}
+            ])
+        );
+        assert_eq!(generated["industry_attempt_count"], 1);
+        assert_eq!(
+            generated["industry_attempts"],
+            serde_json::json!([
+                {"ordinal": 0, "type": 6, "x": 17, "y": 19,
+                 "random_var8f": 0xDEAD_BEEFu32, "initial_random_bits": 0xBEEF,
+                 "layout_index": 2, "succeeded": true}
             ])
         );
         assert_eq!(generated["object_count"], 1);

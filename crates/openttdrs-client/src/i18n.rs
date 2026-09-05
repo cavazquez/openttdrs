@@ -738,6 +738,29 @@ mod tests {
 
     #[test]
     #[allow(clippy::unwrap_used)]
+    fn localization_plugin_applies_openttd_pack_filenames_live() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences {
+            language: "spanish.lng".into(),
+            ..ClientPreferences::default()
+        });
+        app.add_plugins(LocalizationPlugin);
+        let label = app.world_mut().spawn(Text::new("Noticias")).id();
+
+        app.update();
+        assert_eq!(app.world().get::<Text>(label).unwrap().as_str(), "Noticias");
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "english.lng".into();
+        app.update();
+        assert_eq!(app.world().get::<Text>(label).unwrap().as_str(), "News");
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "spanish_MX.lng".into();
+        app.update();
+        assert_eq!(app.world().get::<Text>(label).unwrap().as_str(), "Noticias");
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
     fn localization_plugin_leaves_editable_player_text_alone() {
         let mut app = App::new();
         app.insert_resource(ClientPreferences {

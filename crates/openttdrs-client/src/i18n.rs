@@ -462,6 +462,8 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Espera ante path sin reserva (días). 255 = nunca girar." => {
             "Wait for path without reservation (days). 255 = never turn around."
         }
+        "Señales PBS" => "PBS signals",
+        "Espera" => "Wait",
         "Intervalo de look-ahead (ticks). 255 = desactivar." => {
             "Look-ahead interval (ticks). 255 = disable."
         }
@@ -874,6 +876,19 @@ mod tests {
                 "Manual: hop desde órdenes del vehículo.\nAsimétrica: Demand + MCF OpenTTD (Dijkstra distancia/capacidad).\nSimétrica: Demand Symmetric OpenTTD (geografía + supply) + MCF."
             ),
             "Manual: hop from vehicle orders.\nAsymmetric: OpenTTD Demand + MCF (distance/capacity Dijkstra).\nSymmetric: OpenTTD Demand Symmetric (geography + supply) + MCF."
+        );
+    }
+
+    #[test]
+    fn catalog_translates_pathfinding_window_labels() {
+        assert_eq!(localized_text(Locale::En, "Señales PBS"), "PBS signals");
+        assert_eq!(localized_text(Locale::En, "Espera"), "Wait");
+        assert_eq!(
+            localized_text(
+                Locale::En,
+                "Espera ante path sin reserva (días). 255 = nunca girar."
+            ),
+            "Wait for path without reservation (days). 255 = never turn around."
         );
     }
 

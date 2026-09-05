@@ -2024,6 +2024,8 @@ mod tests {
             rival.manager_face_style = Some("modern".into());
             rival.money_fraction = 197;
             rival.block_preview = 19;
+            rival.inaugurated_year = 1967;
+            rival.inaugurated_year_calendar = 2067;
             rival.liveries[1] = crate::CompanyLivery {
                 in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY,
                 colour1: 7,
@@ -2057,6 +2059,8 @@ mod tests {
         assert_table_field_type(&plyr.body, 0x1A, "face_style");
         assert_table_field_type(&plyr.body, 2, "money_fraction");
         assert_table_field_type(&plyr.body, 2, "block_preview");
+        assert_table_field_type(&plyr.body, 5, "inaugurated_year");
+        assert_table_field_type(&plyr.body, 5, "inaugurated_year_calendar");
         assert_table_field_type(&plyr.body, 0x1B, "liveries");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.companies.len(), 2);
@@ -2076,6 +2080,8 @@ mod tests {
         );
         assert_eq!(sav_game.companies[1].money_fraction, Some(197));
         assert_eq!(sav_game.companies[1].block_preview, Some(19));
+        assert_eq!(sav_game.companies[1].inaugurated_year, Some(1967));
+        assert_eq!(sav_game.companies[1].inaugurated_year_calendar, Some(2067));
         assert_eq!(sav_game.companies[1].is_ai, Some(true));
         assert_eq!(sav_game.companies[1].engine_renew, Some(false));
         assert_eq!(sav_game.companies[1].engine_renew_months, Some(-3));
@@ -2105,6 +2111,8 @@ mod tests {
         assert_eq!(loaded_rival.manager_face_style.as_deref(), Some("modern"));
         assert_eq!(loaded_rival.money_fraction, 197);
         assert_eq!(loaded_rival.block_preview, 19);
+        assert_eq!(loaded_rival.inaugurated_year, 1967);
+        assert_eq!(loaded_rival.inaugurated_year_calendar, 2067);
         assert!(loaded_rival.is_ai);
         assert!(!loaded_rival.engine_renew);
         assert_eq!(loaded_rival.engine_renew_months, -3);
@@ -2578,6 +2586,8 @@ mod tests {
         // que una salida aparentemente válida silencie este estado.
         state.companies[0].money_fraction = 197;
         state.companies[0].block_preview = 19;
+        state.companies[0].inaugurated_year = 1967;
+        state.companies[0].inaugurated_year_calendar = 2067;
         state.companies[0].reset_liveries();
         // Ejercita el valor distinto del centinela global de `PLYR.max_loan`.
         // El smoke OpenTTD opcional re-guarda este valor para acreditar tanto
@@ -2654,6 +2664,8 @@ mod tests {
         );
         assert_eq!(sav_game.companies[0].money_fraction, Some(197));
         assert_eq!(sav_game.companies[0].block_preview, Some(19));
+        assert_eq!(sav_game.companies[0].inaugurated_year, Some(1967));
+        assert_eq!(sav_game.companies[0].inaugurated_year_calendar, Some(2067));
         assert_eq!(sav_game.companies[0].max_loan, Some(450_000));
         assert_eq!(sav_game.vehicles.len(), 2, "tren + bus");
         assert_eq!(sav_game.companies[0].liveries[14], custom_bus_livery);

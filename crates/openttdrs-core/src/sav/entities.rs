@@ -1487,6 +1487,10 @@ pub struct SavCompany {
     pub money_fraction: Option<u8>,
     /// Contador de bloqueo de preview exclusiva (`PLYR.block_preview`).
     pub block_preview: Option<u8>,
+    /// Año económico de inauguración (`PLYR.inaugurated_year`).
+    pub inaugurated_year: Option<i32>,
+    /// Año calendario de inauguración (`PLYR.inaugurated_year_calendar`).
+    pub inaugurated_year_calendar: Option<i32>,
     /// Marca de compañía controlada por IA, si está presente en el save.
     pub is_ai: Option<bool>,
     /// Meses consecutivos de bancarrota (`PLYR.months_of_bankruptcy`).
@@ -1676,6 +1680,10 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let block_preview = record_get(&record, "block_preview")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value).ok());
+            let inaugurated_year =
+                record_i64(&record, "inaugurated_year").and_then(|value| i32::try_from(value).ok());
+            let inaugurated_year_calendar = record_i64(&record, "inaugurated_year_calendar")
+                .and_then(|value| i32::try_from(value).ok());
             let is_ai = record_get(&record, "is_ai")
                 .and_then(SlValue::as_u64)
                 .map(|value| value != 0);
@@ -1737,6 +1745,8 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 manager_face_style,
                 money_fraction,
                 block_preview,
+                inaugurated_year,
+                inaugurated_year_calendar,
                 is_ai,
                 bankruptcy_months,
                 cur_economy: company_cur_economy_from_record(&record),

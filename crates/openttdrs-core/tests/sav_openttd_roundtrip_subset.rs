@@ -213,6 +213,26 @@ fn openttd_resaved_preserves_requested_company_preview_state() {
     assert_eq!(company.block_preview, Some(19));
 }
 
+/// Contrato opcional de años de inauguración. El año económico y el calendario
+/// pueden diferir en el modo wallclock, por lo que el writer debe conservar
+/// ambos `SLE_INT32` de `PLYR` de forma independiente.
+#[test]
+fn openttd_resaved_preserves_requested_company_inauguration_years() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_COMPANY_INAUGURATION").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PLYR");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).unwrap_or_else(|e| panic!("import openttdrs: {e}"));
+    let company = game
+        .companies
+        .first()
+        .expect("PLYR de compañía activa tras re-guardado OpenTTD");
+    assert_eq!(company.inaugurated_year, Some(1967));
+    assert_eq!(company.inaugurated_year_calendar, Some(2067));
+}
+
 /// Contrato opcional para el límite de préstamo individual. OpenTTD representa
 /// el default con `INT64_MIN`, pero una compañía marcada por deity conserva un
 /// valor concreto incluso si cambia el límite global por inflación.

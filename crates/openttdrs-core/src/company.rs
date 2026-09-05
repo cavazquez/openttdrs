@@ -198,6 +198,16 @@ pub struct Company {
     /// exclusiva de motor (`PLYR.block_preview`).
     #[serde(default)]
     pub block_preview: u8,
+    /// Año económico en que se fundó la compañía (`PLYR.inaugurated_year`).
+    ///
+    /// El valor cero es el estado nativo no inicializado y conserva la
+    /// compatibilidad con JSON anterior que todavía no lo persistía.
+    #[serde(default)]
+    pub inaugurated_year: i32,
+    /// Año calendario de fundación para el modo wallclock
+    /// (`PLYR.inaugurated_year_calendar`, SLV 349).
+    #[serde(default)]
+    pub inaugurated_year_calendar: i32,
     /// Esquemas nativos de color de vehículos (`PLYR.liveries`).
     ///
     /// Un JSON anterior a este campo se interpreta como la librea por defecto
@@ -284,6 +294,8 @@ impl Company {
             colour,
             money_fraction: 0,
             block_preview: 0,
+            inaugurated_year: 0,
+            inaugurated_year_calendar: 0,
             liveries: default_company_liveries(colour),
             economy,
             is_ai: false,
@@ -317,6 +329,8 @@ impl Company {
             colour,
             money_fraction: 0,
             block_preview: 0,
+            inaugurated_year: 0,
+            inaugurated_year_calendar: 0,
             liveries: default_company_liveries(colour),
             economy,
             is_ai: true,
@@ -350,6 +364,8 @@ impl Company {
             colour,
             money_fraction: 0,
             block_preview: 0,
+            inaugurated_year: 0,
+            inaugurated_year_calendar: 0,
             liveries: default_company_liveries(colour),
             economy,
             is_ai: true,

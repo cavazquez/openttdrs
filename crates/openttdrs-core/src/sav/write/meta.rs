@@ -169,6 +169,8 @@ pub(super) fn plyr_records(
         rec.push(state.company_colour);
         rec.push(company.money_fraction);
         rec.push(company.block_preview);
+        rec.extend_from_slice(&company.inaugurated_year.to_be_bytes());
+        rec.extend_from_slice(&company.inaugurated_year_calendar.to_be_bytes());
         rec.push(0);
         rec.push(company.bankruptcy_months);
         append_company_settings(
@@ -220,6 +222,8 @@ pub(super) fn plyr_records(
             rec.push(colour);
             rec.push(company_to_write.money_fraction);
             rec.push(company_to_write.block_preview);
+            rec.extend_from_slice(&company_to_write.inaugurated_year.to_be_bytes());
+            rec.extend_from_slice(&company_to_write.inaugurated_year_calendar.to_be_bytes());
             rec.push(u8::from(company.is_ai));
             rec.push(company.bankruptcy_months);
             append_company_settings(
@@ -262,6 +266,10 @@ pub(super) fn plyr_chunk(
     write_str("money_fraction", &mut header)?;
     header.push(2);
     write_str("block_preview", &mut header)?;
+    header.push(5);
+    write_str("inaugurated_year", &mut header)?;
+    header.push(5);
+    write_str("inaugurated_year_calendar", &mut header)?;
     header.push(1);
     write_str("is_ai", &mut header)?;
     header.push(2);

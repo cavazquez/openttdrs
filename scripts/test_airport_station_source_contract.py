@@ -9,6 +9,7 @@ cinco StationGfx animados que define ``station_land.h``.
 from __future__ import annotations
 
 import re
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -16,10 +17,24 @@ import gen_airport_station_draw_data as generator
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCES = (
-    ROOT / "reference" / "openttd-upstream" / "src" / "table" / "station_land.h",
-    ROOT / "third_party" / "openttd" / "station_land.h",
-)
+VENDORED_SOURCE = ROOT / "third_party" / "openttd" / "station_land.h"
+UPSTREAM_SOURCE = ROOT / "reference" / "openttd-upstream" / "src" / "table" / "station_land.h"
+
+
+def contract_sources(root: Path = ROOT) -> tuple[Path, ...]:
+    """Devuelve la copia versionada y, si existe, el checkout opcional del oracle.
+
+    Actions no descarga ``reference/openttd-upstream``; la copia GPL
+    versionada es por tanto la fuente mínima y reproducible del contrato. En
+    una estación de desarrollo se valida además el checkout real, sin hacer
+    del clone local un requisito implícito del CI.
+    """
+    vendored = root / "third_party" / "openttd" / "station_land.h"
+    upstream = root / "reference" / "openttd-upstream" / "src" / "table" / "station_land.h"
+    sources = [vendored]
+    if upstream.is_file():
+        sources.append(upstream)
+    return tuple(sources)
 
 
 def compact(text: str) -> str:
@@ -29,6 +44,14 @@ def compact(text: str) -> str:
 
 
 class AirportStationSourceContractTest(unittest.TestCase):
+    def test_source_selection_has_a_versioned_ci_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vendored = root / "third_party" / "openttd" / "station_land.h"
+            vendored.parent.mkdir(parents=True)
+            vendored.write_text("fixture", encoding="utf-8")
+            self.assertEqual(contract_sources(root), (vendored,))
+
     def test_checked_in_generator_contract_matches_openttd(self) -> None:
         bases = {gfx: (sprite, company) for gfx, _label, sprite, company in generator.AIRPORT_STATION_BASES}
         self.assertEqual(set(bases), set(range(74)))
@@ -74,7 +97,8 @@ class AirportStationSourceContractTest(unittest.TestCase):
         self.assertEqual(set(generator.DYNAMIC_SPRITE_IDS), set(range(2676, 2692)))
 
     def test_openttd_station_land_defines_the_same_ground_and_tile_seq(self) -> None:
-        for source in SOURCES:
+        self.assertTrue(VENDORED_SOURCE.is_file(), f"falta copia versionada: {VENDORED_SOURCE}")
+        for source in contract_sources():
             with self.subTest(source=source):
                 self.assertTrue(source.is_file(), f"falta fuente OpenTTD: {source}")
                 text = compact(source.read_text(encoding="utf-8"))

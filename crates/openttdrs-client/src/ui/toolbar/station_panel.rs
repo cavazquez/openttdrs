@@ -10,8 +10,10 @@ use openttdrs_core::{
     station_rating_for_cargo,
 };
 
+use crate::i18n::{Locale, localized_text};
 use crate::iso::tile_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending};
+use crate::settings::ClientPreferences;
 use crate::sprites::{StationTileClass, station_type_from_m6};
 use crate::state::{OrderPickState, SimWorld};
 use crate::ui::floating_window::{
@@ -339,12 +341,23 @@ pub(crate) fn try_append_station_order(
     apply_order_edit(state, vehicle_id, orders)
 }
 
-fn station_display_name(station: &openttdrs_core::Station, kind_label: &str) -> String {
+fn station_display_name(
+    locale: Locale,
+    station: &openttdrs_core::Station,
+    kind_label: &str,
+) -> String {
     station
         .name
         .clone()
         .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| format!("{} ({}, {})", kind_label, station.pos.x, station.pos.y))
+        .unwrap_or_else(|| {
+            format!(
+                "{} ({}, {})",
+                localized_text(locale, kind_label),
+                station.pos.x,
+                station.pos.y
+            )
+        })
 }
 
 fn station_kind_label(kind: openttdrs_core::StopKind) -> &'static str {
@@ -406,6 +419,7 @@ pub(crate) fn sync_station_cargo_panel(
     mut station_pool: Option<ResMut<StationPoolRegistry>>,
     order_state: Res<OrderEditState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<
         (Entity, &FloatingWindowTitleText, &mut Text),
@@ -423,6 +437,7 @@ pub(crate) fn sync_station_cargo_panel(
     parents: Query<&ChildOf>,
     mut last_pos: Local<Option<TileCoord>>,
 ) {
+    let locale = prefs.locale();
     if let (Some(pos), Some(pool)) = (station_panel.station_pos, station_pool.as_deref_mut()) {
         pool.open_or_focus(pos);
     }
@@ -510,7 +525,7 @@ pub(crate) fn sync_station_cargo_panel(
         } else {
             station_kind_label(slot_station.stop_kind)
         };
-        **title = station_display_name(slot_station, kind_label);
+        **title = station_display_name(locale, slot_station, kind_label);
     }
     let owner_name = sim
         .state
@@ -518,17 +533,18 @@ pub(crate) fn sync_station_cargo_panel(
         .iter()
         .find(|c| c.id == station.owner)
         .map_or_else(
-            || format!("Compañía {}", station.owner.0),
+            || format!("{} {}", localized_text(locale, "Compañía"), station.owner.0),
             |c| c.name.clone(),
         );
     let visiting = vehicles_visiting(&sim, station_pos);
     let active_vehicle = vehicle_id_for_station_panel(&sim, station_pos, order_state.vehicle_id());
     let out = if station.is_waypoint() {
         format!(
-            "Waypoint · ({}, {})\n{owner_name}\nRating: {}/255\nVehículos: {}",
+            "Waypoint · ({}, {})\n{owner_name}\nRating: {}/255\n{}: {}",
             station_pos.x,
             station_pos.y,
             station.rating,
+            localized_text(locale, "Vehículos"),
             visiting.len()
         )
     } else {
@@ -559,19 +575,22 @@ pub(crate) fn sync_station_cargo_panel(
                 format!("{first} +{extra}")
             }
         } else {
-            "ninguna".to_string()
+            localized_text(locale, "ninguna")
         };
         let active = active_vehicle.map_or_else(|| "-".to_string(), |id| format!("#{id}"));
         format!(
-            "{} · ({}, {})\nRating {}/255 · ingresos ${}\n{}: {}\nVehículos {} · activo {}",
-            focused_kind_label,
+            "{} · ({}, {})\nRating {}/255 · {} ${}\n{}: {}\n{} {} · {} {}",
+            localized_text(locale, focused_kind_label),
             station_pos.x,
             station_pos.y,
             station.rating,
             station.income,
-            station_panel.cargo_filter.label(),
+            localized_text(locale, "ingresos"),
+            localized_text(locale, station_panel.cargo_filter.label()),
             cargo_line,
+            localized_text(locale, "Vehículos"),
             visiting.len(),
+            localized_text(locale, "activo"),
             active
         )
     };
@@ -608,13 +627,16 @@ pub(crate) fn sync_station_cargo_panel(
             .filter(|cargo| slot_station.cargo_stock.get(**cargo) > 0)
             .count();
         **text = format!(
-            "{} · ({}, {})\nRating {}/255 · ingresos ${}\nCargas en espera: {}\nVehículos en ruta: {}",
-            station_kind_label(slot_station.stop_kind),
+            "{} · ({}, {})\nRating {}/255 · {} ${}\n{}: {}\n{}: {}",
+            localized_text(locale, station_kind_label(slot_station.stop_kind)),
             slot_station.pos.x,
             slot_station.pos.y,
             slot_station.rating,
             slot_station.income,
+            localized_text(locale, "ingresos"),
+            localized_text(locale, "Cargas en espera"),
             waiting_types,
+            localized_text(locale, "Vehículos en ruta"),
             vehicles_visiting(&sim, slot_station.pos).len()
         );
     }
@@ -1136,6 +1158,23 @@ mod tests {
         assert_eq!(filter.next(), StationCargoFilter::Waiting);
         assert_eq!(filter.next().next(), StationCargoFilter::Accepted);
         assert_eq!(filter.next().next().next(), StationCargoFilter::All);
+    }
+
+    #[test]
+    fn station_title_localizes_kind_but_preserves_custom_name() {
+        let pos = TileCoord::new(3, 4);
+        let mut station = Station::new_with_kind(pos, StopKind::BusStop);
+        let kind = station_kind_label(station.stop_kind);
+        assert_eq!(
+            station_display_name(Locale::En, &station, kind),
+            "Bus stop (3, 4)"
+        );
+
+        station.name = Some("Cunfingway Central".into());
+        assert_eq!(
+            station_display_name(Locale::En, &station, kind),
+            "Cunfingway Central"
+        );
     }
 
     #[test]

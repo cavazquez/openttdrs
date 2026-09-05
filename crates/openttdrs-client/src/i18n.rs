@@ -346,6 +346,10 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Parada bus" => "Bus stop",
         "Parada carga" => "Truck stop",
         "Estacion tren" => "Train station",
+        "Parada de bus" => "Bus stop",
+        "Parada de camión" => "Truck stop",
+        "Estación de tren" => "Train station",
+        "Plataforma petrolera" => "Oil rig",
         "Waypoint road" => "Road waypoint",
         "Muelle" => "Dock",
         "Boya" => "Buoy",
@@ -366,6 +370,27 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Nuevos" => "New",
         "Clonar" => "Clone",
         "Deseng." => "Detach",
+        "Ruta" => "Route",
+        "Órd." => "Ord.",
+        "Nom." => "Name",
+        "Carga" => "Cargo",
+        "Unir" => "Join",
+        "Cerrar" => "Close",
+        "Añadir a ruta del vehículo" => "Add to vehicle route",
+        "Editar órdenes" => "Edit orders",
+        "Centrar cámara en la estación" => "Center camera on station",
+        "Renombrar estación" => "Rename station",
+        "Ver vehículos que visitan esta estación" => "View vehicles visiting this station",
+        "Filtrar carga: todas / con espera / aceptadas" => "Filter cargo: all / waiting / accepted",
+        "Unir con otra estación" => "Join another station",
+        "todas" => "all",
+        "con espera" => "waiting",
+        "aceptadas" => "accepted",
+        "ninguna" => "none",
+        "ingresos" => "income",
+        "activo" => "active",
+        "Cargas en espera" => "Cargo waiting",
+        "Vehículos en ruta" => "Vehicles en route",
         "Casilla" => "Tile",
         "Cond." => "If",
         "ord." => "order",
@@ -913,6 +938,32 @@ mod tests {
             ("Nuevos", "New"),
             ("Clonar", "Clone"),
             ("Deseng.", "Detach"),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+        }
+    }
+
+    #[test]
+    fn catalog_translates_station_chrome_and_summaries() {
+        for (spanish, english) in [
+            ("Parada de bus", "Bus stop"),
+            ("Parada de camión", "Truck stop"),
+            ("Estación de tren", "Train station"),
+            ("Plataforma petrolera", "Oil rig"),
+            ("Ruta", "Route"),
+            ("Órd.", "Ord."),
+            ("Nom.", "Name"),
+            ("Carga", "Cargo"),
+            ("Unir", "Join"),
+            ("Cerrar", "Close"),
+            ("todas", "all"),
+            ("con espera", "waiting"),
+            ("aceptadas", "accepted"),
+            ("ninguna", "none"),
+            ("ingresos", "income"),
+            ("activo", "active"),
+            ("Cargas en espera", "Cargo waiting"),
+            ("Vehículos en ruta", "Vehicles en route"),
         ] {
             assert_eq!(localized_text(Locale::En, spanish), english);
         }

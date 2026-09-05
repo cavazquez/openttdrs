@@ -428,15 +428,17 @@ consist y sorter/viewport), no la ausencia de un call site por tipo.
 | [#331](https://github.com/cavazquez/openttdrs/issues/331) | Locale `es`/`en`, etiquetas estáticas, errores de comandos y el panel de órdenes cambian en vivo. Este último cubre controles, título/pool/hint y filas dinámicas (modos, horarios, refit de carga, incompatibilidades y falta de ruta); la lista de Órdenes compartidas también alterna título, hint y contadores sin traducir IDs ni datos de las órdenes. Liga invalida además sus filas cuando sólo cambia el locale, traduciendo sus etiquetas y conservando el nombre de compañía. Subvenciones traduce su chrome y estados Offer/Active, mientras conserva como datos cargos, compañías e industrias. La configuración de Noticias localiza sus ocho categorías y el modo `Newspaper`, sin traducir titulares/cuerpos generados. IA / TransCargo localiza el resumen dinámico, pero conserva nombres de compañía, importes, cargos, rutas y coordenadas. Opciones de visualización traduce toggles, presets y categorías `TO_*`, y su viewport con scrollbar clásico conserva las acciones inferiores en 720 px. CargoDist traduce explicación y modos sin alterar Demand/MCF ni el estado de carga. La configuración NewGRF traduce controles, guía y estado de parámetro, pero preserva nombres, GRFID, paths y reportes técnicos. Señales PBS traduce título y selector de espera; los valores de pathfinding siguen siendo los mismos. Autoreemplazo cubre chrome, hint y flags de regla, sin modificar nombres de motores. El depósito traduce título, botones de chrome y unidad de antigüedad, y conserva nombre, carga, capacidad y coordenadas del vehículo. La vista de estación traduce clases, filtros, resúmenes, botones y tooltips, preservando nombres de estación, empresa, cargos y coordenadas. Sonido y música traduce volúmenes, reproducción y controles, mientras los títulos de pista se conservan literales. El sub-issue #370 añade la entrada, cabecera, controles y estado dinámico de trucos; formatea la fecha de presentación de CheatWindow, statusbar y toolbar del editor según el locale, y materializa siempre el estado vacío de objetivos sin traducir datos de GameScript/jugadores. La ayuda integrada completa también alterna en vivo, conserva comandos/hotkeys literales y usa viewport con scrollbar clásico para no exceder una pantalla baja. Story alterna título, fallback y navegación, pero conserva literalmente títulos/cuerpos de páginas GameScript. El campo persistido acepta además los filenames que OpenTTD 15.3 guarda para esos dos packs (`english*.lng`/`spanish*.lng`), con la misma normalización segura de ISO. Siguen pendientes cuerpos/titulares generados, catálogos upstream completos, settings no modelados y la paridad UI sin colisiones ECS. | Auditar un catálogo/setting guardado contra OpenTTD y añadir una regresión de cambio de idioma. |
 | RMAP-004 y padres abiertos | Las cohortes auditadas de mapas (64²→512² y cortes ampliados) son exactas por tesela y bloques 4×4, pero eso no generaliza a todas las semillas, tamaños, climas, settings de ríos ni ticks posteriores. | Ampliar la matriz combinatoria sólo cuando exista una primera divergencia reproducible; no convertir una cohorte exacta en cierre del generador. |
 
-Corrección vigente #371–#373 (2026-09-05): la fila #328 de arriba queda
+Corrección vigente #371–#374 (2026-09-05): la fila #328 de arriba queda
 ampliada: strings, listas escalares raíz y struct-lists raíz con descriptor
 recursivamente idéntico pueden cambiar de longitud sin descartar cabecera ni
 columnas ajenas. `CITY.psa_list` agrega una fila `PSAC`; `CITY.supplied` añade
 un cargo con historia interna, preserva los demás bytes `CITY` y OpenTTD
 dedicado vuelve a guardarlo al anunciar SLV 358. La frontera sigue excluyendo
 subschemas desconocidos/incompatibles, cambios de filas/índices y topología;
-#328 permanece abierto. La evidencia única de este último caso y su
-reproducción están en [sav-struct-373.md](sav-struct-373.md).
+#374 normaliza además `INDY.accepted`/`produced` a sus 61 registros nativos
+(salvo historia aceptada aún nula), conservando opacas las filas no
+resolubles. #328 permanece abierto. La evidencia de este último caso y su
+reproducción están en [sav-indy-history-374.md](sav-indy-history-374.md).
 
 Corrección vigente de la tabla: `566ce56a` resuelve la codificación global de
 cargos modernos en SAV y conserva los slots climáticos de saves anteriores a
@@ -837,14 +839,17 @@ de GameScript, exclusividad/neutral stations y cargos custom.
 | 6 | Movimiento y economía diferencial (#330) | Abierto | Oráculos externos para carretera (tráfico/colisiones/dirección), rail (PBS/YAPF/presignals/consist) y aire/mar, incluyendo casos límite. El perfilador de `Kale_TitleGame.sav` ya no aborta cuando un callback devuelve un pago negativo: los contadores `u64` de estación/empresa/estadística saturan ese ajuste a cero y el crédito firmado conserva la penalización; quedan pendientes los oráculos diferenciales y sus casos límite. |
 | 7 | Idiomas y settings (#331) | Abierto | Catálogo de idiomas, locale, settings y textos guardados se cargan y se comparan con OpenTTD sin colisiones ECS ni regresiones de UI. |
 
-Actualización #371–#373 (2026-09-05): la fila de interoperabilidad SAV de este
+Actualización #371–#374 (2026-09-05): la fila de interoperabilidad SAV de este
 orden permite reencuadrar strings, listas escalares y struct-lists de raíz con
 descriptor recursivamente idéntico sin perder columnas importadas. Las pruebas
 nativas son `CITY.psa_list` + `PSAC` y `CITY.supplied`; esta última usa SLV 358
-y OpenTTD dedicado re-guarda los 61 registros de historial. No se infiere desde
-el header si un `HAS_LENGTH` es vector o array fijo, por lo que los writers
-mantienen sus tamaños nativos. Subschemas incompatibles y cambios de filas,
-índices o topología quedan pendientes en #328. Ver [evidencia #373](sav-struct-373.md).
+y OpenTTD dedicado re-guarda los 61 registros de historial. `INDY` normaliza
+ahora sus historiales representables al mismo tamaño (con cero para la entrada
+aceptada todavía nula), pero su agregación trimestral/anual runtime sigue
+pendiente. No se infiere desde el header si un `HAS_LENGTH` es vector o array
+fijo, por lo que los writers mantienen sus tamaños nativos.
+Subschemas incompatibles y cambios de filas, índices o topología quedan
+pendientes en #328. Ver [evidencia #374](sav-indy-history-374.md).
 
 Actualización #329-INDUSTRY-CB28-021 (2026-09-02): CB28 mantiene la semántica
 exacta de OpenTTD (sin invertir el bit 10), y el call site de construcción
@@ -1446,14 +1451,16 @@ y `VEHS` en conjunto. Las mutaciones escalares fijas compatibles conservan ahora
 columnas futuras; cambios de strings/listas/structs, filas o índices siguen
 pendientes junto con la semántica completa; #329 no se cierra.
 
-Corrección #371–#373 (2026-09-05): la frase anterior sobre cambios de
+Corrección #371–#374 (2026-09-05): la frase anterior sobre cambios de
 strings/listas queda superada para strings, listas escalares y struct-lists de
 **raíz** con descriptor recursivo, filas e índices compatibles. `CITY.psa_list`
 y `CITY.supplied` preservan columnas futuras y re-guardado OpenTTD; el segundo
 anuncia SLV 358 y normaliza la historia a 61 registros. Las listas de órdenes,
 subschemas desconocidos y cambios de forma/topología siguen requiriendo la
 frontera estable indicada allí. Detalle y reproducción:
-[sav-struct-373.md](sav-struct-373.md).
+[sav-struct-373.md](sav-struct-373.md). `INDY.accepted`/`produced` también
+emiten ahora sus 61 posiciones nativas sin convertir las filas opacas;
+[sav-indy-history-374.md](sav-indy-history-374.md) conserva la evidencia.
 
 Actualización #329-VEHICLE-SAV-TABLES-011 (2026-09-02): el snapshot de
 interoperabilidad se extendió a `STNN`, `CITY` e `INDY`. En cargar→guardar sin

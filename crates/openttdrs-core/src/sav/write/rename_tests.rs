@@ -584,6 +584,88 @@ fn native_town_supplied_growth_preserves_other_city_fields() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
+fn native_indy_histories_preserve_other_indy_fields() {
+    let original = include_bytes!("../../../tests/fixtures/train_pbs_15_3.sav");
+    let (original_payload, _) = super::super::container::decompress(original).expect("container");
+    let original_chunks = super::super::chunks::parse_chunks(&original_payload).expect("chunks");
+    let original_indy =
+        super::super::chunks::find_chunk(&original_chunks, "INDY").expect("native INDY");
+    assert_eq!(original_indy.ch_type, super::super::chunks::CH_TABLE);
+    let (_, header_end, fields) = parse_table_layout(&original_indy.body).expect("header");
+    assert!(fields.iter().any(|field| field.name == "accepted"));
+    assert!(fields.iter().any(|field| field.name == "produced"));
+
+    let mut state = GameState::from_sav_game(super::super::load(original).expect("native SAV"));
+    let climate = state.climate;
+    let industry = state.industries.first_mut().expect("native industry");
+    let accepted_cargo = crate::CargoType::for_climate(climate)
+        .iter()
+        .copied()
+        .find(|cargo| !industry.accepted_history.contains_key(cargo))
+        .expect("free accepted cargo");
+    let produced_cargo = crate::CargoType::for_climate(climate)
+        .iter()
+        .copied()
+        .find(|cargo| {
+            !industry.produced_history.contains_key(cargo)
+                && !industry.produced_cargos().contains(cargo)
+        })
+        .expect("free produced cargo");
+    industry.record_accepted_cargo(accepted_cargo, 123, 37_004);
+    industry.record_produced_cargo(produced_cargo, 456, 78);
+    let output = save_to_bytes_with(&state, SavContainer::Ottn).expect("SAV with INDY histories");
+    let (payload, _) = super::super::container::decompress(&output).expect("output container");
+    let output_chunks = super::super::chunks::parse_chunks(&payload).expect("output chunks");
+    let output_indy =
+        super::super::chunks::find_chunk(&output_chunks, "INDY").expect("output INDY");
+    assert_eq!(output_indy.ch_type, original_indy.ch_type);
+    assert_eq!(
+        &output_indy.body[..header_end],
+        &original_indy.body[..header_end]
+    );
+    let old_rows = dense_row_payloads(&original_indy.body);
+    let new_rows = dense_row_payloads(&output_indy.body);
+    assert_eq!(old_rows.len(), new_rows.len());
+    for (old_row, new_row) in old_rows.iter().zip(&new_rows) {
+        let old_ranges = field_byte_ranges(&fields, old_row).expect("native ranges");
+        let new_ranges = field_byte_ranges(&fields, new_row).expect("output ranges");
+        for ((field, start, end), (_, new_start, new_end)) in old_ranges.iter().zip(&new_ranges) {
+            if field != "accepted" && field != "produced" {
+                assert_eq!(
+                    &old_row[*start..*end],
+                    &new_row[*new_start..*new_end],
+                    "{field}"
+                );
+            }
+        }
+    }
+
+    let reloaded = super::super::load(&output).expect("reimport");
+    assert!(reloaded.industries.iter().any(|industry| {
+        industry.accepted.iter().any(|entry| {
+            entry.history.len() == crate::entity_history::INDUSTRY_HISTORY_RECORDS
+                && entry
+                    .history
+                    .first()
+                    .is_some_and(|sample| sample.accepted == 123 && sample.waiting == 0)
+        })
+    }));
+    assert!(reloaded.industries.iter().any(|industry| {
+        industry.produced.iter().any(|entry| {
+            entry.history.len() == crate::entity_history::INDUSTRY_HISTORY_RECORDS
+                && entry
+                    .history
+                    .first()
+                    .is_some_and(|sample| sample.production == 456 && sample.transported == 78)
+        })
+    }));
+    if let Ok(path) = std::env::var("OPENTTDRS_DUMP_INDY_HISTORY_NATIVE_SAV") {
+        std::fs::write(path, output).expect("dump for OpenTTD");
+    }
+}
+
+#[test]
 fn native_company_rename_preserves_other_plyr_fields() {
     let original = include_bytes!("../../../tests/fixtures/train_pbs_15_3.sav");
     let (original_payload, _) = super::super::container::decompress(original).expect("container");

@@ -1112,10 +1112,13 @@ un struct-list raíz con descriptor recursivamente idéntico: añadir un
 `CITY.supplied` conserva sus campos hermanos y OpenTTD re-guarda sus 61
 registros de historia cuando el contenedor declara SLV 358. El header no
 distingue vector de array fijo, por lo que cada writer conserva los tamaños
-nativos de sus arrays. Un subcampo desconocido/incompatible, cambio de forma,
-filas, índices o pools nativos no modelados sigue usando el writer canónico;
-la agregación runtime completa de esos historiales pertenece a #329/#330. Por
-eso #328/#329 continúan abiertos.
+nativos de sus arrays. [#374](parity/sav-indy-history-374.md) normaliza los
+historiales representables de `INDY.accepted`/`produced` a 61 registros (o
+cero para la historia aceptada aún nula) y los comprueba tras re-guardado
+dedicado. Un subcampo desconocido/incompatible, cambio de forma, filas, índices
+o pools nativos no modelados sigue usando el writer canónico; la agregación
+runtime completa de esos historiales pertenece a #329/#330. Por eso #328/#329
+continúan abiertos.
 
 <!-- active-parity-backlog:end -->
 

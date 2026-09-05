@@ -6,7 +6,8 @@
 #![allow(clippy::expect_used)]
 
 use openttdrs_core::{
-    COMPANY_LIVERY_FLAG_PRIMARY, COMPANY_LIVERY_FLAG_SECONDARY, CompanyLivery, SavVehicleKind, sav,
+    COMPANY_LIVERY_FLAG_PRIMARY, COMPANY_LIVERY_FLAG_SECONDARY, CompanyLivery,
+    INDUSTRY_HISTORY_RECORDS, SavVehicleKind, sav,
 };
 
 /// #371: ejecutar sobre el SAV que OpenTTD re-guardó después del renombrado
@@ -75,6 +76,34 @@ fn openttd_resaved_preserves_added_town_supplied_entry() {
         }),
         "OpenTTD conserva y normaliza los 61 registros de CITY.supplied: {supplied:?}"
     );
+}
+
+/// #374: ejecutar sobre el SAV que OpenTTD re-guardó después de normalizar
+/// ambos historiales de carga de `INDY` a los 61 registros nativos.
+#[test]
+#[ignore = "requiere OPENTTDRS_ROUNDTRIP_SAV re-guardado por OpenTTD dedicado"]
+fn openttd_resaved_preserves_normalized_indy_histories() {
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV").expect("SAV re-guardado requerido");
+    let bytes = std::fs::read(path).expect("leer SAV re-guardado");
+    let game = sav::load(&bytes).expect("cargar SAV re-guardado");
+    assert!(game.industries.iter().any(|industry| {
+        industry.accepted.iter().any(|entry| {
+            entry.history.len() == INDUSTRY_HISTORY_RECORDS
+                && entry
+                    .history
+                    .first()
+                    .is_some_and(|sample| sample.accepted == 123 && sample.waiting == 0)
+        })
+    }));
+    assert!(game.industries.iter().any(|industry| {
+        industry.produced.iter().any(|entry| {
+            entry.history.len() == INDUSTRY_HISTORY_RECORDS
+                && entry
+                    .history
+                    .first()
+                    .is_some_and(|sample| sample.production == 456 && sample.transported == 78)
+        })
+    }));
 }
 
 #[test]

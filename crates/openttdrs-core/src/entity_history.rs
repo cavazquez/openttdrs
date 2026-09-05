@@ -10,8 +10,9 @@ pub const ENTITY_HISTORY_MONTHS: usize = ECONOMY_HISTORY_MONTHS;
 ///
 /// La ventana nativa contiene el mes actual, 24 meses, 17 agregados
 /// trimestrales y 19 agregados anuales: 61 posiciones (`misc/history_type.hpp`).
-/// El runtime reducido todavía no expone las vistas trimestrales/anuales, pero
-/// conserva la longitud completa para que un `INDY` mutado no trunque el save.
+/// El runtime reducido todavía no expone las vistas trimestrales/anuales y
+/// puede retener sólo su ventana activa; el writer SAV completa el array fijo
+/// para que un `INDY` mutado no trunque el save.
 pub const INDUSTRY_HISTORY_RECORDS: usize = 61;
 
 /// Muestra mensual de un cargo aceptado por una industria.

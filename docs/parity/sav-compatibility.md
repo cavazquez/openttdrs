@@ -42,6 +42,14 @@ historial fijo de 61 registros que OpenTTD espera.
 Un subcampo anidado desconocido o incompatible, cambios de topología, filas o
 índices todavía quedan fuera de ese merge conservador; #328 permanece abierto.
 
+Actualización #374 (2026-09-05): los historiales modelados de
+`INDY.accepted[]` y `INDY.produced[]` ya se escriben con los 61 registros
+fijos de `HistoryData`. La historia aceptada que nunca se creó conserva
+longitud cero, como el puntero nulo nativo; las filas de cargo opacas se
+preservan sin normalización. El runtime reducido aún no reproduce la
+agregación trimestral/anual: [la evidencia y límites](sav-indy-history-374.md)
+mantienen ese alcance separado de #329.
+
 Esta actualización prevalece sobre la limitación histórica de la fila `Mundo
 base` que agrupaba todas las listas: `CITY.psa_list` y el struct-list raíz
 compatible `CITY.supplied` no fuerzan por sí solos el header canónico. La

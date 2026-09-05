@@ -1300,6 +1300,52 @@ fn cargo_from_saved_slot(
     )
 }
 
+/// Escribe el `HistoryData` opcional de una entrada de carga aceptada.
+///
+/// `OpenTTD` deja el puntero nulo cuando ese cargo nunca recibió historial, que
+/// se representa con longitud cero. Una vez creado, en cambio, es un array
+/// fijo de `HISTORY_RECORDS` y no una ventana variable del runtime reducido.
+fn write_indy_accepted_history(
+    buf: &mut Vec<u8>,
+    history: &[crate::sav::SavIndustryAcceptedHistory],
+) -> Result<(), SavError> {
+    if history.is_empty() {
+        return write_gamma(0, buf);
+    }
+    write_gamma(
+        u32::try_from(crate::entity_history::INDUSTRY_HISTORY_RECORDS).unwrap_or(u32::MAX),
+        buf,
+    )?;
+    for index in 0..crate::entity_history::INDUSTRY_HISTORY_RECORDS {
+        let sample = history.get(index);
+        buf.extend_from_slice(&sample.map_or(0, |sample| sample.accepted).to_be_bytes());
+        buf.extend_from_slice(&sample.map_or(0, |sample| sample.waiting).to_be_bytes());
+    }
+    Ok(())
+}
+
+/// Escribe el `HistoryData` fijo de una salida de industria.
+///
+/// `ProducedCargo::history` siempre es un array nativo de 61 registros para
+/// una salida válida. El runtime puede tener sólo los meses activos; se
+/// completa el resto para que el primer re-guardado de `OpenTTD` no cambie la
+/// forma serializada.
+fn write_indy_produced_history(
+    buf: &mut Vec<u8>,
+    history: &[crate::sav::SavIndustryProducedHistory],
+) -> Result<(), SavError> {
+    write_gamma(
+        u32::try_from(crate::entity_history::INDUSTRY_HISTORY_RECORDS).unwrap_or(u32::MAX),
+        buf,
+    )?;
+    for index in 0..crate::entity_history::INDUSTRY_HISTORY_RECORDS {
+        let sample = history.get(index);
+        buf.extend_from_slice(&sample.map_or(0, |sample| sample.production).to_be_bytes());
+        buf.extend_from_slice(&sample.map_or(0, |sample| sample.transported).to_be_bytes());
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_lines)]
 fn write_indy_accepted(
     buf: &mut Vec<u8>,
@@ -1425,17 +1471,7 @@ fn write_indy_accepted(
             })
             .or_else(|| saved_entry.map(|entry| entry.history.clone()))
             .unwrap_or_default();
-        write_gamma(
-            u32::try_from(history.len()).map_err(|_| SavError::ValueOutOfRange {
-                field: "industry accepted history length",
-                value: u32::MAX,
-            })?,
-            buf,
-        )?;
-        for sample in history {
-            buf.extend_from_slice(&sample.accepted.to_be_bytes());
-            buf.extend_from_slice(&sample.waiting.to_be_bytes());
-        }
+        write_indy_accepted_history(buf, &history)?;
     }
     for entry in opaque_entries {
         buf.push(entry.cargo_slot);
@@ -1580,17 +1616,7 @@ fn write_indy_produced(
         buf.push(cargo);
         buf.extend_from_slice(&waiting.to_be_bytes());
         buf.push(rate);
-        write_gamma(
-            u32::try_from(history.len()).map_err(|_| SavError::ValueOutOfRange {
-                field: "industry produced history length",
-                value: u32::MAX,
-            })?,
-            buf,
-        )?;
-        for sample in history {
-            buf.extend_from_slice(&sample.production.to_be_bytes());
-            buf.extend_from_slice(&sample.transported.to_be_bytes());
-        }
+        write_indy_produced_history(buf, &history)?;
     }
     for entry in opaque_entries {
         buf.push(entry.cargo_slot);
@@ -2383,11 +2409,22 @@ mod tests {
             Some(crate::sav::table::SlValue::Structs(items)) => items,
             other => panic!("accepted history ausente: {other:?}"),
         };
-        assert_eq!(accepted_history.len(), 1);
+        assert_eq!(
+            accepted_history.len(),
+            crate::entity_history::INDUSTRY_HISTORY_RECORDS
+        );
         assert_eq!(
             crate::sav::table::record_get(&accepted_history[0], "accepted")
                 .and_then(crate::sav::table::SlValue::as_u64),
             Some(12)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(
+                &accepted_history[crate::entity_history::INDUSTRY_HISTORY_RECORDS - 1],
+                "waiting"
+            )
+            .and_then(crate::sav::table::SlValue::as_u64),
+            Some(0)
         );
 
         let produced = match crate::sav::table::record_get(record, "produced") {
@@ -2423,7 +2460,10 @@ mod tests {
             Some(crate::sav::table::SlValue::Structs(items)) => items,
             other => panic!("history ausente: {other:?}"),
         };
-        assert_eq!(history.len(), 2);
+        assert_eq!(
+            history.len(),
+            crate::entity_history::INDUSTRY_HISTORY_RECORDS
+        );
         assert_eq!(
             crate::sav::table::record_get(&history[0], "production")
                 .and_then(crate::sav::table::SlValue::as_u64),
@@ -2433,6 +2473,14 @@ mod tests {
             crate::sav::table::record_get(&history[1], "transported")
                 .and_then(crate::sav::table::SlValue::as_u64),
             Some(111)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(
+                &history[crate::entity_history::INDUSTRY_HISTORY_RECORDS - 1],
+                "production"
+            )
+            .and_then(crate::sav::table::SlValue::as_u64),
+            Some(0)
         );
     }
 
@@ -2500,12 +2548,43 @@ mod tests {
             Some(crate::sav::table::SlValue::Structs(items)) => items,
             other => panic!("accepted history ausente: {other:?}"),
         };
-        assert_eq!(history.len(), 1);
+        assert_eq!(
+            history.len(),
+            crate::entity_history::INDUSTRY_HISTORY_RECORDS
+        );
         assert_eq!(
             crate::sav::table::record_get(&history[0], "accepted")
                 .and_then(crate::sav::table::SlValue::as_u64),
             Some(12)
         );
+    }
+
+    #[test]
+    fn indy_chunk_keeps_uncreated_accepted_history_empty() {
+        let mut state = GameState::new(8, 8);
+        let mut industry = Industry::new(TileCoord::new(2, 2), IndustryKind::Factory);
+        industry.add_accepted_cargo_waiting(CargoType::Livestock, 12);
+        state.industries.push(industry);
+
+        let indy = indy_chunk(&state, 8).expect("INDY chunk");
+        let rows = crate::sav::table::parse_table_chunk(&indy[5..], false).expect("INDY table");
+        let accepted = match crate::sav::table::record_get(&rows[0].1, "accepted") {
+            Some(crate::sav::table::SlValue::Structs(items)) => items,
+            other => panic!("accepted ausente: {other:?}"),
+        };
+        let livestock = accepted
+            .iter()
+            .find(|entry| {
+                crate::sav::table::record_get(entry, "cargo")
+                    .and_then(crate::sav::table::SlValue::as_u64)
+                    == Some(4)
+            })
+            .expect("livestock input");
+        let history = match crate::sav::table::record_get(livestock, "history") {
+            Some(crate::sav::table::SlValue::Structs(items)) => items,
+            other => panic!("accepted history ausente: {other:?}"),
+        };
+        assert!(history.is_empty());
     }
 
     #[test]
@@ -2535,7 +2614,10 @@ mod tests {
             Some(crate::sav::table::SlValue::Structs(items)) => items,
             other => panic!("produced history ausente: {other:?}"),
         };
-        assert_eq!(history.len(), 2);
+        assert_eq!(
+            history.len(),
+            crate::entity_history::INDUSTRY_HISTORY_RECORDS
+        );
         assert_eq!(
             crate::sav::table::record_get(&history[0], "production")
                 .and_then(crate::sav::table::SlValue::as_u64),

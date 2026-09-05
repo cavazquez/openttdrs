@@ -1811,10 +1811,10 @@ mod tests {
                     }],
                 },
                 crate::sav::SavIndustryProducedCargo {
-                    // Slot 42 is a custom cargo.  The local catalog is empty, so
-                    // it must survive as an opaque INDY row until the GRF is
-                    // installed on a later load.
-                    cargo_slot: 42,
+                    // Slot 64 is outside the current global cargo range. It
+                    // must survive as an opaque INDY row rather than being
+                    // normalized as a locally representable cargo.
+                    cargo_slot: 64,
                     waiting: 19,
                     rate: 11,
                     history: vec![crate::sav::SavIndustryProducedHistory {
@@ -1824,8 +1824,8 @@ mod tests {
                 },
             ],
             accepted: vec![crate::sav::SavIndustryAcceptedCargo {
-                // Accepted custom cargo follows the same passthrough rule.
-                cargo_slot: 43,
+                // An unknown accepted cargo follows the same passthrough rule.
+                cargo_slot: 65,
                 waiting: 13,
                 last_accepted: 9001,
                 accumulated_waiting: 77,
@@ -1839,7 +1839,10 @@ mod tests {
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.industries[0].valid_history, 0b11);
-        assert_eq!(sav_game.industries[0].produced[0].history.len(), 1);
+        assert_eq!(
+            sav_game.industries[0].produced[0].history.len(),
+            crate::entity_history::INDUSTRY_HISTORY_RECORDS
+        );
         assert_eq!(sav_game.industries[0].produced[0].history[0].production, 31);
 
         let loaded = GameState::from_sav_game(sav_game);
@@ -1851,23 +1854,25 @@ mod tests {
             resaved_game.industries[0].produced[0].history[0].transported,
             17
         );
-        let custom_produced = resaved_game.industries[0]
+        let opaque_produced = resaved_game.industries[0]
             .produced
             .iter()
-            .find(|entry| entry.cargo_slot == 42)
-            .expect("custom produced cargo passthrough");
-        assert_eq!(custom_produced.waiting, 19);
-        assert_eq!(custom_produced.rate, 11);
-        assert_eq!(custom_produced.history[0].production, 23);
-        let custom_accepted = resaved_game.industries[0]
+            .find(|entry| entry.cargo_slot == 64)
+            .expect("opaque produced cargo passthrough");
+        assert_eq!(opaque_produced.waiting, 19);
+        assert_eq!(opaque_produced.rate, 11);
+        assert_eq!(opaque_produced.history.len(), 1);
+        assert_eq!(opaque_produced.history[0].production, 23);
+        let opaque_accepted = resaved_game.industries[0]
             .accepted
             .iter()
-            .find(|entry| entry.cargo_slot == 43)
-            .expect("custom accepted cargo passthrough");
-        assert_eq!(custom_accepted.waiting, 13);
-        assert_eq!(custom_accepted.last_accepted, 9001);
-        assert_eq!(custom_accepted.accumulated_waiting, 77);
-        assert_eq!(custom_accepted.history[0].accepted, 5);
+            .find(|entry| entry.cargo_slot == 65)
+            .expect("opaque accepted cargo passthrough");
+        assert_eq!(opaque_accepted.waiting, 13);
+        assert_eq!(opaque_accepted.last_accepted, 9001);
+        assert_eq!(opaque_accepted.accumulated_waiting, 77);
+        assert_eq!(opaque_accepted.history.len(), 1);
+        assert_eq!(opaque_accepted.history[0].accepted, 5);
     }
 
     #[test]

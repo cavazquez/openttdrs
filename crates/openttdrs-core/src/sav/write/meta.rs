@@ -143,6 +143,15 @@ fn append_company_economy_history(
     Ok(())
 }
 
+fn append_company_yearly_expenses(record: &mut Vec<u8>, expenses: &[i64]) -> Result<(), SavError> {
+    write_gamma(39, record)?;
+    for index in 0..crate::company::COMPANY_YEARLY_EXPENSES_COUNT {
+        record.extend_from_slice(&expenses.get(index).copied().unwrap_or(0).to_be_bytes());
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)] // Una fila PLYR debe conservar el orden wire completo.
 pub(super) fn plyr_records(
     state: &GameState,
     autoreplace_export: &super::fleet::AutoreplaceExport,
@@ -178,6 +187,7 @@ pub(super) fn plyr_records(
         rec.extend_from_slice(&company.bankruptcy_asked.to_be_bytes());
         rec.extend_from_slice(&company.bankruptcy_timeout.to_be_bytes());
         rec.extend_from_slice(&company.bankruptcy_value.to_be_bytes());
+        append_company_yearly_expenses(&mut rec, &company.yearly_expenses)?;
         rec.extend_from_slice(&company.terraform_limit.to_be_bytes());
         rec.extend_from_slice(&company.clear_limit.to_be_bytes());
         rec.extend_from_slice(&company.tree_limit.to_be_bytes());
@@ -239,6 +249,7 @@ pub(super) fn plyr_records(
             rec.extend_from_slice(&company_to_write.bankruptcy_asked.to_be_bytes());
             rec.extend_from_slice(&company_to_write.bankruptcy_timeout.to_be_bytes());
             rec.extend_from_slice(&company_to_write.bankruptcy_value.to_be_bytes());
+            append_company_yearly_expenses(&mut rec, &company_to_write.yearly_expenses)?;
             rec.extend_from_slice(&company_to_write.terraform_limit.to_be_bytes());
             rec.extend_from_slice(&company_to_write.clear_limit.to_be_bytes());
             rec.extend_from_slice(&company_to_write.tree_limit.to_be_bytes());
@@ -300,6 +311,8 @@ pub(super) fn plyr_chunk(
     write_str("bankrupt_timeout", &mut header)?;
     header.push(7);
     write_str("bankrupt_value", &mut header)?;
+    header.push(0x17);
+    write_str("yearly_expenses", &mut header)?;
     header.push(6);
     write_str("terraform_limit", &mut header)?;
     header.push(6);

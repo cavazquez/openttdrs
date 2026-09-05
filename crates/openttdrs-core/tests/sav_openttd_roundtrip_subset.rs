@@ -297,6 +297,29 @@ fn openttd_resaved_preserves_requested_company_landscaping_limits() {
     assert_eq!(company.tree_limit, Some(SATURATED_DEFAULT));
 }
 
+/// Contrato opcional para las 39 entradas firmadas de `yearly_expenses`.
+/// La secuencia alterna valores negativos/positivos y cubre ambos extremos,
+/// sin pedir al runtime que calcule o rote el historial anual.
+#[test]
+fn openttd_resaved_preserves_requested_company_yearly_expenses() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_COMPANY_YEARLY_EXPENSES").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PLYR");
+    let raw = std::fs::read(&path).expect("leer SAV re-guardado");
+    let game = sav::load(&raw).expect("import openttdrs");
+    let expenses = game
+        .companies
+        .first()
+        .and_then(|company| company.yearly_expenses.as_deref())
+        .expect("yearly_expenses de compañía activa tras re-guardado OpenTTD");
+    assert_eq!(expenses.len(), 39);
+    assert_eq!(&expenses[..3], &[-19_000, -18_000, -17_000]);
+    assert_eq!(expenses[19], 0);
+    assert_eq!(expenses[38], 19_000);
+}
+
 /// Contrato opcional para el límite de préstamo individual. OpenTTD representa
 /// el default con `INT64_MIN`, pero una compañía marcada por deity conserva un
 /// valor concreto incluso si cambia el límite global por inflación.

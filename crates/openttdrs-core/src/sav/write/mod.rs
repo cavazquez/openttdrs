@@ -2031,6 +2031,7 @@ mod tests {
             rival.bankruptcy_asked = 0;
             rival.bankruptcy_timeout = -17;
             rival.bankruptcy_value = 87_654_321;
+            rival.yearly_expenses = (0_i64..39).map(|index| index * 1_000 - 19_000).collect();
             rival.terraform_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
             rival.clear_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
             rival.tree_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
@@ -2074,6 +2075,7 @@ mod tests {
         assert_table_field_type(&plyr.body, 4, "bankrupt_asked");
         assert_table_field_type(&plyr.body, 3, "bankrupt_timeout");
         assert_table_field_type(&plyr.body, 7, "bankrupt_value");
+        assert_table_field_type(&plyr.body, 0x17, "yearly_expenses");
         assert_table_field_type(&plyr.body, 6, "terraform_limit");
         assert_table_field_type(&plyr.body, 6, "clear_limit");
         assert_table_field_type(&plyr.body, 6, "tree_limit");
@@ -2109,6 +2111,16 @@ mod tests {
         assert_eq!(sav_game.companies[1].bankruptcy_asked, Some(0));
         assert_eq!(sav_game.companies[1].bankruptcy_timeout, Some(-17));
         assert_eq!(sav_game.companies[1].bankruptcy_value, Some(87_654_321));
+        let rival_expenses = sav_game.companies[1]
+            .yearly_expenses
+            .as_deref()
+            .expect("yearly_expenses rival");
+        assert_eq!(
+            rival_expenses.len(),
+            crate::company::COMPANY_YEARLY_EXPENSES_COUNT
+        );
+        assert_eq!(&rival_expenses[..3], &[-19_000, -18_000, -17_000]);
+        assert_eq!(rival_expenses[38], 19_000);
         assert_eq!(
             sav_game.companies[1].terraform_limit,
             Some(crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT)
@@ -2157,6 +2169,15 @@ mod tests {
         assert_eq!(loaded_rival.bankruptcy_asked, 0);
         assert_eq!(loaded_rival.bankruptcy_timeout, -17);
         assert_eq!(loaded_rival.bankruptcy_value, 87_654_321);
+        assert_eq!(
+            loaded_rival.yearly_expenses.len(),
+            crate::company::COMPANY_YEARLY_EXPENSES_COUNT
+        );
+        assert_eq!(
+            &loaded_rival.yearly_expenses[..3],
+            &[-19_000, -18_000, -17_000]
+        );
+        assert_eq!(loaded_rival.yearly_expenses[38], 19_000);
         assert_eq!(
             loaded_rival.terraform_limit,
             crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT
@@ -2649,6 +2670,8 @@ mod tests {
         state.companies[0].bankruptcy_asked = 0;
         state.companies[0].bankruptcy_timeout = -17;
         state.companies[0].bankruptcy_value = 87_654_321;
+        state.companies[0].yearly_expenses =
+            (0_i64..39).map(|index| index * 1_000 - 19_000).collect();
         state.companies[0].terraform_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
         state.companies[0].clear_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
         state.companies[0].tree_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
@@ -2735,6 +2758,16 @@ mod tests {
         assert_eq!(sav_game.companies[0].bankruptcy_asked, Some(0));
         assert_eq!(sav_game.companies[0].bankruptcy_timeout, Some(-17));
         assert_eq!(sav_game.companies[0].bankruptcy_value, Some(87_654_321));
+        let player_expenses = sav_game.companies[0]
+            .yearly_expenses
+            .as_deref()
+            .expect("yearly_expenses player");
+        assert_eq!(
+            player_expenses.len(),
+            crate::company::COMPANY_YEARLY_EXPENSES_COUNT
+        );
+        assert_eq!(&player_expenses[..3], &[-19_000, -18_000, -17_000]);
+        assert_eq!(player_expenses[38], 19_000);
         assert_eq!(
             sav_game.companies[0].terraform_limit,
             Some(crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT)

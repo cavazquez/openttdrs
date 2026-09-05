@@ -1273,6 +1273,9 @@ impl GameState {
                 if let Some(value) = company.bankruptcy_value {
                     target.bankruptcy_value = value;
                 }
+                if let Some(values) = company.yearly_expenses {
+                    target.yearly_expenses = normalize_company_yearly_expenses(&values);
+                }
                 if let Some(value) = company.terraform_limit {
                     target.terraform_limit = value;
                 }
@@ -1993,6 +1996,14 @@ impl GameState {
         }
         state
     }
+}
+
+fn normalize_company_yearly_expenses(values: &[i64]) -> Vec<i64> {
+    let mut normalized = vec![0; crate::company::COMPANY_YEARLY_EXPENSES_COUNT];
+    for (target, source) in normalized.iter_mut().zip(values) {
+        *target = *source;
+    }
+    normalized
 }
 
 #[cfg(test)]

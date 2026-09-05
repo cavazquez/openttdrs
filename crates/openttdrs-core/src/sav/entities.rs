@@ -1506,6 +1506,8 @@ pub struct SavCompany {
     pub bankruptcy_timeout: Option<i16>,
     /// Valor de adquisición almacenado (`PLYR.bankrupt_value`).
     pub bankruptcy_value: Option<i64>,
+    /// Gastos históricos por clase/año (`PLYR.yearly_expenses`).
+    pub yearly_expenses: Option<Vec<i64>>,
     /// Crédito fijo 16.16 de terraformación (`PLYR.terraform_limit`).
     pub terraform_limit: Option<u32>,
     /// Crédito fijo 16.16 de limpieza (`PLYR.clear_limit`).
@@ -1663,6 +1665,18 @@ fn company_old_economy_from_record(record: &SlRecord) -> Vec<SavCompanyEconomy> 
     entries.iter().map(company_economy_from_record).collect()
 }
 
+fn company_yearly_expenses_from_record(record: &SlRecord) -> Option<Vec<i64>> {
+    let SlValue::List(values) = record_get(record, "yearly_expenses")? else {
+        return None;
+    };
+    Some(
+        values
+            .iter()
+            .map(|value| value.as_i64().unwrap_or(0))
+            .collect(),
+    )
+}
+
 /// Empresas presentes en `PLYR`, conservando dinero y color por `CompanyID`.
 #[must_use]
 #[allow(clippy::too_many_lines)] // Descodifica todos los campos PLYR modelados en un único record.
@@ -1719,6 +1733,7 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let bankruptcy_timeout =
                 record_i64(&record, "bankrupt_timeout").and_then(|value| i16::try_from(value).ok());
             let bankruptcy_value = record_i64(&record, "bankrupt_value");
+            let yearly_expenses = company_yearly_expenses_from_record(&record);
             let terraform_limit = record_get(&record, "terraform_limit")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u32::try_from(value).ok());
@@ -1792,6 +1807,7 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 bankruptcy_asked,
                 bankruptcy_timeout,
                 bankruptcy_value,
+                yearly_expenses,
                 terraform_limit,
                 clear_limit,
                 tree_limit,

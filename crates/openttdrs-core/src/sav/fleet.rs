@@ -249,6 +249,7 @@ mod tests {
             bankruptcy_asked: None,
             bankruptcy_timeout: None,
             bankruptcy_value: None,
+            yearly_expenses: None,
             terraform_limit: None,
             clear_limit: None,
             tree_limit: None,

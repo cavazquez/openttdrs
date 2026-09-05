@@ -97,6 +97,9 @@ pub const INVALID_COMPANY_HQ_TILE: u32 = u32::MAX;
 /// partida que una compañía nativa.
 pub const DEFAULT_COMPANY_LANDSCAPING_LIMIT: u32 = 4096 << 16;
 
+/// Entradas de `PLYR.yearly_expenses`: tres años por trece clases de gasto.
+pub const COMPANY_YEARLY_EXPENSES_COUNT: usize = 3 * 13;
+
 /// Escribe el owner de infraestructura en `m1` (vía / carretera / depósitos).
 #[must_use]
 pub fn tile_with_owner(mut tile: crate::map::Tile, owner: CompanyId) -> crate::map::Tile {
@@ -282,6 +285,13 @@ pub struct Company {
     /// compañía correspondiente.
     #[serde(default)]
     pub bankruptcy_value: i64,
+    /// Historial nativo de gastos anuales por categoría
+    /// (`PLYR.yearly_expenses`, 3 × 13 `Money` firmados).
+    ///
+    /// El core lo conserva al intercambiar `.sav`, pero todavía no actualiza
+    /// esta matriz al cerrar un año ni la presenta por categorías en la UI.
+    #[serde(default = "default_company_yearly_expenses")]
+    pub yearly_expenses: Vec<i64>,
     /// Crédito de alturas que la compañía puede terraformar
     /// (`PLYR.terraform_limit`, unidad fija 16.16).
     #[serde(default = "default_company_landscaping_limit")]
@@ -348,6 +358,10 @@ const fn default_company_landscaping_limit() -> u32 {
     DEFAULT_COMPANY_LANDSCAPING_LIMIT
 }
 
+fn default_company_yearly_expenses() -> Vec<i64> {
+    vec![0; COMPANY_YEARLY_EXPENSES_COUNT]
+}
+
 impl Company {
     #[must_use]
     pub fn player(economy: CompanyEconomy, colour: u8) -> Self {
@@ -376,6 +390,7 @@ impl Company {
             bankruptcy_asked: 0,
             bankruptcy_timeout: 0,
             bankruptcy_value: 0,
+            yearly_expenses: default_company_yearly_expenses(),
             terraform_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
             clear_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
             tree_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
@@ -419,6 +434,7 @@ impl Company {
             bankruptcy_asked: 0,
             bankruptcy_timeout: 0,
             bankruptcy_value: 0,
+            yearly_expenses: default_company_yearly_expenses(),
             terraform_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
             clear_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
             tree_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
@@ -462,6 +478,7 @@ impl Company {
             bankruptcy_asked: 0,
             bankruptcy_timeout: 0,
             bankruptcy_value: 0,
+            yearly_expenses: default_company_yearly_expenses(),
             terraform_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
             clear_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
             tree_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,

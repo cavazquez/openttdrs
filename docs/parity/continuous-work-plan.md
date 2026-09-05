@@ -132,6 +132,13 @@ lo exige. `check.sh ci-python` pasa completo fuera del sandbox local (la prueba
 de release abre un socket localhost que el sandbox prohíbe). #333 permanece
 abierto hasta observar CI verde del commit que publique esta corrección.
 
+Sub-issue #352 de #337 (2026-09-05): el gate documental ahora incluye el plan
+continuo, la matriz RMAP y su registro de issues; sus pruebas inyectan una
+afirmación obsoleta en cada fuente tanto con `rg` como con el fallback
+`grep -E`. El manifiesto activo valida fecha, hashes, pin OpenTTD y la política
+que cita el último commit ya publicado en vez de auto-referenciar el commit
+documental. #337 sigue abierto por la auditoría semántica de las demás matrices.
+
 Base funcional local y publicada: **`25d026a7`** (`render: project vehicle effects in isometric space`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están

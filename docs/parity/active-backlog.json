@@ -1,8 +1,9 @@
 {
   "schema_version": 1,
   "cutoff": {
-    "date": "2026-09-03",
-    "main_commit": "26a915db",
+    "date": "2026-09-05",
+    "main_commit": "41e39931",
+    "main_commit_role": "Último commit publicado con validación local completa antes de registrar este corte; un commit documental posterior lo cita y no se auto-referencia.",
     "openttd_tag": "15.3",
     "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888"
   },

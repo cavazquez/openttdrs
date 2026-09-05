@@ -21,6 +21,9 @@ SCAN_PATHS=(
   docs/parity/METODOLOGIA_RENDER_SAV.md
   docs/parity/WORLD_DRAW_SCHEMA.md
   docs/parity/WORLD_SCREENSHOT_SCHEMA.md
+  docs/parity/continuous-work-plan.md
+  docs/parity/random-map-issues.md
+  docs/parity/random-map-matrix.md
   README.md
   docs/parity/divergences_found.md
   docs/parity/train_line_divergences.md
@@ -93,7 +96,10 @@ check_pat 'La sim actual no considera tráfico en carretera'
 check_pat 'ENTRY ignorado al bloquear'
 check_pat 'EXIT y COMBO se tratan como BLOCK'
 check_pat 'lógica de segmento upstream no replica'
-check_pat 'sin ejecutar callbacks'
+# La rehidratación de un SAV debe *no* volver a ejecutar callbacks de fundación;
+# sólo una afirmación global de que el runtime NewGRF no ejecuta callbacks es
+# obsoleta. Mantener el patrón específico evita falsos positivos en ese contrato.
+check_pat 'runtime NewGRF.*sin ejecutar callbacks'
 check_pat 'compatibilidad con `.sav` OpenTTD \(sigue siendo `parse_sav`'
 check_pat 'Paridad visual OpenGFX vanilla \| 🟡 ~85–90 %'
 check_pat 'Paridad visual SP3 ≥ 90 %'

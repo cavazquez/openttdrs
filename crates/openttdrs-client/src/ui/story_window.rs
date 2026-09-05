@@ -2,10 +2,12 @@
 
 use bevy::prelude::*;
 
+use crate::i18n::localized_text;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
-    FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
-    spawn_floating_window, window_text_font,
+    FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
+    WINDOW_TEXT, spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::navigation::{OpenUiRoute, UiRoute};
@@ -35,6 +37,11 @@ pub(crate) enum StoryNavAction {
     Prev,
     Next,
 }
+
+/// Etiqueta traducible de una acción de navegación; la acción propiamente dicha
+/// queda separada para que cambiar el locale no afecte la navegación local.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct StoryNavText(pub(crate) StoryNavAction);
 
 pub(crate) fn setup_story_window(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -122,6 +129,7 @@ fn spawn_nav(
         ))
         .with_children(|btn| {
             btn.spawn((
+                StoryNavText(action),
                 Text::new(label),
                 window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(WINDOW_TEXT),
@@ -178,6 +186,7 @@ pub(crate) fn handle_story_nav_buttons(
 pub(crate) fn sync_story_window(
     state: Res<StoryWindowState>,
     sim: Option<Res<SimWorld>>,
+    prefs: Res<ClientPreferences>,
     mut windows: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<
         &mut Text,
@@ -185,6 +194,8 @@ pub(crate) fn sync_story_window(
             With<StoryTitleText>,
             Without<StoryBodyText>,
             Without<StoryPageLabel>,
+            Without<StoryNavText>,
+            Without<FloatingWindowTitleText>,
         ),
     >,
     mut body_q: Query<
@@ -193,6 +204,8 @@ pub(crate) fn sync_story_window(
             With<StoryBodyText>,
             Without<StoryTitleText>,
             Without<StoryPageLabel>,
+            Without<StoryNavText>,
+            Without<FloatingWindowTitleText>,
         ),
     >,
     mut page_q: Query<
@@ -201,6 +214,8 @@ pub(crate) fn sync_story_window(
             With<StoryPageLabel>,
             Without<StoryTitleText>,
             Without<StoryBodyText>,
+            Without<StoryNavText>,
+            Without<FloatingWindowTitleText>,
         ),
     >,
 ) {
@@ -222,8 +237,11 @@ pub(crate) fn sync_story_window(
     let gs = &sim.state.gs;
     let (title, body, page) = if !gs.enabled || gs.story_pages.is_empty() {
         (
-            "Sin historia".into(),
-            "Este escenario no tiene páginas Story (GS demo desactivado).".into(),
+            localized_text(prefs.locale(), "Sin historia"),
+            localized_text(
+                prefs.locale(),
+                "Este escenario no tiene páginas Story (GS demo desactivado).",
+            ),
             "0 / 0".into(),
         )
     } else {
@@ -246,6 +264,43 @@ pub(crate) fn sync_story_window(
     }
 }
 
+/// Sincroniza el chrome propio de Story. Se mantiene separado de la página
+/// dinámica para no convertir el sistema de contenido en una query ECS amplia.
+pub(crate) fn sync_story_window_chrome(
+    prefs: Res<ClientPreferences>,
+    mut window_title_q: Query<
+        (&FloatingWindowTitleText, &mut Text),
+        (
+            Without<StoryTitleText>,
+            Without<StoryBodyText>,
+            Without<StoryPageLabel>,
+            Without<StoryNavText>,
+        ),
+    >,
+    mut nav_q: Query<
+        (&StoryNavText, &mut Text),
+        (
+            Without<StoryTitleText>,
+            Without<StoryBodyText>,
+            Without<StoryPageLabel>,
+            Without<FloatingWindowTitleText>,
+        ),
+    >,
+) {
+    for (window_title, mut text) in &mut window_title_q {
+        if window_title.0 == FloatingWindowId::Story {
+            **text = localized_text(prefs.locale(), "Historia");
+        }
+    }
+    for (nav, mut text) in &mut nav_q {
+        let source = match nav.0 {
+            StoryNavAction::Prev => "Anterior",
+            StoryNavAction::Next => "Siguiente",
+        };
+        **text = localized_text(prefs.locale(), source);
+    }
+}
+
 pub(crate) fn story_window_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut state: ResMut<StoryWindowState>,
@@ -254,5 +309,118 @@ pub(crate) fn story_window_on_closed(
         if msg.0.class == FloatingWindowId::Story {
             state.open = false;
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use bevy::prelude::*;
+
+    use super::{
+        StoryBodyText, StoryNavAction, StoryNavText, StoryPageLabel, StoryTitleText,
+        StoryWindowState, sync_story_window, sync_story_window_chrome,
+    };
+    use crate::settings::ClientPreferences;
+    use crate::state::SimWorld;
+    use crate::ui::floating_window::{FloatingWindowId, FloatingWindowTitleText};
+    use openttdrs_core::gs::GsStoryPage;
+
+    #[test]
+    fn story_fallback_follows_the_live_locale_without_touching_game_script_pages() {
+        let mut world = World::new();
+        world.insert_resource(StoryWindowState {
+            open: true,
+            ..StoryWindowState::default()
+        });
+        world.insert_resource(SimWorld::default());
+        {
+            let mut sim = world.resource_mut::<SimWorld>();
+            sim.state.gs.enabled = false;
+            sim.state.gs.story_pages.clear();
+        }
+        world.insert_resource(ClientPreferences {
+            language: "en".into(),
+            ..ClientPreferences::default()
+        });
+        let title = world.spawn((StoryTitleText, Text::new("—"))).id();
+        let body = world.spawn((StoryBodyText, Text::new("—"))).id();
+        world.spawn((StoryPageLabel, Text::new("—")));
+        let window_title = world
+            .spawn((
+                FloatingWindowTitleText(FloatingWindowId::Story),
+                Text::new("—"),
+            ))
+            .id();
+        let previous = world
+            .spawn((StoryNavText(StoryNavAction::Prev), Text::new("—")))
+            .id();
+        let next = world
+            .spawn((StoryNavText(StoryNavAction::Next), Text::new("—")))
+            .id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems((sync_story_window, sync_story_window_chrome));
+        schedule.run(&mut world);
+        assert_eq!(
+            world.entity(title).get::<Text>().unwrap().as_str(),
+            "No story"
+        );
+        assert_eq!(
+            world.entity(body).get::<Text>().unwrap().as_str(),
+            "This scenario has no Story pages (GS demo disabled)."
+        );
+        assert_eq!(
+            world.entity(window_title).get::<Text>().unwrap().as_str(),
+            "Story"
+        );
+        assert_eq!(
+            world.entity(previous).get::<Text>().unwrap().as_str(),
+            "Previous"
+        );
+        assert_eq!(world.entity(next).get::<Text>().unwrap().as_str(), "Next");
+
+        world.resource_mut::<ClientPreferences>().language = "es-AR".into();
+        schedule.run(&mut world);
+        assert_eq!(
+            world.entity(title).get::<Text>().unwrap().as_str(),
+            "Sin historia"
+        );
+        assert_eq!(
+            world.entity(body).get::<Text>().unwrap().as_str(),
+            "Este escenario no tiene páginas Story (GS demo desactivado)."
+        );
+        assert_eq!(
+            world.entity(window_title).get::<Text>().unwrap().as_str(),
+            "Historia"
+        );
+        assert_eq!(
+            world.entity(previous).get::<Text>().unwrap().as_str(),
+            "Anterior"
+        );
+        assert_eq!(
+            world.entity(next).get::<Text>().unwrap().as_str(),
+            "Siguiente"
+        );
+
+        {
+            let mut sim = world.resource_mut::<SimWorld>();
+            sim.state.gs.enabled = true;
+            sim.state.gs.story_pages.push(GsStoryPage {
+                id: 42,
+                title: "Título del GameScript".into(),
+                body: "Cuerpo que debe conservar el escenario".into(),
+            });
+        }
+        world.resource_mut::<ClientPreferences>().language = "en".into();
+        schedule.run(&mut world);
+        assert_eq!(
+            world.entity(title).get::<Text>().unwrap().as_str(),
+            "Título del GameScript"
+        );
+        assert_eq!(
+            world.entity(body).get::<Text>().unwrap().as_str(),
+            "Cuerpo que debe conservar el escenario"
+        );
     }
 }

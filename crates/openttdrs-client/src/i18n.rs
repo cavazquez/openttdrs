@@ -451,6 +451,12 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Finanzas…" => "Finances…",
         "Reglas de autoreemplazo." => "Autoreplace rules.",
         "Sin páginas de historia." => "No story pages.",
+        "Sin historia" => "No story",
+        "Este escenario no tiene páginas Story (GS demo desactivado)." => {
+            "This scenario has no Story pages (GS demo disabled)."
+        }
+        "Anterior" => "Previous",
+        "Siguiente" => "Next",
         "Ajustes del rival TransCargo (construcción mensual)." => {
             "TransCargo rival settings (monthly construction)."
         }

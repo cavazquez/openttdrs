@@ -30,7 +30,7 @@ use crate::ui::station_directory::{
 };
 use crate::ui::story_window::{
     StoryWindowState, handle_story_nav_buttons, open_story_from_routes, setup_story_window,
-    story_window_on_closed, sync_story_window,
+    story_window_on_closed, sync_story_window, sync_story_window_chrome,
 };
 use crate::ui::subsidy_list::{
     SubsidyListState, handle_subsidy_list_buttons, open_subsidy_list_from_routes,
@@ -177,6 +177,7 @@ impl Plugin for NavigationUiPlugin {
                         handle_story_nav_buttons,
                         story_window_on_closed,
                         sync_story_window,
+                        sync_story_window_chrome,
                     )
                         .chain()
                         .after(handle_toolbar_menu_entries),

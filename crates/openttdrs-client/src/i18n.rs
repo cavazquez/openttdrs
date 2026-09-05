@@ -390,6 +390,10 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
             "Select an entry: Inspect it or edit params (P◀/P▶, −/+)."
         }
         "Pools de órdenes compartidas." => "Shared order pools.",
+        "Órdenes compartidas" => "Shared orders",
+        "Pools existentes. Abre desde Órdenes → Pools para vincular." => {
+            "Existing pools. Open from Orders → Pools to link."
+        }
         "Vincular vehículo" => "Link vehicle",
         "Orientación del muelle" => "Dock orientation",
         "Tipo de depósito a construir" => "Depot type to build",

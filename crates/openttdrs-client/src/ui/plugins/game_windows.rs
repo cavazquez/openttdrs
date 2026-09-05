@@ -44,7 +44,7 @@ use crate::ui::refit_window::{
 };
 use crate::ui::shared_orders_window::{
     SharedOrdersWindowState, handle_shared_orders_buttons, setup_shared_orders_window,
-    shared_orders_window_on_closed, sync_shared_orders_window,
+    shared_orders_window_on_closed, sync_shared_orders_locale, sync_shared_orders_window,
 };
 use crate::ui::timetable_window::{
     TimetableWindowState, handle_timetable_window_buttons, setup_timetable_window,
@@ -197,6 +197,7 @@ impl Plugin for GameWindowsPlugin {
                 (
                     sync_refit_window,
                     sync_shared_orders_window,
+                    sync_shared_orders_locale.after(sync_shared_orders_window),
                     sync_autoreplace_window,
                 )
                     .in_set(UpdateSet::Ui)

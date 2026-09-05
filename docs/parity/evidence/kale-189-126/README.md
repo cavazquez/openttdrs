@@ -7,9 +7,10 @@ diagnóstico.
 - `openttd-reference.png`: OpenTTD 15.3 de referencia.
 - `openttdrs-candidate.png`: render de OpenTTDRS.
 
-Las PNG versionadas corresponden al baseline archivado, alineado en `[0, 0]`,
-de 213.552 de 921.600 píxeles distintos (23,171875 %). La medición vigente y
-su método de comparación se mantienen sólo en la sección canónica de
-[`PARIDAD.md`](../../../PARIDAD.md#evidencia-visual-raster-vigente): esta evidencia
-archivada demuestra que no había paridad raster global y no se usa para
-atribuir mejoras posteriores.
+Las PNG versionadas se publicaron en `7f7d528e` (2026-08-20) y son una
+ilustración archivada de la brecha, no un baseline cuantitativo vigente. El
+reporte reproducible del corte actual está en
+[`baseline-2026-09-05.json`](baseline-2026-09-05.json); la única interpretación
+canónica de sus métricas vive en
+[`PARIDAD.md`](../../../PARIDAD.md#evidencia-visual-raster-vigente). Estas
+imágenes antiguas no se usan para atribuir mejoras posteriores.

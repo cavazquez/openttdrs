@@ -21,6 +21,7 @@ SCAN_PATHS=(
   docs/parity/METODOLOGIA_RENDER_SAV.md
   docs/parity/WORLD_DRAW_SCHEMA.md
   docs/parity/WORLD_SCREENSHOT_SCHEMA.md
+  docs/parity/evidence/kale-189-126/README.md
   docs/parity/continuous-work-plan.md
   docs/parity/random-map-issues.md
   docs/parity/random-map-matrix.md
@@ -71,7 +72,13 @@ require_pat 'La FTA propia de un layout' docs/parity/newgrf-action0-matrix.md
 require_pat 'Esto no bloquea los callbacks de' docs/parity/newgrf-action0-matrix.md
 require_pat 'recupera el `ObjectType` asignado' docs/parity/sav-compatibility.md
 require_pat 'fusiona esos campos sobre' docs/parity/sav-compatibility.md
+require_pat 'Corte cuantitativo canónico' docs/PARIDAD.md
+require_pat 'baseline-2026-09-05\.json' docs/PARIDAD.md
+require_pat '155\.322 / 921\.600' docs/PARIDAD.md
+require_pat 'cd3c424108be4c8ed285169db2daa4829066d8be' docs/PARIDAD.md
+require_pat 'c2661164bcb6cbf5ab97b56ccbee7506a3b26833' docs/PARIDAD.md
 python3 scripts/check_active_parity_backlog.py
+python3 scripts/check_raster_baseline.py
 
 check_pat 'SIM_TICK_HZ = 5\.0'
 check_pat 'REFERENCE_PROGRESS_STEP = 51'
@@ -119,6 +126,13 @@ check_pat 'PATS`/`OPTS`, `ENGN`, `OBJS`/`OBID` y `SRND` continúan como passthro
 check_pat 'compatibilidad con `.sav` OpenTTD \(sigue siendo `parse_sav`'
 check_pat 'Paridad visual OpenGFX vanilla \| 🟡 ~85–90 %'
 check_pat 'Paridad visual SP3 ≥ 90 %'
+check_pat '193\.939 de 921\.600 píxeles distintos'
+check_pat '213\.552 de 921\.600 píxeles distintos'
+check_pat '12\.956 de 921\.600 píxeles distintos'
+check_pat '60\.774/921\.600 píxeles distintos'
+check_pat '129\.724 de 921\.600 píxeles distintos'
+check_pat '7\.264/122\.880'
+check_pat '6\.195/122\.880'
 
 if [[ "$FAIL" -ne 0 ]]; then
   err "docs de paridad desactualizadas (#125)"

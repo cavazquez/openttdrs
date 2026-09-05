@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "kind": "focused-world-screenshot-baseline",
+  "recorded_on": "2026-09-05",
+  "status": "different",
+  "fixture": {
+    "path": "save/Kale_TitleGame.sav",
+    "sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69"
+  },
+  "reference": {
+    "openttd_version": "15.3",
+    "official_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "oracle_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+    "oracle_worktree": "instrumented export hooks; never committed from openttdrs"
+  },
+  "candidate": {
+    "commit": "cd3c424108be4c8ed285169db2daa4829066d8be"
+  },
+  "capture": {
+    "profile": "clean-static",
+    "reference_graphics": "OpenGFX 8.0 · 8bpp",
+    "candidate_graphics": "OpenGFX · 8bpp",
+    "center": [189, 126],
+    "resolution": [1280, 720],
+    "alignment_radius_px": 8,
+    "hotspot_cell_size_px": 64
+  },
+  "results": [
+    {
+      "scale": 0.25,
+      "openttd_zoom": "In4x",
+      "candidate_translation": [-2, 0],
+      "changed_pixels": 357288,
+      "total_pixels": 921600,
+      "changed_ratio": 0.3876822916666667,
+      "artifacts": {
+        "reference_sha256": "a0d010937977ca8b7d4a6ee681c2b830a3959416288f7c5e5ac35a57eda8c308",
+        "candidate_sha256": "f90af971d90fb01466f27af88734137757910df4f1ab75ffaafaa0ee13286003",
+        "diff_sha256": "41edc06c445e084dca83c65aad49a37d5f2631d558273487960a8a7e9971f073"
+      }
+    },
+    {
+      "scale": 0.5,
+      "openttd_zoom": "In2x",
+      "candidate_translation": [-1, 0],
+      "changed_pixels": 422082,
+      "total_pixels": 921600,
+      "changed_ratio": 0.45798828125,
+      "artifacts": {
+        "reference_sha256": "cc641be2f381003241e33250efb56abb31559346a9b54934724de768bf9aa24f",
+        "candidate_sha256": "0119774c1b0019c8317c19c3a7142cf136ea6e6dcb54217922e0b8525a114efe",
+        "diff_sha256": "af92abf2057a4684f4fc7ca5344b53218d6bde1a9406747162987682f3cf3d4d"
+      }
+    },
+    {
+      "scale": 1.0,
+      "openttd_zoom": "Normal",
+      "candidate_translation": [0, 0],
+      "changed_pixels": 155322,
+      "total_pixels": 921600,
+      "changed_ratio": 0.16853515625,
+      "artifacts": {
+        "reference_sha256": "1c1b0c85ee26ab9ae24db3c5395e9fae4abea9033e5f0548508dac98b1604524",
+        "candidate_sha256": "caea2f0ba06a76d59686f93261b2b8d66a3508e3d97e38a48333deb4b9261db5",
+        "diff_sha256": "765300123ca94dc4610331b8abeea8761826e166bf7f0c38710763d197bea0ce"
+      }
+    },
+    {
+      "scale": 2.0,
+      "openttd_zoom": "Out2x",
+      "candidate_translation": [1, 0],
+      "changed_pixels": 556148,
+      "total_pixels": 921600,
+      "changed_ratio": 0.6034592013888889,
+      "artifacts": {
+        "reference_sha256": "ee0347c1950b0a8fa01b1ccdd247fd1124906960b6134a3988497784fcbd7cf9",
+        "candidate_sha256": "e9d157593eaa3a6b98c2a225da99f55b0e88f7adceebdfca6edb240d67cf608f",
+        "diff_sha256": "9c26249f1a0efe585cdde88c782b6c5d9329af7444de7ec68b26ad3caa63dfd5"
+      }
+    },
+    {
+      "scale": 4.0,
+      "openttd_zoom": "Out4x",
+      "candidate_translation": [1, 0],
+      "changed_pixels": 754334,
+      "total_pixels": 921600,
+      "changed_ratio": 0.8185047743055556,
+      "artifacts": {
+        "reference_sha256": "5a24d7bfd43a92bc656348e5c464eaf7149f63fc6a6e5f2ac24a76cf115cf33e",
+        "candidate_sha256": "80fc5b32d95ed147f7489b033b9e71af4299ddc61345003fefc2d71548176120",
+        "diff_sha256": "5761020a7f0e37f163495ba5d5ed4180bf728706e0009e840e2457a7bb299955"
+      }
+    },
+    {
+      "scale": 8.0,
+      "openttd_zoom": "Out8x",
+      "candidate_translation": [-7, -5],
+      "changed_pixels": 691518,
+      "total_pixels": 921600,
+      "changed_ratio": 0.7503450520833333,
+      "artifacts": {
+        "reference_sha256": "243cf41ec513a706b49b486ae3d7996ef8cebb93404959d1d9ea7712024de2be",
+        "candidate_sha256": "025e2c1efcb4c4d9e3abb35c9d71c144af8dab615c8101d7f8b27f2770fa9bb7",
+        "diff_sha256": "897f505fd3bbd8ced02d3683d31dbd4fd5333d8796f47b6ecc9ba3b763971e2f"
+      }
+    }
+  ]
+}

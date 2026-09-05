@@ -153,6 +153,14 @@ importado participa al reaplicar el catálogo de objetos NewGRF. #328 permanece
 abierto por columnas no modeladas tras mutación, cambios estructurales,
 listas/structs, pools nativos y runtime de objetos.
 
+Sub-issue #355 de #337 (2026-09-05): la evidencia raster separa ahora el
+baseline global reproducible de `Kale_TitleGame.sav` (`cd3c4241`, OpenTTD 15.3
+pin `14ec60f` y oracle `c2661164`) de los diagnósticos focales históricos. La
+matriz de seis zooms conserva cámara, hashes y métricas en
+`evidence/kale-189-126/baseline-2026-09-05.json`; el baseline normal permanece
+distinto, por lo que #326 sigue abierto por composición global, clipping,
+pivotes y familias de producers restantes.
+
 Base funcional local y publicada: **`25d026a7`** (`render: project vehicle effects in isometric space`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están

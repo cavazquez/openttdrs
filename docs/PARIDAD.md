@@ -643,14 +643,39 @@ backlog de implementación.
 
 ### Evidencia visual raster vigente
 
-La corrida de referencia de `Kale_TitleGame.sav`, centro `189,126`,
-`1280x720`, OpenGFX 8bpp y perfil `clean-static` (sin UI, rótulos, vehículos
-ni capas de diagnóstico) quedó **alineado en `[0, 0]`** y aun así registró
-**193.939 de 921.600 píxeles distintos (21,0437283 %)**. La referencia
-archivada anterior registraba 213.552 (23,171875 %), por lo que esta repetición
-reduce 19.613 píxeles distintos sin usar traslación global. El intervalo incluye
-varios cambios de renderer, así que no se atribuye esa mejora completa sólo al
-ajuste urbano #322 ni declara paridad raster.
+**Corte cuantitativo canónico — 2026-09-05.** La evidencia inmutable de esta
+corrida está en
+[`baseline-2026-09-05.json`](parity/evidence/kale-189-126/baseline-2026-09-05.json).
+Usa `save/Kale_TitleGame.sav` SHA-256
+`584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69`, centro
+`189,126`, `1280×720`, OpenGFX 8bpp y perfil `clean-static` (sin UI, rótulos,
+vehículos ni capas de diagnóstico). La referencia es OpenTTD 15.3, pin oficial
+`14ec60f248547d4d062a1160f0fc26d742319888`, a través del oracle instrumentado
+`c2661164bcb6cbf5ab97b56ccbee7506a3b26833`; la candidata es
+`cd3c424108be4c8ed285169db2daa4829066d8be`. El JSON conserva además los SHA-256
+de los tres PNG de cada nivel y la traducción de cámara, de modo que la tabla no
+depende de una captura manual ni de un hash autorreferencial del commit documental.
+
+La fila `1×` es el **baseline global de esta fixture**. Las demás filas son la
+matriz diagnóstica del mismo mapa a los seis zooms discretos: no son mejoras ni
+retrocesos comparables entre sí, porque cada zoom cambia el viewport, el
+muestreo y las familias visibles. Ninguna fila declara paridad de framebuffer.
+
+| Escala openttdrs | Zoom nativo OpenTTD | Alineación candidata | Píxeles distintos / total | Porcentaje | Rol |
+|---:|---|---:|---:|---:|---|
+| `0,25×` | `In4x` | `[-2, 0]` | 357.288 / 921.600 | 38,768229167 % | Diagnóstico de zoom cercano |
+| `0,5×` | `In2x` | `[-1, 0]` | 422.082 / 921.600 | 45,798828125 % | Diagnóstico de zoom cercano |
+| `1×` | `Normal` | `[0, 0]` | **155.322 / 921.600** | **16,853515625 %** | Baseline global de esta fixture |
+| `2×` | `Out2x` | `[1, 0]` | 556.148 / 921.600 | 60,345920139 % | Diagnóstico de zoom alejado |
+| `4×` | `Out4x` | `[1, 0]` | 754.334 / 921.600 | 81,850477431 % | Diagnóstico de zoom alejado |
+| `8×` | `Out8x` | `[-7, -5]` | 691.518 / 921.600 | 75,034505208 % | Diagnóstico de máximo alejamiento |
+
+La corrida normal queda alineada en `[0, 0]`, pero sigue diferente. Las
+traslaciones de las otras filas son señales de cámara/viewport que el reporte
+conserva; nunca se usan para ocultar bordes ni certificar equivalencia. Las PNG
+versionadas antiguas de
+[`kale-189-126`](parity/evidence/kale-189-126/README.md) son sólo una
+ilustración archivada, no una segunda métrica vigente.
 
 La profundidad local urbana de #322 ya mantiene las capas positivas de casas,
 estaciones, fundaciones y depósitos dentro de su fila diagonal; el helper de
@@ -738,9 +763,9 @@ intercambio de slots. Para `(119,9)`, los faroles `1407 → 1406` pasan a
 `1406 → 1407` con sus bounds de pendiente. En `(195,21)`, la estación pasa de
 `5661 → 5641 → 1071 → 1069` a `1071 → 1069 → 5661 → 5641`; las cajas de PPP,
 cable y plataforma se portan juntas. La captura limpia del foco vial queda alineada en
-`[0,0]` con 12.956 de 921.600 píxeles distintos (1,40581597 %); no existe una
-medición A/B aislada de estos cambios, así que no se atribuye una reducción
-cuantificada.
+`[0,0]`. Ese registro de `2806e34a` es una inspección focal histórica, no una
+métrica vigente ni una medición A/B aislada; por eso no se usa para atribuir
+una reducción cuantificada al baseline canónico.
 
 La integración sigue siendo parcial: las 3.014 fundaciones comunes de Kale
 (incluidas 1.943 de casas) ya exportan sus bounds C++ exactos. El incremento
@@ -754,13 +779,12 @@ por contrato la inserción *pre-sort*, por lo que la primera inversión de la
 parada `(225,2)` continúa siendo un diagnóstico esperado, no una forma de
 falsear la traza reordenándola.
 
-La captura limpia focalizada posterior en `(8,5)`, `1280×720`, escala normal,
-queda en `[0,4]` y 60.774/921.600 píxeles distintos (6,594401 %); los hotspots
-se agrupan en celdas de 64 px para priorizar zonas sin convertir una estructura
-alta en una tesela inventada. Se inspeccionaron además capturas reales del
-cliente en `0,25×`, `0,5×`, `1×` y `2×`. Es evidencia de que el portal y su
-entorno continúan componiéndose al cambiar el zoom, no una mejora A/B aislada
-ni paridad de framebuffer.
+La captura limpia focal histórica de `31c7ec03`, en `(8,5)`, `1280×720` y
+escala normal, quedó en `[0,4]`; sus hotspots se agruparon en celdas de 64 px
+para priorizar zonas sin convertir una estructura alta en una tesela inventada.
+El hito comprobó que el portal y su entorno continuaban componiéndose al
+cambiar el zoom, no una mejora A/B aislada ni paridad de framebuffer. Su cifra
+pre-baseline queda en el commit histórico, no compite con el corte canónico.
 
 El runtime aplica el sorter compartido a los sprites directos de fundación,
 buildings vanilla de casas, árboles `MP_TREES` con sus children combinados,
@@ -945,15 +969,15 @@ fundación ya queda cubierta en runtime. El ancla visible de cada
 sprite; para la media foundation rail añade el recorte `SubSprite` y no vuelve
 a aplicar el offset de child ya compensado por ese origen. En el foco Kale
 `(229,149)`, la foundation `5499` con origen `(8,0,0)` deja de abrir rombos
-negros ni triángulos verdes: `world-draw` conserva 282/282 comandos contenidos
-y el raster limpio normal baja de 134.932 a **129.724 de 921.600 píxeles
-distintos (14,075955 %)**. Las capturas reales en `0,25×`, `1×` y `2×` no
-reintroducen el artefacto. Persisten otras familias de infraestructura en las
-vistas amplias, por lo que #326 sigue abierto y no hay paridad raster. Restan
-children, clipping, anclajes finales y framebuffer fuera de este foco; el
-siguiente trabajo debe extenderse a piezas visibles de puentes y familias
-NewGRF de estación, aeropuertos y objetos, sin rebajar el baseline ni
-extrapolar una región a paridad general.
+negros ni triángulos verdes: `world-draw` conserva 282/282 comandos contenidos.
+El hito focal `afaec71d` verificó el artefacto a `0,25×`, `1×` y `2×`, pero su
+medición previa a este corte queda en el commit histórico y no se compara con
+la tabla actual. Persisten otras familias de infraestructura en las vistas
+amplias, por lo que #326 sigue abierto y no hay paridad raster. Restan children,
+clipping, anclajes finales y framebuffer fuera de este foco; el siguiente
+trabajo debe extenderse a piezas visibles de puentes y familias NewGRF de
+estación, aeropuertos y objetos, sin rebajar el baseline ni extrapolar una
+región a paridad general.
 
 El camino de zoom conserva ahora también la representación correcta al cruzar
 el límite de detalle: si el viewport pasa de overview `4×/8×` a sprites
@@ -992,13 +1016,11 @@ Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
 `AddSortableSpriteToDraw`; cubre vía normal, estación, depósito, puente y
 túnel, y usa los metadatos decodificados cuando un NewGRF reemplaza el slot.
 El mismo extractor genera y verifica las 36 entradas para que PNG y anclas no
-diverjan. En Kale, foco `(32,162)`, `384×320`, OpenGFX 8bpp, perfil
-`clean-static` y escala normal, la comparación alineada `[0,0]` pasa de
-**7.264/122.880 (5,911 %) y delta medio 2,787** a **6.195/122.880 (5,042 %) y
-delta medio 2,061**. Se inspeccionó el cliente real a `0,25×`, `0,5×`, `1×` y
-`2×`, y el smoke de niveles fijos pasa. Es una mejora focal de anclaje, no
-paridad de framebuffer: el orden global y otras familias de composición
-siguen pendientes en #326.
+diverjan. El hito de catenaria `6fc43010`, foco `(32,162)`, `384×320`, OpenGFX
+8bpp, perfil `clean-static` y escala normal, fue una mejora focal de anclaje.
+Sus números previos a este corte se conservan con ese commit, no como una
+segunda lectura vigente; el orden global y otras familias de composición siguen
+pendientes en #326.
 
 ## Backlog sucesor activo
 

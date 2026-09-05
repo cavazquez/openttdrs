@@ -90,3 +90,12 @@ El estado cuantitativo de la última corrida comparable se publica sólo en
 [PARIDAD.md](../PARIDAD.md#evidencia-visual-raster-vigente). Un `world-draw`
 contenido no puede sustituir esta captura: ambos contratos miden etapas
 distintas.
+
+Una entrada cuantitativa vigente debe enlazar un reporte versionado y declarar
+como mínimo: fecha, SHA-256 del `.sav`, versión y pin oficial de OpenTTD, commit
+del oracle instrumentado, commit candidato, perfil gráfico, centro, resolución,
+escala/`ZoomLevel`, alineación y píxeles distintos/total. La fila normal puede
+ser el baseline global de una fixture; las demás escalas son diagnósticos y no
+se comparan entre sí. Un número focal de un commit anterior debe quedar marcado
+como histórico o eliminarse de la narrativa canónica: nunca puede presentarse
+como una segunda métrica vigente.

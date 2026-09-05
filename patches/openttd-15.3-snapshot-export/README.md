@@ -39,6 +39,25 @@ cmake -B reference/openttd-upstream/build -S reference/openttd-upstream -DOPTION
 cmake --build reference/openttd-upstream/build -j
 ```
 
+## Captura raster a zoom nativo
+
+El oráculo raster acepta `OPENTTDRS_WORLD_SCREENSHOT_SCALE` con la misma
+convención de escala ortográfica de `openttdrs` (`0.25`, `0.5`, `1`, `2`, `4`
+u `8`). El helper la propaga al motor C++ y evita comparar una candidata
+alejada contra OpenTTD a zoom normal:
+
+```bash
+OPENTTDRS_WORLD_SCREENSHOT_SCALE=2 \
+  ./scripts/export_openttd_world_screenshot.sh save/Kale_TitleGame.sav \
+  /tmp/kale-out2.png reference/openttd-upstream/build/openttd 189,126 1280x720
+```
+
+La correspondencia exacta con `ZoomLevel` y el flujo combinado con el
+candidato están centralizados en
+[`WORLD_SCREENSHOT_SCHEMA.md`](../../docs/parity/WORLD_SCREENSHOT_SCHEMA.md).
+El integrador conserva `snapshot_export.cpp` al detectar un fork derivado del
+pin que ya depende de él; así no mezcla dos implementaciones de `world-raw`.
+
 ## Exportar
 
 ```bash

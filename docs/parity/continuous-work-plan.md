@@ -68,6 +68,17 @@ paquete para cwd, override y ejecutable trasladado, sin mutar el entorno del
 proceso de pruebas; los assets realmente ausentes siguen devolviendo fallback.
 La corrección del atlas de #347 no sustituye el diagnóstico visual de #349.
 
+Oráculo raster #351 (2026-09-05): el exportador C++ acepta ahora la misma
+escala ortográfica fija que el candidato (`0.25`, `0.5`, `1`, `2`, `4`, `8`) y
+la traduce a `In4x`…`Out8x` antes de rasterizar. La cámara ajusta sus
+coordenadas virtuales con ese zoom y el DPI del raster usa el mismo valor; la
+captura normal conservó SHA-256 y cero píxeles distintos frente al binario
+anterior, mientras Kale generó los seis zooms a 1280×720. El integrador también
+detecta un fork derivado del pin que ya contiene `snapshot_export.cpp`: conserva
+esa fuente y sus hooks, sin añadir el `world_raw` duplicado. El contrato y el
+comando canónico están en `WORLD_SCREENSHOT_SCHEMA.md`; #349 permanece abierto
+hasta aislar agua plana y atribuir una causa concreta.
+
 Seguimiento #347 / #333 (2026-09-05): el primer workflow limpio encontró un
 defecto en el *bootstrap* de la propia regresión, no una ausencia del atlas
 versionado. La prueba construía `tiles/../atlas`; como `tiles/` es opcional e

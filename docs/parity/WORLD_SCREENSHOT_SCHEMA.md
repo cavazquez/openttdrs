@@ -2,7 +2,8 @@
 
 `world-draw` prueba decisiones de dibujo. Este contrato complementa esa
 evidencia con los píxeles compuestos por OpenTTD y por `openttdrs`, en una
-misma tesela, resolución y zoom normal.
+misma tesela, resolución y zoom. La escala se fija en ambos motores: no se
+compara una candidata alejada con una referencia normal.
 
 ## Ejecución
 
@@ -13,7 +14,7 @@ SAV=save/Kale_TitleGame.sav
 
 El directorio de salida contiene cuatro artefactos:
 
-- `reference.png`: viewport normal de OpenTTD 15.3 parcheado.
+- `reference.png`: viewport de OpenTTD 15.3 parcheado a la escala solicitada.
 - `candidate.png`: viewport de `openttdrs`, sin UI, HUD, rótulos, vehículos
   ni audio.
 - `diff.png`: negro para píxeles iguales, color amplificado para diferencias y
@@ -21,8 +22,21 @@ El directorio de salida contiene cuatro artefactos:
 - `report.json`: hashes, save, centro, resolución, perfil gráfico, métricas y
   traducción de cámara encontrada.
 
-El script fija `OPENTTDRS_MAP_SHOT_SCALE=1`, que equivale a `ZoomLevel::Normal`
-de OpenTTD. Por defecto activa el perfil `clean-static`: pausa ambas partidas,
+El argumento `escala` (o `OPENTTDRS_WORLD_SCREENSHOT_SCALE`) se propaga a ambos
+capturadores con esta convención compartida:
+
+| Escala ortográfica openttdrs | Zoom nativo OpenTTD |
+|---:|---|
+| `0.25` | `In4x` |
+| `0.5` | `In2x` |
+| `1` | `Normal` |
+| `2` | `Out2x` |
+| `4` | `Out4x` |
+| `8` | `Out8x` |
+
+El exportador nativo acepta sólo esos seis valores; una escala inválida aborta
+en vez de degradar silenciosamente a zoom normal. Por defecto activa el perfil
+`clean-static`: pausa ambas partidas,
 desactiva animaciones y oculta rótulos y vehículos. Eso hace que el diff mida
 geografía, terreno, infraestructura y edificios, no el instante en que cada
 motor actualizó una unidad. Para investigar sprites de vehículos o animaciones

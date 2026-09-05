@@ -16,6 +16,7 @@ OUT="$(realpath -m "$2")"
 BIN="${3:-${OPENTTD_BIN:-${ROOT}/reference/openttd-upstream/build/openttd}}"
 CENTER="${4:-${OPENTTDRS_WORLD_SCREENSHOT_CENTER:-}}"
 RESOLUTION="${5:-${OPENTTDRS_WORLD_SCREENSHOT_RES:-1280x720}}"
+SCALE="${OPENTTDRS_WORLD_SCREENSHOT_SCALE:-1}"
 CLEAN="${OPENTTDRS_WORLD_SCREENSHOT_CLEAN:-1}"
 BUILD_DIR="$(dirname "$BIN")"
 BASESET_SRC="${OPENTTDRS_OPENGFX_DIR:-${ROOT}/.deps/openttd-baseset/opengfx-8.0}"
@@ -56,9 +57,10 @@ export LD_LIBRARY_PATH="${PREFIX}/usr/lib/x86_64-linux-gnu:${PREFIX}/usr/lib${LD
 export OPENTTDRS_WORLD_SCREENSHOT_OUT="$OUT"
 export OPENTTDRS_WORLD_SCREENSHOT_CENTER="$CENTER"
 export OPENTTDRS_WORLD_SCREENSHOT_RES="$RESOLUTION"
+export OPENTTDRS_WORLD_SCREENSHOT_SCALE="$SCALE"
 export OPENTTDRS_WORLD_SCREENSHOT_CLEAN="$CLEAN"
 
-echo "world-screenshot OpenTTD: bin=$BIN sav=$SAV out=$OUT center=$CENTER res=$RESOLUTION clean=$CLEAN gfx=$GRAPHICS_SET blitter=$BLITTER"
+echo "world-screenshot OpenTTD: bin=$BIN sav=$SAV out=$OUT center=$CENTER res=$RESOLUTION scale=$SCALE clean=$CLEAN gfx=$GRAPHICS_SET blitter=$BLITTER"
 cd "$BUILD_DIR"
 set +e
 # El exportador se ejecuta contra un build dedicado con el blitter 8bpp simple

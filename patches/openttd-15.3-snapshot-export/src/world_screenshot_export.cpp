@@ -3,8 +3,8 @@
  *
  * The regular screenshot implementation owns image encoding and the target
  * screenshot directory. This helper only centers the main viewport, queues a
- * normal-zoom viewport render, copies the resulting PNG to an explicit path,
- * and exits once the queued render completed.
+ * explicitly zoomed viewport render, copies the resulting PNG to an explicit
+ * path, and exits once the queued render completed.
  */
 
 #include "world_screenshot_export.h"
@@ -57,6 +57,38 @@ bool ParseResolution(const char *raw, uint32_t &width, uint32_t &height)
 	return width > 0 && height > 0;
 }
 
+/**
+ * La escala es la misma convención que el candidato: factor ortográfico de
+ * openttdrs, no el texto inverso que muestra su HUD. Mantener esta tabla aquí
+ * evita que una referencia `Out2x` se compare accidentalmente con candidata
+ * normal.
+ */
+bool ParseScreenshotScale(const char *raw, ZoomLevel &zoom)
+{
+	if (raw == nullptr || raw[0] == '\0') {
+		zoom = ZoomLevel::Normal;
+		return true;
+	}
+
+	const std::string_view value(raw);
+	if (value == "0.25") {
+		zoom = ZoomLevel::In4x;
+	} else if (value == "0.5") {
+		zoom = ZoomLevel::In2x;
+	} else if (value == "1") {
+		zoom = ZoomLevel::Normal;
+	} else if (value == "2") {
+		zoom = ZoomLevel::Out2x;
+	} else if (value == "4") {
+		zoom = ZoomLevel::Out4x;
+	} else if (value == "8") {
+		zoom = ZoomLevel::Out8x;
+	} else {
+		return false;
+	}
+	return true;
+}
+
 bool EnvEnabled(const char *name)
 {
 	const char *raw = std::getenv(name);
@@ -74,17 +106,19 @@ int WorldScreenshotMinCall()
 }
 
 /**
- * `SC_DEFAULTZOOM` reusa la esquina virtual del viewport principal, pero le
- * puede pedir al raster un tamaño distinto al de la ventana headless. Si no
- * corregimos esa esquina, `ScrollMainWindowToTile` centra la tesela en el
+ * La captura reusa la esquina virtual del viewport principal, pero le puede
+ * pedir al raster un tamaño y zoom distintos a los de la ventana headless. Si
+ * no corregimos esa esquina, `ScrollMainWindowToTile` centra la tesela en el
  * viewport original y la captura recortada queda desplazada. Mantener el
  * centro virtual evita que el oráculo compare regiones distintas al cambiar
- * la resolución.
+ * la resolución o la escala.
  */
-void CenterScreenshotViewportOnMainWindow(Window &window, uint32_t width, uint32_t height)
+void CenterScreenshotViewportOnMainWindow(
+	Window &window, uint32_t width, uint32_t height, ZoomLevel zoom
+)
 {
 	ViewportData &viewport = *window.viewport;
-	const uint32_t zoom_factor = 1U << to_underlying(ZoomLevel::Viewport);
+	const uint32_t zoom_factor = 1U << to_underlying(zoom);
 	const int requested_virtual_width = static_cast<int>(width * zoom_factor);
 	const int requested_virtual_height = static_cast<int>(height * zoom_factor);
 	const int delta_x = (viewport.virtual_width - requested_virtual_width) / 2;
@@ -99,16 +133,17 @@ void CenterScreenshotViewportOnMainWindow(Window &window, uint32_t width, uint32
 	viewport.dest_scrollpos_y += delta_y;
 }
 
-void LogScreenshotViewport(const Window &window, uint32_t width, uint32_t height)
+void LogScreenshotViewport(const Window &window, uint32_t width, uint32_t height, ZoomLevel zoom)
 {
 	if (!EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_DEBUG")) return;
 	const ViewportData &viewport = *window.viewport;
 	std::fprintf(stderr,
-		"openttdrs world-screenshot: scroll=(%d,%d) dest=(%d,%d) virtual=(%d,%d %dx%d) capture=%ux%u\n",
+		"openttdrs world-screenshot: scroll=(%d,%d) dest=(%d,%d) virtual=(%d,%d %dx%d) capture=%ux%u zoom=%d\n",
 		viewport.scrollpos_x, viewport.scrollpos_y,
 		viewport.dest_scrollpos_x, viewport.dest_scrollpos_y,
 		viewport.virtual_left, viewport.virtual_top,
-		viewport.virtual_width, viewport.virtual_height, width, height);
+		viewport.virtual_width, viewport.virtual_height, width, height,
+		to_underlying(zoom));
 }
 
 /**
@@ -152,6 +187,13 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 		return false;
 	}
 
+	ZoomLevel zoom = ZoomLevel::Normal;
+	if (!ParseScreenshotScale(std::getenv("OPENTTDRS_WORLD_SCREENSHOT_SCALE"), zoom)) {
+		std::fprintf(stderr,
+			"openttdrs world-screenshot: escala inválida (usar 0.25, 0.5, 1, 2, 4 u 8)\n");
+		return false;
+	}
+
 	std::optional<TileIndex> center;
 	if (const char *raw_center = std::getenv("OPENTTDRS_WORLD_SCREENSHOT_CENTER"); raw_center != nullptr) {
 		uint32_t x = 0;
@@ -168,8 +210,8 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 	 * primer callback corre justo antes de Tick N+1, cuando OpenTTD todavía
 	 * puede restaurar la cámara guardada. Diferimos un callback adicional:
 	 * entonces el centrado se hace antes de Tick N+2, ya estable. */
-	VideoDriver::GetInstance()->QueueOnMainThread([center, width, height, target] {
-		VideoDriver::GetInstance()->QueueOnMainThread([center, width, height, target] {
+	VideoDriver::GetInstance()->QueueOnMainThread([center, width, height, zoom, target] {
+		VideoDriver::GetInstance()->QueueOnMainThread([center, width, height, zoom, target] {
 		if (center.has_value()) {
 			const bool moved = ScrollMainWindowToTile(*center, true);
 			if (EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_DEBUG")) {
@@ -182,9 +224,9 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 			 * la misma actualización que haría ese frame antes de capturar. */
 			if (Window *main_window = GetMainWindow(); main_window != nullptr) {
 				UpdateViewportPosition(main_window, 0);
-				CenterScreenshotViewportOnMainWindow(*main_window, width, height);
+				CenterScreenshotViewportOnMainWindow(*main_window, width, height, zoom);
 				UpdateViewportPosition(main_window, 0);
-				LogScreenshotViewport(*main_window, width, height);
+				LogScreenshotViewport(*main_window, width, height, zoom);
 			}
 		}
 
@@ -198,7 +240,7 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 		 * make us copy an older successful PNG from a previous invocation. */
 		const std::string screenshot_name = "openttdrs-world-reference-" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-		if (!MakeScreenshot(SC_DEFAULTZOOM, screenshot_name, width, height)) {
+		if (!MakeScreenshotAtZoom(zoom, screenshot_name, width, height)) {
 			std::fprintf(stderr, "openttdrs world-screenshot: no se pudo encolar la captura\n");
 			_exit_game = true;
 			return;

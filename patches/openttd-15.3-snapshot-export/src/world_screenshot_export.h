@@ -10,11 +10,13 @@
 #define OPENTTDRS_WORLD_SCREENSHOT_EXPORT_H
 
 /**
- * Schedules one normal-zoom map screenshot after loading a game, copies it to
+ * Schedules one map screenshot after loading a game, copies it to
  * OPENTTDRS_WORLD_SCREENSHOT_OUT, and then exits OpenTTD. Optional variables:
  *
  * - OPENTTDRS_WORLD_SCREENSHOT_CENTER=x,y
  * - OPENTTDRS_WORLD_SCREENSHOT_RES=widthxheight
+ * - OPENTTDRS_WORLD_SCREENSHOT_SCALE=0.25|0.5|1|2|4|8 (convención de la
+ *   escala ortográfica de openttdrs; por defecto 1 / ZoomLevel::Normal)
  * - OPENTTDRS_WORLD_SCREENSHOT_CLEAN=1 (pausa y oculta rótulos/animación)
  * - OPENTTDRS_WORLD_SCREENSHOT_MIN_CALL=N (por defecto 2; omite la partida
  *   temporal que el dedicado carga antes del .sav indicado con -g)

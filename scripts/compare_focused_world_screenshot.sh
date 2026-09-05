@@ -48,7 +48,8 @@ CANDIDATE="$OUT_DIR/candidate.png"
 DIFF="$OUT_DIR/diff.png"
 REPORT="$OUT_DIR/report.json"
 
-"${ROOT}/scripts/export_openttd_world_screenshot.sh" \
+OPENTTDRS_WORLD_SCREENSHOT_SCALE="$SCALE" \
+  "${ROOT}/scripts/export_openttd_world_screenshot.sh" \
   "$SAV" "$REFERENCE" "$OPENTTD_BIN" "$CENTER" "$RESOLUTION"
 "${ROOT}/scripts/export_openttdrs_world_screenshot.sh" \
   "$SAV" "$CANDIDATE" "$CENTER" "$RESOLUTION" "$SCALE"

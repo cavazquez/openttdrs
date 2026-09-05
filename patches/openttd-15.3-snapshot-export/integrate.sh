@@ -402,6 +402,134 @@ def integrate_world_draw_foundation(dest: Path) -> None:
     print("landscape: traza de decisión DrawFoundation")
 
 
+def integrate_world_screenshot_zoom(dest: Path) -> None:
+    """Expone al oráculo raster un zoom explícito sin cambiar el API normal.
+
+    `SC_DEFAULTZOOM` está fijado a `ZoomLevel::Viewport` en upstream. El
+    exportador necesita además `Out2x`/`Out4x` para comparar cada raster con
+    la misma escala que openttdrs; integrar una sobrecarga pequeña es menos
+    frágil que mutar el viewport principal o capturar la UI con SC_VIEWPORT.
+    """
+    header = dest / "src" / "screenshot.h"
+    header_text = header.read_text(encoding="utf-8")
+    if '#include "zoom_type.h"' not in header_text:
+        anchor = "#define SCREENSHOT_H\n"
+        if anchor not in header_text:
+            raise SystemExit("no encuentro guard de screenshot.h")
+        header_text = header_text.replace(anchor, anchor + '\n#include "zoom_type.h"\n', 1)
+
+    declaration = (
+        "bool MakeScreenshotAtZoom(ZoomLevel zoom, const std::string &name, "
+        "uint32_t width = 0, uint32_t height = 0);\n"
+    )
+    if declaration not in header_text:
+        anchor = "bool MakeScreenshot(ScreenshotType t, const std::string &name, uint32_t width = 0, uint32_t height = 0);\n"
+        if anchor not in header_text:
+            raise SystemExit("no encuentro declaración MakeScreenshot")
+        header_text = header_text.replace(anchor, anchor + declaration, 1)
+    header.write_text(header_text, encoding="utf-8")
+
+    screenshot = dest / "src" / "screenshot.cpp"
+    text = screenshot.read_text(encoding="utf-8")
+    if "#include <optional>\n" not in text:
+        anchor = '#include "screenshot_type.h"\n'
+        if anchor not in text:
+            raise SystemExit("no encuentro include screenshot_type.h")
+        text = text.replace(anchor, anchor + "\n#include <optional>\n", 1)
+
+    if "std::optional<ZoomLevel> zoom_override" not in text:
+        setup_signature = (
+            "static Viewport SetupScreenshotViewport(ScreenshotType t, uint32_t width = 0, uint32_t height = 0)\n"
+        )
+        setup_replacement = (
+            "static Viewport SetupScreenshotViewport(ScreenshotType t, uint32_t width = 0, uint32_t height = 0, "
+            "std::optional<ZoomLevel> zoom_override = std::nullopt)\n"
+        )
+        if setup_signature not in text:
+            raise SystemExit("no encuentro SetupScreenshotViewport")
+        text = text.replace(setup_signature, setup_replacement, 1)
+
+        zoom_assignment = (
+            "\t\t\tvp.zoom = (t == SC_ZOOMEDIN) ? _settings_client.gui.zoom_min : ZoomLevel::Viewport;\n"
+        )
+        zoom_replacement = (
+            "\t\t\tvp.zoom = zoom_override.value_or(\n"
+            "\t\t\t\t(t == SC_ZOOMEDIN) ? _settings_client.gui.zoom_min : ZoomLevel::Viewport\n"
+            "\t\t\t);\n"
+        )
+        if zoom_assignment not in text:
+            raise SystemExit("no encuentro zoom default de SetupScreenshotViewport")
+        text = text.replace(zoom_assignment, zoom_replacement, 1)
+
+        large_signature = (
+            "static bool MakeLargeWorldScreenshot(ScreenshotType t, uint32_t width = 0, uint32_t height = 0)\n"
+        )
+        large_replacement = (
+            "static bool MakeLargeWorldScreenshot(ScreenshotType t, uint32_t width = 0, uint32_t height = 0, "
+            "std::optional<ZoomLevel> zoom_override = std::nullopt)\n"
+        )
+        if large_signature not in text:
+            raise SystemExit("no encuentro MakeLargeWorldScreenshot")
+        text = text.replace(large_signature, large_replacement, 1)
+
+        viewport_call = "\tViewport vp = SetupScreenshotViewport(t, width, height);\n"
+        if viewport_call not in text:
+            raise SystemExit("no encuentro llamada SetupScreenshotViewport")
+        text = text.replace(
+            viewport_call,
+            "\tViewport vp = SetupScreenshotViewport(t, width, height, zoom_override);\n",
+            1,
+        )
+
+        real_signature = (
+            "static bool RealMakeScreenshot(ScreenshotType t, const std::string &name, uint32_t width, uint32_t height)\n"
+        )
+        real_replacement = (
+            "static bool RealMakeScreenshot(ScreenshotType t, const std::string &name, uint32_t width, uint32_t height, "
+            "std::optional<ZoomLevel> zoom_override = std::nullopt)\n"
+        )
+        if real_signature not in text:
+            raise SystemExit("no encuentro RealMakeScreenshot")
+        text = text.replace(real_signature, real_replacement, 1)
+
+        large_call = "\t\t\tret = MakeLargeWorldScreenshot(t, width, height);\n"
+        if large_call not in text:
+            raise SystemExit("no encuentro llamada MakeLargeWorldScreenshot")
+        text = text.replace(
+            large_call,
+            "\t\t\tret = MakeLargeWorldScreenshot(t, width, height, zoom_override);\n",
+            1,
+        )
+
+        # LargeWorldCallback must use the same zoom as the requested viewport.
+        # Normal screenshots remain byte-identical because both values are Normal.
+        dpi_zoom = "\t\t.zoom = ZoomLevel::WorldScreenshot\n"
+        if dpi_zoom not in text:
+            raise SystemExit("no encuentro zoom de LargeWorldCallback")
+        text = text.replace(dpi_zoom, "\t\t.zoom = vp.zoom\n", 1)
+
+    zoom_api = (
+        "\nbool MakeScreenshotAtZoom(ZoomLevel zoom, const std::string &name, uint32_t width, uint32_t height)\n"
+        "{\n"
+        "\tif (zoom < ZoomLevel::Min || zoom > ZoomLevel::Max) return false;\n"
+        "\n"
+        "\tVideoDriver::GetInstance()->QueueOnMainThread([=] {\n"
+        "\t\tRealMakeScreenshot(SC_DEFAULTZOOM, name, width, height, zoom);\n"
+        "\t});\n"
+        "\n"
+        "\treturn true;\n"
+        "}\n"
+    )
+    if "bool MakeScreenshotAtZoom(ZoomLevel zoom" not in text:
+        anchor = "\n\nstatic void MinimapScreenCallback(void *buf, uint y, uint pitch, uint n)\n"
+        if anchor not in text:
+            raise SystemExit("no encuentro ancla posterior a MakeScreenshot")
+        text = text.replace(anchor, zoom_api + anchor, 1)
+
+    screenshot.write_text(text, encoding="utf-8")
+    print("screenshot: API de zoom explícito para oráculo raster")
+
+
 def integrate_headless_raster_blitter(dest: Path) -> None:
     """Permite que un build dedicado rasterice sólo para el oráculo PNG.
 
@@ -643,10 +771,44 @@ def integrate_tree_generation_trace(dest: Path) -> None:
     tree_cmd.write_text(text, encoding="utf-8")
 
 if mode == "world_raw_only":
+    # Un árbol no pinneado nuevo sólo recibe world-raw/semantic/draw/raster.
+    # Pero un fork que ya descendía del pin puede contener los hooks de
+    # snapshot en genworld/tree/openttd; retirarle snapshot_export.cpp dejaría
+    # referencias sin resolver. En ese caso conservamos la instrumentación ya
+    # presente y añadimos el raster sin degradar el build existente.
+    snapshot_source = dest / "src" / "snapshot_export.cpp"
+    snapshot_dependent_markers = (
+        "OpenttdrsMaybeCaptureGenerationStage",
+        "OpenttdrsMaybeCaptureTreeGenerationStage",
+        "OpenttdrsTraceTreePlacement",
+        "OpenttdrsMaybeExportPbsTraceTick",
+        "OpenttdrsMaybeExportAirportFtaTraceTick",
+    )
+    snapshot_dependent_files = (
+        dest / "src" / "genworld.cpp",
+        dest / "src" / "tree_cmd.cpp",
+        dest / "src" / "openttd.cpp",
+    )
+    preserve_snapshot_export = snapshot_source.exists() and any(
+        marker in path.read_text(encoding="utf-8")
+        for path in snapshot_dependent_files
+        for marker in snapshot_dependent_markers
+    )
+
     cmake = dest / "src" / "CMakeLists.txt"
     text = cmake.read_text(encoding="utf-8")
-    text = text.replace("    snapshot_export.cpp\n", "", 1)
-    if "world_raw_export.cpp" not in text:
+    if preserve_snapshot_export:
+        text = add_cmake_source(cmake, text, "snapshot_export.cpp")
+        print("CMakeLists: se conserva snapshot_export.cpp ya requerido")
+    else:
+        text = text.replace("    snapshot_export.cpp\n", "", 1)
+    if preserve_snapshot_export:
+        # La variante completa de snapshot 15.3 ya define world-raw. Añadir
+        # nuestro exportador mínimo además de ella duplicaría el símbolo al
+        # enlazar un fork que conserva esa instrumentación.
+        text = text.replace("    world_raw_export.cpp\n", "", 1)
+        print("CMakeLists: se omite world_raw_export.cpp duplicado de snapshot")
+    elif "world_raw_export.cpp" not in text:
         if "console_cmds.cpp" not in text:
             raise SystemExit("no encuentro console_cmds.cpp en src/CMakeLists.txt")
         text = text.replace(
@@ -674,8 +836,21 @@ if mode == "world_raw_only":
 
     after = dest / "src" / "saveload" / "afterload.cpp"
     at = after.read_text(encoding="utf-8")
-    at = at.replace('#include "../snapshot_export.h"\n', "", 1)
-    if '#include "../world_raw_export.h"' not in at:
+    snapshot_include = '#include "../snapshot_export.h"\n'
+    if preserve_snapshot_export and snapshot_include not in at:
+        nl = at.find("\n#include ")
+        if nl < 0:
+            raise SystemExit("no encuentro includes en afterload.cpp para snapshot existente")
+        at = at[: nl + 1] + snapshot_include + at[nl + 1 :]
+        print("afterload: se conserva include snapshot existente")
+    elif not preserve_snapshot_export:
+        at = at.replace('#include "../snapshot_export.h"\n', "", 1)
+    if preserve_snapshot_export:
+        # snapshot_export.h ya declara world-raw en la variante completa.
+        # Conservar además el header mínimo produce una redeclaración inútil
+        # al compilar un fork derivado del pin.
+        at = at.replace('#include "../world_raw_export.h"\n', "", 1)
+    elif '#include "../world_raw_export.h"' not in at:
         nl = at.find("\n#include ")
         if nl < 0:
             raise SystemExit("no encuentro includes en afterload.cpp")
@@ -734,20 +909,60 @@ if mode == "world_raw_only":
     anchor = "\treturn true;\n}\n\n/**\n * Reload all NewGRF"
     if anchor not in at:
         raise SystemExit("no encuentro ancla return true de AfterLoadGame")
-    at = at.replace(anchor, raw_hook + semantic_hook + draw_hook + screenshot_hook + "\treturn true;\n}\n\n/**\n * Reload all NewGRF", 1)
+    snapshot_hooks = (snapshot_hook + pbs_hook + fta_hook) if preserve_snapshot_export else ""
+    at = at.replace(
+        anchor,
+        snapshot_hooks + raw_hook + semantic_hook + draw_hook + screenshot_hook
+        + "\treturn true;\n}\n\n/**\n * Reload all NewGRF",
+        1,
+    )
     after.write_text(at, encoding="utf-8")
     integrate_world_draw_viewport(dest)
     integrate_world_draw_foundation(dest)
+    integrate_world_screenshot_zoom(dest)
     integrate_headless_raster_blitter(dest)
     print("afterload: hooks world-raw/world-semantic/world-draw/world-screenshot AfterLoadGame")
 
     openttd = dest / "src" / "openttd.cpp"
     ot = openttd.read_text(encoding="utf-8")
-    cleaned = ot.replace('#include "snapshot_export.h"\n', "", 1)
-    if cleaned != ot:
-        openttd.write_text(cleaned, encoding="utf-8")
-        print("openttd: se retiró include snapshot incompatible")
-    print("Integración minimal world-raw/world-semantic/world-draw lista (PBS/FTA/snapshot no se compilan en árbol no pinneado)")
+    if preserve_snapshot_export:
+        snapshot_include = '#include "snapshot_export.h"\n'
+        if snapshot_include not in ot:
+            anchor = '#include "stdafx.h"\n'
+            if anchor not in ot:
+                raise SystemExit("no encuentro include stdafx.h en openttd.cpp para snapshot existente")
+            ot = ot.replace(anchor, snapshot_include + anchor, 1)
+        tick_anchor = "\t\tcur_company.Restore();\n"
+        pbs_tick_hook = "\tOpenttdrsMaybeExportPbsTraceTick();\n"
+        fta_tick_hook = "\tOpenttdrsMaybeExportAirportFtaTraceTick();\n"
+        if pbs_tick_hook not in ot:
+            if tick_anchor not in ot:
+                raise SystemExit("no encuentro ancla post-tick para snapshot existente")
+            ot = ot.replace(tick_anchor, tick_anchor + pbs_tick_hook + fta_tick_hook, 1)
+        elif fta_tick_hook not in ot:
+            ot = ot.replace(pbs_tick_hook, pbs_tick_hook + fta_tick_hook, 1)
+        openttd.write_text(ot, encoding="utf-8")
+        print("openttd: se conservan hooks snapshot/PBS/FTA ya requeridos")
+        print("Integración world-raw/world-semantic/world-draw/world-screenshot lista sobre fork con snapshot existente")
+    else:
+        # El modo no pinneado no compila snapshot_export.cpp; retirar los
+        # hooks post-tick junto al include evita referencias a símbolos fuera
+        # de alcance si el árbol los hubiera añadido manualmente.
+        pbs_tick_hook = "\tOpenttdrsMaybeExportPbsTraceTick();\n"
+        fta_tick_hook = "\tOpenttdrsMaybeExportAirportFtaTraceTick();\n"
+        removed_ticks = 0
+        for tick_hook in (pbs_tick_hook, fta_tick_hook):
+            if tick_hook in ot:
+                ot = ot.replace(tick_hook, "", 1)
+                removed_ticks += 1
+        cleaned = ot.replace('#include "snapshot_export.h"\n', "", 1)
+        if cleaned != ot or removed_ticks:
+            openttd.write_text(cleaned, encoding="utf-8")
+        if cleaned != ot:
+            print("openttd: se retiró include snapshot incompatible")
+        if removed_ticks:
+            print("openttd: se retiraron hooks PBS/FTA incompatibles")
+        print("Integración minimal world-raw/world-semantic/world-draw lista (PBS/FTA/snapshot no se compilan en árbol no pinneado)")
     raise SystemExit(0)
 
 cmake = dest / "src" / "CMakeLists.txt"
@@ -880,6 +1095,7 @@ else:
 after.write_text(at, encoding="utf-8")
 integrate_world_draw_viewport(dest)
 integrate_world_draw_foundation(dest)
+integrate_world_screenshot_zoom(dest)
 integrate_headless_raster_blitter(dest)
 
 openttd = dest / "src" / "openttd.cpp"

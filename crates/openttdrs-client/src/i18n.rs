@@ -56,6 +56,13 @@ struct LocalizedUiText(String);
 /// preferencia, sin obligar a cada constructor de UI a duplicar un marcador.
 pub(crate) struct LocalizationPlugin;
 
+/// El catálogo se sincroniza antes de los sistemas que materializan texto
+/// dinámico. Así una clave estática que fue reemplazada por una fila/título
+/// con datos de la partida no puede volver a sobrescribir ese texto al final
+/// del frame.
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub(crate) struct LocalizationSet;
+
 impl Plugin for LocalizationPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
@@ -67,7 +74,8 @@ impl Plugin for LocalizationPlugin {
                 sync_changed_catalog_ui_texts,
             )
                 .chain()
-                .in_set(UpdateSet::Ui),
+                .in_set(UpdateSet::Ui)
+                .in_set(LocalizationSet),
         );
     }
 }
@@ -253,6 +261,80 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "colinas procedural + lagos" => "procedural hills + lakes",
         "demo completa (plana)" => "full demo (flat)",
         "mapa plano" => "flat map",
+        // Panel de órdenes: los controles estáticos pasan por el plugin y las
+        // filas dinámicas consultan estas mismas claves al refrescarse.
+        "Órdenes" => "Orders",
+        "Horario" => "Timetable",
+        "Modo carga" => "Loading mode",
+        "Modo descarga" => "Unloading mode",
+        "Paradas intermedias" => "Intermediate stops",
+        "Posición andén" => "Platform position",
+        "Parar depósito" => "Stop at depot",
+        "Refit orden" => "Order refit",
+        "Saltarse" => "Skip",
+        "Eliminar" => "Delete",
+        "Ir a" => "Go to",
+        "Compartir" => "Share",
+        "Desvincular" => "Unlink",
+        "Pools" => "Shared pools",
+        "Cond. >50%" => "If >50%",
+        "Cond. <50%" => "If <50%",
+        "Ciclar cond." => "Cycle condition",
+        " · clic en parada" => " · click a stop",
+        " · pool #" => " · shared pool #",
+        "Sin órdenes — «Ir a» y clic en una parada del mapa." => {
+            "No orders — “Go to” and click a stop on the map."
+        }
+        "Parada bus" => "Bus stop",
+        "Parada carga" => "Truck stop",
+        "Estacion tren" => "Train station",
+        "Waypoint road" => "Road waypoint",
+        "Muelle" => "Dock",
+        "Boya" => "Buoy",
+        "Aeropuerto" => "Airport",
+        "Estación" => "Station",
+        "Depósito vía (parar)" => "Rail depot (stop)",
+        "Depósito vía (serv. si hace falta)" => "Rail depot (service if needed)",
+        "Depósito (parar)" => "Depot (stop)",
+        "Depósito (serv. si hace falta)" => "Depot (service if needed)",
+        "Depósito" => "Depot",
+        "Depósito vía" => "Rail depot",
+        "Casilla" => "Tile",
+        "Cond." => "If",
+        "ord." => "order",
+        "carga>" => "load>",
+        "carga<" => "load<",
+        "carga%" => "load%",
+        "fiab" => "reliability",
+        "vmax" => "max speed",
+        "edad" => "age",
+        "serv" => "service",
+        "siempre" => "always",
+        "vida" => "lifetime",
+        "fiabmáx" => "max reliability",
+        "marcha atrás" => "driving backwards",
+        "cargar si posible" => "load if available",
+        "carga completa" => "full load",
+        "completar una carga" => "full load any cargo",
+        "no cargar" => "no loading",
+        "descargar si posible" => "unload if accepted",
+        "descarga forzada" => "unload all",
+        "transferir" => "transfer",
+        "no descargar" => "no unloading",
+        "sin paradas intermedias" => "non-stop",
+        "paradas intermedias" => "with intermediate stops",
+        "andén cercano" => "near platform end",
+        "andén central" => "middle of platform",
+        "andén lejano" => "far platform end",
+        "parar" => "stop",
+        "servicio" => "service",
+        " · sin ruta por red" => " · no network route",
+        " — incompatible: solo buses" => " — incompatible: buses only",
+        " — incompatible: solo camiones/carga" => " — incompatible: trucks only",
+        " — incompatible: solo barcos" => " — incompatible: ships only",
+        " — incompatible: solo aviones" => " — incompatible: aircraft only",
+        " — incompatible: solo trenes" => " — incompatible: trains only",
+        " — incompatible: solo vehículos de carretera" => " — incompatible: road vehicles only",
         // Ventanas y controles reutilizables.
         "Singleplayer · Ctrl+Alt+C · consola: cheat …" => {
             "Singleplayer · Ctrl+Alt+C · console: cheat …"
@@ -555,6 +637,9 @@ mod tests {
         assert_eq!(text(Locale::En, "Idioma"), "Language");
         assert_eq!(text(Locale::En, "Densidad de pueblos"), "Town density");
         assert_eq!(text(Locale::En, "Esc cancelar"), "Esc cancel");
+        assert_eq!(text(Locale::En, "Horario"), "Timetable");
+        assert_eq!(text(Locale::En, "Modo carga"), "Loading mode");
+        assert_eq!(text(Locale::En, "Compartir"), "Share");
         assert_eq!(text(Locale::En, "untranslated"), "untranslated");
     }
 

@@ -369,6 +369,7 @@ impl Plugin for ToolbarUiPlugin {
                     sync_station_catalog_entries,
                     sync_bridge_picker,
                 )
+                    .after(crate::i18n::LocalizationSet)
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),
             )

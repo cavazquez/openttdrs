@@ -1,6 +1,9 @@
 use bevy::prelude::*;
+use openttdrs_core::CargoType;
 use openttdrs_core::prelude::*;
 
+use crate::i18n::{Locale, text as localized};
+use crate::settings::ClientPreferences;
 use crate::state::{OrderPickState, SimWorld, order_pick_active};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText,
@@ -22,6 +25,7 @@ pub(crate) fn sync_order_panel(
     mut order_state: ResMut<OrderEditState>,
     pick_state: Res<State<OrderPickState>>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
+    prefs: Option<Res<ClientPreferences>>,
     sim: Res<SimWorld>,
     mut root_q: Query<(
         Entity,
@@ -44,6 +48,8 @@ pub(crate) fn sync_order_panel(
         Without<FloatingWindowTitleText>,
     >,
 ) {
+    let locale = prefs.as_ref().map_or(Locale::Es, |prefs| prefs.locale());
+
     // Refrescar órdenes desde sim para cada slot abierto.
     for slot in &mut order_state.slots {
         refresh_slot_from_sim(slot, &sim);
@@ -82,18 +88,11 @@ pub(crate) fn sync_order_panel(
         };
 
         *vis = Visibility::Visible;
-        let pick_hint = if order_pick_active(&pick_state) && order_state.focused == Some(vehicle_id)
-        {
-            " · clic en parada"
-        } else {
-            ""
-        };
-        let title_name = {
-            let shared = vehicle
-                .shared_order_id
-                .map_or_else(String::new, |id| format!(" · pool #{id}"));
-            format!("{} (Órdenes){shared}{pick_hint}", vehicle.display_name())
-        };
+        let title_name = order_panel_title(
+            locale,
+            vehicle,
+            order_pick_active(&pick_state) && order_state.focused == Some(vehicle_id),
+        );
         for (title, mut text, child_of) in &mut title_q {
             if title.0 != FloatingWindowId::Orders {
                 continue;
@@ -161,10 +160,10 @@ pub(crate) fn sync_order_panel(
                 continue;
             }
             **text = if slot_state.orders.is_empty() && row_text.slot == 0 {
-                "Sin órdenes — «Ir a» y clic en una parada del mapa.".to_string()
+                empty_order_hint(locale).to_owned()
             } else if let Some(order) = slot_state.orders.get(row_text.slot) {
                 let stuck_here = vehicle.no_network_route_to_order && row_text.slot == current_slot;
-                order_row_label(row_text.slot, *order, vehicle, &sim, stuck_here)
+                order_row_label(locale, row_text.slot, *order, vehicle, &sim, stuck_here)
             } else {
                 String::new()
             };
@@ -235,25 +234,109 @@ fn hide_order_rows_for_slot(
     }
 }
 
+fn order_panel_title(locale: Locale, vehicle: &Vehicle, pick_active: bool) -> String {
+    let pick_hint = if pick_active {
+        localized(locale, " · clic en parada")
+    } else {
+        ""
+    };
+    let shared = vehicle.shared_order_id.map_or_else(String::new, |id| {
+        format!("{}{id}", localized(locale, " · pool #"))
+    });
+    format!(
+        "{} ({}){shared}{pick_hint}",
+        vehicle.display_name(),
+        localized(locale, "Órdenes")
+    )
+}
+
+fn empty_order_hint(locale: Locale) -> &'static str {
+    localized(
+        locale,
+        "Sin órdenes — «Ir a» y clic en una parada del mapa.",
+    )
+}
+
+fn order_cargo_label(locale: Locale, cargo: CargoType) -> &'static str {
+    if locale == Locale::Es {
+        return cargo.display_name();
+    }
+    match cargo {
+        CargoType::Passengers => "passengers",
+        CargoType::Coal => "coal",
+        CargoType::Mail => "mail",
+        CargoType::Oil => "oil",
+        CargoType::Livestock => "livestock",
+        CargoType::Goods => "goods",
+        CargoType::Grain => "grain",
+        CargoType::Wood => "wood",
+        CargoType::IronOre => "iron ore",
+        CargoType::Steel => "steel",
+        CargoType::Valuables => "valuables",
+        CargoType::Wheat => "wheat",
+        CargoType::Paper => "paper",
+        CargoType::Gold => "gold",
+        CargoType::Food => "food",
+        CargoType::Rubber => "rubber",
+        CargoType::Fruit => "fruit",
+        CargoType::Maize => "maize",
+        CargoType::CopperOre => "copper ore",
+        CargoType::Water => "water",
+        CargoType::Diamonds => "diamonds",
+        CargoType::Sugar => "sugar",
+        CargoType::Toys => "toys",
+        CargoType::Batteries => "batteries",
+        CargoType::Candy => "candy",
+        CargoType::Toffee => "toffee",
+        CargoType::Cola => "cola",
+        CargoType::CottonCandy => "cotton candy",
+        CargoType::Bubbles => "bubbles",
+        CargoType::Plastic => "plastic",
+        CargoType::FizzyDrinks => "fizzy drinks",
+        CargoType::Custom(_) => "custom cargo",
+    }
+}
+
 fn station_at_tile(sim: &SimWorld, pos: openttdrs_core::TileCoord) -> Option<&Station> {
     openttdrs_core::station_at_tile(&sim.state.map, &sim.state.stations, pos)
 }
 
-fn stop_kind_mismatch_note(vehicle: &Vehicle, station: &Station) -> Option<&'static str> {
+fn stop_kind_mismatch_note(
+    locale: Locale,
+    vehicle: &Vehicle,
+    station: &Station,
+) -> Option<&'static str> {
     if station.can_service_vehicle(vehicle.kind) {
         return None;
     }
-    Some(match station.stop_kind {
+    let source = match station.stop_kind {
         StopKind::BusStop => " — incompatible: solo buses",
         StopKind::TruckStop => " — incompatible: solo camiones/carga",
         StopKind::Dock | StopKind::Buoy => " — incompatible: solo barcos",
         StopKind::Airport => " — incompatible: solo aviones",
         StopKind::RailStation | StopKind::RailWaypoint => " — incompatible: solo trenes",
         StopKind::RoadWaypoint => " — incompatible: solo vehículos de carretera",
-    })
+    };
+    Some(localized(locale, source))
+}
+
+fn append_order_times(line: &mut String, locale: Locale, wait_ticks: u32, travel_ticks: u32) {
+    if wait_ticks > 0 {
+        match locale {
+            Locale::Es => line.push_str(&format!(" · esp.{wait_ticks}")),
+            Locale::En => line.push_str(&format!(" · wait {wait_ticks}")),
+        }
+    }
+    if travel_ticks > 0 {
+        match locale {
+            Locale::Es => line.push_str(&format!(" · viaje {travel_ticks}")),
+            Locale::En => line.push_str(&format!(" · travel {travel_ticks}")),
+        }
+    }
 }
 
 fn order_row_label(
+    locale: Locale,
     index: usize,
     order: VehicleOrder,
     vehicle: &Vehicle,
@@ -266,7 +349,7 @@ fn order_row_label(
     } else {
         " "
     };
-    let label = match order {
+    let label_source = match order {
         VehicleOrder::Station { .. } => match station_at_tile(sim, pos).map(|s| s.stop_kind) {
             Some(StopKind::BusStop) => "Parada bus",
             Some(StopKind::TruckStop) => "Parada carga",
@@ -319,12 +402,16 @@ fn order_row_label(
                 openttdrs_core::OrderConditionKind::DrivingBackwards => "marcha atrás",
             };
             return format!(
-                "{current} {:>2}. Cond. {cond}{value}% → ord.{}",
+                "{current} {:>2}. {} {}{value}% → {}{}",
                 index + 1,
+                localized(locale, "Cond."),
+                localized(locale, cond),
+                localized(locale, "ord."),
                 jump_to + 1
             );
         }
     };
+    let label = localized(locale, label_source);
     let mut line = format!("{current} {:>2}. {label} ({}, {})", index + 1, pos.x, pos.y);
     if let VehicleOrder::Station {
         wait_ticks,
@@ -332,37 +419,36 @@ fn order_row_label(
         ..
     } = order
     {
-        let load_label = match order.load_type() {
+        let load_source = match order.load_type() {
             openttdrs_core::OrderLoadType::LoadIfPossible => "cargar si posible",
             openttdrs_core::OrderLoadType::FullLoad => "carga completa",
             openttdrs_core::OrderLoadType::FullLoadAny => "completar una carga",
             openttdrs_core::OrderLoadType::NoLoad => "no cargar",
         };
-        let unload_label = match order.unload_type() {
+        let unload_source = match order.unload_type() {
             openttdrs_core::OrderUnloadType::UnloadIfPossible => "descargar si posible",
             openttdrs_core::OrderUnloadType::Unload => "descarga forzada",
             openttdrs_core::OrderUnloadType::Transfer => "transferir",
             openttdrs_core::OrderUnloadType::NoUnload => "no descargar",
         };
-        let non_stop_label = if order.non_stop_destination() {
+        let non_stop_source = if order.non_stop_destination() {
             "sin paradas intermedias"
         } else {
             "paradas intermedias"
         };
-        let stop_location_label = match order.stop_location() {
+        let stop_location_source = match order.stop_location() {
             openttdrs_core::OrderStopLocation::NearEnd => "andén cercano",
             openttdrs_core::OrderStopLocation::Middle => "andén central",
             openttdrs_core::OrderStopLocation::FarEnd => "andén lejano",
         };
         line.push_str(&format!(
-            " · {load_label} · {unload_label} · {non_stop_label} · {stop_location_label}"
+            " · {} · {} · {} · {}",
+            localized(locale, load_source),
+            localized(locale, unload_source),
+            localized(locale, non_stop_source),
+            localized(locale, stop_location_source),
         ));
-        if wait_ticks > 0 {
-            line.push_str(&format!(" · esp.{wait_ticks}"));
-        }
-        if travel_ticks > 0 {
-            line.push_str(&format!(" · viaje {travel_ticks}"));
-        }
+        append_order_times(&mut line, locale, wait_ticks, travel_ticks);
     } else if let VehicleOrder::Depot {
         stop,
         wait_ticks,
@@ -372,34 +458,28 @@ fn order_row_label(
     } = order
     {
         if stop {
-            line.push_str(" · parar");
+            line.push_str(" · ");
+            line.push_str(localized(locale, "parar"));
         } else {
-            line.push_str(" · servicio");
+            line.push_str(" · ");
+            line.push_str(localized(locale, "servicio"));
         }
         if let Some(cargo) = refit_cargo {
-            line.push_str(&format!(
-                " · refit {}",
-                openttdrs_core::cargo_display_name(cargo)
-            ));
+            line.push_str(&format!(" · refit {}", order_cargo_label(locale, cargo)));
         }
-        if wait_ticks > 0 {
-            line.push_str(&format!(" · esp.{wait_ticks}"));
-        }
-        if travel_ticks > 0 {
-            line.push_str(&format!(" · viaje {travel_ticks}"));
-        }
+        append_order_times(&mut line, locale, wait_ticks, travel_ticks);
     } else if let VehicleOrder::Waypoint { travel_ticks, .. } = order
         && travel_ticks > 0
     {
-        line.push_str(&format!(" · viaje {travel_ticks}"));
+        append_order_times(&mut line, locale, 0, travel_ticks);
     }
     if let Some(st) = station_at_tile(sim, pos)
-        && let Some(note) = stop_kind_mismatch_note(vehicle, st)
+        && let Some(note) = stop_kind_mismatch_note(locale, vehicle, st)
     {
         line.push_str(note);
     }
     if stuck_here {
-        line.push_str(" · sin ruta por red");
+        line.push_str(localized(locale, " · sin ruta por red"));
     }
     line
 }
@@ -407,12 +487,17 @@ fn order_row_label(
 #[cfg(test)]
 mod tests {
     use openttdrs_core::prelude::*;
+    use openttdrs_core::{CargoType, OrderConditionKind};
 
+    use crate::i18n::Locale;
     use crate::state::SimWorld;
     use crate::ui::toolbar::OrderEditState;
     use crate::ui::vehicle_chain::VehicleChainRegistry;
 
-    use super::order_row_label;
+    use super::{
+        empty_order_hint, order_cargo_label, order_panel_title, order_row_label,
+        stop_kind_mismatch_note,
+    };
 
     #[test]
     fn order_row_labels_depots() {
@@ -425,8 +510,15 @@ mod tests {
         let vehicle = Vehicle::new(1, VehicleKind::Bus, depot, depot);
 
         assert!(
-            order_row_label(0, VehicleOrder::tile(depot), &vehicle, &sim, false)
-                .contains("Depósito")
+            order_row_label(
+                Locale::Es,
+                0,
+                VehicleOrder::tile(depot),
+                &vehicle,
+                &sim,
+                false
+            )
+            .contains("Depósito")
         );
 
         let rail_depot = TileCoord::new(2, 3);
@@ -439,8 +531,15 @@ mod tests {
         );
         let train = Vehicle::new(2, VehicleKind::Train, rail_depot, rail_depot);
         assert!(
-            order_row_label(0, VehicleOrder::tile(rail_depot), &train, &sim, false)
-                .contains("Depósito vía")
+            order_row_label(
+                Locale::Es,
+                0,
+                VehicleOrder::tile(rail_depot),
+                &train,
+                &sim,
+                false,
+            )
+            .contains("Depósito vía")
         );
     }
 
@@ -456,7 +555,7 @@ mod tests {
             openttdrs_core::OrderNonStop::NonStopDestination,
         );
 
-        let label = order_row_label(0, order, &vehicle, &sim, false);
+        let label = order_row_label(Locale::Es, 0, order, &vehicle, &sim, false);
         assert!(label.contains("completar una carga"));
         assert!(label.contains("descarga forzada"));
         assert!(label.contains("sin paradas intermedias"));
@@ -478,9 +577,67 @@ mod tests {
             panic!("station order should support platform position");
         };
 
-        let label = order_row_label(0, order, &vehicle, &sim, false);
+        let label = order_row_label(Locale::Es, 0, order, &vehicle, &sim, false);
         assert!(label.contains("paradas intermedias"));
         assert!(label.contains("andén lejano"));
+    }
+
+    #[test]
+    fn order_panel_dynamic_text_follows_the_active_locale() {
+        let sim = SimWorld::default();
+        let stop = TileCoord::new(2, 2);
+        let mut vehicle = Vehicle::new(1, VehicleKind::Truck, stop, stop);
+        vehicle.shared_order_id = Some(7);
+        let Some(order) = VehicleOrder::station_with_types(
+            stop,
+            openttdrs_core::OrderLoadType::FullLoadAny,
+            openttdrs_core::OrderUnloadType::Unload,
+            openttdrs_core::OrderNonStop::NonStopDestination,
+        )
+        .with_cycled_wait() else {
+            panic!("station order should support a wait timetable");
+        };
+        let order = order.with_cycled_travel();
+
+        let title = order_panel_title(Locale::En, &vehicle, true);
+        assert!(title.contains("(Orders)"));
+        assert!(title.contains("shared pool #7"));
+        assert!(title.contains("click a stop"));
+        assert_eq!(
+            empty_order_hint(Locale::En),
+            "No orders — “Go to” and click a stop on the map."
+        );
+
+        let label = order_row_label(Locale::En, 0, order, &vehicle, &sim, true);
+        assert!(label.contains("Station"));
+        assert!(label.contains("full load any cargo"));
+        assert!(label.contains("unload all"));
+        assert!(label.contains("non-stop"));
+        assert!(label.contains("middle of platform"));
+        assert!(label.contains("wait 30"));
+        assert!(label.contains("travel 60"));
+        assert!(label.contains("no network route"));
+        let Some(depot_refit) =
+            VehicleOrder::depot(stop).with_cycled_depot_refit(&[CargoType::Passengers])
+        else {
+            panic!("depot order should support cargo refit");
+        };
+        let depot_label = order_row_label(Locale::En, 1, depot_refit, &vehicle, &sim, false);
+        assert!(depot_label.contains("refit passengers"));
+        assert_eq!(
+            order_cargo_label(Locale::En, CargoType::Custom(17)),
+            "custom cargo"
+        );
+
+        let conditional = VehicleOrder::conditional(OrderConditionKind::CargoLoadAbove, 50, 2);
+        let conditional_label = order_row_label(Locale::En, 2, conditional, &vehicle, &sim, false);
+        assert!(conditional_label.contains("If load>50% → order3"));
+
+        let bus_stop = Station::new_with_kind(stop, StopKind::BusStop);
+        assert_eq!(
+            stop_kind_mismatch_note(Locale::En, &vehicle, &bus_stop),
+            Some(" — incompatible: buses only")
+        );
     }
 
     #[test]

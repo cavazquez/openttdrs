@@ -28,6 +28,7 @@ mod tests {
     use openttdrs_core::prelude::*;
 
     use crate::render::{PrimaryGameCamera, RemapMapVisualsPending, VehicleIndex};
+    use crate::settings::ClientPreferences;
     use crate::state::{ClientScreen, SimWorld};
     use crate::ui::audio_settings_window::SoundMusicWindowState;
     use crate::ui::hud::{HoveredTileCoord, HudBuildFeedback, SelectedTileInfo, SimHudControls};
@@ -149,6 +150,51 @@ mod tests {
             Projection::Orthographic(OrthographicProjection::default_2d()),
         ));
         app.world_mut().run_system_once(sync_order_panel).unwrap();
+    }
+
+    #[test]
+    fn order_panel_sync_uses_the_active_locale_for_dynamic_title() {
+        use bevy::asset::AssetPlugin;
+
+        let asset_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins).add_plugins(AssetPlugin {
+            file_path: asset_root.into(),
+            ..default()
+        });
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        app.world_mut().run_system_once(setup_order_panel).unwrap();
+
+        let pos = TileCoord::new(2, 2);
+        let mut vehicle = Vehicle::new(1, VehicleKind::Truck, pos, pos);
+        vehicle.orders = vec![VehicleOrder::station(pos)];
+        let mut sim = SimWorld::default();
+        sim.state.vehicles.push(vehicle.clone());
+        let mut orders = OrderEditState::default();
+        orders.bind_slot(0, vehicle.id, vehicle.orders, None);
+        let prefs = ClientPreferences {
+            language: "en".into(),
+            ..ClientPreferences::default()
+        };
+
+        app.world_mut().insert_resource(orders);
+        app.world_mut().insert_resource(sim);
+        app.world_mut().insert_resource(prefs);
+        insert_order_pick_test_resources(app.world_mut());
+        app.world_mut().spawn((
+            PrimaryGameCamera,
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+        app.world_mut().run_system_once(sync_order_panel).unwrap();
+
+        let world = app.world_mut();
+        let mut titles =
+            world.query::<(&crate::ui::floating_window::FloatingWindowTitleText, &Text)>();
+        assert!(titles.iter(world).any(|(title, text)| {
+            title.0 == crate::ui::floating_window::FloatingWindowId::Orders
+                && text.as_str().contains("(Orders)")
+        }));
     }
 
     #[test]

@@ -4,8 +4,10 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{TICKS_PER_MONTH, cargo_display_name};
 
+use crate::i18n::{Locale, localized_text};
 use crate::iso::tile_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_CREAM, WINDOW_TEXT,
@@ -44,7 +46,20 @@ pub(crate) enum SubsidyListAction {
 #[derive(Default)]
 pub(crate) struct SubsidyListCache {
     tick: u64,
+    locale: Option<Locale>,
     rows: Vec<(u32, bool, String)>,
+}
+
+impl SubsidyListCache {
+    fn needs_refresh(&self, tick: u64, locale: Locale, rows: &[(u32, bool, String)]) -> bool {
+        self.tick != tick || self.locale != Some(locale) || self.rows != rows
+    }
+
+    fn reset(&mut self) {
+        self.tick = 0;
+        self.locale = None;
+        self.rows.clear();
+    }
 }
 
 pub(crate) fn setup_subsidy_list(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -146,33 +161,55 @@ fn months_remaining(expires_tick: u64, now: u64) -> u32 {
     u32::try_from((expires_tick - now).div_ceil(TICKS_PER_MONTH)).unwrap_or(u32::MAX)
 }
 
-fn industry_label(sim: &SimWorld, pos: TileCoord) -> String {
+fn industry_label(locale: Locale, sim: &SimWorld, pos: TileCoord) -> String {
     if let Some(industry) = sim.state.industries.iter().find(|i| i.pos == pos) {
         let name = industry
             .spec
             .map_or_else(|| kind_label(industry.kind), spec_label);
         format!("{name} ({}, {})", pos.x, pos.y)
     } else {
-        format!("Industria ({}, {})", pos.x, pos.y)
+        format!(
+            "{} ({}, {})",
+            localized_text(locale, "Industria"),
+            pos.x,
+            pos.y
+        )
     }
 }
 
-fn station_label(sim: &SimWorld, pos: TileCoord) -> String {
+fn station_label(locale: Locale, sim: &SimWorld, pos: TileCoord) -> String {
     if let Some(station) = sim.state.stations.iter().find(|s| s.pos == pos) {
         station
             .name
             .clone()
             .filter(|n| !n.is_empty())
-            .unwrap_or_else(|| format!("Estación ({}, {})", pos.x, pos.y))
+            .unwrap_or_else(|| {
+                format!(
+                    "{} ({}, {})",
+                    localized_text(locale, "Estación"),
+                    pos.x,
+                    pos.y
+                )
+            })
     } else {
-        format!("Estación ({}, {})", pos.x, pos.y)
+        format!(
+            "{} ({}, {})",
+            localized_text(locale, "Estación"),
+            pos.x,
+            pos.y
+        )
     }
 }
 
-fn format_subsidy_row(sim: &SimWorld, subsidy: &openttdrs_core::Subsidy, tick: u64) -> String {
+fn format_subsidy_row(
+    locale: Locale,
+    sim: &SimWorld,
+    subsidy: &openttdrs_core::Subsidy,
+    tick: u64,
+) -> String {
     let cargo = cargo_display_name(subsidy.cargo);
-    let source = industry_label(sim, subsidy.source_industry_pos);
-    let dest = station_label(sim, subsidy.dest_station_pos);
+    let source = industry_label(locale, sim, subsidy.source_industry_pos);
+    let dest = station_label(locale, sim, subsidy.dest_station_pos);
     if subsidy.is_award_active(tick) {
         let months = months_remaining(subsidy.award_expires_tick, tick);
         let winner = subsidy
@@ -185,10 +222,20 @@ fn format_subsidy_row(sim: &SimWorld, subsidy: &openttdrs_core::Subsidy, tick: u
                     .map(|c| c.name.as_str())
             })
             .unwrap_or("?");
-        format!("[Activo ×2 · {winner}] {cargo}: {source} → {dest} · {months} meses")
+        match locale {
+            Locale::Es => {
+                format!("[Activo ×2 · {winner}] {cargo}: {source} → {dest} · {months} meses")
+            }
+            Locale::En => {
+                format!("[Active ×2 · {winner}] {cargo}: {source} → {dest} · {months} months")
+            }
+        }
     } else {
         let months = months_remaining(subsidy.offer_expires_tick, tick);
-        format!("[Oferta] {cargo}: {source} → {dest} · {months} meses")
+        match locale {
+            Locale::Es => format!("[Oferta] {cargo}: {source} → {dest} · {months} meses"),
+            Locale::En => format!("[Offer] {cargo}: {source} → {dest} · {months} months"),
+        }
     }
 }
 
@@ -267,6 +314,7 @@ fn center_on_tile(
 pub(crate) fn sync_subsidy_list(
     state: Res<SubsidyListState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     list_roots: Query<Entity, With<SubsidyListRoot>>,
     children_q: Query<&Children>,
@@ -282,12 +330,13 @@ pub(crate) fn sync_subsidy_list(
     };
     if !state.open {
         *visibility = Visibility::Hidden;
-        cache.rows.clear();
+        cache.reset();
         return;
     }
     *visibility = Visibility::Visible;
 
     let tick = sim.state.tick.get();
+    let locale = prefs.locale();
     let mut rows: Vec<(u32, bool, String)> = sim
         .state
         .subsidies
@@ -297,16 +346,17 @@ pub(crate) fn sync_subsidy_list(
             (
                 s.id,
                 s.is_award_active(tick),
-                format_subsidy_row(&sim, s, tick),
+                format_subsidy_row(locale, &sim, s, tick),
             )
         })
         .collect();
     rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
 
-    if cache.tick == tick && cache.rows == rows {
+    if !cache.needs_refresh(tick, locale, &rows) {
         return;
     }
     cache.tick = tick;
+    cache.locale = Some(locale);
     cache.rows.clone_from(&rows);
 
     let Ok(list_root) = list_roots.single() else {
@@ -448,5 +498,55 @@ mod tests {
         assert_eq!(months_remaining(TICKS_PER_MONTH, 0), 1);
         assert_eq!(months_remaining(TICKS_PER_MONTH * 3, TICKS_PER_MONTH), 2);
         assert_eq!(months_remaining(10, 10), 0);
+    }
+
+    #[test]
+    fn subsidy_rows_follow_locale_without_translating_cargo_data() {
+        let state = GameState::new(8, 8);
+        let sim = SimWorld {
+            state,
+            ..SimWorld::default()
+        };
+        let subsidy = Subsidy {
+            id: 4,
+            cargo: CargoType::Coal,
+            source_industry_pos: TileCoord::new(1, 2),
+            dest_station_pos: TileCoord::new(5, 6),
+            source_town_pos: None,
+            dest_town_pos: None,
+            offer_expires_tick: TICKS_PER_MONTH * 2,
+            awarded: false,
+            award_expires_tick: 0,
+            awarded_company: None,
+        };
+
+        let english = format_subsidy_row(Locale::En, &sim, &subsidy, 0);
+        assert!(english.starts_with("[Offer]"));
+        assert!(english.contains(cargo_display_name(CargoType::Coal)));
+        assert!(english.contains("Industry (1, 2)"));
+        assert!(english.contains("Station (5, 6)"));
+        assert!(english.ends_with("2 months"));
+
+        let spanish = format_subsidy_row(Locale::Es, &sim, &subsidy, 0);
+        assert!(spanish.starts_with("[Oferta]"));
+        assert!(spanish.contains(cargo_display_name(CargoType::Coal)));
+        assert!(spanish.contains("Industria (1, 2)"));
+        assert!(spanish.contains("Estación (5, 6)"));
+        assert!(spanish.ends_with("2 meses"));
+    }
+
+    #[test]
+    fn subsidy_cache_invalidates_when_only_locale_changes() {
+        let rows = vec![(4, false, "[Oferta] Coal".to_owned())];
+        let mut cache = SubsidyListCache {
+            tick: 12,
+            locale: Some(Locale::Es),
+            rows: rows.clone(),
+        };
+        assert!(!cache.needs_refresh(12, Locale::Es, &rows));
+        assert!(cache.needs_refresh(12, Locale::En, &rows));
+        assert!(cache.needs_refresh(13, Locale::Es, &rows));
+        cache.reset();
+        assert!(cache.needs_refresh(0, Locale::Es, &[]));
     }
 }

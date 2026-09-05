@@ -28,6 +28,14 @@ ROOT = Path(__file__).resolve().parents[1]
 MAX_ALIGNMENT_RADIUS = 64
 DEFAULT_HOTSPOT_CELL_SIZE = 64
 DEFAULT_HOTSPOT_LIMIT = 24
+OPENTTD_ZOOM_BY_ORTHOGRAPHIC_SCALE = {
+    0.25: "In4x",
+    0.5: "In2x",
+    1.0: "Normal",
+    2.0: "Out2x",
+    4.0: "Out4x",
+    8.0: "Out8x",
+}
 
 
 def relative(path: Path) -> str:
@@ -249,6 +257,23 @@ def artifact(path: Path) -> dict[str, str]:
     return {"path": relative(path), "sha256": sha256(path)}
 
 
+def openttd_zoom_for_orthographic_scale(scale: float) -> str:
+    """Devuelve el `ZoomLevel` que recibió el exportador nativo.
+
+    El comparador no admite escalas arbitrarias: los dos capturadores sólo son
+    comparables en los seis pasos discretos que usan OpenTTD y openttdrs.
+    Registrar el nombre nativo evita que un informe diga falsamente `normal`
+    para una captura `Out2x` o `Out4x`.
+    """
+    try:
+        return OPENTTD_ZOOM_BY_ORTHOGRAPHIC_SCALE[scale]
+    except KeyError as exc:
+        accepted = ", ".join(str(value).rstrip(".0") for value in OPENTTD_ZOOM_BY_ORTHOGRAPHIC_SCALE)
+        raise GateError(
+            f"--openttdrs-scale debe ser uno de {accepted} para coincidir con OpenTTD"
+        ) from exc
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("reference", type=Path, help="PNG obtenido de OpenTTD")
@@ -292,8 +317,7 @@ def main(argv: list[str]) -> int:
             raise GateError("--hotspot-cell-size debe ser positivo")
         if args.hotspot_limit <= 0:
             raise GateError("--hotspot-limit debe ser positivo")
-        if not args.openttdrs_scale > 0:
-            raise GateError("--openttdrs-scale debe ser positivo")
+        openttd_zoom = openttd_zoom_for_orthographic_scale(args.openttdrs_scale)
         center = parse_center(args.center)
         requested_resolution = parse_resolution(args.resolution)
         reference, candidate = read_png(args.reference), read_png(args.candidate)
@@ -325,7 +349,7 @@ def main(argv: list[str]) -> int:
             "capture": {
                 "center": center,
                 "requested_resolution": requested_resolution,
-                "openttd_zoom": "normal",
+                "openttd_zoom": openttd_zoom,
                 "openttdrs_orthographic_scale": args.openttdrs_scale,
                 "reference_graphics": args.reference_graphics,
                 "candidate_graphics": args.candidate_graphics,

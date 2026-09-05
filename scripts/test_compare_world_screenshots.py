@@ -15,7 +15,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "compare_world_screenshots.py"
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from compare_world_screenshots import best_candidate_translation, image_metrics, raster_hotspots
+from compare_world_screenshots import (
+    best_candidate_translation,
+    image_metrics,
+    openttd_zoom_for_orthographic_scale,
+    raster_hotspots,
+)
 from window_visual_regression import PNG_SIGNATURE, PngImage, read_png, write_png
 
 
@@ -92,6 +97,17 @@ def main() -> int:
         print(f"FAIL: hotspots raster inesperados: {hotspot_report}", file=sys.stderr)
         return 1
 
+    if (
+        openttd_zoom_for_orthographic_scale(0.25) != "In4x"
+        or openttd_zoom_for_orthographic_scale(0.5) != "In2x"
+        or openttd_zoom_for_orthographic_scale(1.0) != "Normal"
+        or openttd_zoom_for_orthographic_scale(2.0) != "Out2x"
+        or openttd_zoom_for_orthographic_scale(4.0) != "Out4x"
+        or openttd_zoom_for_orthographic_scale(8.0) != "Out8x"
+    ):
+        print("FAIL: mapeo de zoom nativo inesperado", file=sys.stderr)
+        return 1
+
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
         reference_path = root / "reference.png"
@@ -123,6 +139,8 @@ def main() -> int:
             "40x32",
             "--candidate-graphics",
             "OpenGFX · 8bpp",
+            "--openttdrs-scale",
+            "4",
             "--alignment-radius",
             "4",
             "--alignment-stride",
@@ -138,6 +156,9 @@ def main() -> int:
             return 1
         if report["capture"]["profile"] != "clean-static":
             print(f"FAIL: perfil de captura inesperado: {report}", file=sys.stderr)
+            return 1
+        if report["capture"]["openttd_zoom"] != "Out4x":
+            print(f"FAIL: informe sin zoom nativo real: {report}", file=sys.stderr)
             return 1
         if report["hotspots"]["cell_size_px"] != 64 or not report["hotspots"]["reported_cells"]:
             print(f"FAIL: reporte sin hotspots raster: {report}", file=sys.stderr)
@@ -160,6 +181,27 @@ def main() -> int:
         if bad_resolution.returncode != 2 or "resolución real" not in bad_resolution.stderr:
             print(bad_resolution.stdout, bad_resolution.stderr, file=sys.stderr)
             print("FAIL: resolución distinta debe rechazarse", file=sys.stderr)
+            return 1
+
+        bad_scale = run(
+            str(reference_path),
+            str(candidate_path),
+            "--diff",
+            str(diff_path),
+            "--report",
+            str(report_path),
+            "--center",
+            "189,126",
+            "--resolution",
+            "40x32",
+            "--candidate-graphics",
+            "OpenGFX · 8bpp",
+            "--openttdrs-scale",
+            "3",
+        )
+        if bad_scale.returncode != 2 or "debe ser uno de" not in bad_scale.stderr:
+            print(bad_scale.stdout, bad_scale.stderr, file=sys.stderr)
+            print("FAIL: escala fuera de la matriz debe rechazarse", file=sys.stderr)
             return 1
 
     print("OK: el diff raster focal detecta desplazamiento y geometría inválida")

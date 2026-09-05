@@ -28,6 +28,13 @@ if [[ ! -f "$SAV" ]]; then
   echo "error: no existe $SAV" >&2
   exit 1
 fi
+case "$SCALE" in
+  0.25|0.5|1|2|4|8) ;;
+  *)
+    echo "error: escala inválida '$SCALE' (usar 0.25, 0.5, 1, 2, 4 u 8)" >&2
+    exit 2
+    ;;
+esac
 if [[ ! -x "$BIN" ]]; then
   echo "error: no hay binario OpenTTD en $BIN" >&2
   echo "  ./patches/openttd-15.3-snapshot-export/integrate.sh" >&2

@@ -36,6 +36,14 @@ if [[ "$MODE" != "8bpp" && "${OPENTTDRS_WORLD_SCREENSHOT_ALLOW_GFX_MISMATCH:-}" 
   exit 2
 fi
 
+case "$SCALE" in
+  0.25|0.5|1|2|4|8) ;;
+  *)
+    echo "error: escala inválida '$SCALE' (usar 0.25, 0.5, 1, 2, 4 u 8)" >&2
+    exit 2
+    ;;
+esac
+
 mkdir -p "$OUT_DIR"
 export OPENTTDRS_WORLD_SCREENSHOT_CLEAN="$CLEAN"
 if [[ "$CLEAN" == "0" || "$CLEAN" == "false" || "$CLEAN" == "no" || "$CLEAN" == "off" ]]; then

@@ -20,7 +20,8 @@ El directorio de salida contiene cuatro artefactos:
 - `diff.png`: negro para píxeles iguales, color amplificado para diferencias y
   magenta cuando falta cobertura de la candidata.
 - `report.json`: hashes, save, centro, resolución, perfil gráfico, métricas y
-  traducción de cámara encontrada.
+  traducción de cámara encontrada. Su campo `capture.openttd_zoom` declara el
+  `ZoomLevel` nativo efectivo (`In4x`…`Out8x`), no una etiqueta fija.
 
 El argumento `escala` (o `OPENTTDRS_WORLD_SCREENSHOT_SCALE`) se propaga a ambos
 capturadores con esta convención compartida:

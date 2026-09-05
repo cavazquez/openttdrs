@@ -56,7 +56,8 @@ capturas a 1×/0.5×/0.25×/0.125×, revisadas en
 `/tmp/openttdrs-house-atlas-scale-{1,2,4,8}.png`. El mapa se ve en los cuatro
 niveles; las capturas usan los assets locales y no sustituyen la prueba
 aislada sin PNGs ni certifican raster exacto. Persisten marcas negras pequeñas
-en agua al alejar a 0.5×/0.25×, pendientes del diagnóstico de #326. #333
+en agua al alejar a 0.5×/0.25×, aisladas como el sub-issue visual #349 de
+#326. #333
 espera el resultado remoto del nuevo commit.
 
 Brechas identificadas al verificar el cliente: #349 aísla marcas negras de
@@ -77,7 +78,22 @@ anterior, mientras Kale generó los seis zooms a 1280×720. El integrador tambi�
 detecta un fork derivado del pin que ya contiene `snapshot_export.cpp`: conserva
 esa fuente y sus hooks, sin añadir el `world_raw` duplicado. El contrato y el
 comando canónico están en `WORLD_SCREENSHOT_SCHEMA.md`; #349 permanece abierto
-hasta aislar agua plana y atribuir una causa concreta.
+hasta aislar agua plana y atribuir una causa concreta. Una corrección posterior
+del informe exige esos seis pasos discretos y escribe el `ZoomLevel` nativo
+efectivo en `report.json`, de modo que una referencia `Out2x` o `Out4x` ya no
+queda falsamente identificada como `normal`.
+
+Agua plana #349 (2026-09-05): en el bloque interior 4×4 `(140,12)`…`(143,15)`
+de Kale, el PNG OpenGFX de agua mide 64×31 aunque el rombo lógico mide 64×32.
+Al reducir el sprite directamente a `Out2x`/`Out4x` quedaba media fila sin
+cobertura entre vecinos y se veía el framebuffer negro. El renderer conserva
+64×31 en `In4x`/`In2x`/Normal y aplica el footprint lógico 64×32 sólo a agua
+animada en `Out2x`/`Out4x`/`Out8x`, incluidos chunks que aparecen tras el
+zoom; las esclusas estáticas no se alteran. Una región de agua pura de 128×128
+píxeles en `Out2x` pasó de 384 píxeles negros a 0, y Normal mantiene AE=0
+frente a la captura previa. Se revisaron los seis zooms. Esto resuelve sólo la
+costura negra de #349; las diferencias de composición, sprites y cámara siguen
+abiertas en el padre #326.
 
 Seguimiento #347 / #333 (2026-09-05): el primer workflow limpio encontró un
 defecto en el *bootstrap* de la propia regresión, no una ausencia del atlas

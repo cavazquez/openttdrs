@@ -7,6 +7,8 @@ use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::{NewGrfEntry, format_grfid, inspect_grf_file, scan_grf_file, validate_stack};
 
+use crate::i18n::{Locale, localized_text};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::command_error_text::command_error_message;
 use crate::ui::floating_window::{
@@ -66,6 +68,24 @@ pub(crate) enum NewGrfAction {
     ParamDec,
     /// Incrementa el valor del parámetro seleccionado.
     ParamInc,
+}
+
+fn newgrf_param_line(locale: Locale, index: u8, value: u32) -> String {
+    match locale {
+        Locale::Es => format!("param[{index}] = {value}  (P◀/P▶ elige índice, −/+ cambia valor)"),
+        Locale::En => format!("param[{index}] = {value}  (P◀/P▶ chooses index, −/+ changes value)"),
+    }
+}
+
+/// `inspect_text` normalmente es un informe técnico producido por el parser;
+/// sólo se traduce el único estado de chrome que produce esta ventana.
+fn localized_newgrf_inspect_status(locale: Locale, text: &str) -> String {
+    match text {
+        "Selecciona una entrada del stack." => {
+            localized_text(locale, "Selecciona una entrada del stack.")
+        }
+        _ => text.to_owned(),
+    }
 }
 
 pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -215,6 +235,7 @@ fn spawn_action_btn(
 pub(crate) fn sync_newgrf_window(
     state: Res<NewGrfWindowState>,
     sim: Option<Res<SimWorld>>,
+    prefs: Res<ClientPreferences>,
     mut windows: Query<(&FloatingWindow, &mut Visibility)>,
     mut rows: Query<(&NewGrfRow, &mut Node, &mut BackgroundColor), With<Button>>,
     mut texts: Query<(&NewGrfRowText, &mut Text), Without<NewGrfInspectText>>,
@@ -272,22 +293,26 @@ pub(crate) fn sync_newgrf_window(
             **text = String::new();
         }
     }
+    let locale = prefs.locale();
     let param_line = state.selected.and_then(|idx| {
         let entry = stack.get(idx)?;
         let p = state.selected_param;
-        Some(format!(
-            "param[{p}] = {}  (P◀/P▶ elige índice, −/+ cambia valor)",
-            entry.param(usize::from(p))
-        ))
+        Some(newgrf_param_line(locale, p, entry.param(usize::from(p))))
     });
     let inspect_body = if state.inspect_text.is_empty() {
         param_line.unwrap_or_else(|| {
-            "Selecciona una entrada: Inspeccionar o edita params (P◀/P▶, −/+).".into()
+            localized_text(
+                locale,
+                "Selecciona una entrada: Inspeccionar o edita params (P◀/P▶, −/+).",
+            )
         })
     } else if let Some(pline) = param_line {
-        format!("{pline}\n{}", state.inspect_text)
+        format!(
+            "{pline}\n{}",
+            localized_newgrf_inspect_status(locale, &state.inspect_text)
+        )
     } else {
-        state.inspect_text.clone()
+        localized_newgrf_inspect_status(locale, &state.inspect_text)
     };
     for mut text in &mut inspect_q {
         **text = inspect_body.clone();
@@ -609,5 +634,32 @@ pub(crate) fn newgrf_window_on_closed(
             state.selected_param = 0;
             state.inspect_text.clear();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{localized_newgrf_inspect_status, newgrf_param_line};
+    use crate::i18n::{Locale, localized_text};
+
+    #[test]
+    fn newgrf_chrome_follows_locale_without_translating_report_data() {
+        assert_eq!(
+            newgrf_param_line(Locale::En, 7, 42),
+            "param[7] = 42  (P◀/P▶ chooses index, −/+ changes value)"
+        );
+        assert_eq!(
+            newgrf_param_line(Locale::Es, 7, 42),
+            "param[7] = 42  (P◀/P▶ elige índice, −/+ cambia valor)"
+        );
+        assert_eq!(
+            localized_newgrf_inspect_status(Locale::En, "Selecciona una entrada del stack."),
+            "Select an entry in the stack."
+        );
+        let report = "[4750464F] opengfx_base.grf\nscan: NewContainer size=12B";
+        assert_eq!(localized_newgrf_inspect_status(Locale::En, report), report);
+        assert_eq!(localized_text(Locale::En, "Quitar"), "Remove");
+        assert_eq!(localized_text(Locale::En, "Añadir…"), "Add…");
+        assert_eq!(localized_text(Locale::En, "Inspeccionar"), "Inspect");
     }
 }

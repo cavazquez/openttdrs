@@ -424,6 +424,10 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Selecciona una entrada: Inspeccionar o edita params (P◀/P▶, −/+)." => {
             "Select an entry: Inspect it or edit params (P◀/P▶, −/+)."
         }
+        "Selecciona una entrada del stack." => "Select an entry in the stack.",
+        "Quitar" => "Remove",
+        "Añadir…" => "Add…",
+        "Inspeccionar" => "Inspect",
         "Pools de órdenes compartidas." => "Shared order pools.",
         "Órdenes compartidas" => "Shared orders",
         "Pools existentes. Abre desde Órdenes → Pools para vincular." => {

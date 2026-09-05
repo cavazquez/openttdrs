@@ -45,6 +45,11 @@ al sustituir una casa, las industrias `OnlyInTown` ahora usan el clear completo
 de pueblo. La cohorte Tropic 512² con settings de río explícitos vuelve a ser
 exacta; la evidencia y sus límites están en `random-map-issues.md` y
 `evidence/rmap-146.json`.
+RMAP-147 / #362 amplía el gate a los pools ordenados de industrias y objetos:
+la cohorte Temperate/default 512² de `1330935378` es exacta por tiles, bloques
+4×4, RNG, pueblos, 213 industrias y 65 objetos. La evidencia canónica y los
+límites (campos restantes, intentos y ticks) están sólo en
+`random-map-issues.md` y `evidence/rmap-147.json`; #338 sigue abierto.
 
 Estado CI observado de `712ec4ba`: Parity docs, Platform check y Fuzz replay
 pasan; CI supera formato, Clippy, rustdoc y auditorías, pero falla en

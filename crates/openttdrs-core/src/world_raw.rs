@@ -74,13 +74,22 @@ pub struct WorldRawMetadata {
     pub generation: Option<WorldRawGeneration>,
 }
 
-/// Frontera del RNG global y secuencia/demografía de pueblos (no el CITY completo).
+/// Frontera del RNG global y secuencias de entidades de una partida nueva.
+///
+/// Los campos sólo se emiten para `--generate`: no cambian el contrato de
+/// carga de un `.sav`. Las secuencias conservan el orden del pool nativo para
+/// que el comparador por fases pueda detectar una identidad distinta incluso
+/// cuando las teselas resultantes sean iguales.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WorldRawGeneration {
     pub random_state_0: u32,
     pub random_state_1: u32,
     pub town_count: usize,
     pub town_positions: Vec<WorldRawTownPosition>,
+    pub industry_count: usize,
+    pub industry_positions: Vec<WorldRawIndustryPosition>,
+    pub object_count: usize,
+    pub object_positions: Vec<WorldRawObjectPosition>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -92,24 +101,86 @@ pub struct WorldRawTownPosition {
     pub num_houses: u16,
 }
 
+/// Identidad observable de una fila del pool `Industry` durante generación.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WorldRawIndustryPosition {
+    pub id: u32,
+    /// `Industry::type` de `OpenTTD`; se conserva el nombre JSON nativo.
+    #[serde(rename = "type")]
+    pub industry_type: u16,
+    pub x: i32,
+    pub y: i32,
+    /// Ordinal uno-based de `Industry::selected_layout` (cero es legacy).
+    pub selected_layout: u8,
+}
+
+/// Identidad observable de una fila del pool `Object` durante generación.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WorldRawObjectPosition {
+    pub id: u32,
+    /// `Object::type` de `OpenTTD`; se conserva el nombre JSON nativo.
+    #[serde(rename = "type")]
+    pub object_type: u16,
+    pub x: i32,
+    pub y: i32,
+    pub width: u16,
+    pub height: u16,
+    pub view: u8,
+}
+
 impl WorldRawGeneration {
     #[must_use]
     pub fn from_state(state: &crate::GameState) -> Self {
+        let town_positions: Vec<_> = state
+            .towns
+            .iter()
+            .map(|town| WorldRawTownPosition {
+                id: town.id,
+                x: town.pos.x,
+                y: town.pos.y,
+                population: town.population,
+                num_houses: town.num_houses,
+            })
+            .collect();
+        let industry_positions: Vec<_> = state
+            .industries
+            .iter()
+            .map(|industry| WorldRawIndustryPosition {
+                id: u32::from(industry.instance_id),
+                // La generación vanilla siempre define `spec`; el centinela
+                // conserva explícito un estado genérico que todavía no se
+                // puede correlacionar con un `IndustryType` nativo.
+                industry_type: industry.spec.map_or_else(
+                    || industry.newgrf_type_id.unwrap_or(u16::MAX),
+                    |spec| u16::from(spec.native_type()),
+                ),
+                x: industry.pos.x,
+                y: industry.pos.y,
+                selected_layout: industry.selected_layout,
+            })
+            .collect();
+        let object_positions: Vec<_> = state
+            .objects
+            .iter()
+            .map(|object| WorldRawObjectPosition {
+                id: object.object_id,
+                object_type: object.object_type,
+                x: object.tile.x,
+                y: object.tile.y,
+                width: object.width,
+                height: object.height,
+                view: object.view,
+            })
+            .collect();
         Self {
             random_state_0: state.random.state[0],
             random_state_1: state.random.state[1],
-            town_count: state.towns.len(),
-            town_positions: state
-                .towns
-                .iter()
-                .map(|town| WorldRawTownPosition {
-                    id: town.id,
-                    x: town.pos.x,
-                    y: town.pos.y,
-                    population: town.population,
-                    num_houses: town.num_houses,
-                })
-                .collect(),
+            town_count: town_positions.len(),
+            town_positions,
+            industry_count: industry_positions.len(),
+            industry_positions,
+            object_count: object_positions.len(),
+            object_positions,
         }
     }
 }
@@ -329,12 +400,19 @@ mod tests {
         WorldRawContext, WorldRawMetadata, WorldRawRegion, sha256_hex, write_world_raw_jsonl,
     };
     use crate::map::{Map, TileCoord};
+    use crate::sav::SavObject;
+    use crate::{Industry, IndustryKind, IndustrySpec};
 
     #[test]
-    fn generation_metadata_preserves_rng_and_town_sequence_without_affecting_sav() {
+    fn generation_metadata_preserves_rng_and_entity_pool_sequences_without_affecting_sav() {
         let mut state = crate::GameState::from_map(Map::new_flat(64, 64, 0));
         state.random.state = [u32::MAX, 123];
         state.towns = vec![
+            crate::Town {
+                id: 2,
+                pos: TileCoord::new(5, 31),
+                ..Default::default()
+            },
             crate::Town {
                 id: 7,
                 pos: TileCoord::new(23, 11),
@@ -342,16 +420,35 @@ mod tests {
                 num_houses: 87,
                 ..Default::default()
             },
-            crate::Town {
-                id: 2,
-                pos: TileCoord::new(5, 31),
-                ..Default::default()
-            },
         ];
+        state.industries = vec![
+            Industry::with_tiles_spec(
+                TileCoord::new(17, 19),
+                IndustryKind::Factory,
+                IndustrySpec::Factory,
+                vec![TileCoord::new(17, 19)],
+                0,
+            )
+            .with_instance_id(3)
+            .with_selected_layout(2),
+        ];
+        state.objects = vec![SavObject {
+            object_id: 5,
+            tile: TileCoord::new(41, 43),
+            width: 1,
+            height: 2,
+            town: 2,
+            build_date: 0,
+            colour: 3,
+            view: 1,
+            object_type: 1,
+        }];
         let mut header = metadata(&state.map, None);
         let sav = serde_json::to_value(&header).expect("sav metadata");
         assert!(sav.get("random_state_0").is_none());
         assert!(sav.get("town_positions").is_none());
+        assert!(sav.get("industry_positions").is_none());
+        assert!(sav.get("object_positions").is_none());
         header.generation = Some(super::WorldRawGeneration::from_state(&state));
         let generated = serde_json::to_value(&header).expect("generation metadata");
         assert_eq!(generated["random_state_0"], u32::MAX);
@@ -360,8 +457,22 @@ mod tests {
         assert_eq!(
             generated["town_positions"],
             serde_json::json!([
-                {"id": 7, "x": 23, "y": 11, "population": 12345, "num_houses": 87},
-                {"id": 2, "x": 5, "y": 31, "population": 0, "num_houses": 0}
+                {"id": 2, "x": 5, "y": 31, "population": 0, "num_houses": 0},
+                {"id": 7, "x": 23, "y": 11, "population": 12345, "num_houses": 87}
+            ])
+        );
+        assert_eq!(generated["industry_count"], 1);
+        assert_eq!(
+            generated["industry_positions"],
+            serde_json::json!([
+                {"id": 3, "type": 6, "x": 17, "y": 19, "selected_layout": 2}
+            ])
+        );
+        assert_eq!(generated["object_count"], 1);
+        assert_eq!(
+            generated["object_positions"],
+            serde_json::json!([
+                {"id": 5, "type": 1, "x": 41, "y": 43, "width": 1, "height": 2, "view": 1}
             ])
         );
     }

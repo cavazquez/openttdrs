@@ -14,39 +14,122 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generation_phase_parity as phase  # noqa: E402
 
 
+def valid_generation_state() -> dict[str, object]:
+    """Metadata v4 mínima, completa y ordenada para mutar sin un oráculo externo."""
+    return {
+        "random_state_0": 10,
+        "random_state_1": 20,
+        "town_count": 2,
+        "town_positions": [
+            {"id": 0, "x": 2, "y": 3, "population": 40, "num_houses": 3},
+            {"id": 1, "x": 4, "y": 5, "population": 50, "num_houses": 4},
+        ],
+        "industry_count": 2,
+        "industry_positions": [
+            {"id": 3, "type": 6, "x": 7, "y": 8, "selected_layout": 1},
+            {"id": 4, "type": 9, "x": 9, "y": 10, "selected_layout": 2},
+        ],
+        "object_count": 2,
+        "object_positions": [
+            {"id": 5, "type": 0, "x": 11, "y": 12, "width": 1, "height": 1, "view": 0},
+            {"id": 6, "type": 1, "x": 13, "y": 14, "width": 2, "height": 1, "view": 1},
+        ],
+    }
+
+
 def test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles() -> None:
-    reference = {"random_state_0": 10, "random_state_1": 20, "town_count": 2,
-                 "town_positions": [{"id": 0, "x": 2, "y": 3, "population": 40, "num_houses": 3},
-                                    {"id": 1, "x": 4, "y": 5, "population": 50, "num_houses": 4}]}
+    reference = valid_generation_state()
     tiles = {"exact_match": True, "tile_difference_count": 0}
     assert phase.include_generation_state(tiles, reference, reference)["exact_match"]
-    for key in ("random_state_0", "random_state_1", "id", "x", "y", "population", "num_houses", "order", "count"):
+    mutations = (
+        ("random_state_0", "random_state_0", None, None),
+        ("random_state_1", "random_state_1", None, None),
+        ("town population", "town_positions", 0, "population"),
+        ("industry type", "industry_positions", 0, "type"),
+        ("industry layout", "industry_positions", 0, "selected_layout"),
+        ("industry origin", "industry_positions", 0, "x"),
+        ("object type", "object_positions", 0, "type"),
+        ("object footprint", "object_positions", 0, "width"),
+        ("object view", "object_positions", 0, "view"),
+    )
+    for name, collection, index, field in mutations:
         candidate = copy.deepcopy(reference)
-        if key.startswith("random"):
-            candidate[key] += 1
-        elif key == "order":
-            candidate["town_positions"].reverse()
-        elif key == "count":
-            candidate["town_positions"].pop()
-            candidate["town_count"] -= 1
+        if index is None:
+            candidate[collection] += 1
         else:
-            candidate["town_positions"][0][key] += 10
+            candidate[collection][index][field] += 10
         result = phase.include_generation_state(tiles, reference, candidate)
-        assert result["tiles_exact_match"] and not result["exact_match"], key
+        assert result["tiles_exact_match"] and not result["exact_match"], name
         assert phase.first_divergent_stage({"towns": result}) == "towns"
-        if key in ("population", "num_houses"):
-            first = result["generation_state"]["first_town_difference"]
-            assert first["index"] == 0
-            assert first["reference"][key] + 10 == first["candidate"][key]
+        state = result["generation_state"]
+        if collection == "town_positions":
+            first = state["first_town_difference"]
+        elif collection == "industry_positions":
+            first = state["first_industry_difference"]
+        elif collection == "object_positions":
+            first = state["first_object_difference"]
+        else:
+            continue
+        assert first["index"] == 0
+        assert first["reference"][field] + 10 == first["candidate"][field]
+    for positions in ("town_positions", "industry_positions", "object_positions"):
+        candidate = copy.deepcopy(reference)
+        candidate[positions].reverse()
+        try:
+            phase.compare_generation_state(reference, candidate)
+        except phase.GenerationPhaseError:
+            continue
+        raise AssertionError(f"{positions} desordenado debería fallar cerrado")
+    for count, positions in (
+        ("town_count", "town_positions"),
+        ("industry_count", "industry_positions"),
+        ("object_count", "object_positions"),
+    ):
+        candidate = copy.deepcopy(reference)
+        candidate[positions].pop()
+        candidate[count] -= 1
+        result = phase.include_generation_state(tiles, reference, candidate)
+        assert not result["exact_match"], positions
     assert not phase.include_generation_state({"exact_match": False}, reference, reference)["exact_match"]
 
 
 def test_state_gate_fails_closed_for_unobserved_or_malformed_state() -> None:
-    valid = {"random_state_0": 0, "random_state_1": 1, "town_count": 0, "town_positions": []}
-    invalid = [{}, {**valid, "random_state_0": None}, {**valid, "random_state_1": True},
-               {**valid, "town_count": 1}, {**valid, "town_positions": None},
-               {**valid, "town_count": 1, "town_positions": [{"id": 0, "x": -1, "y": 0, "population": 0, "num_houses": 0}]},
-               {**valid, "town_count": 2, "town_positions": [{"id": 0, "x": 1, "y": 0, "population": 0, "num_houses": 0}] * 2}]
+    valid = valid_generation_state()
+    invalid = [
+        {},
+        {**valid, "random_state_0": None},
+        {**valid, "random_state_1": True},
+        {**valid, "town_count": 1},
+        {**valid, "town_positions": None},
+        {
+            **valid,
+            "town_count": 1,
+            "town_positions": [
+                {"id": 0, "x": -1, "y": 0, "population": 0, "num_houses": 0}
+            ],
+        },
+        {
+            **valid,
+            "town_count": 2,
+            "town_positions": [
+                {"id": 0, "x": 1, "y": 0, "population": 0, "num_houses": 0}
+            ]
+            * 2,
+        },
+    ]
+    for count, positions in (
+        ("industry_count", "industry_positions"),
+        ("object_count", "object_positions"),
+    ):
+        bad = copy.deepcopy(valid)
+        bad[positions][1]["id"] = bad[positions][0]["id"]
+        invalid.append(bad)
+        bad = copy.deepcopy(valid)
+        bad[positions][0]["type"] = None
+        invalid.append(bad)
+        bad = copy.deepcopy(valid)
+        bad[count] -= 1
+        invalid.append(bad)
     for bad in invalid:
         for reference, candidate in ((bad, valid), (valid, bad)):
             try:
@@ -60,15 +143,18 @@ def test_state_gate_rejects_missing_demographics_even_when_both_sides_omit_them(
     town = {"id": 0, "x": 2, "y": 3, "population": 40, "num_houses": 3}
     for key in ("population", "num_houses"):
         for value in (None, -1, True, 1 << 32):
-            bad = {"random_state_0": 0, "random_state_1": 1, "town_count": 1,
-                   "town_positions": [{**town, key: value}]}
+            bad = valid_generation_state()
+            bad["town_count"] = 1
+            bad["town_positions"] = [{**town, key: value}]
             try:
                 phase.compare_generation_state(bad, bad)
             except phase.GenerationPhaseError:
                 continue
             raise AssertionError(f"demografía inválida debería fallar: {key}={value}")
         old = {k: v for k, v in town.items() if k != key}
-        bad = {"random_state_0": 0, "random_state_1": 1, "town_count": 1, "town_positions": [old]}
+        bad = valid_generation_state()
+        bad["town_count"] = 1
+        bad["town_positions"] = [old]
         try:
             phase.compare_generation_state(bad, bad)
         except phase.GenerationPhaseError:
@@ -80,7 +166,8 @@ def test_versioned_oracle_exports_generation_state() -> None:
     source = (phase.ROOT / "patches/openttd-15.3-snapshot-export/src/snapshot_export.cpp").read_text()
     stage = source.split("void OpenttdrsMaybeCaptureGenerationStage(const char *stage)", 1)[1]
     stage = stage.split("void OpenttdrsTraceTreePlacement", 1)[0]
-    assert '#include "town.h"' in source
+    for include in ('#include "town.h"', '#include "industry.h"', '#include "object_base.h"'):
+        assert include in source
     for statement in (
         'metadata["random_state_0"] = _random.state[0];',
         'metadata["random_state_1"] = _random.state[1];',
@@ -88,8 +175,31 @@ def test_versioned_oracle_exports_generation_state() -> None:
         'metadata["town_positions"] = town_positions;',
         'Town::Iterate()', 'town->index.base()', 'TileX(town->xy)', 'TileY(town->xy)',
         'town->cache.population', 'town->cache.num_houses',
+        'metadata["industry_count"] = Industry::GetNumItems();',
+        'metadata["industry_positions"] = industry_positions;',
+        'Industry::Iterate()', 'industry->index.base()', 'industry->type',
+        'industry->location.tile', 'industry->selected_layout',
+        'metadata["object_count"] = Object::GetNumItems();',
+        'metadata["object_positions"] = object_positions;',
+        'Object::Iterate()', 'object->index.base()', 'object->type',
+        'object->location.tile', 'object->location.w', 'object->location.h', 'object->view',
     ):
         assert statement in stage, statement
+
+
+def test_unpinned_integration_synchronizes_the_versioned_snapshot_exporter() -> None:
+    """Un fork instrumentado no puede conservar en silencio un exportador viejo."""
+    source = (
+        phase.ROOT / "patches/openttd-15.3-snapshot-export/integrate.sh"
+    ).read_text(encoding="utf-8")
+    for statement in (
+        'python3 - "$DEST" "$MODE" "$PATCH_DIR" <<\'PY\'',
+        "patch_dir = Path(sys.argv[3])",
+        'for name in ("snapshot_export.cpp", "snapshot_export.h"):',
+        "source = patch_dir / \"src\" / name",
+        "target.write_bytes(source.read_bytes())",
+    ):
+        assert statement in source, statement
 
 
 def test_parse_phases_rejects_reordered_or_unknown_values() -> None:
@@ -204,14 +314,67 @@ def test_rmap_145_toyland_512_evidence_keeps_its_exact_and_limited_scope() -> No
     ]
 
 
+def test_rmap_147_evidence_records_ordered_industry_and_object_pools() -> None:
+    evidence = json.loads(
+        (phase.ROOT / "docs/parity/evidence/rmap-147.json").read_text(encoding="utf-8")
+    )
+    assert evidence["issue"] == 362
+    assert evidence["contract"] == "RMAP-147 ordered industry and object pools at generation boundaries"
+    assert evidence["scope"]["size"] == 512
+    assert evidence["scope"]["seed"] == 1330935378
+    assert evidence["scope"]["climate"] == "temperate"
+    comparison = evidence["comparison"]
+    assert comparison["report_schema_version"] == 4
+    assert comparison["all_exact"] and comparison["first_divergent_stage"] is None
+    assert comparison["block_size"] == 4
+    assert comparison["block_grid"] == {"width": 128, "height": 128, "count": 16384}
+    assert comparison["generation_state_fields"] == [
+        "random_state_0",
+        "random_state_1",
+        "town_count",
+        "town_positions[id,x,y,population,num_houses]",
+        "industry_count",
+        "industry_positions[id,type,x,y,selected_layout]",
+        "object_count",
+        "object_positions[id,type,x,y,width,height,view]",
+    ]
+    results = evidence["phase_results"]
+    assert [result["phase"] for result in results] == evidence["scope"]["phases"]
+    assert all(
+        result["tile_difference_count"] == 0 and result["changed_block_count"] == 0
+        for result in results
+    )
+    assert [(result["industry_count"], result["object_count"]) for result in results] == [
+        (0, 0),
+        (0, 0),
+        (0, 0),
+        (213, 0),
+        (213, 65),
+        (213, 65),
+    ]
+    assert set(evidence["ordered_sequence_sha256"]) == {
+        "towns_at_towns",
+        "industries_at_industries",
+        "objects_at_objects",
+    }
+    assert evidence["not_observed"] == [
+        "industry fields outside identity, type, origin and selected_layout",
+        "object fields outside identity, type, origin, footprint and view",
+        "industry placement attempt traces",
+        "startup and subsequent simulation ticks",
+    ]
+
+
 if __name__ == "__main__":
     test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles()
     test_state_gate_fails_closed_for_unobserved_or_malformed_state()
     test_versioned_oracle_exports_generation_state()
+    test_unpinned_integration_synchronizes_the_versioned_snapshot_exporter()
     test_state_gate_rejects_missing_demographics_even_when_both_sides_omit_them()
     test_parse_phases_rejects_reordered_or_unknown_values()
     test_first_divergent_stage_uses_pipeline_order()
     test_river_settings_are_written_for_non_default_oracle_runs()
     test_river_settings_reject_values_outside_openttd_ranges()
     test_rmap_145_toyland_512_evidence_keeps_its_exact_and_limited_scope()
+    test_rmap_147_evidence_records_ordered_industry_and_object_pools()
     print("OK: generation_phase_parity tests")

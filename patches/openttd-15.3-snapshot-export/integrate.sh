@@ -41,13 +41,14 @@ cp "${PATCH_DIR}/src/world_draw_export.h" "${DEST}/src/world_draw_export.h"
 cp "${PATCH_DIR}/src/world_screenshot_export.cpp" "${DEST}/src/world_screenshot_export.cpp"
 cp "${PATCH_DIR}/src/world_screenshot_export.h" "${DEST}/src/world_screenshot_export.h"
 
-python3 - "$DEST" "$MODE" <<'PY'
+python3 - "$DEST" "$MODE" "$PATCH_DIR" <<'PY'
 from pathlib import Path
 import os
 import sys
 
 dest = Path(sys.argv[1])
 mode = sys.argv[2]
+patch_dir = Path(sys.argv[3])
 allow_unpinned = os.environ.get("OPENTTDRS_ALLOW_UNPINNED") == "1"
 
 
@@ -794,6 +795,18 @@ if mode == "world_raw_only":
         for path in snapshot_dependent_files
         for marker in snapshot_dependent_markers
     )
+    if preserve_snapshot_export:
+        # El fork puede conservar una versión anterior de nuestro exportador.
+        # Preservar sus hooks sin sincronizar las fuentes hacía que un cambio
+        # versionado del contrato no llegara al binario que se usa como
+        # oráculo. El parche es la fuente canónica de ese exportador; sólo se
+        # copia cuando el árbol ya demostró ser descendiente instrumentado.
+        for name in ("snapshot_export.cpp", "snapshot_export.h"):
+            source = patch_dir / "src" / name
+            target = dest / "src" / name
+            if target.read_bytes() != source.read_bytes():
+                target.write_bytes(source.read_bytes())
+                print(f"snapshot_export: {name} sincronizado desde el parche")
 
     cmake = dest / "src" / "CMakeLists.txt"
     text = cmake.read_text(encoding="utf-8")

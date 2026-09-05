@@ -12,7 +12,9 @@
 #include "engine_base.h"
 #include "fileio_type.h"
 #include "group_type.h"
+#include "industry.h"
 #include "map_func.h"
+#include "object_base.h"
 #include "openttd.h"
 #include "rail_map.h"
 #include "roadveh.h"
@@ -748,6 +750,32 @@ void OpenttdrsMaybeCaptureGenerationStage(const char *stage)
 			{"population", town->cache.population}, {"num_houses", town->cache.num_houses}});
 	}
 	metadata["town_positions"] = town_positions;
+	metadata["industry_count"] = Industry::GetNumItems();
+	nlohmann::json industry_positions = nlohmann::json::array();
+	for (const Industry *industry : Industry::Iterate()) {
+		industry_positions.push_back({
+			{"id", industry->index.base()},
+			{"type", static_cast<uint16_t>(industry->type)},
+			{"x", TileX(industry->location.tile)},
+			{"y", TileY(industry->location.tile)},
+			{"selected_layout", industry->selected_layout},
+		});
+	}
+	metadata["industry_positions"] = industry_positions;
+	metadata["object_count"] = Object::GetNumItems();
+	nlohmann::json object_positions = nlohmann::json::array();
+	for (const Object *object : Object::Iterate()) {
+		object_positions.push_back({
+			{"id", object->index.base()},
+			{"type", static_cast<uint16_t>(object->type)},
+			{"x", TileX(object->location.tile)},
+			{"y", TileY(object->location.tile)},
+			{"width", object->location.w},
+			{"height", object->location.h},
+			{"view", object->view},
+		});
+	}
+	metadata["object_positions"] = object_positions;
 	out << metadata.dump() << '\n';
 	for (uint y = 0; y < height; y++) {
 		for (uint x = 0; x < width; x++) {

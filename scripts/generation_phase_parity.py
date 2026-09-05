@@ -4,8 +4,8 @@
 OpenTTD escribe `world-raw` directamente tras las fronteras
 ``GenerateClearTile``, pueblos, industrias, objetos y árboles. El candidato
 ejecuta exactamente hasta cada una de esas fases; luego se comparan los diez
-bytes de todas las teselas, RNG y secuencia ID/posición/población/casas de pueblos; las
-diferencias de teselas se agrupan en bloques 4×4. No es un
+bytes de todas las teselas, RNG y las secuencias de los pools de pueblos,
+industrias y objetos; las diferencias de teselas se agrupan en bloques 4×4. No es un
 oráculo raster: una divergencia en esta herramienta identifica la fase que la
 introdujo.
 """
@@ -32,6 +32,58 @@ CLIMATE_CODES = {
     "tropic": 2,
     "toyland": 3,
 }
+
+GENERATION_STATE_FIELDS = (
+    "random_state_0",
+    "random_state_1",
+    "town_count",
+    "town_positions",
+    "industry_count",
+    "industry_positions",
+    "object_count",
+    "object_positions",
+)
+
+GENERATION_ENTITY_POOLS = (
+    (
+        "town",
+        "town_count",
+        "town_positions",
+        (
+            ("id", 0xFFFFFFFF),
+            ("x", 0xFFFFFFFF),
+            ("y", 0xFFFFFFFF),
+            ("population", 0xFFFFFFFF),
+            ("num_houses", 0xFFFF),
+        ),
+    ),
+    (
+        "industry",
+        "industry_count",
+        "industry_positions",
+        (
+            ("id", 0xFFFFFFFF),
+            ("type", 0xFFFF),
+            ("x", 0xFFFFFFFF),
+            ("y", 0xFFFFFFFF),
+            ("selected_layout", 0xFF),
+        ),
+    ),
+    (
+        "object",
+        "object_count",
+        "object_positions",
+        (
+            ("id", 0xFFFFFFFF),
+            ("type", 0xFFFF),
+            ("x", 0xFFFFFFFF),
+            ("y", 0xFFFFFFFF),
+            ("width", 0xFFFF),
+            ("height", 0xFFFF),
+            ("view", 0xFF),
+        ),
+    ),
+)
 
 
 class GenerationPhaseError(RuntimeError):
@@ -68,42 +120,77 @@ def first_divergent_stage(comparisons: dict[str, dict[str, Any]]) -> str | None:
     return None
 
 
+def _validate_generation_pool(
+    metadata: dict[str, Any],
+    source: str,
+    label: str,
+    count_field: str,
+    positions_field: str,
+    fields: tuple[tuple[str, int], ...],
+) -> None:
+    """Exige una secuencia de pool completa, válida, única y ordenada por ID."""
+    count = metadata[count_field]
+    positions = metadata[positions_field]
+    if type(count) is not int or not 0 <= count <= 0xFFFFFFFF:
+        raise GenerationPhaseError(f"{source}: {count_field} inválido")
+    if not isinstance(positions, list) or len(positions) != count:
+        raise GenerationPhaseError(f"{source}: {count_field} no corresponde a {positions_field}")
+    previous_id = -1
+    for index, entity in enumerate(positions):
+        if not isinstance(entity, dict) or any(
+            type(entity.get(field)) is not int or not 0 <= entity[field] <= maximum
+            for field, maximum in fields
+        ):
+            raise GenerationPhaseError(f"{source}: entidad {label} inválida en índice {index}")
+        entity_id = entity["id"]
+        if entity_id <= previous_id:
+            detail = "repetido" if entity_id == previous_id else "fuera de orden"
+            raise GenerationPhaseError(
+                f"{source}: ID {label} {detail} en índice {index}: {entity_id} tras {previous_id}"
+            )
+        previous_id = entity_id
+
+
+def _first_pool_difference(
+    reference: dict[str, Any], candidate: dict[str, Any], count_field: str, positions_field: str
+) -> dict[str, Any] | None:
+    for index in range(max(reference[count_field], candidate[count_field])):
+        ref_entity = reference[positions_field][index] if index < reference[count_field] else None
+        cand_entity = candidate[positions_field][index] if index < candidate[count_field] else None
+        if ref_entity != cand_entity:
+            return {"index": index, "reference": ref_entity, "candidate": cand_entity}
+    return None
+
+
 def compare_generation_state(reference: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
     """No confundir tiles iguales con estado generador igual o no observado."""
-    fields = ("random_state_0", "random_state_1", "town_count", "town_positions")
-    for label, metadata in (("reference", reference), ("candidate", candidate)):
-        missing = [field for field in fields if field not in metadata]
+    for source, metadata in (("reference", reference), ("candidate", candidate)):
+        missing = [field for field in GENERATION_STATE_FIELDS if field not in metadata]
         if missing:
             raise GenerationPhaseError(
-                f"{label}: falta estado de generación {missing}; reconstruir el exportador instrumentado"
+                f"{source}: falta estado de generación {missing}; reconstruir el exportador instrumentado"
             )
-        for field in fields[:3]:
+        for field in ("random_state_0", "random_state_1"):
             value = metadata[field]
             if type(value) is not int or not 0 <= value <= 0xFFFFFFFF:
-                raise GenerationPhaseError(f"{label}: {field} inválido")
-        towns = metadata["town_positions"]
-        if not isinstance(towns, list) or len(towns) != metadata["town_count"]:
-            raise GenerationPhaseError(f"{label}: town_count no corresponde a town_positions")
-        ids = set()
-        for town in towns:
-            if not isinstance(town, dict) or any(
-                type(town.get(key)) is not int or not 0 <= town[key] <= 0xFFFFFFFF
-                for key in ("id", "x", "y", "population", "num_houses")
-            ):
-                raise GenerationPhaseError(f"{label}: posición de pueblo inválida")
-            if town["id"] in ids:
-                raise GenerationPhaseError(f"{label}: ID de pueblo repetido")
-            ids.add(town["id"])
-    differing = [field for field in fields if reference[field] != candidate[field]]
-    first_town = None
-    for index in range(max(reference["town_count"], candidate["town_count"])):
-        ref_town = reference["town_positions"][index] if index < reference["town_count"] else None
-        cand_town = candidate["town_positions"][index] if index < candidate["town_count"] else None
-        if ref_town != cand_town:
-            first_town = {"index": index, "reference": ref_town, "candidate": cand_town}
-            break
-    return {"exact_match": not differing, "compared_fields": list(fields),
-            "differing_fields": differing, "first_town_difference": first_town}
+                raise GenerationPhaseError(f"{source}: {field} inválido")
+        for pool in GENERATION_ENTITY_POOLS:
+            _validate_generation_pool(metadata, source, *pool)
+    differing = [
+        field for field in GENERATION_STATE_FIELDS if reference[field] != candidate[field]
+    ]
+    first_differences = {
+        label: _first_pool_difference(reference, candidate, count_field, positions_field)
+        for label, count_field, positions_field, _ in GENERATION_ENTITY_POOLS
+    }
+    return {
+        "exact_match": not differing,
+        "compared_fields": list(GENERATION_STATE_FIELDS),
+        "differing_fields": differing,
+        "first_town_difference": first_differences["town"],
+        "first_industry_difference": first_differences["industry"],
+        "first_object_difference": first_differences["object"],
+    }
 
 
 def include_generation_state(tile_comparison: dict[str, Any], reference: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
@@ -321,7 +408,7 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = args.report.resolve() if args.report else out_dir / "report.json"
     report: dict[str, Any] = {
-        "schema_version": 3,
+        "schema_version": 4,
         "contract": "generation-phase-parity",
         "reference": {"binary": str(reference), "commit": commit},
         "candidate": matrix.candidate_provenance(candidate, managed=args.candidate_bin is None),

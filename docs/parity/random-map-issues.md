@@ -152,6 +152,7 @@ tiene un criterio verificable y apunta a la evidencia; no se declaran como
 | **RMAP-141** | Auditar configuración de ríos no predeterminada en clima ártico 512². | **Cerrado (sub-issue acotado de RMAP-018/RMAP-004)** | `generation_phase_parity.py --size 512 --seed 1330935379 --climate arctic --amount-of-rivers 1 --min-river-length 2 --river-route-random 1 --water-borders 0` da **0 teselas y 0 bloques 4×4** distintos en las seis fronteras. El caso verifica settings explícitos sin generalizar la matriz combinatoria ni cerrar RMAP-018/RMAP-004. |
 | **RMAP-145** | Extender la cohorte Toyland a 512². | **Cerrado (sub-issue acotado de RMAP-004/RMAP-024/RMAP-056; #360)** | `generation_phase_parity.py --reference-bin reference/openttd-upstream/build/openttd --size 512 --seed 1330935381 --climate toyland --phases landscape,clear,towns,industries,objects,trees --require-exact` deja exactas las seis fronteras: **0 teselas y 0 bloques 4×4** por fase. También coinciden ambas palabras RNG y los 85 pueblos por ID, posición, población y casas. [Evidencia versionada](evidence/rmap-145.json) registra hashes, configuración y el límite explícito: no observa todavía pools de industrias/objetos ni startup. No cierra #338 ni los padres de worldgen. |
 | **RMAP-146** | Sincronizar población/casas al reemplazar casas por industrias. | **Cerrado (sub-issue acotado de RMAP-024/RMAP-056/#338; #361)** | La cohorte Tropic 512²/seed `1330935380` con `rivers=1`, `min=2`, `route=1`, `water_borders=0` tenía bytes, bloques y RNG exactos pero 45 caches municipales distintos desde `industries` (36.924/2.350 frente a 38.154/2.424). Las rutas `OnlyInTown` pasan ahora por el mismo clear de casa completa que `OnlyNearTown`; las seis fronteras vuelven a tener **0 teselas, 0 bloques 4×4, RNG y demografía** distintos. [Evidencia versionada](evidence/rmap-146.json). No observa aún pools de industrias/objetos ni startup, por lo que no cierra los padres. |
+| **RMAP-147** | Observar los pools de industrias y objetos en cada frontera de generación. | **Cerrado (sub-issue acotado de #338; #362)** | El gate v4 exige, además de bytes raw, bloques 4×4, RNG y pueblos, la secuencia ordenada de industria `{id,type,x,y,selected_layout}` y objeto `{id,type,x,y,width,height,view}`. La cohorte Temperate/default 512² seed `1330935378` deja exactas las seis fases: 0 teselas/0 bloques; de `industries` en adelante coinciden 213 industrias y de `objects` en adelante 65 objetos. [Evidencia compacta](evidence/rmap-147.json). No certifica campos restantes de los pools, trazas de intentos ni startup/ticks; #338 sigue abierto. |
 
 ### RMAP-142 — Candidato actualizado y trazabilidad del ejecutable
 
@@ -265,6 +266,30 @@ terreno: `OPENTTDRS_GENERATE_POPULATION=0` omite pueblos/industrias,
 `OPENTTDRS_WATER_BORDERS` permite fijar la máscara de costas. La comparación
 completa continúa usando la configuración de partida nueva (población
 activada por defecto), para no confundir un mapa jugable con un heightmap.
+
+### RMAP-147 — Pools ordenados de industrias y objetos por fase
+
+Cerrado como sub-issue [#362](https://github.com/cavazquez/openttdrs/issues/362)
+(2026-09-05). El comparador por fases v4 ahora exige metadata de los tres
+pools que no se deduce de las teselas: pueblos, industrias y objetos. Cada
+industria conserva `id`, tipo, origen y layout elegido; cada objeto conserva
+`id`, tipo, origen, huella y vista. El estado ausente, malformado, duplicado o
+fuera de orden falla cerrado y el informe conserva la primera diferencia de
+cada pool.
+
+El integrador del oracle sincroniza el `snapshot_export` versionado cuando el
+fork instrumentado ya lo contiene; antes podía conservar una copia antigua y
+medir un contrato distinto al parche. La referencia recompilada y el candidato
+dan seis fronteras exactas en Temperate/default 512² seed `1330935378`: cero
+teselas y cero bloques 4×4 distintos; 96 pueblos tras `towns`, 213 industrias
+tras `industries` y 65 objetos tras `objects`. Los hashes de las secuencias,
+RNG, pins y binarios quedan una única vez en
+[rmap-147.json](evidence/rmap-147.json).
+
+Esto no declara el contenido completo de `INDY`/`OBJS` equivalente ni cubre
+trazas de intentos, industrias acuáticas, startup o ticks posteriores. Es una
+ampliación del oracle de #338, que permanece abierto para la matriz
+multiclima/settings y los comportamientos restantes.
 
 ## Nota sobre issues remotos
 

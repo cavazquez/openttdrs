@@ -55,6 +55,11 @@ explícitos de RMAP-146: también es exacta por tiles, bloques 4×4, RNG y pools
 ordenados (98 pueblos, 213 industrias y 60 objetos). La configuración,
 evidencia y límites están en `random-map-issues.md` y
 `evidence/rmap-148.json`; no amplía el cierre de #338.
+RMAP-149 / #364 completa el control equivalente Arctic 512² con ríos
+explícitos: 96 pueblos, 217 industrias y 61 objetos coinciden ordenados además
+de tiles, bloques 4×4 y RNG. La evidencia y límites están en
+`random-map-issues.md` y `evidence/rmap-149.json`; #338 conserva la matriz
+completa pendiente.
 
 Estado CI observado de `712ec4ba`: Parity docs, Platform check y Fuzz replay
 pasan; CI supera formato, Clippy, rustdoc y auditorías, pero falla en

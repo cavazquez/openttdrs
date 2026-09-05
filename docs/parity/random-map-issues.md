@@ -154,6 +154,7 @@ tiene un criterio verificable y apunta a la evidencia; no se declaran como
 | **RMAP-146** | Sincronizar población/casas al reemplazar casas por industrias. | **Cerrado (sub-issue acotado de RMAP-024/RMAP-056/#338; #361)** | La cohorte Tropic 512²/seed `1330935380` con `rivers=1`, `min=2`, `route=1`, `water_borders=0` tenía bytes, bloques y RNG exactos pero 45 caches municipales distintos desde `industries` (36.924/2.350 frente a 38.154/2.424). Las rutas `OnlyInTown` pasan ahora por el mismo clear de casa completa que `OnlyNearTown`; las seis fronteras vuelven a tener **0 teselas, 0 bloques 4×4, RNG y demografía** distintos. [Evidencia versionada](evidence/rmap-146.json). No observa aún pools de industrias/objetos ni startup, por lo que no cierra los padres. |
 | **RMAP-147** | Observar los pools de industrias y objetos en cada frontera de generación. | **Cerrado (sub-issue acotado de #338; #362)** | El gate v4 exige, además de bytes raw, bloques 4×4, RNG y pueblos, la secuencia ordenada de industria `{id,type,x,y,selected_layout}` y objeto `{id,type,x,y,width,height,view}`. La cohorte Temperate/default 512² seed `1330935378` deja exactas las seis fases: 0 teselas/0 bloques; de `industries` en adelante coinciden 213 industrias y de `objects` en adelante 65 objetos. [Evidencia compacta](evidence/rmap-147.json). No certifica campos restantes de los pools, trazas de intentos ni startup/ticks; #338 sigue abierto. |
 | **RMAP-148** | Aplicar el gate v4 de pools a Tropic con ríos explícitos. | **Cerrado (sub-issue acotado de #338; #363)** | Tropic 512²/seed `1330935380`, `rivers=1`, `min=2`, `route=1`, `water_borders=0` deja exactas las seis fronteras: **0 teselas y 0 bloques 4×4** por fase, ambas palabras RNG, 98 pueblos, 213 industrias y 60 objetos ordenados. [Evidencia compacta](evidence/rmap-148.json). No cierra la matriz: faltan otras combinaciones, campos completos, intentos, industrias acuáticas y ticks. |
+| **RMAP-149** | Aplicar el gate v4 de pools a Arctic con ríos explícitos. | **Cerrado (sub-issue acotado de #338; #364)** | Arctic 512²/seed `1330935379`, `rivers=1`, `min=2`, `route=1`, `water_borders=0` deja exactas las seis fronteras: **0 teselas y 0 bloques 4×4** por fase, ambas palabras RNG, 96 pueblos, 217 industrias y 61 objetos ordenados. [Evidencia compacta](evidence/rmap-149.json). No cierra la matriz: faltan otras combinaciones, campos completos, intentos, industrias acuáticas y ticks. |
 
 ### RMAP-142 — Candidato actualizado y trazabilidad del ejecutable
 
@@ -307,6 +308,20 @@ una sola vez en [rmap-148.json](evidence/rmap-148.json). El resultado cubre
 esta configuración tropical concreta, no el producto cartesiano de semillas,
 tamaños, climas o settings; tampoco observa el resto de `INDY`/`OBJS`, intentos
 de placement, industrias acuáticas ni ticks. #338 sigue abierto.
+
+### RMAP-149 — Pools ordenados en Arctic con ríos explícitos
+
+Cerrado como sub-issue [#364](https://github.com/cavazquez/openttdrs/issues/364)
+(2026-09-05). La cohorte Arctic 512²/seed `1330935379` usa los mismos settings
+explícitos que RMAP-148 (`amount_of_rivers=1`, `min_river_length=2`,
+`river_route_random=1`, `water_borders=0`) y pasa las seis fronteras bajo el
+gate v4: cero diferencias en los diez campos raw y bloques 4×4, ambas palabras
+RNG y pools ordenados de 96 pueblos, 217 industrias y 61 objetos.
+
+[rmap-149.json](evidence/rmap-149.json) contiene una única copia de pins,
+hashes y conteos. Esta expansión cubre una configuración ártica concreta; no
+certifica la matriz combinatoria, campos restantes de `INDY`/`OBJS`, intentos,
+industrias acuáticas ni ticks. #338 sigue abierto.
 
 ## Nota sobre issues remotos
 

@@ -121,7 +121,7 @@ fn load_house_rgba(
         .binary_search_by(|(n, _)| n.cmp(&name.as_str()))
         .ok()?;
     let &(page, x, y, width, height) = TILE_ATLAS_RECTS.get(TILE_ATLAS_NAMES[entry].1 as usize)?;
-    let atlas_dir = tiles.parent()?.join("atlas");
+    let atlas_dir = atlas_dir_for_tiles(tiles)?;
     let img = pages
         .entry(page)
         .or_insert_with(|| {
@@ -142,6 +142,13 @@ fn load_house_rgba(
     Some(image::imageops::crop_imm(img, x, y, width, height).to_image())
 }
 
+/// La carpeta `tiles/` es opcional en una distribución: no construyas
+/// `tiles/../atlas`, porque el kernel exige que `tiles` exista para atravesar
+/// esa ruta. `Path::parent` resuelve el padre léxico sin esa dependencia.
+fn atlas_dir_for_tiles(tiles: &Path) -> Option<std::path::PathBuf> {
+    Some(tiles.parent()?.join("atlas"))
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
@@ -155,7 +162,9 @@ mod tests {
         for page in 0..super::super::TILE_ATLAS_PAGE_COUNT {
             let name = format!("tiles_atlas_{page}.png");
             std::fs::copy(
-                tiles_assets_dir().join("../atlas").join(&name),
+                atlas_dir_for_tiles(&tiles_assets_dir())
+                    .expect("assets/opengfx parent")
+                    .join(&name),
                 atlas_dir.join(name),
             )
             .expect("distributed atlas");
@@ -236,6 +245,17 @@ mod tests {
             .save(&path)
             .expect("truncated atlas");
         assert!(load_house_rgba(1421, &tiles, &mut HashMap::new()).is_none());
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn atlas_directory_does_not_require_the_ignored_tiles_directory() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let tiles = dir.path().join("assets/opengfx/tiles");
+        let expected = dir.path().join("assets/opengfx/atlas");
+        std::fs::create_dir_all(&expected).expect("atlas dir");
+        assert!(!tiles.exists());
+        assert_eq!(atlas_dir_for_tiles(&tiles), Some(expected));
     }
 
     #[test]

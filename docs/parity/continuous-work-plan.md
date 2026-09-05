@@ -23,7 +23,7 @@ El bloque termina sólo con `git commit` y `git push`. La captura raster se usa
 cuando hay compositor WGPU; si el entorno no lo permite, se registra el bloqueo
 y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
-## Handoff de issues — 2026-09-04
+## Handoff de issues — 2026-09-05
 
 Última etapa: RMAP-143 / #346 amplía el gate por fases a RNG y secuencia
 ID/posición de pueblos, además de bytes de teselas; las 30 fronteras de la
@@ -67,6 +67,15 @@ de `resolve_asset_root`, igual que `AssetServer`, en vez de retener
 paquete para cwd, override y ejecutable trasladado, sin mutar el entorno del
 proceso de pruebas; los assets realmente ausentes siguen devolviendo fallback.
 La corrección del atlas de #347 no sustituye el diagnóstico visual de #349.
+
+Seguimiento #347 / #333 (2026-09-05): el primer workflow limpio encontró un
+defecto en el *bootstrap* de la propia regresión, no una ausencia del atlas
+versionado. La prueba construía `tiles/../atlas`; como `tiles/` es opcional e
+ignorado, el kernel no puede recorrer esa ruta en CI. El loader y la prueba
+obtienen ahora el padre léxico de `tiles` antes de añadir `atlas`, y una
+regresión exige que funcione cuando `tiles/` no existe. #347 se reabre hasta
+publicar esta corrección; #333 sigue abierto hasta que el workflow remoto del
+commit corregido quede verde.
 
 Etapa #333 — reparación de gates (2026-09-04): se reprodujeron los fallos de
 CI de `b47163d1`. Rustdoc tenía dos enlaces rotos (`IndustryRandomTrigger` y

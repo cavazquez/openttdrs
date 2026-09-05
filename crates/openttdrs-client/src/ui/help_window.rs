@@ -9,6 +9,7 @@ use crate::ui::floating_window::{
     spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
+use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::toolbar::BuildMenuUi;
 use crate::ui::window_lifecycle::{
     close_floating_window_on_message, sync_floating_window_visibility,
@@ -78,6 +79,12 @@ Settings → Display: Classic / Performance / Dev presets.\n\
 With gizmos ON, the selected tile shows bounds (aligner lite).\n\
 ";
 
+// Un viewport acotado evita que la ayuda larga crezca fuera de una pantalla
+// baja; el scrollbar clásico deja disponible el resto del contenido.
+const HELP_SCROLL_HEIGHT: f32 = 300.0;
+const HELP_SCROLL_BG: Color = Color::srgb(0.22, 0.18, 0.12);
+const HELP_SCROLL_BORDER: Color = Color::srgb(0.45, 0.39, 0.27);
+
 fn help_body(locale: Locale) -> &'static str {
     match locale {
         Locale::Es => HELP_BODY_ES,
@@ -105,17 +112,39 @@ pub(crate) fn setup_help_window(mut commands: Commands, asset_server: Res<AssetS
         420.0,
     );
     commands.entity(content).with_children(|body| {
-        body.spawn((
-            HelpBodyText,
-            Text::new(HELP_BODY_ES),
-            window_text_font(asset_server, UiFontRole::Caption),
-            TextColor(WINDOW_TEXT),
-            BuildMenuUi,
+        spawn_classic_scroll_area_with(
+            body,
+            asset_server,
             Node {
-                width: Val::Percent(100.0),
+                flex_grow: 1.0,
+                min_width: Val::Px(0.0),
+                overflow: Overflow::scroll_y(),
                 ..default()
             },
-        ));
+            Node {
+                width: Val::Percent(100.0),
+                padding: UiRect::all(Val::Px(4.0)),
+                ..default()
+            },
+            HELP_SCROLL_BG,
+            HELP_SCROLL_BORDER,
+            (),
+            (),
+            |scroll| {
+                scroll.spawn((
+                    HelpBodyText,
+                    Text::new(HELP_BODY_ES),
+                    window_text_font(asset_server, UiFontRole::Caption),
+                    TextColor(WINDOW_TEXT),
+                    BuildMenuUi,
+                    Node {
+                        width: Val::Percent(100.0),
+                        ..default()
+                    },
+                ));
+            },
+            HELP_SCROLL_HEIGHT,
+        );
     });
 }
 

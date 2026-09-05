@@ -1006,10 +1006,9 @@ que #331 permanece abierto.
 
 Actualización posterior de #331 (2026-09-05): el cuerpo completo de Ayuda
 ahora alterna `es`/`en` en vivo y preserva nombres de comandos y hotkeys. La
-captura real en inglés confirma la superficie; el contenido puede exceder una
-pantalla baja porque la ventana todavía no tiene scroll. Esa accesibilidad,
-junto con titulares/cuerpos generados y los catálogos upstream, permanece
-fuera de este corte.
+captura real en inglés confirma la superficie y el viewport con scrollbar
+clásico mantiene el contenido dentro de una pantalla baja. Titulares/cuerpos
+generados y los catálogos upstream permanecen fuera de este corte.
 
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate

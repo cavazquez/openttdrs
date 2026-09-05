@@ -25,6 +25,19 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-04
 
+Etapa #333 — reparación de gates (2026-09-04): se reprodujeron los fallos de
+CI de `b47163d1`. Rustdoc tenía dos enlaces rotos (`IndustryRandomTrigger` y
+`[LandscapeType][slot]`); las referencias ya están corregidas y el comando
+completo con `RUSTDOCFLAGS="-D warnings"` pasa. El workspace fuzz conservaba
+SHA-2 0.10 después de que core pasó a 0.11; su lockfile se sincroniza con
+Cargo y vuelve a resolver con `--locked`. Cuatro regresiones ejecutan el gate
+documental con y sin `rg`, admiten documentación correcta y rechazan un dato
+obsoleto; se integran a CI y Parity docs. El replay sanitizer pasó los 800
+inputs y el SAV ancla, con ASan/LSan activos fuera del sandbox (su restricción
+de ptrace impedía finalizar LSan). Formato, Clippy workspace, rustdoc completo,
+gate documental y pruebas Python focalizadas pasan. #333 permanece abierto
+hasta comprobar los workflows del commit publicado.
+
 Base funcional local y publicada: **`25d026a7`** (`render: project vehicle effects in isometric space`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están

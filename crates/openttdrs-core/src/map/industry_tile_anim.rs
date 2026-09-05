@@ -88,7 +88,7 @@ const INDTILE_SPECIAL_NEXT_FRAME_RANDOM_BITS: u8 = 1 << 0;
 ///
 /// Action0 almacena una máscara de estos ordinales y CB25 recibe el ordinal
 /// (más cualquier extensión en los bits altos de `var 18`). No se debe
-/// confundir esta máscara con [`IndustryRandomTrigger`], que pertenece al
+/// confundir esta máscara con [`crate::IndustryRandomTrigger`], que pertenece al
 /// flujo independiente de randomización de `m3`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

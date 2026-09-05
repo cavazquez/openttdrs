@@ -99,7 +99,8 @@
     "scripts/compare_world_screenshots.py",
     "scripts/test_compare_world_screenshots.py",
     "scripts/test_fuzz_regression_corpus.py",
-    "scripts/test_fuzz_replay_workflow.py"
+    "scripts/test_fuzz_replay_workflow.py",
+    "scripts/test_parity_docs_portability.py"
   ],
   "runs": [
     "scripts/test_openttd_reference_manifest.py",
@@ -137,6 +138,7 @@
     "scripts/test_global_sprite_namespace.py",
     "scripts/test_compare_world_screenshots.py",
     "scripts/test_fuzz_regression_corpus.py",
-    "scripts/test_fuzz_replay_workflow.py"
+    "scripts/test_fuzz_replay_workflow.py",
+    "scripts/test_parity_docs_portability.py"
   ]
 }

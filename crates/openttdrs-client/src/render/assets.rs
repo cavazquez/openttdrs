@@ -162,7 +162,7 @@ pub(crate) struct WorldAssets {
     pub(crate) rail_tunnel_fronts: [AtlasSprite; 4],
     pub(crate) monorail_tunnel_fronts: [AtlasSprite; 4],
     pub(crate) maglev_tunnel_fronts: [AtlasSprite; 4],
-    /// Base Action5 0x17 del portal ferroviario: [LandscapeType][slot].
+    /// Base Action5 0x17 del portal ferroviario: `[LandscapeType][slot]`.
     /// `None` conserva el portal tipado vanilla hasta que el extractor haya
     /// generado el PNG correspondiente.
     pub(crate) rail_tunnel_bases: [[Option<AtlasSprite>;

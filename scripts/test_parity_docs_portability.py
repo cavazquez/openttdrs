@@ -126,6 +126,22 @@ class ParityDocsPortabilityTest(unittest.TestCase):
                 "docs/parity/continuous-work-plan.md",
                 "round-trip, pero aún no alimentan los scopes ni se invalidan tras mutaciones",
             ),
+            (
+                "docs/parity/sav-compatibility.md",
+                "OBID` se modela y se reconstruye desde el catálogo cuando no hay passthrough",
+            ),
+            (
+                "docs/parity/sav-compatibility.md",
+                "todavía no se aplica al cargador de overrides",
+            ),
+            (
+                "docs/PLANIFICACION.md",
+                "NGRF`/`GSET`/`ENGN`/`OBJS`/`SRND` y mappings asociados se conservan como passthrough",
+            ),
+            (
+                "docs/PARIDAD.md",
+                "PATS`/`OPTS`, `ENGN`, `OBJS`/`OBID` y `SRND` continúan como passthrough o subconjunto",
+            ),
         )
         for with_rg in (True, False):
             for stale_path, stale_text in stale_claims:

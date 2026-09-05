@@ -616,8 +616,9 @@ pub struct GameState {
     /// jugador realmente construye o demuele un objeto.
     #[serde(default)]
     pub sav_objects_dirty: bool,
-    /// Marca que invalida el passthrough de `OBID` después de reconstruir el
-    /// mapping desde el catálogo `NewGRF`.
+    /// Marca que exige reemitir `OBID` tras cambiar el mapping desde el
+    /// catálogo `NewGRF`; si conserva sus IDs, el writer fusiona los tres
+    /// campos conocidos sobre la tabla original.
     #[serde(default)]
     pub sav_object_mappings_dirty: bool,
     /// Carteles del mapa (`Sign` en `OpenTTD`).

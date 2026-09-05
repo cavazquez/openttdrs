@@ -69,6 +69,8 @@ require_pat 'OpenTTD 15\.3, commit' docs/PARIDAD.md
 require_pat '^# Compatibilidad `.sav` OpenTTD ↔ openttdrs$' docs/parity/sav-compatibility.md
 require_pat 'La FTA propia de un layout' docs/parity/newgrf-action0-matrix.md
 require_pat 'Esto no bloquea los callbacks de' docs/parity/newgrf-action0-matrix.md
+require_pat 'recupera el `ObjectType` asignado' docs/parity/sav-compatibility.md
+require_pat 'fusiona esos campos sobre' docs/parity/sav-compatibility.md
 python3 scripts/check_active_parity_backlog.py
 
 check_pat 'SIM_TICK_HZ = 5\.0'
@@ -110,6 +112,10 @@ check_pat 'Una parada compuesta/importada todavía no conserva estado separado p
 check_pat 'Restan vars BaseStation `60`–`65`/`69`'
 check_pat 'siguen pendientes sus propiedades de capacidad, velocidad, potencia, esfuerzo tractor y costes'
 check_pat 'round-trip, pero aún no alimentan los scopes ni se invalidan tras mutaciones'
+check_pat 'OBID` se modela y se reconstruye desde el catálogo cuando no hay'
+check_pat 'todavía no se aplica al cargador de overrides'
+check_pat 'NGRF`/`GSET`/`ENGN`/`OBJS`/`SRND` y mappings asociados se conservan como'
+check_pat 'PATS`/`OPTS`, `ENGN`, `OBJS`/`OBID` y `SRND` continúan como passthrough o subconjunto'
 check_pat 'compatibilidad con `.sav` OpenTTD \(sigue siendo `parse_sav`'
 check_pat 'Paridad visual OpenGFX vanilla \| 🟡 ~85–90 %'
 check_pat 'Paridad visual SP3 ≥ 90 %'

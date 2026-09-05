@@ -146,6 +146,13 @@ rechaza el regreso de las afirmaciones contradictorias. #329 no se cierra:
 quedan compositor de foundations/rotaciones/sonidos, APIs legacy sin catálogo,
 propiedades y scopes Action0 restantes, cargos custom y writebacks de teselas.
 
+Sub-issue #354 de #337 (2026-09-05): las fuentes SAV ya distinguen el
+passthrough sin mutaciones de `OBJS`, su reconstrucción base tras mutarlo y la
+fusión de campos conocidos de `OBID` cuando conserva los IDs. El mapping
+importado participa al reaplicar el catálogo de objetos NewGRF. #328 permanece
+abierto por columnas no modeladas tras mutación, cambios estructurales,
+listas/structs, pools nativos y runtime de objetos.
+
 Base funcional local y publicada: **`25d026a7`** (`render: project vehicle effects in isometric space`),
 encima de `566ce56a` (IDs globales SAV), `933042ca` (documentación de aceptación exacta)
 y `67ef8101` (`newgrf: evaluate industry tile cargo acceptance`). Los cuatro commits ya están

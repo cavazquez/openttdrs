@@ -11,7 +11,8 @@
 //! ejecución de `ENGN`/`SRND`/callbacks `NewGRF` y flags completos de `PLYR`.
 //! La configuración activa `NGRF` (archivo, GRFID, versión y parámetros) y
 //! las filas base de `OBJS` se reconstruyen cuando se modifican en el runtime;
-//! `OBID` y las columnas desconocidas siguen conservándose como passthrough;
+//! `OBID` fusiona sus campos conocidos sobre el cuerpo original cuando conserva
+//! sus IDs, y sólo un cambio estructural cae al writer canónico;
 //! `ORDL`/`VEHS`/`STNN`/`CITY`/`INDY` reutilizan sus cuerpos originales cuando
 //! las filas semánticas no cambiaron.
 //! `PATS`/`ECMY`/`CAPY` aplican la misma regla para ajustes y pagos conocidos.

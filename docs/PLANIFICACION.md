@@ -2176,10 +2176,14 @@ avión de ala fija.
 
 Preserva `CAPY` al importar/exportar y crea/acumula el pago por cabeza durante
 descargas graduales (conversión lógica↔`REF_VEHICLE` al guardar); `PLYR` conserva dinero/préstamo/límite individual (incluido el centinela de límite global)/meses de bancarrota/color/nombre/indicador AI, el subconjunto ejecutado de
-`settings.*`, presidente, bitfield de rostro, `face_style` e historial trimestral (`cur_economy` y hasta 24 `old_economy`, incluido el desglose de carga) por compañía. Aún faltan flags completos y el modelado/ejecución completa de `OBJS`,
-`GSET`/`ENGN`/`SRND` y configuración NewGRF. Los chunks nativos
-`NGRF`/`GSET`/`ENGN`/`OBJS`/`SRND` y mappings asociados se conservan como
-passthrough al reexportar cuando provienen de un `.sav`; las listas nativas de
+`settings.*`, presidente, bitfield de rostro, `face_style` e historial trimestral (`cur_economy` y hasta 24 `old_economy`, incluido el desglose de carga) por compañía. Aún faltan flags completos, runtime completo de specs/callbacks de objetos y
+`GSET`/`ENGN`/`SRND`. `NGRF` ya se reconstruye desde la configuración activa;
+`GSET`/`ENGN`/`SRND` se conservan como passthrough al reexportar. `OBJS` se
+modela en filas base y conserva su cuerpo original hasta una mutación de objeto;
+entonces el writer emite las filas conocidas. `OBID` se usa al reaplicar el
+catálogo NewGRF y, si mantiene su conjunto de IDs, fusiona los tres campos
+conocidos sobre la tabla original; un cambio estructural usa el writer canónico.
+Las listas nativas de
 RoadStops (`roadstopspeclist`/`roadstoptiledata`) también se reconstruyen desde
 el estado por tesela y actualizan `MAP8`; no se confunde esa conservación con
 ejecutar sus callbacks. `PATS`/`OPTS` ya conserva el

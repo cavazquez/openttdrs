@@ -472,6 +472,7 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Compañías ordenadas por valor neto · performance trimestral" => {
             "Companies sorted by net worth · quarterly performance"
         }
+        "Sin compañías" => "No companies",
         "Filtro: todos" => "Filter: all",
         "buscar…" => "search…",
         "Comprar vehículo" => "Buy vehicle",

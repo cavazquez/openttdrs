@@ -234,6 +234,14 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Distribución de carga" => "Cargo distribution",
         "IA / TransCargo" => "AI / TransCargo",
         "Noticias" => "News",
+        "Entrega de carga" => "Cargo delivery",
+        "Primera entrega" => "First delivery",
+        "Primer vehículo en marcha" => "First vehicle running",
+        "Avisos de vehículo" => "Vehicle advice",
+        "Accidentes" => "Accidents",
+        "Compañías" => "Companies",
+        "Cierre de industria" => "Industry closure",
+        "Cartel" => "Newspaper",
         "Ayuda y atajos" => "Help and shortcuts",
         "Consola" => "Console",
         "Inspector de tile" => "Tile inspector",
@@ -782,6 +790,23 @@ mod tests {
             localized_text(Locale::En, "Un NewGRF denegó esta acción (callback)."),
             "A NewGRF denied this action (callback)."
         );
+    }
+
+    #[test]
+    fn catalog_translates_all_news_settings_categories() {
+        for (spanish, english) in [
+            ("Entrega de carga", "Cargo delivery"),
+            ("Primera entrega", "First delivery"),
+            ("Primer vehículo en marcha", "First vehicle running"),
+            ("Avisos de vehículo", "Vehicle advice"),
+            ("Accidentes", "Accidents"),
+            ("Compañías", "Companies"),
+            ("Cierre de industria", "Industry closure"),
+            ("Economía", "Economy"),
+            ("Cartel", "Newspaper"),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+        }
     }
 
     #[test]

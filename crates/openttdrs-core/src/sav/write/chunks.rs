@@ -89,11 +89,12 @@ pub(super) fn raw_table_chunk(
 /// importado.
 ///
 /// Los saves de `OpenTTD` suelen añadir columnas al final de una tabla sin
-/// cambiar los campos que conoce el runtime. Cuando sólo cambia un escalar
-/// conocido, podemos copiar sus bytes dentro del registro original y dejar
-/// intactas esas columnas futuras. Si la tabla cambia de forma (índices,
-/// strings, listas o structs), devolvemos el writer canónico: conservar un
-/// valor viejo en ese caso sería peor que perder una columna no interpretada.
+/// cambiar los campos que conoce el runtime. Cuando un campo conocido conserva
+/// su schema y el tamaño codificado de cada registro, podemos copiar sus bytes
+/// dentro del registro original y dejar intactas esas columnas futuras. Si
+/// cambian filas, índices, schema o tamaño codificado, devolvemos el writer
+/// canónico: conservar un valor viejo en ese caso sería peor que perder una
+/// columna no interpretada.
 pub(super) fn table_chunk_with_passthrough(
     raw: Option<&SavOpaqueChunk>,
     canonical: Vec<u8>,
@@ -167,10 +168,16 @@ fn read_gamma(data: &[u8], offset: &mut usize) -> Result<u32, SavError> {
         .map_err(|error| SavError::BadFormat(format!("gamma de tabla inválido: {error:?}")))
 }
 
-fn fixed_scalar(field: &TableField) -> bool {
-    // SLE_FILE_STRING (10), STRUCT (11) y HAS_LENGTH necesitan conocer la
-    // longitud exacta del valor para reescribirse; no son parches in-place.
-    field.base != 10 && field.base != 11 && !field.has_length
+fn field_layout_matches(raw: &TableField, canonical: &TableField) -> bool {
+    raw.name == canonical.name
+        && raw.base == canonical.base
+        && raw.has_length == canonical.has_length
+        && raw.sub.len() == canonical.sub.len()
+        && raw
+            .sub
+            .iter()
+            .zip(&canonical.sub)
+            .all(|(raw_sub, canonical_sub)| field_layout_matches(raw_sub, canonical_sub))
 }
 
 fn matching_fields<'a, 'b>(
@@ -185,9 +192,9 @@ fn matching_fields<'a, 'b>(
                 canonical.name
             )));
         };
-        if raw.base != canonical.base || raw.has_length != canonical.has_length {
+        if !field_layout_matches(raw, canonical) {
             return Err(SavError::BadFormat(format!(
-                "tipo incompatible para campo {}",
+                "layout incompatible para campo {}",
                 canonical.name
             )));
         }
@@ -254,9 +261,10 @@ fn merge_table_body_preserving_unknown(
             if raw_bytes == canonical_bytes {
                 continue;
             }
-            if !fixed_scalar(raw_field) || raw_bytes.len() != canonical_bytes.len() {
-                // Strings, listas y structs sólo se pueden fusionar si no
-                // cambiaron. Una mutación de longitud requiere reserializar.
+            if raw_bytes.len() != canonical_bytes.len() {
+                // El payload debe conservar exactamente el mismo tamaño. Así
+                // una string, lista o struct con forma codificada distinta no
+                // puede desplazar las columnas desconocidas que siguen.
                 return Ok(None);
             }
             let destination_start = raw_record.field_start + *raw_start;
@@ -307,6 +315,107 @@ mod tests {
         );
         assert_eq!(
             crate::sav::table::record_get(&rows[0].1, "future").and_then(SlValue::as_u64),
+            Some(0xCAFE)
+        );
+    }
+
+    #[test]
+    fn passthrough_patches_equal_sized_string_and_list_without_losing_future_column() {
+        let mut raw_record = Vec::new();
+        write_str("old", &mut raw_record).expect("raw name");
+        write_gamma(2, &mut raw_record).expect("raw list length");
+        raw_record.extend_from_slice(&[1, 2, 0xCA, 0xFE]);
+        let raw = table_chunk(
+            *b"TEST",
+            &[(0x0A, "name"), (0x12, "values"), (4, "future")],
+            &[raw_record],
+        )
+        .expect("raw table");
+        let raw_chunk = SavOpaqueChunk {
+            name: *b"TEST",
+            ch_type: CH_TABLE,
+            body: raw[5..].to_vec(),
+        };
+
+        let mut canonical_record = Vec::new();
+        write_str("new", &mut canonical_record).expect("canonical name");
+        write_gamma(2, &mut canonical_record).expect("canonical list length");
+        canonical_record.extend_from_slice(&[3, 4]);
+        let canonical = table_chunk(
+            *b"TEST",
+            &[(0x0A, "name"), (0x12, "values")],
+            &[canonical_record],
+        )
+        .expect("canonical table");
+
+        let merged = table_chunk_with_passthrough(Some(&raw_chunk), canonical).expect("merge");
+        let chunks = crate::sav::chunks::parse_chunks(&merged).expect("parse merged");
+        let rows =
+            crate::sav::table::parse_table_chunk(&chunks[0].body, false).expect("merged row");
+        let row = &rows[0].1;
+        assert_eq!(
+            crate::sav::table::record_get(row, "name").and_then(SlValue::as_str),
+            Some("new")
+        );
+        assert_eq!(
+            crate::sav::table::record_get(row, "values"),
+            Some(&SlValue::List(vec![SlValue::Uint(3), SlValue::Uint(4)]))
+        );
+        assert_eq!(
+            crate::sav::table::record_get(row, "future").and_then(SlValue::as_u64),
+            Some(0xCAFE)
+        );
+    }
+
+    #[test]
+    fn passthrough_patches_equal_sized_nested_struct_without_losing_future_column() {
+        let mut raw_header = Vec::new();
+        raw_header.push(0x0B);
+        write_str("stats", &mut raw_header).expect("struct field");
+        raw_header.push(4);
+        write_str("future", &mut raw_header).expect("future field");
+        raw_header.push(0);
+        raw_header.push(2);
+        write_str("level", &mut raw_header).expect("nested field");
+        raw_header.push(0);
+        let mut raw_record = Vec::new();
+        write_gamma(1, &mut raw_record).expect("struct count");
+        raw_record.extend_from_slice(&[7, 0xCA, 0xFE]);
+        let raw =
+            raw_table_chunk(*b"TEST", &raw_header, &[raw_record], CH_TABLE).expect("raw table");
+        let raw_chunk = SavOpaqueChunk {
+            name: *b"TEST",
+            ch_type: CH_TABLE,
+            body: raw[5..].to_vec(),
+        };
+
+        let mut canonical_header = Vec::new();
+        canonical_header.push(0x0B);
+        write_str("stats", &mut canonical_header).expect("canonical struct field");
+        canonical_header.push(0);
+        canonical_header.push(2);
+        write_str("level", &mut canonical_header).expect("canonical nested field");
+        canonical_header.push(0);
+        let mut canonical_record = Vec::new();
+        write_gamma(1, &mut canonical_record).expect("canonical struct count");
+        canonical_record.push(9);
+        let canonical = raw_table_chunk(*b"TEST", &canonical_header, &[canonical_record], CH_TABLE)
+            .expect("canonical table");
+
+        let merged = table_chunk_with_passthrough(Some(&raw_chunk), canonical).expect("merge");
+        let chunks = crate::sav::chunks::parse_chunks(&merged).expect("parse merged");
+        let rows =
+            crate::sav::table::parse_table_chunk(&chunks[0].body, false).expect("merged row");
+        let row = &rows[0].1;
+        let Some(SlValue::Structs(stats)) = crate::sav::table::record_get(row, "stats") else {
+            panic!("stats debería decodificar como struct");
+        };
+        assert_eq!(
+            crate::sav::table::record_get(&stats[0], "level").and_then(SlValue::as_u64),
+            Some(9)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(row, "future").and_then(SlValue::as_u64),
             Some(0xCAFE)
         );
     }

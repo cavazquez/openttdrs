@@ -1185,6 +1185,68 @@ mod tests {
         assert_ne!(changed_vehs.body, original_vehs);
     }
 
+    /// El fixture rico es el smoke que `OpenTTD` dedicado acepta. Al cambiar una
+    /// string modelada sin alterar su tamaño después de importarlo, el writer
+    /// debe conservar su header de tabla en lugar de degradar la tabla entera
+    /// a su representación canónica.
+    #[test]
+    fn imported_plyr_equal_sized_name_change_keeps_raw_header() {
+        let original =
+            save_to_bytes_with(&mvp_rich_state(), SavContainer::Ottn).expect("fixture rich actual");
+        let (original_payload, _) =
+            crate::sav::container::decompress(&original).expect("payload original");
+        let original_chunks =
+            crate::sav::chunks::parse_chunks(&original_payload).expect("chunks originales");
+        let original_plyr =
+            crate::sav::chunks::find_chunk(&original_chunks, "PLYR").expect("PLYR original");
+        let (_, original_header_end, _) =
+            crate::sav::table::parse_table_layout(&original_plyr.body).expect("header PLYR");
+
+        let mut loaded = GameState::from_sav_game(sav::load(&original).expect("import fixture"));
+        let active_company = u32::from(loaded.active_company.0);
+        let company = loaded
+            .companies
+            .iter_mut()
+            .find(|company| u32::from(company.id.0) == active_company)
+            .expect("compañía activa");
+        let original_name = company.name.clone();
+        assert!(original_name.is_ascii(), "fixture de nombre ASCII");
+        let replacement = "X".repeat(original_name.len());
+        assert_ne!(replacement, original_name);
+        company.name = replacement.clone();
+
+        let resaved = save_to_bytes_with(&loaded, SavContainer::Ottn).expect("resave changed");
+        if let Ok(path) = std::env::var("OPENTTDRS_DUMP_EQUAL_SIZED_PLYR_SAV") {
+            std::fs::write(path, &resaved).expect("dump PLYR changed");
+        }
+        let (resaved_payload, _) =
+            crate::sav::container::decompress(&resaved).expect("payload resaved");
+        let resaved_chunks =
+            crate::sav::chunks::parse_chunks(&resaved_payload).expect("chunks resaved");
+        let resaved_plyr =
+            crate::sav::chunks::find_chunk(&resaved_chunks, "PLYR").expect("PLYR resaved");
+        assert_eq!(resaved_plyr.ch_type, original_plyr.ch_type);
+        assert_eq!(
+            &resaved_plyr.body[..original_header_end],
+            &original_plyr.body[..original_header_end],
+            "la mutación de tamaño igual conserva el header importado"
+        );
+        let rows = crate::sav::table::parse_table_chunk(
+            &resaved_plyr.body,
+            resaved_plyr.ch_type == crate::sav::chunks::CH_SPARSE_TABLE,
+        )
+        .expect("PLYR resaved parseable");
+        let (_, active_row) = rows
+            .iter()
+            .find(|(index, _)| *index == active_company)
+            .expect("fila activa PLYR");
+        assert_eq!(
+            crate::sav::table::record_get(active_row, "name")
+                .and_then(crate::sav::table::SlValue::as_str),
+            Some(replacement.as_str())
+        );
+    }
+
     #[test]
     fn ottn_roundtrip_preserves_active_newgrf_configuration() {
         let mut state = tiny_state();

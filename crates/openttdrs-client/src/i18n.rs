@@ -414,6 +414,16 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "— Música —" => "— Music —",
         "Detenido · 0 / 0" => "Stopped · 0 / 0",
         "(sin pistas)" => "(no tracks)",
+        "Vehículos" => "Vehicles",
+        "Ambiente" => "Ambient",
+        "Desastres" => "Disasters",
+        "Confirmación" => "Confirmation",
+        "Clic toolbar" => "Toolbar click",
+        "◀ Ant." => "◀ Prev.",
+        "Sig. ▶" => "Next ▶",
+        "Reproducir" => "Play",
+        "Detener" => "Stop",
+        "Reproduciendo" => "Playing",
         "Espera ante path sin reserva (días). 255 = nunca girar." => {
             "Wait for path without reservation (days). 255 = never turn around."
         }

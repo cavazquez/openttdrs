@@ -7,6 +7,8 @@ use bevy::ui::RelativeCursorPosition;
 use crate::audio::{
     MusicPlayer, MusicPlaylist, MusicState, music_apply_playlist, music_skip, music_toggle_playback,
 };
+use crate::i18n::Locale;
+use crate::settings::ClientPreferences;
 use crate::state::ClientScreen;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, MENU_OVERLAY_WINDOW_Z, TITLE_BROWN,
@@ -61,6 +63,35 @@ pub(crate) struct MusicTrackStatusText;
 
 #[derive(Component)]
 pub(crate) struct MusicTrackTitleText;
+
+fn volume_label(locale: Locale, kind: VolumeSliderKind, volume: f32) -> String {
+    let percent = volume * 100.0;
+    match (locale, kind) {
+        (Locale::Es, VolumeSliderKind::Sfx) => format!("Efectos de sonido: {percent:.0} %"),
+        (Locale::En, VolumeSliderKind::Sfx) => format!("Sound effects: {percent:.0} %"),
+        (Locale::Es, VolumeSliderKind::Music) => format!("Música: {percent:.0} %"),
+        (Locale::En, VolumeSliderKind::Music) => format!("Music: {percent:.0} %"),
+    }
+}
+
+fn music_status_label(locale: Locale, playing: bool, position: &str) -> String {
+    let status = match (locale, playing) {
+        (Locale::Es, true) => "Reproduciendo",
+        (Locale::Es, false) => "Detenido",
+        (Locale::En, true) => "Playing",
+        (Locale::En, false) => "Stopped",
+    };
+    format!("{status} · {position}")
+}
+
+fn music_play_button_label(locale: Locale, playing: bool) -> &'static str {
+    match (locale, playing) {
+        (Locale::Es, true) => "Detener",
+        (Locale::Es, false) => "Reproducir",
+        (Locale::En, true) => "Stop",
+        (Locale::En, false) => "Play",
+    }
+}
 
 fn spawn_volume_slider(
     parent: &mut ChildSpawnerCommands,
@@ -130,13 +161,15 @@ fn spawn_jukebox_section(parent: &mut ChildSpawnerCommands, asset_server: &Asset
             ));
             section.spawn((
                 MusicTrackStatusText,
-                Text::new("Detenido · 0 / 0"),
+                // Estos dos textos se materializan con MusicState; no deben
+                // conservar una clave estática que pueda pisar el título real.
+                Text::new("—"),
                 window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(WINDOW_TEXT),
             ));
             section.spawn((
                 MusicTrackTitleText,
-                Text::new("(sin pistas)"),
+                Text::new("—"),
                 window_text_font(asset_server, UiFontRole::Body),
                 TextColor(WINDOW_TEXT),
             ));
@@ -187,6 +220,11 @@ fn spawn_jukebox_section(parent: &mut ChildSpawnerCommands, asset_server: &Asset
                         ("Reproducir", MusicWindowButton::PlayStop),
                         ("Sig. ▶", MusicWindowButton::Next),
                     ] {
+                        let label = if button == MusicWindowButton::PlayStop {
+                            "—"
+                        } else {
+                            label
+                        };
                         row.spawn((
                             Button,
                             button,
@@ -298,6 +336,7 @@ pub(crate) fn sync_sound_music_window(
     screen: Res<State<ClientScreen>>,
     hud: Res<SimHudControls>,
     music: Res<MusicState>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility, &mut GlobalZIndex)>,
     mut labels: Query<(&VolumeSliderLabel, &mut Text)>,
     mut fills: Query<(&VolumeSliderFill, &mut Node)>,
@@ -355,15 +394,12 @@ pub(crate) fn sync_sound_music_window(
     if *screen.get() == ClientScreen::MainMenu {
         z.0 = z.0.max(MENU_OVERLAY_WINDOW_Z);
     }
+    let locale = prefs.locale();
 
     for (label, mut text) in &mut labels {
         **text = match label.0 {
-            VolumeSliderKind::Sfx => {
-                format!("Efectos de sonido: {:.0} %", hud.sfx_volume * 100.0)
-            }
-            VolumeSliderKind::Music => {
-                format!("Música: {:.0} %", hud.music_volume * 100.0)
-            }
+            VolumeSliderKind::Sfx => volume_label(locale, label.0, hud.sfx_volume),
+            VolumeSliderKind::Music => volume_label(locale, label.0, hud.music_volume),
         };
     }
     for (fill, mut node) in &mut fills {
@@ -389,13 +425,8 @@ pub(crate) fn sync_sound_music_window(
         };
     }
 
-    let status = if music.playing {
-        "Reproduciendo"
-    } else {
-        "Detenido"
-    };
     for mut text in &mut status_q {
-        **text = format!("{status} · {}", music.track_position_label());
+        **text = music_status_label(locale, music.playing, &music.track_position_label());
     }
     for mut text in &mut title_q {
         **text = music.current_track_title().to_string();
@@ -411,12 +442,7 @@ pub(crate) fn sync_sound_music_window(
     }
     for (button, mut text) in &mut play_btn {
         if *button == MusicWindowButton::PlayStop {
-            **text = if music.playing {
-                "Detener"
-            } else {
-                "Reproducir"
-            }
-            .to_string();
+            **text = music_play_button_label(locale, music.playing).to_owned();
         }
     }
 }
@@ -514,5 +540,33 @@ pub(crate) fn sound_music_window_on_closed(
         if msg.0.class == FloatingWindowId::SoundMusic {
             state.open = false;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{VolumeSliderKind, music_play_button_label, music_status_label, volume_label};
+    use crate::i18n::Locale;
+
+    #[test]
+    fn music_chrome_follows_locale_without_touching_track_data() {
+        assert_eq!(
+            volume_label(Locale::En, VolumeSliderKind::Sfx, 0.42),
+            "Sound effects: 42 %"
+        );
+        assert_eq!(
+            volume_label(Locale::Es, VolumeSliderKind::Music, 0.5),
+            "Música: 50 %"
+        );
+        assert_eq!(
+            music_status_label(Locale::En, true, "2 / 17"),
+            "Playing · 2 / 17"
+        );
+        assert_eq!(
+            music_status_label(Locale::Es, false, "2 / 17"),
+            "Detenido · 2 / 17"
+        );
+        assert_eq!(music_play_button_label(Locale::En, false), "Play");
+        assert_eq!(music_play_button_label(Locale::Es, true), "Detener");
     }
 }

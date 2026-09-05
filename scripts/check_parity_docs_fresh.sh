@@ -67,6 +67,8 @@ require_pat() {
 require_pat '^## Estado canónico actual$' docs/PARIDAD.md
 require_pat 'OpenTTD 15\.3, commit' docs/PARIDAD.md
 require_pat '^# Compatibilidad `.sav` OpenTTD ↔ openttdrs$' docs/parity/sav-compatibility.md
+require_pat 'La FTA propia de un layout' docs/parity/newgrf-action0-matrix.md
+require_pat 'Esto no bloquea los callbacks de' docs/parity/newgrf-action0-matrix.md
 python3 scripts/check_active_parity_backlog.py
 
 check_pat 'SIM_TICK_HZ = 5\.0'
@@ -100,6 +102,14 @@ check_pat 'lógica de segmento upstream no replica'
 # sólo una afirmación global de que el runtime NewGRF no ejecuta callbacks es
 # obsoleta. Mantener el patrón específico evita falsos positivos en ese contrato.
 check_pat 'runtime NewGRF.*sin ejecutar callbacks'
+check_pat 'FTA y callbacks \*\*bloqueados\*\*'
+check_pat 'AirportTiles/industria todavía usan las rutas legacy'
+check_pat 'quedan los triggers FTA .*ya conectados al scheduler'
+check_pat 'Falta estado independiente por cada tesela de una parada compuesta'
+check_pat 'Una parada compuesta/importada todavía no conserva estado separado por tesela'
+check_pat 'Restan vars BaseStation `60`–`65`/`69`'
+check_pat 'siguen pendientes sus propiedades de capacidad, velocidad, potencia, esfuerzo tractor y costes'
+check_pat 'round-trip, pero aún no alimentan los scopes ni se invalidan tras mutaciones'
 check_pat 'compatibilidad con `.sav` OpenTTD \(sigue siendo `parse_sav`'
 check_pat 'Paridad visual OpenGFX vanilla \| 🟡 ~85–90 %'
 check_pat 'Paridad visual SP3 ≥ 90 %'

@@ -23,7 +23,13 @@ class ParityDocsPortabilityTest(unittest.TestCase):
         "docs/parity/random-map-matrix.md",
     )
 
-    def run_gate(self, with_rg, stale_path=None, corrupt_cutoff_field=None):
+    def run_gate(
+        self,
+        with_rg,
+        stale_path=None,
+        stale_text=None,
+        corrupt_cutoff_field=None,
+    ):
         with tempfile.TemporaryDirectory(prefix="parity-docs-portability-") as directory:
             root = Path(directory)
             checker = (ROOT / CHECKER).read_text()
@@ -35,8 +41,9 @@ class ParityDocsPortabilityTest(unittest.TestCase):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / relative, target)
             if stale_path:
+                stale_text = stale_text or "SIM_TICK_HZ = 5.0"
                 with (root / stale_path).open("a") as stream:
-                    stream.write("\nSIM_TICK_HZ = 5.0\n")
+                    stream.write(f"\n{stale_text}\n")
             if corrupt_cutoff_field:
                 manifest_path = root / "docs/parity/active-backlog.json"
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -68,7 +75,7 @@ class ParityDocsPortabilityTest(unittest.TestCase):
             if not with_rg:
                 self.assertIn("usando grep -E como fallback", output)
             if stale_path:
-                self.assertIn("SIM_TICK_HZ = 5.0", output)
+                self.assertIn(stale_text, output)
             if corrupt_cutoff_field:
                 self.assertIn(f"cutoff.{corrupt_cutoff_field}", output)
 
@@ -87,6 +94,47 @@ class ParityDocsPortabilityTest(unittest.TestCase):
         for stale_path in self.stale_sources:
             with self.subTest(stale_path=stale_path):
                 self.run_gate(with_rg=False, stale_path=stale_path)
+
+    def test_stale_newgrf_claims_are_rejected_with_both_searchers(self):
+        stale_claims = (
+            ("docs/parity/newgrf-action0-matrix.md", "FTA y callbacks **bloqueados**"),
+            (
+                "docs/parity/newgrf-action0-matrix.md",
+                "AirportTiles/industria todavía usan las rutas legacy",
+            ),
+            (
+                "docs/parity/newgrf-action0-matrix.md",
+                "Falta estado independiente por cada tesela de una parada compuesta",
+            ),
+            (
+                "docs/parity/newgrf-action0-matrix.md",
+                "Una parada compuesta/importada todavía no conserva estado separado por tesela",
+            ),
+            (
+                "docs/parity/newgrf-action0-matrix.md",
+                "Restan vars BaseStation `60`–`65`/`69`",
+            ),
+            (
+                "docs/parity/continuous-work-plan.md",
+                "quedan los triggers FTA (carga/descarga/aterrizaje) ya conectados al scheduler",
+            ),
+            (
+                "docs/parity/continuous-work-plan.md",
+                "siguen pendientes sus propiedades de capacidad, velocidad, potencia, esfuerzo tractor y costes",
+            ),
+            (
+                "docs/parity/continuous-work-plan.md",
+                "round-trip, pero aún no alimentan los scopes ni se invalidan tras mutaciones",
+            ),
+        )
+        for with_rg in (True, False):
+            for stale_path, stale_text in stale_claims:
+                with self.subTest(with_rg=with_rg, stale_text=stale_text):
+                    self.run_gate(
+                        with_rg=with_rg,
+                        stale_path=stale_path,
+                        stale_text=stale_text,
+                    )
 
     def test_invalid_cutoff_is_rejected(self):
         for field in ("main_commit", "main_commit_role", "date"):

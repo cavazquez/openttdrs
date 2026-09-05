@@ -36,7 +36,7 @@ Estados:
 | `0A` | Industries | runtime | N/A (sprites vía tiles 09) | catálogo `industry_spec` + layouts/I/O; place |
 | `0B` | Cargoes | runtime | runtime | catálogo `cargo_spec` → pagos/capacidad/UI + Action3 views |
 | `0C` | Sound effects | runtime | no aplica | catálogo `sound_effect` + cola play; samples Action11 |
-| `0D` | Airports | runtime parcial | runtime | catálogo `airport_spec_catalog` (≥10); Action3 purchase/default; build+save; FTA/callbacks bloqueados (#260) |
+| `0D` | Airports | runtime parcial | runtime | catálogo `airport_spec_catalog` (≥10); Action3 purchase/default; build+save; FTA custom bloqueada, callbacks `AirportTile` parciales (#260) |
 | `0E` | Signals | ignorada por spec (null en OTTD 15.3; #255) | N/A | gráficos: RailTypes `RTSG_SIGNALS` + Action5 `0x04`; estilo en `m2` save/load |
 | `0F` | Objects | runtime | runtime | catálogo `object_spec`; build+render multitile |
 | `10` | Rail types | runtime | runtime (signals/underlay/overlay) | construcción/coste/compat + techo velocidad |
@@ -321,9 +321,14 @@ Fuente: `newgrf_act0_airports.cpp`.
 Catálogo tiles `airport_tile_spec_catalog` (gfx ≥74) y aeropuertos
 `airport_spec_catalog` (ids ≥10). Apply: tiles antes que airports; layouts
 `0x0A` resuelven `0xFE`→tile local. Construcción via
-`SetCurrentAirportNewgrfSpec` + `PlaceAirportArea`. FTA y callbacks **bloqueados**
-explícitamente (#260 / #228): `station_uses_airport_fta` es false si hay
-`airport_newgrf_spec_id`. Action3 adjunta `newgrf_views` (tiles) y
+`SetCurrentAirportNewgrfSpec` + `PlaceAirportArea`. La FTA propia de un layout
+NewGRF sigue bloqueada explícitamente (#260 / #228):
+`station_uses_airport_fta` es false si hay `airport_newgrf_spec_id`; el layout
+custom no se hace pasar por la FSM vanilla. Esto no bloquea los callbacks de
+`AirportTile`: el scheduler ejecuta `CB152`/`CB153`/`CB154` y sus eventos de
+carga, y `AirplaneTouchdown` llega a la tesela tanto desde un nodo FTA vanilla
+cuando existe como desde la transición simple de aterrizaje. Action3 adjunta
+`newgrf_views` (tiles) y
 purchase (`0xFF`)/default (airports); dibujo NewGRF o fallback `subst_id`
 (`resolve_airport_tile_draw_gfx`); piezas de construcción usan siempre subst
 (`resolve_airport_tile_piece_gfx`).
@@ -433,15 +438,15 @@ Fuente: `newgrf_act0_roadstops.cpp` / `newgrf_roadstop.h`.
 | `08` class label 4 chars | **runtime** (catálogo) |
 | `09` stop type BYTE (`0` bus / `1` truck / `2` all) | **runtime** (catálogo; validado en query+execute) |
 | `0C` draw_mode BYTE (`Road`/`Overlay`/`WaypGround`) | **runtime** (catálogo; bits en `road_stop_spec`) |
-| `0D` cargos de random triggers DWORD | **runtime parcial**: preserva la máscara local y la traduce con CTT/versión Action8; habilita re-randomización Action2 en NewCargo, CargoTaken, carga, llegada y salida vial. Falta estado independiente por cada tesela de una parada compuesta. |
+| `0D` cargos de random triggers DWORD | **runtime parcial**: preserva la máscara local y la traduce con CTT/versión Action8; habilita re-randomización Action2 en NewCargo, CargoTaken, carga, llegada y salida vial. Las teselas de una parada compuesta conservan random independiente; las APIs legacy sin catálogo mantienen el fallback histórico. |
 | `12` flags DWORD (`DriveThroughOnly` bit3, `RoadOnly` bit5, `TramOnly` bit6, …) | **runtime** (validado en query+execute; resto almacenado) |
 | `11` callback mask BYTE | **runtime parcial**: bit `Avail` ejecuta CB13 en picker/query+execute; `AnimationNextFrame`/`AnimationSpeed` habilitan CB141/CB142 y CB140 usa la máscara Action0 `0x10`. El render reevalúa la rama Action3/Action2 con el contexto local persistente; restan scopes completos de estación. |
-| `0E` animation info | **runtime parcial**: frames/loop alimentan CB140–142, con frame/activo persistidos por parada |
-| `0F` animation speed | **runtime parcial**: espera base `2^speed` del scheduler CB140–142 |
-| `10` animation triggers | **runtime parcial**: `Built`, `TileLoop`, `NewCargo`, `CargoTaken`, `VehicleLoads`, llegada/salida vial y `AcceptanceTick`; CB140 recibe el ordinal y el id CTT de cargo en `param2`. Una parada compuesta/importada todavía no conserva estado separado por tesela. |
+| `0E` animation info | **runtime parcial**: frames/loop alimentan CB140–142, con frame/activo persistidos por tesela |
+| `0F` animation speed | **runtime parcial**: espera base `2^speed` del scheduler CB140–142 por tesela |
+| `10` animation triggers | **runtime parcial**: `Built`, `TileLoop`, `NewCargo`, `CargoTaken`, `VehicleLoads`, llegada/salida vial y `AcceptanceTick`; CB140 recibe el ordinal y el id CTT de cargo en `param2`. Una parada compuesta/importada conserva spec/frame/activo/random separados por tesela. |
 | `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
 | `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** (`associated_badges` + diagnósticos) |
-| Action1/3 views | **runtime** parcial: bahía `0..3`; DT `4`/`5` si hay vistas; el renderer resuelve Action2 por parada con random/triggers, vista/tipo/terreno, road/tram, frame, `param[]` y los scopes vecinos `66`/`67`/`68`/`6A`/`6B`, y cachea también `(var,param)`; si no hay vista usa Action5 `0x11` / OpenGFX. Restan vars BaseStation `60`–`65`/`69`. |
+| Action1/3 views | **runtime** parcial: bahía `0..3`; DT `4`/`5` si hay vistas; el renderer y scheduler resuelven Action2 por tesela con random/triggers, vista/tipo/terreno, road/tram, frame, `param[]`, carga `60`–`65`/`69` y scopes vecinos `66`/`67`/`68`/`6A`/`6B`, y cachean también `(var,param)`; si no hay vista usa Action5 `0x11` / OpenGFX. Restan scopes completos de estación y APIs legacy sin catálogo. |
 | drive-through `m5`=`RSV_*` 4/5 | **runtime** (colocación + connect eje X/Y) |
 | `grfid` + `newgrf_local_id` | **runtime** (save/load + rebind tras re-apply multi-GRF) |
 | resto (`0x0A`–`0x0B`, `0x13`–`0x16`) | consumidas (ancho fijo) / pendiente |
@@ -449,8 +454,8 @@ Fuente: `newgrf_act0_roadstops.cpp` / `newgrf_roadstop.h`.
 Precisión de la CTT en este corte (`b25a2362`): los scopes de carga de
 estaciones y paradas viales ya resuelven labels custom mediante el catálogo
 activo. Los parámetros de cargo de callbacks de animación y los scopes de
-`AirportTiles`/industria todavía usan las rutas legacy hasta que reciban ese
-catálogo.
+`AirportTiles` ya reciben la CTT del catálogo activo. Industria conserva rutas
+legacy en los call sites que aún no reciben ese catálogo.
 
 ## Sound effects (`0C`)
 

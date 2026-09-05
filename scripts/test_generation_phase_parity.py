@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import tempfile
 import copy
+import json
 import sys
 from pathlib import Path
 
@@ -155,6 +156,54 @@ def test_river_settings_reject_values_outside_openttd_ranges() -> None:
             raise AssertionError(f"la configuración {kwargs} debería fallar")
 
 
+def test_rmap_145_toyland_512_evidence_keeps_its_exact_and_limited_scope() -> None:
+    """La cohorte publicada no debe perder fases ni convertirse en una afirmación global."""
+    evidence = json.loads(
+        (phase.ROOT / "docs/parity/evidence/rmap-145.json").read_text(encoding="utf-8")
+    )
+    assert evidence["contract"] == "RMAP-145 Toyland 512x512 generation phases"
+    assert evidence["scope"] == {
+        "size": 512,
+        "seed": 1330935381,
+        "climate": "toyland",
+        "generation_settings": {
+            "amount_of_rivers": None,
+            "min_river_length": None,
+            "river_route_random": None,
+            "water_borders": None,
+        },
+        "phases": ["landscape", "clear", "towns", "industries", "objects", "trees"],
+    }
+    comparison = evidence["comparison"]
+    assert comparison["all_exact"] and comparison["first_divergent_stage"] is None
+    assert comparison["block_size"] == 4
+    assert comparison["block_grid"] == {"width": 128, "height": 128, "count": 16384}
+    assert comparison["raw_tile_fields"] == list(phase.matrix.RAW_FIELDS)
+    assert comparison["generation_state_fields"] == [
+        "random_state_0",
+        "random_state_1",
+        "town_count",
+        "town_positions[id,x,y,population,num_houses]",
+    ]
+    results = evidence["phase_results"]
+    assert [result["phase"] for result in results] == evidence["scope"]["phases"]
+    assert all(
+        result["tile_difference_count"] == 0 and result["changed_block_count"] == 0
+        for result in results
+    )
+    assert evidence["town_summary_at_trees"] == {
+        "count": 85,
+        "total_population": 53778,
+        "total_houses": 1955,
+        "ordered_sequence_sha256": "4d58dd60305087f4251e93b18f7f082ae2e8b770e02d31bdbf3b5547df1b5ecf",
+    }
+    assert evidence["not_observed"] == [
+        "industry pool identities and fields",
+        "object pool identities and fields",
+        "startup and subsequent simulation ticks",
+    ]
+
+
 if __name__ == "__main__":
     test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles()
     test_state_gate_fails_closed_for_unobserved_or_malformed_state()
@@ -164,4 +213,5 @@ if __name__ == "__main__":
     test_first_divergent_stage_uses_pipeline_order()
     test_river_settings_are_written_for_non_default_oracle_runs()
     test_river_settings_reject_values_outside_openttd_ranges()
+    test_rmap_145_toyland_512_evidence_keeps_its_exact_and_limited_scope()
     print("OK: generation_phase_parity tests")

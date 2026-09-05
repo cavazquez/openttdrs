@@ -1,0 +1,118 @@
+{
+  "date": "2026-09-05",
+  "contract": "RMAP-145 Toyland 512x512 generation phases",
+  "scope": {
+    "size": 512,
+    "seed": 1330935381,
+    "climate": "toyland",
+    "generation_settings": {
+      "amount_of_rivers": null,
+      "min_river_length": null,
+      "river_route_random": null,
+      "water_borders": null
+    },
+    "phases": [
+      "landscape",
+      "clear",
+      "towns",
+      "industries",
+      "objects",
+      "trees"
+    ]
+  },
+  "reference": {
+    "openttd_release_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "instrumented_exporter_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+    "binary_sha256": "82b925079ad2e3896d059f88095692adde7c5985e4c6706914c9d918195441be",
+    "exporter_sha256": "995eca2a5b49b55bb0cddbb07c08ee40b2b8bfb29afc6207ab27db7109a369ae"
+  },
+  "candidate": {
+    "source_commit": "6d75f4133d1cc1abda12cf247926df34bc4f708d",
+    "source_tracked_changes": [],
+    "build": "cargo-build-locked",
+    "binary_sha256": "227d544cb70d5bf20ad06d49e0a8a99d16c13ad4fa8206d2cfdfa75e67960bad"
+  },
+  "comparison": {
+    "raw_tile_fields": [
+      "height",
+      "type",
+      "m1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "m7",
+      "m8"
+    ],
+    "block_size": 4,
+    "block_grid": {
+      "width": 128,
+      "height": 128,
+      "count": 16384
+    },
+    "generation_state_fields": [
+      "random_state_0",
+      "random_state_1",
+      "town_count",
+      "town_positions[id,x,y,population,num_houses]"
+    ],
+    "all_exact": true,
+    "first_divergent_stage": null
+  },
+  "phase_results": [
+    {
+      "phase": "landscape",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [4132929813, 1426827899],
+      "town_count": 0
+    },
+    {
+      "phase": "clear",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [2657396054, 1762131921],
+      "town_count": 0
+    },
+    {
+      "phase": "towns",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [3834731210, 1368448136],
+      "town_count": 85
+    },
+    {
+      "phase": "industries",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [1930027064, 2014527695],
+      "town_count": 85
+    },
+    {
+      "phase": "objects",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [1930027064, 2014527695],
+      "town_count": 85
+    },
+    {
+      "phase": "trees",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [2064463413, 3275213739],
+      "town_count": 85
+    }
+  ],
+  "town_summary_at_trees": {
+    "count": 85,
+    "total_population": 53778,
+    "total_houses": 1955,
+    "ordered_sequence_sha256": "4d58dd60305087f4251e93b18f7f082ae2e8b770e02d31bdbf3b5547df1b5ecf"
+  },
+  "not_observed": [
+    "industry pool identities and fields",
+    "object pool identities and fields",
+    "startup and subsequent simulation ticks"
+  ]
+}

@@ -150,6 +150,7 @@ tiene un criterio verificable y apunta a la evidencia; no se declaran como
 
 | **RMAP-140** | Ampliar la matriz de generación a otros climas en 512². | **Cerrado (sub-issue acotado de RMAP-004/RMAP-024/RMAP-056/RMAP-018)** | `generation_phase_parity.py --size 512 --seed 1330935378 --climate arctic` y `--size 512 --seed 1330935380 --climate tropic` dejan exactas las seis fronteras (`landscape`→`trees`): **0 teselas y 0 bloques 4×4** distintos en las 12 comparaciones. Toyland 1024²/seed `1330935381` no se cuenta: el oráculo superó el timeout de 120 s. La cohorte no cierra los padres, que conservan abierta la matriz completa de climas, tamaños, settings y ticks posteriores. |
 | **RMAP-141** | Auditar configuración de ríos no predeterminada en clima ártico 512². | **Cerrado (sub-issue acotado de RMAP-018/RMAP-004)** | `generation_phase_parity.py --size 512 --seed 1330935379 --climate arctic --amount-of-rivers 1 --min-river-length 2 --river-route-random 1 --water-borders 0` da **0 teselas y 0 bloques 4×4** distintos en las seis fronteras. El caso verifica settings explícitos sin generalizar la matriz combinatoria ni cerrar RMAP-018/RMAP-004. |
+| **RMAP-145** | Extender la cohorte Toyland a 512². | **Cerrado (sub-issue acotado de RMAP-004/RMAP-024/RMAP-056; #360)** | `generation_phase_parity.py --reference-bin reference/openttd-upstream/build/openttd --size 512 --seed 1330935381 --climate toyland --phases landscape,clear,towns,industries,objects,trees --require-exact` deja exactas las seis fronteras: **0 teselas y 0 bloques 4×4** por fase. También coinciden ambas palabras RNG y los 85 pueblos por ID, posición, población y casas. [Evidencia versionada](evidence/rmap-145.json) registra hashes, configuración y el límite explícito: no observa todavía pools de industrias/objetos ni startup. No cierra #338 ni los padres de worldgen. |
 
 ### RMAP-142 — Candidato actualizado y trazabilidad del ejecutable
 
@@ -224,6 +225,21 @@ Esto completa **#336**, limitado a su cohorte temperate/default de cuatro
 semillas 512². RMAP-024/027/030/032/034/082 y #338 permanecen abiertos: no
 se certifican todos los campos CITY, otros climas/settings, industrias ni
 startup. La metadata por sí sola no cambia el algoritmo de generación.
+
+### RMAP-145 — Cohorte Toyland 512² por fases
+
+Cerrado como sub-issue [#360](https://github.com/cavazquez/openttdrs/issues/360)
+(2026-09-05). La seed Toyland `1330935381` en 512² completa las seis fronteras
+del pipeline con **0 teselas y 0 bloques 4×4** distintos por frontera. El
+comparador conserva los diez campos raw, ambas palabras RNG y la secuencia
+ordenada de pueblos (`id`, `x`, `y`, población y casas): al final hay 85
+pueblos, población total 53.778 y 1.955 casas, iguales al oracle. La evidencia
+compacta, incluidos hashes de binarios/exportador y de la secuencia completa,
+está en [rmap-145.json](evidence/rmap-145.json).
+
+El alcance no inspecciona todavía los pools de industrias u objetos, ni los
+ticks de startup/posteriores. Es una extensión de cohorte, no un cierre de
+RMAP-004, RMAP-024, RMAP-056 ni #338.
 
 El avance de código de RMAP-004 deja un contrato reproducible para aislar
 terreno: `OPENTTDRS_GENERATE_POPULATION=0` omite pueblos/industrias,

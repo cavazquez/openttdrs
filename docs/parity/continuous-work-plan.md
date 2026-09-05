@@ -36,6 +36,10 @@ cohorte; #338 y los padres de worldgen conservan la generalización pendiente.
 La evidencia canónica está en `docs/parity/evidence/rmap-144.json` y
 `random-map-issues.md`. RMAP-142 / `712ec4ba`
 evita candidatos obsoletos y conserva hash/procedencia de los binarios.
+RMAP-145 / #360 agrega la cohorte Toyland 512² de la seed `1330935381`: las
+seis fronteras son exactas por bytes raw, bloques 4×4, RNG y demografía de
+pueblos. El alcance y los pools que aún no observa quedan únicamente en
+`random-map-issues.md` y `evidence/rmap-145.json`; #338 sigue abierto.
 
 Estado CI observado de `712ec4ba`: Parity docs, Platform check y Fuzz replay
 pasan; CI supera formato, Clippy, rustdoc y auditorías, pero falla en

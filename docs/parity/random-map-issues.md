@@ -155,6 +155,7 @@ tiene un criterio verificable y apunta a la evidencia; no se declaran como
 | **RMAP-147** | Observar los pools de industrias y objetos en cada frontera de generación. | **Cerrado (sub-issue acotado de #338; #362)** | El gate v4 exige, además de bytes raw, bloques 4×4, RNG y pueblos, la secuencia ordenada de industria `{id,type,x,y,selected_layout}` y objeto `{id,type,x,y,width,height,view}`. La cohorte Temperate/default 512² seed `1330935378` deja exactas las seis fases: 0 teselas/0 bloques; de `industries` en adelante coinciden 213 industrias y de `objects` en adelante 65 objetos. [Evidencia compacta](evidence/rmap-147.json). No certifica campos restantes de los pools, trazas de intentos ni startup/ticks; #338 sigue abierto. |
 | **RMAP-148** | Aplicar el gate v4 de pools a Tropic con ríos explícitos. | **Cerrado (sub-issue acotado de #338; #363)** | Tropic 512²/seed `1330935380`, `rivers=1`, `min=2`, `route=1`, `water_borders=0` deja exactas las seis fronteras: **0 teselas y 0 bloques 4×4** por fase, ambas palabras RNG, 98 pueblos, 213 industrias y 60 objetos ordenados. [Evidencia compacta](evidence/rmap-148.json). No cierra la matriz: faltan otras combinaciones, campos completos, intentos, industrias acuáticas y ticks. |
 | **RMAP-149** | Aplicar el gate v4 de pools a Arctic con ríos explícitos. | **Cerrado (sub-issue acotado de #338; #364)** | Arctic 512²/seed `1330935379`, `rivers=1`, `min=2`, `route=1`, `water_borders=0` deja exactas las seis fronteras: **0 teselas y 0 bloques 4×4** por fase, ambas palabras RNG, 96 pueblos, 217 industrias y 61 objetos ordenados. [Evidencia compacta](evidence/rmap-149.json). No cierra la matriz: faltan otras combinaciones, campos completos, intentos, industrias acuáticas y ticks. |
+| **RMAP-150** | Aplicar el gate v4 de pools a Toyland. | **Cerrado (sub-issue acotado de #338; #365)** | Toyland 512²/seed `1330935381` deja exactas las seis fronteras: **0 teselas y 0 bloques 4×4** por fase, ambas palabras RNG, 85 pueblos y 203 industrias ordenadas. El pool `Object` es vacío en ambos lados y se valida explícitamente. [Evidencia compacta](evidence/rmap-150.json). No cierra la matriz: faltan otros settings/seeds, cobertura no vacía de objetos Toyland, campos completos, intentos, industrias acuáticas y ticks. |
 
 ### RMAP-142 — Candidato actualizado y trazabilidad del ejecutable
 
@@ -322,6 +323,21 @@ RNG y pools ordenados de 96 pueblos, 217 industrias y 61 objetos.
 hashes y conteos. Esta expansión cubre una configuración ártica concreta; no
 certifica la matriz combinatoria, campos restantes de `INDY`/`OBJS`, intentos,
 industrias acuáticas ni ticks. #338 sigue abierto.
+
+### RMAP-150 — Pools ordenados en Toyland
+
+Cerrado como sub-issue [#365](https://github.com/cavazquez/openttdrs/issues/365)
+(2026-09-05). Toyland 512²/seed `1330935381` pasa las seis fronteras bajo el
+gate v4: los diez campos raw, bloques 4×4 y ambas palabras RNG son idénticos,
+y los pools conservan 85 pueblos y 203 industrias en orden. `objects` también
+es igual, pero vacío en ambos lados; se registra como control explícito de la
+metadata v4, no como cobertura de un objeto Toyland real.
+
+[rmap-150.json](evidence/rmap-150.json) contiene pins, hashes y conteos. El
+resultado completa una primera cohorte de los cuatro climas con pools
+observables, pero #338 permanece abierto: faltan otras semillas/settings,
+pools no vacíos relevantes, campos completos de entidades, intentos,
+industrias acuáticas y ticks.
 
 ## Nota sobre issues remotos
 

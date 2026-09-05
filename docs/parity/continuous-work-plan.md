@@ -60,6 +60,11 @@ explícitos: 96 pueblos, 217 industrias y 61 objetos coinciden ordenados además
 de tiles, bloques 4×4 y RNG. La evidencia y límites están en
 `random-map-issues.md` y `evidence/rmap-149.json`; #338 conserva la matriz
 completa pendiente.
+RMAP-150 / #365 extiende el gate a Toyland 512²: 85 pueblos y 203 industrias
+coinciden ordenados; el pool de objetos es vacío en ambos lados y se valida
+explícitamente. La evidencia y sus límites están en `random-map-issues.md` y
+`evidence/rmap-150.json`; no equivale a cobertura no vacía de objetos Toyland
+ni cierra #338.
 
 Estado CI observado de `712ec4ba`: Parity docs, Platform check y Fuzz replay
 pasan; CI supera formato, Clippy, rustdoc y auditorías, pero falla en

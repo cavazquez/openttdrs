@@ -474,6 +474,58 @@ def test_rmap_149_evidence_extends_ordered_pools_to_arctic_rivers() -> None:
     assert evidence["not_observed"][-1] == "other seeds, sizes, climates and generation setting combinations"
 
 
+def test_rmap_150_evidence_records_toyland_empty_object_pool() -> None:
+    """Un pool vacío sigue siendo estado observado, no cobertura de objetos reales."""
+    evidence = json.loads(
+        (phase.ROOT / "docs/parity/evidence/rmap-150.json").read_text(encoding="utf-8")
+    )
+    assert evidence["issue"] == 365
+    assert evidence["contract"] == "RMAP-150 Toyland ordered entity pools at generation boundaries"
+    assert evidence["scope"] == {
+        "size": 512,
+        "seed": 1330935381,
+        "climate": "toyland",
+        "generation_settings": {
+            "amount_of_rivers": None,
+            "min_river_length": None,
+            "river_route_random": None,
+            "water_borders": None,
+        },
+        "phases": ["landscape", "clear", "towns", "industries", "objects", "trees"],
+    }
+    comparison = evidence["comparison"]
+    assert comparison["report_schema_version"] == 4
+    assert comparison["all_exact"] and comparison["first_divergent_stage"] is None
+    assert comparison["block_grid"] == {"width": 128, "height": 128, "count": 16384}
+    results = evidence["phase_results"]
+    assert all(
+        result["tile_difference_count"] == 0 and result["changed_block_count"] == 0
+        for result in results
+    )
+    assert [(result["town_count"], result["industry_count"], result["object_count"])
+            for result in results] == [
+        (0, 0, 0),
+        (0, 0, 0),
+        (85, 0, 0),
+        (85, 203, 0),
+        (85, 203, 0),
+        (85, 203, 0),
+    ]
+    assert set(evidence["ordered_sequence_sha256"]) == {
+        "towns_at_towns",
+        "industries_at_industries",
+        "objects_at_objects",
+    }
+    assert evidence["not_observed"] == [
+        "industry fields outside identity, type, origin and selected_layout",
+        "object fields outside identity, type, origin, footprint and view",
+        "non-empty Toyland object pool coverage",
+        "industry placement attempt traces and aquatic industries",
+        "startup and subsequent simulation ticks",
+        "other seeds, sizes, climates and generation setting combinations",
+    ]
+
+
 if __name__ == "__main__":
     test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles()
     test_state_gate_fails_closed_for_unobserved_or_malformed_state()
@@ -488,4 +540,5 @@ if __name__ == "__main__":
     test_rmap_147_evidence_records_ordered_industry_and_object_pools()
     test_rmap_148_evidence_extends_ordered_pools_to_tropic_rivers()
     test_rmap_149_evidence_extends_ordered_pools_to_arctic_rivers()
+    test_rmap_150_evidence_records_toyland_empty_object_pool()
     print("OK: generation_phase_parity tests")

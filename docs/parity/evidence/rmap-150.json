@@ -1,0 +1,138 @@
+{
+  "date": "2026-09-05",
+  "issue": 365,
+  "contract": "RMAP-150 Toyland ordered entity pools at generation boundaries",
+  "scope": {
+    "size": 512,
+    "seed": 1330935381,
+    "climate": "toyland",
+    "generation_settings": {
+      "amount_of_rivers": null,
+      "min_river_length": null,
+      "river_route_random": null,
+      "water_borders": null
+    },
+    "phases": [
+      "landscape",
+      "clear",
+      "towns",
+      "industries",
+      "objects",
+      "trees"
+    ]
+  },
+  "reference": {
+    "openttd_release_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "instrumented_exporter_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+    "binary_sha256": "c709f8a347072be96ba3359c1ded624be13eb98106573662842acad80e0206a3b",
+    "exporter_sha256": "da9aa69e4847715ba8e968c84689a15e202b8dc0b1acf05aabcd9afe8c6519c7"
+  },
+  "candidate": {
+    "source_commit_before_documentation": "5445de78c6f2ce8513fec04a28d8c064035b4fc8",
+    "source_tracked_changes": [],
+    "build": "cargo-build-locked",
+    "binary_sha256": "7a124ec4756d3652892a507d91e229393ab3ba276c13de032ad6f304ef666084"
+  },
+  "comparison": {
+    "report_schema_version": 4,
+    "raw_tile_fields": [
+      "height",
+      "type",
+      "m1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "m7",
+      "m8"
+    ],
+    "block_size": 4,
+    "block_grid": {
+      "width": 128,
+      "height": 128,
+      "count": 16384
+    },
+    "generation_state_fields": [
+      "random_state_0",
+      "random_state_1",
+      "town_count",
+      "town_positions[id,x,y,population,num_houses]",
+      "industry_count",
+      "industry_positions[id,type,x,y,selected_layout]",
+      "object_count",
+      "object_positions[id,type,x,y,width,height,view]"
+    ],
+    "all_exact": true,
+    "first_divergent_stage": null
+  },
+  "phase_results": [
+    {
+      "phase": "landscape",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [4132929813, 1426827899],
+      "town_count": 0,
+      "industry_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "clear",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [2657396054, 1762131921],
+      "town_count": 0,
+      "industry_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "towns",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [3834731210, 1368448136],
+      "town_count": 85,
+      "industry_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "industries",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [1930027064, 2014527695],
+      "town_count": 85,
+      "industry_count": 203,
+      "object_count": 0
+    },
+    {
+      "phase": "objects",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [1930027064, 2014527695],
+      "town_count": 85,
+      "industry_count": 203,
+      "object_count": 0
+    },
+    {
+      "phase": "trees",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [2064463413, 3275213739],
+      "town_count": 85,
+      "industry_count": 203,
+      "object_count": 0
+    }
+  ],
+  "ordered_sequence_sha256": {
+    "towns_at_towns": "227cd9f451c891f2d8b9bde69a1237b7e1e48a5a12292dc89c747792bf38aed8",
+    "industries_at_industries": "99c4ef17dc2c39aa418d784e9e76c0a51224e3dcd5cf4a489afa377d4fc9da9e",
+    "objects_at_objects": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+  },
+  "not_observed": [
+    "industry fields outside identity, type, origin and selected_layout",
+    "object fields outside identity, type, origin, footprint and view",
+    "non-empty Toyland object pool coverage",
+    "industry placement attempt traces and aquatic industries",
+    "startup and subsequent simulation ticks",
+    "other seeds, sizes, climates and generation setting combinations"
+  ]
+}

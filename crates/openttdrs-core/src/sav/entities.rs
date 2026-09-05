@@ -1506,6 +1506,12 @@ pub struct SavCompany {
     pub bankruptcy_timeout: Option<i16>,
     /// Valor de adquisición almacenado (`PLYR.bankrupt_value`).
     pub bankruptcy_value: Option<i64>,
+    /// Crédito fijo 16.16 de terraformación (`PLYR.terraform_limit`).
+    pub terraform_limit: Option<u32>,
+    /// Crédito fijo 16.16 de limpieza (`PLYR.clear_limit`).
+    pub clear_limit: Option<u32>,
+    /// Crédito fijo 16.16 de plantación (`PLYR.tree_limit`).
+    pub tree_limit: Option<u32>,
     /// Acumulador del trimestre actual (`PLYR.cur_economy`).
     pub cur_economy: Option<SavCompanyEconomy>,
     /// Trimestres cerrados en orden `OpenTTD`: más reciente primero (`PLYR.old_economy`).
@@ -1713,6 +1719,15 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let bankruptcy_timeout =
                 record_i64(&record, "bankrupt_timeout").and_then(|value| i16::try_from(value).ok());
             let bankruptcy_value = record_i64(&record, "bankrupt_value");
+            let terraform_limit = record_get(&record, "terraform_limit")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok());
+            let clear_limit = record_get(&record, "clear_limit")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok());
+            let tree_limit = record_get(&record, "tree_limit")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok());
             let liveries = company_liveries_from_record(&record, colour, save_version);
             let settings = nested_struct(&record, "settings");
             let setting = |name: &str, legacy: &str| {
@@ -1777,6 +1792,9 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 bankruptcy_asked,
                 bankruptcy_timeout,
                 bankruptcy_value,
+                terraform_limit,
+                clear_limit,
+                tree_limit,
                 cur_economy: company_cur_economy_from_record(&record),
                 old_economy: company_old_economy_from_record(&record),
                 liveries,

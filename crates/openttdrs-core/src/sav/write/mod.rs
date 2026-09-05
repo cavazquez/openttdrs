@@ -2031,6 +2031,9 @@ mod tests {
             rival.bankruptcy_asked = 0;
             rival.bankruptcy_timeout = -17;
             rival.bankruptcy_value = 87_654_321;
+            rival.terraform_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
+            rival.clear_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
+            rival.tree_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
             rival.liveries[1] = crate::CompanyLivery {
                 in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY,
                 colour1: 7,
@@ -2071,6 +2074,9 @@ mod tests {
         assert_table_field_type(&plyr.body, 4, "bankrupt_asked");
         assert_table_field_type(&plyr.body, 3, "bankrupt_timeout");
         assert_table_field_type(&plyr.body, 7, "bankrupt_value");
+        assert_table_field_type(&plyr.body, 6, "terraform_limit");
+        assert_table_field_type(&plyr.body, 6, "clear_limit");
+        assert_table_field_type(&plyr.body, 6, "tree_limit");
         assert_table_field_type(&plyr.body, 0x1B, "liveries");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.companies.len(), 2);
@@ -2103,6 +2109,18 @@ mod tests {
         assert_eq!(sav_game.companies[1].bankruptcy_asked, Some(0));
         assert_eq!(sav_game.companies[1].bankruptcy_timeout, Some(-17));
         assert_eq!(sav_game.companies[1].bankruptcy_value, Some(87_654_321));
+        assert_eq!(
+            sav_game.companies[1].terraform_limit,
+            Some(crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT)
+        );
+        assert_eq!(
+            sav_game.companies[1].clear_limit,
+            Some(crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT)
+        );
+        assert_eq!(
+            sav_game.companies[1].tree_limit,
+            Some(crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT)
+        );
         assert_eq!(sav_game.companies[1].is_ai, Some(true));
         assert_eq!(sav_game.companies[1].engine_renew, Some(false));
         assert_eq!(sav_game.companies[1].engine_renew_months, Some(-3));
@@ -2139,6 +2157,18 @@ mod tests {
         assert_eq!(loaded_rival.bankruptcy_asked, 0);
         assert_eq!(loaded_rival.bankruptcy_timeout, -17);
         assert_eq!(loaded_rival.bankruptcy_value, 87_654_321);
+        assert_eq!(
+            loaded_rival.terraform_limit,
+            crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT
+        );
+        assert_eq!(
+            loaded_rival.clear_limit,
+            crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT
+        );
+        assert_eq!(
+            loaded_rival.tree_limit,
+            crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT
+        );
         assert!(loaded_rival.is_ai);
         assert!(!loaded_rival.engine_renew);
         assert_eq!(loaded_rival.engine_renew_months, -3);
@@ -2619,6 +2649,9 @@ mod tests {
         state.companies[0].bankruptcy_asked = 0;
         state.companies[0].bankruptcy_timeout = -17;
         state.companies[0].bankruptcy_value = 87_654_321;
+        state.companies[0].terraform_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
+        state.companies[0].clear_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
+        state.companies[0].tree_limit = crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT;
         state.companies[0].reset_liveries();
         // Ejercita el valor distinto del centinela global de `PLYR.max_loan`.
         // El smoke OpenTTD opcional re-guarda este valor para acreditar tanto
@@ -2702,6 +2735,18 @@ mod tests {
         assert_eq!(sav_game.companies[0].bankruptcy_asked, Some(0));
         assert_eq!(sav_game.companies[0].bankruptcy_timeout, Some(-17));
         assert_eq!(sav_game.companies[0].bankruptcy_value, Some(87_654_321));
+        assert_eq!(
+            sav_game.companies[0].terraform_limit,
+            Some(crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT)
+        );
+        assert_eq!(
+            sav_game.companies[0].clear_limit,
+            Some(crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT)
+        );
+        assert_eq!(
+            sav_game.companies[0].tree_limit,
+            Some(crate::company::DEFAULT_COMPANY_LANDSCAPING_LIMIT)
+        );
         assert_eq!(sav_game.companies[0].max_loan, Some(450_000));
         assert_eq!(sav_game.vehicles.len(), 2, "tren + bus");
         assert_eq!(sav_game.companies[0].liveries[14], custom_bus_livery);

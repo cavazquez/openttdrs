@@ -275,6 +275,28 @@ fn openttd_resaved_preserves_requested_company_passive_bankruptcy_state() {
     assert_eq!(company.bankruptcy_value, Some(87_654_321));
 }
 
+/// Contrato opcional para los cupos 16.16 de paisajismo. El fixture usa el
+/// burst saturado por defecto (`4096 << 16`), de modo que los ticks que ejecuta
+/// OpenTTD durante el smoke no cambian los valores antes del re-guardado.
+#[test]
+fn openttd_resaved_preserves_requested_company_landscaping_limits() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_COMPANY_LANDSCAPING").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PLYR");
+    let raw = std::fs::read(&path).expect("leer SAV re-guardado");
+    let game = sav::load(&raw).expect("import openttdrs");
+    let company = game
+        .companies
+        .first()
+        .expect("PLYR de compañía activa tras re-guardado OpenTTD");
+    const SATURATED_DEFAULT: u32 = 4096 << 16;
+    assert_eq!(company.terraform_limit, Some(SATURATED_DEFAULT));
+    assert_eq!(company.clear_limit, Some(SATURATED_DEFAULT));
+    assert_eq!(company.tree_limit, Some(SATURATED_DEFAULT));
+}
+
 /// Contrato opcional para el límite de préstamo individual. OpenTTD representa
 /// el default con `INT64_MIN`, pero una compañía marcada por deity conserva un
 /// valor concreto incluso si cambia el límite global por inflación.

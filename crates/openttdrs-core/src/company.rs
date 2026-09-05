@@ -89,6 +89,14 @@ pub const COMPANY_MAX_LOAN_DEFAULT: i64 = i64::MIN;
 /// nativo evita confundir la ausencia de HQ con la tesela `(0, 0)`.
 pub const INVALID_COMPANY_HQ_TILE: u32 = u32::MAX;
 
+/// Crédito inicial/saturado de los límites de paisajismo del preset nativo.
+///
+/// `OpenTTD` usa una unidad fija de 16 bits y, con sus settings por defecto,
+/// inicializa cada cupo en `4096 << 16`. El core aún no descuenta ni recarga
+/// estos valores, pero los nuevos estados deben exportar el mismo punto de
+/// partida que una compañía nativa.
+pub const DEFAULT_COMPANY_LANDSCAPING_LIMIT: u32 = 4096 << 16;
+
 /// Escribe el owner de infraestructura en `m1` (vía / carretera / depósitos).
 #[must_use]
 pub fn tile_with_owner(mut tile: crate::map::Tile, owner: CompanyId) -> crate::map::Tile {
@@ -274,6 +282,18 @@ pub struct Company {
     /// compañía correspondiente.
     #[serde(default)]
     pub bankruptcy_value: i64,
+    /// Crédito de alturas que la compañía puede terraformar
+    /// (`PLYR.terraform_limit`, unidad fija 16.16).
+    #[serde(default = "default_company_landscaping_limit")]
+    pub terraform_limit: u32,
+    /// Crédito de teselas que la compañía puede limpiar
+    /// (`PLYR.clear_limit`, unidad fija 16.16).
+    #[serde(default = "default_company_landscaping_limit")]
+    pub clear_limit: u32,
+    /// Crédito de árboles que la compañía puede plantar
+    /// (`PLYR.tree_limit`, unidad fija 16.16).
+    #[serde(default = "default_company_landscaping_limit")]
+    pub tree_limit: u32,
     /// Autorenovación de vehículos viejos (`settings.engine_renew`).
     #[serde(default = "default_engine_renew")]
     pub engine_renew: bool,
@@ -324,6 +344,10 @@ const fn default_company_hq_tile() -> u32 {
     INVALID_COMPANY_HQ_TILE
 }
 
+const fn default_company_landscaping_limit() -> u32 {
+    DEFAULT_COMPANY_LANDSCAPING_LIMIT
+}
+
 impl Company {
     #[must_use]
     pub fn player(economy: CompanyEconomy, colour: u8) -> Self {
@@ -352,6 +376,9 @@ impl Company {
             bankruptcy_asked: 0,
             bankruptcy_timeout: 0,
             bankruptcy_value: 0,
+            terraform_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
+            clear_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
+            tree_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,
@@ -392,6 +419,9 @@ impl Company {
             bankruptcy_asked: 0,
             bankruptcy_timeout: 0,
             bankruptcy_value: 0,
+            terraform_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
+            clear_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
+            tree_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,
@@ -432,6 +462,9 @@ impl Company {
             bankruptcy_asked: 0,
             bankruptcy_timeout: 0,
             bankruptcy_value: 0,
+            terraform_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
+            clear_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
+            tree_limit: DEFAULT_COMPANY_LANDSCAPING_LIMIT,
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,

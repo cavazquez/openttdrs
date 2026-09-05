@@ -36,7 +36,29 @@ impl Locale {
     #[must_use]
     pub(crate) fn from_code(code: &str) -> Self {
         let normalized = code.trim().to_ascii_lowercase();
-        if normalized == "en" || normalized.starts_with("en-") || normalized.starts_with("en_") {
+        // OpenTTD persiste en su configuración el nombre del archivo `.lng`,
+        // no sólo el ISO del encabezado. Aceptamos sus tres variantes inglesas
+        // disponibles en 15.3, además de las variantes españolas equivalentes,
+        // sin afirmar que ya soportamos todos los packs upstream.
+        let pack_name = normalized
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(normalized.as_str());
+        let english_pack = matches!(
+            pack_name,
+            "english"
+                | "english.txt"
+                | "english.lng"
+                | "english_us.txt"
+                | "english_us.lng"
+                | "english_au.txt"
+                | "english_au.lng"
+        );
+        if english_pack
+            || normalized == "en"
+            || normalized.starts_with("en-")
+            || normalized.starts_with("en_")
+        {
             Self::En
         } else {
             Self::Es
@@ -622,11 +644,22 @@ mod tests {
     use super::{Locale, LocalizationPlugin, localized_text, text};
 
     #[test]
-    fn locale_codes_accept_region_suffixes_and_fallback_to_spanish() {
+    fn locale_codes_and_openttd_pack_filenames_resolve_to_supported_locales() {
         assert_eq!(Locale::from_code("en"), Locale::En);
         assert_eq!(Locale::from_code("EN-us"), Locale::En);
         assert_eq!(Locale::from_code("es-AR"), Locale::Es);
+        assert_eq!(Locale::from_code(" english.lng "), Locale::En);
+        assert_eq!(Locale::from_code("lang/english_US.lng"), Locale::En);
+        assert_eq!(Locale::from_code("english_AU.txt"), Locale::En);
+        assert_eq!(Locale::from_code("spanish.lng"), Locale::Es);
+        assert_eq!(Locale::from_code("spanish_MX.txt"), Locale::Es);
         assert_eq!(Locale::from_code("unknown"), Locale::Es);
+
+        let prefs = ClientPreferences {
+            language: "english.lng".into(),
+            ..ClientPreferences::default()
+        };
+        assert_eq!(prefs.locale(), Locale::En);
     }
 
     #[test]

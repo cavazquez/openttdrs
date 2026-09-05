@@ -1,11 +1,13 @@
 //! Ventana formal de cheats (#45), paridad ligera con `CheatWindow` de OpenTTD.
-//! Mutaciones solo vía `Command::Cheat*`. Abrir: Ctrl+Alt+C / Ajustes → Cheats…
+//! Mutaciones solo vía `Command::Cheat*`. Abrir: Ctrl+Alt+C / Ajustes → Trucos…
 
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{calendar_day_index, calendar_year_day, format_calendar_date};
+use openttdrs_core::{calendar_day_index, calendar_year_day};
 
+use crate::i18n::{Locale, localized_calendar_date, localized_text};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
@@ -43,7 +45,7 @@ pub(crate) fn setup_cheat_window(mut commands: Commands, asset_server: Res<Asset
         &mut commands,
         asset_server,
         FloatingWindowId::CheatWindow,
-        "Cheats",
+        "Trucos",
         TITLE_BROWN,
         Vec2::new(280.0, 140.0),
         360.0,
@@ -142,6 +144,7 @@ fn spawn_cheat_btn(
 pub(crate) fn sync_cheat_window(
     state: Res<CheatWindowState>,
     sim: Option<Res<SimWorld>>,
+    prefs: Res<ClientPreferences>,
     mut windows: Query<(&FloatingWindow, &mut Visibility)>,
     mut status_q: Query<&mut Text, With<CheatWindowStatusText>>,
     mut buttons: Query<(&CheatWindowAction, &mut BackgroundColor), With<Button>>,
@@ -161,7 +164,7 @@ pub(crate) fn sync_cheat_window(
     let Some(sim) = sim.as_deref() else {
         return;
     };
-    let status = format_cheat_status(&sim.state);
+    let status = format_cheat_status(&sim.state, prefs.locale());
     for mut text in &mut status_q {
         **text = status.clone();
     }
@@ -245,23 +248,63 @@ pub(crate) fn cheat_window_on_closed(
     }
 }
 
-fn format_cheat_status(state: &openttdrs_core::GameState) -> String {
+fn format_cheat_status(state: &openttdrs_core::GameState, locale: Locale) -> String {
     let c = &state.cheats;
-    let date = format_calendar_date(state.tick);
+    let date = localized_calendar_date(locale, state.tick);
     let company = state
         .companies
         .iter()
         .find(|co| co.id == state.active_company)
         .map(|co| co.name.as_str())
         .unwrap_or("?");
+    let bool_label = |value| localized_text(locale, if value { "sí" } else { "no" });
     format!(
-        "enabled={} ∞$={} bulldozer={}\nmoney={} · {} · cia {} ({})",
-        c.enabled,
-        c.infinite_money,
-        c.magic_bulldozer,
+        "{}={} ∞$={} {}={}\n{}={} · {} · {} {} ({})",
+        localized_text(locale, "activado"),
+        bool_label(c.enabled),
+        bool_label(c.infinite_money),
+        localized_text(locale, "bulldozer"),
+        bool_label(c.magic_bulldozer),
+        localized_text(locale, "dinero"),
         state.economy.money,
         date,
+        localized_text(locale, "compañía"),
         state.active_company.0,
         company
     )
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use bevy::prelude::*;
+
+    use super::{CheatWindowState, CheatWindowStatusText, sync_cheat_window};
+    use crate::settings::ClientPreferences;
+    use crate::state::SimWorld;
+
+    #[test]
+    fn cheat_status_follows_the_live_locale() {
+        let mut world = World::new();
+        world.insert_resource(CheatWindowState { open: true });
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(ClientPreferences {
+            language: "en".into(),
+            ..ClientPreferences::default()
+        });
+        let status = world.spawn((CheatWindowStatusText, Text::new("—"))).id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sync_cheat_window);
+        schedule.run(&mut world);
+        let english = world.entity(status).get::<Text>().unwrap().as_str();
+        assert!(english.starts_with("enabled="));
+        assert!(english.contains(" Jan "));
+
+        world.resource_mut::<ClientPreferences>().language = "es-AR".into();
+        schedule.run(&mut world);
+        let spanish = world.entity(status).get::<Text>().unwrap().as_str();
+        assert!(spanish.starts_with("activado="));
+        assert!(spanish.contains(" ene "));
+    }
 }

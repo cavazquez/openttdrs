@@ -3,6 +3,7 @@
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 use bevy::text::EditableText;
+use openttdrs_core::{GameTick, format_calendar_date};
 
 use crate::bevy_app::UpdateSet;
 use crate::settings::ClientPreferences;
@@ -358,9 +359,23 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         " — incompatible: solo trenes" => " — incompatible: trains only",
         " — incompatible: solo vehículos de carretera" => " — incompatible: road vehicles only",
         // Ventanas y controles reutilizables.
+        "Trucos" => "Cheats",
+        "Trucos..." => "Cheats...",
         "Singleplayer · Ctrl+Alt+C · consola: cheat …" => {
             "Singleplayer · Ctrl+Alt+C · console: cheat …"
         }
+        "Dinero, año, bulldozer, compañía (Ctrl+Alt+C)" => {
+            "Money, year, bulldozer, company (Ctrl+Alt+C)"
+        }
+        "Año−" => "Year−",
+        "Año+" => "Year+",
+        "Sin escenario GS activo" => "No active GS scenario",
+        // Estado de la ventana de trucos: los valores se materializan en cada
+        // frame, por lo que sus etiquetas se traducen antes de interpolarlos.
+        "activado" => "enabled",
+        "bulldozer" => "bulldozer",
+        "dinero" => "money",
+        "compañía" => "company",
         "GameScript-lite · progreso de goals del escenario" => {
             "GameScript-lite · scenario goal progress"
         }
@@ -634,14 +649,52 @@ pub(crate) fn localized_text(locale: Locale, source: &str) -> String {
     text(locale, source).to_owned()
 }
 
+/// Formatea una fecha del simulador para la superficie UI activa.
+///
+/// El core conserva el formato español como dato canónico de sus noticias;
+/// esta conversión sólo afecta las fechas materializadas por el cliente. Así
+/// el cambio de locale no modifica ticks, saves ni texto producido por un
+/// GameScript.
+#[must_use]
+pub(crate) fn localized_calendar_date(locale: Locale, tick: GameTick) -> String {
+    let source = format_calendar_date(tick);
+    if locale == Locale::Es {
+        return source;
+    }
+    let mut parts = source.split_whitespace();
+    let (Some(day), Some(month), Some(year)) = (parts.next(), parts.next(), parts.next()) else {
+        return source;
+    };
+    if parts.next().is_some() {
+        return source;
+    }
+    let month = match month {
+        "ene" => "Jan",
+        "feb" => "Feb",
+        "mar" => "Mar",
+        "abr" => "Apr",
+        "may" => "May",
+        "jun" => "Jun",
+        "jul" => "Jul",
+        "ago" => "Aug",
+        "sep" => "Sep",
+        "oct" => "Oct",
+        "nov" => "Nov",
+        "dic" => "Dec",
+        _ => month,
+    };
+    format!("{day} {month} {year}")
+}
+
 #[cfg(test)]
 mod tests {
     use bevy::prelude::*;
     use bevy::text::EditableText;
+    use openttdrs_core::GameTick;
 
     use crate::settings::ClientPreferences;
 
-    use super::{Locale, LocalizationPlugin, localized_text, text};
+    use super::{Locale, LocalizationPlugin, localized_calendar_date, localized_text, text};
 
     #[test]
     fn locale_codes_and_openttd_pack_filenames_resolve_to_supported_locales() {
@@ -673,6 +726,11 @@ mod tests {
         assert_eq!(text(Locale::En, "Horario"), "Timetable");
         assert_eq!(text(Locale::En, "Modo carga"), "Loading mode");
         assert_eq!(text(Locale::En, "Compartir"), "Share");
+        assert_eq!(text(Locale::En, "Trucos..."), "Cheats...");
+        assert_eq!(
+            text(Locale::En, "Sin escenario GS activo"),
+            "No active GS scenario"
+        );
         assert_eq!(text(Locale::En, "untranslated"), "untranslated");
     }
 
@@ -689,6 +747,18 @@ mod tests {
         assert_eq!(
             localized_text(Locale::En, "Un NewGRF denegó esta acción (callback)."),
             "A NewGRF denied this action (callback)."
+        );
+    }
+
+    #[test]
+    fn calendar_date_is_localized_only_at_the_client_boundary() {
+        assert_eq!(
+            localized_calendar_date(Locale::Es, GameTick::new(0)),
+            "1 ene 1950"
+        );
+        assert_eq!(
+            localized_calendar_date(Locale::En, GameTick::new(0)),
+            "1 Jan 1950"
         );
     }
 
@@ -757,6 +827,54 @@ mod tests {
         app.world_mut().resource_mut::<ClientPreferences>().language = "spanish_MX.lng".into();
         app.update();
         assert_eq!(app.world().get::<Text>(label).unwrap().as_str(), "Noticias");
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_updates_cheat_and_goal_labels_live_without_touching_game_data() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let cheat_title = app.world_mut().spawn(Text::new("Trucos")).id();
+        // Los títulos del GameScript son datos de la partida, no claves UI.
+        let game_script_goal = app
+            .world_mut()
+            .spawn(Text::new("Meta de jugador: 12/20"))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(cheat_title).unwrap().as_str(),
+            "Cheats"
+        );
+        // La lista puede materializar su estado vacío después del cambio de
+        // idioma; el registro tardío debe usar el locale actual.
+        let goal_empty = app
+            .world_mut()
+            .spawn(Text::new("Sin escenario GS activo"))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(goal_empty).unwrap().as_str(),
+            "No active GS scenario"
+        );
+        assert_eq!(
+            app.world().get::<Text>(game_script_goal).unwrap().as_str(),
+            "Meta de jugador: 12/20"
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(cheat_title).unwrap().as_str(),
+            "Trucos"
+        );
+        assert_eq!(
+            app.world().get::<Text>(goal_empty).unwrap().as_str(),
+            "Sin escenario GS activo"
+        );
     }
 
     #[test]

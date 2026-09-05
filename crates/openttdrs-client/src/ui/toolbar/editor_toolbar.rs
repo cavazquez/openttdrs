@@ -7,12 +7,13 @@ use bevy::ui::UiScale;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::Command;
 use openttdrs_core::{
-    RoadTramType, RoadTypeDef, calendar_day_index, calendar_year_day, format_calendar_date,
-    list_road_types,
+    RoadTramType, RoadTypeDef, calendar_day_index, calendar_year_day, list_road_types,
 };
 
 use crate::camera::{ZoomMode, zoom_step_scale};
+use crate::i18n::localized_calendar_date;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending};
+use crate::settings::ClientPreferences;
 use crate::state::ingame_lifecycle::InGameUi;
 use crate::state::{EditorSession, SimRunState, SimWorld, sim_is_paused, toggle_sim_run_state};
 use crate::ui::audio_settings_window::SoundMusicWindowState;
@@ -969,6 +970,7 @@ pub(crate) fn sync_editor_toolbar_visibility(
 pub(crate) fn sync_editor_toolbar_date(
     editor: Res<EditorSession>,
     sim: Option<Res<SimWorld>>,
+    prefs: Res<ClientPreferences>,
     mut q: Query<&mut Text, With<EditorToolbarDateText>>,
 ) {
     if !editor.active {
@@ -977,7 +979,7 @@ pub(crate) fn sync_editor_toolbar_date(
     let Some(sim) = sim.as_deref() else {
         return;
     };
-    let label = format_calendar_date(sim.state.tick);
+    let label = localized_calendar_date(prefs.locale(), sim.state.tick);
     for mut text in &mut q {
         if **text != label {
             **text = label.clone();

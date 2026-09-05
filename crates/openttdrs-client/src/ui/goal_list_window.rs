@@ -31,7 +31,9 @@ struct GoalListRow;
 
 #[derive(Default)]
 pub(crate) struct GoalListCache {
-    fingerprint: u64,
+    // `0` es el fingerprint válido del GameScript desactivado y sin goals.
+    // `None` distingue la primera apertura de una lista ya vacía.
+    fingerprint: Option<u64>,
 }
 
 pub(crate) fn setup_goal_list_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -84,17 +86,15 @@ pub(crate) fn sync_goal_list_window(
 ) {
     sync_floating_window_visibility(&mut windows, FloatingWindowId::Goals, state.open);
     if !state.open {
-        cache.fingerprint = 0;
+        cache.fingerprint = None;
         return;
     }
     let Some(sim) = sim.as_deref() else {
         return;
     };
-    let fingerprint = goal_fingerprint(&sim.state.gs);
-    if fingerprint == cache.fingerprint {
+    if !refresh_goal_list_cache(&mut cache, &sim.state.gs) {
         return;
     }
-    cache.fingerprint = fingerprint;
     let Ok(list_root) = list_roots.single() else {
         return;
     };
@@ -136,6 +136,16 @@ fn goal_fingerprint(gs: &openttdrs_core::GsState) -> u64 {
     h
 }
 
+/// Registra el contenido visto y conserva la primera lista vacía como cambio.
+fn refresh_goal_list_cache(cache: &mut GoalListCache, gs: &openttdrs_core::GsState) -> bool {
+    let fingerprint = goal_fingerprint(gs);
+    if cache.fingerprint == Some(fingerprint) {
+        return false;
+    }
+    cache.fingerprint = Some(fingerprint);
+    true
+}
+
 pub(crate) fn goal_list_window_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut state: ResMut<GoalListWindowState>,
@@ -143,4 +153,18 @@ pub(crate) fn goal_list_window_on_closed(
     close_floating_window_on_message(&mut closed, FloatingWindowId::Goals, || {
         state.open = false;
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GoalListCache, refresh_goal_list_cache};
+
+    #[test]
+    fn disabled_empty_goal_list_refreshes_when_opened_for_the_first_time() {
+        let mut cache = GoalListCache::default();
+        let gs = openttdrs_core::GsState::default();
+
+        assert!(refresh_goal_list_cache(&mut cache, &gs));
+        assert!(!refresh_goal_list_cache(&mut cache, &gs));
+    }
 }

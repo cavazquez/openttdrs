@@ -215,7 +215,7 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             SaveMenuAction::TileInspector,
         ),
         (
-            "Cheats...",
+            "Trucos...",
             "Dinero, año, bulldozer, compañía (Ctrl+Alt+C)",
             SaveMenuAction::Cheats,
         ),

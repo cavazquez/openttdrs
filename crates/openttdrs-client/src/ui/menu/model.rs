@@ -399,7 +399,7 @@ pub(crate) const HELP_MENU: MenuSpec = MenuSpec {
             MenuAction::Route(UiRoute::TileInspector),
         ),
         MenuEntrySpec::divider(),
-        MenuEntrySpec::item("Cheats", MenuAction::Route(UiRoute::Cheats)),
+        MenuEntrySpec::item("Trucos", MenuAction::Route(UiRoute::Cheats)),
     ],
 };
 

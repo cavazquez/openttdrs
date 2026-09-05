@@ -1,10 +1,8 @@
 use bevy::prelude::*;
-use openttdrs_core::{
-    NewsDisplayMode, NewsReference, NewsType, PendingNewsEvent, format_calendar_date, format_money,
-};
+use openttdrs_core::{NewsDisplayMode, NewsReference, NewsType, PendingNewsEvent, format_money};
 
 use crate::camera::{CameraFocusRequest, tile_camera_world_pos};
-use crate::i18n::Locale;
+use crate::i18n::{Locale, localized_calendar_date};
 use crate::news_prefs::NewsDisplayPrefs;
 use crate::settings::ClientPreferences;
 use crate::state::{EditorSession, SimRunState, SimWorld, sim_is_paused};
@@ -57,7 +55,7 @@ pub(crate) fn sync_status_bar(
     mut cache: Local<StatusBarCache>,
 ) {
     let locale = prefs.locale();
-    let date = format_calendar_date(sim.state.tick);
+    let date = localized_calendar_date(locale, sim.state.tick);
     let money = format_money(sim.state.economy.money);
     let company_name = active_company_display_name(&sim);
     let company = if editor.active {

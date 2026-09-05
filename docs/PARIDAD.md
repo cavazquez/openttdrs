@@ -994,6 +994,16 @@ autoridad y NewGRF sin tocar nombres propios ni texto editable; los mensajes
 de ventanas que siguen generándose como párrafos y los catálogos upstream
 continúan explícitamente pendientes.
 
+Actualización #370 (2026-09-05): la ventana de trucos y su entrada en Ajustes
+usan claves `es`/`en` en vivo, incluido su estado dinámico. Las fechas que el
+cliente materializa en CheatWindow, la statusbar y la barra del editor pasan
+por la presentación del locale (por ejemplo, `16 Jun 1950` en inglés), sin
+alterar ticks, SAV ni noticias que son datos de simulación. La lista de
+objetivos ahora construye también su estado vacío inicial; títulos y cuerpos
+provenientes de GameScript o jugadores siguen sin traducirse. Este corte no
+abarca titulares/cuerpos generados ni los catálogos upstream completos, por lo
+que #331 permanece abierto.
+
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate
 pixel-perfect: mientras el orden global de composición siga divergente, la

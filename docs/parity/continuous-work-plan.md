@@ -40,6 +40,20 @@ El manifiesto Python completo local ya pasó después de `19a07913`. #333
 permanece abierto; la siguiente reparación debe cubrir un checkout limpio,
 sin borrar ni debilitar la aserción de paletas.
 
+Reparación #347 validada (2026-09-04): las casas sin PNG suelto se recortan
+del atlas distribuido y conservan la misma paleta; las páginas se decodifican
+una vez por construcción. Se mantiene la aserción de pares completos y se
+añaden pruebas de directorio sin PNGs, RGBA/dimensiones, recorte, transparencia,
+override y página truncada. Pasan 3249 tests workspace con nextest (3 omitidos),
+1074 client con cargo test (2 ignorados), Clippy client, rustdoc completo,
+formato y gates documentales. El cliente recompilado abrió Kale y produjo
+capturas a 1×/0.5×/0.25×/0.125×, revisadas en
+`/tmp/openttdrs-house-atlas-scale-{1,2,4,8}.png`. El mapa se ve en los cuatro
+niveles; las capturas usan los assets locales y no sustituyen la prueba
+aislada sin PNGs ni certifican raster exacto. Persisten marcas negras pequeñas
+en agua al alejar a 0.5×/0.25×, pendientes del diagnóstico de #326. #333
+espera el resultado remoto del nuevo commit.
+
 Etapa #333 — reparación de gates (2026-09-04): se reprodujeron los fallos de
 CI de `b47163d1`. Rustdoc tenía dos enlaces rotos (`IndustryRandomTrigger` y
 `[LandscapeType][slot]`); las referencias ya están corregidas y el comando

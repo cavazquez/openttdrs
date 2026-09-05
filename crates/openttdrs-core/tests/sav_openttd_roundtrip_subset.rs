@@ -24,6 +24,28 @@ fn openttd_resaved_preserves_renamed_company() {
     );
 }
 
+/// #372: ejecutar sobre el SAV que OpenTTD re-guardó después de añadir un
+/// `PersistentStorage` de pueblo y su referencia `CITY.psa_list`.
+#[test]
+#[ignore = "requiere OPENTTDRS_ROUNDTRIP_SAV re-guardado por OpenTTD dedicado"]
+fn openttd_resaved_preserves_added_town_psa_list() {
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV").expect("SAV re-guardado requerido");
+    let bytes = std::fs::read(path).expect("leer SAV re-guardado");
+    let game = sav::load(&bytes).expect("cargar SAV re-guardado");
+    let storage = game
+        .persistent_storages
+        .iter()
+        .find(|storage| storage.grfid == 0xD1CE_BA5E)
+        .expect("PSAC nuevo preservado");
+    assert_eq!(storage.storage.get(7), Some(&0xCAFE_BABE));
+    assert!(
+        game.town_persistent_storage_ids
+            .values()
+            .any(|ids| ids.contains(&storage.storage_id)),
+        "algún CITY.psa_list conserva la referencia al PSAC nuevo"
+    );
+}
+
 #[test]
 fn openttd_resaved_preserves_declared_subset() {
     let Ok(path) = std::env::var("OPENTTDRS_ROUNDTRIP_SAV") else {

@@ -28,13 +28,21 @@ cambia la prioridad global, la fila resumida de `PARIDAD.md`.
 `✅` cubierto en el corte indicado; `🟡` best-effort o subconjunto; `❌` no se
 preserva. Importar un dato no implica que el exportador lo escriba.
 
-Actualización #371 (2026-09-05): el merge de tablas importadas conserva columnas
-desconocidas al renombrar strings raíz con otra longitud, siempre que su
-descriptor y las identidades de fila no cambien. Reencuadra la fila con gamma
-nativo, incluidos registros de más de 16 KiB; el lector corrige también la
-variante gamma de cinco bytes. [Evidencia y reproducción](sav-rename-371.md).
-Listas/structs de distinta longitud y cambios de topología continúan fuera de
-ese merge conservador; #328 permanece abierto.
+Actualización #371/#372 (2026-09-05): el merge de tablas importadas conserva
+columnas desconocidas al cambiar strings o listas escalares raíz de otra
+longitud, siempre que su descriptor y las identidades de fila no cambien.
+Reencuadra la fila con gamma nativo, incluidos registros de más de 16 KiB; el
+lector corrige también la variante gamma de cinco bytes. Las listas se limitan
+al wire-format raíz: el header no distingue vector de array fijo y cada writer
+mantiene el tamaño nativo de sus arrays. [Strings](sav-rename-371.md) y
+[listas raíz](sav-vector-372.md) contienen evidencia y reproducción.
+Structs/listas anidadas de distinta longitud y cambios de topología continúan
+fuera de ese merge conservador; #328 permanece abierto.
+
+Esta actualización prevalece sobre la limitación histórica de la fila `Mundo
+base` que agrupaba todas las listas: desde #372, `CITY.psa_list` y cualquier
+lista escalar raíz compatible no fuerzan por sí solas el header canónico. La
+restricción residual de esa fila es para structs y listas anidadas.
 
 Corrección vigente: desde `26a915db`, `INDY.accepted[].history`,
 `accepted[].accumulated_waiting`, `INDY.produced[].history` y `valid_history`

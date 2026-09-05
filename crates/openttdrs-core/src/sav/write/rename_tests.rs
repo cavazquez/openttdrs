@@ -1,4 +1,4 @@
-//! #371: renombrar tablas nativas sin perder columnas no modeladas.
+//! #371/#372: mutar filas SAV sin perder columnas no modeladas.
 
 #![allow(clippy::expect_used)]
 
@@ -29,6 +29,59 @@ fn rename_records(sparse: bool, raw: bool, names: [&str; 2], counters: [u8; 2]) 
         records.push(row);
     }
     records
+}
+
+fn list_records(sparse: bool, raw: bool, values: [&[u8]; 2], counters: [u8; 2]) -> Vec<Vec<u8>> {
+    let mut records = Vec::new();
+    for (ordinal, ((values, counter), index)) in
+        values.into_iter().zip(counters).zip([3, 130]).enumerate()
+    {
+        if ordinal == 1 && !sparse {
+            records.push(Vec::new());
+        }
+        let mut row = Vec::new();
+        if sparse {
+            codec::write_gamma(index, &mut row).expect("sparse index");
+        }
+        if raw {
+            row.extend_from_slice(&[0xAB, 0xCD]);
+            codec::write_gamma(
+                u32::try_from(values.len()).expect("list length fits gamma"),
+                &mut row,
+            )
+            .expect("list length");
+            row.extend_from_slice(values);
+            row.extend_from_slice(&[counter, 0xCA, 0xFE]);
+        } else {
+            row.push(counter);
+            codec::write_gamma(
+                u32::try_from(values.len()).expect("list length fits gamma"),
+                &mut row,
+            )
+            .expect("list length");
+            row.extend_from_slice(values);
+            row.push(0); // Campo moderno omitido por el schema original.
+        }
+        records.push(row);
+    }
+    records
+}
+
+fn dense_row_payloads(body: &[u8]) -> Vec<&[u8]> {
+    let (_, mut offset, _) = parse_table_layout(body).expect("table header");
+    let mut rows = Vec::new();
+    loop {
+        let length = crate::tnbp_decode::read_sl_gamma(body, &mut offset).expect("row length");
+        if length == 0 {
+            break;
+        }
+        let payload_len = usize::try_from(length - 1).expect("row length fits usize");
+        let end = offset.checked_add(payload_len).expect("row end");
+        assert!(end <= body.len(), "row payload within table");
+        rows.push(&body[offset..end]);
+        offset = end;
+    }
+    rows
 }
 
 #[test]
@@ -89,6 +142,72 @@ fn rename_preserves_unknown_columns_dense_holes_and_sparse_indices() {
 }
 
 #[test]
+fn list_growth_preserves_unknown_columns_dense_holes_and_sparse_indices() {
+    let before = vec![0x11; 127];
+    let after = vec![0x22; 128];
+    for sparse in [false, true] {
+        for (old_values, new_values) in [
+            (before.as_slice(), after.as_slice()),
+            (after.as_slice(), &[0x33, 0x44][..]),
+            (&[0x55][..], &[][..]),
+        ] {
+            let raw_fields = [(4, "before"), (0x12, "values"), (2, "known"), (4, "after")];
+            let canonical_fields = [(2, "known"), (0x12, "values"), (2, "newer")];
+            let chunk_type = if sparse {
+                super::super::chunks::CH_SPARSE_TABLE
+            } else {
+                super::super::chunks::CH_TABLE
+            };
+            let mut raw = chunks::table_chunk(
+                *b"TEST",
+                &raw_fields,
+                &list_records(sparse, true, [old_values, &[0x66, 0x77]], [7, 22]),
+            )
+            .expect("raw");
+            raw[4] = chunk_type;
+            let source = super::super::SavOpaqueChunk {
+                name: *b"TEST",
+                ch_type: chunk_type,
+                body: raw[5..].to_vec(),
+            };
+            let mut canonical = chunks::table_chunk(
+                *b"TEST",
+                &canonical_fields,
+                &list_records(sparse, false, [new_values, &[0x66, 0x77]], [9, 99]),
+            )
+            .expect("canonical");
+            canonical[4] = chunk_type;
+            let snapshot = list_records(sparse, false, [old_values, &[0x66, 0x77]], [7, 99]);
+            let merged = chunks::table_chunk_with_passthrough_from_snapshot(
+                Some(&source),
+                canonical,
+                Some(&snapshot),
+            )
+            .expect("merge");
+            let mut expected = chunks::table_chunk(
+                *b"TEST",
+                &raw_fields,
+                &list_records(sparse, true, [new_values, &[0x66, 0x77]], [9, 22]),
+            )
+            .expect("expected");
+            expected[4] = chunk_type;
+            assert_eq!(
+                merged,
+                expected,
+                "sparse={sparse}, {} -> {}",
+                old_values.len(),
+                new_values.len()
+            );
+            let rows = parse_table_chunk(&merged[5..], sparse).expect("valid framing");
+            assert_eq!(
+                rows.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+                if sparse { vec![3, 130] } else { vec![0, 2] }
+            );
+        }
+    }
+}
+
+#[test]
 fn rename_preserves_large_unknown_column_across_three_byte_row_length() {
     let mut row = Vec::new();
     codec::write_str("old", &mut row).expect("old name");
@@ -135,11 +254,24 @@ fn rename_preserves_large_unknown_column_across_three_byte_row_length() {
 }
 
 #[test]
-fn rename_falls_back_when_row_identity_or_list_size_changes() {
-    let raw = chunks::table_chunk(
+fn rename_falls_back_when_row_identity_or_nested_struct_size_changes() {
+    let mut raw_header = Vec::new();
+    raw_header.push(0x1B);
+    codec::write_str("entries", &mut raw_header).expect("struct field");
+    raw_header.push(2);
+    codec::write_str("future", &mut raw_header).expect("future field");
+    raw_header.push(0);
+    raw_header.push(2);
+    codec::write_str("value", &mut raw_header).expect("nested field");
+    raw_header.push(0);
+    let mut raw_record = Vec::new();
+    codec::write_gamma(1, &mut raw_record).expect("struct count");
+    raw_record.extend_from_slice(&[7, 0xAA]);
+    let raw = chunks::raw_table_chunk(
         *b"TEST",
-        &[(0x12, "values"), (2, "future")],
-        &[vec![1, 7, 0xAA]],
+        &raw_header,
+        &[raw_record],
+        super::super::chunks::CH_TABLE,
     )
     .expect("raw");
     let source = super::super::SavOpaqueChunk {
@@ -147,17 +279,40 @@ fn rename_falls_back_when_row_identity_or_list_size_changes() {
         ch_type: super::super::chunks::CH_TABLE,
         body: raw[5..].to_vec(),
     };
-    for rows in [vec![vec![2, 7, 8]], vec![vec![1, 7], vec![1, 8]]] {
-        let canonical =
-            chunks::table_chunk(*b"TEST", &[(0x12, "values")], &rows).expect("canonical");
-        let merged = chunks::table_chunk_with_passthrough_from_snapshot(
-            Some(&source),
-            canonical.clone(),
-            None,
-        )
-        .expect("fallback");
-        assert_eq!(merged, canonical);
-    }
+    let mut canonical_header = Vec::new();
+    canonical_header.push(0x1B);
+    codec::write_str("entries", &mut canonical_header).expect("struct field");
+    canonical_header.push(0);
+    canonical_header.push(2);
+    codec::write_str("value", &mut canonical_header).expect("nested field");
+    canonical_header.push(0);
+    let mut canonical_record = Vec::new();
+    codec::write_gamma(2, &mut canonical_record).expect("struct count");
+    canonical_record.extend_from_slice(&[7, 8]);
+    let canonical = chunks::raw_table_chunk(
+        *b"TEST",
+        &canonical_header,
+        &[canonical_record],
+        super::super::chunks::CH_TABLE,
+    )
+    .expect("canonical");
+    let merged =
+        chunks::table_chunk_with_passthrough_from_snapshot(Some(&source), canonical.clone(), None)
+            .expect("fallback");
+    assert_eq!(merged, canonical);
+
+    let canonical = chunks::raw_table_chunk(
+        *b"TEST",
+        &canonical_header,
+        &[vec![1, 7], vec![1, 8]],
+        super::super::chunks::CH_TABLE,
+    )
+    .expect("topology changed");
+    let merged =
+        chunks::table_chunk_with_passthrough_from_snapshot(Some(&source), canonical.clone(), None)
+            .expect("fallback");
+    assert_eq!(merged, canonical);
+
     let mut source = source;
     source.ch_type = super::super::chunks::CH_SPARSE_TABLE;
     let mut raw =
@@ -197,6 +352,75 @@ fn rename_falls_back_when_name_descriptor_changes() {
         )
         .expect("fallback");
         assert_eq!(merged, canonical);
+    }
+}
+
+#[test]
+fn native_town_psa_list_growth_preserves_other_city_fields() {
+    let original = include_bytes!("../../../tests/fixtures/train_pbs_15_3.sav");
+    let (original_payload, _) = super::super::container::decompress(original).expect("container");
+    let original_chunks = super::super::chunks::parse_chunks(&original_payload).expect("chunks");
+    let original_city =
+        super::super::chunks::find_chunk(&original_chunks, "CITY").expect("native CITY");
+    assert_eq!(original_city.ch_type, super::super::chunks::CH_TABLE);
+    let (_, header_end, fields) = parse_table_layout(&original_city.body).expect("header");
+    assert!(fields.iter().any(|field| field.name == "psa_list"));
+    assert!(fields.iter().any(|field| field.name == "name"));
+
+    let mut state = GameState::from_sav_game(super::super::load(original).expect("native SAV"));
+    let town = state.towns.first_mut().expect("native town");
+    let town_id = town.id;
+    let old_refs = state
+        .sav_town_persistent_storage_ids
+        .get(&town_id)
+        .cloned()
+        .unwrap_or_default();
+    let grfid = 0xD1CE_BA5Eu32;
+    town.newgrf_persistent_regs.insert(
+        grfid,
+        std::collections::HashMap::from([(7, 0xCAFE_BABEu32)]),
+    );
+    let output = save_to_bytes_with(&state, SavContainer::Ottn).expect("SAV with town PSA");
+    let (payload, _) = super::super::container::decompress(&output).expect("output container");
+    let output_chunks = super::super::chunks::parse_chunks(&payload).expect("output chunks");
+    let output_city =
+        super::super::chunks::find_chunk(&output_chunks, "CITY").expect("output CITY");
+    assert_eq!(output_city.ch_type, original_city.ch_type);
+    assert_eq!(
+        &output_city.body[..header_end],
+        &original_city.body[..header_end]
+    );
+    let old_rows = dense_row_payloads(&original_city.body);
+    let new_rows = dense_row_payloads(&output_city.body);
+    assert_eq!(old_rows.len(), new_rows.len());
+    for (old_row, new_row) in old_rows.iter().zip(&new_rows) {
+        let old_ranges = field_byte_ranges(&fields, old_row).expect("native ranges");
+        let new_ranges = field_byte_ranges(&fields, new_row).expect("output ranges");
+        for ((field, start, end), (_, new_start, new_end)) in old_ranges.iter().zip(&new_ranges) {
+            if field != "psa_list" {
+                assert_eq!(
+                    &old_row[*start..*end],
+                    &new_row[*new_start..*new_end],
+                    "{field}"
+                );
+            }
+        }
+    }
+    let reloaded = super::super::load(&output).expect("reimport");
+    let refs = reloaded
+        .town_persistent_storage_ids
+        .get(&town_id)
+        .expect("new town PSA reference");
+    assert_eq!(refs.len(), old_refs.len() + 1);
+    let storage_id = reloaded
+        .persistent_storages
+        .iter()
+        .find(|storage| storage.grfid == grfid)
+        .map(|storage| storage.storage_id)
+        .expect("new PSAC row");
+    assert!(refs.contains(&storage_id));
+    if let Ok(path) = std::env::var("OPENTTDRS_DUMP_TOWN_PSA_NATIVE_SAV") {
+        std::fs::write(path, output).expect("dump for OpenTTD");
     }
 }
 

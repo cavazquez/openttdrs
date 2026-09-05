@@ -1104,10 +1104,13 @@ entrega el snapshot semántico a cada tabla reconstruida por esa fusión, de mod
 que un campo compatible de un schema legacy puede cambiar sin insertar campos
 modernos intactos; las regresiones directas cubren `PLYR` y `CITY`. El corte
 [#371](parity/sav-rename-371.md) permite además renombrar strings raíz con otra
-longitud sin perder columnas ajenas, reconstruyendo sólo la fila y su longitud
-gamma; está contrastado con un `PLYR` nativo y re-guardado por OpenTTD. Una
-mutación de un campo ausente/incompatible, de longitud de lista/struct anidado
-o de pools nativos no modelados sigue usando el writer canónico. Por eso
+longitud sin perder columnas ajenas. [#372](parity/sav-vector-372.md) extiende
+ese merge a listas raíz escalares: `CITY.psa_list` se contrastó en un SAV
+nativo, conserva los demás bytes `CITY` y OpenTTD dedicado vuelve a guardar el
+`PSAC` añadido. El header no distingue vector de array fijo, por lo que cada
+writer conserva los tamaños nativos de sus arrays. Una mutación de un campo
+ausente/incompatible, de structs/listas anidadas de otra longitud, de forma de
+filas o de pools nativos no modelados sigue usando el writer canónico. Por eso
 #328/#329 continúan abiertos.
 
 <!-- active-parity-backlog:end -->

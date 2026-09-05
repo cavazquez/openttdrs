@@ -7,6 +7,8 @@ use openttdrs_core::{
     format_money,
 };
 
+use crate::i18n::Locale;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
@@ -229,9 +231,79 @@ fn short_money(amount: i64) -> String {
     }
 }
 
+/// Localiza únicamente el chrome del resumen de IA que el core expone como
+/// texto de diagnóstico. Los nombres, importes, cargos, rutas y coordenadas
+/// quedan como datos literales de la partida.
+fn localized_ai_debug_status(locale: Locale, status: &str) -> String {
+    if locale == Locale::Es {
+        return status.to_owned();
+    }
+
+    status
+        .lines()
+        .map(localize_ai_debug_line_en)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn localize_ai_debug_line_en(line: &str) -> String {
+    if let Some(settings) = line.strip_prefix("IA: ") {
+        let mut parts = settings.split(" · ");
+        if let (Some(enabled), Some(threshold), Some(max_routes), None) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+            && let (Some(threshold), Some(max_routes)) = (
+                threshold.strip_prefix("umbral "),
+                max_routes.strip_prefix("máx. rutas rail "),
+            )
+        {
+            return format!(
+                "AI: {enabled} · cash threshold {threshold} · max. rail routes {max_routes}"
+            );
+        }
+    }
+
+    if let Some(routes) = line.strip_prefix("  Rutas / trenes: ") {
+        return format!("  Routes / trains: {routes}");
+    }
+    if let Some(routes) = line.strip_prefix("  Rutas / buses: ") {
+        return format!("  Routes / buses: {routes}");
+    }
+    if let Some(vehicle) = line.strip_prefix("  #") {
+        let mut parts = vehicle.splitn(4, " · ");
+        if let (Some(id), Some(cargo), Some(state), Some(route)) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        {
+            let state = match state {
+                "marcha" => "running",
+                "parado" => "stopped",
+                value => value,
+            };
+            let route = if route == "sin órdenes" {
+                "no orders"
+            } else {
+                route
+            };
+            return format!("  #{id} · {cargo} · {state} · {route}");
+        }
+    }
+    if let Some((company, details)) = line.rsplit_once(" · color ")
+        && let Some((colour, money)) = details.split_once(" · ")
+    {
+        return format!("{company} · colour {colour} · {money}");
+    }
+
+    match line {
+        "Sin compañía IA en la partida." => "No AI company in the game.".into(),
+        "  (sin trenes)" => "  (no trains)".into(),
+        "  (sin buses)" => "  (no buses)".into(),
+        _ => line.to_owned(),
+    }
+}
+
 pub(crate) fn sync_ai_settings_window(
     state: Res<AiSettingsWindowState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut buttons: Query<(&AiSettingsAction, &mut BorderColor), Without<FloatingWindow>>,
     mut debug_q: Query<&mut Text, With<AiSettingsDebugText>>,
@@ -256,7 +328,10 @@ pub(crate) fn sync_ai_settings_window(
         };
     }
     if let Ok(mut text) = debug_q.single_mut() {
-        *text = Text::new(format_ai_debug_status(&sim.state));
+        *text = Text::new(localized_ai_debug_status(
+            prefs.locale(),
+            &format_ai_debug_status(&sim.state),
+        ));
     }
 }
 
@@ -298,4 +373,40 @@ pub(crate) fn ai_settings_on_closed(
     close_floating_window_on_message(&mut closed, FloatingWindowId::AiSettings, || {
         state.open = false;
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::localized_ai_debug_status;
+    use crate::i18n::Locale;
+
+    #[test]
+    fn ai_debug_status_localizes_chrome_without_touching_game_data() {
+        let status = concat!(
+            "IA: ON · umbral $80.0K · máx. rutas rail 2\n",
+            "TransCargo · color 3 · $120.0K\n",
+            "  Rutas / trenes: 1 / 2\n",
+            "  #7 · Goods · marcha · (1,2) → (3,4)\n",
+            "RoadHaul · color 5 · $90.0K\n",
+            "  Rutas / buses: 0 / 3\n",
+            "  (sin buses)"
+        );
+        assert_eq!(localized_ai_debug_status(Locale::Es, status), status);
+        assert_eq!(
+            localized_ai_debug_status(Locale::En, status),
+            concat!(
+                "AI: ON · cash threshold $80.0K · max. rail routes 2\n",
+                "TransCargo · colour 3 · $120.0K\n",
+                "  Routes / trains: 1 / 2\n",
+                "  #7 · Goods · running · (1,2) → (3,4)\n",
+                "RoadHaul · colour 5 · $90.0K\n",
+                "  Routes / buses: 0 / 3\n",
+                "  (no buses)"
+            )
+        );
+        assert_eq!(
+            localized_ai_debug_status(Locale::En, "Sin compañía IA en la partida."),
+            "No AI company in the game."
+        );
+    }
 }

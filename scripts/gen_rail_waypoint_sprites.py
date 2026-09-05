@@ -24,6 +24,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from pillow_compat import flattened_data
+
 REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
 COMPANY_DATA = (
@@ -126,12 +128,12 @@ def bake_company_palette_dark_blue(crop_p: Image.Image) -> Image.Image:
     remap = build_palette_index_remap(palette)
     baked = Image.new("P", crop_p.size)
     baked.putpalette(palette)
-    baked.putdata([remap.get(px, px) for px in crop_p.get_flattened_data()])
+    baked.putdata([remap.get(px, px) for px in flattened_data(crop_p)])
     rgba = baked.convert("RGBA")
     transparent_rgb = tuple(palette[0:3])
     keyed = [
         (0, 0, 0, 0) if px[:3] == transparent_rgb else px
-        for px in rgba.get_flattened_data()
+        for px in flattened_data(rgba)
     ]
     rgba.putdata(keyed)
     return rgba

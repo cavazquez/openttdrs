@@ -20,6 +20,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from pillow_compat import flattened_data
+
 
 ROOT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OPENGFX_DIR = ROOT / "assets" / "opengfx"
@@ -41,7 +43,7 @@ def is_magenta_colorkey(red: int, green: int, blue: int) -> bool:
 def sanitize(path: Path, write: bool) -> int:
     with Image.open(path) as source:
         rgba = source.convert("RGBA")
-    pixels = list(rgba.get_flattened_data())
+    pixels = list(flattened_data(rgba))
     changed = sum(
         alpha > 0 and is_magenta_colorkey(red, green, blue)
         for red, green, blue, alpha in pixels

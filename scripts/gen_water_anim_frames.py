@@ -22,6 +22,7 @@ from pathlib import Path
 from PIL import Image
 
 from gen_shore_full_set import find_extra_nfo, parse_shore_blocks
+from pillow_compat import flattened_data
 
 REPO = Path(__file__).resolve().parents[1]
 TILES_DIR = REPO / "assets" / "opengfx" / "tiles"
@@ -112,7 +113,7 @@ def indexed_sources() -> list[tuple[str, Image.Image]]:
 
 def validate_palette_sources(sources: list[tuple[str, Image.Image]]) -> None:
     """Falla si OpenGFX deja de cubrir los índices animables requeridos."""
-    water_indices = set(sources[0][1].get_flattened_data()) & ANIMATED_INDICES
+    water_indices = set(flattened_data(sources[0][1])) & ANIMATED_INDICES
     # En OpenGFX 8.0 el agua plana sólo contiene los cinco tonos oscuros;
     # los cinco índices glitter aparecen en las costas. Exigir los diez aquí
     # rechazaba un set válido antes de verificar el conjunto completo.
@@ -121,7 +122,7 @@ def validate_palette_sources(sources: list[tuple[str, Image.Image]]) -> None:
         raise SystemExit(f"SPR_FLAT_WATER_TILE no cubre dark-water: faltan {missing}")
     all_indices: set[int] = set()
     for _name, image in sources:
-        all_indices.update(set(image.get_flattened_data()) & ANIMATED_INDICES)
+        all_indices.update(set(flattened_data(image)) & ANIMATED_INDICES)
     # OpenGFX no tiene por qué dibujar cada entrada de la paleta glitter (8.0,
     # por ejemplo, usa 250, 251 y 254). Basta con que las costas aporten al
     # menos una para preservar la animación y admitir variantes del set.
@@ -134,8 +135,8 @@ def render_frame(base: Image.Image, dark_frame: int, glitter_frame: int) -> Imag
     rgba = base.convert("RGBA")
     palette = base.getpalette()
     transparent_rgb = tuple(palette[:3]) if palette else None
-    src = list(base.get_flattened_data())
-    dst = list(rgba.get_flattened_data())
+    src = list(flattened_data(base))
+    dst = list(flattened_data(rgba))
     for i, palette_index in enumerate(src):
         if palette_index == 0:
             dst[i] = (0, 0, 0, 0)

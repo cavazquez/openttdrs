@@ -14,6 +14,7 @@ from gen_bridge_structure_palette import (
 )
 from gen_company_palette_rust import COMPANY_RAMP_INDICES, build_outputs, load_dos_palette
 from opengfx_palette import indexed_dos_to_rgba
+from pillow_compat import flattened_data
 
 
 class OpenGfxPaletteTest(unittest.TestCase):
@@ -24,7 +25,7 @@ class OpenGfxPaletteTest(unittest.TestCase):
             [0, 0, 255, 238, 0, 238, 246, 0, 246, 168, 168, 168]
             + [0] * (256 * 3 - 12)
         )
-        actual = list(indexed_dos_to_rgba(source).get_flattened_data())
+        actual = list(flattened_data(indexed_dos_to_rgba(source)))
         self.assertEqual(actual[0], (0, 0, 0, 0))
         self.assertEqual(actual[1], (16, 16, 16, 255))
         self.assertEqual(actual[2], (148, 149, 148, 255))
@@ -81,7 +82,7 @@ class OpenGfxPaletteTest(unittest.TestCase):
         source.putpalette([255, 0, 255] * 256)
         table = tuple([0, 9, 2, 1] + list(range(4, 256)))
         palette = tuple((index, index + 1, index + 2) for index in range(256))
-        actual = list(remap_indexed_crash(source, table, palette).get_flattened_data())
+        actual = list(flattened_data(remap_indexed_crash(source, table, palette)))
         self.assertEqual(
             actual,
             [

@@ -23,6 +23,7 @@ from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode
 from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
+from pillow_compat import flattened_data
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -109,7 +110,7 @@ def load_sheet(path: Path, mode: str | None) -> Image.Image:
             rgba.putdata(
                 [
                     (0, 0, 0, 0) if pixel[:3] == transparent else pixel
-                    for pixel in rgba.get_flattened_data()
+                    for pixel in flattened_data(rgba)
                 ]
             )
         return rgba

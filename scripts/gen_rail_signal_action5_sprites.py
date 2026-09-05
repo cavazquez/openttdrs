@@ -21,6 +21,7 @@ from pathlib import Path
 from PIL import Image
 
 from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
+from pillow_compat import flattened_data
 
 REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
@@ -87,7 +88,7 @@ def load_sheet(path: Path, cache: dict[str, Image.Image]) -> Image.Image:
 def dematte(img: Image.Image) -> Image.Image:
     src = img.convert("RGBA")
     data = []
-    for r, g, b, a in src.get_flattened_data():
+    for r, g, b, a in flattened_data(src):
         if a == 0 or (r, g, b) == (0, 0, 255) or (r > 200 and b > 200 and g < 80):
             data.append((0, 0, 0, 0))
         else:
@@ -113,7 +114,7 @@ def main() -> None:
         if not path.is_file() or path.stat().st_size == 0:
             sys.exit(f"Sheet inválido para NFO {nfo_sid}: {path}")
         crop = dematte(load_sheet(path, cache).crop((x, y, x + w, y + h)))
-        opaque = sum(1 for px in crop.get_flattened_data() if px[3] > 0)
+        opaque = sum(1 for px in flattened_data(crop) if px[3] > 0)
         if opaque < 1:
             sys.exit(f"rail_{game_id}.png quedó vacío (NFO {nfo_sid})")
         if w > 32 or h > 40:

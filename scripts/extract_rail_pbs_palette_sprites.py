@@ -28,6 +28,7 @@ from PIL import Image
 
 from extract_bridge_pbs_reservation_sprites import parse_action5_slope_rects
 from opengfx_palette import UNUSED_TRANSPARENT_INDICES, dos_palette
+from pillow_compat import flattened_data
 
 ROOT = Path(__file__).resolve().parents[1]
 OPENGFX = ROOT / "assets" / "opengfx"
@@ -166,7 +167,7 @@ def remap_indexed_crash(
         raise ValueError(f"tabla de recolor inválida: {len(table)} entradas")
     palette = dos_palette() if palette is None else palette
     pixels: list[tuple[int, int, int, int]] = []
-    for source in image.get_flattened_data():
+    for source in flattened_data(image):
         if source == 0 or source in UNUSED_TRANSPARENT_INDICES:
             pixels.append((0, 0, 0, 0))
             continue

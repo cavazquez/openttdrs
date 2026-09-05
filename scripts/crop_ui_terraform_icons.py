@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from nfo_sprite_meta import detect_graphics_mode
+from pillow_compat import flattened_data
 
 try:
     from PIL import Image
@@ -129,7 +130,7 @@ ACTION5_SPRITES = [
 
 def dematte_colorkey(img: Image.Image) -> Image.Image:
     data = []
-    for r, g, b, a in img.getdata():
+    for r, g, b, a in flattened_data(img):
         # OpenGFX clásico usa magenta de transparencia; OpenGFX2 suele usar
         # azul CC. Ambos son colorkeys de la hoja, no píxeles del icono.
         if a > 0 and ((r, g, b) == (0, 0, 255) or (r > 220 and g < 32 and b > 220)):

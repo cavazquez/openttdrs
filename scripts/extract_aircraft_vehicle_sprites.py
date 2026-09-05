@@ -15,6 +15,7 @@ from pathlib import Path
 from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode
+from pillow_compat import flattened_data
 
 REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
@@ -98,7 +99,7 @@ def dematte_index_zero(img: Image.Image) -> Image.Image:
     rgba.putdata(
         [
             (0, 0, 0, 0) if (r, g, b) == (0, 0, 255) else (r, g, b, a)
-            for r, g, b, a in rgba.get_flattened_data()
+            for r, g, b, a in flattened_data(rgba)
         ]
     )
     return rgba

@@ -26,6 +26,7 @@ from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode
 from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
+from pillow_compat import flattened_data
 
 REPO = Path(__file__).resolve().parents[1]
 TILES_DIR = REPO / "assets" / "opengfx" / "tiles"
@@ -72,7 +73,7 @@ def load_sheet(path: Path, mode: str) -> Image.Image:
                 rgba.putdata(
                     [
                         (0, 0, 0, 0) if (r, g, b) == transparent_rgb else (r, g, b, a)
-                        for r, g, b, a in rgba.getdata()
+                        for r, g, b, a in flattened_data(rgba)
                     ]
                 )
             return rgba

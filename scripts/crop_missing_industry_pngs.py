@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from nfo_sprite_meta import detect_graphics_mode
+from pillow_compat import flattened_data
 
 try:
     from PIL import Image
@@ -63,7 +64,7 @@ def load_sheet(png_path: Path, graphics_mode: str) -> Image.Image:
             img_rgba = img.convert("RGBA")
             if transparent_rgb is not None:
                 data = []
-                for r, g, b, a in img_rgba.getdata():
+                for r, g, b, a in flattened_data(img_rgba):
                     if (r, g, b) == transparent_rgb:
                         data.append((0, 0, 0, 0))
                     else:
@@ -81,7 +82,7 @@ def load_sheet(png_path: Path, graphics_mode: str) -> Image.Image:
         transparent_rgb = tuple(pal[0:3])
         img_rgba = img.convert("RGBA")
         data = []
-        for r, g, b, a in img_rgba.getdata():
+        for r, g, b, a in flattened_data(img_rgba):
             if (r, g, b) == transparent_rgb or is_magenta_key(r, g, b):
                 data.append((0, 0, 0, 0))
             else:
@@ -90,7 +91,7 @@ def load_sheet(png_path: Path, graphics_mode: str) -> Image.Image:
         return img_rgba
     img_rgba = img.convert("RGBA")
     data = []
-    for r, g, b, a in img_rgba.getdata():
+    for r, g, b, a in flattened_data(img_rgba):
         if is_magenta_key(r, g, b):
             data.append((0, 0, 0, 0))
         else:
@@ -104,7 +105,7 @@ def dematte_cc_blue_mask(img: Image.Image) -> Image.Image:
     src = img.convert("RGBA")
     data = [
         (0, 0, 0, 0) if a > 0 and r == 0 and g == 0 and b == 255 else (r, g, b, a)
-        for r, g, b, a in src.getdata()
+        for r, g, b, a in flattened_data(src)
     ]
     src.putdata(data)
     return src

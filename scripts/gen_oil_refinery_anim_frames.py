@@ -20,6 +20,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from pillow_compat import flattened_data
+
 REPO = Path(__file__).resolve().parents[1]
 TILES_DIR = REPO / "assets" / "opengfx" / "tiles"
 
@@ -114,7 +116,7 @@ def main() -> int:
             missing.append(sid)
             continue
         base = Image.open(src).convert("RGBA")
-        fire_px = sum(1 for r, g, b, a in base.getdata() if is_fire_pixel(r, g, b, a))
+        fire_px = sum(1 for r, g, b, a in flattened_data(base) if is_fire_pixel(r, g, b, a))
         for f in range(FRAME_COUNT):
             out_name = f"industry_{sid}_fire_anim_{f:02d}.png"
             render_frame(base, f).save(TILES_DIR / out_name)

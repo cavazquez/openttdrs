@@ -17,6 +17,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from pillow_compat import flattened_data
+
 ROOT = Path(__file__).resolve().parents[1]
 PALETTES_H = ROOT / "third_party" / "openttd" / "table" / "palettes.h"
 
@@ -94,7 +96,7 @@ def indexed_dos_to_rgba(image: Image.Image) -> Image.Image:
     palette = dos_palette()
     animated = _initial_animated_palette()
     pixels: list[tuple[int, int, int, int]] = []
-    for index in image.get_flattened_data():
+    for index in flattened_data(image):
         if index == 0 or index in UNUSED_TRANSPARENT_INDICES:
             pixels.append((0, 0, 0, 0))
             continue
@@ -109,7 +111,7 @@ def dematte_legacy_colorkey(image: Image.Image) -> Image.Image:
     """Fallback para imágenes no indexadas que ya perdieron sus índices."""
     rgba = image.convert("RGBA")
     data = []
-    for red, green, blue, alpha in rgba.get_flattened_data():
+    for red, green, blue, alpha in flattened_data(rgba):
         magenta = red >= 220 and blue >= 220 and green <= 40 and abs(red - blue) <= 24
         if alpha > 0 and ((red, green, blue) == (0, 0, 255) or magenta):
             data.append((0, 0, 0, 0))

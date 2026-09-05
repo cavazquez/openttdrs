@@ -28,6 +28,7 @@ from nfo_sprite_meta import (
     sprite_dims_from_assets,
 )
 from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
+from pillow_compat import flattened_data
 
 SPR_FARMLAND_BARE = 4126
 FIELD_STATES = 9  # bare, state 1..7, haypacks
@@ -67,7 +68,7 @@ def load_sheet(png_path: Path, mode: str) -> Image.Image:
             if transparent_rgb is not None:
                 data = [
                     (0, 0, 0, 0) if (r, g, b) == transparent_rgb else (r, g, b, a)
-                    for r, g, b, a in img_rgba.getdata()
+                    for r, g, b, a in flattened_data(img_rgba)
                 ]
                 img_rgba.putdata(data)
             return img_rgba

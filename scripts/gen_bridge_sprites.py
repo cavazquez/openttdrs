@@ -21,6 +21,7 @@ from nfo_sprite_meta import (
     pick_sprite_meta,
     sprite_dims_from_assets,
 )
+from pillow_compat import flattened_data
 from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 REPO = Path(__file__).resolve().parents[1]
@@ -175,7 +176,7 @@ def load_sheet(path: Path, mode: str) -> Image.Image:
         out = img.convert("RGBA")
         if key:
             data = [
-                (0, 0, 0, 0) if px[:3] == key else px for px in out.get_flattened_data()
+                (0, 0, 0, 0) if px[:3] == key else px for px in flattened_data(out)
             ]
             out.putdata(data)
         return out

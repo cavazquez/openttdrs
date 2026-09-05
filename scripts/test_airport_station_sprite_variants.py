@@ -16,6 +16,7 @@ from pathlib import Path
 from PIL import Image
 
 import gen_airport_station_draw_data as generator
+from pillow_compat import flattened_data
 
 
 SPRITE_IDS = (2661, 2662, 2663, 2664)
@@ -172,12 +173,12 @@ class AirportStationSpriteVariantsTest(unittest.TestCase):
             cropper.crop(4982, "airport_helipad.png")
             with Image.open(fallback_sprites / "fallback.png") as source:
                 expected_pixels = list(
-                    generator.indexed_dos_to_rgba(source).get_flattened_data()
+                    flattened_data(generator.indexed_dos_to_rgba(source))
                 )
             with Image.open(root / "tiles" / "airport_helipad.png") as rendered:
                 self.assertEqual(rendered.size, (2, 1))
                 self.assertEqual(
-                    list(rendered.convert("RGBA").get_flattened_data()),
+                    list(flattened_data(rendered.convert("RGBA"))),
                     expected_pixels,
                 )
         finally:

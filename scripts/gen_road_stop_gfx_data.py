@@ -16,6 +16,8 @@ try:
 except ImportError:
     Image = None  # type: ignore[misc, assignment]
 
+from pillow_compat import flattened_data
+
 DIRS = ("ne", "se", "sw", "nw")
 TRUCK_DATAS = (67, 68, 69, 70)
 BUS_DATAS = (71, 72, 73, 74)
@@ -196,7 +198,7 @@ def extract_drive_through_tiles(
         # El GRF extra usa azul puro como índice transparente en estas tiras;
         # a diferencia de las hojas base, ese índice no llega marcado como
         # alpha en el PNG de grfcodec.
-        pixels = crop.get_flattened_data()
+        pixels = flattened_data(crop)
         crop.putdata(
             [(0, 0, 0, 0) if pixel[:3] == (0, 0, 255) else pixel for pixel in pixels]
         )

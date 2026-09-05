@@ -24,6 +24,7 @@ from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode
 from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
+from pillow_compat import flattened_data
 
 REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
@@ -103,7 +104,7 @@ def is_magenta_key(r: int, g: int, b: int) -> bool:
 
 def _key_color_transparent(img_rgba: Image.Image, key_rgb: tuple[int, int, int]) -> None:
     keyed = [
-        (0, 0, 0, 0) if px[:3] == key_rgb else px for px in img_rgba.get_flattened_data()
+        (0, 0, 0, 0) if px[:3] == key_rgb else px for px in flattened_data(img_rgba)
     ]
     img_rgba.putdata(keyed)
 
@@ -126,7 +127,7 @@ def dematte_sprite(img: Image.Image) -> Image.Image:
     """Quita azul CC, magenta de remapeo y otros colorkeys típicos de OpenGFX."""
     src = img.convert("RGBA")
     data = []
-    for r, g, b, a in src.get_flattened_data():
+    for r, g, b, a in flattened_data(src):
         if a == 0:
             data.append((0, 0, 0, 0))
         elif (r, g, b) == (0, 0, 255) or is_magenta_key(r, g, b):
@@ -138,7 +139,7 @@ def dematte_sprite(img: Image.Image) -> Image.Image:
 
 
 def opaque_color_count(img: Image.Image) -> int:
-    return len({px for px in img.get_flattened_data() if px[3] > 0})
+    return len({px for px in flattened_data(img) if px[3] > 0})
 
 
 def recolor_cc_signal_mask(img: Image.Image, sid: int) -> Image.Image:
@@ -147,7 +148,7 @@ def recolor_cc_signal_mask(img: Image.Image, sid: int) -> Image.Image:
     is_green = (sid - base) % 2 == 1
     color = (40, 200, 60, 255) if is_green else (220, 30, 30, 255)
     src = img.convert("RGBA")
-    data = [(color if a > 0 else (0, 0, 0, 0)) for _r, _g, _b, a in src.get_flattened_data()]
+    data = [(color if a > 0 else (0, 0, 0, 0)) for _r, _g, _b, a in flattened_data(src)]
     src.putdata(data)
     return src
 
@@ -295,7 +296,7 @@ def main() -> None:
         nc = opaque_color_count(im)
         if nc < 1:
             sys.exit(f"{path.name} está vacío")
-        for r, g, b, a in im.get_flattened_data():
+        for r, g, b, a in flattened_data(im):
             if a > 0 and is_magenta_key(r, g, b):
                 sys.exit(f"{path.name} tiene magenta CC sin horneado")
         if sid in (1275, 1276, 1416, 1417, 1418, 1419) and (w > 6 or h > 16):

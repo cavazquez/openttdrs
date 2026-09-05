@@ -238,6 +238,8 @@ mod tests {
             president_name: None,
             manager_face: None,
             manager_face_style: None,
+            money_fraction: None,
+            block_preview: None,
             is_ai: None,
             bankruptcy_months: None,
             cur_economy: None,

@@ -187,6 +187,17 @@ pub struct Company {
     #[serde(default)]
     pub manager_face_style: Option<String>,
     pub colour: u8,
+    /// Parte fraccional del saldo nativo (`PLYR.money_fraction`).
+    ///
+    /// `OpenTTD` conserva el residuo de las operaciones monetarias de precisión
+    /// sub-entera en este byte. El runtime propio no calcula todavía ese
+    /// residuo, pero debe retenerlo al abrir y volver a guardar una partida.
+    #[serde(default)]
+    pub money_fraction: u8,
+    /// Trimestres durante los que la compañía no puede recibir una preview
+    /// exclusiva de motor (`PLYR.block_preview`).
+    #[serde(default)]
+    pub block_preview: u8,
     /// Esquemas nativos de color de vehículos (`PLYR.liveries`).
     ///
     /// Un JSON anterior a este campo se interpreta como la librea por defecto
@@ -271,6 +282,8 @@ impl Company {
             manager_face: 0,
             manager_face_style: None,
             colour,
+            money_fraction: 0,
+            block_preview: 0,
             liveries: default_company_liveries(colour),
             economy,
             is_ai: false,
@@ -302,6 +315,8 @@ impl Company {
             manager_face: 0,
             manager_face_style: None,
             colour,
+            money_fraction: 0,
+            block_preview: 0,
             liveries: default_company_liveries(colour),
             economy,
             is_ai: true,
@@ -333,6 +348,8 @@ impl Company {
             manager_face: 0,
             manager_face_style: None,
             colour,
+            money_fraction: 0,
+            block_preview: 0,
             liveries: default_company_liveries(colour),
             economy,
             is_ai: true,

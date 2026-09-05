@@ -192,6 +192,27 @@ fn openttd_resaved_preserves_requested_company_manager_identity() {
     assert_eq!(company.manager_face_style.as_deref(), Some("modern"));
 }
 
+/// Contrato opcional de estado operativo de compañía. `money_fraction` es el
+/// residuo monetario sub-entero y `block_preview` impide previews exclusivas
+/// durante una cantidad de trimestres; ambos son bytes nativos de `PLYR`, no
+/// valores visuales derivados.
+#[test]
+fn openttd_resaved_preserves_requested_company_preview_state() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_COMPANY_PREVIEW_STATE").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PLYR");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).unwrap_or_else(|e| panic!("import openttdrs: {e}"));
+    let company = game
+        .companies
+        .first()
+        .expect("PLYR de compañía activa tras re-guardado OpenTTD");
+    assert_eq!(company.money_fraction, Some(197));
+    assert_eq!(company.block_preview, Some(19));
+}
+
 /// Contrato opcional para el límite de préstamo individual. OpenTTD representa
 /// el default con `INT64_MIN`, pero una compañía marcada por deity conserva un
 /// valor concreto incluso si cambia el límite global por inflación.

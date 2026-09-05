@@ -1483,6 +1483,10 @@ pub struct SavCompany {
     pub manager_face: Option<u32>,
     /// Etiqueta del estilo de retrato (`PLYR.face_style`, SLV 355).
     pub manager_face_style: Option<String>,
+    /// Residuo monetario de precisión sub-entera (`PLYR.money_fraction`).
+    pub money_fraction: Option<u8>,
+    /// Contador de bloqueo de preview exclusiva (`PLYR.block_preview`).
+    pub block_preview: Option<u8>,
     /// Marca de compañía controlada por IA, si está presente en el save.
     pub is_ai: Option<bool>,
     /// Meses consecutivos de bancarrota (`PLYR.months_of_bankruptcy`).
@@ -1640,6 +1644,7 @@ fn company_old_economy_from_record(record: &SlRecord) -> Vec<SavCompanyEconomy> 
 
 /// Empresas presentes en `PLYR`, conservando dinero y color por `CompanyID`.
 #[must_use]
+#[allow(clippy::too_many_lines)] // Descodifica todos los campos PLYR modelados en un único record.
 pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> Vec<SavCompany> {
     let Some(plyr) = find_chunk(chunks, "PLYR") else {
         return Vec::new();
@@ -1665,6 +1670,12 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 .and_then(SlValue::as_str)
                 .filter(|style| !style.is_empty())
                 .map(str::to_owned);
+            let money_fraction = record_get(&record, "money_fraction")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok());
+            let block_preview = record_get(&record, "block_preview")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok());
             let is_ai = record_get(&record, "is_ai")
                 .and_then(SlValue::as_u64)
                 .map(|value| value != 0);
@@ -1724,6 +1735,8 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 president_name,
                 manager_face,
                 manager_face_style,
+                money_fraction,
+                block_preview,
                 is_ai,
                 bankruptcy_months,
                 cur_economy: company_cur_economy_from_record(&record),

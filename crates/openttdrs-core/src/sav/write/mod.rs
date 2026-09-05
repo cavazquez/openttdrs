@@ -2004,6 +2004,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)] // Contrato de round-trip de PLYR por compañía.
     fn ottn_roundtrip_preserves_company_pool_money_and_colour() {
         let mut state = tiny_state();
         state.sync_active_from_mirrors();
@@ -2021,6 +2022,8 @@ mod tests {
             rival.president_name = Some("Ada Rival".into());
             rival.manager_face = 1 << 7;
             rival.manager_face_style = Some("modern".into());
+            rival.money_fraction = 197;
+            rival.block_preview = 19;
             rival.liveries[1] = crate::CompanyLivery {
                 in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY,
                 colour1: 7,
@@ -2052,6 +2055,8 @@ mod tests {
         assert_table_field_type(&plyr.body, 0x1A, "president_name");
         assert_table_field_type(&plyr.body, 6, "face");
         assert_table_field_type(&plyr.body, 0x1A, "face_style");
+        assert_table_field_type(&plyr.body, 2, "money_fraction");
+        assert_table_field_type(&plyr.body, 2, "block_preview");
         assert_table_field_type(&plyr.body, 0x1B, "liveries");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.companies.len(), 2);
@@ -2069,6 +2074,8 @@ mod tests {
             sav_game.companies[1].manager_face_style.as_deref(),
             Some("modern")
         );
+        assert_eq!(sav_game.companies[1].money_fraction, Some(197));
+        assert_eq!(sav_game.companies[1].block_preview, Some(19));
         assert_eq!(sav_game.companies[1].is_ai, Some(true));
         assert_eq!(sav_game.companies[1].engine_renew, Some(false));
         assert_eq!(sav_game.companies[1].engine_renew_months, Some(-3));
@@ -2096,6 +2103,8 @@ mod tests {
         assert_eq!(loaded_rival.president_name.as_deref(), Some("Ada Rival"));
         assert_eq!(loaded_rival.manager_face, 1 << 7);
         assert_eq!(loaded_rival.manager_face_style.as_deref(), Some("modern"));
+        assert_eq!(loaded_rival.money_fraction, 197);
+        assert_eq!(loaded_rival.block_preview, 19);
         assert!(loaded_rival.is_ai);
         assert!(!loaded_rival.engine_renew);
         assert_eq!(loaded_rival.engine_renew_months, -3);
@@ -2564,6 +2573,11 @@ mod tests {
         state.companies[0].president_name = Some("Ada Lovelace".into());
         state.companies[0].manager_face = 1 << 7;
         state.companies[0].manager_face_style = Some("modern".into());
+        // Ambos bytes existen en el descriptor nativo de `PLYR`, entre
+        // `colour` e `is_ai`. El smoke dedicated los re-guarda para evitar
+        // que una salida aparentemente válida silencie este estado.
+        state.companies[0].money_fraction = 197;
+        state.companies[0].block_preview = 19;
         state.companies[0].reset_liveries();
         // Ejercita el valor distinto del centinela global de `PLYR.max_loan`.
         // El smoke OpenTTD opcional re-guarda este valor para acreditar tanto
@@ -2638,6 +2652,8 @@ mod tests {
             sav_game.companies[0].manager_face_style.as_deref(),
             Some("modern")
         );
+        assert_eq!(sav_game.companies[0].money_fraction, Some(197));
+        assert_eq!(sav_game.companies[0].block_preview, Some(19));
         assert_eq!(sav_game.companies[0].max_loan, Some(450_000));
         assert_eq!(sav_game.vehicles.len(), 2, "tren + bus");
         assert_eq!(sav_game.companies[0].liveries[14], custom_bus_livery);

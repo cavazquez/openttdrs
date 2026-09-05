@@ -1240,6 +1240,12 @@ impl GameState {
                 if let Some(style) = company.manager_face_style {
                     target.manager_face_style = Some(style);
                 }
+                if let Some(value) = company.money_fraction {
+                    target.money_fraction = value;
+                }
+                if let Some(value) = company.block_preview {
+                    target.block_preview = value;
+                }
                 if let Some(is_ai) = company.is_ai {
                     target.is_ai = is_ai;
                 }

@@ -167,6 +167,8 @@ pub(super) fn plyr_records(
         rec.extend_from_slice(&state.economy.loan.to_be_bytes());
         rec.extend_from_slice(&company.economy.sav_max_loan().to_be_bytes());
         rec.push(state.company_colour);
+        rec.push(company.money_fraction);
+        rec.push(company.block_preview);
         rec.push(0);
         rec.push(company.bankruptcy_months);
         append_company_settings(
@@ -216,6 +218,8 @@ pub(super) fn plyr_records(
             rec.extend_from_slice(&loan.to_be_bytes());
             rec.extend_from_slice(&company_to_write.economy.sav_max_loan().to_be_bytes());
             rec.push(colour);
+            rec.push(company_to_write.money_fraction);
+            rec.push(company_to_write.block_preview);
             rec.push(u8::from(company.is_ai));
             rec.push(company.bankruptcy_months);
             append_company_settings(
@@ -254,6 +258,10 @@ pub(super) fn plyr_chunk(
     write_str("max_loan", &mut header)?;
     header.push(2);
     write_str("colour", &mut header)?;
+    header.push(2);
+    write_str("money_fraction", &mut header)?;
+    header.push(2);
+    write_str("block_preview", &mut header)?;
     header.push(1);
     write_str("is_ai", &mut header)?;
     header.push(2);

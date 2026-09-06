@@ -2129,5 +2129,15 @@ guardas upstream de pendiente no empinada y `TileMaxZ`, hidrata el objeto y su
 `TownScopeResolver` y mantiene el writeback parent aislado hasta el execute.
 `CALLBACK_FAILED`/cero permiten; un resultado booleano no nulo, una instancia
 no resoluble o una topología no soportada rechazan sin mutar. Las regresiones
-cubren la semántica booleana y la atomicidad; siguen pendientes los callbacks
-de texto, el writeback `7C` propio de objeto y scopes/vecinos avanzados.
+cubren la semántica booleana y la atomicidad; el texto Action4 se aborda en
+#428, mientras siguen pendientes el writeback `7C` propio de objeto y
+scopes/vecinos avanzados.
+
+Actualización #329-OBJECT-FUND-MORE-TEXT-428 (2026-09-06, issue [#428](https://github.com/cavazquez/openttdrs/issues/428)):
+CB15C (`0x15C`) ya se evalúa al abrir el ObjectPicker con la vista elegida y
+sin crear una instancia. `CALLBACK_FAILED`/`0x400` no agregan texto, los
+resultados `0..0x3FF` se clasifican como texto local y `0x40F` recupera el
+`StringID` desde el registro `0x100` del text stack; respuestas fuera del
+contrato quedan como `Invalid`. El selector muestra un diagnóstico explícito
+en vez de ocultar un callback válido. El parseo Action4 y la traducción por
+idioma de esas cadenas siguen separados del cierre de este issue.

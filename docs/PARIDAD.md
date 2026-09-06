@@ -2423,9 +2423,11 @@ después del preflight geométrico: sólo pendientes no empinadas con el mismo
 `TileMaxZ` llegan al scope Object/Town. `CALLBACK_FAILED` o cero autorizan y
 un resultado booleano no nulo rechaza sin mutar; referencias OBJS ausentes y
 topologías no soportadas también se rechazan de forma conservadora. La
-regresión de `raise_land`/`lower_land`/`level_land` cubre la atomicidad. Siguen
-pendientes los callbacks de texto, el writeback `7C` propio y scopes/vecinos
-avanzados.
+regresión de `raise_land`/`lower_land`/`level_land` cubre la atomicidad. CB15C
+ya clasifica el texto adicional del selector (local, `StringID` en `0x100`,
+ausente o inválido) y lo muestra como diagnóstico; falta el catálogo Action4
+para traducirlo. También siguen pendientes el writeback `7C` propio y
+scopes/vecinos avanzados.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.
 

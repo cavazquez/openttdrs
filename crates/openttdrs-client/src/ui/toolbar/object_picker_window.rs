@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    Command, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_TRANSMITTER, list_buildable_object_specs,
-    object_spec_def,
+    Command, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_TRANSMITTER, ObjectFundMoreText,
+    list_buildable_object_specs, object_spec_def, resolve_object_fund_more_text_callback,
 };
 
 use crate::render::NewGrfObjectSpriteCache;
@@ -32,6 +32,9 @@ pub(crate) struct ObjectPickerPreviewImage;
 
 #[derive(Component)]
 pub(crate) struct ObjectPickerLabel;
+
+#[derive(Component)]
+pub(crate) struct ObjectPickerFundMoreText;
 
 pub(crate) fn setup_object_picker(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -116,6 +119,16 @@ pub(crate) fn setup_object_picker(mut commands: Commands, asset_server: Res<Asse
                 ..default()
             },
         ));
+        panel.spawn((
+            ObjectPickerFundMoreText,
+            Text::new(""),
+            window_text_font(asset_server, UiFontRole::Caption),
+            TextColor(Color::srgb(0.85, 0.65, 0.30)),
+            Node {
+                margin: UiRect::top(Val::Px(3.0)),
+                ..default()
+            },
+        ));
     });
 }
 
@@ -174,6 +187,24 @@ fn object_label(sim: &SimWorld, id: u16) -> String {
         other => object_spec_def(&sim.state.object_spec_catalog, other)
             .map(|d| format!("{} ({}×{})", d.name, d.size_width(), d.size_height()))
             .unwrap_or_else(|| format!("Objeto {other}")),
+    }
+}
+
+fn object_fund_more_text_label(sim: &SimWorld, id: u16) -> String {
+    let Some(def) = object_spec_def(&sim.state.object_spec_catalog, id) else {
+        return String::new();
+    };
+    match resolve_object_fund_more_text_callback(def, 0) {
+        ObjectFundMoreText::None => String::new(),
+        ObjectFundMoreText::Local(offset) => {
+            format!("Texto NewGRF local #{offset} (Action4 pendiente)")
+        }
+        ObjectFundMoreText::GrfString(string_id) => {
+            format!("Texto NewGRF StringID {string_id:#06X} (Action4 pendiente)")
+        }
+        ObjectFundMoreText::Invalid(result) => {
+            format!("Callback CB15C inválido: {result:#06X}")
+        }
     }
 }
 
@@ -246,7 +277,22 @@ pub(crate) fn sync_object_picker(
     sim: Res<SimWorld>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text), (Without<ObjectPickerLabel>,)>,
-    mut label_q: Query<&mut Text, (With<ObjectPickerLabel>, Without<FloatingWindowTitleText>)>,
+    mut label_q: Query<
+        &mut Text,
+        (
+            With<ObjectPickerLabel>,
+            Without<FloatingWindowTitleText>,
+            Without<ObjectPickerFundMoreText>,
+        ),
+    >,
+    mut more_text_q: Query<
+        &mut Text,
+        (
+            With<ObjectPickerFundMoreText>,
+            Without<ObjectPickerLabel>,
+            Without<FloatingWindowTitleText>,
+        ),
+    >,
     mut buttons: Query<(&ObjectPickerButton, &mut BackgroundColor), With<Button>>,
 ) {
     let Some((_, mut visibility)) = root_q
@@ -262,6 +308,9 @@ pub(crate) fn sync_object_picker(
         Visibility::Hidden
     };
     if !open {
+        if let Ok(mut text) = more_text_q.single_mut() {
+            **text = String::new();
+        }
         return;
     }
 
@@ -275,6 +324,9 @@ pub(crate) fn sync_object_picker(
     }
     if let Ok(mut text) = label_q.single_mut() {
         **text = format!("Seleccionado: {label}");
+    }
+    if let Ok(mut text) = more_text_q.single_mut() {
+        **text = object_fund_more_text_label(&sim, current);
     }
     for (button, mut bg) in &mut buttons {
         *bg = BackgroundColor(if button.0 == current {

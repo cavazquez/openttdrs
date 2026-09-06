@@ -1188,3 +1188,23 @@ intactos. Los wrappers de previews/tests pasan contexto vacío para conservar
 compatibilidad. Regresiones cubren tablas de pieza/eje, máscara custom,
 fallback vanilla y ausencia de estación; queda pendiente persistir flags de
 pilares propios de `BridgeSpec` NewGRF y validar goldens de captura.
+
+### #329-OBJECT-FUND-MORE-TEXT-428 — `CBID_OBJECT_FUND_MORE_TEXT`
+
+Actualizado: 2026-09-06. El selector de objetos evalúa CB15C (`0x15C`) antes
+de crear una instancia y pasa la vista seleccionada en `ObjectScopeResolver`.
+`CALLBACK_FAILED` y `0x400` no agregan línea; `0..0x3FF` se clasifica como
+`GRFSTR_MISC_GRF_TEXT + result`; `0x40F` recupera el `StringID` de `register
+0x100`, y cualquier otro valor queda marcado como callback inválido. El
+resultado no muta `GameState` y el ObjectPicker muestra un diagnóstico visible
+para no perder callbacks válidos. Action4 y la traducción por idioma de esos
+IDs siguen pendientes y no se cuentan como paridad de strings.
+
+### #329-OBJECT-AUTOSLOPE-427 — `CBID_OBJECT_AUTOSLOPE`
+
+Actualizado: 2026-09-06. `raise_land`, `lower_land` y `level_land` consultan
+CB15D después del preflight de pendiente; sólo una pendiente no empinada con
+el mismo `TileMaxZ` llega al scope Object/Town. `CALLBACK_FAILED` o cero
+permiten y cualquier resultado no nulo rechaza sin mutar. Las regresiones
+cubren la semántica booleana y la atomicidad; los scopes avanzados y el
+writeback propio de objeto continúan en #329.

@@ -177,6 +177,12 @@ impl ObjectSpecDef {
         self.callback_mask & OBJECT_CALLBACK_AUTOSLOPE_MASK != 0
     }
 
+    /// `true` si la ventana de fundación consulta texto adicional CB15C.
+    #[must_use]
+    pub const fn has_fund_more_text_callback(&self) -> bool {
+        self.callback_mask & OBJECT_CALLBACK_FUND_MORE_TEXT_MASK != 0
+    }
+
     /// La secuencia Action0 continúa al llegar al último frame.
     #[must_use]
     pub const fn animation_loops(&self) -> bool {

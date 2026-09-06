@@ -27,14 +27,14 @@ use crate::newgrf_sprites::{
     CBID_INDUSTRY_DECIDE_COLOUR, CBID_INDUSTRY_INPUT_CARGO_TYPES, CBID_INDUSTRY_LOCATION,
     CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_OUTPUT_CARGO_TYPES,
     CBID_INDUSTRY_PROD_CHANGE_BUILD, CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_INDUSTRY_REFUSE_CARGO,
-    CBID_INDUSTRY_SPECIAL_EFFECT, CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME,
-    CBID_STATION_ANIMATION_SPEED, CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY,
-    CBID_STATION_LAND_SLOPE_CHECK, CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE,
-    CBID_VEHICLE_COLOUR_MAPPING, CBID_VEHICLE_CUSTOM_REFIT, CBID_VEHICLE_LENGTH,
-    CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY, CBID_VEHICLE_REFIT_CAPACITY,
-    CBID_VEHICLE_REFIT_COST, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_SPAWN_VISUAL_EFFECT,
-    CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT, IndustryProductionGroup,
-    TrainSpriteGraphics,
+    CBID_INDUSTRY_SPECIAL_EFFECT, CBID_OBJECT_FUND_MORE_TEXT, CBID_OBJECT_LAND_SLOPE_CHECK,
+    CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
+    CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
+    CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_COLOUR_MAPPING,
+    CBID_VEHICLE_CUSTOM_REFIT, CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT,
+    CBID_VEHICLE_MODIFY_PROPERTY, CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_REFIT_COST,
+    CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_SPAWN_VISUAL_EFFECT, CBID_VEHICLE_START_STOP_CHECK,
+    CBID_VEHICLE_VISUAL_EFFECT, IndustryProductionGroup, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -2830,6 +2830,58 @@ pub fn apply_object_slope_callback_for_build(
     callback_allows_location_for_grf(result, def.grfid, def.newgrf_grf_version)
 }
 
+/// Texto que devuelve CB15C para la ventana de construcción de un objeto.
+///
+/// `Local` representa `GRFSTR_MISC_GRF_TEXT + result`; `GrfString` es el
+/// resultado especial `0x40F`, cuyo `StringID` vive en `register 0x100` del
+/// text stack. `None` conserva tanto `CALLBACK_FAILED` como `0x400`, que son
+/// las dos respuestas upstream que no agregan una línea. `Invalid` permite al
+/// cliente informar un resultado fuera del contrato sin convertirlo en texto.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectFundMoreText {
+    None,
+    Local(u16),
+    GrfString(u32),
+    Invalid(u16),
+}
+
+/// Evalúa CB15C en el scope de preview de `ObjectPicker`.
+///
+/// `OpenTTD` consulta el callback antes de crear una instancia (`Object ==
+/// nullptr`, `INVALID_TILE`) y pasa la vista seleccionada por el resolver. No
+/// hay estado persistente que escribir en esta ruta; sólo se inicializan las
+/// variables de objeto que siguen siendo definidas sin tesela y se devuelve la
+/// clasificación del resultado junto con el valor del registro `0x100`.
+#[must_use]
+pub fn resolve_object_fund_more_text_callback(def: &ObjectSpecDef, view: u8) -> ObjectFundMoreText {
+    if !def.has_fund_more_text_callback() {
+        return ObjectFundMoreText::None;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return ObjectFundMoreText::None;
+    };
+    let mut ctx = Action2EvalCtx::default();
+    ctx.vars.insert(0x42, 0);
+    ctx.vars.insert(0x43, 0);
+    ctx.vars.insert(0x44, 0);
+    ctx.vars.insert(0x45, 0);
+    ctx.vars.insert(0x46, 0);
+    ctx.vars.insert(0x47, 0);
+    ctx.vars.insert(0x48, u32::from(view));
+    ctx.vars.insert(0x5F, 0);
+    let result =
+        runtime.resolve_callback_ctx(def.local_id, CBID_OBJECT_FUND_MORE_TEXT, 0, 0, &mut ctx);
+    match result {
+        CALLBACK_FAILED | 0x400 => ObjectFundMoreText::None,
+        0x40F => ctx.registers_100.get(&0x100).copied().map_or(
+            ObjectFundMoreText::Invalid(result),
+            ObjectFundMoreText::GrfString,
+        ),
+        0..=0x3FF => ObjectFundMoreText::Local(result),
+        other => ObjectFundMoreText::Invalid(other),
+    }
+}
+
 /// Call site de construcción de estación ferroviaria: CB `0x13` availability.
 ///
 /// `OpenTTD` invoca este callback sin `Station` ni tesela creada. Por eso no hay
@@ -4172,6 +4224,49 @@ mod tests {
                 default: 0,
             },
         );
+        gfx
+    }
+
+    fn gfx_callback_fund_more_text_grf_string(string_id: u32) -> TrainSpriteGraphics {
+        let mut gfx = gfx_callback_literal_u16(0x40F);
+        let Some(entry) = gfx.action2_var.get_mut(&2) else {
+            return gfx;
+        };
+        entry.first = Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                shift: 0,
+                and_mask: string_id,
+                ..Action2VarAdjust::default()
+            },
+        };
+        entry.ops = vec![
+            Action2VarOp {
+                operator: 0x0E,
+                rhs: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0x100,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+            },
+            Action2VarOp {
+                operator: 0x0F,
+                rhs: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0x40F,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+            },
+        ];
         gfx
     }
 
@@ -7367,6 +7462,60 @@ mod tests {
                 .get(&0x0102_0304)
                 .and_then(|registers| registers.get(&3)),
             Some(&11)
+        );
+    }
+
+    fn object_fund_more_text_def(runtime: TrainSpriteGraphics) -> ObjectSpecDef {
+        ObjectSpecDef {
+            id: 5,
+            class_label: "OBJ ".into(),
+            name: "fund-more-text".into(),
+            size: crate::object_spec::OBJECT_SIZE_1X1,
+            from_newgrf: true,
+            local_id: 0,
+            grfid: 0x5445_5854,
+            newgrf_grf_version: 8,
+            climate_mask: crate::object_spec::DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: 1,
+            flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            callback_mask: crate::object_spec::OBJECT_CALLBACK_FUND_MORE_TEXT_MASK,
+            views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+            associated_badges: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn object_fund_more_text_callback_classifies_upstream_results() {
+        let mut def = object_fund_more_text_def(gfx_callback_variable_byte(0x48, 0));
+        assert_eq!(
+            resolve_object_fund_more_text_callback(&def, 7),
+            ObjectFundMoreText::Local(7)
+        );
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(0x400)));
+        assert_eq!(
+            resolve_object_fund_more_text_callback(&def, 7),
+            ObjectFundMoreText::None
+        );
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(0x500)));
+        assert_eq!(
+            resolve_object_fund_more_text_callback(&def, 7),
+            ObjectFundMoreText::Invalid(0x500)
+        );
+    }
+
+    #[test]
+    fn object_fund_more_text_callback_returns_grf_string_from_text_stack() {
+        let def = object_fund_more_text_def(gfx_callback_fund_more_text_grf_string(0x1234));
+        assert_eq!(
+            resolve_object_fund_more_text_callback(&def, 2),
+            ObjectFundMoreText::GrfString(0x1234)
         );
     }
 

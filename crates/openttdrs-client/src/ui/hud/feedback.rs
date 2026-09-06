@@ -48,10 +48,11 @@ pub(crate) fn push_vehicle_start_stop_error(
                     Locale::Es => openttdrs_core::NEWGRF_LANGUAGE_SPANISH,
                     Locale::En => openttdrs_core::NEWGRF_LANGUAGE_ENGLISH,
                 };
-                let text = sim.state.runtime.newgrf_string_catalog.lookup_expanded(
+                let text = sim.state.runtime.newgrf_string_catalog.lookup_rendered(
                     diagnostic.grfid,
                     string_id,
                     language,
+                    &openttdrs_core::NewGrfTextContext::default(),
                 )?;
                 if text.is_empty() {
                     return None;
@@ -97,10 +98,11 @@ pub(crate) fn push_station_slope_error(
                 Locale::Es => openttdrs_core::NEWGRF_LANGUAGE_SPANISH,
                 Locale::En => openttdrs_core::NEWGRF_LANGUAGE_ENGLISH,
             };
-            let text = sim.state.runtime.newgrf_string_catalog.lookup_expanded(
+            let text = sim.state.runtime.newgrf_string_catalog.lookup_rendered(
                 diagnostic.grfid,
                 string_id,
                 language,
+                &openttdrs_core::NewGrfTextContext::default(),
             )?;
             if text.is_empty() {
                 return None;
@@ -146,10 +148,11 @@ pub(crate) fn push_object_slope_error(
                 Locale::Es => openttdrs_core::NEWGRF_LANGUAGE_SPANISH,
                 Locale::En => openttdrs_core::NEWGRF_LANGUAGE_ENGLISH,
             };
-            let text = sim.state.runtime.newgrf_string_catalog.lookup_expanded(
+            let text = sim.state.runtime.newgrf_string_catalog.lookup_rendered(
                 diagnostic.grfid,
                 string_id,
                 language,
+                &openttdrs_core::NewGrfTextContext::default(),
             )?;
             if text.is_empty() {
                 return None;

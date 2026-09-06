@@ -2182,6 +2182,16 @@ y corte de ciclos. El selector de objetos muestra ahora el texto expandido;
 parámetros dinámicos y consumidores de otros features permanecen como trabajo
 posterior.
 
+Actualización #329-NEWGRF-TEXT-PARAMS-442 (2026-09-06, issue [#442](https://github.com/cavazquez/openttdrs/issues/442)):
+el catálogo añade `NewGrfTextContext`, `NewGrfTextValue` y
+`lookup_rendered`: los parámetros signed/unsigned/hex/string se consumen en un
+orden explícito y las choice-lists simples eligen la rama solicitada o default.
+El HUD de rechazos y el picker de objetos usan el renderer con contexto vacío,
+por lo que ya no muestran los marcadores de choice-list. El contexto no muta,
+los payloads incompletos se conservan literalmente y fecha, género/case,
+pluralización basada en idioma y parámetros de otros features siguen siendo
+sucesores pendientes.
+
 Actualización #329-VEHICLE-CB31-FEEDBACK-434 (2026-09-06, issue [#434](https://github.com/cavazquez/openttdrs/issues/434)):
 el rechazo de CB31 conserva un diagnóstico efímero por vehículo/GRFID y los
 botones de start/stop resuelven `LocalString`/`GrfString` con el catálogo

@@ -3,8 +3,10 @@
 //! El parser cubre la parte que necesitan los callbacks que devuelven texto:
 //! IDs genéricos (`0xD000` en adelante), variantes por idioma, cadenas
 //! terminadas en NUL y los controles NFO básicos que `OpenTTD` traduce al cargar
-//! un Action4/Action13. Choice-lists, pluralización y parámetros del text stack
-//! que requieren estado de juego quedan representados con marcadores visibles.
+//! un Action4/Action13. Los parámetros del text stack pueden materializarse
+//! con un contexto explícito; los controles que requieren estado de idioma o
+//! de juego (fecha, género/caso y pluralización) quedan representados como
+//! marcadores visibles.
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Write as _;
@@ -35,6 +37,52 @@ pub struct NewGrfString {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewGrfStringCatalog {
     entries: Vec<NewGrfString>,
+}
+
+/// Valor que puede consumir un control dinámico del text stack.
+///
+/// El tipo se mantiene deliberadamente pequeño: el callback que produce el
+/// texto entrega una pila de parámetros, no una referencia global al estado de
+/// la partida. Si el valor no está disponible, el marcador original se
+/// conserva para que la UI no invente información.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NewGrfTextValue {
+    Signed(i64),
+    Unsigned(u64),
+    Text(String),
+}
+
+/// Contexto opcional para resolver los marcadores dinámicos de una cadena.
+///
+/// `choice_index` selecciona una entrada de `gender-list`, `case-list` o
+/// `plural-list`; cero es la rama default. La selección no pretende sustituir
+/// el mapeo lingüístico de `OpenTTD`: ese mapeo requiere el idioma cargado y se
+/// mantiene pendiente en la matriz de paridad.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewGrfTextContext {
+    pub params: Vec<NewGrfTextValue>,
+    pub choice_index: Option<u8>,
+}
+
+impl NewGrfTextContext {
+    /// Construye un contexto con los parámetros en el orden de consumo.
+    #[must_use]
+    pub fn with_params<I>(params: I) -> Self
+    where
+        I: IntoIterator<Item = NewGrfTextValue>,
+    {
+        Self {
+            params: params.into_iter().collect(),
+            choice_index: None,
+        }
+    }
+
+    /// Selecciona la rama de una choice-list; cero representa default.
+    #[must_use]
+    pub fn with_choice_index(mut self, choice_index: u8) -> Self {
+        self.choice_index = Some(choice_index);
+        self
+    }
 }
 
 /// Traduce los controles NFO que no necesitan un text stack ni un scope de
@@ -228,6 +276,207 @@ fn push_utf8_char(raw: &[u8], first: u8, cursor: &mut usize, out: &mut String) -
     true
 }
 
+const MARKER_OPEN: char = '⟦';
+const MARKER_CLOSE: char = '⟧';
+
+/// Resuelve los parámetros y choice-lists que el decoder deja como
+/// marcadores. Los marcadores que necesitan estado de idioma o de partida se
+/// conservan literalmente.
+///
+/// La función es pura: el índice de parámetros es local a la llamada y el
+/// contexto no se modifica. Una choice-list incompleta también se conserva
+/// completa, evitando perder texto de un GRF malformado.
+#[must_use]
+pub fn render_newgrf_text(text: &str, context: &NewGrfTextContext) -> String {
+    let mut parameter_index = 0usize;
+    render_newgrf_text_inner(text, context, &mut parameter_index)
+}
+
+#[derive(Debug, Default)]
+struct ChoiceCapture {
+    raw: String,
+    prefix: String,
+    segments: Vec<(u8, String)>,
+    current: Option<u8>,
+}
+
+impl ChoiceCapture {
+    fn new(marker: &str) -> Self {
+        Self {
+            raw: marker.to_owned(),
+            prefix: String::new(),
+            segments: Vec::new(),
+            current: None,
+        }
+    }
+
+    fn push_chunk(&mut self, chunk: &str) {
+        self.raw.push_str(chunk);
+        if let Some(current) = self.current {
+            if let Some((_, value)) = self
+                .segments
+                .iter_mut()
+                .find(|(index, _)| *index == current)
+            {
+                value.push_str(chunk);
+            }
+        } else {
+            self.prefix.push_str(chunk);
+        }
+    }
+
+    fn switch_to(&mut self, index: u8, marker: &str) {
+        self.raw.push_str(marker);
+        self.current = Some(index);
+        if !self.segments.iter().any(|(known, _)| *known == index) {
+            self.segments.push((index, String::new()));
+        }
+    }
+
+    fn selected(&self, index: u8) -> Option<String> {
+        self.segments
+            .iter()
+            .find(|(known, _)| *known == index)
+            .or_else(|| self.segments.iter().find(|(known, _)| *known == 0))
+            .map(|(_, value)| format!("{}{}", self.prefix, value))
+    }
+}
+
+fn render_newgrf_text_inner(
+    text: &str,
+    context: &NewGrfTextContext,
+    parameter_index: &mut usize,
+) -> String {
+    let mut output = String::with_capacity(text.len());
+    let mut cursor = 0usize;
+    let mut choice: Option<ChoiceCapture> = None;
+
+    while cursor < text.len() {
+        let Some(relative_open) = text[cursor..].find(MARKER_OPEN) else {
+            append_text_chunk(&mut output, &mut choice, &text[cursor..]);
+            break;
+        };
+        let start = cursor + relative_open;
+        append_text_chunk(&mut output, &mut choice, &text[cursor..start]);
+
+        let value_start = start + MARKER_OPEN.len_utf8();
+        let Some(relative_close) = text[value_start..].find(MARKER_CLOSE) else {
+            append_marker_chunk(&mut output, &mut choice, &text[start..]);
+            break;
+        };
+        let value_end = value_start + relative_close;
+        let marker_end = value_end + MARKER_CLOSE.len_utf8();
+        let marker = &text[start..marker_end];
+        let value = &text[value_start..value_end];
+
+        if value == "choice-end" {
+            if let Some(mut finished) = choice.take() {
+                finished.raw.push_str(marker);
+                if let Some(selected) = finished.selected(context.choice_index.unwrap_or(0)) {
+                    output.push_str(&render_newgrf_text_inner(
+                        &selected,
+                        context,
+                        parameter_index,
+                    ));
+                } else {
+                    output.push_str(&finished.raw);
+                }
+            } else {
+                output.push_str(marker);
+            }
+        } else if let Some(capture) = choice.as_mut() {
+            match value {
+                "choice-default" => capture.switch_to(0, marker),
+                value if value.starts_with("choice-next:") => {
+                    let index = value["choice-next:".len()..].parse::<u8>().unwrap_or(0);
+                    capture.switch_to(index, marker);
+                }
+                _ => capture.push_chunk(marker),
+            }
+        } else if is_choice_start(value) {
+            choice = Some(ChoiceCapture::new(marker));
+        } else {
+            output.push_str(&render_dynamic_marker(
+                value,
+                marker,
+                context,
+                parameter_index,
+            ));
+        }
+        cursor = marker_end;
+    }
+
+    if let Some(capture) = choice {
+        output.push_str(&capture.raw);
+    }
+    output
+}
+
+fn append_text_chunk(output: &mut String, choice: &mut Option<ChoiceCapture>, chunk: &str) {
+    if let Some(capture) = choice.as_mut() {
+        capture.push_chunk(chunk);
+    } else {
+        output.push_str(chunk);
+    }
+}
+
+fn append_marker_chunk(output: &mut String, choice: &mut Option<ChoiceCapture>, chunk: &str) {
+    append_text_chunk(output, choice, chunk);
+}
+
+fn is_choice_start(value: &str) -> bool {
+    matches!(value, "gender-list" | "case-list" | "plural-list")
+}
+
+fn render_dynamic_marker(
+    value: &str,
+    marker: &str,
+    context: &NewGrfTextContext,
+    parameter_index: &mut usize,
+) -> String {
+    let is_parameter = matches!(
+        value,
+        "param-dword-signed"
+            | "param-dword"
+            | "param-word-signed"
+            | "param-word"
+            | "param-byte"
+            | "param-byte-hex"
+            | "param-word-hex"
+            | "param-dword-hex"
+            | "param-qword-hex"
+            | "param-dword-force"
+            | "param-string"
+    );
+    if !is_parameter {
+        return marker.to_owned();
+    }
+    let parameter = context.params.get(*parameter_index);
+    *parameter_index = (*parameter_index).saturating_add(1);
+    let Some(parameter) = parameter else {
+        return marker.to_owned();
+    };
+
+    let signed = matches!(value, "param-dword-signed" | "param-word-signed");
+    let hexadecimal = matches!(
+        value,
+        "param-byte-hex" | "param-word-hex" | "param-dword-hex" | "param-qword-hex"
+    );
+    match parameter {
+        NewGrfTextValue::Text(text) => text.clone(),
+        NewGrfTextValue::Signed(number) if hexadecimal => {
+            format!("{:X}", u64::from_ne_bytes(number.to_ne_bytes()))
+        }
+        NewGrfTextValue::Unsigned(number) if hexadecimal => format!("{number:X}"),
+        NewGrfTextValue::Signed(number) if signed => number.to_string(),
+        NewGrfTextValue::Unsigned(number) if signed => {
+            i64::from_ne_bytes(number.to_ne_bytes()).to_string()
+        }
+        NewGrfTextValue::Signed(number) => u64::from_ne_bytes(number.to_ne_bytes()).to_string(),
+        NewGrfTextValue::Unsigned(number) => number.to_string(),
+    }
+}
+
 impl NewGrfStringCatalog {
     /// Borra todas las cadenas del stack anterior.
     pub fn clear(&mut self) {
@@ -302,6 +551,20 @@ impl NewGrfStringCatalog {
         let text = self.lookup(grfid, string_id, language)?.to_owned();
         let mut stack = vec![string_id];
         Some(self.expand_inline_references(&text, grfid, language, &mut stack, 0))
+    }
+
+    /// Resuelve una cadena, expande referencias inline y materializa los
+    /// controles dinámicos compatibles con [`NewGrfTextContext`].
+    #[must_use]
+    pub fn lookup_rendered(
+        &self,
+        grfid: u32,
+        string_id: u32,
+        language: u8,
+        context: &NewGrfTextContext,
+    ) -> Option<String> {
+        let text = self.lookup_expanded(grfid, string_id, language)?;
+        Some(render_newgrf_text(&text, context))
     }
 
     fn expand_inline_references(
@@ -763,6 +1026,60 @@ mod tests {
         assert_eq!(
             catalog.lookup(1, 0xD000, NEWGRF_LANGUAGE_SPANISH),
             Some("translation")
+        );
+    }
+
+    #[test]
+    fn renders_dynamic_parameters_without_mutating_context() {
+        let context = NewGrfTextContext::with_params([
+            NewGrfTextValue::Signed(-7),
+            NewGrfTextValue::Unsigned(0x2A),
+            NewGrfTextValue::Text("Station".into()),
+        ]);
+        let text = "A⟦param-dword-signed⟧/⟦param-dword-hex⟧/⟦param-string⟧";
+        assert_eq!(render_newgrf_text(text, &context), "A-7/2A/Station");
+        assert_eq!(context.params.len(), 3);
+    }
+
+    #[test]
+    fn renders_choice_list_prefix_and_default_or_selected_branch() {
+        let text = "prefix⟦plural-list⟧⟦choice-next:1⟧one⟦choice-default⟧default⟦choice-end⟧suffix";
+        assert_eq!(
+            render_newgrf_text(text, &NewGrfTextContext::default()),
+            "prefixdefaultsuffix"
+        );
+        assert_eq!(
+            render_newgrf_text(text, &NewGrfTextContext::default().with_choice_index(1)),
+            "prefixonesuffix"
+        );
+    }
+
+    #[test]
+    fn preserves_incomplete_choice_lists_and_missing_parameters() {
+        let text = "x⟦plural-list⟧zero⟦choice-next:1⟧⟦param-dword⟧";
+        let context = NewGrfTextContext::default();
+        assert_eq!(render_newgrf_text(text, &context), text);
+    }
+
+    #[test]
+    fn lookup_rendered_expands_inline_text_before_dynamic_controls() {
+        let mut catalog = NewGrfStringCatalog::default();
+        catalog.push(NewGrfString {
+            grfid: 1,
+            string_id: 0xD000,
+            language: NEWGRF_LANGUAGE_ENGLISH,
+            text: "Base ⟦grf-string:0x0001⟧".into(),
+        });
+        catalog.push(NewGrfString {
+            grfid: 1,
+            string_id: 0xD001,
+            language: NEWGRF_LANGUAGE_ENGLISH,
+            text: "⟦param-dword⟧".into(),
+        });
+        let context = NewGrfTextContext::with_params([NewGrfTextValue::Unsigned(42)]);
+        assert_eq!(
+            catalog.lookup_rendered(1, 0xD000, NEWGRF_LANGUAGE_ENGLISH, &context),
+            Some("Base 42".into())
         );
     }
 }

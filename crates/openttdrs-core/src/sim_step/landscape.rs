@@ -223,6 +223,9 @@ fn on_tick_link_graph(state: &mut GameState) {
             let join_date = date.saturating_add(u32::from(
                 native.recalc_time_seconds / crate::flow_stat::ECONOMY_SECONDS_PER_DAY,
             ));
+            // El runtime opaco deja de representar el estado una vez que se
+            // crea un job nuevo sobre el grafo vivo.
+            state.link_graph.runtime_chunks.clear();
             state
                 .runtime
                 .pending_linkgraph_jobs
@@ -241,6 +244,9 @@ fn on_tick_link_graph(state: &mut GameState) {
             // jobs superpuestos, los siguientes esperan la marca posterior.
             let pending = state.runtime.pending_linkgraph_jobs.remove(0);
             state.runtime.station_flows = station_flows_from_jobs(pending.jobs);
+            // Tras `JoinNext`, LGRJ/LGRS ya no describen la cola que sigue en
+            // Rust; el writer emitirá tablas vacías hasta el próximo spawn.
+            state.link_graph.runtime_chunks.clear();
         }
     }
 }

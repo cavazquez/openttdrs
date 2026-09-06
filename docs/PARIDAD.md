@@ -2203,8 +2203,11 @@ Reporte regenerable: [`parity/divergences_found.md`](parity/divergences_found.md
 scheduler determinista ya respeta la latencia de `recalc_time` y conserva los
 flows anteriores hasta la marca de join vencida ([#394](parity/sav-linkgraph-recalc-time-394.md)).
 `LGRJ`/`LGRS` se preservan opacamente durante un roundtrip si el grafo no
-cambia; al mutarlo se descartan porque los jobs quedan obsoletos. Threads,
-pausa multiplayer y rehidratación ejecutable de esos jobs siguen OOS.
+cambia; al importar se decodifican sus snapshots y `LGRS.running` rehidrata la
+cola ejecutable de `JoinNext`. Al mutar o integrar el grafo se descartan porque
+los jobs quedan obsoletos. Threads, pausa multiplayer, compresión/merge y el
+planificador completo de `schedule` siguen OOS; ver
+[`sav-linkgraph-jobs-395.md`](parity/sav-linkgraph-jobs-395.md).
 **Overlay mapa:** ✅ gizmos al abrir Link Graph o con «Overlay Link Graph» en Opciones de visualización.  
 **Dumps C++ byte-igual (MCF):** fixtures JSON en `tests/fixtures/linkgraph/*.json` (`OPENTTD_DUMP_LINKGRAPH=1`).  
 **Dumps C++ byte-igual (LGRP wire):** `lgrp_empty.bin` / `lgrp_two_node_goods.bin` (`OPENTTD_DUMP_LGRP=1`).
@@ -2259,8 +2262,9 @@ OPENTTD_DUMP_LGRP=1 ./openttd_test "[linkgraph][lgrp]"
 ```
 
 Asserts en `sav/linkgraph.rs` (`lgrp_*_matches_openttd_dump`). `LGRJ`/`LGRS`
-quedan fuera del golden: Rust conserva su payload TABLE opaco cuando puede,
-pero todavía no rehidrata esos jobs guardados como entradas ejecutables.
+mantienen passthrough byte a byte cuando no mutan y tienen regresiones de
+decodificación de snapshot/orden; los jobs se reanudan en la cola determinista
+de `JoinNext` al importar SAV.
 
 ### Manual
 

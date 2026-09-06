@@ -27,11 +27,11 @@ de segundos a días mantiene el entero nativo de OpenTTD, incluido un
 `recalc_time` menor que un día.
 
 El estado de esa cola no se serializa en `GameState`/JSON. OpenTTD sí guarda
-sus jobs y listas de schedule en `LGRJ`/`LGRS`; ese contrato de persistencia y
-la rehidratación ejecutable de un job en vuelo quedan explícitamente como el
-siguiente residual SAV (los chunks nativos todavía pueden conservarse como
-passthrough). `rebuild_station_flows` continúa siendo una reconstrucción
-inmediata para cargas/comandos que deben invalidar flows en el mismo tick.
+sus jobs y listas de schedule en `LGRJ`/`LGRS`; la rehidratación ejecutable de
+esos snapshots se implementa en el corte SAV
+[`sav-linkgraph-jobs-395.md`](sav-linkgraph-jobs-395.md). `rebuild_station_flows`
+continúa siendo una reconstrucción inmediata para cargas/comandos que deben
+invalidar flows en el mismo tick.
 
 ## Regresiones
 

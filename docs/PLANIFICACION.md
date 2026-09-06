@@ -860,7 +860,9 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
 - Link graph observacional ✅. CargoDist (#49) MVP ✅; **nivel 2 MCF** ✅:
   pipeline OpenTTD (`Demand` + MCF1/2 Dijkstra + `FlowMapper`) en `linkgraph_parity/`;
   `GetVia` con `RandomRange` + RNG alineado; Symmetric = Demand Symmetric (no espejo);
-  stub `CapacityScaled` legado solo para tests. LGRP + overlay ✅ (#102); OOS: jobs async `LGRJ`/`LGRS`.
+  stub `CapacityScaled` legado solo para tests. LGRP + overlay ✅ (#102);
+  snapshots `LGRJ`/`LGRS` se importan y reanudan en la cola determinista;
+  threads async, compresión/merge y el planificador completo siguen OOS.
 
 ### Fase 5 — Railtypes / electrificación / RailConvert ✅ (MVP)
 
@@ -977,7 +979,8 @@ Prioridad tras cierre UI-0…UI-8 (no reabrir fases cerradas salvo regresión):
 
 1. Desync UI / lobby multijugador ([#21](https://github.com/cavazquez/openttdrs/issues/21) MVP hecho; host migration #171).
 2. NewGRF parámetros editables + paridad Action0–14 total → OOS / estructural.
-3. LGRJ CargoDist async → OOS.
+3. LGRJ CargoDist async: snapshots SAV y `JoinNext` ✅ (#395); threads async,
+   presupuesto de CPU y merge de grafos → OOS.
 
 #### P2 — Modos avanzados (no bloquean P0)
 
@@ -1474,7 +1477,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Cadena fábrica (madera+carbón→goods) | `industry_cmd.cpp` | **PARCIAL** |
 | Envejecimiento en vehículo | `cargopacket.cpp` | **EXISTE** (`cargo_transit_ticks`) |
 | Decaimiento en estación | `station_cmd.cpp:3959` | **EXISTE** (edad + truncate; rating por compañía + gate pax) |
-| Link graph / flow stats | `linkgraph/` | **EXISTE** (`linkgraph_parity/` + `sav/linkgraph` LGRP + overlay; LGRJ async OOS) |
+| Link graph / flow stats | `linkgraph/` | **EXISTE** (`linkgraph_parity/` + `sav/linkgraph` LGRP/LGRJ/LGRS + overlay; async completo OOS) |
 
 ##### Puentes y túneles
 
@@ -2027,9 +2030,11 @@ describe el wire format y los puntos de extensión del writer.
 
 **Estado del writer:** emite mapa, `STNN`, `CITY`, `INDY`, `ORDL`, `VEHS`,
 `LGRP`/`LGRJ`/`LGRS`, `DATE` y `PLYR`. `LGRP` persiste
-capacity/usage/travel_time del link graph observado; los jobs quedan vacíos.
-JSON sigue siendo el formato nativo completo para el estado que el subconjunto
-`.sav` no preserva.
+capacity/usage/travel_time del link graph observado; un save importado conserva
+los jobs nativos sin mutaciones y los rehidrata para `JoinNext`, mientras que un
+grafo nuevo sin passthrough emite tablas de runtime vacías para que OpenTTD las
+regenere. JSON sigue siendo el formato nativo completo para el estado que el
+subconjunto `.sav` no preserva.
 
 ---
 
@@ -2194,9 +2199,11 @@ distante de estaciones, `vehicle.wagon_speed_limits`, `vehicle.disable_elrails`,
 autoridad, inflación/recesiones y unidades de tiempo). El perfil `linkgraph`
 mantiene sus segundos y cuatro selectores; el scheduler determinista respeta
 ahora la fecha de join derivada de `recalc_time`, aunque el presupuesto de CPU,
-threads y la rehidratación ejecutable de `LGRJ`/`LGRS` siguen parciales. La
-evidencia está en [`sav-linkgraph-settings-383.md`](parity/sav-linkgraph-settings-383.md)
-y [`sav-linkgraph-recalc-time-394.md`](parity/sav-linkgraph-recalc-time-394.md).
+threads, la compresión/merge de nodos y el planificador completo siguen
+parciales; `LGRJ`/`LGRS` ya se rehidratan como jobs ejecutables al importar SAV.
+La evidencia está en [`sav-linkgraph-settings-383.md`](parity/sav-linkgraph-settings-383.md),
+[`sav-linkgraph-recalc-time-394.md`](parity/sav-linkgraph-recalc-time-394.md) y
+[`sav-linkgraph-jobs-395.md`](parity/sav-linkgraph-jobs-395.md).
 La unión distante tiene su contrato PATS/command en
 [`sav-distant-join-stations-384.md`](parity/sav-distant-join-stations-384.md). El historial de
 noticias propio queda en JSON (no es un pool nativo de OpenTTD `.sav`). `ORDL`

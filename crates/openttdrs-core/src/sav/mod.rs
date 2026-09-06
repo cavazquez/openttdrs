@@ -89,7 +89,7 @@ use crate::pathfinder;
 use crate::station::{Station, StopKind};
 use crate::town::Town;
 use crate::vehicle::{AircraftPhase, Vehicle, VehicleKind};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub use entities::{
     SavCargoPacket, SavIndustry, SavIndustryAcceptedCargo, SavIndustryAcceptedHistory,
@@ -301,6 +301,10 @@ pub struct SavGame {
     pub random_state: Option<[u32; 2]>,
     /// Grafo de enlaces observado (`LGRP`); vacío si el chunk falta o es legacy.
     pub link_graph: LinkGraphStats,
+    /// Jobs de `CargoDist` en vuelo (`LGRJ`) y orden `LGRS` para reanudar
+    /// `JoinNext` después de importar el save.
+    pub(crate) linkgraph_jobs: Vec<linkgraph::SavLinkGraphJob>,
+    pub(crate) linkgraph_schedule: linkgraph::SavLinkGraphSchedule,
     /// Perfil de `CargoDist` de `PATS.linkgraph.*`.
     ///
     /// Conserva los cuatro modos por clase y los segundos nativos; el core
@@ -542,6 +546,8 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let opaque_chunks = opaque_chunks_from_chunks(&chunk_list);
     let link_graph =
         linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
+    let (linkgraph_jobs, linkgraph_schedule) =
+        linkgraph::linkgraph_runtime_from_chunks(&chunk_list, map_w, map_h, climate);
     Ok(SavGame {
         version,
         map,
@@ -562,6 +568,8 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         game_time,
         random_state,
         link_graph,
+        linkgraph_jobs,
+        linkgraph_schedule,
         cargo_dist: parsed_settings.cargo_dist,
         climate,
         snow_line_height,
@@ -1090,6 +1098,8 @@ impl GameState {
     #[allow(clippy::too_many_lines)]
     pub fn from_sav_game(mut sav: SavGame) -> Self {
         let clear_legacy_depot_reservations = sav.version < SLV_DEPOT_RESERVATION_PERSISTED;
+        let linkgraph_jobs = std::mem::take(&mut sav.linkgraph_jobs);
+        let linkgraph_schedule = std::mem::take(&mut sav.linkgraph_schedule);
         let vehs_raw_chunk = sav.vehs_raw_chunk.take();
         let ordl_raw_chunk = sav.ordl_raw_chunk.take();
         let stnn_raw_chunk = sav.stnn_raw_chunk.take();
@@ -1488,6 +1498,7 @@ impl GameState {
         if state.cargo_dist.has_automatic_distribution() {
             state.rebuild_station_flows();
         }
+        install_sav_linkgraph_jobs(&mut state, linkgraph_jobs, linkgraph_schedule);
         for v in &sav.vehicles {
             let kind = match v.kind {
                 SavVehicleKind::Train => VehicleKind::Train,
@@ -2008,6 +2019,56 @@ impl GameState {
     }
 }
 
+/// Rehidrata los jobs que `OpenTTD` dejó entre `SpawnNext` y `JoinNext`.
+///
+/// `LGRS.running` es autoritativo para el orden de integración. Si el chunk
+/// falta o no contiene referencias, se usa el orden estable del pool `LGRJ`;
+/// referencias imposibles se descartan sin abortar la carga completa.
+fn install_sav_linkgraph_jobs(
+    state: &mut GameState,
+    jobs: Vec<linkgraph::SavLinkGraphJob>,
+    schedule: linkgraph::SavLinkGraphSchedule,
+) {
+    if jobs.is_empty() {
+        return;
+    }
+    let mut by_pool: BTreeMap<u32, linkgraph::SavLinkGraphJob> =
+        jobs.into_iter().map(|job| (job.pool_index, job)).collect();
+    let order = if schedule.chunk_present {
+        schedule.running
+    } else {
+        let mut fallback = by_pool.keys().copied().collect::<Vec<_>>();
+        fallback.sort_by_key(|pool_index| {
+            (
+                by_pool
+                    .get(pool_index)
+                    .map_or(u16::MAX, |job| job.graph_index),
+                *pool_index,
+            )
+        });
+        fallback
+    };
+    let mut grouped: BTreeMap<u32, Vec<(crate::cargo::CargoType, crate::cargodist::parity::Job)>> =
+        BTreeMap::new();
+    for pool_index in order {
+        let Some(job) = by_pool.remove(&pool_index) else {
+            continue;
+        };
+        grouped
+            .entry(job.join_date)
+            .or_default()
+            .push((job.cargo, job.job));
+    }
+    for (join_date, jobs) in grouped {
+        if !jobs.is_empty() {
+            state
+                .runtime
+                .pending_linkgraph_jobs
+                .push(crate::game_state::PendingLinkGraphJob { join_date, jobs });
+        }
+    }
+}
+
 fn normalize_company_yearly_expenses(values: &[i64]) -> Vec<i64> {
     let mut normalized = vec![0; crate::company::COMPANY_YEARLY_EXPENSES_COUNT];
     for (target, source) in normalized.iter_mut().zip(values) {
@@ -2020,6 +2081,52 @@ fn normalize_company_yearly_expenses(values: &[i64]) -> Vec<i64> {
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imported_linkgraph_jobs_resume_in_lgrs_running_order() {
+        let job = crate::cargodist::parity::Job::new(
+            vec![
+                crate::cargodist::parity::BaseNode {
+                    station: 10,
+                    x: 1,
+                    y: 1,
+                    supply: 4,
+                    demand: 0,
+                },
+                crate::cargodist::parity::BaseNode {
+                    station: 11,
+                    x: 2,
+                    y: 1,
+                    supply: 0,
+                    demand: 4,
+                },
+            ],
+            vec![vec![], vec![]],
+            crate::cargodist::parity::LinkGraphSettings::default(),
+        );
+        let mut state = GameState::from_map(Map::new_flat(8, 8, 0));
+        install_sav_linkgraph_jobs(
+            &mut state,
+            vec![linkgraph::SavLinkGraphJob {
+                pool_index: 5,
+                join_date: 123,
+                graph_index: 2,
+                cargo: crate::CargoType::Coal,
+                job,
+            }],
+            linkgraph::SavLinkGraphSchedule {
+                chunk_present: true,
+                schedule: vec![2],
+                running: vec![5],
+            },
+        );
+        assert_eq!(state.runtime.pending_linkgraph_jobs.len(), 1);
+        let pending = &state.runtime.pending_linkgraph_jobs[0];
+        assert_eq!(pending.join_date, 123);
+        assert_eq!(pending.jobs.len(), 1);
+        assert_eq!(pending.jobs[0].0, crate::CargoType::Coal);
+        assert_eq!(pending.jobs[0].1.nodes[0].station, 10);
+    }
 
     #[test]
     fn maps_supported_vanilla_road_engine_ids_to_catalog_chassis() {
@@ -2059,6 +2166,8 @@ mod tests {
             game_time: None,
             random_state: None,
             link_graph: LinkGraphStats::default(),
+            linkgraph_jobs: Vec::new(),
+            linkgraph_schedule: linkgraph::SavLinkGraphSchedule::default(),
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             climate: crate::Climate::Temperate,
             snow_line_height: crate::world_gen::DEF_SNOW_LINE_HEIGHT,
@@ -2904,6 +3013,8 @@ mod tests {
             cargo_packets: Vec::new(),
             cargo_payments: Vec::new(),
             link_graph: LinkGraphStats::default(),
+            linkgraph_jobs: Vec::new(),
+            linkgraph_schedule: linkgraph::SavLinkGraphSchedule::default(),
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             vehicles: vec![
                 SavVehicle {

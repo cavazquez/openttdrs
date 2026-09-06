@@ -1793,7 +1793,17 @@ Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/c
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en
 segundos económicos y mantiene los flows previos hasta la primera marca de
 `JoinNext` posterior a ese vencimiento. La regresión también demuestra que una
-mutación del grafo posterior no altera el job en vuelo. La cola ejecutable no
-rehidrata todavía los jobs guardados en `LGRJ`/`LGRS`; threads, presupuesto de
-CPU, pausa multiplayer, compresión y topología dinámica siguen pendientes en
-#328; el padre no se cierra.
+mutación del grafo posterior no altera el job en vuelo. La rehidratación
+ejecutable de `LGRJ`/`LGRS` se documenta en el corte siguiente (#395); threads,
+presupuesto de CPU, pausa multiplayer, compresión y topología dinámica siguen
+pendientes en #328; el padre no se cierra.
+
+Actualización #328-LINKGRAPH-069 (2026-09-06, issue [#395](https://github.com/cavazquez/openttdrs/issues/395)):
+`LGRJ`/`LGRS` ahora se decodifican durante la importación SAV: el snapshot de
+cada job (settings, cargo, nodos, aristas y `join_date`) se transforma en un
+`cargodist::parity::Job`, y `LGRS.running` restaura el orden de `JoinNext`.
+Coordenadas y destinos imposibles se descartan sin abortar el save. El
+passthrough nativo se conserva hasta integrar o mutar el grafo, momento en que
+se invalida para no exportar jobs obsoletos. Threads, presupuesto de CPU,
+compresión/merge, pausa multiplayer y el planificador completo de `schedule`
+siguen pendientes; el padre #328 continúa abierto.

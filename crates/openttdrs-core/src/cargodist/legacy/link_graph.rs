@@ -7,7 +7,9 @@ use crate::cargo::CargoType;
 use crate::map::TileCoord;
 
 /// Chunk de runtime `LGRJ`/`LGRS` conservado de forma opaca durante un
-/// roundtrip `.sav`. No se interpreta ni se ejecuta en Rust.
+/// roundtrip `.sav`. La importación interpreta las columnas conocidas para
+/// rehidratar la cola; este cuerpo sigue siendo la fuente de passthrough para
+/// columnas futuras hasta que el grafo se muta.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LinkGraphRuntimeChunk {
     pub(crate) name: [u8; 4],
@@ -54,7 +56,7 @@ impl LinkFlowSample {
 pub struct LinkGraphStats {
     #[serde(default)]
     pub edges: HashMap<LinkEdgeKey, LinkFlowSample>,
-    /// Runtime `LGRJ`/`LGRS` original, solo válido hasta mutar el grafo.
+    /// Runtime `LGRJ`/`LGRS` original, solo válido hasta integrar o mutar el grafo.
     #[serde(skip)]
     pub(crate) runtime_chunks: Vec<LinkGraphRuntimeChunk>,
 }

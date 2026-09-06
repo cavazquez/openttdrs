@@ -776,7 +776,7 @@ fn write_stnn_normal(
     buf.push(0); // time_since_load
     buf.push(0); // time_since_unload
     buf.push(VEH_INVALID); // last_vehicle_type
-    buf.push(0); // had_vehicle_of_type
+    buf.push(u8::try_from(st.had_vehicle_of_type & u16::from(u8::MAX)).unwrap_or(u8::MAX)); // had_vehicle_of_type
     write_gamma(0, buf)?; // loading_vehicles
     buf.extend_from_slice(&0u64.to_be_bytes()); // always_accepted
 
@@ -2075,6 +2075,7 @@ mod tests {
         let mut state = GameState::new(64, 64);
         let mut rail = Station::new_with_kind(TileCoord::new(28, 39), StopKind::RailStation);
         rail.name = Some("Central".into());
+        rail.had_vehicle_of_type = 0x2A;
         state.stations = vec![rail];
         let recs = stnn_records(&state, 64).unwrap();
         assert_eq!(recs.len(), 1);
@@ -2086,6 +2087,9 @@ mod tests {
         let chunk = stnn_chunk(&recs).unwrap();
         assert!(chunk.starts_with(b"STNN"));
         assert_eq!(chunk[4], CH_TABLE);
+        let chunks = crate::sav::chunks::parse_chunks(&chunk).expect("parse STNN");
+        let decoded = crate::sav::entities::stations_from_chunks(&chunks, 64, 352);
+        assert_eq!(decoded[0].had_vehicle_of_type, 0x2A);
     }
 
     #[test]

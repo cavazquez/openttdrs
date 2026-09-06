@@ -1796,6 +1796,13 @@ el mismo bitset en `0x8A`, con regresión de todos los bits y round-trip JSON.
 La lectura/escritura de `STNN.normal.had_vehicle_of_type` y los estados
 `0xF2`/`0xF3` de `RoadStop` siguen pendientes; #329 continúa abierto.
 
+Actualización #329-STATION-HAD-VEHICLE-SAV-397 (2026-09-06, issue [#397](https://github.com/cavazquez/openttdrs/issues/397)):
+el puente SAV lee `STNN.normal.had_vehicle_of_type` en filas modernas y
+legacy, hidrata el bitset de `Station` y vuelve a emitir el byte al escribir
+`STNN`. La regresión cubre parser y writer con bitsets no nulos; los campos
+ausentes conservan cero. `last_vehicle_type`, `0xF2`/`0xF3` y los scopes
+restantes continúan pendientes en #329.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

@@ -14,6 +14,6 @@ station rating path. Both map-aware and legacy Action2 contexts read the same
 value. The field has `serde(default)`, so old JSON saves load with an empty
 history and new JSON saves round-trip every bit.
 
-This issue does not claim native SAV parity for
-`STNN.normal.had_vehicle_of_type`; the SAV field and the road-stop status
-variables `0xF2`/`0xF3` remain tracked by parent issue #329.
+Native SAV parity for `STNN.normal.had_vehicle_of_type` is covered separately
+by issue #397. The road-stop status variables `0xF2`/`0xF3` remain tracked by
+parent issue #329.

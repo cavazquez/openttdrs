@@ -945,5 +945,15 @@ Actualizado: 2026-09-06. `Station.had_vehicle_of_type` conserva los bits
 actualiza cuando una unidad presta servicio de carga o descarga y los
 waypoints exponen `WAYPOINT=0x40`. `station_action2` y la API legacy devuelven
 el mismo valor en `0x8A`, y el bitset forma parte del round-trip JSON propio.
-La lectura/escritura equivalente de `STNN.normal.had_vehicle_of_type` y los
-estados nativos `0xF2`/`0xF3` de `RoadStop` siguen pendientes.
+La lectura/escritura equivalente de `STNN.normal.had_vehicle_of_type` se
+cubre en #397; los estados nativos `0xF2`/`0xF3` de `RoadStop` siguen
+pendientes.
+
+### #329-STATION-HAD-VEHICLE-SAV-397 — Round-trip SAV de `0x8A`
+
+Actualizado: 2026-09-06. El puente SAV lee `STNN.normal.had_vehicle_of_type`
+en filas modernas y legacy, hidrata `Station.had_vehicle_of_type` y vuelve a
+emitir el byte al escribir `STNN`; los campos ausentes conservan cero. La
+regresión cubre parser y writer con bitsets no nulos sin ampliar el contrato
+del índice de órdenes. `last_vehicle_type`, `0xF2`/`0xF3` y los scopes restantes
+continúan pendientes en #329.

@@ -81,6 +81,8 @@ pub struct SavStation {
     pub airport_rotation: u8,
     /// `Station::airport.blocks` (guardado como `airport.flags`).
     pub airport_blocks: u64,
+    /// `Station::had_vehicle_of_type` (`STNN.normal`), byte nativo de SAV.
+    pub had_vehicle_of_type: u8,
     /// Índice del pool `PersistentStorage` referenciado por `airport.psa`.
     pub airport_persistent_storage_id: Option<u32>,
     /// Paquetes de carga en espera, agrupados por slot de cargo de `OpenTTD`.
@@ -294,6 +296,34 @@ pub(crate) fn station_index_from_chunks(
     out
 }
 
+/// Extrae el historial `Station::had_vehicle_of_type` del registro `STNN`.
+///
+/// El campo vive dentro de `normal` en el formato moderno y en la raíz en
+/// algunas tablas legacy. Mantener esta lectura separada del índice evita
+/// ampliar el contrato interno usado por el decodificador de órdenes.
+#[must_use]
+pub(crate) fn station_had_vehicle_flags_from_chunks(
+    chunks: &[RawChunk],
+    save_version: u16,
+) -> std::collections::HashMap<u32, u8> {
+    let Some(stnn) = find_chunk(chunks, "STNN") else {
+        return std::collections::HashMap::new();
+    };
+    table_rows(stnn, save_version)
+        .into_iter()
+        .map(|(station_id, record)| {
+            let normal = nested_struct(&record, "normal");
+            let value = normal
+                .and_then(|n| record_get(n, "had_vehicle_of_type"))
+                .or_else(|| record_get(&record, "had_vehicle_of_type"))
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0);
+            (station_id, value)
+        })
+        .collect()
+}
+
 fn table_rows(chunk: &RawChunk, save_version: u16) -> Vec<(u32, super::table::SlRecord)> {
     super::array_legacy::chunk_rows(chunk, save_version)
 }
@@ -431,6 +461,7 @@ pub(crate) fn stations_from_chunks(
     save_version: u16,
 ) -> Vec<SavStation> {
     let mut cargo_by_station = station_cargo_from_chunks(chunks, save_version);
+    let had_vehicle_flags = station_had_vehicle_flags_from_chunks(chunks, save_version);
     let mut indexed: Vec<_> = station_index_from_chunks(chunks, map_w, save_version)
         .into_iter()
         .filter(|(_, st)| !st.is_waypoint)
@@ -454,6 +485,7 @@ pub(crate) fn stations_from_chunks(
             airport_layout: st.airport_layout,
             airport_rotation: st.airport_rotation,
             airport_blocks: st.airport_blocks,
+            had_vehicle_of_type: had_vehicle_flags.get(&station_id).copied().unwrap_or(0),
             airport_persistent_storage_id: st.airport_persistent_storage_id,
             cargo: cargo_by_station.remove(&station_id).unwrap_or_default(),
         })
@@ -2946,6 +2978,7 @@ mod tests {
                     (0x0A | 0x10, "name"),
                     (2, "owner"),
                     (2, "facilities"),
+                    (2, "had_vehicle_of_type"),
                 ],
                 records,
             ),
@@ -2959,12 +2992,14 @@ mod tests {
         write_str("Mi Estación", &mut st);
         st.push(crate::company::CompanyId::NONE.0); // estación neutral
         st.push(1); // FACIL_TRAIN
+        st.push(0x3E); // train/bus/truck/aircraft/ship
 
         let mut wp = Vec::new();
         wp.extend_from_slice(&10u32.to_be_bytes());
         write_str("", &mut wp);
         wp.push(crate::company::CompanyId::PLAYER.0);
         wp.push(0x80); // waypoint
+        wp.push(0x40); // waypoint history bit
 
         let chunks = vec![station_chunk(&[st, wp])];
         let stations = stations_from_chunks(&chunks, 64, 300);
@@ -2973,6 +3008,7 @@ mod tests {
         assert_eq!(stations[0].name.as_deref(), Some("Mi Estación"));
         assert_eq!(stations[0].owner, crate::company::CompanyId::NONE.0);
         assert_eq!(stations[0].facilities, 1);
+        assert_eq!(stations[0].had_vehicle_of_type, 0x3E);
     }
 
     #[test]

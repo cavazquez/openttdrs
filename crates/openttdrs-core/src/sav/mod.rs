@@ -1396,6 +1396,7 @@ impl GameState {
             station.owner = crate::company::CompanyId(st.owner);
             station.name = entities::resolve_sav_station_name(st, &state.towns);
             station.newgrf_persistent_storage_id = st.airport_persistent_storage_id;
+            station.had_vehicle_of_type = u16::from(st.had_vehicle_of_type);
             // Una misma estación puede combinar tren, bus y aeropuerto. No
             // deducir el aeropuerto del `StopKind`: éste sólo conserva una
             // facilidad principal para la simulación simplificada.
@@ -2537,6 +2538,7 @@ mod tests {
             airport_layout: 0,
             airport_rotation: 0,
             airport_blocks: 0,
+            had_vehicle_of_type: 0,
             airport_persistent_storage_id: None,
             cargo: Vec::new(),
         });
@@ -2584,6 +2586,7 @@ mod tests {
             airport_layout: 0,
             airport_rotation: 0,
             airport_blocks: 0,
+            had_vehicle_of_type: 0,
             airport_persistent_storage_id: None,
             cargo: Vec::new(),
         });
@@ -2646,6 +2649,7 @@ mod tests {
             airport_layout: 0,
             airport_rotation: 0,
             airport_blocks: 0,
+            had_vehicle_of_type: 0x0E,
             airport_persistent_storage_id: None,
             cargo: Vec::new(),
         });
@@ -2671,6 +2675,7 @@ mod tests {
         );
 
         let state = GameState::from_sav_game(sav);
+        assert_eq!(state.stations[0].had_vehicle_of_type, 0x0E);
         let tile_state = state.stations[0]
             .road_stop_tile_state(tile_pos)
             .expect("estado custom por tesela");
@@ -2701,6 +2706,7 @@ mod tests {
                 airport_layout: 0,
                 airport_rotation: 0,
                 airport_blocks: 0,
+                had_vehicle_of_type: 0,
                 airport_persistent_storage_id: None,
                 cargo: vec![entities::SavStationCargo {
                     cargo_slot: 1,
@@ -2722,6 +2728,7 @@ mod tests {
                 airport_layout: 0,
                 airport_rotation: 0,
                 airport_blocks: 0,
+                had_vehicle_of_type: 0,
                 airport_persistent_storage_id: None,
                 cargo: Vec::new(),
             },
@@ -2797,6 +2804,7 @@ mod tests {
             airport_layout: 0,
             airport_rotation: 0,
             airport_blocks: 0,
+            had_vehicle_of_type: 0,
             airport_persistent_storage_id: None,
             cargo: vec![
                 entities::SavStationCargo {
@@ -2976,6 +2984,7 @@ mod tests {
                     airport_layout: 0,
                     airport_rotation: 0,
                     airport_blocks: 0,
+                    had_vehicle_of_type: 0,
                     airport_persistent_storage_id: None,
                     cargo: Vec::new(),
                 },
@@ -2993,6 +3002,7 @@ mod tests {
                     airport_layout: 3,
                     airport_rotation: 6,
                     airport_blocks: 0,
+                    had_vehicle_of_type: 0,
                     airport_persistent_storage_id: None,
                     cargo: Vec::new(),
                 },

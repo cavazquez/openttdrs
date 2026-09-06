@@ -324,6 +324,8 @@ pub struct SavGame {
     pub serve_neutral_industries: bool,
     /// Nivel de averías persistido en `PATS` / `OPTS`.
     pub vehicle_breakdowns: u8,
+    /// Sólo entregar carga a estaciones ya visitadas (`order.selectgoods`).
+    pub selectgoods: bool,
     /// No mandar vehículos a servicio sin averías (`PATS` / `OPTS`).
     pub no_servicing_if_no_breakdowns: bool,
     /// Duración de subsidios en años (`PATS` / `OPTS`).
@@ -565,6 +567,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         station_noise_level: parsed_settings.station_noise_level,
         serve_neutral_industries: parsed_settings.serve_neutral_industries,
         vehicle_breakdowns: parsed_settings.vehicle_breakdowns,
+        selectgoods: parsed_settings.selectgoods,
         no_servicing_if_no_breakdowns: parsed_settings.no_servicing_if_no_breakdowns,
         subsidy_duration: parsed_settings.subsidy_duration,
         subsidy_multiplier: parsed_settings.subsidy_multiplier,
@@ -1139,6 +1142,7 @@ impl GameState {
             sav.serve_neutral_industries
         };
         state.vehicle_breakdowns = sav.vehicle_breakdowns;
+        state.order.selectgoods = sav.selectgoods;
         state.no_servicing_if_no_breakdowns = sav.no_servicing_if_no_breakdowns;
         state.subsidy_duration = sav.subsidy_duration;
         state.subsidy_multiplier = sav.subsidy_multiplier;
@@ -2060,6 +2064,7 @@ mod tests {
             station_noise_level: false,
             serve_neutral_industries: true,
             vehicle_breakdowns: 2,
+            selectgoods: true,
             no_servicing_if_no_breakdowns: true,
             subsidy_duration: 1,
             subsidy_multiplier: 1,
@@ -3346,6 +3351,7 @@ mod tests {
             station_noise_level: false,
             serve_neutral_industries: true,
             vehicle_breakdowns: 2,
+            selectgoods: true,
             no_servicing_if_no_breakdowns: true,
             subsidy_duration: 1,
             subsidy_multiplier: 1,

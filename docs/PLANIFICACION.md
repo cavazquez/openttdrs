@@ -2189,7 +2189,7 @@ Las listas nativas de
 RoadStops (`roadstopspeclist`/`roadstoptiledata`) también se reconstruyen desde
 el estado por tesela y actualizan `MAP8`; no se confunde esa conservación con
 ejecutar sus callbacks. `PATS`/`OPTS` ya conserva el
-subconjunto ejecutado por el core (construcción, pathfinding, averías,
+subconjunto ejecutado por el core (construcción, pathfinding, `selectgoods`, averías,
 subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo). El historial de
 noticias propio queda en JSON (no es un pool nativo de OpenTTD `.sav`). `ORDL`
 preserva los campos básicos por orden —incluidos wait/travel/max-speed— y

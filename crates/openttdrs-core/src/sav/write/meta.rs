@@ -428,6 +428,7 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
             (1, "economy.station_noise_level"),
             (1, "station.serve_neutral_industries"),
             (2, "difficulty.vehicle_breakdowns"),
+            (1, "order.selectgoods"),
             (1, "order.no_servicing_if_no_breakdowns"),
             (4, "difficulty.subsidy_duration"),
             (2, "difficulty.subsidy_multiplier"),
@@ -474,6 +475,7 @@ pub(super) fn pats_record(state: &GameState) -> Vec<u8> {
         u8::from(state.station_noise_level),
         u8::from(state.serve_neutral_industries),
         state.vehicle_breakdowns.min(2),
+        u8::from(state.order.selectgoods),
         u8::from(state.no_servicing_if_no_breakdowns),
     ];
     record.extend_from_slice(&state.subsidy_duration.to_be_bytes());

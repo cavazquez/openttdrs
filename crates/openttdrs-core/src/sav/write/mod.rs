@@ -726,6 +726,7 @@ mod tests {
         state.station_noise_level = true;
         state.serve_neutral_industries = false;
         state.vehicle_breakdowns = 0;
+        state.order.selectgoods = false;
         state.no_servicing_if_no_breakdowns = false;
         state.subsidy_duration = 5_000;
         state.subsidy_multiplier = 3;
@@ -751,6 +752,10 @@ mod tests {
         }];
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let (payload, _) = crate::sav::container::decompress(&bytes).expect("payload");
+        let chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
+        let pats = crate::sav::chunks::find_chunk(&chunks, "PATS").expect("PATS");
+        assert_table_field_type(&pats.body, 1, "order.selectgoods");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.climate, state.climate);
         assert_eq!(sav_game.snow_line_height, state.snow_line_height);
@@ -771,6 +776,7 @@ mod tests {
             state.serve_neutral_industries
         );
         assert_eq!(sav_game.vehicle_breakdowns, state.vehicle_breakdowns);
+        assert_eq!(sav_game.selectgoods, state.order.selectgoods);
         assert_eq!(
             sav_game.no_servicing_if_no_breakdowns,
             state.no_servicing_if_no_breakdowns
@@ -793,6 +799,15 @@ mod tests {
         );
         assert_eq!(sav_game.global_economy, state.global_economy);
         assert_eq!(sav_game.cargo_payments, state.cargo_payments);
+
+        let loaded = GameState::from_sav_game(sav_game);
+        assert!(!loaded.order.selectgoods);
+        let unvisited = Station::new_with_kind(TileCoord::new(1, 1), StopKind::TruckStop);
+        assert!(crate::station::can_move_goods_to_station(
+            &unvisited,
+            crate::cargo::CargoType::Coal,
+            loaded.order.selectgoods,
+        ));
         assert!(
             exported_chunk_names(&state)
                 .expect("chunk names")
@@ -811,6 +826,20 @@ mod tests {
                 .iter()
                 .any(|name| name == "CAPY")
         );
+    }
+
+    #[test]
+    fn imported_pats_selectgoods_mutation_is_reexported() {
+        let original =
+            save_to_bytes_with(&tiny_state(), SavContainer::Ottn).expect("save original");
+        let mut imported = GameState::from_sav_game(sav::load(&original).expect("import original"));
+        assert!(imported.order.selectgoods);
+
+        imported.order.selectgoods = false;
+        let changed =
+            save_to_bytes_with(&imported, SavContainer::Ottn).expect("save changed setting");
+        let reimported = sav::load(&changed).expect("import changed setting");
+        assert!(!reimported.selectgoods);
     }
 
     #[test]
@@ -2667,6 +2696,10 @@ mod tests {
         use crate::sav::table::{SlValue, parse_table_chunk, record_get};
 
         let mut state = mvp_rich_state();
+        // Valor no default de un setting que participa directamente en
+        // MoveGoodsToStation; el smoke dedicado acredita que OpenTTD lo
+        // reconoce y lo conserva al re-guardar.
+        state.order.selectgoods = false;
         state.sync_active_from_mirrors();
         state.companies[0].president_name = Some("Ada Lovelace".into());
         state.companies[0].allow_list = vec![
@@ -2757,6 +2790,7 @@ mod tests {
         let sav_game = sav::load(&bytes).expect("load rust");
         assert!(sav_game.stations.len() >= 2);
         assert_eq!(sav_game.industries.len(), 1);
+        assert!(!sav_game.selectgoods);
         assert_eq!(
             sav_game.companies[0].president_name.as_deref(),
             Some("Ada Lovelace")
@@ -2843,6 +2877,7 @@ mod tests {
         assert_eq!(saved_bus.road_crashed_ctr, 23);
         assert_eq!(saved_bus.road_reverse_ctr, 3);
         let imported = GameState::from_sav_game(sav_game);
+        assert!(!imported.order.selectgoods);
         let imported_bus = imported
             .vehicles
             .iter()

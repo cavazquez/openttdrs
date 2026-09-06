@@ -59,6 +59,7 @@ pub(crate) struct ParsedSettings {
     pub station_noise_level: bool,
     pub serve_neutral_industries: bool,
     pub vehicle_breakdowns: u8,
+    pub selectgoods: bool,
     pub no_servicing_if_no_breakdowns: bool,
     pub subsidy_duration: u16,
     pub subsidy_multiplier: u8,
@@ -80,6 +81,7 @@ impl Default for ParsedSettings {
             station_noise_level: false,
             serve_neutral_industries: true,
             vehicle_breakdowns: 2,
+            selectgoods: true,
             no_servicing_if_no_breakdowns: true,
             subsidy_duration: 1,
             subsidy_multiplier: 1,
@@ -227,6 +229,13 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                 .and_then(|value| u8::try_from(value).ok())
             {
                 parsed.vehicle_breakdowns = value.min(2);
+                found = true;
+            }
+            if let Some(value) = record_get(&record, "order.selectgoods")
+                .and_then(SlValue::as_u64)
+                .and_then(bool_from_u64)
+            {
+                parsed.selectgoods = value;
                 found = true;
             }
             if let Some(value) = record_get(&record, "order.no_servicing_if_no_breakdowns")
@@ -425,7 +434,8 @@ mod tests {
     fn reads_gameplay_settings_with_native_widths() {
         let body = build_table_body(
             &[
-                (2, "order.no_servicing_if_no_breakdowns"),
+                (1, "order.selectgoods"),
+                (1, "order.no_servicing_if_no_breakdowns"),
                 (4, "difficulty.subsidy_duration"),
                 (2, "difficulty.subsidy_multiplier"),
                 (2, "difficulty.disasters"),
@@ -435,7 +445,7 @@ mod tests {
                 (2, "difficulty.economy"),
             ],
             &[{
-                let mut record = vec![0];
+                let mut record = vec![0, 0];
                 record.extend_from_slice(&5_000u16.to_be_bytes());
                 record.extend_from_slice(&[3, 0, 3, 1, 0, 1]);
                 record
@@ -447,6 +457,7 @@ mod tests {
             body,
         };
         let parsed = settings_from_chunks(&[chunk]);
+        assert!(!parsed.selectgoods);
         assert!(!parsed.no_servicing_if_no_breakdowns);
         assert_eq!(parsed.subsidy_duration, 5_000);
         assert_eq!(parsed.subsidy_multiplier, 3);
@@ -458,5 +469,16 @@ mod tests {
         assert!(parsed.using_wallclock_units);
         assert!(!parsed.inflation_enabled);
         assert!(parsed.recessions_enabled);
+    }
+
+    #[test]
+    fn reads_selectgoods_from_legacy_opts_fallback() {
+        let chunk = RawChunk {
+            name: *b"OPTS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(1, "order.selectgoods")], &[vec![0]]),
+        };
+
+        assert!(!settings_from_chunks(&[chunk]).selectgoods);
     }
 }

@@ -345,6 +345,24 @@ fn openttd_resaved_preserves_requested_company_allow_list() {
     );
 }
 
+/// Contrato opcional para PATS.order.selectgoods. El fixture rico lo emite
+/// como false, de modo que la regresión prueba el valor no-default que
+/// modifica realmente MoveGoodsToStation, no sólo la presencia del header.
+#[test]
+fn openttd_resaved_preserves_requested_selectgoods() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_SELECTGOODS").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PATS");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).expect("import openttdrs");
+    assert!(
+        !game.selectgoods,
+        "OpenTTD debe re-guardar PATS.order.selectgoods = false"
+    );
+}
+
 /// Contrato opcional para el límite de préstamo individual. OpenTTD representa
 /// el default con `INT64_MIN`, pero una compañía marcada por deity conserva un
 /// valor concreto incluso si cambia el límite global por inflación.

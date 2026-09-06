@@ -2203,13 +2203,14 @@ las APIs legacy de teselas dirty. Quedan fuera los scopes completos de
 `BaseStation`/aeropuerto y el callback genérico de sonidos ambientales.
 
 Actualización #329-NEWGRF-TEXT-DATES-444 (2026-09-06, issue [#444](https://github.com/cavazquez/openttdrs/issues/444)):
-los controles de fecha WORD/DWORD (`DATE_LONG`, `DATE_SHORT`, `DATE_ISO`) ya
+los controles de fecha WORD/DWORD (`0x82`/`0x83`/`0x9A16`/`0x9A17`) ya
 consumen `NewGrfTextValue::Date` —o un entero de día explícito— y producen
-formato largo, corto o ISO determinista. El decoder distingue `0x9A16`/`0x9A17`
-de power, volumen, peso y cargos, que conservan sus propios marcadores. Fecha
-ausente, negativa o textual permanece visible sin inventar un valor. El
-formato localizado y la conversión de epochs NewGRF fuera del calendario 1950,
-además de género/case/plural, siguen pendientes.
+formato largo, corto o ISO determinista. `0x84` conserva su semántica NewGRF
+de velocidad WORD; `date-iso` sólo es un marcador explícito del renderer. El
+decoder distingue las fechas de power, volumen, peso y cargos, que conservan
+sus propios marcadores. Fecha ausente, negativa o textual permanece visible
+sin inventar un valor. El formato localizado y la conversión de epochs NewGRF
+fuera del calendario 1950, además de género/case/plural, siguen pendientes.
 
 Actualización #329-VEHICLE-CB31-FEEDBACK-434 (2026-09-06, issue [#434](https://github.com/cavazquez/openttdrs/issues/434)):
 el rechazo de CB31 conserva un diagnóstico efímero por vehículo/GRFID y los

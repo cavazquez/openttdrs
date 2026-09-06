@@ -4,9 +4,10 @@ Implementado en `main` el 2026-09-06.
 
 ## Divergencia
 
-El decoder reconocía los controles `0x82`/`0x83`/`0x84` y `0x9A 0x16`/
-`0x9A 0x17`, pero los dejaba como marcadores aun cuando el consumidor había
-entregado un parámetro. Además, los códigos extendidos `0x18..0x1E` se
+El decoder reconocía los controles de fecha `0x82`/`0x83` y
+`0x9A 0x16`/`0x9A 0x17`, pero los dejaba como marcadores aun cuando el
+consumidor había entregado un parámetro. `0x84` es el control NewGRF de
+velocidad WORD —no una fecha ISO— y los códigos extendidos `0x18..0x1E` se
 etiquetaban incorrectamente como fechas DWORD.
 
 ## Implementación
@@ -18,8 +19,10 @@ etiquetaban incorrectamente como fechas DWORD.
   resto del text stack y produce formato largo (`1 ene 1950`), corto
   (`ene 1950`) o ISO (`1950-01-01`). Valores signed/unsigned también se
   aceptan como día de calendario para mantener la frontera interoperable.
-- El decoder distingue fechas WORD/DWORD y deja `power`, `volume`, `weight` y
-  cargos con marcadores específicos en vez de convertirlos en fechas.
+- El decoder distingue fechas WORD/DWORD, conserva `0x84` como velocidad y
+  deja `power`, `volume`, `weight` y cargos con marcadores específicos en vez
+  de convertirlos en fechas. `date-iso` sigue siendo un marcador explícito
+  del renderer, no un alias de `0x84`.
 - Un parámetro ausente, negativo o textual conserva el marcador original.
 
 El formato es determinista y usa las abreviaturas de calendario actuales del

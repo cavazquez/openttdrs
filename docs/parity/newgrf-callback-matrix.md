@@ -1270,13 +1270,15 @@ requieren todavía un contexto específico y no se declaran paridad completa.
 
 ### #329-NEWGRF-TEXT-DATES-444 — fechas del text stack
 
-Actualizado: 2026-09-06. Los controles `0x82`/`0x83`/`0x84` y `0x9A16`/
+Actualizado: 2026-09-06. Los controles de fecha `0x82`/`0x83` y `0x9A16`/
 `0x9A17` se distinguen durante el decode y `NewGrfTextContext::with_date`
-permite consumir el día de calendario en orden. `lookup_rendered` produce
-fecha larga (`1 ene 1950`), corta (`ene 1950`) e ISO (`1950-01-01`) de forma
-determinista; valores ausentes o inválidos conservan el marcador. El formato
-localizado, la conversión de epochs base 1920/0 y género/case/plural siguen
-siendo sucesores del parent #329.
+permite consumir el día de calendario en orden. `0x84` conserva su semántica
+NewGRF de velocidad WORD; `date-iso` sólo se acepta como marcador explícito
+del catálogo. `lookup_rendered` produce fecha larga (`1 ene 1950`), corta
+(`ene 1950`) e ISO (`1950-01-01`) de forma determinista; valores ausentes o
+inválidos conservan el marcador. El formato localizado, la conversión de
+epochs base 1920/0 y género/case/plural siguen siendo sucesores del parent
+#329.
 
 ### #329-VEHICLE-CB31-FEEDBACK-434 — motivo textual de start/stop
 

@@ -152,7 +152,10 @@ pub fn decode_newgrf_text(raw: &[u8]) -> String {
             }
             0x82 => push_marker(&mut out, "date-long"),
             0x83 => push_marker(&mut out, "date-short"),
-            0x84 => push_marker(&mut out, "date-iso"),
+            // NewGRF 0x84 is the WORD speed control; DATE_ISO is an
+            // OpenTTD string control and is still accepted by the renderer
+            // when a catalog entry supplies that marker explicitly.
+            0x84 => push_marker(&mut out, "param-speed"),
             0x85 => push_marker(&mut out, "discard-word"),
             0x86 => push_marker(&mut out, "rotate-words"),
             0x87 => push_marker(&mut out, "volume"),
@@ -938,7 +941,7 @@ mod tests {
     fn decodes_word_and_dword_date_controls_separately() {
         assert_eq!(
             decode_newgrf_text(&[0x82, 0x83, 0x84, 0x9A, 0x16, 0x9A, 0x17]),
-            "⟦date-long⟧⟦date-short⟧⟦date-iso⟧⟦date-dword-long⟧⟦date-dword-short⟧"
+            "⟦date-long⟧⟦date-short⟧⟦param-speed⟧⟦date-dword-long⟧⟦date-dword-short⟧"
         );
     }
 

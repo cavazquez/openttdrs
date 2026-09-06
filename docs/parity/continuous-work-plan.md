@@ -2055,3 +2055,11 @@ determinista por distancia Manhattan/ID. JSON antiguo sigue cargando con
 enlace nativo y el round-trip/default legacy; quedan fuera las estaciones
 nuevas sin asociación nativa persistida y las variables de TownScope todavía
 no modeladas.
+
+Actualización #329-ROADSTOP-TOWN-PARENT-421 (2026-09-06, issue [#421](https://github.com/cavazquez/openttdrs/issues/421)):
+RoadStopScope reutiliza la asociación `Station::town_id` para seleccionar el
+pueblo nativo en `0x45`/`0x46`, copiar el parent `TownScopeResolver` y cargar
+el PSA `7C` por GRFID. Los road stops importados desde SAV dejan de depender
+del pueblo geométricamente más cercano; IDs ausentes o inválidos y APIs legacy
+siguen usando el fallback Manhattan/ID. La regresión cubre vars, población y
+writeback del PSA con dos pueblos divergentes.

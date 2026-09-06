@@ -231,6 +231,7 @@ pub(crate) fn populate_road_stop_badge_vars_for_spec(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn action2_eval_ctx_for_road_stop_tile_impl(
     map: &Map,
     stations: &[Station],
@@ -299,8 +300,11 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
     });
     ctx.vars.insert(0x43, road_type);
     ctx.vars.insert(0x44, tram_type);
-    let (town_zone_distance, town_distance_square) =
-        road_stop_town_vars(resolution.world.map(|world| world.towns), coord);
+    let (town_zone_distance, town_distance_square) = road_stop_town_vars(
+        resolution.world.map(|world| world.towns),
+        station.town_id,
+        coord,
+    );
     ctx.vars.insert(0x45, town_zone_distance);
     ctx.vars.insert(0x46, town_distance_square);
     ctx.vars.insert(
@@ -317,7 +321,13 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
     // disponibilidad); esta ruta siempre resuelve una instancia en el mapa.
     ctx.vars.insert(0x50, 0);
     if let Some(spec) = resolution.current_spec {
-        populate_road_stop_parent_scope(&mut ctx, resolution.world, coord, spec.grfid);
+        populate_road_stop_parent_scope(
+            &mut ctx,
+            resolution.world,
+            station.town_id,
+            coord,
+            spec.grfid,
+        );
         populate_road_stop_badge_vars_for_spec(&mut ctx, spec);
         let cargo_catalog = resolution
             .world
@@ -349,36 +359,34 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
 
 /// Populates the `TownScopeResolver` parent used by a map-aware road stop.
 ///
-/// `OpenTTD` stores the parent association on the native road-stop object. The
-/// current model only has the world pool at this call site, so the nearest
-/// town (with ID as a stable tie-breaker) is the explicit fallback. Callers
+/// `OpenTTD` stores the parent association on the native road-stop object.
+/// Imported stations preserve that ID; missing/invalid IDs use the nearest
+/// town (with ID as a stable tie-breaker) as the explicit fallback. Callers
 /// without a world context intentionally retain an empty parent scope.
 fn populate_road_stop_parent_scope(
     ctx: &mut Action2EvalCtx,
     world: Option<RoadStopWorldContext<'_>>,
+    station_town_id: Option<u32>,
     coord: TileCoord,
     grfid: u32,
 ) {
     let Some(world) = world else {
         return;
     };
-    if let Some(town) = world
-        .towns
-        .iter()
-        .min_by_key(|town| (crate::economy::manhattan_distance(coord, town.pos), town.id))
-    {
+    if let Some(town) = road_stop_town(world.towns, station_town_id, coord) {
         town.copy_newgrf_parent_scope(grfid, ctx);
     }
 }
 
-fn road_stop_town_vars(towns: Option<&[Town]>, coord: TileCoord) -> (u32, u32) {
+fn road_stop_town_vars(
+    towns: Option<&[Town]>,
+    station_town_id: Option<u32>,
+    coord: TileCoord,
+) -> (u32, u32) {
     let Some(towns) = towns else {
         return (u32::from(HouseZone::TownEdge as u8) << 16, 0);
     };
-    let Some(town) = towns
-        .iter()
-        .min_by_key(|town| (crate::economy::manhattan_distance(coord, town.pos), town.id))
-    else {
+    let Some(town) = road_stop_town(towns, station_town_id, coord) else {
         return (u32::from(HouseZone::TownEdge as u8) << 16, 0);
     };
     let manhattan = crate::economy::manhattan_distance(coord, town.pos);
@@ -387,6 +395,16 @@ fn road_stop_town_vars(towns: Option<&[Town]>, coord: TileCoord) -> (u32, u32) {
         zone | manhattan.min(u32::from(u16::MAX)),
         distance_square(coord, town.pos),
     )
+}
+
+fn road_stop_town(towns: &[Town], station_town_id: Option<u32>, coord: TileCoord) -> Option<&Town> {
+    station_town_id
+        .and_then(|town_id| towns.iter().find(|town| town.id == town_id))
+        .or_else(|| {
+            towns
+                .iter()
+                .min_by_key(|town| (crate::economy::manhattan_distance(coord, town.pos), town.id))
+        })
 }
 
 fn road_stop_company_info(owner: CompanyId, companies: Option<&[Company]>) -> u32 {
@@ -992,6 +1010,58 @@ mod tests {
         assert_eq!(ctx.parent_vars.get(&0x41), Some(&7));
         assert_eq!(ctx.parent_vars.get(&0x82), Some(&65_535));
         assert_eq!(ctx.parent_persistent_registers.get(&4), Some(&0xAABB_CCDD));
+    }
+
+    #[test]
+    fn road_stop_scope_prefers_native_town_for_vars_and_parent() {
+        let mut map = Map::new_flat(10, 10, 0);
+        let coord = TileCoord::new(1, 2);
+        map.set_tile(coord, road_stop_tile(4, 3 << 3)).unwrap();
+        let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+        station.road_stop_spec = Some(7);
+        station.town_id = Some(9);
+
+        let grfid = 0x5151_0001;
+        let mut nearest = Town {
+            id: 7,
+            pos: TileCoord::new(1, 3),
+            population: 100,
+            ..Town::default()
+        };
+        nearest
+            .newgrf_persistent_regs
+            .insert(grfid, std::collections::HashMap::from([(4, 0xAAAA)]));
+        let mut native = Town {
+            id: 9,
+            pos: TileCoord::new(8, 8),
+            population: 900,
+            ..Town::default()
+        };
+        native
+            .newgrf_persistent_regs
+            .insert(grfid, std::collections::HashMap::from([(4, 0xBBBB)]));
+        let towns = vec![nearest, native];
+        let catalog = vec![road_stop_spec(7, grfid, 0, None)];
+        let ctx = action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
+            &map,
+            std::slice::from_ref(&station),
+            &catalog,
+            RoadStopWorldContext {
+                towns: &towns,
+                companies: &[],
+                industries: &[],
+                road_type_catalog: &[],
+                cargo_spec_catalog: &[],
+            },
+            coord,
+            0,
+            Climate::Temperate,
+        );
+
+        assert_eq!(ctx.vars.get(&0x46), Some(&85));
+        assert_eq!(ctx.parent_vars.get(&0x41), Some(&9));
+        assert_eq!(ctx.parent_vars.get(&0x82), Some(&900));
+        assert_eq!(ctx.parent_persistent_registers.get(&4), Some(&0xBBBB));
     }
 
     #[test]

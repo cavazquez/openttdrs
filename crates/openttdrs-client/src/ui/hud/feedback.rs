@@ -72,11 +72,59 @@ pub(crate) fn push_vehicle_start_stop_error(
     feedback.pending_soft_ping = true;
 }
 
+/// Muestra un rechazo de CB149 con el texto del catálogo activo cuando el
+/// callback devolvió un motivo NewGRF. El diagnóstico se consume siempre para
+/// que no sobreviva al comando que lo produjo.
+pub(crate) fn push_station_slope_error(
+    feedback: &mut HudBuildFeedback,
+    sim: &mut SimWorld,
+    err: CommandError,
+    locale: Locale,
+    elapsed_secs: f32,
+) {
+    let diagnostic = sim.state.runtime.last_station_slope_diagnostic.take();
+    let dynamic_message = if matches!(err, CommandError::NewGrfCallbackDenied) {
+        diagnostic.and_then(|diagnostic| {
+            let string_id = match diagnostic.outcome {
+                openttdrs_core::StationSlopeCallbackOutcome::LocalString(string_id)
+                | openttdrs_core::StationSlopeCallbackOutcome::GrfString(string_id) => string_id,
+                openttdrs_core::StationSlopeCallbackOutcome::Allow
+                | openttdrs_core::StationSlopeCallbackOutcome::GenericDenied(_) => return None,
+            };
+            let language = match locale {
+                Locale::Es => openttdrs_core::NEWGRF_LANGUAGE_SPANISH,
+                Locale::En => openttdrs_core::NEWGRF_LANGUAGE_ENGLISH,
+            };
+            let text = sim.state.runtime.newgrf_string_catalog.lookup_expanded(
+                diagnostic.grfid,
+                string_id,
+                language,
+            )?;
+            if text.is_empty() {
+                return None;
+            }
+            let prefix = match locale {
+                Locale::Es => "La estación no puede construirse",
+                Locale::En => "The station cannot be built",
+            };
+            Some(format!("{prefix}: {text}"))
+        })
+    } else {
+        None
+    };
+
+    feedback.message =
+        Some(dynamic_message.unwrap_or_else(|| command_error_message(err).to_string()));
+    feedback.expires_at_secs = elapsed_secs + BUILD_ERROR_DISPLAY_SECS;
+    feedback.pending_soft_ping = true;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use openttdrs_core::{
-        NewGrfString, VehicleStartStopCallbackDiagnostic, VehicleStartStopCallbackOutcome,
+        NewGrfString, StationSlopeCallbackDiagnostic, StationSlopeCallbackOutcome,
+        VehicleStartStopCallbackDiagnostic, VehicleStartStopCallbackOutcome,
     };
 
     #[test]
@@ -153,5 +201,35 @@ mod tests {
                 .last_vehicle_start_stop_diagnostic
                 .is_none()
         );
+    }
+
+    #[test]
+    fn station_slope_error_uses_catalog_text_and_consumes_diagnostic() {
+        let mut sim = SimWorld::default();
+        sim.state.runtime.newgrf_string_catalog.push(NewGrfString {
+            grfid: 9,
+            string_id: 0xD002,
+            language: openttdrs_core::NEWGRF_LANGUAGE_ENGLISH,
+            text: "Use una plataforma plana".into(),
+        });
+        sim.state.runtime.last_station_slope_diagnostic = Some(StationSlopeCallbackDiagnostic {
+            grfid: 9,
+            outcome: StationSlopeCallbackOutcome::LocalString(0xD002),
+        });
+        let mut feedback = HudBuildFeedback::default();
+
+        push_station_slope_error(
+            &mut feedback,
+            &mut sim,
+            CommandError::NewGrfCallbackDenied,
+            Locale::En,
+            3.0,
+        );
+
+        assert_eq!(
+            feedback.message.as_deref(),
+            Some("The station cannot be built: Use una plataforma plana")
+        );
+        assert!(sim.state.runtime.last_station_slope_diagnostic.is_none());
     }
 }

@@ -377,6 +377,29 @@ pub struct VehicleStartStopCallbackDiagnostic {
     pub outcome: VehicleStartStopCallbackOutcome,
 }
 
+/// Resultado normalizado de un callback de ubicación `NewGRF`, como CB149.
+///
+/// Los resultados menores que `0x400` son textos locales del GRF; `0x40F`
+/// toma el `StringID` del registro `0x100`. Los códigos restantes representan
+/// errores estándar o resultados desconocidos y se conservan para diagnóstico.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StationSlopeCallbackOutcome {
+    Allow,
+    LocalString(u32),
+    GrfString(u32),
+    GenericDenied(u16),
+}
+
+/// Diagnóstico efímero del último rechazo CB149 durante una construcción.
+///
+/// La estructura vive sólo hasta que la UI consume el feedback y no forma
+/// parte de JSON/SAV.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StationSlopeCallbackDiagnostic {
+    pub grfid: u32,
+    pub outcome: StationSlopeCallbackOutcome,
+}
+
 /// Clasifica el resultado bruto de CB `0x31` con la semántica de versión de
 /// `OpenTTD`. `register_100` sólo se consulta para el resultado especial `0x40F`.
 #[must_use]
@@ -3024,7 +3047,7 @@ pub fn apply_station_availability_callback_for_build_with_context(
 /// aporta scope/registro persistente de estación, aunque sí aplica la inversión
 /// de bit 10 de GRFs anteriores a versión 8.
 #[must_use]
-pub fn apply_station_slope_callback_for_build(
+pub fn resolve_station_slope_callback_for_build(
     def: &crate::station_class::StationSpecDef,
     slope: u8,
     axis_y: bool,
@@ -3032,12 +3055,12 @@ pub fn apply_station_slope_callback_for_build(
     length: u8,
     platform: u8,
     position: u8,
-) -> bool {
+) -> StationSlopeCallbackOutcome {
     if !def.has_slope_check_callback() {
-        return true;
+        return StationSlopeCallbackOutcome::Allow;
     }
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
-        return true;
+        return StationSlopeCallbackOutcome::Allow;
     };
 
     // `PerformStationTileSlopeCheck`: SLOPE_W=1, SLOPE_E=4, SLOPE_EW=5.
@@ -3051,13 +3074,59 @@ pub fn apply_station_slope_callback_for_build(
         | (u32::from(length) << 16)
         | (u32::from(platform) << 8)
         | u32::from(position);
-    let result = runtime.resolve_callback(
+    let mut ctx = Action2EvalCtx::default();
+    let result = runtime.resolve_callback_ctx(
         def.newgrf_local_id,
         CBID_STATION_LAND_SLOPE_CHECK,
         param1,
         param2,
+        &mut ctx,
     );
-    callback_allows_location_for_grf(result, def.newgrf_grfid, def.newgrf_grf_version)
+    if result == CALLBACK_FAILED {
+        return StationSlopeCallbackOutcome::Allow;
+    }
+    let normalized =
+        if def.newgrf_grfid != 0 && def.newgrf_grf_version != 0 && def.newgrf_grf_version < 8 {
+            result ^ (1 << 10)
+        } else {
+            result
+        };
+    if normalized == 0x400 {
+        return StationSlopeCallbackOutcome::Allow;
+    }
+    if normalized < 0x400 {
+        return StationSlopeCallbackOutcome::LocalString(
+            crate::newgrf_text::GRF_STRING_GENERIC_BASE + u32::from(normalized),
+        );
+    }
+    if normalized == 0x40F {
+        return ctx.registers_100.get(&0x100).copied().map_or(
+            StationSlopeCallbackOutcome::GenericDenied(normalized),
+            StationSlopeCallbackOutcome::GrfString,
+        );
+    }
+    StationSlopeCallbackOutcome::GenericDenied(normalized)
+}
+
+/// Compatibilidad booleana para callers que sólo necesitan saber si la
+/// pendiente es válida. El detalle del motivo queda disponible mediante
+/// [`resolve_station_slope_callback_for_build`].
+#[must_use]
+pub fn apply_station_slope_callback_for_build(
+    def: &crate::station_class::StationSpecDef,
+    slope: u8,
+    axis_y: bool,
+    platforms: u8,
+    length: u8,
+    platform: u8,
+    position: u8,
+) -> bool {
+    matches!(
+        resolve_station_slope_callback_for_build(
+            def, slope, axis_y, platforms, length, platform, position
+        ),
+        StationSlopeCallbackOutcome::Allow
+    )
 }
 
 /// Resolver stateful de estación para scopes que sí tienen una estación.
@@ -7732,6 +7801,23 @@ mod tests {
         assert!(!apply_station_slope_callback_for_build(
             &def, 1, true, 3, 5, 2, 4,
         ));
+
+        def.newgrf_grfid = 0x534C_4F50;
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(7)));
+        assert_eq!(
+            resolve_station_slope_callback_for_build(&def, 1, true, 3, 5, 2, 4),
+            StationSlopeCallbackOutcome::LocalString(0xD007)
+        );
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(0x400)));
+        assert_eq!(
+            resolve_station_slope_callback_for_build(&def, 1, true, 3, 5, 2, 4),
+            StationSlopeCallbackOutcome::Allow
+        );
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(0x401)));
+        assert_eq!(
+            resolve_station_slope_callback_for_build(&def, 1, true, 3, 5, 2, 4),
+            StationSlopeCallbackOutcome::GenericDenied(0x401)
+        );
     }
 
     #[test]

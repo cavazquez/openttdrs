@@ -27,6 +27,65 @@ fn place_rail_station_sets_m6_and_axis_in_m5() {
 }
 
 #[test]
+fn rail_station_cb149_rejection_keeps_map_unchanged_and_diagnostic() {
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+
+    let mut s = GameState::new(8, 8);
+    let mut runtime = TrainSpriteGraphics::default();
+    runtime.assigns.push(TrainSpriteAssign {
+        local_id: 0,
+        set_id: 2,
+    });
+    runtime.action2_var.insert(
+        2,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x1A,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: 7,
+                    ..Action2VarAdjust::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+    let spec = s
+        .station_spec_catalog
+        .iter_mut()
+        .find(|spec| spec.id == crate::StationSpecId::DefaultRail)
+        .unwrap();
+    spec.callback_mask = crate::station_class::STATION_CALLBACK_SLOPE_CHECK_MASK;
+    spec.newgrf_runtime = Some(Box::new(runtime));
+    spec.newgrf_grfid = 0x534C_4F50;
+    spec.newgrf_grf_version = 8;
+
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(1, 2))).unwrap();
+    let error =
+        apply_command(&mut s, &Command::PlaceRailStation(TileCoord::new(2, 2), 0)).unwrap_err();
+
+    assert_eq!(error, CommandError::NewGrfCallbackDenied);
+    assert!(s.stations.is_empty());
+    assert_eq!(
+        s.map.get(TileCoord::new(2, 2)).unwrap().kind,
+        TileKind::Grass
+    );
+    let diagnostic = s
+        .runtime
+        .last_station_slope_diagnostic
+        .expect("CB149 rejection should retain its diagnostic");
+    assert_eq!(diagnostic.grfid, 0x534C_4F50);
+    assert_eq!(
+        diagnostic.outcome,
+        crate::StationSlopeCallbackOutcome::LocalString(0xD007)
+    );
+}
+
+#[test]
 fn rail_station_footprint_swaps_axes() {
     assert_eq!(crate::rail_station_footprint(false, 3, 5), (5, 3));
     assert_eq!(crate::rail_station_footprint(true, 3, 5), (3, 5));

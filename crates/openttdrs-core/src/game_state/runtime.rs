@@ -242,6 +242,11 @@ pub struct SimulationRuntime {
     pub last_vehicle_start_stop_diagnostic:
         Option<crate::newgrf_callback::VehicleStartStopCallbackDiagnostic>,
 
+    /// Motivo textual del último rechazo CB149 durante la construcción de una
+    /// estación ferroviaria. No se persiste y se consume desde el HUD.
+    pub last_station_slope_diagnostic:
+        Option<crate::newgrf_callback::StationSlopeCallbackDiagnostic>,
+
     /// Overrides baseset [`crate::SoundId`] → `(grfid, local_id)` `NewGRF` (Action0 prop `0x0A`).
     /// Índice = `SoundId` 0..72; reconstruido al aplicar Sounds.
     pub sound_overrides: [Option<(u32, u8)>; crate::sound_id::SOUND_COUNT],
@@ -321,6 +326,7 @@ impl SimulationRuntime {
             command_recorder: None,
             newgrf_diagnostics: Vec::new(),
             last_vehicle_start_stop_diagnostic: None,
+            last_station_slope_diagnostic: None,
             sound_overrides: [None; crate::sound_id::SOUND_COUNT],
             pending_newgrf_sounds: Vec::new(),
             legacy_sav_afterload: None,

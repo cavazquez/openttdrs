@@ -197,7 +197,7 @@ pub(in crate::command) fn place_rail_station(
     check_station_placement(&state.map, &state.stations, c, dir, StopKind::RailStation)?;
     check_rail_station_spec_restrictions(state, 1, 1)?;
     let axis_y = rail_station_m5(&state.map, c, dir) & 1 != 0;
-    check_rail_station_slope_callbacks(state, c, axis_y, 1, 1)?;
+    check_rail_station_slope_callbacks_with_diagnostic(state, c, axis_y, 1, 1)?;
     station_placement_on_tile(state, c, dir, StopKind::RailStation)
 }
 
@@ -315,6 +315,40 @@ pub(in crate::command) fn check_rail_station_slope_callbacks(
     platforms: u8,
     length: u8,
 ) -> Result<(), CommandError> {
+    check_rail_station_slope_callbacks_impl(state, origin, axis_y, platforms, length)
+        .map_err(|(error, _)| error)
+}
+
+pub(in crate::command) fn check_rail_station_slope_callbacks_with_diagnostic(
+    state: &mut GameState,
+    origin: TileCoord,
+    axis_y: bool,
+    platforms: u8,
+    length: u8,
+) -> Result<(), CommandError> {
+    state.runtime.last_station_slope_diagnostic = None;
+    match check_rail_station_slope_callbacks_impl(&*state, origin, axis_y, platforms, length) {
+        Ok(()) => Ok(()),
+        Err((error, diagnostic)) => {
+            state.runtime.last_station_slope_diagnostic = diagnostic;
+            Err(error)
+        }
+    }
+}
+
+fn check_rail_station_slope_callbacks_impl(
+    state: &GameState,
+    origin: TileCoord,
+    axis_y: bool,
+    platforms: u8,
+    length: u8,
+) -> Result<
+    (),
+    (
+        CommandError,
+        Option<crate::newgrf_callback::StationSlopeCallbackDiagnostic>,
+    ),
+> {
     let Some(spec) = crate::station_class::station_spec_def(
         &state.station_spec_catalog,
         state.current_station_spec,
@@ -338,11 +372,22 @@ pub(in crate::command) fn check_rail_station_slope_callbacks(
                     origin.y + i32::from(platform),
                 )
             };
-            let (slope, _) = tile_slope_and_z(&state.map, c).ok_or(CommandError::OutOfBounds)?;
-            if !crate::newgrf_callback::apply_station_slope_callback_for_build(
+            let (slope, _) =
+                tile_slope_and_z(&state.map, c).ok_or((CommandError::OutOfBounds, None))?;
+            let outcome = crate::newgrf_callback::resolve_station_slope_callback_for_build(
                 spec, slope, axis_y, platforms, length, platform, position,
+            );
+            if !matches!(
+                outcome,
+                crate::newgrf_callback::StationSlopeCallbackOutcome::Allow
             ) {
-                return Err(CommandError::NewGrfCallbackDenied);
+                return Err((
+                    CommandError::NewGrfCallbackDenied,
+                    Some(crate::newgrf_callback::StationSlopeCallbackDiagnostic {
+                        grfid: spec.newgrf_grfid,
+                        outcome,
+                    }),
+                ));
             }
         }
     }
@@ -362,7 +407,7 @@ pub(in crate::command) fn place_rail_station_area(
     check_rail_station_spec_restrictions(state, platforms, length)?;
     let (w, h) = rail_station_footprint(axis_y, platforms, length);
     check_rail_station_area(state, origin, w, h)?;
-    check_rail_station_slope_callbacks(state, origin, axis_y, platforms, length)?;
+    check_rail_station_slope_callbacks_with_diagnostic(state, origin, axis_y, platforms, length)?;
     let anchor = TileCoord::new(origin.x + (w - 1) / 2, origin.y + (h - 1) / 2);
     if !authority_allows_new_station(&state.towns, anchor, state.active_company) {
         return Err(CommandError::AuthorityRatingTooLow);

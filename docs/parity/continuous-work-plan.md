@@ -2196,3 +2196,20 @@ la lista de vehículos lo entrega al feedback textual de #434. La regresión
 combina una unidad vanilla y una NewGRF para demostrar que no queda un grupo
 parcialmente iniciado; autoreemplazo y órdenes de depot siguen siendo
 sucesores del padre #329.
+
+Actualización #329-STATION-CB149-ERROR-437 (2026-09-06, issue [#437](https://github.com/cavazquez/openttdrs/issues/437)):
+CB149 de estaciones ferroviarias conserva ahora el resultado de ubicación de
+OpenTTD 15.3: `FAILED`/`0x400` permiten, `0..0x3FF` se convierten a texto
+genérico NewGRF, `0x40F` consulta `regs100[0]` y los códigos estándar quedan
+como rechazo genérico; GRF <8 invierte el bit 10. El preflight de toda la
+huella guarda un diagnóstico efímero y la UI resuelve Action4/Action13 con el
+locale activo sin reejecutar el callback. La regresión fija parámetros,
+atomicidad y consumo del diagnóstico; scopes completos, vecinos y parámetros
+dinámicos de text stack siguen abiertos.
+
+Actualización #329-STATION-AVAILABILITY-TEXT-436 (2026-09-06, issue [#436](https://github.com/cavazquez/openttdrs/issues/436)):
+investigación del código upstream 15.3 (`Convert8bitBooleanCallback`) confirmó
+que CB13 de estaciones/road stops sólo devuelve booleano y no tiene StringID de
+error. El issue textual se cerró como no aplicable con referencias a
+`station_cmd.cpp` y `newgrf_commons.cpp`; no se declara una capacidad que
+OpenTTD no ofrece.

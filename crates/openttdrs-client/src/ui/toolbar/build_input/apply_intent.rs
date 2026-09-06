@@ -5,10 +5,13 @@ use openttdrs_core::BridgeType;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 
+use crate::i18n::Locale;
 use crate::render::{RemapMapVisualsPending, request_map_visual_remap_with_labels};
+use crate::settings::ClientPreferences;
 use crate::state::{OrderPickState, SimWorld};
 use crate::ui::hud::{
     HudBuildFeedback, SelectedTileInfo, enqueue_build_place_flash, push_build_command_error,
+    push_station_slope_error,
 };
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::toolbar::bridge_window::{BridgeBuildState, PendingBridge};
@@ -38,6 +41,7 @@ use super::selection;
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct IntentApplyContext<'w> {
     pub sim: ResMut<'w, SimWorld>,
+    pub prefs: Option<Res<'w, ClientPreferences>>,
     pub selected: ResMut<'w, SelectedTileInfo>,
     pub drag_state: ResMut<'w, DragBuildState>,
     pub station_state: ResMut<'w, StationBuildState>,
@@ -334,7 +338,21 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 )
             }) {
                 if let Err(e) = crate::network::apply_player_command(&mut ctx.sim.state, &cmd) {
-                    push_build_command_error(&mut ctx.hud_feedback, e, time_secs);
+                    if action == BuildMenuAction::RailStation {
+                        let locale = ctx
+                            .prefs
+                            .as_ref()
+                            .map_or(Locale::Es, |prefs| prefs.locale());
+                        push_station_slope_error(
+                            &mut ctx.hud_feedback,
+                            &mut ctx.sim,
+                            e,
+                            locale,
+                            time_secs,
+                        );
+                    } else {
+                        push_build_command_error(&mut ctx.hud_feedback, e, time_secs);
+                    }
                 } else {
                     if ctrl_held && action == BuildMenuAction::RailSignals && !cycle {
                         ctx.station_state.signal_type = sig_type;

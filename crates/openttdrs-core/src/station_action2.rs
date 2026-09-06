@@ -502,6 +502,14 @@ fn populate_station_general_vars(ctx: &mut Action2EvalCtx, station: &Station) {
         0xF7,
         u32::try_from((airport_blocks >> 8) & u64::from(u8::MAX)).unwrap_or(0),
     );
+    ctx.vars.insert(
+        0xF2,
+        station.road_stop_status_value(crate::station::StopKind::TruckStop),
+    );
+    ctx.vars.insert(
+        0xF3,
+        station.road_stop_status_value(crate::station::StopKind::BusStop),
+    );
     ctx.vars.insert(0xF0, station.stop_kind.facilities_mask());
 }
 
@@ -1203,6 +1211,26 @@ mod tests {
                 Some(low_mask)
             );
         }
+    }
+
+    #[test]
+    fn station_road_stop_status_vars_follow_native_stop_kind() {
+        let mut truck = Station::new_with_kind(TileCoord::new(1, 1), StopKind::TruckStop);
+        truck.road_stop_status = 0xC1;
+        let truck_ctx = action2_eval_ctx_from_station(&truck);
+        assert_eq!(truck_ctx.vars.get(&0xF2), Some(&0xC1));
+        assert_eq!(truck_ctx.vars.get(&0xF3), Some(&0));
+
+        let mut bus = Station::new_with_kind(TileCoord::new(2, 2), StopKind::BusStop);
+        bus.road_stop_status = 0x42;
+        let bus_ctx = action2_eval_ctx_from_station(&bus);
+        assert_eq!(bus_ctx.vars.get(&0xF2), Some(&0));
+        assert_eq!(bus_ctx.vars.get(&0xF3), Some(&0x42));
+
+        let rail = Station::new_with_kind(TileCoord::new(3, 3), StopKind::RailStation);
+        let rail_ctx = action2_eval_ctx_from_station(&rail);
+        assert_eq!(rail_ctx.vars.get(&0xF2), Some(&0));
+        assert_eq!(rail_ctx.vars.get(&0xF3), Some(&0));
     }
 
     #[test]

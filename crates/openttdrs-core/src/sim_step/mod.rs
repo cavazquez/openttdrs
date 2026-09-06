@@ -193,6 +193,7 @@ pub(crate) fn step(state: &mut GameState) {
         .runtime
         .terminal_spatial_index
         .rebuild(&state.map, &state.stations);
+    refresh_road_stop_statuses(state);
     state.tick.advance();
     state.advance_game_timers();
     let t = state.tick.get();
@@ -224,6 +225,7 @@ pub(crate) fn step(state: &mut GameState) {
     phase_pbs_reservations(state);
 
     phase_movement(state);
+    refresh_road_stop_statuses(state);
     landscape::call_landscape_tick(state, t);
     phase_post_tick(state);
 }
@@ -241,6 +243,7 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
         .runtime
         .terminal_spatial_index
         .rebuild(&state.map, &state.stations);
+    refresh_road_stop_statuses(state);
     state.tick.advance();
     state.advance_game_timers();
     let t = state.tick.get();
@@ -312,6 +315,7 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     timings.train_collision_ns = nanos(collisions);
     let crashed = Instant::now();
     crate::ground_crash::tick_crashed_vehicles(state);
+    refresh_road_stop_statuses(state);
     timings.crashed_vehicle_ns = nanos(crashed);
     let pbs = Instant::now();
     phase_pbs_reservations(state);
@@ -328,6 +332,62 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     timings.total_ns = nanos(wall0);
 
     timings
+}
+
+/// Reconstruye el byte que `RoadStop::status.base()` expone a `StationScope`.
+///
+/// `OpenTTD` conserva este estado en cada elemento del pool `RoadStop`; el
+/// modelo propio agrupa la parada lógica en `Station`, por lo que se recalcula
+/// desde la geometría y los vehículos primarios en los mismos límites de tick.
+fn refresh_road_stop_statuses(state: &mut GameState) {
+    let mut statuses = vec![0_u8; state.stations.len()];
+    for (index, station) in state.stations.iter().enumerate() {
+        if !matches!(
+            station.stop_kind,
+            crate::StopKind::BusStop | crate::StopKind::TruckStop
+        ) {
+            continue;
+        }
+        let mut status =
+            crate::station::ROAD_STOP_STATUS_BAY0_FREE | crate::station::ROAD_STOP_STATUS_BAY1_FREE;
+        if crate::station::is_drive_through_road_stop(&state.map, station.pos) {
+            status |= crate::station::ROAD_STOP_STATUS_BASE_ENTRY;
+        }
+        statuses[index] = status;
+    }
+
+    for vehicle in &state.vehicles {
+        if vehicle.crashed || !vehicle.is_consist_head() {
+            continue;
+        }
+        let compatible = match vehicle.kind {
+            crate::VehicleKind::Bus | crate::VehicleKind::Tram => crate::StopKind::BusStop,
+            crate::VehicleKind::Truck => crate::StopKind::TruckStop,
+            _ => continue,
+        };
+        let Some((index, _)) = state.stations.iter().enumerate().find(|(_, station)| {
+            station.stop_kind == compatible && station.covers_tile(vehicle.pos)
+        }) else {
+            continue;
+        };
+        if !crate::road_movement::rvsb::is_bay_road_state(vehicle.road_state) {
+            continue;
+        }
+        if vehicle.road_state & crate::road_movement::rvsb::RVSB_USING_SECOND_BAY != 0 {
+            statuses[index] &= !crate::station::ROAD_STOP_STATUS_BAY1_FREE;
+        } else {
+            statuses[index] &= !crate::station::ROAD_STOP_STATUS_BAY0_FREE;
+        }
+        // RoadStop::Enter marca EntryBusy hasta RoadStop::Leave, incluido el
+        // tiempo de carga detenido dentro de la bahía.
+        statuses[index] |= crate::station::ROAD_STOP_STATUS_ENTRY_BUSY;
+    }
+
+    for (station, status) in state.stations.iter_mut().zip(statuses) {
+        if status != 0 {
+            station.road_stop_status = status;
+        }
+    }
 }
 
 fn nanos(start: Instant) -> u64 {
@@ -972,6 +1032,54 @@ mod tests {
             associated_badges: Vec::new(),
         });
         (state, pos)
+    }
+
+    #[test]
+    fn road_stop_status_replays_base_and_bay_occupancy() {
+        let bay = TileCoord::new(4, 3);
+        let mut state = GameState::new(12, 8);
+        let mut tile = state.map.get(bay).unwrap();
+        tile.kind = crate::TileKind::Station;
+        tile.m5 = crate::RSV_BAY_NE;
+        tile.m6 = 2 << 3; // truck stop (StationType in bits 3..6)
+        state.map.set_tile(bay, tile).unwrap();
+        state.stations.push(crate::Station::new_with_kind(
+            bay,
+            crate::StopKind::TruckStop,
+        ));
+
+        refresh_road_stop_statuses(&mut state);
+        assert_eq!(state.stations[0].road_stop_status, 0x03);
+
+        let mut far = Vehicle::new(1, VehicleKind::Truck, bay, bay);
+        far.road_state = crate::road_movement::rvsb::RVSB_IN_ROAD_STOP
+            | crate::road_movement::rvsb::RVSB_ENTERED_STOP;
+        state.vehicles.push(far);
+        refresh_road_stop_statuses(&mut state);
+        assert_eq!(state.stations[0].road_stop_status, 0x82);
+
+        let mut near = Vehicle::new(2, VehicleKind::Truck, bay, bay);
+        near.road_state = crate::road_movement::rvsb::RVSB_IN_ROAD_STOP
+            | crate::road_movement::rvsb::RVSB_ENTERED_STOP
+            | crate::road_movement::rvsb::RVSB_USING_SECOND_BAY;
+        state.vehicles.push(near);
+        refresh_road_stop_statuses(&mut state);
+        assert_eq!(state.stations[0].road_stop_status, 0x80);
+
+        state.vehicles.clear();
+        let through = TileCoord::new(6, 3);
+        let mut through_tile = state.map.get(through).unwrap();
+        through_tile.kind = crate::TileKind::Station;
+        through_tile.m5 = crate::RSV_DRIVE_THROUGH_X;
+        through_tile.m3 = 0x05;
+        through_tile.m6 = 3 << 3; // bus stop (StationType in bits 3..6)
+        state.map.set_tile(through, through_tile).unwrap();
+        state.stations.push(crate::Station::new_with_kind(
+            through,
+            crate::StopKind::BusStop,
+        ));
+        refresh_road_stop_statuses(&mut state);
+        assert_eq!(state.stations[1].road_stop_status, 0x43);
     }
 
     #[test]

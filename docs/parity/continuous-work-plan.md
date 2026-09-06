@@ -1778,8 +1778,9 @@ Actualización #329-STATION-AIRPORT-VARS-066 (2026-09-06, issue [#392](https://g
 `station_action2` expone `0xF1` (tipo compacto `TTDPatch` `0..3`, preservando
 Action0 `0x0D` para NewGRF), `0xF6` (palabra baja de `airport_blocks`) y `0xF7`
 (bits 8..15) en legacy y map-aware. Las regresiones cubren aeropuerto vanilla,
-tipo NewGRF y bloques FTA no nulos. Los estados `0xF2`/`0xF3` y el historial
-`0x8A` se cubren en #396; los estados `0xF2`/`0xF3` continúan en #329.
+tipo NewGRF y bloques FTA no nulos. El historial `0x8A` se cubre en #396 y
+los estados `0xF2`/`0xF3` se publican en #399; los scopes restantes continúan
+en #329.
 
 Actualización #329-STATION-FACILITIES-067 (2026-09-06, issue [#393](https://github.com/cavazquez/openttdrs/issues/393)):
 `StopKind` centraliza la máscara `StationFacilities` de `0xF0`: los waypoints
@@ -1793,15 +1794,16 @@ Actualización #329-STATION-HAD-VEHICLE-396 (2026-09-06, issue [#396](https://gi
 avión y barco; se actualiza al prestar servicio de carga o descarga y los
 waypoints exponen `HVOT_WAYPOINT`. `station_action2` y la ruta legacy devuelven
 el mismo bitset en `0x8A`, con regresión de todos los bits y round-trip JSON.
-La lectura/escritura de `STNN.normal.had_vehicle_of_type` y los estados
-`0xF2`/`0xF3` de `RoadStop` siguen pendientes; #329 continúa abierto.
+La lectura/escritura de `STNN.normal.had_vehicle_of_type` ya está cubierta por
+#397; los estados `0xF2`/`0xF3` de `RoadStop` se separan en #399; #329 continúa
+abierto.
 
 Actualización #329-STATION-HAD-VEHICLE-SAV-397 (2026-09-06, issue [#397](https://github.com/cavazquez/openttdrs/issues/397)):
 el puente SAV lee `STNN.normal.had_vehicle_of_type` en filas modernas y
 legacy, hidrata el bitset de `Station` y vuelve a emitir el byte al escribir
 `STNN`. La regresión cubre parser y writer con bitsets no nulos; los campos
-ausentes conservan cero. `last_vehicle_type`, `0xF2`/`0xF3` y los scopes
-restantes continúan pendientes en #329.
+ausentes conservan cero. `last_vehicle_type` ya está cubierto por #398; los
+scopes restantes continúan pendientes en #329.
 
 Actualización #329-STATION-LAST-VEHICLE-SAV-398 (2026-09-06, issue [#398](https://github.com/cavazquez/openttdrs/issues/398)):
 `STNN.normal.last_vehicle_type` ya se lee en filas modernas y legacy, se
@@ -1809,8 +1811,18 @@ hidrata en `Station.last_vehicle_type` y se vuelve a emitir al guardar
 `STNN`. `VEH_INVALID`, train, road, ship y aircraft conservan sus códigos
 nativos; bus, camión y tranvía comparten `VEH_ROAD` en el formato OpenTTD y se
 normalizan al tipo road compatible del modelo. Las regresiones cubren parser,
-hydration, writer→parser y la tabla de códigos. `0xF2`/`0xF3` y scopes
-restantes continúan pendientes en #329.
+hydration, writer→parser y la tabla de códigos. Los estados `0xF2`/`0xF3` se
+publican en #399; los scopes restantes continúan pendientes en #329.
+
+Actualización #329-ROADSTOP-STATUS-399 (2026-09-06, issue [#399](https://github.com/cavazquez/openttdrs/issues/399)):
+`Station.road_stop_status` conserva el byte base de `RoadStop::status` con
+compatibilidad JSON. `StationScope` expone `0xF2` para truck y `0xF3` para bus
+solamente cuando coincide el tipo de parada. La simulación reconstruye
+`Bay0Free`, `Bay1Free`, `BaseEntry` y `EntryBusy` desde la geometría y los
+vehículos primarios en cada límite de tick; los tests cubren bahías, ocupación,
+drive-through y el aislamiento de rail. El estado no se agrega al formato SAV:
+OpenTTD lo deriva del pool `RoadStop` al cargar. Pools físicos separados,
+colas drive-through completas y scopes restantes siguen pendientes en #329.
 
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler

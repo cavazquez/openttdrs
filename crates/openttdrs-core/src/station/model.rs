@@ -322,6 +322,13 @@ pub struct Station {
     /// waypoints añaden su bit en [`Self::had_vehicle_of_type_value`].
     #[serde(default)]
     pub had_vehicle_of_type: u16,
+    /// Estado nativo de la parada vial asociada (`RoadStop::status.base()`).
+    ///
+    /// Bits 0/1 indican bahías libres, bit 6 identifica la entrada base de
+    /// una parada drive-through y bit 7 una entrada de bahía ocupada. Los
+    /// saves JSON anteriores empiezan con ambas bahías libres.
+    #[serde(default = "default_road_stop_status")]
+    pub road_stop_status: u8,
     /// Días sin recogida por compañía (rating competitivo; default vacío).
     #[serde(default)]
     pub company_time_since_pickup: Vec<(CompanyId, CargoTimeSincePickup)>,
@@ -424,6 +431,19 @@ const fn default_station_rating() -> u8 {
     super::goods_entry::INITIAL_STATION_RATING
 }
 
+const fn default_road_stop_status() -> u8 {
+    ROAD_STOP_STATUS_BAY0_FREE | ROAD_STOP_STATUS_BAY1_FREE
+}
+
+/// `RoadStop::RoadStopStatusFlag::Bay0Free`.
+pub const ROAD_STOP_STATUS_BAY0_FREE: u8 = 1 << 0;
+/// `RoadStop::RoadStopStatusFlag::Bay1Free`.
+pub const ROAD_STOP_STATUS_BAY1_FREE: u8 = 1 << 1;
+/// `RoadStop::RoadStopStatusFlag::BaseEntry`.
+pub const ROAD_STOP_STATUS_BASE_ENTRY: u8 = 1 << 6;
+/// `RoadStop::RoadStopStatusFlag::EntryBusy`.
+pub const ROAD_STOP_STATUS_ENTRY_BUSY: u8 = 1 << 7;
+
 fn seed_station_newgrf_random_bits(pos: TileCoord) -> u16 {
     let x = pos.x.cast_unsigned();
     let y = pos.y.cast_unsigned();
@@ -489,6 +509,7 @@ impl Station {
             rating: default_station_rating(),
             last_vehicle_type: None,
             had_vehicle_of_type: 0,
+            road_stop_status: default_road_stop_status(),
             company_time_since_pickup: vec![(CompanyId::PLAYER, CargoTimeSincePickup::default())],
             airport_tiles: Vec::new(),
             airport_tile_gfx: Vec::new(),
@@ -526,6 +547,20 @@ impl Station {
     pub const fn had_vehicle_of_type_value(&self) -> u32 {
         let waypoint = if self.is_waypoint() { 1_u16 << 6 } else { 0 };
         (self.had_vehicle_of_type | waypoint) as u32
+    }
+
+    /// Valor de `StationScopeResolver::GetVariable(0xF2/0xF3)`.
+    ///
+    /// `OpenTTD` sólo devuelve el status de la lista nativa correspondiente al
+    /// tipo de parada; una estación sin esa lista obtiene cero.
+    #[must_use]
+    pub fn road_stop_status_value(&self, stop_kind: StopKind) -> u32 {
+        match (stop_kind, self.stop_kind) {
+            (StopKind::TruckStop, StopKind::TruckStop) | (StopKind::BusStop, StopKind::BusStop) => {
+                u32::from(self.road_stop_status)
+            }
+            _ => 0,
+        }
     }
 
     /// Registra que un vehículo del tipo indicado prestó servicio.

@@ -39,7 +39,10 @@ pub use geometry::{
     vehicle_at_road_stop, vehicle_physically_at_station,
 };
 pub use goods_entry::{GoodsEntry, INITIAL_STATION_RATING, STATION_RATING_MAX_STEP, StationGoods};
-pub use model::{CargoTimeSincePickup, RoadStopTileState, Station, StopKind};
+pub use model::{
+    CargoTimeSincePickup, ROAD_STOP_STATUS_BASE_ENTRY, ROAD_STOP_STATUS_BAY0_FREE,
+    ROAD_STOP_STATUS_BAY1_FREE, ROAD_STOP_STATUS_ENTRY_BUSY, RoadStopTileState, Station, StopKind,
+};
 pub use move_goods::{can_move_goods_to_station, move_goods_to_station, update_station_waiting};
 pub use tile_encoding::{
     STATION_TILE_PYLONS, STATION_TILE_RESERVATION, STATION_TILE_WIRES, STATION_TYPE_BUOY,

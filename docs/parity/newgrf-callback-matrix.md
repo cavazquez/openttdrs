@@ -927,8 +927,8 @@ legacy y map-aware. Las regresiones cubren aeropuerto vanilla, tipo NewGRF,
 bloques no nulos y ambas rutas. El historial `0x8A` ya se conserva en
 `Station`, se actualiza al prestar servicio y se expone en las rutas legacy y
 map-aware, incluyendo el bit de waypoint. Los estados `0xF2`/`0xF3` de
-paradas road, las cadenas de nombre/fecha y los scopes completos de
-`BaseStation`/aeropuerto continúan pendientes en #329.
+paradas road se cubren en #399; las cadenas de nombre/fecha y los scopes
+completos de `BaseStation`/aeropuerto continúan pendientes en #329.
 
 ### #329-STATION-FACILITIES-067 — Bitset F0 de waypoints y RoadStops
 
@@ -946,8 +946,8 @@ actualiza cuando una unidad presta servicio de carga o descarga y los
 waypoints exponen `WAYPOINT=0x40`. `station_action2` y la API legacy devuelven
 el mismo valor en `0x8A`, y el bitset forma parte del round-trip JSON propio.
 La lectura/escritura equivalente de `STNN.normal.had_vehicle_of_type` se
-cubre en #397; los estados nativos `0xF2`/`0xF3` de `RoadStop` siguen
-pendientes.
+cubre en #397; el estado nativo de `RoadStop` se documenta y valida por
+separado en #399.
 
 ### #329-STATION-HAD-VEHICLE-SAV-397 — Round-trip SAV de `0x8A`
 
@@ -965,4 +965,18 @@ en filas modernas y legacy, hidrata `Station.last_vehicle_type` y vuelve a
 emitir el código nativo (`VEH_INVALID`, train, road, ship o aircraft) al
 escribir `STNN`. Bus, camión y tranvía comparten `VEH_ROAD` en el formato
 nativo y se normalizan al tipo road compatible del modelo. Los estados
-`0xF2`/`0xF3` de `RoadStop` y los scopes restantes continúan pendientes.
+`0xF2`/`0xF3` se cubren en #399; los scopes restantes continúan pendientes.
+
+### #329-ROADSTOP-STATUS-399 — Variables `0xF2`/`0xF3`
+
+Actualizado: 2026-09-06. `Station.road_stop_status` conserva el byte base de
+`RoadStop::status` y `StationScope` devuelve el valor sólo para el tipo nativo
+correspondiente: `0xF2` para truck y `0xF3` para bus. La simulación reconstruye
+las banderas `Bay0Free`, `Bay1Free`, `BaseEntry` y `EntryBusy` desde la
+geometría y los vehículos primarios en los límites de tick; las paradas
+drive-through reciben `BaseEntry`, mientras las bahías ocupadas limpian la
+bandera libre y marcan `EntryBusy`. El campo tiene default compatible con JSON
+anterior y no amplía el formato SAV, porque OpenTTD deriva este estado del pool
+`RoadStop` al cargar. Regresiones cubren ambos resolvers, bahías, ocupación,
+drive-through y aislamiento por `StopKind`. Los pools/colas físicos separados
+y el resto de scopes de `BaseStation` permanecen pendientes en #329.

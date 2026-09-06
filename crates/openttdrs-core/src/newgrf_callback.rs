@@ -44,6 +44,7 @@ use crate::road_stop_action2::{
 use crate::road_stop_spec::RoadStopSpecDef;
 use crate::station::{Station, station_at_tile};
 use crate::station_action2::{
+    StationAction2WorldContext, action2_eval_ctx_for_station_tile_with_catalog_and_world,
     action2_eval_ctx_for_station_tile_with_grf, populate_station_badge_vars_for_spec,
     populate_station_purchase_scope_vars, populate_station_scope_fallback_vars,
 };
@@ -3004,6 +3005,66 @@ pub fn apply_station_availability_callback_at(
     };
     // A stale tile/index pair must not erase an existing station's PSA. Keep
     // the legacy scope in that case; valid map-aware calls use the rich path.
+    if ctx.vars.is_empty() {
+        ctx = action2_eval_ctx_from_station(station);
+    }
+    ctx.persistent_registers
+        .clone_from(&station.newgrf_persistent_regs);
+    let result = gfx.resolve_callback_ctx(local_id, CBID_STATION_AVAILABILITY, 0, 0, &mut ctx);
+    if let Some(station) = stations.get_mut(station_index) {
+        writeback_station_persistent_registers(station, &ctx);
+    }
+    callback_allows_8bit_boolean(result)
+}
+
+/// Variante catalogue-aware de `CBID_STATION_AVAILABILITY` para una estación
+/// ya colocada.
+///
+/// El resolver nativo de `OpenTTD` conserva, además del tile scope, el catálogo
+/// de estaciones y los pools de mundo necesarios para `StationScope`: así el
+/// runtime Action2 puede consultar vecinos (`66`/`67`/`68`/`6A`/`6B`), badges
+/// (`7A`) y el `TownScopeResolver` parent (`40`/`41`/`82`). La variante legacy
+/// anterior se mantiene para callers que todavía no tienen esos pools y usa
+/// exactamente el mismo fallback seguro para un tile obsoleto.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn apply_station_availability_callback_at_with_catalog_and_world(
+    gfx: &TrainSpriteGraphics,
+    local_id: u8,
+    map: &Map,
+    stations: &mut [Station],
+    station_index: usize,
+    coord: TileCoord,
+    station_catalog: &[crate::station_class::StationSpecDef],
+    world: StationAction2WorldContext<'_>,
+    owner_colour: u8,
+    climate: Climate,
+    type_tables: Option<&crate::newgrf_type_tables::GrfTypeTranslationTables>,
+    grf_version: u8,
+) -> bool {
+    let Some(station) = stations.get(station_index) else {
+        return true;
+    };
+    let station_pos = station.pos;
+    let tile_belongs_to_station =
+        station_at_tile(map, stations, coord).is_some_and(|candidate| candidate.pos == station_pos);
+    let mut ctx = if tile_belongs_to_station {
+        action2_eval_ctx_for_station_tile_with_catalog_and_world(
+            map,
+            stations,
+            station_catalog,
+            coord,
+            owner_colour,
+            climate,
+            type_tables,
+            grf_version,
+            world,
+        )
+    } else {
+        Action2EvalCtx::default()
+    };
+    // A stale tile/index pair must not erase an existing station's PSA. Keep
+    // the legacy scope in that case; valid calls use the rich path above.
     if ctx.vars.is_empty() {
         ctx = action2_eval_ctx_from_station(station);
     }
@@ -7106,6 +7167,92 @@ mod tests {
             Some(&7)
         );
         assert_eq!(writeback_stations[0].pos, coord);
+    }
+
+    #[test]
+    fn station_availability_catalog_context_exposes_neighbours_and_psa() {
+        let source = TileCoord::new(1, 1);
+        let neighbour = TileCoord::new(3, 1);
+        let mut map = Map::new_flat(8, 8, 0);
+        let station_tile = |m5| crate::map::Tile {
+            height: 0,
+            kind: crate::map::TileKind::Station,
+            mapt: 0,
+            m5,
+            m1: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        };
+        map.set_tile(source, station_tile(0)).unwrap();
+        map.set_tile(neighbour, station_tile(2)).unwrap();
+
+        let mut current = Station::new_with_kind(source, crate::station::StopKind::RailStation);
+        current.station_spec = crate::station_class::StationSpecId::from_u16(1);
+        let mut adjacent = Station::new_with_kind(neighbour, crate::station::StopKind::RailStation);
+        adjacent.station_spec = crate::station_class::StationSpecId::from_u16(2);
+        let mut stations = vec![current, adjacent];
+
+        let neighbour_callback = gfx_callback_compare_parameterized_u32(0x68, 0x02, 0x0A07);
+        let mut catalog = crate::station_class::vanilla_station_spec_catalog();
+        let mut current_spec = catalog.pop().unwrap();
+        current_spec.id = crate::station_class::StationSpecId::from_u16(1);
+        current_spec.from_newgrf = true;
+        current_spec.newgrf_grfid = 0x1111_0001;
+        current_spec.newgrf_local_id = 4;
+        current_spec.newgrf_runtime = Some(Box::new(neighbour_callback.clone()));
+        let mut adjacent_spec = current_spec.clone();
+        adjacent_spec.id = crate::station_class::StationSpecId::from_u16(2);
+        adjacent_spec.newgrf_grfid = 0x2222_0002;
+        adjacent_spec.newgrf_local_id = 7;
+        adjacent_spec.newgrf_runtime = None;
+        catalog.extend([current_spec, adjacent_spec]);
+
+        let world = StationAction2WorldContext {
+            towns: &[],
+            companies: &[],
+            industries: &[],
+            cargo_spec_catalog: &[],
+        };
+        assert!(
+            apply_station_availability_callback_at_with_catalog_and_world(
+                &neighbour_callback,
+                0,
+                &map,
+                &mut stations,
+                0,
+                source,
+                &catalog,
+                world,
+                0,
+                Climate::Temperate,
+                None,
+                8,
+            )
+        );
+
+        let psto = gfx_callback_psto(5, 7, 1);
+        assert!(
+            apply_station_availability_callback_at_with_catalog_and_world(
+                &psto,
+                0,
+                &map,
+                &mut stations,
+                0,
+                source,
+                &catalog,
+                world,
+                0,
+                Climate::Temperate,
+                None,
+                8,
+            )
+        );
+        assert_eq!(stations[0].newgrf_persistent_regs.get(&5), Some(&7));
     }
 
     #[test]

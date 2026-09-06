@@ -1959,6 +1959,17 @@ ejecutable de `LGRJ`/`LGRS` se documenta en el corte siguiente (#395); threads,
 presupuesto de CPU, pausa multiplayer, compresión y topología dinámica siguen
 pendientes en #328; el padre no se cierra.
 
+Actualización #329-STATION-CB13-MAP-AWARE-413 (2026-09-06, issue [#413](https://github.com/cavazquez/openttdrs/issues/413)):
+CB13 de una estación colocada ya dispone de
+`apply_station_availability_callback_at_with_catalog_and_world`, que reutiliza
+el contexto del renderer con catálogo y pools de mundo. El runtime puede leer
+vecinos `0x66`/`0x67`/`0x68`/`0x6A`/`0x6B`, badges `0x7A`, parent TownScope y
+PSA `7C`; el writeback se ejecuta después del callback y un tile obsoleto
+conserva el fallback legacy sin limpiar storage. La regresión cubre identidad
+de vecino empaquetada y persistencia. Strings, sonidos, scopes completos de
+`BaseStation` y el vínculo nativo estación→pueblo continúan pendientes en
+#329.
+
 Actualización #328-LINKGRAPH-069 (2026-09-06, issue [#395](https://github.com/cavazquez/openttdrs/issues/395)):
 `LGRJ`/`LGRS` ahora se decodifican durante la importación SAV: el snapshot de
 cada job (settings, cargo, nodos, aristas y `join_date`) se transforma en un

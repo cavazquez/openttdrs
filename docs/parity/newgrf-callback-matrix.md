@@ -82,7 +82,7 @@ legacy sin mundo mantiene su fallback explícito.
 | Feature | CBID (ejemplos) | Estado | Notas |
 |---|---|---|---|
 | Stations (`04`) | `0x24` `CBID_STATION_BUILD_TILE_LAYOUT` | **soportado** | Call site: construcción `apply_station_build_tile_layout_callback` |
-| Stations | `0x13` `CBID_STATION_AVAILABILITY` | **parcial runtime** | Máscara Action0 `0x0B`, Action3→Action2 y call site query+execute de `PlaceRailStation` / `PlaceRailStationArea`; la ruta de compra ya construye el scope sin estación (`0x40`/`0x41`/`0x46`/`0x47`/`0x49=0x02110000`, `0x42=0`, `0x43=GetCompanyInfo`, `0x44=2`, badges `0x7A` y fecha `0xFA`) y usa la compañía/fecha reales del `GameState`. Para una estación existente, `apply_station_availability_callback_at` comparte el contexto map-aware del renderer (`0x40`–`0x4A`, `0x5F`, terreno, carga y `7C`); la API legacy sin mapa expone los sentinels nativos y conserva writeback. Faltan vecinos `0x66`/`0x68`/`0x6A`/`0x6B`, strings, sonidos y scopes completos de `BaseStation`/aeropuerto. |
+| Stations | `0x13` `CBID_STATION_AVAILABILITY` | **parcial runtime** | Máscara Action0 `0x0B`, Action3→Action2 y call site query+execute de `PlaceRailStation` / `PlaceRailStationArea`; la ruta de compra ya construye el scope sin estación (`0x40`/`0x41`/`0x46`/`0x47`/`0x49=0x02110000`, `0x42=0`, `0x43=GetCompanyInfo`, `0x44=2`, badges `0x7A` y fecha `0xFA`) y usa la compañía/fecha reales del `GameState`. Para una estación existente, `apply_station_availability_callback_at_with_catalog_and_world` comparte el contexto map-aware del renderer (`0x40`–`0x4A`, `0x5F`, terreno, carga, vecinos `0x66`/`0x67`/`0x68`/`0x6A`/`0x6B`, badges, parent TownScope y `7C`); la API legacy sin catálogo conserva el fallback map-aware y writeback. Siguen faltando strings, sonidos y scopes completos de `BaseStation`/aeropuerto. |
 | Stations | `0x14` `CBID_STATION_DRAW_TILE_LAYOUT` | **parcial runtime** | Bit `DrawTileLayout` de Action0 `0x0B`; el renderer lo ejecuta por tesela antes de elegir la vista Action1/3 y conserva el eje. Los layouts `TileSeq` completos se resuelven por Action3/2→Action1, reemplazan el suelo, emiten parents `M(...)` y children relativos después de la catenaria y comparten fingerprint de registros `7D`/`0x100`; sprites base, paletas custom y layouts incompletos usan fallback vanilla atómico. Faltan scope/regs persistentes de `BaseStation`, layouts 16-bit/invalidación exacta y callbacks/sonidos de estación. |
 | Stations | Action2 var `0x7A` (badges) | **parcial runtime** | Action0 prop `0x1F` conserva la lista `ReadBadgeList` (índices WORD), la tabla local se resuelve contra `GlobalVar 0x18` y `badge_catalog`, y el contexto catalog-aware del renderer devuelve presencia (`0`/`1`) o `UINT_MAX` para una entrada no resoluble, igual que `GetBadgeVariableResult`. La API legacy sin spec/catálogo mantiene el sentinel y queda documentada como limitación de contexto; faltan los scopes completos de `BaseStation` y sonidos. |
 | Stations | Action2 parent `TownScopeResolver` | **parcial runtime** | Las rutas catalog-aware que reciben el mundo seleccionan el pueblo más cercano con `(distancia Manhattan, town.id)`, copian las variables de `TownScopeResolver` modeladas y cargan el PSA `7C` por GRFID. El renderer y los triggers/scheduler de animación con pools de mundo usan este contexto; APIs legacy sin pueblos mantienen parent vacío. La asociación nativa estación→pueblo y variables no representadas siguen pendientes. |
@@ -143,7 +143,7 @@ legacy sin mundo mantiene su fallback explícito.
 |---|---|---|
 | Temporal (`7D` / `\2sto`) | Solo durante la evaluación Action2 | Descartado al terminar el ctx |
 | Persistente (`7C` / `\2psto`) | Vehículo: `Vehicle.newgrf_persistent_regs` | Writeback tras CB; round-trip JSON save |
-| Persistente estación | `Station.newgrf_persistent_regs` | **parcial runtime**: API stateful + JSON round-trip; CB13 map-aware de una estación existente (`apply_station_availability_callback_at`) escribe `7C` después de evaluar el contexto real y la API legacy conserva sentinels; CB13 de construcción no puede hacer writeback porque OpenTTD lo evalúa sin estación/tesela |
+| Persistente estación | `Station.newgrf_persistent_regs` | **parcial runtime**: API stateful + JSON round-trip; CB13 map-aware de una estación existente (`apply_station_availability_callback_at_with_catalog_and_world`) escribe `7C` después de evaluar el contexto real, con vecinos/badges/parent cuando recibe catálogo y pools; la API legacy conserva sentinels y CB13 de construcción no puede hacer writeback porque OpenTTD lo evalúa sin estación/tesela |
 | Persistente industria | `Industry.newgrf_persistent_regs` | Writeback tras CB de producción, CB25/26/27 y `ResolveRerandomisation` de tesela para `TileLoop`, `IndustryTick` y `CargoReceived` cuando el scheduler recibe pools de mundo; CB25 se dispara en sus eventos reales y CB26/CB27 quedan en la pasada visual de frames activos; reseed parent agregado una vez por footprint; round-trip SAV/JSON, con `INDY.psa`/`PSAC` conservados |
 | Persistente pueblo (scope parent de casas/objetos) | `Town.newgrf_persistent_regs` | **parcial**: lectura `7C` por GRFID en Action2, `CITY`/`PSAC` y round-trip SAV/JSON; CB17 de casas y CB157 de objetos durante construcción hacen writeback parent por GRFID (con preflight aislado); callbacks de teselas de industria y su re-randomización (`TileLoop`, `IndustryTick`, `CargoReceived`) ya escriben el parent `Industry`, mientras scopes de otras entidades siguen pendientes |
 | Persistente casa/objeto | — | **OOS** como entidad propia; consumen el PSA del pueblo asociado cuando existe |
@@ -1001,6 +1001,22 @@ la fecha actual del calendario. El rename usa la plantilla fallback nativa
 cuando no queda un nombre generado. La resolución de textos por idioma,
 parámetros town/company y los scopes restantes de `BaseStation` continúan
 pendientes en #329.
+
+### #329-STATION-CB13-MAP-AWARE-413 — vecinos, catálogo y parent en disponibilidad
+
+Actualizado: 2026-09-06. La API pública
+`apply_station_availability_callback_at_with_catalog_and_world` evalúa CB13 de
+una estación colocada con el catálogo de `StationSpec` y
+`StationAction2WorldContext`. Para el tile vigente reutiliza el resolver del
+renderer: vecinos `0x66`/`0x67`/`0x68`/`0x6A`/`0x6B`, badges `0x7A`, cargos y el
+parent TownScope con PSA `7C` por GRFID quedan disponibles antes de resolver el
+Action2. La estación se vuelve a mutar sólo después de la evaluación, por lo
+que `7C` continúa escribiéndose en la entidad correcta. Si el tile es obsoleto
+se conserva el contexto legacy sin borrar el PSA. La regresión separa dos
+estaciones rail para verificar el valor empaquetado de `0x68` y un segundo
+callback que persiste `7C`. El wrapper anterior sigue siendo compatible para
+callers sin catálogo; strings, sonidos, scopes completos de `BaseStation` y la
+asociación nativa estación→pueblo siguen pendientes en #329.
 
 ### #329-STATION-DEPRECATED-CARGO-401 — Variables legacy `0x8C`–`0xEC`
 

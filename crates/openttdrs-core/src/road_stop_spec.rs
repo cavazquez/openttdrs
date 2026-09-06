@@ -159,6 +159,13 @@ pub struct RoadStopSpecDef {
     /// Ids de badges asociados (catálogo `badge`).
     #[serde(default)]
     pub associated_badges: Vec<u16>,
+    /// Tabla GRF-local usada por `RoadStopScope` var `0x7A`.
+    ///
+    /// Se rehidrata al reaplicar el stack `NewGRF`, igual que en Stations;
+    /// `u16::MAX` conserva un índice local no resoluble para que no se
+    /// desplacen los parámetros posteriores.
+    #[serde(default, skip)]
+    pub newgrf_badge_translation: Vec<u16>,
 }
 
 const fn default_road_stop_draw_mode() -> u8 {
@@ -471,6 +478,7 @@ mod tests {
             newgrf_runtime: None,
             newgrf_type_tables: None,
             associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         }
     }
 
@@ -512,6 +520,7 @@ mod tests {
                 newgrf_runtime: None,
                 newgrf_type_tables: None,
                 associated_badges: Vec::new(),
+                newgrf_badge_translation: Vec::new(),
             },
             RoadStopSpecDef {
                 id: 11,
@@ -535,6 +544,7 @@ mod tests {
                 newgrf_runtime: None,
                 newgrf_type_tables: None,
                 associated_badges: Vec::new(),
+                newgrf_badge_translation: Vec::new(),
             },
         ];
         (classes, specs)

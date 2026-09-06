@@ -190,6 +190,47 @@ struct RoadStopAction2Resolution<'a> {
     world: Option<RoadStopWorldContext<'a>>,
 }
 
+/// Materializa `RoadStopScope` `0x7A(parameter)` usando la Badge Translation
+/// Table del GRF activo. `OpenTTD` conserva `UINT_MAX` para un índice local que
+/// no existe en la tabla; mantener esa posición evita desplazar parámetros
+/// posteriores y permite que Action2 distinga “desconocido” de “no asociado”.
+pub(crate) fn populate_road_stop_badge_vars_for_spec(
+    ctx: &mut Action2EvalCtx,
+    spec: &RoadStopSpecDef,
+) {
+    let mut requested = BTreeSet::new();
+    if let Some(runtime) = spec.newgrf_runtime.as_ref() {
+        for entry in runtime.action2_var.values() {
+            for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+                if term.variable == 0x7A
+                    && let Some(parameter) = term.param
+                {
+                    requested.insert(parameter);
+                }
+            }
+        }
+    }
+    requested.extend(
+        spec.newgrf_badge_translation
+            .iter()
+            .enumerate()
+            .filter_map(|(index, _)| u8::try_from(index).ok()),
+    );
+    for parameter in requested {
+        let badge_id = spec
+            .newgrf_badge_translation
+            .get(usize::from(parameter))
+            .copied()
+            .unwrap_or(u16::MAX);
+        let value = if badge_id == u16::MAX {
+            u32::MAX
+        } else {
+            u32::from(spec.associated_badges.contains(&badge_id))
+        };
+        ctx.parameterized_vars.insert((0x7A, parameter), value);
+    }
+}
+
 fn action2_eval_ctx_for_road_stop_tile_impl(
     map: &Map,
     stations: &[Station],
@@ -276,6 +317,7 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
     // disponibilidad); esta ruta siempre resuelve una instancia en el mapa.
     ctx.vars.insert(0x50, 0);
     if let Some(spec) = resolution.current_spec {
+        populate_road_stop_badge_vars_for_spec(&mut ctx, spec);
         let cargo_catalog = resolution
             .world
             .map_or(&[][..], |world| world.cargo_spec_catalog);
@@ -669,6 +711,7 @@ mod tests {
             newgrf_runtime: runtime.map(Box::new),
             newgrf_type_tables: None,
             associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         }
     }
 
@@ -771,6 +814,31 @@ mod tests {
         assert_eq!(ctx.vars.get(&0xF0), Some(&(1_u32 << 2)));
         assert_eq!(ctx.vars.get(&0xFA), Some(&123));
         assert_eq!(ctx.persistent_registers.get(&4), Some(&99));
+    }
+
+    #[test]
+    fn road_stop_scope_exposes_badge_presence_and_unknown_sentinels() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(1, 2);
+        map.set_tile(coord, road_stop_tile(4, 3 << 3)).unwrap();
+        let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+        station.road_stop_spec = Some(7);
+        station.sync_legacy_road_stop_anchor();
+
+        let mut spec = road_stop_spec(7, 0x4242_0001, 0, None);
+        spec.associated_badges = vec![17];
+        spec.newgrf_badge_translation = vec![17, u16::MAX];
+        let catalog = vec![spec];
+        let ctx = action2_eval_ctx_for_road_stop_tile_with_catalog(
+            &map,
+            std::slice::from_ref(&station),
+            &catalog,
+            coord,
+            0,
+            Climate::Temperate,
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 0)), Some(&1));
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 1)), Some(&u32::MAX));
     }
 
     #[test]

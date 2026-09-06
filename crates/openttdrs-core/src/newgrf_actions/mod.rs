@@ -2984,6 +2984,56 @@ mod tests {
     }
 
     #[test]
+    fn apply_roadstop_badges_uses_globalvar_translation_table() {
+        let badge = build_action0_badge_payload(b"GATE", 0, None);
+        let badge_translation = vec![
+            0x00,
+            crate::newgrf_type_tables::ACTION0_FEATURE_GLOBALVAR,
+            0x01,
+            0x01,
+            0x00,
+            crate::newgrf_type_tables::PROP_BADGE_TRANSLATION,
+            b'G',
+            b'A',
+            b'T',
+            b'E',
+            0,
+        ];
+        let mut roadstop = build_action0_roadstop_payload(b"BDGE", 0, "Badge stop", &[]);
+        roadstop[2] = roadstop[2].saturating_add(2);
+        // Propiedades bridgeable `0x13`/`0x14` preceden a menudo a la lista
+        // de badges en GRFs reales; deben poder saltarse sin ocultar `0x16`.
+        roadstop.extend_from_slice(&[0x13, 0x02, 0x01, 0x02]);
+        // OpenTTD RoadStops prop 0x16: WORD count + local Badge TT ids.
+        roadstop.extend_from_slice(&[0x16, 0x01, 0x00, 0x00, 0x00]);
+        let meta = parse_action0_roadstop_meta(&roadstop).unwrap();
+        assert_eq!(meta.badge_local_ids, vec![0]);
+
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&badge, &badge_translation, &roadstop],
+            [b'R', b'B', 0, 1],
+            "roadstop-badge",
+            "",
+        );
+        let dir = tempfile_dir_with("roadstop-badge.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("roadstop-badge.grf", 0x5242_0001));
+        apply_newgrf_badges(&mut state, &[&dir]);
+        apply_newgrf_roadstops(&mut state, &[&dir]);
+
+        let badge_id = state.badge_catalog[0].id;
+        let spec = state
+            .road_stop_spec_catalog
+            .iter()
+            .find(|spec| spec.from_newgrf)
+            .unwrap();
+        assert_eq!(spec.associated_badges, vec![badge_id]);
+        assert_eq!(spec.newgrf_badge_translation, vec![badge_id]);
+    }
+
+    #[test]
     fn roadstop_animation_properties_survive_action0_and_catalog_apply() {
         let a0 = build_action0_roadstop_payload_with_animation(
             b"ANIM",

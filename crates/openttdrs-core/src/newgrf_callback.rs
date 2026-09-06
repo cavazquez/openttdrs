@@ -39,6 +39,7 @@ use crate::newgrf_sprites::{
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
     RoadStopWorldContext, action2_eval_ctx_for_road_stop_tile_with_catalog_and_world,
+    populate_road_stop_badge_vars_for_spec,
 };
 use crate::road_stop_spec::RoadStopSpecDef;
 use crate::station::{Station, station_at_tile};
@@ -3119,6 +3120,7 @@ pub fn apply_road_stop_availability_callback_with_context(
         .saturating_sub(crate::station::STATION_BUILD_DATE_DEFAULT)
         .min(u32::from(u16::MAX));
     ctx.vars.insert(0xFA, relative_date);
+    populate_road_stop_badge_vars_for_spec(&mut ctx, def);
     let result = runtime.resolve_callback_ctx(
         def.newgrf_local_id,
         CBID_STATION_AVAILABILITY,
@@ -4188,6 +4190,45 @@ mod tests {
                 first: Action2VarTerm {
                     variable,
                     param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: vec![Action2VarOp {
+                    operator: 0x12,
+                    rhs: Action2VarTerm {
+                        variable: 0x1A,
+                        param: None,
+                        adjust: Action2VarAdjust {
+                            and_mask: expected,
+                            ..Action2VarAdjust::default()
+                        },
+                    },
+                }],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
+    fn gfx_callback_compare_parameterized_u32(
+        variable: u8,
+        parameter: u8,
+        expected: u32,
+    ) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable,
+                    param: Some(parameter),
                     adjust: Action2VarAdjust {
                         and_mask: u32::MAX,
                         ..Action2VarAdjust::default()
@@ -7300,6 +7341,7 @@ mod tests {
             newgrf_runtime: Some(Box::new(gfx_callback_psto(4, 12, 0xFE))),
             newgrf_type_tables: None,
             associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         };
         let mut station = Station::new_with_kind(TileCoord::new(1, 1), StopKind::BusStop);
         assert!(trigger_road_stop_animation(
@@ -7340,6 +7382,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn road_stop_availability_purchase_scope_uses_native_sentinels_and_company_context() {
         let mut def = crate::RoadStopSpecDef {
             id: 1,
@@ -7363,6 +7406,7 @@ mod tests {
             newgrf_runtime: None,
             newgrf_type_tables: None,
             associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         };
         let mut rival = crate::company::Company::rival_transcargo(
             crate::game_state::CompanyEconomy::default(),
@@ -7432,6 +7476,35 @@ mod tests {
                 crate::station::STATION_BUILD_DATE_DEFAULT,
             ));
         }
+
+        def.associated_badges = vec![7];
+        def.newgrf_badge_translation = vec![7, u16::MAX];
+        def.newgrf_runtime = Some(Box::new(gfx_callback_compare_parameterized_u32(0x7A, 0, 1)));
+        assert!(apply_road_stop_availability_callback_with_context(
+            &def,
+            StopKind::BusStop,
+            RoadType::Road,
+            &[],
+            crate::company::CompanyId(1),
+            0,
+            &companies,
+            crate::station::STATION_BUILD_DATE_DEFAULT,
+        ));
+        def.newgrf_runtime = Some(Box::new(gfx_callback_compare_parameterized_u32(
+            0x7A,
+            1,
+            u32::MAX,
+        )));
+        assert!(apply_road_stop_availability_callback_with_context(
+            &def,
+            StopKind::BusStop,
+            RoadType::Road,
+            &[],
+            crate::company::CompanyId(1),
+            0,
+            &companies,
+            crate::station::STATION_BUILD_DATE_DEFAULT,
+        ));
     }
 
     #[test]
@@ -7459,6 +7532,7 @@ mod tests {
             newgrf_runtime: Some(Box::new(gfx_callback_variable_byte(0x46, 0))),
             newgrf_type_tables: None,
             associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         };
         let catalog = vec![def.clone()];
         let coord = TileCoord::new(1, 2);
@@ -7558,6 +7632,7 @@ mod tests {
             newgrf_runtime: Some(Box::new(gfx)),
             newgrf_type_tables: None,
             associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         };
         let catalog = vec![def.clone()];
         let coord = TileCoord::new(1, 2);
@@ -7671,6 +7746,7 @@ mod tests {
             newgrf_runtime: Some(Box::new(gfx)),
             newgrf_type_tables: None,
             associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         };
         let mut station = Station::new_with_kind(TileCoord::new(6, 4), StopKind::BusStop);
         station.road_stop_newgrf_random_bits = 0;

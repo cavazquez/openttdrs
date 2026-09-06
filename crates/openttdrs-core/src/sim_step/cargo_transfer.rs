@@ -1838,6 +1838,7 @@ mod tests {
             newgrf_runtime: Some(Box::new(cb140_trigger_byte_runtime())),
             newgrf_type_tables: None,
             associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         });
         (state, pos)
     }

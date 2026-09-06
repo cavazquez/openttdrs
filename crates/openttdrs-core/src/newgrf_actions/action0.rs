@@ -69,6 +69,8 @@ const PROP_ROADSTOP_STOP_TYPE: u8 = 0x09;
 const PROP_ROADSTOP_DRAW_MODE: u8 = 0x0C;
 /// `RoadStops`: general flags DWORD (`OpenTTD` `0x12`).
 const PROP_ROADSTOP_FLAGS: u8 = 0x12;
+/// `RoadStops`: Badge list (`OpenTTD` `0x16`, WORD count + local ids).
+const PROP_ROADSTOP_BADGES: u8 = 0x16;
 /// Cargoes: bit number (`OpenTTD` `0x08`).
 const PROP_CARGO_BITNUM: u8 = 0x08;
 /// Cargoes: label 4 chars (`OpenTTD` `0x17`).
@@ -600,6 +602,8 @@ pub struct ParsedRoadStopMeta {
     pub animation_speed: u8,
     /// Action0 `0x10`: máscara `StationAnimationTrigger`.
     pub animation_triggers: u16,
+    /// Action0 `0x16`: índices locales de la Badge Translation Table.
+    pub badge_local_ids: Vec<u16>,
     /// Etiquetas de badge (`prop 0xFD`); se resuelven en apply.
     pub badge_labels: Vec<String>,
     /// Lista `0xFD` truncada / inválida (diagnóstico observable).
@@ -618,6 +622,7 @@ struct RoadStopMetaParse {
     animation_status: u8,
     animation_speed: u8,
     animation_triggers: u16,
+    badge_local_ids: Vec<u16>,
     badge_labels: Vec<String>,
     badge_list_error: Option<String>,
 }
@@ -636,6 +641,7 @@ impl Default for RoadStopMetaParse {
             animation_status: 0xFF,
             animation_speed: 2,
             animation_triggers: 0,
+            badge_local_ids: Vec::new(),
             badge_labels: Vec::new(),
             badge_list_error: None,
         }
@@ -672,6 +678,7 @@ impl RoadStopMetaParse {
             animation_status: self.animation_status,
             animation_speed: self.animation_speed,
             animation_triggers: self.animation_triggers,
+            badge_local_ids: self.badge_local_ids,
             badge_labels: self.badge_labels,
             badge_list_error: self.badge_list_error,
         }
@@ -2288,7 +2295,8 @@ pub fn collect_house_metas_from_grf(data: &[u8]) -> Vec<ParsedHouseMeta> {
     out
 }
 
-/// Parsea Action0 `RoadStops` (`0x14`): class, stop type, `draw_mode`, flags, nombre `0xFE`, badges `0xFD`.
+/// Parsea Action0 `RoadStops` (`0x14`): class, stop type, `draw_mode`, flags,
+/// badges nativos `0x16`, nombre `0xFE` y la extensión auxiliar `0xFD`.
 #[must_use]
 #[allow(clippy::too_many_lines)] // El formato Action0 es de ancho variable por propiedad.
 pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta> {
@@ -2378,6 +2386,12 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 meta.animation_triggers = u16::from_le_bytes([payload[i], payload[i + 1]]);
                 i += 2;
             }
+            PROP_ROADSTOP_BADGES => {
+                let Some(ids) = read_badge_local_ids(payload, &mut i) else {
+                    break;
+                };
+                meta.badge_local_ids = ids;
+            }
             PROP_NAME_CSTRING => {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
                     break;
@@ -2401,6 +2415,19 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                     break;
                 }
                 i += 2;
+            }
+            // Bridgeable height/pillar lists: ExtendedByte count followed by
+            // one byte per layout. No runtime consumer uses them yet, but
+            // they must be skipped so a later native prop (notably badges
+            // `0x16`) remains visible to the parser.
+            0x13 | 0x14 => {
+                let Some(count) = read_station_extended_byte(payload, &mut i) else {
+                    break;
+                };
+                if i.checked_add(count).is_none_or(|end| end > payload.len()) {
+                    break;
+                }
+                i += count;
             }
             _ => break,
         }

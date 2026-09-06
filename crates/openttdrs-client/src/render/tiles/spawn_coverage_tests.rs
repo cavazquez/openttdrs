@@ -797,6 +797,7 @@ fn road_stop_no_catenary_flag_suppresses_road_and_tram_wires() {
         newgrf_runtime: None,
         newgrf_type_tables: None,
         associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
     };
     let grid = RenderGrid::from_map(&map, 8, 8);
     let mut world = World::new();

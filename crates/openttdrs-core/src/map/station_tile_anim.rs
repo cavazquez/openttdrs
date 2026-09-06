@@ -1755,6 +1755,7 @@ mod tests {
             newgrf_runtime: Some(Box::new(road_stop_animation_callbacks())),
             newgrf_type_tables: None,
             associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         }
     }
 

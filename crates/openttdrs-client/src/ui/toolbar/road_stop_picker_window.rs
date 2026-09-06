@@ -438,6 +438,7 @@ mod tests {
             newgrf_runtime: None,
             newgrf_type_tables: None,
             associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         });
         world.insert_resource(sim);
         world.spawn((Button, RoadStopPickerButton::Spec(7), Interaction::Pressed));

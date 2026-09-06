@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use crate::GameState;
-use crate::badge::resolve_badge_labels_detailed;
+use crate::badge::{resolve_badge_labels_detailed, resolve_badge_local_ids};
 use crate::road_stop_spec::{
     RoadStopClassDef, RoadStopSpecDef, empty_road_stop_class_catalog, empty_road_stop_spec_catalog,
     next_free_road_stop_class_id, next_free_road_stop_spec_id,
@@ -116,11 +116,32 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
                     entry.filename, meta.label
                 ));
             }
-            let (associated_badges, unresolved) = resolve_badge_labels_detailed(
+            let (label_badges, unresolved) = resolve_badge_labels_detailed(
                 &meta.badge_labels,
                 &state.badge_catalog,
                 entry.grfid,
             );
+            let badge_labels = type_tables
+                .as_ref()
+                .map_or(&[][..], |tables| tables.badges.as_slice());
+            let (mut associated_badges, newgrf_badge_translation, unresolved_local) =
+                resolve_badge_local_ids(
+                    &meta.badge_local_ids,
+                    badge_labels,
+                    &state.badge_catalog,
+                    entry.grfid,
+                );
+            for badge in label_badges {
+                if !associated_badges.contains(&badge) {
+                    associated_badges.push(badge);
+                }
+            }
+            for local_id in unresolved_local {
+                state.runtime.newgrf_diagnostics.push(format!(
+                    "{}: roadstop '{}': badge local no resuelto ({local_id})",
+                    entry.filename, meta.label
+                ));
+            }
             for label in unresolved {
                 state.runtime.newgrf_diagnostics.push(format!(
                     "{}: roadstop '{}': badge desconocido '{label}'",
@@ -149,6 +170,7 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
                 newgrf_runtime,
                 newgrf_type_tables: type_tables.clone(),
                 associated_badges,
+                newgrf_badge_translation,
             });
         }
     }

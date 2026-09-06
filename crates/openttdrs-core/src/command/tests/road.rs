@@ -728,6 +728,7 @@ fn place_bus_stop_persists_current_road_stop_spec() {
         newgrf_runtime: None,
         newgrf_type_tables: None,
         associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(spec_id)).unwrap();
     assert_eq!(s.current_road_stop_spec, Some(spec_id));
@@ -798,6 +799,7 @@ fn place_bus_stop_availability_sees_absolute_calendar_date() {
         newgrf_runtime: Some(Box::new(runtime)),
         newgrf_type_tables: None,
         associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(0)).unwrap();
     apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 0))).unwrap();
@@ -866,6 +868,7 @@ fn reject_bus_spec_on_truck_stop() {
         newgrf_runtime: None,
         newgrf_type_tables: None,
         associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(0)).unwrap();
     let stop = TileCoord::new(1, 1);
@@ -909,6 +912,7 @@ fn reject_drive_through_only_as_bay() {
         newgrf_runtime: None,
         newgrf_type_tables: None,
         associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(0)).unwrap();
     let stop = TileCoord::new(1, 1);
@@ -953,6 +957,7 @@ fn reject_road_only_spec_with_tram() {
         newgrf_runtime: None,
         newgrf_type_tables: None,
         associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(0)).unwrap();
     let stop = TileCoord::new(1, 1);
@@ -995,6 +1000,7 @@ fn road_stop_spec_json_roundtrip_keeps_station_link() {
         newgrf_runtime: None,
         newgrf_type_tables: None,
         associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(7)).unwrap();
     let stop = TileCoord::new(1, 1);

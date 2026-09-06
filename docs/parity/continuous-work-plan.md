@@ -1920,6 +1920,16 @@ La ruta de una parada colocada conserva su máscara derivada de `StopKind`; la
 regresión del callback de compra comprueba explícitamente el cero sin crear
 una entidad temporal. El padre #329 sigue abierto.
 
+Actualización #329-ROADSTOP-BADGES-410 (2026-09-06, issue [#410](https://github.com/cavazquez/openttdrs/issues/410)):
+RoadStops ya parsea la propiedad Action0 nativa `0x16` (`ReadBadgeList`) y
+salta las listas bridgeable `0x13`/`0x14` antes de continuar con propiedades
+posteriores. `apply_newgrf_roadstops` traduce los índices mediante GlobalVar
+`0x18`, conserva `associated_badges` y la tabla local `0x7A`, y mantiene el
+fallback auxiliar `0xFD` por etiqueta. El renderer/map-aware y el callback de
+compra devuelven `1`/`0`/`UINT_MAX` para badge asociado, conocido no asociado o
+índice local desconocido. Las regresiones cubren parseo, aplicación, parada
+colocada y picker sin entidad; el padre #329 sigue abierto.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

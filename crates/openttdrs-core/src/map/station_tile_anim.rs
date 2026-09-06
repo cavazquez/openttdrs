@@ -36,6 +36,45 @@ use crate::world_gen::Climate;
 /// Frames del radar vanilla (`SPR_AIRPORT_RADAR_1` … `_12`).
 pub const AIRPORT_RADAR_FRAMES: u8 = 12;
 
+/// Sonido que `CB140`/`CB141`/`CB142` solicita al terminar un callback.
+///
+/// OpenTTD codifica el índice local en los bits 8..14 del resultado del
+/// callback. Se mantiene separado del resultado visual para que las capas que
+/// ejecutan la animación puedan encolarlo en el catálogo de sonidos del estado
+/// sin cambiar las APIs históricas que solo devolvían teselas dirty.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StationAnimationSound {
+    pub grfid: u32,
+    pub local_id: u8,
+}
+
+/// Encola los sonidos producidos por callbacks de animación de estación.
+///
+/// Un sonido ausente o sin sample es silencioso, igual que el camino de audio
+/// de OpenTTD cuando el efecto no está disponible en el catálogo cargado.
+pub fn play_station_animation_sounds(
+    state: &mut crate::GameState,
+    sounds: impl IntoIterator<Item = StationAnimationSound>,
+) {
+    for sound in sounds {
+        let _ = crate::play_newgrf_sound(state, sound.grfid, sound.local_id);
+    }
+}
+
+fn capture_station_animation_sound(
+    result: u16,
+    grfid: u32,
+    sound_events: Option<&mut Vec<StationAnimationSound>>,
+) {
+    let Some(sound_events) = sound_events else {
+        return;
+    };
+    let local_id = ((result >> 8) & 0x7F) as u8;
+    if local_id != 0 {
+        sound_events.push(StationAnimationSound { grfid, local_id });
+    }
+}
+
 /// Avanza `m7` en las teselas airport animadas; coste O(aeropuertos), no O(mapa).
 pub fn step_airport_tiles(map: &mut Map, tick: u64, stations: &[Station]) -> Vec<TileCoord> {
     // Un frame cada 3 ticks ≈ ritmo visual cercano a OpenTTD.
@@ -870,6 +909,7 @@ fn trigger_newgrf_station_animation_inner<S: BuildHasher>(
     coord: TileCoord,
     trigger: StationAnimationTrigger,
     cargo: Option<CargoType>,
+    sound_events: Option<&mut Vec<StationAnimationSound>>,
 ) -> bool {
     let Some((station_index, mut ctx)) = station_animation_context(
         map,
@@ -914,6 +954,7 @@ fn trigger_newgrf_station_animation_inner<S: BuildHasher>(
     if result == CALLBACK_FAILED {
         return false;
     }
+    capture_station_animation_sound(result, def.newgrf_grfid, sound_events);
     match (result & 0xFF) as u8 {
         0xFD => {}
         0xFE => {
@@ -1076,6 +1117,39 @@ fn trigger_newgrf_station_animation_with_industries<S: BuildHasher>(
     coord: TileCoord,
     trigger: StationAnimationTrigger,
 ) -> bool {
+    trigger_newgrf_station_animation_with_industries_and_sounds(
+        map,
+        tick,
+        stations,
+        companies,
+        towns,
+        industries,
+        climate,
+        catalog,
+        cargo_catalog,
+        active_tiles,
+        coord,
+        trigger,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn trigger_newgrf_station_animation_with_industries_and_sounds<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    towns: &[crate::town::Town],
+    industries: Option<&[Industry]>,
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    cargo_catalog: &[CargoSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    coord: TileCoord,
+    trigger: StationAnimationTrigger,
+    sound_events: Option<&mut Vec<StationAnimationSound>>,
+) -> bool {
     trigger_newgrf_station_animation_inner(
         map,
         tick,
@@ -1090,6 +1164,44 @@ fn trigger_newgrf_station_animation_with_industries<S: BuildHasher>(
         coord,
         trigger,
         None,
+        sound_events,
+    )
+}
+
+/// Variante de la animación de una tesela que captura el sonido codificado por
+/// el callback en `sound_events`.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_station_animation_with_towns_and_world_and_cargo_catalog_and_sounds<
+    S: BuildHasher,
+>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    towns: &[crate::town::Town],
+    industries: &[Industry],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    coord: TileCoord,
+    trigger: StationAnimationTrigger,
+    sound_events: &mut Vec<StationAnimationSound>,
+) -> bool {
+    trigger_newgrf_station_animation_with_industries_and_sounds(
+        map,
+        tick,
+        stations,
+        companies,
+        towns,
+        Some(industries),
+        climate,
+        catalog,
+        cargo_catalog,
+        active_tiles,
+        coord,
+        trigger,
+        Some(sound_events),
     )
 }
 
@@ -1278,8 +1390,44 @@ fn trigger_newgrf_station_animation_for_station_with_industries<S: BuildHasher>(
     trigger: StationAnimationTrigger,
     cargo: Option<CargoType>,
 ) -> Vec<TileCoord> {
+    trigger_newgrf_station_animation_for_station_with_industries_and_sounds(
+        map,
+        tick,
+        stations,
+        companies,
+        towns,
+        industries,
+        climate,
+        catalog,
+        cargo_catalog,
+        active_tiles,
+        station_anchor,
+        trigger,
+        cargo,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn trigger_newgrf_station_animation_for_station_with_industries_and_sounds<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    towns: &[crate::town::Town],
+    industries: Option<&[Industry]>,
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    cargo_catalog: &[CargoSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger: StationAnimationTrigger,
+    cargo: Option<CargoType>,
+    sound_events: Option<&mut Vec<StationAnimationSound>>,
+) -> Vec<TileCoord> {
     let tiles = station_animation_whole_tiles(map, stations, station_anchor);
     let mut dirty = Vec::new();
+    let mut sound_events = sound_events;
     for coord in tiles {
         if trigger_newgrf_station_animation_inner(
             map,
@@ -1295,11 +1443,50 @@ fn trigger_newgrf_station_animation_for_station_with_industries<S: BuildHasher>(
             coord,
             trigger,
             cargo,
+            sound_events.as_deref_mut(),
         ) {
             dirty.push(coord);
         }
     }
     dirty
+}
+
+/// Variante `TA_WHOLE` que captura los sonidos codificados por cada callback.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_station_animation_for_station_with_towns_and_world_and_cargo_catalog_and_sounds<
+    S: BuildHasher,
+>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    towns: &[crate::town::Town],
+    industries: &[Industry],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger: StationAnimationTrigger,
+    cargo: Option<CargoType>,
+    sound_events: &mut Vec<StationAnimationSound>,
+) -> Vec<TileCoord> {
+    trigger_newgrf_station_animation_for_station_with_industries_and_sounds(
+        map,
+        tick,
+        stations,
+        companies,
+        towns,
+        Some(industries),
+        climate,
+        catalog,
+        cargo_catalog,
+        active_tiles,
+        station_anchor,
+        trigger,
+        cargo,
+        Some(sound_events),
+    )
 }
 
 /// Ejecuta CB140 en la plataforma que contiene `trigger_tile` (`TA_PLATFORM`).
@@ -1456,6 +1643,41 @@ fn trigger_newgrf_station_animation_for_platform_with_industries<S: BuildHasher>
     trigger_tile: TileCoord,
     trigger: StationAnimationTrigger,
 ) -> Vec<TileCoord> {
+    trigger_newgrf_station_animation_for_platform_with_industries_and_sounds(
+        map,
+        tick,
+        stations,
+        companies,
+        towns,
+        industries,
+        climate,
+        catalog,
+        cargo_catalog,
+        active_tiles,
+        station_anchor,
+        trigger_tile,
+        trigger,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn trigger_newgrf_station_animation_for_platform_with_industries_and_sounds<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    towns: &[crate::town::Town],
+    industries: Option<&[Industry]>,
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    cargo_catalog: &[CargoSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger_tile: TileCoord,
+    trigger: StationAnimationTrigger,
+    sound_events: Option<&mut Vec<StationAnimationSound>>,
+) -> Vec<TileCoord> {
     let Some(station) = stations
         .iter()
         .find(|station| station.pos == station_anchor)
@@ -1475,6 +1697,7 @@ fn trigger_newgrf_station_animation_for_platform_with_industries<S: BuildHasher>
     tiles.dedup();
 
     let mut dirty = Vec::new();
+    let mut sound_events = sound_events;
     for coord in tiles {
         if trigger_newgrf_station_animation_inner(
             map,
@@ -1490,11 +1713,50 @@ fn trigger_newgrf_station_animation_for_platform_with_industries<S: BuildHasher>
             coord,
             trigger,
             None,
+            sound_events.as_deref_mut(),
         ) {
             dirty.push(coord);
         }
     }
     dirty
+}
+
+/// Variante `TA_PLATFORM` que captura los sonidos codificados por cada callback.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_station_animation_for_platform_with_towns_and_world_and_cargo_catalog_and_sounds<
+    S: BuildHasher,
+>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    towns: &[crate::town::Town],
+    industries: &[Industry],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger_tile: TileCoord,
+    trigger: StationAnimationTrigger,
+    sound_events: &mut Vec<StationAnimationSound>,
+) -> Vec<TileCoord> {
+    trigger_newgrf_station_animation_for_platform_with_industries_and_sounds(
+        map,
+        tick,
+        stations,
+        companies,
+        towns,
+        Some(industries),
+        climate,
+        catalog,
+        cargo_catalog,
+        active_tiles,
+        station_anchor,
+        trigger_tile,
+        trigger,
+        Some(sound_events),
+    )
 }
 
 #[allow(clippy::too_many_arguments)] // Misma entidad mutada que el trigger público.
@@ -1510,6 +1772,7 @@ fn advance_newgrf_station_tile<S: BuildHasher>(
     cargo_catalog: &[CargoSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
     coord: TileCoord,
+    sound_events: Option<&mut Vec<StationAnimationSound>>,
 ) -> bool {
     let Some((station_index, mut ctx)) = station_animation_context(
         map,
@@ -1536,6 +1799,7 @@ fn advance_newgrf_station_tile<S: BuildHasher>(
     };
     let before_frame = tile.m7;
     let was_active = active_tiles.contains(&coord);
+    let mut sound_events = sound_events;
     let mut speed = def.animation_speed.min(16);
     if def.has_animation_speed_callback() {
         let result = resolve_station_animation_callback(
@@ -1547,6 +1811,7 @@ fn advance_newgrf_station_tile<S: BuildHasher>(
             0,
         );
         if result != CALLBACK_FAILED {
+            capture_station_animation_sound(result, def.newgrf_grfid, sound_events.as_deref_mut());
             speed = u8::try_from(result & 0xFF).unwrap_or(16).min(16);
         }
     }
@@ -1570,6 +1835,7 @@ fn advance_newgrf_station_tile<S: BuildHasher>(
             0,
         );
         if result != CALLBACK_FAILED {
+            capture_station_animation_sound(result, def.newgrf_grfid, sound_events);
             match (result & 0xFF) as u8 {
                 0xFF => {
                     active_tiles.remove(&coord);
@@ -1732,9 +1998,41 @@ fn step_newgrf_station_tiles_with_industries<S: BuildHasher>(
     active_tiles: &mut HashSet<TileCoord, S>,
     tile_loop_visits: &[(TileCoord, crate::map::Tile)],
 ) -> Vec<TileCoord> {
+    step_newgrf_station_tiles_with_industries_and_sounds(
+        map,
+        tick,
+        stations,
+        companies,
+        towns,
+        industries,
+        climate,
+        catalog,
+        cargo_catalog,
+        active_tiles,
+        tile_loop_visits,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn step_newgrf_station_tiles_with_industries_and_sounds<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    towns: &[crate::town::Town],
+    industries: Option<&[Industry]>,
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    cargo_catalog: &[CargoSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    tile_loop_visits: &[(TileCoord, crate::map::Tile)],
+    sound_events: Option<&mut Vec<StationAnimationSound>>,
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
+    let mut sound_events = sound_events;
     for (coord, _) in tile_loop_visits {
-        if trigger_newgrf_station_animation_with_industries(
+        if trigger_newgrf_station_animation_with_industries_and_sounds(
             map,
             tick,
             stations,
@@ -1747,6 +2045,7 @@ fn step_newgrf_station_tiles_with_industries<S: BuildHasher>(
             active_tiles,
             *coord,
             StationAnimationTrigger::TileLoop,
+            sound_events.as_deref_mut(),
         ) {
             dirty.push(*coord);
         }
@@ -1767,6 +2066,7 @@ fn step_newgrf_station_tiles_with_industries<S: BuildHasher>(
             cargo_catalog,
             active_tiles,
             coord,
+            sound_events.as_deref_mut(),
         ) {
             dirty.push(coord);
         }
@@ -1774,6 +2074,40 @@ fn step_newgrf_station_tiles_with_industries<S: BuildHasher>(
     dirty.sort_by_key(|coord| (coord.x, coord.y));
     dirty.dedup();
     dirty
+}
+
+/// Variante del scheduler que captura los sonidos de CB140/CB141/CB142.
+#[allow(clippy::too_many_arguments)]
+pub fn step_newgrf_station_tiles_with_towns_and_world_and_cargo_catalog_and_sounds<
+    S: BuildHasher,
+>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    towns: &[crate::town::Town],
+    industries: &[Industry],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    tile_loop_visits: &[(TileCoord, crate::map::Tile)],
+    sound_events: &mut Vec<StationAnimationSound>,
+) -> Vec<TileCoord> {
+    step_newgrf_station_tiles_with_industries_and_sounds(
+        map,
+        tick,
+        stations,
+        companies,
+        towns,
+        Some(industries),
+        climate,
+        catalog,
+        cargo_catalog,
+        active_tiles,
+        tile_loop_visits,
+        Some(sound_events),
+    )
 }
 
 /// Frame de radar 0..11 desde `m7`.
@@ -1799,7 +2133,7 @@ mod tests {
         ROADSTOP_CALLBACK_MASK_ANIMATION_SPEED, ROADSTOP_DRAW_MODE_DEFAULT, RoadStopSpecDef,
     };
 
-    fn callback_literal(value: u8) -> Action2VarEntry {
+    fn callback_literal(value: u16) -> Action2VarEntry {
         Action2VarEntry {
             first: Action2VarTerm {
                 variable: 0x1A,
@@ -1954,6 +2288,16 @@ mod tests {
         gfx.action2_var.insert(4, callback_literal(0xFE));
         gfx.action2_var.insert(5, callback_literal(3));
         gfx.action2_var.insert(6, callback_literal(2));
+        gfx
+    }
+
+    fn station_animation_sound_callbacks() -> TrainSpriteGraphics {
+        let mut gfx = station_animation_callbacks();
+        // CB140 devuelve frame=5 y sound local=0x12 en bits 8..14.
+        gfx.action2_var.insert(4, callback_literal(0x1205));
+        // CB141 fija frame=3 + sound 0x13; CB142 espera 2 ticks + sound 0x14.
+        gfx.action2_var.insert(5, callback_literal(0x1303));
+        gfx.action2_var.insert(6, callback_literal(0x1402));
         gfx
     }
 
@@ -2323,6 +2667,96 @@ mod tests {
         let loaded = crate::GameState::load_json(&json).unwrap();
         assert_eq!(loaded.map.get(coord).unwrap().m7, 3);
         assert!(loaded.newgrf_animated_station_tiles.contains(&coord));
+    }
+
+    #[test]
+    fn station_animation_callback_sound_is_captured_and_played() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut tile = map.get(coord).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 0;
+        map.set_tile(coord, tile).unwrap();
+
+        let mut stations = vec![Station::new_with_kind(coord, StopKind::RailStation)];
+        let mut catalog = crate::vanilla_station_spec_catalog();
+        let def = &mut catalog[0];
+        def.from_newgrf = true;
+        def.newgrf_grfid = 0x534E_4401;
+        def.callback_mask = crate::STATION_CALLBACK_ANIMATION_NEXT_FRAME_MASK
+            | crate::STATION_CALLBACK_ANIMATION_SPEED_MASK;
+        def.animation_triggers = crate::STATION_ANIMATION_TRIGGER_BUILT;
+        def.newgrf_runtime = Some(Box::new(station_animation_sound_callbacks()));
+        let companies = vec![crate::Company::player(crate::CompanyEconomy::default(), 0)];
+        let mut active = HashSet::new();
+        let mut sounds = Vec::new();
+
+        assert!(
+            trigger_newgrf_station_animation_with_towns_and_world_and_cargo_catalog_and_sounds(
+                &mut map,
+                1,
+                &mut stations,
+                &companies,
+                &[],
+                &[],
+                &[],
+                Climate::Temperate,
+                &catalog,
+                &mut active,
+                coord,
+                StationAnimationTrigger::Built,
+                &mut sounds,
+            )
+        );
+        assert_eq!(map.get(coord).unwrap().m7, 5);
+        assert_eq!(
+            sounds,
+            vec![StationAnimationSound {
+                grfid: 0x534E_4401,
+                local_id: 0x12,
+            }]
+        );
+
+        let visit_sounds = &mut sounds;
+        let dirty = step_newgrf_station_tiles_with_towns_and_world_and_cargo_catalog_and_sounds(
+            &mut map,
+            4,
+            &mut stations,
+            &companies,
+            &[],
+            &[],
+            &[],
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            &[],
+            visit_sounds,
+        );
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(visit_sounds.len(), 3);
+        assert_eq!(visit_sounds[1].local_id, 0x14);
+        assert_eq!(visit_sounds[2].local_id, 0x13);
+
+        let mut state = crate::GameState::from_map(map);
+        state.sound_effect_catalog = [0x12, 0x13, 0x14]
+            .into_iter()
+            .map(|local_id| crate::SoundEffectDef {
+                local_id,
+                grfid: 0x534E_4401,
+                volume: 96,
+                priority: 7,
+                override_old: None,
+                has_sample: true,
+                sample_pcm: vec![128],
+                from_newgrf: true,
+            })
+            .collect();
+        play_station_animation_sounds(&mut state, sounds);
+        assert_eq!(state.runtime.pending_newgrf_sounds.len(), 3);
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].local_id, 0x12);
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].priority, 7);
     }
 
     #[test]

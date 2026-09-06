@@ -563,8 +563,9 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         }),
     );
     state.runtime.industry_tile_dirty.extend(road_stop_dirty);
+    let mut station_sounds = Vec::new();
     let station_dirty =
-        crate::map::step_newgrf_station_tiles_with_towns_and_world_and_cargo_catalog(
+        crate::map::step_newgrf_station_tiles_with_towns_and_world_and_cargo_catalog_and_sounds(
             &mut state.map,
             t,
             &mut state.stations,
@@ -576,8 +577,10 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             &state.station_spec_catalog,
             &mut state.newgrf_animated_station_tiles,
             &visits,
+            &mut station_sounds,
         );
     state.runtime.industry_tile_dirty.extend(station_dirty);
+    crate::map::play_station_animation_sounds(state, station_sounds);
     let object_dirty = crate::map::step_newgrf_object_tiles(
         &mut state.map,
         t,
@@ -726,8 +729,9 @@ pub(super) fn trigger_station_platform_animation(
     else {
         return;
     };
+    let mut station_sounds = Vec::new();
     let dirty =
-        crate::map::trigger_newgrf_station_animation_for_platform_with_towns_and_world_and_cargo_catalog(
+        crate::map::trigger_newgrf_station_animation_for_platform_with_towns_and_world_and_cargo_catalog_and_sounds(
             &mut state.map,
             state.tick.get(),
             &mut state.stations,
@@ -741,8 +745,10 @@ pub(super) fn trigger_station_platform_animation(
             station_anchor,
             trigger_tile,
             trigger,
+            &mut station_sounds,
         );
     state.runtime.industry_tile_dirty.extend(dirty);
+    crate::map::play_station_animation_sounds(state, station_sounds);
 }
 
 /// Ejecuta los triggers `AirportTile` que cubren una estación.

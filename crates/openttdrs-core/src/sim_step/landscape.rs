@@ -101,8 +101,9 @@ fn trigger_station_acceptance_animations(state: &mut GameState, t: u64) {
                 station.goods.get_mut(cargo).clear_newgrf_bigtick();
             }
         }
+        let mut station_sounds = Vec::new();
         let dirty =
-            crate::map::trigger_newgrf_station_animation_for_station_with_towns_and_world_and_cargo_catalog(
+            crate::map::trigger_newgrf_station_animation_for_station_with_towns_and_world_and_cargo_catalog_and_sounds(
                 &mut state.map,
                 t,
                 &mut state.stations,
@@ -116,8 +117,10 @@ fn trigger_station_acceptance_animations(state: &mut GameState, t: u64) {
                 station_anchor,
                 crate::StationAnimationTrigger::AcceptanceTick,
                 None,
+                &mut station_sounds,
             );
         state.runtime.industry_tile_dirty.extend(dirty);
+        crate::map::play_station_animation_sounds(state, station_sounds);
         super::trigger_airport_animation_at(
             state,
             station_anchor,

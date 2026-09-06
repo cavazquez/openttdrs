@@ -2192,6 +2192,16 @@ los payloads incompletos se conservan literalmente y fecha, género/case,
 pluralización basada en idioma y parámetros de otros features siguen siendo
 sucesores pendientes.
 
+Actualización #329-STATION-ANIMATION-SOUNDS-443 (2026-09-06, issue [#443](https://github.com/cavazquez/openttdrs/issues/443)):
+los resultados de CB140, CB141 y CB142 ya separan el byte visual de los bits
+8..14 del sonido. Las rutas de construcción, carga, aceptación, reservas y
+vehículos capturan `(GRFID, local_id)`; el scheduler de `TileLoop` conserva
+además los sonidos de velocidad y siguiente frame. Los call sites con
+`GameState` resuelven el par contra `sound_effect_catalog` y encolan
+`PendingNewgrfSound`, manteniendo silencioso un sample ausente y sin cambiar
+las APIs legacy de teselas dirty. Quedan fuera los scopes completos de
+`BaseStation`/aeropuerto y el callback genérico de sonidos ambientales.
+
 Actualización #329-VEHICLE-CB31-FEEDBACK-434 (2026-09-06, issue [#434](https://github.com/cavazquez/openttdrs/issues/434)):
 el rechazo de CB31 conserva un diagnóstico efímero por vehículo/GRFID y los
 botones de start/stop resuelven `LocalString`/`GrfString` con el catálogo

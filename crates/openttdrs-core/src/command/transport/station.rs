@@ -410,6 +410,7 @@ fn check_rail_station_slope_callbacks_impl(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 pub(in crate::command) fn place_rail_station_area(
     state: &mut GameState,
     origin: TileCoord,
@@ -494,7 +495,8 @@ pub(in crate::command) fn place_rail_station_area(
             } else {
                 TileCoord::new(origin.x + i32::from(l), origin.y + i32::from(n))
             };
-            if crate::map::trigger_newgrf_station_animation_with_towns_and_world_and_cargo_catalog(
+            let mut station_sounds = Vec::new();
+            if crate::map::trigger_newgrf_station_animation_with_towns_and_world_and_cargo_catalog_and_sounds(
                 &mut state.map,
                 tick,
                 &mut state.stations,
@@ -507,9 +509,11 @@ pub(in crate::command) fn place_rail_station_area(
                 &mut state.newgrf_animated_station_tiles,
                 c,
                 crate::station_class::StationAnimationTrigger::Built,
+                &mut station_sounds,
             ) {
                 state.runtime.industry_tile_dirty.push(c);
             }
+            crate::map::play_station_animation_sounds(state, station_sounds);
         }
     }
     if let Some((town_id, delta)) =
@@ -641,7 +645,8 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     if stop_kind == StopKind::RailStation {
         let tick = state.tick.get();
         let climate = state.climate;
-        if crate::map::trigger_newgrf_station_animation_with_towns_and_world_and_cargo_catalog(
+        let mut station_sounds = Vec::new();
+        if crate::map::trigger_newgrf_station_animation_with_towns_and_world_and_cargo_catalog_and_sounds(
             &mut state.map,
             tick,
             &mut state.stations,
@@ -654,9 +659,11 @@ pub(in crate::command::transport) fn station_placement_on_tile(
             &mut state.newgrf_animated_station_tiles,
             c,
             crate::station_class::StationAnimationTrigger::Built,
+            &mut station_sounds,
         ) {
             state.runtime.industry_tile_dirty.push(c);
         }
+        crate::map::play_station_animation_sounds(state, station_sounds);
     }
     state.economy.money -= build_cost;
     if let Some((town_id, delta)) =
@@ -742,7 +749,8 @@ pub(in crate::command) fn place_rail_waypoint(
     state.stations.push(st);
     let tick = state.tick.get();
     let climate = state.climate;
-    if crate::map::trigger_newgrf_station_animation_with_towns_and_world_and_cargo_catalog(
+    let mut station_sounds = Vec::new();
+    if crate::map::trigger_newgrf_station_animation_with_towns_and_world_and_cargo_catalog_and_sounds(
         &mut state.map,
         tick,
         &mut state.stations,
@@ -755,9 +763,11 @@ pub(in crate::command) fn place_rail_waypoint(
         &mut state.newgrf_animated_station_tiles,
         c,
         crate::station_class::StationAnimationTrigger::Built,
+        &mut station_sounds,
     ) {
         state.runtime.industry_tile_dirty.push(c);
     }
+    crate::map::play_station_animation_sounds(state, station_sounds);
     state.economy.money -= waypoint_build_cost(&state.global_economy);
     Ok(())
 }

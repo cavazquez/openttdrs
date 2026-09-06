@@ -71,8 +71,9 @@ fn trigger_station_cargo_animation(
     trigger: crate::StationAnimationTrigger,
     cargo: CargoType,
 ) {
+    let mut station_sounds = Vec::new();
     let dirty =
-        crate::map::trigger_newgrf_station_animation_for_station_with_towns_and_world_and_cargo_catalog(
+        crate::map::trigger_newgrf_station_animation_for_station_with_towns_and_world_and_cargo_catalog_and_sounds(
             &mut state.map,
             state.tick.get(),
             &mut state.stations,
@@ -86,8 +87,10 @@ fn trigger_station_cargo_animation(
             station_pos,
             trigger,
             Some(cargo),
+            &mut station_sounds,
         );
     state.runtime.industry_tile_dirty.extend(dirty);
+    crate::map::play_station_animation_sounds(state, station_sounds);
     let airport_trigger = match trigger {
         crate::StationAnimationTrigger::NewCargo => Some(crate::AirportAnimationTrigger::NewCargo),
         crate::StationAnimationTrigger::CargoTaken => {
@@ -108,8 +111,9 @@ fn trigger_station_vehicle_load_animation(
     station_pos: TileCoord,
     vehicle_pos: TileCoord,
 ) {
+    let mut station_sounds = Vec::new();
     let dirty =
-        crate::map::trigger_newgrf_station_animation_for_platform_with_towns_and_world_and_cargo_catalog(
+        crate::map::trigger_newgrf_station_animation_for_platform_with_towns_and_world_and_cargo_catalog_and_sounds(
             &mut state.map,
             state.tick.get(),
             &mut state.stations,
@@ -123,8 +127,10 @@ fn trigger_station_vehicle_load_animation(
             station_pos,
             vehicle_pos,
             crate::StationAnimationTrigger::VehicleLoads,
+            &mut station_sounds,
         );
     state.runtime.industry_tile_dirty.extend(dirty);
+    crate::map::play_station_animation_sounds(state, station_sounds);
     super::trigger_road_stop_animation_at(
         state,
         vehicle_pos,

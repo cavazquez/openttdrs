@@ -98,7 +98,7 @@ pub use object::{
     object_footprint_at, object_footprint_tiles, object_id_from_tile, object_origin_from_tile,
     object_origin_from_tile_with_objects, object_spec_id_from_tile, object_tile_offset_byte,
     object_type_dims, object_type_dims_id, object_type_from_tile, object_view_index_for_tile,
-    object_view_index_for_type,
+    object_view_index_for_type, step_newgrf_object_tiles,
 };
 pub use rail_bits::{
     OTTD_MP_RAILWAY, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT,

@@ -1220,6 +1220,10 @@ pub const CBID_CARGO_PROFIT_CALC: u16 = 0x39;
 pub const CBID_CARGO_STATION_RATING_CALC: u16 = 0x145;
 /// Callback objetos: comprobar pendiente de cada tesela (`CBID_OBJECT_LAND_SLOPE_CHECK`).
 pub const CBID_OBJECT_LAND_SLOPE_CHECK: u16 = 0x157;
+/// Callback objetos: elegir el siguiente frame (`CBID_OBJECT_ANIMATION_NEXT_FRAME`).
+pub const CBID_OBJECT_ANIMATION_NEXT_FRAME: u16 = 0x158;
+/// Callback objetos: elegir la velocidad (`CBID_OBJECT_ANIMATION_SPEED`).
+pub const CBID_OBJECT_ANIMATION_SPEED: u16 = 0x15A;
 /// Callback teselas industria: trigger de animación (`CBID_INDTILE_ANIMATION_TRIGGER`).
 pub const CBID_INDTILE_ANIMATION_TRIGGER: u16 = 0x25;
 /// Callback teselas industria: siguiente frame (`CBID_INDTILE_ANIMATION_NEXT_FRAME`).

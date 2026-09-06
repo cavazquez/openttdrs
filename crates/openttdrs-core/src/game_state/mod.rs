@@ -435,6 +435,12 @@ pub struct GameState {
     /// Equivalente persistido de `AnimatedTileList` para teselas de aeropuerto `NewGRF`.
     #[serde(default)]
     pub newgrf_animated_airport_tiles: std::collections::HashSet<TileCoord>,
+    /// Equivalente persistido de `AnimatedTileList` para objetos `NewGRF`.
+    #[serde(default)]
+    pub newgrf_animated_object_tiles: std::collections::HashSet<TileCoord>,
+    /// Indica que la siembra inicial de objetos importados ya ocurrió.
+    #[serde(default)]
+    pub newgrf_object_animation_initialized: bool,
     /// Overrides vanilla gfx → `NewGRF` (`GetTranslatedIndustryTileID`).
     #[serde(default = "crate::industry_tile::empty_industry_tile_overrides")]
     pub industry_tile_overrides: Vec<u16>,
@@ -886,6 +892,8 @@ impl GameState {
             newgrf_animated_industry_tiles: std::collections::HashSet::new(),
             newgrf_animated_station_tiles: std::collections::HashSet::new(),
             newgrf_animated_airport_tiles: std::collections::HashSet::new(),
+            newgrf_animated_object_tiles: std::collections::HashSet::new(),
+            newgrf_object_animation_initialized: false,
             industry_tile_overrides: crate::industry_tile::empty_industry_tile_overrides(),
             industry_spec_catalog: Vec::new(),
             industry_overrides: crate::industry_spec::empty_industry_overrides(),
@@ -1027,6 +1035,8 @@ impl GameState {
             newgrf_animated_industry_tiles: std::collections::HashSet::new(),
             newgrf_animated_station_tiles: std::collections::HashSet::new(),
             newgrf_animated_airport_tiles: std::collections::HashSet::new(),
+            newgrf_animated_object_tiles: std::collections::HashSet::new(),
+            newgrf_object_animation_initialized: false,
             industry_tile_overrides: crate::industry_tile::empty_industry_tile_overrides(),
             industry_spec_catalog: Vec::new(),
             industry_overrides: crate::industry_spec::empty_industry_overrides(),

@@ -245,6 +245,14 @@ pub(crate) fn build_object(
             object_type: u16::from(object_type),
         });
     }
+    if let Some(def) =
+        crate::object_spec::object_spec_def(&state.object_spec_catalog, u16::from(object_type))
+        && def.has_animation()
+    {
+        for tile in crate::map::object_footprint_tiles(c, w, h) {
+            state.newgrf_animated_object_tiles.insert(tile);
+        }
+    }
     state.sav_objects_dirty = true;
     state.economy.money -= cost;
     Ok(())

@@ -2075,3 +2075,16 @@ un GRF sintético, comprueba flags, frames/status, velocidad y máscara de
 triggers y valida el round-trip del spec. Esta etapa no declara ejecución:
 CB158/CB15A, triggers por tick y estado `m3hi` por tesela siguen siendo el
 próximo recorte de #329.
+
+Actualización #329-OBJECT-ANIMATION-RUNTIME-423 (2026-09-06, issue [#423](https://github.com/cavazquez/openttdrs/issues/423)):
+el scheduler de objetos ya se integra en `AnimateTile_Object` y conserva una
+lista de teselas activas más el estado de siembra inicial en `GameState`/JSON.
+Para cada tesela de una huella `OBJS`, CB15A selecciona la cadencia `2^speed`
+(acotada a `0..16`) y CB158 selecciona el frame; `CALLBACK_FAILED` mantiene el
+avance Action0, `0xFE` delega en ese avance y `0xFF` elimina la tesela de la
+lista sin reiniciarla automáticamente. El frame se escribe en `m3hi`, los
+callbacks reciben el scope real de objeto (`0x40`–`0x64`, pueblo parent y
+vecinos solicitados) y los registros `7C` del pueblo se reemiten por GRFID. La
+regresión cubre cadencia/frame, detención `0xFF` y round-trip JSON. CB159/triggers,
+callbacks colour/autoslope/fund text, writeback propio de la tesela y layouts
+16-bit siguen fuera de esta etapa.

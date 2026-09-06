@@ -2,12 +2,17 @@
 
 use super::{Map, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
 use crate::newgrf_sprites::Action2EvalCtx;
+use crate::newgrf_sprites::{
+    CALLBACK_FAILED, CBID_OBJECT_ANIMATION_NEXT_FRAME, CBID_OBJECT_ANIMATION_SPEED,
+};
 use crate::object_spec::{
     NEW_OBJECT_OFFSET, ObjectSpecDef, decode_object_tile_offset, encode_object_tile_offset,
     object_footprint_tile_index, object_spec_def,
 };
 use crate::sav::SavObject;
 use crate::world_gen::Climate;
+use std::collections::HashSet;
+use std::hash::BuildHasher;
 
 /// Nibble alto de `mapt` para teselas objeto.
 pub const OTTD_MP_OBJECT: u8 = 10;
@@ -536,6 +541,262 @@ pub fn action2_eval_ctx_for_object_tile_with_world(
     )
 }
 
+/// Ejecuta el scheduler `AnimateTile_Object` para objetos `NewGRF`.
+///
+/// El frame vive en `MAP3HI` (`m3hi`) y las teselas activas se conservan en
+/// `active_tiles`, el equivalente persistido de `AnimatedTileList`. La primera
+/// pasada siembra los objetos ya importados; los objetos construidos después
+/// deben registrar sus teselas desde la ruta de construcción. Esto evita que un
+/// callback `0xFF` vuelva a activar una animación detenida en el siguiente tick.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
+pub fn step_newgrf_object_tiles<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    objects: &[SavObject],
+    towns: &mut [crate::town::Town],
+    catalog: &[ObjectSpecDef],
+    climate: Climate,
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+    initialized: &mut bool,
+) -> Vec<TileCoord> {
+    let mut candidates = Vec::new();
+    for object in objects {
+        let Some(def) = object_spec_def(catalog, object.object_type) else {
+            continue;
+        };
+        if !def.from_newgrf || !def.has_animation() || def.newgrf_runtime.is_none() {
+            continue;
+        }
+        let width = u8::try_from(object.width)
+            .ok()
+            .filter(|width| *width != 0)
+            .unwrap_or_else(|| def.size_width().max(1));
+        let height = u8::try_from(object.height)
+            .ok()
+            .filter(|height| *height != 0)
+            .unwrap_or_else(|| def.size_height().max(1));
+        for coord in object_footprint_tiles(object.tile, width, height) {
+            let Some(tile) = map.get(coord) else {
+                continue;
+            };
+            if !is_map_object_tile(tile.mapt)
+                || object_origin_from_tile_with_objects(&tile, coord, objects) != Some(object.tile)
+            {
+                continue;
+            }
+            candidates.push((coord, object.object_type, object.tile));
+        }
+    }
+    candidates.sort_by_key(|(coord, object_type, origin)| {
+        (coord.x, coord.y, *object_type, origin.x, origin.y)
+    });
+    candidates.dedup_by(|left, right| left.0 == right.0);
+
+    if !*initialized {
+        for &(coord, object_type, _) in &candidates {
+            let Some(def) = object_spec_def(catalog, object_type) else {
+                continue;
+            };
+            let frame = map.get(coord).map_or(0, |tile| tile.m3hi);
+            if !def.animation_loops() && frame >= def.animation_frames && tick > 0 {
+                continue;
+            }
+            active_tiles.insert(coord);
+        }
+        *initialized = true;
+    }
+
+    let mut dirty = Vec::new();
+    for (coord, object_type, origin) in candidates {
+        if !active_tiles.contains(&coord) {
+            continue;
+        }
+        let Some(def) = object_spec_def(catalog, object_type) else {
+            active_tiles.remove(&coord);
+            continue;
+        };
+        let Some(mut tile) = map.get(coord) else {
+            active_tiles.remove(&coord);
+            continue;
+        };
+        let before = tile.m3hi;
+        let mut speed = def.animation_speed.min(16);
+        if def.has_animation_speed_callback() {
+            let result = resolve_object_animation_callback(
+                map,
+                &tile,
+                coord,
+                origin,
+                object_type,
+                objects,
+                towns,
+                catalog,
+                climate,
+                CBID_OBJECT_ANIMATION_SPEED,
+                0,
+                0,
+            );
+            if result != CALLBACK_FAILED {
+                speed = u8::try_from(result & 0xFF).unwrap_or(16).min(16);
+            }
+        }
+        if !tick.is_multiple_of(1_u64 << u32::from(speed)) {
+            continue;
+        }
+
+        let result = if def.has_animation_next_frame_callback() {
+            let random = if def.animation_next_frame_uses_random_bits() {
+                object_animation_random_bits(world_seed, tick, coord)
+            } else {
+                0
+            };
+            resolve_object_animation_callback(
+                map,
+                &tile,
+                coord,
+                origin,
+                object_type,
+                objects,
+                towns,
+                catalog,
+                climate,
+                CBID_OBJECT_ANIMATION_NEXT_FRAME,
+                random,
+                0,
+            )
+        } else {
+            CALLBACK_FAILED
+        };
+        match (result & 0xFF) as u8 {
+            0xFF if result != CALLBACK_FAILED => {
+                active_tiles.remove(&coord);
+            }
+            0xFE if result != CALLBACK_FAILED => {
+                if !advance_object_animation_frame(&mut tile, def) {
+                    active_tiles.remove(&coord);
+                }
+            }
+            frame if result != CALLBACK_FAILED => {
+                tile.m3hi = frame;
+            }
+            _ => {
+                if !advance_object_animation_frame(&mut tile, def) {
+                    active_tiles.remove(&coord);
+                }
+            }
+        }
+        if tile.m3hi != before && map.set_tile(coord, tile).is_ok() {
+            dirty.push(coord);
+        }
+    }
+    dirty
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_object_animation_callback(
+    map: &Map,
+    tile: &Tile,
+    coord: TileCoord,
+    origin: TileCoord,
+    object_type: u16,
+    objects: &[SavObject],
+    towns: &mut [crate::town::Town],
+    catalog: &[ObjectSpecDef],
+    climate: Climate,
+    callback: u16,
+    param1: u32,
+    param2: u32,
+) -> u16 {
+    let Some(def) = object_spec_def(catalog, object_type) else {
+        return CALLBACK_FAILED;
+    };
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return CALLBACK_FAILED;
+    };
+    let tileh = tile_slope_and_z(map, coord).map_or(0, |(slope, _)| slope);
+    let mut ctx = action2_eval_ctx_for_object_tile_with_world(
+        map,
+        *tile,
+        tileh,
+        climate,
+        coord,
+        &*towns,
+        objects,
+        catalog,
+        object_type,
+        Some(origin),
+        &requested_object_scope_vars(runtime),
+    );
+    ctx.random_bits = param1;
+    ctx.vars.insert(0x5F, param1 << 8);
+    let result = runtime.resolve_callback_ctx(def.local_id, callback, param1, param2, &mut ctx);
+
+    if !ctx.parent_persistent_registers.is_empty() {
+        let current = objects
+            .iter()
+            .find(|object| object.tile == origin && object.object_type == object_type);
+        let town_index = current
+            .and_then(|object| {
+                (object.town != 0)
+                    .then_some(object.town)
+                    .and_then(|id| towns.iter().position(|town| town.id == id))
+            })
+            .or_else(|| {
+                towns
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|(_, town)| crate::house_spec::distance_square(town.pos, coord))
+                    .map(|(index, _)| index)
+            });
+        if let Some(index) = town_index {
+            towns[index]
+                .newgrf_persistent_regs
+                .insert(def.grfid, ctx.parent_persistent_registers);
+        }
+    }
+    result
+}
+
+fn requested_object_scope_vars(
+    runtime: &crate::newgrf_sprites::TrainSpriteGraphics,
+) -> Vec<(u8, u8)> {
+    let mut params = HashSet::new();
+    for entry in runtime.action2_var.values() {
+        let terms = std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs));
+        for term in terms {
+            if (0x60..=0x64).contains(&term.variable)
+                && let Some(parameter) = term.param
+            {
+                params.insert((term.variable, parameter));
+            }
+        }
+    }
+    let mut params: Vec<_> = params.into_iter().collect();
+    params.sort_unstable();
+    params
+}
+
+fn object_animation_random_bits(world_seed: u64, tick: u64, coord: TileCoord) -> u32 {
+    let low = crate::map::industry_tile_rng(world_seed, tick, coord, 0x4F42_4A41);
+    let high = crate::map::industry_tile_rng(world_seed, tick, coord, 0x4F42_4A42);
+    u32::from(low) | (u32::from(high) << 8)
+}
+
+fn advance_object_animation_frame(tile: &mut Tile, def: &ObjectSpecDef) -> bool {
+    if tile.m3hi < def.animation_frames {
+        tile.m3hi = tile.m3hi.saturating_add(1);
+        true
+    } else if def.animation_loops() {
+        tile.m3hi = 0;
+        true
+    } else {
+        false
+    }
+}
+
 fn current_grfid(object_type: u16, object_catalog: &[ObjectSpecDef]) -> u32 {
     object_spec_def(object_catalog, object_type).map_or(0, |def| def.grfid)
 }
@@ -681,7 +942,223 @@ mod tests {
     use super::*;
     use crate::GameState;
     use crate::map::TileKind;
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
     use crate::sav;
+
+    fn object_animation_callback_runtime(next_frame: u8, speed: u8) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFFFF,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(3, 0x158, 0x158), (4, 0x15A, 0x15A)],
+                default: 0,
+            },
+        );
+        for (set_id, value) in [(3, next_frame), (4, speed)] {
+            gfx.action2_var.insert(
+                set_id,
+                Action2VarEntry {
+                    first: Action2VarTerm {
+                        variable: 0x1A,
+                        param: None,
+                        adjust: Action2VarAdjust {
+                            shift: 0,
+                            and_mask: u32::from(value),
+                            ..Action2VarAdjust::default()
+                        },
+                    },
+                    ops: Vec::new(),
+                    ranges: Vec::new(),
+                    default: 0,
+                },
+            );
+        }
+        gfx
+    }
+
+    fn animated_object_spec(runtime: TrainSpriteGraphics) -> ObjectSpecDef {
+        ObjectSpecDef {
+            id: 5,
+            class_label: "TEST".into(),
+            name: "Animated object".into(),
+            size: 0x11,
+            from_newgrf: true,
+            local_id: 0,
+            grfid: 0xABCD_0001,
+            newgrf_grf_version: 0,
+            climate_mask: 0x0F,
+            build_cost_factor: 1,
+            flags: crate::object_spec::OBJECT_FLAG_ANIMATION,
+            animation_frames: 2,
+            animation_status: 1,
+            animation_speed: 2,
+            animation_triggers: 0,
+            callback_mask: crate::object_spec::OBJECT_CALLBACK_ANIMATION_NEXT_FRAME_MASK
+                | crate::object_spec::OBJECT_CALLBACK_ANIMATION_SPEED_MASK,
+            views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+            associated_badges: Vec::new(),
+        }
+    }
+
+    fn animated_object_fixture() -> (Map, Vec<SavObject>, Vec<ObjectSpecDef>) {
+        let mut map = Map::new_flat(2, 1, 0);
+        let tile = Tile {
+            height: 0,
+            kind: TileKind::Grass,
+            mapt: MP_OBJECT_MAPT,
+            m5: 5,
+            m1: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0x12,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        };
+        map.set_tile(TileCoord::new(0, 0), tile)
+            .expect("object tile");
+        let object_id = object_id_from_tile(&tile).expect("object id");
+        let objects = vec![SavObject {
+            object_id,
+            tile: TileCoord::new(0, 0),
+            width: 1,
+            height: 1,
+            town: 0,
+            build_date: 0,
+            colour: 0,
+            view: 0,
+            object_type: 5,
+        }];
+        (
+            map,
+            objects,
+            vec![animated_object_spec(object_animation_callback_runtime(
+                1, 1,
+            ))],
+        )
+    }
+
+    #[test]
+    fn object_animation_scheduler_honours_callback_speed_and_next_frame() {
+        let (mut map, objects, catalog) = animated_object_fixture();
+        let mut towns = Vec::new();
+        let mut active = HashSet::new();
+        let mut initialized = false;
+
+        assert!(
+            step_newgrf_object_tiles(
+                &mut map,
+                1,
+                &objects,
+                &mut towns,
+                &catalog,
+                Climate::Temperate,
+                7,
+                &mut active,
+                &mut initialized,
+            )
+            .is_empty()
+        );
+        assert!(active.contains(&TileCoord::new(0, 0)));
+        assert_eq!(map.get(TileCoord::new(0, 0)).expect("tile").m3hi, 0);
+
+        let dirty = step_newgrf_object_tiles(
+            &mut map,
+            2,
+            &objects,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+            7,
+            &mut active,
+            &mut initialized,
+        );
+        assert_eq!(dirty, vec![TileCoord::new(0, 0)]);
+        assert_eq!(map.get(TileCoord::new(0, 0)).expect("tile").m3hi, 1);
+        assert!(active.contains(&TileCoord::new(0, 0)));
+    }
+
+    #[test]
+    fn object_animation_callback_ff_removes_tile_without_restarting() {
+        let (mut map, objects, mut catalog) = animated_object_fixture();
+        catalog[0].newgrf_runtime = Some(Box::new(object_animation_callback_runtime(0xFF, 1)));
+        let mut towns = Vec::new();
+        let mut active = HashSet::new();
+        let mut initialized = false;
+
+        let _ = step_newgrf_object_tiles(
+            &mut map,
+            1,
+            &objects,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+            7,
+            &mut active,
+            &mut initialized,
+        );
+        let _ = step_newgrf_object_tiles(
+            &mut map,
+            2,
+            &objects,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+            7,
+            &mut active,
+            &mut initialized,
+        );
+        assert!(!active.contains(&TileCoord::new(0, 0)));
+        let _ = step_newgrf_object_tiles(
+            &mut map,
+            4,
+            &objects,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+            7,
+            &mut active,
+            &mut initialized,
+        );
+        assert!(!active.contains(&TileCoord::new(0, 0)));
+        assert_eq!(map.get(TileCoord::new(0, 0)).expect("tile").m3hi, 0);
+    }
+
+    #[test]
+    fn object_animation_scheduler_state_roundtrips_as_json() {
+        let mut state = GameState::new(2, 1);
+        state
+            .newgrf_animated_object_tiles
+            .insert(TileCoord::new(1, 0));
+        state.newgrf_object_animation_initialized = true;
+
+        let encoded = serde_json::to_string(&state).expect("state json");
+        let decoded: GameState = serde_json::from_str(&encoded).expect("state json load");
+        assert!(
+            decoded
+                .newgrf_animated_object_tiles
+                .contains(&TileCoord::new(1, 0))
+        );
+        assert!(decoded.newgrf_object_animation_initialized);
+    }
 
     #[test]
     fn dual_fixture_resolves_transmitter_and_lighthouse_from_object_pool() {

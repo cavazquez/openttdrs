@@ -578,6 +578,18 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             &visits,
         );
     state.runtime.industry_tile_dirty.extend(station_dirty);
+    let object_dirty = crate::map::step_newgrf_object_tiles(
+        &mut state.map,
+        t,
+        &state.objects,
+        &mut state.towns,
+        &state.object_spec_catalog,
+        state.climate,
+        state.world_seed,
+        &mut state.newgrf_animated_object_tiles,
+        &mut state.newgrf_object_animation_initialized,
+    );
+    state.runtime.industry_tile_dirty.extend(object_dirty);
     state
         .runtime
         .industry_tile_dirty

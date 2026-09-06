@@ -95,6 +95,12 @@ pub fn apply_newgrf_cargoes(state: &mut GameState, search_dirs: &[&Path]) {
         }
     }
     state.cargo_spec_catalog = catalog;
+    // El selector PATS de CargoDist consulta las clases del catálogo activo.
+    // Rehacer los flows al cambiarlo evita que un SAV importado calcule un
+    // cargo NewGRF como mercancía default hasta el siguiente rollover mensual.
+    if state.cargo_dist.has_automatic_distribution() {
+        state.rebuild_station_flows();
+    }
 }
 
 /// Aplica Cargoes con directorios de búsqueda por defecto.

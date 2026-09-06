@@ -1,7 +1,9 @@
 //! `CallLandscapeTick` — orden `OpenTTD`: town → trees → station → industry → companies → linkgraph.
 
-use crate::flow_stat::{DistributionType, StationFlows};
-use crate::linkgraph_parity::{build_jobs_from_game, run_full_pipeline, to_station_flows_helper};
+use crate::flow_stat::StationFlows;
+use crate::linkgraph_parity::{
+    build_jobs_from_cargo_dist, run_full_pipeline, to_station_flows_helper,
+};
 use crate::{GameState, station};
 
 /// Tick de economía en el que se spawnean/unen jobs del linkgraph (`SPAWN_JOIN_TICK`).
@@ -150,12 +152,13 @@ fn on_tick_companies(state: &mut GameState, t: u64) {
 }
 
 /// `OnTick_LinkGraph` (P2.21) — jobs síncronos sobre copia del grafo cuando
-/// `economy_timer.date_fract == 21`, con cadencia `recalc_interval_days`.
+/// `economy_timer.date_fract == 21`, con cadencia nativa de PATS
+/// `linkgraph.recalc_interval` (segundos convertidos a días económicos).
 fn on_tick_link_graph(state: &mut GameState) {
     if state.economy_timer.date_fract != LINKGRAPH_SPAWN_JOIN_TICK {
         return;
     }
-    let interval = state.cargo_dist.recalc_interval_days.max(1);
+    let interval = state.cargo_dist.effective_recalc_interval_days();
     let offset = state.economy_timer.date % interval;
     // OpenTTD: offset==0 → SpawnNext; offset==interval/2 → JoinNext.
     // Aquí ambos ejecutan el MCF síncrono sobre una copia del grafo.
@@ -163,13 +166,21 @@ fn on_tick_link_graph(state: &mut GameState) {
         // Copia observacional: el pipeline no muta estaciones ni el grafo en vivo.
         let stations = state.stations.clone();
         let link_graph = state.link_graph.clone();
-        let distribution = state.cargo_dist.distribution;
+        let cargo_dist = state.cargo_dist;
+        let cargo_catalog = state.cargo_spec_catalog.clone();
         let (map_w, map_h) = state.map.dimensions();
-        if matches!(distribution, DistributionType::Manual) {
+        if !cargo_dist.has_automatic_distribution() {
             state.runtime.station_flows = StationFlows::default();
             return;
         }
-        let jobs = build_jobs_from_game(&stations, &link_graph, distribution, map_w, map_h);
+        let jobs = build_jobs_from_cargo_dist(
+            &stations,
+            &link_graph,
+            cargo_dist,
+            &cargo_catalog,
+            map_w,
+            map_h,
+        );
         let mut merged = StationFlows::default();
         for (cargo, mut job) in jobs {
             run_full_pipeline(&mut job);

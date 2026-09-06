@@ -1172,23 +1172,24 @@ impl GameState {
 
     /// Reconstruye `StationFlows` con el pipeline `OpenTTD` (Demand + MCF1/2).
     pub fn rebuild_station_flows(&mut self) {
-        use crate::flow_stat::{DistributionType, StationFlows};
+        use crate::flow_stat::StationFlows;
         use crate::linkgraph_parity::{
-            build_jobs_from_game, run_full_pipeline, to_station_flows_helper,
+            build_jobs_from_cargo_dist, run_full_pipeline, to_station_flows_helper,
         };
 
         self.runtime.station_flow_rebuilds = self.runtime.station_flow_rebuilds.saturating_add(1);
 
-        if matches!(self.cargo_dist.distribution, DistributionType::Manual) {
+        if !self.cargo_dist.has_automatic_distribution() {
             self.runtime.station_flows = StationFlows::default();
             return;
         }
 
         let (map_w, map_h) = self.map.dimensions();
-        let jobs = build_jobs_from_game(
+        let jobs = build_jobs_from_cargo_dist(
             &self.stations,
             &self.link_graph,
-            self.cargo_dist.distribution,
+            self.cargo_dist,
+            &self.cargo_spec_catalog,
             map_w,
             map_h,
         );
@@ -1217,9 +1218,10 @@ impl GameState {
     fn reroute_stale_cargo_hops(&mut self) {
         use crate::cargo::{ALL_CARGO_TYPES, CUSTOM_CARGO_COUNT};
         use crate::cargo_packet::StationHopKey;
-        use crate::flow_stat::DistributionType;
 
-        if matches!(self.cargo_dist.distribution, DistributionType::Manual) {
+        let cargo_dist = self.cargo_dist;
+        let cargo_catalog = self.cargo_spec_catalog.clone();
+        if !cargo_dist.has_automatic_distribution() {
             return;
         }
 
@@ -1238,6 +1240,9 @@ impl GameState {
                     .copied()
                     .chain((0..CUSTOM_CARGO_COUNT).map(crate::cargo::custom_cargo))
                 {
+                    if !cargo_dist.is_automatically_distributed(cargo, &cargo_catalog) {
+                        continue;
+                    }
                     // ¿Algún share sigue apuntando a `avoid`?
                     let still_valid = self
                         .runtime
@@ -1276,6 +1281,9 @@ impl GameState {
             let Some(cargo) = self.vehicles[v_idx].cargo_type else {
                 continue;
             };
+            if !cargo_dist.is_automatically_distributed(cargo, &cargo_catalog) {
+                continue;
+            }
             let hops: Vec<_> = self.vehicles[v_idx]
                 .cargo_packets
                 .packets

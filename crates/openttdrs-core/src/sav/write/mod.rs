@@ -735,6 +735,18 @@ mod tests {
         state.using_wallclock_units = true;
         state.global_economy.inflation_enabled = false;
         state.global_economy.recessions_enabled = true;
+        state.cargo_dist.per_cargo = Some(crate::flow_stat::CargoDistPerCargoSettings {
+            recalc_interval_seconds: 5,
+            recalc_time_seconds: 9_000,
+            distribution_pax: crate::flow_stat::DistributionType::Symmetric,
+            distribution_mail: crate::flow_stat::DistributionType::Asymmetric,
+            distribution_armoured: crate::flow_stat::DistributionType::Manual,
+            distribution_default: crate::flow_stat::DistributionType::Asymmetric,
+            accuracy: 64,
+            demand_size: 0,
+            demand_distance: 255,
+            short_path_saturation: 250,
+        });
         state.global_economy.inflation_prices = 123_456;
         state.global_economy.inflation_payment = 234_567;
         state.global_economy.fluct = -7;
@@ -756,6 +768,10 @@ mod tests {
         let chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
         let pats = crate::sav::chunks::find_chunk(&chunks, "PATS").expect("PATS");
         assert_table_field_type(&pats.body, 1, "order.selectgoods");
+        assert_table_field_type(&pats.body, 4, "linkgraph.recalc_interval");
+        assert_table_field_type(&pats.body, 4, "linkgraph.recalc_time");
+        assert_table_field_type(&pats.body, 2, "linkgraph.distribution_pax");
+        assert_table_field_type(&pats.body, 2, "linkgraph.short_path_saturation");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.climate, state.climate);
         assert_eq!(sav_game.snow_line_height, state.snow_line_height);
@@ -776,6 +792,7 @@ mod tests {
             state.serve_neutral_industries
         );
         assert_eq!(sav_game.vehicle_breakdowns, state.vehicle_breakdowns);
+        assert_eq!(sav_game.cargo_dist, state.cargo_dist);
         assert_eq!(sav_game.selectgoods, state.order.selectgoods);
         assert_eq!(
             sav_game.no_servicing_if_no_breakdowns,
@@ -802,6 +819,7 @@ mod tests {
 
         let loaded = GameState::from_sav_game(sav_game);
         assert!(!loaded.order.selectgoods);
+        assert_eq!(loaded.cargo_dist, state.cargo_dist);
         let unvisited = Station::new_with_kind(TileCoord::new(1, 1), StopKind::TruckStop);
         assert!(crate::station::can_move_goods_to_station(
             &unvisited,
@@ -839,6 +857,37 @@ mod tests {
         let changed =
             save_to_bytes_with(&imported, SavContainer::Ottn).expect("save changed setting");
         let reimported = sav::load(&changed).expect("import changed setting");
+        assert!(!reimported.selectgoods);
+    }
+
+    #[test]
+    fn imported_pats_linkgraph_profile_survives_an_unrelated_mutation() {
+        let profile = crate::flow_stat::CargoDistPerCargoSettings {
+            recalc_interval_seconds: 5,
+            recalc_time_seconds: 9_000,
+            distribution_pax: crate::flow_stat::DistributionType::Symmetric,
+            distribution_mail: crate::flow_stat::DistributionType::Asymmetric,
+            distribution_armoured: crate::flow_stat::DistributionType::Manual,
+            distribution_default: crate::flow_stat::DistributionType::Asymmetric,
+            accuracy: 64,
+            demand_size: 0,
+            demand_distance: 255,
+            short_path_saturation: 250,
+        };
+        let mut original_state = tiny_state();
+        original_state.cargo_dist.per_cargo = Some(profile);
+        let original =
+            save_to_bytes_with(&original_state, SavContainer::Ottn).expect("save original");
+        let mut imported = GameState::from_sav_game(sav::load(&original).expect("import original"));
+        assert_eq!(imported.cargo_dist.per_cargo, Some(profile));
+
+        // Obliga a fusionar PATS sobre el snapshot importado en lugar de
+        // reutilizar el cuerpo crudo completo.
+        imported.order.selectgoods = false;
+        let changed =
+            save_to_bytes_with(&imported, SavContainer::Ottn).expect("save changed setting");
+        let reimported = sav::load(&changed).expect("import changed setting");
+        assert_eq!(reimported.cargo_dist.per_cargo, Some(profile));
         assert!(!reimported.selectgoods);
     }
 
@@ -2700,6 +2749,18 @@ mod tests {
         // MoveGoodsToStation; el smoke dedicado acredita que OpenTTD lo
         // reconoce y lo conserva al re-guardar.
         state.order.selectgoods = false;
+        state.cargo_dist.per_cargo = Some(crate::flow_stat::CargoDistPerCargoSettings {
+            recalc_interval_seconds: 6,
+            recalc_time_seconds: 31,
+            distribution_pax: crate::flow_stat::DistributionType::Symmetric,
+            distribution_mail: crate::flow_stat::DistributionType::Asymmetric,
+            distribution_armoured: crate::flow_stat::DistributionType::Manual,
+            distribution_default: crate::flow_stat::DistributionType::Asymmetric,
+            accuracy: 31,
+            demand_size: 85,
+            demand_distance: 135,
+            short_path_saturation: 175,
+        });
         state.sync_active_from_mirrors();
         state.companies[0].president_name = Some("Ada Lovelace".into());
         state.companies[0].allow_list = vec![
@@ -2791,6 +2852,13 @@ mod tests {
         assert!(sav_game.stations.len() >= 2);
         assert_eq!(sav_game.industries.len(), 1);
         assert!(!sav_game.selectgoods);
+        assert_eq!(
+            sav_game
+                .cargo_dist
+                .per_cargo
+                .expect("perfil linkgraph PATS"),
+            state.cargo_dist.per_cargo.expect("perfil fuente")
+        );
         assert_eq!(
             sav_game.companies[0].president_name.as_deref(),
             Some("Ada Lovelace")

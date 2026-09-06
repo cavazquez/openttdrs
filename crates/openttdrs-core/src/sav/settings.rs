@@ -6,6 +6,7 @@
 //! forma distinta a `OpenTTD`.
 
 use crate::engine::{RoadVehicleAccelerationModel, TrainAccelerationModel};
+use crate::flow_stat::{CargoDistSettings, DistributionType};
 use crate::town::TownCouncilTolerance;
 use crate::{ConstructionSettings, PathfindingSettings, RoadVehicleDrivingSide, TrainSignalSide};
 
@@ -35,6 +36,15 @@ fn bool_from_u64(value: u64) -> Option<bool> {
         1 => Some(true),
         _ => None,
     }
+}
+
+fn linkgraph_distribution_from_u8(value: u8) -> Option<DistributionType> {
+    DistributionType::from_openttd(value)
+}
+
+fn linkgraph_default_distribution_from_u8(value: u8) -> Option<DistributionType> {
+    linkgraph_distribution_from_u8(value)
+        .filter(|distribution| !matches!(distribution, DistributionType::Symmetric))
 }
 
 fn town_council_tolerance_from_u8(value: u8) -> Option<TownCouncilTolerance> {
@@ -68,6 +78,7 @@ pub(crate) struct ParsedSettings {
     pub using_wallclock_units: bool,
     pub inflation_enabled: bool,
     pub recessions_enabled: bool,
+    pub cargo_dist: CargoDistSettings,
 }
 
 impl Default for ParsedSettings {
@@ -90,6 +101,7 @@ impl Default for ParsedSettings {
             using_wallclock_units: false,
             inflation_enabled: true,
             recessions_enabled: false,
+            cargo_dist: CargoDistSettings::default(),
         }
     }
 }
@@ -295,6 +307,95 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                 parsed.recessions_enabled = value;
                 found = true;
             }
+
+            // LinkGraphSettings aparece en PATS desde SLV_183. Mantener el
+            // perfil entero evita convertir cuatro modos de carga en un único
+            // enum global al hidratar la simulación.
+            let mut linkgraph = parsed.cargo_dist.per_cargo.unwrap_or_default();
+            let mut found_linkgraph = false;
+            if let Some(value) = record_get(&record, "linkgraph.recalc_interval")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .filter(|value| (4..=90).contains(value))
+            {
+                linkgraph.recalc_interval_seconds = value;
+                found_linkgraph = true;
+            }
+            if let Some(value) = record_get(&record, "linkgraph.recalc_time")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .filter(|value| (1..=9_000).contains(value))
+            {
+                linkgraph.recalc_time_seconds = value;
+                found_linkgraph = true;
+            }
+            if let Some(value) = record_get(&record, "linkgraph.distribution_pax")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .and_then(linkgraph_distribution_from_u8)
+            {
+                linkgraph.distribution_pax = value;
+                found_linkgraph = true;
+            }
+            if let Some(value) = record_get(&record, "linkgraph.distribution_mail")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .and_then(linkgraph_distribution_from_u8)
+            {
+                linkgraph.distribution_mail = value;
+                found_linkgraph = true;
+            }
+            if let Some(value) = record_get(&record, "linkgraph.distribution_armoured")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .and_then(linkgraph_distribution_from_u8)
+            {
+                linkgraph.distribution_armoured = value;
+                found_linkgraph = true;
+            }
+            if let Some(value) = record_get(&record, "linkgraph.distribution_default")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .and_then(linkgraph_default_distribution_from_u8)
+            {
+                linkgraph.distribution_default = value;
+                found_linkgraph = true;
+            }
+            if let Some(value) = record_get(&record, "linkgraph.accuracy")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .filter(|value| (2..=64).contains(value))
+            {
+                linkgraph.accuracy = value;
+                found_linkgraph = true;
+            }
+            if let Some(value) = record_get(&record, "linkgraph.demand_distance")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+            {
+                linkgraph.demand_distance = value;
+                found_linkgraph = true;
+            }
+            if let Some(value) = record_get(&record, "linkgraph.demand_size")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .filter(|value| *value <= 100)
+            {
+                linkgraph.demand_size = value;
+                found_linkgraph = true;
+            }
+            if let Some(value) = record_get(&record, "linkgraph.short_path_saturation")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .filter(|value| *value <= 250)
+            {
+                linkgraph.short_path_saturation = value;
+                found_linkgraph = true;
+            }
+            if found_linkgraph {
+                parsed.cargo_dist.per_cargo = Some(linkgraph);
+                found = true;
+            }
         }
         if found {
             break;
@@ -480,5 +581,51 @@ mod tests {
         };
 
         assert!(!settings_from_chunks(&[chunk]).selectgoods);
+    }
+
+    #[test]
+    fn reads_linkgraph_profile_with_native_seconds_and_four_classes() {
+        let body = build_table_body(
+            &[
+                (4, "linkgraph.recalc_interval"),
+                (4, "linkgraph.recalc_time"),
+                (2, "linkgraph.distribution_pax"),
+                (2, "linkgraph.distribution_mail"),
+                (2, "linkgraph.distribution_armoured"),
+                (2, "linkgraph.distribution_default"),
+                (2, "linkgraph.accuracy"),
+                (2, "linkgraph.demand_distance"),
+                (2, "linkgraph.demand_size"),
+                (2, "linkgraph.short_path_saturation"),
+            ],
+            &[{
+                let mut record = Vec::new();
+                record.extend_from_slice(&5_u16.to_be_bytes());
+                record.extend_from_slice(&9_000_u16.to_be_bytes());
+                record.extend_from_slice(&[2, 1, 0, 1, 64, 255, 0, 250]);
+                record
+            }],
+        );
+        let parsed = settings_from_chunks(&[RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body,
+        }]);
+        assert!(
+            parsed.cargo_dist.per_cargo.is_some(),
+            "PATS linkgraph profile"
+        );
+        let profile = parsed.cargo_dist.per_cargo.unwrap_or_default();
+        assert_eq!(profile.recalc_interval_seconds, 5);
+        assert_eq!(profile.recalc_time_seconds, 9_000);
+        assert_eq!(profile.distribution_pax, DistributionType::Symmetric);
+        assert_eq!(profile.distribution_mail, DistributionType::Asymmetric);
+        assert_eq!(profile.distribution_armoured, DistributionType::Manual);
+        assert_eq!(profile.distribution_default, DistributionType::Asymmetric);
+        assert_eq!(profile.accuracy, 64);
+        assert_eq!(profile.demand_distance, 255);
+        assert_eq!(profile.demand_size, 0);
+        assert_eq!(profile.short_path_saturation, 250);
+        assert_eq!(parsed.cargo_dist.effective_recalc_interval_days(), 2);
     }
 }

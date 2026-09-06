@@ -839,7 +839,7 @@ de GameScript, exclusividad/neutral stations y cargos custom.
 | 6 | Movimiento y economía diferencial (#330) | Abierto | Oráculos externos para carretera (tráfico/colisiones/dirección), rail (PBS/YAPF/presignals/consist) y aire/mar, incluyendo casos límite. El perfilador de `Kale_TitleGame.sav` ya no aborta cuando un callback devuelve un pago negativo: los contadores `u64` de estación/empresa/estadística saturan ese ajuste a cero y el crédito firmado conserva la penalización; quedan pendientes los oráculos diferenciales y sus casos límite. |
 | 7 | Idiomas y settings (#331) | Abierto | Catálogo de idiomas, locale, settings y textos guardados se cargan y se comparan con OpenTTD sin colisiones ECS ni regresiones de UI. |
 
-Actualización #371–#382 (2026-09-05): la fila de interoperabilidad SAV de este
+Actualización #371–#383 (2026-09-05): la fila de interoperabilidad SAV de este
 orden permite reencuadrar strings, listas escalares y struct-lists de raíz con
 descriptor recursivamente idéntico sin perder columnas importadas. Las pruebas
 nativas son `CITY.psa_list` + `PSAC` y `CITY.supplied`; esta última usa SLV 358
@@ -867,6 +867,12 @@ autorización de red runtime. Ver [#381](sav-company-allow-list-381.md).
 PATS.order.selectgoods conserva además el bool que el core usa para decidir si
 una estación sin visita previa puede recibir carga; la mutación del setting
 también invalida el passthrough de PATS. Ver [#382](sav-order-selectgoods-382.md).
+PATS.linkgraph conserva también el intervalo y presupuesto en segundos, los
+cuatro modos por clase y los knobs del pipeline ya portado; el selector respeta
+las clases NewGRF y el scheduler usa la división nativa de dos segundos por
+día. El presupuesto de job sigue sin ejecutar threads/pausa porque el pipeline
+es síncrono. Ver [#383](sav-linkgraph-settings-383.md). #328 permanece abierto
+por los demás pools, schemas y runtime SAV.
 
 Actualización #329-INDUSTRY-CB28-021 (2026-09-02): CB28 mantiene la semántica
 exacta de OpenTTD (sin invertir el bit 10), y el call site de construcción

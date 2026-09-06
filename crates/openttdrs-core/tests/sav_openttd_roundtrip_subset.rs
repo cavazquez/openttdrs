@@ -7,7 +7,9 @@
 
 use openttdrs_core::{
     COMPANY_LIVERY_FLAG_PRIMARY, COMPANY_LIVERY_FLAG_SECONDARY, CompanyLivery,
-    INDUSTRY_HISTORY_RECORDS, SavVehicleKind, sav,
+    INDUSTRY_HISTORY_RECORDS, SavVehicleKind,
+    flow_stat::{CargoDistPerCargoSettings, DistributionType},
+    sav,
 };
 
 /// #371: ejecutar sobre el SAV que OpenTTD re-guardó después del renombrado
@@ -360,6 +362,36 @@ fn openttd_resaved_preserves_requested_selectgoods() {
     assert!(
         !game.selectgoods,
         "OpenTTD debe re-guardar PATS.order.selectgoods = false"
+    );
+}
+
+/// #383: el fixture rico usa valores no-default para todos los campos
+/// linkgraph que OpenTTD persiste en PATS. El dedicated los carga y guarda
+/// antes de que este importador compruebe tanto el wire como los cuatro
+/// selectores por clase.
+#[test]
+fn openttd_resaved_preserves_requested_linkgraph_settings() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_LINKGRAPH_SETTINGS").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke linkgraph");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).expect("import openttdrs");
+    assert_eq!(
+        game.cargo_dist.per_cargo,
+        Some(CargoDistPerCargoSettings {
+            recalc_interval_seconds: 6,
+            recalc_time_seconds: 31,
+            distribution_pax: DistributionType::Symmetric,
+            distribution_mail: DistributionType::Asymmetric,
+            distribution_armoured: DistributionType::Manual,
+            distribution_default: DistributionType::Asymmetric,
+            accuracy: 31,
+            demand_size: 85,
+            demand_distance: 135,
+            short_path_saturation: 175,
+        })
     );
 }
 

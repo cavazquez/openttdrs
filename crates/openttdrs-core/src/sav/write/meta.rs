@@ -437,6 +437,16 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
             (2, "economy.timekeeping_units"),
             (1, "economy.inflation"),
             (1, "difficulty.economy"),
+            (4, "linkgraph.recalc_interval"),
+            (4, "linkgraph.recalc_time"),
+            (2, "linkgraph.distribution_pax"),
+            (2, "linkgraph.distribution_mail"),
+            (2, "linkgraph.distribution_armoured"),
+            (2, "linkgraph.distribution_default"),
+            (2, "linkgraph.accuracy"),
+            (2, "linkgraph.demand_distance"),
+            (2, "linkgraph.demand_size"),
+            (2, "linkgraph.short_path_saturation"),
         ],
         &[pats_record(state)],
     )
@@ -456,6 +466,7 @@ pub(super) fn pats_record(state: &GameState) -> Vec<u8> {
         crate::TrainSignalSide::RoadVehicleDrivingSide => 1,
         crate::TrainSignalSide::Right => 2,
     };
+    let linkgraph = state.cargo_dist.openttd_settings();
     let mut record = vec![
         landscape,
         state.snow_line_height,
@@ -486,6 +497,18 @@ pub(super) fn pats_record(state: &GameState) -> Vec<u8> {
         u8::from(state.using_wallclock_units),
         u8::from(state.global_economy.inflation_enabled),
         u8::from(state.global_economy.recessions_enabled),
+    ]);
+    record.extend_from_slice(&linkgraph.recalc_interval_seconds.to_be_bytes());
+    record.extend_from_slice(&linkgraph.recalc_time_seconds.to_be_bytes());
+    record.extend_from_slice(&[
+        linkgraph.distribution_pax.as_openttd(),
+        linkgraph.distribution_mail.as_openttd(),
+        linkgraph.distribution_armoured.as_openttd(),
+        linkgraph.distribution_default.as_openttd(),
+        linkgraph.accuracy,
+        linkgraph.demand_distance,
+        linkgraph.demand_size,
+        linkgraph.short_path_saturation,
     ]);
     record
 }

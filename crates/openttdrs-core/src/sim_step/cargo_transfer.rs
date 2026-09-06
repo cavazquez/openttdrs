@@ -1217,6 +1217,7 @@ fn has_loadable_supply(state: &GameState) -> bool {
         .any(|station| station.cargo_stock != crate::CargoStock::default())
 }
 
+#[allow(clippy::too_many_lines)] // carga de industria, órdenes y next-hop son una transición atómica.
 fn try_load_from_industry(
     state: &mut GameState,
     vehicle_idx: usize,
@@ -1278,8 +1279,11 @@ fn try_load_from_industry(
     )
     .into_iter()
     .next();
+    let distribution = state
+        .cargo_dist
+        .distribution_for(output, &state.cargo_spec_catalog);
     packet.next_hop = crate::flow_stat::resolve_next_hop(
-        state.cargo_dist.distribution,
+        distribution,
         &state.runtime.station_flows,
         station_pos,
         output,
@@ -1439,12 +1443,14 @@ fn try_load_from_station_waiting_cargo(
     )
     .into_iter()
     .next();
-    let distribution = state.cargo_dist.distribution;
     for packet in &mut taken {
         if packet.first_station.is_none() {
             packet.first_station = Some(station_pos);
         }
         let origin = packet.first_station.unwrap_or(station_pos);
+        let distribution = state
+            .cargo_dist
+            .distribution_for(packet.cargo, &state.cargo_spec_catalog);
         packet.next_hop = crate::flow_stat::resolve_next_hop(
             distribution,
             &state.runtime.station_flows,

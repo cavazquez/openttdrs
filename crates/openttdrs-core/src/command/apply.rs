@@ -604,10 +604,14 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             Ok(())
         }
         Command::SetCargoDistDistribution(mode) => {
-            if state.cargo_dist.distribution == *mode {
+            if state.cargo_dist.distribution == *mode && state.cargo_dist.per_cargo.is_none() {
                 return Ok(());
             }
-            state.cargo_dist.distribution = *mode;
+            // La UI propia aún expone un selector único. Al usarlo vuelve al
+            // perfil global legacy para que su intención sea inequívoca; un
+            // SAV importado conserva en cambio los cuatro modos PATS hasta
+            // que el jugador cambia este comando.
+            state.cargo_dist.set_legacy_distribution(*mode);
             state.rebuild_station_flows();
             Ok(())
         }

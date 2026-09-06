@@ -301,6 +301,11 @@ pub struct SavGame {
     pub random_state: Option<[u32; 2]>,
     /// Grafo de enlaces observado (`LGRP`); vacío si el chunk falta o es legacy.
     pub link_graph: LinkGraphStats,
+    /// Perfil de `CargoDist` de `PATS.linkgraph.*`.
+    ///
+    /// Conserva los cuatro modos por clase y los segundos nativos; el core
+    /// convierte sólo la cadencia al ejecutar su scheduler económico.
+    pub cargo_dist: crate::flow_stat::CargoDistSettings,
     /// Landscape del save (`game_creation.landscape`); default temperate.
     pub climate: crate::Climate,
     /// Línea de nieve efectiva (`game_creation.snow_line_height`) de `PATS`.
@@ -557,6 +562,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         game_time,
         random_state,
         link_graph,
+        cargo_dist: parsed_settings.cargo_dist,
         climate,
         snow_line_height,
         construction: parsed_settings.construction,
@@ -1142,6 +1148,7 @@ impl GameState {
             sav.serve_neutral_industries
         };
         state.vehicle_breakdowns = sav.vehicle_breakdowns;
+        state.cargo_dist = sav.cargo_dist;
         state.order.selectgoods = sav.selectgoods;
         state.no_servicing_if_no_breakdowns = sav.no_servicing_if_no_breakdowns;
         state.subsidy_duration = sav.subsidy_duration;
@@ -1478,10 +1485,7 @@ impl GameState {
             import::apply_legacy_sav_afterload(&mut state);
         }
         state.link_graph = sav.link_graph;
-        if !matches!(
-            state.cargo_dist.distribution,
-            crate::flow_stat::DistributionType::Manual
-        ) {
+        if state.cargo_dist.has_automatic_distribution() {
             state.rebuild_station_flows();
         }
         for v in &sav.vehicles {
@@ -2054,6 +2058,7 @@ mod tests {
             game_time: None,
             random_state: None,
             link_graph: LinkGraphStats::default(),
+            cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             climate: crate::Climate::Temperate,
             snow_line_height: crate::world_gen::DEF_SNOW_LINE_HEIGHT,
             construction: crate::ConstructionSettings::default(),
@@ -2898,6 +2903,7 @@ mod tests {
             cargo_packets: Vec::new(),
             cargo_payments: Vec::new(),
             link_graph: LinkGraphStats::default(),
+            cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             vehicles: vec![
                 SavVehicle {
                     sav_id: 0,

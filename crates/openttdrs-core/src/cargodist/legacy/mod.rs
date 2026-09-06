@@ -9,8 +9,8 @@ pub mod mcf;
 
 // Re-exportaciones para compatibilidad
 pub use flow_stat::{
-    CargoDistSettings, DistributionType, FlowStat, FlowStatMap, PlannedFlowEdge, StationFlowTable,
-    StationFlows, resolve_next_hop,
+    CargoDistPerCargoSettings, CargoDistSettings, DistributionType, FlowStat, FlowStatMap,
+    PlannedFlowEdge, StationFlowTable, StationFlows, resolve_next_hop,
 };
 pub use link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphStats};
 pub use mcf::{

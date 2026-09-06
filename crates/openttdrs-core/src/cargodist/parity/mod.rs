@@ -17,7 +17,9 @@ use crate::cargodist::legacy::flow_stat::StationFlows;
 pub use demands::calculate_demands;
 pub use flow_stat::{FlowStat, FlowStatMap};
 pub use flowmapper::FlowMapper;
-pub use from_game::{build_jobs_from_game, settings_from_game};
+pub use from_game::{
+    build_jobs_from_cargo_dist, build_jobs_from_game, settings_from_cargo_dist, settings_from_game,
+};
 pub use math::{distance_max_plus_manhattan, int_sqrt};
 pub use mcf::{
     CapacityAnnotation, DistanceAnnotation, FlowEdgeIterator, GraphEdgeIterator, MCF1stPass,

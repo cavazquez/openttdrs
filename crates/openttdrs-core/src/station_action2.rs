@@ -19,6 +19,7 @@ use crate::station::{
     station_at_tile, station_type_from_m6,
 };
 use crate::station_class::{StationSpecDef, station_spec_def};
+use crate::town::Town;
 use crate::world_gen::Climate;
 use std::collections::BTreeSet;
 
@@ -76,6 +77,10 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
 /// consulten el catchment vivo en vez del predicado persistido del save.
 #[derive(Debug, Clone, Copy)]
 pub struct StationAction2WorldContext<'a> {
+    /// Pool de pueblos para resolver el `TownScopeResolver` parent de la
+    /// estación. La asociación nativa estación→pueblo aún no se conserva en
+    /// este modelo; el resolver usa el pueblo más cercano como fallback.
+    pub towns: &'a [Town],
     /// Pool de compañías para codificar `StationScope::0x43` con la librea
     /// por defecto y el bit de IA, igual que `GetCompanyInfo` upstream.
     pub companies: &'a [Company],
@@ -176,6 +181,7 @@ pub fn action2_eval_ctx_for_station_tile_with_catalog_and_world(
         grf_version,
         world,
     );
+    populate_station_parent_scope(&mut ctx, map, stations, station_catalog, coord, world.towns);
     populate_station_badge_vars(&mut ctx, map, stations, station_catalog, coord);
     populate_station_neighbour_vars(
         &mut ctx,
@@ -187,6 +193,33 @@ pub fn action2_eval_ctx_for_station_tile_with_catalog_and_world(
         grf_version,
     );
     ctx
+}
+
+/// Materializa el `TownScopeResolver` que `OpenTTD` expone como parent de una
+/// estación colocada. Sin un vínculo nativo estación→pueblo, se conserva la
+/// selección determinista por distancia Manhattan/ID usada por otros scopes
+/// de mundo; las APIs sin catálogo no pueden elegir el GRFID del PSA.
+fn populate_station_parent_scope(
+    ctx: &mut Action2EvalCtx,
+    map: &Map,
+    stations: &[Station],
+    station_catalog: &[StationSpecDef],
+    coord: TileCoord,
+    towns: &[Town],
+) {
+    let Some(station) = station_at_tile(map, stations, coord) else {
+        return;
+    };
+    let Some(spec) = station_spec_def(station_catalog, station.station_spec) else {
+        return;
+    };
+    let Some(town) = towns
+        .iter()
+        .min_by_key(|town| (crate::economy::manhattan_distance(coord, town.pos), town.id))
+    else {
+        return;
+    };
+    town.copy_newgrf_parent_scope(spec.newgrf_grfid, ctx);
 }
 
 /// Materializa `StationScope` `0x7A` usando la Badge Translation Table local
@@ -1820,6 +1853,7 @@ mod tests {
             Some(&tables),
             8,
             StationAction2WorldContext {
+                towns: &[],
                 companies: &[],
                 industries: &[],
                 cargo_spec_catalog: &cargo_catalog,
@@ -1853,6 +1887,7 @@ mod tests {
             None,
             8,
             StationAction2WorldContext {
+                towns: &[],
                 companies: &companies,
                 industries: &[],
                 cargo_spec_catalog: &[],
@@ -1860,6 +1895,62 @@ mod tests {
         );
 
         assert_eq!(ctx.vars.get(&0x43), Some(&0x9201_0001));
+    }
+
+    #[test]
+    fn station_world_scope_exposes_parent_town_and_psa_by_grfid() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let coord = TileCoord::new(1, 2);
+        map.set_tile(coord, rail_station_tile(0)).unwrap();
+        let mut station = Station::new_with_kind(coord, StopKind::RailStation);
+        station.station_spec = crate::station_class::StationSpecId::from_u16(1);
+
+        let grfid = 0x4242_0001;
+        let mut town = Town {
+            id: 7,
+            pos: TileCoord::new(0, 0),
+            population: 65_535,
+            larger_town: true,
+            squared_town_zone_radius: [100, 100, 0, 0, 0],
+            ..Town::default()
+        };
+        town.newgrf_persistent_regs
+            .insert(grfid, std::collections::HashMap::from([(4, 0xAABB_CCDD)]));
+        let catalog = vec![station_spec(1, grfid, 0, station_neighbour_runtime(&[]))];
+        let ctx = action2_eval_ctx_for_station_tile_with_catalog_and_world(
+            &map,
+            std::slice::from_ref(&station),
+            &catalog,
+            coord,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+            StationAction2WorldContext {
+                towns: std::slice::from_ref(&town),
+                companies: &[],
+                industries: &[],
+                cargo_spec_catalog: &[],
+            },
+        );
+
+        assert_eq!(ctx.parent_vars.get(&0x40), Some(&1));
+        assert_eq!(ctx.parent_vars.get(&0x41), Some(&7));
+        assert_eq!(ctx.parent_vars.get(&0x82), Some(&65_535));
+        assert_eq!(ctx.parent_persistent_registers.get(&4), Some(&0xAABB_CCDD));
+
+        let legacy = action2_eval_ctx_for_station_tile_with_catalog(
+            &map,
+            std::slice::from_ref(&station),
+            &catalog,
+            coord,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+        );
+        assert!(legacy.parent_vars.is_empty());
+        assert!(legacy.parent_persistent_registers.is_empty());
     }
 
     #[test]
@@ -1922,6 +2013,7 @@ mod tests {
             None,
             8,
             StationAction2WorldContext {
+                towns: &[],
                 companies: &[],
                 industries: &[],
                 cargo_spec_catalog: &[],
@@ -1944,6 +2036,7 @@ mod tests {
             None,
             8,
             StationAction2WorldContext {
+                towns: &[],
                 companies: &[],
                 industries: &[],
                 cargo_spec_catalog: &[],

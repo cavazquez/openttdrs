@@ -1939,6 +1939,16 @@ vacío. La regresión cubre población/flags y un registro persistente; la
 asociación nativa parada→pueblo y variables no representadas siguen pendientes
 en #329.
 
+Actualización #329-STATION-TOWN-PARENT-412 (2026-09-06, issue [#412](https://github.com/cavazquez/openttdrs/issues/412)):
+`StationResolverObject::GetScope(VSG_SCOPE_PARENT)` ya se materializa en las
+rutas catalog-aware. El contexto recibe `GameState::towns`, selecciona el
+pueblo más cercano con desempate por ID, copia las variables `TownScope` que
+el modelo conserva y carga el PSA `7C` de la `StationSpec` por GRFID. Renderer,
+construcción y wrappers de animación/scheduler CB140–142 con pools de mundo
+usan este parent; las APIs legacy mantienen el fallback vacío. La asociación
+nativa estación→pueblo y variables no representadas continúan pendientes en
+#329.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

@@ -102,11 +102,12 @@ fn trigger_station_acceptance_animations(state: &mut GameState, t: u64) {
             }
         }
         let dirty =
-            crate::map::trigger_newgrf_station_animation_for_station_with_world_and_cargo_catalog(
+            crate::map::trigger_newgrf_station_animation_for_station_with_towns_and_world_and_cargo_catalog(
                 &mut state.map,
                 t,
                 &mut state.stations,
                 &state.companies,
+                &state.towns,
                 &state.industries,
                 &state.cargo_spec_catalog,
                 state.climate,

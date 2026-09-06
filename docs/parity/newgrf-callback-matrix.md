@@ -1242,3 +1242,12 @@ el mismo `TileMaxZ` llega al scope Object/Town. `CALLBACK_FAILED` o cero
 permiten y cualquier resultado no nulo rechaza sin mutar. Las regresiones
 cubren la semántica booleana y la atomicidad; los scopes avanzados y el
 writeback propio de objeto continúan en #329.
+
+### #329-NEWGRF-TEXT-STACK-433 — referencias inline del text stack
+
+Actualizado: 2026-09-06. `NewGrfStringCatalog::lookup_expanded` resuelve las
+referencias `0x81` que el decoder deja como `⟦grf-string:0xNNNN⟧`. Convierte IDs
+locales al rango genérico, reutiliza el fallback de idioma, expande hasta ocho
+niveles y conserva un marcador ante cadenas ausentes o ciclos. El CB15C del
+ObjectPicker ya consume esta salida; parámetros dinámicos, pluralización,
+choice-lists y la conexión de otros features siguen pendientes.

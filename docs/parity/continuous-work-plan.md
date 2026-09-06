@@ -2174,3 +2174,10 @@ fuentes, referencias inline, controles extendidos y glifos frecuentes dejan de
 aparecer como bytes crudos. Parámetros dinámicos, choice-lists y
 gender/case/plural se representan con marcadores `⟦...⟧` hasta disponer del
 text stack y los mappings de idioma completos.
+
+Actualización #329-NEWGRF-TEXT-STACK-433 (2026-09-06, issue [#433](https://github.com/cavazquez/openttdrs/issues/433)):
+`NewGrfStringCatalog::lookup_expanded` resuelve referencias inline `0x81` con
+fallback de locale, IDs locales en el rango genérico, expansión anidada limitada
+y corte de ciclos. El selector de objetos muestra ahora el texto expandido;
+parámetros dinámicos y consumidores de otros features permanecen como trabajo
+posterior.

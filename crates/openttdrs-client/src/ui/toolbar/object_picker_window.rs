@@ -203,7 +203,7 @@ fn object_fund_more_text_label(sim: &SimWorld, id: u16, locale: Locale) -> Strin
             sim.state
                 .runtime
                 .newgrf_string_catalog
-                .lookup(def.grfid, string_id, newgrf_language(locale))
+                .lookup_expanded(def.grfid, string_id, newgrf_language(locale))
                 .map_or_else(
                     || format!("Texto NewGRF local #{offset} (Action4 ausente)"),
                     |text| format!("Texto NewGRF: {text}"),
@@ -213,7 +213,7 @@ fn object_fund_more_text_label(sim: &SimWorld, id: u16, locale: Locale) -> Strin
             .state
             .runtime
             .newgrf_string_catalog
-            .lookup(def.grfid, string_id, newgrf_language(locale))
+            .lookup_expanded(def.grfid, string_id, newgrf_language(locale))
             .map_or_else(
                 || format!("Texto NewGRF StringID {string_id:#06X} (Action4 ausente)"),
                 |text| format!("Texto NewGRF: {text}"),

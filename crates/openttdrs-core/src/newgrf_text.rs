@@ -18,6 +18,9 @@ pub const NEWGRF_LANGUAGE_SPANISH: u8 = 4;
 /// Variante genérica/fallback usada por Action13 de GRF v7 o anteriores.
 pub const NEWGRF_LANGUAGE_UNSPECIFIED: u8 = 0x7F;
 
+const MAX_INLINE_TEXT_EXPANSION_DEPTH: usize = 8;
+const INLINE_TEXT_MARKER_PREFIX: &str = "⟦grf-string:0x";
+
 /// Una cadena genérica definida por un Action4.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewGrfString {
@@ -283,6 +286,87 @@ impl NewGrfStringCatalog {
                 .map(|entry| entry.text.as_str())
         })
     }
+
+    /// Resuelve una cadena y expande referencias inline `0x81` ya traducidas
+    /// por [`decode_newgrf_text`].
+    ///
+    /// El byte `0x81` contiene un ID local de GRF; el decoder lo conserva como
+    /// `⟦grf-string:0xNNNN⟧` para no mezclar el parseo de pseudo-sprites con el
+    /// catálogo. Al resolverlo, los IDs menores a `GRF_STRING_GENERIC_BASE` se
+    /// mapean al rango genérico del GRF y los IDs ya genéricos se conservan.
+    /// Cada referencia se busca con el mismo fallback de idioma que [`lookup`].
+    /// Las cadenas faltantes permanecen como marcadores visibles y los ciclos
+    /// se cortan sin panic.
+    #[must_use]
+    pub fn lookup_expanded(&self, grfid: u32, string_id: u32, language: u8) -> Option<String> {
+        let text = self.lookup(grfid, string_id, language)?.to_owned();
+        let mut stack = vec![string_id];
+        Some(self.expand_inline_references(&text, grfid, language, &mut stack, 0))
+    }
+
+    fn expand_inline_references(
+        &self,
+        text: &str,
+        grfid: u32,
+        language: u8,
+        stack: &mut Vec<u32>,
+        depth: usize,
+    ) -> String {
+        if depth >= MAX_INLINE_TEXT_EXPANSION_DEPTH {
+            return text.to_owned();
+        }
+
+        let mut output = String::with_capacity(text.len());
+        let mut cursor = 0usize;
+        while let Some(relative_start) = text[cursor..].find(INLINE_TEXT_MARKER_PREFIX) {
+            let start = cursor + relative_start;
+            output.push_str(&text[cursor..start]);
+            let value_start = start + INLINE_TEXT_MARKER_PREFIX.len();
+            let Some(relative_end) = text[value_start..].find('⟧') else {
+                output.push_str(&text[start..]);
+                return output;
+            };
+            let value_end = value_start + relative_end;
+            let marker_end = value_end + '⟧'.len_utf8();
+            let marker = &text[start..marker_end];
+            let Some(raw_id) = u32::from_str_radix(&text[value_start..value_end], 16).ok() else {
+                output.push_str(marker);
+                cursor = marker_end;
+                continue;
+            };
+            let target_id = if raw_id < GRF_STRING_GENERIC_BASE {
+                let Some(target_id) = GRF_STRING_GENERIC_BASE.checked_add(raw_id) else {
+                    output.push_str(marker);
+                    cursor = marker_end;
+                    continue;
+                };
+                target_id
+            } else {
+                raw_id
+            };
+
+            if stack.contains(&target_id) {
+                output.push_str(marker);
+                cursor = marker_end;
+                continue;
+            }
+
+            let Some(replacement) = self.lookup(grfid, target_id, language).map(str::to_owned)
+            else {
+                output.push_str(marker);
+                cursor = marker_end;
+                continue;
+            };
+            stack.push(target_id);
+            let expanded =
+                self.expand_inline_references(&replacement, grfid, language, stack, depth + 1);
+            stack.pop();
+            output.push_str(&expanded);
+            cursor = marker_end;
+        }
+        output.push_str(&text[cursor..]);
+        output
+    }
 }
 
 /// Recorre pseudo-sprites y recoge Action13 (`TranslateGRFStrings`).
@@ -544,6 +628,78 @@ mod tests {
         assert_eq!(catalog.lookup(1, 0xD000, 4), Some("es"));
         assert_eq!(catalog.lookup(1, 0xD000, 2), Some("en"));
         assert_eq!(catalog.lookup(2, 0xD000, 2), None);
+    }
+
+    #[test]
+    fn lookup_expanded_resolves_nested_local_and_generic_references() {
+        let mut catalog = NewGrfStringCatalog::default();
+        catalog.push(NewGrfString {
+            grfid: 1,
+            string_id: 0xD000,
+            language: NEWGRF_LANGUAGE_ENGLISH,
+            text: "Base ⟦grf-string:0x0001⟧".into(),
+        });
+        catalog.push(NewGrfString {
+            grfid: 1,
+            string_id: 0xD001,
+            language: NEWGRF_LANGUAGE_ENGLISH,
+            text: "child ⟦grf-string:0xD002⟧".into(),
+        });
+        catalog.push(NewGrfString {
+            grfid: 1,
+            string_id: 0xD002,
+            language: NEWGRF_LANGUAGE_ENGLISH,
+            text: "leaf".into(),
+        });
+
+        assert_eq!(
+            catalog.lookup_expanded(1, 0xD000, NEWGRF_LANGUAGE_SPANISH),
+            Some("Base child leaf".into())
+        );
+    }
+
+    #[test]
+    fn lookup_expanded_preserves_missing_and_cyclic_references() {
+        let mut catalog = NewGrfStringCatalog::default();
+        catalog.push(NewGrfString {
+            grfid: 1,
+            string_id: 0xD000,
+            language: NEWGRF_LANGUAGE_ENGLISH,
+            text: "root ⟦grf-string:0x0001⟧ ⟦grf-string:0x0003⟧".into(),
+        });
+        catalog.push(NewGrfString {
+            grfid: 1,
+            string_id: 0xD001,
+            language: NEWGRF_LANGUAGE_ENGLISH,
+            text: "child ⟦grf-string:0x0000⟧".into(),
+        });
+
+        assert_eq!(
+            catalog.lookup_expanded(1, 0xD000, NEWGRF_LANGUAGE_ENGLISH),
+            Some("root child ⟦grf-string:0x0000⟧ ⟦grf-string:0x0003⟧".into())
+        );
+    }
+
+    #[test]
+    fn lookup_expanded_uses_locale_fallback_for_nested_text() {
+        let mut catalog = NewGrfStringCatalog::default();
+        catalog.push(NewGrfString {
+            grfid: 1,
+            string_id: 0xD000,
+            language: NEWGRF_LANGUAGE_SPANISH,
+            text: "Principal ⟦grf-string:0x0001⟧".into(),
+        });
+        catalog.push(NewGrfString {
+            grfid: 1,
+            string_id: 0xD001,
+            language: NEWGRF_LANGUAGE_UNSPECIFIED,
+            text: "genérico".into(),
+        });
+
+        assert_eq!(
+            catalog.lookup_expanded(1, 0xD000, NEWGRF_LANGUAGE_SPANISH),
+            Some("Principal genérico".into())
+        );
     }
 
     #[test]

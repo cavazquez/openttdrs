@@ -42,9 +42,20 @@ pub struct ConstructionSettings {
     /// terreno desnudo con la paleta negra, no como agua infinita.
     #[serde(default = "default_freeform_edges")]
     pub freeform_edges: bool,
+    /// Permite unir una parte nueva a una estación no adyacente
+    /// (`station.distant_join_stations`).
+    ///
+    /// `OpenTTD` lo habilita por defecto desde `SLV_106`. El comando reducido
+    /// `JoinStations` lo consulta antes de fusionar dos estaciones existentes.
+    #[serde(default = "default_distant_join_stations")]
+    pub distant_join_stations: bool,
 }
 
 const fn default_freeform_edges() -> bool {
+    true
+}
+
+const fn default_distant_join_stations() -> bool {
     true
 }
 
@@ -55,6 +66,7 @@ impl Default for ConstructionSettings {
             train_signal_side: TrainSignalSide::default(),
             road_vehicle_driving_side: RoadVehicleDrivingSide::default(),
             freeform_edges: default_freeform_edges(),
+            distant_join_stations: default_distant_join_stations(),
         }
     }
 }
@@ -120,6 +132,11 @@ mod tests {
     #[test]
     fn freeform_edges_follow_openttd_default() {
         assert!(ConstructionSettings::default().freeform_edges);
+    }
+
+    #[test]
+    fn distant_join_stations_follows_openttd_default() {
+        assert!(ConstructionSettings::default().distant_join_stations);
     }
 
     #[test]

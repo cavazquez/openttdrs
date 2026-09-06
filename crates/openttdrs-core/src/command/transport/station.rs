@@ -754,8 +754,9 @@ fn rewrite_order_station(order: &mut crate::VehicleOrder, from: TileCoord, to: T
     }
 }
 
-/// Une dos paradas road 1×1 adyacentes o dos estaciones rail con huellas
-/// adyacentes (misma compañía, mismo tipo; rail: mismo eje).
+/// Une dos paradas road 1×1 o dos estaciones rail (misma compañía, mismo
+/// tipo; rail: mismo eje). Cuando `station.distant_join_stations` está
+/// desactivado, exige que sus huellas sean adyacentes.
 pub(crate) fn join_stations(
     state: &mut GameState,
     keep: TileCoord,
@@ -774,7 +775,7 @@ pub(crate) fn join_stations(
         .iter()
         .position(|s| s.pos == merge)
         .ok_or(CommandError::StationNotFound)?;
-    {
+    let adjacent = {
         let keep_st = &state.stations[keep_idx];
         let merge_st = &state.stations[merge_idx];
         if keep_st.owner != merge_st.owner || keep_st.stop_kind != merge_st.stop_kind {
@@ -783,18 +784,13 @@ pub(crate) fn join_stations(
         match keep_st.stop_kind {
             StopKind::BusStop | StopKind::TruckStop => {
                 let dist = (keep.x - merge.x).abs() + (keep.y - merge.y).abs();
-                if dist != 1 {
-                    return Err(CommandError::CannotJoinStations);
-                }
+                dist == 1
             }
             StopKind::RailStation => {
                 let keep_tiles =
                     crate::station::rail_station_owned_tiles(&state.map, &state.stations, keep_st);
                 let merge_tiles =
                     crate::station::rail_station_owned_tiles(&state.map, &state.stations, merge_st);
-                if !crate::station::station_tile_sets_adjacent(&keep_tiles, &merge_tiles) {
-                    return Err(CommandError::CannotJoinStations);
-                }
                 let keep_axis =
                     crate::station::rail_station_axis_y(&state.map, &state.stations, keep_st);
                 let merge_axis =
@@ -802,9 +798,13 @@ pub(crate) fn join_stations(
                 if keep_axis != merge_axis {
                     return Err(CommandError::CannotJoinStations);
                 }
+                crate::station::station_tile_sets_adjacent(&keep_tiles, &merge_tiles)
             }
             _ => return Err(CommandError::CannotJoinStations),
         }
+    };
+    if !state.construction.distant_join_stations && !adjacent {
+        return Err(CommandError::CannotJoinStations);
     }
     // Materializar los campos legacy antes de extraer la estación. Así un join
     // posterior conserva spec/frame/random distintos por tesela en vez de

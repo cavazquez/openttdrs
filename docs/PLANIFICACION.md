@@ -2189,11 +2189,13 @@ Las listas nativas de
 RoadStops (`roadstopspeclist`/`roadstoptiledata`) también se reconstruyen desde
 el estado por tesela y actualizan `MAP8`; no se confunde esa conservación con
 ejecutar sus callbacks. `PATS`/`OPTS` ya conserva el
-subconjunto ejecutado por el core (construcción, pathfinding, `selectgoods`, perfil
-`linkgraph` por clase, averías, subsidios, desastres, autoridad, inflación/recesiones y
-unidades de tiempo). El perfil `linkgraph` mantiene sus segundos y cuatro selectores,
-pero el presupuesto de job sigue síncrono; la evidencia está en
-[`sav-linkgraph-settings-383.md`](parity/sav-linkgraph-settings-383.md). El historial de
+subconjunto ejecutado por el core (construcción, pathfinding, `selectgoods`, unión
+distante de estaciones, perfil `linkgraph` por clase, averías, subsidios, desastres,
+autoridad, inflación/recesiones y unidades de tiempo). El perfil `linkgraph` mantiene
+sus segundos y cuatro selectores, pero el presupuesto de job sigue síncrono; la
+evidencia está en [`sav-linkgraph-settings-383.md`](parity/sav-linkgraph-settings-383.md).
+La unión distante tiene su contrato PATS/command en
+[`sav-distant-join-stations-384.md`](parity/sav-distant-join-stations-384.md). El historial de
 noticias propio queda en JSON (no es un pool nativo de OpenTTD `.sav`). `ORDL`
 preserva los campos básicos por orden —incluidos wait/travel/max-speed— y
 `VEHS.common` conserva inicio/tiempo/atraso de timetable, las muestras derivadas de
@@ -2256,9 +2258,9 @@ Reglas:
 
 ---
 
-*Última actualización: 2026-09-05 — el resumen remite a la matriz SAV y al
-perfil PATS `linkgraph` por clase; el contrato de wire y sus límites siguen
-centralizados allí.*
+*Última actualización: 2026-09-05 — el resumen remite a la matriz SAV, al
+perfil PATS `linkgraph` por clase y a la unión distante; el contrato de wire y
+sus límites siguen centralizados allí.*
 
 ## Carreteras drag (paused)
 

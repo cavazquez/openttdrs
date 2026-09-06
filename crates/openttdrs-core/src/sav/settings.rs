@@ -236,6 +236,13 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                 parsed.serve_neutral_industries = value;
                 found = true;
             }
+            if let Some(value) = record_get(&record, "station.distant_join_stations")
+                .and_then(SlValue::as_u64)
+                .and_then(bool_from_u64)
+            {
+                parsed.construction.distant_join_stations = value;
+                found = true;
+            }
             if let Some(value) = record_get(&record, "difficulty.vehicle_breakdowns")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value).ok())
@@ -518,6 +525,21 @@ mod tests {
         };
         let parsed = settings_from_chunks(&[chunk]);
         assert!(!parsed.serve_neutral_industries);
+    }
+
+    #[test]
+    fn reads_distant_station_join_setting_with_native_default() {
+        let disabled = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(1, "station.distant_join_stations")], &[vec![0]]),
+        };
+        assert!(settings_from_chunks(&[]).construction.distant_join_stations);
+        assert!(
+            !settings_from_chunks(&[disabled])
+                .construction
+                .distant_join_stations
+        );
     }
 
     #[test]

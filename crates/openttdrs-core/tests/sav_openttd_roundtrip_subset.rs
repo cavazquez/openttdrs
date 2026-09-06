@@ -365,6 +365,24 @@ fn openttd_resaved_preserves_requested_selectgoods() {
     );
 }
 
+/// #384: el fixture rico desactiva la unión distante de estaciones. El
+/// dedicated debe mantener el booleano de `PATS` al re-guardar, y el core lo
+/// convierte en la misma política que usa `Command::JoinStations`.
+#[test]
+fn openttd_resaved_preserves_requested_distant_join_stations() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_DISTANT_JOIN_STATIONS").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PATS");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).expect("import openttdrs");
+    assert!(
+        !game.construction.distant_join_stations,
+        "OpenTTD debe re-guardar PATS.station.distant_join_stations = false"
+    );
+}
+
 /// #383: el fixture rico usa valores no-default para todos los campos
 /// linkgraph que OpenTTD persiste en PATS. El dedicated los carga y guarda
 /// antes de que este importador compruebe tanto el wire como los cuatro

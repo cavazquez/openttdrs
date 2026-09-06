@@ -241,8 +241,9 @@ fn road_stop_vanilla_tile_does_not_inherit_the_anchor_newgrf_spec() {
 }
 
 #[test]
-fn join_stations_rejects_non_adjacent() {
+fn join_stations_rejects_non_adjacent_when_setting_is_disabled() {
     let mut s = GameState::new(8, 8);
+    s.construction.distant_join_stations = false;
     let a = TileCoord::new(1, 1);
     let b = TileCoord::new(3, 1);
     apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 0))).unwrap();
@@ -251,6 +252,23 @@ fn join_stations_rejects_non_adjacent() {
     apply_command(&mut s, &Command::PlaceBusStop(b, 3)).unwrap();
     let e = apply_command(&mut s, &Command::JoinStations { keep: a, merge: b }).unwrap_err();
     assert_eq!(e, CommandError::CannotJoinStations);
+}
+
+#[test]
+fn join_stations_allows_non_adjacent_when_setting_is_enabled() {
+    let mut s = GameState::new(8, 8);
+    let keep = TileCoord::new(1, 1);
+    let merge = TileCoord::new(5, 1);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 0))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(5, 0))).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(keep, 3)).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(merge, 3)).unwrap();
+
+    assert!(s.construction.distant_join_stations);
+    apply_command(&mut s, &Command::JoinStations { keep, merge }).unwrap();
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].pos, keep);
+    assert!(s.stations[0].joined_tiles.contains(&merge));
 }
 
 #[test]

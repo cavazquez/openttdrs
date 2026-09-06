@@ -1777,3 +1777,10 @@ Action0 `0x0D` para NewGRF), `0xF6` (palabra baja de `airport_blocks`) y `0xF7`
 tipo NewGRF y bloques FTA no nulos. Los estados `0xF2`/`0xF3` y el historial
 `0x8A` no se inventan porque el modelo no conserva esos bitsets; continúan en
 #329.
+
+Actualización #329-STATION-FACILITIES-067 (2026-09-06, issue [#393](https://github.com/cavazquez/openttdrs/issues/393)):
+`StopKind` centraliza la máscara `StationFacilities` de `0xF0`: los waypoints
+conservan también su facilidad de transporte (`RailWaypoint=0x81`,
+`RoadWaypoint=0x86`). El resolver map-aware de `RoadStop` ya expone `F0` para
+bus, truck y waypoint; no se inventan bits cuando no hay estación. El padre
+#329 continúa abierto.

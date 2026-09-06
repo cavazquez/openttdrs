@@ -498,16 +498,7 @@ fn populate_station_general_vars(ctx: &mut Action2EvalCtx, station: &Station) {
         0xF7,
         u32::try_from((airport_blocks >> 8) & u64::from(u8::MAX)).unwrap_or(0),
     );
-    let facilities = match station.stop_kind {
-        crate::station::StopKind::RailStation => 1 << 0,
-        crate::station::StopKind::TruckStop => 1 << 1,
-        crate::station::StopKind::BusStop => 1 << 2,
-        crate::station::StopKind::Airport => 1 << 3,
-        crate::station::StopKind::Dock => 1 << 4,
-        crate::station::StopKind::RailWaypoint | crate::station::StopKind::RoadWaypoint => 1 << 7,
-        crate::station::StopKind::Buoy => 0,
-    };
-    ctx.vars.insert(0xF0, facilities);
+    ctx.vars.insert(0xF0, station.stop_kind.facilities_mask());
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1192,7 +1183,12 @@ mod tests {
             (StopKind::TruckStop, 1_u32 << 1, 0b010_u32),
             (StopKind::Dock, 1_u32 << 4, 0b111_u32),
             (StopKind::Airport, 1_u32 << 3, 0b101_u32),
-            (StopKind::RailWaypoint, 1_u32 << 7, 0),
+            (StopKind::RailWaypoint, (1_u32 << 0) | (1_u32 << 7), 0),
+            (
+                StopKind::RoadWaypoint,
+                (1_u32 << 1) | (1_u32 << 2) | (1_u32 << 7),
+                0,
+            ),
         ] {
             let station = Station::new_with_kind(TileCoord::new(1, 1), kind);
             let ctx = action2_eval_ctx_from_station(&station);

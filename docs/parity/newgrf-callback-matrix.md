@@ -926,3 +926,11 @@ baja de los bloques FTA) y `0xF7` (bits 8..15 de esa palabra) en los contextos
 legacy y map-aware. Las regresiones cubren aeropuerto vanilla, tipo NewGRF,
 bloques no nulos y ambas rutas. Los estados `0xF2`/`0xF3` de paradas road y el
 historial `0x8A` siguen fuera del modelo y continúan pendientes en #329.
+
+### #329-STATION-FACILITIES-067 — Bitset F0 de waypoints y RoadStops
+
+Actualizado: 2026-09-06. La máscara `0xF0` comparte ahora la codificación de
+`StationFacilities`: `RailWaypoint=0x81` y `RoadWaypoint=0x86` además de las
+facilidades simples. El contexto map-aware de `RoadStop` también expone `F0`
+para bus, truck y waypoint. No se crea una facilidad para un contexto sin
+estación; el resto de estados/historiales sigue pendiente en #329.

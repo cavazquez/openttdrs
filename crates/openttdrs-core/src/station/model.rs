@@ -440,6 +440,22 @@ pub enum StopKind {
     RoadWaypoint,
 }
 
+impl StopKind {
+    /// Bitset `StationFacilities` que exponen los scopes `NewGRF` en `0xF0`.
+    #[must_use]
+    pub const fn facilities_mask(self) -> u32 {
+        match self {
+            Self::RailStation => 1 << 0,
+            Self::TruckStop => 1 << 1,
+            Self::BusStop => 1 << 2,
+            Self::Airport => 1 << 3,
+            Self::Dock | Self::Buoy => 1 << 4,
+            Self::RailWaypoint => (1 << 0) | (1 << 7),
+            Self::RoadWaypoint => (1 << 1) | (1 << 2) | (1 << 7),
+        }
+    }
+}
+
 impl Station {
     #[must_use]
     pub fn new(pos: TileCoord) -> Self {

@@ -268,6 +268,7 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
     );
     ctx.vars
         .insert(0x49, u32::from(station.road_stop_animation_frame_at(coord)));
+    ctx.vars.insert(0xF0, station.stop_kind.facilities_mask());
     // Bit 4 de var 50 sólo se usa cuando no existe tesela (picker/callback de
     // disponibilidad); esta ruta siempre resuelve una instancia en el mapa.
     ctx.vars.insert(0x50, 0);
@@ -772,6 +773,7 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x46), Some(&0));
         assert_eq!(ctx.vars.get(&0x47), Some(&0));
         assert_eq!(ctx.vars.get(&0x49), Some(&7));
+        assert_eq!(ctx.vars.get(&0xF0), Some(&(1_u32 << 2)));
         assert_eq!(ctx.persistent_registers.get(&4), Some(&99));
     }
 

@@ -1979,3 +1979,12 @@ passthrough nativo se conserva hasta integrar o mutar el grafo, momento en que
 se invalida para no exportar jobs obsoletos. Threads, presupuesto de CPU,
 compresión/merge, pausa multiplayer y el planificador completo de `schedule`
 siguen pendientes; el padre #328 continúa abierto.
+
+Actualización #329-ROADSTOP-COST-MULTIPLIERS-414 (2026-09-06, issue [#414](https://github.com/cavazquez/openttdrs/issues/414)):
+RoadStop Action0 `0x15` ya conserva los multiplicadores de construcción y
+limpieza (default `16`) y los aplica con las categorías de precio de bus/camión
+de OpenTTD y shift `-4`. `PlaceBusStop`/`PlaceTruckStop` y `ClearTile` para
+paradas custom cobran el valor de la spec; el fallback sin spec no cambia. Las
+regresiones cubren parseo, catálogo y construir/limpiar; scopes completos de
+`BaseStation`, listas bridgeables, strings y sonidos siguen pendientes en
+#329.

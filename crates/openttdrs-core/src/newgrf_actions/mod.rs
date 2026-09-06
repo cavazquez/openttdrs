@@ -2930,6 +2930,10 @@ mod tests {
         a0[2] = a0[2].saturating_add(1);
         a0.push(0x0D);
         a0.extend_from_slice(&((1_u32 << 0) | (1_u32 << 5)).to_le_bytes());
+        // Action0 `0x15`: build=24, clear=40 (vanilla is 16/16).
+        a0[2] = a0[2].saturating_add(1);
+        a0.push(0x15);
+        a0.extend_from_slice(&[24, 40]);
         let meta = parse_action0_roadstop_meta(&a0).unwrap();
         assert_eq!(meta.class_short_label, "BUSC");
         assert_eq!(meta.stop_type, 0);
@@ -2942,6 +2946,8 @@ mod tests {
         );
         assert_eq!(meta.callback_mask, 0);
         assert_eq!(meta.random_cargo_triggers, (1 << 0) | (1 << 5));
+        assert_eq!(meta.build_cost_multiplier, 24);
+        assert_eq!(meta.clear_cost_multiplier, 40);
         assert!(meta.badge_labels.is_empty());
 
         let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'R', b'S', 0, 1], "rstop", "");
@@ -2966,6 +2972,8 @@ mod tests {
         assert_eq!(def.newgrf_local_id, 0);
         assert_eq!(def.newgrf_grf_version, 8);
         assert_eq!(def.draw_mode, 0x03);
+        assert_eq!(def.build_cost_multiplier, 24);
+        assert_eq!(def.clear_cost_multiplier, 40);
         assert!(
             def.cargo_triggers_randomisation(
                 crate::CargoType::Passengers,

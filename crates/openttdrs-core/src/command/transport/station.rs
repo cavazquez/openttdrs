@@ -1,4 +1,4 @@
-use crate::economy::{station_build_cost, waypoint_build_cost};
+use crate::economy::{road_stop_build_cost_factored, station_build_cost, waypoint_build_cost};
 use crate::map::{Map, TileCoord, TileKind, tile_slope_and_z};
 use crate::pathfinder::{
     station_entrance_faces_rail, station_entrance_faces_road, station_site_tile_allows_build,
@@ -485,6 +485,22 @@ fn resolve_road_stop_spec_for_placement(state: &GameState) -> Option<u16> {
     })
 }
 
+fn road_stop_build_cost_for_state(state: &GameState, stop_kind: StopKind) -> i64 {
+    state
+        .current_road_stop_spec
+        .and_then(|id| crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, id))
+        .map_or_else(
+            || station_build_cost(&state.global_economy),
+            |def| {
+                road_stop_build_cost_factored(
+                    &state.global_economy,
+                    stop_kind,
+                    def.build_cost_multiplier,
+                )
+            },
+        )
+}
+
 pub(in crate::command::transport) fn station_placement_on_tile(
     state: &mut GameState,
     c: TileCoord,
@@ -495,6 +511,11 @@ pub(in crate::command::transport) fn station_placement_on_tile(
         return Err(CommandError::AuthorityRatingTooLow);
     }
     let kind = state.map.get_kind(c).unwrap_or(TileKind::Grass);
+    let build_cost = if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {
+        road_stop_build_cost_for_state(state, stop_kind)
+    } else {
+        station_build_cost(&state.global_economy)
+    };
     // Snapshot para rollback si `connect_road_stop` falla (antes dejaba Station huérfana
     // y RoadHaul no podía reintentar otra boca).
     let prev_tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
@@ -576,7 +597,7 @@ pub(in crate::command::transport) fn station_placement_on_tile(
             state.runtime.industry_tile_dirty.push(c);
         }
     }
-    state.economy.money -= station_build_cost(&state.global_economy);
+    state.economy.money -= build_cost;
     if let Some((town_id, delta)) =
         town::apply_station_build_rating_penalty(&mut state.towns, c, state.active_company)
     {

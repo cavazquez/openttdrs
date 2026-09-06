@@ -127,6 +127,12 @@ pub struct RoadStopSpecDef {
     /// Action0 `0x12` flags DWORD (`RoadStopSpecFlags`).
     #[serde(default)]
     pub flags: u32,
+    /// Action0 `0x15`: build cost multiplier per tile (`16` = vanilla).
+    #[serde(default = "default_road_stop_cost_multiplier")]
+    pub build_cost_multiplier: u8,
+    /// Action0 `0x15`: clear cost multiplier per tile (`16` = vanilla).
+    #[serde(default = "default_road_stop_cost_multiplier")]
+    pub clear_cost_multiplier: u8,
     /// Action0 `0x11` (`RoadStopCallbackMask`). El bit de disponibilidad se
     /// ejecuta al previsualizar y construir; los bits 1/2 accionan el
     /// scheduler de animación de la parada.
@@ -178,6 +184,10 @@ const fn default_road_stop_animation_status() -> u8 {
 
 const fn default_road_stop_animation_speed() -> u8 {
     2
+}
+
+const fn default_road_stop_cost_multiplier() -> u8 {
+    16
 }
 
 impl RoadStopSpecDef {
@@ -469,6 +479,8 @@ mod tests {
             draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
             random_cargo_triggers: 0,
             flags,
+            build_cost_multiplier: 16,
+            clear_cost_multiplier: 16,
             callback_mask: 0,
             animation_status: 0xFF,
             animation_frames: 0,
@@ -511,6 +523,8 @@ mod tests {
                 draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
                 random_cargo_triggers: 0,
                 flags: 0,
+                build_cost_multiplier: 16,
+                clear_cost_multiplier: 16,
                 callback_mask: 0,
                 animation_status: 0xFF,
                 animation_frames: 0,
@@ -535,6 +549,8 @@ mod tests {
                 draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
                 random_cargo_triggers: 0,
                 flags: 0,
+                build_cost_multiplier: 16,
+                clear_cost_multiplier: 16,
                 callback_mask: 0,
                 animation_status: 0xFF,
                 animation_frames: 0,

@@ -695,6 +695,8 @@ fn place_road_writes_newgrf_road_type_m4() {
 
 #[test]
 fn place_bus_stop_persists_current_road_stop_spec() {
+    use crate::StopKind;
+    use crate::economy::{road_stop_build_cost_factored, road_stop_clear_cost_factored};
     use crate::road_stop_spec::{RoadStopClassDef, RoadStopSpecDef};
 
     let mut s = GameState::new(8, 8);
@@ -719,6 +721,8 @@ fn place_bus_stop_persists_current_road_stop_spec() {
         draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
         random_cargo_triggers: 0,
         flags: 0,
+        build_cost_multiplier: 24,
+        clear_cost_multiplier: 40,
         callback_mask: 0,
         animation_status: 0xFF,
         animation_frames: 0,
@@ -737,8 +741,22 @@ fn place_bus_stop_persists_current_road_stop_spec() {
     let stop = TileCoord::new(1, 1);
     let road = TileCoord::new(1, 0);
     apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+    let money_before_stop = s.economy.money;
     apply_command(&mut s, &Command::PlaceBusStop(stop, 3)).unwrap();
     assert_eq!(s.stations[0].road_stop_spec, Some(spec_id));
+    assert_eq!(
+        s.economy.money,
+        money_before_stop - road_stop_build_cost_factored(&s.global_economy, StopKind::BusStop, 24)
+    );
+
+    let money_before_clear = s.economy.money;
+    apply_command(&mut s, &Command::ClearTile(stop)).unwrap();
+    assert_eq!(
+        s.economy.money,
+        money_before_clear
+            - road_stop_clear_cost_factored(&s.global_economy, StopKind::BusStop, 40)
+    );
+    assert!(s.stations.is_empty());
 }
 
 #[test]
@@ -790,6 +808,8 @@ fn place_bus_stop_availability_sees_absolute_calendar_date() {
         draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
         random_cargo_triggers: 0,
         flags: 0,
+        build_cost_multiplier: 16,
+        clear_cost_multiplier: 16,
         callback_mask: crate::ROADSTOP_CALLBACK_MASK_AVAILABILITY,
         animation_status: 0,
         animation_frames: 0,
@@ -859,6 +879,8 @@ fn reject_bus_spec_on_truck_stop() {
         draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
         random_cargo_triggers: 0,
         flags: 0,
+        build_cost_multiplier: 16,
+        clear_cost_multiplier: 16,
         callback_mask: 0,
         animation_status: 0xFF,
         animation_frames: 0,
@@ -903,6 +925,8 @@ fn reject_drive_through_only_as_bay() {
         draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
         random_cargo_triggers: 0,
         flags: crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY,
+        build_cost_multiplier: 16,
+        clear_cost_multiplier: 16,
         callback_mask: 0,
         animation_status: 0xFF,
         animation_frames: 0,
@@ -948,6 +972,8 @@ fn reject_road_only_spec_with_tram() {
         draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
         random_cargo_triggers: 0,
         flags: crate::ROADSTOP_FLAG_ROAD_ONLY,
+        build_cost_multiplier: 16,
+        clear_cost_multiplier: 16,
         callback_mask: 0,
         animation_status: 0xFF,
         animation_frames: 0,
@@ -991,6 +1017,8 @@ fn road_stop_spec_json_roundtrip_keeps_station_link() {
         draw_mode: 0x03,
         random_cargo_triggers: 0,
         flags: crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY,
+        build_cost_multiplier: 16,
+        clear_cost_multiplier: 16,
         callback_mask: crate::ROADSTOP_CALLBACK_MASK_AVAILABILITY,
         animation_status: 0xFF,
         animation_frames: 0,

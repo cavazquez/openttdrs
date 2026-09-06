@@ -9,7 +9,8 @@ pub mod vehicle_costs;
 
 pub use build_costs::{
     build_object_cost, build_object_cost_factored, buy_land_cost, rail_build_cost,
-    rail_build_cost_factored, road_build_cost, road_build_cost_factored, station_build_cost,
+    rail_build_cost_factored, road_build_cost, road_build_cost_factored,
+    road_stop_build_cost_factored, road_stop_clear_cost_factored, station_build_cost,
     terraform_cost_per_corner, terraform_cost_per_corner_inflated, waypoint_build_cost,
 };
 pub use global::{

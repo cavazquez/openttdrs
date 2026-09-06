@@ -31,6 +31,8 @@ pub enum PriceIndex {
     BuildVehicleRoad = 18,
     BuildVehicleShip = 19,
     Terraform = 21,
+    ClearStationBus = 36,
+    ClearStationTruck = 37,
     BuildObject = 50,
     RunningTrainSteam = 41,
     RunningTrainDiesel = 42,
@@ -95,6 +97,8 @@ const PRICE_BASE_SPECS: [PriceBaseSpec; PRICE_TABLE_LEN] = {
     table[18] = spec(14_000, PriceCategory::Construction);
     table[19] = spec(65_000, PriceCategory::Construction);
     table[21] = spec(250, PriceCategory::Construction);
+    table[36] = spec(50, PriceCategory::Construction);
+    table[37] = spec(50, PriceCategory::Construction);
     table[41] = spec(5_600, PriceCategory::Running);
     table[42] = spec(5_200, PriceCategory::Running);
     table[43] = spec(4_800, PriceCategory::Running);

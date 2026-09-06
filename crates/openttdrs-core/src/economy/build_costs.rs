@@ -2,6 +2,7 @@
 
 use super::global::GlobalEconomy;
 use super::pricebase::{PriceIndex, get_price};
+use crate::StopKind;
 
 /// Coste de terraform por esquina modificada (`Price::Terraform`).
 #[must_use]
@@ -71,6 +72,43 @@ pub fn station_build_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::BuildStationRail, 1, 0)
 }
 
+/// Coste por tesela de una parada vial `NewGRF`.
+///
+/// `RoadStopSpec::GetBuildCost` usa la categoría de bus/camión y el
+/// multiplicador Action0 `0x15` con un desplazamiento `-4`; `16` conserva el
+/// precio vanilla.
+#[must_use]
+pub fn road_stop_build_cost_factored(
+    ge: &GlobalEconomy,
+    stop_kind: StopKind,
+    cost_multiplier: u8,
+) -> i64 {
+    let index = if stop_kind == StopKind::TruckStop {
+        PriceIndex::BuildStationTruck
+    } else {
+        PriceIndex::BuildStationBus
+    };
+    get_price(ge, index, i64::from(cost_multiplier), -4)
+}
+
+/// Coste por tesela de retirar una parada vial `NewGRF`.
+///
+/// El precio base de limpieza es independiente del de construcción, pero
+/// comparte el multiplicador de `RoadStopSpec` y el desplazamiento `-4`.
+#[must_use]
+pub fn road_stop_clear_cost_factored(
+    ge: &GlobalEconomy,
+    stop_kind: StopKind,
+    cost_multiplier: u8,
+) -> i64 {
+    let index = if stop_kind == StopKind::TruckStop {
+        PriceIndex::ClearStationTruck
+    } else {
+        PriceIndex::ClearStationBus
+    };
+    get_price(ge, index, i64::from(cost_multiplier), -4)
+}
+
 /// Coste de waypoint ferroviario (`Price::BuildWaypointRail`).
 #[must_use]
 pub fn waypoint_build_cost(ge: &GlobalEconomy) -> i64 {
@@ -107,6 +145,27 @@ mod tests {
         assert_eq!(
             station_build_cost(&ge),
             medium_default_price(PriceIndex::BuildStationRail)
+        );
+    }
+
+    #[test]
+    fn road_stop_cost_multiplier_uses_build_and_clear_categories() {
+        let ge = GlobalEconomy::new();
+        assert_eq!(
+            road_stop_build_cost_factored(&ge, StopKind::BusStop, 16),
+            medium_default_price(PriceIndex::BuildStationBus)
+        );
+        assert_eq!(
+            road_stop_build_cost_factored(&ge, StopKind::TruckStop, 8),
+            medium_default_price(PriceIndex::BuildStationTruck) / 2
+        );
+        assert_eq!(
+            road_stop_clear_cost_factored(&ge, StopKind::BusStop, 24),
+            medium_default_price(PriceIndex::ClearStationBus) * 3 / 2
+        );
+        assert_eq!(
+            road_stop_clear_cost_factored(&ge, StopKind::TruckStop, 0),
+            0
         );
     }
 }

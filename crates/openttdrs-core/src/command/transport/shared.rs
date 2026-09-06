@@ -1,8 +1,9 @@
+use crate::economy::road_stop_clear_cost_factored;
 use crate::map::{
     Map, OBJECT_TYPE_STATUE_COMPANY, TileCoord, TileKind, WaterClass, make_water_tile,
     object_id_from_tile, object_type_from_tile, water_class_from_m1,
 };
-use crate::{CLEAR_TILE_COST, GameState};
+use crate::{CLEAR_TILE_COST, GameState, StopKind};
 
 use super::super::{CommandError, in_bounds, require_tile_owned_by_active, tile_owner};
 
@@ -55,6 +56,27 @@ pub(in crate::command::transport) fn propagate_rail_diag_to_neighbors(
         write_normal_rail_tile(state, n, merged)?;
     }
     Ok(())
+}
+
+fn road_stop_clear_cost_for_tile(state: &GameState, c: TileCoord) -> Option<i64> {
+    state
+        .stations
+        .iter()
+        .find(|station| {
+            station.pos == c && matches!(station.stop_kind, StopKind::BusStop | StopKind::TruckStop)
+        })
+        .and_then(|station| {
+            station.road_stop_spec.and_then(|spec_id| {
+                crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, spec_id)
+                    .map(|spec| {
+                        road_stop_clear_cost_factored(
+                            &state.global_economy,
+                            station.stop_kind,
+                            spec.clear_cost_multiplier,
+                        )
+                    })
+            })
+        })
 }
 
 pub(in crate::command::transport) fn junction_merge_for_neighbor(
@@ -321,6 +343,11 @@ pub(in crate::command) fn clear_tile(
         return Ok(());
     }
 
+    // A custom RoadStop supplies its own Action0 `0x15` clear multiplier. The
+    // native command charges the category-specific clear price even though the
+    // tile itself is reset to grass below.
+    let road_stop_clear_cost = road_stop_clear_cost_for_tile(state, c);
+
     state
         .map
         .set_kind(c, TileKind::Grass)
@@ -334,6 +361,6 @@ pub(in crate::command) fn clear_tile(
         .industries
         .retain(|industry| !industry.contains_tile(c));
     crate::command::sign::remove_signs_at(state, c);
-    state.economy.money -= CLEAR_TILE_COST;
+    state.economy.money -= road_stop_clear_cost.unwrap_or(CLEAR_TILE_COST);
     Ok(())
 }

@@ -1831,6 +1831,8 @@ mod tests {
             draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
             random_cargo_triggers: 0,
             flags: 0,
+            build_cost_multiplier: 16,
+            clear_cost_multiplier: 16,
             callback_mask: 0,
             animation_status: 1,
             animation_frames: u8::MAX,

@@ -69,6 +69,8 @@ const PROP_ROADSTOP_STOP_TYPE: u8 = 0x09;
 const PROP_ROADSTOP_DRAW_MODE: u8 = 0x0C;
 /// `RoadStops`: general flags DWORD (`OpenTTD` `0x12`).
 const PROP_ROADSTOP_FLAGS: u8 = 0x12;
+/// `RoadStops`: build/clear cost multipliers BYTE pair (`OpenTTD` `0x15`).
+const PROP_ROADSTOP_COST_MULTIPLIERS: u8 = 0x15;
 /// `RoadStops`: Badge list (`OpenTTD` `0x16`, WORD count + local ids).
 const PROP_ROADSTOP_BADGES: u8 = 0x16;
 /// Cargoes: bit number (`OpenTTD` `0x08`).
@@ -592,6 +594,10 @@ pub struct ParsedRoadStopMeta {
     pub random_cargo_triggers: u32,
     /// Action0 `0x12` flags DWORD.
     pub flags: u32,
+    /// Action0 `0x15`: build cost multiplier per tile (`16` = default).
+    pub build_cost_multiplier: u8,
+    /// Action0 `0x15`: clear cost multiplier per tile (`16` = default).
+    pub clear_cost_multiplier: u8,
     /// Action0 `0x11` (`RoadStopCallbackMask`).
     pub callback_mask: u8,
     /// Action0 `0x0E`: último frame de animación.
@@ -617,6 +623,8 @@ struct RoadStopMetaParse {
     draw_mode: u8,
     random_cargo_triggers: u32,
     flags: u32,
+    build_cost_multiplier: u8,
+    clear_cost_multiplier: u8,
     callback_mask: u8,
     animation_frames: u8,
     animation_status: u8,
@@ -636,6 +644,8 @@ impl Default for RoadStopMetaParse {
             draw_mode: crate::road_stop_spec::ROADSTOP_DRAW_MODE_DEFAULT,
             random_cargo_triggers: 0,
             flags: 0,
+            build_cost_multiplier: 16,
+            clear_cost_multiplier: 16,
             callback_mask: 0,
             animation_frames: 0,
             animation_status: 0xFF,
@@ -673,6 +683,8 @@ impl RoadStopMetaParse {
             draw_mode: self.draw_mode,
             random_cargo_triggers: self.random_cargo_triggers,
             flags: self.flags,
+            build_cost_multiplier: self.build_cost_multiplier,
+            clear_cost_multiplier: self.clear_cost_multiplier,
             callback_mask: self.callback_mask,
             animation_frames: self.animation_frames,
             animation_status: self.animation_status,
@@ -2357,6 +2369,14 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 ]);
                 i += 4;
             }
+            PROP_ROADSTOP_COST_MULTIPLIERS => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                meta.build_cost_multiplier = payload[i];
+                meta.clear_cost_multiplier = payload[i + 1];
+                i += 2;
+            }
             0x11 => {
                 if i >= payload.len() {
                     break;
@@ -2410,7 +2430,7 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 }
             }
             // Anchos fijos OTTD (avanzar el bloque sin semántica).
-            0x0A | 0x0B | 0x15 => {
+            0x0A | 0x0B => {
                 if i + 2 > payload.len() {
                     break;
                 }

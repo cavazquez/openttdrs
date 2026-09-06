@@ -434,6 +434,8 @@ mod tests {
             animation_speed: 2,
             animation_triggers: 0,
             random_cargo_triggers: 0,
+            build_cost_multiplier: 16,
+            clear_cost_multiplier: 16,
             newgrf_views: Vec::new(),
             newgrf_runtime: None,
             newgrf_type_tables: None,

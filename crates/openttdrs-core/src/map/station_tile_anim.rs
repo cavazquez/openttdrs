@@ -1908,6 +1908,8 @@ mod tests {
             draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
             random_cargo_triggers: 0,
             flags: 0,
+            build_cost_multiplier: 16,
+            clear_cost_multiplier: 16,
             callback_mask: ROADSTOP_CALLBACK_MASK_ANIMATION_NEXT_FRAME
                 | ROADSTOP_CALLBACK_MASK_ANIMATION_SPEED,
             animation_status: 1,

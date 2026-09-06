@@ -161,6 +161,8 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
                 draw_mode: meta.draw_mode,
                 random_cargo_triggers: meta.random_cargo_triggers,
                 flags: meta.flags,
+                build_cost_multiplier: meta.build_cost_multiplier,
+                clear_cost_multiplier: meta.clear_cost_multiplier,
                 callback_mask: meta.callback_mask,
                 animation_status: meta.animation_status,
                 animation_frames: meta.animation_frames,

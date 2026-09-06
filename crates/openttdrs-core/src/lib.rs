@@ -242,11 +242,12 @@ pub use economy::{
     build_object_cost, build_object_cost_factored, buy_land_cost, cargo_current_payment,
     cargo_time_factor, check_bankruptcy, decrease_loan, increase_loan, inflation_income_factor,
     inflation_prices_factor, manhattan_distance, monthly_loan_interest, rail_build_cost_factored,
-    road_build_cost_factored, terraform_cost_per_corner, ticks_to_transit_periods,
-    transported_goods_income, transported_goods_income_for_climate,
-    transported_goods_income_with_spec, vehicle_asset_value_with_catalog, vehicle_purchase_cost,
-    vehicle_purchase_cost_with_callbacks, vehicle_refit_cost_with_callbacks,
-    vehicle_running_cost_per_tick, vehicle_sell_refund, vehicle_sell_refund_with_catalog,
+    road_build_cost_factored, road_stop_build_cost_factored, road_stop_clear_cost_factored,
+    terraform_cost_per_corner, ticks_to_transit_periods, transported_goods_income,
+    transported_goods_income_for_climate, transported_goods_income_with_spec,
+    vehicle_asset_value_with_catalog, vehicle_purchase_cost, vehicle_purchase_cost_with_callbacks,
+    vehicle_refit_cost_with_callbacks, vehicle_running_cost_per_tick, vehicle_sell_refund,
+    vehicle_sell_refund_with_catalog,
 };
 pub use economy_quarterly::{
     ECONOMY_HISTORY_QUARTERS, QuarterlyEconomyEntry, QuarterlyEconomyHistory,

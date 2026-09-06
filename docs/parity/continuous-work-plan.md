@@ -1878,6 +1878,14 @@ determinista y los registros `7C` de compra no se persisten porque aún no hay
 una entidad. Vecinos, strings, sonidos y scopes completos de `BaseStation`/
 aeropuerto siguen pendientes en #329.
 
+Actualización #329-STATION-CARGO-GUARDS-405 (2026-09-06, issue [#405](https://github.com/cavazquez/openttdrs/issues/405)):
+las variables Station `0x61` y `0x63` respetan las guardas nativas de
+`GoodsEntry`: el contador de espera queda en cero hasta el primer intento de
+carga y los períodos de tránsito sólo se leen cuando hay data/packets. La
+familia `0x64` y los slots deprecated mantienen sus contratos propios. La
+regresión cubre estación sin vehículo/datos y una cola con tránsito; scopes,
+strings, sonidos y cargos no representables permanecen parciales en #329.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

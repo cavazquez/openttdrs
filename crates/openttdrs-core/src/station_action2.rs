@@ -873,7 +873,13 @@ fn station_cargo_var(
     match variable {
         // `GoodsEntry::TotalCount`, capped to the 12-bit Action2 contract.
         0x60 => station.cargo_stock.get(cargo).min(4095),
-        0x61 => u32::from(station.time_since_pickup.get(cargo)),
+        0x61 => {
+            if entry.has_vehicle_ever_tried_loading() {
+                u32::from(station.time_since_pickup.get(cargo))
+            } else {
+                0
+            }
+        }
         0x62 => {
             if entry.has_rating {
                 u32::from(entry.rating)
@@ -884,13 +890,21 @@ fn station_cargo_var(
         // The packet queue retains the same maximum transit-period statistic
         // used by the cargo rating path; legacy stock-only saves naturally
         // return zero until their packets are hydrated.
-        0x63 => station
-            .cargo_packets
-            .packets()
-            .filter(|packet| packet.cargo == cargo)
-            .map(|packet| u32::from(packet.periods_in_transit))
-            .max()
-            .unwrap_or(0),
+        0x63 => {
+            let mut packets = station
+                .cargo_packets
+                .packets()
+                .filter(|packet| packet.cargo == cargo);
+            if let Some(first) = packets.next() {
+                std::iter::once(first)
+                    .chain(packets)
+                    .map(|packet| u32::from(packet.periods_in_transit))
+                    .max()
+                    .unwrap_or(0)
+            } else {
+                0
+            }
+        }
         0x64 => {
             if entry.has_vehicle_ever_tried_loading() {
                 u32::from(entry.last_speed) | (u32::from(entry.last_age) << 8)
@@ -1696,6 +1710,44 @@ mod tests {
         assert_eq!(ctx.parameterized_vars.get(&(0x64, 1)), Some(&1_101));
         assert_eq!(ctx.parameterized_vars.get(&(0x65, 1)), Some(&8));
         assert_eq!(ctx.parameterized_vars.get(&(0x69, 1)), Some(&13));
+    }
+
+    #[test]
+    fn station_cargo_scope_honours_vehicle_and_data_guards() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(1, 1);
+        map.set_tile(coord, rail_station_tile(0)).unwrap();
+        let mut station = Station::new_with_kind(coord, StopKind::RailStation);
+        station.time_since_pickup.coal = 17;
+
+        let ctx = action2_eval_ctx_for_station_tile_with_grf(
+            &map,
+            std::slice::from_ref(&station),
+            coord,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x61, 1)), Some(&0));
+        assert_eq!(ctx.parameterized_vars.get(&(0x63, 1)), Some(&0));
+
+        station.goods.get_mut(CargoType::Coal).last_speed = 1;
+        let mut packet = CargoPacket::new(CargoType::Coal, 2, coord);
+        packet.periods_in_transit = 4;
+        station.push_waiting_packets([packet]);
+        station.time_since_pickup.coal = 17;
+        let ctx = action2_eval_ctx_for_station_tile_with_grf(
+            &map,
+            std::slice::from_ref(&station),
+            coord,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x61, 1)), Some(&17));
+        assert_eq!(ctx.parameterized_vars.get(&(0x63, 1)), Some(&4));
     }
 
     #[test]

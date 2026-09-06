@@ -2159,3 +2159,11 @@ El parser valida GRFID activo, versión del GRF, idioma explícito de v8+ o
 lookup del catálogo; cargas desconocidas, fuera de rango y truncadas se
 ignoran sin mutar el estado. Códigos de control y mappings específicos siguen
 fuera del recorte.
+
+Actualización #329-VEHICLE-CB31-ERROR-431 (2026-09-06, issue [#431](https://github.com/cavazquez/openttdrs/issues/431)):
+CB31 (`CBID_VEHICLE_START_STOP_CHECK`) conserva ahora el motivo que devuelve
+OpenTTD: `0..0x3FF` apunta a `0xD000 + resultado`, `0x40F` recupera
+`regs100[0]`, `0x400`/`CALLBACK_FAILED` permiten y GRF v7 mantiene el permiso
+especial `0xFF`. La API booleana de comandos sigue compatible; localización,
+controles de texto y serialización del error permanecen explícitamente como
+sucesores.

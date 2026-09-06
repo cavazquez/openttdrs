@@ -349,13 +349,79 @@ pub fn vehicle_start_stop_callback_allows(result: u16) -> bool {
     result == CALLBACK_FAILED || result == 0x400 || (result & 0xFF) == 0xFF
 }
 
+/// Motivo normalizado que devuelve CB `0x31` antes de construir el error de
+/// comando.
+///
+/// `OpenTTD` no reduce todas las denegaciones a un único texto: los resultados
+/// menores que `0x400` apuntan al rango genérico `0xD000`, mientras `0x40F`
+/// recupera un `StringID` explícito desde `register 0x100`. Conservar esa
+/// clasificación en el core permite que el caller elija el idioma y expanda
+/// el text stack sin volver a ejecutar el callback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VehicleStartStopCallbackOutcome {
+    Allow,
+    LocalString(u32),
+    GrfString(u32),
+    GenericDenied(u16),
+}
+
+/// Clasifica el resultado bruto de CB `0x31` con la semántica de versión de
+/// `OpenTTD`. `register_100` sólo se consulta para el resultado especial `0x40F`.
+#[must_use]
+pub const fn classify_vehicle_start_stop_callback(
+    result: u16,
+    grf_version: u8,
+    register_100: Option<u32>,
+) -> VehicleStartStopCallbackOutcome {
+    if result == CALLBACK_FAILED || result == 0x400 {
+        return VehicleStartStopCallbackOutcome::Allow;
+    }
+    if grf_version < 8 && result < 0x400 && (result & 0xFF) == 0xFF {
+        return VehicleStartStopCallbackOutcome::Allow;
+    }
+    if result < 0x400 {
+        return VehicleStartStopCallbackOutcome::LocalString(
+            crate::newgrf_text::GRF_STRING_GENERIC_BASE + result as u32,
+        );
+    }
+    if grf_version >= 8 && result == 0x40F {
+        return match register_100 {
+            Some(string_id) => VehicleStartStopCallbackOutcome::GrfString(string_id),
+            None => VehicleStartStopCallbackOutcome::GenericDenied(result),
+        };
+    }
+    VehicleStartStopCallbackOutcome::GenericDenied(result)
+}
+
+/// Ejecuta CB 0x31, conserva el `StringID` que produjo el text stack y aplica
+/// writeback. `Allow` es la única variante que permite start/stop.
+#[must_use]
+pub fn resolve_vehicle_start_stop_callback(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+) -> VehicleStartStopCallbackOutcome {
+    let Some(runtime) = engine.newgrf_runtime.as_ref() else {
+        return VehicleStartStopCallbackOutcome::Allow;
+    };
+    let mut ctx = action2_eval_ctx_from_vehicle(vehicle);
+    let result = runtime.resolve_callback_ctx_u16(
+        engine.newgrf_local_id,
+        CBID_VEHICLE_START_STOP_CHECK,
+        0,
+        0,
+        &mut ctx,
+    );
+    let register_100 = ctx.registers_100.get(&0x100).copied();
+    writeback_vehicle_persistent_registers(vehicle, &ctx);
+    classify_vehicle_start_stop_callback(result, engine.newgrf_grf_version, register_100)
+}
+
 /// Ejecuta CB 0x31 y aplica writeback. `true` = permitir start/stop.
 pub fn apply_vehicle_start_stop_callback(engine: &EngineDef, vehicle: &mut Vehicle) -> bool {
-    if engine.newgrf_runtime.is_none() {
-        return true;
-    }
-    let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_START_STOP_CHECK, 0, 0);
-    vehicle_start_stop_callback_allows(result)
+    matches!(
+        resolve_vehicle_start_stop_callback(engine, vehicle),
+        VehicleStartStopCallbackOutcome::Allow
+    )
 }
 
 /// Resultado normalizado de `CBID_VEHICLE_32DAY_CALLBACK` (`0x32`).
@@ -5991,6 +6057,65 @@ mod tests {
         assert!(!vehicle_start_stop_callback_allows(0));
         assert!(!vehicle_start_stop_callback_allows(0x10));
         assert!(!vehicle_start_stop_callback_allows(0x40F));
+    }
+
+    #[test]
+    fn callbacks_ac_start_stop_classifies_upstream_error_strings() {
+        assert_eq!(
+            classify_vehicle_start_stop_callback(CALLBACK_FAILED, 8, None),
+            VehicleStartStopCallbackOutcome::Allow
+        );
+        assert_eq!(
+            classify_vehicle_start_stop_callback(0x400, 8, None),
+            VehicleStartStopCallbackOutcome::Allow
+        );
+        assert_eq!(
+            classify_vehicle_start_stop_callback(0xFF, 7, None),
+            VehicleStartStopCallbackOutcome::Allow
+        );
+        assert_eq!(
+            classify_vehicle_start_stop_callback(0x12, 7, None),
+            VehicleStartStopCallbackOutcome::LocalString(0xD012)
+        );
+        assert_eq!(
+            classify_vehicle_start_stop_callback(0xFF, 8, None),
+            VehicleStartStopCallbackOutcome::LocalString(0xD0FF)
+        );
+        assert_eq!(
+            classify_vehicle_start_stop_callback(0x40F, 8, Some(0x1234_5678)),
+            VehicleStartStopCallbackOutcome::GrfString(0x1234_5678)
+        );
+        assert_eq!(
+            classify_vehicle_start_stop_callback(0x40F, 8, None),
+            VehicleStartStopCallbackOutcome::GenericDenied(0x40F)
+        );
+        assert_eq!(
+            classify_vehicle_start_stop_callback(0x401, 8, None),
+            VehicleStartStopCallbackOutcome::GenericDenied(0x401)
+        );
+    }
+
+    #[test]
+    fn callbacks_ac_start_stop_runtime_preserves_register_string_id() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grf_version = 8;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_fund_more_text_grf_string(0x1234)));
+        let mut vehicle = Vehicle::new(
+            31,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+
+        assert_eq!(
+            resolve_vehicle_start_stop_callback(&engine, &mut vehicle),
+            VehicleStartStopCallbackOutcome::GrfString(0x1234)
+        );
     }
 
     #[test]

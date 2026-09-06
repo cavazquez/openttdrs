@@ -692,7 +692,12 @@ no están cerrados.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset, el conteo `61→60` y los badges de vehículo/vía `0x64`/`0x65`/`0x7A` ya están cubiertos mediante GlobalVar `0x18`; los scopes parent de casa y objeto ya reciben el PSA del pueblo por GRFID cuando `CITY.psa_list` los asocia. Siguen pendientes los scopes parent completos de estación/industria y variables de casa/objeto que no sean ese storage.
 - Storage persistente de industria/aeropuerto/pueblo: `INDY.psa`, `STNN.normal.airport.psa`, `CITY.psa_list` y `PSAC` se importan, hidratan sus referencias y exportan para los registros `7C` conocidos; casas y objetos leen el PSA del pueblo desde su scope parent y CB17/CB157 de construcción ya hacen writeback por GRFID. Los callbacks CB25/26/27 y la re-randomización de `IndustryTile` también escriben el PSA de la industria en `TileLoop`, `IndustryTick` y `CargoReceived`; siguen pendientes la invalidación tras mutaciones y los callbacks PSA de pueblo restantes. CB140–142 y el CB13 map-aware de estación preservan `7C` junto con las variables de tesela y vecindad modeladas; todavía faltan áreas completas de `BaseStation`, strings y sonidos. CB14 aún no aporta el layout 16-bit exacto; CB149 aún no aporta scope/vecinos ni strings GRF.
 - Goldens tick-a-tick vs OpenTTD 15.3 para todos los features.
-- Textos GRF de string (`0x40F` / `regs100`) en CB31: denegación genérica `NewGrfCallbackDenied`.
+- CB31 de vehículos ya conserva el motivo textual: GRF v7/v8 clasifican
+  `0..0x3FF` como `0xD000 + resultado`, `0x40F` como `regs100[0]` y los
+  valores desconocidos como `GenericDenied`; la API booleana de comandos aún
+  expone `NewGrfCallbackDenied`, por lo que localización, expansión de
+  controles y serialización del mensaje siguen pendientes. Evidencia:
+  [newgrf-vehicle-start-stop-431.md](newgrf-vehicle-start-stop-431.md).
 
 Actualización #329-CARGO-TRAIN-WEIGHT-063 (2026-09-04, commit `b32b87f4`):
 `ConsistChanged` suma `CargoSpec::weight` por unidad cargada y actualiza

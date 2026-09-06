@@ -21,6 +21,7 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
     // hacia el feedback de una acción posterior que falle por otra razón.
     state.runtime.last_vehicle_start_stop_diagnostic = None;
     state.runtime.last_station_slope_diagnostic = None;
+    state.runtime.last_object_slope_diagnostic = None;
     state.runtime.fleet_index.rebuild(&state.vehicles);
     state
         .runtime

@@ -479,7 +479,8 @@ reseedean una vez por footprint. El writer asigna/reemite
 las filas nativas al exportar. El preflight de objetos usa copias de pueblos y
 sólo las conserva al ejecutar una orden financiada. La lectura runtime y el
 writeback siguen acotados a esos call sites;
-el resto de la paridad queda
+Los rechazos CB157 conservan además el código/texto de ubicación sólo durante
+el comando y el HUD lo consume sin persistirlo en SAV/JSON. El resto de la paridad queda
 detallado en [`parity/sav-compatibility.md`](parity/sav-compatibility.md).
 
 Actualización #329-INDTILE-PSA-033 (2026-09-03, `47afecd7`): la ruta normal de

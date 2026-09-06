@@ -121,7 +121,77 @@ pub(crate) fn push_station_slope_error(
     feedback.pending_soft_ping = true;
 }
 
+/// Muestra un rechazo de CB157 con el texto del catálogo activo. El
+/// diagnóstico se consume siempre para que un fallo posterior no reutilice el
+/// motivo de otro objeto.
+pub(crate) fn push_object_slope_error(
+    feedback: &mut HudBuildFeedback,
+    sim: &mut SimWorld,
+    err: CommandError,
+    locale: Locale,
+    elapsed_secs: f32,
+) {
+    let diagnostic = sim.state.runtime.last_object_slope_diagnostic.take();
+    let dynamic_message = if matches!(err, CommandError::NewGrfCallbackDenied) {
+        diagnostic.and_then(|diagnostic| {
+            let string_id = match diagnostic.outcome {
+                openttdrs_core::ObjectSlopeCallbackOutcome::LocalString(string_id)
+                | openttdrs_core::ObjectSlopeCallbackOutcome::GrfString(string_id) => string_id,
+                openttdrs_core::ObjectSlopeCallbackOutcome::Allow => return None,
+                openttdrs_core::ObjectSlopeCallbackOutcome::GenericDenied(code) => {
+                    return standard_object_slope_error(code, locale);
+                }
+            };
+            let language = match locale {
+                Locale::Es => openttdrs_core::NEWGRF_LANGUAGE_SPANISH,
+                Locale::En => openttdrs_core::NEWGRF_LANGUAGE_ENGLISH,
+            };
+            let text = sim.state.runtime.newgrf_string_catalog.lookup_expanded(
+                diagnostic.grfid,
+                string_id,
+                language,
+            )?;
+            if text.is_empty() {
+                return None;
+            }
+            let prefix = match locale {
+                Locale::Es => "El objeto no puede construirse",
+                Locale::En => "The object cannot be built",
+            };
+            Some(format!("{prefix}: {text}"))
+        })
+    } else {
+        None
+    };
+
+    feedback.message =
+        Some(dynamic_message.unwrap_or_else(|| command_error_message(err).to_string()));
+    feedback.expires_at_secs = elapsed_secs + BUILD_ERROR_DISPLAY_SECS;
+    feedback.pending_soft_ping = true;
+}
+
 fn standard_station_slope_error(code: u16, locale: Locale) -> Option<String> {
+    let message = match (locale, code) {
+        (Locale::Es, 0x402) => "Sólo se puede construir en selva.",
+        (Locale::Es, 0x403) => "Sólo se puede construir en desierto.",
+        (Locale::Es, 0x404) => "Sólo se puede construir por encima de la línea de nieve.",
+        (Locale::Es, 0x405) => "Sólo se puede construir por debajo de la línea de nieve.",
+        (Locale::Es, 0x406) => "No se puede construir en el mar.",
+        (Locale::Es, 0x407) => "No se puede construir sobre un canal.",
+        (Locale::Es, 0x408) => "No se puede construir sobre un río.",
+        (Locale::En, 0x402) => "This can only be built in rainforest.",
+        (Locale::En, 0x403) => "This can only be built in desert.",
+        (Locale::En, 0x404) => "This can only be built above the snow line.",
+        (Locale::En, 0x405) => "This can only be built below the snow line.",
+        (Locale::En, 0x406) => "This cannot be built on sea.",
+        (Locale::En, 0x407) => "This cannot be built on a canal.",
+        (Locale::En, 0x408) => "This cannot be built on a river.",
+        _ => return None,
+    };
+    Some(message.to_string())
+}
+
+fn standard_object_slope_error(code: u16, locale: Locale) -> Option<String> {
     let message = match (locale, code) {
         (Locale::Es, 0x402) => "Sólo se puede construir en selva.",
         (Locale::Es, 0x403) => "Sólo se puede construir en desierto.",
@@ -146,7 +216,8 @@ fn standard_station_slope_error(code: u16, locale: Locale) -> Option<String> {
 mod tests {
     use super::*;
     use openttdrs_core::{
-        NewGrfString, StationSlopeCallbackDiagnostic, StationSlopeCallbackOutcome,
+        NewGrfString, ObjectSlopeCallbackDiagnostic, ObjectSlopeCallbackOutcome,
+        StationSlopeCallbackDiagnostic, StationSlopeCallbackOutcome,
         VehicleStartStopCallbackDiagnostic, VehicleStartStopCallbackOutcome,
     };
 
@@ -277,5 +348,59 @@ mod tests {
             feedback.message.as_deref(),
             Some("No se puede construir sobre un canal.")
         );
+    }
+
+    #[test]
+    fn object_slope_error_uses_expanded_catalog_text_and_consumes_diagnostic() {
+        let mut sim = SimWorld::default();
+        sim.state.runtime.newgrf_string_catalog.push(NewGrfString {
+            grfid: 12,
+            string_id: 0xD003,
+            language: openttdrs_core::NEWGRF_LANGUAGE_SPANISH,
+            text: "El terreno no es válido".into(),
+        });
+        sim.state.runtime.last_object_slope_diagnostic = Some(ObjectSlopeCallbackDiagnostic {
+            grfid: 12,
+            outcome: ObjectSlopeCallbackOutcome::LocalString(0xD003),
+        });
+        let mut feedback = HudBuildFeedback::default();
+
+        push_object_slope_error(
+            &mut feedback,
+            &mut sim,
+            CommandError::NewGrfCallbackDenied,
+            Locale::Es,
+            2.0,
+        );
+
+        assert_eq!(
+            feedback.message.as_deref(),
+            Some("El objeto no puede construirse: El terreno no es válido")
+        );
+        assert!(sim.state.runtime.last_object_slope_diagnostic.is_none());
+    }
+
+    #[test]
+    fn object_slope_error_localizes_standard_callback_codes() {
+        let mut sim = SimWorld::default();
+        sim.state.runtime.last_object_slope_diagnostic = Some(ObjectSlopeCallbackDiagnostic {
+            grfid: 12,
+            outcome: ObjectSlopeCallbackOutcome::GenericDenied(0x40F),
+        });
+        let mut feedback = HudBuildFeedback::default();
+
+        push_object_slope_error(
+            &mut feedback,
+            &mut sim,
+            CommandError::NewGrfCallbackDenied,
+            Locale::En,
+            2.0,
+        );
+
+        assert_eq!(
+            feedback.message.as_deref(),
+            Some("Un NewGRF denegó esta acción (callback).")
+        );
+        assert!(sim.state.runtime.last_object_slope_diagnostic.is_none());
     }
 }

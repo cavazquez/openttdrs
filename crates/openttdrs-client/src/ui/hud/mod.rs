@@ -8,7 +8,8 @@ mod place_flash;
 mod sound_ping;
 
 pub(crate) use feedback::{
-    push_build_command_error, push_station_slope_error, push_vehicle_start_stop_error,
+    push_build_command_error, push_object_slope_error, push_station_slope_error,
+    push_vehicle_start_stop_error,
 };
 
 pub(crate) use display::{setup_tile_info_ui, update_tile_info_text};

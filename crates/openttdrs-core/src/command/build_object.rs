@@ -61,13 +61,14 @@ fn check_single_object_tile(map: &Map, c: TileCoord) -> Result<(), CommandError>
     }
 }
 
-pub(crate) fn check_build_object_with_towns(
+fn check_build_object_with_towns_diagnostic(
     map: &Map,
     c: TileCoord,
     object_type: u8,
     catalog: &[ObjectSpecDef],
     climate: Climate,
     towns: &mut [Town],
+    mut diagnostic: Option<&mut Option<crate::newgrf_callback::ObjectSlopeCallbackDiagnostic>>,
 ) -> Result<(), CommandError> {
     in_bounds(map, c)?;
     if !is_allowed_build_object_type(object_type, catalog) {
@@ -106,7 +107,7 @@ pub(crate) fn check_build_object_with_towns(
                     .min_by_key(|(_, town)| crate::house_spec::distance_square(town.pos, tile))
                     .map(|(index, _)| index);
                 if let Some(index) = nearest_town {
-                    if !crate::newgrf_callback::apply_object_slope_callback_for_build(
+                    let outcome = crate::newgrf_callback::resolve_object_slope_callback_for_build(
                         def,
                         map,
                         &mut towns[index],
@@ -114,11 +115,34 @@ pub(crate) fn check_build_object_with_towns(
                         slope,
                         offset,
                         climate,
+                    );
+                    if !matches!(
+                        outcome,
+                        crate::newgrf_callback::ObjectSlopeCallbackOutcome::Allow
                     ) {
+                        if let Some(slot) = diagnostic.as_deref_mut() {
+                            *slot = Some(crate::newgrf_callback::ObjectSlopeCallbackDiagnostic {
+                                grfid: def.grfid,
+                                outcome,
+                            });
+                        }
                         return Err(CommandError::NewGrfCallbackDenied);
                     }
-                } else if !crate::newgrf_callback::apply_object_slope_callback(def, slope, offset) {
-                    return Err(CommandError::NewGrfCallbackDenied);
+                } else {
+                    let outcome =
+                        crate::newgrf_callback::resolve_object_slope_callback(def, slope, offset);
+                    if !matches!(
+                        outcome,
+                        crate::newgrf_callback::ObjectSlopeCallbackOutcome::Allow
+                    ) {
+                        if let Some(slot) = diagnostic.as_deref_mut() {
+                            *slot = Some(crate::newgrf_callback::ObjectSlopeCallbackDiagnostic {
+                                grfid: def.grfid,
+                                outcome,
+                            });
+                        }
+                        return Err(CommandError::NewGrfCallbackDenied);
+                    }
                 }
             }
         }
@@ -153,7 +177,35 @@ pub(crate) fn check_build_object_placement_with_towns(
     climate: Climate,
     towns: &mut [Town],
 ) -> Result<(), CommandError> {
-    check_build_object_with_towns(map, c, object_type, catalog, climate, towns)?;
+    check_build_object_placement_with_towns_diagnostic(
+        map,
+        c,
+        object_type,
+        catalog,
+        climate,
+        towns,
+        None,
+    )
+}
+
+fn check_build_object_placement_with_towns_diagnostic(
+    map: &Map,
+    c: TileCoord,
+    object_type: u8,
+    catalog: &[ObjectSpecDef],
+    climate: Climate,
+    towns: &mut [Town],
+    diagnostic: Option<&mut Option<crate::newgrf_callback::ObjectSlopeCallbackDiagnostic>>,
+) -> Result<(), CommandError> {
+    check_build_object_with_towns_diagnostic(
+        map,
+        c,
+        object_type,
+        catalog,
+        climate,
+        towns,
+        diagnostic,
+    )?;
     if !is_newgrf_object_type(object_type) && count_objects_of_type(map, object_type) >= 1 {
         return Err(CommandError::ObjectLimitReached);
     }
@@ -197,13 +249,14 @@ pub(crate) fn build_object(
     // conserva sus efectos PSA para el execute, pero un fallo de fondos no
     // muta el estado persistente.
     let mut callback_towns = state.towns.clone();
-    check_build_object_placement_with_towns(
+    check_build_object_placement_with_towns_diagnostic(
         &state.map,
         c,
         object_type,
         &state.object_spec_catalog,
         state.climate,
         &mut callback_towns,
+        Some(&mut state.runtime.last_object_slope_diagnostic),
     )?;
     let (factor, tiles) = object_build_cost_params(object_type, &state.object_spec_catalog);
     let cost = build_object_cost_factored(&state.global_economy, factor, tiles);
@@ -622,12 +675,22 @@ mod tests {
             state.map.get_kind(TileCoord::new(3, 3)),
             Some(TileKind::Grass)
         );
+        assert_eq!(
+            state.runtime.last_object_slope_diagnostic,
+            Some(crate::newgrf_callback::ObjectSlopeCallbackDiagnostic {
+                grfid: crate::newgrf_config::grfid_from_bytes(*b"CBOS"),
+                outcome: crate::newgrf_callback::ObjectSlopeCallbackOutcome::LocalString(
+                    crate::newgrf_text::GRF_STRING_GENERIC_BASE,
+                ),
+            })
+        );
 
         // En GRF 7, el mismo cero del callback se interpreta como éxito por
         // la inversión histórica del bit 10.
         state.object_spec_catalog[0].newgrf_grf_version = 7;
         assert_eq!(command_would_fail(&state, &command), None);
         apply_command(&mut state, &command).expect("GRF 7 permite la pendiente");
+        assert!(state.runtime.last_object_slope_diagnostic.is_none());
     }
 
     #[test]

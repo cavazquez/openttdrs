@@ -2229,3 +2229,12 @@ regresión cubre un vecino canalizado y la ruta de construcción de una estació
 la variante legacy sin mapa conserva su contrato. Scopes adicionales de
 `BaseStation`, vecinos no-terreno y parámetros dinámicos del text stack siguen
 siendo sucesores del padre #329.
+
+Actualización #329-OBJECT-CB157-ERRORS-440 (2026-09-06, issue [#440](https://github.com/cavazquez/openttdrs/issues/440)):
+CB157 de objetos conserva ahora el motivo exacto de rechazo de OpenTTD 15.3:
+textos locales, `regs100[0]` para `0x40F`, códigos genéricos e inversión de bit
+10 para GRF<8. El preflight map-aware mantiene el writeback PSA del pueblo y
+guarda un diagnóstico efímero sin mutar el mapa; el HUD lo consume una sola vez
+con catálogo expandido y locale activo, incluyendo los códigos estándar de
+clima/agua. Scopes propios de instancia/tesela y el fallback completo de
+pendiente siguen siendo sucesores del padre.

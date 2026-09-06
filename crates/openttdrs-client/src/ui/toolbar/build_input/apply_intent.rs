@@ -11,7 +11,7 @@ use crate::settings::ClientPreferences;
 use crate::state::{OrderPickState, SimWorld};
 use crate::ui::hud::{
     HudBuildFeedback, SelectedTileInfo, enqueue_build_place_flash, push_build_command_error,
-    push_station_slope_error,
+    push_object_slope_error, push_station_slope_error,
 };
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::toolbar::bridge_window::{BridgeBuildState, PendingBridge};
@@ -344,6 +344,23 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                             .as_ref()
                             .map_or(Locale::Es, |prefs| prefs.locale());
                         push_station_slope_error(
+                            &mut ctx.hud_feedback,
+                            &mut ctx.sim,
+                            e,
+                            locale,
+                            time_secs,
+                        );
+                    } else if matches!(
+                        action,
+                        BuildMenuAction::BuildLighthouse
+                            | BuildMenuAction::BuildTransmitter
+                            | BuildMenuAction::PlaceNewGrfObject
+                    ) {
+                        let locale = ctx
+                            .prefs
+                            .as_ref()
+                            .map_or(Locale::Es, |prefs| prefs.locale());
+                        push_object_slope_error(
                             &mut ctx.hud_feedback,
                             &mut ctx.sim,
                             e,

@@ -401,6 +401,58 @@ pub struct StationSlopeCallbackDiagnostic {
     pub outcome: StationSlopeCallbackOutcome,
 }
 
+/// Motivo normalizado que devuelve CB `0x157` al validar la pendiente de un
+/// objeto. Comparte el contrato de callbacks de ubicación con CB149, pero se
+/// conserva separado para que el HUD pueda describir correctamente el objeto.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectSlopeCallbackOutcome {
+    Allow,
+    LocalString(u32),
+    GrfString(u32),
+    GenericDenied(u16),
+}
+
+/// Diagnóstico efímero del último rechazo CB157 durante una construcción.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ObjectSlopeCallbackDiagnostic {
+    pub grfid: u32,
+    pub outcome: ObjectSlopeCallbackOutcome,
+}
+
+/// Clasifica el retorno de CB157 con la semántica de ubicación de `OpenTTD`.
+/// `register_100` se consulta únicamente para el resultado especial `0x40F`.
+#[must_use]
+pub fn classify_object_slope_callback(
+    result: u16,
+    grfid: u32,
+    grf_version: u8,
+    register_100: Option<u32>,
+) -> ObjectSlopeCallbackOutcome {
+    if result == CALLBACK_FAILED {
+        return ObjectSlopeCallbackOutcome::Allow;
+    }
+    let normalized = if grfid != 0 && grf_version != 0 && grf_version < 8 {
+        result ^ (1 << 10)
+    } else {
+        result
+    };
+    if normalized == 0x400 {
+        return ObjectSlopeCallbackOutcome::Allow;
+    }
+    if normalized < 0x400 {
+        return ObjectSlopeCallbackOutcome::LocalString(
+            crate::newgrf_text::GRF_STRING_GENERIC_BASE + u32::from(normalized),
+        );
+    }
+    if normalized == 0x40F {
+        return match register_100 {
+            Some(string_id) => ObjectSlopeCallbackOutcome::GrfString(string_id),
+            None => ObjectSlopeCallbackOutcome::GenericDenied(normalized),
+        };
+    }
+    ObjectSlopeCallbackOutcome::GenericDenied(normalized)
+}
+
 /// Clasifica el resultado bruto de CB `0x31` con la semántica de versión de
 /// `OpenTTD`. `register_100` sólo se consulta para el resultado especial `0x40F`.
 #[must_use]
@@ -2866,11 +2918,26 @@ pub fn resolve_cargo_station_rating_callback(
 /// `OpenTTD` siguen fuera de este corte.
 #[must_use]
 pub fn apply_object_slope_callback(def: &ObjectSpecDef, slope: u8, footprint_offset: u8) -> bool {
+    matches!(
+        resolve_object_slope_callback(def, slope, footprint_offset),
+        ObjectSlopeCallbackOutcome::Allow
+    )
+}
+
+/// Resuelve CB157 sin contexto de tesela. Se conserva para callers legacy que
+/// sólo necesitan el booleano, pero permite que los callers diagnósticos
+/// conserven la razón de rechazo sin volver a ejecutar el callback.
+#[must_use]
+pub fn resolve_object_slope_callback(
+    def: &ObjectSpecDef,
+    slope: u8,
+    footprint_offset: u8,
+) -> ObjectSlopeCallbackOutcome {
     if !def.has_slope_check_callback() {
-        return true;
+        return ObjectSlopeCallbackOutcome::Allow;
     }
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
-        return true;
+        return ObjectSlopeCallbackOutcome::Allow;
     };
     let result = runtime.resolve_callback(
         def.local_id,
@@ -2878,7 +2945,7 @@ pub fn apply_object_slope_callback(def: &ObjectSpecDef, slope: u8, footprint_off
         u32::from(slope),
         u32::from(footprint_offset),
     );
-    callback_allows_location_for_grf(result, def.grfid, def.newgrf_grf_version)
+    classify_object_slope_callback(result, def.grfid, def.newgrf_grf_version, None)
 }
 
 /// Call site de construcción de objetos con el `TownScopeResolver` parent.
@@ -2900,14 +2967,40 @@ pub fn apply_object_slope_callback_for_build(
     footprint_offset: u8,
     climate: crate::Climate,
 ) -> bool {
+    matches!(
+        resolve_object_slope_callback_for_build(
+            def,
+            map,
+            town,
+            tile,
+            slope,
+            footprint_offset,
+            climate,
+        ),
+        ObjectSlopeCallbackOutcome::Allow
+    )
+}
+
+/// Variante map-aware de CB157 que conserva el motivo de rechazo y aplica el
+/// writeback PSA del pueblo incluso cuando la ubicación es denegada.
+#[must_use]
+pub fn resolve_object_slope_callback_for_build(
+    def: &ObjectSpecDef,
+    map: &Map,
+    town: &mut Town,
+    tile: TileCoord,
+    slope: u8,
+    footprint_offset: u8,
+    climate: crate::Climate,
+) -> ObjectSlopeCallbackOutcome {
     if !def.has_slope_check_callback() {
-        return true;
+        return ObjectSlopeCallbackOutcome::Allow;
     }
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
-        return true;
+        return ObjectSlopeCallbackOutcome::Allow;
     };
     let Some(mut map_tile) = map.get(tile) else {
-        return true;
+        return ObjectSlopeCallbackOutcome::Allow;
     };
     // Antes de colocar el objeto MAP2 aún no contiene el desplazamiento de la
     // tesela. El scope nativo expone igualmente `0x40` durante construcción;
@@ -2929,7 +3022,12 @@ pub fn apply_object_slope_callback_for_build(
         &mut ctx,
     );
     writeback_town_persistent_registers(town, def.grfid, &ctx);
-    callback_allows_location_for_grf(result, def.grfid, def.newgrf_grf_version)
+    classify_object_slope_callback(
+        result,
+        def.grfid,
+        def.newgrf_grf_version,
+        ctx.registers_100.get(&0x100).copied(),
+    )
 }
 
 /// Texto que devuelve CB15C para la ventana de construcción de un objeto.
@@ -7832,6 +7930,65 @@ mod tests {
         assert_eq!(
             resolve_object_fund_more_text_callback(&def, 2),
             ObjectFundMoreText::GrfString(0x1234)
+        );
+    }
+
+    #[test]
+    fn callbacks_ac_object_slope_classifies_upstream_error_strings() {
+        assert_eq!(
+            classify_object_slope_callback(CALLBACK_FAILED, 0x4F42, 8, None),
+            ObjectSlopeCallbackOutcome::Allow
+        );
+        assert_eq!(
+            classify_object_slope_callback(0x400, 0x4F42, 8, None),
+            ObjectSlopeCallbackOutcome::Allow
+        );
+        // GRF < 8 invierte el bit 10: cero es éxito y 0x400 es rechazo.
+        assert_eq!(
+            classify_object_slope_callback(0, 0x4F42, 7, None),
+            ObjectSlopeCallbackOutcome::Allow
+        );
+        assert_eq!(
+            classify_object_slope_callback(0x400, 0x4F42, 7, None),
+            ObjectSlopeCallbackOutcome::LocalString(0xD000)
+        );
+        assert_eq!(
+            classify_object_slope_callback(7, 0x4F42, 8, None),
+            ObjectSlopeCallbackOutcome::LocalString(0xD007)
+        );
+        assert_eq!(
+            classify_object_slope_callback(0x40F, 0x4F42, 8, Some(0x1234_5678)),
+            ObjectSlopeCallbackOutcome::GrfString(0x1234_5678)
+        );
+        assert_eq!(
+            classify_object_slope_callback(0x40F, 0x4F42, 8, None),
+            ObjectSlopeCallbackOutcome::GenericDenied(0x40F)
+        );
+    }
+
+    #[test]
+    fn callbacks_ac_object_slope_reads_register_100_for_40f() {
+        let mut def = object_fund_more_text_def(gfx_callback_fund_more_text_grf_string(0x1234));
+        def.callback_mask = crate::object_spec::OBJECT_CALLBACK_SLOPE_CHECK_MASK;
+        let map = Map::new_flat(4, 4, 0);
+        let tile = TileCoord::new(1, 1);
+        let mut town = Town {
+            id: 1,
+            pos: tile,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            resolve_object_slope_callback_for_build(
+                &def,
+                &map,
+                &mut town,
+                tile,
+                0,
+                0,
+                Climate::Temperate,
+            ),
+            ObjectSlopeCallbackOutcome::GrfString(0x1234)
         );
     }
 

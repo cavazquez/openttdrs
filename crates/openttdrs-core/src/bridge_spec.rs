@@ -6,6 +6,11 @@ use crate::map::{Tile, TileCoord};
 use crate::rail_signals::calendar_year_at_tick;
 use crate::tick::GameTick;
 
+/// Cantidad de piezas centrales y ejes que conserva `BridgeSpec`.
+pub const BRIDGE_MIDDLE_PIECE_COUNT: usize = 6;
+pub const BRIDGE_AXIS_COUNT: usize = 2;
+pub type BridgePillarFlagsTable = [[u8; BRIDGE_AXIS_COUNT]; BRIDGE_MIDDLE_PIECE_COUNT];
+
 /// Línea recta entre dos teselas (misma regla que el arrastre de puente).
 #[must_use]
 pub fn axis_line(a: TileCoord, b: TileCoord) -> Vec<TileCoord> {
@@ -118,6 +123,14 @@ pub struct BridgeSpecDef {
     /// Action0 prop `0x0D` (tablas de sprites) presente en algún override.
     #[serde(default)]
     pub has_custom_sprites: bool,
+    /// Action0 prop `0x15`: máscara de pilares por pieza central/eje.
+    /// Cada bit sigue `BridgePillarFlag` de `OpenTTD` (esquinas 0..3, aristas 4..7).
+    #[serde(default)]
+    pub pillar_flags: BridgePillarFlagsTable,
+    /// Indica que el GRF publicó Action0 `0x15`; una tabla cero sigue siendo
+    /// significativa y no debe confundirse con un save JSON antiguo.
+    #[serde(default)]
+    pub has_custom_pillar_flags: bool,
 }
 
 impl BridgeSpecDef {
@@ -134,6 +147,8 @@ impl BridgeSpecDef {
             from_newgrf: false,
             grfid: 0,
             has_custom_sprites: false,
+            pillar_flags: [[0; BRIDGE_AXIS_COUNT]; BRIDGE_MIDDLE_PIECE_COUNT],
+            has_custom_pillar_flags: false,
         }
     }
 }
@@ -595,6 +610,17 @@ mod tests {
         let b = TileCoord::new(4, 0);
         assert_eq!(bridge_total_length(a, b), 5);
         assert_eq!(bridge_middle_length(a, b), 3);
+    }
+
+    #[test]
+    fn bridge_spec_pillar_flags_roundtrip_through_json() {
+        let mut catalog = vanilla_bridge_spec_catalog();
+        catalog[0].pillar_flags[4] = [0x12, 0x34];
+        catalog[0].has_custom_pillar_flags = true;
+        let json = serde_json::to_string(&catalog).expect("bridge catalog JSON");
+        let loaded: Vec<BridgeSpecDef> = serde_json::from_str(&json).expect("bridge catalog");
+        assert_eq!(loaded[0].pillar_flags[4], [0x12, 0x34]);
+        assert!(loaded[0].has_custom_pillar_flags);
     }
 
     #[test]

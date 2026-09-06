@@ -2019,4 +2019,17 @@ eje; una intersección omite el bloque de pilares de esa tesela, igual que
 paradas vanilla y los wrappers sin catálogo siguen estables. Se agregaron
 regresiones para las tablas de máscaras y selección custom/vanilla; queda
 pendiente transportar los flags de pilares de `BridgeSpec` NewGRF y validar
-goldens de captura antes de cerrar el parent #329.
+goldens de captura antes de cerrar el parent #329. La persistencia de esa
+tabla queda documentada en #418.
+
+Actualización #329-BRIDGE-PILLAR-FLAGS-418 (2026-09-06, issue [#418](https://github.com/cavazquez/openttdrs/issues/418)):
+Action0 `Bridges` propiedad `0x15` ya se conserva como seis piezas centrales
+por dos ejes (`BridgePillarFlagsTable`). El parser lee `ExtendedByte`, guarda
+los dos bytes de cada entrada, consume también las entradas posteriores al
+límite de seis para no desalinear la propiedad siguiente y tolera payloads
+truncados sin panic. La aplicación NewGRF copia la tabla al `BridgeSpecDef`,
+marca `has_custom_pillar_flags` incluso para una máscara cero y el catálogo
+JSON la rehidrata con defaults compatibles con saves anteriores. Las
+regresiones cubren parseo, truncamiento, aplicación y round-trip; el renderer
+todavía usa el fallback vanilla hasta #419, que conectará la tabla al
+compositor y a la intersección con `disallowed_pillars`.

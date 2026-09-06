@@ -52,6 +52,10 @@ pub fn apply_newgrf_bridges(state: &mut GameState, search_dirs: &[&Path]) {
             if meta.has_custom_sprites {
                 slot.has_custom_sprites = true;
             }
+            if meta.pillar_flags_set {
+                slot.pillar_flags = meta.pillar_flags;
+                slot.has_custom_pillar_flags = true;
+            }
             slot.from_newgrf = true;
             slot.grfid = entry.grfid;
         }

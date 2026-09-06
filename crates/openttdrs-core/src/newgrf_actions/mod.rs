@@ -4869,6 +4869,56 @@ mod tests {
         let _ = parse_action0_bridge_meta(&[0x00, ACTION0_FEATURE_BRIDGES, 0x02, 0x01, 0x00]);
     }
 
+    /// #418: Bridges — Action0 `0x15` conserva seis piezas/ejes y consume extras.
+    #[test]
+    fn bridge_pillar_flags_parse_apply_and_truncate() {
+        let mut a0 = vec![
+            0x00,
+            ACTION0_FEATURE_BRIDGES,
+            0x07, // year, min, max, price, speed, pillars, name
+            0x01,
+            0x00,
+            0x08,
+            0,
+            0x09,
+            0,
+            0x0A,
+            0xFF,
+            0x0B,
+            80,
+            0x0C,
+            32,
+            0,
+            0x15,
+            8,
+        ];
+        for piece in 0..8u8 {
+            a0.extend_from_slice(&[piece + 1, 0x80 | piece]);
+        }
+        a0.extend_from_slice(&[0xFE, b'P', b'i', b'l', b'l', 0]);
+
+        let meta = parse_action0_bridge_meta(&a0).expect("bridge metadata");
+        assert!(meta.pillar_flags_set);
+        assert_eq!(meta.pillar_flags[0], [1, 0x80]);
+        assert_eq!(meta.pillar_flags[5], [6, 0x85]);
+        assert_eq!(meta.name.as_deref(), Some("Pill"));
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'P', b'F', 0, 1], "pill", "");
+        let dir = tempfile_dir_with("pill.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("pill.grf", 0x5046_0001));
+        apply_newgrf_bridges(&mut state, &[&dir]);
+        let def = crate::bridge_spec_def(
+            &state.bridge_spec_catalog,
+            crate::bridge_spec::BridgeType::Wooden,
+        )
+        .unwrap();
+        assert!(def.has_custom_pillar_flags);
+        assert_eq!(def.pillar_flags[5], [6, 0x85]);
+    }
+
     /// #259: Bridges — dos GRFs mismo `local_id`; el último gana.
     #[test]
     fn infra_ac_bridge_two_grf_stack_last_wins() {

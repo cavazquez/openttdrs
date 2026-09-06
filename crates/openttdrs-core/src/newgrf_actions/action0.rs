@@ -768,6 +768,9 @@ pub struct ParsedBridgeMeta {
     pub max_speed: u16,
     pub name: Option<String>,
     pub has_custom_sprites: bool,
+    /// Action0 `0x15`: máscaras de pilares por pieza/eje.
+    pub pillar_flags: crate::bridge_spec::BridgePillarFlagsTable,
+    pub pillar_flags_set: bool,
     /// Props runtime vistas (si no, el apply conserva el slot vanilla).
     pub year_set: bool,
     pub min_len_set: bool,
@@ -2693,28 +2696,21 @@ fn skip_bridge_sprite_tables(payload: &[u8], i: &mut usize) -> bool {
     true
 }
 
-fn skip_bridge_pillars(payload: &[u8], i: &mut usize) -> bool {
-    if *i >= payload.len() {
-        return false;
-    }
-    let b = payload[*i];
-    *i += 1;
-    let tiles = if b == 0xFF {
-        if *i + 1 > payload.len() {
-            return false;
+fn read_bridge_pillars(
+    payload: &[u8],
+    i: &mut usize,
+) -> Option<(crate::bridge_spec::BridgePillarFlagsTable, bool)> {
+    let tiles = read_station_extended_byte(payload, i)?;
+    let mut flags =
+        [[0; crate::bridge_spec::BRIDGE_AXIS_COUNT]; crate::bridge_spec::BRIDGE_MIDDLE_PIECE_COUNT];
+    for piece in 0..tiles {
+        let x = read_u8(payload, i)?;
+        let y = read_u8(payload, i)?;
+        if let Some(slot) = flags.get_mut(piece) {
+            *slot = [x, y];
         }
-        let v = u16::from_le_bytes([payload[*i], payload[*i + 1]]);
-        *i += 2;
-        usize::from(v)
-    } else {
-        usize::from(b)
-    };
-    let bytes = tiles.saturating_mul(2);
-    if *i + bytes > payload.len() {
-        return false;
     }
-    *i += bytes;
-    true
+    Some((flags, true))
 }
 
 /// Parsea Action0 `Bridges` (`0x06`): year/len/price/speed (+ props consumidas).
@@ -2737,6 +2733,9 @@ pub fn parse_action0_bridge_meta(payload: &[u8]) -> Option<ParsedBridgeMeta> {
     let mut max_speed = u16::MAX;
     let mut name = None;
     let mut has_custom_sprites = false;
+    let mut pillar_flags =
+        [[0; crate::bridge_spec::BRIDGE_AXIS_COUNT]; crate::bridge_spec::BRIDGE_MIDDLE_PIECE_COUNT];
+    let mut pillar_flags_set = false;
     let mut year_set = false;
     let mut min_len_set = false;
     let mut max_len_set = false;
@@ -2819,9 +2818,11 @@ pub fn parse_action0_bridge_meta(payload: &[u8]) -> Option<ParsedBridgeMeta> {
                 price_set = true;
             }
             PROP_BRIDGE_PILLARS => {
-                if !skip_bridge_pillars(payload, &mut i) {
+                let Some((flags, set)) = read_bridge_pillars(payload, &mut i) else {
                     break;
-                }
+                };
+                pillar_flags = flags;
+                pillar_flags_set = set;
             }
             PROP_NAME_CSTRING => {
                 let mut bytes = Vec::new();
@@ -2846,6 +2847,8 @@ pub fn parse_action0_bridge_meta(payload: &[u8]) -> Option<ParsedBridgeMeta> {
         max_speed,
         name,
         has_custom_sprites,
+        pillar_flags,
+        pillar_flags_set,
         year_set,
         min_len_set,
         max_len_set,

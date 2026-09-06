@@ -156,7 +156,8 @@ pub use badge::{
     next_free_badge_id, resolve_badge_labels, resolve_badge_labels_detailed,
 };
 pub use bridge_spec::{
-    BRIDGE_SPECS, BridgePiece, BridgeSpec, BridgeSpecDef, BridgeType, bridge_above_axis_from_mapt,
+    BRIDGE_AXIS_COUNT, BRIDGE_MIDDLE_PIECE_COUNT, BRIDGE_SPECS, BridgePiece,
+    BridgePillarFlagsTable, BridgeSpec, BridgeSpecDef, BridgeType, bridge_above_axis_from_mapt,
     bridge_available, bridge_available_at_tick, bridge_available_at_tick_in, bridge_available_in,
     bridge_build_cost, bridge_build_cost_in, bridge_line_tiles, bridge_max_speed_for_tile,
     bridge_middle_length, bridge_spec, bridge_spec_def, bridge_total_length, bridge_type_from_m6,

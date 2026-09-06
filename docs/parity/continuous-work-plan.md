@@ -1748,3 +1748,15 @@ construcción conserva el resolver nulo de OpenTTD, sin `Station` ni PSA. Quedan
 fuera de este corte las variables vecinas `0x66`/`0x68`/`0x6A`/`0x6B`, strings,
 sonidos, layouts 16-bit y los scopes completos de `BaseStation`/aeropuerto;
 #329 permanece abierto.
+
+Actualización #329-STATION-NEIGHBOURS-064 (2026-09-06, issue [#390](https://github.com/cavazquez/openttdrs/issues/390)):
+los constructores catalogue-aware de `station_action2` materializan sólo las
+consultas vecinas declaradas por el Action2 activo. `0x66`/`0x67` resuelven
+frame y land info con offsets firmados, wrap y versión GRF; `0x68` codifica
+gfx/eje/estación y la identidad `(GRFID, local_id)`; `0x6A`/`0x6B` aplican los
+sentinels y el filtro de GRF de OpenTTD. La ruta de sprites plana, layouts
+`TileSeq` y CB140–142 reciben el catálogo; las APIs legacy sin catálogo no
+inventan vecinos. La regresión cubre misma/diferente estación, ejes,
+parámetros coexistentes, wrap y teselas ausentes. Continúan fuera sonidos,
+strings, layouts 16-bit y scopes completos de `BaseStation`/aeropuerto; #329
+permanece abierto.

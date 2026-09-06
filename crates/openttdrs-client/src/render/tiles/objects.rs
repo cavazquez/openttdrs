@@ -1733,9 +1733,10 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 let colour_u8 = owner_colour.map(CompanyColour::as_u8).unwrap_or(0);
                 let mut a2 = world.map_or_else(
                     || {
-                        openttdrs_core::action2_eval_ctx_for_station_tile_with_grf(
+                        openttdrs_core::action2_eval_ctx_for_station_tile_with_catalog(
                             map,
                             stations,
+                            station_catalog,
                             ctx.coord,
                             colour_u8,
                             climate,
@@ -1744,9 +1745,10 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         )
                     },
                     |world| {
-                        openttdrs_core::action2_eval_ctx_for_station_tile_with_world(
+                        openttdrs_core::action2_eval_ctx_for_station_tile_with_catalog_and_world(
                             map,
                             stations,
+                            station_catalog,
                             ctx.coord,
                             colour_u8,
                             climate,
@@ -2614,9 +2616,10 @@ fn resolve_station_layout_for_tile<'a>(
     let colour_u8 = owner_colour.map(CompanyColour::as_u8).unwrap_or(0);
     let mut action2 = world.map_or_else(
         || {
-            openttdrs_core::action2_eval_ctx_for_station_tile_with_grf(
+            openttdrs_core::action2_eval_ctx_for_station_tile_with_catalog(
                 map,
                 stations,
+                station_catalog,
                 ctx.coord,
                 colour_u8,
                 climate,
@@ -2625,9 +2628,10 @@ fn resolve_station_layout_for_tile<'a>(
             )
         },
         |world| {
-            openttdrs_core::action2_eval_ctx_for_station_tile_with_world(
+            openttdrs_core::action2_eval_ctx_for_station_tile_with_catalog_and_world(
                 map,
                 stations,
+                station_catalog,
                 ctx.coord,
                 colour_u8,
                 climate,

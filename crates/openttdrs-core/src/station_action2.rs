@@ -4,7 +4,8 @@ use crate::cargo::{ALL_CARGO_TYPES, CargoType};
 use crate::cargo_spec::CargoSpecDef;
 use crate::industry::Industry;
 use crate::map::{
-    Map, TileCoord, TileKind, rail_bits_touching_side, rail_traversal_bits, tile_slope_and_z,
+    Map, TILE_PIXEL_HEIGHT, TileCoord, TileKind, rail_bits_touching_side, rail_traversal_bits,
+    tile_slope_and_z,
 };
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::newgrf_type_tables::{
@@ -16,7 +17,9 @@ use crate::station::{
     STATION_TILE_RESERVATION, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage,
     station_at_tile, station_type_from_m6,
 };
+use crate::station_class::{StationSpecDef, station_spec_def};
 use crate::world_gen::Climate;
+use std::collections::BTreeSet;
 
 /// Contexto Action2 para dibujar / resolver sprites de una tesela de estación.
 ///
@@ -102,6 +105,338 @@ pub fn action2_eval_ctx_for_station_tile_with_world(
         grf_version,
         Some(world),
     )
+}
+
+/// Variante del contexto de estación que además materializa las consultas a
+/// teselas vecinas declaradas por el runtime Action2 del spec actual.
+///
+/// El catálogo sólo se necesita para traducir `0x68`/`0x6A`/`0x6B` a la
+/// identidad `(GRFID, local_id)` de la spec vecina. Las APIs históricas que no
+/// tienen catálogo siguen usando [`action2_eval_ctx_for_station_tile_with_grf`]
+/// y conservan el fallback sin vecindad.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn action2_eval_ctx_for_station_tile_with_catalog(
+    map: &Map,
+    stations: &[Station],
+    station_catalog: &[StationSpecDef],
+    coord: TileCoord,
+    owner_colour: u8,
+    climate: Climate,
+    type_tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
+) -> Action2EvalCtx {
+    let mut ctx = action2_eval_ctx_for_station_tile_with_grf(
+        map,
+        stations,
+        coord,
+        owner_colour,
+        climate,
+        type_tables,
+        grf_version,
+    );
+    populate_station_neighbour_vars(
+        &mut ctx,
+        map,
+        stations,
+        station_catalog,
+        coord,
+        climate,
+        grf_version,
+    );
+    ctx
+}
+
+/// Variante catalogue-aware con cobertura viva de cargos/industrias.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn action2_eval_ctx_for_station_tile_with_catalog_and_world(
+    map: &Map,
+    stations: &[Station],
+    station_catalog: &[StationSpecDef],
+    coord: TileCoord,
+    owner_colour: u8,
+    climate: Climate,
+    type_tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
+    world: StationAction2WorldContext<'_>,
+) -> Action2EvalCtx {
+    let mut ctx = action2_eval_ctx_for_station_tile_with_world(
+        map,
+        stations,
+        coord,
+        owner_colour,
+        climate,
+        type_tables,
+        grf_version,
+        world,
+    );
+    populate_station_neighbour_vars(
+        &mut ctx,
+        map,
+        stations,
+        station_catalog,
+        coord,
+        climate,
+        grf_version,
+    );
+    ctx
+}
+
+struct StationNeighbourScope<'a> {
+    map: &'a Map,
+    stations: &'a [Station],
+    station_catalog: &'a [StationSpecDef],
+    source: &'a Station,
+    current_spec: &'a StationSpecDef,
+    coord: TileCoord,
+    climate: Climate,
+    grf_version: u8,
+}
+
+impl StationNeighbourScope<'_> {
+    fn populate(&self, ctx: &mut Action2EvalCtx) {
+        for (variable, parameter) in requested_station_neighbour_vars(self.current_spec) {
+            let nearby = nearby_station_tile(self.map, self.coord, parameter);
+            let value = match variable {
+                0x66 => {
+                    nearby_station_animation_frame(self.map, self.stations, self.source, nearby)
+                }
+                0x67 => nearby_station_land_info(
+                    self.map,
+                    self.coord,
+                    nearby,
+                    self.climate,
+                    self.grf_version,
+                ),
+                0x68 => nearby_station_info(
+                    self.map,
+                    self.stations,
+                    self.station_catalog,
+                    self.source,
+                    self.current_spec,
+                    self.coord,
+                    nearby,
+                ),
+                0x6A => nearby_station_grfid(self.map, self.stations, self.station_catalog, nearby),
+                0x6B => nearby_station_local_id(
+                    self.map,
+                    self.stations,
+                    self.station_catalog,
+                    self.current_spec,
+                    nearby,
+                ),
+                _ => continue,
+            };
+            ctx.parameterized_vars.insert((variable, parameter), value);
+        }
+    }
+}
+
+fn populate_station_neighbour_vars(
+    ctx: &mut Action2EvalCtx,
+    map: &Map,
+    stations: &[Station],
+    station_catalog: &[StationSpecDef],
+    coord: TileCoord,
+    climate: Climate,
+    grf_version: u8,
+) {
+    let Some(source) = station_at_tile(map, stations, coord) else {
+        return;
+    };
+    let Some(current_spec) = station_spec_def(station_catalog, source.station_spec) else {
+        return;
+    };
+    if !current_spec.from_newgrf || current_spec.newgrf_runtime.is_none() {
+        return;
+    }
+    StationNeighbourScope {
+        map,
+        stations,
+        station_catalog,
+        source,
+        current_spec,
+        coord,
+        climate,
+        grf_version,
+    }
+    .populate(ctx);
+}
+
+fn requested_station_neighbour_vars(spec: &StationSpecDef) -> BTreeSet<(u8, u8)> {
+    let mut requested = BTreeSet::new();
+    let Some(runtime) = spec.newgrf_runtime.as_ref() else {
+        return requested;
+    };
+    for entry in runtime.action2_var.values() {
+        for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+            if matches!(term.variable, 0x66 | 0x67 | 0x68 | 0x6A | 0x6B)
+                && let Some(parameter) = term.param
+            {
+                requested.insert((term.variable, parameter));
+            }
+        }
+    }
+    requested
+}
+
+fn signed_station_nibble(value: u8) -> i32 {
+    let value = i32::from(value & 0x0F);
+    if value >= 8 { value - 16 } else { value }
+}
+
+/// `GetNearbyTile` para `StationScopeResolver`: offsets firmados en nibbles y
+/// wrap toroidal, igual que el resolver vial.
+fn nearby_station_tile(map: &Map, base: TileCoord, parameter: u8) -> TileCoord {
+    let (width, height) = map.dimensions();
+    let (Ok(width), Ok(height)) = (i32::try_from(width), i32::try_from(height)) else {
+        return base;
+    };
+    if width == 0 || height == 0 {
+        return base;
+    }
+    let dx = signed_station_nibble(parameter);
+    let dy = signed_station_nibble(parameter >> 4);
+    TileCoord::new(
+        base.x.saturating_add(dx).rem_euclid(width),
+        base.y.saturating_add(dy).rem_euclid(height),
+    )
+}
+
+fn is_rail_station_tile(map: &Map, stations: &[Station], coord: TileCoord) -> bool {
+    map.get(coord).is_some_and(|tile| {
+        tile.kind == TileKind::Station
+            && matches!(
+                station_type_from_m6(tile.m6),
+                0 | STATION_TYPE_RAIL_WAYPOINT
+            )
+            && station_at_tile(map, stations, coord).is_some_and(|station| {
+                matches!(
+                    station.stop_kind,
+                    crate::station::StopKind::RailStation | crate::station::StopKind::RailWaypoint
+                )
+            })
+    })
+}
+
+fn nearby_station_animation_frame(
+    map: &Map,
+    stations: &[Station],
+    source: &Station,
+    nearby: TileCoord,
+) -> u32 {
+    if !is_rail_station_tile(map, stations, nearby) {
+        return u32::MAX;
+    }
+    let Some(candidate) = station_at_tile(map, stations, nearby) else {
+        return u32::MAX;
+    };
+    if candidate.pos != source.pos {
+        return u32::MAX;
+    }
+    map.get(nearby).map_or(u32::MAX, |tile| u32::from(tile.m7))
+}
+
+fn nearby_station_land_info(
+    map: &Map,
+    source: TileCoord,
+    nearby: TileCoord,
+    climate: Climate,
+    grf_version: u8,
+) -> u32 {
+    let Some(tile) = map.get(nearby) else {
+        return u32::MAX;
+    };
+    let (tileh, raw_z) = tile_slope_and_z(map, nearby).unwrap_or((0, 0));
+    let z = if grf_version >= 8 {
+        raw_z
+    } else {
+        raw_z.saturating_mul(u8::try_from(TILE_PIXEL_HEIGHT).unwrap_or(8))
+    };
+    let axis_y = map
+        .get(source)
+        .is_some_and(|source_tile| source_tile.m5 & 1 != 0);
+    let slope_swapped = axis_y && ((tileh & 1 != 0) != (tileh & 4 != 0));
+    let slope = if slope_swapped { tileh ^ 5 } else { tileh };
+    let tile_type = u32::from(tile_kind_as_ottd(tile.kind));
+    let terrain = terrain_type_for_tile(map, nearby, climate, Some(tile));
+    tile_type << 24 | u32::from(z) << 16 | (terrain << 2) << 8 | u32::from(slope)
+}
+
+fn nearby_station_info(
+    map: &Map,
+    stations: &[Station],
+    station_catalog: &[StationSpecDef],
+    source: &Station,
+    current_spec: &StationSpecDef,
+    source_coord: TileCoord,
+    nearby: TileCoord,
+) -> u32 {
+    if !is_rail_station_tile(map, stations, nearby) {
+        return u32::MAX;
+    }
+    let Some(candidate) = station_at_tile(map, stations, nearby) else {
+        return u32::MAX;
+    };
+    let Some(tile) = map.get(nearby) else {
+        return u32::MAX;
+    };
+    let source_axis = map
+        .get(source_coord)
+        .map_or(0, |source_tile| source_tile.m5 & 1);
+    let nearby_axis = tile.m5 & 1;
+    let mut result = u32::from((tile.m5 >> 1) & 0x03) << 12;
+    if source_axis != nearby_axis {
+        result |= 1 << 11;
+    }
+    if candidate.pos == source.pos {
+        result |= 1 << 10;
+    }
+    if let Some(spec) = station_spec_def(station_catalog, candidate.station_spec)
+        && spec.from_newgrf
+    {
+        result |= 1
+            << if spec.newgrf_grfid == current_spec.newgrf_grfid {
+                8
+            } else {
+                9
+            };
+        result |= u32::from(spec.newgrf_local_id);
+    }
+    result
+}
+
+fn nearby_station_grfid(
+    map: &Map,
+    stations: &[Station],
+    station_catalog: &[StationSpecDef],
+    nearby: TileCoord,
+) -> u32 {
+    if !is_rail_station_tile(map, stations, nearby) {
+        return u32::MAX;
+    }
+    station_at_tile(map, stations, nearby)
+        .and_then(|station| station_spec_def(station_catalog, station.station_spec))
+        .filter(|spec| spec.from_newgrf)
+        .map_or(0, |spec| spec.newgrf_grfid)
+}
+
+fn nearby_station_local_id(
+    map: &Map,
+    stations: &[Station],
+    station_catalog: &[StationSpecDef],
+    current_spec: &StationSpecDef,
+    nearby: TileCoord,
+) -> u32 {
+    if !is_rail_station_tile(map, stations, nearby) {
+        return u32::MAX;
+    }
+    station_at_tile(map, stations, nearby)
+        .and_then(|station| station_spec_def(station_catalog, station.station_spec))
+        .filter(|spec| spec.from_newgrf)
+        .filter(|spec| spec.newgrf_grfid == current_spec.newgrf_grfid)
+        .map_or(0xFFFE, |spec| u32::from(spec.newgrf_local_id))
 }
 
 /// Completa el contexto mínimo de una estación cuando el caller no tiene una
@@ -608,6 +943,9 @@ mod tests {
     use crate::cargo_packet::CargoPacket;
     use crate::company::CompanyId;
     use crate::map::{Map, Tile, TileKind};
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
+    };
     use crate::station::{Station, StopKind};
 
     fn rail_station_tile(m5: u8) -> Tile {
@@ -624,6 +962,66 @@ mod tests {
             m2_hi: 0,
             m7: 0,
             m3hi: 0,
+        }
+    }
+
+    fn station_neighbour_runtime(
+        vars: &[(u8, u8)],
+    ) -> Box<crate::newgrf_sprites::TrainSpriteGraphics> {
+        let mut runtime = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        runtime.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        for (index, &(variable, parameter)) in vars.iter().enumerate() {
+            runtime.action2_var.insert(
+                u8::try_from(2 + index).unwrap_or(u8::MAX),
+                Action2VarEntry {
+                    first: Action2VarTerm {
+                        variable,
+                        param: Some(parameter),
+                        adjust: Action2VarAdjust {
+                            and_mask: u32::MAX,
+                            ..Action2VarAdjust::default()
+                        },
+                    },
+                    ops: Vec::new(),
+                    ranges: Vec::new(),
+                    default: 0,
+                },
+            );
+        }
+        Box::new(runtime)
+    }
+
+    fn station_spec(
+        id: u16,
+        grfid: u32,
+        local_id: u8,
+        runtime: Box<crate::newgrf_sprites::TrainSpriteGraphics>,
+    ) -> StationSpecDef {
+        StationSpecDef {
+            id: crate::station_class::StationSpecId::from_u16(id),
+            class: crate::station_class::StationClassId::from_u16(1),
+            label: format!("Station {id}"),
+            short_label: format!("S{id}"),
+            disallowed_platforms: 0,
+            disallowed_lengths: 0,
+            callback_mask: 0,
+            flags: 0,
+            animation_status: 0,
+            animation_frames: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            from_newgrf: true,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: local_id,
+            newgrf_runtime: Some(runtime),
+            newgrf_grfid: grfid,
+            newgrf_grf_version: 8,
+            newgrf_type_tables: None,
+            custom_layouts: std::collections::HashMap::new(),
         }
     }
 
@@ -648,6 +1046,73 @@ mod tests {
         assert!(ctx.vars.contains_key(&0x67));
         assert_eq!(ctx.random_bits, 0x42);
         assert_eq!(ctx.vars.get(&0x4A), Some(&9));
+    }
+
+    #[test]
+    fn station_ctx_resolves_neighbour_vars_with_wrap_and_grf_identity() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let source = TileCoord::new(1, 1);
+        let same = TileCoord::new(2, 1);
+        let other = TileCoord::new(3, 1);
+        map.set_tile(source, rail_station_tile(0)).unwrap();
+        let mut same_tile = rail_station_tile(2);
+        same_tile.m7 = 7;
+        map.set_tile(same, same_tile).unwrap();
+        let mut other_tile = rail_station_tile(1);
+        other_tile.m7 = 9;
+        map.set_tile(other, other_tile).unwrap();
+
+        let mut current = Station::new_with_kind(source, StopKind::RailStation);
+        current.station_spec = crate::station_class::StationSpecId::from_u16(1);
+        let mut other_station = Station::new_with_kind(other, StopKind::RailStation);
+        other_station.station_spec = crate::station_class::StationSpecId::from_u16(2);
+        let stations = vec![current, other_station];
+        let runtime = station_neighbour_runtime(&[
+            (0x66, 0x01),
+            (0x67, 0x01),
+            (0x68, 0x01),
+            (0x6A, 0x01),
+            (0x6B, 0x01),
+            (0x66, 0x02),
+            (0x68, 0x02),
+            (0x6A, 0x02),
+            (0x6B, 0x02),
+            (0x66, 0xFF),
+            (0x68, 0xFF),
+        ]);
+        let catalog = vec![
+            station_spec(1, 0x1111_0001, 4, runtime),
+            station_spec(2, 0x2222_0002, 7, station_neighbour_runtime(&[])),
+        ];
+        let ctx = action2_eval_ctx_for_station_tile_with_catalog(
+            &map,
+            &stations,
+            &catalog,
+            source,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+        );
+
+        assert_eq!(ctx.parameterized_vars.get(&(0x66, 0x01)), Some(&7));
+        assert!(ctx.parameterized_vars.contains_key(&(0x67, 0x01)));
+        assert_eq!(ctx.parameterized_vars.get(&(0x68, 0x01)), Some(&0x1504));
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x6A, 0x01)),
+            Some(&0x1111_0001)
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x6B, 0x01)), Some(&4));
+
+        assert_eq!(ctx.parameterized_vars.get(&(0x66, 0x02)), Some(&u32::MAX));
+        assert_eq!(ctx.parameterized_vars.get(&(0x68, 0x02)), Some(&0x0A07));
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x6A, 0x02)),
+            Some(&0x2222_0002)
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x6B, 0x02)), Some(&0xFFFE));
+        assert_eq!(ctx.parameterized_vars.get(&(0x66, 0xFF)), Some(&u32::MAX));
+        assert_eq!(ctx.parameterized_vars.get(&(0x68, 0xFF)), Some(&u32::MAX));
     }
 
     #[test]

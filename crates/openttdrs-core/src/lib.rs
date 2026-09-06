@@ -746,6 +746,8 @@ pub use station::{
 };
 pub use station_action2::{
     StationAction2WorldContext, action2_eval_ctx_for_station_tile,
+    action2_eval_ctx_for_station_tile_with_catalog,
+    action2_eval_ctx_for_station_tile_with_catalog_and_world,
     action2_eval_ctx_for_station_tile_with_grf, action2_eval_ctx_for_station_tile_with_world,
 };
 pub use station_class::{

@@ -27,8 +27,8 @@ use crate::station::{
     station_type_from_m6,
 };
 use crate::station_action2::{
-    StationAction2WorldContext, action2_eval_ctx_for_station_tile_with_grf,
-    action2_eval_ctx_for_station_tile_with_world,
+    StationAction2WorldContext, action2_eval_ctx_for_station_tile_with_catalog,
+    action2_eval_ctx_for_station_tile_with_catalog_and_world,
 };
 use crate::station_class::{StationAnimationTrigger, StationSpecDef, station_spec_def};
 use crate::world_gen::Climate;
@@ -786,9 +786,10 @@ fn station_animation_context(
         .map_or(0, |company| company.colour);
     let mut ctx = industries.map_or_else(
         || {
-            action2_eval_ctx_for_station_tile_with_grf(
+            action2_eval_ctx_for_station_tile_with_catalog(
                 map,
                 stations,
+                catalog,
                 coord,
                 owner_colour,
                 climate,
@@ -797,9 +798,10 @@ fn station_animation_context(
             )
         },
         |industries| {
-            action2_eval_ctx_for_station_tile_with_world(
+            action2_eval_ctx_for_station_tile_with_catalog_and_world(
                 map,
                 stations,
+                catalog,
                 coord,
                 owner_colour,
                 climate,

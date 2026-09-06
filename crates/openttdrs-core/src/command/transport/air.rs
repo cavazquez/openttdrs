@@ -147,6 +147,7 @@ pub(in crate::command) fn place_airport_area(
     st.airport_tile_gfx = airport_tile_gfx;
     st.airport_spec = place_spec;
     st.airport_newgrf_spec_id = newgrf_id.filter(|_| newgrf_def.is_some());
+    st.airport_ttd_type = newgrf_def.as_ref().map(|def| def.ttd_airport_type);
     // La API de construcción conserva el eje como orientación geométrica.
     // Usar las rotaciones cardinales canónicas de OpenTTD mantiene la
     // distinción X/Y en SAV aunque todavía no se exponga el cuarto giro en UI.

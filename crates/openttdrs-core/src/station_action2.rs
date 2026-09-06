@@ -484,6 +484,20 @@ fn populate_station_general_vars(ctx: &mut Action2EvalCtx, station: &Station) {
     ctx.vars.insert(0x48, acceptance_mask);
     ctx.vars.insert(0x82, 50);
     ctx.vars.insert(0x86, 0);
+    let airport_type = station.airport_ttd_type.map_or_else(
+        || u32::from(station.airport_spec.as_ttd_airport_type()),
+        u32::from,
+    );
+    ctx.vars.insert(0xF1, airport_type);
+    let airport_blocks = station.airport_blocks;
+    ctx.vars.insert(
+        0xF6,
+        u32::try_from(airport_blocks & u64::from(u32::MAX)).unwrap_or(u32::MAX),
+    );
+    ctx.vars.insert(
+        0xF7,
+        u32::try_from((airport_blocks >> 8) & u64::from(u8::MAX)).unwrap_or(0),
+    );
     let facilities = match station.stop_kind {
         crate::station::StopKind::RailStation => 1 << 0,
         crate::station::StopKind::TruckStop => 1 << 1,
@@ -968,6 +982,7 @@ fn platform_info_for_tile_variant(
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::airport_class::AirportSpecId;
     use crate::cargo_packet::CargoPacket;
     use crate::company::CompanyId;
     use crate::map::{Map, Tile, TileKind};
@@ -1187,6 +1202,50 @@ mod tests {
                 Some(low_mask)
             );
         }
+    }
+
+    #[test]
+    fn station_general_vars_encode_airport_type_and_blocks() {
+        let mut station = Station::new_with_kind(TileCoord::new(1, 1), StopKind::Airport);
+        station.airport_spec = AirportSpecId::International;
+        station.airport_blocks = 0x0001_2345;
+        let legacy = action2_eval_ctx_from_station(&station);
+        assert_eq!(legacy.vars.get(&0xF1), Some(&1));
+        assert_eq!(legacy.vars.get(&0xF6), Some(&0x0001_2345));
+        assert_eq!(legacy.vars.get(&0xF7), Some(&0x23));
+
+        station.airport_newgrf_spec_id = Some(42);
+        station.airport_ttd_type = Some(3);
+        let mut map = Map::new_flat(4, 4, 0);
+        map.set_tile(
+            station.pos,
+            Tile {
+                height: 0,
+                kind: TileKind::Station,
+                mapt: 0,
+                m5: 0,
+                m1: 0,
+                m6: 0,
+                m8: 0,
+                m3: 0,
+                m2: 0,
+                m2_hi: 0,
+                m7: 0,
+                m3hi: 0,
+            },
+        )
+        .unwrap();
+        let map_aware = action2_eval_ctx_for_station_tile(
+            &map,
+            std::slice::from_ref(&station),
+            station.pos,
+            0,
+            Climate::Temperate,
+            None,
+        );
+        assert_eq!(map_aware.vars.get(&0xF1), Some(&3));
+        assert_eq!(map_aware.vars.get(&0xF6), Some(&0x0001_2345));
+        assert_eq!(map_aware.vars.get(&0xF7), Some(&0x23));
     }
 
     #[test]

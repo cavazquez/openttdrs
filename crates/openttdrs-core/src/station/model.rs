@@ -334,6 +334,11 @@ pub struct Station {
     /// Id global `NewGRF` del aeropuerto (`≥10`); `None` = vanilla.
     #[serde(default)]
     pub airport_newgrf_spec_id: Option<u16>,
+    /// Tipo compacto `TTDPatch` de `StationScopeResolver::GetVariable(0xF1)`.
+    /// Se hidrata desde Action0 `Airports` cuando el catálogo está disponible;
+    /// `None` usa la agrupación vanilla derivada de `airport_spec`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub airport_ttd_type: Option<u8>,
     /// Índice de layout del aeropuerto guardado por `STNN.normal.airport.layout`.
     ///
     /// `OpenTTD` separa este selector de la orientación geométrica. Mantenerlo
@@ -464,6 +469,7 @@ impl Station {
             airport_tile_gfx: Vec::new(),
             airport_spec: crate::airport_class::AirportSpecId::Heliport,
             airport_newgrf_spec_id: None,
+            airport_ttd_type: None,
             airport_layout: 0,
             airport_rotation: 0,
             airport_blocks: 0,

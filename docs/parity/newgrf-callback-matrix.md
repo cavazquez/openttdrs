@@ -917,3 +917,12 @@ legacy. Las regresiones cubren rail, bus, truck, dock, airport y waypoint; los
 IDs custom fuera de los 32 bits nativos no se aliasan. Strings, fecha de
 construcción, estado de aeropuerto, historial de vehículos y scopes completos
 de `BaseStation` continúan en #329.
+
+### #329-STATION-AIRPORT-VARS-066 — Variables de aeropuerto modeladas
+
+Actualizado: 2026-09-06. `StationScopeResolver` expone `0xF1` (tipo compacto
+TTDPatch `0..3`, con Action0 `0x0D` preservado para NewGRF), `0xF6` (palabra
+baja de los bloques FTA) y `0xF7` (bits 8..15 de esa palabra) en los contextos
+legacy y map-aware. Las regresiones cubren aeropuerto vanilla, tipo NewGRF,
+bloques no nulos y ambas rutas. Los estados `0xF2`/`0xF3` de paradas road y el
+historial `0x8A` siguen fuera del modelo y continúan pendientes en #329.

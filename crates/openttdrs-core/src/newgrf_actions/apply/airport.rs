@@ -220,6 +220,7 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
                 catchment: i32::from(meta.catchment),
                 noise_level: meta.noise_level,
                 subst_id: subst,
+                ttd_airport_type: meta.ttd_airport_type,
                 layouts,
                 enabled: true,
                 min_year: meta.min_year,
@@ -261,6 +262,7 @@ pub fn rehydrate_newgrf_airport_tiles(state: &mut GameState) {
         else {
             continue;
         };
+        station.airport_ttd_type = Some(def.ttd_airport_type);
         let rotation = station.airport_rotation & 6;
         let Some(layout) = def
             .layouts
@@ -419,6 +421,7 @@ mod tests {
             catchment: 4,
             noise_level: 1,
             subst_id: AirportSpecId::Small,
+            ttd_airport_type: 1,
             layouts: vec![AirportTileLayout {
                 rotation: 0,
                 tiles: vec![

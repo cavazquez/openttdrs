@@ -151,6 +151,23 @@ impl AirportSpecId {
             Self::Oilrig => 9,
         }
     }
+
+    /// Tipo compacto `TTDPatch` que devuelve la variable `NewGRF` `0xF1`.
+    /// `OpenTTD` agrupa los aeropuertos vanilla por tamaño/función, no por el
+    /// `AirportType` global usado en SAV.
+    #[must_use]
+    pub const fn as_ttd_airport_type(self) -> u8 {
+        match self {
+            Self::Heliport | Self::Helidepot | Self::Helistation => 2,
+            Self::Oilrig => 3,
+            Self::Small => 0,
+            Self::City
+            | Self::Metropolitan
+            | Self::International
+            | Self::Intercontinental
+            | Self::Commuter => 1,
+        }
+    }
 }
 
 /// Tesela de layout `NewGRF` ya resuelta a gfx global o vanilla.
@@ -185,6 +202,9 @@ pub struct NewgrfAirportSpecDef {
     pub noise_level: u8,
     /// Spec vanilla de la que hereda clase/FTA flags (sin ejecutar FTA `NewGRF`).
     pub subst_id: AirportSpecId,
+    /// Tipo compacto `TTDPatch` de Action0 `Airports` prop `0x0D` (`var 0xF1`).
+    #[serde(default)]
+    pub ttd_airport_type: u8,
     pub layouts: Vec<AirportTileLayout>,
     pub enabled: bool,
     pub min_year: u16,

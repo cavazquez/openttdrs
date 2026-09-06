@@ -1769,3 +1769,11 @@ la API legacy. Las regresiones cubren rail, bus, truck, dock, airport y
 waypoint; IDs custom fuera de los 32 bits nativos no se aliasan. Strings,
 fecha de construcción, estado de aeropuerto, historial de vehículos y scopes
 completos de `BaseStation` continúan en #329.
+
+Actualización #329-STATION-AIRPORT-VARS-066 (2026-09-06, issue [#392](https://github.com/cavazquez/openttdrs/issues/392)):
+`station_action2` expone `0xF1` (tipo compacto `TTDPatch` `0..3`, preservando
+Action0 `0x0D` para NewGRF), `0xF6` (palabra baja de `airport_blocks`) y `0xF7`
+(bits 8..15) en legacy y map-aware. Las regresiones cubren aeropuerto vanilla,
+tipo NewGRF y bloques FTA no nulos. Los estados `0xF2`/`0xF3` y el historial
+`0x8A` no se inventan porque el modelo no conserva esos bitsets; continúan en
+#329.

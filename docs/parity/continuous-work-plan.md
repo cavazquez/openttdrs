@@ -1913,6 +1913,13 @@ compartido de `Station`. La regresión fija `build_date = base + 123` y valida
 `0xFA=123` en la ruta legacy que también alimenta render/animación; el picker
 sin entidad conserva su fecha actual en #406/#407. El padre #329 sigue abierto.
 
+Actualización #329-ROADSTOP-PURCHASE-FACILITIES-409 (2026-09-06, issue [#409](https://github.com/cavazquez/openttdrs/issues/409)):
+el scope nulo de compra RoadStop publica `0xF0=0`, el sentinel de
+`StationFacilities` que devuelve OpenTTD antes de que exista una estación.
+La ruta de una parada colocada conserva su máscara derivada de `StopKind`; la
+regresión del callback de compra comprueba explícitamente el cero sin crear
+una entidad temporal. El padre #329 sigue abierto.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

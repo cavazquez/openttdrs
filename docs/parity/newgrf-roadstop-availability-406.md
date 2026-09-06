@@ -27,6 +27,7 @@ carretera. Antes de resolver `CBID_STATION_AVAILABILITY` (`0x13`) publica:
 | `0x47` | `GetCompanyInfo` exacto: id, bit IA y colores de librea |
 | `0x49` | Frame `0` sin tesela |
 | `0x50` | Bit de scope de compra `1 << 4` |
+| `0xF0` | Facilities `0` mientras no existe una entidad |
 | `0xFA` | Fecha absoluta menos `DAYS_TILL_ORIGINAL_BASE_YEAR`, saturada a WORD |
 
 La API histórica `apply_road_stop_availability_callback` conserva un wrapper
@@ -50,6 +51,7 @@ comprueba:
   distinta;
 - bit `0x50 = 0x10` del picker;
 - sentinels de zona, distancia y frame (`0x45`, `0x46`, `0x49`);
+- facilities de compra (`0xF0=0`), porque no existe una estación aún;
 - ejecución con `CompanyId`, pool y road type del contexto real.
 
 ## Límites restantes

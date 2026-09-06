@@ -3113,6 +3113,8 @@ pub fn apply_road_stop_availability_callback_with_context(
     ctx.vars.insert(0x49, 0);
     // `GetVariable(0x50)` marks the no-tile picker scope with bit 4.
     ctx.vars.insert(0x50, 1 << 4);
+    // `RoadStopScopeResolver` has no facilities until a station entity exists.
+    ctx.vars.insert(0xF0, 0);
     let relative_date = calendar_date
         .saturating_sub(crate::station::STATION_BUILD_DATE_DEFAULT)
         .min(u32::from(u16::MAX));
@@ -7385,6 +7387,17 @@ mod tests {
         // No station/tile exists in the picker: OpenTTD marks this scope with
         // bit 4 in 0x50 and returns zero for distance/frame variables.
         def.newgrf_runtime = Some(Box::new(gfx_callback_compare_u32(0x50, 0x10)));
+        assert!(apply_road_stop_availability_callback_with_context(
+            &def,
+            StopKind::BusStop,
+            RoadType::Road,
+            &[],
+            crate::company::CompanyId(1),
+            0,
+            &companies,
+            crate::station::STATION_BUILD_DATE_DEFAULT,
+        ));
+        def.newgrf_runtime = Some(Box::new(gfx_callback_compare_u32(0xF0, 0)));
         assert!(apply_road_stop_availability_callback_with_context(
             &def,
             StopKind::BusStop,

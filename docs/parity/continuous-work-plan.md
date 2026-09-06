@@ -1886,6 +1886,17 @@ familia `0x64` y los slots deprecated mantienen sus contratos propios. La
 regresión cubre estación sin vehículo/datos y una cola con tránsito; scopes,
 strings, sonidos y cargos no representables permanecen parciales en #329.
 
+Actualización #329-ROADSTOP-AVAILABILITY-406 (2026-09-06, issue [#406](https://github.com/cavazquez/openttdrs/issues/406)):
+el callback `CBID_STATION_AVAILABILITY` de `RoadStop` ya recibe el scope nulo
+de compra de OpenTTD: vista/tipo, road/tram traducido, `TownEdge << 16`,
+distancia/frame cero, `GetCompanyInfo` con IA y libreas de la compañía activa y
+el bit `0x50=1<<4` que marca el picker sin tesela. `PlaceBusStop` y
+`PlaceTruckStop` pasan el pool real antes de mutar el mapa; el wrapper legacy
+mantiene un fallback determinista. La regresión cubre `0x47`, `0x50`, `0x45`,
+`0x46` y `0x49`. No se persiste `7C` porque aún no existe una entidad en el
+selector; vecinos, terreno real, cargas, strings y sonidos continúan en el
+scope runtime de la parada colocada y el padre #329 sigue abierto.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

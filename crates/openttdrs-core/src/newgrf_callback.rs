@@ -47,7 +47,7 @@ use crate::station_action2::{
     populate_station_purchase_scope_vars, populate_station_scope_fallback_vars,
 };
 use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
-use crate::town::Town;
+use crate::town::{HouseZone, Town};
 use crate::vehicle::{Vehicle, VehicleKind, VehicleRandomTrigger};
 use crate::{
     CargoType, Climate, GameState, IndustryKind, RoadType, SoundId, StopKind, VehicleSoundEvent,
@@ -3020,17 +3020,45 @@ pub fn apply_station_availability_callback_at(
 ///
 /// `OpenTTD` construye este resolver sin estación ni tesela (`st = nullptr`,
 /// `tile = INVALID_TILE`) y suministra tipo de parada y carretera actuales.
-/// Este call site cubre esas variables estables (`0x40`, `0x41`, `0x43`,
-/// `0x44`) y conserva el comportamiento seguro de `CALLBACK_FAILED` = permitir.
-/// El picker no tiene una tesela base; las consultas de vecindad sólo se
-/// resuelven al renderizar una parada ya colocada. Los callbacks de animación
-/// siguen usando el scope local del scheduler.
+/// Este wrapper conserva el comportamiento seguro de las llamadas legacy que
+/// no disponen del pool de compañías. Las variables que dependen del picker
+/// se completan con los sentinelas nativos y `CompanyInfo` usa el color de
+/// fallback histórico.
 #[must_use]
 pub fn apply_road_stop_availability_callback(
     def: &crate::road_stop_spec::RoadStopSpecDef,
     stop_kind: StopKind,
     road_type: RoadType,
     road_type_catalog: &[crate::road_type::RoadTypeDef],
+) -> bool {
+    apply_road_stop_availability_callback_with_context(
+        def,
+        stop_kind,
+        road_type,
+        road_type_catalog,
+        CompanyId::PLAYER,
+        0,
+        &[],
+    )
+}
+
+/// Variante con el contexto real del comando de compra.
+///
+/// `OpenTTD` construye `RoadStopScopeResolver` con `st == nullptr` y
+/// `tile == INVALID_TILE` durante el picker. En ese scope las variables de
+/// pueblo, estación, animación y terreno no leen una parada artificial:
+/// devuelven sentinelas explícitos (`0x45`, `0x46`, `0x49`, `0x50`), mientras
+/// `0x47` expone el `CompanyInfo` de la compañía activa. Recibir el pool real
+/// es necesario para conservar el bit de IA y los dos canales de la librea.
+#[must_use]
+pub fn apply_road_stop_availability_callback_with_context(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    stop_kind: StopKind,
+    road_type: RoadType,
+    road_type_catalog: &[crate::road_type::RoadTypeDef],
+    owner: CompanyId,
+    owner_colour: u8,
+    companies: &[crate::company::Company],
 ) -> bool {
     if !def.has_availability_callback() {
         return true;
@@ -3068,6 +3096,18 @@ pub fn apply_road_stop_availability_callback(
             ctx.vars.insert(0x44, u32::from(local_type));
         }
     }
+    // `INVALID_TILE` purchase scope: no town/terrain/station exists yet.
+    // `TownEdge << 16` is the native sentinel returned by HouseZone::GetZone.
+    ctx.vars
+        .insert(0x45, u32::from(HouseZone::TownEdge as u8) << 16);
+    ctx.vars.insert(0x46, 0);
+    ctx.vars.insert(
+        0x47,
+        crate::company::newgrf_company_info(owner, Some(companies), owner_colour & 0x0F),
+    );
+    ctx.vars.insert(0x49, 0);
+    // `GetVariable(0x50)` marks the no-tile picker scope with bit 4.
+    ctx.vars.insert(0x50, 1 << 4);
     let result = runtime.resolve_callback_ctx(
         def.newgrf_local_id,
         CBID_STATION_AVAILABILITY,
@@ -7286,6 +7326,76 @@ mod tests {
             3,
         ));
         assert_eq!(station.road_stop_animation_frame, 5);
+    }
+
+    #[test]
+    fn road_stop_availability_purchase_scope_uses_native_sentinels_and_company_context() {
+        let mut def = crate::RoadStopSpecDef {
+            id: 1,
+            class: 0,
+            label: "purchase-scope".into(),
+            short_label: "PURCHASE".into(),
+            stop_type: crate::ROADSTOP_TYPE_BUS,
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_grf_version: 8,
+            draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 0,
+            flags: 0,
+            callback_mask: crate::ROADSTOP_CALLBACK_MASK_AVAILABILITY,
+            animation_status: 0,
+            animation_frames: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: None,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+        };
+        let mut rival = crate::company::Company::rival_transcargo(
+            crate::game_state::CompanyEconomy::default(),
+            3,
+        );
+        rival.liveries[0].colour1 = 2;
+        rival.liveries[0].colour2 = 9;
+        let companies = vec![rival];
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_compare_u32(0x47, 0x9201_0001)));
+        assert!(apply_road_stop_availability_callback_with_context(
+            &def,
+            StopKind::BusStop,
+            RoadType::Road,
+            &[],
+            crate::company::CompanyId(1),
+            0,
+            &companies,
+        ));
+
+        // No station/tile exists in the picker: OpenTTD marks this scope with
+        // bit 4 in 0x50 and returns zero for distance/frame variables.
+        def.newgrf_runtime = Some(Box::new(gfx_callback_compare_u32(0x50, 0x10)));
+        assert!(apply_road_stop_availability_callback_with_context(
+            &def,
+            StopKind::BusStop,
+            RoadType::Road,
+            &[],
+            crate::company::CompanyId(1),
+            0,
+            &companies,
+        ));
+        for variable in [0x45, 0x46, 0x49] {
+            def.newgrf_runtime = Some(Box::new(gfx_callback_compare_u32(variable, 0)));
+            assert!(apply_road_stop_availability_callback_with_context(
+                &def,
+                StopKind::BusStop,
+                RoadType::Road,
+                &[],
+                crate::company::CompanyId(1),
+                0,
+                &companies,
+            ));
+        }
     }
 
     #[test]

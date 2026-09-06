@@ -102,11 +102,19 @@ pub(crate) fn check_road_stop_spec_restrictions(
     if def.tram_only() && rt_class != crate::road_type::RoadTramType::Tram {
         return Err(CommandError::RoadStopRoadTypeMismatch);
     }
-    if !crate::newgrf_callback::apply_road_stop_availability_callback(
+    let owner_colour = state
+        .companies
+        .iter()
+        .find(|company| company.id == state.active_company)
+        .map_or(state.company_colour, |company| company.colour);
+    if !crate::newgrf_callback::apply_road_stop_availability_callback_with_context(
         def,
         stop_kind,
         state.current_road_type,
         &state.road_type_catalog,
+        state.active_company,
+        owner_colour,
+        &state.companies,
     ) {
         return Err(CommandError::NewGrfCallbackDenied);
     }

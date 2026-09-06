@@ -2219,3 +2219,13 @@ el HUD traduce los códigos estándar `0x402..0x408` de CB149 a los siete
 mensajes de clima/agua de OpenTTD en español e inglés. `0x401` y resultados
 desconocidos conservan el fallback genérico; la tabla sólo afecta al feedback y
 no altera el preflight ni la semántica del callback.
+
+Actualización #329-STATION-CB149-LAND-SCOPE-439 (2026-09-06, issue [#439](https://github.com/cavazquez/openttdrs/issues/439)):
+el preflight map-aware de CB149 materializa ahora `StationScopeResolver::0x67`
+desde la tesela real antes de crear la estación. Se respetan offsets firmados
+en nibbles, intercambio X/Y para el eje Y, wrap toroidal, clase de agua,
+terreno, tipo de tesela y la escala de altura de GRF <8 frente a GRF >=8. La
+regresión cubre un vecino canalizado y la ruta de construcción de una estación;
+la variante legacy sin mapa conserva su contrato. Scopes adicionales de
+`BaseStation`, vecinos no-terreno y parámetros dinámicos del text stack siguen
+siendo sucesores del padre #329.

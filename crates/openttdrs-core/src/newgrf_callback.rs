@@ -47,6 +47,7 @@ use crate::station_action2::{
     StationAction2WorldContext, action2_eval_ctx_for_station_tile_with_catalog_and_world,
     action2_eval_ctx_for_station_tile_with_grf, populate_station_badge_vars_for_spec,
     populate_station_purchase_scope_vars, populate_station_scope_fallback_vars,
+    station_slope_land_info,
 };
 use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
 use crate::town::{HouseZone, Town};
@@ -3056,6 +3057,55 @@ pub fn resolve_station_slope_callback_for_build(
     platform: u8,
     position: u8,
 ) -> StationSlopeCallbackOutcome {
+    resolve_station_slope_callback_for_build_impl(
+        def, slope, axis_y, platforms, length, platform, position, None,
+    )
+}
+
+/// Variante map-aware del chequeo CB149.
+///
+/// El resolver de `OpenTTD` tiene `tile` aunque aún no exista una estación y
+/// permite que Action2 consulte `0x67[param]`. La API legacy anterior no
+/// recibía un mapa y se conserva para callers que sólo empaquetan parámetros;
+/// los comandos de construcción deben usar esta variante para reproducir el
+/// scope real de pendiente.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_station_slope_callback_for_build_with_map(
+    def: &crate::station_class::StationSpecDef,
+    map: &Map,
+    tile: TileCoord,
+    climate: Climate,
+    slope: u8,
+    axis_y: bool,
+    platforms: u8,
+    length: u8,
+    platform: u8,
+    position: u8,
+) -> StationSlopeCallbackOutcome {
+    resolve_station_slope_callback_for_build_impl(
+        def,
+        slope,
+        axis_y,
+        platforms,
+        length,
+        platform,
+        position,
+        Some((map, tile, climate)),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_station_slope_callback_for_build_impl(
+    def: &crate::station_class::StationSpecDef,
+    slope: u8,
+    axis_y: bool,
+    platforms: u8,
+    length: u8,
+    platform: u8,
+    position: u8,
+    map_context: Option<(&Map, TileCoord, Climate)>,
+) -> StationSlopeCallbackOutcome {
     if !def.has_slope_check_callback() {
         return StationSlopeCallbackOutcome::Allow;
     }
@@ -3075,6 +3125,17 @@ pub fn resolve_station_slope_callback_for_build(
         | (u32::from(platform) << 8)
         | u32::from(position);
     let mut ctx = Action2EvalCtx::default();
+    if let Some((map, tile, climate)) = map_context {
+        populate_station_slope_land_vars(
+            &mut ctx,
+            runtime,
+            map,
+            tile,
+            axis_y,
+            climate,
+            def.newgrf_grf_version,
+        );
+    }
     let result = runtime.resolve_callback_ctx(
         def.newgrf_local_id,
         CBID_STATION_LAND_SLOPE_CHECK,
@@ -3106,6 +3167,28 @@ pub fn resolve_station_slope_callback_for_build(
         );
     }
     StationSlopeCallbackOutcome::GenericDenied(normalized)
+}
+
+fn populate_station_slope_land_vars(
+    ctx: &mut Action2EvalCtx,
+    runtime: &TrainSpriteGraphics,
+    map: &Map,
+    tile: TileCoord,
+    axis_y: bool,
+    climate: Climate,
+    grf_version: u8,
+) {
+    for entry in runtime.action2_var.values() {
+        for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+            if term.variable == 0x67
+                && let Some(parameter) = term.param
+            {
+                let value =
+                    station_slope_land_info(map, tile, parameter, axis_y, climate, grf_version);
+                ctx.parameterized_vars.insert((0x67, parameter), value);
+            }
+        }
+    }
 }
 
 /// Compatibilidad booleana para callers que sólo necesitan saber si la
@@ -4552,6 +4635,33 @@ mod tests {
                 default: 0,
             },
         );
+        gfx
+    }
+
+    fn gfx_callback_allow_if_parameterized_u32(
+        variable: u8,
+        parameter: u8,
+        expected: u32,
+    ) -> TrainSpriteGraphics {
+        let mut gfx = gfx_callback_compare_parameterized_u32(variable, parameter, expected);
+        let literal = |value: u8| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                and_mask: u32::from(value),
+                ..Action2VarAdjust::default()
+            },
+        };
+        gfx.action2_var.get_mut(&2).unwrap().ops.extend([
+            Action2VarOp {
+                operator: 0x0A,
+                rhs: literal(0x10),
+            },
+            Action2VarOp {
+                operator: 0x0A,
+                rhs: literal(0x40),
+            },
+        ]);
         gfx
     }
 
@@ -7818,6 +7928,87 @@ mod tests {
             resolve_station_slope_callback_for_build(&def, 1, true, 3, 5, 2, 4),
             StationSlopeCallbackOutcome::GenericDenied(0x401)
         );
+    }
+
+    #[test]
+    fn callbacks_ac_station_slope_map_scope_exposes_land_info() {
+        let mut def = crate::station_class::vanilla_station_spec_catalog()
+            .pop()
+            .unwrap();
+        def.callback_mask = crate::station_class::STATION_CALLBACK_SLOPE_CHECK_MASK;
+        def.newgrf_grfid = 0x534C_4F50;
+        def.newgrf_grf_version = 8;
+
+        let base = TileCoord::new(2, 2);
+        let target = TileCoord::new(4, 3);
+        let mut map = crate::Map::new_flat(8, 8, 0);
+        for y in 0..8 {
+            for x in 0..8 {
+                map.set_height(TileCoord::new(x, y), 2).unwrap();
+            }
+        }
+        map.set_kind(target, crate::TileKind::Water).unwrap();
+        map.set_mapt_m5(target, 0x60, 0).unwrap();
+        map.set_m1(
+            target,
+            crate::map::set_water_class_m1(0, crate::map::WaterClass::Canal),
+        )
+        .unwrap();
+
+        // 0x21 is (dx=+1, dy=+2). Axis Y swaps those offsets, so the
+        // callback must read (base.x+2, base.y+1) rather than (base.x+1,
+        // base.y+2). The target is deliberately a canal tile to exercise the
+        // water-class bits in the 0czzbbss result.
+        let expected_v8 = crate::station_action2::station_slope_land_info(
+            &map,
+            base,
+            0x21,
+            true,
+            Climate::Temperate,
+            8,
+        );
+        assert_eq!(expected_v8, 0x0602_4200);
+        let wrong_axis = crate::station_action2::station_slope_land_info(
+            &map,
+            base,
+            0x21,
+            false,
+            Climate::Temperate,
+            8,
+        );
+        assert_ne!(expected_v8, wrong_axis);
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_parameterized_u32(
+            0x67,
+            0x21,
+            expected_v8,
+        )));
+        assert_eq!(
+            resolve_station_slope_callback_for_build_with_map(
+                &def,
+                &map,
+                base,
+                Climate::Temperate,
+                0,
+                true,
+                1,
+                1,
+                0,
+                0,
+            ),
+            StationSlopeCallbackOutcome::Allow
+        );
+
+        // GRF < 8 reads the pixel height instead of the tile-height unit.
+        def.newgrf_grf_version = 7;
+        let expected_v7 = crate::station_action2::station_slope_land_info(
+            &map,
+            base,
+            0x21,
+            true,
+            Climate::Temperate,
+            7,
+        );
+        assert_eq!(expected_v7, 0x0610_4200);
     }
 
     #[test]

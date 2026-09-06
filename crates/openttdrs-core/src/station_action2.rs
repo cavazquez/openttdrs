@@ -5,8 +5,8 @@ use crate::cargo_spec::CargoSpecDef;
 use crate::company::{Company, CompanyId, newgrf_company_info};
 use crate::industry::Industry;
 use crate::map::{
-    Map, TILE_PIXEL_HEIGHT, TileCoord, TileKind, rail_bits_touching_side, rail_traversal_bits,
-    tile_slope_and_z,
+    Map, TILE_PIXEL_HEIGHT, Tile, TileCoord, TileKind, is_coast_tile, rail_bits_touching_side,
+    rail_traversal_bits, tile_slope_and_z, water_class,
 };
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::newgrf_type_tables::{
@@ -497,6 +497,88 @@ fn nearby_station_land_info(
     let tile_type = u32::from(tile_kind_as_ottd(tile.kind));
     let terrain = terrain_type_for_tile(map, nearby, climate, Some(tile));
     tile_type << 24 | u32::from(z) << 16 | (terrain << 2) << 8 | u32::from(slope)
+}
+
+/// Codifica `StationScopeResolver::GetVariable(0x67)` para el resolver de
+/// pendiente de una estación que todavía no existe.
+///
+/// Durante `CBID_STATION_LAND_SLOPE_CHECK` `OpenTTD` permite consultar una
+/// tesela vecina con offsets firmados y cambia el orden de los offsets cuando
+/// el eje de la estación es Y. El resto del contexto es el mismo formato
+/// `0czzbbss` de `GetNearbyTileInformation`: tipo de tesela, altura, terreno,
+/// agua y pendiente orientada al eje.
+pub(crate) fn station_slope_land_info(
+    map: &Map,
+    base: TileCoord,
+    parameter: u8,
+    axis_y: bool,
+    climate: Climate,
+    grf_version: u8,
+) -> u32 {
+    let nearby = nearby_station_slope_tile(map, base, parameter, axis_y);
+    let Some(tile) = map.get(nearby) else {
+        return u32::MAX;
+    };
+    let (tileh, raw_z) = tile_slope_and_z(map, nearby).unwrap_or((0, tile.height));
+    let z = if grf_version >= 8 {
+        raw_z
+    } else {
+        raw_z.saturating_mul(u8::try_from(TILE_PIXEL_HEIGHT).unwrap_or(8))
+    };
+    let tile_type = station_land_tile_type(tile);
+    let water_bits =
+        water_class(tile).map_or(0, |class| u32::from((class.as_u8() + 1) & 0x03) << 5);
+    let terrain = terrain_type_for_tile(map, nearby, climate, Some(tile));
+    let terrain_bits = water_bits | (terrain << 2) | u32::from(tile_type == 6) << 1;
+    let axis_slope = axis_y && ((tileh & 1 != 0) != (tileh & 4 != 0));
+    let slope = if axis_slope { tileh ^ 5 } else { tileh };
+    u32::from(tile_type) << 24 | u32::from(z) << 16 | terrain_bits << 8 | u32::from(slope)
+}
+
+fn nearby_station_slope_tile(map: &Map, base: TileCoord, parameter: u8, axis_y: bool) -> TileCoord {
+    let (width, height) = map.dimensions();
+    let (Ok(width), Ok(height)) = (i32::try_from(width), i32::try_from(height)) else {
+        return base;
+    };
+    if width == 0 || height == 0 {
+        return base;
+    }
+    let signed_nibble = |value: u8| {
+        let value = i32::from(value & 0x0F);
+        if value >= 8 { value - 16 } else { value }
+    };
+    let (mut dx, mut dy) = (signed_nibble(parameter), signed_nibble(parameter >> 4));
+    if axis_y {
+        std::mem::swap(&mut dx, &mut dy);
+    }
+    TileCoord::new(
+        base.x.saturating_add(dx).rem_euclid(width),
+        base.y.saturating_add(dy).rem_euclid(height),
+    )
+}
+
+fn station_land_tile_type(tile: Tile) -> u8 {
+    // Loaded saves retain the raw MAPT nibble. Generated maps may only have
+    // the semantic TileKind, so preserve the same fallback used by the other
+    // Action2 contexts. Trees on a water-class tile are OpenTTD shore trees,
+    // whose exposed type is MP_WATER rather than MP_TREES.
+    if is_coast_tile(tile) {
+        return 6;
+    }
+    if tile.ottd_type_nibble() != 0 || tile.kind == TileKind::Grass {
+        return tile.ottd_type_nibble();
+    }
+    match tile.kind {
+        TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge => 1,
+        TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge => 2,
+        TileKind::House => 3,
+        TileKind::Forest => 4,
+        TileKind::Station | TileKind::Airport => 5,
+        TileKind::Water | TileKind::ShipDepot => 6,
+        TileKind::Void => 7,
+        TileKind::Industry => 8,
+        TileKind::CoalField | TileKind::Unknown(_) | TileKind::Grass => 0,
+    }
 }
 
 fn nearby_station_info(

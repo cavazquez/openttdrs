@@ -374,8 +374,17 @@ fn check_rail_station_slope_callbacks_impl(
             };
             let (slope, _) =
                 tile_slope_and_z(&state.map, c).ok_or((CommandError::OutOfBounds, None))?;
-            let outcome = crate::newgrf_callback::resolve_station_slope_callback_for_build(
-                spec, slope, axis_y, platforms, length, platform, position,
+            let outcome = crate::newgrf_callback::resolve_station_slope_callback_for_build_with_map(
+                spec,
+                &state.map,
+                c,
+                state.climate,
+                slope,
+                axis_y,
+                platforms,
+                length,
+                platform,
+                position,
             );
             if !matches!(
                 outcome,

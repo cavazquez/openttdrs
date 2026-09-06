@@ -86,6 +86,86 @@ fn rail_station_cb149_rejection_keeps_map_unchanged_and_diagnostic() {
 }
 
 #[test]
+fn rail_station_cb149_reads_map_land_scope_before_placement() {
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, TrainSpriteAssign,
+        TrainSpriteGraphics,
+    };
+
+    let mut s = GameState::new(8, 8);
+    let origin = TileCoord::new(2, 2);
+    let neighbour = TileCoord::new(3, 2);
+    crate::map::make_water_tile(&mut s.map, neighbour, crate::map::WaterClass::Sea).unwrap();
+    let expected =
+        crate::station_action2::station_slope_land_info(&s.map, origin, 1, false, s.climate, 8);
+
+    let literal = |value: u32| Action2VarTerm {
+        variable: 0x1A,
+        param: None,
+        adjust: Action2VarAdjust {
+            and_mask: value,
+            ..Action2VarAdjust::default()
+        },
+    };
+    let mut runtime = TrainSpriteGraphics::default();
+    runtime.assigns.push(TrainSpriteAssign {
+        local_id: 0,
+        set_id: 2,
+    });
+    runtime.action2_var.insert(
+        2,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x67,
+                param: Some(1),
+                adjust: Action2VarAdjust {
+                    and_mask: u32::MAX,
+                    ..Action2VarAdjust::default()
+                },
+            },
+            ops: vec![
+                Action2VarOp {
+                    operator: 0x12,
+                    rhs: literal(expected),
+                },
+                Action2VarOp {
+                    operator: 0x0A,
+                    rhs: literal(0x10),
+                },
+                Action2VarOp {
+                    operator: 0x0A,
+                    rhs: literal(0x40),
+                },
+            ],
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+    let spec = s
+        .station_spec_catalog
+        .iter_mut()
+        .find(|spec| spec.id == crate::StationSpecId::DefaultRail)
+        .unwrap();
+    spec.callback_mask = crate::station_class::STATION_CALLBACK_SLOPE_CHECK_MASK;
+    spec.newgrf_runtime = Some(Box::new(runtime));
+    spec.newgrf_grfid = 0x534C_4F50;
+    spec.newgrf_grf_version = 8;
+
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin,
+            axis_y: false,
+            platforms: 1,
+            length: 1,
+        },
+    )
+    .expect("CB149 should see the neighbour terrain before placement");
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.map.get(origin).unwrap().kind, TileKind::Station);
+}
+
+#[test]
 fn rail_station_footprint_swaps_axes() {
     assert_eq!(crate::rail_station_footprint(false, 3, 5), (5, 3));
     assert_eq!(crate::rail_station_footprint(true, 3, 5), (3, 5));

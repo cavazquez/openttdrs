@@ -5,10 +5,10 @@
 //! terminadas en NUL y los controles NFO básicos que `OpenTTD` traduce al cargar
 //! un Action4/Action13. Los parámetros del text stack pueden materializarse
 //! con un contexto explícito; los controles que requieren estado de idioma o
-//! de juego (género/caso) quedan representados como marcadores visibles; la
-//! pluralización puede materializarse con la regla que entrega el marcador o
-//! `NewGrfTextContext`; las fechas se materializan cuando el caller entrega un
-//! parámetro tipado.
+//! de juego (género/caso) se conservan como metadata y se resuelven cuando el
+//! caller entrega índices explícitos; la pluralización puede materializarse
+//! con la regla que entrega el marcador o `NewGrfTextContext`; las fechas se
+//! materializan cuando el caller entrega un parámetro tipado.
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Write as _;
@@ -71,6 +71,9 @@ pub struct NewGrfTextContext {
     /// Regla de plural de `OpenTTD` (`0..=14`) para una lista sin metadata o para
     /// sobrescribir la regla que el marcador decodificado ya conserva.
     pub plural_form: Option<u8>,
+    /// Índice de género/caso ya resuelto por el caller lingüístico.
+    pub gender_index: Option<u8>,
+    pub case_index: Option<u8>,
 }
 
 impl NewGrfTextContext {
@@ -84,6 +87,8 @@ impl NewGrfTextContext {
             params: params.into_iter().collect(),
             choice_index: None,
             plural_form: None,
+            gender_index: None,
+            case_index: None,
         }
     }
 
@@ -98,6 +103,20 @@ impl NewGrfTextContext {
     #[must_use]
     pub fn with_plural_form(mut self, plural_form: u8) -> Self {
         self.plural_form = Some(plural_form);
+        self
+    }
+
+    /// Selecciona explícitamente una rama de género ya resuelta por el locale.
+    #[must_use]
+    pub fn with_gender_index(mut self, gender_index: u8) -> Self {
+        self.gender_index = Some(gender_index);
+        self
+    }
+
+    /// Selecciona explícitamente una rama de caso ya resuelta por el locale.
+    #[must_use]
+    pub fn with_case_index(mut self, case_index: u8) -> Self {
+        self.case_index = Some(case_index);
         self
     }
 
@@ -347,6 +366,10 @@ struct ChoiceCapture {
 enum ChoiceKind {
     #[default]
     Explicit,
+    Gender {
+        parameter_offset: usize,
+    },
+    Case,
     Plural {
         plural_form: u8,
         parameter_offset: usize,
@@ -490,6 +513,15 @@ fn is_choice_start(value: &str) -> bool {
 }
 
 fn parse_choice_kind(value: &str) -> ChoiceKind {
+    if let Some(metadata) = value.strip_prefix("gender-list:") {
+        let Some(parameter_offset) = metadata.parse::<usize>().ok() else {
+            return ChoiceKind::Explicit;
+        };
+        return ChoiceKind::Gender { parameter_offset };
+    }
+    if value == "case-list" {
+        return ChoiceKind::Case;
+    }
     let Some(metadata) = value.strip_prefix("plural-list:") else {
         return ChoiceKind::Explicit;
     };
@@ -512,6 +544,13 @@ fn parse_choice_kind(value: &str) -> ChoiceKind {
 fn choice_index_for(capture: &ChoiceCapture, context: &NewGrfTextContext) -> Option<u8> {
     match capture.kind {
         ChoiceKind::Explicit => Some(context.choice_index.unwrap_or(0)),
+        ChoiceKind::Gender { parameter_offset } => context.gender_index.or_else(|| {
+            context
+                .params
+                .get(parameter_offset)
+                .and_then(text_gender_index)
+        }),
+        ChoiceKind::Case => context.case_index.or(context.choice_index).or(Some(0)),
         ChoiceKind::Plural {
             plural_form,
             parameter_offset,
@@ -524,6 +563,15 @@ fn choice_index_for(capture: &ChoiceCapture, context: &NewGrfTextContext) -> Opt
             determine_plural_form(count, rule)
         }
     }
+}
+
+fn text_gender_index(value: &NewGrfTextValue) -> Option<u8> {
+    let NewGrfTextValue::Text(text) = value else {
+        return None;
+    };
+    let marker = text.strip_prefix("⟦gender:")?;
+    let end = marker.find('⟧')?;
+    marker.get(..end)?.parse::<u8>().ok()
 }
 
 fn text_plural_count(value: &NewGrfTextValue) -> Option<i64> {
@@ -660,6 +708,11 @@ fn render_dynamic_marker(
     context: &NewGrfTextContext,
     parameter_index: &mut usize,
 ) -> String {
+    if value.starts_with("gender:") || value.starts_with("case:") {
+        // SCC_GENDER_INDEX/SCC_SET_CASE are metadata consumed by the
+        // linguistic resolver and never contribute visible glyphs.
+        return String::new();
+    }
     let date_style = match value {
         "date-long" | "date-dword" | "date-dword-long" => Some(DateStyle::Long),
         "date-short" | "date-dword-short" => Some(DateStyle::Short),
@@ -1431,6 +1484,47 @@ mod tests {
                 .with_plural_form(1),
             ),
             "one"
+        );
+    }
+
+    #[test]
+    fn renders_gender_and_case_metadata_without_visible_markers() {
+        assert_eq!(
+            render_newgrf_text("a⟦gender:2⟧b⟦case:1⟧c", &NewGrfTextContext::default(),),
+            "abc"
+        );
+
+        let gender_list = "⟦gender-list:0⟧⟦choice-next:0⟧masc⟦choice-next:1⟧fem⟦choice-end⟧";
+        assert_eq!(
+            render_newgrf_text(
+                gender_list,
+                &NewGrfTextContext::with_params([NewGrfTextValue::Text(
+                    "⟦gender:1⟧Estación".into(),
+                )]),
+            ),
+            "fem"
+        );
+        assert_eq!(
+            render_newgrf_text(
+                gender_list,
+                &NewGrfTextContext::default().with_gender_index(0),
+            ),
+            "masc"
+        );
+
+        let case_list = "⟦case-list⟧⟦choice-next:0⟧nominativo⟦choice-next:1⟧acusativo⟦choice-end⟧";
+        assert_eq!(
+            render_newgrf_text(case_list, &NewGrfTextContext::default().with_case_index(1),),
+            "acusativo"
+        );
+    }
+
+    #[test]
+    fn preserves_gender_list_when_context_is_missing() {
+        let text = "x⟦gender-list:2⟧⟦choice-next:0⟧masc⟦choice-next:1⟧fem⟦choice-end⟧";
+        assert_eq!(
+            render_newgrf_text(text, &NewGrfTextContext::default()),
+            text
         );
     }
 

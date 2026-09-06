@@ -2219,6 +2219,13 @@ las quince ramas `DeterminePluralForm` de OpenTTD 15.3 para signed/unsigned.
 Los casos sin parámetro, texto o regla válida conservan el marcador; el
 catálogo automático por locale y gender/case quedan como sucesores.
 
+Actualización #329-NEWGRF-TEXT-GENDER-CASE-446 (2026-09-06, issue [#446](https://github.com/cavazquez/openttdrs/issues/446)):
+los metadatos `gender`/`case` dejan de dibujarse, `gender-list:<offset>` puede
+leer `⟦gender:N⟧` desde el parámetro textual y `case-list` acepta un índice
+explícito del contexto. Contexto o parámetro ausente conserva la lista; las
+tablas automáticas por locale y los scopes implícitos de OpenTTD siguen
+pendientes.
+
 Actualización #329-VEHICLE-CB31-FEEDBACK-434 (2026-09-06, issue [#434](https://github.com/cavazquez/openttdrs/issues/434)):
 el rechazo de CB31 conserva un diagnóstico efímero por vehículo/GRFID y los
 botones de start/stop resuelven `LocalString`/`GrfString` con el catálogo

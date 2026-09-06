@@ -1291,6 +1291,16 @@ Offset inexistente, texto no numérico y reglas fuera de `0..=14` conservan la
 lista. Los marcadores de género conservan su offset para sucesores, pero el
 catálogo automático por locale y gender/case siguen pendientes.
 
+### #329-NEWGRF-TEXT-GENDER-CASE-446 — metadata de género y caso
+
+Actualizado: 2026-09-06. Los marcadores `gender:<index>` y `case:<index>` se
+consumen como metadata invisible. `NewGrfTextContext` acepta índices explícitos
+para ambos; `gender-list:<offset>` también inspecciona un parámetro textual que
+empieza con `⟦gender:N⟧`, mientras `case-list` usa el índice de caso o el
+fallback manual existente. Sin contexto de género o con un parámetro ausente
+se conserva la lista completa. El catálogo automático por locale y las tablas
+lingüísticas siguen pendientes.
+
 ### #329-VEHICLE-CB31-FEEDBACK-434 — motivo textual de start/stop
 
 Actualizado: 2026-09-06. El rechazo de `CBID_VEHICLE_START_STOP_CHECK` conserva

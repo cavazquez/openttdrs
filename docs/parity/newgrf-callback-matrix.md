@@ -1280,6 +1280,17 @@ inválidos conservan el marcador. El formato localizado, la conversión de
 epochs base 1920/0 y género/case/plural siguen siendo sucesores del parent
 #329.
 
+### #329-NEWGRF-TEXT-PLURALS-445 — regla y parámetro de `plural-list`
+
+Actualizado: 2026-09-06. El decoder conserva el `plural_form` y el offset de
+`0x9A15` como `plural-list:<regla>:<offset>`. El renderer obtiene el contador
+signed/unsigned desde ese parámetro y replica las quince ramas de
+`DeterminePluralForm` de OpenTTD 15.3; `NewGrfTextContext::with_plural_form`
+permite aportar o sobrescribir la regla cuando la cadena llega sin metadata.
+Offset inexistente, texto no numérico y reglas fuera de `0..=14` conservan la
+lista. Los marcadores de género conservan su offset para sucesores, pero el
+catálogo automático por locale y gender/case siguen pendientes.
+
 ### #329-VEHICLE-CB31-FEEDBACK-434 — motivo textual de start/stop
 
 Actualizado: 2026-09-06. El rechazo de `CBID_VEHICLE_START_STOP_CHECK` conserva

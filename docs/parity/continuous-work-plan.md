@@ -2212,6 +2212,13 @@ sus propios marcadores. Fecha ausente, negativa o textual permanece visible
 sin inventar un valor. El formato localizado y la conversión de epochs NewGRF
 fuera del calendario 1950, además de género/case/plural, siguen pendientes.
 
+Actualización #329-NEWGRF-TEXT-PLURALS-445 (2026-09-06, issue [#445](https://github.com/cavazquez/openttdrs/issues/445)):
+`0x9A15` conserva ahora regla y offset en `plural-list:<regla>:<offset>`.
+`NewGrfTextContext` puede entregar una regla explícita y el renderer replica
+las quince ramas `DeterminePluralForm` de OpenTTD 15.3 para signed/unsigned.
+Los casos sin parámetro, texto o regla válida conservan el marcador; el
+catálogo automático por locale y gender/case quedan como sucesores.
+
 Actualización #329-VEHICLE-CB31-FEEDBACK-434 (2026-09-06, issue [#434](https://github.com/cavazquez/openttdrs/issues/434)):
 el rechazo de CB31 conserva un diagnóstico efímero por vehículo/GRFID y los
 botones de start/stop resuelven `LocalString`/`GrfString` con el catálogo

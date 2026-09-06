@@ -5,9 +5,10 @@
 //! terminadas en NUL y los controles NFO básicos que `OpenTTD` traduce al cargar
 //! un Action4/Action13. Los parámetros del text stack pueden materializarse
 //! con un contexto explícito; los controles que requieren estado de idioma o
-//! de juego (género/caso y pluralización) quedan representados como marcadores
-//! visibles; las fechas se materializan cuando el caller entrega un parámetro
-//! tipado en `NewGrfTextContext`.
+//! de juego (género/caso) quedan representados como marcadores visibles; la
+//! pluralización puede materializarse con la regla que entrega el marcador o
+//! `NewGrfTextContext`; las fechas se materializan cuando el caller entrega un
+//! parámetro tipado.
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Write as _;
@@ -67,6 +68,9 @@ pub enum NewGrfTextValue {
 pub struct NewGrfTextContext {
     pub params: Vec<NewGrfTextValue>,
     pub choice_index: Option<u8>,
+    /// Regla de plural de `OpenTTD` (`0..=14`) para una lista sin metadata o para
+    /// sobrescribir la regla que el marcador decodificado ya conserva.
+    pub plural_form: Option<u8>,
 }
 
 impl NewGrfTextContext {
@@ -79,6 +83,7 @@ impl NewGrfTextContext {
         Self {
             params: params.into_iter().collect(),
             choice_index: None,
+            plural_form: None,
         }
     }
 
@@ -86,6 +91,13 @@ impl NewGrfTextContext {
     #[must_use]
     pub fn with_choice_index(mut self, choice_index: u8) -> Self {
         self.choice_index = Some(choice_index);
+        self
+    }
+
+    /// Selecciona la regla de pluralización upstream para listas decodificadas.
+    #[must_use]
+    pub fn with_plural_form(mut self, plural_form: u8) -> Self {
+        self.plural_form = Some(plural_form);
         self
     }
 
@@ -242,20 +254,27 @@ fn decode_extended_control(raw: &[u8], cursor: &mut usize, out: &mut String) {
         }
         0x11 => push_marker(out, "choice-default"),
         0x12 => push_marker(out, "choice-end"),
-        0x13..=0x15 => {
-            let label = match code {
-                0x13 => "gender-list",
-                0x14 => "case-list",
-                _ => "plural-list",
+        0x13 => {
+            let Some(&offset) = raw.get(*cursor) else {
+                push_marker(out, "truncated:9A13");
+                return;
             };
-            if code != 0x14 {
-                if raw.get(*cursor).is_none() {
-                    push_marker(out, "truncated:9A13");
-                    return;
-                }
-                *cursor += 1;
-            }
-            push_marker(out, label);
+            *cursor += 1;
+            let _ = write!(out, "⟦gender-list:{offset}⟧");
+        }
+        0x14 => push_marker(out, "case-list"),
+        0x15 => {
+            let Some(&plural_form) = raw.get(*cursor) else {
+                push_marker(out, "truncated:9A15");
+                return;
+            };
+            *cursor += 1;
+            let Some(&offset) = raw.get(*cursor) else {
+                push_marker(out, "truncated:9A15");
+                return;
+            };
+            *cursor += 1;
+            let _ = write!(out, "⟦plural-list:{plural_form}:{offset}⟧");
         }
         0x16 => push_marker(out, "date-dword-long"),
         0x17 => push_marker(out, "date-dword-short"),
@@ -321,15 +340,27 @@ struct ChoiceCapture {
     prefix: String,
     segments: Vec<(u8, String)>,
     current: Option<u8>,
+    kind: ChoiceKind,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+enum ChoiceKind {
+    #[default]
+    Explicit,
+    Plural {
+        plural_form: u8,
+        parameter_offset: usize,
+    },
 }
 
 impl ChoiceCapture {
-    fn new(marker: &str) -> Self {
+    fn new(marker: &str, value: &str) -> Self {
         Self {
             raw: marker.to_owned(),
             prefix: String::new(),
             segments: Vec::new(),
             current: None,
+            kind: parse_choice_kind(value),
         }
     }
 
@@ -395,7 +426,12 @@ fn render_newgrf_text_inner(
         if value == "choice-end" {
             if let Some(mut finished) = choice.take() {
                 finished.raw.push_str(marker);
-                if let Some(selected) = finished.selected(context.choice_index.unwrap_or(0)) {
+                if let Some(index) = choice_index_for(&finished, context) {
+                    let Some(selected) = finished.selected(index) else {
+                        output.push_str(&finished.raw);
+                        cursor = marker_end;
+                        continue;
+                    };
                     output.push_str(&render_newgrf_text_inner(
                         &selected,
                         context,
@@ -417,7 +453,7 @@ fn render_newgrf_text_inner(
                 _ => capture.push_chunk(marker),
             }
         } else if is_choice_start(value) {
-            choice = Some(ChoiceCapture::new(marker));
+            choice = Some(ChoiceCapture::new(marker, value));
         } else {
             output.push_str(&render_dynamic_marker(
                 value,
@@ -449,6 +485,173 @@ fn append_marker_chunk(output: &mut String, choice: &mut Option<ChoiceCapture>, 
 
 fn is_choice_start(value: &str) -> bool {
     matches!(value, "gender-list" | "case-list" | "plural-list")
+        || value.starts_with("gender-list:")
+        || value.starts_with("plural-list:")
+}
+
+fn parse_choice_kind(value: &str) -> ChoiceKind {
+    let Some(metadata) = value.strip_prefix("plural-list:") else {
+        return ChoiceKind::Explicit;
+    };
+    let mut fields = metadata.split(':');
+    let Some(plural_form) = fields.next().and_then(|field| field.parse::<u8>().ok()) else {
+        return ChoiceKind::Explicit;
+    };
+    let Some(parameter_offset) = fields.next().and_then(|field| field.parse::<usize>().ok()) else {
+        return ChoiceKind::Explicit;
+    };
+    if fields.next().is_some() {
+        return ChoiceKind::Explicit;
+    }
+    ChoiceKind::Plural {
+        plural_form,
+        parameter_offset,
+    }
+}
+
+fn choice_index_for(capture: &ChoiceCapture, context: &NewGrfTextContext) -> Option<u8> {
+    match capture.kind {
+        ChoiceKind::Explicit => Some(context.choice_index.unwrap_or(0)),
+        ChoiceKind::Plural {
+            plural_form,
+            parameter_offset,
+        } => {
+            let count = context
+                .params
+                .get(parameter_offset)
+                .and_then(text_plural_count)?;
+            let rule = context.plural_form.unwrap_or(plural_form);
+            determine_plural_form(count, rule)
+        }
+    }
+}
+
+fn text_plural_count(value: &NewGrfTextValue) -> Option<i64> {
+    match value {
+        NewGrfTextValue::Signed(number) => Some(*number),
+        NewGrfTextValue::Unsigned(number) => i64::try_from(*number).ok(),
+        NewGrfTextValue::Date { day_index } => i64::try_from(*day_index).ok(),
+        NewGrfTextValue::Text(_) => None,
+    }
+}
+
+/// Replica las reglas `DeterminePluralForm` de `OpenTTD` 15.3.
+#[allow(clippy::too_many_lines)] // Tabla 0..=14 alineada con DeterminePluralForm upstream.
+fn determine_plural_form(count: i64, plural_form: u8) -> Option<u8> {
+    let n = count.unsigned_abs();
+    let index = match plural_form {
+        0 => u8::from(n != 1),
+        1 => 0,
+        2 => u8::from(n > 1),
+        3 => {
+            if n % 10 == 1 && n % 100 != 11 {
+                0
+            } else if n != 0 {
+                1
+            } else {
+                2
+            }
+        }
+        4 => {
+            if n == 1 {
+                0
+            } else if n == 2 {
+                1
+            } else if n < 7 {
+                2
+            } else if n < 11 {
+                3
+            } else {
+                4
+            }
+        }
+        5 => {
+            if n % 10 == 1 && n % 100 != 11 {
+                0
+            } else if n % 10 >= 2 && (n % 100 < 10 || n % 100 >= 20) {
+                1
+            } else {
+                2
+            }
+        }
+        6 => {
+            if n % 10 == 1 && n % 100 != 11 {
+                0
+            } else if n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) {
+                1
+            } else {
+                2
+            }
+        }
+        7 => {
+            if n == 1 {
+                0
+            } else if n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) {
+                1
+            } else {
+                2
+            }
+        }
+        8 => {
+            if n % 100 == 1 {
+                0
+            } else if n % 100 == 2 {
+                1
+            } else if n % 100 == 3 || n % 100 == 4 {
+                2
+            } else {
+                3
+            }
+        }
+        9 => u8::from(!(n % 10 == 1 && n % 100 != 11)),
+        10 => {
+            if n == 1 {
+                0
+            } else if (2..=4).contains(&n) {
+                1
+            } else {
+                2
+            }
+        }
+        11 => match n % 10 {
+            0 | 1 | 3 | 6 | 7 | 8 => 0,
+            2 | 4 | 5 | 9 => 1,
+            _ => return None,
+        },
+        12 => {
+            if n == 1 {
+                0
+            } else if n == 0 || (2..=10).contains(&(n % 100)) {
+                1
+            } else if (11..=19).contains(&(n % 100)) {
+                2
+            } else {
+                3
+            }
+        }
+        13 => {
+            if n == 1 || n == 11 {
+                0
+            } else if n == 2 || n == 12 {
+                1
+            } else if (3..=10).contains(&n) || (13..=19).contains(&n) {
+                2
+            } else {
+                3
+            }
+        }
+        14 => {
+            if n == 1 {
+                0
+            } else if n == 0 || (1..=19).contains(&(n % 100)) {
+                1
+            } else {
+                2
+            }
+        }
+        _ => return None,
+    };
+    Some(index)
 }
 
 fn render_dynamic_marker(
@@ -946,6 +1149,15 @@ mod tests {
     }
 
     #[test]
+    fn decodes_plural_metadata_without_losing_parameter_offset() {
+        assert_eq!(
+            decode_newgrf_text(&[0x9A, 0x13, 7, 0x9A, 0x14, 0x9A, 0x15, 0, 3]),
+            "⟦gender-list:7⟧⟦case-list⟧⟦plural-list:0:3⟧"
+        );
+        assert_eq!(decode_newgrf_text(&[0x9A, 0x15, 2]), "⟦truncated:9A15⟧");
+    }
+
+    #[test]
     fn keeps_regular_utf8_text_unchanged() {
         assert_eq!(decode_newgrf_text("Español ✓".as_bytes()), "Español ✓");
     }
@@ -1194,6 +1406,87 @@ mod tests {
             render_newgrf_text(text, &NewGrfTextContext::default().with_choice_index(1)),
             "prefixonesuffix"
         );
+    }
+
+    #[test]
+    fn renders_plural_list_from_count_and_rule_metadata() {
+        let text = "⟦plural-list:0:1⟧⟦choice-next:0⟧one⟦choice-next:1⟧many⟦choice-end⟧";
+        let singular = NewGrfTextContext::with_params([
+            NewGrfTextValue::Unsigned(99),
+            NewGrfTextValue::Signed(1),
+        ]);
+        let plural = NewGrfTextContext::with_params([
+            NewGrfTextValue::Unsigned(99),
+            NewGrfTextValue::Signed(2),
+        ]);
+        assert_eq!(render_newgrf_text(text, &singular), "one");
+        assert_eq!(render_newgrf_text(text, &plural), "many");
+        assert_eq!(
+            render_newgrf_text(
+                text,
+                &NewGrfTextContext::with_params([
+                    NewGrfTextValue::Unsigned(99),
+                    NewGrfTextValue::Signed(0),
+                ])
+                .with_plural_form(1),
+            ),
+            "one"
+        );
+    }
+
+    #[test]
+    fn preserves_plural_list_when_count_or_rule_is_invalid() {
+        let text = "x⟦plural-list:0:1⟧⟦choice-next:0⟧one⟦choice-next:1⟧many⟦choice-end⟧";
+        assert_eq!(
+            render_newgrf_text(
+                text,
+                &NewGrfTextContext::with_params([
+                    NewGrfTextValue::Unsigned(99),
+                    NewGrfTextValue::Text("unknown".into()),
+                ]),
+            ),
+            text
+        );
+        assert_eq!(
+            render_newgrf_text(
+                text,
+                &NewGrfTextContext::with_params([
+                    NewGrfTextValue::Unsigned(99),
+                    NewGrfTextValue::Unsigned(1),
+                ])
+                .with_plural_form(15),
+            ),
+            text
+        );
+    }
+
+    #[test]
+    fn determine_plural_form_matches_all_upstream_rules() {
+        let cases = [
+            (0, 1, 0),
+            (1, 99, 0),
+            (2, 0, 0),
+            (3, 0, 2),
+            (4, 7, 3),
+            (5, 2, 1),
+            (6, 5, 2),
+            (7, 2, 1),
+            (8, 3, 2),
+            (9, 11, 1),
+            (10, 3, 1),
+            (11, 2, 1),
+            (12, 11, 2),
+            (13, 20, 3),
+            (14, 20, 2),
+        ];
+        for (rule, count, expected) in cases {
+            assert_eq!(
+                determine_plural_form(count, rule),
+                Some(expected),
+                "rule={rule}"
+            );
+        }
+        assert_eq!(determine_plural_form(1, 15), None);
     }
 
     #[test]

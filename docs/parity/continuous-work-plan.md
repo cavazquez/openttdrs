@@ -870,8 +870,11 @@ también invalida el passthrough de PATS. Ver [#382](sav-order-selectgoods-382.m
 PATS.linkgraph conserva también el intervalo y presupuesto en segundos, los
 cuatro modos por clase y los knobs del pipeline ya portado; el selector respeta
 las clases NewGRF y el scheduler usa la división nativa de dos segundos por
-día. El presupuesto de job sigue sin ejecutar threads/pausa porque el pipeline
-es síncrono. Ver [#383](sav-linkgraph-settings-383.md). El bool
+día. El job conserva ahora además su snapshot y espera la fecha de join nativa
+derivada de `recalc_time`; una marca de join temprana deja intactos los flows
+anteriores. Threads/pausa, compresión y validación de topología siguen fuera
+del corte. Ver [#383](sav-linkgraph-settings-383.md) y
+[#394](sav-linkgraph-recalc-time-394.md). El bool
 `station.distant_join_stations` también se conserva y gobierna el comando
 propio de unión remota, con default `true` y smoke de OpenTTD 15.3; no cubre
 todos los comandos de estación. Ver [#384](sav-distant-join-stations-384.md).
@@ -1784,3 +1787,13 @@ conservan también su facilidad de transporte (`RailWaypoint=0x81`,
 `RoadWaypoint=0x86`). El resolver map-aware de `RoadStop` ya expone `F0` para
 bus, truck y waypoint; no se inventan bits cuando no hay estación. El padre
 #329 continúa abierto.
+
+Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
+`PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
+clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en
+segundos económicos y mantiene los flows previos hasta la primera marca de
+`JoinNext` posterior a ese vencimiento. La regresión también demuestra que una
+mutación del grafo posterior no altera el job en vuelo. La cola ejecutable no
+rehidrata todavía los jobs guardados en `LGRJ`/`LGRS`; threads, presupuesto de
+CPU, pausa multiplayer, compresión y topología dinámica siguen pendientes en
+#328; el padre no se cierra.

@@ -2,9 +2,9 @@
 
 use crate::flow_stat::StationFlows;
 use crate::linkgraph_parity::{
-    build_jobs_from_cargo_dist, run_full_pipeline, to_station_flows_helper,
+    Job, build_jobs_from_cargo_dist, run_full_pipeline, to_station_flows_helper,
 };
-use crate::{GameState, station};
+use crate::{CargoType, GameState, station};
 
 /// Tick de economía en el que se spawnean/unen jobs del linkgraph (`SPAWN_JOIN_TICK`).
 pub const LINKGRAPH_SPAWN_JOIN_TICK: u16 = 21;
@@ -151,28 +151,66 @@ fn on_tick_companies(state: &mut GameState, t: u64) {
     crate::disaster::tick_disasters(state);
 }
 
+/// Integra una lista de jobs ya vencidos en la representación de flows.
+///
+/// El trabajo se construye sobre una copia del grafo en el tick de spawn y se
+/// ejecuta aquí sólo al llegar a su `join_date`, igual que el `JoinNext` de
+/// `OpenTTD`. Mantener esta operación aislada también evita que el scheduler
+/// síncrono y los comandos que fuerzan una reconstrucción diverjan.
+fn station_flows_from_jobs(jobs: Vec<(CargoType, Job)>) -> StationFlows {
+    let mut merged = StationFlows::default();
+    for (cargo, mut job) in jobs {
+        run_full_pipeline(&mut job);
+        let part = to_station_flows_helper(&job, cargo);
+        for (station_tile, table) in part.by_station {
+            let dest = merged.by_station.entry(station_tile).or_default();
+            for (c, map) in table.by_cargo {
+                let dest_map = dest.by_cargo.entry(c).or_default();
+                for (origin, fs) in map.by_origin {
+                    for (via, amount) in fs.shares {
+                        dest_map.add_flow(origin, via, amount);
+                    }
+                }
+            }
+        }
+    }
+    merged
+}
+
 /// `OnTick_LinkGraph` (P2.21) — jobs síncronos sobre copia del grafo cuando
 /// `economy_timer.date_fract == 21`, con cadencia nativa de PATS
-/// `linkgraph.recalc_interval` (segundos convertidos a días económicos).
+/// `linkgraph.recalc_interval` (segundos convertidos a días económicos) y
+/// latencia nativa de `linkgraph.recalc_time`.
 fn on_tick_link_graph(state: &mut GameState) {
     if state.economy_timer.date_fract != LINKGRAPH_SPAWN_JOIN_TICK {
         return;
     }
-    let interval = state.cargo_dist.effective_recalc_interval_days();
+    let native = state.cargo_dist.openttd_settings();
+    // Operar siempre sobre el valor nativo clamped (también para JSON legacy):
+    // OpenTTD nunca permite un intervalo menor a cuatro segundos, es decir,
+    // dos días económicos en este reloj.
+    let interval =
+        u32::from(native.recalc_interval_seconds / crate::flow_stat::ECONOMY_SECONDS_PER_DAY)
+            .max(1);
     let offset = state.economy_timer.date % interval;
-    // OpenTTD: offset==0 → SpawnNext; offset==interval/2 → JoinNext.
-    // Aquí ambos ejecutan el MCF síncrono sobre una copia del grafo.
-    if offset == 0 || offset == interval / 2 {
-        // Copia observacional: el pipeline no muta estaciones ni el grafo en vivo.
-        let stations = state.stations.clone();
-        let link_graph = state.link_graph.clone();
+    let date = state.economy_timer.date;
+
+    // OpenTTD: offset==0 → SpawnNext; offset==interval/2 → JoinNext. El
+    // segundo sólo integra el primer job cuya fecha de join ya venció.
+    if offset == 0 {
         let cargo_dist = state.cargo_dist;
-        let cargo_catalog = state.cargo_spec_catalog.clone();
-        let (map_w, map_h) = state.map.dimensions();
         if !cargo_dist.has_automatic_distribution() {
+            state.runtime.pending_linkgraph_jobs.clear();
             state.runtime.station_flows = StationFlows::default();
             return;
         }
+
+        // Copia observacional: el pipeline no muta estaciones ni el grafo en
+        // vivo y conserva los ajustes que existían al crear el job.
+        let stations = state.stations.clone();
+        let link_graph = state.link_graph.clone();
+        let cargo_catalog = state.cargo_spec_catalog.clone();
+        let (map_w, map_h) = state.map.dimensions();
         let jobs = build_jobs_from_cargo_dist(
             &stations,
             &link_graph,
@@ -181,23 +219,29 @@ fn on_tick_link_graph(state: &mut GameState) {
             map_w,
             map_h,
         );
-        let mut merged = StationFlows::default();
-        for (cargo, mut job) in jobs {
-            run_full_pipeline(&mut job);
-            let part = to_station_flows_helper(&job, cargo);
-            for (station_tile, table) in part.by_station {
-                let dest = merged.by_station.entry(station_tile).or_default();
-                for (c, map) in table.by_cargo {
-                    let dest_map = dest.by_cargo.entry(c).or_default();
-                    for (origin, fs) in map.by_origin {
-                        for (via, amount) in fs.shares {
-                            dest_map.add_flow(origin, via, amount);
-                        }
-                    }
-                }
-            }
+        if !jobs.is_empty() {
+            let join_date = date.saturating_add(u32::from(
+                native.recalc_time_seconds / crate::flow_stat::ECONOMY_SECONDS_PER_DAY,
+            ));
+            state
+                .runtime
+                .pending_linkgraph_jobs
+                .push(crate::game_state::PendingLinkGraphJob { join_date, jobs });
         }
-        state.runtime.station_flows = merged;
+    }
+
+    if offset == interval / 2 {
+        let due = state
+            .runtime
+            .pending_linkgraph_jobs
+            .first()
+            .is_some_and(|job| job.join_date <= date);
+        if due {
+            // Sólo se integra una cabeza por marca, como `JoinNext`; si hay
+            // jobs superpuestos, los siguientes esperan la marca posterior.
+            let pending = state.runtime.pending_linkgraph_jobs.remove(0);
+            state.runtime.station_flows = station_flows_from_jobs(pending.jobs);
+        }
     }
 }
 
@@ -205,12 +249,14 @@ fn on_tick_link_graph(state: &mut GameState) {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::cargodist::legacy::flow_stat::DistributionType as GameDistribution;
+    use crate::cargodist::parity::{BaseEdge, BaseNode, DistributionType, Job, LinkGraphSettings};
     use crate::map::TileKind;
     use crate::newgrf_sprites::{
         Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
     };
     use crate::station::{Station, StopKind};
-    use crate::{STATION_ANIMATION_TRIGGER_ACCEPTANCE_TICK, TileCoord};
+    use crate::{CargoType, STATION_ANIMATION_TRIGGER_ACCEPTANCE_TICK, TileCoord};
 
     /// CB140 sintético: escribe en el frame el byte bajo de `var 18`.
     fn acceptance_trigger_callbacks() -> TrainSpriteGraphics {
@@ -341,5 +387,128 @@ mod tests {
 
         on_tick_station(&mut state, 250);
         assert_eq!(state.stations[0].road_stop_animation_frame, 6);
+    }
+
+    fn linkgraph_test_state() -> GameState {
+        let mut state = GameState::new(8, 8);
+        let source = TileCoord::new(1, 1);
+        let destination = TileCoord::new(5, 5);
+        state
+            .stations
+            .push(Station::new_with_kind(source, StopKind::RailStation));
+        state
+            .stations
+            .push(Station::new_with_kind(destination, StopKind::RailStation));
+        state
+            .link_graph
+            .record_trip(source, destination, CargoType::Coal, 10, 20, 4);
+        state.cargo_dist.distribution = GameDistribution::Asymmetric;
+        state.economy_timer.date_fract = LINKGRAPH_SPAWN_JOIN_TICK;
+        state
+    }
+
+    #[test]
+    fn linkgraph_spawn_keeps_snapshot_until_recalc_time_join_date() {
+        let mut state = linkgraph_test_state();
+        state.cargo_dist.per_cargo = Some(crate::flow_stat::CargoDistPerCargoSettings {
+            recalc_interval_seconds: 8,
+            recalc_time_seconds: 9,
+            distribution_default: GameDistribution::Asymmetric,
+            ..Default::default()
+        });
+
+        // Día 0, offset 0: se crea el job, pero OpenTTD aún no integra sus
+        // flows. La fecha nativa es 9 / 2 = 4 días económicos.
+        on_tick_link_graph(&mut state);
+        assert_eq!(state.runtime.pending_linkgraph_jobs.len(), 1);
+        assert_eq!(state.runtime.pending_linkgraph_jobs[0].join_date, 4);
+        assert!(state.runtime.station_flows.by_station.is_empty());
+
+        // Día 2: es la primera marca de JoinNext, pero el job todavía no venció.
+        state.economy_timer.date = 2;
+        on_tick_link_graph(&mut state);
+        assert_eq!(state.runtime.pending_linkgraph_jobs.len(), 1);
+        assert!(state.runtime.station_flows.by_station.is_empty());
+
+        // Día 6: primera marca de join posterior a join_date; recién aquí se
+        // publican los shares calculados sobre la copia del grafo.
+        state.economy_timer.date = 6;
+        on_tick_link_graph(&mut state);
+        assert!(state.runtime.pending_linkgraph_jobs.is_empty());
+        assert!(!state.runtime.station_flows.by_station.is_empty());
+    }
+
+    #[test]
+    fn linkgraph_pending_job_preserves_graph_snapshot() {
+        let mut state = linkgraph_test_state();
+        state.cargo_dist.per_cargo = Some(crate::flow_stat::CargoDistPerCargoSettings {
+            recalc_interval_seconds: 8,
+            recalc_time_seconds: 9,
+            distribution_default: GameDistribution::Asymmetric,
+            ..Default::default()
+        });
+        on_tick_link_graph(&mut state);
+        assert_eq!(state.runtime.pending_linkgraph_jobs.len(), 1);
+
+        // Cambiar el grafo después del spawn no altera el snapshot ya iniciado.
+        let extra = TileCoord::new(7, 7);
+        state
+            .link_graph
+            .record_trip(TileCoord::new(1, 1), extra, CargoType::Coal, 99, 99, 1);
+        state.economy_timer.date = 2;
+        on_tick_link_graph(&mut state);
+
+        let pending = state.runtime.pending_linkgraph_jobs.first();
+        assert_eq!(pending.map(|job| job.jobs.len()), Some(1));
+        let Some(pending) = pending else {
+            panic!("job pending");
+        };
+        let (cargo, job) = &pending.jobs[0];
+        assert_eq!(*cargo, CargoType::Coal);
+        assert_eq!(job.nodes.len(), 2);
+        assert!(
+            job.edges
+                .iter()
+                .flat_map(|edges| edges.iter())
+                .all(|edge| edge.dest < 2)
+        );
+    }
+
+    #[test]
+    fn linkgraph_test_job_has_stable_join_pipeline() {
+        let settings = LinkGraphSettings {
+            distribution: DistributionType::Asymmetric,
+            ..Default::default()
+        };
+        let job = Job::new(
+            vec![
+                BaseNode {
+                    station: 0,
+                    x: 1,
+                    y: 1,
+                    supply: 10,
+                    demand: 0,
+                },
+                BaseNode {
+                    station: 1,
+                    x: 5,
+                    y: 5,
+                    supply: 0,
+                    demand: 10,
+                },
+            ],
+            vec![
+                vec![BaseEdge {
+                    dest: 1,
+                    capacity: 20,
+                    usage: 0,
+                    travel_time: 4,
+                }],
+                Vec::new(),
+            ],
+            settings,
+        );
+        let flows = station_flows_from_jobs(vec![(CargoType::Coal, job)]);
+        assert!(!flows.by_station.is_empty());
     }
 }

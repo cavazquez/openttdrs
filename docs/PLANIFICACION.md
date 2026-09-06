@@ -678,7 +678,7 @@ tick contra OpenTTD seguirá divergiendo aunque las fórmulas individuales sean 
 | **P2.18** | `ProcessOrders` | · hecho | Máquina que interrumpe por depósito, resuelve vías, avanza índices y busca depósito más cercano (`order_cmd.cpp:1949-2159`) | `process_orders` / `update_order_dest` en `order_execution.rs` | XL · **hecho** |
 | **P2.19** | Clasificación de carga | · hecho | `PrepareUnload` llama a `Stage`, que clasifica cada paquete en `TRANSFER`, `DELIVER`, `KEEP` o `LOAD` usando los flujos (`cargopacket.cpp:406-526`) | `prepare_unload` / `Stage` cableado en `cargo_transfer.rs` | XL · **hecho** |
 | **P2.20** | Cola de estación | · hecho | `StationCargoList` es un `MultiMap` indexado por `next_hop`, con cantidad reservada (`cargopacket.h:513-608`) | `by_next_hop` + `reserved` en `cargo_packet/types.rs` | L · **hecho** |
-| **P2.21** | Planificador del linkgraph | · hecho | `OnTick_LinkGraph` lanza y recoge jobs asíncronos sobre una copia del grafo de estaciones cuando `date_fract == 21`, con `recalc_interval` (`linkgraphschedule.cpp:202-216`) | Jobs síncronos MCF en `landscape.rs` (`date_fract == 21`) | XL · **hecho** |
+| **P2.21** | Planificador del linkgraph | · hecho | `OnTick_LinkGraph` lanza y recoge jobs sobre una copia del grafo de estaciones cuando `date_fract == 21`, con `recalc_interval` y `recalc_time` (`linkgraphschedule.cpp:202-216`) | Cola determinista de jobs pendientes y MCF síncrono en `landscape.rs`; threads/pausa siguen fuera | XL · **hecho** |
 | **P2.22** | Siguiente parada del flujo | · hecho | `GetNextStoppingStation` recorre la lista de forma recursiva con vías y condicionales (`order_cmd.cpp:363-409`) | `get_next_stopping_station` recursivo; `next_station_hop` delega | M · **hecho** |
 
 **P2.1 · hecho** — `timer/mod.rs`: `CalendarTimer` y `EconomyTimer` con `date_fract` 0..73,
@@ -2191,9 +2191,12 @@ el estado por tesela y actualizan `MAP8`; no se confunde esa conservación con
 ejecutar sus callbacks. `PATS`/`OPTS` ya conserva el
 subconjunto ejecutado por el core (construcción, pathfinding, `selectgoods`, unión
 distante de estaciones, `vehicle.wagon_speed_limits`, `vehicle.disable_elrails`, `vehicle.plane_speed`, `vehicle.plane_crashes`, perfil `linkgraph` por clase, averías, subsidios, desastres,
-autoridad, inflación/recesiones y unidades de tiempo). El perfil `linkgraph` mantiene
-sus segundos y cuatro selectores, pero el presupuesto de job sigue síncrono; la
-evidencia está en [`sav-linkgraph-settings-383.md`](parity/sav-linkgraph-settings-383.md).
+autoridad, inflación/recesiones y unidades de tiempo). El perfil `linkgraph`
+mantiene sus segundos y cuatro selectores; el scheduler determinista respeta
+ahora la fecha de join derivada de `recalc_time`, aunque el presupuesto de CPU,
+threads y la rehidratación ejecutable de `LGRJ`/`LGRS` siguen parciales. La
+evidencia está en [`sav-linkgraph-settings-383.md`](parity/sav-linkgraph-settings-383.md)
+y [`sav-linkgraph-recalc-time-394.md`](parity/sav-linkgraph-recalc-time-394.md).
 La unión distante tiene su contrato PATS/command en
 [`sav-distant-join-stations-384.md`](parity/sav-distant-join-stations-384.md). El historial de
 noticias propio queda en JSON (no es un pool nativo de OpenTTD `.sav`). `ORDL`

@@ -39,6 +39,18 @@ pub(crate) struct LegacySavAfterload {
     pub(crate) industries: Vec<LegacySavIndustry>,
 }
 
+/// Job de `CargoDist` que `OpenTTD` ya inició pero todavía no integró en los
+/// `FlowStat` de las estaciones.
+///
+/// El grafo y los ajustes se copian al hacer spawn. El contenido queda en el
+/// runtime (no en JSON/SAV) y se aplica cuando la marca de `join_date` llega a
+/// la siguiente oportunidad de `JoinNext`.
+#[derive(Debug, Clone)]
+pub struct PendingLinkGraphJob {
+    pub join_date: u32,
+    pub jobs: Vec<(crate::cargo::CargoType, crate::cargodist::parity::Job)>,
+}
+
 /// Campos efímeros de la simulación (no persistidos; reconstruidos tras carga).
 ///
 /// Todos los campos aquí tienen `#[serde(skip)]` implícito por no estar en
@@ -212,6 +224,10 @@ pub struct SimulationRuntime {
     /// no forma parte del estado autoritativo ni se persiste.
     pub station_flow_rebuilds: u64,
 
+    /// Jobs de link graph en vuelo; reemplaza el scheduler thread de `OpenTTD`
+    /// por una cola determinista entre los ticks de spawn y join.
+    pub pending_linkgraph_jobs: Vec<PendingLinkGraphJob>,
+
     /// Grabador opcional: cada `apply_command` exitoso se encola (plan IA progresiva).
     pub command_recorder: Option<VecDeque<Command>>,
 
@@ -293,6 +309,7 @@ impl SimulationRuntime {
             rail_type_max_speed: [0; 4],
             station_flows: crate::flow_stat::StationFlows::default(),
             station_flow_rebuilds: 0,
+            pending_linkgraph_jobs: Vec::new(),
             command_recorder: None,
             newgrf_diagnostics: Vec::new(),
             sound_overrides: [None; crate::sound_id::SOUND_COUNT],

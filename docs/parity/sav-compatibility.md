@@ -104,6 +104,17 @@ se conserva pero no convierte el pipeline síncrono en el job/thread nativo.
 La evidencia y los límites están en
 [`sav-linkgraph-settings-383.md`](sav-linkgraph-settings-383.md).
 
+Actualización #394 (2026-09-06): el scheduler determinista respeta ahora la
+latencia observable de `PATS.linkgraph.recalc_time`. En el spawn se clona el
+grafo y se encola un job con `join_date = fecha + recalc_time / 2 s`; la marca
+de mitad de `recalc_interval` sólo integra la cabeza cuando ya venció, por lo
+que un presupuesto largo puede esperar varias marcas y los flows anteriores
+se conservan mientras tanto. La cola ejecutable es efímera y no cambia el wire
+format; `LGRJ`/`LGRS` de un save todavía se conservan como chunks nativos, pero
+no se rehidratan en esa cola. Threads, presupuesto de CPU real, pausa
+multiplayer, compresión y validación de topología siguen siendo parciales; ver
+[`sav-linkgraph-recalc-time-394.md`](sav-linkgraph-recalc-time-394.md).
+
 Actualización #384 (2026-09-05): `PATS.station.distant_join_stations` se
 importa y emite como `SLE_BOOL`, con el default nativo `true` de `SLV_106`.
 `Command::JoinStations` lo ejecuta para permitir o rechazar una unión no

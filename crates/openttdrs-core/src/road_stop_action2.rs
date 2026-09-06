@@ -317,6 +317,7 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
     // disponibilidad); esta ruta siempre resuelve una instancia en el mapa.
     ctx.vars.insert(0x50, 0);
     if let Some(spec) = resolution.current_spec {
+        populate_road_stop_parent_scope(&mut ctx, resolution.world, coord, spec.grfid);
         populate_road_stop_badge_vars_for_spec(&mut ctx, spec);
         let cargo_catalog = resolution
             .world
@@ -344,6 +345,30 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
         .populate(&mut ctx);
     }
     ctx
+}
+
+/// Populates the `TownScopeResolver` parent used by a map-aware road stop.
+///
+/// `OpenTTD` stores the parent association on the native road-stop object. The
+/// current model only has the world pool at this call site, so the nearest
+/// town (with ID as a stable tie-breaker) is the explicit fallback. Callers
+/// without a world context intentionally retain an empty parent scope.
+fn populate_road_stop_parent_scope(
+    ctx: &mut Action2EvalCtx,
+    world: Option<RoadStopWorldContext<'_>>,
+    coord: TileCoord,
+    grfid: u32,
+) {
+    let Some(world) = world else {
+        return;
+    };
+    if let Some(town) = world
+        .towns
+        .iter()
+        .min_by_key(|town| (crate::economy::manhattan_distance(coord, town.pos), town.id))
+    {
+        town.copy_newgrf_parent_scope(grfid, ctx);
+    }
 }
 
 fn road_stop_town_vars(towns: Option<&[Town]>, coord: TileCoord) -> (u32, u32) {
@@ -921,6 +946,48 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x45), Some(&(1 << 16 | 3)));
         assert_eq!(ctx.vars.get(&0x46), Some(&5));
         assert_eq!(ctx.vars.get(&0x47), Some(&0x9201_0001));
+    }
+
+    #[test]
+    fn road_stop_world_scope_exposes_parent_town_and_psa_by_grfid() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let coord = TileCoord::new(1, 2);
+        map.set_tile(coord, road_stop_tile(4, 3 << 3)).unwrap();
+        let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+        station.road_stop_spec = Some(7);
+
+        let grfid = 0x4242_0001;
+        let mut town = Town {
+            id: 7,
+            pos: TileCoord::new(0, 0),
+            population: 65_535,
+            squared_town_zone_radius: [100, 100, 0, 0, 0],
+            larger_town: true,
+            ..Town::default()
+        };
+        town.newgrf_persistent_regs
+            .insert(grfid, std::collections::HashMap::from([(4, 0xAABB_CCDD)]));
+        let catalog = vec![road_stop_spec(7, grfid, 0, None)];
+        let ctx = action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
+            &map,
+            std::slice::from_ref(&station),
+            &catalog,
+            RoadStopWorldContext {
+                towns: std::slice::from_ref(&town),
+                companies: &[],
+                industries: &[],
+                road_type_catalog: &[],
+                cargo_spec_catalog: &[],
+            },
+            coord,
+            0,
+            Climate::Temperate,
+        );
+
+        assert_eq!(ctx.parent_vars.get(&0x40), Some(&1));
+        assert_eq!(ctx.parent_vars.get(&0x41), Some(&7));
+        assert_eq!(ctx.parent_vars.get(&0x82), Some(&65_535));
+        assert_eq!(ctx.parent_persistent_registers.get(&4), Some(&0xAABB_CCDD));
     }
 
     #[test]

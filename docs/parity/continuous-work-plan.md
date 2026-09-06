@@ -1930,6 +1930,15 @@ compra devuelven `1`/`0`/`UINT_MAX` para badge asociado, conocido no asociado o
 índice local desconocido. Las regresiones cubren parseo, aplicación, parada
 colocada y picker sin entidad; el padre #329 sigue abierto.
 
+Actualización #329-ROADSTOP-TOWN-PARENT-411 (2026-09-06, issue [#411](https://github.com/cavazquez/openttdrs/issues/411)):
+la ruta map-aware de `RoadStopScopeResolver` ya materializa el
+`TownScopeResolver` parent seleccionando el pueblo más cercano con desempate
+por ID, y copia las variables de pueblo modeladas junto con el PSA `7C` del
+GRFID de la parada. Las APIs legacy sin pool de pueblos mantienen el parent
+vacío. La regresión cubre población/flags y un registro persistente; la
+asociación nativa parada→pueblo y variables no representadas siguen pendientes
+en #329.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

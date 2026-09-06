@@ -22,7 +22,8 @@ máscara de idiomas y puede producir más de una variante.
   acepta Action4 genéricos con terminadores NUL completos; un payload truncado
   no genera una entrada parcial.
 - `NewGrfStringCatalog` indexa `(GRFID, StringID, idioma)` y resuelve primero
-  el idioma solicitado, luego inglés y finalmente la variante más reciente.
+  el idioma solicitado, luego el genérico `0x7F`, inglés y finalmente la
+  variante más reciente.
 - El refresco del stack carga el catálogo antes de los Objects. CB15C local
   suma `0xD000 + offset`; CB15C `0x40F` consulta directamente el `StringID`
   del registro `0x100`.
@@ -31,4 +32,4 @@ máscara de idiomas y puede producir más de una variante.
 
 Los códigos de control de strings se conservan sin expandir; la expansión del
 text stack y los Action4 específicos de cada feature siguen siendo sucesores
-separados.
+separados. Action13 se implementó en el issue sucesor [#430](https://github.com/cavazquez/openttdrs/issues/430).

@@ -2426,9 +2426,12 @@ topologías no soportadas también se rechazan de forma conservadora. La
 regresión de `raise_land`/`lower_land`/`level_land` cubre la atomicidad. CB15C
 ya clasifica el texto adicional del selector (local, `StringID` en `0x100`,
 ausente o inválido); el catálogo Action4 genérico resuelve el rango `0xD000`
-y el `StringID` de `0x40F` por idioma con fallback inglés/última variante, y
-el selector muestra la cadena o `Action4 ausente`. Los códigos de control y
-los Action4 específicos por feature todavía no se expanden. También siguen
+y el `StringID` de `0x40F` por idioma con fallback genérico `0x7F`, inglés y
+última variante, y
+el selector muestra la cadena o `Action4 ausente`. Action13 ya puede
+sobrescribir una cadena genérica válida para GRFID activo, usando idioma
+explícito en GRF v8+ y `0x7F` genérico en versiones anteriores. Los códigos de
+control y los Action4 específicos por feature todavía no se expanden. También siguen
 pendientes el writeback `7C` propio y scopes/vecinos avanzados.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.

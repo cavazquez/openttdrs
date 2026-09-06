@@ -582,8 +582,9 @@ pub use newgrf_sprites::{
     merge_twocc_action5_block, oneway_action5_slot, roadstop_action5_slot, signal_action5_slot,
 };
 pub use newgrf_text::{
-    GRF_STRING_GENERIC_BASE, NEWGRF_LANGUAGE_ENGLISH, NEWGRF_LANGUAGE_SPANISH, NewGrfString,
-    NewGrfStringCatalog, collect_action4_generic_strings_from_grf,
+    GRF_STRING_GENERIC_BASE, NEWGRF_LANGUAGE_ENGLISH, NEWGRF_LANGUAGE_SPANISH,
+    NEWGRF_LANGUAGE_UNSPECIFIED, NewGrfString, NewGrfStringCatalog,
+    collect_action4_generic_strings_from_grf, collect_action13_translations_from_grf,
 };
 pub use newgrf_type_tables::{
     GrfTypeTranslationTables, TypeLabel, cargo_from_local_id_with_catalog,

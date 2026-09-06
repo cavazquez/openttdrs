@@ -1199,7 +1199,7 @@ de crear una instancia y pasa la vista seleccionada en `ObjectScopeResolver`.
 resultado no muta `GameState`; Action4 genérico (`0x80`) se parsea para
 pseudo-sprites v1/v2 y se indexa por `(GRFID, StringID, idioma)`. CB15C local
 consulta `0xD000 + result` y `0x40F` consulta el registro `0x100`; el
-ObjectPicker aplica idioma solicitado, inglés y última variante como fallback.
+ObjectPicker aplica idioma solicitado, genérico `0x7F`, inglés y última variante como fallback.
 Los códigos de control y Action4 específicos por feature no se expanden
 todavía.
 
@@ -1212,6 +1212,17 @@ de catálogos NewGRF reconstruye `SimulationRuntime.newgrf_string_catalog`
 antes de aplicar Objects; la UI de CB15C deja de mostrar `Action4 pendiente`
 cuando encuentra la cadena. La expansión de códigos de control y el text stack
 completo permanecen como sucesores.
+
+### #329-ACTION13-TRANSLATIONS-430 — traducciones genéricas
+
+Actualizado: 2026-09-06. `collect_action13_translations_from_grf` valida el
+GRFID contra el stack activo, usa el layout sin byte de idioma para GRF v7 y
+anteriores y el layout con idioma para v8+, y sólo acepta los rangos genéricos
+que upstream permite. Las cadenas no vacías y completas se agregan después de
+Action4 para que la variante traducida tenga prioridad; un payload truncado,
+fuera de rango o dirigido a un GRFID desconocido no modifica el catálogo.
+La expansión de códigos de control y mappings Action0 específicos por feature
+queda pendiente.
 
 ### #329-OBJECT-AUTOSLOPE-427 — `CBID_OBJECT_AUTOSLOPE`
 

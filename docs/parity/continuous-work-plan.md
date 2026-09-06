@@ -2145,8 +2145,17 @@ idioma de esas cadenas siguen separados del cierre de este issue.
 Actualización #329-ACTION4-GENERIC-STRINGS-429 (2026-09-06, issue [#429](https://github.com/cavazquez/openttdrs/issues/429)):
 Action4 genérico (`0x80`) ya se recorre desde pseudo-sprites v1/v2. El núcleo
 conserva `(GRFID, StringID, idioma)` en un catálogo efímero y aplica el
-fallback idioma solicitado → inglés → última variante declarada. CB15C local
+fallback idioma solicitado → genérico `0x7F` → inglés → última variante declarada. CB15C local
 resuelve `0xD000 + offset` y CB15C `0x40F` consulta el registro `0x100`; el
 ObjectPicker muestra la cadena cuando existe y `Action4 ausente` cuando no.
 Payloads truncados no agregan textos parciales. Los códigos de control y los
 Action4 específicos por feature siguen siendo sucesores separados.
+
+Actualización #329-ACTION13-TRANSLATIONS-430 (2026-09-06, issue [#430](https://github.com/cavazquez/openttdrs/issues/430)):
+Action13 (`TranslateGRFStrings`) ya se procesa después de los Action4 base.
+El parser valida GRFID activo, versión del GRF, idioma explícito de v8+ o
+`0x7F` genérico para v7 y anteriores, rangos `0xD000..0xD3FF`/
+`0xD800..0xFFFF` y terminadores NUL. Las traducciones válidas ganan en el
+lookup del catálogo; cargas desconocidas, fuera de rango y truncadas se
+ignoran sin mutar el estado. Códigos de control y mappings específicos siguen
+fuera del recorte.

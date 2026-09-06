@@ -24,6 +24,12 @@ pub mod train;
 pub fn apply_newgrf_strings(state: &mut GameState, search_dirs: &[&std::path::Path]) {
     let mut catalog = crate::newgrf_text::NewGrfStringCatalog::default();
     let stack = state.newgrf_stack.clone();
+    let active_grfids: Vec<u32> = stack
+        .iter()
+        .filter(|entry| entry.enabled)
+        .map(|entry| entry.grfid)
+        .collect();
+    let mut loaded = Vec::new();
     for entry in stack.iter().filter(|entry| entry.enabled) {
         let Some(path) = search_dirs
             .iter()
@@ -35,9 +41,20 @@ pub fn apply_newgrf_strings(state: &mut GameState, search_dirs: &[&std::path::Pa
         let Ok(data) = std::fs::read(path) else {
             continue;
         };
-        catalog.extend(
-            crate::newgrf_text::collect_action4_generic_strings_from_grf(&data, entry.grfid),
-        );
+        loaded.push((entry.grfid, entry.grf_version, data));
+    }
+    // Primero se registran los textos base de todos los GRF y luego sus
+    // traducciones. Así Action13 puede apuntar a un GRFID cargado antes o
+    // después en el stack sin perder prioridad.
+    for (grfid, _, data) in &loaded {
+        catalog.extend(crate::newgrf_text::collect_action4_generic_strings_from_grf(data, *grfid));
+    }
+    for (_, grf_version, data) in &loaded {
+        catalog.extend(crate::newgrf_text::collect_action13_translations_from_grf(
+            data,
+            *grf_version,
+            &active_grfids,
+        ));
     }
     state.runtime.newgrf_string_catalog = catalog;
 }

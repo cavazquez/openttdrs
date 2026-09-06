@@ -1,7 +1,7 @@
 //! Specs de objetos `NewGRF` (`Objects`, feature Action0 `0x0F`).
 //!
-//! Catálogo runtime: clase, tamaño, clima, coste y nombre; sprites/callbacks opcionales vía
-//! Action1/2/3.
+//! Catálogo runtime: clase, tamaño, clima, coste, nombre y metadata de animación;
+//! sprites/callbacks opcionales vía Action1/2/3.
 
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,12 @@ pub const DEFAULT_OBJECT_CLIMATE_MASK: u8 = 0x0F;
 ///
 /// Corresponde a [`CBID_OBJECT_LAND_SLOPE_CHECK`](crate::CBID_OBJECT_LAND_SLOPE_CHECK).
 pub const OBJECT_CALLBACK_SLOPE_CHECK_MASK: u16 = 1 << 0;
+pub const OBJECT_CALLBACK_ANIMATION_NEXT_FRAME_MASK: u16 = 1 << 1;
+pub const OBJECT_CALLBACK_ANIMATION_SPEED_MASK: u16 = 1 << 2;
+
+/// Bits de `ObjectFlag` que afectan al runtime de animación.
+pub const OBJECT_FLAG_ANIMATION: u16 = 1 << 6;
+pub const OBJECT_FLAG_ANIM_RANDOM_BITS: u16 = 1 << 12;
 
 /// Spec de objeto definido por Action0.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,6 +54,20 @@ pub struct ObjectSpecDef {
     /// Multiplicador de coste Action0 `0x0D` (`build_cost_multiplier`).
     #[serde(default = "default_object_build_cost_factor")]
     pub build_cost_factor: u8,
+    /// Flags de comportamiento Action0 `0x10` (`ObjectFlag`).
+    #[serde(default)]
+    pub flags: u16,
+    /// Último frame y estado Action0 `0x11` (`0xFF` = sin animación).
+    #[serde(default)]
+    pub animation_frames: u8,
+    #[serde(default = "default_object_animation_status")]
+    pub animation_status: u8,
+    /// Exponente de velocidad Action0 `0x12` (ticks entre frames = `2^n`).
+    #[serde(default = "default_object_animation_speed")]
+    pub animation_speed: u8,
+    /// Máscara de triggers Action0 `0x13`.
+    #[serde(default)]
+    pub animation_triggers: u16,
     /// Máscara de callbacks Action0 `0x15` (WORD).
     #[serde(default)]
     pub callback_mask: u16,
@@ -68,6 +88,14 @@ const fn default_object_climate_mask() -> u8 {
 
 const fn default_object_build_cost_factor() -> u8 {
     DEFAULT_OBJECT_BUILD_COST_FACTOR
+}
+
+const fn default_object_animation_status() -> u8 {
+    0xFF
+}
+
+const fn default_object_animation_speed() -> u8 {
+    2
 }
 
 impl ObjectSpecDef {
@@ -105,6 +133,36 @@ impl ObjectSpecDef {
     #[must_use]
     pub const fn has_slope_check_callback(&self) -> bool {
         self.callback_mask & OBJECT_CALLBACK_SLOPE_CHECK_MASK != 0
+    }
+
+    /// `true` cuando el objeto declara teselas animadas.
+    #[must_use]
+    pub const fn has_animation(&self) -> bool {
+        self.flags & OBJECT_FLAG_ANIMATION != 0 && self.animation_status != 0xFF
+    }
+
+    /// El callback de siguiente frame puede consumir random bits.
+    #[must_use]
+    pub const fn animation_next_frame_uses_random_bits(&self) -> bool {
+        self.flags & OBJECT_FLAG_ANIM_RANDOM_BITS != 0
+    }
+
+    /// El spec declaró CB `0x158` para elegir el siguiente frame.
+    #[must_use]
+    pub const fn has_animation_next_frame_callback(&self) -> bool {
+        self.callback_mask & OBJECT_CALLBACK_ANIMATION_NEXT_FRAME_MASK != 0
+    }
+
+    /// El spec declaró CB `0x15A` para elegir la velocidad.
+    #[must_use]
+    pub const fn has_animation_speed_callback(&self) -> bool {
+        self.callback_mask & OBJECT_CALLBACK_ANIMATION_SPEED_MASK != 0
+    }
+
+    /// La secuencia Action0 continúa al llegar al último frame.
+    #[must_use]
+    pub const fn animation_loops(&self) -> bool {
+        self.animation_status == 1
     }
 
     /// Vista Action1/3 por índice (módulo `len` si hay varias).
@@ -283,6 +341,11 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
             callback_mask: 0,
             views: vec![red, blue],
             newgrf_runtime: Some(Box::new(runtime)),
@@ -336,6 +399,11 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
             callback_mask: 0,
             views: vec![sprite],
             newgrf_runtime: Some(Box::new(runtime)),

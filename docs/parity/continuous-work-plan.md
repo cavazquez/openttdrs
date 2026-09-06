@@ -2063,3 +2063,15 @@ el PSA `7C` por GRFID. Los road stops importados desde SAV dejan de depender
 del pueblo geométricamente más cercano; IDs ausentes o inválidos y APIs legacy
 siguen usando el fallback Manhattan/ID. La regresión cubre vars, población y
 writeback del PSA con dos pueblos divergentes.
+
+Actualización #329-OBJECT-ANIMATION-METADATA-422 (2026-09-06, issue [#422](https://github.com/cavazquez/openttdrs/issues/422)):
+Action0 `Objects` ya conserva los cuatro campos que habilitan el contrato de
+animación de OpenTTD: flags `0x10` (incluidos `Animation` y `AnimRandomBits`),
+frames/estado `0x11`, velocidad `0x12` y triggers `0x13`. El parser tolera
+payloads antiguos que no traen esas propiedades y usa `NoAnimation`/velocidad
+`2` como defaults nativos; `ObjectSpecDef`, el catálogo aplicado y JSON
+mantienen los valores sin perderlos al rehidratar un save. La regresión carga
+un GRF sintético, comprueba flags, frames/status, velocidad y máscara de
+triggers y valida el round-trip del spec. Esta etapa no declara ejecución:
+CB158/CB15A, triggers por tick y estado `m3hi` por tesela siguen siendo el
+próximo recorte de #329.

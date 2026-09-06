@@ -121,6 +121,14 @@ const PROP_OBJECT_CLIMATE: u8 = 0x0B;
 const PROP_OBJECT_SIZE: u8 = 0x0C;
 /// Objects: build cost multiplier BYTE (`OpenTTD` `0x0D`).
 const PROP_OBJECT_BUILD_COST: u8 = 0x0D;
+/// Objects: behaviour flags WORD (`OpenTTD` `0x10`).
+const PROP_OBJECT_FLAGS: u8 = 0x10;
+/// Objects: animation frame count and status (`OpenTTD` `0x11`).
+const PROP_OBJECT_ANIMATION_INFO: u8 = 0x11;
+/// Objects: animation speed (`OpenTTD` `0x12`).
+const PROP_OBJECT_ANIMATION_SPEED: u8 = 0x12;
+/// Objects: animation trigger mask WORD (`OpenTTD` `0x13`).
+const PROP_OBJECT_ANIMATION_TRIGGERS: u8 = 0x13;
 /// Objects: callback mask WORD (`OpenTTD` `0x15`).
 const PROP_OBJECT_CALLBACK_MASK: u8 = 0x15;
 /// Stations: callback mask (`OpenTTD` 15.3).
@@ -790,6 +798,16 @@ pub struct ParsedObjectMeta {
     pub climate_mask: u8,
     /// Multiplicador de coste de construcción (`prop 0x0D`).
     pub build_cost_factor: u8,
+    /// Flags de comportamiento (`prop 0x10`), incluido `Animation` y
+    /// `AnimRandomBits`.
+    pub flags: u16,
+    /// Último frame y estado (`prop 0x11`).
+    pub animation_frames: u8,
+    pub animation_status: u8,
+    /// Exponente de velocidad (`prop 0x12`).
+    pub animation_speed: u8,
+    /// Máscara de triggers (`prop 0x13`).
+    pub animation_triggers: u16,
     /// Máscara de callbacks (`prop 0x15`, WORD).
     pub callback_mask: u16,
     /// Etiquetas de badge (`prop 0xFD`); se resuelven en apply.
@@ -3058,6 +3076,7 @@ pub fn collect_cargo_metas_from_grf(data: &[u8]) -> Vec<ParsedCargoMeta> {
 
 /// Parsea Action0 `Objects` (`0x0F`): class label, size, nombre `0xFE`, badges `0xFD`.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
     let header = parse_action0_header(payload)?;
     if header.feature != ACTION0_FEATURE_OBJECTS || header.num_ids == 0 || payload.len() < 5 {
@@ -3070,6 +3089,11 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
     let mut size = crate::object_spec::OBJECT_SIZE_1X1;
     let mut climate_mask = crate::object_spec::DEFAULT_OBJECT_CLIMATE_MASK;
     let mut build_cost_factor = crate::object_spec::DEFAULT_OBJECT_BUILD_COST_FACTOR;
+    let mut flags = 0u16;
+    let mut animation_frames = 0u8;
+    let mut animation_status = 0xFFu8;
+    let mut animation_speed = 2u8;
+    let mut animation_triggers = 0u16;
     let mut callback_mask = 0u16;
     let mut badge_labels = Vec::new();
     let mut badge_list_error = None;
@@ -3112,6 +3136,35 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
                 build_cost_factor = payload[i];
                 i += 1;
             }
+            PROP_OBJECT_FLAGS => {
+                let Some(bytes) = payload.get(i..i + 2) else {
+                    break;
+                };
+                flags = u16::from_le_bytes([bytes[0], bytes[1]]);
+                i += 2;
+            }
+            PROP_OBJECT_ANIMATION_INFO => {
+                let Some(bytes) = payload.get(i..i + 2) else {
+                    break;
+                };
+                animation_frames = bytes[0];
+                animation_status = bytes[1];
+                i += 2;
+            }
+            PROP_OBJECT_ANIMATION_SPEED => {
+                if i >= payload.len() {
+                    break;
+                }
+                animation_speed = payload[i];
+                i += 1;
+            }
+            PROP_OBJECT_ANIMATION_TRIGGERS => {
+                let Some(bytes) = payload.get(i..i + 2) else {
+                    break;
+                };
+                animation_triggers = u16::from_le_bytes([bytes[0], bytes[1]]);
+                i += 2;
+            }
             PROP_OBJECT_CALLBACK_MASK => {
                 let Some(bytes) = payload.get(i..i + 2) else {
                     break;
@@ -3152,6 +3205,11 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
         size,
         climate_mask,
         build_cost_factor,
+        flags,
+        animation_frames,
+        animation_status,
+        animation_speed,
+        animation_triggers,
         callback_mask,
         badge_labels,
         badge_list_error,

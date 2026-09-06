@@ -594,9 +594,11 @@ pub use news::{
 };
 pub use object_spec::{
     DEFAULT_OBJECT_BUILD_COST_FACTOR, DEFAULT_OBJECT_CLIMATE_MASK, NEW_OBJECT_OFFSET,
-    OBJECT_CALLBACK_SLOPE_CHECK_MASK, OBJECT_SIZE_1X1, ObjectSpecDef, empty_object_spec_catalog,
-    is_selectable_object_spec, list_1x1_object_specs, list_buildable_object_specs,
-    next_free_object_spec_id, object_size_is_1x1, object_spec_def,
+    OBJECT_CALLBACK_ANIMATION_NEXT_FRAME_MASK, OBJECT_CALLBACK_ANIMATION_SPEED_MASK,
+    OBJECT_CALLBACK_SLOPE_CHECK_MASK, OBJECT_FLAG_ANIM_RANDOM_BITS, OBJECT_FLAG_ANIMATION,
+    OBJECT_SIZE_1X1, ObjectSpecDef, empty_object_spec_catalog, is_selectable_object_spec,
+    list_1x1_object_specs, list_buildable_object_specs, next_free_object_spec_id,
+    object_size_is_1x1, object_spec_def,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{

@@ -310,6 +310,11 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask,
             build_cost_factor: cost_factor,
+            flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
             callback_mask: 0,
             views: Vec::new(),
             newgrf_runtime: None,
@@ -795,6 +800,11 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: 1,
+            flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
             callback_mask: 0,
             views: Vec::new(),
             newgrf_runtime: None,
@@ -815,6 +825,11 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: 1,
+            flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
             callback_mask: 0,
             views: Vec::new(),
             newgrf_runtime: None,
@@ -840,6 +855,11 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: 0x05,
             build_cost_factor: 5,
+            flags: crate::object_spec::OBJECT_FLAG_ANIMATION,
+            animation_frames: 3,
+            animation_status: 1,
+            animation_speed: 4,
+            animation_triggers: 0x12,
             callback_mask: OBJECT_CALLBACK_SLOPE_CHECK_MASK,
             views: Vec::new(),
             newgrf_runtime: None,
@@ -857,8 +877,26 @@ mod tests {
         assert_eq!(loaded.build_cost_factor, 5);
         assert_eq!(loaded.climate_mask, 0x05);
         assert_eq!(loaded.callback_mask, OBJECT_CALLBACK_SLOPE_CHECK_MASK);
+        assert_eq!(loaded.flags, crate::object_spec::OBJECT_FLAG_ANIMATION);
+        assert_eq!(loaded.animation_frames, 3);
+        assert_eq!(loaded.animation_status, 1);
+        assert_eq!(loaded.animation_speed, 4);
+        assert_eq!(loaded.animation_triggers, 0x12);
         assert!(loaded.views.is_empty());
         assert!(loaded.newgrf_runtime.is_none());
+
+        let legacy: ObjectSpecDef = serde_json::from_value(serde_json::json!({
+            "id": NEW_OBJECT_OFFSET,
+            "class_label": "OLD ",
+            "name": "Old",
+            "size": 0x11,
+            "from_newgrf": true
+        }))
+        .expect("legacy spec");
+        assert_eq!(legacy.animation_status, 0xFF);
+        assert_eq!(legacy.animation_speed, 2);
+        assert_eq!(legacy.animation_frames, 0);
+        assert_eq!(legacy.animation_triggers, 0);
     }
 
     #[test]

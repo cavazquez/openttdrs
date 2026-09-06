@@ -1029,7 +1029,42 @@ pub fn build_action0_object_payload_with_callback_mask(
     name: &str,
     badge_labels: &[[u8; 4]],
 ) -> Vec<u8> {
-    let num_props = 5 + u8::from(callback_mask != 0) + u8::from(!badge_labels.is_empty());
+    build_action0_object_payload_with_animation(
+        local_id,
+        class_label,
+        size,
+        climate_mask,
+        cost_factor,
+        0,
+        0,
+        0xFF,
+        2,
+        0,
+        callback_mask,
+        name,
+        badge_labels,
+    )
+}
+
+/// Action0 Objects con flags y metadata de animación (`0x10`–`0x13`).
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn build_action0_object_payload_with_animation(
+    local_id: u8,
+    class_label: &[u8; 4],
+    size: u8,
+    climate_mask: u8,
+    cost_factor: u8,
+    flags: u16,
+    animation_frames: u8,
+    animation_status: u8,
+    animation_speed: u8,
+    animation_triggers: u16,
+    callback_mask: u16,
+    name: &str,
+    badge_labels: &[[u8; 4]],
+) -> Vec<u8> {
+    let num_props = 9 + u8::from(callback_mask != 0) + u8::from(!badge_labels.is_empty());
     let mut p = vec![
         0x00,
         ACTION0_FEATURE_OBJECTS,
@@ -1045,6 +1080,15 @@ pub fn build_action0_object_payload_with_callback_mask(
     p.push(size);
     p.push(0x0D); // build cost multiplier
     p.push(cost_factor);
+    p.push(0x10); // flags
+    p.extend_from_slice(&flags.to_le_bytes());
+    p.push(0x11); // animation frames/status
+    p.push(animation_frames);
+    p.push(animation_status);
+    p.push(0x12); // animation speed
+    p.push(animation_speed);
+    p.push(0x13); // animation triggers
+    p.extend_from_slice(&animation_triggers.to_le_bytes());
     if callback_mask != 0 {
         p.push(0x15); // callback mask (WORD)
         p.extend_from_slice(&callback_mask.to_le_bytes());
@@ -3636,12 +3680,17 @@ mod tests {
 
     #[test]
     fn parse_object_meta_and_apply_registers() {
-        let a0 = build_action0_object_payload_with_callback_mask(
+        let a0 = build_action0_object_payload_with_animation(
             0,
             b"LIGT",
             0x12,
             0x05,
             7,
+            crate::OBJECT_FLAG_ANIMATION | crate::OBJECT_FLAG_ANIM_RANDOM_BITS,
+            6,
+            1,
+            4,
+            0x0201,
             crate::OBJECT_CALLBACK_SLOPE_CHECK_MASK,
             "Faro",
             &[],
@@ -3651,6 +3700,14 @@ mod tests {
         assert_eq!(meta.size, 0x12);
         assert_eq!(meta.climate_mask, 0x05);
         assert_eq!(meta.build_cost_factor, 7);
+        assert_eq!(
+            meta.flags,
+            crate::OBJECT_FLAG_ANIMATION | crate::OBJECT_FLAG_ANIM_RANDOM_BITS
+        );
+        assert_eq!(meta.animation_frames, 6);
+        assert_eq!(meta.animation_status, 1);
+        assert_eq!(meta.animation_speed, 4);
+        assert_eq!(meta.animation_triggers, 0x0201);
         assert_eq!(meta.callback_mask, crate::OBJECT_CALLBACK_SLOPE_CHECK_MASK);
         assert_eq!(meta.name, "Faro");
         assert!(meta.badge_labels.is_empty());
@@ -3671,10 +3728,52 @@ mod tests {
         assert_eq!(def.size, 0x12);
         assert_eq!(def.climate_mask, 0x05);
         assert_eq!(def.build_cost_factor, 7);
+        assert_eq!(
+            def.flags,
+            crate::OBJECT_FLAG_ANIMATION | crate::OBJECT_FLAG_ANIM_RANDOM_BITS
+        );
+        assert_eq!(def.animation_frames, 6);
+        assert_eq!(def.animation_status, 1);
+        assert_eq!(def.animation_speed, 4);
+        assert_eq!(def.animation_triggers, 0x0201);
+        assert!(def.has_animation());
+        assert!(def.animation_next_frame_uses_random_bits());
         assert_eq!(def.callback_mask, crate::OBJECT_CALLBACK_SLOPE_CHECK_MASK);
         assert!(def.has_slope_check_callback());
         assert_eq!(def.local_id, 0);
         assert!(def.associated_badges.is_empty());
+
+        // Saves/GRFs antiguos pueden omitir las cuatro propiedades nuevas;
+        // el parser conserva los defaults nativos en ese caso.
+        let legacy = vec![
+            0x00,
+            ACTION0_FEATURE_OBJECTS,
+            0x05,
+            0x01,
+            0,
+            0x08,
+            b'L',
+            b'I',
+            b'G',
+            b'T',
+            0x0B,
+            0x0F,
+            0x0C,
+            0x11,
+            0x0D,
+            0x01,
+            0xFE,
+            b'V',
+            b'a',
+            b'n',
+            0,
+        ];
+        let legacy_meta = parse_action0_object_meta(&legacy).expect("legacy object");
+        assert_eq!(legacy_meta.flags, 0);
+        assert_eq!(legacy_meta.animation_frames, 0);
+        assert_eq!(legacy_meta.animation_status, 0xFF);
+        assert_eq!(legacy_meta.animation_speed, 2);
+        assert_eq!(legacy_meta.animation_triggers, 0);
     }
 
     #[test]

@@ -16,6 +16,6 @@ Updated: 2026-09-06
 Regression coverage exercises a vanilla international airport, a NewGRF
 TTDPatch type, non-zero FTA blocks, and both legacy and map-aware contexts.
 
-This cut deliberately does not claim `0xF2`/`0xF3` truck/bus status or `0x8A`
-vehicle-history flags: those bitsets are not represented by the current model
-and remain in parent issue #329.
+This cut deliberately does not claim `0xF2`/`0xF3` truck/bus status. The
+vehicle-history flags in `0x8A` are covered separately by issue #396; airport
+scope fields beyond the model remain in parent issue #329.

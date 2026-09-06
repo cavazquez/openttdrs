@@ -314,6 +314,14 @@ pub struct Station {
     /// cuatro veces más antes de penalizar.
     #[serde(default)]
     pub last_vehicle_type: Option<VehicleKind>,
+    /// Bitset nativo `Station::had_vehicle_of_type`, expuesto por `NewGRF` en
+    /// la variable de estación `0x8A`.
+    ///
+    /// `OpenTTD` conserva este historial aunque la estación quede vacía. Los
+    /// saves JSON anteriores no tenían el campo y empiezan en cero; los
+    /// waypoints añaden su bit en [`Self::had_vehicle_of_type_value`].
+    #[serde(default)]
+    pub had_vehicle_of_type: u16,
     /// Días sin recogida por compañía (rating competitivo; default vacío).
     #[serde(default)]
     pub company_time_since_pickup: Vec<(CompanyId, CargoTimeSincePickup)>,
@@ -480,6 +488,7 @@ impl Station {
             goods: super::goods_entry::StationGoods::default(),
             rating: default_station_rating(),
             last_vehicle_type: None,
+            had_vehicle_of_type: 0,
             company_time_since_pickup: vec![(CompanyId::PLAYER, CargoTimeSincePickup::default())],
             airport_tiles: Vec::new(),
             airport_tile_gfx: Vec::new(),
@@ -507,6 +516,31 @@ impl Station {
     #[must_use]
     pub const fn road_stop_action2_random_bits(&self) -> u32 {
         (self.newgrf_random_bits as u32) | ((self.road_stop_newgrf_random_bits as u32) << 16)
+    }
+
+    /// Valor de `StationScopeResolver::GetVariable(0x8A)`.
+    ///
+    /// Los waypoints no reciben vehículos de carga en el modelo, pero
+    /// `OpenTTD` los identifica explícitamente con `HVOT_WAYPOINT`.
+    #[must_use]
+    pub const fn had_vehicle_of_type_value(&self) -> u32 {
+        let waypoint = if self.is_waypoint() { 1_u16 << 6 } else { 0 };
+        (self.had_vehicle_of_type | waypoint) as u32
+    }
+
+    /// Registra que un vehículo del tipo indicado prestó servicio.
+    ///
+    /// Los valores siguen `station_type.h` de `OpenTTD`: el bit cero queda
+    /// libre y los tipos de vehículo comienzan en el bit 1.
+    pub fn mark_vehicle_of_type(&mut self, kind: VehicleKind) {
+        let bit = match kind {
+            VehicleKind::Train => 1_u16 << 1,
+            VehicleKind::Bus | VehicleKind::Tram => 1_u16 << 2,
+            VehicleKind::Truck => 1_u16 << 3,
+            VehicleKind::Aircraft => 1_u16 << 4,
+            VehicleKind::Ship => 1_u16 << 5,
+        };
+        self.had_vehicle_of_type |= bit;
     }
 
     /// Devuelve el spec `NewGRF` aplicado a una tesela vial de la estación.
@@ -747,7 +781,7 @@ impl Station {
     }
 
     #[must_use]
-    pub fn is_waypoint(&self) -> bool {
+    pub const fn is_waypoint(&self) -> bool {
         matches!(
             self.stop_kind,
             StopKind::RailWaypoint | StopKind::Buoy | StopKind::RoadWaypoint

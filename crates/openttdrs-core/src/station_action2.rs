@@ -483,6 +483,10 @@ fn populate_station_general_vars(ctx: &mut Action2EvalCtx, station: &Station) {
     }
     ctx.vars.insert(0x48, acceptance_mask);
     ctx.vars.insert(0x82, 50);
+    // `Station::had_vehicle_of_type` is a persistent history, not the last
+    // vehicle that loaded cargo. Waypoints expose their dedicated bit even
+    // when no load/unload path exists.
+    ctx.vars.insert(0x8A, station.had_vehicle_of_type_value());
     ctx.vars.insert(0x86, 0);
     let airport_type = station.airport_ttd_type.map_or_else(
         || u32::from(station.airport_spec.as_ttd_airport_type()),
@@ -982,6 +986,7 @@ mod tests {
         Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
     };
     use crate::station::{Station, StopKind};
+    use crate::vehicle::VehicleKind;
 
     fn rail_station_tile(m5: u8) -> Tile {
         Tile {
@@ -1198,6 +1203,38 @@ mod tests {
                 Some(low_mask)
             );
         }
+    }
+
+    #[test]
+    fn station_var_8a_tracks_vehicle_history_and_json_roundtrip() {
+        let mut station = Station::new_with_kind(TileCoord::new(1, 1), StopKind::RailStation);
+        assert_eq!(
+            action2_eval_ctx_from_station(&station).vars.get(&0x8A),
+            Some(&0)
+        );
+
+        for kind in [
+            VehicleKind::Train,
+            VehicleKind::Bus,
+            VehicleKind::Truck,
+            VehicleKind::Aircraft,
+            VehicleKind::Ship,
+        ] {
+            station.mark_vehicle_of_type(kind);
+        }
+        assert_eq!(station.had_vehicle_of_type_value(), 0x3E);
+        let ctx = action2_eval_ctx_from_station(&station);
+        assert_eq!(ctx.vars.get(&0x8A), Some(&0x3E));
+
+        let encoded = serde_json::to_string(&station).expect("station JSON");
+        let decoded: Station = serde_json::from_str(&encoded).expect("station JSON roundtrip");
+        assert_eq!(decoded.had_vehicle_of_type, 0x3E);
+
+        let waypoint = Station::new_with_kind(TileCoord::new(2, 2), StopKind::RailWaypoint);
+        assert_eq!(
+            action2_eval_ctx_from_station(&waypoint).vars.get(&0x8A),
+            Some(&0x40)
+        );
     }
 
     #[test]

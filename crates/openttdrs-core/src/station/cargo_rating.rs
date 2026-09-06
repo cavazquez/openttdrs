@@ -373,6 +373,7 @@ pub struct StationVisit {
 /// hay recogida → no hay `last_speed` → no llega carga.
 pub fn note_station_load_attempt(station: &mut Station, cargo: CargoType, visit: StationVisit) {
     station.last_vehicle_type = Some(visit.vehicle_kind);
+    station.mark_vehicle_of_type(visit.vehicle_kind);
     let entry = station.goods.get_mut(cargo);
     // `last_speed == 0` significa «nunca»; un intento real siempre deja al menos 1.
     entry.last_speed = visit.last_speed.max(1);

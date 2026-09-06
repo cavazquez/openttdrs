@@ -498,6 +498,10 @@ pub(super) fn unload_vehicles(
         if !st.can_service_vehicle(state.vehicles[i].kind) {
             continue;
         }
+        // `Station::had_vehicle_of_type` se actualiza al prestar servicio,
+        // incluso si la descarga termina siendo rechazada por aceptación,
+        // orden o capacidad. Es el historial que consume NewGRF 0x8A.
+        state.stations[station_idx].mark_vehicle_of_type(state.vehicles[i].kind);
         // CargoDist / P2.19: `PrepareUnload` + `Stage` (TRANSFER/DELIVER/KEEP).
         let unload_type = state.vehicles[i]
             .orders
@@ -975,6 +979,7 @@ pub(super) fn load_vehicles(
         if !station_matches_current_order(&state.vehicles[i], station.pos) {
             continue;
         }
+        state.stations[station_idx].mark_vehicle_of_type(vehicle_kind);
         let physically_at =
             station_index_at_vehicle(state, &state.vehicles[i]) == Some(station_idx);
 

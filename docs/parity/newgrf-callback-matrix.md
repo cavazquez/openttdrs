@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-04** (base publicada `25d026a7`; corrección de posición
+Actualizada: **2026-09-06** (base publicada `73288748`; corrección de posición
 CB10/CB160 documentada en VEHICLE-VISUAL-EFFECT-085; órdenes de refit de estación,
 clases de carga Action0, CTT y
 callback de refit de vehículos; CTT de cargos custom en scopes
@@ -924,8 +924,11 @@ Actualizado: 2026-09-06. `StationScopeResolver` expone `0xF1` (tipo compacto
 TTDPatch `0..3`, con Action0 `0x0D` preservado para NewGRF), `0xF6` (palabra
 baja de los bloques FTA) y `0xF7` (bits 8..15 de esa palabra) en los contextos
 legacy y map-aware. Las regresiones cubren aeropuerto vanilla, tipo NewGRF,
-bloques no nulos y ambas rutas. Los estados `0xF2`/`0xF3` de paradas road y el
-historial `0x8A` siguen fuera del modelo y continúan pendientes en #329.
+bloques no nulos y ambas rutas. El historial `0x8A` ya se conserva en
+`Station`, se actualiza al prestar servicio y se expone en las rutas legacy y
+map-aware, incluyendo el bit de waypoint. Los estados `0xF2`/`0xF3` de
+paradas road, las cadenas de nombre/fecha y los scopes completos de
+`BaseStation`/aeropuerto continúan pendientes en #329.
 
 ### #329-STATION-FACILITIES-067 — Bitset F0 de waypoints y RoadStops
 
@@ -934,3 +937,13 @@ Actualizado: 2026-09-06. La máscara `0xF0` comparte ahora la codificación de
 facilidades simples. El contexto map-aware de `RoadStop` también expone `F0`
 para bus, truck y waypoint. No se crea una facilidad para un contexto sin
 estación; el resto de estados/historiales sigue pendiente en #329.
+
+### #329-STATION-HAD-VEHICLE-396 — Historial `0x8A`
+
+Actualizado: 2026-09-06. `Station.had_vehicle_of_type` conserva los bits
+`TRAIN=0x02`, `BUS=0x04`, `TRUCK=0x08`, `AIRCRAFT=0x10` y `SHIP=0x20`; se
+actualiza cuando una unidad presta servicio de carga o descarga y los
+waypoints exponen `WAYPOINT=0x40`. `station_action2` y la API legacy devuelven
+el mismo valor en `0x8A`, y el bitset forma parte del round-trip JSON propio.
+La lectura/escritura equivalente de `STNN.normal.had_vehicle_of_type` y los
+estados nativos `0xF2`/`0xF3` de `RoadStop` siguen pendientes.

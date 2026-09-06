@@ -1770,16 +1770,16 @@ el contexto de estación expone las variables generales modeladas `0x48`
 `0xF0` (facilities derivadas de `StopKind`) tanto en la ruta map-aware como en
 la API legacy. Las regresiones cubren rail, bus, truck, dock, airport y
 waypoint; IDs custom fuera de los 32 bits nativos no se aliasan. Strings,
-fecha de construcción, estado de aeropuerto, historial de vehículos y scopes
-completos de `BaseStation` continúan en #329.
+fecha de construcción, estados de road stop y scopes completos de `BaseStation`
+continúan en #329. El historial de vehículos `0x8A` se publica por separado
+en #396.
 
 Actualización #329-STATION-AIRPORT-VARS-066 (2026-09-06, issue [#392](https://github.com/cavazquez/openttdrs/issues/392)):
 `station_action2` expone `0xF1` (tipo compacto `TTDPatch` `0..3`, preservando
 Action0 `0x0D` para NewGRF), `0xF6` (palabra baja de `airport_blocks`) y `0xF7`
 (bits 8..15) en legacy y map-aware. Las regresiones cubren aeropuerto vanilla,
 tipo NewGRF y bloques FTA no nulos. Los estados `0xF2`/`0xF3` y el historial
-`0x8A` no se inventan porque el modelo no conserva esos bitsets; continúan en
-#329.
+`0x8A` se cubren en #396; los estados `0xF2`/`0xF3` continúan en #329.
 
 Actualización #329-STATION-FACILITIES-067 (2026-09-06, issue [#393](https://github.com/cavazquez/openttdrs/issues/393)):
 `StopKind` centraliza la máscara `StationFacilities` de `0xF0`: los waypoints
@@ -1787,6 +1787,14 @@ conservan también su facilidad de transporte (`RailWaypoint=0x81`,
 `RoadWaypoint=0x86`). El resolver map-aware de `RoadStop` ya expone `F0` para
 bus, truck y waypoint; no se inventan bits cuando no hay estación. El padre
 #329 continúa abierto.
+
+Actualización #329-STATION-HAD-VEHICLE-396 (2026-09-06, issue [#396](https://github.com/cavazquez/openttdrs/issues/396), commit `73288748`):
+`Station.had_vehicle_of_type` conserva los bits nativos de tren, bus, camión,
+avión y barco; se actualiza al prestar servicio de carga o descarga y los
+waypoints exponen `HVOT_WAYPOINT`. `station_action2` y la ruta legacy devuelven
+el mismo bitset en `0x8A`, con regresión de todos los bits y round-trip JSON.
+La lectura/escritura de `STNN.normal.had_vehicle_of_type` y los estados
+`0xF2`/`0xF3` de `RoadStop` siguen pendientes; #329 continúa abierto.
 
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler

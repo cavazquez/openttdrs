@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::economy::{terraform_cost_per_corner, terraform_cost_per_corner_inflated};
 use crate::game_state::GameState;
-use crate::map::{Map, TileCoord, TileKind, is_coast_tile};
+use crate::map::{Map, TileCoord, TileKind, is_coast_tile, is_map_object_tile};
 use crate::tile_slope_and_z;
 
 use super::error::CommandError;
@@ -37,6 +37,8 @@ struct TerraformModel<'a> {
     /// Permite que los procedimientos de teselas de industria decidan por
     /// `CBID_INDTILE_AUTOSLOPE` en lugar de rechazarlas como terreno genérico.
     allow_industry_autoslope: bool,
+    /// Permite que `TerraformTile_Object` decida por `CBID_OBJECT_AUTOSLOPE`.
+    allow_object_autoslope: bool,
 }
 
 impl<'a> TerraformModel<'a> {
@@ -51,6 +53,7 @@ impl<'a> TerraformModel<'a> {
             cost_per_corner,
             primary_tile: None,
             allow_industry_autoslope: false,
+            allow_object_autoslope: false,
         }
     }
 
@@ -66,6 +69,11 @@ impl<'a> TerraformModel<'a> {
 
     fn with_industry_autoslope(mut self) -> Self {
         self.allow_industry_autoslope = true;
+        self
+    }
+
+    fn with_object_autoslope(mut self) -> Self {
+        self.allow_object_autoslope = true;
         self
     }
 
@@ -171,17 +179,25 @@ impl<'a> TerraformModel<'a> {
             }
             if self.primary_tile.is_none() || self.primary_tile == Some(*c) {
                 let kind = self.map.get_kind(*c).unwrap_or(TileKind::Void);
-                let source_ok = match kind {
-                    TileKind::Grass | TileKind::Forest => true,
-                    TileKind::Industry if self.allow_industry_autoslope => true,
-                    // OpenTTD treats a coast as clearable terrain during
-                    // autoslope/platform checks; plain water remains blocked
-                    // when `NoWater` is set.
-                    TileKind::Water if !self.allow_water_source => {
-                        self.map.get(*c).is_some_and(is_coast_tile)
+                let source_ok = if self
+                    .map
+                    .get(*c)
+                    .is_some_and(|tile| is_map_object_tile(tile.mapt))
+                {
+                    self.allow_object_autoslope
+                } else {
+                    match kind {
+                        TileKind::Grass | TileKind::Forest => true,
+                        TileKind::Industry if self.allow_industry_autoslope => true,
+                        // OpenTTD treats a coast as clearable terrain during
+                        // autoslope/platform checks; plain water remains blocked
+                        // when `NoWater` is set.
+                        TileKind::Water if !self.allow_water_source => {
+                            self.map.get(*c).is_some_and(is_coast_tile)
+                        }
+                        TileKind::Water if self.allow_water_source => true,
+                        _ => false,
                     }
-                    TileKind::Water if self.allow_water_source => true,
-                    _ => false,
                 };
                 if !source_ok {
                     return Err(CommandError::TileNotTerraformable);
@@ -323,6 +339,7 @@ fn simulate_corner_delta(
     if allow_industry_autoslope {
         model = model.with_industry_autoslope();
     }
+    model = model.with_object_autoslope();
     let current = model.corner_height(c.x, c.y);
     let target = i16::from(current) + i16::from(delta);
     if target < 0 {
@@ -360,6 +377,7 @@ fn simulate_level_land(
     if allow_industry_autoslope {
         model = model.with_industry_autoslope();
     }
+    model = model.with_object_autoslope();
     let (min_x, min_y, max_x, max_y) = tile_rect(from, to);
     for y in min_y..=max_y {
         for x in min_x..=max_x {
@@ -466,6 +484,68 @@ fn validate_industry_autoslope_callbacks(
             || !crate::newgrf_callback::apply_industry_tile_autoslope_callback(state, coord)
         {
             state.industries = industries_before;
+            return Err(CommandError::TileNotTerraformable);
+        }
+    }
+    Ok(())
+}
+
+/// Ejecuta `TerraformTile_Object` sobre cada tesela de objeto afectada.
+///
+/// Sólo el caso que `OpenTTD` puede resolver como autoslope se conserva en el
+/// mapa: pendientes antiguas/nuevas no pronunciadas y `TileMaxZ` idéntico. Un
+/// resultado no nulo de CB15D desactiva el autoslope; `CALLBACK_FAILED` o cero
+/// lo permiten. Si no podemos resolver el objeto desde `OBJS`, rechazamos de
+/// forma conservadora en lugar de modificar silenciosamente su terreno.
+fn validate_object_autoslope_callbacks(
+    state: &mut GameState,
+    result: &TerraformResult,
+) -> Result<(), CommandError> {
+    if state.economy.money < result.cost {
+        return Err(CommandError::InsufficientFunds);
+    }
+    for &coord in &result.dirty_tiles {
+        let Some(tile) = state.map.get(coord) else {
+            continue;
+        };
+        if !is_map_object_tile(tile.mapt) {
+            continue;
+        }
+        let Some(origin) =
+            crate::map::object_origin_from_tile_with_objects(&tile, coord, &state.objects)
+        else {
+            return Err(CommandError::TileNotTerraformable);
+        };
+        let Some(object) = state.objects.iter().find(|object| object.tile == origin) else {
+            return Err(CommandError::TileNotTerraformable);
+        };
+        if object.object_type == u16::from(crate::map::OBJECT_TYPE_TRANSMITTER)
+            || object.object_type == u16::from(crate::map::OBJECT_TYPE_LIGHTHOUSE)
+        {
+            return Err(CommandError::TileNotTerraformable);
+        }
+        let old = tile_slope_and_z(&state.map, coord).ok_or(CommandError::OutOfBounds)?;
+        let hnorth = corner_height_with_result(&state.map, result, coord.x, coord.y);
+        let hwest = corner_height_with_result(&state.map, result, coord.x + 1, coord.y);
+        let heast = corner_height_with_result(&state.map, result, coord.x, coord.y + 1);
+        let hsouth = corner_height_with_result(&state.map, result, coord.x + 1, coord.y + 1);
+        let (new_slope, new_z, _) = slope_from_corner_heights(hnorth, hwest, heast, hsouth);
+        let old_max = old.1.saturating_add(slope_max_z(old.0));
+        let new_max = new_z.saturating_add(slope_max_z(new_slope));
+        if old.0 & crate::map::SLOPE_STEEP != 0
+            || new_slope & crate::map::SLOPE_STEEP != 0
+            || old_max != new_max
+        {
+            return Err(CommandError::TileNotTerraformable);
+        }
+        if !crate::map::apply_object_autoslope_callback(
+            &state.map,
+            &state.objects,
+            &mut state.towns,
+            &state.object_spec_catalog,
+            state.climate,
+            coord,
+        ) {
             return Err(CommandError::TileNotTerraformable);
         }
     }
@@ -610,6 +690,7 @@ pub(super) fn raise_land(state: &mut GameState, c: TileCoord) -> Result<(), Comm
     let cost_per = terraform_cost_per_corner(&state.global_economy);
     let result = simulate_corner_delta(&state.map, c, 1, true, cost_per, true)?;
     validate_industry_autoslope_callbacks(state, &result)?;
+    validate_object_autoslope_callbacks(state, &result)?;
     apply_terraform_result(state, result)
 }
 
@@ -617,6 +698,7 @@ pub(super) fn lower_land(state: &mut GameState, c: TileCoord) -> Result<(), Comm
     let cost_per = terraform_cost_per_corner(&state.global_economy);
     let result = simulate_corner_delta(&state.map, c, -1, false, cost_per, true)?;
     validate_industry_autoslope_callbacks(state, &result)?;
+    validate_object_autoslope_callbacks(state, &result)?;
     apply_terraform_result(state, result)
 }
 
@@ -629,6 +711,7 @@ pub(super) fn level_land(
     let cost_per = terraform_cost_per_corner(&state.global_economy);
     let result = simulate_level_land(&state.map, from, to, mode, cost_per, true)?;
     validate_industry_autoslope_callbacks(state, &result)?;
+    validate_object_autoslope_callbacks(state, &result)?;
     apply_terraform_result(state, result)
 }
 
@@ -637,8 +720,109 @@ pub(super) fn level_land(
 mod tests {
     use super::*;
     use crate::map::TileKind;
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, CBID_OBJECT_AUTOSLOPE,
+        TrainSpriteAssign, TrainSpriteGraphics,
+    };
+    use crate::object_spec::{
+        DEFAULT_OBJECT_CLIMATE_MASK, OBJECT_CALLBACK_AUTOSLOPE_MASK, OBJECT_SIZE_1X1, ObjectSpecDef,
+    };
+    use crate::sav::SavObject;
     use crate::test_fixtures::SandboxMap;
     use crate::{Command, apply_command, tile_slope_and_z};
+
+    fn object_autoslope_runtime(result: u8) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFFFF,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(
+                    3,
+                    u32::from(CBID_OBJECT_AUTOSLOPE),
+                    u32::from(CBID_OBJECT_AUTOSLOPE),
+                )],
+                default: 0,
+            },
+        );
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: u32::from(result),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
+    fn state_with_object_autoslope_callback(result: u8) -> (GameState, TileCoord) {
+        let mut state = SandboxMap::flat_rich(8, 8, 4);
+        let coord = TileCoord::new(3, 3);
+        let mut tile = state.map.get(coord).unwrap();
+        tile.height = 3;
+        tile.mapt = crate::map::MP_OBJECT_MAPT;
+        tile.m5 = 5;
+        tile.m2 = 0;
+        tile.m2_hi = 0;
+        state.map.set_tile(coord, tile).unwrap();
+        let object_id = crate::map::object_id_from_tile(&tile).unwrap();
+        state.objects.push(SavObject {
+            object_id,
+            tile: coord,
+            width: 1,
+            height: 1,
+            town: 0,
+            build_date: 0,
+            colour: 0,
+            view: 0,
+            object_type: 5,
+        });
+        state.object_spec_catalog.push(ObjectSpecDef {
+            id: 5,
+            class_label: "TEST".into(),
+            name: "Autoslope object".into(),
+            size: OBJECT_SIZE_1X1,
+            from_newgrf: true,
+            local_id: 0,
+            grfid: 0x4155_544F,
+            newgrf_grf_version: 8,
+            climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: 1,
+            flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            callback_mask: OBJECT_CALLBACK_AUTOSLOPE_MASK,
+            views: Vec::new(),
+            newgrf_runtime: Some(Box::new(object_autoslope_runtime(result))),
+            associated_badges: Vec::new(),
+        });
+        (state, coord)
+    }
 
     #[test]
     fn raise_flat_grass_creates_north_slope() {
@@ -770,5 +954,25 @@ mod tests {
         crate::apply_command(&mut s, &crate::Command::RaiseLand(TileCoord::new(4, 3))).unwrap();
         assert_eq!(s.map.get_kind(industry_tile), Some(TileKind::Industry));
         assert_eq!(crate::tile_slope_and_z(&s.map, industry_tile).unwrap().0, 9);
+    }
+
+    #[test]
+    fn object_autoslope_callback_allows_terraform_when_zero() {
+        let (mut state, coord) = state_with_object_autoslope_callback(0);
+        apply_command(&mut state, &Command::RaiseLand(coord)).unwrap();
+        assert_eq!(state.map.get(coord).unwrap().height, 4);
+    }
+
+    #[test]
+    fn object_autoslope_callback_rejects_without_mutating_state() {
+        let (mut state, coord) = state_with_object_autoslope_callback(1);
+        let height_before = state.map.get(coord).unwrap().height;
+        let money_before = state.economy.money;
+        assert_eq!(
+            apply_command(&mut state, &Command::RaiseLand(coord)),
+            Err(CommandError::TileNotTerraformable)
+        );
+        assert_eq!(state.map.get(coord).unwrap().height, height_before);
+        assert_eq!(state.economy.money, money_before);
     }
 }

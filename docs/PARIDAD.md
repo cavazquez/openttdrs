@@ -2417,6 +2417,15 @@ En saves &lt; 214, OpenTTD mueve el RoadType desde bits 6–7 de `m7` a `m4` (ro
   los scopes `0x42`, `0x47`, `0x48`, `0x60`–`0x64`; siguen pendientes mappings
   faltantes, callbacks de objeto adicionales y el merge estructural de
   columnas desconocidas.
+
+El terraform de una huella de objeto existente ya consulta CB15D (`0x15D`)
+después del preflight geométrico: sólo pendientes no empinadas con el mismo
+`TileMaxZ` llegan al scope Object/Town. `CALLBACK_FAILED` o cero autorizan y
+un resultado booleano no nulo rechaza sin mutar; referencias OBJS ausentes y
+topologías no soportadas también se rechazan de forma conservadora. La
+regresión de `raise_land`/`lower_land`/`level_land` cubre la atomicidad. Siguen
+pendientes los callbacks de texto, el writeback `7C` propio y scopes/vecinos
+avanzados.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.
 

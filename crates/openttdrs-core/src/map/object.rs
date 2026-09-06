@@ -4,7 +4,7 @@ use super::{Map, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::newgrf_sprites::{
     CALLBACK_FAILED, CBID_OBJECT_ANIMATION_NEXT_FRAME, CBID_OBJECT_ANIMATION_SPEED,
-    CBID_OBJECT_ANIMATION_TRIGGER, CBID_OBJECT_COLOUR,
+    CBID_OBJECT_ANIMATION_TRIGGER, CBID_OBJECT_AUTOSLOPE, CBID_OBJECT_COLOUR,
 };
 use crate::object_spec::{
     NEW_OBJECT_OFFSET, ObjectSpecDef, decode_object_tile_offset, encode_object_tile_offset,
@@ -851,6 +851,53 @@ pub fn resolve_object_colour_callback(
     )
 }
 
+/// Consulta CB15D para la tesela de un objeto existente.
+///
+/// `OpenTTD` llama este callback desde `TerraformTile_Object`, con la instancia
+/// `Object` como scope y el pueblo asociado como parent. `CALLBACK_FAILED` o
+/// cero permiten autoslope; un resultado booleano no nulo lo desactiva.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn apply_object_autoslope_callback(
+    map: &Map,
+    objects: &[SavObject],
+    towns: &mut [crate::town::Town],
+    catalog: &[ObjectSpecDef],
+    climate: Climate,
+    coord: TileCoord,
+) -> bool {
+    let Some(tile) = map.get(coord) else {
+        return false;
+    };
+    let Some(origin) = object_origin_from_tile_with_objects(&tile, coord, objects) else {
+        return false;
+    };
+    let Some(object) = objects.iter().find(|object| object.tile == origin) else {
+        return false;
+    };
+    let Some(def) = object_spec_def(catalog, object.object_type) else {
+        return true;
+    };
+    if !def.has_autoslope_callback() {
+        return true;
+    }
+    let result = resolve_object_animation_callback(
+        map,
+        &tile,
+        coord,
+        origin,
+        object.object_type,
+        objects,
+        towns,
+        catalog,
+        climate,
+        CBID_OBJECT_AUTOSLOPE,
+        0,
+        0,
+    );
+    result == CALLBACK_FAILED || result == 0
+}
+
 #[allow(clippy::too_many_arguments)]
 fn apply_object_animation_trigger_at<S: BuildHasher>(
     map: &mut Map,
@@ -1237,6 +1284,53 @@ mod tests {
         gfx
     }
 
+    fn object_autoslope_callback_runtime(result: u8) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFFFF,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(
+                    3,
+                    u32::from(CBID_OBJECT_AUTOSLOPE),
+                    u32::from(CBID_OBJECT_AUTOSLOPE),
+                )],
+                default: 0,
+            },
+        );
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: u32::from(result),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     fn animated_object_spec(runtime: TrainSpriteGraphics) -> ObjectSpecDef {
         ObjectSpecDef {
             id: 5,
@@ -1452,6 +1546,33 @@ mod tests {
             3,
         );
         assert_eq!(colour, 9);
+    }
+
+    #[test]
+    fn object_autoslope_callback_uses_upstream_boolean_semantics() {
+        let (map, objects, mut catalog) = animated_object_fixture();
+        catalog[0].flags = 0;
+        catalog[0].animation_status = 0xFF;
+        catalog[0].callback_mask = crate::object_spec::OBJECT_CALLBACK_AUTOSLOPE_MASK;
+        catalog[0].newgrf_runtime = Some(Box::new(object_autoslope_callback_runtime(0)));
+        assert!(apply_object_autoslope_callback(
+            &map,
+            &objects,
+            &mut [],
+            &catalog,
+            Climate::Temperate,
+            TileCoord::new(0, 0),
+        ));
+
+        catalog[0].newgrf_runtime = Some(Box::new(object_autoslope_callback_runtime(1)));
+        assert!(!apply_object_autoslope_callback(
+            &map,
+            &objects,
+            &mut [],
+            &catalog,
+            Climate::Temperate,
+            TileCoord::new(0, 0),
+        ));
     }
 
     #[test]

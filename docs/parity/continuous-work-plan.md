@@ -2107,7 +2107,8 @@ instancia, pasa el color inicial como `param1`, reutiliza el scope real de
 Object/Town parent y persiste un resultado válido de 8 bits en `OBJS`/JSON/SAV.
 `CALLBACK_FAILED` y valores `>=0x100` conservan el color inicial; la regresión
 sintética verifica la selección del color. 2CC/livery avanzada, callbacks
-fund text/autoslope y el resto de scopes de Objects siguen fuera de esta etapa.
+fund text y el resto de scopes de Objects siguen fuera de esta etapa; CB15D
+autoslope se cerró en el issue #427.
 
 Actualización #328-SAV-NESTED-426 (2026-09-06, issue [#426](https://github.com/cavazquez/openttdrs/issues/426)):
 el passthrough genérico de `CH_TABLE`/`CH_SPARSE_TABLE` compara ahora los
@@ -2120,3 +2121,13 @@ las filas o los índices, el writer vuelve al camino canónico. Las regresiones
 sintética y los casos nativos de `CITY`/`INDY` pasan con 2150 tests de core;
 quedan pendientes pools no modelados y mutaciones estructurales con columnas
 desconocidas dentro de elementos nuevos.
+
+Actualización #329-OBJECT-AUTOSLOPE-427 (2026-09-06, issue [#427](https://github.com/cavazquez/openttdrs/issues/427)):
+CB15D (`0x15D`) ya se consulta desde `raise_land`, `lower_land` y `level_land`
+cuando la operación toca una huella `OBJS` existente. El preflight conserva las
+guardas upstream de pendiente no empinada y `TileMaxZ`, hidrata el objeto y su
+`TownScopeResolver` y mantiene el writeback parent aislado hasta el execute.
+`CALLBACK_FAILED`/cero permiten; un resultado booleano no nulo, una instancia
+no resoluble o una topología no soportada rechazan sin mutar. Las regresiones
+cubren la semántica booleana y la atomicidad; siguen pendientes los callbacks
+de texto, el writeback `7C` propio de objeto y scopes/vecinos avanzados.

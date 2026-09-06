@@ -27,6 +27,10 @@ pub const OBJECT_CALLBACK_ANIMATION_NEXT_FRAME_MASK: u16 = 1 << 1;
 pub const OBJECT_CALLBACK_ANIMATION_SPEED_MASK: u16 = 1 << 2;
 /// Bit `Colour` de la máscara de callbacks Action0 `0x15`.
 pub const OBJECT_CALLBACK_COLOUR_MASK: u16 = 1 << 3;
+/// Bit `FundMoreText` de la máscara de callbacks Action0 `0x15`.
+pub const OBJECT_CALLBACK_FUND_MORE_TEXT_MASK: u16 = 1 << 4;
+/// Bit `Autoslope` de la máscara de callbacks Action0 `0x15`.
+pub const OBJECT_CALLBACK_AUTOSLOPE_MASK: u16 = 1 << 5;
 
 /// Bits de `ObjectFlag` que afectan al runtime de animación.
 pub const OBJECT_FLAG_ANIMATION: u16 = 1 << 6;
@@ -165,6 +169,12 @@ impl ObjectSpecDef {
     #[must_use]
     pub const fn has_colour_callback(&self) -> bool {
         self.callback_mask & OBJECT_CALLBACK_COLOUR_MASK != 0
+    }
+
+    /// `true` si el objeto delega el autoslope de la tesela en CB15D.
+    #[must_use]
+    pub const fn has_autoslope_callback(&self) -> bool {
+        self.callback_mask & OBJECT_CALLBACK_AUTOSLOPE_MASK != 0
     }
 
     /// La secuencia Action0 continúa al llegar al último frame.

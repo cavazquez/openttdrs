@@ -1995,5 +1995,16 @@ conserva por layout (seis entradas: cuatro bahías y dos drive-through). El
 catálogo, la aplicación NewGRF y JSON mantienen altura mínima y pilares
 prohibidos; las entradas posteriores siguen alineadas incluso cuando un GRF
 declara más de seis layouts. Las regresiones cubren parseo, truncamiento,
-aplicación y round-trip. Falta conectar este dato con la comprobación nativa
-de puentes sobre una parada; el issue padre #329 permanece abierto.
+aplicación y round-trip. La comprobación nativa de altura al tender un puente
+se conectó en #416; la máscara de pilares queda como consumidor visual
+pendiente. El issue padre #329 permanece abierto.
+
+Actualización #329-ROADSTOP-BRIDGE-CLEARANCE-416 (2026-09-06, issue [#416](https://github.com/cavazquez/openttdrs/issues/416)):
+`check_bridge_with_stations` recorre las teselas intermedias del puente en el
+preview y en el execute. Cuando encuentra una parada bus/camión custom,
+resuelve su layout desde `m5` y compara `GetTileMaxZ + min_height` con la
+altura del tablero; `min_height=0` o un tablero bajo devuelve
+`BridgeTooLowForRoadStop` sin mutar el mapa. La regresión cubre rechazo,
+aceptación en la altura mínima y rollback; vanilla/saves sin spec conservan el
+fallback. `disallowed_pillars` aún necesita integrarse en el compositor de
+pilares de puentes y #329 sigue abierto.

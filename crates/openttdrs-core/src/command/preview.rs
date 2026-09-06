@@ -10,7 +10,7 @@ use super::industry::{check_place_industry_spec, check_place_industry_spec_layou
 use super::terraform::{check_level_land, check_lower_land, check_raise_land};
 use super::town;
 use super::transport::{
-    check_airport_area, check_airport_placement, check_bridge, check_clear_tile,
+    check_airport_area, check_airport_placement, check_bridge_with_stations, check_clear_tile,
     check_cycle_rail_signal_type, check_dock_placement, check_place_aqueduct, check_place_buoy,
     check_place_canal, check_place_lock, check_place_rail, check_place_rail_signal_oriented,
     check_place_rail_waypoint, check_place_river, check_place_road_bits, check_place_road_waypoint,
@@ -176,7 +176,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             check_tunnel(map, *a).err()
         }
         Command::PlaceRoadBridge(a, b, bt) | Command::PlaceRailBridge(a, b, bt) => {
-            check_bridge(map, *a, *b)
+            check_bridge_with_stations(map, &state.stations, &state.road_stop_spec_catalog, *a, *b)
                 .err()
                 .or_else(|| {
                     if bridge_available_at_tick_in(

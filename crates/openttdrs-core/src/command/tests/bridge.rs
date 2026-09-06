@@ -74,6 +74,104 @@ fn bridge_accepts_span_over_water() {
     );
 }
 
+fn state_with_custom_road_stop_bridge_height(min_height: u8) -> (GameState, TileCoord) {
+    let mut state = GameState::new(10, 8);
+    let stop = TileCoord::new(3, 3);
+    state
+        .map
+        .set_kind(TileCoord::new(4, 3), TileKind::Water)
+        .unwrap();
+    state.road_stop_class_catalog.push(crate::RoadStopClassDef {
+        id: 0,
+        label: "Bridge class".into(),
+        short_label: "BRDG".into(),
+        from_newgrf: true,
+    });
+    let mut bridgeable_info =
+        [crate::RoadStopBridgeableInfo::default(); crate::ROADSTOP_LAYOUT_COUNT];
+    for info in &mut bridgeable_info {
+        info.min_height = min_height;
+    }
+    state.road_stop_spec_catalog.push(crate::RoadStopSpecDef {
+        id: 0,
+        class: 0,
+        label: "Bridge stop".into(),
+        short_label: "BRDG".into(),
+        stop_type: crate::ROADSTOP_TYPE_BUS,
+        from_newgrf: true,
+        grfid: 0x4252_4447,
+        newgrf_local_id: 0,
+        newgrf_grf_version: 8,
+        draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+        random_cargo_triggers: 0,
+        flags: 0,
+        build_cost_multiplier: 16,
+        clear_cost_multiplier: 16,
+        bridgeable_info,
+        callback_mask: 0,
+        animation_status: 0xFF,
+        animation_frames: 0,
+        animation_speed: 2,
+        animation_triggers: 0,
+        newgrf_views: Vec::new(),
+        newgrf_runtime: None,
+        newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
+    });
+    crate::apply_command(&mut state, &Command::SetCurrentRoadStopSpec(0)).unwrap();
+    crate::apply_command(&mut state, &Command::PlaceRoad(TileCoord::new(3, 2))).unwrap();
+    crate::apply_command(&mut state, &Command::PlaceBusStop(stop, 3)).unwrap();
+    (state, stop)
+}
+
+#[test]
+fn bridge_rejects_custom_road_stop_without_enough_bridge_height() {
+    let (mut state, stop) = state_with_custom_road_stop_bridge_height(2);
+    let start = TileCoord::new(1, 3);
+    let end = TileCoord::new(5, 3);
+    let command = Command::PlaceRoadBridge(start, end, BridgeType::Wooden);
+    assert_eq!(
+        command_would_fail(&state, &command),
+        Some(CommandError::BridgeTooLowForRoadStop)
+    );
+    let before = state.map.get(stop);
+    assert_eq!(
+        apply_command(&mut state, &command),
+        Err(CommandError::BridgeTooLowForRoadStop)
+    );
+    assert_eq!(state.map.get(stop), before);
+    assert_eq!(state.map.get_kind(start), Some(TileKind::Grass));
+}
+
+#[test]
+fn bridge_rejects_custom_road_stop_with_zero_bridgeable_height() {
+    let (state, _) = state_with_custom_road_stop_bridge_height(0);
+    assert_eq!(
+        command_would_fail(
+            &state,
+            &Command::PlaceRoadBridge(
+                TileCoord::new(1, 3),
+                TileCoord::new(5, 3),
+                BridgeType::Wooden,
+            )
+        ),
+        Some(CommandError::BridgeTooLowForRoadStop)
+    );
+}
+
+#[test]
+fn bridge_accepts_custom_road_stop_at_declared_minimum_height() {
+    let (mut state, stop) = state_with_custom_road_stop_bridge_height(1);
+    let start = TileCoord::new(1, 3);
+    let end = TileCoord::new(5, 3);
+    let command = Command::PlaceRoadBridge(start, end, BridgeType::Wooden);
+    assert_eq!(command_would_fail(&state, &command), None);
+    apply_command(&mut state, &command).unwrap();
+    assert_eq!(state.map.get_kind(stop), Some(TileKind::Station));
+    assert_eq!(state.map.get_kind(start), Some(TileKind::RoadBridge));
+}
+
 fn assert_rail_bridge_connects_axis(axis_y: bool) {
     let mut state = GameState::new(12, 12);
     let c = TileCoord::new;

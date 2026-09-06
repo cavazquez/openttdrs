@@ -70,6 +70,8 @@ pub enum CommandError {
     /// Puente sin hueco que salvar (agua o terreno más bajo bajo el tramo).
     BridgeTypeNotAvailable,
     InvalidBridgeSpan,
+    /// El tablero no deja el despeje declarado por un `RoadStop` `NewGRF`.
+    BridgeTooLowForRoadStop,
     /// `TrackBits` incompatibles con la pendiente de la tesela (`GetRailFoundation`).
     InvalidRailOnSlope,
     /// Solo vía recta (eje X o Y) admite waypoint.

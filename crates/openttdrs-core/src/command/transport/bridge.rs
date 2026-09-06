@@ -7,6 +7,7 @@ use crate::map::{
     Map, TileCoord, TileKind, complement_slope, inclined_slope_direction, resolve_tunnel_end,
     tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles, tunnel_preview_path,
 };
+use crate::station::{Station, StopKind, station_at_tile};
 
 use super::super::CommandError;
 
@@ -29,7 +30,71 @@ fn bridge_ramp_m5(is_rail: bool, dir: u8) -> u8 {
     0x80 | (transport << 2) | (dir & 0x03)
 }
 
-pub(crate) fn check_bridge(map: &Map, a: TileCoord, b: TileCoord) -> Result<(), CommandError> {
+fn tile_max_z(map: &Map, c: TileCoord) -> Option<u8> {
+    tile_slope_and_z(map, c).map(|(slope, z)| {
+        z.saturating_add(if slope == 0 {
+            0
+        } else if slope & crate::SLOPE_STEEP != 0 {
+            2
+        } else {
+            1
+        })
+    })
+}
+
+/// Comprueba el despeje de una parada vial bajo el tablero del puente.
+///
+/// `OpenTTD` llama a `CheckBuildAbove` para cada tesela intermedia y usa la
+/// entrada de `RoadStopSpec::bridgeable_info` correspondiente al layout de
+/// `m5`. Las paradas vanilla y las custom sin spec conservan el fallback
+/// histórico de este motor (sin restricción `NewGRF`).
+fn check_bridgeable_road_stop(
+    map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &[crate::road_stop_spec::RoadStopSpecDef],
+    c: TileCoord,
+    bridge_height: u8,
+) -> Result<(), CommandError> {
+    let Some(tile) = map.get(c) else {
+        return Err(CommandError::OutOfBounds);
+    };
+    if tile.kind != TileKind::Station {
+        return Ok(());
+    }
+    let Some(station) = station_at_tile(map, stations, c) else {
+        return Ok(());
+    };
+    if !matches!(station.stop_kind, StopKind::BusStop | StopKind::TruckStop) {
+        return Ok(());
+    }
+    let Some(spec_id) = station.road_stop_spec_at(c) else {
+        return Ok(());
+    };
+    let Some(spec) = crate::road_stop_spec::road_stop_spec_def(road_stop_catalog, spec_id) else {
+        return Ok(());
+    };
+    let layout = usize::from(tile.m5 & 0x0F);
+    let info = spec
+        .bridgeable_info
+        .get(layout)
+        .copied()
+        .unwrap_or_default();
+    if info.min_height == 0
+        || tile_max_z(map, c)
+            .is_some_and(|max_z| max_z.saturating_add(info.min_height) > bridge_height)
+    {
+        return Err(CommandError::BridgeTooLowForRoadStop);
+    }
+    Ok(())
+}
+
+pub(crate) fn check_bridge_with_stations(
+    map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &[crate::road_stop_spec::RoadStopSpecDef],
+    a: TileCoord,
+    b: TileCoord,
+) -> Result<(), CommandError> {
     let line = axis_line(a, b);
     if line.len() < 3 {
         return Err(CommandError::InvalidBridgeSpan);
@@ -58,6 +123,13 @@ pub(crate) fn check_bridge(map: &Map, a: TileCoord, b: TileCoord) -> Result<(), 
             if !transport_tile_is_buildable(kind) {
                 return Err(build_error_for_kind(kind));
             }
+            check_bridgeable_road_stop(
+                map,
+                stations,
+                road_stop_catalog,
+                *c,
+                start_z.saturating_add(1),
+            )?;
             if tile_slope_and_z(map, *c).is_some_and(|(_, z)| z < start_z) {
                 span_has_gap = true;
             }
@@ -93,8 +165,10 @@ pub(crate) fn check_tunnel(map: &Map, start: TileCoord) -> Result<(), CommandErr
     Ok(())
 }
 
-pub(crate) fn check_tunnel_or_bridge(
+pub(crate) fn check_tunnel_or_bridge_with_stations(
     map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &[crate::road_stop_spec::RoadStopSpecDef],
     a: TileCoord,
     b: TileCoord,
     is_tunnel: bool,
@@ -102,7 +176,7 @@ pub(crate) fn check_tunnel_or_bridge(
     if is_tunnel {
         check_tunnel(map, a)
     } else {
-        check_bridge(map, a, b)
+        check_bridge_with_stations(map, stations, road_stop_catalog, a, b)
     }
 }
 
@@ -116,7 +190,14 @@ pub(in crate::command) fn place_tunnel_or_bridge(
     bridge_type: BridgeType,
 ) -> Result<(), CommandError> {
     let is_tunnel = matches!(kind_to_place, TileKind::RoadTunnel | TileKind::RailTunnel);
-    check_tunnel_or_bridge(&state.map, a, b, is_tunnel)?;
+    check_tunnel_or_bridge_with_stations(
+        &state.map,
+        &state.stations,
+        &state.road_stop_spec_catalog,
+        a,
+        b,
+        is_tunnel,
+    )?;
     let line = if is_tunnel {
         let end = resolve_tunnel_end(&state.map, a).ok_or(CommandError::InvalidTunnelEndpoints)?;
         let (start_tileh, _) =

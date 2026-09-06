@@ -64,6 +64,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::InvalidBridgeSpan => {
             "Puente inválido: las orillas al mismo nivel y agua o terreno más bajo bajo el tramo."
         }
+        CommandError::BridgeTooLowForRoadStop => {
+            "El puente queda demasiado bajo para esta parada NewGRF."
+        }
         CommandError::InvalidRailOnSlope => {
             "La vía no puede construirse en esta pendiente con esa geometría."
         }
@@ -210,6 +213,7 @@ mod tests {
             CommandError::InvalidTunnelEndpoints,
             CommandError::BridgeTypeNotAvailable,
             CommandError::InvalidBridgeSpan,
+            CommandError::BridgeTooLowForRoadStop,
             CommandError::InvalidRailOnSlope,
             CommandError::CannotPlaceWaypointOnTrack,
             CommandError::NoRailToRemove,

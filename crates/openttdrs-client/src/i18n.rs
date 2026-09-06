@@ -642,6 +642,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Puente inválido: las orillas al mismo nivel y agua o terreno más bajo bajo el tramo." => {
             "Invalid bridge: banks must be level with water or lower ground beneath the span."
         }
+        "El puente queda demasiado bajo para esta parada NewGRF." => {
+            "The bridge is too low for this NewGRF stop."
+        }
         "La vía no puede construirse en esta pendiente con esa geometría." => {
             "Rail cannot be built on this slope with that geometry."
         }

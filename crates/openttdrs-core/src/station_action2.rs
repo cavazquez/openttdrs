@@ -463,6 +463,7 @@ pub(crate) fn populate_station_scope_fallback_vars(ctx: &mut Action2EvalCtx, sta
     ctx.vars
         .insert(0x4A, u32::from(station.road_stop_animation_frame));
     populate_station_general_vars(ctx, station);
+    populate_station_legacy_cargo_vars(ctx, station);
     ctx.vars.insert(
         0x5F,
         u32::from(station.newgrf_random_bits) << 8
@@ -624,8 +625,74 @@ fn action2_eval_ctx_for_station_tile_impl(
             cargo_catalog,
         );
     }
+    populate_station_legacy_cargo_vars(&mut ctx, st);
 
     ctx
+}
+
+/// Materializa las variables de carga deprecated `0x8C..0xEC` de
+/// `Station::GetNewGRFVariable`. A diferencia de `0x60..0x69`, estas variables
+/// codifican directamente las doce ranuras nativas y no pasan por la CTT del
+/// GRF. Mantenerlas en `vars` permite que las APIs legacy y map-aware
+/// compartan el mismo valor sin inventar IDs para cargos custom.
+fn populate_station_legacy_cargo_vars(ctx: &mut Action2EvalCtx, station: &Station) {
+    for cargo_index in 0..crate::cargo::NUM_ORIGINAL_CARGO {
+        let Ok(cargo_id) = u8::try_from(cargo_index) else {
+            continue;
+        };
+        let Some(cargo) = CargoType::from_cargo_id(cargo_id) else {
+            continue;
+        };
+        let entry = station.goods.get(cargo);
+        let total = station.cargo_stock.get(cargo);
+        let accepted = cargo_is_accepted(station, cargo, None);
+        let packed_total = total.min(4095);
+        let first_station = station_first_cargo_station_id(station, cargo);
+        let periods_in_transit = station
+            .cargo_packets
+            .packets()
+            .filter(|packet| packet.cargo == cargo)
+            .map(|packet| u32::from(packet.periods_in_transit))
+            .max()
+            .unwrap_or(0);
+        let base = 0x8C_u8.saturating_add(cargo_id.saturating_mul(8));
+        ctx.vars.insert(base, total);
+        ctx.vars.insert(
+            base.saturating_add(1),
+            (packed_total & 0x0F) | if accepted { 1 << 7 } else { 0 },
+        );
+        ctx.vars.insert(
+            base.saturating_add(2),
+            u32::from(station.time_since_pickup.get(cargo)),
+        );
+        ctx.vars
+            .insert(base.saturating_add(3), u32::from(entry.rating));
+        ctx.vars.insert(base.saturating_add(4), first_station);
+        ctx.vars.insert(base.saturating_add(5), periods_in_transit);
+        ctx.vars
+            .insert(base.saturating_add(6), u32::from(entry.last_speed));
+        ctx.vars
+            .insert(base.saturating_add(7), u32::from(entry.last_age));
+    }
+}
+
+/// Devuelve el primer `StationID` sólo cuando el modelo puede demostrar que el
+/// packet nació en esta estación. Los packets conservan coordenadas y no un
+/// pool index, por lo que una ruta cuyo origen no coincide usa el sentinel
+/// `StationID::Invalid()` nativo en vez de adivinar una identidad.
+fn station_first_cargo_station_id(station: &Station, cargo: CargoType) -> u32 {
+    let Some(station_id) = station.ottd_station_id else {
+        return u32::MAX;
+    };
+    let has_first_station = station
+        .cargo_packets
+        .packets()
+        .any(|packet| packet.cargo == cargo && packet.first_station == Some(station.pos));
+    if has_first_station {
+        station_id
+    } else {
+        u32::MAX
+    }
 }
 
 /// Materializa las variables de carga parametrizadas que puede consultar el
@@ -1495,6 +1562,48 @@ mod tests {
         assert_eq!(ctx.parameterized_vars.get(&(0x64, 1)), Some(&1_101));
         assert_eq!(ctx.parameterized_vars.get(&(0x65, 1)), Some(&8));
         assert_eq!(ctx.parameterized_vars.get(&(0x69, 1)), Some(&13));
+    }
+
+    #[test]
+    fn station_deprecated_cargo_vars_match_native_layout() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(1, 1);
+        map.set_tile(coord, rail_station_tile(0)).unwrap();
+        let mut station = Station::new_with_kind(coord, StopKind::RailStation);
+        station.ottd_station_id = Some(17);
+        station.cargo_stock.add(CargoType::Coal, 0x1234);
+        station.time_since_pickup.coal = 9;
+        let entry = station.goods.get_mut(CargoType::Coal);
+        entry.rating = 123;
+        entry.last_speed = 77;
+        entry.last_age = 4;
+        let mut packet = CargoPacket::new(CargoType::Coal, 23, coord).with_first_station(coord);
+        packet.periods_in_transit = 6;
+        station.push_waiting_packets([packet]);
+
+        let legacy = action2_eval_ctx_from_station(&station);
+        let map_aware = action2_eval_ctx_for_station_tile_with_grf(
+            &map,
+            std::slice::from_ref(&station),
+            coord,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+        );
+        for ctx in [&legacy, &map_aware] {
+            assert_eq!(ctx.vars.get(&0x94), Some(&4683));
+            assert_eq!(ctx.vars.get(&0x95), Some(&0x8F));
+            assert_eq!(ctx.vars.get(&0x96), Some(&9));
+            assert_eq!(ctx.vars.get(&0x97), Some(&123));
+            assert_eq!(ctx.vars.get(&0x98), Some(&17));
+            assert_eq!(ctx.vars.get(&0x99), Some(&6));
+            assert_eq!(ctx.vars.get(&0x9A), Some(&77));
+            assert_eq!(ctx.vars.get(&0x9B), Some(&4));
+        }
+        assert_eq!(legacy.vars.get(&0x8C), Some(&0));
+        assert_eq!(legacy.vars.get(&0x8F), Some(&175));
+        assert_eq!(legacy.vars.get(&0x90), Some(&u32::MAX));
     }
 
     #[test]

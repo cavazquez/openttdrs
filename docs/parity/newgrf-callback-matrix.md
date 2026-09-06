@@ -996,3 +996,15 @@ la fecha actual del calendario. El rename usa la plantilla fallback nativa
 cuando no queda un nombre generado. La resolución de textos por idioma,
 parámetros town/company y los scopes restantes de `BaseStation` continúan
 pendientes en #329.
+
+### #329-STATION-DEPRECATED-CARGO-401 — Variables legacy `0x8C`–`0xEC`
+
+Actualizado: 2026-09-06. Los resolvers legacy y map-aware materializan las
+doce ranuras nativas con las ocho subvariables de OpenTTD: total, nibble de
+espera y aceptación, días, rating, primera estación, períodos de tránsito,
+velocidad y edad. El total se limita a 4095 sólo para el nibble; los sentinels
+`0xFFFFFFFF`, `0xFF00` y `StationID::Invalid()` se conservan donde el modelo
+no tiene una medición válida. El primer ID sólo se devuelve para packets cuyo
+origen es la propia estación y cuyo pool ID fue importado. Cargos custom/CTT,
+textos, sonidos y los scopes restantes de `BaseStation` continúan fuera de
+este corte en #329.

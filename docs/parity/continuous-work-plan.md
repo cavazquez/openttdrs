@@ -1836,6 +1836,15 @@ La resolución de texto por idioma/town/company, callbacks de construcción sin
 estación y scopes restantes de `BaseStation`/aeropuerto siguen pendientes;
 #329 permanece abierto.
 
+Actualización #329-STATION-DEPRECATED-CARGO-401 (2026-09-06, issue [#401](https://github.com/cavazquez/openttdrs/issues/401)):
+los resolvers legacy y map-aware de estación materializan la familia nativa
+`0x8C..0xEC`, con ocho subvariables por cada una de las doce ranuras: total,
+aceptación, espera, rating, primera estación, tránsito, velocidad y edad.
+Se preservan los sentinels y el primer `StationID` sólo cuando el packet y el
+pool importado permiten demostrar el origen. La regresión compara ambos
+contextos con datos de carbón no nulos; cargos custom/CTT, textos, sonidos y
+los scopes restantes de `BaseStation` siguen pendientes en #329.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

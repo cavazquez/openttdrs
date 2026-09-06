@@ -1735,3 +1735,16 @@ dieciseisavos de tonelada), por lo que un cargo custom deja de usar siempre el
 peso genérico de una tonelada. El valor se aplica en cada tick del controlador
 vial y se conserva el fallback para callers sin catálogo; #329 sigue abierto
 hasta cubrir consist ferroviario, `freight_trains` y el resto de propiedades.
+
+Actualización #329-STATION-SCOPE-063 (2026-09-06, issue [#389](https://github.com/cavazquez/openttdrs/issues/389)):
+`action2_eval_ctx_from_station` ya no deja vacío el scope de una estación en
+las APIs legacy: expone los sentinels nativos de plataforma/vía (`0x40`,
+`0x41`, `0x46`, `0x47`, `0x49`), owner (`0x43`), PBS (`0x44`), continuación
+no disponible (`0x45`), frame (`0x4A`) y random/triggers (`0x5F`). El nuevo
+`apply_station_availability_callback_at` comparte con el renderer el contexto
+map-aware de la tesela y hace writeback de `7C` después del callback; una
+regresión también cubre el fallback cuando el índice/tile está obsoleto. La
+construcción conserva el resolver nulo de OpenTTD, sin `Station` ni PSA. Quedan
+fuera de este corte las variables vecinas `0x66`/`0x68`/`0x6A`/`0x6B`, strings,
+sonidos, layouts 16-bit y los scopes completos de `BaseStation`/aeropuerto;
+#329 permanece abierto.

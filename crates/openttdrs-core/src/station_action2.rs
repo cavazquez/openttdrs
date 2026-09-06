@@ -104,6 +104,36 @@ pub fn action2_eval_ctx_for_station_tile_with_world(
     )
 }
 
+/// Completa el contexto mínimo de una estación cuando el caller no tiene una
+/// tesela disponible (por ejemplo una API legacy que sólo recibe `Station`).
+///
+/// `OpenTTD` usa los mismos valores centinela para las variables de andén,
+/// vía y posición cuando el resolver no tiene `tile`. Mantenerlos explícitos
+/// es importante: un Action2 que consulta una de estas variables debe obtener
+/// el sentinel nativo, no caer silenciosamente al valor cero de un mapa vacío.
+pub(crate) fn populate_station_scope_fallback_vars(ctx: &mut Action2EvalCtx, station: &Station) {
+    // `0x2110000`: platforms/tracks/position with no station tile.
+    const NO_TILE_PLATFORM_INFO: u32 = 0x0211_0000;
+    for variable in [0x40, 0x41, 0x46, 0x47, 0x49] {
+        ctx.vars.insert(variable, NO_TILE_PLATFORM_INFO);
+    }
+    // Terrain/rail type and PBS status have the same no-tile defaults as the
+    // purchase/slope resolver.  Rail continuation and tile frame are not
+    // available without a coordinate, so expose OpenTTD's unavailable value
+    // for the former and a stable zero for the latter.
+    ctx.vars.insert(0x42, 0);
+    ctx.vars.insert(0x43, u32::from(station.owner.0));
+    ctx.vars.insert(0x44, 2);
+    ctx.vars.insert(0x45, u32::MAX);
+    ctx.vars
+        .insert(0x4A, u32::from(station.road_stop_animation_frame));
+    ctx.vars.insert(
+        0x5F,
+        u32::from(station.newgrf_random_bits) << 8
+            | u32::from(station.newgrf_waiting_random_triggers),
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 fn action2_eval_ctx_for_station_tile_impl(
     map: &Map,
@@ -126,7 +156,10 @@ fn action2_eval_ctx_for_station_tile_impl(
 
     let random = u32::from(st.newgrf_random_bits);
     ctx.random_bits = random;
-    ctx.vars.insert(0x5F, random << 8);
+    ctx.vars.insert(
+        0x5F,
+        random << 8 | u32::from(st.newgrf_waiting_random_triggers),
+    );
 
     let nn_player = u32::from(st.owner.0);
     let c = u32::from(owner_colour & 0x0F);

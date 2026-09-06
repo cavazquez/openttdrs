@@ -40,7 +40,10 @@ use crate::road_stop_action2::{
     RoadStopWorldContext, action2_eval_ctx_for_road_stop_tile_with_catalog_and_world,
 };
 use crate::road_stop_spec::RoadStopSpecDef;
-use crate::station::Station;
+use crate::station::{Station, station_at_tile};
+use crate::station_action2::{
+    action2_eval_ctx_for_station_tile_with_grf, populate_station_scope_fallback_vars,
+};
 use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
 use crate::town::Town;
 use crate::vehicle::{Vehicle, VehicleKind, VehicleRandomTrigger};
@@ -110,6 +113,7 @@ pub fn action2_eval_ctx_from_station(station: &Station) -> Action2EvalCtx {
     ctx.persistent_registers
         .clone_from(&station.newgrf_persistent_regs);
     ctx.random_bits = u32::from(station.newgrf_random_bits);
+    populate_station_scope_fallback_vars(&mut ctx, station);
     ctx
 }
 
@@ -2887,6 +2891,61 @@ pub fn apply_station_availability_callback(
     let mut ctx = action2_eval_ctx_from_station(station);
     let result = gfx.resolve_callback_ctx(local_id, CBID_STATION_AVAILABILITY, 0, 0, &mut ctx);
     writeback_station_persistent_registers(station, &ctx);
+    callback_allows_8bit_boolean(result)
+}
+
+/// Variante de `CBID_STATION_AVAILABILITY` para una estación ya colocada.
+///
+/// A diferencia de [`apply_station_availability_callback`], que conserva la
+/// API legacy sin mapa, este call site recibe la tesela real y evalúa las
+/// variables de `StationScopeResolver` (`40`–`4A`, `5F`, terreno y carga)
+/// mediante el mismo helper que usa el renderer. El `Station` se muta sólo
+/// después de evaluar el callback, de forma que `7C` se escribe en la entidad
+/// correcta sin crear un alias mutable/immutable de `stations`.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn apply_station_availability_callback_at(
+    gfx: &TrainSpriteGraphics,
+    local_id: u8,
+    map: &Map,
+    stations: &mut [Station],
+    station_index: usize,
+    coord: TileCoord,
+    owner_colour: u8,
+    climate: Climate,
+    type_tables: Option<&crate::newgrf_type_tables::GrfTypeTranslationTables>,
+    grf_version: u8,
+) -> bool {
+    let Some(station) = stations.get(station_index) else {
+        return true;
+    };
+    let station_pos = station.pos;
+    let tile_belongs_to_station =
+        station_at_tile(map, stations, coord).is_some_and(|candidate| candidate.pos == station_pos);
+    let mut ctx = if tile_belongs_to_station {
+        action2_eval_ctx_for_station_tile_with_grf(
+            map,
+            stations,
+            coord,
+            owner_colour,
+            climate,
+            type_tables,
+            grf_version,
+        )
+    } else {
+        Action2EvalCtx::default()
+    };
+    // A stale tile/index pair must not erase an existing station's PSA. Keep
+    // the legacy scope in that case; valid map-aware calls use the rich path.
+    if ctx.vars.is_empty() {
+        ctx = action2_eval_ctx_from_station(station);
+    }
+    ctx.persistent_registers
+        .clone_from(&station.newgrf_persistent_regs);
+    let result = gfx.resolve_callback_ctx(local_id, CBID_STATION_AVAILABILITY, 0, 0, &mut ctx);
+    if let Some(station) = stations.get_mut(station_index) {
+        writeback_station_persistent_registers(station, &ctx);
+    }
     callback_allows_8bit_boolean(result)
 }
 
@@ -6730,6 +6789,113 @@ mod tests {
         let mut st = Station::new(TileCoord::new(2, 2));
         assert!(apply_station_availability_callback(&gfx, 0, &mut st));
         assert_eq!(st.newgrf_persistent_regs.get(&5), Some(&7));
+    }
+
+    #[test]
+    fn station_availability_legacy_scope_exposes_station_vars() {
+        let mut st = Station::new(TileCoord::new(2, 2));
+        st.owner = crate::company::CompanyId(3);
+        st.newgrf_random_bits = 0x1234;
+        st.newgrf_waiting_random_triggers = 0x08;
+
+        let ctx = action2_eval_ctx_from_station(&st);
+        assert_eq!(ctx.vars.get(&0x40), Some(&0x0211_0000));
+        assert_eq!(ctx.vars.get(&0x41), Some(&0x0211_0000));
+        assert_eq!(ctx.vars.get(&0x43), Some(&3));
+        assert_eq!(ctx.vars.get(&0x44), Some(&2));
+        assert_eq!(ctx.vars.get(&0x45), Some(&u32::MAX));
+        assert_eq!(ctx.vars.get(&0x5F), Some(&0x0012_3408));
+
+        // The callback can branch on the owner even when an old caller only
+        // supplies `Station`; the previous context returned the default 0.
+        let owner_callback = gfx_callback_variable_byte(0x43, 0);
+        assert_eq!(
+            owner_callback.resolve_callback_ctx(
+                0,
+                CBID_STATION_AVAILABILITY,
+                0,
+                0,
+                &mut ctx.clone()
+            ),
+            3
+        );
+    }
+
+    #[test]
+    fn station_availability_map_context_exposes_tile_scope_and_psa() {
+        let coord = TileCoord::new(2, 2);
+        let mut map = Map::new_flat(8, 8, 0);
+        map.set_tile(
+            coord,
+            crate::map::Tile {
+                height: 0,
+                kind: crate::map::TileKind::Station,
+                mapt: 0,
+                m5: 0,
+                m1: 0,
+                m6: 0,
+                m8: 0,
+                m3: 0,
+                m2: 0,
+                m2_hi: 0,
+                m7: 9,
+                m3hi: 0,
+            },
+        )
+        .unwrap();
+        let mut station = Station::new_with_kind(coord, crate::station::StopKind::RailStation);
+        station.owner = crate::company::CompanyId(2);
+        let mut stations = vec![station];
+        let owner = gfx_callback_compare_u32(0x43, 0x3300_0002);
+        assert!(apply_station_availability_callback_at(
+            &owner,
+            0,
+            &map,
+            &mut stations,
+            0,
+            coord,
+            3,
+            Climate::Temperate,
+            None,
+            8,
+        ));
+        assert_eq!(stations[0].newgrf_persistent_regs.get(&5), None);
+
+        let stale_tile = gfx_callback_compare_u32(0x40, 0x0211_0000);
+        assert!(apply_station_availability_callback_at(
+            &stale_tile,
+            0,
+            &map,
+            &mut stations,
+            0,
+            TileCoord::new(3, 2),
+            3,
+            Climate::Temperate,
+            None,
+            8,
+        ));
+
+        // `7C` is still written by the map-aware path, not just by the
+        // legacy wrapper.
+        let mut writeback_stations = vec![stations[0].clone()];
+        let psto = gfx_callback_psto(5, 7, 1);
+        assert!(apply_station_availability_callback_at(
+            &psto,
+            0,
+            &map,
+            &mut writeback_stations,
+            0,
+            coord,
+            3,
+            Climate::Temperate,
+            None,
+            8,
+        ));
+        assert_eq!(
+            writeback_stations[0].newgrf_persistent_regs.get(&5),
+            Some(&7)
+        );
+        assert_eq!(writeback_stations[0].pos, coord);
     }
 
     #[test]

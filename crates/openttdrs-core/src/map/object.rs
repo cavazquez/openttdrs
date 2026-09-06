@@ -4,6 +4,7 @@ use super::{Map, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::newgrf_sprites::{
     CALLBACK_FAILED, CBID_OBJECT_ANIMATION_NEXT_FRAME, CBID_OBJECT_ANIMATION_SPEED,
+    CBID_OBJECT_ANIMATION_TRIGGER,
 };
 use crate::object_spec::{
     NEW_OBJECT_OFFSET, ObjectSpecDef, decode_object_tile_offset, encode_object_tile_offset,
@@ -26,6 +27,26 @@ pub const OBJECT_TYPE_LIGHTHOUSE: u8 = 1;
 /// Estatua de compañía construida por la autoridad local (`SPR_STATUE_COMPANY`).
 pub const OBJECT_TYPE_STATUE_COMPANY: u8 = 2;
 pub const OBJECT_TYPE_OWNED_LAND: u8 = 3;
+
+/// Triggers de animación de objetos (`ObjectAnimationTrigger` upstream).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ObjectAnimationTrigger {
+    /// Se dispara al construir el objeto, para toda la huella.
+    Built = 0,
+    /// Se dispara al visitar cada tesela en `TileLoop_Object`.
+    TileLoop = 1,
+    /// Se dispara al visitar el origen cada 256 ticks, para toda la huella.
+    TileLoopNorth = 2,
+}
+
+impl ObjectAnimationTrigger {
+    /// Bit de `animation_triggers` correspondiente al trigger.
+    #[must_use]
+    pub const fn mask(self) -> u16 {
+        1_u16 << (self as u8)
+    }
+}
 
 /// Conteos de instancias `Object` para `ObjectScopeResolver::0x64`.
 ///
@@ -561,6 +582,7 @@ pub fn step_newgrf_object_tiles<S: BuildHasher>(
     world_seed: u64,
     active_tiles: &mut HashSet<TileCoord, S>,
     initialized: &mut bool,
+    tile_loop_visits: &[(TileCoord, Tile)],
 ) -> Vec<TileCoord> {
     let mut candidates = Vec::new();
     for object in objects {
@@ -609,7 +631,51 @@ pub fn step_newgrf_object_tiles<S: BuildHasher>(
         *initialized = true;
     }
 
+    let visited: HashSet<_> = tile_loop_visits.iter().map(|(coord, _)| *coord).collect();
     let mut dirty = Vec::new();
+    for &(coord, object_type, origin) in &candidates {
+        let Some(def) = object_spec_def(catalog, object_type) else {
+            continue;
+        };
+        if visited.contains(&coord)
+            && def.animation_triggers & ObjectAnimationTrigger::TileLoop.mask() != 0
+            && apply_object_animation_trigger_at(
+                map,
+                coord,
+                origin,
+                object_type,
+                objects,
+                towns,
+                catalog,
+                climate,
+                world_seed,
+                tick,
+                ObjectAnimationTrigger::TileLoop,
+                active_tiles,
+            )
+        {
+            dirty.push(coord);
+        }
+    }
+    let north_origins: Vec<_> = objects
+        .iter()
+        .filter(|object| visited.contains(&object.tile))
+        .map(|object| object.tile)
+        .collect();
+    for origin in north_origins {
+        dirty.extend(trigger_newgrf_object_animation(
+            map,
+            tick,
+            objects,
+            towns,
+            catalog,
+            climate,
+            world_seed,
+            active_tiles,
+            origin,
+            ObjectAnimationTrigger::TileLoopNorth,
+        ));
+    }
     for (coord, object_type, origin) in candidates {
         if !active_tiles.contains(&coord) {
             continue;
@@ -693,6 +759,130 @@ pub fn step_newgrf_object_tiles<S: BuildHasher>(
         }
     }
     dirty
+}
+
+/// Ejecuta CB159 sobre una huella completa, usado al construir un objeto o
+/// cuando `TileLoopNorth` solicita la actualización de todas sus teselas.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_object_animation<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    objects: &[SavObject],
+    towns: &mut [crate::town::Town],
+    catalog: &[ObjectSpecDef],
+    climate: Climate,
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord, S>,
+    origin: TileCoord,
+    trigger: ObjectAnimationTrigger,
+) -> Vec<TileCoord> {
+    let Some(object) = objects.iter().find(|object| object.tile == origin) else {
+        return Vec::new();
+    };
+    let Some(def) = object_spec_def(catalog, object.object_type) else {
+        return Vec::new();
+    };
+    if !def.from_newgrf || !def.has_animation() || def.animation_triggers & trigger.mask() == 0 {
+        return Vec::new();
+    }
+    let (width, height) = object_animation_dimensions(object, def);
+    let mut dirty = Vec::new();
+    for coord in object_footprint_tiles(origin, width, height) {
+        if apply_object_animation_trigger_at(
+            map,
+            coord,
+            origin,
+            object.object_type,
+            objects,
+            towns,
+            catalog,
+            climate,
+            world_seed,
+            tick,
+            trigger,
+            active_tiles,
+        ) {
+            dirty.push(coord);
+        }
+    }
+    dirty
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_object_animation_trigger_at<S: BuildHasher>(
+    map: &mut Map,
+    coord: TileCoord,
+    origin: TileCoord,
+    object_type: u16,
+    objects: &[SavObject],
+    towns: &mut [crate::town::Town],
+    catalog: &[ObjectSpecDef],
+    climate: Climate,
+    world_seed: u64,
+    tick: u64,
+    trigger: ObjectAnimationTrigger,
+    active_tiles: &mut HashSet<TileCoord, S>,
+) -> bool {
+    let Some(mut tile) = map.get(coord) else {
+        return false;
+    };
+    let Some(def) = object_spec_def(catalog, object_type) else {
+        return false;
+    };
+    if !is_map_object_tile(tile.mapt)
+        || object_origin_from_tile_with_objects(&tile, coord, objects) != Some(origin)
+        || def.animation_triggers & trigger.mask() == 0
+    {
+        return false;
+    }
+    let before = tile.m3hi;
+    let random = object_animation_random_bits(world_seed, tick, coord);
+    let result = resolve_object_animation_callback(
+        map,
+        &tile,
+        coord,
+        origin,
+        object_type,
+        objects,
+        towns,
+        catalog,
+        climate,
+        CBID_OBJECT_ANIMATION_TRIGGER,
+        random,
+        u32::from(trigger as u8),
+    );
+    if result != CALLBACK_FAILED {
+        match (result & 0xFF) as u8 {
+            0xFD => {}
+            0xFE => {
+                active_tiles.insert(coord);
+            }
+            0xFF => {
+                active_tiles.remove(&coord);
+            }
+            frame => {
+                tile.m3hi = frame;
+                active_tiles.insert(coord);
+            }
+        }
+    }
+    if tile.m3hi != before {
+        let _ = map.set_tile(coord, tile);
+    }
+    tile.m3hi != before
+}
+
+fn object_animation_dimensions(object: &SavObject, def: &ObjectSpecDef) -> (u8, u8) {
+    let width = u8::try_from(object.width)
+        .ok()
+        .filter(|width| *width != 0)
+        .unwrap_or_else(|| def.size_width().max(1));
+    let height = u8::try_from(object.height)
+        .ok()
+        .filter(|height| *height != 0)
+        .unwrap_or_else(|| def.size_height().max(1));
+    (width, height)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -948,6 +1138,14 @@ mod tests {
     use crate::sav;
 
     fn object_animation_callback_runtime(next_frame: u8, speed: u8) -> TrainSpriteGraphics {
+        object_animation_callback_runtime_with_trigger(next_frame, speed, 0xFD)
+    }
+
+    fn object_animation_callback_runtime_with_trigger(
+        next_frame: u8,
+        speed: u8,
+        trigger: u8,
+    ) -> TrainSpriteGraphics {
         let mut gfx = TrainSpriteGraphics::default();
         gfx.assigns.push(TrainSpriteAssign {
             local_id: 0,
@@ -966,11 +1164,11 @@ mod tests {
                     },
                 },
                 ops: Vec::new(),
-                ranges: vec![(3, 0x158, 0x158), (4, 0x15A, 0x15A)],
+                ranges: vec![(3, 0x158, 0x158), (4, 0x15A, 0x15A), (5, 0x159, 0x159)],
                 default: 0,
             },
         );
-        for (set_id, value) in [(3, next_frame), (4, speed)] {
+        for (set_id, value) in [(3, next_frame), (4, speed), (5, trigger)] {
             gfx.action2_var.insert(
                 set_id,
                 Action2VarEntry {
@@ -1074,6 +1272,7 @@ mod tests {
                 7,
                 &mut active,
                 &mut initialized,
+                &[],
             )
             .is_empty()
         );
@@ -1090,6 +1289,7 @@ mod tests {
             7,
             &mut active,
             &mut initialized,
+            &[],
         );
         assert_eq!(dirty, vec![TileCoord::new(0, 0)]);
         assert_eq!(map.get(TileCoord::new(0, 0)).expect("tile").m3hi, 1);
@@ -1114,6 +1314,7 @@ mod tests {
             7,
             &mut active,
             &mut initialized,
+            &[],
         );
         let _ = step_newgrf_object_tiles(
             &mut map,
@@ -1125,6 +1326,7 @@ mod tests {
             7,
             &mut active,
             &mut initialized,
+            &[],
         );
         assert!(!active.contains(&TileCoord::new(0, 0)));
         let _ = step_newgrf_object_tiles(
@@ -1137,6 +1339,7 @@ mod tests {
             7,
             &mut active,
             &mut initialized,
+            &[],
         );
         assert!(!active.contains(&TileCoord::new(0, 0)));
         assert_eq!(map.get(TileCoord::new(0, 0)).expect("tile").m3hi, 0);
@@ -1158,6 +1361,33 @@ mod tests {
                 .contains(&TileCoord::new(1, 0))
         );
         assert!(decoded.newgrf_object_animation_initialized);
+    }
+
+    #[test]
+    fn object_animation_trigger_callback_sets_frame_and_activates_tile() {
+        let (mut map, objects, mut catalog) = animated_object_fixture();
+        catalog[0].animation_triggers = ObjectAnimationTrigger::Built.mask();
+        catalog[0].newgrf_runtime = Some(Box::new(object_animation_callback_runtime_with_trigger(
+            1, 1, 2,
+        )));
+        let mut towns = Vec::new();
+        let mut active = HashSet::new();
+
+        let dirty = trigger_newgrf_object_animation(
+            &mut map,
+            1,
+            &objects,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+            7,
+            &mut active,
+            TileCoord::new(0, 0),
+            ObjectAnimationTrigger::Built,
+        );
+        assert_eq!(dirty, vec![TileCoord::new(0, 0)]);
+        assert_eq!(map.get(TileCoord::new(0, 0)).expect("tile").m3hi, 2);
+        assert!(active.contains(&TileCoord::new(0, 0)));
     }
 
     #[test]

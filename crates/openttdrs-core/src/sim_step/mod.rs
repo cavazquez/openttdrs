@@ -588,6 +588,7 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         state.world_seed,
         &mut state.newgrf_animated_object_tiles,
         &mut state.newgrf_object_animation_initialized,
+        &visits,
     );
     state.runtime.industry_tile_dirty.extend(object_dirty);
     state

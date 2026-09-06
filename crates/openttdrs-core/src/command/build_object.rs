@@ -252,6 +252,18 @@ pub(crate) fn build_object(
         for tile in crate::map::object_footprint_tiles(c, w, h) {
             state.newgrf_animated_object_tiles.insert(tile);
         }
+        let _ = crate::map::trigger_newgrf_object_animation(
+            &mut state.map,
+            state.tick.get(),
+            &state.objects,
+            &mut state.towns,
+            &state.object_spec_catalog,
+            state.climate,
+            state.world_seed,
+            &mut state.newgrf_animated_object_tiles,
+            c,
+            crate::map::ObjectAnimationTrigger::Built,
+        );
     }
     state.sav_objects_dirty = true;
     state.economy.money -= cost;

@@ -2088,3 +2088,14 @@ vecinos solicitados) y los registros `7C` del pueblo se reemiten por GRFID. La
 regresión cubre cadencia/frame, detención `0xFF` y round-trip JSON. CB159/triggers,
 callbacks colour/autoslope/fund text, writeback propio de la tesela y layouts
 16-bit siguen fuera de esta etapa.
+
+Actualización #329-OBJECT-ANIMATION-TRIGGERS-424 (2026-09-06, issue [#424](https://github.com/cavazquez/openttdrs/issues/424)):
+se añadió `CBID_OBJECT_ANIMATION_TRIGGER` (`0x159`) y el enum de triggers
+`Built`, `TileLoop` y `TileLoopNorth`, con las mismas máscaras de Action0 que
+OpenTTD. La construcción registra las teselas animadas y ejecuta el callback
+para toda la huella; `AnimateTile_Object` consume `TileLoop` por tesela y el
+origen consume `TileLoopNorth` para toda la huella. `param2` lleva el ordinal,
+los resultados `0xFD`/`0xFE`/`0xFF`/frame actualizan la lista y `m3hi`, y el
+fallback `CALLBACK_FAILED` no muta el estado. La regresión sintética cubre un
+trigger `Built` que fija un frame; quedan triggers de carga/economía no
+representados y callbacks colour/autoslope/fund text.

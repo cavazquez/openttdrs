@@ -62,6 +62,48 @@ fn electric_engine_requires_electrified_neighbor() {
 }
 
 #[test]
+fn disabling_elrails_allows_electric_engine_on_normal_rail() {
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = SandboxMap::flat_rich(12, 8, 1);
+    s.construction.disable_elrails = true;
+    for x in 2..=6_i32 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+    }
+    let depot = TileCoord::new(4, 5);
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_ASIASTAR),
+    )
+    .unwrap();
+    assert_eq!(
+        rail_type_from_tile(s.map.get(TileCoord::new(4, 4)).unwrap()),
+        RailType::Rail
+    );
+}
+
+#[test]
+fn disabling_elrails_makes_electric_to_rail_conversion_a_noop() {
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(8, 8);
+    s.economy.money = 100_000;
+    s.construction.disable_elrails = true;
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRail(c)).unwrap();
+    apply_command(&mut s, &Command::ConvertRail(c, RailType::Electric.as_u8())).unwrap();
+    let money_before = s.economy.money;
+    apply_command(&mut s, &Command::ConvertRail(c, RailType::Rail.as_u8())).unwrap();
+    assert_eq!(
+        rail_type_from_tile(s.map.get(c).unwrap()),
+        RailType::Electric
+    );
+    assert_eq!(s.economy.money, money_before);
+}
+
+#[test]
 fn place_rail_uses_current_rail_type() {
     use crate::rail_type::{RailType, rail_type_from_tile};
 

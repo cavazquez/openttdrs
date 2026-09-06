@@ -401,6 +401,23 @@ fn openttd_resaved_preserves_requested_wagon_speed_limits() {
     );
 }
 
+/// #386: el fixture rico desactiva `vehicle.disable_elrails`. OpenTTD debe
+/// conservar el booleano PATS al re-guardar.
+#[test]
+fn openttd_resaved_preserves_requested_disable_elrails() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_DISABLE_ELRAILS").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PATS");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).expect("import openttdrs");
+    assert!(
+        game.construction.disable_elrails,
+        "OpenTTD debe re-guardar PATS.vehicle.disable_elrails = true"
+    );
+}
+
 /// #383: el fixture rico usa valores no-default para todos los campos
 /// linkgraph que OpenTTD persiste en PATS. El dedicated los carga y guarda
 /// antes de que este importador compruebe tanto el wire como los cuatro

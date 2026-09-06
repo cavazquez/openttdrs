@@ -160,7 +160,13 @@ pub(super) fn build_vehicle_at_depot(
     }
     // Compatibilidad motor↔vía adyacente (eléctrico / mono / maglev).
     if engine.kind == VehicleKind::Train {
-        let required = crate::rail_type::required_rail_type_for_engine(engine_id);
+        let mut required = engine.required_rail_type.map_or_else(
+            || crate::rail_type::required_rail_type_for_engine(engine_id),
+            crate::rail_type::RailType::from_u8,
+        );
+        if state.construction.disable_elrails && required == crate::rail_type::RailType::Electric {
+            required = crate::rail_type::RailType::Rail;
+        }
         if required != crate::rail_type::RailType::Rail {
             let neighbor_ok = [(-1, 0), (1, 0), (0, -1), (0, 1)].iter().any(|(dx, dy)| {
                 let n = TileCoord::new(depot_pos.x + dx, depot_pos.y + dy);

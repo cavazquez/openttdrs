@@ -316,13 +316,28 @@ pub const fn railtypes_mask_contains(mask: u8, rt: RailType) -> bool {
 /// ¿El motor puede circular / comprarse sobre este tipo de vía?
 #[must_use]
 pub fn engine_compatible_with_rail(engine: &EngineDef, rail_type: RailType) -> bool {
+    engine_compatible_with_rail_setting(engine, rail_type, false)
+}
+
+/// Variante que aplica `vehicle.disable_elrails` a la compatibilidad del
+/// motor. `OpenTTD` mueve los motores destinados a electrificación a rail normal
+/// cuando la red eléctrica está desactivada.
+#[must_use]
+pub fn engine_compatible_with_rail_setting(
+    engine: &EngineDef,
+    rail_type: RailType,
+    disable_elrails: bool,
+) -> bool {
     if !engine.is_train_engine() && !engine.is_wagon() {
         return true;
     }
-    let required = engine.required_rail_type.map_or_else(
+    let mut required = engine.required_rail_type.map_or_else(
         || required_rail_type_for_engine(engine.id),
         RailType::from_u8,
     );
+    if disable_elrails && required == RailType::Electric {
+        required = RailType::Rail;
+    }
     match required {
         RailType::Rail => matches!(rail_type, RailType::Rail | RailType::Electric),
         other => other == rail_type,
@@ -434,6 +449,21 @@ mod tests {
         assert!(engine_compatible_with_rail(kirby, RailType::Rail));
         assert!(engine_compatible_with_rail(kirby, RailType::Electric));
         assert!(!engine_compatible_with_rail(kirby, RailType::Maglev));
+    }
+
+    #[test]
+    fn disabling_elrails_moves_electric_engine_to_normal_rail() {
+        let asia = engine_by_id(ENGINE_TRAIN_ASIASTAR).unwrap();
+        assert!(!engine_compatible_with_rail_setting(
+            asia,
+            RailType::Rail,
+            false
+        ));
+        assert!(engine_compatible_with_rail_setting(
+            asia,
+            RailType::Rail,
+            true
+        ));
     }
 
     #[test]

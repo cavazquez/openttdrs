@@ -623,6 +623,15 @@ pub(in crate::command) fn convert_rail(
     if current == to_type {
         return Ok(());
     }
+    // OpenTTD treats an existing electric tile as already compatible with
+    // normal rail while `vehicle.disable_elrails` is active; converting it to
+    // Rail is therefore a no-op rather than a paid map mutation.
+    if state.construction.disable_elrails
+        && current == crate::rail_type::RailType::Electric
+        && to_type == crate::rail_type::RailType::Rail
+    {
+        return Ok(());
+    }
     // No convertir si un tren en la tesela quedaría incompatible con el nuevo tipo.
     if state.vehicles.iter().any(|v| {
         v.pos == c

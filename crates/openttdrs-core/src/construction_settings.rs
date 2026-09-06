@@ -21,6 +21,7 @@ pub enum TrainSignalSide {
 
 /// Ajustes persistentes de construcción/conducción.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ConstructionSettings {
     /// Altura máxima de mapa (`construction.map_height_limit`).
     ///
@@ -56,6 +57,12 @@ pub struct ConstructionSettings {
     /// máxima del consist no queda limitada por unidades que sean vagones.
     #[serde(default = "default_wagon_speed_limits")]
     pub wagon_speed_limits: bool,
+    /// Desactiva la red eléctrica vanilla (`vehicle.disable_elrails`).
+    ///
+    /// Al activarlo, las locomotoras eléctricas se consideran aptas para rail
+    /// normal y una conversión Electric → Rail no necesita cambiar la tesela.
+    #[serde(default)]
+    pub disable_elrails: bool,
 }
 
 const fn default_freeform_edges() -> bool {
@@ -79,6 +86,7 @@ impl Default for ConstructionSettings {
             freeform_edges: default_freeform_edges(),
             distant_join_stations: default_distant_join_stations(),
             wagon_speed_limits: default_wagon_speed_limits(),
+            disable_elrails: false,
         }
     }
 }
@@ -154,6 +162,11 @@ mod tests {
     #[test]
     fn wagon_speed_limits_follows_openttd_default() {
         assert!(ConstructionSettings::default().wagon_speed_limits);
+    }
+
+    #[test]
+    fn disable_elrails_is_off_by_default() {
+        assert!(!ConstructionSettings::default().disable_elrails);
     }
 
     #[test]

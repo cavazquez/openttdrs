@@ -160,6 +160,13 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                 parsed.construction.wagon_speed_limits = value;
                 found = true;
             }
+            if let Some(value) = record_get(&record, "vehicle.disable_elrails")
+                .and_then(SlValue::as_u64)
+                .and_then(bool_from_u64)
+            {
+                parsed.construction.disable_elrails = value;
+                found = true;
+            }
             if let Some(value) = record_get(&record, "pf.wait_for_pbs_path")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value).ok())
@@ -561,6 +568,21 @@ mod tests {
             !settings_from_chunks(&[disabled])
                 .construction
                 .wagon_speed_limits
+        );
+    }
+
+    #[test]
+    fn reads_disable_elrails_setting_with_native_default() {
+        let disabled = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(1, "vehicle.disable_elrails")], &[vec![1]]),
+        };
+        assert!(!settings_from_chunks(&[]).construction.disable_elrails);
+        assert!(
+            settings_from_chunks(&[disabled])
+                .construction
+                .disable_elrails
         );
     }
 

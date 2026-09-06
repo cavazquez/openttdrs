@@ -885,6 +885,13 @@ activo; el test del core cubre ambas ramas y el smoke dedicado verifica que
 OpenTTD re-guarda el valor `false`. `UsesWagonOverride` sigue fuera de este
 issue; #328 continúa abierto por ese runtime NewGRF y por las demás brechas.
 
+Actualización #386 (2026-09-06): `PATS.vehicle.disable_elrails` se hidrata en
+`ConstructionSettings`, se reemite como `SLE_BOOL` y gobierna la compra de
+locomotoras eléctricas sobre rail normal y la conversión Electric → Rail como
+no-op. Parser, mutación, comandos y smoke están cubiertos; la ocultación del
+overlay de catenaria en el renderer global sigue siendo residual de #326/#329.
+Ver [evidencia #386](sav-disable-elrails-386.md).
+
 Actualización #329-INDUSTRY-CB28-021 (2026-09-02): CB28 mantiene la semántica
 exacta de OpenTTD (sin invertir el bit 10), y el call site de construcción
 expone `IACT_USERCREATION` (`param2=2`) y las variables de ubicación

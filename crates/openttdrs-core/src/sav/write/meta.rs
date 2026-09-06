@@ -67,6 +67,16 @@ fn append_company_liveries(
     Ok(())
 }
 
+fn append_company_allow_list(record: &mut Vec<u8>, allow_list: &[String]) -> Result<(), SavError> {
+    let count = u32::try_from(allow_list.len())
+        .map_err(|_| SavError::BadFormat("demasiadas claves autorizadas de compañía".into()))?;
+    write_gamma(count, record)?;
+    for key in allow_list {
+        write_str(key, record)?;
+    }
+    Ok(())
+}
+
 fn signed_economy_value(value: u64, field: &str) -> Result<i64, SavError> {
     i64::try_from(value)
         .map_err(|_| SavError::BadFormat(format!("{field} de economía de compañía excede i64")))
@@ -167,6 +177,7 @@ pub(super) fn plyr_records(
         company.economy = state.economy;
         write_str("Jugador", &mut rec)?;
         write_str(company.president_name.as_deref().unwrap_or(""), &mut rec)?;
+        append_company_allow_list(&mut rec, &company.allow_list)?;
         rec.extend_from_slice(&company.manager_face.to_be_bytes());
         write_str(
             company.manager_face_style.as_deref().unwrap_or(""),
@@ -229,6 +240,7 @@ pub(super) fn plyr_records(
             }
             write_str(&company.name, &mut rec)?;
             write_str(company.president_name.as_deref().unwrap_or(""), &mut rec)?;
+            append_company_allow_list(&mut rec, &company_to_write.allow_list)?;
             rec.extend_from_slice(&company.manager_face.to_be_bytes());
             write_str(
                 company.manager_face_style.as_deref().unwrap_or(""),
@@ -277,6 +289,8 @@ pub(super) fn plyr_chunk(
     write_str("name", &mut header)?;
     header.push(0x0A | 0x10);
     write_str("president_name", &mut header)?;
+    header.push(0x1B);
+    write_str("allow_list", &mut header)?;
     header.push(6);
     write_str("face", &mut header)?;
     header.push(0x0A | 0x10);
@@ -327,6 +341,10 @@ pub(super) fn plyr_chunk(
     write_str("old_economy", &mut header)?;
     header.push(0x1B);
     write_str("liveries", &mut header)?;
+    header.push(0);
+
+    header.push(0x1A);
+    write_str("key", &mut header)?;
     header.push(0);
 
     header.push(6);

@@ -320,6 +320,31 @@ fn openttd_resaved_preserves_requested_company_yearly_expenses() {
     assert_eq!(expenses[38], 19_000);
 }
 
+/// Contrato opcional para la struct-list `PLYR.allow_list`. Las claves se
+/// conservan como strings opacos: acredita interoperabilidad SAV, no que el
+/// runtime propio ya autorice clientes de red.
+#[test]
+fn openttd_resaved_preserves_requested_company_allow_list() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_COMPANY_ALLOW_LIST").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PLYR");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).expect("import openttdrs");
+    let company = game
+        .companies
+        .first()
+        .expect("PLYR de compañía activa tras re-guardado OpenTTD");
+    assert_eq!(
+        company.allow_list,
+        [
+            "ed25519:fixture-public-key-alpha",
+            "ed25519:fixture-public-key-bravo"
+        ]
+    );
+}
+
 /// Contrato opcional para el límite de préstamo individual. OpenTTD representa
 /// el default con `INT64_MIN`, pero una compañía marcada por deity conserva un
 /// valor concreto incluso si cambia el límite global por inflación.

@@ -1234,6 +1234,7 @@ impl GameState {
                 if let Some(name) = company.president_name {
                     target.president_name = Some(name);
                 }
+                target.allow_list = company.allow_list;
                 if let Some(face) = company.manager_face {
                     target.manager_face = face;
                 }

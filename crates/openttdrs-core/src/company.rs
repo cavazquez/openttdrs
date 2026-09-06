@@ -193,6 +193,14 @@ pub struct Company {
     /// personalizado en `OpenTTD`.
     #[serde(default)]
     pub president_name: Option<String>,
+    /// Claves públicas autorizadas a controlar esta compañía
+    /// (`PLYR.allow_list[].key`).
+    ///
+    /// El core conserva la lista para que un `.sav` no pierda los permisos de
+    /// red de `OpenTTD`. La autenticación y la autorización multijugador siguen
+    /// fuera de este runtime.
+    #[serde(default)]
+    pub allow_list: Vec<String>,
     /// Bitfield opaco del retrato de manager (`PLYR.face`). El core no lo
     /// interpreta, pero debe conservarlo para que `OpenTTD` mantenga el rostro.
     #[serde(default)]
@@ -369,6 +377,7 @@ impl Company {
             id: CompanyId::PLAYER,
             name: "Jugador".to_string(),
             president_name: None,
+            allow_list: Vec::new(),
             manager_face: 0,
             manager_face_style: None,
             colour,
@@ -413,6 +422,7 @@ impl Company {
             id: CompanyId(1),
             name: RIVAL_NAME_TRANSCARGO.to_string(),
             president_name: None,
+            allow_list: Vec::new(),
             manager_face: 0,
             manager_face_style: None,
             colour,
@@ -457,6 +467,7 @@ impl Company {
             id: CompanyId(2),
             name: RIVAL_NAME_ROADHAUL.to_string(),
             president_name: None,
+            allow_list: Vec::new(),
             manager_face: 0,
             manager_face_style: None,
             colour,

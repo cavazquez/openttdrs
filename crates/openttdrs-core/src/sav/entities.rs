@@ -1479,6 +1479,12 @@ pub struct SavCompany {
     pub name: Option<String>,
     /// Nombre personalizado del presidente (`PLYR.president_name`).
     pub president_name: Option<String>,
+    /// Claves públicas autorizadas de `PLYR.allow_list[].key`.
+    ///
+    /// La lista aparece como struct-list desde `SLV_COMPANY_ALLOW_LIST_V2`.
+    /// Se retiene para interoperabilidad; el core no ejecuta la autorización
+    /// de red asociada.
+    pub allow_list: Vec<String>,
     /// Bitfield del retrato del presidente (`PLYR.face`).
     pub manager_face: Option<u32>,
     /// Etiqueta del estilo de retrato (`PLYR.face_style`, SLV 355).
@@ -1677,6 +1683,17 @@ fn company_yearly_expenses_from_record(record: &SlRecord) -> Option<Vec<i64>> {
     )
 }
 
+fn company_allow_list_from_record(record: &SlRecord) -> Vec<String> {
+    let Some(SlValue::Structs(entries)) = record_get(record, "allow_list") else {
+        return Vec::new();
+    };
+    entries
+        .iter()
+        .filter_map(|entry| record_get(entry, "key").and_then(SlValue::as_str))
+        .map(str::to_owned)
+        .collect()
+}
+
 /// Empresas presentes en `PLYR`, conservando dinero y color por `CompanyID`.
 #[must_use]
 #[allow(clippy::too_many_lines)] // Descodifica todos los campos PLYR modelados en un único record.
@@ -1698,6 +1715,7 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let president_name = record_get(&record, "president_name")
                 .and_then(SlValue::as_str)
                 .map(str::to_owned);
+            let allow_list = company_allow_list_from_record(&record);
             let manager_face = record_get(&record, "face")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u32::try_from(value).ok());
@@ -1794,6 +1812,7 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 colour,
                 name,
                 president_name,
+                allow_list,
                 manager_face,
                 manager_face_style,
                 money_fraction,

@@ -2154,7 +2154,7 @@ payload (zlib si OTTZ; raw si OTTN)
 6. `ORDL` — `CH_TABLE` con struct `orders` (estación/waypoint/depósito/condicional); una lista por vehículo con órdenes
 7. `VEHS` — `CH_SPARSE_TABLE` de tren, bus/camión, barco y aeronaves (ala fija o helicóptero con sombra y rotor) + ref a ORDL; se conservan los campos FTA básicos
 8. `DATE` — `CH_TABLE` `date` (i32) + `tick_counter` (u64)
-9. `PLYR` — `CH_TABLE` `name`/`president_name`/`face_style` (string) + `face` (u32) + `money`/`current_loan`/`max_loan` (i64) + `colour`/`months_of_bankruptcy` (u8) + `is_ai` (u8) + `settings.*` (autorrenovación y servicio por tipo) + las 23 entradas `liveries` (`in_use`/`colour1`/`colour2`). `max_loan=INT64_MIN` conserva el centinela nativo de límite global; otro valor es un override individual. El writer usa SLV355 para conservar la etiqueta de estilo junto al bitfield de rostro.
+9. `PLYR` — `CH_TABLE` `name`/`president_name`/`face_style` (string) + struct-list `allow_list[].key` + `face` (u32) + `money`/`current_loan`/`max_loan` (i64) + `colour`/`months_of_bankruptcy` (u8) + `is_ai` (u8) + `settings.*` (autorrenovación y servicio por tipo) + las 23 entradas `liveries` (`in_use`/`colour1`/`colour2`). `max_loan=INT64_MIN` conserva el centinela nativo de límite global; otro valor es un override individual. El writer usa SLV358 (posterior a SLV355) para conservar la etiqueta de estilo junto al bitfield de rostro.
 10. Terminador `00 00 00 00`
 
 #### Mapeo `Tile` → planos
@@ -2178,7 +2178,7 @@ avión de ala fija.
 
 Preserva `CAPY` al importar/exportar y crea/acumula el pago por cabeza durante
 descargas graduales (conversión lógica↔`REF_VEHICLE` al guardar); `PLYR` conserva dinero/préstamo/límite individual (incluido el centinela de límite global)/meses de bancarrota/color/nombre/indicador AI, el subconjunto ejecutado de
-`settings.*`, presidente, bitfield de rostro, `face_style` e historial trimestral (`cur_economy` y hasta 24 `old_economy`, incluido el desglose de carga) por compañía. Aún faltan flags completos, runtime completo de specs/callbacks de objetos y
+`settings.*`, presidente, `allow_list[].key`, bitfield de rostro, `face_style` e historial trimestral (`cur_economy` y hasta 24 `old_economy`, incluido el desglose de carga) por compañía. La lista preserva claves de acceso, pero no implementa todavía autenticación/red. Aún faltan flags completos, runtime completo de specs/callbacks de objetos y
 `GSET`/`ENGN`/`SRND`. `NGRF` ya se reconstruye desde la configuración activa;
 `GSET`/`ENGN`/`SRND` se conservan como passthrough al reexportar. `OBJS` se
 modela en filas base y conserva su cuerpo original hasta una mutación de objeto;

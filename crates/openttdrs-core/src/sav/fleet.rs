@@ -236,6 +236,7 @@ mod tests {
             colour: 0,
             name: None,
             president_name: None,
+            allow_list: Vec::new(),
             manager_face: None,
             manager_face_style: None,
             money_fraction: None,

@@ -587,6 +587,7 @@ pub use newgrf_text::{
     GRF_STRING_GENERIC_BASE, NEWGRF_LANGUAGE_ENGLISH, NEWGRF_LANGUAGE_SPANISH,
     NEWGRF_LANGUAGE_UNSPECIFIED, NewGrfString, NewGrfStringCatalog,
     collect_action4_generic_strings_from_grf, collect_action13_translations_from_grf,
+    decode_newgrf_text,
 };
 pub use newgrf_type_tables::{
     GrfTypeTranslationTables, TypeLabel, cargo_from_local_id_with_catalog,

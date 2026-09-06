@@ -698,6 +698,11 @@ no están cerrados.
   expone `NewGrfCallbackDenied`, por lo que localización, expansión de
   controles y serialización del mensaje siguen pendientes. Evidencia:
   [newgrf-vehicle-start-stop-431.md](newgrf-vehicle-start-stop-431.md).
+- Action4/Action13 decodifica controles NFO básicos antes de indexar el
+  catálogo (`0x01`, saltos, referencias `0x81`, glifos y controles
+  extendidos); parámetros, choice-lists, plural/gender/case y el text stack
+  activo quedan como marcadores visibles y siguen parciales. Evidencia:
+  [newgrf-text-control-codes-432.md](newgrf-text-control-codes-432.md).
 
 Actualización #329-CARGO-TRAIN-WEIGHT-063 (2026-09-04, commit `b32b87f4`):
 `ConsistChanged` suma `CargoSpec::weight` por unidad cargada y actualiza

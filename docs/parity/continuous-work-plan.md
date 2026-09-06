@@ -2167,3 +2167,10 @@ OpenTTD: `0..0x3FF` apunta a `0xD000 + resultado`, `0x40F` recupera
 especial `0xFF`. La API booleana de comandos sigue compatible; localización,
 controles de texto y serialización del error permanecen explícitamente como
 sucesores.
+
+Actualización #329-NEWGRF-TEXT-CONTROLS-432 (2026-09-06, issue [#432](https://github.com/cavazquez/openttdrs/issues/432)):
+Action4/Action13 pasan por `decode_newgrf_text`: espacios codificados, saltos,
+fuentes, referencias inline, controles extendidos y glifos frecuentes dejan de
+aparecer como bytes crudos. Parámetros dinámicos, choice-lists y
+gender/case/plural se representan con marcadores `⟦...⟧` hasta disponer del
+text stack y los mappings de idioma completos.

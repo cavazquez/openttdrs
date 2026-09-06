@@ -1803,6 +1803,15 @@ legacy, hidrata el bitset de `Station` y vuelve a emitir el byte al escribir
 ausentes conservan cero. `last_vehicle_type`, `0xF2`/`0xF3` y los scopes
 restantes continúan pendientes en #329.
 
+Actualización #329-STATION-LAST-VEHICLE-SAV-398 (2026-09-06, issue [#398](https://github.com/cavazquez/openttdrs/issues/398)):
+`STNN.normal.last_vehicle_type` ya se lee en filas modernas y legacy, se
+hidrata en `Station.last_vehicle_type` y se vuelve a emitir al guardar
+`STNN`. `VEH_INVALID`, train, road, ship y aircraft conservan sus códigos
+nativos; bus, camión y tranvía comparten `VEH_ROAD` en el formato OpenTTD y se
+normalizan al tipo road compatible del modelo. Las regresiones cubren parser,
+hydration, writer→parser y la tabla de códigos. `0xF2`/`0xF3` y scopes
+restantes continúan pendientes en #329.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

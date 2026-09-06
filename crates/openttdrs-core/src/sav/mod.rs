@@ -1397,6 +1397,17 @@ impl GameState {
             station.name = entities::resolve_sav_station_name(st, &state.towns);
             station.newgrf_persistent_storage_id = st.airport_persistent_storage_id;
             station.had_vehicle_of_type = u16::from(st.had_vehicle_of_type);
+            // `STNN` guarda `VehicleType`, no el subtipo bus/camión/tranvía.
+            // El modelo propio sólo necesita distinguir barco para el rating;
+            // representar `VEH_ROAD` como bus conserva ese comportamiento y
+            // evita inventar una clase que el save nativo no puede expresar.
+            station.last_vehicle_type = match st.last_vehicle_type {
+                0 => Some(VehicleKind::Train),
+                1 => Some(VehicleKind::Bus),
+                2 => Some(VehicleKind::Ship),
+                3 => Some(VehicleKind::Aircraft),
+                _ => None,
+            };
             // Una misma estación puede combinar tren, bus y aeropuerto. No
             // deducir el aeropuerto del `StopKind`: éste sólo conserva una
             // facilidad principal para la simulación simplificada.
@@ -2539,6 +2550,7 @@ mod tests {
             airport_rotation: 0,
             airport_blocks: 0,
             had_vehicle_of_type: 0,
+            last_vehicle_type: 0xFF,
             airport_persistent_storage_id: None,
             cargo: Vec::new(),
         });
@@ -2587,6 +2599,7 @@ mod tests {
             airport_rotation: 0,
             airport_blocks: 0,
             had_vehicle_of_type: 0,
+            last_vehicle_type: 0xFF,
             airport_persistent_storage_id: None,
             cargo: Vec::new(),
         });
@@ -2650,6 +2663,7 @@ mod tests {
             airport_rotation: 0,
             airport_blocks: 0,
             had_vehicle_of_type: 0x0E,
+            last_vehicle_type: 2,
             airport_persistent_storage_id: None,
             cargo: Vec::new(),
         });
@@ -2676,6 +2690,7 @@ mod tests {
 
         let state = GameState::from_sav_game(sav);
         assert_eq!(state.stations[0].had_vehicle_of_type, 0x0E);
+        assert_eq!(state.stations[0].last_vehicle_type, Some(VehicleKind::Ship));
         let tile_state = state.stations[0]
             .road_stop_tile_state(tile_pos)
             .expect("estado custom por tesela");
@@ -2707,6 +2722,7 @@ mod tests {
                 airport_rotation: 0,
                 airport_blocks: 0,
                 had_vehicle_of_type: 0,
+                last_vehicle_type: 0xFF,
                 airport_persistent_storage_id: None,
                 cargo: vec![entities::SavStationCargo {
                     cargo_slot: 1,
@@ -2729,6 +2745,7 @@ mod tests {
                 airport_rotation: 0,
                 airport_blocks: 0,
                 had_vehicle_of_type: 0,
+                last_vehicle_type: 0xFF,
                 airport_persistent_storage_id: None,
                 cargo: Vec::new(),
             },
@@ -2805,6 +2822,7 @@ mod tests {
             airport_rotation: 0,
             airport_blocks: 0,
             had_vehicle_of_type: 0,
+            last_vehicle_type: 0xFF,
             airport_persistent_storage_id: None,
             cargo: vec![
                 entities::SavStationCargo {
@@ -2985,6 +3003,7 @@ mod tests {
                     airport_rotation: 0,
                     airport_blocks: 0,
                     had_vehicle_of_type: 0,
+                    last_vehicle_type: 0xFF,
                     airport_persistent_storage_id: None,
                     cargo: Vec::new(),
                 },
@@ -3003,6 +3022,7 @@ mod tests {
                     airport_rotation: 6,
                     airport_blocks: 0,
                     had_vehicle_of_type: 0,
+                    last_vehicle_type: 0xFF,
                     airport_persistent_storage_id: None,
                     cargo: Vec::new(),
                 },

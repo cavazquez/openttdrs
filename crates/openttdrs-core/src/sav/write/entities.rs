@@ -12,6 +12,7 @@ use crate::industry::{Industry, IndustryKind, IndustrySpec};
 use crate::map::{Map, TileCoord, coord_to_linear_index};
 use crate::station::{RoadStopTileState, Station, StopKind};
 use crate::town::Town;
+use crate::vehicle::VehicleKind;
 use std::collections::{BTreeMap, HashMap};
 
 /// Bits `FACIL_*` al escribir `STNN` (alineados con el import).
@@ -33,6 +34,10 @@ const STR_SV_STNAME: u16 = 0x6006;
 
 /// `VEH_INVALID`.
 const VEH_INVALID: u8 = 0xFF;
+const VEH_TRAIN: u8 = 0;
+const VEH_ROAD: u8 = 1;
+const VEH_SHIP: u8 = 2;
+const VEH_AIRCRAFT: u8 = 3;
 
 /// Identidad nativa `(GRFID, localidx)` de una spec de road stop.
 type RoadStopSpecIdentity = (u32, u16);
@@ -775,7 +780,7 @@ fn write_stnn_normal(
     buf.push(0); // indtype
     buf.push(0); // time_since_load
     buf.push(0); // time_since_unload
-    buf.push(VEH_INVALID); // last_vehicle_type
+    buf.push(last_vehicle_type_byte(st.last_vehicle_type));
     buf.push(u8::try_from(st.had_vehicle_of_type & u16::from(u8::MAX)).unwrap_or(u8::MAX)); // had_vehicle_of_type
     write_gamma(0, buf)?; // loading_vehicles
     buf.extend_from_slice(&0u64.to_be_bytes()); // always_accepted
@@ -793,6 +798,19 @@ fn write_stnn_normal(
         write_station_goods_entry(buf, st, cargo, saved)?;
     }
     Ok(())
+}
+
+/// Convierte el tipo de vehículo del modelo al `VehicleType` de `OpenTTD`.
+/// El save sólo distingue `VEH_ROAD`; bus, camión y tranvía comparten ese
+/// código nativo.
+fn last_vehicle_type_byte(kind: Option<VehicleKind>) -> u8 {
+    match kind {
+        None => VEH_INVALID,
+        Some(VehicleKind::Train) => VEH_TRAIN,
+        Some(VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram) => VEH_ROAD,
+        Some(VehicleKind::Ship) => VEH_SHIP,
+        Some(VehicleKind::Aircraft) => VEH_AIRCRAFT,
+    }
 }
 
 /// Convierte la huella materializada de una estación en los campos compactos
@@ -2075,6 +2093,7 @@ mod tests {
         let mut state = GameState::new(64, 64);
         let mut rail = Station::new_with_kind(TileCoord::new(28, 39), StopKind::RailStation);
         rail.name = Some("Central".into());
+        rail.last_vehicle_type = Some(VehicleKind::Aircraft);
         rail.had_vehicle_of_type = 0x2A;
         state.stations = vec![rail];
         let recs = stnn_records(&state, 64).unwrap();
@@ -2089,7 +2108,22 @@ mod tests {
         assert_eq!(chunk[4], CH_TABLE);
         let chunks = crate::sav::chunks::parse_chunks(&chunk).expect("parse STNN");
         let decoded = crate::sav::entities::stations_from_chunks(&chunks, 64, 352);
+        assert_eq!(decoded[0].last_vehicle_type, VEH_AIRCRAFT);
         assert_eq!(decoded[0].had_vehicle_of_type, 0x2A);
+    }
+
+    #[test]
+    fn last_vehicle_type_wire_codes_match_native_vehicle_type() {
+        assert_eq!(last_vehicle_type_byte(None), VEH_INVALID);
+        assert_eq!(last_vehicle_type_byte(Some(VehicleKind::Train)), VEH_TRAIN);
+        assert_eq!(last_vehicle_type_byte(Some(VehicleKind::Bus)), VEH_ROAD);
+        assert_eq!(last_vehicle_type_byte(Some(VehicleKind::Truck)), VEH_ROAD);
+        assert_eq!(last_vehicle_type_byte(Some(VehicleKind::Tram)), VEH_ROAD);
+        assert_eq!(last_vehicle_type_byte(Some(VehicleKind::Ship)), VEH_SHIP);
+        assert_eq!(
+            last_vehicle_type_byte(Some(VehicleKind::Aircraft)),
+            VEH_AIRCRAFT
+        );
     }
 
     #[test]

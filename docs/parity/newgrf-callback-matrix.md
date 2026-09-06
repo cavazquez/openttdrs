@@ -957,3 +957,12 @@ emitir el byte al escribir `STNN`; los campos ausentes conservan cero. La
 regresión cubre parser y writer con bitsets no nulos sin ampliar el contrato
 del índice de órdenes. `last_vehicle_type`, `0xF2`/`0xF3` y los scopes restantes
 continúan pendientes en #329.
+
+### #329-STATION-LAST-VEHICLE-SAV-398 — Round-trip SAV de `last_vehicle_type`
+
+Actualizado: 2026-09-06. El puente SAV lee `STNN.normal.last_vehicle_type`
+en filas modernas y legacy, hidrata `Station.last_vehicle_type` y vuelve a
+emitir el código nativo (`VEH_INVALID`, train, road, ship o aircraft) al
+escribir `STNN`. Bus, camión y tranvía comparten `VEH_ROAD` en el formato
+nativo y se normalizan al tipo road compatible del modelo. Los estados
+`0xF2`/`0xF3` de `RoadStop` y los scopes restantes continúan pendientes.

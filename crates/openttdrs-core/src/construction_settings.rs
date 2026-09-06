@@ -49,6 +49,13 @@ pub struct ConstructionSettings {
     /// `JoinStations` lo consulta antes de fusionar dos estaciones existentes.
     #[serde(default = "default_distant_join_stations")]
     pub distant_join_stations: bool,
+    /// Aplica el límite de velocidad declarado por cada vagón
+    /// (`vehicle.wagon_speed_limits`).
+    ///
+    /// `OpenTTD` lo habilita por defecto. Cuando se desactiva, la velocidad
+    /// máxima del consist no queda limitada por unidades que sean vagones.
+    #[serde(default = "default_wagon_speed_limits")]
+    pub wagon_speed_limits: bool,
 }
 
 const fn default_freeform_edges() -> bool {
@@ -56,6 +63,10 @@ const fn default_freeform_edges() -> bool {
 }
 
 const fn default_distant_join_stations() -> bool {
+    true
+}
+
+const fn default_wagon_speed_limits() -> bool {
     true
 }
 
@@ -67,6 +78,7 @@ impl Default for ConstructionSettings {
             road_vehicle_driving_side: RoadVehicleDrivingSide::default(),
             freeform_edges: default_freeform_edges(),
             distant_join_stations: default_distant_join_stations(),
+            wagon_speed_limits: default_wagon_speed_limits(),
         }
     }
 }
@@ -137,6 +149,11 @@ mod tests {
     #[test]
     fn distant_join_stations_follows_openttd_default() {
         assert!(ConstructionSettings::default().distant_join_stations);
+    }
+
+    #[test]
+    fn wagon_speed_limits_follows_openttd_default() {
+        assert!(ConstructionSettings::default().wagon_speed_limits);
     }
 
     #[test]

@@ -2190,7 +2190,7 @@ RoadStops (`roadstopspeclist`/`roadstoptiledata`) también se reconstruyen desde
 el estado por tesela y actualizan `MAP8`; no se confunde esa conservación con
 ejecutar sus callbacks. `PATS`/`OPTS` ya conserva el
 subconjunto ejecutado por el core (construcción, pathfinding, `selectgoods`, unión
-distante de estaciones, perfil `linkgraph` por clase, averías, subsidios, desastres,
+distante de estaciones, `vehicle.wagon_speed_limits`, perfil `linkgraph` por clase, averías, subsidios, desastres,
 autoridad, inflación/recesiones y unidades de tiempo). El perfil `linkgraph` mantiene
 sus segundos y cuatro selectores, pero el presupuesto de job sigue síncrono; la
 evidencia está en [`sav-linkgraph-settings-383.md`](parity/sav-linkgraph-settings-383.md).
@@ -2258,7 +2258,7 @@ Reglas:
 
 ---
 
-*Última actualización: 2026-09-05 — el resumen remite a la matriz SAV, al
+*Última actualización: 2026-09-06 — el resumen remite a la matriz SAV, al
 perfil PATS `linkgraph` por clase y a la unión distante; el contrato de wire y
 sus límites siguen centralizados allí.*
 

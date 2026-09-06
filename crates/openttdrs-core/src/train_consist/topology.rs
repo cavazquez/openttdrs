@@ -110,6 +110,33 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
     cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
     freight_trains: u8,
 ) {
+    consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
+        vehicles,
+        head_id,
+        map,
+        engine_catalog,
+        cargo_catalog,
+        freight_trains,
+        true,
+    );
+}
+
+/// Como [`consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier`],
+/// controlando si los vagones limitan la velocidad máxima del consist.
+///
+/// El wrapper legacy mantiene `vehicle.wagon_speed_limits = true`; los
+/// caminos que disponen de [`GameState`](crate::GameState) deben pasar el
+/// valor persistido en `state.construction.wagon_speed_limits`.
+#[allow(clippy::too_many_lines)]
+pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
+    vehicles: &mut [Vehicle],
+    head_id: u32,
+    map: Option<&crate::map::Map>,
+    engine_catalog: &[EngineDef],
+    cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+    freight_trains: u8,
+    wagon_speed_limits: bool,
+) {
     let ids = consist_unit_ids(vehicles, head_id);
     if ids.is_empty() {
         return;
@@ -203,8 +230,11 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
             tilt = tilt && eng.rail_tilts;
             curve_mod = curve_mod.min(eng.curve_speed_mod);
         }
-        // Min speed por unidad (`wagon_speed_limits` activo por defecto).
-        if speed > 0 {
+        // OpenTTD ignora el límite de velocidad de los vagones cuando
+        // `vehicle.wagon_speed_limits` está desactivado. El override de
+        // vagón de NewGRF (`UsesWagonOverride`) aún no está modelado aquí;
+        // `eng.is_wagon()` conserva la semántica vanilla para este ajuste.
+        if speed > 0 && (wagon_speed_limits || !eng.is_wagon()) {
             max_speed = max_speed.min(speed);
         }
         // Compatible railtypes: solo unidades con potencia propia (no powered wagons).

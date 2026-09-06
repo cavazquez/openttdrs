@@ -1,6 +1,6 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
-Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-05**,
+Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-09-06**,
 `main` con base funcional publicada `25d026a7`, posterior al writeback canónico
 de `CITY`,
 CB17 de casas, CB157 de objetos, CB25/26/27 de animación y re-randomización
@@ -111,6 +111,14 @@ adyacente sin relajar owner, tipo o eje rail. El dedicated OpenTTD 15.3
 re-guardó el valor no-default `false`; la evidencia y el límite de comandos
 de estación está en
 [`sav-distant-join-stations-384.md`](sav-distant-join-stations-384.md).
+
+Actualización #385 (2026-09-06): `PATS.vehicle.wagon_speed_limits` se importa
+y emite como `SLE_BOOL`, con default nativo `true`. La reconstrucción de
+consistes aplica el mínimo de velocidad de cada unidad sólo cuando el ajuste
+está activo; los caminos de estado pasan la preferencia al recalcular los
+cachés después de cargar, comprar, acoplar, autoreemplazar o mover. El
+override de vagón de NewGRF (`UsesWagonOverride`) sigue siendo un límite de
+runtime separado. Ver [evidencia #385](sav-wagon-speed-limits-385.md).
 
 Esta actualización prevalece sobre la limitación histórica de la fila `Mundo
 base` que agrupaba todas las listas: `CITY.psa_list` y el struct-list raíz

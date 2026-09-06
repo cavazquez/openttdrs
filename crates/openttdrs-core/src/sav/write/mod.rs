@@ -714,6 +714,7 @@ mod tests {
         state.construction.train_signal_side = crate::TrainSignalSide::Right;
         state.construction.freeform_edges = false;
         state.construction.distant_join_stations = false;
+        state.construction.wagon_speed_limits = false;
         state.pathfinding.wait_for_pbs_path = 7;
         state.pathfinding.path_backoff_interval = 8;
         state.pathfinding.reverse_at_signals = false;
@@ -770,6 +771,7 @@ mod tests {
         let pats = crate::sav::chunks::find_chunk(&chunks, "PATS").expect("PATS");
         assert_table_field_type(&pats.body, 1, "order.selectgoods");
         assert_table_field_type(&pats.body, 1, "station.distant_join_stations");
+        assert_table_field_type(&pats.body, 1, "vehicle.wagon_speed_limits");
         assert_table_field_type(&pats.body, 4, "linkgraph.recalc_interval");
         assert_table_field_type(&pats.body, 4, "linkgraph.recalc_time");
         assert_table_field_type(&pats.body, 2, "linkgraph.distribution_pax");
@@ -875,6 +877,20 @@ mod tests {
             save_to_bytes_with(&imported, SavContainer::Ottn).expect("save changed setting");
         let reimported = sav::load(&changed).expect("import changed setting");
         assert!(!reimported.construction.distant_join_stations);
+    }
+
+    #[test]
+    fn imported_pats_wagon_speed_limits_mutation_is_reexported() {
+        let original =
+            save_to_bytes_with(&tiny_state(), SavContainer::Ottn).expect("save original");
+        let mut imported = GameState::from_sav_game(sav::load(&original).expect("import original"));
+        assert!(imported.construction.wagon_speed_limits);
+
+        imported.construction.wagon_speed_limits = false;
+        let changed =
+            save_to_bytes_with(&imported, SavContainer::Ottn).expect("save changed setting");
+        let reimported = sav::load(&changed).expect("import changed setting");
+        assert!(!reimported.construction.wagon_speed_limits);
     }
 
     #[test]
@@ -2769,6 +2785,9 @@ mod tests {
         // El valor no-default controla si una pieza nueva puede reutilizar una
         // estación no adyacente. El smoke PATS acredita el bool nativo.
         state.construction.distant_join_stations = false;
+        // El smoke PATS también acredita que OpenTTD conserva el límite de
+        // velocidad de vagones cuando se solicita explícitamente desactivarlo.
+        state.construction.wagon_speed_limits = false;
         state.cargo_dist.per_cargo = Some(crate::flow_stat::CargoDistPerCargoSettings {
             recalc_interval_seconds: 6,
             recalc_time_seconds: 31,
@@ -2873,6 +2892,7 @@ mod tests {
         assert_eq!(sav_game.industries.len(), 1);
         assert!(!sav_game.selectgoods);
         assert!(!sav_game.construction.distant_join_stations);
+        assert!(!sav_game.construction.wagon_speed_limits);
         assert_eq!(
             sav_game
                 .cargo_dist

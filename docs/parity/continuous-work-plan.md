@@ -23,7 +23,7 @@ El bloque termina sólo con `git commit` y `git push`. La captura raster se usa
 cuando hay compositor WGPU; si el entorno no lo permite, se registra el bloqueo
 y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
-## Handoff de issues — 2026-09-05
+## Handoff de issues — 2026-09-06
 
 Última etapa: RMAP-143 / #346 amplía el gate por fases a RNG y secuencia
 ID/posición de pueblos, además de bytes de teselas; las 30 fronteras de la
@@ -876,6 +876,14 @@ es síncrono. Ver [#383](sav-linkgraph-settings-383.md). El bool
 propio de unión remota, con default `true` y smoke de OpenTTD 15.3; no cubre
 todos los comandos de estación. Ver [#384](sav-distant-join-stations-384.md).
 #328 permanece abierto por los demás pools, schemas y runtime SAV.
+
+Actualización #385 (2026-09-06): `PATS.vehicle.wagon_speed_limits` se
+hidrata en `ConstructionSettings`, se reemite como `SLE_BOOL` y gobierna la
+velocidad máxima de los consistes en todos los call sites con `GameState`.
+OpenTTD sólo aplica el mínimo de una unidad wagon cuando el setting está
+activo; el test del core cubre ambas ramas y el smoke dedicado verifica que
+OpenTTD re-guarda el valor `false`. `UsesWagonOverride` sigue fuera de este
+issue; #328 continúa abierto por ese runtime NewGRF y por las demás brechas.
 
 Actualización #329-INDUSTRY-CB28-021 (2026-09-02): CB28 mantiene la semántica
 exacta de OpenTTD (sin invertir el bit 10), y el call site de construcción

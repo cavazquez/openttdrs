@@ -538,13 +538,14 @@ fn replace_chain(
         crate::command::vehicles::spawn_newgrf_articulated_parts(state, head_id, new_engine);
     }
     if is_train {
-        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
+        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
             &mut state.vehicles,
             head_id,
             Some(&state.map),
             &state.engine_catalog,
             &state.cargo_spec_catalog,
             state.freight_trains,
+            state.construction.wagon_speed_limits,
         );
     }
 
@@ -700,13 +701,14 @@ fn trim_consist_to_length(state: &mut GameState, head_id: u32, max_length: u16) 
         };
         let _ = detach_unit(&mut state.vehicles, tail);
         state.vehicles.retain(|v| v.id != tail);
-        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier(
+        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
             &mut state.vehicles,
             head_id,
             Some(&state.map),
             &state.engine_catalog,
             &state.cargo_spec_catalog,
             state.freight_trains,
+            state.construction.wagon_speed_limits,
         );
     }
 }

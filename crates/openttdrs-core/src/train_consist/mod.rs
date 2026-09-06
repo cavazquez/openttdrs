@@ -30,9 +30,10 @@ pub use pose::{TrainUnitPose, consist_unit_poses};
 pub use topology::{
     consist_changed, consist_changed_with_map, consist_changed_with_map_and_catalog,
     consist_changed_with_map_and_catalog_and_cargo,
-    consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier, consist_head_id,
-    consist_unit_ids, consist_unit_ids_indexed, engine_is_train_engine, engine_is_wagon,
-    same_consist,
+    consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier,
+    consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits,
+    consist_head_id, consist_unit_ids, consist_unit_ids_indexed, engine_is_train_engine,
+    engine_is_wagon, same_consist,
 };
 
 /// Longitud de una unidad de tren en fracciones de tesela (`OpenTTD` `VEHICLE_LENGTH`).
@@ -363,6 +364,50 @@ mod tests {
             3,
         );
         assert_eq!(vs[0].cached_weight_t, engine_weight.saturating_add(24));
+    }
+
+    #[test]
+    fn wagon_speed_limits_setting_controls_consist_max_speed() {
+        let mut vs = vec![train(1), train(2)];
+        vs[0].engine_id = Some(10);
+        vs[1].engine_id = Some(11);
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+
+        let mut head = crate::engine::engine_for_vehicle(VehicleKind::Train, 0).clone();
+        head.id = 10;
+        head.max_speed = 160;
+        head.capacity = 0;
+        head.cargo = None;
+        let Some(mut wagon) =
+            crate::engine::engine_by_id(crate::engine::ENGINE_WAGON_PASSENGER).cloned()
+        else {
+            panic!("vanilla passenger wagon");
+        };
+        wagon.id = 11;
+        wagon.max_speed = 40;
+        let catalog = vec![head, wagon];
+
+        consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
+            &mut vs,
+            1,
+            None,
+            &catalog,
+            &[],
+            1,
+            true,
+        );
+        assert_eq!(vs[0].cached_max_speed, 40);
+
+        consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
+            &mut vs,
+            1,
+            None,
+            &catalog,
+            &[],
+            1,
+            false,
+        );
+        assert_eq!(vs[0].cached_max_speed, 160);
     }
 
     #[test]

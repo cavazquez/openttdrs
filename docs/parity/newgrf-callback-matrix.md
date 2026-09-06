@@ -81,7 +81,7 @@ legacy sin mundo mantiene su fallback explícito.
 | Feature | CBID (ejemplos) | Estado | Notas |
 |---|---|---|---|
 | Stations (`04`) | `0x24` `CBID_STATION_BUILD_TILE_LAYOUT` | **soportado** | Call site: construcción `apply_station_build_tile_layout_callback` |
-| Stations | `0x13` `CBID_STATION_AVAILABILITY` | **parcial runtime** | Máscara Action0 `0x0B`, Action3→Action2 y call site query+execute de `PlaceRailStation` / `PlaceRailStationArea`; el scope de construcción sigue siendo nulo (sin `Station`/tesela), con booleano de 8 bits. Para una estación existente, `apply_station_availability_callback_at` comparte el contexto map-aware del renderer (`0x40`–`0x4A`, `0x5F`, terreno, carga y `7C`); la API legacy sin mapa expone los sentinels nativos y conserva writeback. Faltan vecinos `0x66`/`0x68`/`0x6A`/`0x6B`, strings, sonidos y scopes completos de `BaseStation`/aeropuerto. |
+| Stations | `0x13` `CBID_STATION_AVAILABILITY` | **parcial runtime** | Máscara Action0 `0x0B`, Action3→Action2 y call site query+execute de `PlaceRailStation` / `PlaceRailStationArea`; la ruta de compra ya construye el scope sin estación (`0x40`/`0x41`/`0x46`/`0x47`/`0x49=0x02110000`, `0x42=0`, `0x43=GetCompanyInfo`, `0x44=2`, badges `0x7A` y fecha `0xFA`) y usa la compañía/fecha reales del `GameState`. Para una estación existente, `apply_station_availability_callback_at` comparte el contexto map-aware del renderer (`0x40`–`0x4A`, `0x5F`, terreno, carga y `7C`); la API legacy sin mapa expone los sentinels nativos y conserva writeback. Faltan vecinos `0x66`/`0x68`/`0x6A`/`0x6B`, strings, sonidos y scopes completos de `BaseStation`/aeropuerto. |
 | Stations | `0x14` `CBID_STATION_DRAW_TILE_LAYOUT` | **parcial runtime** | Bit `DrawTileLayout` de Action0 `0x0B`; el renderer lo ejecuta por tesela antes de elegir la vista Action1/3 y conserva el eje. Los layouts `TileSeq` completos se resuelven por Action3/2→Action1, reemplazan el suelo, emiten parents `M(...)` y children relativos después de la catenaria y comparten fingerprint de registros `7D`/`0x100`; sprites base, paletas custom y layouts incompletos usan fallback vanilla atómico. Faltan scope/regs persistentes de `BaseStation`, layouts 16-bit/invalidación exacta y callbacks/sonidos de estación. |
 | Stations | Action2 var `0x7A` (badges) | **parcial runtime** | Action0 prop `0x1F` conserva la lista `ReadBadgeList` (índices WORD), la tabla local se resuelve contra `GlobalVar 0x18` y `badge_catalog`, y el contexto catalog-aware del renderer devuelve presencia (`0`/`1`) o `UINT_MAX` para una entrada no resoluble, igual que `GetBadgeVariableResult`. La API legacy sin spec/catálogo mantiene el sentinel y queda documentada como limitación de contexto; faltan los scopes completos de `BaseStation` y sonidos. |
 | Stations | `0x149` `CBID_STATION_LAND_SLOPE_CHECK` | **parcial runtime** | Bit `SlopeCheck` de Action0 `0x0B`; Action3→Action2 por tesela en query+execute de `PlaceRailStation` / `PlaceRailStationArea`, antes de mutar. `param1` conserva slope+orientación; `param2` andenes/longitud/offsets. `FAILED`/`0x400` permite en GRF ≥8 y se aplica la inversión de bit 10 para GRF <8. Faltan scope de estación/vecinos y strings GRF. |
@@ -1036,3 +1036,15 @@ y color recibido, sin inventar una compañía. Las regresiones cubren libreas
 con canales distintos, IA, compañía ausente y ambos scopes; los scopes
 completos de `BaseStation` y la resolución de textos/sonidos siguen pendientes
 en #329.
+
+### #329-STATION-AVAILABILITY-PURCHASE-404 — Scope de compra CB13
+
+Actualizado: 2026-09-06. La variante catalogue/context-aware del callback de
+disponibilidad de estación ya materializa el resolver sin `Station` ni tesela:
+sentinelas `0x02110000` de plataformas/posición, `0x42=0`, `0x43` mediante
+`GetCompanyInfo`, `0x44=2`, badges `0x7A` y fecha relativa `0xFA`. El preflight
+real de `PlaceRailStation`/`PlaceRailStationArea` aporta compañía activa, pool
+de compañías y calendario antes de mutar el mapa; la API histórica conserva un
+fallback determinista. Como no existe todavía una estación, los registros
+`7C` de este resolver son temporales y no se persisten. Vecinos, strings,
+sonidos y scopes completos de `BaseStation`/aeropuerto siguen pendientes.

@@ -8,6 +8,7 @@
 
 use crate::cargo_spec::{CargoSpecDef, cargo_type_from_label_with_catalog};
 use crate::cargodist::parity::Randomizer;
+use crate::company::CompanyId;
 use crate::engine::EngineDef;
 use crate::house_spec::{HouseSpecDef, action2_eval_ctx_for_house_tile_with_towns};
 use crate::industry::{Industry, IndustryProcessingInput, IndustryProductionAction};
@@ -43,7 +44,7 @@ use crate::road_stop_spec::RoadStopSpecDef;
 use crate::station::{Station, station_at_tile};
 use crate::station_action2::{
     action2_eval_ctx_for_station_tile_with_grf, populate_station_badge_vars_for_spec,
-    populate_station_scope_fallback_vars,
+    populate_station_purchase_scope_vars, populate_station_scope_fallback_vars,
 };
 use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
 use crate::town::Town;
@@ -2836,13 +2837,49 @@ pub fn apply_object_slope_callback_for_build(
 pub fn apply_station_availability_callback_for_build(
     def: &crate::station_class::StationSpecDef,
 ) -> bool {
+    apply_station_availability_callback_for_build_with_context(
+        def,
+        CompanyId::PLAYER,
+        0,
+        &[],
+        crate::station::STATION_BUILD_DATE_DEFAULT,
+    )
+}
+
+/// Variante de disponibilidad de compra con el contexto que conserva el
+/// comando de construcción: compañía activa, pool de compañías y fecha del
+/// calendario. Esto reproduce el scope `st == nullptr` de `OpenTTD` sin crear
+/// una estación artificial ni persistir registros de instancia.
+#[must_use]
+pub fn apply_station_availability_callback_for_build_with_context(
+    def: &crate::station_class::StationSpecDef,
+    owner: CompanyId,
+    owner_colour: u8,
+    companies: &[crate::company::Company],
+    calendar_date: u32,
+) -> bool {
     if !def.has_availability_callback() {
         return true;
     }
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return true;
     };
-    let result = runtime.resolve_callback(def.newgrf_local_id, CBID_STATION_AVAILABILITY, 0, 0);
+    let mut ctx = Action2EvalCtx::default();
+    populate_station_purchase_scope_vars(
+        &mut ctx,
+        def,
+        owner,
+        Some(companies),
+        owner_colour,
+        calendar_date,
+    );
+    let result = runtime.resolve_callback_ctx(
+        def.newgrf_local_id,
+        CBID_STATION_AVAILABILITY,
+        0,
+        0,
+        &mut ctx,
+    );
     callback_allows_8bit_boolean(result)
 }
 
@@ -6818,6 +6855,38 @@ mod tests {
         let mut st = Station::new(TileCoord::new(2, 2));
         assert!(apply_station_availability_callback(&gfx, 0, &mut st));
         assert_eq!(st.newgrf_persistent_regs.get(&5), Some(&7));
+    }
+
+    #[test]
+    fn station_availability_purchase_scope_uses_company_and_calendar_context() {
+        let mut spec = crate::station_class::vanilla_station_spec_catalog().remove(0);
+        spec.callback_mask = crate::station_class::STATION_CALLBACK_AVAILABILITY_MASK;
+        spec.newgrf_local_id = 0;
+        let mut rival = crate::company::Company::rival_transcargo(
+            crate::game_state::CompanyEconomy::default(),
+            3,
+        );
+        rival.liveries[0].colour1 = 2;
+        rival.liveries[0].colour2 = 9;
+        let companies = vec![rival];
+
+        spec.newgrf_runtime = Some(Box::new(gfx_callback_compare_u32(0x43, 0x9201_0001)));
+        assert!(apply_station_availability_callback_for_build_with_context(
+            &spec,
+            crate::company::CompanyId(1),
+            0,
+            &companies,
+            crate::station::STATION_BUILD_DATE_DEFAULT,
+        ));
+
+        spec.newgrf_runtime = Some(Box::new(gfx_callback_compare_u32(0xFA, 123)));
+        assert!(apply_station_availability_callback_for_build_with_context(
+            &spec,
+            crate::company::CompanyId(1),
+            0,
+            &companies,
+            crate::station::STATION_BUILD_DATE_DEFAULT + 123,
+        ));
     }
 
     #[test]

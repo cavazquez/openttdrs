@@ -2,7 +2,7 @@
 
 use crate::cargo::{ALL_CARGO_TYPES, CargoType};
 use crate::cargo_spec::CargoSpecDef;
-use crate::company::{Company, newgrf_company_info};
+use crate::company::{Company, CompanyId, newgrf_company_info};
 use crate::industry::Industry;
 use crate::map::{
     Map, TILE_PIXEL_HEIGHT, TileCoord, TileKind, rail_bits_touching_side, rail_traversal_bits,
@@ -248,6 +248,36 @@ pub(crate) fn populate_station_badge_vars_for_spec(
         };
         ctx.parameterized_vars.insert((0x7A, parameter), value);
     }
+}
+
+/// Materializa el scope de compra de `StationScopeResolver` cuando todavía no
+/// existe una estación ni una tesela. `OpenTTD` conserva sentinelas de layout,
+/// el estado PBS de compra, `GetCompanyInfo(_current_company)`, badges de la
+/// spec y la fecha relativa actual; el resto de variables queda no disponible
+/// de forma observable para el evaluator.
+pub(crate) fn populate_station_purchase_scope_vars(
+    ctx: &mut Action2EvalCtx,
+    spec: &StationSpecDef,
+    owner: CompanyId,
+    companies: Option<&[Company]>,
+    owner_colour: u8,
+    calendar_date: u32,
+) {
+    const NO_TILE_PLATFORM_INFO: u32 = 0x0211_0000;
+    for variable in [0x40, 0x41, 0x46, 0x47, 0x49] {
+        ctx.vars.insert(variable, NO_TILE_PLATFORM_INFO);
+    }
+    ctx.vars.insert(0x42, 0);
+    ctx.vars.insert(
+        0x43,
+        newgrf_company_info(owner, companies, owner_colour & 0x0F),
+    );
+    ctx.vars.insert(0x44, 2);
+    let relative_date = calendar_date
+        .saturating_sub(crate::station::STATION_BUILD_DATE_DEFAULT)
+        .min(u32::from(u16::MAX));
+    ctx.vars.insert(0xFA, relative_date);
+    populate_station_badge_vars_for_spec(ctx, spec);
 }
 
 struct StationNeighbourScope<'a> {
@@ -1778,6 +1808,39 @@ mod tests {
         );
 
         assert_eq!(ctx.vars.get(&0x43), Some(&0x9201_0001));
+    }
+
+    #[test]
+    fn station_purchase_scope_matches_native_sentinels_and_badges() {
+        let mut spec = crate::station_class::vanilla_station_spec_catalog().remove(0);
+        spec.associated_badges = vec![17];
+        spec.newgrf_badge_translation = vec![17];
+        let mut rival = crate::company::Company::rival_transcargo(
+            crate::game_state::CompanyEconomy::default(),
+            3,
+        );
+        rival.liveries[0].colour1 = 2;
+        rival.liveries[0].colour2 = 9;
+        let companies = vec![rival];
+        let mut ctx = Action2EvalCtx::default();
+
+        populate_station_purchase_scope_vars(
+            &mut ctx,
+            &spec,
+            crate::company::CompanyId(1),
+            Some(&companies),
+            0,
+            crate::station::STATION_BUILD_DATE_DEFAULT + 123,
+        );
+
+        for variable in [0x40, 0x41, 0x46, 0x47, 0x49] {
+            assert_eq!(ctx.vars.get(&variable), Some(&0x0211_0000));
+        }
+        assert_eq!(ctx.vars.get(&0x42), Some(&0));
+        assert_eq!(ctx.vars.get(&0x43), Some(&0x9201_0001));
+        assert_eq!(ctx.vars.get(&0x44), Some(&2));
+        assert_eq!(ctx.vars.get(&0xFA), Some(&123));
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 0)), Some(&1));
     }
 
     #[test]

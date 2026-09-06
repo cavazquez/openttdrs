@@ -278,7 +278,18 @@ pub(in crate::command) fn check_rail_station_spec_restrictions(
     if !spec.allows_platforms(platforms) || !spec.allows_length(length) {
         return Err(CommandError::StationSizeNotAllowed);
     }
-    if !crate::newgrf_callback::apply_station_availability_callback_for_build(spec) {
+    let owner_colour = state
+        .companies
+        .iter()
+        .find(|company| company.id == state.active_company)
+        .map_or(state.company_colour, |company| company.colour);
+    if !crate::newgrf_callback::apply_station_availability_callback_for_build_with_context(
+        spec,
+        state.active_company,
+        owner_colour,
+        &state.companies,
+        state.calendar.date,
+    ) {
         return Err(CommandError::NewGrfCallbackDenied);
     }
     Ok(())

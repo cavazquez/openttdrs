@@ -1868,6 +1868,16 @@ cubren compañía IA, canales de librea distintos, ausencia de pool y ambos
 scopes. Los scopes completos de `BaseStation`, strings y sonidos siguen
 pendientes en #329.
 
+Actualización #329-STATION-AVAILABILITY-PURCHASE-404 (2026-09-06, issue [#404](https://github.com/cavazquez/openttdrs/issues/404)):
+la disponibilidad de estación en construcción ya ejecuta `CBID 0x13` con el
+scope sin estación de OpenTTD: sentinelas de plataformas/posición, terreno y
+PBS de compra, `GetCompanyInfo`, badges y fecha relativa. El preflight de
+`PlaceRailStation`/`PlaceRailStationArea` pasa la compañía activa, su pool y el
+calendario, antes de modificar el mapa; la API legacy mantiene un fallback
+determinista y los registros `7C` de compra no se persisten porque aún no hay
+una entidad. Vecinos, strings, sonidos y scopes completos de `BaseStation`/
+aeropuerto siguen pendientes en #329.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

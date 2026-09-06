@@ -4,7 +4,7 @@ use super::{Map, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::newgrf_sprites::{
     CALLBACK_FAILED, CBID_OBJECT_ANIMATION_NEXT_FRAME, CBID_OBJECT_ANIMATION_SPEED,
-    CBID_OBJECT_ANIMATION_TRIGGER,
+    CBID_OBJECT_ANIMATION_TRIGGER, CBID_OBJECT_COLOUR,
 };
 use crate::object_spec::{
     NEW_OBJECT_OFFSET, ObjectSpecDef, decode_object_tile_offset, encode_object_tile_offset,
@@ -809,6 +809,48 @@ pub fn trigger_newgrf_object_animation<S: BuildHasher>(
     dirty
 }
 
+/// Resuelve CB15B al construir un objeto y devuelve el color de 8 bits.
+/// `CALLBACK_FAILED` y resultados fuera de rango quedan a cargo del caller,
+/// que conserva el color inicial como fallback nativo.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_object_colour_callback(
+    map: &Map,
+    objects: &[SavObject],
+    towns: &mut [crate::town::Town],
+    catalog: &[ObjectSpecDef],
+    climate: Climate,
+    origin: TileCoord,
+    initial_colour: u8,
+) -> u16 {
+    let Some(object) = objects.iter().find(|object| object.tile == origin) else {
+        return CALLBACK_FAILED;
+    };
+    let Some(def) = object_spec_def(catalog, object.object_type) else {
+        return CALLBACK_FAILED;
+    };
+    if !def.has_colour_callback() {
+        return CALLBACK_FAILED;
+    }
+    let Some(tile) = map.get(origin) else {
+        return CALLBACK_FAILED;
+    };
+    resolve_object_animation_callback(
+        map,
+        &tile,
+        origin,
+        origin,
+        object.object_type,
+        objects,
+        towns,
+        catalog,
+        climate,
+        CBID_OBJECT_COLOUR,
+        u32::from(initial_colour),
+        0,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn apply_object_animation_trigger_at<S: BuildHasher>(
     map: &mut Map,
@@ -1164,11 +1206,16 @@ mod tests {
                     },
                 },
                 ops: Vec::new(),
-                ranges: vec![(3, 0x158, 0x158), (4, 0x15A, 0x15A), (5, 0x159, 0x159)],
+                ranges: vec![
+                    (3, 0x158, 0x158),
+                    (4, 0x15A, 0x15A),
+                    (5, 0x159, 0x159),
+                    (6, 0x15B, 0x15B),
+                ],
                 default: 0,
             },
         );
-        for (set_id, value) in [(3, next_frame), (4, speed), (5, trigger)] {
+        for (set_id, value) in [(3, next_frame), (4, speed), (5, trigger), (6, 9)] {
             gfx.action2_var.insert(
                 set_id,
                 Action2VarEntry {
@@ -1208,7 +1255,8 @@ mod tests {
             animation_speed: 2,
             animation_triggers: 0,
             callback_mask: crate::object_spec::OBJECT_CALLBACK_ANIMATION_NEXT_FRAME_MASK
-                | crate::object_spec::OBJECT_CALLBACK_ANIMATION_SPEED_MASK,
+                | crate::object_spec::OBJECT_CALLBACK_ANIMATION_SPEED_MASK
+                | crate::object_spec::OBJECT_CALLBACK_COLOUR_MASK,
             views: Vec::new(),
             newgrf_runtime: Some(Box::new(runtime)),
             associated_badges: Vec::new(),
@@ -1388,6 +1436,22 @@ mod tests {
         assert_eq!(dirty, vec![TileCoord::new(0, 0)]);
         assert_eq!(map.get(TileCoord::new(0, 0)).expect("tile").m3hi, 2);
         assert!(active.contains(&TileCoord::new(0, 0)));
+    }
+
+    #[test]
+    fn object_colour_callback_returns_valid_eight_bit_colour() {
+        let (map, objects, catalog) = animated_object_fixture();
+        let mut towns = Vec::new();
+        let colour = resolve_object_colour_callback(
+            &map,
+            &objects,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+            TileCoord::new(0, 0),
+            3,
+        );
+        assert_eq!(colour, 9);
     }
 
     #[test]

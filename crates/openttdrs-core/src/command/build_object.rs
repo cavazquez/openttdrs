@@ -245,6 +245,30 @@ pub(crate) fn build_object(
             object_type: u16::from(object_type),
         });
     }
+    if let Some(object_index) = state
+        .objects
+        .iter()
+        .position(|object| object.tile == c && object.object_type == u16::from(object_type))
+        && state
+            .object_spec_catalog
+            .iter()
+            .find(|def| def.id == u16::from(object_type))
+            .is_some_and(ObjectSpecDef::has_colour_callback)
+    {
+        let initial_colour = state.objects[object_index].colour;
+        let callback_colour = crate::map::resolve_object_colour_callback(
+            &state.map,
+            &state.objects,
+            &mut state.towns,
+            &state.object_spec_catalog,
+            state.climate,
+            c,
+            initial_colour,
+        );
+        if callback_colour != crate::CALLBACK_FAILED && callback_colour < 0x100 {
+            state.objects[object_index].colour = callback_colour as u8;
+        }
+    }
     if let Some(def) =
         crate::object_spec::object_spec_def(&state.object_spec_catalog, u16::from(object_type))
         && def.has_animation()

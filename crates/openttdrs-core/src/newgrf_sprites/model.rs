@@ -1226,6 +1226,8 @@ pub const CBID_OBJECT_ANIMATION_NEXT_FRAME: u16 = 0x158;
 pub const CBID_OBJECT_ANIMATION_TRIGGER: u16 = 0x159;
 /// Callback objetos: elegir la velocidad (`CBID_OBJECT_ANIMATION_SPEED`).
 pub const CBID_OBJECT_ANIMATION_SPEED: u16 = 0x15A;
+/// Callback objetos: decidir el color de la instancia (`CBID_OBJECT_COLOUR`).
+pub const CBID_OBJECT_COLOUR: u16 = 0x15B;
 /// Callback teselas industria: trigger de animación (`CBID_INDTILE_ANIMATION_TRIGGER`).
 pub const CBID_INDTILE_ANIMATION_TRIGGER: u16 = 0x25;
 /// Callback teselas industria: siguiente frame (`CBID_INDTILE_ANIMATION_NEXT_FRAME`).

@@ -25,6 +25,8 @@ pub const DEFAULT_OBJECT_CLIMATE_MASK: u8 = 0x0F;
 pub const OBJECT_CALLBACK_SLOPE_CHECK_MASK: u16 = 1 << 0;
 pub const OBJECT_CALLBACK_ANIMATION_NEXT_FRAME_MASK: u16 = 1 << 1;
 pub const OBJECT_CALLBACK_ANIMATION_SPEED_MASK: u16 = 1 << 2;
+/// Bit `Colour` de la máscara de callbacks Action0 `0x15`.
+pub const OBJECT_CALLBACK_COLOUR_MASK: u16 = 1 << 3;
 
 /// Bits de `ObjectFlag` que afectan al runtime de animación.
 pub const OBJECT_FLAG_ANIMATION: u16 = 1 << 6;
@@ -157,6 +159,12 @@ impl ObjectSpecDef {
     #[must_use]
     pub const fn has_animation_speed_callback(&self) -> bool {
         self.callback_mask & OBJECT_CALLBACK_ANIMATION_SPEED_MASK != 0
+    }
+
+    /// `true` si el objeto delega el color de la instancia en CB15B.
+    #[must_use]
+    pub const fn has_colour_callback(&self) -> bool {
+        self.callback_mask & OBJECT_CALLBACK_COLOUR_MASK != 0
     }
 
     /// La secuencia Action0 continúa al llegar al último frame.

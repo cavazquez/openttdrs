@@ -2099,3 +2099,12 @@ los resultados `0xFD`/`0xFE`/`0xFF`/frame actualizan la lista y `m3hi`, y el
 fallback `CALLBACK_FAILED` no muta el estado. La regresión sintética cubre un
 trigger `Built` que fija un frame; quedan triggers de carga/economía no
 representados y callbacks colour/autoslope/fund text.
+
+Actualización #329-OBJECT-COLOUR-425 (2026-09-06, issue [#425](https://github.com/cavazquez/openttdrs/issues/425)):
+`CBID_OBJECT_COLOUR` (`0x15B`) y el bit `Colour` de Action0 ya se exponen en
+el catálogo. `BuildObject` evalúa el callback después de materializar la
+instancia, pasa el color inicial como `param1`, reutiliza el scope real de
+Object/Town parent y persiste un resultado válido de 8 bits en `OBJS`/JSON/SAV.
+`CALLBACK_FAILED` y valores `>=0x100` conservan el color inicial; la regresión
+sintética verifica la selección del color. 2CC/livery avanzada, callbacks
+fund text/autoslope y el resto de scopes de Objects siguen fuera de esta etapa.

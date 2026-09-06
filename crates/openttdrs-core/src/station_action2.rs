@@ -462,11 +462,38 @@ pub(crate) fn populate_station_scope_fallback_vars(ctx: &mut Action2EvalCtx, sta
     ctx.vars.insert(0x45, u32::MAX);
     ctx.vars
         .insert(0x4A, u32::from(station.road_stop_animation_frame));
+    populate_station_general_vars(ctx, station);
     ctx.vars.insert(
         0x5F,
         u32::from(station.newgrf_random_bits) << 8
             | u32::from(station.newgrf_waiting_random_triggers),
     );
+}
+
+/// Variables generales que pertenecen a la estación lógica y no a una
+/// tesela concreta. Las dos constantes siguen el contrato de
+/// `StationScopeResolver`; no inventamos strings/fechas que el modelo todavía
+/// no conserva.
+fn populate_station_general_vars(ctx: &mut Action2EvalCtx, station: &Station) {
+    let mut acceptance_mask = 0u32;
+    for cargo in ALL_CARGO_TYPES {
+        if station.accepts_cargo(cargo) {
+            acceptance_mask |= 1_u32 << cargo.cargo_id();
+        }
+    }
+    ctx.vars.insert(0x48, acceptance_mask);
+    ctx.vars.insert(0x82, 50);
+    ctx.vars.insert(0x86, 0);
+    let facilities = match station.stop_kind {
+        crate::station::StopKind::RailStation => 1 << 0,
+        crate::station::StopKind::TruckStop => 1 << 1,
+        crate::station::StopKind::BusStop => 1 << 2,
+        crate::station::StopKind::Airport => 1 << 3,
+        crate::station::StopKind::Dock => 1 << 4,
+        crate::station::StopKind::RailWaypoint | crate::station::StopKind::RoadWaypoint => 1 << 7,
+        crate::station::StopKind::Buoy => 0,
+    };
+    ctx.vars.insert(0xF0, facilities);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -484,6 +511,7 @@ fn action2_eval_ctx_for_station_tile_impl(
     let Some(st) = station_at_tile(map, stations, coord) else {
         return ctx;
     };
+    populate_station_general_vars(&mut ctx, st);
     let tile = map.get(coord);
     let m5 = tile.map_or(0, |t| t.m5);
     let m6 = tile.map_or(0, |t| t.m6);
@@ -943,6 +971,7 @@ mod tests {
     use crate::cargo_packet::CargoPacket;
     use crate::company::CompanyId;
     use crate::map::{Map, Tile, TileKind};
+    use crate::newgrf_callback::action2_eval_ctx_from_station;
     use crate::newgrf_sprites::{
         Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
     };
@@ -1042,6 +1071,10 @@ mod tests {
         assert!(ctx.vars.contains_key(&0x43));
         assert!(ctx.vars.contains_key(&0x4A));
         assert!(ctx.vars.contains_key(&0x5F));
+        assert_eq!(ctx.vars.get(&0x48).map(|value| value & 0b111), Some(0b010));
+        assert_eq!(ctx.vars.get(&0x82), Some(&50));
+        assert_eq!(ctx.vars.get(&0x86), Some(&0));
+        assert_eq!(ctx.vars.get(&0xF0), Some(&1));
         assert!(ctx.vars.contains_key(&0x10));
         assert!(ctx.vars.contains_key(&0x67));
         assert_eq!(ctx.random_bits, 0x42);
@@ -1135,6 +1168,25 @@ mod tests {
         assert_eq!((v43 >> 24) & 0xFF, 0x44);
         assert_eq!(ctx.vars.get(&0x42), Some(&0)); // grass + rail 0
         assert_eq!(ctx.vars.get(&0x4A), Some(&0)); // frame MAP7
+    }
+
+    #[test]
+    fn station_general_vars_encode_acceptance_and_facilities() {
+        for (kind, facilities, low_mask) in [
+            (StopKind::BusStop, 1_u32 << 2, 0b101_u32),
+            (StopKind::TruckStop, 1_u32 << 1, 0b010_u32),
+            (StopKind::Dock, 1_u32 << 4, 0b111_u32),
+            (StopKind::Airport, 1_u32 << 3, 0b101_u32),
+            (StopKind::RailWaypoint, 1_u32 << 7, 0),
+        ] {
+            let station = Station::new_with_kind(TileCoord::new(1, 1), kind);
+            let ctx = action2_eval_ctx_from_station(&station);
+            assert_eq!(ctx.vars.get(&0xF0), Some(&facilities));
+            assert_eq!(
+                ctx.vars.get(&0x48).map(|value| value & 0b111),
+                Some(low_mask)
+            );
+        }
     }
 
     #[test]

@@ -1760,3 +1760,12 @@ inventan vecinos. La regresión cubre misma/diferente estación, ejes,
 parámetros coexistentes, wrap y teselas ausentes. Continúan fuera sonidos,
 strings, layouts 16-bit y scopes completos de `BaseStation`/aeropuerto; #329
 permanece abierto.
+
+Actualización #329-STATION-GENERAL-065 (2026-09-06, issue [#391](https://github.com/cavazquez/openttdrs/issues/391)):
+el contexto de estación expone las variables generales modeladas `0x48`
+(máscara de cargos vanilla aceptados), `0x82` (50), `0x86` (0 reservado) y
+`0xF0` (facilities derivadas de `StopKind`) tanto en la ruta map-aware como en
+la API legacy. Las regresiones cubren rail, bus, truck, dock, airport y
+waypoint; IDs custom fuera de los 32 bits nativos no se aliasan. Strings,
+fecha de construcción, estado de aeropuerto, historial de vehículos y scopes
+completos de `BaseStation` continúan en #329.

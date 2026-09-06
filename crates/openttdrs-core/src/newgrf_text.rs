@@ -5,8 +5,9 @@
 //! terminadas en NUL y los controles NFO básicos que `OpenTTD` traduce al cargar
 //! un Action4/Action13. Los parámetros del text stack pueden materializarse
 //! con un contexto explícito; los controles que requieren estado de idioma o
-//! de juego (fecha, género/caso y pluralización) quedan representados como
-//! marcadores visibles.
+//! de juego (género/caso y pluralización) quedan representados como marcadores
+//! visibles; las fechas se materializan cuando el caller entrega un parámetro
+//! tipado en `NewGrfTextContext`.
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Write as _;
@@ -50,6 +51,10 @@ pub enum NewGrfTextValue {
     Signed(i64),
     Unsigned(u64),
     Text(String),
+    /// Día desde el 1 de enero de 1950 del calendario de la partida.
+    Date {
+        day_index: u64,
+    },
 }
 
 /// Contexto opcional para resolver los marcadores dinámicos de una cadena.
@@ -81,6 +86,13 @@ impl NewGrfTextContext {
     #[must_use]
     pub fn with_choice_index(mut self, choice_index: u8) -> Self {
         self.choice_index = Some(choice_index);
+        self
+    }
+
+    /// Añade una fecha expresada como día del calendario de la partida.
+    #[must_use]
+    pub fn with_date(mut self, day_index: u64) -> Self {
+        self.params.push(NewGrfTextValue::Date { day_index });
         self
     }
 }
@@ -242,7 +254,15 @@ fn decode_extended_control(raw: &[u8], cursor: &mut usize, out: &mut String) {
             }
             push_marker(out, label);
         }
-        0x16..=0x1E => push_marker(out, "date-dword"),
+        0x16 => push_marker(out, "date-dword-long"),
+        0x17 => push_marker(out, "date-dword-short"),
+        0x18 => push_marker(out, "param-power"),
+        0x19 => push_marker(out, "param-volume-short"),
+        0x1A => push_marker(out, "param-weight-short"),
+        0x1B => push_marker(out, "param-cargo-long"),
+        0x1C => push_marker(out, "param-cargo-short"),
+        0x1D => push_marker(out, "param-cargo-tiny"),
+        0x1E => push_marker(out, "param-cargo-name"),
         0x1F | 0x20 => {}
         0x21 => push_marker(out, "param-dword-force"),
         _ => {
@@ -434,6 +454,21 @@ fn render_dynamic_marker(
     context: &NewGrfTextContext,
     parameter_index: &mut usize,
 ) -> String {
+    let date_style = match value {
+        "date-long" | "date-dword" | "date-dword-long" => Some(DateStyle::Long),
+        "date-short" | "date-dword-short" => Some(DateStyle::Short),
+        "date-iso" => Some(DateStyle::Iso),
+        _ => None,
+    };
+    if let Some(style) = date_style {
+        let parameter = context.params.get(*parameter_index);
+        *parameter_index = (*parameter_index).saturating_add(1);
+        let Some(day_index) = parameter.and_then(text_date_day_index) else {
+            return marker.to_owned();
+        };
+        return format_newgrf_date(day_index, style);
+    }
+
     let is_parameter = matches!(
         value,
         "param-dword-signed"
@@ -464,6 +499,8 @@ fn render_dynamic_marker(
     );
     match parameter {
         NewGrfTextValue::Text(text) => text.clone(),
+        NewGrfTextValue::Date { day_index } if hexadecimal => format!("{day_index:X}"),
+        NewGrfTextValue::Date { day_index } => day_index.to_string(),
         NewGrfTextValue::Signed(number) if hexadecimal => {
             format!("{:X}", u64::from_ne_bytes(number.to_ne_bytes()))
         }
@@ -474,6 +511,75 @@ fn render_dynamic_marker(
         }
         NewGrfTextValue::Signed(number) => u64::from_ne_bytes(number.to_ne_bytes()).to_string(),
         NewGrfTextValue::Unsigned(number) => number.to_string(),
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DateStyle {
+    Long,
+    Short,
+    Iso,
+}
+
+fn text_date_day_index(value: &NewGrfTextValue) -> Option<u64> {
+    match value {
+        NewGrfTextValue::Date { day_index } | NewGrfTextValue::Unsigned(day_index) => {
+            Some(*day_index)
+        }
+        NewGrfTextValue::Signed(day_index) => u64::try_from(*day_index).ok(),
+        NewGrfTextValue::Text(_) => None,
+    }
+}
+
+fn format_newgrf_date(day_index: u64, style: DateStyle) -> String {
+    let (year, day_of_year) = crate::news::calendar_year_day(day_index);
+    let (month, day) = month_day_from_day_of_year(day_of_year);
+    let month_number = month_number(month);
+    match style {
+        DateStyle::Long => format!("{day} {month} {year}"),
+        DateStyle::Short => format!("{month} {year}"),
+        DateStyle::Iso => format!("{year:04}-{month_number:02}-{day:02}"),
+    }
+}
+
+fn month_day_from_day_of_year(mut day_of_year: u64) -> (&'static str, u64) {
+    const MONTHS: [(&str, u64); 12] = [
+        ("ene", 31),
+        ("feb", 28),
+        ("mar", 31),
+        ("abr", 30),
+        ("may", 31),
+        ("jun", 30),
+        ("jul", 31),
+        ("ago", 31),
+        ("sep", 30),
+        ("oct", 31),
+        ("nov", 30),
+        ("dic", 31),
+    ];
+    for (month, days) in MONTHS {
+        if day_of_year <= days {
+            return (month, day_of_year);
+        }
+        day_of_year = day_of_year.saturating_sub(days);
+    }
+    ("dic", 31)
+}
+
+fn month_number(month: &str) -> u8 {
+    match month {
+        "ene" => 1,
+        "feb" => 2,
+        "mar" => 3,
+        "abr" => 4,
+        "may" => 5,
+        "jun" => 6,
+        "jul" => 7,
+        "ago" => 8,
+        "sep" => 9,
+        "oct" => 10,
+        "nov" => 11,
+        _ => 12,
     }
 }
 
@@ -829,6 +935,14 @@ mod tests {
     }
 
     #[test]
+    fn decodes_word_and_dword_date_controls_separately() {
+        assert_eq!(
+            decode_newgrf_text(&[0x82, 0x83, 0x84, 0x9A, 0x16, 0x9A, 0x17]),
+            "⟦date-long⟧⟦date-short⟧⟦date-iso⟧⟦date-dword-long⟧⟦date-dword-short⟧"
+        );
+    }
+
+    #[test]
     fn keeps_regular_utf8_text_unchanged() {
         assert_eq!(decode_newgrf_text("Español ✓".as_bytes()), "Español ✓");
     }
@@ -1039,6 +1153,31 @@ mod tests {
         let text = "A⟦param-dword-signed⟧/⟦param-dword-hex⟧/⟦param-string⟧";
         assert_eq!(render_newgrf_text(text, &context), "A-7/2A/Station");
         assert_eq!(context.params.len(), 3);
+    }
+
+    #[test]
+    fn renders_date_parameters_in_long_short_and_iso_forms() {
+        let context = NewGrfTextContext::default().with_date(0);
+        assert_eq!(
+            render_newgrf_text(
+                "⟦date-long⟧ / ⟦date-short⟧ / ⟦date-iso⟧",
+                &NewGrfTextContext::with_params([
+                    NewGrfTextValue::Date { day_index: 0 },
+                    NewGrfTextValue::Unsigned(31),
+                    NewGrfTextValue::Signed(59),
+                ]),
+            ),
+            "1 ene 1950 / feb 1950 / 1950-03-01"
+        );
+        assert_eq!(render_newgrf_text("⟦date-long⟧", &context), "1 ene 1950");
+    }
+
+    #[test]
+    fn preserves_missing_date_parameters() {
+        assert_eq!(
+            render_newgrf_text("x⟦date-iso⟧", &NewGrfTextContext::default()),
+            "x⟦date-iso⟧"
+        );
     }
 
     #[test]

@@ -1395,6 +1395,22 @@ impl GameState {
             station.ottd_station_id = Some(st.station_id);
             station.owner = crate::company::CompanyId(st.owner);
             station.name = entities::resolve_sav_station_name(st, &state.towns);
+            // `BaseStation::string_id` is a 16-bit StringID in the native
+            // save.  Keep it as a widened value for NewGRF callbacks; when a
+            // legacy/fixture record omitted it, a custom name uses the
+            // documented fallback template and an unnamed station uses the
+            // vanilla station template.
+            station.newgrf_string_id = st.string_id.map_or_else(
+                || {
+                    if station.name.is_some() {
+                        crate::station::STATION_STRING_ID_FALLBACK
+                    } else {
+                        crate::station::STATION_STRING_ID_DEFAULT
+                    }
+                },
+                u32::from,
+            );
+            station.build_date = st.build_date;
             station.newgrf_persistent_storage_id = st.airport_persistent_storage_id;
             station.had_vehicle_of_type = u16::from(st.had_vehicle_of_type);
             // `STNN` guarda `VehicleType`, no el subtipo bus/camión/tranvía.
@@ -2542,6 +2558,7 @@ mod tests {
             name: Some("Plataforma".to_string()),
             facilities: FACIL_AIRPORT,
             string_id: None,
+            build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
             town_id: None,
             airport_type: 9,
             airport_w: 1,
@@ -2591,6 +2608,7 @@ mod tests {
             name: Some("Neutral Dock".into()),
             facilities: FACIL_DOCK,
             string_id: None,
+            build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
             town_id: None,
             airport_type: 0,
             airport_w: 0,
@@ -2655,6 +2673,7 @@ mod tests {
             name: Some("Parada importada".into()),
             facilities: FACIL_BUS_STOP,
             string_id: None,
+            build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
             town_id: None,
             airport_type: 0,
             airport_w: 0,
@@ -2714,6 +2733,7 @@ mod tests {
                 name: Some("Origen".to_string()),
                 facilities: FACIL_TRAIN,
                 string_id: None,
+                build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
                 town_id: None,
                 airport_type: 0,
                 airport_w: 0,
@@ -2737,6 +2757,7 @@ mod tests {
                 name: Some("Destino".to_string()),
                 facilities: FACIL_TRAIN,
                 string_id: None,
+                build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
                 town_id: None,
                 airport_type: 0,
                 airport_w: 0,
@@ -2773,6 +2794,7 @@ mod tests {
                     facilities: FACIL_TRAIN,
                     name: None,
                     string_id: None,
+                    build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
                     town_id: None,
                     airport_type: 0,
                     airport_w: 0,
@@ -2814,6 +2836,7 @@ mod tests {
             name: Some("Global".to_string()),
             facilities: FACIL_TRAIN,
             string_id: None,
+            build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
             town_id: None,
             airport_type: 0,
             airport_w: 0,
@@ -2995,6 +3018,7 @@ mod tests {
                     name: Some("Estación Norte".into()),
                     facilities: 0x01,
                     string_id: None,
+                    build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
                     town_id: None,
                     airport_type: 0,
                     airport_w: 0,
@@ -3014,6 +3038,7 @@ mod tests {
                     name: Some("Intermodal".into()),
                     facilities: FACIL_TRAIN | FACIL_BUS_STOP | FACIL_AIRPORT,
                     string_id: None,
+                    build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
                     town_id: None,
                     airport_type: 10,
                     airport_w: 9,

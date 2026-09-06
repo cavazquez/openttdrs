@@ -1824,6 +1824,18 @@ drive-through y el aislamiento de rail. El estado no se agrega al formato SAV:
 OpenTTD lo deriva del pool `RoadStop` al cargar. Pools físicos separados,
 colas drive-through completas y scopes restantes siguen pendientes en #329.
 
+Actualización #329-STATION-STRING-DATE-400 (2026-09-06, issue [#400](https://github.com/cavazquez/openttdrs/issues/400)):
+`Station` conserva `BaseStation::string_id` y la fecha absoluta de
+construcción. `StationScope` expone `0x84` y `0xFA`, con la conversión nativa
+de fecha relativa y saturación a WORD; `STNN.base` los lee y escribe en filas
+modernas y legacy, y la importación SAV los hidrata. Las estaciones creadas
+por tren, carretera, waypoint, muelle, boya y aeropuerto asignan la fecha del
+calendario actual; rename conserva la plantilla fallback de OpenTTD. El
+round-trip writer→parser, JSON y callbacks tienen regresiones específicas.
+La resolución de texto por idioma/town/company, callbacks de construcción sin
+estación y scopes restantes de `BaseStation`/aeropuerto siguen pendientes;
+#329 permanece abierto.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

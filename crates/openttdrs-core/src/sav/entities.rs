@@ -68,6 +68,8 @@ pub struct SavStation {
     pub facilities: u8,
     /// `BaseStation::string_id` (`STR_SV_STNAME_*`) cuando no hay nombre custom.
     pub string_id: Option<u16>,
+    /// `BaseStation::build_date`, en días absolutos del calendario.
+    pub build_date: u32,
     /// Índice de ciudad (`BaseStation::town`) para armar el nombre generado.
     pub town_id: Option<u32>,
     /// `Station::airport.type` (`AT_*` de `OpenTTD`); solo válido si `facilities` trae `FACIL_AIRPORT`.
@@ -171,6 +173,7 @@ pub(crate) struct SavStationIndex {
     pub facilities: u8,
     pub name: Option<String>,
     pub string_id: Option<u16>,
+    pub build_date: u32,
     pub town_id: Option<u32>,
     pub airport_type: u8,
     pub airport_w: u16,
@@ -237,6 +240,10 @@ pub(crate) fn station_index_from_chunks(
         let string_id = record_get(base, "string_id")
             .and_then(SlValue::as_u64)
             .and_then(|v| u16::try_from(v).ok());
+        let build_date = record_get(base, "build_date")
+            .and_then(SlValue::as_i64)
+            .and_then(|v| u32::try_from(v).ok())
+            .unwrap_or(crate::station::STATION_BUILD_DATE_DEFAULT);
         // `SLE_REF(..., REF_TOWN)`: 0 = null, resto = `Town::index + 1`.
         #[allow(clippy::cast_possible_truncation)]
         let town_id = record_get(base, "town")
@@ -285,6 +292,7 @@ pub(crate) fn station_index_from_chunks(
                 facilities: facilities as u8,
                 name,
                 string_id,
+                build_date,
                 town_id,
                 airport_type: airport_type as u8,
                 airport_w: airport_w as u16,
@@ -510,6 +518,7 @@ pub(crate) fn stations_from_chunks(
             name: st.name,
             facilities: st.facilities,
             string_id: st.string_id,
+            build_date: st.build_date,
             town_id: st.town_id,
             airport_type: st.airport_type,
             airport_w: st.airport_w,

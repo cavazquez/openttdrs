@@ -291,6 +291,12 @@ pub struct Station {
     /// Nombre de la estación (saves de `OpenTTD` con nombre custom).
     #[serde(default)]
     pub name: Option<String>,
+    /// `BaseStation::string_id` para `StationScopeResolver::GetVariable(0x84)`.
+    #[serde(default = "default_station_string_id")]
+    pub newgrf_string_id: u32,
+    /// Fecha absoluta de construcción, en días desde el origen del calendario.
+    #[serde(default = "default_station_build_date")]
+    pub build_date: u32,
     /// Cargo acumulado en el almacén de la estación.
     pub stock: u32,
     #[serde(default)]
@@ -431,6 +437,21 @@ const fn default_station_rating() -> u8 {
     super::goods_entry::INITIAL_STATION_RATING
 }
 
+/// `STR_SV_STNAME`, nombre generado vanilla de una estación nueva.
+pub const STATION_STRING_ID_DEFAULT: u32 = 0x6006;
+/// `STR_SV_STNAME_FALLBACK`, usado cuando la estación tiene nombre custom.
+pub const STATION_STRING_ID_FALLBACK: u32 = 0x6027;
+/// Días absolutos hasta el 1 de enero de 1950 (`CalendarTime` de `OpenTTD`).
+pub const STATION_BUILD_DATE_DEFAULT: u32 = crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR;
+
+const fn default_station_string_id() -> u32 {
+    STATION_STRING_ID_DEFAULT
+}
+
+const fn default_station_build_date() -> u32 {
+    STATION_BUILD_DATE_DEFAULT
+}
+
 const fn default_road_stop_status() -> u8 {
     ROAD_STOP_STATUS_BAY0_FREE | ROAD_STOP_STATUS_BAY1_FREE
 }
@@ -500,6 +521,8 @@ impl Station {
             owner: CompanyId::PLAYER,
             neutral_industry_id: None,
             name: None,
+            newgrf_string_id: STATION_STRING_ID_DEFAULT,
+            build_date: STATION_BUILD_DATE_DEFAULT,
             stock: 0,
             cargo_stock: CargoStock::default(),
             cargo_packets: StationCargoList::default(),
@@ -547,6 +570,23 @@ impl Station {
     pub const fn had_vehicle_of_type_value(&self) -> u32 {
         let waypoint = if self.is_waypoint() { 1_u16 << 6 } else { 0 };
         (self.had_vehicle_of_type | waypoint) as u32
+    }
+
+    /// Valor de `StationScopeResolver::GetVariable(0x84)`.
+    #[must_use]
+    pub const fn newgrf_string_id_value(&self) -> u32 {
+        self.newgrf_string_id
+    }
+
+    /// Valor de `StationScopeResolver::GetVariable(0xFA)`.
+    #[must_use]
+    pub const fn newgrf_build_date_value(&self) -> u32 {
+        let value = self.build_date.saturating_sub(STATION_BUILD_DATE_DEFAULT);
+        if value > u16::MAX as u32 {
+            u16::MAX as u32
+        } else {
+            value
+        }
     }
 
     /// Valor de `StationScopeResolver::GetVariable(0xF2/0xF3)`.

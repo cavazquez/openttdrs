@@ -471,9 +471,8 @@ pub(crate) fn populate_station_scope_fallback_vars(ctx: &mut Action2EvalCtx, sta
 }
 
 /// Variables generales que pertenecen a la estación lógica y no a una
-/// tesela concreta. Las dos constantes siguen el contrato de
-/// `StationScopeResolver`; no inventamos strings/fechas que el modelo todavía
-/// no conserva.
+/// tesela concreta. Las cadenas y fechas se conservan en `Station` para que
+/// los contextos legacy y map-aware compartan exactamente la misma respuesta.
 fn populate_station_general_vars(ctx: &mut Action2EvalCtx, station: &Station) {
     let mut acceptance_mask = 0u32;
     for cargo in ALL_CARGO_TYPES {
@@ -487,6 +486,8 @@ fn populate_station_general_vars(ctx: &mut Action2EvalCtx, station: &Station) {
     // vehicle that loaded cargo. Waypoints expose their dedicated bit even
     // when no load/unload path exists.
     ctx.vars.insert(0x8A, station.had_vehicle_of_type_value());
+    ctx.vars.insert(0x84, station.newgrf_string_id_value());
+    ctx.vars.insert(0xFA, station.newgrf_build_date_value());
     ctx.vars.insert(0x86, 0);
     let airport_type = station.airport_ttd_type.map_or_else(
         || u32::from(station.airport_spec.as_ttd_airport_type()),
@@ -1263,6 +1264,25 @@ mod tests {
             action2_eval_ctx_from_station(&waypoint).vars.get(&0x8A),
             Some(&0x40)
         );
+    }
+
+    #[test]
+    fn station_string_id_and_build_date_vars_follow_native_values() {
+        let mut station = Station::new_with_kind(TileCoord::new(1, 1), StopKind::RailStation);
+        station.newgrf_string_id = crate::station::STATION_STRING_ID_FALLBACK;
+        station.build_date = crate::station::STATION_BUILD_DATE_DEFAULT + 321;
+
+        let ctx = action2_eval_ctx_from_station(&station);
+        assert_eq!(ctx.vars.get(&0x84), Some(&0x6027));
+        assert_eq!(ctx.vars.get(&0xFA), Some(&321));
+
+        let encoded = serde_json::to_string(&station).expect("station JSON");
+        let decoded: Station = serde_json::from_str(&encoded).expect("station JSON roundtrip");
+        assert_eq!(
+            decoded.newgrf_string_id,
+            crate::station::STATION_STRING_ID_FALLBACK
+        );
+        assert_eq!(decoded.newgrf_build_date_value(), 321);
     }
 
     #[test]

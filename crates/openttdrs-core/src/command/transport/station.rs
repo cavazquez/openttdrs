@@ -401,6 +401,7 @@ pub(in crate::command) fn place_rail_station_area(
     let anchor = TileCoord::new(origin.x + (w - 1) / 2, origin.y + (h - 1) / 2);
     let mut st = Station::new_with_kind(anchor, StopKind::RailStation);
     st.owner = state.active_company;
+    st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
     st.station_spec = spec_id;
     state.stations.push(st);
     let tick = state.tick.get();
@@ -505,6 +506,7 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     }
     let mut st = Station::new_with_kind(c, stop_kind);
     st.owner = state.active_company;
+    st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
     if stop_kind == StopKind::RailStation {
         st.station_spec = state.current_station_spec;
     }
@@ -631,6 +633,7 @@ pub(in crate::command) fn place_rail_waypoint(
         .map_err(|_| CommandError::OutOfBounds)?;
     let mut st = Station::new_with_kind(c, StopKind::RailWaypoint);
     st.owner = state.active_company;
+    st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
     st.station_spec = state.current_station_spec;
     state.stations.push(st);
     let tick = state.tick.get();
@@ -711,6 +714,7 @@ pub(in crate::command) fn place_road_waypoint(
         .map_err(|_| CommandError::OutOfBounds)?;
     let mut st = Station::new_with_kind(c, StopKind::RoadWaypoint);
     st.owner = state.active_company;
+    st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
     state.stations.push(st);
     state.economy.money -= waypoint_build_cost(&state.global_economy);
     Ok(())
@@ -742,6 +746,11 @@ pub(crate) fn rename_station(
         return Err(CommandError::StationNameTooLong);
     }
     station.name = normalized;
+    station.newgrf_string_id = if station.name.is_some() {
+        crate::station::STATION_STRING_ID_FALLBACK
+    } else {
+        crate::station::STATION_STRING_ID_DEFAULT
+    };
     Ok(())
 }
 

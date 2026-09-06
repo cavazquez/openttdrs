@@ -127,6 +127,7 @@ pub(in crate::command) fn place_dock(
         .map_err(|_| CommandError::OutOfBounds)?;
     let mut st = Station::new_with_kind(c, StopKind::Dock);
     st.owner = state.active_company;
+    st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
     state.stations.push(st);
     state.economy.money -= station_build_cost(&state.global_economy);
     Ok(())
@@ -253,6 +254,7 @@ pub(in crate::command) fn place_buoy(
         .map_err(|_| CommandError::OutOfBounds)?;
     let mut st = Station::new_with_kind(c, StopKind::Buoy);
     st.owner = state.active_company;
+    st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
     state.stations.push(st);
     state.economy.money -= station_build_cost(&state.global_economy) / 2;
     Ok(())

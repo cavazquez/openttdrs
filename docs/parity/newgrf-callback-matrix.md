@@ -914,9 +914,10 @@ Actualizado: 2026-09-06. El contexto de estación expone `0x48` (máscara de
 cargos vanilla aceptados), `0x82` (50), `0x86` (0 reservado) y `0xF0`
 (facilities derivadas de `StopKind`) tanto en la ruta map-aware como en la API
 legacy. Las regresiones cubren rail, bus, truck, dock, airport y waypoint; los
-IDs custom fuera de los 32 bits nativos no se aliasan. Strings, fecha de
-construcción, estado de aeropuerto, historial de vehículos y scopes completos
-de `BaseStation` continúan en #329.
+IDs custom fuera de los 32 bits nativos no se aliasan. `0x84` (StringID) y
+`0xFA` (fecha relativa) ya se cubren en #400; el estado de aeropuerto, el
+historial de vehículos y los scopes completos de `BaseStation` continúan en
+#329.
 
 ### #329-STATION-AIRPORT-VARS-066 — Variables de aeropuerto modeladas
 
@@ -927,8 +928,8 @@ legacy y map-aware. Las regresiones cubren aeropuerto vanilla, tipo NewGRF,
 bloques no nulos y ambas rutas. El historial `0x8A` ya se conserva en
 `Station`, se actualiza al prestar servicio y se expone en las rutas legacy y
 map-aware, incluyendo el bit de waypoint. Los estados `0xF2`/`0xF3` de
-paradas road se cubren en #399; las cadenas de nombre/fecha y los scopes
-completos de `BaseStation`/aeropuerto continúan pendientes en #329.
+paradas road se cubren en #399; las cadenas de nombre/fecha se cubren en #400.
+Los scopes completos de `BaseStation`/aeropuerto continúan pendientes en #329.
 
 ### #329-STATION-FACILITIES-067 — Bitset F0 de waypoints y RoadStops
 
@@ -947,7 +948,8 @@ waypoints exponen `WAYPOINT=0x40`. `station_action2` y la API legacy devuelven
 el mismo valor en `0x8A`, y el bitset forma parte del round-trip JSON propio.
 La lectura/escritura equivalente de `STNN.normal.had_vehicle_of_type` se
 cubre en #397; el estado nativo de `RoadStop` se documenta y valida por
-separado en #399.
+separado en #399. `last_vehicle_type`, `0xF2`/`0xF3` y `0x84`/`0xFA` quedan
+documentados en los cortes SAV/road stop/Station siguientes.
 
 ### #329-STATION-HAD-VEHICLE-SAV-397 — Round-trip SAV de `0x8A`
 
@@ -955,8 +957,8 @@ Actualizado: 2026-09-06. El puente SAV lee `STNN.normal.had_vehicle_of_type`
 en filas modernas y legacy, hidrata `Station.had_vehicle_of_type` y vuelve a
 emitir el byte al escribir `STNN`; los campos ausentes conservan cero. La
 regresión cubre parser y writer con bitsets no nulos sin ampliar el contrato
-del índice de órdenes. `last_vehicle_type`, `0xF2`/`0xF3` y los scopes restantes
-continúan pendientes en #329.
+del índice de órdenes. `last_vehicle_type` y `0xF2`/`0xF3` se cubren en #398 y
+#399; los scopes restantes continúan pendientes en #329.
 
 ### #329-STATION-LAST-VEHICLE-SAV-398 — Round-trip SAV de `last_vehicle_type`
 
@@ -965,7 +967,8 @@ en filas modernas y legacy, hidrata `Station.last_vehicle_type` y vuelve a
 emitir el código nativo (`VEH_INVALID`, train, road, ship o aircraft) al
 escribir `STNN`. Bus, camión y tranvía comparten `VEH_ROAD` en el formato
 nativo y se normalizan al tipo road compatible del modelo. Los estados
-`0xF2`/`0xF3` se cubren en #399; los scopes restantes continúan pendientes.
+`0xF2`/`0xF3` se cubren en #399; `0x84`/`0xFA` se cubren en #400; los scopes
+restantes continúan pendientes.
 
 ### #329-ROADSTOP-STATUS-399 — Variables `0xF2`/`0xF3`
 
@@ -980,3 +983,16 @@ anterior y no amplía el formato SAV, porque OpenTTD deriva este estado del pool
 `RoadStop` al cargar. Regresiones cubren ambos resolvers, bahías, ocupación,
 drive-through y aislamiento por `StopKind`. Los pools/colas físicos separados
 y el resto de scopes de `BaseStation` permanecen pendientes en #329.
+
+### #329-STATION-STRING-DATE-400 — Variables `0x84`/`0xFA`
+
+Actualizado: 2026-09-06. `Station` conserva `BaseStation::string_id` y la
+fecha absoluta de construcción con defaults compatibles con JSON anterior.
+`StationScope` devuelve `0x84` y `0xFA` en las rutas legacy y map-aware; la
+fecha se convierte a días desde `DAYS_TILL_ORIGINAL_BASE_YEAR` y se satura al
+WORD nativo. `STNN.base` lee y escribe ambos campos en filas modernas y
+legacy, la importación SAV los hidrata y los comandos de construcción asignan
+la fecha actual del calendario. El rename usa la plantilla fallback nativa
+cuando no queda un nombre generado. La resolución de textos por idioma,
+parámetros town/company y los scopes restantes de `BaseStation` continúan
+pendientes en #329.

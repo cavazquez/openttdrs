@@ -29,9 +29,6 @@ const INVALID_TILE: u32 = 0xFFFF_FFFF;
 /// `NUM_CARGO` (`OpenTTD` moderno).
 const NUM_CARGO: u32 = 64;
 
-/// `STR_SV_STNAME` — plantilla de nombre generado.
-const STR_SV_STNAME: u16 = 0x6006;
-
 /// `VEH_INVALID`.
 const VEH_INVALID: u8 = 0xFF;
 const VEH_TRAIN: u8 = 0;
@@ -688,6 +685,7 @@ fn write_empty_goods_entry(buf: &mut Vec<u8>) -> Result<(), SavError> {
 
 fn write_stnn_base(
     buf: &mut Vec<u8>,
+    station: &Station,
     tile_idx: u32,
     name: &str,
     facilities: u8,
@@ -696,12 +694,15 @@ fn write_stnn_base(
 ) -> Result<(), SavError> {
     buf.extend_from_slice(&tile_idx.to_be_bytes());
     buf.extend_from_slice(&town_ref.to_be_bytes());
-    buf.extend_from_slice(&STR_SV_STNAME.to_be_bytes());
+    let string_id = u16::try_from(station.newgrf_string_id)
+        .unwrap_or(crate::station::STATION_STRING_ID_DEFAULT as u16);
+    buf.extend_from_slice(&string_id.to_be_bytes());
     write_str(name, buf)?;
     buf.push(0); // delete_ctr
     buf.push(owner.0);
     buf.push(facilities);
-    buf.extend_from_slice(&0i32.to_be_bytes()); // build_date
+    let build_date = i32::try_from(station.build_date).unwrap_or(i32::MAX);
+    buf.extend_from_slice(&build_date.to_be_bytes()); // build_date
     buf.extend_from_slice(&0u16.to_be_bytes()); // random_bits
     buf.push(0); // waiting_triggers
     Ok(())
@@ -722,7 +723,7 @@ fn write_stnn_normal(
 ) -> Result<(), SavError> {
     let name = st.name.as_deref().unwrap_or("");
     buf.push(1); // base presente
-    write_stnn_base(buf, tile_idx, name, facilities, town_ref, owner)?;
+    write_stnn_base(buf, st, tile_idx, name, facilities, town_ref, owner)?;
 
     let (train_tile, train_w, train_h) =
         if facilities & FACIL_TRAIN != 0 && !is_waypoint(facilities) {
@@ -848,7 +849,7 @@ fn write_stnn_waypoint(
 ) -> Result<(), SavError> {
     let name = st.name.as_deref().unwrap_or("");
     buf.push(1); // base presente
-    write_stnn_base(buf, tile_idx, name, facilities, town_ref, owner)?;
+    write_stnn_base(buf, st, tile_idx, name, facilities, town_ref, owner)?;
     buf.extend_from_slice(&0u16.to_be_bytes()); // town_cn
     let (train_tile, w, h) = if facilities & FACIL_TRAIN != 0 {
         (tile_idx, 1u8, 1u8)
@@ -2093,6 +2094,8 @@ mod tests {
         let mut state = GameState::new(64, 64);
         let mut rail = Station::new_with_kind(TileCoord::new(28, 39), StopKind::RailStation);
         rail.name = Some("Central".into());
+        rail.newgrf_string_id = crate::station::STATION_STRING_ID_FALLBACK;
+        rail.build_date = crate::station::STATION_BUILD_DATE_DEFAULT + 123;
         rail.last_vehicle_type = Some(VehicleKind::Aircraft);
         rail.had_vehicle_of_type = 0x2A;
         state.stations = vec![rail];
@@ -2110,6 +2113,11 @@ mod tests {
         let decoded = crate::sav::entities::stations_from_chunks(&chunks, 64, 352);
         assert_eq!(decoded[0].last_vehicle_type, VEH_AIRCRAFT);
         assert_eq!(decoded[0].had_vehicle_of_type, 0x2A);
+        assert_eq!(decoded[0].string_id, Some(0x6027));
+        assert_eq!(
+            decoded[0].build_date,
+            crate::station::STATION_BUILD_DATE_DEFAULT + 123
+        );
     }
 
     #[test]

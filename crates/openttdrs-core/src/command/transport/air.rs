@@ -143,6 +143,7 @@ pub(in crate::command) fn place_airport_area(
     }
     let mut st = Station::new_with_kind(station_anchor, StopKind::Airport);
     st.owner = state.active_company;
+    st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
     st.airport_tiles = tiles;
     st.airport_tile_gfx = airport_tile_gfx;
     st.airport_spec = place_spec;

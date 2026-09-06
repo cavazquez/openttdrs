@@ -269,6 +269,13 @@ pub struct RoadStopTileState {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Station {
     pub pos: TileCoord,
+    /// Índice nativo de `BaseStation::town` cuando proviene de un SAV.
+    ///
+    /// `None` conserva el comportamiento de partidas creadas por openttdrs o
+    /// saves legacy sin la referencia: los scopes `NewGRF` usan entonces el
+    /// pueblo más cercano como fallback determinista.
+    #[serde(default)]
+    pub town_id: Option<u32>,
     /// `StationID` original del save de `OpenTTD`. Permite asociar en O(1) cada
     /// tesela `MP_STATION` importada con su estación, aun cuando la estación
     /// ocupe un andén grande o varias paradas unidas.
@@ -516,6 +523,7 @@ impl Station {
         let newgrf_random_bits = seed_station_newgrf_random_bits(pos);
         Self {
             pos,
+            town_id: None,
             ottd_station_id: None,
             stop_kind,
             owner: CompanyId::PLAYER,
@@ -887,7 +895,7 @@ impl Station {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use super::CargoTimeSincePickup;
+    use super::{CargoTimeSincePickup, Station, StopKind};
     use crate::CargoType;
 
     #[test]
@@ -905,5 +913,23 @@ mod tests {
         let loaded_legacy: CargoTimeSincePickup =
             serde_json::from_value(legacy).expect("deserialize legacy waiting age");
         assert_eq!(loaded_legacy.get(cargo), 0);
+    }
+
+    #[test]
+    fn station_town_id_roundtrips_and_defaults_for_legacy_json() {
+        let mut station =
+            Station::new_with_kind(crate::TileCoord::new(2, 3), StopKind::RailStation);
+        station.town_id = Some(42);
+        let json = serde_json::to_string(&station).expect("serialize station");
+        let loaded: Station = serde_json::from_str(&json).expect("deserialize station");
+        assert_eq!(loaded.town_id, Some(42));
+
+        let mut legacy: serde_json::Value = serde_json::from_str(&json).expect("station value");
+        legacy
+            .as_object_mut()
+            .expect("station object")
+            .remove("town_id");
+        let loaded_legacy: Station = serde_json::from_value(legacy).expect("legacy station");
+        assert_eq!(loaded_legacy.town_id, None);
     }
 }

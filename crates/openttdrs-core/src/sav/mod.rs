@@ -1393,6 +1393,7 @@ impl GameState {
             let stop_kind = stop_kind_from_facilities(st.facilities);
             let mut station = Station::new_with_kind(st.pos, stop_kind);
             station.ottd_station_id = Some(st.station_id);
+            station.town_id = st.town_id;
             station.owner = crate::company::CompanyId(st.owner);
             station.name = entities::resolve_sav_station_name(st, &state.towns);
             // `BaseStation::string_id` is a 16-bit StringID in the native

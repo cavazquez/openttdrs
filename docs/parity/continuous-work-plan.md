@@ -2044,3 +2044,14 @@ la misma máscara, de modo que una parada custom bloquea únicamente el pilar
 que realmente dibujaría el puente. Las regresiones cubren override custom,
 override cero y fallback vanilla; la captura dorada contra OpenTTD queda como
 validación pendiente del cierre raster global.
+
+Actualización #329-STATION-TOWN-PARENT-420 (2026-09-06, issue [#420](https://github.com/cavazquez/openttdrs/issues/420)):
+`Station` conserva ahora `town_id` opcional y el importador SAV lo hidrata
+desde `BaseStation::town`. El parent `TownScopeResolver` de estaciones
+catalog-aware usa ese ID nativo para copiar variables y registros `7C` por
+GRFID; sólo si la referencia falta o no está en el pool aplica el fallback
+determinista por distancia Manhattan/ID. JSON antiguo sigue cargando con
+`None`. Las regresiones cubren dos pueblos donde el más cercano difiere del
+enlace nativo y el round-trip/default legacy; quedan fuera las estaciones
+nuevas sin asociación nativa persistida y las variables de TownScope todavía
+no modeladas.

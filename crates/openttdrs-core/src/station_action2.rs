@@ -196,9 +196,9 @@ pub fn action2_eval_ctx_for_station_tile_with_catalog_and_world(
 }
 
 /// Materializa el `TownScopeResolver` que `OpenTTD` expone como parent de una
-/// estación colocada. Sin un vínculo nativo estación→pueblo, se conserva la
-/// selección determinista por distancia Manhattan/ID usada por otros scopes
-/// de mundo; las APIs sin catálogo no pueden elegir el GRFID del PSA.
+/// estación colocada. Cuando el importador SAV conservó `BaseStation::town`,
+/// esa referencia gana; las estaciones nuevas y saves legacy usan la selección
+/// determinista por distancia Manhattan/ID como fallback.
 fn populate_station_parent_scope(
     ctx: &mut Action2EvalCtx,
     map: &Map,
@@ -213,10 +213,15 @@ fn populate_station_parent_scope(
     let Some(spec) = station_spec_def(station_catalog, station.station_spec) else {
         return;
     };
-    let Some(town) = towns
-        .iter()
-        .min_by_key(|town| (crate::economy::manhattan_distance(coord, town.pos), town.id))
-    else {
+    let town = station
+        .town_id
+        .and_then(|town_id| towns.iter().find(|town| town.id == town_id))
+        .or_else(|| {
+            towns
+                .iter()
+                .min_by_key(|town| (crate::economy::manhattan_distance(coord, town.pos), town.id))
+        });
+    let Some(town) = town else {
         return;
     };
     town.copy_newgrf_parent_scope(spec.newgrf_grfid, ctx);
@@ -1951,6 +1956,59 @@ mod tests {
         );
         assert!(legacy.parent_vars.is_empty());
         assert!(legacy.parent_persistent_registers.is_empty());
+    }
+
+    #[test]
+    fn station_world_scope_prefers_native_town_over_nearest_fallback() {
+        let mut map = Map::new_flat(10, 10, 0);
+        let coord = TileCoord::new(1, 1);
+        map.set_tile(coord, rail_station_tile(0)).unwrap();
+        let mut station = Station::new_with_kind(coord, StopKind::RailStation);
+        station.station_spec = crate::station_class::StationSpecId::from_u16(1);
+        station.town_id = Some(9);
+
+        let grfid = 0x5151_0001;
+        let mut nearest = Town {
+            id: 7,
+            pos: TileCoord::new(1, 2),
+            population: 100,
+            ..Town::default()
+        };
+        nearest
+            .newgrf_persistent_regs
+            .insert(grfid, std::collections::HashMap::from([(4, 0xAAAA)]));
+        let mut native = Town {
+            id: 9,
+            pos: TileCoord::new(8, 8),
+            population: 900,
+            ..Town::default()
+        };
+        native
+            .newgrf_persistent_regs
+            .insert(grfid, std::collections::HashMap::from([(4, 0xBBBB)]));
+        let towns = vec![nearest, native];
+        let catalog = vec![station_spec(1, grfid, 0, station_neighbour_runtime(&[]))];
+
+        let ctx = action2_eval_ctx_for_station_tile_with_catalog_and_world(
+            &map,
+            std::slice::from_ref(&station),
+            &catalog,
+            coord,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+            StationAction2WorldContext {
+                towns: &towns,
+                companies: &[],
+                industries: &[],
+                cargo_spec_catalog: &[],
+            },
+        );
+
+        assert_eq!(ctx.parent_vars.get(&0x41), Some(&9));
+        assert_eq!(ctx.parent_vars.get(&0x82), Some(&900));
+        assert_eq!(ctx.parent_persistent_registers.get(&4), Some(&0xBBBB));
     }
 
     #[test]

@@ -54,7 +54,9 @@ fn trigger_depot_on_entry(state: &mut GameState, index: usize, was_in_depot: boo
 }
 
 pub(super) fn tick_aircraft_phases(state: &mut GameState) {
-    use crate::aircraft_movement::{AircraftPhaseEvent, tick_aircraft_phase_with_catalog};
+    use crate::aircraft_movement::{
+        AircraftPhaseEvent, tick_aircraft_phase_with_catalog_and_plane_speed,
+    };
     use crate::sim_events::SimEvent;
 
     let mut brake_checks = Vec::new();
@@ -62,11 +64,12 @@ pub(super) fn tick_aircraft_phases(state: &mut GameState) {
         let previous_phase = state.vehicles[i].aircraft_phase;
         let prev_pos = state.vehicles[i].airport_pos;
         let prev_fta = state.vehicles[i].airport_fta_active;
-        let ev = tick_aircraft_phase_with_catalog(
+        let ev = tick_aircraft_phase_with_catalog_and_plane_speed(
             &mut state.vehicles[i],
             &state.map,
             &mut state.stations,
             &state.engine_catalog,
+            state.construction.plane_speed,
         );
         let id = state.vehicles[i].id;
         let at = state.vehicles[i].pos;
@@ -391,10 +394,11 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             };
         let train_accel = state.train_acceleration_model;
         refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
-        state.vehicles[i].step_with_map_and_accel_and_catalog(
+        state.vehicles[i].step_with_map_and_accel_and_catalog_and_plane_speed(
             Some(&state.map),
             train_accel,
             &state.engine_catalog,
+            state.construction.plane_speed,
         );
         refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
         trigger_depot_on_entry(state, i, was_in_depot);

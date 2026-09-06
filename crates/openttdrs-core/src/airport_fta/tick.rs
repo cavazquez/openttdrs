@@ -67,7 +67,18 @@ pub fn tick_country_airport_fta_with_catalog(
     stations: &mut [Station],
     engine_catalog: &[crate::engine::EngineDef],
 ) -> Option<AircraftPhaseEvent> {
-    tick_airport_fta_with_catalog(v, map, stations, engine_catalog)
+    tick_country_airport_fta_with_catalog_and_plane_speed(v, map, stations, engine_catalog, 4)
+}
+
+/// Variante que propaga `vehicle.plane_speed` al movimiento de los nodos FTA.
+pub fn tick_country_airport_fta_with_catalog_and_plane_speed(
+    v: &mut Vehicle,
+    map: &Map,
+    stations: &mut [Station],
+    engine_catalog: &[crate::engine::EngineDef],
+    plane_speed: u8,
+) -> Option<AircraftPhaseEvent> {
+    tick_airport_fta_with_catalog_and_plane_speed(v, map, stations, engine_catalog, plane_speed)
 }
 
 /// Tick FTA para specs soportados hasta Helistation.
@@ -86,6 +97,17 @@ pub fn tick_airport_fta_with_catalog(
     map: &Map,
     stations: &mut [Station],
     engine_catalog: &[crate::engine::EngineDef],
+) -> Option<AircraftPhaseEvent> {
+    tick_airport_fta_with_catalog_and_plane_speed(v, map, stations, engine_catalog, 4)
+}
+
+/// Variante que aplica el divisor de velocidad nativo a la distancia FTA.
+pub fn tick_airport_fta_with_catalog_and_plane_speed(
+    v: &mut Vehicle,
+    map: &Map,
+    stations: &mut [Station],
+    engine_catalog: &[crate::engine::EngineDef],
+    plane_speed: u8,
 ) -> Option<AircraftPhaseEvent> {
     if v.kind != VehicleKind::Aircraft || !v.running {
         return None;
@@ -117,7 +139,7 @@ pub fn tick_airport_fta_with_catalog(
         return Some(sync_phase_from_node(v, &profile));
     }
 
-    let just_reached = move_towards_waypoint(v, map, &stations[st_idx], &profile);
+    let just_reached = move_towards_waypoint(v, map, &stations[st_idx], &profile, plane_speed);
     let ev = sync_phase_from_node(v, &profile);
     if just_reached && airport_node_is_loading_stand(profile.kind, v.airport_pos) {
         // La orden se completa recién al alcanzar físicamente el stand. Antes,
@@ -1305,6 +1327,7 @@ fn move_towards_waypoint(
     map: &Map,
     station: &Station,
     profile: &AirportFtaProfile,
+    plane_speed: u8,
 ) -> bool {
     ensure_airport_subpos(v);
     v.path.clear();
@@ -1357,7 +1380,12 @@ fn move_towards_waypoint(
             | FLAG_HELI_RAISE
             | FLAG_HELI_LOWER)
         != 0;
-    let rate = if fast { 4 } else { 1 };
+    // `plane_speed=4` conserva la cadencia histórica del motor FTA. Valores
+    // menores representan aeronaves más rápidas, como el divisor nativo de
+    // `UpdateAircraftSpeed`.
+    let base_rate = if fast { 4_u32 } else { 1_u32 };
+    let divisor = u32::from(plane_speed.clamp(1, 4));
+    let rate = i32::try_from((base_rate * 4).div_ceil(divisor)).unwrap_or(1);
     let step_x = dx.clamp(-rate, rate);
     let step_y = dy.clamp(-rate, rate);
     v.airport_sub_x += step_x;

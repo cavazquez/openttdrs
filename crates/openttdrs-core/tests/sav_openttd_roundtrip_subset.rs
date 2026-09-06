@@ -418,6 +418,23 @@ fn openttd_resaved_preserves_requested_disable_elrails() {
     );
 }
 
+/// #388: el fixture rico usa el divisor rápido `vehicle.plane_speed = 2`.
+/// OpenTTD debe conservar el `UINT8` PATS al re-guardar.
+#[test]
+fn openttd_resaved_preserves_requested_plane_speed() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_PLANE_SPEED").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PATS");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).expect("import openttdrs");
+    assert_eq!(
+        game.construction.plane_speed, 2,
+        "OpenTTD debe re-guardar PATS.vehicle.plane_speed = 2"
+    );
+}
+
 /// #387: el fixture rico usa el nivel reducido de `vehicle.plane_crashes`.
 /// OpenTTD debe conservar el `UINT8` PATS al re-guardar.
 #[test]

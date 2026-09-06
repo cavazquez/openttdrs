@@ -113,7 +113,7 @@ pub use aircraft_crash::{
 };
 pub use aircraft_movement::{
     aircraft_requires_path, straight_line_path, tick_aircraft_phase,
-    tick_aircraft_phase_with_catalog,
+    tick_aircraft_phase_with_catalog, tick_aircraft_phase_with_catalog_and_plane_speed,
 };
 pub use airport::{
     AIRPORT_SMALL_H, AIRPORT_SMALL_W, AirportPiece, airport_loading_tile, airport_loading_tile_at,

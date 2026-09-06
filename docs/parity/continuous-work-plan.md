@@ -900,6 +900,15 @@ deterministas y smoke OpenTTD 15.3 están cubiertos. Las rutas de accidente
 fuera de FTA y la UI nativa siguen pendientes; ver
 [`sav-plane-crashes-387.md`](sav-plane-crashes-387.md).
 
+Actualización #388 (2026-09-06, en curso): `PATS.vehicle.plane_speed` se
+hidrata en `ConstructionSettings`, se reemite como `SLE_UINT8` con rango
+`1..=4` y default `4`, y el divisor llega al movimiento lineal y FTA desde
+`GameState`. Las APIs históricas conservan el default nativo. El smoke
+OpenTTD 15.3 y la actualización final de commit/hash quedan pendientes antes
+de cerrar el issue; la aceleración completa y callbacks de velocidad siguen
+siendo residuales deliberados de #328. Ver
+[`sav-plane-speed-388.md`](sav-plane-speed-388.md).
+
 Actualización #329-INDUSTRY-CB28-021 (2026-09-02): CB28 mantiene la semántica
 exacta de OpenTTD (sin invertir el bit 10), y el call site de construcción
 expone `IACT_USERCREATION` (`param2=2`) y las variables de ubicación

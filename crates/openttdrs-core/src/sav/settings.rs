@@ -167,6 +167,13 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                 parsed.construction.disable_elrails = value;
                 found = true;
             }
+            if let Some(value) = record_get(&record, "vehicle.plane_speed")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+            {
+                parsed.construction.plane_speed = value.clamp(1, 4);
+                found = true;
+            }
             if let Some(value) = record_get(&record, "vehicle.plane_crashes")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value).ok())
@@ -591,6 +598,29 @@ mod tests {
                 .construction
                 .disable_elrails
         );
+    }
+
+    #[test]
+    fn reads_plane_speed_with_native_default_and_clamps_range() {
+        assert_eq!(settings_from_chunks(&[]).construction.plane_speed, 4);
+        let faster = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(2, "vehicle.plane_speed")], &[vec![1]]),
+        };
+        assert_eq!(settings_from_chunks(&[faster]).construction.plane_speed, 1);
+        let zero = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(2, "vehicle.plane_speed")], &[vec![0]]),
+        };
+        assert_eq!(settings_from_chunks(&[zero]).construction.plane_speed, 1);
+        let invalid = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(2, "vehicle.plane_speed")], &[vec![9]]),
+        };
+        assert_eq!(settings_from_chunks(&[invalid]).construction.plane_speed, 4);
     }
 
     #[test]

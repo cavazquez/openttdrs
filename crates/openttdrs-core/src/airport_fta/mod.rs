@@ -47,7 +47,9 @@ pub use profile::fta_profile_for_spec;
 pub use tick::{
     airport_nw_origin, init_airport_fta_on_purchase, init_country_fta_on_purchase,
     station_uses_airport_fta, station_uses_country_fta, tick_airport_fta,
-    tick_airport_fta_with_catalog, tick_country_airport_fta, tick_country_airport_fta_with_catalog,
+    tick_airport_fta_with_catalog, tick_airport_fta_with_catalog_and_plane_speed,
+    tick_country_airport_fta, tick_country_airport_fta_with_catalog,
+    tick_country_airport_fta_with_catalog_and_plane_speed,
 };
 pub use types::{
     AirportBlockBits, AirportFtaEdge, AirportFtaKind, AirportFtaProfile, AirportHeading,

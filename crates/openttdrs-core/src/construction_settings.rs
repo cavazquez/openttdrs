@@ -63,6 +63,13 @@ pub struct ConstructionSettings {
     /// normal y una conversión Electric → Rail no necesita cambiar la tesela.
     #[serde(default)]
     pub disable_elrails: bool,
+    /// Divisor de velocidad de aeronaves (`vehicle.plane_speed`).
+    ///
+    /// `OpenTTD` admite `1..=4` y usa `4` por defecto. El ajuste reduce la
+    /// distancia recorrida por tick; los valores fuera de rango se normalizan
+    /// al leer o escribir PATS.
+    #[serde(default = "default_plane_speed")]
+    pub plane_speed: u8,
     /// Nivel de accidentes de aeronaves (`vehicle.plane_crashes`).
     ///
     /// `0` desactiva los accidentes aleatorios, `1` usa la probabilidad
@@ -87,6 +94,10 @@ const fn default_plane_crashes() -> u8 {
     2
 }
 
+const fn default_plane_speed() -> u8 {
+    4
+}
+
 impl Default for ConstructionSettings {
     fn default() -> Self {
         Self {
@@ -97,6 +108,7 @@ impl Default for ConstructionSettings {
             distant_join_stations: default_distant_join_stations(),
             wagon_speed_limits: default_wagon_speed_limits(),
             disable_elrails: false,
+            plane_speed: default_plane_speed(),
             plane_crashes: default_plane_crashes(),
         }
     }
@@ -178,6 +190,11 @@ mod tests {
     #[test]
     fn disable_elrails_is_off_by_default() {
         assert!(!ConstructionSettings::default().disable_elrails);
+    }
+
+    #[test]
+    fn plane_speed_uses_openttd_default() {
+        assert_eq!(ConstructionSettings::default().plane_speed, 4);
     }
 
     #[test]

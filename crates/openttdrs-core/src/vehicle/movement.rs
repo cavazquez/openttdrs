@@ -12,6 +12,16 @@ use crate::train_movement::{ACCEL_SLOWDOWN, affect_speed_by_z_change, is_45_degr
 /// Paso sub-tile de referencia (bus MPS en diagonal). Ver [`crate::REFERENCE_PROGRESS_STEP`].
 pub const VEHICLE_PROGRESS_STEP: u8 = crate::engine::REFERENCE_PROGRESS_STEP;
 
+/// Escala la distancia sub-tile de una aeronave con `vehicle.plane_speed`.
+///
+/// El oráculo divide la distancia después de actualizar la velocidad. El
+/// cálculo se mantiene separado para que los call sites históricos, que no
+/// reciben `GameState`, conserven el divisor nativo `4`.
+#[must_use]
+pub(crate) fn aircraft_progress_step_for_plane_speed(step: u8, plane_speed: u8) -> u8 {
+    step / plane_speed.clamp(1, 4)
+}
+
 /// Sprite cardinal intermedio al girar 90° entre dos diagonales.
 #[must_use]
 const fn turn_cardinal_direction(
@@ -171,6 +181,25 @@ impl super::model::Vehicle {
         train_accel: TrainAccelerationModel,
         engine_catalog: &[crate::engine::EngineDef],
     ) {
+        self.step_with_map_and_accel_and_catalog_and_plane_speed(
+            map,
+            train_accel,
+            engine_catalog,
+            4,
+        );
+    }
+
+    /// Variante que aplica `vehicle.plane_speed` a aeronaves.
+    ///
+    /// Las APIs anteriores delegan aquí con el default nativo `4`, de modo
+    /// que no cambian los consumidores que todavía no poseen `GameState`.
+    pub fn step_with_map_and_accel_and_catalog_and_plane_speed(
+        &mut self,
+        map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
+        engine_catalog: &[crate::engine::EngineDef],
+        plane_speed: u8,
+    ) {
         if !self.running {
             self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
             if self.kind != super::model::VehicleKind::Train {
@@ -232,7 +261,7 @@ impl super::model::Vehicle {
             return;
         }
 
-        self.step_path_vehicle(map, train_accel, engine_catalog);
+        self.step_path_vehicle(map, train_accel, engine_catalog, plane_speed);
     }
 
     /// Movimiento genérico de barcos y aeronaves que siguen `movement_target`.
@@ -241,6 +270,7 @@ impl super::model::Vehicle {
         map: Option<&Map>,
         train_accel: TrainAccelerationModel,
         engine_catalog: &[crate::engine::EngineDef],
+        plane_speed: u8,
     ) {
         self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
 
@@ -288,7 +318,13 @@ impl super::model::Vehicle {
             return;
         }
 
-        let step = u16::from(self.progress_step());
+        let progress_step = self.progress_step();
+        let progress_step = if self.kind == super::model::VehicleKind::Aircraft {
+            aircraft_progress_step_for_plane_speed(progress_step, plane_speed)
+        } else {
+            progress_step
+        };
+        let step = u16::from(progress_step);
         let next = u16::from(self.progress) + step;
         if next < 255 {
             if let Ok(progress) = u8::try_from(next) {
@@ -1162,5 +1198,20 @@ impl super::model::Vehicle {
             return 0;
         }
         u32::try_from(u64::from(travel).saturating_sub(elapsed)).unwrap_or(1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::aircraft_progress_step_for_plane_speed;
+
+    #[test]
+    fn aircraft_progress_step_matches_plane_speed_divisor() {
+        assert_eq!(aircraft_progress_step_for_plane_speed(64, 1), 64);
+        assert_eq!(aircraft_progress_step_for_plane_speed(64, 2), 32);
+        assert_eq!(aircraft_progress_step_for_plane_speed(64, 3), 21);
+        assert_eq!(aircraft_progress_step_for_plane_speed(64, 4), 16);
+        assert_eq!(aircraft_progress_step_for_plane_speed(64, 0), 64);
+        assert_eq!(aircraft_progress_step_for_plane_speed(64, 9), 16);
     }
 }

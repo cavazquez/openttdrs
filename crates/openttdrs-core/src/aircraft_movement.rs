@@ -53,7 +53,7 @@ pub fn tick_aircraft_phase(
     map: &Map,
     stations: &mut [Station],
 ) -> AircraftPhaseEvent {
-    tick_aircraft_phase_with_catalog(v, map, stations, &[])
+    tick_aircraft_phase_with_catalog_and_plane_speed(v, map, stations, &[], 4)
 }
 
 /// Variante que resuelve velocidad y callbacks contra el catálogo activo de
@@ -64,13 +64,30 @@ pub fn tick_aircraft_phase_with_catalog(
     stations: &mut [Station],
     engine_catalog: &[crate::engine::EngineDef],
 ) -> AircraftPhaseEvent {
+    tick_aircraft_phase_with_catalog_and_plane_speed(v, map, stations, engine_catalog, 4)
+}
+
+/// Variante que aplica `vehicle.plane_speed` también al motor FTA de
+/// aeropuertos. El divisor nativo `4` queda como default de las APIs
+/// históricas que no reciben `GameState`.
+pub fn tick_aircraft_phase_with_catalog_and_plane_speed(
+    v: &mut Vehicle,
+    map: &Map,
+    stations: &mut [Station],
+    engine_catalog: &[crate::engine::EngineDef],
+    plane_speed: u8,
+) -> AircraftPhaseEvent {
     if v.kind != VehicleKind::Aircraft {
         return AircraftPhaseEvent::None;
     }
     // Country/Small: motor FTA cuando aplica.
-    if let Some(ev) =
-        crate::airport_fta::tick_country_airport_fta_with_catalog(v, map, stations, engine_catalog)
-    {
+    if let Some(ev) = crate::airport_fta::tick_country_airport_fta_with_catalog_and_plane_speed(
+        v,
+        map,
+        stations,
+        engine_catalog,
+        plane_speed,
+    ) {
         return ev;
     }
     match v.aircraft_phase {

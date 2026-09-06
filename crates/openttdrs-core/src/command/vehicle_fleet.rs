@@ -75,6 +75,21 @@ pub(super) fn set_vehicle_group_running(
     {
         return Err(CommandError::VehicleGroupNotFound);
     }
+    // Evaluate all callbacks before changing any `running` bit. OpenTTD does
+    // not leave a partially started group when one consist is rejected.
+    state.runtime.last_vehicle_start_stop_diagnostic = None;
+    let vehicle_ids: Vec<u32> = state
+        .vehicles
+        .iter()
+        .filter(|vehicle| vehicle.group_id == Some(group_id))
+        .map(|vehicle| vehicle.id)
+        .collect();
+    for vehicle_id in vehicle_ids {
+        if running {
+            can_start_vehicle_from_depot(state, vehicle_id)?;
+        }
+        check_vehicle_start_stop_callback(state, vehicle_id)?;
+    }
     for vehicle in &mut state.vehicles {
         if vehicle.group_id == Some(group_id) {
             vehicle.running = running;

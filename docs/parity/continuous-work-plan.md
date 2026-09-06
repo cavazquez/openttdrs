@@ -2187,3 +2187,12 @@ el rechazo de CB31 conserva un diagnóstico efímero por vehículo/GRFID y los
 botones de start/stop resuelven `LocalString`/`GrfString` con el catálogo
 expandido y el locale activo. El fallback genérico, la no persistencia y la
 ausencia de una segunda ejecución del callback quedan cubiertos por pruebas.
+
+Actualización #329-VEHICLE-CB31-GROUP-435 (2026-09-06, issue [#435](https://github.com/cavazquez/openttdrs/issues/435)):
+el comando de arranque/parada de grupos hace ahora un preflight completo de sus
+vehículos: valida la espera de horario y CB31 antes de cambiar cualquier estado.
+Una denegación es atómica, conserva el diagnóstico de la unidad responsable y
+la lista de vehículos lo entrega al feedback textual de #434. La regresión
+combina una unidad vanilla y una NewGRF para demostrar que no queda un grupo
+parcialmente iniciado; autoreemplazo y órdenes de depot siguen siendo
+sucesores del padre #329.

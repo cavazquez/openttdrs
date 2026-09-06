@@ -1260,3 +1260,14 @@ ventana y depósito lo resuelven con `NewGrfStringCatalog::lookup_expanded` y el
 locale activo. Los resultados `LocalString`/`GrfString` muestran el motivo
 Action4/Action13 expandido; `GenericDenied`, cadenas ausentes y otros errores
 mantienen el mensaje genérico. No se persiste ni se reejecuta el callback.
+
+### #329-VEHICLE-CB31-GROUP-435 — arranque/parada atómica de grupos
+
+Actualizado: 2026-09-06. `SetVehicleGroupRunning` hace un preflight de cada
+vehículo del grupo: conserva la validación de espera de horario en depósito y
+evalúa `CBID_VEHICLE_START_STOP_CHECK` antes de tocar cualquier bit `running`.
+Una denegación devuelve `NewGrfCallbackDenied`, deja la flota sin cambios
+parciales y conserva el diagnóstico efímero de la unidad que rechazó para el
+feedback textual de #434. La lista de vehículos usa el mismo catálogo y locale
+que las acciones individuales. Las reglas de CB31 para autoreemplazo y órdenes
+de depot siguen pendientes en #329.

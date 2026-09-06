@@ -438,6 +438,93 @@ fn vehicle_group_assign_and_save_v8_fields() {
 }
 
 #[test]
+fn vehicle_group_running_checks_cb31_atomically() {
+    use crate::engine::{ENGINE_BUS_MPS, NEWGRF_ENGINE_ID_BASE};
+    use crate::newgrf_callback::VehicleStartStopCallbackOutcome;
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+
+    let mut callback = TrainSpriteGraphics::default();
+    callback.assigns.push(TrainSpriteAssign {
+        local_id: 0,
+        set_id: 2,
+    });
+    callback.action2_var.insert(
+        2,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x1A,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: 0x10,
+                    ..Action2VarAdjust::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+
+    let mut s = GameState::new(8, 8);
+    apply_command(
+        &mut s,
+        &Command::CreateVehicleGroup {
+            name: "CB31".into(),
+        },
+    )
+    .unwrap();
+    let group_id = s.vehicle_groups[0].id;
+
+    let mut engine = crate::engine::engine_by_id(ENGINE_BUS_MPS).unwrap().clone();
+    engine.id = NEWGRF_ENGINE_ID_BASE + 30;
+    engine.newgrf_grfid = 0x4342_3331;
+    engine.newgrf_local_id = 0;
+    engine.newgrf_runtime = Some(Box::new(callback));
+    s.engine_catalog.push(engine);
+
+    let mut unrestricted = Vehicle::new(
+        1,
+        VehicleKind::Bus,
+        TileCoord::new(1, 1),
+        TileCoord::new(1, 1),
+    );
+    unrestricted.running = false;
+    unrestricted.group_id = Some(group_id);
+    let mut rejected = Vehicle::new(
+        2,
+        VehicleKind::Bus,
+        TileCoord::new(2, 1),
+        TileCoord::new(2, 1),
+    );
+    rejected.running = false;
+    rejected.group_id = Some(group_id);
+    rejected.engine_id = Some(NEWGRF_ENGINE_ID_BASE + 30);
+    s.vehicles.extend([unrestricted, rejected]);
+
+    let error = apply_command(
+        &mut s,
+        &Command::SetVehicleGroupRunning {
+            group_id,
+            running: true,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error, CommandError::NewGrfCallbackDenied);
+    assert!(s.vehicles.iter().all(|vehicle| !vehicle.running));
+    let diagnostic = s
+        .runtime
+        .last_vehicle_start_stop_diagnostic
+        .expect("group rejection should retain the denying vehicle");
+    assert_eq!(diagnostic.vehicle_id, 2);
+    assert_eq!(
+        diagnostic.outcome,
+        VehicleStartStopCallbackOutcome::LocalString(0xD010)
+    );
+}
+
+#[test]
 fn timetable_lateness_clear_command() {
     let mut s = GameState::new(4, 4);
     let mut v = Vehicle::new(

@@ -595,7 +595,22 @@ pub(crate) fn handle_vehicle_list_buttons(
                 &Command::SetVehicleGroupRunning { group_id, running },
             ) {
                 Ok(()) => pending.pending = true,
-                Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+                Err(e) => {
+                    let diagnostic_vehicle_id = sim
+                        .state
+                        .runtime
+                        .last_vehicle_start_stop_diagnostic
+                        .as_ref()
+                        .map_or(u32::MAX, |diagnostic| diagnostic.vehicle_id);
+                    push_vehicle_start_stop_error(
+                        &mut hud_feedback,
+                        &mut sim,
+                        e,
+                        diagnostic_vehicle_id,
+                        prefs.as_ref().map_or(Locale::Es, |prefs| prefs.locale()),
+                        time.elapsed_secs(),
+                    );
+                }
             }
             continue;
         }

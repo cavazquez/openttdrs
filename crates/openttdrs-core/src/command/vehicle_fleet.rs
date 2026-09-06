@@ -399,6 +399,7 @@ fn check_vehicle_start_stop_callback(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    state.runtime.last_vehicle_start_stop_diagnostic = None;
     let engine_id = state
         .vehicles
         .iter()
@@ -417,9 +418,19 @@ fn check_vehicle_start_stop_callback(
     let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
-    if crate::newgrf_callback::apply_vehicle_start_stop_callback(&engine, vehicle) {
+    let outcome = crate::newgrf_callback::resolve_vehicle_start_stop_callback(&engine, vehicle);
+    if matches!(
+        outcome,
+        crate::newgrf_callback::VehicleStartStopCallbackOutcome::Allow
+    ) {
         Ok(())
     } else {
+        state.runtime.last_vehicle_start_stop_diagnostic =
+            Some(crate::newgrf_callback::VehicleStartStopCallbackDiagnostic {
+                vehicle_id,
+                grfid: engine.newgrf_grfid,
+                outcome,
+            });
         Err(CommandError::NewGrfCallbackDenied)
     }
 }

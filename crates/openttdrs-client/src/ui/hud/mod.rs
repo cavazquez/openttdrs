@@ -7,7 +7,7 @@ mod input;
 mod place_flash;
 mod sound_ping;
 
-pub(crate) use feedback::push_build_command_error;
+pub(crate) use feedback::{push_build_command_error, push_vehicle_start_stop_error};
 
 pub(crate) use display::{setup_tile_info_ui, update_tile_info_text};
 pub(crate) use income_popup::{animate_income_popups, spawn_income_popups};

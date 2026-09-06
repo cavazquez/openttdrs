@@ -237,6 +237,11 @@ pub struct SimulationRuntime {
     /// No se persiste; se reconstruye al reaplicar el stack.
     pub newgrf_diagnostics: Vec<String>,
 
+    /// Motivo textual del último rechazo CB31, sólo durante el comando actual.
+    /// No se persiste y se consume únicamente si el HUD reporta ese vehículo.
+    pub last_vehicle_start_stop_diagnostic:
+        Option<crate::newgrf_callback::VehicleStartStopCallbackDiagnostic>,
+
     /// Overrides baseset [`crate::SoundId`] → `(grfid, local_id)` `NewGRF` (Action0 prop `0x0A`).
     /// Índice = `SoundId` 0..72; reconstruido al aplicar Sounds.
     pub sound_overrides: [Option<(u32, u8)>; crate::sound_id::SOUND_COUNT],
@@ -315,6 +320,7 @@ impl SimulationRuntime {
             pending_linkgraph_jobs: Vec::new(),
             command_recorder: None,
             newgrf_diagnostics: Vec::new(),
+            last_vehicle_start_stop_diagnostic: None,
             sound_overrides: [None; crate::sound_id::SOUND_COUNT],
             pending_newgrf_sounds: Vec::new(),
             legacy_sav_afterload: None,

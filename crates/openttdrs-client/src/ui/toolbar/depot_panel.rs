@@ -22,7 +22,7 @@ use crate::ui::floating_window::{
     spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
-use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::hud::{HudBuildFeedback, push_build_command_error, push_vehicle_start_stop_error};
 use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::{
@@ -1114,6 +1114,7 @@ pub(crate) fn handle_depot_panel_buttons(
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
+    prefs: Option<Res<ClientPreferences>>,
     time: Res<Time>,
 ) {
     for (interaction, sell) in &mut sell_q {
@@ -1167,7 +1168,14 @@ pub(crate) fn handle_depot_panel_buttons(
                 pending.pending = true;
                 depot_state.selected_vehicle = Some(vehicle_id);
             }
-            Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+            Err(e) => push_vehicle_start_stop_error(
+                &mut hud_feedback,
+                &mut sim,
+                e,
+                vehicle_id,
+                prefs.as_ref().map_or(Locale::Es, |prefs| prefs.locale()),
+                time.elapsed_secs(),
+            ),
         }
     }
 

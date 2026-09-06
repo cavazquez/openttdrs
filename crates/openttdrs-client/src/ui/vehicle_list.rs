@@ -8,17 +8,19 @@ use bevy::ui::widget::ImageNode;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 
+use crate::i18n::Locale;
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles,
     vehicle_world_position,
 };
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CREAM,
     WINDOW_TEXT, spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
-use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::hud::{HudBuildFeedback, push_build_command_error, push_vehicle_start_stop_error};
 use crate::ui::list_window::{
     LIST_BTN_ACTIVE, LIST_BTN_BG, LIST_BTN_HOVER, SortDir, clear_list_children, list_chip_bg,
     spawn_list_empty_label, spawn_list_scroll_area, spawn_list_sort_button,
@@ -513,6 +515,7 @@ pub(crate) fn handle_vehicle_list_buttons(
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
+    prefs: Option<Res<ClientPreferences>>,
     time: Res<Time>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
@@ -607,7 +610,14 @@ pub(crate) fn handle_vehicle_list_buttons(
                 ) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+                        push_vehicle_start_stop_error(
+                            &mut hud_feedback,
+                            &mut sim,
+                            e,
+                            vehicle_id,
+                            prefs.as_ref().map_or(Locale::Es, |prefs| prefs.locale()),
+                            time.elapsed_secs(),
+                        );
                     }
                 }
             }

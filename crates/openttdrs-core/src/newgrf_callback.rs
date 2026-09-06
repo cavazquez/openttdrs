@@ -365,6 +365,18 @@ pub enum VehicleStartStopCallbackOutcome {
     GenericDenied(u16),
 }
 
+/// Diagnóstico efímero que acompaña un rechazo de CB31 hasta la capa de UI.
+///
+/// No forma parte de `GameState` persistido ni altera el resultado del
+/// comando; sólo evita perder el GRFID y el `StringID` antes de que el HUD
+/// pueda resolver el texto del catálogo activo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VehicleStartStopCallbackDiagnostic {
+    pub vehicle_id: u32,
+    pub grfid: u32,
+    pub outcome: VehicleStartStopCallbackOutcome,
+}
+
 /// Clasifica el resultado bruto de CB `0x31` con la semántica de versión de
 /// `OpenTTD`. `register_100` sólo se consulta para el resultado especial `0x40F`.
 #[must_use]

@@ -5,11 +5,13 @@ use bevy::text::EditableText;
 use openttdrs_core::{Command, station::resolve_order_destination};
 
 use crate::camera::tile_camera_world_pos;
+use crate::i18n::Locale;
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, vehicle_world_position,
 };
+use crate::settings::ClientPreferences;
 use crate::state::{OrderPickState, SimWorld};
-use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::hud::{HudBuildFeedback, push_build_command_error, push_vehicle_start_stop_error};
 use crate::ui::refit_window::RefitWindowState;
 use crate::ui::timetable_window::{TimetableWindowState, open_timetable_for_vehicle};
 use crate::ui::toolbar::{OrderEditState, open_order_edit_for_vehicle};
@@ -36,6 +38,7 @@ pub(crate) fn handle_vehicle_window_buttons(
     >,
     mut refit_window: ResMut<RefitWindowState>,
     mut timetable: ResMut<TimetableWindowState>,
+    prefs: Option<Res<ClientPreferences>>,
     time: Res<Time>,
 ) {
     for (interaction, button) in &mut buttons {
@@ -53,7 +56,14 @@ pub(crate) fn handle_vehicle_window_buttons(
                 ) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+                        push_vehicle_start_stop_error(
+                            &mut hud_feedback,
+                            &mut sim,
+                            e,
+                            vehicle_id,
+                            prefs.as_ref().map_or(Locale::Es, |prefs| prefs.locale()),
+                            time.elapsed_secs(),
+                        );
                     }
                 }
             }

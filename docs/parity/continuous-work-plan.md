@@ -2181,3 +2181,9 @@ fallback de locale, IDs locales en el rango genérico, expansión anidada limita
 y corte de ciclos. El selector de objetos muestra ahora el texto expandido;
 parámetros dinámicos y consumidores de otros features permanecen como trabajo
 posterior.
+
+Actualización #329-VEHICLE-CB31-FEEDBACK-434 (2026-09-06, issue [#434](https://github.com/cavazquez/openttdrs/issues/434)):
+el rechazo de CB31 conserva un diagnóstico efímero por vehículo/GRFID y los
+botones de start/stop resuelven `LocalString`/`GrfString` con el catálogo
+expandido y el locale activo. El fallback genérico, la no persistencia y la
+ausencia de una segunda ejecución del callback quedan cubiertos por pruebas.

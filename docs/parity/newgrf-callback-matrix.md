@@ -1251,3 +1251,12 @@ locales al rango genérico, reutiliza el fallback de idioma, expande hasta ocho
 niveles y conserva un marcador ante cadenas ausentes o ciclos. El CB15C del
 ObjectPicker ya consume esta salida; parámetros dinámicos, pluralización,
 choice-lists y la conexión de otros features siguen pendientes.
+
+### #329-VEHICLE-CB31-FEEDBACK-434 — motivo textual de start/stop
+
+Actualizado: 2026-09-06. El rechazo de `CBID_VEHICLE_START_STOP_CHECK` conserva
+un diagnóstico efímero `(vehicle_id, GRFID, outcome)` y los botones de lista,
+ventana y depósito lo resuelven con `NewGrfStringCatalog::lookup_expanded` y el
+locale activo. Los resultados `LocalString`/`GrfString` muestran el motivo
+Action4/Action13 expandido; `GenericDenied`, cadenas ausentes y otros errores
+mantienen el mensaje genérico. No se persiste ni se reejecuta el callback.

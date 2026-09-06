@@ -243,7 +243,11 @@ fn skip_field(field: &TableField, data: &[u8], off: &mut usize) -> Result<(), Sa
     Ok(())
 }
 
-fn skip_record_fields(fields: &[TableField], data: &[u8], off: &mut usize) -> Result<(), SavError> {
+pub(crate) fn skip_record_fields(
+    fields: &[TableField],
+    data: &[u8],
+    off: &mut usize,
+) -> Result<(), SavError> {
     for field in fields {
         skip_field(field, data, off)?;
     }

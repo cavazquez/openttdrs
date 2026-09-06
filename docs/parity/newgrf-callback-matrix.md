@@ -342,9 +342,12 @@ estatuas, `valid_history` y texto), las listas `supplied`/`received` y
 (`MAX_COMPANIES` y `NUM_TAE`, con `TAE_NONE` en el slot 0), y una regresión
 valida el round-trip de escalares e historiales; un fixture generado se acepta
 con OpenTTD 15.3. La caché `cache.population` continúa fuera del writer porque
-OpenTTD la reconstruye desde las teselas. Mutaciones estructurales aún caen al
-header canónico y descartan columnas anidadas desconocidas; el writeback de PSA
-y los consumidores de cargos custom siguen pendientes.
+OpenTTD la reconstruye desde las teselas. Desde #426 el merge SAV también puede
+reencuadrar scalars y listas escalares dentro de un struct de cantidad estable,
+conservando subcampos desconocidos del cuerpo importado; una mutación de
+topología o una lista que crece con schema anidado distinto mantiene el
+fallback al header canónico. El writeback de PSA y los consumidores de cargos
+custom siguen pendientes.
 
 Actualización #329-TOWN-CITY-030 (2026-09-02, commit `b7429397`): `CITY.received.old_act/new_act`
 se hidrata ahora en las ventanas runtime que consulta `UpdateTownGrowth`, y

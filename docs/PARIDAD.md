@@ -1099,7 +1099,9 @@ con schema y tamaño codificado idénticos sobre el cuerpo SAV importado, siempr
 que las filas y sus índices permanezcan iguales. Esto conserva columnas futuras
 y huecos en `STNN`, `CITY`, `INDY`, `ORDL`, `VEHS`, `CAPA`, `PATS`, `ECMY`,
 `CAPY`, `GRPS`, `ERNW`, `NGRF`, `DATE` y `PLYR`; incluye strings, listas y
-structs/campos anidados cuando no cambian su forma codificada. El escritor
+structs/campos anidados cuando no cambian su forma codificada; desde #426
+también reencuadra scalars y listas escalares dentro de un struct de cantidad
+estable, conservando subcampos desconocidos del SAV importado. El escritor
 entrega el snapshot semántico a cada tabla reconstruida por esa fusión, de modo
 que un campo compatible de un schema legacy puede cambiar sin insertar campos
 modernos intactos; las regresiones directas cubren `PLYR` y `CITY`. El corte
@@ -1115,8 +1117,9 @@ distingue vector de array fijo, por lo que cada writer conserva los tamaños
 nativos de sus arrays. [#374](parity/sav-indy-history-374.md) normaliza los
 historiales representables de `INDY.accepted`/`produced` a 61 registros (o
 cero para la historia aceptada aún nula) y los comprueba tras re-guardado
-dedicado. Un subcampo desconocido/incompatible, cambio de forma, filas, índices
-o pools nativos no modelados sigue usando el writer canónico; la agregación
+dedicado. Un subcampo desconocido/incompatible, cambio de forma, una lista de
+structs que crece con subcampos desconocidos dentro de sus elementos, filas,
+índices o pools nativos no modelados sigue usando el writer canónico; la agregación
 runtime completa de esos historiales pertenece a #329/#330. Por eso #328/#329
 continúan abiertos.
 

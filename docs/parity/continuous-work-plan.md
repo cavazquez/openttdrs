@@ -2108,3 +2108,15 @@ Object/Town parent y persiste un resultado válido de 8 bits en `OBJS`/JSON/SAV.
 `CALLBACK_FAILED` y valores `>=0x100` conservan el color inicial; la regresión
 sintética verifica la selección del color. 2CC/livery avanzada, callbacks
 fund text/autoslope y el resto de scopes de Objects siguen fuera de esta etapa.
+
+Actualización #328-SAV-NESTED-426 (2026-09-06, issue [#426](https://github.com/cavazquez/openttdrs/issues/426)):
+el passthrough genérico de `CH_TABLE`/`CH_SPARSE_TABLE` compara ahora los
+descriptores de structs de forma recursiva. Cuando la cantidad de elementos se
+mantiene, una mutación de scalar o lista escalar anidada sustituye sólo el
+subcampo conocido y conserva las columnas hermanas desconocidas dentro de cada
+elemento. Las listas de structs que crecen siguen usando la fusión anterior
+cuando el schema es idéntico; si además cambia el schema anidado, la topología,
+las filas o los índices, el writer vuelve al camino canónico. Las regresiones
+sintética y los casos nativos de `CITY`/`INDY` pasan con 2150 tests de core;
+quedan pendientes pools no modelados y mutaciones estructurales con columnas
+desconocidas dentro de elementos nuevos.

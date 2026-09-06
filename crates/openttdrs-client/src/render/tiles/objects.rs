@@ -3549,6 +3549,7 @@ pub(crate) fn spawn_transport_object_tile(
         action5_sprites,
         images,
         &[],
+        &[],
     );
 }
 
@@ -3719,6 +3720,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
     road_stop_catalog: &[RoadStopSpecDef],
+    bridge_spec_catalog: &[openttdrs_core::BridgeSpecDef],
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -4390,6 +4392,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                     images,
                     stations,
                     road_stop_catalog,
+                    bridge_spec_catalog,
                 );
             }
         }

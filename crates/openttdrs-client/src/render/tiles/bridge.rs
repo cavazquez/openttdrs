@@ -83,6 +83,7 @@ pub(crate) fn spawn_bridge_middle_with_road_types(
         images,
         &[],
         &[],
+        &[],
     );
 }
 
@@ -107,6 +108,7 @@ pub(crate) fn spawn_bridge_middle_with_road_types_and_stations(
     images: Option<&mut Assets<Image>>,
     stations: &[openttdrs_core::Station],
     road_stop_catalog: &[openttdrs_core::RoadStopSpecDef],
+    bridge_spec_catalog: &[openttdrs_core::BridgeSpecDef],
 ) {
     let Some(tile) = ctx.tile else {
         return;
@@ -138,6 +140,7 @@ pub(crate) fn spawn_bridge_middle_with_road_types_and_stations(
         images,
         stations,
         road_stop_catalog,
+        bridge_spec_catalog,
     );
 }
 

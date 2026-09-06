@@ -2030,6 +2030,17 @@ límite de seis para no desalinear la propiedad siguiente y tolera payloads
 truncados sin panic. La aplicación NewGRF copia la tabla al `BridgeSpecDef`,
 marca `has_custom_pillar_flags` incluso para una máscara cero y el catálogo
 JSON la rehidrata con defaults compatibles con saves anteriores. Las
-regresiones cubren parseo, truncamiento, aplicación y round-trip; el renderer
-todavía usa el fallback vanilla hasta #419, que conectará la tabla al
-compositor y a la intersección con `disallowed_pillars`.
+regresiones cubren parseo, truncamiento, aplicación y round-trip. El issue
+quedó cerrado; la conexión visual se completó en #419.
+
+Actualización #329-BRIDGE-PILLAR-RENDER-419 (2026-09-06, issue [#419](https://github.com/cavazquez/openttdrs/issues/419)):
+El pase mundial y el compositor de objetos ya transportan
+`bridge_spec_catalog` hasta `DrawBridgeMiddle`. Para cada `BridgeType`, pieza
+central y eje, el renderer usa `BridgeSpecDef.pillar_flags` sólo cuando
+`has_custom_pillar_flags` está activo; una tabla publicada con cero conserva
+ese cero explícito y los saves/catálogos vanilla siguen usando las máscaras
+de OpenTTD. La intersección con `RoadStopSpecDef.disallowed_pillars` consulta
+la misma máscara, de modo que una parada custom bloquea únicamente el pilar
+que realmente dibujaría el puente. Las regresiones cubren override custom,
+override cero y fallback vanilla; la captura dorada contra OpenTTD queda como
+validación pendiente del cierre raster global.

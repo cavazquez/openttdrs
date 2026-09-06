@@ -289,6 +289,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     Some(action5_sprites),
                     Some(images),
                     &sim.state.road_stop_spec_catalog,
+                    &sim.state.bridge_spec_catalog,
                 );
             }
             TileKind::Industry => {
@@ -362,6 +363,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
             Some(images),
             &sim.state.stations,
             &sim.state.road_stop_spec_catalog,
+            &sim.state.bridge_spec_catalog,
         );
         if let Some(trace) = &world_draw_trace {
             trace.end_tile();

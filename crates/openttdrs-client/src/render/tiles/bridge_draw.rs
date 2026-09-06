@@ -186,6 +186,7 @@ pub(crate) struct CatenaryUnderLowBridge {
 /// esquinas `0..=3`, aristas `4..=7`.
 #[must_use]
 fn bridge_pillar_flags(
+    bridge_spec_catalog: &[openttdrs_core::BridgeSpecDef],
     bridge_type: BridgeType,
     piece: openttdrs_core::BridgePiece,
     axis: usize,
@@ -208,7 +209,7 @@ fn bridge_pillar_flags(
         [0x0C, 0x09],   // MiddleOdd
         [0x0C, 0x09],   // MiddleEven
     ];
-    let piece = match piece {
+    let piece_index = match piece {
         openttdrs_core::BridgePiece::North => 0,
         openttdrs_core::BridgePiece::South => 1,
         openttdrs_core::BridgePiece::InnerNorth => 2,
@@ -217,16 +218,21 @@ fn bridge_pillar_flags(
         openttdrs_core::BridgePiece::MiddleEven => 5,
     };
     let axis = axis.min(1);
+    if let Some(spec) = openttdrs_core::bridge_spec_def(bridge_spec_catalog, bridge_type)
+        .filter(|spec| spec.has_custom_pillar_flags)
+    {
+        return spec.pillar_flags[piece_index][axis];
+    }
     match bridge_type {
         BridgeType::SuspensionConcrete
         | BridgeType::SuspensionSteel
-        | BridgeType::SuspensionSteelYellow => SUSPENSION[piece][axis],
+        | BridgeType::SuspensionSteelYellow => SUSPENSION[piece_index][axis],
         BridgeType::CantileverSteel
         | BridgeType::CantileverBrown
         | BridgeType::CantileverRed
         | BridgeType::TubularSteel
         | BridgeType::TubularYellow
-        | BridgeType::TubularSilicon => CANTILEVER[piece][axis],
+        | BridgeType::TubularSilicon => CANTILEVER[piece_index][axis],
         BridgeType::Wooden
         | BridgeType::Concrete
         | BridgeType::GirderSteel
@@ -252,10 +258,12 @@ fn vanilla_road_stop_disallowed_pillars(layout: u8) -> u8 {
 /// Resuelve si la tesela bajo un vano debe ocultar sus pilares. La decisión
 /// es sólo visual: el chequeo de altura/validez permanece en `core`.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 fn road_stop_blocks_bridge_pillars(
     map: &Map,
     stations: &[Station],
     road_stop_catalog: &[RoadStopSpecDef],
+    bridge_spec_catalog: &[openttdrs_core::BridgeSpecDef],
     coord: TileCoord,
     bridge_type: BridgeType,
     piece: openttdrs_core::BridgePiece,
@@ -282,7 +290,7 @@ fn road_stop_blocks_bridge_pillars(
             || vanilla_road_stop_disallowed_pillars(layout),
             |info| info.disallowed_pillars,
         );
-    blocked & bridge_pillar_flags(bridge_type, piece, axis) != 0
+    blocked & bridge_pillar_flags(bridge_spec_catalog, bridge_type, piece, axis) != 0
 }
 
 /// Replica el bloque `IsBridgeAbove` de `DrawRailCatenaryRailway`.
@@ -1782,24 +1790,49 @@ mod tests {
     #[test]
     fn bridge_pillar_flags_match_vanilla_piece_tables() {
         assert_eq!(
-            bridge_pillar_flags(BridgeType::Wooden, BridgePiece::North, 0),
+            bridge_pillar_flags(&[], BridgeType::Wooden, BridgePiece::North, 0),
             0x0F
         );
         assert_eq!(
-            bridge_pillar_flags(BridgeType::SuspensionConcrete, BridgePiece::North, 0),
+            bridge_pillar_flags(&[], BridgeType::SuspensionConcrete, BridgePiece::North, 0),
             0x03
         );
         assert_eq!(
-            bridge_pillar_flags(BridgeType::SuspensionConcrete, BridgePiece::MiddleEven, 1),
+            bridge_pillar_flags(
+                &[],
+                BridgeType::SuspensionConcrete,
+                BridgePiece::MiddleEven,
+                1
+            ),
             0
         );
         assert_eq!(
-            bridge_pillar_flags(BridgeType::CantileverRed, BridgePiece::North, 0),
+            bridge_pillar_flags(&[], BridgeType::CantileverRed, BridgePiece::North, 0),
             0
         );
         assert_eq!(
-            bridge_pillar_flags(BridgeType::TubularSteel, BridgePiece::MiddleOdd, 1),
+            bridge_pillar_flags(&[], BridgeType::TubularSteel, BridgePiece::MiddleOdd, 1),
             0x09
+        );
+    }
+
+    #[test]
+    fn bridge_pillar_flags_prefer_custom_bridge_spec() {
+        let mut catalog = openttdrs_core::vanilla_bridge_spec_catalog();
+        let wooden = usize::from(BridgeType::Wooden.as_u8());
+        catalog[wooden].has_custom_pillar_flags = true;
+        catalog[wooden].pillar_flags[0][0] = 0xA5;
+        assert_eq!(
+            bridge_pillar_flags(&catalog, BridgeType::Wooden, BridgePiece::North, 0),
+            0xA5
+        );
+
+        // A published zero mask is also an explicit override, not a fallback
+        // to the vanilla four-corner table.
+        catalog[wooden].pillar_flags[0][0] = 0;
+        assert_eq!(
+            bridge_pillar_flags(&catalog, BridgeType::Wooden, BridgePiece::North, 0),
+            0
         );
     }
 
@@ -1871,6 +1904,24 @@ mod tests {
             &map,
             &stations,
             &catalog,
+            &[],
+            coord,
+            BridgeType::Wooden,
+            BridgePiece::MiddleOdd,
+            0,
+        ));
+
+        // The same road-stop mask is not enough to block a bridge whose GRF
+        // explicitly publishes an empty pillar table for this piece/axis.
+        let mut bridge_catalog = openttdrs_core::vanilla_bridge_spec_catalog();
+        let wooden = usize::from(BridgeType::Wooden.as_u8());
+        bridge_catalog[wooden].has_custom_pillar_flags = true;
+        bridge_catalog[wooden].pillar_flags[4][0] = 0;
+        assert!(!road_stop_blocks_bridge_pillars(
+            &map,
+            &stations,
+            &catalog,
+            &bridge_catalog,
             coord,
             BridgeType::Wooden,
             BridgePiece::MiddleOdd,
@@ -1884,6 +1935,7 @@ mod tests {
             &map,
             &stations,
             &catalog,
+            &[],
             coord,
             BridgeType::Wooden,
             BridgePiece::MiddleOdd,
@@ -1895,6 +1947,7 @@ mod tests {
         assert!(!road_stop_blocks_bridge_pillars(
             &map,
             &[station_without_spec],
+            &[],
             &[],
             coord,
             BridgeType::Wooden,
@@ -2490,6 +2543,7 @@ pub(crate) fn spawn_bridge_deck(
         images,
         &[],
         &[],
+        &[],
     );
 }
 
@@ -2519,6 +2573,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     mut images: Option<&mut Assets<Image>>,
     stations: &[Station],
     road_stop_catalog: &[RoadStopSpecDef],
+    bridge_spec_catalog: &[openttdrs_core::BridgeSpecDef],
 ) {
     use crate::sprites::{TransparencyOption, is_hidden};
     let ids = bridge_deck_sprite_ids(span.bridge_type, span.piece);
@@ -3235,6 +3290,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
         map,
         stations,
         road_stop_catalog,
+        bridge_spec_catalog,
         ctx.coord,
         span.bridge_type,
         span.piece,

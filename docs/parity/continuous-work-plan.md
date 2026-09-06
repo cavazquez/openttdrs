@@ -2213,3 +2213,9 @@ que CB13 de estaciones/road stops sólo devuelve booleano y no tiene StringID de
 error. El issue textual se cerró como no aplicable con referencias a
 `station_cmd.cpp` y `newgrf_commons.cpp`; no se declara una capacidad que
 OpenTTD no ofrece.
+
+Actualización #329-STATION-CB149-STANDARD-ERRORS-438 (2026-09-06, issue [#438](https://github.com/cavazquez/openttdrs/issues/438)):
+el HUD traduce los códigos estándar `0x402..0x408` de CB149 a los siete
+mensajes de clima/agua de OpenTTD en español e inglés. `0x401` y resultados
+desconocidos conservan el fallback genérico; la tabla sólo afecta al feedback y
+no altera el preflight ni la semántica del callback.

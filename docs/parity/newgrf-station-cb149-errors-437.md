@@ -9,7 +9,8 @@ motivo del primer rechazo antes de mutar el mapa:
 - `CALLBACK_FAILED` y `0x400` permiten;
 - los resultados `0..0x3FF` se convierten a `GRF_STRING_GENERIC_BASE + result`;
 - `0x40F` usa `register 0x100` cuando el callback lo publicó;
-- `0x401..0x408` y resultados desconocidos quedan como rechazo genérico;
+- `0x401` y resultados desconocidos quedan como rechazo genérico; `0x402..0x408`
+  conservan el código estándar para la tabla localizada de #438;
 - GRF menores que la versión 8 invierten el bit 10 antes de clasificar.
 
 El diagnóstico `(GRFID, outcome)` es efímero, se limpia al iniciar cada

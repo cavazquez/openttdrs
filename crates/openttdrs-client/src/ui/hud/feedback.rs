@@ -88,8 +88,10 @@ pub(crate) fn push_station_slope_error(
             let string_id = match diagnostic.outcome {
                 openttdrs_core::StationSlopeCallbackOutcome::LocalString(string_id)
                 | openttdrs_core::StationSlopeCallbackOutcome::GrfString(string_id) => string_id,
-                openttdrs_core::StationSlopeCallbackOutcome::Allow
-                | openttdrs_core::StationSlopeCallbackOutcome::GenericDenied(_) => return None,
+                openttdrs_core::StationSlopeCallbackOutcome::Allow => return None,
+                openttdrs_core::StationSlopeCallbackOutcome::GenericDenied(code) => {
+                    return standard_station_slope_error(code, locale);
+                }
             };
             let language = match locale {
                 Locale::Es => openttdrs_core::NEWGRF_LANGUAGE_SPANISH,
@@ -117,6 +119,27 @@ pub(crate) fn push_station_slope_error(
         Some(dynamic_message.unwrap_or_else(|| command_error_message(err).to_string()));
     feedback.expires_at_secs = elapsed_secs + BUILD_ERROR_DISPLAY_SECS;
     feedback.pending_soft_ping = true;
+}
+
+fn standard_station_slope_error(code: u16, locale: Locale) -> Option<String> {
+    let message = match (locale, code) {
+        (Locale::Es, 0x402) => "Sólo se puede construir en selva.",
+        (Locale::Es, 0x403) => "Sólo se puede construir en desierto.",
+        (Locale::Es, 0x404) => "Sólo se puede construir por encima de la línea de nieve.",
+        (Locale::Es, 0x405) => "Sólo se puede construir por debajo de la línea de nieve.",
+        (Locale::Es, 0x406) => "No se puede construir en el mar.",
+        (Locale::Es, 0x407) => "No se puede construir sobre un canal.",
+        (Locale::Es, 0x408) => "No se puede construir sobre un río.",
+        (Locale::En, 0x402) => "This can only be built in rainforest.",
+        (Locale::En, 0x403) => "This can only be built in desert.",
+        (Locale::En, 0x404) => "This can only be built above the snow line.",
+        (Locale::En, 0x405) => "This can only be built below the snow line.",
+        (Locale::En, 0x406) => "This cannot be built on sea.",
+        (Locale::En, 0x407) => "This cannot be built on a canal.",
+        (Locale::En, 0x408) => "This cannot be built on a river.",
+        _ => return None,
+    };
+    Some(message.to_string())
 }
 
 #[cfg(test)]
@@ -231,5 +254,28 @@ mod tests {
             Some("The station cannot be built: Use una plataforma plana")
         );
         assert!(sim.state.runtime.last_station_slope_diagnostic.is_none());
+    }
+
+    #[test]
+    fn station_slope_error_localizes_standard_callback_codes() {
+        let mut sim = SimWorld::default();
+        sim.state.runtime.last_station_slope_diagnostic = Some(StationSlopeCallbackDiagnostic {
+            grfid: 9,
+            outcome: StationSlopeCallbackOutcome::GenericDenied(0x407),
+        });
+        let mut feedback = HudBuildFeedback::default();
+
+        push_station_slope_error(
+            &mut feedback,
+            &mut sim,
+            CommandError::NewGrfCallbackDenied,
+            Locale::Es,
+            3.0,
+        );
+
+        assert_eq!(
+            feedback.message.as_deref(),
+            Some("No se puede construir sobre un canal.")
+        );
     }
 }

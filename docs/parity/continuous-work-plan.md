@@ -892,6 +892,13 @@ no-op. Parser, mutación, comandos y smoke están cubiertos; la ocultación del
 overlay de catenaria en el renderer global sigue siendo residual de #326/#329.
 Ver [evidencia #386](sav-disable-elrails-386.md).
 
+Actualización #387 (2026-09-06): `PATS.vehicle.plane_crashes` se acota como
+el siguiente corte SAV. El oráculo define un `UINT8` `0..2`, probabilidad
+general `(0x4000 << nivel) / 1500` y un caso especial fijo para jet en pista
+corta; la implementación debe persistirlo en PATS, aplicarlo al camino FTA
+existente, probar los umbrales y documentar que las rutas de accidente fuera
+de FTA y la UI nativa siguen pendientes.
+
 Actualización #329-INDUSTRY-CB28-021 (2026-09-02): CB28 mantiene la semántica
 exacta de OpenTTD (sin invertir el bit 10), y el call site de construcción
 expone `IACT_USERCREATION` (`param2=2`) y las variables de ubicación

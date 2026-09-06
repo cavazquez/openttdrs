@@ -63,6 +63,12 @@ pub struct ConstructionSettings {
     /// normal y una conversión Electric → Rail no necesita cambiar la tesela.
     #[serde(default)]
     pub disable_elrails: bool,
+    /// Nivel de accidentes de aeronaves (`vehicle.plane_crashes`).
+    ///
+    /// `0` desactiva los accidentes aleatorios, `1` usa la probabilidad
+    /// reducida y `2` la normal de `OpenTTD`.
+    #[serde(default = "default_plane_crashes")]
+    pub plane_crashes: u8,
 }
 
 const fn default_freeform_edges() -> bool {
@@ -77,6 +83,10 @@ const fn default_wagon_speed_limits() -> bool {
     true
 }
 
+const fn default_plane_crashes() -> u8 {
+    2
+}
+
 impl Default for ConstructionSettings {
     fn default() -> Self {
         Self {
@@ -87,6 +97,7 @@ impl Default for ConstructionSettings {
             distant_join_stations: default_distant_join_stations(),
             wagon_speed_limits: default_wagon_speed_limits(),
             disable_elrails: false,
+            plane_crashes: default_plane_crashes(),
         }
     }
 }
@@ -167,6 +178,11 @@ mod tests {
     #[test]
     fn disable_elrails_is_off_by_default() {
         assert!(!ConstructionSettings::default().disable_elrails);
+    }
+
+    #[test]
+    fn plane_crashes_uses_openttd_default() {
+        assert_eq!(ConstructionSettings::default().plane_crashes, 2);
     }
 
     #[test]

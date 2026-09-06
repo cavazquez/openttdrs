@@ -418,6 +418,23 @@ fn openttd_resaved_preserves_requested_disable_elrails() {
     );
 }
 
+/// #387: el fixture rico usa el nivel reducido de `vehicle.plane_crashes`.
+/// OpenTTD debe conservar el `UINT8` PATS al re-guardar.
+#[test]
+fn openttd_resaved_preserves_requested_plane_crashes() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_PLANE_CRASHES").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke PATS");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).expect("import openttdrs");
+    assert_eq!(
+        game.construction.plane_crashes, 1,
+        "OpenTTD debe re-guardar PATS.vehicle.plane_crashes = 1"
+    );
+}
+
 /// #383: el fixture rico usa valores no-default para todos los campos
 /// linkgraph que OpenTTD persiste en PATS. El dedicated los carga y guarda
 /// antes de que este importador compruebe tanto el wire como los cuatro

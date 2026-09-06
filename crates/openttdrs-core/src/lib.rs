@@ -109,7 +109,7 @@ pub use ai::{
 };
 pub use aircraft_crash::{
     SHORT_STRIP_JET_CRASH_PROB, crash_airplane, maybe_crash_after_brake_tick,
-    should_crash_short_strip_jet,
+    should_crash_aircraft, should_crash_short_strip_jet,
 };
 pub use aircraft_movement::{
     aircraft_requires_path, straight_line_path, tick_aircraft_phase,

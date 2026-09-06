@@ -15,7 +15,34 @@ pub const SHORT_STRIP_JET_CRASH_PROB: u32 = 3276;
 const RANDOM_BITS: u32 = 22;
 const RANDOM_MASK: u32 = (1 << RANDOM_BITS) - 1;
 
-/// ¿Debe estrellarse este aterrizaje según flags y tirada?
+/// ¿Debe estrellarse un avión según el tramo, ajuste y tirada?
+#[must_use]
+pub fn should_crash_aircraft(
+    short_strip: bool,
+    is_jet: bool,
+    no_jetcrash: bool,
+    plane_crashes: u8,
+    roll_22bit: u32,
+) -> bool {
+    let probability = if short_strip && is_jet {
+        if no_jetcrash {
+            return false;
+        }
+        SHORT_STRIP_JET_CRASH_PROB
+    } else {
+        if plane_crashes == 0 {
+            return false;
+        }
+        // OpenTTD: (0x4000 << plane_crashes) / 1500, with 0/1/2 as the
+        // none/reduced/normal setting values. Clamp malformed JSON/SAV input
+        // to the native maximum instead of shifting an unbounded value.
+        (0x4000_u32 << u32::from(plane_crashes.min(2))) / 1500
+    };
+    (roll_22bit & RANDOM_MASK) <= probability
+}
+
+/// Compatibilidad de la API histórica para el caso especial de jet en pista
+/// corta, cuyo umbral no depende de `vehicle.plane_crashes`.
 #[must_use]
 pub fn should_crash_short_strip_jet(
     short_strip: bool,
@@ -23,10 +50,10 @@ pub fn should_crash_short_strip_jet(
     no_jetcrash: bool,
     roll_22bit: u32,
 ) -> bool {
-    if !short_strip || !is_jet || no_jetcrash {
+    if !short_strip || !is_jet {
         return false;
     }
-    (roll_22bit & RANDOM_MASK) <= SHORT_STRIP_JET_CRASH_PROB
+    should_crash_aircraft(short_strip, is_jet, no_jetcrash, 2, roll_22bit)
 }
 
 /// Tirada con el RNG de partida (`Random` / 22 bits bajos).
@@ -131,7 +158,13 @@ pub fn maybe_crash_after_brake_tick(
     let is_jet = crate::engine::aircraft_is_jet(engine_id);
     let no_jetcrash = state.cheats.no_jetcrash_active();
     let roll = roll_crash_die(&mut state.random);
-    if !should_crash_short_strip_jet(def.fta_flags.short_strip(), is_jet, no_jetcrash, roll) {
+    if !should_crash_aircraft(
+        def.fta_flags.short_strip(),
+        is_jet,
+        no_jetcrash,
+        state.construction.plane_crashes,
+        roll,
+    ) {
         return false;
     }
     let at = state.vehicles[idx].pos;
@@ -164,6 +197,29 @@ mod tests {
         assert!(!should_crash_short_strip_jet(true, true, true, 0));
         assert!(!should_crash_short_strip_jet(false, true, false, 0));
         assert!(!should_crash_short_strip_jet(true, false, false, 0));
+    }
+
+    #[test]
+    fn plane_crashes_setting_controls_non_special_probability() {
+        let reduced_limit = (0x4000_u32 << 1) / 1500;
+        let normal_limit = (0x4000_u32 << 2) / 1500;
+        assert!(!should_crash_aircraft(false, false, false, 0, 0));
+        assert!(should_crash_aircraft(false, false, false, 1, reduced_limit));
+        assert!(!should_crash_aircraft(
+            false,
+            false,
+            false,
+            1,
+            reduced_limit + 1
+        ));
+        assert!(should_crash_aircraft(false, false, false, 2, normal_limit));
+        assert!(!should_crash_aircraft(
+            false,
+            false,
+            false,
+            2,
+            normal_limit + 1
+        ));
     }
 
     #[test]

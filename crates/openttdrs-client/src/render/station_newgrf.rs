@@ -218,6 +218,8 @@ mod tests {
             newgrf_grfid: 0,
             newgrf_grf_version: 0,
             newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             custom_layouts: Default::default(),
         };
         let mut images = Assets::<Image>::default();
@@ -284,6 +286,8 @@ mod tests {
             newgrf_grfid: 0,
             newgrf_grf_version: 0,
             newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             custom_layouts: Default::default(),
         };
         let mut ctx = openttdrs_core::Action2EvalCtx::default();
@@ -360,6 +364,8 @@ mod tests {
             newgrf_grfid: 0,
             newgrf_grf_version: 0,
             newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             custom_layouts: Default::default(),
         };
         let mut images = Assets::<Image>::default();

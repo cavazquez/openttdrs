@@ -193,6 +193,8 @@ pub struct ParsedStationMeta {
     pub animation_speed: u8,
     /// Action0 `0x18`: `StationAnimationTrigger` que invocan CB140.
     pub animation_triggers: u16,
+    /// Prop `0x1F`: índices locales de la Badge Translation Table.
+    pub badge_local_ids: Vec<u16>,
     /// Layouts prop `0x0E`: `(platforms, length)` → tiletypes.
     pub custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
     /// Prop `0x0F`: copiar layouts desde este id local (si definido).
@@ -1336,6 +1338,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
     let mut animation_frames = 0u8;
     let mut animation_speed = 2u8;
     let mut animation_triggers = 0u16;
+    let mut badge_local_ids = Vec::new();
     let mut custom_layouts = std::collections::HashMap::new();
     let mut copy_layout_from = None;
     for _ in 0..header.num_props {
@@ -1444,6 +1447,13 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                 animation_triggers = u16::from_le_bytes([bytes[0], bytes[1]]);
                 i += 2;
             }
+            // 0x1F: Badge list (WORD count + N×WORD local ids).
+            0x1F => {
+                let Some(ids) = read_badge_local_ids(payload, &mut i) else {
+                    break;
+                };
+                badge_local_ids = ids;
+            }
             PROP_NAME_CSTRING => {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
                     break;
@@ -1466,6 +1476,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
         animation_frames,
         animation_speed,
         animation_triggers,
+        badge_local_ids,
         custom_layouts,
         copy_layout_from,
     ))
@@ -1483,6 +1494,7 @@ fn finish_parsed_station_meta(
     animation_frames: u8,
     animation_speed: u8,
     animation_triggers: u16,
+    badge_local_ids: Vec<u16>,
     custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
     copy_layout_from: Option<u16>,
 ) -> ParsedStationMeta {
@@ -1519,6 +1531,7 @@ fn finish_parsed_station_meta(
         animation_frames,
         animation_speed,
         animation_triggers,
+        badge_local_ids,
         custom_layouts,
         copy_layout_from,
     }

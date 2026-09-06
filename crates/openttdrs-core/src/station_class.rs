@@ -123,6 +123,12 @@ pub struct StationSpecDef {
     /// Tablas de traducción del GRF para vars Action2 (`42`, etc.).
     #[serde(default, skip)]
     pub newgrf_type_tables: Option<crate::newgrf_type_tables::GrfTypeTranslationTables>,
+    /// Badges globales asociados a la spec (`Action0` prop `0x1F`).
+    #[serde(default)]
+    pub associated_badges: Vec<u16>,
+    /// Tabla GRF-local usada por `StationScope` var `0x7A`.
+    #[serde(default, skip)]
+    pub newgrf_badge_translation: Vec<u16>,
     /// Layouts custom Action0 prop `0x0E`: clave `(platforms, length)` → tiletypes.
     #[serde(default, skip)]
     pub custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
@@ -413,6 +419,8 @@ pub fn vanilla_station_spec_catalog() -> Vec<StationSpecDef> {
         newgrf_grfid: 0,
         newgrf_grf_version: 0,
         newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
         custom_layouts: std::collections::HashMap::new(),
     }]
 }

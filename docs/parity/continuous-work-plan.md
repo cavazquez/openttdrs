@@ -1845,6 +1845,19 @@ pool importado permiten demostrar el origen. La regresión compara ambos
 contextos con datos de carbón no nulos; cargos custom/CTT, textos, sonidos y
 los scopes restantes de `BaseStation` siguen pendientes en #329.
 
+Actualización #329-STATION-BADGES-402 (2026-09-06, issue [#402](https://github.com/cavazquez/openttdrs/issues/402)):
+Station Action0 prop `0x1F` ya lee `ReadBadgeList` (índices WORD), y
+`apply_newgrf_stations` resuelve esos índices mediante la Badge Translation
+Table `GlobalVar 0x18` y el catálogo global, conservando `u16::MAX` para
+labels no resolubles. `StationSpecDef` guarda las asociaciones y la tabla
+local de runtime; los contextos catalog-aware del renderer exponen
+`0x7A(parameter)` como `1`/`0`/`UINT_MAX`, igual que `GetBadgeVariableResult`.
+La variante legacy `action2_eval_ctx_from_station_with_spec` y su callback de
+disponibilidad equivalente conservan la misma respuesta sin tesela cuando el
+caller aporta la spec. La API histórica que sólo recibe `Station` no conoce la
+spec ni la tabla del GRF y mantiene el fallback sin badge; scopes completos de
+`BaseStation`, strings y sonidos siguen pendientes en #329.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

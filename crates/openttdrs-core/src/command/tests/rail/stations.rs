@@ -124,6 +124,8 @@ fn place_rail_station_area_persists_newgrf_station_spec() {
         newgrf_grfid: 0,
         newgrf_grf_version: 0,
         newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
         custom_layouts: std::collections::HashMap::new(),
     });
     s.current_station_class = class_id;
@@ -176,6 +178,8 @@ fn place_rail_station_area_rejects_disallowed_platforms_and_lengths() {
         newgrf_grfid: 0,
         newgrf_grf_version: 0,
         newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
         custom_layouts: std::collections::HashMap::new(),
     });
     s.current_station_class = class_id;
@@ -267,6 +271,8 @@ fn place_rail_station_0e_layout_writes_tiletypes_for_distinct_views() {
         newgrf_grfid: 0,
         newgrf_grf_version: 0,
         newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
         custom_layouts: layouts,
     });
     s.current_station_class = class_id;
@@ -362,6 +368,8 @@ fn place_rail_station_cb24_overrides_0e_tiletype() {
         newgrf_grfid: 1,
         newgrf_grf_version: 0,
         newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
         custom_layouts: layouts,
     });
     s.current_station_class = class_id;

@@ -3570,6 +3570,8 @@ fn sloped_newgrf_station_overlay_follows_foundation_parent() {
         newgrf_grfid: 0x5354_4E47,
         newgrf_grf_version: 8,
         newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
         custom_layouts: std::collections::HashMap::new(),
     };
     let mut station = Station::new_with_kind(c(1, 1), StopKind::RailStation);

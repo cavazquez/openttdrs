@@ -2595,6 +2595,66 @@ mod tests {
     }
 
     #[test]
+    fn parse_station_badge_list_prop_1f() {
+        let mut payload = vec![0x00, ACTION0_FEATURE_STATIONS, 0x02, 0x01, 0x00];
+        payload.push(0x08); // Station class label.
+        payload.extend_from_slice(b"BDGE");
+        payload.push(0x1F); // ReadBadgeList: WORD count + local ids.
+        payload.extend_from_slice(&2u16.to_le_bytes());
+        payload.extend_from_slice(&[0x03, 0x00, 0x07, 0x00]);
+
+        let meta = parse_action0_station_meta(&payload).unwrap();
+        assert_eq!(meta.badge_local_ids, vec![3, 7]);
+    }
+
+    #[test]
+    fn apply_station_badges_uses_globalvar_translation_table() {
+        let badge = build_action0_badge_payload(b"GATE", 0, None);
+        let badge_translation = vec![
+            0x00,
+            crate::newgrf_type_tables::ACTION0_FEATURE_GLOBALVAR,
+            0x01,
+            0x01,
+            0x00,
+            crate::newgrf_type_tables::PROP_BADGE_TRANSLATION,
+            b'G',
+            b'A',
+            b'T',
+            b'E',
+            0,
+        ];
+        let mut station = build_action0_station_payload(b"BDGE", b"Gate", 0, 0, "Badge Station");
+        station[2] = station[2].saturating_add(1);
+        let name_start = station.len().saturating_sub("Badge Station".len() + 2);
+        let tail = station.split_off(name_start);
+        station.extend_from_slice(&[0x1F, 0x01, 0x00, 0x00, 0x00]);
+        station.extend(tail);
+
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&badge, &badge_translation, &station],
+            [b'S', b'B', 0, 1],
+            "station-badge",
+            "",
+        );
+        let dir = tempfile_dir_with("station-badge.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("station-badge.grf", 0x5342_0001));
+        apply_newgrf_badges(&mut state, &[&dir]);
+        apply_newgrf_stations(&mut state, &[&dir]);
+
+        let badge_id = state.badge_catalog[0].id;
+        let spec = state
+            .station_spec_catalog
+            .iter()
+            .find(|spec| spec.from_newgrf)
+            .unwrap();
+        assert_eq!(spec.associated_badges, vec![badge_id]);
+        assert_eq!(spec.newgrf_badge_translation, vec![badge_id]);
+    }
+
+    #[test]
     fn parse_and_apply_station_animation_props_13_16_17_18() {
         let callback_mask = crate::STATION_CALLBACK_ANIMATION_NEXT_FRAME_MASK
             | crate::STATION_CALLBACK_ANIMATION_SPEED_MASK;

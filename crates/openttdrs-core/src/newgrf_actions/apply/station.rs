@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use crate::GameState;
+use crate::badge::resolve_badge_local_ids;
 use crate::station_class::{
     StationClassDef, StationClassId, StationSpecDef, StationSpecId, next_free_station_class_id,
     next_free_station_spec_id, vanilla_station_class_catalog, vanilla_station_spec_catalog,
@@ -34,6 +35,7 @@ fn resolve_or_create_station_class(
 }
 
 /// Reconstruye catálogos de estación desde el stack `enabled` + vanilla.
+#[allow(clippy::too_many_lines)]
 pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
     let mut classes = vanilla_station_class_catalog();
     let mut specs = vanilla_station_spec_catalog();
@@ -89,6 +91,21 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
             } else {
                 None
             };
+            let (associated_badges, newgrf_badge_translation, unresolved_badges) =
+                resolve_badge_local_ids(
+                    &meta.badge_local_ids,
+                    tables_opt
+                        .as_ref()
+                        .map_or(&[][..], |tables| tables.badges.as_slice()),
+                    &state.badge_catalog,
+                    entry.grfid,
+                );
+            for local_id in unresolved_badges {
+                state.runtime.newgrf_diagnostics.push(format!(
+                    "{}: station '{}': badge local no resuelto ({local_id})",
+                    entry.filename, meta.label
+                ));
+            }
             let custom_layouts = layouts_by_local.get(local_idx).cloned().unwrap_or_default();
             specs.push(StationSpecDef {
                 id: spec_id,
@@ -111,6 +128,8 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 newgrf_grfid: entry.grfid,
                 newgrf_grf_version: entry.grf_version,
                 newgrf_type_tables: tables_opt.clone(),
+                associated_badges,
+                newgrf_badge_translation,
                 custom_layouts,
             });
         }

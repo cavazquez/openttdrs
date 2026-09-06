@@ -42,7 +42,8 @@ use crate::road_stop_action2::{
 use crate::road_stop_spec::RoadStopSpecDef;
 use crate::station::{Station, station_at_tile};
 use crate::station_action2::{
-    action2_eval_ctx_for_station_tile_with_grf, populate_station_scope_fallback_vars,
+    action2_eval_ctx_for_station_tile_with_grf, populate_station_badge_vars_for_spec,
+    populate_station_scope_fallback_vars,
 };
 use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
 use crate::town::Town;
@@ -114,6 +115,19 @@ pub fn action2_eval_ctx_from_station(station: &Station) -> Action2EvalCtx {
         .clone_from(&station.newgrf_persistent_regs);
     ctx.random_bits = u32::from(station.newgrf_random_bits);
     populate_station_scope_fallback_vars(&mut ctx, station);
+    ctx
+}
+
+/// Contexto legacy de una estación cuando el caller conserva también su
+/// `StationSpec`. Esto habilita `StationScope` `0x7A` sin exigir mapa: `OpenTTD`
+/// recibe la spec en el resolver aunque la estación aún no tenga tesela.
+#[must_use]
+pub fn action2_eval_ctx_from_station_with_spec(
+    station: &Station,
+    spec: &crate::station_class::StationSpecDef,
+) -> Action2EvalCtx {
+    let mut ctx = action2_eval_ctx_from_station(station);
+    populate_station_badge_vars_for_spec(&mut ctx, spec);
     ctx
 }
 
@@ -2889,6 +2903,21 @@ pub fn apply_station_availability_callback(
     station: &mut Station,
 ) -> bool {
     let mut ctx = action2_eval_ctx_from_station(station);
+    let result = gfx.resolve_callback_ctx(local_id, CBID_STATION_AVAILABILITY, 0, 0, &mut ctx);
+    writeback_station_persistent_registers(station, &ctx);
+    callback_allows_8bit_boolean(result)
+}
+
+/// Variante legacy de disponibilidad que conserva la `StationSpec` y por
+/// tanto puede evaluar badges `0x7A` aun sin una tesela de mapa.
+#[must_use]
+pub fn apply_station_availability_callback_with_spec(
+    gfx: &TrainSpriteGraphics,
+    local_id: u8,
+    station: &mut Station,
+    spec: &crate::station_class::StationSpecDef,
+) -> bool {
+    let mut ctx = action2_eval_ctx_from_station_with_spec(station, spec);
     let result = gfx.resolve_callback_ctx(local_id, CBID_STATION_AVAILABILITY, 0, 0, &mut ctx);
     writeback_station_persistent_registers(station, &ctx);
     callback_allows_8bit_boolean(result)
@@ -6819,6 +6848,26 @@ mod tests {
             ),
             3
         );
+    }
+
+    #[test]
+    fn station_availability_legacy_spec_scope_exposes_badges() {
+        let mut st = Station::new(TileCoord::new(2, 2));
+        let mut spec = crate::station_class::vanilla_station_spec_catalog().remove(0);
+        spec.associated_badges = vec![17];
+        spec.newgrf_badge_translation = vec![17];
+        let mut gfx = gfx_callback_variable_byte(0x7A, 0);
+        gfx.action2_var.get_mut(&2).unwrap().first.param = Some(0);
+
+        let mut ctx = action2_eval_ctx_from_station_with_spec(&st, &spec);
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 0)), Some(&1));
+        assert_eq!(
+            gfx.resolve_callback_ctx(0, CBID_STATION_AVAILABILITY, 0, 0, &mut ctx),
+            1
+        );
+        assert!(apply_station_availability_callback_with_spec(
+            &gfx, 0, &mut st, &spec
+        ));
     }
 
     #[test]

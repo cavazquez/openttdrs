@@ -135,6 +135,7 @@ pub fn action2_eval_ctx_for_station_tile_with_catalog(
         type_tables,
         grf_version,
     );
+    populate_station_badge_vars(&mut ctx, map, stations, station_catalog, coord);
     populate_station_neighbour_vars(
         &mut ctx,
         map,
@@ -171,6 +172,7 @@ pub fn action2_eval_ctx_for_station_tile_with_catalog_and_world(
         grf_version,
         world,
     );
+    populate_station_badge_vars(&mut ctx, map, stations, station_catalog, coord);
     populate_station_neighbour_vars(
         &mut ctx,
         map,
@@ -181,6 +183,67 @@ pub fn action2_eval_ctx_for_station_tile_with_catalog_and_world(
         grf_version,
     );
     ctx
+}
+
+/// Materializa `StationScope` `0x7A` usando la Badge Translation Table local
+/// de la spec actual. `OpenTTD` devuelve `UINT_MAX` para índices no resolubles;
+/// conservar el sentinel evita confundir un badge inexistente con uno ausente.
+fn populate_station_badge_vars(
+    ctx: &mut Action2EvalCtx,
+    map: &Map,
+    stations: &[Station],
+    station_catalog: &[StationSpecDef],
+    coord: TileCoord,
+) {
+    let Some(station) = station_at_tile(map, stations, coord) else {
+        return;
+    };
+    let Some(spec) = station_spec_def(station_catalog, station.station_spec) else {
+        return;
+    };
+    populate_station_badge_vars_for_spec(ctx, spec);
+}
+
+/// Variante sin tesela para callbacks legacy que sí conservan la
+/// `StationSpec` activa. La API que sólo recibe `Station` no puede invocarla
+/// sin inventar la tabla local del GRF.
+pub(crate) fn populate_station_badge_vars_for_spec(
+    ctx: &mut Action2EvalCtx,
+    spec: &StationSpecDef,
+) {
+    let mut requested = BTreeSet::new();
+    if let Some(runtime) = spec.newgrf_runtime.as_ref() {
+        for entry in runtime.action2_var.values() {
+            for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+                if term.variable == 0x7A
+                    && let Some(parameter) = term.param
+                {
+                    requested.insert(parameter);
+                }
+            }
+        }
+    }
+    // Conservar también las entradas traducidas permite inspeccionar el
+    // contexto antes de resolver el grupo, como hacen los otros scopes.
+    requested.extend(
+        spec.newgrf_badge_translation
+            .iter()
+            .enumerate()
+            .filter_map(|(index, _)| u8::try_from(index).ok()),
+    );
+    for parameter in requested {
+        let badge_id = spec
+            .newgrf_badge_translation
+            .get(usize::from(parameter))
+            .copied()
+            .unwrap_or(u16::MAX);
+        let value = if badge_id == u16::MAX {
+            u32::MAX
+        } else {
+            u32::from(spec.associated_badges.contains(&badge_id))
+        };
+        ctx.parameterized_vars.insert((0x7A, parameter), value);
+    }
 }
 
 struct StationNeighbourScope<'a> {
@@ -1137,6 +1200,8 @@ mod tests {
             newgrf_grfid: grfid,
             newgrf_grf_version: 8,
             newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             custom_layouts: std::collections::HashMap::new(),
         }
     }
@@ -1233,6 +1298,39 @@ mod tests {
         assert_eq!(ctx.parameterized_vars.get(&(0x6B, 0x02)), Some(&0xFFFE));
         assert_eq!(ctx.parameterized_vars.get(&(0x66, 0xFF)), Some(&u32::MAX));
         assert_eq!(ctx.parameterized_vars.get(&(0x68, 0xFF)), Some(&u32::MAX));
+    }
+
+    #[test]
+    fn station_badge_var_uses_grf_local_translation_and_sentinel() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(1, 1);
+        map.set_tile(coord, rail_station_tile(0)).unwrap();
+        let mut station = Station::new_with_kind(coord, StopKind::RailStation);
+        station.station_spec = crate::station_class::StationSpecId::from_u16(1);
+
+        let mut spec = station_spec(
+            1,
+            0xBEEF_0001,
+            0,
+            station_neighbour_runtime(&[(0x7A, 0), (0x7A, 1), (0x7A, 2), (0x7A, 4)]),
+        );
+        spec.associated_badges = vec![42];
+        spec.newgrf_badge_translation = vec![42, u16::MAX, 7];
+        let ctx = action2_eval_ctx_for_station_tile_with_catalog(
+            &map,
+            &[station],
+            &[spec],
+            coord,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+        );
+
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 0)), Some(&1));
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 1)), Some(&u32::MAX));
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 2)), Some(&0));
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 4)), Some(&u32::MAX));
     }
 
     #[test]

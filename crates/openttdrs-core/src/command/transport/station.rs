@@ -115,6 +115,7 @@ pub(crate) fn check_road_stop_spec_restrictions(
         state.active_company,
         owner_colour,
         &state.companies,
+        crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date),
     ) {
         return Err(CommandError::NewGrfCallbackDenied);
     }
@@ -296,7 +297,7 @@ pub(in crate::command) fn check_rail_station_spec_restrictions(
         state.active_company,
         owner_colour,
         &state.companies,
-        state.calendar.date,
+        crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date),
     ) {
         return Err(CommandError::NewGrfCallbackDenied);
     }

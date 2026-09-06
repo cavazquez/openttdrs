@@ -741,6 +741,71 @@ fn place_bus_stop_persists_current_road_stop_spec() {
 }
 
 #[test]
+fn place_bus_stop_availability_sees_absolute_calendar_date() {
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+    use crate::road_stop_spec::{RoadStopClassDef, RoadStopSpecDef};
+
+    let mut s = GameState::new(8, 8);
+    s.calendar.date = 123;
+    s.road_stop_class_catalog.push(RoadStopClassDef {
+        id: 0,
+        label: "Fecha".into(),
+        short_label: "DATE".into(),
+        from_newgrf: true,
+    });
+    let mut runtime = TrainSpriteGraphics::default();
+    runtime.assigns.push(TrainSpriteAssign {
+        local_id: 0,
+        set_id: 2,
+    });
+    runtime.action2_var.insert(
+        2,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0xFA,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: u32::MAX,
+                    ..Action2VarAdjust::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+    s.road_stop_spec_catalog.push(RoadStopSpecDef {
+        id: 0,
+        class: 0,
+        label: "Fecha NewGRF".into(),
+        short_label: "DATE".into(),
+        stop_type: 0,
+        from_newgrf: true,
+        grfid: 0x406,
+        newgrf_local_id: 0,
+        newgrf_grf_version: 8,
+        draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+        random_cargo_triggers: 0,
+        flags: 0,
+        callback_mask: crate::ROADSTOP_CALLBACK_MASK_AVAILABILITY,
+        animation_status: 0,
+        animation_frames: 0,
+        animation_speed: 0,
+        animation_triggers: 0,
+        newgrf_views: Vec::new(),
+        newgrf_runtime: Some(Box::new(runtime)),
+        newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+    });
+    apply_command(&mut s, &Command::SetCurrentRoadStopSpec(0)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 0))).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(TileCoord::new(1, 1), 3)).unwrap();
+    assert_eq!(s.stations[0].road_stop_spec, Some(0));
+}
+
+#[test]
 fn place_bus_stop_bay_orients_0_to_3() {
     for dir in 0u8..4 {
         let mut s = GameState::new(8, 8);

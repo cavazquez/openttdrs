@@ -1897,6 +1897,15 @@ mantiene un fallback determinista. La regresión cubre `0x47`, `0x50`, `0x45`,
 selector; vecinos, terreno real, cargas, strings y sonidos continúan en el
 scope runtime de la parada colocada y el padre #329 sigue abierto.
 
+Actualización #329-PURCHASE-DATE-407 (2026-09-06, issue [#407](https://github.com/cavazquez/openttdrs/issues/407)):
+la frontera entre el reloj del core y el calendario NewGRF quedó corregida:
+`CalendarTimer.date` es relativo al año base y los preflights de estaciones y
+road stops ahora pasan `DAYS_TILL_ORIGINAL_BASE_YEAR + date` al resolver. Así
+`0xFA` devuelve la fecha relativa correcta (saturada a WORD) durante la compra,
+no cero por underflow saturado. Las regresiones ejecutan `PlaceRailStationArea`
+y `PlaceBusStop` con un callback que lee `0xFA`; ambas construcciones sólo
+pueden pasar si reciben el día absoluto. El padre #329 sigue abierto.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

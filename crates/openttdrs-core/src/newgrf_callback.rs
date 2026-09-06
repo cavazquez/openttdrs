@@ -3039,6 +3039,7 @@ pub fn apply_road_stop_availability_callback(
         CompanyId::PLAYER,
         0,
         &[],
+        crate::station::STATION_BUILD_DATE_DEFAULT,
     )
 }
 
@@ -3048,9 +3049,12 @@ pub fn apply_road_stop_availability_callback(
 /// `tile == INVALID_TILE` durante el picker. En ese scope las variables de
 /// pueblo, estación, animación y terreno no leen una parada artificial:
 /// devuelven sentinelas explícitos (`0x45`, `0x46`, `0x49`, `0x50`), mientras
-/// `0x47` expone el `CompanyInfo` de la compañía activa. Recibir el pool real
-/// es necesario para conservar el bit de IA y los dos canales de la librea.
+/// `0x47` expone el `CompanyInfo` de la compañía activa y `0xFA` recibe la
+/// fecha absoluta del reloj del juego para producir la fecha relativa nativa.
+/// Recibir el pool real es necesario para conservar el bit de IA y los dos
+/// canales de la librea.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn apply_road_stop_availability_callback_with_context(
     def: &crate::road_stop_spec::RoadStopSpecDef,
     stop_kind: StopKind,
@@ -3059,6 +3063,7 @@ pub fn apply_road_stop_availability_callback_with_context(
     owner: CompanyId,
     owner_colour: u8,
     companies: &[crate::company::Company],
+    calendar_date: u32,
 ) -> bool {
     if !def.has_availability_callback() {
         return true;
@@ -3108,6 +3113,10 @@ pub fn apply_road_stop_availability_callback_with_context(
     ctx.vars.insert(0x49, 0);
     // `GetVariable(0x50)` marks the no-tile picker scope with bit 4.
     ctx.vars.insert(0x50, 1 << 4);
+    let relative_date = calendar_date
+        .saturating_sub(crate::station::STATION_BUILD_DATE_DEFAULT)
+        .min(u32::from(u16::MAX));
+    ctx.vars.insert(0xFA, relative_date);
     let result = runtime.resolve_callback_ctx(
         def.newgrf_local_id,
         CBID_STATION_AVAILABILITY,
@@ -7370,6 +7379,7 @@ mod tests {
             crate::company::CompanyId(1),
             0,
             &companies,
+            crate::station::STATION_BUILD_DATE_DEFAULT,
         ));
 
         // No station/tile exists in the picker: OpenTTD marks this scope with
@@ -7383,6 +7393,18 @@ mod tests {
             crate::company::CompanyId(1),
             0,
             &companies,
+            crate::station::STATION_BUILD_DATE_DEFAULT,
+        ));
+        def.newgrf_runtime = Some(Box::new(gfx_callback_compare_u32(0xFA, 123)));
+        assert!(apply_road_stop_availability_callback_with_context(
+            &def,
+            StopKind::BusStop,
+            RoadType::Road,
+            &[],
+            crate::company::CompanyId(1),
+            0,
+            &companies,
+            crate::station::STATION_BUILD_DATE_DEFAULT + 123,
         ));
         for variable in [0x45, 0x46, 0x49] {
             def.newgrf_runtime = Some(Box::new(gfx_callback_compare_u32(variable, 0)));
@@ -7394,6 +7416,7 @@ mod tests {
                 crate::company::CompanyId(1),
                 0,
                 &companies,
+                crate::station::STATION_BUILD_DATE_DEFAULT,
             ));
         }
     }

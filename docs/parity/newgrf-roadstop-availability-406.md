@@ -27,12 +27,15 @@ carretera. Antes de resolver `CBID_STATION_AVAILABILITY` (`0x13`) publica:
 | `0x47` | `GetCompanyInfo` exacto: id, bit IA y colores de librea |
 | `0x49` | Frame `0` sin tesela |
 | `0x50` | Bit de scope de compra `1 << 4` |
+| `0xFA` | Fecha absoluta menos `DAYS_TILL_ORIGINAL_BASE_YEAR`, saturada a WORD |
 
 La API histórica `apply_road_stop_availability_callback` conserva un wrapper
 determinista para callers sin `GameState`: propietario jugador, color de
 fallback y pool vacío. El comando de construcción (`PlaceBusStop` y
 `PlaceTruckStop`) usa la variante contextual antes de cambiar el mapa, igual
-que la ruta ferroviaria de estaciones.
+que la ruta ferroviaria de estaciones. La integración de la fecha absoluta
+del calendario y la regresión end-to-end de ambos pickers se cerró en el
+follow-up [#407](https://github.com/cavazquez/openttdrs/issues/407).
 
 Como todavía no existe una entidad `RoadStop` en el picker, no se escribe PSA
 `7C` en este scope. Las consultas de vecinos, terreno real, cargas y estado de

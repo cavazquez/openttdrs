@@ -144,6 +144,84 @@ fn place_rail_station_area_persists_newgrf_station_spec() {
 }
 
 #[test]
+fn place_rail_station_availability_sees_absolute_calendar_date() {
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+    use crate::station_class::{StationClassDef, StationClassId, StationSpecDef, StationSpecId};
+
+    let mut s = GameState::new(16, 16);
+    s.calendar.date = 123;
+    let class_id = StationClassId::from_u16(1);
+    let spec_id = StationSpecId::from_u16(1);
+    s.station_class_catalog.push(StationClassDef {
+        id: class_id,
+        label: "Fecha".into(),
+        short_label: "DATE".into(),
+        from_newgrf: true,
+    });
+    let mut runtime = TrainSpriteGraphics::default();
+    runtime.assigns.push(TrainSpriteAssign {
+        local_id: 0,
+        set_id: 2,
+    });
+    runtime.action2_var.insert(
+        2,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0xFA,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: u32::MAX,
+                    ..Action2VarAdjust::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+    s.station_spec_catalog.push(StationSpecDef {
+        id: spec_id,
+        class: class_id,
+        label: "Fecha NewGRF".into(),
+        short_label: "DATE".into(),
+        disallowed_platforms: 0,
+        disallowed_lengths: 0,
+        callback_mask: crate::station_class::STATION_CALLBACK_AVAILABILITY_MASK,
+        flags: 0,
+        animation_status: 0,
+        animation_frames: 0,
+        animation_speed: 0,
+        animation_triggers: 0,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: Some(Box::new(runtime)),
+        newgrf_grfid: 0x407,
+        newgrf_grf_version: 8,
+        newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
+        custom_layouts: std::collections::HashMap::new(),
+    });
+    s.current_station_class = class_id;
+    s.current_station_spec = spec_id;
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(3, 3),
+            axis_y: false,
+            platforms: 1,
+            length: 2,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.stations[0].station_spec, spec_id);
+}
+
+#[test]
 fn place_rail_station_area_rejects_disallowed_platforms_and_lengths() {
     use crate::station_class::{StationClassDef, StationClassId, StationSpecDef, StationSpecId};
 

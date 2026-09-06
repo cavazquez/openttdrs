@@ -2006,5 +2006,17 @@ resuelve su layout desde `m5` y compara `GetTileMaxZ + min_height` con la
 altura del tablero; `min_height=0` o un tablero bajo devuelve
 `BridgeTooLowForRoadStop` sin mutar el mapa. La regresión cubre rechazo,
 aceptación en la altura mínima y rollback; vanilla/saves sin spec conservan el
-fallback. `disallowed_pillars` aún necesita integrarse en el compositor de
-pilares de puentes y #329 sigue abierto.
+fallback. El consumidor visual de `disallowed_pillars` quedó implementado en
+#417; la persistencia de flags propios de puentes NewGRF y los demás scopes
+mantienen abierto #329.
+
+Actualización #329-ROADSTOP-BRIDGE-PILLARS-417 (2026-09-06, issue [#417](https://github.com/cavazquez/openttdrs/issues/417)):
+El renderer mundial de puentes recibe estaciones y catálogo de road stops y
+resuelve la spec por tesela/layout. `disallowed_pillars` se cruza con las
+tablas vanilla de pilares `ALL_PILLARS`, suspensión y cantilever por pieza y
+eje; una intersección omite el bloque de pilares de esa tesela, igual que
+`DrawBridgeMiddle`, sin afectar tablero, barandas ni catenaria. El fallback de
+paradas vanilla y los wrappers sin catálogo siguen estables. Se agregaron
+regresiones para las tablas de máscaras y selección custom/vanilla; queda
+pendiente transportar los flags de pilares de `BridgeSpec` NewGRF y validar
+goldens de captura antes de cerrar el parent #329.

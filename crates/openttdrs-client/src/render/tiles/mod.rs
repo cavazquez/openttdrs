@@ -16,7 +16,9 @@ mod spawn_coverage_tests;
 pub(crate) use batches::flush_map_batches;
 #[cfg(test)]
 pub(crate) use bridge::spawn_bridge_middle;
+#[cfg(test)]
 pub(crate) use bridge::spawn_bridge_middle_with_road_types;
+pub(crate) use bridge::spawn_bridge_middle_with_road_types_and_stations;
 pub(crate) use bridge_draw::{catenary_under_low_bridge, roadside_detail_visible_under_bridge};
 pub(crate) use helpers::{
     FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC,

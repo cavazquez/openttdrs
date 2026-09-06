@@ -2558,6 +2558,7 @@ fn newgrf_rail_depot_group_replaces_relocated_building_layers() {
                     &[],
                     None,
                     Some(&mut images),
+                    &[],
                 );
             },
         )
@@ -2675,6 +2676,7 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
                     &[],
                     None,
                     Some(&mut images),
+                    &[],
                 );
             },
         )
@@ -3078,6 +3080,7 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
                     &[],
                     Some(&mut cache),
                     Some(&mut images),
+                    &[],
                 );
             },
         )

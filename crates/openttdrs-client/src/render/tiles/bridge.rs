@@ -65,6 +65,49 @@ pub(crate) fn spawn_bridge_middle_with_road_types(
     action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     images: Option<&mut Assets<Image>>,
 ) {
+    spawn_bridge_middle_with_road_types_and_stations(
+        commands,
+        map,
+        dims,
+        assets,
+        ctx,
+        show_pbs_reservations,
+        climate,
+        road_catalog,
+        road_sprites,
+        newgrf_stack,
+        catenary_newgrf,
+        catenary_sprites,
+        bridge_decks_newgrf,
+        action5_sprites,
+        images,
+        &[],
+        &[],
+    );
+}
+
+/// Variante del pase de vanos que recibe el contexto de estaciones necesario
+/// para aplicar `RoadStopSpec::bridgeable_info.disallowed_pillars`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_bridge_middle_with_road_types_and_stations(
+    commands: &mut Commands,
+    map: &Map,
+    dims: (u32, u32),
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    show_pbs_reservations: bool,
+    climate: Climate,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+    stations: &[openttdrs_core::Station],
+    road_stop_catalog: &[openttdrs_core::RoadStopSpecDef],
+) {
     let Some(tile) = ctx.tile else {
         return;
     };
@@ -93,6 +136,8 @@ pub(crate) fn spawn_bridge_middle_with_road_types(
         newgrf_stack,
         action5_sprites,
         images,
+        stations,
+        road_stop_catalog,
     );
 }
 

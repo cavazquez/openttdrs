@@ -4,8 +4,9 @@ use bevy::prelude::*;
 use openttdrs_core::Climate;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    BridgeType, bridge_above_axis_from_mapt, bridge_type_from_m6, calc_bridge_piece,
-    foundation_draw_plan, rail_bridge_other_end, rail_type_from_tile, road_bridge_other_end,
+    BridgeType, RoadStopSpecDef, Station, StopKind, bridge_above_axis_from_mapt,
+    bridge_type_from_m6, calc_bridge_piece, foundation_draw_plan, rail_bridge_other_end,
+    rail_type_from_tile, road_bridge_other_end, road_stop_spec_def, station_at_tile,
     tunnel_bridge_rail_reserved,
 };
 
@@ -174,6 +175,114 @@ pub(crate) struct BridgeSpanInfo {
 pub(crate) struct CatenaryUnderLowBridge {
     pub(crate) hide_wires: bool,
     pub(crate) pylon_pcp_override: u8,
+}
+
+/// Bits de `BridgePillarFlag` que realmente puede ocupar una pieza vanilla.
+///
+/// `DrawBridgeMiddle` en OpenTTD deja el bloque de pilares intacto cuando la
+/// máscara de la parada no intersecta esta tabla. Los puentes sencillos usan
+/// las cuatro esquinas; suspensión y cantilever tienen piezas sin apoyo o con
+/// sólo dos esquinas. El valor conserva los ocho bits de `BridgePillarFlag`:
+/// esquinas `0..=3`, aristas `4..=7`.
+#[must_use]
+fn bridge_pillar_flags(
+    bridge_type: BridgeType,
+    piece: openttdrs_core::BridgePiece,
+    axis: usize,
+) -> u8 {
+    const ALL_CORNERS: u8 = 0x0F;
+    const EMPTY: u8 = 0;
+    const SUSPENSION: [[u8; 2]; 6] = [
+        [0x03, 0x06],               // North
+        [0x0C, 0x09],               // South
+        [0x0C, 0x09],               // InnerNorth
+        [0x03, 0x06],               // InnerSouth
+        [ALL_CORNERS, ALL_CORNERS], // MiddleOdd
+        [EMPTY, EMPTY],             // MiddleEven
+    ];
+    const CANTILEVER: [[u8; 2]; 6] = [
+        [EMPTY, EMPTY], // North
+        [0x0C, 0x09],   // South
+        [0x0C, 0x09],   // InnerNorth
+        [0x0C, 0x09],   // InnerSouth
+        [0x0C, 0x09],   // MiddleOdd
+        [0x0C, 0x09],   // MiddleEven
+    ];
+    let piece = match piece {
+        openttdrs_core::BridgePiece::North => 0,
+        openttdrs_core::BridgePiece::South => 1,
+        openttdrs_core::BridgePiece::InnerNorth => 2,
+        openttdrs_core::BridgePiece::InnerSouth => 3,
+        openttdrs_core::BridgePiece::MiddleOdd => 4,
+        openttdrs_core::BridgePiece::MiddleEven => 5,
+    };
+    let axis = axis.min(1);
+    match bridge_type {
+        BridgeType::SuspensionConcrete
+        | BridgeType::SuspensionSteel
+        | BridgeType::SuspensionSteelYellow => SUSPENSION[piece][axis],
+        BridgeType::CantileverSteel
+        | BridgeType::CantileverBrown
+        | BridgeType::CantileverRed
+        | BridgeType::TubularSteel
+        | BridgeType::TubularYellow
+        | BridgeType::TubularSilicon => CANTILEVER[piece][axis],
+        BridgeType::Wooden
+        | BridgeType::Concrete
+        | BridgeType::GirderSteel
+        | BridgeType::GirderSteelAlt => ALL_CORNERS,
+    }
+}
+
+/// Máscara vanilla de pilares bloqueados por una parada vial cuando no hay
+/// una spec NewGRF asociada. Coincide con `_station_bridgeable_info_roadstop`.
+#[must_use]
+fn vanilla_road_stop_disallowed_pillars(layout: u8) -> u8 {
+    match layout {
+        0 => 1 << 4,              // EdgeNE
+        1 => 1 << 5,              // EdgeSE
+        2 => 1 << 6,              // EdgeSW
+        3 => 1 << 7,              // EdgeNW
+        4 => (1 << 6) | (1 << 4), // EdgeSW + EdgeNE
+        5 => (1 << 7) | (1 << 5), // EdgeNW + EdgeSE
+        _ => 0xFF,
+    }
+}
+
+/// Resuelve si la tesela bajo un vano debe ocultar sus pilares. La decisión
+/// es sólo visual: el chequeo de altura/validez permanece en `core`.
+#[must_use]
+fn road_stop_blocks_bridge_pillars(
+    map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &[RoadStopSpecDef],
+    coord: TileCoord,
+    bridge_type: BridgeType,
+    piece: openttdrs_core::BridgePiece,
+    axis: usize,
+) -> bool {
+    let Some(tile) = map.get(coord) else {
+        return false;
+    };
+    if tile.kind != TileKind::Station {
+        return false;
+    }
+    let Some(station) = station_at_tile(map, stations, coord) else {
+        return false;
+    };
+    if !matches!(station.stop_kind, StopKind::BusStop | StopKind::TruckStop) {
+        return false;
+    }
+    let layout = tile.m5 & 0x0F;
+    let blocked = station
+        .road_stop_spec_at(coord)
+        .and_then(|spec_id| road_stop_spec_def(road_stop_catalog, spec_id))
+        .and_then(|spec| spec.bridgeable_info.get(usize::from(layout)))
+        .map_or_else(
+            || vanilla_road_stop_disallowed_pillars(layout),
+            |info| info.disallowed_pillars,
+        );
+    blocked & bridge_pillar_flags(bridge_type, piece, axis) != 0
 }
 
 /// Replica el bloque `IsBridgeAbove` de `DrawRailCatenaryRailway`.
@@ -1645,8 +1754,9 @@ fn record_bridge_structure_trace(
 mod tests {
     use bevy::prelude::{Rect, Vec2};
     use openttdrs_core::{
-        BridgePiece, BridgeType, Map, RailType, Tile, TileCoord, TileKind, WaterClass,
-        set_bridge_middle_mapt, set_bridge_type_m6, set_water_class_m1,
+        BridgePiece, BridgeType, Map, RailType, RoadStopSpecDef, Station, StopKind, Tile,
+        TileCoord, TileKind, WaterClass, set_bridge_middle_mapt, set_bridge_type_m6,
+        set_water_class_m1,
     };
 
     use super::{
@@ -1654,11 +1764,12 @@ mod tests {
         RAIL_TB_X, bridge_catenary_wire_trace_bounds, bridge_foundation_child_offset,
         bridge_middle_structure_trace_placement, bridge_parent_bounds,
         bridge_pbs_reservation_offset, bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds,
-        bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind,
-        bridge_ramp_ground_sprite_id, bridge_road_catenary_sprite_ids,
+        bridge_pillar_flags, bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta,
+        bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id, bridge_road_catenary_sprite_ids,
         bridge_road_catenary_trace_geometry, bridge_road_sprite_offset, bridge_span_at,
         bridge_surface_z, catenary_under_low_bridge, pillar_ground_heights, pillar_half_crop,
-        pillar_segments, roadside_detail_visible_under_bridge,
+        pillar_segments, road_stop_blocks_bridge_pillars, roadside_detail_visible_under_bridge,
+        vanilla_road_stop_disallowed_pillars,
     };
     use crate::sprites::bridge_deck_sprite_ids;
 
@@ -1666,6 +1777,130 @@ mod tests {
     fn bridge_ramp_uses_ground_height_while_span_uses_deck_height() {
         assert_eq!(bridge_surface_z(1, 2, true), 1);
         assert_eq!(bridge_surface_z(1, 2, false), 2);
+    }
+
+    #[test]
+    fn bridge_pillar_flags_match_vanilla_piece_tables() {
+        assert_eq!(
+            bridge_pillar_flags(BridgeType::Wooden, BridgePiece::North, 0),
+            0x0F
+        );
+        assert_eq!(
+            bridge_pillar_flags(BridgeType::SuspensionConcrete, BridgePiece::North, 0),
+            0x03
+        );
+        assert_eq!(
+            bridge_pillar_flags(BridgeType::SuspensionConcrete, BridgePiece::MiddleEven, 1),
+            0
+        );
+        assert_eq!(
+            bridge_pillar_flags(BridgeType::CantileverRed, BridgePiece::North, 0),
+            0
+        );
+        assert_eq!(
+            bridge_pillar_flags(BridgeType::TubularSteel, BridgePiece::MiddleOdd, 1),
+            0x09
+        );
+    }
+
+    #[test]
+    fn road_stop_pillar_mask_uses_custom_spec_and_vanilla_fallback() {
+        assert_eq!(vanilla_road_stop_disallowed_pillars(0), 1 << 4);
+        assert_eq!(vanilla_road_stop_disallowed_pillars(4), (1 << 6) | (1 << 4));
+        assert_eq!(vanilla_road_stop_disallowed_pillars(9), 0xFF);
+
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(3, 3, 0);
+        map.set_tile(
+            coord,
+            Tile {
+                kind: TileKind::Station,
+                m5: 0,
+                ..Tile {
+                    height: 0,
+                    kind: TileKind::Grass,
+                    mapt: 0,
+                    m5: 0,
+                    m1: 0,
+                    m6: 0,
+                    m8: 0,
+                    m3: 0,
+                    m2: 0,
+                    m2_hi: 0,
+                    m7: 0,
+                    m3hi: 0,
+                }
+            },
+        )
+        .expect("station tile");
+        let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+        station.road_stop_spec = Some(1);
+        let stations = vec![station];
+        let mut spec = RoadStopSpecDef {
+            id: 1,
+            class: 0,
+            label: "custom".into(),
+            short_label: "C".into(),
+            stop_type: openttdrs_core::ROADSTOP_TYPE_BUS,
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_grf_version: 0,
+            draw_mode: openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 0,
+            flags: 0,
+            build_cost_multiplier: 16,
+            clear_cost_multiplier: 16,
+            bridgeable_info: [openttdrs_core::road_stop_spec::RoadStopBridgeableInfo::default();
+                openttdrs_core::ROADSTOP_LAYOUT_COUNT],
+            callback_mask: 0,
+            animation_status: 0xFF,
+            animation_frames: 0,
+            animation_speed: 2,
+            animation_triggers: 0,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: None,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+        };
+        spec.bridgeable_info[0].disallowed_pillars = 1;
+        let mut catalog = vec![spec];
+
+        assert!(road_stop_blocks_bridge_pillars(
+            &map,
+            &stations,
+            &catalog,
+            coord,
+            BridgeType::Wooden,
+            BridgePiece::MiddleOdd,
+            0,
+        ));
+
+        // An edge-only mask does not intersect a vanilla bridge's corner-only
+        // pillar table, matching DrawBridgeMiddle's Any(pillars) check.
+        catalog[0].bridgeable_info[0].disallowed_pillars = 1 << 4;
+        assert!(!road_stop_blocks_bridge_pillars(
+            &map,
+            &stations,
+            &catalog,
+            coord,
+            BridgeType::Wooden,
+            BridgePiece::MiddleOdd,
+            0,
+        ));
+
+        // Without a spec, the vanilla road-stop edge mask is retained.
+        let station_without_spec = Station::new_with_kind(coord, StopKind::BusStop);
+        assert!(!road_stop_blocks_bridge_pillars(
+            &map,
+            &[station_without_spec],
+            &[],
+            coord,
+            BridgeType::Wooden,
+            BridgePiece::MiddleOdd,
+            0,
+        ));
     }
 
     #[test]
@@ -2253,6 +2488,8 @@ pub(crate) fn spawn_bridge_deck(
         &[],
         action5_sprites,
         images,
+        &[],
+        &[],
     );
 }
 
@@ -2280,6 +2517,8 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     mut action5_sprites: Option<&mut NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
+    stations: &[Station],
+    road_stop_catalog: &[RoadStopSpecDef],
 ) {
     use crate::sprites::{TransparencyOption, is_hidden};
     let ids = bridge_deck_sprite_ids(span.bridge_type, span.piece);
@@ -2990,6 +3229,17 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
         return;
     };
     if tile.kind == TileKind::Void {
+        return;
+    }
+    if road_stop_blocks_bridge_pillars(
+        map,
+        stations,
+        road_stop_catalog,
+        ctx.coord,
+        span.bridge_type,
+        span.piece,
+        span.axis,
+    ) {
         return;
     }
     // `DrawBridgePillars` recibe el `TileInfo` después de `DrawFoundation`.

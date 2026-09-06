@@ -9,7 +9,7 @@
 use std::collections::BTreeSet;
 
 use crate::cargo_spec::CargoSpecDef;
-use crate::company::{Company, CompanyId};
+use crate::company::{Company, CompanyId, newgrf_company_info};
 use crate::house_spec::{distance_square, get_town_radius_group};
 use crate::industry::Industry;
 use crate::map::{
@@ -320,16 +320,7 @@ fn road_stop_town_vars(towns: Option<&[Town]>, coord: TileCoord) -> (u32, u32) {
 }
 
 fn road_stop_company_info(owner: CompanyId, companies: Option<&[Company]>) -> u32 {
-    let Some(company) =
-        companies.and_then(|companies| companies.iter().find(|company| company.id == owner))
-    else {
-        return u32::from(owner.0);
-    };
-    let livery = company.liveries.first();
-    u32::from(owner.0)
-        | (u32::from(company.is_ai) << 16)
-        | (u32::from(livery.map_or(company.colour, |l| l.colour1)) << 24)
-        | (u32::from(livery.map_or(company.colour, |l| l.colour2)) << 28)
+    newgrf_company_info(owner, companies, 0)
 }
 
 /// Datos invariantes de una evaluación Action2 de `RoadStop` con vecindad.
@@ -834,7 +825,10 @@ mod tests {
             ..Town::default()
         };
         town.fund_buildings_months = 0;
-        let companies = vec![Company::rival_transcargo(CompanyEconomy::default(), 3)];
+        let mut rival = Company::rival_transcargo(CompanyEconomy::default(), 3);
+        rival.liveries[0].colour1 = 2;
+        rival.liveries[0].colour2 = 9;
+        let companies = vec![rival];
         let ctx = action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
             &map,
             &[station],
@@ -853,7 +847,7 @@ mod tests {
 
         assert_eq!(ctx.vars.get(&0x45), Some(&(1 << 16 | 3)));
         assert_eq!(ctx.vars.get(&0x46), Some(&5));
-        assert_eq!(ctx.vars.get(&0x47), Some(&0x3301_0001));
+        assert_eq!(ctx.vars.get(&0x47), Some(&0x9201_0001));
     }
 
     #[test]

@@ -2,6 +2,7 @@
 
 use crate::cargo::{ALL_CARGO_TYPES, CargoType};
 use crate::cargo_spec::CargoSpecDef;
+use crate::company::{Company, newgrf_company_info};
 use crate::industry::Industry;
 use crate::map::{
     Map, TILE_PIXEL_HEIGHT, TileCoord, TileKind, rail_bits_touching_side, rail_traversal_bits,
@@ -75,6 +76,9 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
 /// consulten el catchment vivo en vez del predicado persistido del save.
 #[derive(Debug, Clone, Copy)]
 pub struct StationAction2WorldContext<'a> {
+    /// Pool de compañías para codificar `StationScope::0x43` con la librea
+    /// por defecto y el bit de IA, igual que `GetCompanyInfo` upstream.
+    pub companies: &'a [Company],
     pub industries: &'a [Industry],
     /// Catálogo activo para que vars `60`–`69` puedan resolver cargos custom
     /// mediante la etiqueta de la CTT del GRF.
@@ -606,9 +610,11 @@ fn action2_eval_ctx_for_station_tile_impl(
         random << 8 | u32::from(st.newgrf_waiting_random_triggers),
     );
 
-    let nn_player = u32::from(st.owner.0);
-    let c = u32::from(owner_colour & 0x0F);
-    let var43 = nn_player | ((c | (c << 4)) << 24);
+    let var43 = newgrf_company_info(
+        st.owner,
+        world.as_ref().map(|world| world.companies),
+        owner_colour & 0x0F,
+    );
     ctx.vars.insert(0x43, var43);
 
     // `StationScopeResolver::GetVariable(0x44)`: rail station/waypoint PBS
@@ -1732,12 +1738,46 @@ mod tests {
             Some(&tables),
             8,
             StationAction2WorldContext {
+                companies: &[],
                 industries: &[],
                 cargo_spec_catalog: &cargo_catalog,
             },
         );
         assert_eq!(ctx.parameterized_vars.get(&(0x60, 0)), Some(&22));
         assert_eq!(ctx.parameterized_vars.get(&(0x63, 0)), Some(&0));
+    }
+
+    #[test]
+    fn station_world_scope_encodes_company_info_from_pool() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(1, 1);
+        map.set_tile(coord, rail_station_tile(0)).unwrap();
+        let mut station = Station::new_with_kind(coord, StopKind::RailStation);
+        station.owner = crate::company::CompanyId(1);
+        let mut rival = crate::company::Company::rival_transcargo(
+            crate::game_state::CompanyEconomy::default(),
+            3,
+        );
+        rival.liveries[0].colour1 = 2;
+        rival.liveries[0].colour2 = 9;
+        let companies = vec![rival];
+
+        let ctx = action2_eval_ctx_for_station_tile_with_world(
+            &map,
+            std::slice::from_ref(&station),
+            coord,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+            StationAction2WorldContext {
+                companies: &companies,
+                industries: &[],
+                cargo_spec_catalog: &[],
+            },
+        );
+
+        assert_eq!(ctx.vars.get(&0x43), Some(&0x9201_0001));
     }
 
     #[test]
@@ -1767,6 +1807,7 @@ mod tests {
             None,
             8,
             StationAction2WorldContext {
+                companies: &[],
                 industries: &[],
                 cargo_spec_catalog: &[],
             },
@@ -1788,6 +1829,7 @@ mod tests {
             None,
             8,
             StationAction2WorldContext {
+                companies: &[],
                 industries: &[],
                 cargo_spec_catalog: &[],
             },

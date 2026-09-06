@@ -553,6 +553,37 @@ impl Company {
     }
 }
 
+/// Codifica la información de compañía que exponen las variables `NewGRF`
+/// `StationScope::0x43` y `RoadStopScope::0x47`.
+///
+/// `OpenTTD` devuelve el id base del propietario, el bit `0x10000` para una
+/// compañía IA y los dos canales de la librea por defecto en los nibbles
+/// altos. Cuando el caller no conserva el pool de compañías se mantiene el
+/// fallback histórico de repetir `fallback_colour` en ambos canales.
+#[must_use]
+pub fn newgrf_company_info(
+    owner: CompanyId,
+    companies: Option<&[Company]>,
+    fallback_colour: u8,
+) -> u32 {
+    let Some(company) =
+        companies.and_then(|companies| companies.iter().find(|company| company.id == owner))
+    else {
+        let colour = u32::from(fallback_colour);
+        return u32::from(owner.0) | (colour << 24) | (colour << 28);
+    };
+
+    let default_livery = company
+        .liveries
+        .first()
+        .copied()
+        .unwrap_or_else(|| CompanyLivery::with_company_colour(company.colour));
+    u32::from(owner.0)
+        | (u32::from(company.is_ai) << 16)
+        | (u32::from(default_livery.colour1) << 24)
+        | (u32::from(default_livery.colour2) << 28)
+}
+
 /// Color primario efectivo para un esquema de librea.
 ///
 /// `OpenTTD` sólo selecciona un esquema especializado cuando el esquema por
@@ -789,6 +820,26 @@ mod tests {
         let mut rival = Company::rival_transcargo(CompanyEconomy::default(), 1);
         rival.id = CompanyId(1);
         assert_eq!(first_free_company_colour(&[player, rival]), 2);
+    }
+
+    #[test]
+    fn newgrf_company_info_encodes_ai_and_default_livery_channels() {
+        let mut rival = Company::rival_transcargo(CompanyEconomy::default(), 3);
+        rival.liveries[0] = CompanyLivery {
+            in_use: COMPANY_LIVERY_FLAG_PRIMARY | COMPANY_LIVERY_FLAG_SECONDARY,
+            colour1: 2,
+            colour2: 9,
+        };
+
+        assert_eq!(
+            newgrf_company_info(rival.id, Some(std::slice::from_ref(&rival)), 0),
+            0x9201_0001
+        );
+    }
+
+    #[test]
+    fn newgrf_company_info_keeps_owner_and_fallback_colour_without_pool() {
+        assert_eq!(newgrf_company_info(CompanyId(7), None, 4), 0x4400_0007);
     }
 
     #[test]

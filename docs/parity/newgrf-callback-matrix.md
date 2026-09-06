@@ -1023,3 +1023,16 @@ sólo recibe `Station` no tiene spec ni tabla del GRF y conserva el fallback sin
 badge; `action2_eval_ctx_from_station_with_spec` cubre el callback legacy que
 sí conserva la spec. Los scopes completos de `BaseStation`, strings y sonidos
 siguen pendientes en #329.
+
+### #329-COMPANY-INFO-403 — StationScope `0x43` y RoadStopScope `0x47`
+
+Actualizado: 2026-09-06. La codificación de `GetCompanyInfo` se centraliza:
+id base del propietario, bit `0x10000` para compañías IA y colores primario y
+secundario de la librea por defecto en los nibbles altos. El contexto
+catalog-aware de estación recibe el pool de compañías y deja de repetir
+incondicionalmente un único color; `RoadStop` usa la misma función para su
+variable `0x47`. Las APIs legacy sin pool conservan el fallback de propietario
+y color recibido, sin inventar una compañía. Las regresiones cubren libreas
+con canales distintos, IA, compañía ausente y ambos scopes; los scopes
+completos de `BaseStation` y la resolución de textos/sonidos siguen pendientes
+en #329.

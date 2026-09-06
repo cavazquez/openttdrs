@@ -808,6 +808,7 @@ fn station_animation_context(
                 def.newgrf_type_tables.as_ref(),
                 def.newgrf_grf_version,
                 StationAction2WorldContext {
+                    companies,
                     industries,
                     cargo_spec_catalog: cargo_catalog,
                 },

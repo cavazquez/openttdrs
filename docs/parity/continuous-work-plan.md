@@ -1858,6 +1858,16 @@ caller aporta la spec. La API histórica que sólo recibe `Station` no conoce la
 spec ni la tabla del GRF y mantiene el fallback sin badge; scopes completos de
 `BaseStation`, strings y sonidos siguen pendientes en #329.
 
+Actualización #329-COMPANY-INFO-403 (2026-09-06, issue [#403](https://github.com/cavazquez/openttdrs/issues/403)):
+la codificación de `GetCompanyInfo` ya es compartida por `StationScope 0x43`
+y `RoadStopScope 0x47`: conserva el id base, el bit de IA y los canales
+primario/secundario de la librea por defecto. Los contextos de estación que
+conservan el mundo reciben el pool de compañías y resuelven colores distintos;
+las rutas legacy sin pool mantienen el fallback explícito. Las regresiones
+cubren compañía IA, canales de librea distintos, ausencia de pool y ambos
+scopes. Los scopes completos de `BaseStation`, strings y sonidos siguen
+pendientes en #329.
+
 Actualización #328-LINKGRAPH-068 (2026-09-06, issue [#394](https://github.com/cavazquez/openttdrs/issues/394)):
 `PATS.linkgraph.recalc_time` ya no es sólo un byte conservado. El scheduler
 clona estaciones/grafo/catálogo en el spawn, calcula la fecha de integración en

@@ -218,8 +218,8 @@ pub use company::{
     LIVERY_SCHEME_TRUCK, MAX_COMPANIES, RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO,
     company_colour_taken_by_other, company_id_by_name, company_livery_colours,
     company_livery_primary_colour, company_livery_secondary_colour, default_company_liveries,
-    feeder_share_of, first_free_company_colour, tile_owner_colour, tile_with_owner,
-    vehicle_livery_scheme,
+    feeder_share_of, first_free_company_colour, newgrf_company_info, tile_owner_colour,
+    tile_with_owner, vehicle_livery_scheme,
 };
 pub use construction_settings::{ConstructionSettings, RoadVehicleDrivingSide, TrainSignalSide};
 pub use depot::{

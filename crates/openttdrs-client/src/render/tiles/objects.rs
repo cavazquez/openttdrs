@@ -1755,6 +1755,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                             def.newgrf_type_tables.as_ref(),
                             def.newgrf_grf_version,
                             openttdrs_core::StationAction2WorldContext {
+                                companies: world.companies,
                                 industries: world.industries,
                                 cargo_spec_catalog: world.cargo_spec_catalog,
                             },
@@ -2638,6 +2639,7 @@ fn resolve_station_layout_for_tile<'a>(
                 def.newgrf_type_tables.as_ref(),
                 def.newgrf_grf_version,
                 openttdrs_core::StationAction2WorldContext {
+                    companies: world.companies,
                     industries: world.industries,
                     cargo_spec_catalog: world.cargo_spec_catalog,
                 },

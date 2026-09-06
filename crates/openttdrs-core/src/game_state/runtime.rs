@@ -58,6 +58,8 @@ pub struct PendingLinkGraphJob {
 /// reconstruirse/limpiarse tras cargar un save.
 #[derive(Debug, Clone)]
 pub struct SimulationRuntime {
+    /// Strings genéricos Action4 del stack activo (no se persisten).
+    pub newgrf_string_catalog: crate::newgrf_text::NewGrfStringCatalog,
     /// `VehicleID -> slot` y topología de consists, reconstruidos una vez por tick.
     pub fleet_index: crate::fleet_index::FleetIndex,
 
@@ -261,6 +263,7 @@ impl SimulationRuntime {
     #[must_use]
     pub fn new() -> Self {
         Self {
+            newgrf_string_catalog: crate::newgrf_text::NewGrfStringCatalog::default(),
             fleet_index: crate::fleet_index::FleetIndex::default(),
             terminal_spatial_index: crate::fleet_index::TerminalSpatialIndex::default(),
             depot_spatial_index: crate::depot::DepotSpatialIndex::default(),

@@ -2425,9 +2425,11 @@ un resultado booleano no nulo rechaza sin mutar; referencias OBJS ausentes y
 topologías no soportadas también se rechazan de forma conservadora. La
 regresión de `raise_land`/`lower_land`/`level_land` cubre la atomicidad. CB15C
 ya clasifica el texto adicional del selector (local, `StringID` en `0x100`,
-ausente o inválido) y lo muestra como diagnóstico; falta el catálogo Action4
-para traducirlo. También siguen pendientes el writeback `7C` propio y
-scopes/vecinos avanzados.
+ausente o inválido); el catálogo Action4 genérico resuelve el rango `0xD000`
+y el `StringID` de `0x40F` por idioma con fallback inglés/última variante, y
+el selector muestra la cadena o `Action4 ausente`. Los códigos de control y
+los Action4 específicos por feature todavía no se expanden. También siguen
+pendientes el writeback `7C` propio y scopes/vecinos avanzados.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.
 

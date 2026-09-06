@@ -2141,3 +2141,12 @@ resultados `0..0x3FF` se clasifican como texto local y `0x40F` recupera el
 contrato quedan como `Invalid`. El selector muestra un diagnóstico explícito
 en vez de ocultar un callback válido. El parseo Action4 y la traducción por
 idioma de esas cadenas siguen separados del cierre de este issue.
+
+Actualización #329-ACTION4-GENERIC-STRINGS-429 (2026-09-06, issue [#429](https://github.com/cavazquez/openttdrs/issues/429)):
+Action4 genérico (`0x80`) ya se recorre desde pseudo-sprites v1/v2. El núcleo
+conserva `(GRFID, StringID, idioma)` en un catálogo efímero y aplica el
+fallback idioma solicitado → inglés → última variante declarada. CB15C local
+resuelve `0xD000 + offset` y CB15C `0x40F` consulta el registro `0x100`; el
+ObjectPicker muestra la cadena cuando existe y `Action4 ausente` cuando no.
+Payloads truncados no agregan textos parciales. Los códigos de control y los
+Action4 específicos por feature siguen siendo sucesores separados.

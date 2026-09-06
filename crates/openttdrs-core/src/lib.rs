@@ -49,6 +49,7 @@ mod newgrf_company_ramp;
 pub mod newgrf_config;
 mod newgrf_palette_data;
 pub mod newgrf_sprites;
+pub mod newgrf_text;
 pub mod newgrf_type_tables;
 pub mod newgrf_walk;
 pub mod news;
@@ -579,6 +580,10 @@ pub use newgrf_sprites::{
     merge_oneway_action5_block, merge_openttd_gui_action5_block, merge_roadstop_action5_block,
     merge_shore_action5_block, merge_signals_action5_block, merge_tramway_action5_block,
     merge_twocc_action5_block, oneway_action5_slot, roadstop_action5_slot, signal_action5_slot,
+};
+pub use newgrf_text::{
+    GRF_STRING_GENERIC_BASE, NEWGRF_LANGUAGE_ENGLISH, NEWGRF_LANGUAGE_SPANISH, NewGrfString,
+    NewGrfStringCatalog, collect_action4_generic_strings_from_grf,
 };
 pub use newgrf_type_tables::{
     GrfTypeTranslationTables, TypeLabel, cargo_from_local_id_with_catalog,

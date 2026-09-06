@@ -1196,9 +1196,22 @@ de crear una instancia y pasa la vista seleccionada en `ObjectScopeResolver`.
 `CALLBACK_FAILED` y `0x400` no agregan línea; `0..0x3FF` se clasifica como
 `GRFSTR_MISC_GRF_TEXT + result`; `0x40F` recupera el `StringID` de `register
 0x100`, y cualquier otro valor queda marcado como callback inválido. El
-resultado no muta `GameState` y el ObjectPicker muestra un diagnóstico visible
-para no perder callbacks válidos. Action4 y la traducción por idioma de esos
-IDs siguen pendientes y no se cuentan como paridad de strings.
+resultado no muta `GameState`; Action4 genérico (`0x80`) se parsea para
+pseudo-sprites v1/v2 y se indexa por `(GRFID, StringID, idioma)`. CB15C local
+consulta `0xD000 + result` y `0x40F` consulta el registro `0x100`; el
+ObjectPicker aplica idioma solicitado, inglés y última variante como fallback.
+Los códigos de control y Action4 específicos por feature no se expanden
+todavía.
+
+### #329-ACTION4-GENERIC-STRINGS-429 — catálogo de texto genérico
+
+Actualizado: 2026-09-06. `collect_action4_generic_strings_from_grf` ignora
+Action4 no genéricos, acepta esquema de idiomas extendido y máscara antigua,
+y descarta únicamente la entrada cuyo terminador NUL no aparece. El refresco
+de catálogos NewGRF reconstruye `SimulationRuntime.newgrf_string_catalog`
+antes de aplicar Objects; la UI de CB15C deja de mostrar `Action4 pendiente`
+cuando encuentra la cadena. La expansión de códigos de control y el text stack
+completo permanecen como sucesores.
 
 ### #329-OBJECT-AUTOSLOPE-427 — `CBID_OBJECT_AUTOSLOPE`
 

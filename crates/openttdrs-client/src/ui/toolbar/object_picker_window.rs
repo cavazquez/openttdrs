@@ -6,7 +6,9 @@ use openttdrs_core::{
     list_buildable_object_specs, object_spec_def, resolve_object_fund_more_text_callback,
 };
 
+use crate::i18n::Locale;
 use crate::render::NewGrfObjectSpriteCache;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
@@ -190,21 +192,42 @@ fn object_label(sim: &SimWorld, id: u16) -> String {
     }
 }
 
-fn object_fund_more_text_label(sim: &SimWorld, id: u16) -> String {
+fn object_fund_more_text_label(sim: &SimWorld, id: u16, locale: Locale) -> String {
     let Some(def) = object_spec_def(&sim.state.object_spec_catalog, id) else {
         return String::new();
     };
     match resolve_object_fund_more_text_callback(def, 0) {
         ObjectFundMoreText::None => String::new(),
         ObjectFundMoreText::Local(offset) => {
-            format!("Texto NewGRF local #{offset} (Action4 pendiente)")
+            let string_id = openttdrs_core::GRF_STRING_GENERIC_BASE + u32::from(offset);
+            sim.state
+                .runtime
+                .newgrf_string_catalog
+                .lookup(def.grfid, string_id, newgrf_language(locale))
+                .map_or_else(
+                    || format!("Texto NewGRF local #{offset} (Action4 ausente)"),
+                    |text| format!("Texto NewGRF: {text}"),
+                )
         }
-        ObjectFundMoreText::GrfString(string_id) => {
-            format!("Texto NewGRF StringID {string_id:#06X} (Action4 pendiente)")
-        }
+        ObjectFundMoreText::GrfString(string_id) => sim
+            .state
+            .runtime
+            .newgrf_string_catalog
+            .lookup(def.grfid, string_id, newgrf_language(locale))
+            .map_or_else(
+                || format!("Texto NewGRF StringID {string_id:#06X} (Action4 ausente)"),
+                |text| format!("Texto NewGRF: {text}"),
+            ),
         ObjectFundMoreText::Invalid(result) => {
             format!("Callback CB15C inválido: {result:#06X}")
         }
+    }
+}
+
+fn newgrf_language(locale: Locale) -> u8 {
+    match locale {
+        Locale::Es => openttdrs_core::NEWGRF_LANGUAGE_SPANISH,
+        Locale::En => openttdrs_core::NEWGRF_LANGUAGE_ENGLISH,
     }
 }
 
@@ -272,9 +295,11 @@ pub(crate) fn sync_object_preview_image(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn sync_object_picker(
     tool_state: Res<UiToolState>,
     sim: Res<SimWorld>,
+    prefs: Option<Res<ClientPreferences>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text), (Without<ObjectPickerLabel>,)>,
     mut label_q: Query<
@@ -326,7 +351,10 @@ pub(crate) fn sync_object_picker(
         **text = format!("Seleccionado: {label}");
     }
     if let Ok(mut text) = more_text_q.single_mut() {
-        **text = object_fund_more_text_label(&sim, current);
+        let locale = prefs
+            .as_deref()
+            .map_or(Locale::Es, ClientPreferences::locale);
+        **text = object_fund_more_text_label(&sim, current, locale);
     }
     for (button, mut bg) in &mut buttons {
         *bg = BackgroundColor(if button.0 == current {

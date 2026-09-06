@@ -20,6 +20,35 @@ pub mod sounds;
 pub mod station;
 pub mod train;
 
+/// Reconstruye el catálogo de strings genéricos Action4 del stack activo.
+pub fn apply_newgrf_strings(state: &mut GameState, search_dirs: &[&std::path::Path]) {
+    let mut catalog = crate::newgrf_text::NewGrfStringCatalog::default();
+    let stack = state.newgrf_stack.clone();
+    for entry in stack.iter().filter(|entry| entry.enabled) {
+        let Some(path) = search_dirs
+            .iter()
+            .map(|dir| dir.join(&entry.filename))
+            .find(|path| path.is_file())
+        else {
+            continue;
+        };
+        let Ok(data) = std::fs::read(path) else {
+            continue;
+        };
+        catalog.extend(
+            crate::newgrf_text::collect_action4_generic_strings_from_grf(&data, entry.grfid),
+        );
+    }
+    state.runtime.newgrf_string_catalog = catalog;
+}
+
+/// Aplica strings Action4 usando los directorios `NewGRF` estándar.
+pub fn apply_newgrf_strings_default_dirs(state: &mut GameState) {
+    let owned = default_newgrf_search_dirs();
+    let refs: Vec<&std::path::Path> = owned.iter().map(AsRef::as_ref).collect();
+    apply_newgrf_strings(state, &refs);
+}
+
 #[must_use]
 pub fn default_newgrf_search_dirs() -> Vec<PathBuf> {
     let mut dirs = vec![
@@ -37,6 +66,7 @@ pub fn default_newgrf_search_dirs() -> Vec<PathBuf> {
 /// Refresco completo de catálogos Action0 tras cambiar el stack.
 pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     state.runtime.newgrf_diagnostics.clear();
+    apply_newgrf_strings_default_dirs(state);
     // Badges deben existir antes de resolver listas `ReadBadgeList` de
     // road/rail types y vehículos.
     badges::apply_newgrf_badges_default_dirs(state);

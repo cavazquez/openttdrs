@@ -3160,6 +3160,20 @@ pub fn resolve_station_slope_callback_for_build(
     )
 }
 
+struct StationSlopePurchaseContext<'a> {
+    owner: CompanyId,
+    owner_colour: u8,
+    companies: &'a [crate::company::Company],
+    calendar_date: u32,
+}
+
+type StationSlopeMapContext<'a> = (
+    &'a Map,
+    TileCoord,
+    Climate,
+    Option<StationSlopePurchaseContext<'a>>,
+);
+
 /// Variante map-aware del chequeo CB149.
 ///
 /// El resolver de `OpenTTD` tiene `tile` aunque aún no exista una estación y
@@ -3189,7 +3203,58 @@ pub fn resolve_station_slope_callback_for_build_with_map(
         length,
         platform,
         position,
-        Some((map, tile, climate)),
+        Some((
+            map,
+            tile,
+            climate,
+            Some(StationSlopePurchaseContext {
+                owner: CompanyId::PLAYER,
+                owner_colour: 0,
+                companies: &[],
+                calendar_date: crate::station::STATION_BUILD_DATE_DEFAULT,
+            }),
+        )),
+    )
+}
+
+/// Variante map-aware con el contexto real de compra del comando.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_station_slope_callback_for_build_with_map_and_context(
+    def: &crate::station_class::StationSpecDef,
+    map: &Map,
+    tile: TileCoord,
+    climate: Climate,
+    slope: u8,
+    axis_y: bool,
+    platforms: u8,
+    length: u8,
+    platform: u8,
+    position: u8,
+    owner: CompanyId,
+    owner_colour: u8,
+    companies: &[crate::company::Company],
+    calendar_date: u32,
+) -> StationSlopeCallbackOutcome {
+    resolve_station_slope_callback_for_build_impl(
+        def,
+        slope,
+        axis_y,
+        platforms,
+        length,
+        platform,
+        position,
+        Some((
+            map,
+            tile,
+            climate,
+            Some(StationSlopePurchaseContext {
+                owner,
+                owner_colour,
+                companies,
+                calendar_date,
+            }),
+        )),
     )
 }
 
@@ -3202,7 +3267,7 @@ fn resolve_station_slope_callback_for_build_impl(
     length: u8,
     platform: u8,
     position: u8,
-    map_context: Option<(&Map, TileCoord, Climate)>,
+    map_context: Option<StationSlopeMapContext<'_>>,
 ) -> StationSlopeCallbackOutcome {
     if !def.has_slope_check_callback() {
         return StationSlopeCallbackOutcome::Allow;
@@ -3223,7 +3288,23 @@ fn resolve_station_slope_callback_for_build_impl(
         | (u32::from(platform) << 8)
         | u32::from(position);
     let mut ctx = Action2EvalCtx::default();
-    if let Some((map, tile, climate)) = map_context {
+    if let Some((map, tile, climate, purchase_context)) = map_context {
+        if let Some(StationSlopePurchaseContext {
+            owner,
+            owner_colour,
+            companies,
+            calendar_date,
+        }) = purchase_context
+        {
+            populate_station_purchase_scope_vars(
+                &mut ctx,
+                def,
+                owner,
+                Some(companies),
+                owner_colour,
+                calendar_date,
+            );
+        }
         populate_station_slope_land_vars(
             &mut ctx,
             runtime,
@@ -4694,6 +4775,32 @@ mod tests {
                 default: 0,
             },
         );
+        gfx
+    }
+
+    fn gfx_callback_allow_if_u32(variable: u8, expected: u32) -> TrainSpriteGraphics {
+        let mut gfx = gfx_callback_compare_u32(variable, expected);
+        let Some(entry) = gfx.action2_var.get_mut(&2) else {
+            return gfx;
+        };
+        let literal = |value: u32| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                and_mask: value,
+                ..Action2VarAdjust::default()
+            },
+        };
+        entry.ops.extend([
+            Action2VarOp {
+                operator: 0x0A,
+                rhs: literal(0x10),
+            },
+            Action2VarOp {
+                operator: 0x0A,
+                rhs: literal(0x40),
+            },
+        ]);
         gfx
     }
 
@@ -8166,6 +8273,58 @@ mod tests {
             7,
         );
         assert_eq!(expected_v7, 0x0610_4200);
+    }
+
+    #[test]
+    fn callbacks_ac_station_slope_map_scope_exposes_purchase_vars() {
+        let mut def = crate::station_class::vanilla_station_spec_catalog()
+            .pop()
+            .unwrap();
+        def.callback_mask = crate::station_class::STATION_CALLBACK_SLOPE_CHECK_MASK;
+        def.newgrf_grfid = 0x534C_4F50;
+        def.newgrf_grf_version = 8;
+        def.associated_badges = vec![17];
+        def.newgrf_badge_translation = vec![17];
+        let map = Map::new_flat(8, 8, 0);
+        let tile = TileCoord::new(2, 2);
+        let companies = vec![crate::Company::player(crate::CompanyEconomy::default(), 3)];
+        let calendar_date = crate::station::STATION_BUILD_DATE_DEFAULT + 123;
+        let resolve = |def: &crate::station_class::StationSpecDef| {
+            resolve_station_slope_callback_for_build_with_map_and_context(
+                def,
+                &map,
+                tile,
+                Climate::Temperate,
+                0,
+                false,
+                1,
+                1,
+                0,
+                0,
+                crate::CompanyId::PLAYER,
+                3,
+                &companies,
+                calendar_date,
+            )
+        };
+
+        for (variable, expected) in [
+            (0x40, 0x0211_0000),
+            (0x44, 2),
+            (
+                0x43,
+                crate::company::newgrf_company_info(crate::CompanyId::PLAYER, Some(&companies), 3),
+            ),
+            (0xFA, 123),
+        ] {
+            def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_u32(variable, expected)));
+            assert_eq!(resolve(&def), StationSlopeCallbackOutcome::Allow);
+        }
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_parameterized_u32(
+            0x7A, 0, 1,
+        )));
+        assert_eq!(resolve(&def), StationSlopeCallbackOutcome::Allow);
     }
 
     #[test]

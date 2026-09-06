@@ -374,7 +374,7 @@ fn check_rail_station_slope_callbacks_impl(
             };
             let (slope, _) =
                 tile_slope_and_z(&state.map, c).ok_or((CommandError::OutOfBounds, None))?;
-            let outcome = crate::newgrf_callback::resolve_station_slope_callback_for_build_with_map(
+            let outcome = crate::newgrf_callback::resolve_station_slope_callback_for_build_with_map_and_context(
                 spec,
                 &state.map,
                 c,
@@ -385,6 +385,13 @@ fn check_rail_station_slope_callbacks_impl(
                 length,
                 platform,
                 position,
+                state.active_company,
+                state.company_colour,
+                &state.companies,
+                state
+                    .calendar
+                    .date
+                    .saturating_add(crate::station::STATION_BUILD_DATE_DEFAULT),
             );
             if !matches!(
                 outcome,

@@ -2238,3 +2238,11 @@ guarda un diagnóstico efímero sin mutar el mapa; el HUD lo consume una sola ve
 con catálogo expandido y locale activo, incluyendo los códigos estándar de
 clima/agua. Scopes propios de instancia/tesela y el fallback completo de
 pendiente siguen siendo sucesores del padre.
+
+Actualización #329-STATION-CB149-PURCHASE-SCOPE-441 (2026-09-06, issue [#441](https://github.com/cavazquez/openttdrs/issues/441)):
+CB149 map-aware materializa ahora el scope de compra real: sentinelas de
+plataforma/posición, estado PBS, `GetCompanyInfo` de la compañía activa,
+badges y fecha relativa. El comando pasa compañía, pool, color y calendario al
+resolver para que preview y execute seleccionen la misma rama Action2. Las
+variables de una estación ya creada y vecinos continúan en los scopes de
+render/animación del parent #329.

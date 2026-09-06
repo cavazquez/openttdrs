@@ -436,6 +436,8 @@ mod tests {
             random_cargo_triggers: 0,
             build_cost_multiplier: 16,
             clear_cost_multiplier: 16,
+            bridgeable_info: [openttdrs_core::road_stop_spec::RoadStopBridgeableInfo::default();
+                openttdrs_core::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
             newgrf_views: Vec::new(),
             newgrf_runtime: None,
             newgrf_type_tables: None,

@@ -7481,6 +7481,8 @@ mod tests {
             flags: 0,
             build_cost_multiplier: 16,
             clear_cost_multiplier: 16,
+            bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+                crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
             callback_mask: 0,
             animation_status: 1,
             animation_frames: 1,
@@ -7548,6 +7550,8 @@ mod tests {
             flags: 0,
             build_cost_multiplier: 16,
             clear_cost_multiplier: 16,
+            bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+                crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
             callback_mask: crate::ROADSTOP_CALLBACK_MASK_AVAILABILITY,
             animation_status: 0,
             animation_frames: 0,
@@ -7676,6 +7680,8 @@ mod tests {
             flags: 0,
             build_cost_multiplier: 16,
             clear_cost_multiplier: 16,
+            bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+                crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
             callback_mask: 0,
             animation_status: 1,
             animation_frames: 8,
@@ -7778,6 +7784,8 @@ mod tests {
             flags: 0,
             build_cost_multiplier: 16,
             clear_cost_multiplier: 16,
+            bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+                crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
             callback_mask: 0,
             animation_status: 0,
             animation_frames: 0,
@@ -7894,6 +7902,8 @@ mod tests {
             flags: 0,
             build_cost_multiplier: 16,
             clear_cost_multiplier: 16,
+            bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+                crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
             callback_mask: 0,
             animation_status: 0xFF,
             animation_frames: 0,

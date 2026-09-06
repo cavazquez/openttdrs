@@ -1988,3 +1988,12 @@ paradas custom cobran el valor de la spec; el fallback sin spec no cambia. Las
 regresiones cubren parseo, catálogo y construir/limpiar; scopes completos de
 `BaseStation`, listas bridgeables, strings y sonidos siguen pendientes en
 #329.
+
+Actualización #329-ROADSTOP-BRIDGEABLE-415 (2026-09-06, issue [#415](https://github.com/cavazquez/openttdrs/issues/415)):
+RoadStop Action0 `0x13`/`0x14` ya se consume como lista `ExtendedByte` y se
+conserva por layout (seis entradas: cuatro bahías y dos drive-through). El
+catálogo, la aplicación NewGRF y JSON mantienen altura mínima y pilares
+prohibidos; las entradas posteriores siguen alineadas incluso cuando un GRF
+declara más de seis layouts. Las regresiones cubren parseo, truncamiento,
+aplicación y round-trip. Falta conectar este dato con la comprobación nativa
+de puentes sobre una parada; el issue padre #329 permanece abierto.

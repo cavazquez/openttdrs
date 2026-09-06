@@ -3008,14 +3008,19 @@ mod tests {
             0,
         ];
         let mut roadstop = build_action0_roadstop_payload(b"BDGE", 0, "Badge stop", &[]);
-        roadstop[2] = roadstop[2].saturating_add(2);
+        roadstop[2] = roadstop[2].saturating_add(3);
         // Propiedades bridgeable `0x13`/`0x14` preceden a menudo a la lista
         // de badges en GRFs reales; deben poder saltarse sin ocultar `0x16`.
         roadstop.extend_from_slice(&[0x13, 0x02, 0x01, 0x02]);
+        roadstop.extend_from_slice(&[0x14, 0x02, 0x04, 0x08]);
         // OpenTTD RoadStops prop 0x16: WORD count + local Badge TT ids.
         roadstop.extend_from_slice(&[0x16, 0x01, 0x00, 0x00, 0x00]);
         let meta = parse_action0_roadstop_meta(&roadstop).unwrap();
         assert_eq!(meta.badge_local_ids, vec![0]);
+        assert_eq!(meta.bridgeable_info[0].min_height, 1);
+        assert_eq!(meta.bridgeable_info[1].min_height, 2);
+        assert_eq!(meta.bridgeable_info[0].disallowed_pillars, 4);
+        assert_eq!(meta.bridgeable_info[1].disallowed_pillars, 8);
 
         let bytes = build_grf_v2_with_action0s_and_action8(
             &[&badge, &badge_translation, &roadstop],
@@ -3039,6 +3044,27 @@ mod tests {
             .unwrap();
         assert_eq!(spec.associated_badges, vec![badge_id]);
         assert_eq!(spec.newgrf_badge_translation, vec![badge_id]);
+        assert_eq!(spec.bridgeable_info[0].min_height, 1);
+        assert_eq!(spec.bridgeable_info[1].min_height, 2);
+        assert_eq!(spec.bridgeable_info[0].disallowed_pillars, 4);
+        assert_eq!(spec.bridgeable_info[1].disallowed_pillars, 8);
+    }
+
+    #[test]
+    fn roadstop_bridgeable_lists_truncate_to_six_layouts_and_keep_following_props() {
+        let mut roadstop = build_action0_roadstop_payload(b"BRDG", 0, "Bridge stop", &[]);
+        roadstop[2] = roadstop[2].saturating_add(3);
+        roadstop.extend_from_slice(&[
+            0x13, 8, 1, 2, 3, 4, 5, 6, 7, 8, // extra heights are consumed
+            0x14, 8, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x16, 0x01, 0x00, 0x00, 0x00,
+        ]);
+
+        let meta = parse_action0_roadstop_meta(&roadstop).unwrap();
+        assert_eq!(meta.badge_local_ids, vec![0]);
+        assert_eq!(meta.bridgeable_info[0].min_height, 1);
+        assert_eq!(meta.bridgeable_info[5].min_height, 6);
+        assert_eq!(meta.bridgeable_info[0].disallowed_pillars, 0x10);
+        assert_eq!(meta.bridgeable_info[5].disallowed_pillars, 0x60);
     }
 
     #[test]

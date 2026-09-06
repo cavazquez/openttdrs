@@ -1910,6 +1910,8 @@ mod tests {
             flags: 0,
             build_cost_multiplier: 16,
             clear_cost_multiplier: 16,
+            bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+                crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
             callback_mask: ROADSTOP_CALLBACK_MASK_ANIMATION_NEXT_FRAME
                 | ROADSTOP_CALLBACK_MASK_ANIMATION_SPEED,
             animation_status: 1,

@@ -598,6 +598,9 @@ pub struct ParsedRoadStopMeta {
     pub build_cost_multiplier: u8,
     /// Action0 `0x15`: clear cost multiplier per tile (`16` = default).
     pub clear_cost_multiplier: u8,
+    /// Action0 `0x13`/`0x14`: bridge constraints indexed by tile layout.
+    pub bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo;
+        crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
     /// Action0 `0x11` (`RoadStopCallbackMask`).
     pub callback_mask: u8,
     /// Action0 `0x0E`: último frame de animación.
@@ -625,6 +628,8 @@ struct RoadStopMetaParse {
     flags: u32,
     build_cost_multiplier: u8,
     clear_cost_multiplier: u8,
+    bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo;
+        crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
     callback_mask: u8,
     animation_frames: u8,
     animation_status: u8,
@@ -646,6 +651,8 @@ impl Default for RoadStopMetaParse {
             flags: 0,
             build_cost_multiplier: 16,
             clear_cost_multiplier: 16,
+            bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+                crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
             callback_mask: 0,
             animation_frames: 0,
             animation_status: 0xFF,
@@ -685,6 +692,7 @@ impl RoadStopMetaParse {
             flags: self.flags,
             build_cost_multiplier: self.build_cost_multiplier,
             clear_cost_multiplier: self.clear_cost_multiplier,
+            bridgeable_info: self.bridgeable_info,
             callback_mask: self.callback_mask,
             animation_frames: self.animation_frames,
             animation_status: self.animation_status,
@@ -2377,6 +2385,36 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 meta.clear_cost_multiplier = payload[i + 1];
                 i += 2;
             }
+            0x13 => {
+                let Some(count) = read_station_extended_byte(payload, &mut i) else {
+                    break;
+                };
+                for layout in 0..count {
+                    if i >= payload.len() {
+                        break;
+                    }
+                    let height = payload[i];
+                    i += 1;
+                    if layout < crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT {
+                        meta.bridgeable_info[layout].min_height = height;
+                    }
+                }
+            }
+            0x14 => {
+                let Some(count) = read_station_extended_byte(payload, &mut i) else {
+                    break;
+                };
+                for layout in 0..count {
+                    if i >= payload.len() {
+                        break;
+                    }
+                    let pillars = payload[i];
+                    i += 1;
+                    if layout < crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT {
+                        meta.bridgeable_info[layout].disallowed_pillars = pillars;
+                    }
+                }
+            }
             0x11 => {
                 if i >= payload.len() {
                     break;
@@ -2435,19 +2473,6 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                     break;
                 }
                 i += 2;
-            }
-            // Bridgeable height/pillar lists: ExtendedByte count followed by
-            // one byte per layout. No runtime consumer uses them yet, but
-            // they must be skipped so a later native prop (notably badges
-            // `0x16`) remains visible to the parser.
-            0x13 | 0x14 => {
-                let Some(count) = read_station_extended_byte(payload, &mut i) else {
-                    break;
-                };
-                if i.checked_add(count).is_none_or(|end| end > payload.len()) {
-                    break;
-                }
-                i += count;
             }
             _ => break,
         }

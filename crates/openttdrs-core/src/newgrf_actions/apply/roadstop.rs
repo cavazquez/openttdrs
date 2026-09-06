@@ -163,6 +163,7 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
                 flags: meta.flags,
                 build_cost_multiplier: meta.build_cost_multiplier,
                 clear_cost_multiplier: meta.clear_cost_multiplier,
+                bridgeable_info: meta.bridgeable_info,
                 callback_mask: meta.callback_mask,
                 animation_status: meta.animation_status,
                 animation_frames: meta.animation_frames,

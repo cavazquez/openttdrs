@@ -723,6 +723,8 @@ fn place_bus_stop_persists_current_road_stop_spec() {
         flags: 0,
         build_cost_multiplier: 24,
         clear_cost_multiplier: 40,
+        bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+            crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
         callback_mask: 0,
         animation_status: 0xFF,
         animation_frames: 0,
@@ -810,6 +812,8 @@ fn place_bus_stop_availability_sees_absolute_calendar_date() {
         flags: 0,
         build_cost_multiplier: 16,
         clear_cost_multiplier: 16,
+        bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+            crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
         callback_mask: crate::ROADSTOP_CALLBACK_MASK_AVAILABILITY,
         animation_status: 0,
         animation_frames: 0,
@@ -881,6 +885,8 @@ fn reject_bus_spec_on_truck_stop() {
         flags: 0,
         build_cost_multiplier: 16,
         clear_cost_multiplier: 16,
+        bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+            crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
         callback_mask: 0,
         animation_status: 0xFF,
         animation_frames: 0,
@@ -927,6 +933,8 @@ fn reject_drive_through_only_as_bay() {
         flags: crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY,
         build_cost_multiplier: 16,
         clear_cost_multiplier: 16,
+        bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+            crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
         callback_mask: 0,
         animation_status: 0xFF,
         animation_frames: 0,
@@ -974,6 +982,8 @@ fn reject_road_only_spec_with_tram() {
         flags: crate::ROADSTOP_FLAG_ROAD_ONLY,
         build_cost_multiplier: 16,
         clear_cost_multiplier: 16,
+        bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+            crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
         callback_mask: 0,
         animation_status: 0xFF,
         animation_frames: 0,
@@ -1019,6 +1029,8 @@ fn road_stop_spec_json_roundtrip_keeps_station_link() {
         flags: crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY,
         build_cost_multiplier: 16,
         clear_cost_multiplier: 16,
+        bridgeable_info: [crate::road_stop_spec::RoadStopBridgeableInfo::default();
+            crate::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
         callback_mask: crate::ROADSTOP_CALLBACK_MASK_AVAILABILITY,
         animation_status: 0xFF,
         animation_frames: 0,

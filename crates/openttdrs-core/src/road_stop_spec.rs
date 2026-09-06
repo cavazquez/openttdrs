@@ -20,6 +20,21 @@ pub const ROADSTOP_TYPE_BUS: u8 = 0;
 pub const ROADSTOP_TYPE_TRUCK: u8 = 1;
 pub const ROADSTOP_TYPE_ALL: u8 = 2;
 
+/// Cantidad máxima de layouts de una especificación de parada (`OpenTTD`
+/// mantiene seis vistas: cuatro bahías y dos drive-through).
+pub const ROADSTOP_LAYOUT_COUNT: usize = 6;
+
+/// Información de puente de un layout Action0 `RoadStop`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct RoadStopBridgeableInfo {
+    /// Action0 `0x13`: altura mínima de puente para este layout.
+    #[serde(default)]
+    pub min_height: u8,
+    /// Action0 `0x14`: máscara de pilares no permitidos.
+    #[serde(default)]
+    pub disallowed_pillars: u8,
+}
+
 /// Bits de `RoadStopSpecFlag` (`OpenTTD` `newgrf_roadstop.h`; Action0 prop `0x12` DWORD).
 ///
 /// | Bit | Flag | Semántica |
@@ -133,6 +148,9 @@ pub struct RoadStopSpecDef {
     /// Action0 `0x15`: clear cost multiplier per tile (`16` = vanilla).
     #[serde(default = "default_road_stop_cost_multiplier")]
     pub clear_cost_multiplier: u8,
+    /// Action0 `0x13`/`0x14`: restricciones de puente por layout.
+    #[serde(default = "default_road_stop_bridgeable_info")]
+    pub bridgeable_info: [RoadStopBridgeableInfo; ROADSTOP_LAYOUT_COUNT],
     /// Action0 `0x11` (`RoadStopCallbackMask`). El bit de disponibilidad se
     /// ejecuta al previsualizar y construir; los bits 1/2 accionan el
     /// scheduler de animación de la parada.
@@ -188,6 +206,10 @@ const fn default_road_stop_animation_speed() -> u8 {
 
 const fn default_road_stop_cost_multiplier() -> u8 {
     16
+}
+
+fn default_road_stop_bridgeable_info() -> [RoadStopBridgeableInfo; ROADSTOP_LAYOUT_COUNT] {
+    [RoadStopBridgeableInfo::default(); ROADSTOP_LAYOUT_COUNT]
 }
 
 impl RoadStopSpecDef {
@@ -481,6 +503,7 @@ mod tests {
             flags,
             build_cost_multiplier: 16,
             clear_cost_multiplier: 16,
+            bridgeable_info: default_road_stop_bridgeable_info(),
             callback_mask: 0,
             animation_status: 0xFF,
             animation_frames: 0,
@@ -525,6 +548,7 @@ mod tests {
                 flags: 0,
                 build_cost_multiplier: 16,
                 clear_cost_multiplier: 16,
+                bridgeable_info: default_road_stop_bridgeable_info(),
                 callback_mask: 0,
                 animation_status: 0xFF,
                 animation_frames: 0,
@@ -551,6 +575,7 @@ mod tests {
                 flags: 0,
                 build_cost_multiplier: 16,
                 clear_cost_multiplier: 16,
+                bridgeable_info: default_road_stop_bridgeable_info(),
                 callback_mask: 0,
                 animation_status: 0xFF,
                 animation_frames: 0,
@@ -583,6 +608,19 @@ mod tests {
         let def = sample_spec(ROADSTOP_TYPE_ALL, 0);
         assert!(def.matches_stop_kind(StopKind::BusStop));
         assert!(def.matches_stop_kind(StopKind::TruckStop));
+    }
+
+    #[test]
+    fn bridgeable_info_roundtrips_through_json() {
+        let mut def = sample_spec(ROADSTOP_TYPE_BUS, 0);
+        def.bridgeable_info[0] = RoadStopBridgeableInfo {
+            min_height: 7,
+            disallowed_pillars: 0x12,
+        };
+        let json = serde_json::to_string(&def).unwrap();
+        let loaded: RoadStopSpecDef = serde_json::from_str(&json).unwrap();
+        assert_eq!(loaded.bridgeable_info[0].min_height, 7);
+        assert_eq!(loaded.bridgeable_info[0].disallowed_pillars, 0x12);
     }
 
     #[test]

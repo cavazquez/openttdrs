@@ -943,6 +943,38 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
             return Some(format!("{english_prefix}{coordinates})."));
         }
     }
+    if let Some(rest) = source.strip_prefix("Sin ruta por red: vehículo ")
+        && let Some((vehicle_id, order)) = rest
+            .strip_suffix(')')
+            .and_then(|value| value.split_once(" (orden "))
+        && is_ascii_digits(vehicle_id)
+        && is_ascii_digits(order)
+    {
+        return Some(format!(
+            "No network route: vehicle {vehicle_id} (order {order})"
+        ));
+    }
+    for (spanish_prefix, english_prefix) in [
+        ("Sin órdenes: vehículo ", "No orders: vehicle "),
+        (
+            "Parada incompatible: vehículo ",
+            "Incompatible stop: vehicle ",
+        ),
+        (
+            "Sin carga disponible: vehículo ",
+            "No cargo available: vehicle ",
+        ),
+        (
+            "Sin camino reservado: vehículo ",
+            "No reserved path: vehicle ",
+        ),
+    ] {
+        if let Some(vehicle_id) = source.strip_prefix(spanish_prefix)
+            && is_ascii_digits(vehicle_id)
+        {
+            return Some(format!("{english_prefix}{vehicle_id}"));
+        }
+    }
     None
 }
 
@@ -1174,6 +1206,42 @@ mod tests {
             "Un helicóptero se estrella en (7, -8) (GS).",
             "Un submarino provoca daños en (7, 8",
             "Un hundimiento en mina afecta (7, 8). texto",
+        ] {
+            assert_eq!(localized_text(Locale::En, malformed), malformed);
+        }
+    }
+
+    #[test]
+    fn catalog_translates_vehicle_advice_headlines_without_mutating_ids() {
+        for (spanish, english) in [
+            (
+                "Sin ruta por red: vehículo 42 (orden 3)",
+                "No network route: vehicle 42 (order 3)",
+            ),
+            ("Sin órdenes: vehículo 7", "No orders: vehicle 7"),
+            (
+                "Parada incompatible: vehículo 8",
+                "Incompatible stop: vehicle 8",
+            ),
+            (
+                "Sin carga disponible: vehículo 9",
+                "No cargo available: vehicle 9",
+            ),
+            (
+                "Sin camino reservado: vehículo 10",
+                "No reserved path: vehicle 10",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        for malformed in [
+            "Sin ruta por red: vehículo 42 (orden tres)",
+            "Sin ruta por red: vehículo 42 (orden 3",
+            "Sin órdenes: vehículo cuarenta",
+            "Parada incompatible: vehículo 8 (GS)",
+            "Sin carga disponible: vehículo 9 extra",
+            "Sin camino reservado: vehículo ",
         ] {
             assert_eq!(localized_text(Locale::En, malformed), malformed);
         }
@@ -1663,6 +1731,50 @@ mod tests {
             (
                 "Un hundimiento en mina afecta (11, -12).",
                 "A mine subsidence affects (11, -12).",
+            ),
+        ];
+        let entities: Vec<_> = entries
+            .iter()
+            .map(|(spanish, _)| app.world_mut().spawn(Text::new(*spanish)).id())
+            .collect();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        for ((_, english), entity) in entries.iter().zip(entities.iter()) {
+            assert_eq!(app.world().get::<Text>(*entity).unwrap().as_str(), *english);
+        }
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        for ((spanish, _), entity) in entries.iter().zip(entities.iter()) {
+            assert_eq!(app.world().get::<Text>(*entity).unwrap().as_str(), *spanish);
+        }
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_vehicle_advice_late() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let entries = [
+            (
+                "Sin ruta por red: vehículo 42 (orden 3)",
+                "No network route: vehicle 42 (order 3)",
+            ),
+            ("Sin órdenes: vehículo 7", "No orders: vehicle 7"),
+            (
+                "Parada incompatible: vehículo 8",
+                "Incompatible stop: vehicle 8",
+            ),
+            (
+                "Sin carga disponible: vehículo 9",
+                "No cargo available: vehicle 9",
+            ),
+            (
+                "Sin camino reservado: vehículo 10",
+                "No reserved path: vehicle 10",
             ),
         ];
         let entities: Vec<_> = entries

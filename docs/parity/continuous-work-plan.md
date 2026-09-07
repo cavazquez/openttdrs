@@ -2305,3 +2305,10 @@ la configuración de Noticias usa ahora las fuentes `Silencio`, `Resumen` y
 localiza la explicación de los modos; el enum, los defaults y las ocho
 preferencias no cambian. #331 sigue abierto por las superficies y catálogos
 upstream restantes.
+
+Actualización #331-BUY-VEHICLE-CHROME-467 (2026-09-07, issue [#467](https://github.com/cavazquez/openttdrs/issues/467)):
+la ventana de compra de vehículos localiza sus títulos de depósito, controles
+de ordenar y filtros. El título dinámico recibe el locale sin cambiar la clase
+de depósito; nombres de motores, cargos y estadísticas permanecen datos
+literales. #331 sigue abierto por los catálogos upstream y superficies UI
+restantes.

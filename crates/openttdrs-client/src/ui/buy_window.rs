@@ -17,8 +17,10 @@ use openttdrs_core::{
 };
 use std::collections::HashMap;
 
+use crate::i18n::{Locale, localized_text};
 use crate::render::newgrf_cache::{DecodedSpriteImagePolicy, decoded_sprite_image};
 use crate::render::{RemapMapVisualsPending, TruckHandles};
+use crate::settings::ClientPreferences;
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -483,6 +485,10 @@ fn buy_window_title(sim: &SimWorld, depot_pos: TileCoord) -> &'static str {
     }
 }
 
+fn localized_buy_window_title(locale: Locale, sim: &SimWorld, depot_pos: TileCoord) -> String {
+    localized_text(locale, buy_window_title(sim, depot_pos))
+}
+
 fn preview_sprite_for_engine(
     trucks: &TruckHandles,
     engine: &EngineDef,
@@ -525,6 +531,7 @@ fn toolbar_button_active(state: &BuyVehicleWindowState, button: BuyVehicleToolba
 pub(crate) fn sync_buy_window(
     buy_state: Res<BuyVehicleWindowState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     trucks: Option<Res<TruckHandles>>,
     mut preview_cache: ResMut<NewGrfTrainPreviewCache>,
     mut images: ResMut<Assets<Image>>,
@@ -607,7 +614,7 @@ pub(crate) fn sync_buy_window(
         .iter_mut()
         .find(|(t, _)| t.0 == FloatingWindowId::BuyVehicle)
     {
-        **title = buy_window_title(&sim, depot_pos).to_string();
+        **title = localized_buy_window_title(prefs.locale(), &sim, depot_pos);
     }
     let kind = depot_kind_at(&sim, depot_pos);
     if let Ok(mut toolbar) = road_toolbar_q.single_mut() {
@@ -1069,5 +1076,33 @@ mod tests {
             openttdrs_core::consist_unit_ids(&sim.state.vehicles, head_id).len(),
             2
         );
+    }
+
+    #[test]
+    fn buy_window_chrome_localizes_titles_without_changing_depot_kind() {
+        let road = SimWorld {
+            state: road_depot_state(),
+            ..SimWorld::default()
+        };
+        let rail = SimWorld {
+            state: rail_depot_state(),
+            ..SimWorld::default()
+        };
+        let depot = TileCoord::new(2, 2);
+
+        assert_eq!(
+            localized_buy_window_title(Locale::Es, &road, depot),
+            "Nuevos vehículos de carretera"
+        );
+        assert_eq!(
+            localized_buy_window_title(Locale::En, &road, depot),
+            "New road vehicles"
+        );
+        assert_eq!(
+            localized_buy_window_title(Locale::En, &rail, depot),
+            "New rail vehicles"
+        );
+        assert_eq!(road.state.map.get_kind(depot), Some(TileKind::RoadDepot));
+        assert_eq!(rail.state.map.get_kind(depot), Some(TileKind::RailDepot));
     }
 }

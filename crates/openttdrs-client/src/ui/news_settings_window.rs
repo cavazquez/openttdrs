@@ -53,7 +53,7 @@ pub(crate) fn setup_news_settings_window(mut commands: Commands, asset_server: R
     );
     commands.entity(content).with_children(|body| {
         body.spawn((
-            Text::new("Off = silencio · Summary = ticker · Full = cartel"),
+            Text::new("Silencio = sin noticias · Resumen = ticker · Completo = periódico"),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.82, 0.78, 0.68)),
         ));
@@ -99,7 +99,7 @@ pub(crate) fn setup_news_settings_window(mut commands: Commands, asset_server: R
                             Interaction::default(),
                             BuildMenuUi,
                             children![(
-                                Text::new(mode_button_label(mode)),
+                                Text::new(mode_button_source(mode)),
                                 window_text_font(asset_server, UiFontRole::Caption),
                                 TextColor(WINDOW_TEXT),
                             )],
@@ -110,11 +110,11 @@ pub(crate) fn setup_news_settings_window(mut commands: Commands, asset_server: R
     });
 }
 
-fn mode_button_label(mode: NewsDisplayMode) -> &'static str {
+fn mode_button_source(mode: NewsDisplayMode) -> &'static str {
     match mode {
-        NewsDisplayMode::Off => "Off",
-        NewsDisplayMode::Summary => "Ticker",
-        NewsDisplayMode::Full => "Cartel",
+        NewsDisplayMode::Off => "Silencio",
+        NewsDisplayMode::Summary => "Resumen",
+        NewsDisplayMode::Full => "Completo",
     }
 }
 
@@ -158,4 +158,25 @@ pub(crate) fn news_settings_on_closed(
     close_floating_window_on_message(&mut closed, FloatingWindowId::NewsSettings, || {
         state.open = false;
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mode_button_source;
+    use crate::i18n::{Locale, localized_text};
+    use openttdrs_core::NewsDisplayMode;
+
+    #[test]
+    fn news_mode_buttons_keep_the_preference_enum_but_localize_labels() {
+        for (mode, spanish, english) in [
+            (NewsDisplayMode::Off, "Silencio", "Off"),
+            (NewsDisplayMode::Summary, "Resumen", "Summary"),
+            (NewsDisplayMode::Full, "Completo", "Full"),
+        ] {
+            let source = mode_button_source(mode);
+            assert_eq!(source, spanish);
+            assert_eq!(localized_text(Locale::Es, source), spanish);
+            assert_eq!(localized_text(Locale::En, source), english);
+        }
+    }
 }

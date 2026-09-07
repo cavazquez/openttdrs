@@ -539,7 +539,10 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
             "Follows the main camera (more zoomed out)."
         }
         "Stock: --" => "Stock: --",
-        "Off = silencio · Summary = ticker · Full = cartel" => {
+        "Silencio" => "Off",
+        "Resumen" => "Summary",
+        "Completo" => "Full",
+        "Silencio = sin noticias · Resumen = ticker · Completo = periódico" => {
             "Off = silence · Summary = ticker · Full = newspaper"
         }
         "Fin de partida" => "End of game",
@@ -1204,9 +1207,19 @@ mod tests {
             ("Cierre de industria", "Industry closure"),
             ("Economía", "Economy"),
             ("Cartel", "Newspaper"),
+            ("Silencio", "Off"),
+            ("Resumen", "Summary"),
+            ("Completo", "Full"),
         ] {
             assert_eq!(localized_text(Locale::En, spanish), english);
         }
+        assert_eq!(
+            localized_text(
+                Locale::En,
+                "Silencio = sin noticias · Resumen = ticker · Completo = periódico"
+            ),
+            "Off = silence · Summary = ticker · Full = newspaper"
+        );
     }
 
     #[test]

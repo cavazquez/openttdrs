@@ -2298,3 +2298,10 @@ dos estilos de señal. El título dinámico localiza también tipo, variante y
 densidad sin alterar IDs, ciclo ni encoding. La regresión cubre ambos locales
 y confirma que la selección permanece intacta; #331 sigue abierto por las
 superficies UI y catálogos upstream restantes.
+
+Actualización #331-NEWS-SETTINGS-MODES-466 (2026-09-07, issue [#466](https://github.com/cavazquez/openttdrs/issues/466)):
+la configuración de Noticias usa ahora las fuentes `Silencio`, `Resumen` y
+`Completo`, que alternan a `Off`, `Summary` y `Full` en inglés. También se
+localiza la explicación de los modos; el enum, los defaults y las ocho
+preferencias no cambian. #331 sigue abierto por las superficies y catálogos
+upstream restantes.

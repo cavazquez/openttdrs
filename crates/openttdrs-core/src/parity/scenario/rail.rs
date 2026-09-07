@@ -215,6 +215,12 @@ pub fn build_train_supply_signal_snapshot() -> GameState {
 fn build_train_supply_core() -> GameState {
     let mut state = GameState::new(20, 14);
     state.world_seed = 0;
+    // Fixture de señales/carga: una avería aleatoria sólo mediría el estado
+    // incidental del RNG, no el bloqueo ferroviario que este escenario debe
+    // aislar. Igual que los demás escenarios rail headless, desactiva eventos
+    // externos y conserva una trayectoria reproducible.
+    state.disasters_enabled = false;
+    state.vehicle_breakdowns = 0;
 
     for x in 2..=12 {
         apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, 6)))

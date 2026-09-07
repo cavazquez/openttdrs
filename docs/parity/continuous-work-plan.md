@@ -159,9 +159,14 @@ estado inicial de reloj y RNG persistido. #508 conserva el `INDY.counter` de
 decrementa el contador como `u16` por tick y mueve el scheduler diario al timer
 económico previo a `TimerGameTick`: en tres días normales igualan reloj, tick,
 `ECMY`, `ITBL`, acciones y los 42 contadores. El primer residual posterior es
-el RNG global (#512), no un salto artificial del contador. #510 impide que una
-ejecución dedicated sin socket se acepte como oracle aunque produzca JSONL
-válida. RMAP-162 cierra
+el RNG global (#512), no un salto artificial del contador. La instrumentación
+puntual separó 930 consumos nativos en la primera jornada de `autosave0.sav`;
+#513 conserva ya los 45 `Chance16R(1,14)` de industria cuyo contador previo es
+múltiplo de 64. El candidato pasa de la recurrencia RNG 1 a la 46
+(`[3745887598,3221364368]`), exactamente 45 avances más, pero no reclama
+igualdad de la jornada: Town, árboles, tiles NewGRF y otros consumidores siguen
+en #512. #510 impide que una ejecución dedicated sin socket se acepte como
+oracle aunque produzca JSONL válida. RMAP-162 cierra
 instrumentación y regresiones, no afirma todavía paridad temporal ni reduce
 los pendientes de #499, RMAP-056 o #338.
 
@@ -169,8 +174,8 @@ Actualizado el 2026-09-07: RMAP-159/#500, RMAP-160/#501, RMAP-161/#502 y
 RMAP-162/#506 son sub-issues cerrados de estado/selección, observación nativa,
 ejecución vanilla e instrumentación diferencial. #507 conserva la cobertura de
 carga `DATE`, #510 valida la calidad de la corrida native, #511 cierra el
-contador persistido y #512 mantiene separado el RNG posterior. Los gates
-continúan siendo obligatorios y
+contador persistido, #513 cierra el bloque acotado de sonido ambiental de
+industria y #512 mantiene separado el RNG posterior. Los gates continúan siendo obligatorios y
 ningún issue padre se considera cerrado por esta cobertura.
 
 Reparación #347 validada (2026-09-04): las casas sin PNG suelto se recortan

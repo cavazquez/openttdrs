@@ -738,6 +738,14 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
         let tiles = state.industries[i].tiles.clone();
         let pos = state.industries[i].pos;
         let footprint: Vec<TileCoord> = if tiles.is_empty() { vec![pos] } else { tiles };
+        // `ProduceIndustryGoods` consulta el sonido ambiental antes de
+        // decrementar `Industry::counter`. Aunque este runtime todavía no
+        // reproduce ese efecto, `Chance16R(1, 14)` consume el RNG global y
+        // omitirlo desplaza todos los consumidores posteriores. La condición
+        // usa el contador persistido previo al decremento, como OpenTTD.
+        if state.industries[i].counter.is_multiple_of(64) {
+            let _ = state.random.chance16(1, 14);
+        }
         // `ProduceIndustryGoods` decrementa el contador persistido antes de
         // evaluar producción, callbacks y efectos. No se puede reconstruir
         // esa fase con `tick + counter` tras importar un SAV.
@@ -1147,6 +1155,44 @@ mod tests {
 
         produce_industries(&mut state, 18);
         assert_eq!(state.industries[0].counter, u16::MAX);
+    }
+
+    #[test]
+    fn runtime_consumes_ambient_industry_rng_before_decrementing_counter() {
+        let mut state = GameState::new(4, 4);
+        state.random = Randomizer {
+            state: [0x1020_3040, 0x5060_7080],
+        };
+        for (instance_id, counter) in [(0, 64), (1, 63), (2, 0), (3, 1)] {
+            state.industries.push(
+                Industry::with_tiles_spec(
+                    TileCoord::new(1, 1),
+                    IndustrySpec::CoalMine.kind(),
+                    IndustrySpec::CoalMine,
+                    vec![TileCoord::new(1, 1)],
+                    0,
+                )
+                .with_instance_id(instance_id)
+                .with_persisted_counter(counter),
+            );
+        }
+
+        let mut expected_rng = state.random;
+        let _ = expected_rng.chance16(1, 14);
+        let _ = expected_rng.chance16(1, 14);
+
+        produce_industries(&mut state, 17);
+
+        assert_eq!(state.random, expected_rng, "sólo 64 y 0 eran múltiplos");
+        assert_eq!(
+            state
+                .industries
+                .iter()
+                .map(|industry| industry.counter)
+                .collect::<Vec<_>>(),
+            vec![63, 62, u16::MAX, 0],
+            "el chequeo ocurre antes del decremento persistido"
+        );
     }
 
     #[test]

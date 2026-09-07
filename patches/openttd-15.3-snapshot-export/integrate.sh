@@ -215,6 +215,39 @@ def integrate_world_draw_viewport(dest: Path) -> None:
             1,
         )
 
+    screenshot_sort_marker = (
+        "\t_vp_sprite_sorter(&_vd.parent_sprites_to_sort);\n"
+        "\tViewportDrawParentSprites(&_vd.parent_sprites_to_sort, &_vd.child_screen_sprites_to_draw);\n"
+    )
+    screenshot_sort_trace = r'''	_vp_sprite_sorter(&_vd.parent_sprites_to_sort);
+	if (OpenttdrsWorldScreenshotSortTraceMatches(
+		vp.left, vp.top, vp.width, vp.height, static_cast<int>(to_underlying(vp.zoom))
+	)) {
+		OpenttdrsWorldScreenshotBeginSortSegment(
+			_vd.dpi.left, _vd.dpi.top, _vd.dpi.width, _vd.dpi.height,
+			static_cast<uint64_t>(_vd.parent_sprites_to_sort.size()),
+			static_cast<uint64_t>(_vd.child_screen_sprites_to_draw.size())
+		);
+		for (size_t final_ordinal = 0; final_ordinal < _vd.parent_sprites_to_sort.size(); final_ordinal++) {
+			const ParentSpriteToDraw &parent = *_vd.parent_sprites_to_sort[final_ordinal];
+			const uint64_t parent_id = static_cast<uint64_t>(&parent - _vd.parent_sprites_to_draw.data());
+			OpenttdrsWorldScreenshotRecordSortParent(
+				static_cast<uint64_t>(final_ordinal), parent_id,
+				static_cast<uint32_t>(parent.image), static_cast<uint32_t>(parent.pal),
+				parent.x, parent.y, parent.left, parent.top,
+				parent.xmin, parent.ymin, parent.zmin,
+				parent.xmax, parent.ymax, parent.zmax, parent.first_child
+			);
+		}
+		OpenttdrsWorldScreenshotFinishSortSegment();
+	}
+	ViewportDrawParentSprites(&_vd.parent_sprites_to_sort, &_vd.child_screen_sprites_to_draw);
+'''
+    if "OpenttdrsWorldScreenshotBeginSortSegment" not in text:
+        if screenshot_sort_marker not in text:
+            raise SystemExit("no encuentro sorter final del ViewportDoDraw para world-screenshot")
+        text = text.replace(screenshot_sort_marker, screenshot_sort_trace, 1)
+
     start_marker = "void StartSpriteCombine()\n{\n\tassert(_vd.combine_sprites == SPRITE_COMBINE_NONE);"
     if "OpenttdrsWorldDrawRecordCombineStart" not in text:
         if start_marker not in text:

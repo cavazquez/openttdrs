@@ -20,6 +20,7 @@ SCALE="${5:-${OPENTTDRS_WORLD_SCREENSHOT_SCALE:-1}}"
 SETTLE_FRAMES="${OPENTTDRS_WORLD_SCREENSHOT_SETTLE_FRAMES:-180}"
 TIMEOUT_SECONDS="${OPENTTDRS_WORLD_SCREENSHOT_TIMEOUT_SECONDS:-120}"
 CLEAN="${OPENTTDRS_WORLD_SCREENSHOT_CLEAN:-1}"
+SORT_OUT="${OPENTTDRS_VIEWPORT_SORT_TRACE_OUT:-}"
 
 if [[ ! -f "$SAV" ]]; then
   echo "error: no existe $SAV" >&2
@@ -48,8 +49,16 @@ fi
 
 mkdir -p "$(dirname "$OUT")"
 rm -f "$OUT"
+if [[ -n "$SORT_OUT" ]]; then
+  SORT_OUT="$(realpath -m "$SORT_OUT")"
+  mkdir -p "$(dirname "$SORT_OUT")"
+  rm -f "$SORT_OUT"
+  export OPENTTDRS_VIEWPORT_SORT_TRACE_OUT="$SORT_OUT"
+else
+  unset OPENTTDRS_VIEWPORT_SORT_TRACE_OUT
+fi
 
-echo "world-screenshot openttdrs: sav=$SAV out=$OUT center=$CENTER res=$RESOLUTION scale=$SCALE settle=${SETTLE_FRAMES}f clean=$CLEAN"
+echo "world-screenshot openttdrs: sav=$SAV out=$OUT center=$CENTER res=$RESOLUTION scale=$SCALE settle=${SETTLE_FRAMES}f clean=$CLEAN sort=${SORT_OUT:-off}"
 cd "$ROOT"
 set +e
 OPENTTDRS_SAV_LOAD="$SAV" \
@@ -72,5 +81,13 @@ if [[ ! -s "$OUT" ]]; then
   tail -n 100 /tmp/openttdrs-world-screenshot-candidate.log >&2 || true
   exit 1
 fi
+if [[ -n "$SORT_OUT" ]] && [[ ! -s "$SORT_OUT" ]]; then
+  echo "error: openttdrs no generó la traza de sorter $SORT_OUT (exit=$rc). Log:" >&2
+  tail -n 100 /tmp/openttdrs-world-screenshot-candidate.log >&2 || true
+  exit 1
+fi
 
 echo "OK: candidata raster openttdrs escrita en $OUT"
+if [[ -n "$SORT_OUT" ]]; then
+  echo "OK: orden del compositor openttdrs escrito en $SORT_OUT"
+fi

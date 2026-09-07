@@ -18,6 +18,7 @@ CENTER="${4:-${OPENTTDRS_WORLD_SCREENSHOT_CENTER:-}}"
 RESOLUTION="${5:-${OPENTTDRS_WORLD_SCREENSHOT_RES:-1280x720}}"
 SCALE="${OPENTTDRS_WORLD_SCREENSHOT_SCALE:-1}"
 CLEAN="${OPENTTDRS_WORLD_SCREENSHOT_CLEAN:-1}"
+SORT_OUT="${OPENTTDRS_WORLD_SCREENSHOT_SORT_OUT:-}"
 BUILD_DIR="$(dirname "$BIN")"
 BASESET_SRC="${OPENTTDRS_OPENGFX_DIR:-${ROOT}/.deps/openttd-baseset/opengfx-8.0}"
 GRAPHICS_SET="${OPENTTDRS_GRAPHICS_SET:-opengfx}"
@@ -59,6 +60,11 @@ fi
 
 mkdir -p "$(dirname "$OUT")"
 rm -f "$OUT"
+if [[ -n "$SORT_OUT" ]]; then
+  SORT_OUT="$(realpath -m "$SORT_OUT")"
+  mkdir -p "$(dirname "$SORT_OUT")"
+  rm -f "$SORT_OUT"
+fi
 
 export LD_LIBRARY_PATH="${PREFIX}/usr/lib/x86_64-linux-gnu:${PREFIX}/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export OPENTTDRS_WORLD_SCREENSHOT_OUT="$OUT"
@@ -66,8 +72,13 @@ export OPENTTDRS_WORLD_SCREENSHOT_CENTER="$CENTER"
 export OPENTTDRS_WORLD_SCREENSHOT_RES="$RESOLUTION"
 export OPENTTDRS_WORLD_SCREENSHOT_SCALE="$SCALE"
 export OPENTTDRS_WORLD_SCREENSHOT_CLEAN="$CLEAN"
+if [[ -n "$SORT_OUT" ]]; then
+  export OPENTTDRS_WORLD_SCREENSHOT_SORT_OUT="$SORT_OUT"
+else
+  unset OPENTTDRS_WORLD_SCREENSHOT_SORT_OUT
+fi
 
-echo "world-screenshot OpenTTD: bin=$BIN sav=$SAV out=$OUT center=$CENTER res=$RESOLUTION scale=$SCALE clean=$CLEAN gfx=$GRAPHICS_SET blitter=$BLITTER"
+echo "world-screenshot OpenTTD: bin=$BIN sav=$SAV out=$OUT center=$CENTER res=$RESOLUTION scale=$SCALE clean=$CLEAN sort=${SORT_OUT:-off} gfx=$GRAPHICS_SET blitter=$BLITTER"
 cd "$BUILD_DIR"
 set +e
 # El exportador se ejecuta contra un build dedicado con el blitter 8bpp simple
@@ -83,5 +94,13 @@ if [[ ! -s "$OUT" ]]; then
   tail -n 80 /tmp/openttdrs-world-screenshot-run.log >&2 || true
   exit 1
 fi
+if [[ -n "$SORT_OUT" ]] && [[ ! -s "$SORT_OUT" ]]; then
+  echo "error: no se generó la traza de sorter $SORT_OUT (exit=$rc). Log:" >&2
+  tail -n 80 /tmp/openttdrs-world-screenshot-run.log >&2 || true
+  exit 1
+fi
 
 echo "OK: referencia raster OpenTTD escrita en $OUT"
+if [[ -n "$SORT_OUT" ]]; then
+  echo "OK: orden real del viewport escrito en $SORT_OUT"
+fi

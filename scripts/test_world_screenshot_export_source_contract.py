@@ -73,6 +73,30 @@ class WorldScreenshotExportSourceContractTest(unittest.TestCase):
         self.assertIn('exportOPENTTDRS_WORLD_SCREENSHOT_SCALE="$SCALE"', compact(exporter))
         self.assertIn('OPENTTDRS_WORLD_SCREENSHOT_SCALE="$SCALE"', comparator)
 
+    def test_optional_sort_trace_uses_the_real_screenshot_viewport(self) -> None:
+        source = compact(SOURCE.read_text(encoding="utf-8"))
+        integrator = compact(INTEGRATOR.read_text(encoding="utf-8"))
+        exporter = EXPORTER.read_text(encoding="utf-8")
+
+        # La traza no puede reutilizar el world-draw por filas: debe armarse
+        # justo antes de la captura y cerrarse después del raster encolado.
+        self.assertIn('std::getenv("OPENTTDRS_WORLD_SCREENSHOT_SORT_OUT")', source)
+        self.assertIn("OpenttdrsWorldScreenshotStartSortTrace(width,height", source)
+        self.assertIn("OpenttdrsWorldScreenshotFinishSortTrace()", source)
+        self.assertLess(
+            source.index("OpenttdrsWorldScreenshotStartSortTrace(width,height"),
+            source.index("MakeScreenshotAtZoom(zoom,screenshot_name,width,height)"),
+        )
+        self.assertIn('"contract","world-screenshot-sort"', source)
+        self.assertIn("viewport_left==0&&viewport_top==0", source)
+        self.assertIn("viewport_width==static_cast<int>(state.expected_width)", source)
+        self.assertIn("viewport_height==static_cast<int>(state.expected_height)", source)
+        self.assertIn("OpenttdrsWorldScreenshotBeginSortSegment", integrator)
+        self.assertIn("_vp_sprite_sorter(&_vd.parent_sprites_to_sort);", integrator)
+        self.assertIn("ViewportDrawParentSprites(&_vd.parent_sprites_to_sort", integrator)
+        self.assertIn('SORT_OUT="${OPENTTDRS_WORLD_SCREENSHOT_SORT_OUT:-}"', exporter)
+        self.assertIn('export OPENTTDRS_WORLD_SCREENSHOT_SORT_OUT="$SORT_OUT"', exporter)
+
     def test_unpinned_integration_preserves_an_existing_snapshot_or_cleans_it_consistently(self) -> None:
         integrator = INTEGRATOR.read_text(encoding="utf-8")
 
@@ -85,7 +109,10 @@ class WorldScreenshotExportSourceContractTest(unittest.TestCase):
         self.assertIn('text = add_cmake_source(cmake, text, "snapshot_export.cpp")', integrator)
         self.assertIn('text = text.replace("    world_raw_export.cpp\\n", "", 1)', integrator)
         self.assertIn("snapshot_export.h ya declara world-raw", integrator)
-        self.assertIn("snapshot_hooks = (snapshot_hook + pbs_hook + fta_hook)", integrator)
+        self.assertIn(
+            "snapshot_hooks = (snapshot_hook + pbs_hook + industry_hook + fta_hook)",
+            integrator,
+        )
         self.assertIn('pbs_tick_hook = "\\tOpenttdrsMaybeExportPbsTraceTick();\\n"', integrator)
         self.assertIn('fta_tick_hook = "\\tOpenttdrsMaybeExportAirportFtaTraceTick();\\n"', integrator)
         self.assertIn('for tick_hook in (pbs_tick_hook, fta_tick_hook):', integrator)

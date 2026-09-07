@@ -17,17 +17,44 @@
 #include "video/video_driver.hpp"
 #include "window_func.h"
 
+#include "3rdparty/nlohmann/json.hpp"
+
 #include <chrono>
 #include <charconv>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <string_view>
 
+using nlohmann::json;
+
 namespace {
+
+struct ScreenshotSortTraceState {
+	bool active = false;
+	bool failed = false;
+	bool in_segment = false;
+	uint32_t expected_width = 0;
+	uint32_t expected_height = 0;
+	int expected_zoom = 0;
+	uint64_t segments = 0;
+	uint64_t parents = 0;
+	std::ofstream out;
+};
+
+ScreenshotSortTraceState _openttdrs_world_screenshot_sort_trace;
+
+void EmitScreenshotSortTrace(json row)
+{
+	auto &state = _openttdrs_world_screenshot_sort_trace;
+	if (!state.active || state.failed) return;
+	state.out << row.dump() << '\n';
+	if (!state.out) state.failed = true;
+}
 
 bool ParseUint(std::string_view text, uint32_t &value)
 {
@@ -240,6 +267,13 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 		 * make us copy an older successful PNG from a previous invocation. */
 		const std::string screenshot_name = "openttdrs-world-reference-" +
 			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+		if (!OpenttdrsWorldScreenshotStartSortTrace(
+			width, height, static_cast<int>(to_underlying(zoom))
+		)) {
+			std::fprintf(stderr, "openttdrs world-screenshot: no se pudo abrir la traza del sorter\n");
+			_exit_game = true;
+			return;
+		}
 		if (!MakeScreenshotAtZoom(zoom, screenshot_name, width, height)) {
 			std::fprintf(stderr, "openttdrs world-screenshot: no se pudo encolar la captura\n");
 			_exit_game = true;
@@ -251,6 +285,11 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 		 * esta captura. Si el raster falló no existe un archivo con el nombre
 		 * nuevo: abortar es preferible a copiar una referencia obsoleta. */
 		VideoDriver::GetInstance()->QueueOnMainThread([target] {
+			if (!OpenttdrsWorldScreenshotFinishSortTrace()) {
+				std::fprintf(stderr, "openttdrs world-screenshot: la traza del sorter quedó incompleta\n");
+				_exit_game = true;
+				return;
+			}
 			std::error_code error;
 			const std::filesystem::path source(_full_screenshot_path);
 			if (!std::filesystem::is_regular_file(source, error) || error ||
@@ -286,4 +325,134 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 bool OpenttdrsWorldScreenshotHideVehicles()
 {
 	return EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_CLEAN");
+}
+
+bool OpenttdrsWorldScreenshotStartSortTrace(uint32_t width, uint32_t height, int zoom)
+{
+	const char *output = std::getenv("OPENTTDRS_WORLD_SCREENSHOT_SORT_OUT");
+	if (output == nullptr || output[0] == '\0') return true;
+
+	auto &state = _openttdrs_world_screenshot_sort_trace;
+	if (state.active) return false;
+	state = {};
+
+	std::error_code error;
+	const std::filesystem::path destination(output);
+	if (!destination.parent_path().empty()) {
+		std::filesystem::create_directories(destination.parent_path(), error);
+	}
+	if (error) return false;
+	state.out.open(destination, std::ios::out | std::ios::trunc);
+	if (!state.out) return false;
+
+	state.active = true;
+	state.expected_width = width;
+	state.expected_height = height;
+	state.expected_zoom = zoom;
+	EmitScreenshotSortTrace({
+		{"kind", "metadata"},
+		{"schema_version", 1},
+		{"contract", "world-screenshot-sort"},
+		{"producer", "openttd"},
+		{"stage", "post_viewport_sprite_sorter"},
+		{"width", width},
+		{"height", height},
+		{"zoom", zoom},
+	});
+	state.out.flush();
+	if (!state.out) state.failed = true;
+	return !state.failed;
+}
+
+bool OpenttdrsWorldScreenshotFinishSortTrace()
+{
+	auto &state = _openttdrs_world_screenshot_sort_trace;
+	if (!state.active) return true;
+	if (state.in_segment || state.segments == 0) state.failed = true;
+	if (!state.failed) {
+		EmitScreenshotSortTrace({
+			{"kind", "complete"},
+			{"segments", state.segments},
+			{"parents", state.parents},
+		});
+	}
+	state.out.flush();
+	const bool ok = !state.failed && static_cast<bool>(state.out);
+	state.out.close();
+	state.active = false;
+	return ok;
+}
+
+bool OpenttdrsWorldScreenshotSortTraceMatches(
+	int viewport_left, int viewport_top, int viewport_width, int viewport_height, int zoom
+)
+{
+	const auto &state = _openttdrs_world_screenshot_sort_trace;
+	return state.active && !state.failed &&
+		viewport_left == 0 && viewport_top == 0 &&
+		viewport_width == static_cast<int>(state.expected_width) &&
+		viewport_height == static_cast<int>(state.expected_height) &&
+		zoom == state.expected_zoom;
+}
+
+void OpenttdrsWorldScreenshotBeginSortSegment(
+	int virtual_left, int virtual_top, int virtual_width, int virtual_height,
+	uint64_t parent_count, uint64_t child_count
+)
+{
+	auto &state = _openttdrs_world_screenshot_sort_trace;
+	if (!state.active || state.failed) return;
+	if (state.in_segment) {
+		state.failed = true;
+		return;
+	}
+	state.in_segment = true;
+	state.parents += parent_count;
+	EmitScreenshotSortTrace({
+		{"kind", "segment"},
+		{"ordinal", state.segments},
+		{"virtual", {
+			{"left", virtual_left}, {"top", virtual_top},
+			{"width", virtual_width}, {"height", virtual_height},
+		}},
+		{"parents", parent_count},
+		{"children", child_count},
+	});
+}
+
+void OpenttdrsWorldScreenshotRecordSortParent(
+	uint64_t final_ordinal, uint64_t parent_id,
+	uint32_t image, uint32_t palette,
+	int screen_x, int screen_y, int left, int top,
+	int xmin, int ymin, int zmin, int xmax, int ymax, int zmax, int first_child
+)
+{
+	const auto &state = _openttdrs_world_screenshot_sort_trace;
+	if (!state.active || state.failed || !state.in_segment) return;
+	EmitScreenshotSortTrace({
+		{"kind", "parent"},
+		{"segment", state.segments},
+		{"final_ordinal", final_ordinal},
+		{"parent_id", parent_id},
+		{"image", image},
+		{"palette", palette},
+		{"screen", {{"x", screen_x}, {"y", screen_y}, {"left", left}, {"top", top}}},
+		{"world_bounds", {
+			{"xmin", xmin}, {"ymin", ymin}, {"zmin", zmin},
+			{"xmax", xmax}, {"ymax", ymax}, {"zmax", zmax},
+		}},
+		{"first_child", first_child},
+	});
+}
+
+void OpenttdrsWorldScreenshotFinishSortSegment()
+{
+	auto &state = _openttdrs_world_screenshot_sort_trace;
+	if (!state.active || state.failed) return;
+	if (!state.in_segment) {
+		state.failed = true;
+		return;
+	}
+	state.in_segment = false;
+	state.segments++;
 }

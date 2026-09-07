@@ -2722,7 +2722,7 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
 }
 
 #[test]
-fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
+fn airport_pier_tile_seq_layers_attach_to_global_sorter_for_both_import_paths() {
     let assets = boot_assets_app();
     let expected_apron = assets.airport_apron.clone();
     let expected_jetway = assets
@@ -2850,6 +2850,41 @@ fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
         )
         .expect("airport pier spawn");
 
+    let airport_parents: Vec<_> = world
+        .query::<&ViewportSortableParent>()
+        .iter(&world)
+        .filter_map(|parent| {
+            [2661, 2662].contains(&parent.sprite_id).then_some((
+                parent.sprite_id,
+                (
+                    parent.bounds.xmin,
+                    parent.bounds.ymin,
+                    parent.bounds.zmin,
+                    parent.bounds.xmax,
+                    parent.bounds.ymax,
+                    parent.bounds.zmax,
+                ),
+                parent.insertion_key,
+            ))
+        })
+        .collect();
+    assert!(
+        airport_parents.contains(&(
+            2661,
+            (35, 34, 0, 37, 36, 13),
+            crate::render::viewport_insertion_key(2, 2, 0),
+        )),
+        "el jetway StationGfx del MP_STATION debe conservar prisma y ordinal TILE_SEQ"
+    );
+    assert!(
+        airport_parents.contains(&(
+            2662,
+            (64, 40, 0, 77, 42, 13),
+            crate::render::viewport_insertion_key(4, 2, 0),
+        )),
+        "el túnel StationGfx del Airport importado debe participar con ordinal cero"
+    );
+
     let mut aprons = 0;
     let mut jetways = Vec::new();
     let mut tunnels = Vec::new();
@@ -2865,8 +2900,22 @@ fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
         }
     }
     assert_eq!(aprons, 2, "cada pier comienza con SPR_AIRPORT_APRON");
-    assert_eq!(jetways, vec![expected_jetway_pos]);
-    assert_eq!(tunnels, vec![expected_tunnel_pos]);
+    assert_eq!(
+        jetways
+            .iter()
+            .map(|position| position.truncate())
+            .collect::<Vec<_>>(),
+        vec![expected_jetway_pos.truncate()],
+        "el sorter puede reasignar Z, pero no el ancla NFO del jetway"
+    );
+    assert_eq!(
+        tunnels
+            .iter()
+            .map(|position| position.truncate())
+            .collect::<Vec<_>>(),
+        vec![expected_tunnel_pos.truncate()],
+        "el sorter puede reasignar Z, pero no el ancla NFO del túnel"
+    );
 }
 
 #[test]

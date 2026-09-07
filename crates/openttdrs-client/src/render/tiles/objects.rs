@@ -873,6 +873,34 @@ fn record_airport_station_layer_trace(
     );
 }
 
+/// Prisma `TILE_SEQ_LINE` de una capa BUILD de aeropuerto vanilla.
+///
+/// Aunque el PNG se ancla con los offsets NFO de [`overlay_pos`], OpenTTD
+/// entrega esta caja a `AddSortableSpriteToDraw`. Mantener ambas
+/// representaciones evita que una terminal, hangar o jetway correctamente
+/// seleccionado quede debajo de otro productor por conservar sólo el Z local
+/// de su tesela.
+fn airport_station_parent_bounds(
+    ctx: &TileRenderContext,
+    base_z: u8,
+    layer: &crate::sprites::AirportStationLayer,
+) -> ParentSpriteBounds {
+    tile_seq_parent_sprite(
+        0,
+        layer.sprite_id,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        base_z,
+        layer.dx as i32,
+        layer.dy as i32,
+        layer.dz as i32,
+        layer.sx,
+        layer.sy,
+        layer.sz,
+    )
+    .bounds
+}
+
 /// Convierte el desplazamiento `TILE_SEQ_GROUND` a los píxeles de pantalla
 /// que OpenTTD pasa como `extra_offs_*` a `AddTileSpriteToDraw`.
 ///
@@ -889,6 +917,7 @@ fn airport_station_ground_layer_trace_offset(dx: f32, dy: f32, dz: f32) -> (i32,
 /// capas usan el origen TILE_SEQ, las dimensiones NFO y la paleta del
 /// propietario; centrarlas en la tesela convertía el túnel peatonal y los
 /// hangares del aeropuerto en piezas corridas.
+#[allow(clippy::too_many_arguments)] // La llamada recibe el mismo contexto explícito que los demás producers TileSeq.
 fn spawn_airport_station_overlays(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -897,9 +926,10 @@ fn spawn_airport_station_overlays(
     ctx: &TileRenderContext,
     base_z: u8,
     gfx: u8,
+    map_width: u32,
 ) {
     let m7 = ctx.tile.map_or(0, |tile| tile.m7);
-    for layer in airport_station_layers_for_gfx(gfx) {
+    for (layer_index, layer) in airport_station_layers_for_gfx(gfx).iter().enumerate() {
         let sprite_id = airport_station_animation_sprite_id(gfx, m7, layer.sprite_id);
         let Some(sprite_meta) = airport_station_sprite_for_id(sprite_id) else {
             record_airport_station_layer_trace(sprite_id, layer, owner_colour, true);
@@ -910,7 +940,7 @@ fn spawn_airport_station_overlays(
             continue;
         };
         let (xrel, yrel) = airport_station_overlay_rel_for_sprite(layer, sprite_meta);
-        let pos = overlay_pos(
+        let mut pos = overlay_pos(
             ctx.iso_pos,
             xrel,
             yrel,
@@ -921,6 +951,13 @@ fn spawn_airport_station_overlays(
             ctx.tx_i32(),
             ctx.ty_i32(),
         );
+        // La profundidad fuente conserva exactamente la banda que tenía la
+        // capa antes de entrar al sorter. Varias líneas TILE_SEQ comparten la
+        // misma banda (0.050); el desempate nativo es su `insertion_key`, no
+        // un desplazamiento artificial que pueda correr parents no
+        // relacionados a través de una capa fija del mapa.
+        let source_depth = viewport_source_depth(pos.z, ctx.tx, map_width);
+        pos.z = source_depth;
         record_airport_station_layer_trace(sprite_id, layer, owner_colour, false);
         let sprite = if layer.company_coloured {
             sprite_from_atlas_or_company_white_colour(
@@ -937,6 +974,19 @@ fn spawn_airport_station_overlays(
             ctx.map_tile_chunk(),
             tint_building_sprite(sprite),
             Transform::from_translation(pos),
+            ViewportSortableParent {
+                sprite_id,
+                bounds: airport_station_parent_bounds(ctx, base_z, layer),
+                insertion_key: viewport_insertion_key(
+                    ctx.tx,
+                    ctx.ty,
+                    // El apron se emite con `DrawGroundSprite` y no entra a
+                    // `parent_sprites_to_draw`: la primera TILE_SEQ_LINE es
+                    // por lo tanto el ordinal sortable cero de la tesela.
+                    u8::try_from(layer_index).unwrap_or(u8::MAX),
+                ),
+                source_depth,
+            },
         ));
     }
 }
@@ -2526,6 +2576,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 ctx,
                 base_z,
                 m5,
+                dims.0,
             );
         }
         StationTileClass::Other(_) => {
@@ -4363,6 +4414,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                     ctx,
                     base_z,
                     m5,
+                    dims.0,
                 );
             }
             if !imported_station_gfx && piece == openttdrs_core::AirportPiece::Tower {

@@ -454,7 +454,7 @@ pub(crate) fn hydrate_sav_industries(
             Industry::with_tiles(origin, kind, tiles).with_random_colour(saved.random_colour)
         }
         .with_instance_id(instance_id)
-        .with_counter(saved.counter);
+        .with_persisted_counter(saved.counter);
         industry.selected_layout = saved.selected_layout;
         industry.newgrf_random = saved.random;
         industry.newgrf_persistent_storage_id = saved.persistent_storage_id;
@@ -1130,7 +1130,9 @@ mod tests {
             neutral_station_id: None,
             industry_type: 0,
             random_colour: 14,
-            counter: 123,
+            // `INDY.counter` es SLE_UINT16: sólo la semilla de una industria
+            // nueva usa 12 bits, una partida en marcha puede conservar los 16.
+            counter: 12_730,
             selected_layout: 2,
             random: 0xBEEF,
             last_prod_year: 1972,
@@ -1192,7 +1194,7 @@ mod tests {
         assert_eq!(industry.extra_produced_cargo(crate::CargoType::Steel), 22);
         assert_eq!(industry.accepted_cargo_waiting(crate::CargoType::Grain), 15);
         assert_eq!(industry.last_accepted_date(crate::CargoType::Grain), 10_974);
-        assert_eq!(industry.counter, 123);
+        assert_eq!(industry.counter, 12_730);
         assert_eq!(industry.selected_layout, 2);
         assert_eq!(industry.newgrf_random, 0xBEEF);
         assert_eq!(industry.last_prod_year, 1972);

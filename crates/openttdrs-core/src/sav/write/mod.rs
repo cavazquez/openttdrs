@@ -2124,18 +2124,21 @@ mod tests {
             growth_funded: 0,
             ..Default::default()
         }];
-        state.industries = vec![Industry::with_tiles_spec(
-            TileCoord::new(36, 20),
-            IndustryKind::CoalMine,
-            IndustrySpec::CoalMine,
-            vec![
+        state.industries = vec![
+            Industry::with_tiles_spec(
                 TileCoord::new(36, 20),
-                TileCoord::new(37, 20),
-                TileCoord::new(36, 21),
-                TileCoord::new(37, 21),
-            ],
-            0,
-        )];
+                IndustryKind::CoalMine,
+                IndustrySpec::CoalMine,
+                vec![
+                    TileCoord::new(36, 20),
+                    TileCoord::new(37, 20),
+                    TileCoord::new(36, 21),
+                    TileCoord::new(37, 21),
+                ],
+                0,
+            )
+            .with_persisted_counter(12_730),
+        ];
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let sav_game = sav::load(&bytes).expect("load");
@@ -2147,6 +2150,7 @@ mod tests {
         assert_eq!(sav_game.industries[0].width, 2);
         assert_eq!(sav_game.industries[0].height, 2);
         assert_eq!(sav_game.industries[0].industry_type, 0);
+        assert_eq!(sav_game.industries[0].counter, 12_730);
     }
 
     #[test]

@@ -1402,6 +1402,18 @@ impl Industry {
         self
     }
 
+    /// Restaura el contador completo que `INDY` persiste como `u16`.
+    ///
+    /// A diferencia de [`Self::with_counter`], este no es un valor recién
+    /// sembrado por `GB(r, 4, 12)`: tras producir durante una partida el
+    /// contador puede usar los 16 bits y también se expone así a callbacks
+    /// `NewGRF`.
+    #[must_use]
+    pub const fn with_persisted_counter(mut self, counter: u16) -> Self {
+        self.counter = counter;
+        self
+    }
+
     /// ¿Este tick cae en el ciclo de producción de esta industria?
     ///
     /// `OpenTTD` decrementa `counter` cada tick y produce cuando es múltiplo de
@@ -3086,6 +3098,13 @@ mod tests {
     fn counter_keeps_only_twelve_bits() {
         let ind = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine).with_counter(0xFFFF);
         assert_eq!(ind.counter, INDUSTRY_COUNTER_MASK);
+    }
+
+    #[test]
+    fn persisted_counter_keeps_all_sixteen_bits() {
+        let ind = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine)
+            .with_persisted_counter(0xFFFF);
+        assert_eq!(ind.counter, 0xFFFF);
     }
 
     #[test]

@@ -882,6 +882,13 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
             "Company «{company}» is bankrupt (month {month}/{limit})."
         ));
     }
+    if let Some(vehicle_id) = source
+        .strip_prefix("Autoreemplazo falló (vehículo ")
+        .and_then(|value| value.strip_suffix(')'))
+        && is_ascii_digits(vehicle_id)
+    {
+        return Some(format!("Autoreplace failed (vehicle {vehicle_id})"));
+    }
     None
 }
 
@@ -1234,6 +1241,36 @@ mod tests {
         ] {
             assert_eq!(localized_text(Locale::En, malformed), malformed);
         }
+    }
+
+    #[test]
+    fn catalog_translates_autoreplace_failure_headline_without_touching_body() {
+        for (spanish, english) in [
+            (
+                "Autoreemplazo falló (vehículo 42)",
+                "Autoreplace failed (vehicle 42)",
+            ),
+            (
+                "Autoreemplazo falló (vehículo 1007)",
+                "Autoreplace failed (vehicle 1007)",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        for malformed in [
+            "Autoreemplazo falló (vehículo )",
+            "Autoreemplazo falló (vehículo cuarenta)",
+            "Autoreemplazo falló (vehículo 42",
+            "Autoreemplazo falló (vehículo 42) (GameScript)",
+            "Autoreemplazo falló (vehículo 42) motivo",
+        ] {
+            assert_eq!(localized_text(Locale::En, malformed), malformed);
+        }
+        assert_eq!(
+            localized_text(Locale::En, "No hay regla de autoreemplazo para ese motor."),
+            "No autoreplace rule exists for that engine."
+        );
     }
 
     #[test]
@@ -1706,6 +1743,63 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
             "La compañía «Transportes Norte» está en quiebra (mes 3/12)."
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_autoreplace_failure_late() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let headline = app
+            .world_mut()
+            .spawn(Text::new("Autoreemplazo falló (vehículo 42)"))
+            .id();
+        let body = app
+            .world_mut()
+            .spawn(Text::new("No hay regla de autoreemplazo para ese motor."))
+            .id();
+        let malformed = app
+            .world_mut()
+            .spawn(Text::new("Autoreemplazo falló (vehículo 42) (GS)"))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Autoreplace failed (vehicle 42)"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "No autoreplace rule exists for that engine."
+        );
+        assert_eq!(
+            app.world().get::<Text>(malformed).unwrap().as_str(),
+            "Autoreemplazo falló (vehículo 42) (GS)"
+        );
+
+        let late = app
+            .world_mut()
+            .spawn(Text::new("Autoreemplazo falló (vehículo 1007)"))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(late).unwrap().as_str(),
+            "Autoreplace failed (vehicle 1007)"
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Autoreemplazo falló (vehículo 42)"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "No hay regla de autoreemplazo para ese motor."
         );
     }
 

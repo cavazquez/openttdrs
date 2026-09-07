@@ -84,6 +84,20 @@ pub(crate) fn runtime_fingerprint(
             .wrapping_add(value)
             .wrapping_add(u32::from(variable) << 16);
     }
+    // A deterministic parent scope can expose distinct values for the same
+    // variable at several parameters (notably AirportScope `7A[badge]`).
+    // Keep this table separate from self parameters with a tag, otherwise a
+    // cached AirportTile sprite can leak from one parent AirportSpec into
+    // another that uses the same tile gfx.
+    let mut parent_parameterized: Vec<_> = ctx.parent_parameterized_vars.iter().collect();
+    parent_parameterized.sort_unstable_by_key(|entry| *entry.0);
+    for (key, value) in parent_parameterized {
+        let (variable, parameter) = *key;
+        h = h
+            .wrapping_mul(31)
+            .wrapping_add(*value)
+            .wrapping_add(0xA500_0000 | (u32::from(variable) << 8) | u32::from(parameter));
+    }
     let mut relative_vars: Vec<_> = ctx.relative_vars.iter().collect();
     relative_vars.sort_unstable_by_key(|entry| *entry.0);
     for (&(offset, variable), &value) in relative_vars {
@@ -195,6 +209,12 @@ mod tests {
         );
         second = first.clone();
         second.relative_vars.insert((-1, 0x40), 4);
+        assert_ne!(
+            runtime_fingerprint(&first, vars::TRAIN, true),
+            runtime_fingerprint(&second, vars::TRAIN, true)
+        );
+        second = first.clone();
+        second.parent_parameterized_vars.insert((0x7A, 0), 1);
         assert_ne!(
             runtime_fingerprint(&first, vars::TRAIN, true),
             runtime_fingerprint(&second, vars::TRAIN, true)

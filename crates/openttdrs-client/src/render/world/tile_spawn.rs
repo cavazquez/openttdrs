@@ -272,6 +272,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     &sim.state.stations,
                     &sim.state.towns,
                     &sim.state.airport_tile_spec_catalog,
+                    &sim.state.airport_spec_catalog,
                     &sim.state.runtime.rail_type_depot_newgrf,
                     &sim.state.runtime.rail_type_underlay_newgrf,
                     &sim.state.runtime.rail_type_tunnel_newgrf,

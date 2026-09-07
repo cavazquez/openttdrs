@@ -146,6 +146,7 @@ pub use airport_fta::{
 };
 pub use airport_tile_action2::{
     action2_eval_ctx_for_airport_tile, action2_eval_ctx_for_airport_tile_with_towns,
+    action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog,
 };
 pub use airport_tile_spec::{
     AirportAnimationTrigger, AirportTileGfxId, AirportTileSpecDef, INVALID_AIRPORT_TILE,

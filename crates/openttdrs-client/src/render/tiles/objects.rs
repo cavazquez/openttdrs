@@ -3587,6 +3587,7 @@ pub(crate) fn spawn_transport_object_tile(
         &[],
         &[],
         &[],
+        &[],
         catenary_newgrf,
         catenary_sprites,
         None,
@@ -3648,12 +3649,21 @@ fn resolve_newgrf_airport_layout_for_tile(
     towns: &[openttdrs_core::Town],
     ctx: &TileRenderContext,
     catalog: &[openttdrs_core::AirportTileSpecDef],
+    airport_catalog: &[openttdrs_core::NewgrfAirportSpecDef],
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) -> Option<(openttdrs_core::newgrf_sprites::ResolvedTileLayout, u32)> {
-    let mut action2 = openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns(
-        map, stations, towns, ctx.coord, catalog, def, climate,
-    );
+    let mut action2 =
+        openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
+            map,
+            stations,
+            towns,
+            airport_catalog,
+            ctx.coord,
+            catalog,
+            def,
+            climate,
+        );
     action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
         newgrf_stack,
         def.newgrf_grfid,
@@ -3899,6 +3909,7 @@ fn spawn_newgrf_airport_tile(
     stations: &[Station],
     towns: &[openttdrs_core::Town],
     catalog: &[openttdrs_core::AirportTileSpecDef],
+    airport_catalog: &[openttdrs_core::NewgrfAirportSpecDef],
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     cache: Option<&mut crate::render::NewGrfAction5SpriteCache>,
@@ -3913,9 +3924,17 @@ fn spawn_newgrf_airport_tile(
     };
     let frame = usize::from(ctx.tile.map_or(0, |tile| tile.m7));
     let mut action2 = if def.newgrf_runtime.is_some() {
-        let mut action2 = openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns(
-            map, stations, towns, ctx.coord, catalog, def, climate,
-        );
+        let mut action2 =
+            openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
+                map,
+                stations,
+                towns,
+                airport_catalog,
+                ctx.coord,
+                catalog,
+                def,
+                climate,
+            );
         action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
             newgrf_stack,
             def.newgrf_grfid,
@@ -3997,6 +4016,7 @@ fn airport_tile_draws_default_foundation(
     towns: &[openttdrs_core::Town],
     coord: TileCoord,
     catalog: &[openttdrs_core::AirportTileSpecDef],
+    airport_catalog: &[openttdrs_core::NewgrfAirportSpecDef],
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) -> bool {
@@ -4006,8 +4026,15 @@ fn airport_tile_draws_default_foundation(
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return true;
     };
-    let mut ctx = openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns(
-        map, stations, towns, coord, catalog, def, climate,
+    let mut ctx = openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
+        map,
+        stations,
+        towns,
+        airport_catalog,
+        coord,
+        catalog,
+        def,
+        climate,
     );
     ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
         newgrf_stack,
@@ -4040,6 +4067,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
     stations: &[Station],
     towns: &[openttdrs_core::Town],
     airport_tile_catalog: &[openttdrs_core::AirportTileSpecDef],
+    airport_catalog: &[openttdrs_core::NewgrfAirportSpecDef],
     rail_type_depot_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     rail_type_underlay_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     rail_type_tunnel_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
@@ -4622,6 +4650,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                     towns,
                     ctx,
                     airport_tile_catalog,
+                    airport_catalog,
                     climate,
                     newgrf_stack,
                 )
@@ -4635,6 +4664,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                         towns,
                         ctx.coord,
                         airport_tile_catalog,
+                        airport_catalog,
                         climate,
                         newgrf_stack,
                     );
@@ -4708,6 +4738,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                         towns,
                         ctx.coord,
                         airport_tile_catalog,
+                        airport_catalog,
                         climate,
                         newgrf_stack,
                     );
@@ -4739,6 +4770,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                     stations,
                     towns,
                     airport_tile_catalog,
+                    airport_catalog,
                     climate,
                     newgrf_stack,
                     action5_sprites.as_deref_mut(),

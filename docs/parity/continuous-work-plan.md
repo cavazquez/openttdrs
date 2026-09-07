@@ -492,6 +492,16 @@ validan sólo sus teselas declaradas. La evidencia y los límites viven en
 [newgrf-airport-layout-rotation-326.md](newgrf-airport-layout-rotation-326.md);
 la rotación runtime de sprites/children sigue abierta.
 
+Actualización #503-AIRPORT-PARENT-BADGES (2026-09-07): `AirportTile` ahora
+materializa `0x7A[param]` también en el scope padre con la tabla local del GRF
+de la tesela y los badges del `AirportSpec` construido; render, CB150 y el
+scheduler de animación reciben el mismo catálogo, y el fingerprint incluye los
+parámetros parent para que dos aeropuertos no compartan una variante equivocada.
+La evidencia y los límites están en
+[newgrf-airport-parent-badges-503.md](newgrf-airport-parent-badges-503.md).
+Esto no cierra #326 ni #329: FTA, paletas, foundations/rotaciones y sonidos
+siguen fuera de este subtramo.
+
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. `d9b0537c` limita el sorter runtime a la región relevante del viewport y excluye ocultos; el corte actual incorpora el `TileLayoutSpriteGroup` de AirportTile: conserva layouts estáticos, sustituye ground, emite BUILD como `TILE_SEQ_LINE` parents/children y combina únicamente el ground con la fundación. La evidencia cuantitativa vive sólo en `PARIDAD.md`. Foundations Action5/rotaciones de aeropuertos, sprite-stack y el orden completo de framebuffer siguen sin equivalencia global. | Contrastar la traza scoped nativa/candidata para elegir la primera familia visible restante; después verificar `0,12×`, `0,25×`, `0,50×`, `1×` y los seis zooms si cambia viewport, culling u overview. |

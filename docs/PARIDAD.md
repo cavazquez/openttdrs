@@ -136,8 +136,9 @@ explícitas ya invierten el label real de un `CargoSpec` custom (por ejemplo,
 cargos custom registrados y sólo publican pares local↔global con ida y vuelta
 válida; el renderer pasa el catálogo activo a ambos contextos. Las APIs legacy
 sin catálogo conservan el fallback vanilla y no inventan una identidad.
-CB140/141/142, `AirportTiles`, industria y GUI ilimitada todavía requieren
-propagar el catálogo en sus propios call sites; #329 sigue abierto.
+CB140/141/142, industria y GUI ilimitada todavía requieren propagar el
+catálogo en sus propios call sites. `AirportTiles` ya recibe tanto el catálogo
+de cargos como el de aeropuertos para su scope padre; #329 sigue abierto.
 
 Actualización vigente del corte: `036fda1f` implementa el monitor efímero de
 carga compatible con `_cargo_pickups`/`_cargo_deliveries`: codificación nativa
@@ -389,6 +390,14 @@ GRF; construcción y descarga pasan por la variante catálogo-aware y la
 regresión `TOFU` verifica el índice local 6. Las APIs directas legacy siguen
 disponibles sin catálogo; quedan pendientes industria y GUI/variables
 ilimitadas, además de foundations/rotaciones/sonidos de AirportTile.
+
+Actualización #503 (2026-09-07): los grupos Action2 de `AirportTile` que usan
+scope padre ahora resuelven `0x7A[param]` contra la tabla local del GRF de la
+tesela y los badges del `AirportSpec` construido. El renderer, CB150 y el
+scheduler comparten `airport_spec_catalog`; el fingerprint incluye los
+parámetros parent para que no reutilice sprites entre aeropuertos distintos.
+La FTA propia, paletas, foundations/rotaciones y sonidos siguen abiertos en
+#326/#329; ver [#503](parity/newgrf-airport-parent-badges-503.md).
 
 Actualización #329-CARGO-CTT-069 (2026-09-04, `b80b8362`): `CB3D`
 (`IndustryRefuseCargo`) resuelve labels de cargas custom contra el catálogo

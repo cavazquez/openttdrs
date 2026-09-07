@@ -7,11 +7,12 @@ use bevy::image::ImagePlugin;
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    Action2VarAdjust, Action2VarEntry, Action2VarTerm, AirportTileGfxId, AirportTileSpecDef,
-    BridgeType, Climate, DecodedSprite, FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef,
-    IndustryTileGfxId, IndustryTileSpecDef, RailType, RoadStopSpecDef, RoadTramType, RoadType,
-    RoadTypeDef, StationClassId, StationSpecDef, StationSpecId, TrainSpriteAssign,
-    TrainSpriteGraphics, WaterClass, set_water_class_m1, vanilla_road_type_catalog,
+    Action2VarAdjust, Action2VarEntry, Action2VarTerm, AirportClassId, AirportSpecId,
+    AirportTileGfxId, AirportTileSpecDef, BridgeType, Climate, DecodedSprite,
+    FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef, IndustryTileGfxId, IndustryTileSpecDef,
+    NewgrfAirportSpecDef, RailType, RoadStopSpecDef, RoadTramType, RoadType, RoadTypeDef,
+    StationClassId, StationSpecDef, StationSpecId, TrainSpriteAssign, TrainSpriteGraphics,
+    WaterClass, set_water_class_m1, vanilla_road_type_catalog,
 };
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
@@ -2542,6 +2543,7 @@ fn newgrf_rail_depot_group_replaces_relocated_building_layers() {
                     &[],
                     &[],
                     &[],
+                    &[],
                     &depot_specs,
                     &[],
                     &[],
@@ -2658,6 +2660,7 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
                     false,
                     &m.0,
                     m.0.dimensions(),
+                    &[],
                     &[],
                     &[],
                     &[],
@@ -2998,7 +3001,7 @@ fn imported_airport_uses_full_station_gfx_not_airport_piece_fallbacks() {
 }
 
 #[test]
-fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
+fn built_newgrf_airport_uses_parent_badge_action2_sprite() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();
     let coord = TileCoord::new(2, 2);
@@ -3047,16 +3050,19 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
         7,
         Action2VarEntry {
             first: Action2VarTerm {
-                variable: 0x44,
-                param: None,
+                variable: 0x7A,
+                param: Some(0),
                 adjust: Action2VarAdjust {
+                    // El renderer debe conservar el marker de los grupos
+                    // Action2 parent y entregar AirportScope 7A al tile.
+                    shift: 0x80,
                     and_mask: u32::MAX,
                     ..Default::default()
                 },
             },
             ops: Vec::new(),
-            ranges: vec![(0, 0, 0), (1, 1, u32::MAX)],
-            default: 0,
+            ranges: vec![(0, 1, 1)],
+            default: 1,
         },
     );
     let gfx = 74;
@@ -3074,8 +3080,8 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
         newgrf_grfid: 0x4150_544C,
         newgrf_grf_version: 0,
         newgrf_type_tables: None,
-        associated_badges: Vec::new(),
-        newgrf_badge_translation: Vec::new(),
+        associated_badges: vec![31],
+        newgrf_badge_translation: vec![42],
         newgrf_preview: Some(view.clone()),
         newgrf_views: vec![view, blue_view],
         newgrf_runtime: Some(Box::new(runtime)),
@@ -3086,6 +3092,28 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
     station.airport_tile_gfx.push((coord, gfx));
     let stations = vec![station];
     let catalog = vec![airport_tile];
+    let airport_catalog = vec![NewgrfAirportSpecDef {
+        id: 10,
+        class: AirportClassId::Small,
+        label: "Badge airport".into(),
+        short_label: "Badge".into(),
+        size_x: 1,
+        size_y: 1,
+        catchment: 4,
+        noise_level: 1,
+        subst_id: AirportSpecId::Small,
+        ttd_airport_type: 0,
+        layouts: Vec::new(),
+        enabled: true,
+        min_year: 0,
+        max_year: u16::MAX,
+        maintenance_cost: 0,
+        associated_badges: vec![42],
+        newgrf_local_id: 0,
+        newgrf_grfid: 0x4150_544C,
+        newgrf_views: Vec::new(),
+        newgrf_purchase_views: Vec::new(),
+    }];
 
     let grid = RenderGrid::from_map(&map, 8, 8);
     let mut world = World::new();
@@ -3115,6 +3143,7 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
                     &stations,
                     &[],
                     &catalog,
+                    &airport_catalog,
                     &[],
                     &[],
                     &[],
@@ -3146,9 +3175,9 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
     let images = world.resource::<Assets<Image>>();
     assert!(
         sprite_handles.iter().any(|handle| {
-            images.get(handle).and_then(|image| image.data.as_deref()) == Some(blue_rgba.as_slice())
+            images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba.as_slice())
         }),
-        "el aeropuerto construido debe reevaluar Action2 y consumir la vista por frame"
+        "el aeropuerto construido debe reevaluar Action2 con el badge del AirportScope padre"
     );
 }
 
@@ -3284,6 +3313,7 @@ fn newgrf_airport_tile_layout_emits_ground_sortable_parent_and_child() {
                     &stations,
                     &[],
                     &catalog,
+                    &[],
                     &[],
                     &[],
                     &[],
@@ -3461,6 +3491,7 @@ fn newgrf_airport_draw_foundations_callback_controls_slope_foundation() {
                         &stations,
                         &[],
                         &catalog,
+                        &[],
                         &[],
                         &[],
                         &[],

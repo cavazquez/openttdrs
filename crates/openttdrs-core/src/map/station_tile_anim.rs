@@ -139,11 +139,13 @@ fn airport_station_index(stations: &[Station], coord: TileCoord) -> Option<usize
         .position(|station| station.stop_kind.has_airport_facility() && station.covers_tile(coord))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn airport_animation_context_with_towns(
     map: &Map,
     stations: &[Station],
     towns: &[crate::town::Town],
     catalog: &[AirportTileSpecDef],
+    airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
     climate: Climate,
     newgrf_stack: &[crate::NewGrfEntry],
     coord: TileCoord,
@@ -161,8 +163,15 @@ fn airport_animation_context_with_towns(
         .iter()
         .find(|candidate| candidate.gfx.as_u16() == gfx && candidate.from_newgrf)
         .cloned()?;
-    let mut ctx = crate::airport_tile_action2::action2_eval_ctx_for_airport_tile_with_towns(
-        map, stations, towns, coord, catalog, &def, climate,
+    let mut ctx = crate::airport_tile_action2::action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
+        map,
+        stations,
+        towns,
+        airport_catalog,
+        coord,
+        catalog,
+        &def,
+        climate,
     );
     ctx.set_grf_params(crate::stack_params_for_grfid(
         newgrf_stack,
@@ -300,11 +309,47 @@ pub fn trigger_newgrf_airport_tile_animation_with_towns<S: BuildHasher>(
     random: Option<u32>,
     var18_extra: u8,
 ) -> bool {
+    trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog(
+        map,
+        tick,
+        stations,
+        towns,
+        climate,
+        catalog,
+        &[],
+        active_tiles,
+        newgrf_stack,
+        coord,
+        trigger,
+        random,
+        var18_extra,
+    )
+}
+
+/// Variante con el catálogo `Airports` necesario para el scope padre de
+/// `AirportTile` (`Action2` type padre y badges `0x7A`).
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    towns: &[crate::town::Town],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    coord: TileCoord,
+    trigger: AirportAnimationTrigger,
+    random: Option<u32>,
+    var18_extra: u8,
+) -> bool {
     let Some((station_index, def, mut ctx)) = airport_animation_context_with_towns(
         map,
         stations,
         towns,
         catalog,
+        airport_catalog,
         climate,
         newgrf_stack,
         coord,
@@ -432,6 +477,43 @@ pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog
     trigger: AirportAnimationTrigger,
     cargo: Option<CargoType>,
 ) -> Vec<TileCoord> {
+    trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog(
+        map,
+        tick,
+        stations,
+        towns,
+        cargo_catalog,
+        climate,
+        catalog,
+        &[],
+        active_tiles,
+        newgrf_stack,
+        station_anchor,
+        trigger,
+        cargo,
+    )
+}
+
+/// Variante con catálogo `Airports` para que los callbacks disparados por
+/// eventos usen el mismo scope padre que el renderer.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog<
+    S: BuildHasher,
+>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    towns: &[crate::town::Town],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    station_anchor: TileCoord,
+    trigger: AirportAnimationTrigger,
+    cargo: Option<CargoType>,
+) -> Vec<TileCoord> {
     let Some(station) = stations
         .iter()
         .find(|station| station.pos == station_anchor && station.stop_kind.has_airport_facility())
@@ -457,13 +539,14 @@ pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog
                 cargo,
                 cargo_catalog,
             );
-            trigger_newgrf_airport_tile_animation_with_towns(
+            trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog(
                 map,
                 tick,
                 stations,
                 towns,
                 climate,
                 catalog,
+                airport_catalog,
                 active_tiles,
                 newgrf_stack,
                 *coord,
@@ -483,6 +566,7 @@ fn advance_newgrf_airport_tile<S: BuildHasher>(
     towns: &[crate::town::Town],
     climate: Climate,
     catalog: &[AirportTileSpecDef],
+    airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
     newgrf_stack: &[crate::NewGrfEntry],
     coord: TileCoord,
@@ -492,6 +576,7 @@ fn advance_newgrf_airport_tile<S: BuildHasher>(
         stations,
         towns,
         catalog,
+        airport_catalog,
         climate,
         newgrf_stack,
         coord,
@@ -611,15 +696,45 @@ pub fn step_newgrf_airport_tiles_with_towns<S: BuildHasher>(
     newgrf_stack: &[crate::NewGrfEntry],
     tile_loop_visits: &[(TileCoord, crate::map::Tile)],
 ) -> Vec<TileCoord> {
+    step_newgrf_airport_tiles_with_towns_and_airport_catalog(
+        map,
+        tick,
+        stations,
+        towns,
+        climate,
+        catalog,
+        &[],
+        active_tiles,
+        newgrf_stack,
+        tile_loop_visits,
+    )
+}
+
+/// Variante completa del scheduler con el catálogo de `Airports` para el
+/// scope padre de cada `AirportTile`.
+#[allow(clippy::too_many_arguments)]
+pub fn step_newgrf_airport_tiles_with_towns_and_airport_catalog<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    towns: &[crate::town::Town],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    tile_loop_visits: &[(TileCoord, crate::map::Tile)],
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for (coord, _) in tile_loop_visits {
-        if trigger_newgrf_airport_tile_animation_with_towns(
+        if trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog(
             map,
             tick,
             stations,
             towns,
             climate,
             catalog,
+            airport_catalog,
             active_tiles,
             newgrf_stack,
             *coord,
@@ -651,6 +766,7 @@ pub fn step_newgrf_airport_tiles_with_towns<S: BuildHasher>(
             stations,
             towns,
             catalog,
+            airport_catalog,
             climate,
             newgrf_stack,
             coord,
@@ -681,6 +797,7 @@ pub fn step_newgrf_airport_tiles_with_towns<S: BuildHasher>(
             towns,
             climate,
             catalog,
+            airport_catalog,
             active_tiles,
             newgrf_stack,
             coord,
@@ -2125,6 +2242,7 @@ pub fn is_airport_tower_tile(kind: TileKind, m5: u8) -> bool {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::airport_class::{AirportClassId, AirportSpecId, NewgrfAirportSpecDef};
     use crate::newgrf_sprites::{
         Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
     };
@@ -2193,6 +2311,57 @@ mod tests {
         gfx.action2_var.insert(4, callback_literal(0xFE));
         gfx.action2_var.insert(5, callback_literal(3));
         gfx.action2_var.insert(6, callback_literal(2));
+        gfx
+    }
+
+    /// El callback de animación toma su resultado de `AirportScope 7A[0]`.
+    /// El marker `0x80` en `shift` representa el scope padre de Action2.
+    fn airport_parent_badge_trigger_callbacks() -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: u32::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(
+                    4,
+                    u32::from(CBID_AIRPTILE_ANIMATION_TRIGGER),
+                    u32::from(CBID_AIRPTILE_ANIMATION_TRIGGER),
+                )],
+                default: 0,
+            },
+        );
+        gfx.action2_var.insert(
+            4,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x7A,
+                    param: Some(0),
+                    adjust: Action2VarAdjust {
+                        shift: 0x80,
+                        and_mask: u32::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(5, 1, 1)],
+                default: 6,
+            },
+        );
+        gfx.action2_var.insert(5, callback_literal(0xFE));
+        gfx.action2_var.insert(6, callback_literal(0xFF));
         gfx
     }
 
@@ -2515,6 +2684,131 @@ mod tests {
         let loaded = crate::GameState::load_json(&json).unwrap();
         assert_eq!(loaded.map.get(coord).unwrap().m7, 6);
         assert!(loaded.newgrf_animated_airport_tiles.contains(&coord));
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn airport_parent_badges_reach_event_and_scheduler_callbacks() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut tile = map.get(coord).unwrap();
+        tile.kind = TileKind::Airport;
+        tile.m5 = AirportPiece::Apron as u8;
+        map.set_tile(coord, tile).unwrap();
+
+        let mut station = Station::new_with_kind(coord, StopKind::Airport);
+        station.airport_tiles = vec![coord];
+        station.airport_tile_gfx = vec![(coord, 74)];
+        station.airport_newgrf_spec_id = Some(10);
+        let mut stations = vec![station];
+        let catalog = vec![AirportTileSpecDef {
+            gfx: crate::AirportTileGfxId(74),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0,
+            // Mantenerla activa durante la fase de avance del scheduler: el
+            // callback de trigger devuelve 0xFE, pero esta fixture no define
+            // CB153/CB154 para terminarla en el mismo tick.
+            animation_frames: 5,
+            animation_status: 1,
+            animation_speed: 16,
+            animation_triggers: AirportAnimationTrigger::Built.mask()
+                | AirportAnimationTrigger::TileLoop.mask(),
+            animation_special_flags: 0,
+            newgrf_local_id: 0,
+            newgrf_grfid: 0x4150_0001,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            // La traducción es propia del AirportTile, no del AirportSpec.
+            associated_badges: vec![31],
+            newgrf_badge_translation: vec![42],
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(airport_parent_badge_trigger_callbacks())),
+        }];
+        let airport_catalog = vec![NewgrfAirportSpecDef {
+            id: 10,
+            class: AirportClassId::Small,
+            label: "Badge airport".into(),
+            short_label: "Badge".into(),
+            size_x: 1,
+            size_y: 1,
+            catchment: 4,
+            noise_level: 1,
+            subst_id: AirportSpecId::Small,
+            ttd_airport_type: 0,
+            layouts: Vec::new(),
+            enabled: true,
+            min_year: 0,
+            max_year: u16::MAX,
+            maintenance_cost: 0,
+            associated_badges: vec![42],
+            newgrf_local_id: 0,
+            newgrf_grfid: 0x1122_3344,
+            newgrf_views: Vec::new(),
+            newgrf_purchase_views: Vec::new(),
+        }];
+        let mut active = HashSet::new();
+
+        assert!(
+            trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog(
+                &mut map,
+                1,
+                &mut stations,
+                &[],
+                Climate::Temperate,
+                &catalog,
+                &airport_catalog,
+                &mut active,
+                &[],
+                coord,
+                AirportAnimationTrigger::Built,
+                None,
+                0,
+            )
+        );
+        assert!(active.contains(&coord));
+
+        active.clear();
+        let tile_loop_visits = vec![(coord, map.get(coord).unwrap())];
+        assert_eq!(
+            step_newgrf_airport_tiles_with_towns_and_airport_catalog(
+                &mut map,
+                2,
+                &mut stations,
+                &[],
+                Climate::Temperate,
+                &catalog,
+                &airport_catalog,
+                &mut active,
+                &[],
+                &tile_loop_visits,
+            ),
+            vec![coord]
+        );
+        assert!(active.contains(&coord));
+
+        let mut no_badge_airports = airport_catalog;
+        no_badge_airports[0].associated_badges.clear();
+        active.clear();
+        assert!(
+            !trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog(
+                &mut map,
+                3,
+                &mut stations,
+                &[],
+                Climate::Temperate,
+                &catalog,
+                &no_badge_airports,
+                &mut active,
+                &[],
+                coord,
+                AirportAnimationTrigger::Built,
+                None,
+                0,
+            )
+        );
+        assert!(!active.contains(&coord));
     }
 
     #[test]

@@ -8,6 +8,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::airport_class::{NewgrfAirportSpecDef, newgrf_airport_spec_def};
 use crate::airport_tile_spec::{AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET};
 use crate::house_spec::{distance_square, get_town_radius_group};
 use crate::map::{Map, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
@@ -32,9 +33,10 @@ pub fn action2_eval_ctx_for_airport_tile(
     current_spec: &AirportTileSpecDef,
     climate: Climate,
 ) -> Action2EvalCtx {
-    action2_eval_ctx_for_airport_tile_with_towns(
+    action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
         map,
         stations,
+        &[],
         &[],
         coord,
         tile_catalog,
@@ -53,6 +55,39 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns(
     map: &Map,
     stations: &[Station],
     towns: &[crate::town::Town],
+    coord: TileCoord,
+    tile_catalog: &[AirportTileSpecDef],
+    current_spec: &AirportTileSpecDef,
+    climate: Climate,
+) -> Action2EvalCtx {
+    action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
+        map,
+        stations,
+        towns,
+        &[],
+        coord,
+        tile_catalog,
+        current_spec,
+        climate,
+    )
+}
+
+/// Variante completa que recibe el catálogo `Airports` para el scope padre.
+///
+/// Un `AirportTile` conserva el GRFID y la tabla local de badges del tile que
+/// está resolviendo. Su scope padre, en cambio, consulta los badges asociados
+/// al aeropuerto construido. Mantener ambos catálogos separados reproduce
+/// `AirportTileResolverObject`: la traducción de `0x7A[param]` viene del GRF
+/// del tile, mientras que la presencia se pregunta al `AirportSpec` padre.
+/// La API histórica sin catálogo conserva `UINT_MAX` para un padre `NewGRF` que
+/// no se puede encontrar.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
+    map: &Map,
+    stations: &[Station],
+    towns: &[crate::town::Town],
+    airport_catalog: &[NewgrfAirportSpecDef],
     coord: TileCoord,
     tile_catalog: &[AirportTileSpecDef],
     current_spec: &AirportTileSpecDef,
@@ -107,6 +142,15 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns(
     ctx.parent_vars
         .insert(0x40, u32::from(station.airport_layout));
 
+    // El padre vanilla existe y simplemente no tiene badges. Un id NewGRF
+    // ausente del catálogo activo, en cambio, equivale a un spec que OpenTTD
+    // no puede resolver y debe permanecer como `UINT_MAX`.
+    let parent_badges: Option<&[u16]> = match station.airport_newgrf_spec_id {
+        Some(spec_id) => newgrf_airport_spec_def(airport_catalog, spec_id)
+            .map(|spec| spec.associated_badges.as_slice()),
+        None => Some(&[]),
+    };
+
     if let Some(runtime) = current_spec.newgrf_runtime.as_ref() {
         for (variable, parameter) in requested_nearby_vars(runtime) {
             let nearby = nearby_tile(map, coord, parameter);
@@ -125,18 +169,23 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns(
             };
             ctx.parameterized_vars.insert((variable, parameter), value);
         }
-        for parameter in requested_badge_vars(runtime) {
-            let value = current_spec
-                .newgrf_badge_translation
-                .get(usize::from(parameter))
-                .map_or(u32::MAX, |&badge| {
-                    if badge == u16::MAX {
-                        u32::MAX
-                    } else {
-                        u32::from(current_spec.associated_badges.contains(&badge))
-                    }
-                });
+        let (self_badges, parent_badges_requested) = requested_badge_vars(runtime);
+        for parameter in self_badges {
+            let value = badge_variable_result(
+                &current_spec.newgrf_badge_translation,
+                Some(&current_spec.associated_badges),
+                parameter,
+            );
             ctx.parameterized_vars.insert((0x7A, parameter), value);
+        }
+        for parameter in parent_badges_requested {
+            let value = badge_variable_result(
+                &current_spec.newgrf_badge_translation,
+                parent_badges,
+                parameter,
+            );
+            ctx.parent_parameterized_vars
+                .insert((0x7A, parameter), value);
         }
     }
     ctx
@@ -158,19 +207,46 @@ fn requested_nearby_vars(
     requested
 }
 
-fn requested_badge_vars(runtime: &crate::newgrf_sprites::TrainSpriteGraphics) -> BTreeSet<u8> {
-    let mut requested = BTreeSet::new();
+fn requested_badge_vars(
+    runtime: &crate::newgrf_sprites::TrainSpriteGraphics,
+) -> (BTreeSet<u8>, BTreeSet<u8>) {
+    let mut self_scope = BTreeSet::new();
+    let mut parent_scope = BTreeSet::new();
     for entry in runtime.action2_var.values() {
         for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
             if term.variable == 0x7A
-                && !term.adjust.is_parent_scope()
                 && let Some(parameter) = term.param
             {
-                requested.insert(parameter);
+                if term.adjust.is_parent_scope() {
+                    parent_scope.insert(parameter);
+                } else {
+                    self_scope.insert(parameter);
+                }
             }
         }
     }
-    requested
+    (self_scope, parent_scope)
+}
+
+/// `GetBadgeVariableResult`: la tabla pertenece al GRF que ejecuta Action2,
+/// pero la lista de badges puede provenir del spec de la tesela o de su padre.
+fn badge_variable_result(
+    translation: &[u16],
+    associated_badges: Option<&[u16]>,
+    parameter: u8,
+) -> u32 {
+    let Some(associated_badges) = associated_badges else {
+        return u32::MAX;
+    };
+    translation
+        .get(usize::from(parameter))
+        .map_or(u32::MAX, |&badge| {
+            if badge == u16::MAX {
+                u32::MAX
+            } else {
+                u32::from(associated_badges.contains(&badge))
+            }
+        })
 }
 
 fn nearby_tile(map: &Map, base: TileCoord, parameter: u8) -> TileCoord {
@@ -341,6 +417,7 @@ fn tile_kind_as_ottd(map: &Map, stations: &[Station], coord: TileCoord, tile: Ti
 #[allow(clippy::expect_used, clippy::too_many_lines)]
 mod tests {
     use super::*;
+    use crate::airport_class::{AirportClassId, AirportSpecId, NewgrfAirportSpecDef};
     use crate::airport_tile_spec::AirportTileGfxId;
     use crate::map::Tile;
     use crate::newgrf_sprites::{
@@ -532,5 +609,134 @@ mod tests {
         assert_eq!(ctx.parameterized_vars.get(&(0x7A, 1)), Some(&u32::MAX));
         let selected = current.newgrf_view_runtime(0, &mut ctx);
         assert_eq!(selected.as_ref().map(|sprite| sprite.rgba[0]), Some(255));
+    }
+
+    #[test]
+    fn airport_tile_parent_badge_selects_the_parent_scope_action2_branch() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let coord = TileCoord::new(1, 1);
+        let mut tile = map.get(coord).expect("tile");
+        tile.kind = TileKind::Airport;
+        map.set_tile(coord, tile).expect("airport tile");
+
+        let mut station = Station::new_with_kind(coord, StopKind::Airport);
+        station.airport_tiles = vec![coord];
+        station.airport_newgrf_spec_id = Some(10);
+
+        let mut runtime = TrainSpriteGraphics {
+            sets: vec![vec![sprite(0xA1, 0)], vec![sprite(0xB2, 0)]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 3,
+                set_id: 7,
+            }],
+            action2_to_action1: [(8, 0), (9, 1)].into_iter().collect(),
+            ..Default::default()
+        };
+        // Type 0x82/0x86/0x8A carries the parent marker in `shift`; it must
+        // read AirportScope `7A[0]`, not the AirportTile's own badge list.
+        runtime.action2_var.insert(
+            7,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x7A,
+                    param: Some(0),
+                    adjust: Action2VarAdjust {
+                        shift: 0x80,
+                        and_mask: u32::MAX,
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(8, 1, 1)],
+                default: 9,
+            },
+        );
+        let current = AirportTileSpecDef {
+            gfx: AirportTileGfxId(74),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            newgrf_local_id: 3,
+            newgrf_grfid: 0xAABB_CCDD,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            // Deliberadamente distinto: demuestra que la presencia proviene
+            // de AirportSpec, pero el índice local sigue siendo del tile GRF.
+            associated_badges: vec![31],
+            newgrf_badge_translation: vec![42],
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+        let parent = NewgrfAirportSpecDef {
+            id: 10,
+            class: AirportClassId::Small,
+            label: "Badge airport".into(),
+            short_label: "Badge".into(),
+            size_x: 1,
+            size_y: 1,
+            catchment: 4,
+            noise_level: 1,
+            subst_id: AirportSpecId::Small,
+            ttd_airport_type: 0,
+            layouts: Vec::new(),
+            enabled: true,
+            min_year: 0,
+            max_year: u16::MAX,
+            maintenance_cost: 0,
+            associated_badges: vec![42],
+            newgrf_local_id: 0,
+            newgrf_grfid: 0x1122_3344,
+            newgrf_views: Vec::new(),
+            newgrf_purchase_views: Vec::new(),
+        };
+        let tile_catalog = vec![current.clone()];
+        let mut ctx = action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
+            &map,
+            &[station.clone()],
+            &[],
+            std::slice::from_ref(&parent),
+            coord,
+            &tile_catalog,
+            &current,
+            Climate::Temperate,
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 0)), None);
+        assert_eq!(ctx.parent_parameterized_vars.get(&(0x7A, 0)), Some(&1));
+        assert_eq!(
+            current
+                .newgrf_view_runtime(0, &mut ctx)
+                .map(|sprite| sprite.rgba[0]),
+            Some(0xA1)
+        );
+
+        let mut parent_without_badge = parent;
+        parent_without_badge.associated_badges.clear();
+        let mut ctx_without_badge =
+            action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
+                &map,
+                &[station],
+                &[],
+                &[parent_without_badge],
+                coord,
+                &tile_catalog,
+                &current,
+                Climate::Temperate,
+            );
+        assert_eq!(
+            ctx_without_badge.parent_parameterized_vars.get(&(0x7A, 0)),
+            Some(&0)
+        );
+        assert_eq!(
+            current
+                .newgrf_view_runtime(0, &mut ctx_without_badge)
+                .map(|sprite| sprite.rgba[0]),
+            Some(0xB2)
+        );
     }
 }

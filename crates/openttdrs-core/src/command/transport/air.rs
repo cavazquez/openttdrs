@@ -317,7 +317,7 @@ fn place_airport_area_with_layout(
     state.stations.push(st);
     if newgrf_def.is_some() {
         let dirty =
-            crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog(
+            crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog(
                 &mut state.map,
                 state.tick.get(),
                 &mut state.stations,
@@ -325,6 +325,7 @@ fn place_airport_area_with_layout(
                 &state.cargo_spec_catalog,
                 state.climate,
                 &state.airport_tile_spec_catalog,
+                &state.airport_spec_catalog,
                 &mut state.newgrf_animated_airport_tiles,
                 &state.newgrf_stack,
                 station_anchor,

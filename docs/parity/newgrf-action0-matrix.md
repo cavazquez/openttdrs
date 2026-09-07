@@ -320,9 +320,11 @@ Fuente: `newgrf_act0_airports.cpp`.
 
 Catálogo tiles `airport_tile_spec_catalog` (gfx ≥74) y aeropuertos
 `airport_spec_catalog` (ids ≥10). Apply: tiles antes que airports; layouts
-`0x0A` resuelven `0xFE`→tile local. Construcción via
-`SetCurrentAirportNewgrfSpec` + `PlaceAirportArea`. La FTA propia de un layout
-NewGRF sigue bloqueada explícitamente (#260 / #228):
+`0x0A` resuelven `0xFE`→tile local. El picker lista los specs habilitados y
+construye vía `SetCurrentAirportNewgrfSpec` +
+`PlaceAirportAreaWithLayout`, que conserva el id global e índice Action0 y
+visita sólo las teselas declaradas. La FTA propia de un layout NewGRF sigue
+bloqueada explícitamente (#260 / #228):
 `station_uses_airport_fta` es false si hay `airport_newgrf_spec_id`; el layout
 custom no se hace pasar por la FSM vanilla. Esto no bloquea los callbacks de
 `AirportTile`: el scheduler ejecuta `CB152`/`CB153`/`CB154` y sus eventos de

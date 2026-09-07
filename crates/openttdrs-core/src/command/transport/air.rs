@@ -2,7 +2,7 @@
 
 use crate::airport::{
     AirportPiece, airport_m6_airport, airport_spec_footprint, airport_spec_tiles,
-    newgrf_airport_footprint, newgrf_airport_layout_selection, newgrf_airport_tile_gfx_with_layout,
+    newgrf_airport_layout_selection_with_index, newgrf_airport_tile_gfx_with_layout,
 };
 use crate::airport_class::{AirportSpecId, NewgrfAirportSpecDef, newgrf_airport_spec_def};
 use crate::economy::station_build_cost;
@@ -14,6 +14,9 @@ use crate::{DEPOT_BUILD_COST, GameState, Station, StopKind};
 use super::super::CommandError;
 use super::shared::check_in_bounds;
 use super::station::clear_station_site_tile;
+
+/// Spec clonado y selector `(índice Action0, rotación)` de una construcción.
+type SelectedNewgrfAirportLayout = (NewgrfAirportSpecDef, (u8, u8));
 
 pub(crate) fn check_airport_placement(
     map: &Map,
@@ -42,31 +45,122 @@ pub(in crate::command) fn place_airport(
     place_airport_area(state, c, false, AirportSpecId::Heliport)
 }
 
+/// Catálogo y layout `NewGRF` activos para una construcción.
+///
+/// El comando histórico sólo conserva el eje, de modo que `layout` es `None`;
+/// el picker moderno entrega el índice Action0 exacto. Al pedir un índice no
+/// existente se rechaza en vez de sustituir silenciosamente otra rotación.
+fn selected_newgrf_airport_layout(
+    state: &GameState,
+    axis_y: bool,
+    layout: Option<u8>,
+    newgrf_spec_id: Option<u16>,
+) -> Result<Option<SelectedNewgrfAirportLayout>, CommandError> {
+    let Some(id) = newgrf_spec_id.or(state.current_airport_newgrf_id) else {
+        return if layout.is_some() {
+            Err(CommandError::InvalidAirportLayout)
+        } else {
+            Ok(None)
+        };
+    };
+    let Some(def) = newgrf_airport_spec_def(&state.airport_spec_catalog, id).cloned() else {
+        return if layout.is_some() {
+            Err(CommandError::InvalidAirportLayout)
+        } else {
+            Ok(None)
+        };
+    };
+    let selection = newgrf_airport_layout_selection_with_index(&def, layout, axis_y)
+        .ok_or(CommandError::InvalidAirportLayout)?;
+    Ok(Some((def, selection)))
+}
+
+fn check_airport_tiles(
+    state: &GameState,
+    tiles: impl IntoIterator<Item = TileCoord>,
+) -> Result<(), CommandError> {
+    let mut flat_height = None;
+    let mut saw_tile = false;
+    for c in tiles {
+        saw_tile = true;
+        check_airport_placement(&state.map, &state.stations, c)?;
+        let height = state.map.get(c).map_or(0, |tile| tile.height);
+        if let Some(expected) = flat_height {
+            if height != expected {
+                return Err(CommandError::CannotPlaceStationOnOccupiedTile);
+            }
+        } else {
+            // `CheckFlatLandAirport` toma la primera tesela del iterator
+            // Action0 como referencia, no necesariamente el origen del área.
+            flat_height = Some(height);
+        }
+    }
+    if saw_tile {
+        Ok(())
+    } else {
+        Err(CommandError::InvalidAirportLayout)
+    }
+}
+
+fn check_airport_area_with_layout(
+    state: &GameState,
+    origin: TileCoord,
+    axis_y: bool,
+    spec: AirportSpecId,
+    layout: Option<u8>,
+    newgrf_spec_id: Option<u16>,
+) -> Result<(), CommandError> {
+    if let Some((def, (layout_index, rotation))) =
+        selected_newgrf_airport_layout(state, axis_y, layout, newgrf_spec_id)?
+    {
+        // Igual que `AirportTileTableIterator`, validar sólo las teselas que
+        // Action0 declara. El rectángulo tamaño X×Y sirve para selección y
+        // station spread, pero no convierte los huecos de un layout en suelo
+        // requerido.
+        let tiles = newgrf_airport_tile_gfx_with_layout(
+            origin,
+            &def,
+            &[],
+            axis_y,
+            Some(layout_index),
+            Some(rotation),
+        )
+        .into_iter()
+        .map(|(coord, _)| coord);
+        return check_airport_tiles(state, tiles);
+    }
+
+    let (w, h) = airport_spec_footprint(spec, axis_y);
+    check_airport_tiles(
+        state,
+        (0..h).flat_map(|dy| (0..w).map(move |dx| TileCoord::new(origin.x + dx, origin.y + dy))),
+    )
+}
+
 pub(crate) fn check_airport_area(
     state: &GameState,
     origin: TileCoord,
     axis_y: bool,
     spec: AirportSpecId,
 ) -> Result<(), CommandError> {
-    let (w, h) = if let Some(id) = state.current_airport_newgrf_id
-        && let Some(def) = newgrf_airport_spec_def(&state.airport_spec_catalog, id)
-    {
-        newgrf_airport_footprint(def, axis_y)
-    } else {
-        airport_spec_footprint(spec, axis_y)
-    };
-    let h0 = state.map.get(origin).map_or(0, |t| t.height);
-    for dy in 0..h {
-        for dx in 0..w {
-            let c = TileCoord::new(origin.x + dx, origin.y + dy);
-            check_airport_placement(&state.map, &state.stations, c)?;
-            let hc = state.map.get(c).map_or(0, |t| t.height);
-            if hc != h0 {
-                return Err(CommandError::CannotPlaceStationOnOccupiedTile);
-            }
-        }
-    }
-    Ok(())
+    check_airport_area_with_layout(state, origin, axis_y, spec, None, None)
+}
+
+pub(crate) fn check_airport_area_with_explicit_layout(
+    state: &GameState,
+    origin: TileCoord,
+    newgrf_spec_id: u16,
+    layout: u8,
+    spec: AirportSpecId,
+) -> Result<(), CommandError> {
+    check_airport_area_with_layout(
+        state,
+        origin,
+        false,
+        spec,
+        Some(layout),
+        Some(newgrf_spec_id),
+    )
 }
 
 /// Gfx y piezas de un layout `NewGRF` ya orientado por Action0.
@@ -112,24 +206,46 @@ pub(in crate::command) fn place_airport_area(
     axis_y: bool,
     spec: AirportSpecId,
 ) -> Result<(), CommandError> {
-    check_airport_area(state, origin, axis_y, spec)?;
+    place_airport_area_with_layout(state, origin, axis_y, spec, None, None)
+}
 
-    let newgrf_id = state.current_airport_newgrf_id;
-    let newgrf_def = newgrf_id.and_then(|id| {
-        state
-            .airport_spec_catalog
-            .iter()
-            .find(|d| d.id == id && d.enabled)
-            .cloned()
+/// Construye un aeropuerto `NewGRF` usando un índice Action0 explícito.
+pub(in crate::command) fn place_airport_area_with_explicit_layout(
+    state: &mut GameState,
+    origin: TileCoord,
+    newgrf_spec_id: u16,
+    layout: u8,
+    spec: AirportSpecId,
+) -> Result<(), CommandError> {
+    place_airport_area_with_layout(
+        state,
+        origin,
+        false,
+        spec,
+        Some(layout),
+        Some(newgrf_spec_id),
+    )
+}
+
+fn place_airport_area_with_layout(
+    state: &mut GameState,
+    origin: TileCoord,
+    axis_y: bool,
+    spec: AirportSpecId,
+    layout: Option<u8>,
+    newgrf_spec_id: Option<u16>,
+) -> Result<(), CommandError> {
+    check_airport_area_with_layout(state, origin, axis_y, spec, layout, newgrf_spec_id)?;
+
+    let newgrf_id = newgrf_spec_id.or(state.current_airport_newgrf_id);
+    let newgrf = selected_newgrf_airport_layout(state, axis_y, layout, newgrf_spec_id)?;
+    let (newgrf_def, newgrf_layout) = newgrf.map_or((None, None), |(def, selection)| {
+        (Some(def), Some(selection))
     });
     let place_spec = newgrf_def.as_ref().map_or(spec, |d| d.subst_id);
     // Cada layout Action0 ya contiene sus offsets para su rotación. Conservar
     // el selector elegido evita tanto transponer el footprint como guardar en
     // STNN una rotación distinta de los gfx realmente materializados.
-    let newgrf_layout = newgrf_def
-        .as_ref()
-        .and_then(|def| newgrf_airport_layout_selection(def, axis_y));
-
     let (airport_tile_gfx, placed) = if let Some(def) = newgrf_def.as_ref() {
         let mapping = newgrf_airport_tile_mapping(
             origin,

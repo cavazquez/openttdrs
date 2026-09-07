@@ -5,8 +5,10 @@
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::{
-    AirportClassId, AirportSpecId, STATION_COVERAGE_RADIUS, airport_class_def, airport_spec_def,
-    airport_spec_footprint, list_airport_classes, list_airport_specs, station_coverage_at,
+    AirportClassId, AirportSpecId, STATION_COVERAGE_RADIUS, airport_spec_def,
+    airport_spec_footprint, list_airport_classes, list_airport_specs,
+    newgrf_airport_footprint_with_layout, newgrf_airport_layout_selection_with_index,
+    newgrf_airport_spec_def, station_coverage_at,
 };
 
 use crate::i18n::{Locale, localized_text};
@@ -26,13 +28,18 @@ use super::{BuildMenuAction, BuildMenuUi, StationBuildState, UiToolState};
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_ACTIVE: Color = Color::srgb(0.58, 0.50, 0.31);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
+/// Espacio de cache separado para previews Action3 de Airport NewGRF.
+const AIRPORT_NEWGRF_PREVIEW_CACHE_TYPE: u8 = 0xFD;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AirportPickerButton {
     Class(AirportClassId),
     Spec(AirportSpecId),
+    NewgrfSpec(u16),
     AxisX,
     AxisY,
+    LayoutPrevious,
+    LayoutNext,
     CoverageOff,
     CoverageOn,
 }
@@ -46,6 +53,13 @@ pub(crate) struct AirportPickerCoverageText;
 /// Miniatura Action5 `0x16` del spec seleccionado.
 #[derive(Component)]
 pub(crate) struct AirportPickerPreviewImage;
+
+/// Lista dinámica: los Airports Action0 pueden aparecer después del setup UI.
+#[derive(Component)]
+pub(crate) struct AirportPickerSpecList;
+
+#[derive(Component)]
+pub(crate) struct AirportPickerLayoutText;
 
 pub(crate) fn setup_airport_picker(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -113,17 +127,28 @@ pub(crate) fn setup_airport_picker(mut commands: Commands, asset_server: Res<Ass
             (),
             (),
             |col| {
-                for class in list_airport_classes("") {
-                    for def in list_airport_specs(class.id, "") {
-                        spawn_text_button(
-                            col,
-                            asset_server,
-                            AirportPickerButton::Spec(def.id),
-                            def.label,
-                            280.0,
-                        );
+                col.spawn((
+                    AirportPickerSpecList,
+                    Node {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(3.0),
+                        ..default()
+                    },
+                ))
+                .with_children(|list| {
+                    for class in list_airport_classes("") {
+                        for def in list_airport_specs(class.id, "") {
+                            spawn_text_button(
+                                list,
+                                asset_server,
+                                AirportPickerButton::Spec(def.id),
+                                def.label,
+                                280.0,
+                            );
+                        }
                     }
-                }
+                });
             },
             200.0,
         );
@@ -138,6 +163,31 @@ pub(crate) fn setup_airport_picker(mut commands: Commands, asset_server: Res<Ass
             .with_children(|row| {
                 spawn_text_button(row, asset_server, AirportPickerButton::AxisX, "Eje X", 72.0);
                 spawn_text_button(row, asset_server, AirportPickerButton::AxisY, "Eje Y", 72.0);
+                spawn_text_button(
+                    row,
+                    asset_server,
+                    AirportPickerButton::LayoutPrevious,
+                    "◀",
+                    24.0,
+                );
+                row.spawn((
+                    AirportPickerLayoutText,
+                    Text::new("Layout —"),
+                    window_text_font(asset_server, UiFontRole::Caption),
+                    TextColor(WINDOW_TEXT),
+                    Node {
+                        min_width: Val::Px(86.0),
+                        align_self: AlignSelf::Center,
+                        ..default()
+                    },
+                ));
+                spawn_text_button(
+                    row,
+                    asset_server,
+                    AirportPickerButton::LayoutNext,
+                    "▶",
+                    24.0,
+                );
             });
         spawn_section_label(panel, asset_server, "Cobertura");
         panel
@@ -230,6 +280,80 @@ fn airport_tool_active(tool: &UiToolState) -> bool {
     tool.active_tool == Some(BuildMenuAction::Airport)
 }
 
+fn active_newgrf_airport(sim: &SimWorld) -> Option<&openttdrs_core::NewgrfAirportSpecDef> {
+    sim.state
+        .current_airport_newgrf_id
+        .and_then(|id| newgrf_airport_spec_def(&sim.state.airport_spec_catalog, id))
+}
+
+fn selected_newgrf_layout(sim: &SimWorld, station_state: &StationBuildState) -> Option<(u8, u8)> {
+    let def = active_newgrf_airport(sim)?;
+    let requested = station_state.airport_layout.unwrap_or(0);
+    newgrf_airport_layout_selection_with_index(def, Some(requested), station_state.airport_axis_y)
+}
+
+fn airport_axis_for_rotation(rotation: u8) -> bool {
+    matches!(rotation & 6, 2 | 6)
+}
+
+fn airport_layout_label(selection: Option<(u8, u8)>, layout_count: usize) -> String {
+    let Some((index, rotation)) = selection else {
+        return "Layout —".into();
+    };
+    let direction = match rotation & 6 {
+        2 => "E",
+        4 => "S",
+        6 => "O",
+        _ => "N",
+    };
+    format!(
+        "Layout {}/{} · {direction}",
+        usize::from(index) + 1,
+        layout_count
+    )
+}
+
+/// Añade los Airports Action0 que aparecen al aplicar/cambiar NewGRF.
+pub(crate) fn sync_airport_catalog_entries(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    sim: Res<SimWorld>,
+    lists: Query<Entity, With<AirportPickerSpecList>>,
+    existing: Query<&AirportPickerButton>,
+) {
+    let existing_ids: std::collections::HashSet<u16> = existing
+        .iter()
+        .filter_map(|button| match *button {
+            AirportPickerButton::NewgrfSpec(id) => Some(id),
+            _ => None,
+        })
+        .collect();
+    let Ok(list) = lists.single() else {
+        return;
+    };
+    for def in sim
+        .state
+        .airport_spec_catalog
+        .iter()
+        .filter(|def| def.enabled)
+    {
+        if existing_ids.contains(&def.id) {
+            continue;
+        }
+        let id = def.id;
+        let label = format!("{} · NewGRF", def.label);
+        commands.entity(list).with_children(|col| {
+            spawn_text_button(
+                col,
+                &asset_server,
+                AirportPickerButton::NewgrfSpec(id),
+                &label,
+                280.0,
+            );
+        });
+    }
+}
+
 fn localized_airport_title(locale: Locale, label: &str) -> String {
     format!("{} · {label}", localized_text(locale, "Aeropuerto"))
 }
@@ -279,6 +403,20 @@ pub(crate) fn sync_airport_preview_image(
     let Ok((mut image, mut node)) = preview.single_mut() else {
         return;
     };
+    if let Some(def) = active_newgrf_airport(&sim) {
+        let Some(decoded) = def.newgrf_preview_sprite() else {
+            node.display = Display::None;
+            return;
+        };
+        image.image = cache.handle_for(
+            AIRPORT_NEWGRF_PREVIEW_CACHE_TYPE,
+            def.id,
+            decoded,
+            &mut images,
+        );
+        node.display = Display::Flex;
+        return;
+    }
     let Some(slot) = openttdrs_core::airport_preview_action5_slot(station_state.airport_spec)
     else {
         node.display = Display::None;
@@ -307,7 +445,7 @@ pub(crate) fn sync_airport_preview_image(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_airport_picker(
     tool_state: Res<UiToolState>,
-    station_state: Res<StationBuildState>,
+    mut station_state: ResMut<StationBuildState>,
     sim: Res<SimWorld>,
     prefs: Res<ClientPreferences>,
     hovered: Option<Res<HoveredTileCoord>>,
@@ -317,6 +455,7 @@ pub(crate) fn sync_airport_picker(
         (
             Without<AirportPickerSizeLabel>,
             Without<AirportPickerCoverageText>,
+            Without<AirportPickerLayoutText>,
         ),
     >,
     mut size_q: Query<
@@ -325,6 +464,7 @@ pub(crate) fn sync_airport_picker(
             With<AirportPickerSizeLabel>,
             Without<AirportPickerCoverageText>,
             Without<FloatingWindowTitleText>,
+            Without<AirportPickerLayoutText>,
         ),
     >,
     mut coverage_q: Query<
@@ -332,6 +472,16 @@ pub(crate) fn sync_airport_picker(
         (
             With<AirportPickerCoverageText>,
             Without<AirportPickerSizeLabel>,
+            Without<FloatingWindowTitleText>,
+            Without<AirportPickerLayoutText>,
+        ),
+    >,
+    mut layout_q: Query<
+        &mut Text,
+        (
+            With<AirportPickerLayoutText>,
+            Without<AirportPickerSizeLabel>,
+            Without<AirportPickerCoverageText>,
             Without<FloatingWindowTitleText>,
         ),
     >,
@@ -353,11 +503,44 @@ pub(crate) fn sync_airport_picker(
         return;
     }
 
+    let newgrf = active_newgrf_airport(&sim);
+    if let Some(def) = newgrf {
+        station_state.airport_newgrf_spec_id = Some(def.id);
+        if let Some(last) = def.layouts.len().checked_sub(1) {
+            let last = u8::try_from(last).unwrap_or(u8::MAX);
+            let index = station_state.airport_layout.unwrap_or(0).min(last);
+            station_state.airport_layout = Some(index);
+            station_state.airport_axis_y =
+                airport_axis_for_rotation(def.layouts[usize::from(index)].rotation);
+        } else {
+            station_state.airport_layout = None;
+        }
+    } else {
+        station_state.airport_layout = None;
+        station_state.airport_newgrf_spec_id = None;
+    }
+
     let class = sim.state.current_airport_class;
     let spec = station_state.airport_spec;
     let axis_y = station_state.airport_axis_y;
-    let (w, h) = airport_spec_footprint(spec, axis_y);
-    let label = airport_spec_def(spec).map_or("—", |d| d.label);
+    let layout = selected_newgrf_layout(&sim, &station_state);
+    let layout_count = newgrf.map_or(0, |def| def.layouts.len());
+    let (w, h) = newgrf
+        .and_then(|def| {
+            newgrf_airport_footprint_with_layout(def, layout.map(|(index, _)| index), axis_y)
+        })
+        .unwrap_or_else(|| airport_spec_footprint(spec, axis_y));
+    let label = newgrf
+        .map(|def| def.label.as_str())
+        .unwrap_or_else(|| airport_spec_def(spec).map_or("—", |def| def.label));
+    let radius = newgrf.map_or_else(
+        || {
+            airport_spec_def(spec)
+                .map(|def| def.catchment)
+                .unwrap_or(STATION_COVERAGE_RADIUS)
+        },
+        |def| def.catchment,
+    );
     let locale = prefs.locale();
 
     if let Some((_, mut title)) = title_q
@@ -369,10 +552,10 @@ pub(crate) fn sync_airport_picker(
     if let Ok(mut size) = size_q.single_mut() {
         **size = localized_airport_size(locale, w, h);
     }
+    if let Ok(mut layout_text) = layout_q.single_mut() {
+        **layout_text = airport_layout_label(layout, layout_count);
+    }
     if let Ok(mut cov) = coverage_q.single_mut() {
-        let radius = airport_spec_def(spec)
-            .map(|d| d.catchment)
-            .unwrap_or(STATION_COVERAGE_RADIUS);
         let text = if !station_state.airport_show_coverage {
             localized_airport_coverage_hidden(locale)
         } else if let Some(pos) = hovered.as_ref().and_then(|h| h.pos) {
@@ -392,25 +575,38 @@ pub(crate) fn sync_airport_picker(
     for (button, mut bg) in &mut buttons {
         let on = match *button {
             AirportPickerButton::Class(c) => c == class,
-            AirportPickerButton::Spec(s) => s == spec,
+            AirportPickerButton::Spec(s) => {
+                sim.state.current_airport_newgrf_id.is_none() && s == spec
+            }
+            AirportPickerButton::NewgrfSpec(id) => sim.state.current_airport_newgrf_id == Some(id),
             AirportPickerButton::AxisX => !axis_y,
             AirportPickerButton::AxisY => axis_y,
+            AirportPickerButton::LayoutPrevious | AirportPickerButton::LayoutNext => false,
             AirportPickerButton::CoverageOff => !station_state.airport_show_coverage,
             AirportPickerButton::CoverageOn => station_state.airport_show_coverage,
         };
-        // Ocultar specs de otra clase coloreando igual pero podríamos filtrar:
         let visible_spec = match *button {
             AirportPickerButton::Spec(s) => airport_spec_def(s).is_some_and(|d| d.class == class),
+            AirportPickerButton::NewgrfSpec(id) => {
+                newgrf_airport_spec_def(&sim.state.airport_spec_catalog, id)
+                    .is_some_and(|def| def.class == class)
+            }
             _ => true,
         };
-        *bg = BackgroundColor(if !visible_spec {
+        let layout_disabled = match *button {
+            AirportPickerButton::LayoutPrevious => layout.is_none_or(|(index, _)| index == 0),
+            AirportPickerButton::LayoutNext => {
+                layout.is_none_or(|(index, _)| usize::from(index) + 1 >= layout_count)
+            }
+            _ => false,
+        };
+        *bg = BackgroundColor(if !visible_spec || layout_disabled {
             Color::srgb(0.22, 0.20, 0.16)
         } else if on {
             BTN_ACTIVE
         } else {
             BTN_BG
         });
-        let _ = airport_class_def(class);
     }
 }
 
@@ -430,6 +626,8 @@ pub(crate) fn handle_airport_picker_buttons(
                     &Command::SetCurrentAirportClass(class),
                 );
                 station_state.airport_spec = sim.state.current_airport_spec;
+                station_state.airport_layout = None;
+                station_state.airport_newgrf_spec_id = None;
             }
             AirportPickerButton::Spec(spec) => {
                 let _ = crate::network::apply_player_command(
@@ -437,9 +635,63 @@ pub(crate) fn handle_airport_picker_buttons(
                     &Command::SetCurrentAirportSpec(spec),
                 );
                 station_state.airport_spec = sim.state.current_airport_spec;
+                station_state.airport_layout = None;
+                station_state.airport_newgrf_spec_id = None;
             }
-            AirportPickerButton::AxisX => station_state.airport_axis_y = false,
-            AirportPickerButton::AxisY => station_state.airport_axis_y = true,
+            AirportPickerButton::NewgrfSpec(id) => {
+                let _ = crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::SetCurrentAirportNewgrfSpec(id),
+                );
+                station_state.airport_spec = sim.state.current_airport_spec;
+                if let Some(def) = active_newgrf_airport(&sim)
+                    && let Some(first) = def.layouts.first()
+                {
+                    station_state.airport_layout = Some(0);
+                    station_state.airport_newgrf_spec_id = Some(def.id);
+                    station_state.airport_axis_y = airport_axis_for_rotation(first.rotation);
+                } else {
+                    station_state.airport_layout = None;
+                    station_state.airport_newgrf_spec_id = None;
+                }
+            }
+            AirportPickerButton::AxisX | AirportPickerButton::AxisY => {
+                let axis_y = matches!(*button, AirportPickerButton::AxisY);
+                if let Some(def) = active_newgrf_airport(&sim)
+                    && let Some((layout, rotation)) =
+                        newgrf_airport_layout_selection_with_index(def, None, axis_y)
+                {
+                    station_state.airport_layout = Some(layout);
+                    station_state.airport_newgrf_spec_id = Some(def.id);
+                    station_state.airport_axis_y = airport_axis_for_rotation(rotation);
+                } else {
+                    station_state.airport_layout = None;
+                    station_state.airport_newgrf_spec_id = None;
+                    station_state.airport_axis_y = axis_y;
+                }
+            }
+            AirportPickerButton::LayoutPrevious | AirportPickerButton::LayoutNext => {
+                let Some(def) = active_newgrf_airport(&sim) else {
+                    continue;
+                };
+                let Some((current, _)) = selected_newgrf_layout(&sim, &station_state) else {
+                    continue;
+                };
+                let next = match *button {
+                    AirportPickerButton::LayoutPrevious => current.checked_sub(1),
+                    AirportPickerButton::LayoutNext => {
+                        let next = current.saturating_add(1);
+                        (usize::from(next) < def.layouts.len()).then_some(next)
+                    }
+                    _ => None,
+                };
+                if let Some(next) = next {
+                    station_state.airport_layout = Some(next);
+                    station_state.airport_newgrf_spec_id = Some(def.id);
+                    station_state.airport_axis_y =
+                        airport_axis_for_rotation(def.layouts[usize::from(next)].rotation);
+                }
+            }
             AirportPickerButton::CoverageOff => station_state.airport_show_coverage = false,
             AirportPickerButton::CoverageOn => station_state.airport_show_coverage = true,
         }
@@ -463,6 +715,32 @@ mod tests {
     use super::*;
     use crate::state::SimWorld;
     use bevy::ecs::system::RunSystemOnce;
+    use openttdrs_core::{AirportLayoutTile, AirportTileLayout, NewgrfAirportSpecDef};
+
+    fn picker_newgrf_spec(layouts: Vec<AirportTileLayout>) -> NewgrfAirportSpecDef {
+        NewgrfAirportSpecDef {
+            id: 10,
+            class: AirportClassId::Small,
+            label: "Picker custom".into(),
+            short_label: "Picker".into(),
+            size_x: 4,
+            size_y: 2,
+            catchment: 5,
+            noise_level: 1,
+            subst_id: AirportSpecId::Small,
+            ttd_airport_type: 0,
+            layouts,
+            enabled: true,
+            min_year: 0,
+            max_year: u16::MAX,
+            maintenance_cost: 0,
+            associated_badges: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_grfid: 0,
+            newgrf_views: Vec::new(),
+            newgrf_purchase_views: Vec::new(),
+        }
+    }
 
     #[test]
     fn picking_spec_updates_state() {
@@ -507,6 +785,127 @@ mod tests {
             world.resource::<StationBuildState>().airport_spec,
             AirportSpecId::Heliport
         );
+    }
+
+    #[test]
+    fn airport_picker_adds_enabled_newgrf_specs_to_the_catalog() {
+        use bevy::asset::AssetPlugin;
+
+        let asset_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins).add_plugins(AssetPlugin {
+            file_path: asset_root.into(),
+            ..default()
+        });
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+
+        let mut sim = SimWorld::default();
+        sim.state
+            .airport_spec_catalog
+            .push(picker_newgrf_spec(vec![AirportTileLayout {
+                rotation: 0,
+                tiles: vec![AirportLayoutTile {
+                    x: 0,
+                    y: 0,
+                    gfx: 24,
+                }],
+            }]));
+        app.world_mut().insert_resource(sim);
+        app.world_mut()
+            .run_system_once(setup_airport_picker)
+            .unwrap();
+        app.world_mut()
+            .run_system_once(sync_airport_catalog_entries)
+            .unwrap();
+
+        let world = app.world_mut();
+        let mut buttons = world.query::<&AirportPickerButton>();
+        assert!(
+            buttons
+                .iter(world)
+                .any(|button| *button == AirportPickerButton::NewgrfSpec(10))
+        );
+    }
+
+    #[test]
+    fn newgrf_picker_selects_and_cycles_the_exact_action0_layout() {
+        let layouts = vec![
+            AirportTileLayout {
+                rotation: 0,
+                tiles: vec![AirportLayoutTile {
+                    x: 0,
+                    y: 0,
+                    gfx: 24,
+                }],
+            },
+            AirportTileLayout {
+                rotation: 6,
+                tiles: vec![AirportLayoutTile {
+                    x: 0,
+                    y: 0,
+                    gfx: 24,
+                }],
+            },
+        ];
+        let mut select_world = World::new();
+        select_world.insert_resource(StationBuildState::default());
+        let mut sim = SimWorld::default();
+        sim.state
+            .airport_spec_catalog
+            .push(picker_newgrf_spec(layouts.clone()));
+        select_world.insert_resource(sim);
+        select_world.spawn((
+            Button,
+            AirportPickerButton::NewgrfSpec(10),
+            Interaction::Pressed,
+        ));
+        select_world
+            .run_system_once(handle_airport_picker_buttons)
+            .unwrap();
+        assert_eq!(
+            select_world
+                .resource::<SimWorld>()
+                .state
+                .current_airport_newgrf_id,
+            Some(10)
+        );
+        assert_eq!(
+            select_world.resource::<StationBuildState>().airport_layout,
+            Some(0)
+        );
+        assert_eq!(
+            select_world
+                .resource::<StationBuildState>()
+                .airport_newgrf_spec_id,
+            Some(10)
+        );
+
+        let mut cycle_world = World::new();
+        cycle_world.insert_resource(StationBuildState {
+            airport_layout: Some(0),
+            airport_newgrf_spec_id: Some(10),
+            ..Default::default()
+        });
+        let mut sim = SimWorld::default();
+        sim.state
+            .airport_spec_catalog
+            .push(picker_newgrf_spec(layouts));
+        sim.state.current_airport_newgrf_id = Some(10);
+        cycle_world.insert_resource(sim);
+        cycle_world.spawn((
+            Button,
+            AirportPickerButton::LayoutNext,
+            Interaction::Pressed,
+        ));
+        cycle_world
+            .run_system_once(handle_airport_picker_buttons)
+            .unwrap();
+        assert_eq!(
+            cycle_world.resource::<StationBuildState>().airport_layout,
+            Some(1)
+        );
+        assert!(cycle_world.resource::<StationBuildState>().airport_axis_y);
     }
 
     #[test]

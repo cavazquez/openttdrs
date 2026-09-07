@@ -556,19 +556,23 @@ pub fn airport_spec_tiles(
     })
 }
 
-/// Elige el layout que representa la orientación disponible para el selector
-/// binario de construcción.
+/// Resuelve el layout `Action0` elegido para un aeropuerto `NewGRF`.
 ///
-/// `OpenTTD` guarda cuatro layouts independientes: sus coordenadas ya están
-/// rotadas en Action0 y `AirportTileTableIterator` las consume tal cual. La
-/// UI compacta sólo expone el eje X/Y, por lo que prefiere N/E y luego la otra
-/// dirección del mismo eje; si el GRF no ofrece ese eje, conserva su primer
-/// layout declarativo en vez de transponer coordenadas que el GRF ya orientó.
+/// Cuando el picker proporciona un índice, reproduce el contrato de
+/// `CmdBuildAirport`: ese índice es autoritativo y un índice ausente no se
+/// sustituye por otra rotación. El caso `None` mantiene la ruta histórica de
+/// herramientas que sólo conocían el eje X/Y: prefiere N/E y luego la otra
+/// dirección del mismo eje, sin transponer coordenadas Action0.
 #[must_use]
-pub(crate) fn newgrf_airport_layout_selection(
+pub fn newgrf_airport_layout_selection_with_index(
     def: &crate::airport_class::NewgrfAirportSpecDef,
+    layout_index: Option<u8>,
     axis_y: bool,
 ) -> Option<(u8, u8)> {
+    if let Some(index) = layout_index {
+        let layout = def.layouts.get(usize::from(index))?;
+        return Some((index, layout.rotation & 6));
+    }
     let preferred = if axis_y { 2 } else { 0 };
     let same_axis = if axis_y { 6 } else { 4 };
     let (index, layout) = def
@@ -586,24 +590,45 @@ pub(crate) fn newgrf_airport_layout_selection(
     Some((u8::try_from(index).ok()?, layout.rotation & 6))
 }
 
+pub(crate) fn newgrf_airport_layout_selection(
+    def: &crate::airport_class::NewgrfAirportSpecDef,
+    axis_y: bool,
+) -> Option<(u8, u8)> {
+    newgrf_airport_layout_selection_with_index(def, None, axis_y)
+}
+
+/// Footprint declarado para el layout `Action0` solicitado.
+///
+/// `OpenTTD` intercambia únicamente las dimensiones declaradas cuando la
+/// rotación es E/O; los offsets de las teselas siguen perteneciendo al layout
+/// y no se transponen. `None` conserva la selección histórica por eje.
+#[must_use]
+pub fn newgrf_airport_footprint_with_layout(
+    def: &crate::airport_class::NewgrfAirportSpecDef,
+    layout_index: Option<u8>,
+    axis_y: bool,
+) -> Option<(i32, i32)> {
+    let (_, rotation) = newgrf_airport_layout_selection_with_index(def, layout_index, axis_y)?;
+    if matches!(rotation, 2 | 6) {
+        Some((def.size_y, def.size_x))
+    } else {
+        Some((def.size_x, def.size_y))
+    }
+}
+
 /// Footprint `NewGRF` (`size` del layout seleccionado).
 #[must_use]
 pub fn newgrf_airport_footprint(
     def: &crate::airport_class::NewgrfAirportSpecDef,
     axis_y: bool,
 ) -> (i32, i32) {
-    let layout_axis_y = newgrf_airport_layout_selection(def, axis_y)
-        .is_some_and(|(_, rotation)| matches!(rotation, 2 | 6));
-    let layout_axis_y = if def.layouts.is_empty() {
-        axis_y
-    } else {
-        layout_axis_y
-    };
-    if layout_axis_y {
-        (def.size_y, def.size_x)
-    } else {
-        (def.size_x, def.size_y)
-    }
+    newgrf_airport_footprint_with_layout(def, None, axis_y).unwrap_or({
+        if axis_y {
+            (def.size_y, def.size_x)
+        } else {
+            (def.size_x, def.size_y)
+        }
+    })
 }
 
 /// Itera (coord, pieza) del layout `NewGRF` elegido para el eje solicitado.

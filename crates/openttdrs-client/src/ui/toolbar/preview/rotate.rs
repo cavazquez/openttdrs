@@ -38,7 +38,24 @@ pub(crate) fn rotate_station_with_right_click(
             station_state.rail_axis_y = !station_state.rail_axis_y;
         }
         Some(BuildMenuAction::Airport) => {
-            station_state.airport_axis_y = !station_state.airport_axis_y;
+            let selected_newgrf = sim.as_ref().and_then(|sim| {
+                sim.state.current_airport_newgrf_id.and_then(|id| {
+                    openttdrs_core::newgrf_airport_spec_def(&sim.state.airport_spec_catalog, id)
+                })
+            });
+            if let Some(def) = selected_newgrf.filter(|def| !def.layouts.is_empty()) {
+                let max = u8::try_from(def.layouts.len() - 1).unwrap_or(u8::MAX);
+                let next = station_state.airport_layout.unwrap_or(0).min(max);
+                let next = if next == max { 0 } else { next + 1 };
+                station_state.airport_layout = Some(next);
+                station_state.airport_newgrf_spec_id = Some(def.id);
+                station_state.airport_axis_y = def.layouts[usize::from(next)].rotation & 6 == 2
+                    || def.layouts[usize::from(next)].rotation & 6 == 6;
+            } else {
+                station_state.airport_layout = None;
+                station_state.airport_newgrf_spec_id = None;
+                station_state.airport_axis_y = !station_state.airport_axis_y;
+            }
         }
         Some(BuildMenuAction::RailSignals) => {
             let ctrl =

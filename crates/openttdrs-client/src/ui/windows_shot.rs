@@ -1010,7 +1010,11 @@ pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
         Some(113)
     ),
     reference_geometry!(RailStationPicker, "default", Auto, Some(280), Some(220)),
-    reference_geometry!(AirportPicker, "default", Auto, Some(320), Some(220)),
+    // El catálogo Action0 y la vista previa pueden añadir filas. Una altura
+    // fija de 220 px dejaba orientación, cobertura y estado fuera del marco;
+    // el árbol de widgets calcula la altura real igual que los pickers cuyo
+    // contenido depende del catálogo.
+    reference_geometry!(AirportPicker, "default", Auto, Some(320), None),
     reference_geometry!(RoadStopPicker, "default", Auto, Some(220), Some(180)),
     reference_geometry!(ObjectPicker, "default", Auto, Some(220), Some(200)),
     reference_geometry!(BridgePicker, "default", Auto, Some(200), Some(114)),

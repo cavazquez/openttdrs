@@ -151,6 +151,8 @@ pub enum CommandError {
     AuthorityRatingTooLow,
     /// El pueblo rechaza el aeropuerto por exceso de ruido.
     AirportNoiseTooHigh,
+    /// El layout Action0 solicitado no existe para el aeropuerto `NewGRF` activo.
+    InvalidAirportLayout,
     /// No se puede plantar un árbol aquí.
     CannotPlantTreeHere,
     /// No hay árbol ni cultivo que quitar.

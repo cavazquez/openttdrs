@@ -1129,6 +1129,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "La autoridad local rechaza el aeropuerto: demasiado ruido." => {
             "The local authority rejects the airport: too much noise."
         }
+        "El layout seleccionado no existe para este aeropuerto NewGRF." => {
+            "The selected layout does not exist for this NewGRF airport."
+        }
         "No se puede plantar un árbol aquí." => "A tree cannot be planted here.",
         "No hay árbol ni cultivo en esta tesela." => "There is no tree or crop on this tile.",
         "Cartel no encontrado." => "Sign not found.",

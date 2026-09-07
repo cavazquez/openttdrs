@@ -10,9 +10,10 @@ use super::industry::{check_place_industry_spec, check_place_industry_spec_layou
 use super::terraform::{check_level_land, check_lower_land, check_raise_land};
 use super::town;
 use super::transport::{
-    check_airport_area, check_airport_placement, check_bridge_with_stations, check_clear_tile,
-    check_cycle_rail_signal_type, check_dock_placement, check_place_aqueduct, check_place_buoy,
-    check_place_canal, check_place_lock, check_place_rail, check_place_rail_signal_oriented,
+    check_airport_area, check_airport_area_with_explicit_layout, check_airport_placement,
+    check_bridge_with_stations, check_clear_tile, check_cycle_rail_signal_type,
+    check_dock_placement, check_place_aqueduct, check_place_buoy, check_place_canal,
+    check_place_lock, check_place_rail, check_place_rail_signal_oriented,
     check_place_rail_waypoint, check_place_river, check_place_road_bits, check_place_road_waypoint,
     check_rail_depot_placement, check_rail_station_area, check_rail_station_slope_callbacks,
     check_rail_station_spec_restrictions, check_rail_trackbits_with_autoslope, check_remove_rail,
@@ -164,6 +165,15 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             axis_y,
             spec,
         } => check_airport_area(state, *origin, *axis_y, *spec).err(),
+        Command::PlaceAirportAreaWithLayout {
+            origin,
+            newgrf_spec_id,
+            layout,
+            spec,
+        } => {
+            check_airport_area_with_explicit_layout(state, *origin, *newgrf_spec_id, *layout, *spec)
+                .err()
+        }
         Command::PlaceCanal(c) => check_place_canal(map, *c).err(),
         Command::PlaceRiver(c) => check_place_river(map, *c).err(),
         Command::PlaceBuoy(c) => check_place_buoy(map, &state.stations, *c).err(),

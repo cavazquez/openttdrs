@@ -354,6 +354,18 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             axis_y,
             spec,
         } => transport::place_airport_area(state, *origin, *axis_y, *spec),
+        Command::PlaceAirportAreaWithLayout {
+            origin,
+            newgrf_spec_id,
+            layout,
+            spec,
+        } => transport::place_airport_area_with_explicit_layout(
+            state,
+            *origin,
+            *newgrf_spec_id,
+            *layout,
+            *spec,
+        ),
         Command::PlaceCanal(c) => transport::place_canal(state, *c),
         Command::PlaceRiver(c) => transport::place_river(state, *c),
         Command::PlaceBuoy(c) => transport::place_buoy(state, *c),

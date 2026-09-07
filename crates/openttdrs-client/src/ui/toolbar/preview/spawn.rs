@@ -179,15 +179,65 @@ fn spawn_airport_preview(
     use openttdrs_core::prelude::*;
     use openttdrs_core::{
         STATION_COVERAGE_RADIUS, airport_spec_def, airport_spec_footprint, airport_spec_tiles,
+        newgrf_airport_footprint_with_layout, newgrf_airport_layout_selection_with_index,
+        newgrf_airport_spec_def, newgrf_airport_tile_gfx_with_layout,
     };
 
     let spec = station_state.airport_spec;
     let axis_y = station_state.airport_axis_y;
-    let (w, h) = airport_spec_footprint(spec, axis_y);
-    let cmd = Command::PlaceAirportArea {
-        origin,
-        axis_y,
-        spec,
+    let current_newgrf = sim
+        .state
+        .current_airport_newgrf_id
+        .and_then(|id| newgrf_airport_spec_def(&sim.state.airport_spec_catalog, id));
+    let catchment = current_newgrf.map_or_else(
+        || {
+            airport_spec_def(spec)
+                .map(|d| d.catchment)
+                .unwrap_or(STATION_COVERAGE_RADIUS)
+        },
+        |def| def.catchment,
+    );
+    let selected_newgrf = current_newgrf.and_then(|def| {
+        let (layout, rotation) =
+            newgrf_airport_layout_selection_with_index(def, station_state.airport_layout, axis_y)?;
+        let footprint = newgrf_airport_footprint_with_layout(def, Some(layout), axis_y)?;
+        let tiles = newgrf_airport_tile_gfx_with_layout(
+            origin,
+            def,
+            &sim.state.airport_tile_spec_catalog,
+            axis_y,
+            Some(layout),
+            Some(rotation),
+        )
+        .into_iter()
+        .map(|(coord, _)| coord)
+        .collect::<Vec<_>>();
+        Some((footprint, tiles))
+    });
+    let ((w, h), airport_tiles) = selected_newgrf.unwrap_or_else(|| {
+        (
+            airport_spec_footprint(spec, axis_y),
+            airport_spec_tiles(origin, spec, axis_y)
+                .map(|(coord, _)| coord)
+                .collect(),
+        )
+    });
+    let cmd = if let (Some(newgrf_spec_id), Some(layout)) = (
+        station_state.airport_newgrf_spec_id,
+        station_state.airport_layout,
+    ) {
+        Command::PlaceAirportAreaWithLayout {
+            origin,
+            newgrf_spec_id,
+            layout,
+            spec,
+        }
+    } else {
+        Command::PlaceAirportArea {
+            origin,
+            axis_y,
+            spec,
+        }
     };
     let valid = command_would_fail(&sim.state, &cmd).is_none();
     let select = asset_server.load::<Image>("assets/opengfx/tiles/tile_select.png");
@@ -197,7 +247,7 @@ fn spawn_airport_preview(
         Color::srgba(1.0, 0.3, 0.25, 0.95)
     };
 
-    for (coord, _piece) in airport_spec_tiles(origin, spec, axis_y) {
+    for coord in airport_tiles {
         let Some(tile) = sim.state.map.get(coord) else {
             continue;
         };
@@ -214,9 +264,7 @@ fn spawn_airport_preview(
     }
 
     if show_coverage {
-        let radius = airport_spec_def(spec)
-            .map(|d| d.catchment)
-            .unwrap_or(STATION_COVERAGE_RADIUS);
+        let radius = catchment;
         let coverage_img = asset_server.load::<Image>("assets/opengfx/tiles/tile_select.png");
         let coverage_tint = Color::srgba(0.35, 0.85, 0.45, 0.28);
         for dy in -radius..=(h - 1 + radius) {

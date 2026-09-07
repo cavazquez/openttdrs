@@ -75,6 +75,19 @@ pub enum Command {
         #[serde(default)]
         spec: crate::airport_class::AirportSpecId,
     },
+    /// Aeropuerto `NewGRF` con el índice Action0 exacto.
+    ///
+    /// A diferencia de [`Self::PlaceAirportArea`], no reduce el selector a
+    /// los ejes X/Y: `OpenTTD` persiste y ejecuta el índice de layout elegido.
+    /// Lleva el id global del spec para que la acción sea reproducible aunque
+    /// cambie la selección local antes de aplicarse.
+    PlaceAirportAreaWithLayout {
+        origin: TileCoord,
+        newgrf_spec_id: u16,
+        layout: u8,
+        #[serde(default)]
+        spec: crate::airport_class::AirportSpecId,
+    },
     /// Canal: convierte terreno en agua navegable.
     PlaceCanal(TileCoord),
     /// Pinta río (`WaterClass::River`); plano o pendiente inclinada.

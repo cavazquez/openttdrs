@@ -55,8 +55,8 @@ use crate::ui::toolbar::{
     setup_station_cargo_panel, setup_terraform_picker, setup_top_toolbar, setup_tree_picker,
     sign_picker_on_closed, signal_picker_on_closed, station_catalog_filter_keyboard,
     station_rename_editable_keyboard, station_rename_keyboard, station_view_on_closed,
-    sync_action5_gui_toolbar_icons, sync_airport_picker, sync_airport_preview_image,
-    sync_bridge_picker, sync_build_pointer_modifiers, sync_buoy_picker,
+    sync_action5_gui_toolbar_icons, sync_airport_catalog_entries, sync_airport_picker,
+    sync_airport_preview_image, sync_bridge_picker, sync_build_pointer_modifiers, sync_buoy_picker,
     sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_company_selector,
     sync_depot_build_picker, sync_depot_panel, sync_dock_picker, sync_editor_only_build_tools,
     sync_freight_trains_button_label, sync_minimap, sync_object_catalog_entries,
@@ -367,6 +367,7 @@ impl Plugin for ToolbarUiPlugin {
                     sync_town_authority_window,
                     sync_rail_station_picker,
                     sync_station_catalog_entries,
+                    sync_airport_catalog_entries,
                     sync_bridge_picker,
                 )
                     .after(crate::i18n::LocalizationSet)

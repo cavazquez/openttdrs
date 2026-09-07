@@ -183,6 +183,91 @@ fn newgrf_airport_build_uses_declared_east_layout_without_transposing_tiles() {
 }
 
 #[test]
+fn explicit_newgrf_layout_uses_only_declared_tiles_and_rejects_unknown_index() {
+    // `CheckFlatLandAirport` itera `AirportTileTableIterator`: una tesela
+    // ocupada dentro del rectángulo declarado, pero fuera del layout, no puede
+    // bloquear ni ser limpiada por la construcción.
+    let mut s = GameState::new(12, 12);
+    s.airport_spec_catalog.push(NewgrfAirportSpecDef {
+        id: 10,
+        class: AirportClassId::Small,
+        label: "Layout sparse".into(),
+        short_label: "Sparse".into(),
+        size_x: 4,
+        size_y: 3,
+        catchment: 4,
+        noise_level: 1,
+        subst_id: crate::AirportSpecId::Small,
+        ttd_airport_type: 0,
+        layouts: vec![AirportTileLayout {
+            rotation: 4,
+            tiles: vec![
+                AirportLayoutTile {
+                    x: 0,
+                    y: 0,
+                    gfx: 24,
+                },
+                AirportLayoutTile {
+                    x: 3,
+                    y: 2,
+                    gfx: 14,
+                },
+            ],
+        }],
+        enabled: true,
+        min_year: 0,
+        max_year: u16::MAX,
+        maintenance_cost: 0,
+        associated_badges: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_grfid: 0,
+        newgrf_views: Vec::new(),
+        newgrf_purchase_views: Vec::new(),
+    });
+    // El comando explícito lleva el id; no depende de una selección de picker
+    // que pudo cambiar antes de aplicarse (red/replay).
+    s.current_airport_newgrf_id = None;
+    let origin = TileCoord::new(2, 2);
+    let undeclared = TileCoord::new(3, 3);
+    s.map.set_kind(undeclared, TileKind::Rail).unwrap();
+
+    apply_command(
+        &mut s,
+        &Command::PlaceAirportAreaWithLayout {
+            origin,
+            newgrf_spec_id: 10,
+            layout: 0,
+            spec: crate::AirportSpecId::Small,
+        },
+    )
+    .unwrap();
+
+    let station = &s.stations[0];
+    assert_eq!(station.airport_layout, 0);
+    assert_eq!(station.airport_rotation, 4);
+    assert_eq!(
+        station.airport_tiles,
+        vec![TileCoord::new(2, 2), TileCoord::new(5, 4)]
+    );
+    assert_eq!(s.map.get_kind(undeclared), Some(TileKind::Rail));
+
+    let mut invalid = GameState::new(12, 12);
+    invalid.airport_spec_catalog = s.airport_spec_catalog.clone();
+    invalid.current_airport_newgrf_id = None;
+    let err = apply_command(
+        &mut invalid,
+        &Command::PlaceAirportAreaWithLayout {
+            origin,
+            newgrf_spec_id: 10,
+            layout: 1,
+            spec: crate::AirportSpecId::Small,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(err, crate::CommandError::InvalidAirportLayout);
+}
+
+#[test]
 fn place_canal_converts_grass_to_water() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(3, 3);

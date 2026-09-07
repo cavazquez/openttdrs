@@ -85,11 +85,25 @@ pub(crate) fn command_for_action(
         BuildMenuAction::River => Some(Command::PlaceRiver(pos)),
         BuildMenuAction::Buoy => Some(Command::PlaceBuoy(pos)),
         BuildMenuAction::Lock => Some(Command::PlaceLock(pos, station_state.orientation & 1 != 0)),
-        BuildMenuAction::Airport => Some(Command::PlaceAirportArea {
-            origin: pos,
-            axis_y: station_state.airport_axis_y,
-            spec: station_state.airport_spec,
-        }),
+        BuildMenuAction::Airport => {
+            if let (Some(newgrf_spec_id), Some(layout)) = (
+                station_state.airport_newgrf_spec_id,
+                station_state.airport_layout,
+            ) {
+                Some(Command::PlaceAirportAreaWithLayout {
+                    origin: pos,
+                    newgrf_spec_id,
+                    layout,
+                    spec: station_state.airport_spec,
+                })
+            } else {
+                Some(Command::PlaceAirportArea {
+                    origin: pos,
+                    axis_y: station_state.airport_axis_y,
+                    spec: station_state.airport_spec,
+                })
+            }
+        }
         BuildMenuAction::RailDepot => {
             Some(Command::PlaceRailDepotDir(pos, station_state.orientation))
         }
@@ -329,5 +343,43 @@ pub(crate) fn command_for_line_action(
         BuildMenuAction::RailBridge => Some(Command::PlaceRailBridge(a, b, bridge_type)),
         BuildMenuAction::Aqueduct => Some(Command::PlaceAqueduct(a, b)),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn airport_command_keeps_the_explicit_newgrf_layout() {
+        let station_state = StationBuildState {
+            airport_spec: openttdrs_core::AirportSpecId::Small,
+            airport_axis_y: false,
+            airport_layout: Some(3),
+            airport_newgrf_spec_id: Some(10),
+            ..Default::default()
+        };
+        let origin = TileCoord::new(7, 9);
+        let command = command_for_action(
+            BuildMenuAction::Airport,
+            origin,
+            &station_state,
+            None,
+            None,
+            None,
+            0,
+            false,
+            RailType::Rail,
+            0,
+        );
+        assert_eq!(
+            command,
+            Some(Command::PlaceAirportAreaWithLayout {
+                origin,
+                newgrf_spec_id: 10,
+                layout: 3,
+                spec: openttdrs_core::AirportSpecId::Small,
+            })
+        );
     }
 }

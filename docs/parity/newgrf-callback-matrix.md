@@ -141,10 +141,10 @@ legacy sin mundo mantiene su fallback explícito.
 | Cargoes (resto) / Types | varios | **OOS** | Sin ejecución de CB en este corte |
 | Generic | `0x01` `CBID_RANDOM_TRIGGER` | **OOS** | Ver triggers abajo |
 
-Nota de precisión aeroportuaria (2026-09-07): la geometría de layouts Action0
-ya selecciona N/E (o S/O del mismo eje), conserva el selector `STNN` y usa
-offsets directos al construir y rehidratar. No equivale a rotación runtime del
-compositor; el oráculo, regresiones y límites están en
+Nota de precisión aeroportuaria (2026-09-07): el picker ya conserva el índice
+Action0 exacto e id global al construir, valida sólo las teselas declaradas y
+usa offsets directos al persistir/re-hidratar `STNN`. No equivale a rotación
+runtime del compositor; el oráculo, regresiones y límites están en
 [newgrf-airport-layout-rotation-326.md](newgrf-airport-layout-rotation-326.md).
 
 ## Storage

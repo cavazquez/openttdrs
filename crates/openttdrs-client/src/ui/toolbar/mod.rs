@@ -25,7 +25,7 @@ mod systems;
 
 pub(crate) use airport_picker_window::{
     airport_picker_on_closed, handle_airport_picker_buttons, setup_airport_picker,
-    sync_airport_picker, sync_airport_preview_image,
+    sync_airport_catalog_entries, sync_airport_picker, sync_airport_preview_image,
 };
 pub(crate) use bridge_window::{
     BridgeBuildState, PendingBridge, bridge_picker_on_closed, handle_bridge_picker_buttons,
@@ -435,6 +435,13 @@ pub(crate) struct StationBuildState {
     pub(crate) airport_spec: openttdrs_core::AirportSpecId,
     /// Orientación del footprint aéreo.
     pub(crate) airport_axis_y: bool,
+    /// Índice Action0 explícito del aeropuerto NewGRF seleccionado.
+    ///
+    /// `None` conserva los dos ejes del picker vanilla; `Some` evita reducir
+    /// layouts N/E/S/O distintos a una rotación binaria.
+    pub(crate) airport_layout: Option<u8>,
+    /// Id global del spec NewGRF que acompaña al layout explícito en el comando.
+    pub(crate) airport_newgrf_spec_id: Option<u16>,
     /// Halo de cobertura al previsualizar aeropuerto.
     pub(crate) airport_show_coverage: bool,
     /// Tipo de señal a colocar (`SIGTYPE_*`; Ctrl cicla block→entry→exit→combo→path→path1vía).
@@ -463,6 +470,8 @@ impl Default for StationBuildState {
             rail_show_coverage: true,
             airport_spec: openttdrs_core::AirportSpecId::Small,
             airport_axis_y: false,
+            airport_layout: None,
+            airport_newgrf_spec_id: None,
             airport_show_coverage: true,
             signal_type: openttdrs_core::SIGTYPE_PATH,
             signal_variant: 0,

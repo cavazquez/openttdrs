@@ -485,9 +485,10 @@ ruta compartida para los cuatro tipos cuando el modelo no es `VE_DEFAULT`. La
 brecha restante de #326/#329 es la composición exacta (sprites/sonidos locales,
 consist y sorter/viewport), no la ausencia de un call site por tipo.
 
-Actualización #326-AIRPORT-LAYOUT-ROTATION (2026-09-07): el selector X/Y de
-construcción conserva el layout Action0 N/E (o S/O del mismo eje), su índice
-SAV y sus offsets directos. La evidencia y los límites viven en
+Actualización #326-AIRPORT-LAYOUT-ROTATION (2026-09-07): el picker de
+construcción lista los airports NewGRF habilitados y conserva el índice Action0
+exacto junto con su id global; query, ghost y execute usan la misma elección y
+validan sólo sus teselas declaradas. La evidencia y los límites viven en
 [newgrf-airport-layout-rotation-326.md](newgrf-airport-layout-rotation-326.md);
 la rotación runtime de sprites/children sigue abierta.
 
@@ -1269,9 +1270,10 @@ secundarias fuera de ese contrato.
   reevalúa Action2 con posición relativa, frame, layout padre, random y
   vecinos. Si falta el catálogo o la vista cae al `AirportPiece` vanilla.
   El importador SAV conserva tipo, layout, rotación y huella, y reatacha los
-  `AirportTile` cuando el layout activo coincide exactamente. El selector X/Y
-  conserva el layout N/E (o S/O del mismo eje) y suma sus offsets Action0
-  directamente al rehidratar; ver
+  `AirportTile` cuando el layout activo coincide exactamente. El picker expone
+  el índice Action0 exacto de cada aeropuerto NewGRF, lo transporta con su id
+  global hasta query/execute y suma sus offsets directamente; los huecos del
+  rectángulo no se validan ni se limpian. Ver
   [newgrf-airport-layout-rotation-326.md](newgrf-airport-layout-rotation-326.md).
   Action0 conserva
   frames/status/speed/triggers y el scheduler ejecuta parcialmente Built,

@@ -119,7 +119,10 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::PlaceTruckStop(c, _)
         | Command::PlaceRoadTunnel(c, _) => CommandEffects::construction(Road, *c),
 
-        Command::PlaceAirportArea { origin: c, .. } => CommandEffects::construction(Road, *c),
+        Command::PlaceAirportArea { origin: c, .. }
+        | Command::PlaceAirportAreaWithLayout { origin: c, .. } => {
+            CommandEffects::construction(Road, *c)
+        }
 
         // ═══════════════════════════════════════════════════════════════════
         // Construcción Other (terraform, objetos, industrias, casas, pueblos)

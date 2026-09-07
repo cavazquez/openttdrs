@@ -2,9 +2,9 @@
 
 use crate::airport::{
     AirportPiece, airport_m6_airport, airport_spec_footprint, airport_spec_tiles,
-    newgrf_airport_footprint, newgrf_airport_tiles,
+    newgrf_airport_footprint, newgrf_airport_layout_selection, newgrf_airport_tile_gfx_with_layout,
 };
-use crate::airport_class::{AirportSpecId, newgrf_airport_spec_def};
+use crate::airport_class::{AirportSpecId, NewgrfAirportSpecDef, newgrf_airport_spec_def};
 use crate::economy::station_build_cost;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{station_site_tile_allows_build, station_site_tile_needs_clear};
@@ -69,6 +69,42 @@ pub(crate) fn check_airport_area(
     Ok(())
 }
 
+/// Gfx y piezas de un layout `NewGRF` ya orientado por Action0.
+struct NewgrfAirportTileMapping {
+    gfx: Vec<(TileCoord, u16)>,
+    pieces: Vec<(TileCoord, AirportPiece)>,
+}
+
+fn newgrf_airport_tile_mapping(
+    origin: TileCoord,
+    axis_y: bool,
+    def: &NewgrfAirportSpecDef,
+    tile_catalog: &[crate::airport_tile_spec::AirportTileSpecDef],
+    layout: Option<(u8, u8)>,
+) -> NewgrfAirportTileMapping {
+    let (layout_index, rotation) = layout.map_or((None, None), |(index, rotation)| {
+        (Some(index), Some(rotation))
+    });
+    let gfx = newgrf_airport_tile_gfx_with_layout(
+        origin,
+        def,
+        tile_catalog,
+        axis_y,
+        layout_index,
+        rotation,
+    );
+    let pieces = gfx
+        .iter()
+        .map(|(coord, gfx)| {
+            let piece = AirportPiece::from_station_gfx(
+                crate::airport_tile_spec::resolve_airport_tile_piece_gfx(*gfx, tile_catalog),
+            );
+            (*coord, piece)
+        })
+        .collect();
+    NewgrfAirportTileMapping { gfx, pieces }
+}
+
 /// Aeropuerto según [`AirportSpecId`] o layout `NewGRF` activo.
 pub(in crate::command) fn place_airport_area(
     state: &mut GameState,
@@ -87,19 +123,27 @@ pub(in crate::command) fn place_airport_area(
             .cloned()
     });
     let place_spec = newgrf_def.as_ref().map_or(spec, |d| d.subst_id);
+    // Cada layout Action0 ya contiene sus offsets para su rotación. Conservar
+    // el selector elegido evita tanto transponer el footprint como guardar en
+    // STNN una rotación distinta de los gfx realmente materializados.
+    let newgrf_layout = newgrf_def
+        .as_ref()
+        .and_then(|def| newgrf_airport_layout_selection(def, axis_y));
 
-    let airport_tile_gfx = newgrf_def.as_ref().map_or_else(Vec::new, |def| {
-        crate::airport::newgrf_airport_tile_gfx(
+    let (airport_tile_gfx, placed) = if let Some(def) = newgrf_def.as_ref() {
+        let mapping = newgrf_airport_tile_mapping(
             origin,
+            axis_y,
             def,
             &state.airport_tile_spec_catalog,
-            axis_y,
-        )
-    });
-    let placed: Vec<(TileCoord, AirportPiece)> = if let Some(ref def) = newgrf_def {
-        newgrf_airport_tiles(origin, def, &state.airport_tile_spec_catalog, axis_y)
+            newgrf_layout,
+        );
+        (mapping.gfx, mapping.pieces)
     } else {
-        airport_spec_tiles(origin, place_spec, axis_y).collect()
+        (
+            Vec::new(),
+            airport_spec_tiles(origin, place_spec, axis_y).collect(),
+        )
     };
 
     let station_anchor = placed
@@ -149,10 +193,9 @@ pub(in crate::command) fn place_airport_area(
     st.airport_spec = place_spec;
     st.airport_newgrf_spec_id = newgrf_id.filter(|_| newgrf_def.is_some());
     st.airport_ttd_type = newgrf_def.as_ref().map(|def| def.ttd_airport_type);
-    // La API de construcción conserva el eje como orientación geométrica.
-    // Usar las rotaciones cardinales canónicas de OpenTTD mantiene la
-    // distinción X/Y en SAV aunque todavía no se exponga el cuarto giro en UI.
-    st.airport_rotation = if axis_y { 2 } else { 0 };
+    let (layout_index, rotation) = newgrf_layout.unwrap_or((0, if axis_y { 2 } else { 0 }));
+    st.airport_layout = layout_index;
+    st.airport_rotation = rotation;
     st.airport_blocks = 0;
     // Catchment: `station_catchment_radius` lee `airport_spec` en cobertura.
     state.stations.push(st);

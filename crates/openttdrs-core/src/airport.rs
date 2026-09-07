@@ -556,20 +556,57 @@ pub fn airport_spec_tiles(
     })
 }
 
-/// Footprint `NewGRF` (`size` del layout; `axis_y` intercambia ejes).
+/// Elige el layout que representa la orientación disponible para el selector
+/// binario de construcción.
+///
+/// `OpenTTD` guarda cuatro layouts independientes: sus coordenadas ya están
+/// rotadas en Action0 y `AirportTileTableIterator` las consume tal cual. La
+/// UI compacta sólo expone el eje X/Y, por lo que prefiere N/E y luego la otra
+/// dirección del mismo eje; si el GRF no ofrece ese eje, conserva su primer
+/// layout declarativo en vez de transponer coordenadas que el GRF ya orientó.
+#[must_use]
+pub(crate) fn newgrf_airport_layout_selection(
+    def: &crate::airport_class::NewgrfAirportSpecDef,
+    axis_y: bool,
+) -> Option<(u8, u8)> {
+    let preferred = if axis_y { 2 } else { 0 };
+    let same_axis = if axis_y { 6 } else { 4 };
+    let (index, layout) = def
+        .layouts
+        .iter()
+        .enumerate()
+        .find(|(_, layout)| layout.rotation & 6 == preferred)
+        .or_else(|| {
+            def.layouts
+                .iter()
+                .enumerate()
+                .find(|(_, layout)| layout.rotation & 6 == same_axis)
+        })
+        .or_else(|| def.layouts.iter().enumerate().next())?;
+    Some((u8::try_from(index).ok()?, layout.rotation & 6))
+}
+
+/// Footprint `NewGRF` (`size` del layout seleccionado).
 #[must_use]
 pub fn newgrf_airport_footprint(
     def: &crate::airport_class::NewgrfAirportSpecDef,
     axis_y: bool,
 ) -> (i32, i32) {
-    if axis_y {
+    let layout_axis_y = newgrf_airport_layout_selection(def, axis_y)
+        .is_some_and(|(_, rotation)| matches!(rotation, 2 | 6));
+    let layout_axis_y = if def.layouts.is_empty() {
+        axis_y
+    } else {
+        layout_axis_y
+    };
+    if layout_axis_y {
         (def.size_y, def.size_x)
     } else {
         (def.size_x, def.size_y)
     }
 }
 
-/// Itera (coord, pieza) del primer layout `NewGRF` usable.
+/// Itera (coord, pieza) del layout `NewGRF` elegido para el eje solicitado.
 ///
 /// Piezas se derivan del `subst` gfx de cada tile (`AirportPiece::from_station_gfx`).
 /// FTA `NewGRF` queda fuera de alcance (#260): construcción usa subst visual.
@@ -606,11 +643,20 @@ pub fn newgrf_airport_tile_gfx(
     tile_catalog: &[crate::airport_tile_spec::AirportTileSpecDef],
     axis_y: bool,
 ) -> Vec<(TileCoord, u16)> {
-    newgrf_airport_tile_gfx_with_layout(origin, def, tile_catalog, axis_y, None, None)
+    let (layout_index, rotation) = newgrf_airport_layout_selection(def, axis_y)
+        .map_or((None, None), |(index, rotation)| {
+            (Some(index), Some(rotation))
+        });
+    newgrf_airport_tile_gfx_with_layout(origin, def, tile_catalog, axis_y, layout_index, rotation)
 }
 
 /// Variante que conserva el selector exacto de `STNN.normal.airport.layout`
 /// y la rotación `Direction` del aeropuerto importado.
+///
+/// Las coordenadas de un layout `NewGRF` ya están en la orientación declarada:
+/// `AirportTileTableIterator` de `OpenTTD` suma `(x,y)` al origen sin
+/// transponerlas. `axis_y` sólo queda para el fallback vanilla cuando no hay
+/// layout `NewGRF` representable.
 ///
 /// `None` mantiene la política histórica (primera orientación norte/sur).
 /// Cuando el índice o la rotación no existen en el catálogo se degrada a esa
@@ -628,19 +674,19 @@ pub fn newgrf_airport_tile_gfx_with_layout(
     let layout = layout_index
         .and_then(|index| def.layouts.get(usize::from(index)))
         .filter(|candidate| {
-            requested_rotation.is_none_or(|expected| candidate.rotation == expected)
+            requested_rotation.is_none_or(|expected| candidate.rotation & 6 == expected)
         })
         .or_else(|| {
             requested_rotation.and_then(|expected| {
                 def.layouts
                     .iter()
-                    .find(|candidate| candidate.rotation == expected)
+                    .find(|candidate| candidate.rotation & 6 == expected)
             })
         })
         .or_else(|| {
             def.layouts.iter().find(|layout| {
                 // Prefer north (0) or south (4); else first.
-                layout.rotation == 0 || layout.rotation == 4
+                (layout.rotation & 6) == 0 || (layout.rotation & 6) == 4
             })
         })
         .or_else(|| def.layouts.first());
@@ -653,11 +699,7 @@ pub fn newgrf_airport_tile_gfx_with_layout(
         .tiles
         .iter()
         .map(|t| {
-            let (dx, dy) = if axis_y {
-                (i32::from(t.y), i32::from(t.x))
-            } else {
-                (i32::from(t.x), i32::from(t.y))
-            };
+            let (dx, dy) = (i32::from(t.x), i32::from(t.y));
             let gfx = if t.gfx < crate::airport_tile_spec::NEW_AIRPORT_TILE_OFFSET {
                 t.gfx
             } else {

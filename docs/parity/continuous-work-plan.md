@@ -485,6 +485,12 @@ ruta compartida para los cuatro tipos cuando el modelo no es `VE_DEFAULT`. La
 brecha restante de #326/#329 es la composición exacta (sprites/sonidos locales,
 consist y sorter/viewport), no la ausencia de un call site por tipo.
 
+Actualización #326-AIRPORT-LAYOUT-ROTATION (2026-09-07): el selector X/Y de
+construcción conserva el layout Action0 N/E (o S/O del mismo eje), su índice
+SAV y sus offsets directos. La evidencia y los límites viven en
+[newgrf-airport-layout-rotation-326.md](newgrf-airport-layout-rotation-326.md);
+la rotación runtime de sprites/children sigue abierta.
+
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. `d9b0537c` limita el sorter runtime a la región relevante del viewport y excluye ocultos; el corte actual incorpora el `TileLayoutSpriteGroup` de AirportTile: conserva layouts estáticos, sustituye ground, emite BUILD como `TILE_SEQ_LINE` parents/children y combina únicamente el ground con la fundación. La evidencia cuantitativa vive sólo en `PARIDAD.md`. Foundations Action5/rotaciones de aeropuertos, sprite-stack y el orden completo de framebuffer siguen sin equivalencia global. | Contrastar la traza scoped nativa/candidata para elegir la primera familia visible restante; después verificar `0,12×`, `0,25×`, `0,50×`, `1×` y los seis zooms si cambia viewport, culling u overview. |
@@ -1263,13 +1269,17 @@ secundarias fuera de ese contrato.
   reevalúa Action2 con posición relativa, frame, layout padre, random y
   vecinos. Si falta el catálogo o la vista cae al `AirportPiece` vanilla.
   El importador SAV conserva tipo, layout, rotación y huella, y reatacha los
-  `AirportTile` cuando el layout activo coincide exactamente. Action0 conserva
+  `AirportTile` cuando el layout activo coincide exactamente. El selector X/Y
+  conserva el layout N/E (o S/O del mismo eje) y suma sus offsets Action0
+  directamente al rehidratar; ver
+  [newgrf-airport-layout-rotation-326.md](newgrf-airport-layout-rotation-326.md).
+  Action0 conserva
   frames/status/speed/triggers y el scheduler ejecuta parcialmente Built,
   TileLoop, next-frame y speed (`0x152`/`0x153`/`0x154`) con estado persistido;
   los triggers de carga/descarga y `AirplaneTouchdown` alcanzan el scheduler
   (desde una FTA vanilla cuando existe o desde el aterrizaje simple), mientras
-  la FTA propia de layouts NewGRF sigue bloqueada; quedan las rotaciones runtime
-  del compositor y sonidos, por lo
+  la FTA propia de layouts NewGRF sigue bloqueada; quedan la rotación runtime
+  de sprites/children del compositor y sonidos, por lo
   que #329 continúa abierto.
 - `reference/` es un checkout local ignorado/no versionado; nunca se agrega al
   commit de una tarea.

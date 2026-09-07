@@ -276,43 +276,38 @@ pub fn rehydrate_newgrf_airport_tiles(state: &mut GameState) {
             .or_else(|| {
                 def.layouts
                     .iter()
-                    .find(|candidate| candidate.rotation == rotation)
+                    .find(|candidate| candidate.rotation & 6 == rotation)
             })
             .or_else(|| {
-                def.layouts
-                    .iter()
-                    .find(|candidate| candidate.rotation == 0 || candidate.rotation == 4)
+                def.layouts.iter().find(|candidate| {
+                    (candidate.rotation & 6) == 0 || (candidate.rotation & 6) == 4
+                })
             })
             .or_else(|| def.layouts.first())
         else {
             continue;
         };
+        // El layout guardado ya codifica coordenadas en la orientación de
+        // `rotation`. `AirportTileTableIterator` nativo las suma directamente
+        // al origen; `axis_y` queda sólo como fallback si el layout dejó de
+        // estar disponible tras recargar el GRF.
         let axis_y = rotation == 2 || rotation == 6;
         let actual = station.airport_tiles.clone();
         let mut found = None;
-        for axis_y in [axis_y] {
-            for actual_coord in &actual {
-                for layout_tile in &layout.tiles {
-                    let (dx, dy) = if axis_y {
-                        (i32::from(layout_tile.y), i32::from(layout_tile.x))
-                    } else {
-                        (i32::from(layout_tile.x), i32::from(layout_tile.y))
-                    };
-                    let origin = TileCoord::new(actual_coord.x - dx, actual_coord.y - dy);
-                    let mapping = crate::airport::newgrf_airport_tile_gfx_with_layout(
-                        origin,
-                        def,
-                        tile_catalog,
-                        axis_y,
-                        Some(station.airport_layout),
-                        Some(rotation),
-                    );
-                    if airport_tile_coords_match(&mapping, &actual) {
-                        found = Some(mapping);
-                        break;
-                    }
-                }
-                if found.is_some() {
+        for actual_coord in &actual {
+            for layout_tile in &layout.tiles {
+                let (dx, dy) = (i32::from(layout_tile.x), i32::from(layout_tile.y));
+                let origin = TileCoord::new(actual_coord.x - dx, actual_coord.y - dy);
+                let mapping = crate::airport::newgrf_airport_tile_gfx_with_layout(
+                    origin,
+                    def,
+                    tile_catalog,
+                    axis_y,
+                    Some(station.airport_layout),
+                    Some(rotation),
+                );
+                if airport_tile_coords_match(&mapping, &actual) {
+                    found = Some(mapping);
                     break;
                 }
             }
@@ -473,6 +468,78 @@ mod tests {
                 (TileCoord::new(5, 7), 74),
                 (TileCoord::new(6, 7), 75),
             ]
+        );
+    }
+
+    #[test]
+    fn rehydrates_east_layout_coordinates_without_transposing_them() {
+        let mut state = GameState::new(16, 16);
+        let mut station = Station::new_with_kind(TileCoord::new(5, 6), StopKind::Airport);
+        station.airport_newgrf_spec_id = Some(10);
+        station.airport_layout = 1;
+        station.airport_rotation = 2;
+        station.airport_tiles = vec![TileCoord::new(5, 6), TileCoord::new(6, 9)];
+        state.stations.push(station);
+        state.airport_spec_catalog = vec![NewgrfAirportSpecDef {
+            id: 10,
+            class: AirportClassId::Small,
+            label: "Rotaciones".into(),
+            short_label: "Rot".into(),
+            size_x: 4,
+            size_y: 2,
+            catchment: 4,
+            noise_level: 1,
+            subst_id: AirportSpecId::Small,
+            ttd_airport_type: 0,
+            layouts: vec![
+                AirportTileLayout {
+                    rotation: 0,
+                    tiles: vec![
+                        AirportLayoutTile {
+                            x: 0,
+                            y: 0,
+                            gfx: 24,
+                        },
+                        AirportLayoutTile {
+                            x: 3,
+                            y: 1,
+                            gfx: 14,
+                        },
+                    ],
+                },
+                AirportTileLayout {
+                    rotation: 2,
+                    tiles: vec![
+                        AirportLayoutTile {
+                            x: 0,
+                            y: 0,
+                            gfx: 24,
+                        },
+                        AirportLayoutTile {
+                            x: 1,
+                            y: 3,
+                            gfx: 18,
+                        },
+                    ],
+                },
+            ],
+            enabled: true,
+            min_year: 0,
+            max_year: u16::MAX,
+            maintenance_cost: 0,
+            associated_badges: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_grfid: 0,
+            newgrf_views: Vec::new(),
+            newgrf_purchase_views: Vec::new(),
+        }];
+
+        rehydrate_newgrf_airport_tiles(&mut state);
+
+        assert_eq!(
+            state.stations[0].airport_tile_gfx,
+            vec![(TileCoord::new(5, 6), 24), (TileCoord::new(6, 9), 18)],
+            "STNN.layout/rotation conserva los offsets E que el GRF declaró"
         );
     }
 }

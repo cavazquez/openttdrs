@@ -1,6 +1,6 @@
 # Matriz de callbacks NewGRF (CBID) — OpenTTD 15.3
 
-Actualizada: **2026-09-06** (base publicada `95e1091f`; corrección de posición
+Actualizada: **2026-09-07** (base publicada `95e1091f`; corrección de posición
 CB10/CB160 documentada en VEHICLE-VISUAL-EFFECT-085; órdenes de refit de estación,
 clases de carga Action0, CTT y
 callback de refit de vehículos; CTT de cargos custom en scopes
@@ -140,6 +140,12 @@ legacy sin mundo mantiene su fallback explícito.
 | Cargoes (`0B`) | `0x39` `CBID_CARGO_PROFIT_CALC`; `0x145` `CBID_CARGO_STATION_RATING_CALC` | **parcial runtime** | Máscara Action0 `0x1A`, Action3→Action2: CB39 paga cada packet en `unload_vehicles` (`param1=0`, distancia/cantidad/tránsito, multiplicador signed-15); CB145 sustituye el target durante `update_station_ratings` (`param1` tipo histórico de vehículo; `param2` días/espera/velocidad, resultado signed-15). Faltan scopes avanzados y demás CBs. |
 | Cargoes (resto) / Types | varios | **OOS** | Sin ejecución de CB en este corte |
 | Generic | `0x01` `CBID_RANDOM_TRIGGER` | **OOS** | Ver triggers abajo |
+
+Nota de precisión aeroportuaria (2026-09-07): la geometría de layouts Action0
+ya selecciona N/E (o S/O del mismo eje), conserva el selector `STNN` y usa
+offsets directos al construir y rehidratar. No equivale a rotación runtime del
+compositor; el oráculo, regresiones y límites están en
+[newgrf-airport-layout-rotation-326.md](newgrf-airport-layout-rotation-326.md).
 
 ## Storage
 

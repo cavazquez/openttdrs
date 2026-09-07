@@ -6,6 +6,7 @@ use crate::{
     ENGINE_SHIP_FERRY, GameState, StopKind, TileCoord, TileKind, VehicleKind,
     airport_tile_is_hangar, airport_tile_is_heliport, apply_command,
 };
+use crate::{AirportClassId, AirportLayoutTile, AirportTileLayout, NewgrfAirportSpecDef};
 
 #[test]
 fn place_heliport_and_buy_helicopter() {
@@ -76,6 +77,109 @@ fn place_airport_small_footprint_and_hangar_buy() {
     )
     .unwrap_err();
     assert!(matches!(err, crate::CommandError::InvalidDepotTile));
+}
+
+#[test]
+fn newgrf_airport_build_uses_declared_east_layout_without_transposing_tiles() {
+    // `AirportTileTableIterator` usa los offsets Action0 tal cual. La segunda
+    // variante no es la transposición de la primera: además de ocupar 2×4,
+    // publica un gfx distinto para verificar que se eligió el layout E real.
+    let mut s = GameState::new(16, 16);
+    s.airport_spec_catalog.push(NewgrfAirportSpecDef {
+        id: 10,
+        class: AirportClassId::Small,
+        label: "Rotaciones".into(),
+        short_label: "Rot".into(),
+        size_x: 4,
+        size_y: 2,
+        catchment: 4,
+        noise_level: 1,
+        subst_id: crate::AirportSpecId::Small,
+        ttd_airport_type: 0,
+        layouts: vec![
+            AirportTileLayout {
+                rotation: 0,
+                tiles: vec![
+                    AirportLayoutTile {
+                        x: 0,
+                        y: 0,
+                        gfx: 24,
+                    },
+                    AirportLayoutTile {
+                        x: 3,
+                        y: 1,
+                        gfx: 14,
+                    },
+                ],
+            },
+            AirportTileLayout {
+                rotation: 2,
+                tiles: vec![
+                    AirportLayoutTile {
+                        x: 0,
+                        y: 0,
+                        gfx: 24,
+                    },
+                    AirportLayoutTile {
+                        x: 1,
+                        y: 3,
+                        gfx: 18,
+                    },
+                ],
+            },
+        ],
+        enabled: true,
+        min_year: 0,
+        max_year: u16::MAX,
+        maintenance_cost: 0,
+        associated_badges: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_grfid: 0,
+        newgrf_views: Vec::new(),
+        newgrf_purchase_views: Vec::new(),
+    });
+    s.current_airport_newgrf_id = Some(10);
+    let origin = TileCoord::new(2, 2);
+    assert_eq!(
+        crate::airport::newgrf_airport_footprint(&s.airport_spec_catalog[0], true),
+        (2, 4),
+        "el área E intercambia sólo las dimensiones, no los offsets Action0"
+    );
+
+    assert!(
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin,
+                axis_y: true,
+                spec: crate::AirportSpecId::Small,
+            },
+        )
+        .is_ok(),
+        "airport NewGRF este"
+    );
+
+    let station = &s.stations[0];
+    assert_eq!(station.airport_layout, 1);
+    assert_eq!(station.airport_rotation, 2);
+    assert_eq!(
+        station.airport_tiles,
+        vec![TileCoord::new(2, 2), TileCoord::new(3, 5)],
+        "los offsets E de Action0 no se transponen"
+    );
+    assert_eq!(
+        station.airport_tile_gfx,
+        vec![(TileCoord::new(2, 2), 24), (TileCoord::new(3, 5), 18)],
+        "se conserva el gfx de la variante E seleccionada"
+    );
+    assert_eq!(
+        s.map.get_kind(TileCoord::new(3, 5)),
+        Some(TileKind::Airport)
+    );
+    assert_ne!(
+        s.map.get_kind(TileCoord::new(5, 3)),
+        Some(TileKind::Airport)
+    );
 }
 
 #[test]

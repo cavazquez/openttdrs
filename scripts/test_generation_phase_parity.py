@@ -1139,6 +1139,114 @@ def test_rmap_155_evidence_records_toyland_ordered_industry_attempts() -> None:
     ]
 
 
+def test_rmap_157_evidence_records_compact_tropic_1024_industry_attempts() -> None:
+    """El caso grande conserva hashes completos sin versionar 151.843 filas."""
+    evidence = json.loads(
+        (phase.ROOT / "docs/parity/evidence/rmap-157.json").read_text(encoding="utf-8")
+    )
+    assert evidence["issue"] == 498
+    assert (
+        evidence["contract"]
+        == "RMAP-157 Tropic river 1024x1024 generation boundaries and ordered industry attempts"
+    )
+    assert evidence["scope"] == {
+        "size": 1024,
+        "seed": 1330935380,
+        "climate": "tropic",
+        "generation_settings": {
+            "amount_of_rivers": 1,
+            "min_river_length": 2,
+            "river_route_random": 1,
+            "water_borders": 0,
+        },
+        "oracle_timeout_seconds": 300,
+        "phases": ["landscape", "clear", "towns", "industries", "objects", "trees"],
+    }
+    comparison = evidence["comparison"]
+    assert comparison["compact_report_schema_version"] == 1
+    assert comparison["source_report_schema_version"] == 6
+    assert comparison["compact_report_bytes"] == 33723
+    assert comparison["all_exact"] and comparison["first_divergent_stage"] is None
+    assert comparison["block_size"] == 4
+    assert comparison["block_grid"] == {"width": 256, "height": 256, "count": 65536}
+    assert comparison["ordered_sequence_encoding"] == (
+        "JSON UTF-8 sort_keys=true separators=(',', ':') SHA-256"
+    )
+    assert comparison["generation_state_fields"] == [
+        "random_state_0",
+        "random_state_1",
+        "town_count",
+        "town_positions[id,x,y,population,num_houses]",
+        "industry_count",
+        "industry_positions[id,type,x,y,selected_layout,random,random_colour,counter,prod_level,town_id]",
+        "industry_attempt_count",
+        "industry_attempts[ordinal,type,x,y,random_var8f,initial_random_bits,layout_index,succeeded]",
+        "object_count",
+        "object_positions[id,type,x,y,width,height,view]",
+    ]
+    results = evidence["phase_results"]
+    assert [result["phase"] for result in results] == evidence["scope"]["phases"]
+    assert all(
+        result["tile_difference_count"] == 0 and result["changed_block_count"] == 0
+        for result in results
+    )
+    assert [
+        (
+            result["town_count"],
+            result["industry_count"],
+            result["industry_attempt_count"],
+            result["object_count"],
+        )
+        for result in results
+    ] == [
+        (0, 0, 0, 0),
+        (0, 0, 0, 0),
+        (371, 0, 0, 0),
+        (371, 868, 151843, 0),
+        (371, 868, 151843, 240),
+        (371, 868, 151843, 240),
+    ]
+    assert evidence["industry_attempt_trace_at_industries"] == {
+        "count": 151843,
+        "succeeded_count": 868,
+        "rejected_count": 150975,
+        "first": {
+            "ordinal": 0,
+            "type": 4,
+            "x": 832,
+            "y": 638,
+            "random_var8f": 3673026387,
+            "initial_random_bits": 49855,
+            "layout_index": 1,
+            "succeeded": False,
+        },
+        "last": {
+            "ordinal": 151842,
+            "type": 23,
+            "x": 136,
+            "y": 258,
+            "random_var8f": 3801484120,
+            "initial_random_bits": 7024,
+            "layout_index": 0,
+            "succeeded": True,
+        },
+    }
+    assert set(evidence["ordered_sequence_sha256"]) == {
+        "towns_at_towns",
+        "industries_at_industries",
+        "industry_attempts_at_industries",
+        "objects_at_objects",
+    }
+    assert evidence["not_observed"] == [
+        "industry fields outside identity, constructor random/colour/counter/level/town and selected_layout",
+        "industry creation-helper rejection reason and per-layout retry diagnostics",
+        "aquatic industries including IT_OIL_RIG",
+        "object fields outside identity, type, origin, footprint and view",
+        "startup and subsequent simulation ticks",
+        "other seeds, sizes, climates and generation setting combinations",
+    ]
+
+
 if __name__ == "__main__":
     test_compact_report_hashes_full_pools_without_serializing_them()
     test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles()
@@ -1160,4 +1268,5 @@ if __name__ == "__main__":
     test_rmap_153_evidence_records_tropic_river_ordered_industry_attempts()
     test_rmap_154_evidence_records_arctic_river_ordered_industry_attempts()
     test_rmap_155_evidence_records_toyland_ordered_industry_attempts()
+    test_rmap_157_evidence_records_compact_tropic_1024_industry_attempts()
     print("OK: generation_phase_parity tests")

@@ -106,6 +106,11 @@ que habilita casos grandes sin convertir sus trazas en artefactos versionados
 gigantes. No sustituye el reporte completo al diagnosticar una divergencia ni
 reduce el alcance pendiente de #338.
 
+RMAP-157 / #498 aplica esa evidencia a Tropic/ríos 1024²: la seed
+`1330935380` mantiene sus seis fronteras exactas, incluidos 151.843 intentos
+industriales. La configuración, timeout, hashes y límites quedan sólo en
+`random-map-issues.md` y `evidence/rmap-157.json`; #338 no se cierra.
+
 Actualizado el 2026-09-05: el último `main` observado antes de RMAP-152
 (`3a4736fd`) completó CI, Parity docs, Fuzz replay y Platform check en verde.
 La reparación del checkout limpio está incluida y #333 se cerró con esa

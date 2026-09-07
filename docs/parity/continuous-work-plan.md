@@ -2372,3 +2372,9 @@ la lista de carteles localiza acciones, estado vacío y encabezado dinámico.
 ID, coordenadas y nombres de usuario permanecen literales; centrar, renombrar,
 borrar y remapear no cambian. #331 sigue abierto por los catálogos upstream y
 superficies UI restantes.
+
+Actualización #331-ROAD-RAIL-TOOLTIPS-477 (2026-09-07, issue [#477](https://github.com/cavazquez/openttdrs/issues/477)):
+los tooltips RailType/RoadType y la abreviatura `Eléc` consultan el catálogo
+inglés. Selectores, filtros, IDs y labels NewGRF permanecen intactos; la
+regresión cubre todas las descripciones nuevas. #331 sigue abierto por los
+catálogos upstream y superficies UI restantes.

@@ -379,6 +379,19 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Eliminar cartel" => "Delete sign",
         "Aplicar" => "Apply",
         "Clic en una fila para seleccionar:" => "Click a row to select:",
+        "Eléc" => "Elec",
+        "Tipo de vía: normal (construir / convertir)" => "Rail type: normal (build / convert)",
+        "Tipo de vía: eléctrica (construir / convertir)" => {
+            "Rail type: electric (build / convert)"
+        }
+        "Tipo de vía: monorail (construir / convertir)" => "Rail type: monorail (build / convert)",
+        "Tipo de vía: maglev (construir / convertir)" => "Rail type: maglev (build / convert)",
+        "Tipo de carretera (vanilla + NewGRF Action0/1/3)" => {
+            "Road type (vanilla + NewGRF Action0/1/3)"
+        }
+        "Tipo de tranvía (vanilla + NewGRF Action0/1/3)" => {
+            "Tram type (vanilla + NewGRF Action0/1/3)"
+        }
         "Coloca la boya en agua navegable para abrir rutas." => {
             "Place the buoy in navigable water to open routes."
         }
@@ -1336,6 +1349,31 @@ mod tests {
             (
                 "Clic en una fila para seleccionar:",
                 "Click a row to select:",
+            ),
+            ("Eléc", "Elec"),
+            (
+                "Tipo de vía: normal (construir / convertir)",
+                "Rail type: normal (build / convert)",
+            ),
+            (
+                "Tipo de vía: eléctrica (construir / convertir)",
+                "Rail type: electric (build / convert)",
+            ),
+            (
+                "Tipo de vía: monorail (construir / convertir)",
+                "Rail type: monorail (build / convert)",
+            ),
+            (
+                "Tipo de vía: maglev (construir / convertir)",
+                "Rail type: maglev (build / convert)",
+            ),
+            (
+                "Tipo de carretera (vanilla + NewGRF Action0/1/3)",
+                "Road type (vanilla + NewGRF Action0/1/3)",
+            ),
+            (
+                "Tipo de tranvía (vanilla + NewGRF Action0/1/3)",
+                "Tram type (vanilla + NewGRF Action0/1/3)",
             ),
             (
                 "Coloca la boya en agua navegable para abrir rutas.",

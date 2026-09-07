@@ -522,7 +522,9 @@ mod tests {
     fn tick_for_calendar_year_matches_news_helper() {
         assert_eq!(
             tick_for_calendar_year(2000),
-            openttdrs_core::GameTick::new(50 * openttdrs_core::economy::TICKS_PER_YEAR)
+            // Entre 1950 y 2000 hay doce años bisiestos (1952…1996).
+            // El helper debe usar los 18_262 días gregorianos, no 50 × 365.
+            openttdrs_core::GameTick::new(18_262 * u64::from(openttdrs_core::TICKS_PER_DAY))
         );
     }
 

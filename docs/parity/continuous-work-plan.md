@@ -156,16 +156,18 @@ mismo JSONL v1 en el corte post-timer y el comparador exige reloj, RNG, `ECMY`,
 derivar tick, calendario ni economía entre sí; la corrida controlada iguala el
 estado inicial de reloj y RNG persistido. #508 conserva el `INDY.counter` de
 16 bits y #509 conserva `INDY.location.tile` ante footprints incompletos; la
-comparación avanza ahora al `random_state` del arranque dedicated. RMAP-162
-cierra instrumentación y regresiones, no afirma todavía paridad temporal ni
-reduce los pendientes de #499, RMAP-056 o #338.
+comparación normal avanza al primer residual de runtime, el decremento por tick
+de `INDY.counter` (#511). #510 impide que una ejecución dedicated sin socket
+se acepte como oracle aunque produzca JSONL válida. RMAP-162 cierra
+instrumentación y regresiones, no afirma todavía paridad temporal ni reduce
+los pendientes de #499, RMAP-056 o #338.
 
 Actualizado el 2026-09-07: RMAP-159/#500, RMAP-160/#501, RMAP-161/#502 y
 RMAP-162/#506 son sub-issues cerrados de estado/selección, observación nativa,
 ejecución vanilla e instrumentación diferencial. #507 conserva la cobertura de
-carga `DATE`; el RNG post-carga y el runtime posterior conservan los
-residuales separados. Los gates continúan siendo obligatorios y ningún
-issue padre se considera cerrado por esta cobertura.
+carga `DATE`, #510 valida la calidad de la corrida native y #511 mantiene
+separado el runtime posterior. Los gates continúan siendo obligatorios y
+ningún issue padre se considera cerrado por esta cobertura.
 
 Reparación #347 validada (2026-09-04): las casas sin PNG suelto se recortan
 del atlas distribuido y conservan la misma paleta; las páginas se decodifican

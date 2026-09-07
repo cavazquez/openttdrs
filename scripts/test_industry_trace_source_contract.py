@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -139,7 +140,48 @@ class IndustryTraceSourceContractTest(unittest.TestCase):
         exporter = EXPORTER.read_text(encoding="utf-8")
         self.assertIn('OPENTTDRS_INDUSTRY_TRACE_OUT="$OUT"', exporter)
         self.assertIn('OPENTTDRS_INDUSTRY_TRACE_DAYS="$DAYS"', exporter)
+        self.assertIn('Could not bind socket', exporter)
         self.assertIn('validate_industry_trace.py" "$OUT" "$DAYS" openttd', exporter)
+
+    def test_native_runner_rejects_a_valid_trace_after_socket_bind_failure(self) -> None:
+        """Una JSONL bien formada no basta si dedicated cambió su arranque."""
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            build_dir = temp_path / "build"
+            build_dir.mkdir()
+            baseset = temp_path / "baseset"
+            baseset.mkdir()
+            save = temp_path / "fixture.sav"
+            save.touch()
+            output = temp_path / "industry.jsonl"
+            trace = "\n".join(json.dumps(row) for row in valid_trace()) + "\n"
+            fake_openttd = build_dir / "openttd"
+            fake_openttd.write_text(
+                "#!/usr/bin/env python3\n"
+                "import os\n"
+                "from pathlib import Path\n"
+                "import sys\n"
+                f"Path(os.environ['OPENTTDRS_INDUSTRY_TRACE_OUT']).write_text({trace!r}, encoding='utf-8')\n"
+                "print('dbg: [net:0] Could not bind socket on 127.0.0.1: Operation not permitted', file=sys.stderr)\n",
+                encoding="utf-8",
+            )
+            fake_openttd.chmod(0o755)
+            result = subprocess.run(
+                [str(EXPORTER), str(save), str(output), "1"],
+                cwd=ROOT,
+                env={
+                    **os.environ,
+                    "OPENTTD_BIN": str(fake_openttd),
+                    "OPENTTDRS_OPENGFX_DIR": str(baseset),
+                    "OPENTTDRS_DEPS_PREFIX": str(temp_path / "prefix"),
+                },
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Could not bind socket", result.stderr)
+        self.assertIn("no se acepta como oracle RNG", result.stderr)
 
     def test_candidate_runner_exports_and_compares_the_contract(self) -> None:
         runner = CANDIDATE_RUNNER.read_text(encoding="utf-8")

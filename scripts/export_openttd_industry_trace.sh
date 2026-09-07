@@ -19,6 +19,7 @@ COMMIT="$(openttd_manifest_get "$ROOT" commit)"
 BUILD_DIR="$(dirname "$BIN")"
 BASESET_SRC="${OPENTTDRS_OPENGFX_DIR:-${ROOT}/.deps/openttd-baseset/opengfx-8.0}"
 PREFIX="${OPENTTDRS_DEPS_PREFIX:-${ROOT}/.deps/openttd-prefix}"
+TRACE_LOG="/tmp/openttdrs-industry-trace.log"
 
 if [[ ! -f "$SAV" ]]; then
   echo "error: no existe $SAV" >&2
@@ -55,12 +56,19 @@ export OPENTTDRS_SNAPSHOT_MIN_CALL="${OPENTTDRS_SNAPSHOT_MIN_CALL:-2}"
 
 echo "oráculo scheduler industrias OpenTTD: bin=$BIN sav=$SAV días=$DAYS out=$OUT commit=$COMMIT"
 cd "$BUILD_DIR"
-timeout 180s ./openttd -X -I opengfx -D -g "$SAV" >/tmp/openttdrs-industry-trace.log 2>&1 || rc=$?
+timeout 180s ./openttd -X -I opengfx -D -g "$SAV" >"$TRACE_LOG" 2>&1 || rc=$?
 rc="${rc:-0}"
+
+if grep -Fq "Could not bind socket" "$TRACE_LOG"; then
+  echo "error: OpenTTD dedicated no pudo abrir un socket; la traza puede seguir una ruta de arranque distinta." >&2
+  echo "ejecutá el oráculo fuera del sandbox o con sockets permitidos; no se acepta como oracle RNG." >&2
+  tail -n 40 "$TRACE_LOG" >&2 || true
+  exit 1
+fi
 
 if [[ ! -s "$OUT" ]]; then
   echo "error: no se generó la traza de industrias (exit=$rc). Log:" >&2
-  tail -n 40 /tmp/openttdrs-industry-trace.log >&2 || true
+  tail -n 40 "$TRACE_LOG" >&2 || true
   exit 1
 fi
 

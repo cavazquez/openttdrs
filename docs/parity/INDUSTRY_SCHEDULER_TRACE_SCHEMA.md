@@ -2,8 +2,9 @@
 
 Actualizado: 2026-09-07. Sub-issues: #501 (oráculo), #502 (ejecución vanilla)
 y #506 (candidato/comparador); padre de runtime: #499 / RMAP-158. #507
-conserva la importación de los relojes `DATE` y el estado RNG de carga; el
-primer residual de entidad se separa de ese contrato.
+conserva la importación de los relojes `DATE` y el estado RNG de carga; #510
+rechaza una ejecución dedicated degradada y #511 aísla el primer residual de
+runtime posterior.
 
 `OPENTTDRS_INDUSTRY_TRACE_OUT` habilita, exclusivamente en el binario OpenTTD
 instrumentado, una traza JSONL de la rutina diaria
@@ -29,6 +30,12 @@ El exportador arma el hook después del segundo `AfterLoadGame` por defecto,
 porque el dedicado crea primero una partida temporal antes de cargar `-g`.
 `OPENTTDRS_SNAPSHOT_MIN_CALL=1` sólo se usa para fixtures que no tienen esa
 partida temporal.
+
+El dedicated debe poder abrir su socket de red. El exportador rechaza una
+traza incluso si su JSONL es sintácticamente válida cuando el log contiene
+`Could not bind socket`: esa ruta de arranque puede consumir RNG distinto. En
+un sandbox se debe ejecutar el oracle con sockets permitidos; no se normaliza
+ni se compara esa salida degradada.
 
 El segundo exportador carga el mismo `.sav` mediante el core Rust, escribe una
 fila `initial` y captura cada fila `day` dentro del scheduler, inmediatamente
@@ -79,18 +86,16 @@ absoluta del contrato; no relaja `year`, `month`, `tick` ni RNG. La corrección
 de #507 conserva el `DATE` moderno completo —ambos relojes, sus fracciones y
 el tick— y, en la corrida controlada sobre la partida de trabajo, iguala en
 `initial` calendario, economía, tick y las dos palabras RNG que contiene el
-SAV. Un dedicado lanzado en un entorno que no le permite abrir su socket puede
-recorrer un arranque distinto; esa salida no se usa como oracle de importación.
+SAV. #510 rechaza la salida dedicated que no puede abrir su socket, porque esa
+ruta recorre un arranque distinto y no es un oracle de importación.
 
-Con los relojes ya alineados, el comparador expone su primer residual real:
-`INDY.counter` se cargaba truncado a 12 bits (`12730` nativo frente a `442` en
-el candidato) y #508 ya conserva los 16 bits. #509 mantiene
-`INDY.location.tile` como origen aun con un footprint incompleto; el comparador
-ya supera `industries[1].x` (`216` frente a `217`) y expone la siguiente
-diferencia: `initial.random_state.state_0` del arranque dedicated. Esa ruta de
-arranque debe caracterizarse contra el RNG persistido de `DATE` antes de
-atribuirla al scheduler. Hasta entonces —y hasta los residuales posteriores—
-este contrato no declara paridad runtime del scheduler.
+Con el estado inicial ya alineado, #508 conserva los 16 bits de `INDY.counter`
+y #509 mantiene `INDY.location.tile` como origen aun con un footprint
+incompleto. La primera diferencia válida queda en
+`day[1].industries[0].counter`: OpenTTD produce `12658` y el candidato
+`12730`. #511 cubre el decremento con wrapping que OpenTTD hace durante la
+producción por tick y su persistencia; hasta resolverlo —y los residuales que
+sigan— este contrato no declara paridad runtime del scheduler.
 
 ## Límites explícitos
 

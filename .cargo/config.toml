@@ -7,11 +7,14 @@
 #   consume lld al enlazar (histórico OOM/bus-error con inputs muy grandes).
 # - El código propio usa opt-level=1: compilación incremental rápida.
 #
-# No fijar mold/clang aquí: en CI (ubuntu-latest) suele faltar mold y clang rechaza
-# -fuse-ld=mold. Opcional en tu máquina (~/.cargo/config.toml o override local):
-#   [target.x86_64-unknown-linux-gnu]
-#   linker = "clang"
-#   rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+# Rust 1.98 + rust-lld puede producir símbolos ocultos sin resolver al enlazar
+# el binario de pruebas completo de Bevy (aunque `cargo check` pase). CI ya
+# instala `mold` mediante `.github/apt-packages.txt`; usarlo también aquí hace
+# reproducible la ruta local y evita depender de artefactos incrementales del
+# enlazador integrado.
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
 # Para producción: cargo run --release
 # Iteración local con Bevy enlazado dinámicamente: cargo client (ver alias abajo)

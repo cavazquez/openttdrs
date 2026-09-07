@@ -2452,3 +2452,11 @@ el estado dinámico de `VehicleView` localiza estados, velocidad, ausencia de
 órdenes y destinos fallback, preservando nombres de estación, coordenadas,
 colores, comandos y selección. Details, órdenes y estados avanzados de
 movimiento permanecen pendientes en #331 y sus bloques funcionales.
+
+Actualización #331-VEHICLE-DETAILS-LOCALE-489 (2026-09-07, issue [#489](https://github.com/cavazquez/openttdrs/issues/489)):
+`VehicleDetails` localiza título, pestañas, resumen de totales, unidades de
+potencia/edad, fiabilidad, depósito, renovación, velocidad, órdenes y año de
+coste; las cargas vanilla también siguen el locale activo. Nombres de motor y
+de cargas NewGRF/custom, IDs, coordenadas, importes, capacidad, consist y
+comandos permanecen intactos. Servicio, TE y editor de órdenes avanzado siguen
+pendientes en #331 y sus bloques funcionales.

@@ -10,7 +10,9 @@ mod details;
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
 
+use crate::i18n::localized_text;
 use crate::render::TruckHandles;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CRIMSON,
@@ -427,6 +429,7 @@ pub(crate) fn sync_vehicle_details_window(
     details_state: Res<VehicleDetailsWindowState>,
     chain: Res<VehicleChainRegistry>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(
         Entity,
@@ -474,6 +477,7 @@ pub(crate) fn sync_vehicle_details_window(
         (With<Button>, Without<VehicleDetailsAction>),
     >,
 ) {
+    let locale = prefs.locale();
     for (root_entity, mut win, slot, mut vis) in &mut root_q {
         if win.id != FloatingWindowId::VehicleDetails {
             continue;
@@ -499,7 +503,11 @@ pub(crate) fn sync_vehicle_details_window(
         };
         *vis = Visibility::Visible;
 
-        let title_name = format!("Detalles — {}", vehicle.display_name());
+        let title_name = format!(
+            "{} — {}",
+            localized_text(locale, "Detalles"),
+            vehicle.display_name()
+        );
         for (title, mut text, child_of) in &mut title_q {
             if title.0 != FloatingWindowId::VehicleDetails {
                 continue;
@@ -512,7 +520,7 @@ pub(crate) fn sync_vehicle_details_window(
             if sum_slot.0 != slot.0 {
                 continue;
             }
-            **summary = vehicle_details_summary(vehicle, &sim, slot_state.details_tab);
+            **summary = vehicle_details_summary(locale, vehicle, &sim, slot_state.details_tab);
         }
 
         let unit_ids = details_unit_ids(vehicle, &sim);
@@ -533,7 +541,8 @@ pub(crate) fn sync_vehicle_details_window(
             if let Some(&unit_id) = unit_ids.get(unit_text.unit_idx)
                 && let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id)
             {
-                **text = vehicle_details_unit_line(unit, vehicle, &sim, slot_state.details_tab);
+                **text =
+                    vehicle_details_unit_line(locale, unit, vehicle, &sim, slot_state.details_tab);
             } else {
                 **text = String::new();
             }

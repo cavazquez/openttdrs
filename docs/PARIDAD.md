@@ -1883,12 +1883,12 @@ y **una fila por unidad** (sprite lateral + texto según tab; scroll).
 
 | Feature OpenTTD | Estado en cliente | Cercanía |
 |---|---|---|
-| Edad + vida útil | Filas Details (Info) + depósito | **A** |
-| Beneficio este año / anterior | Resumen tab Totales | ✔ (campo en vehículo) |
-| Peso/potencia/esfuerzo tractor (TE) | Peso/potencia por unidad y consist | **A** para peso/potencia; TE es **B** |
-| Fiabilidad + nº de averías | Fiabilidad en fila Info; averías no | Fiabilidad ✔; averías **C** |
+| Edad + vida útil | Filas Details (Info) + depósito; unidades de edad localizadas (#489) | **A** |
+| Beneficio este año / anterior | Resumen tab Totales, etiquetas localizadas (#489) | ✔ (campo en vehículo) |
+| Peso/potencia/esfuerzo tractor (TE) | Peso/potencia por unidad y consist, `CV`/`hp` según locale (#489) | **A** para peso/potencia; TE es **B** |
+| Fiabilidad + nº de averías | Fiabilidad en fila Info (`fiab.`/`rel.`); averías no | Fiabilidad ✔; averías **C** |
 | Intervalo de servicio (`ChangeServiceInterval`, dropdown días/%/min) | No hay editor UI | La sim soporta intervalo en días o porcentaje, revisión y autoenvío road; falta el comando/editor por vehículo y la opción minutos |
-| **Lista de vagones con 4 pestañas** (cargo/info/capacidad/totales por vagón) | Filas con sprite + datos por tab (#175) | ✔ |
+| **Lista de vagones con 4 pestañas** (cargo/info/capacidad/totales por vagón) | Filas con sprite + datos por tab (#175), chrome y métricas localizados (#489) | ✔ |
 
 Con tren puntual, lo máximo alcanzable hoy es una ventana de detalles de
 «una unidad»: edad, peso/potencia, coste, fiabilidad, carga — todo A/B.

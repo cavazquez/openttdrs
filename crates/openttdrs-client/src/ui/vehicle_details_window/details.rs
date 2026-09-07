@@ -1,8 +1,9 @@
 //! Texto de detalles por unidad y resúmenes de tab (OpenTTD `DrawTrainDetails` / #175).
 
 use openttdrs_core::prelude::*;
-use openttdrs_core::{cargo_display_name, format_money};
+use openttdrs_core::{CargoType, cargo_spec_display_name, format_money};
 
+use crate::i18n::{Locale, localized_text};
 use crate::state::SimWorld;
 
 use super::VehicleDetailsTab;
@@ -14,10 +15,23 @@ pub(crate) fn speed_to_kmh(kind: VehicleKind, units: u16) -> u16 {
     }
 }
 
-pub(crate) fn cargo_type_label(vehicle: &openttdrs_core::Vehicle) -> String {
+pub(crate) fn cargo_type_label(
+    locale: Locale,
+    vehicle: &openttdrs_core::Vehicle,
+    sim: &SimWorld,
+) -> String {
     vehicle.cargo_type.map_or_else(
-        || "Cualquiera".to_string(),
-        |c| cargo_display_name(c).to_string(),
+        || localized_text(locale, "Cualquiera"),
+        |cargo| {
+            let name = cargo_spec_display_name(cargo, &sim.state.cargo_spec_catalog);
+            // Los nombres definidos por NewGRF son datos de la partida, no
+            // claves del catálogo vanilla: se conservan literalmente.
+            if matches!(cargo, CargoType::Custom(_)) {
+                name
+            } else {
+                localized_text(locale, &name)
+            }
+        },
     )
 }
 
@@ -30,6 +44,7 @@ pub(crate) fn details_unit_ids(vehicle: &openttdrs_core::Vehicle, sim: &SimWorld
 /// Resumen encima de la lista (tab Totales; vacío en el resto).
 #[must_use]
 pub(crate) fn vehicle_details_summary(
+    locale: Locale,
     vehicle: &openttdrs_core::Vehicle,
     sim: &SimWorld,
     tab: VehicleDetailsTab,
@@ -55,10 +70,17 @@ pub(crate) fn vehicle_details_summary(
         };
         (c.saturating_add(u.cargo), cap.saturating_add(u.capacity))
     });
+    let power_unit = if locale == Locale::En { "hp" } else { "CV" };
     format!(
-        "Unidades: {units} · Peso: {weight} t · Potencia: {power} CV · Carga: {cargo}/{capacity}\n\
-         Beneficio este año: {} · Anterior: {}",
+        "{}: {units} · {}: {weight} t · {}: {power} {power_unit} · {}: {cargo}/{capacity}\n\
+         {}: {} · {}: {}",
+        localized_text(locale, "Unidades"),
+        localized_text(locale, "Peso"),
+        localized_text(locale, "Potencia"),
+        localized_text(locale, "Carga"),
+        localized_text(locale, "Beneficio este año"),
         format_money(vehicle.profit_this_year),
+        localized_text(locale, "Anterior"),
         format_money(vehicle.profit_last_year),
     )
 }
@@ -66,6 +88,7 @@ pub(crate) fn vehicle_details_summary(
 /// Línea de datos de una unidad según el tab activo.
 #[must_use]
 pub(crate) fn vehicle_details_unit_line(
+    locale: Locale,
     unit: &openttdrs_core::Vehicle,
     head: &openttdrs_core::Vehicle,
     sim: &SimWorld,
@@ -81,36 +104,40 @@ pub(crate) fn vehicle_details_unit_line(
                 .get(unit.owner.index())
                 .map_or(6, |c| c.engine_renew_months);
             let age_note = if unit.needs_autorenewing(sim.state.tick.get(), renew_months) {
-                " · renovar"
-            } else {
-                ""
-            };
-            let depot_note = if openttdrs_core::vehicle_in_depot(&sim.state.map, unit.pos) {
-                " · depósito"
-            } else {
-                ""
-            };
-            let is_head = unit.id == head.id;
-            let power_note = if is_head || engine.power_hp > 0 {
-                format!(" · {} CV", engine.power_hp)
+                format!(" · {}", localized_text(locale, "renovar"))
             } else {
                 String::new()
             };
+            let depot_note = if openttdrs_core::vehicle_in_depot(&sim.state.map, unit.pos) {
+                format!(" · {}", localized_text(locale, "depósito"))
+            } else {
+                String::new()
+            };
+            let is_head = unit.id == head.id;
+            let power_note = if is_head || engine.power_hp > 0 {
+                let power_unit = if locale == Locale::En { "hp" } else { "CV" };
+                format!(" · {} {power_unit}", engine.power_hp)
+            } else {
+                String::new()
+            };
+            let age_unit = if locale == Locale::En { "y" } else { "a" };
             format!(
-                "#{} {} · {} t{power_note} · {age}a{age_note} · fiab. {}%{depot_note}",
+                "#{} {} · {} t{power_note} · {age}{age_unit}{age_note} · {} {}%{depot_note}",
                 unit.id,
                 engine.name,
                 engine.weight_t,
+                localized_text(locale, "fiab."),
                 unit.reliability / 100,
             )
         }
         VehicleDetailsTab::Cargo => format!(
-            "#{} {} · {} {}/{} · packets {}",
+            "#{} {} · {} {}/{} · {} {}",
             unit.id,
             engine.name,
-            cargo_type_label(unit),
+            cargo_type_label(locale, unit, sim),
             unit.cargo,
             unit.capacity,
+            localized_text(locale, "packets"),
             unit.cargo_packets.packets.len(),
         ),
         VehicleDetailsTab::Capacity => format!(
@@ -118,16 +145,17 @@ pub(crate) fn vehicle_details_unit_line(
             unit.id,
             engine.name,
             unit.capacity,
-            cargo_type_label(unit),
+            cargo_type_label(locale, unit, sim),
         ),
         VehicleDetailsTab::Totals => format!(
-            "#{} {} · {} t · {}/{} · ${}/año",
+            "#{} {} · {} t · {}/{} · ${}/{}",
             unit.id,
             engine.name,
             engine.weight_t,
             unit.cargo,
             unit.capacity,
             engine.running_cost_year,
+            localized_text(locale, "año"),
         ),
     }
 }
@@ -136,12 +164,13 @@ pub(crate) fn vehicle_details_unit_line(
 #[cfg(test)]
 #[must_use]
 pub(crate) fn vehicle_details_body(
+    locale: Locale,
     vehicle: &openttdrs_core::Vehicle,
     sim: &SimWorld,
     tab: VehicleDetailsTab,
 ) -> String {
     let mut lines = Vec::new();
-    let summary = vehicle_details_summary(vehicle, sim, tab);
+    let summary = vehicle_details_summary(locale, vehicle, sim, tab);
     if !summary.is_empty() {
         lines.push(summary);
     }
@@ -149,14 +178,14 @@ pub(crate) fn vehicle_details_body(
         let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id) else {
             continue;
         };
-        lines.push(vehicle_details_unit_line(unit, vehicle, sim, tab));
+        lines.push(vehicle_details_unit_line(locale, unit, vehicle, sim, tab));
     }
     // Tab Info de un solo vehículo: enriquecer con velocidad/órdenes (cabeza).
     if tab == VehicleDetailsTab::Info && details_unit_ids(vehicle, sim).len() == 1 {
         let engine = vehicle.effective_engine();
-        let shared = vehicle
-            .shared_order_id
-            .map_or_else(String::new, |id| format!(" · Órdenes compartidas #{id}"));
+        let shared = vehicle.shared_order_id.map_or_else(String::new, |id| {
+            format!(" · {} #{id}", localized_text(locale, "Órdenes compartidas"))
+        });
         let active_order = if vehicle.orders.is_empty() {
             "—".to_string()
         } else {
@@ -169,12 +198,17 @@ pub(crate) fn vehicle_details_body(
             )
         };
         lines.push(format!(
-            "Posición: ({}, {}) · Velocidad: {} km/h (máx. {}) · Órdenes: {} · Activa: {active_order}{shared}",
+            "{} ({}, {}) · {}: {} km/h ({} {}) · {}: {} · {}: {active_order}{shared}",
+            localized_text(locale, "Posición:"),
             vehicle.pos.x,
             vehicle.pos.y,
+            localized_text(locale, "Velocidad"),
             speed_to_kmh(vehicle.kind, vehicle.cur_speed),
+            localized_text(locale, "máx."),
             engine.speed_kmh(),
+            localized_text(locale, "Órdenes"),
             vehicle.orders.len(),
+            localized_text(locale, "Activa"),
         ));
     }
     lines.join("\n")
@@ -205,12 +239,12 @@ mod tests {
             state,
             ..SimWorld::default()
         };
-        let body = vehicle_details_body(&vehicle, &sim, VehicleDetailsTab::Info);
+        let body = vehicle_details_body(Locale::Es, &vehicle, &sim, VehicleDetailsTab::Info);
         assert!(body.contains("fiab."));
         assert!(body.contains(" t "));
-        let cargo = vehicle_details_body(&vehicle, &sim, VehicleDetailsTab::Cargo);
+        let cargo = vehicle_details_body(Locale::Es, &vehicle, &sim, VehicleDetailsTab::Cargo);
         assert!(cargo.contains("packets"));
-        let totals = vehicle_details_body(&vehicle, &sim, VehicleDetailsTab::Totals);
+        let totals = vehicle_details_body(Locale::Es, &vehicle, &sim, VehicleDetailsTab::Totals);
         assert!(totals.contains("Unidades:"));
     }
 
@@ -230,7 +264,13 @@ mod tests {
         };
         let ids = details_unit_ids(&vehicle, &sim);
         assert_eq!(ids, vec![9]);
-        let line = vehicle_details_unit_line(&vehicle, &vehicle, &sim, VehicleDetailsTab::Capacity);
+        let line = vehicle_details_unit_line(
+            Locale::Es,
+            &vehicle,
+            &vehicle,
+            &sim,
+            VehicleDetailsTab::Capacity,
+        );
         assert!(line.contains("#9"));
         assert!(line.contains("cap."));
     }
@@ -262,9 +302,47 @@ mod tests {
         let head = &sim.state.vehicles[0];
         let ids = details_unit_ids(head, &sim);
         assert_eq!(ids, vec![1, 2]);
-        let body = vehicle_details_body(head, &sim, VehicleDetailsTab::Cargo);
+        let body = vehicle_details_body(Locale::Es, head, &sim, VehicleDetailsTab::Cargo);
         assert!(body.contains("#1"));
         assert!(body.contains("#2"));
         assert!(body.contains("12/40"));
+    }
+
+    #[test]
+    fn english_details_localize_chrome_and_preserve_engine_custom_name_and_values() {
+        let mut state = GameState::new(8, 8);
+        let mut vehicle = Vehicle::new(
+            42,
+            VehicleKind::Bus,
+            TileCoord::new(3, 4),
+            TileCoord::new(3, 4),
+        );
+        vehicle.name = Some("Línea Ñandú".into());
+        vehicle.cargo_type = Some(CargoType::Goods);
+        vehicle.cargo = 7;
+        vehicle.capacity = 12;
+        vehicle.cur_speed = 80;
+        state.vehicles.push(vehicle.clone());
+        let sim = SimWorld {
+            state,
+            ..SimWorld::default()
+        };
+
+        let info = vehicle_details_body(Locale::En, &vehicle, &sim, VehicleDetailsTab::Info);
+        assert!(info.contains("rel."));
+        assert!(info.contains("Speed"));
+        assert!(info.contains("Active"));
+        assert!(info.contains("Línea Ñandú") || info.contains("Bus"));
+
+        let cargo = vehicle_details_body(Locale::En, &vehicle, &sim, VehicleDetailsTab::Cargo);
+        assert!(cargo.contains("goods"));
+        assert!(cargo.contains("7/12"));
+
+        let totals = vehicle_details_body(Locale::En, &vehicle, &sim, VehicleDetailsTab::Totals);
+        assert!(totals.contains("Units:"));
+        assert!(totals.contains("Weight:"));
+        assert!(totals.contains("Profit this year:"));
+        assert!(totals.contains("/year"));
+        assert!(!totals.contains("Unidades:") && !totals.contains("Peso:"));
     }
 }

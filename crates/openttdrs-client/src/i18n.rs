@@ -402,6 +402,11 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Aviones" => "Aircraft",
         "Finanzas" => "Finances",
         "Compañía" => "Company",
+        "Préstamo" => "Loan",
+        "vehículos" => "vehicles",
+        "Stub — Livery/ManagerFace/Infrastructure residual (#271)." => {
+            "Stub — residual Livery/ManagerFace/Infrastructure (#271)."
+        }
         "Ingresos" => "Income",
         "Beneficio operativo" => "Operating profit",
         "Valor de compañía" => "Company value",

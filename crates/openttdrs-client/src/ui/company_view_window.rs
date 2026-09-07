@@ -6,6 +6,8 @@
 use bevy::prelude::*;
 use openttdrs_core::format_money;
 
+use crate::i18n::localized_text;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::finances_window::FinancesWindowState;
 use crate::ui::floating_window::{
@@ -23,6 +25,9 @@ pub(crate) struct CompanyViewWindowState {
 
 #[derive(Component)]
 pub(crate) struct CompanyViewBodyText;
+
+#[derive(Component)]
+pub(crate) struct CompanyViewButtonText;
 
 #[derive(Component, Clone, Copy)]
 pub(crate) enum CompanyViewButton {
@@ -65,6 +70,7 @@ pub(crate) fn setup_company_view_window(mut commands: Commands, asset_server: Re
             Interaction::default(),
             BuildMenuUi,
             children![(
+                CompanyViewButtonText,
                 Text::new("Finanzas…"),
                 window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(WINDOW_TEXT),
@@ -102,10 +108,30 @@ pub(crate) fn handle_company_view_buttons(
 pub(crate) fn sync_company_view_window(
     state: Res<CompanyViewWindowState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
-    mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<CompanyViewBodyText>>,
-    mut body_q: Query<&mut Text, (With<CompanyViewBodyText>, Without<FloatingWindowTitleText>)>,
+    mut title_q: Query<
+        (&FloatingWindowTitleText, &mut Text),
+        (Without<CompanyViewBodyText>, Without<CompanyViewButtonText>),
+    >,
+    mut body_q: Query<
+        &mut Text,
+        (
+            With<CompanyViewBodyText>,
+            Without<FloatingWindowTitleText>,
+            Without<CompanyViewButtonText>,
+        ),
+    >,
+    mut button_text_q: Query<
+        &mut Text,
+        (
+            With<CompanyViewButtonText>,
+            Without<FloatingWindowTitleText>,
+            Without<CompanyViewBodyText>,
+        ),
+    >,
 ) {
+    let locale = prefs.locale();
     let Some((_, mut vis)) = root_q
         .iter_mut()
         .find(|(w, _)| w.id == FloatingWindowId::CompanyView)
@@ -123,7 +149,9 @@ pub(crate) fn sync_company_view_window(
         .companies
         .iter()
         .find(|c| c.id == sim.state.active_company);
-    let name = company.map(|c| c.name.as_str()).unwrap_or("Compañía");
+    let name = company
+        .map(|c| c.name.clone())
+        .unwrap_or_else(|| localized_text(locale, "Compañía"));
     let money = company
         .map(|c| c.economy.money)
         .unwrap_or(sim.state.economy.money);
@@ -141,14 +169,24 @@ pub(crate) fn sync_company_view_window(
         .iter_mut()
         .find(|(tt, _)| tt.0 == FloatingWindowId::CompanyView)
     {
-        **title = format!("Compañía — {name}");
+        **title = format!("{} — {name}", localized_text(locale, "Compañía"));
+    }
+    for mut text in &mut button_text_q {
+        **text = localized_text(locale, "Finanzas…");
     }
     if let Ok(mut body) = body_q.single_mut() {
         **body = format!(
-            "{name}\nDinero: {}\nPréstamo: {}\nFlota: {fleet} vehículos\n\
-             Stub — Livery/ManagerFace/Infrastructure residual (#271).",
+            "{name}\n{}: {}\n{}: {}\n{}: {fleet} {}\n{}",
+            localized_text(locale, "Dinero"),
             format_money(money),
+            localized_text(locale, "Préstamo"),
             format_money(loan),
+            localized_text(locale, "Flota"),
+            localized_text(locale, "vehículos"),
+            localized_text(
+                locale,
+                "Stub — Livery/ManagerFace/Infrastructure residual (#271).",
+            ),
         );
     }
 }
@@ -180,5 +218,22 @@ mod tests {
             .run_system_once(open_company_view_from_routes)
             .unwrap();
         assert!(world.resource::<CompanyViewWindowState>().open);
+    }
+
+    #[test]
+    fn company_view_localizes_chrome_without_mutating_company_name_or_values() {
+        assert_eq!(
+            localized_text(crate::i18n::Locale::En, "Compañía"),
+            "Company"
+        );
+        assert_eq!(localized_text(crate::i18n::Locale::En, "Préstamo"), "Loan");
+        assert_eq!(
+            localized_text(crate::i18n::Locale::En, "vehículos"),
+            "vehicles"
+        );
+        assert_eq!(
+            localized_text(crate::i18n::Locale::En, "Compañía Ñandú"),
+            "Compañía Ñandú"
+        );
     }
 }

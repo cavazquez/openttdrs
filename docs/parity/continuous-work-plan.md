@@ -2413,3 +2413,9 @@ la ventana de autoridad localiza título, estado, resumen, ratings, las ocho
 acciones y sus estados de disponibilidad, sin mutar costes, máscaras, nombres,
 IDs, cascada ni efectos diferidos. #331 sigue abierto por los catálogos
 upstream y superficies UI restantes.
+
+Actualización #331-COMPANY-VIEW-LOCALE-483 (2026-09-07, issue [#483](https://github.com/cavazquez/openttdrs/issues/483)):
+la vista de compañía localiza título, botón Finanzas y resumen de dinero,
+préstamo y flota, preservando nombres, importes, conteos, IDs y navegación. El
+residual de Livery/ManagerFace/Infrastructure permanece explícito; #331 sigue
+abierto por ese alcance, catálogos upstream y superficies UI restantes.

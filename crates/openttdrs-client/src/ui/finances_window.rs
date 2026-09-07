@@ -4,6 +4,8 @@ use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::{LOAN_INTERVAL, format_money};
 
+use crate::i18n::{Locale, localized_text};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
@@ -29,9 +31,13 @@ pub(crate) enum FinancesWindowButton {
     OpenAiSettings,
 }
 
+#[derive(Component, Clone, Copy)]
+pub(crate) struct FinancesWindowButtonText(pub(crate) FinancesWindowButton);
+
 #[derive(Default)]
 pub(crate) struct FinancesSyncCache {
     snapshot: Option<FinancesSnapshot>,
+    locale: Option<Locale>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,11 +91,11 @@ pub(crate) fn setup_finances_window(mut commands: Commands, asset_server: Res<As
             ..default()
         },))
             .with_children(|row| {
-                for (label, button) in [
-                    ("Pedir préstamo", FinancesWindowButton::IncreaseLoan),
-                    ("Devolver préstamo", FinancesWindowButton::DecreaseLoan),
-                    ("Comprar rival (quiebra)", FinancesWindowButton::BuyRival),
-                    ("IA…", FinancesWindowButton::OpenAiSettings),
+                for button in [
+                    FinancesWindowButton::IncreaseLoan,
+                    FinancesWindowButton::DecreaseLoan,
+                    FinancesWindowButton::BuyRival,
+                    FinancesWindowButton::OpenAiSettings,
                 ] {
                     row.spawn((
                         Button,
@@ -107,7 +113,8 @@ pub(crate) fn setup_finances_window(mut commands: Commands, asset_server: Res<As
                         Interaction::default(),
                         BuildMenuUi,
                         children![(
-                            Text::new(label),
+                            FinancesWindowButtonText(button),
+                            Text::new(""),
                             window_text_font(asset_server, UiFontRole::Caption),
                             TextColor(WINDOW_TEXT),
                         )],
@@ -182,20 +189,43 @@ pub(crate) fn handle_finances_window_buttons(
     }
 }
 
+fn finances_button_label(locale: Locale, button: FinancesWindowButton) -> String {
+    localized_text(
+        locale,
+        match button {
+            FinancesWindowButton::IncreaseLoan => "Pedir préstamo",
+            FinancesWindowButton::DecreaseLoan => "Devolver préstamo",
+            FinancesWindowButton::BuyRival => "Comprar rival (quiebra)",
+            FinancesWindowButton::OpenAiSettings => "IA…",
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_finances_window(
     finances: Res<FinancesWindowState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
-    mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
+    mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<FinancesWindowBodyText>>,
     mut body_q: Query<
         &mut Text,
         (
             With<FinancesWindowBodyText>,
             Without<FloatingWindowTitleText>,
+            Without<FinancesWindowButtonText>,
+        ),
+    >,
+    mut button_text_q: Query<
+        (&FinancesWindowButtonText, &mut Text),
+        (
+            Without<FloatingWindowTitleText>,
+            Without<FinancesWindowBodyText>,
         ),
     >,
     mut cache: Local<FinancesSyncCache>,
 ) {
+    let locale = prefs.locale();
     let Some((_, mut vis)) = root_q
         .iter_mut()
         .find(|(w, _)| w.id == FloatingWindowId::Finances)
@@ -208,6 +238,9 @@ pub(crate) fn sync_finances_window(
         return;
     }
     *vis = Visibility::Visible;
+    for (button, mut text) in &mut button_text_q {
+        **text = finances_button_label(locale, button.0);
+    }
 
     let company = sim
         .state
@@ -302,10 +335,11 @@ pub(crate) fn sync_finances_window(
         road_tiles,
         ..soft
     };
-    if cache.snapshot.as_ref() == Some(&snapshot) {
+    if cache.locale == Some(locale) && cache.snapshot.as_ref() == Some(&snapshot) {
         return;
     }
     cache.snapshot = Some(snapshot.clone());
+    cache.locale = Some(locale);
 
     if let Some((_, mut title)) = title_q
         .iter_mut()
@@ -316,49 +350,72 @@ pub(crate) fn sync_finances_window(
             .companies
             .iter()
             .find(|c| c.id == sim.state.active_company)
-            .map(|c| c.name.as_str())
-            .unwrap_or(crate::ui::statusbar::COMPANY_DISPLAY_NAME);
-        **title = name.to_string();
+            .map(|c| c.name.clone())
+            .unwrap_or_else(|| localized_text(locale, crate::ui::statusbar::COMPANY_DISPLAY_NAME));
+        **title = name;
     }
     if let Ok(mut body) = body_q.single_mut() {
         let net = snapshot.money.saturating_sub(snapshot.loan);
         let profit = snapshot.cargo_income as i64 - snapshot.running_costs as i64;
-        let mut companies_block = String::from("\n\nCompañías:");
+        let mut companies_block = format!("\n\n{}:", localized_text(locale, "Compañías"));
         for row in &snapshot.companies {
-            let tag = if row.is_ai { " (IA)" } else { "" };
+            let tag = if row.is_ai {
+                format!(" ({})", localized_text(locale, "IA"))
+            } else {
+                String::new()
+            };
             companies_block.push_str(&format!(
-                "\n  {}{} · color #{} · {} · ingresos {}",
+                "\n  {}{} · {} #{} · {} {} · {} {}",
                 row.name,
                 tag,
+                localized_text(locale, "color"),
                 row.colour,
+                localized_text(locale, "Dinero"),
                 format_money(row.money),
+                localized_text(locale, "ingresos"),
                 format_money(row.cargo_income.cast_signed()),
             ));
         }
         **body = format!(
-            "Efectivo: {}\nPréstamo: {} / {}\nPatrimonio neto: {}\n\
-             (cada operación: {})\n\n\
-             Ingresos por transporte: {}\nCostes de explotación: {}\n\
-             Beneficio operativo: {}\n\
-             Entregas: {} ({} unidades)\n\n\
-             Infraestructura:\n\
-               Vehículos: {}\n\
-               Estaciones: {}\n\
-               Vía: {} teselas · Carretera: {} teselas{}",
+            "{}: {}\n{}: {} / {}\n{}: {}\n\
+             ({}: {})\n\n\
+             {}: {}\n{}: {}\n\
+             {}: {}\n\
+             {}: {} ({} {})\n\n\
+             {}:\n\
+               {}: {}\n\
+               {}: {}\n\
+               {}: {} {} · {}: {} {}{}",
+            localized_text(locale, "Efectivo"),
             format_money(snapshot.money),
+            localized_text(locale, "Préstamo"),
             format_money(snapshot.loan),
             format_money(snapshot.max_loan),
+            localized_text(locale, "Patrimonio neto"),
             format_money(net),
+            localized_text(locale, "cada operación"),
             format_money(LOAN_INTERVAL),
+            localized_text(locale, "Ingresos por transporte"),
             format_money(snapshot.cargo_income.cast_signed()),
+            localized_text(locale, "Costes de explotación"),
             format_money(snapshot.running_costs.cast_signed()),
+            localized_text(locale, "Beneficio operativo"),
             format_money(profit),
+            localized_text(locale, "Entregas"),
             snapshot.deliveries,
             snapshot.units_delivered,
+            localized_text(locale, "unidades"),
+            localized_text(locale, "Infraestructura"),
+            localized_text(locale, "Vehículos"),
             snapshot.vehicles,
+            localized_text(locale, "Estaciones"),
             snapshot.stations,
+            localized_text(locale, "Vía"),
             snapshot.rail_tiles,
+            localized_text(locale, "teselas"),
+            localized_text(locale, "Carretera"),
             snapshot.road_tiles,
+            localized_text(locale, "teselas"),
             companies_block,
         );
     }
@@ -372,5 +429,36 @@ pub(crate) fn finances_window_on_closed(
         if msg.0.class == FloatingWindowId::Finances {
             finances.open = false;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finances_chrome_localizes_without_translating_dynamic_company_data() {
+        assert_eq!(
+            finances_button_label(Locale::En, FinancesWindowButton::IncreaseLoan),
+            "Take loan"
+        );
+        assert_eq!(
+            finances_button_label(Locale::En, FinancesWindowButton::DecreaseLoan),
+            "Repay loan"
+        );
+        assert_eq!(
+            finances_button_label(Locale::En, FinancesWindowButton::BuyRival),
+            "Buy rival (bankruptcy)"
+        );
+        assert_eq!(
+            finances_button_label(Locale::En, FinancesWindowButton::OpenAiSettings),
+            "AI…"
+        );
+        assert_eq!(localized_text(Locale::En, "Efectivo"), "Cash");
+        assert_eq!(
+            localized_text(Locale::En, "Infraestructura"),
+            "Infrastructure"
+        );
+        assert_eq!(localized_text(Locale::En, "Empresa Ñandú"), "Empresa Ñandú");
     }
 }

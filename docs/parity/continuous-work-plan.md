@@ -2434,3 +2434,9 @@ localizan títulos, períodos y hints (incluido el estado vacío), y cada ventan
 actualiza su propio hint. Series, barras, importes, nombres, IDs y selección de
 compañía permanecen intactos; ejes, tooltips por barra y filtro manual siguen
 residuales en #331/#271.
+
+Actualización #331-FINANCES-WINDOW-LOCALE-486 (2026-09-07, issue [#486](https://github.com/cavazquez/openttdrs/issues/486)):
+la ventana de finanzas localiza botones, resumen financiero, infraestructura y
+bloque de compañías, invalidando la caché sólo cuando cambia el locale o los
+datos. Nombres, importes, conteos, colores, IDs y comandos permanecen intactos;
+el detalle histórico y la edición avanzada siguen pendientes en #331/#271.

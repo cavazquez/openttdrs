@@ -2065,7 +2065,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | BridgePicker | tras tramo de puente | |
 | DestinationPicker | órdenes → destino | |
 | NewsHistory | barra de noticias | |
-| Finances | menú Economía | |
+| Finances | menú Economía | Resumen financiero, infraestructura y compañías localizado (#486) |
 | CompanyView | menú Economía | Stub dinero/flota (#271); Livery/ManagerFace residual |
 | NewsSettings | Ajustes | |
 | PathfindingSettings | Ajustes | |

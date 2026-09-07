@@ -889,6 +889,20 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
     {
         return Some(format!("Autoreplace failed (vehicle {vehicle_id})"));
     }
+    if let Some(coordinates) = source
+        .strip_prefix("Industria en (")
+        .and_then(|value| value.strip_suffix(") anuncia su cierre"))
+        && is_coordinate_pair(coordinates)
+    {
+        return Some(format!("Industry at ({coordinates}) announces its closure"));
+    }
+    if let Some(coordinates) = source
+        .strip_prefix("Industria cerrada en (")
+        .and_then(|value| value.strip_suffix(')'))
+        && is_coordinate_pair(coordinates)
+    {
+        return Some(format!("Industry closed at ({coordinates})"));
+    }
     None
 }
 
@@ -1084,7 +1098,7 @@ mod tests {
     }
 
     #[test]
-    fn catalog_translates_industry_closing_body_without_coordinates() {
+    fn catalog_translates_industry_closing_body_and_headline() {
         assert_eq!(
             localized_text(
                 Locale::En,
@@ -1101,7 +1115,7 @@ mod tests {
         );
         assert_eq!(
             localized_text(Locale::En, "Industria en (3, 7) anuncia su cierre"),
-            "Industria en (3, 7) anuncia su cierre"
+            "Industry at (3, 7) announces its closure"
         );
     }
 
@@ -1271,6 +1285,33 @@ mod tests {
             localized_text(Locale::En, "No hay regla de autoreemplazo para ese motor."),
             "No autoreplace rule exists for that engine."
         );
+    }
+
+    #[test]
+    fn catalog_translates_industry_closure_headlines_with_valid_coordinates() {
+        for (spanish, english) in [
+            (
+                "Industria en (3, 7) anuncia su cierre",
+                "Industry at (3, 7) announces its closure",
+            ),
+            (
+                "Industria cerrada en (-4, 12)",
+                "Industry closed at (-4, 12)",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        for malformed in [
+            "Industria en (3, siete) anuncia su cierre",
+            "Industria en (3, 7) anuncia su cierre (GS)",
+            "Industria en (3, 7 anuncia su cierre",
+            "Industria cerrada en (x, 12)",
+            "Industria cerrada en (-4, 12) (GameScript)",
+            "Industria cerrada en (-4, 12",
+        ] {
+            assert_eq!(localized_text(Locale::En, malformed), malformed);
+        }
     }
 
     #[test]
@@ -1512,7 +1553,7 @@ mod tests {
 
     #[test]
     #[allow(clippy::unwrap_used)]
-    fn localization_plugin_translates_industry_closing_body_only() {
+    fn localization_plugin_translates_industry_closing_body_and_headline() {
         let mut app = App::new();
         app.insert_resource(ClientPreferences::default());
         app.add_plugins(LocalizationPlugin);
@@ -1532,7 +1573,7 @@ mod tests {
         app.update();
         assert_eq!(
             app.world().get::<Text>(headline).unwrap().as_str(),
-            "Industria en (3, 7) anuncia su cierre"
+            "Industry at (3, 7) announces its closure"
         );
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
@@ -1800,6 +1841,63 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
             "No hay regla de autoreemplazo para ese motor."
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_industry_closure_headlines_late() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let closing = app
+            .world_mut()
+            .spawn(Text::new("Industria en (3, 7) anuncia su cierre"))
+            .id();
+        let closed = app
+            .world_mut()
+            .spawn(Text::new("Industria cerrada en (-4, 12)"))
+            .id();
+        let malformed = app
+            .world_mut()
+            .spawn(Text::new("Industria cerrada en (x, 12)"))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(closing).unwrap().as_str(),
+            "Industry at (3, 7) announces its closure"
+        );
+        assert_eq!(
+            app.world().get::<Text>(closed).unwrap().as_str(),
+            "Industry closed at (-4, 12)"
+        );
+        assert_eq!(
+            app.world().get::<Text>(malformed).unwrap().as_str(),
+            "Industria cerrada en (x, 12)"
+        );
+
+        let late = app
+            .world_mut()
+            .spawn(Text::new("Industria en (-10, -2) anuncia su cierre"))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(late).unwrap().as_str(),
+            "Industry at (-10, -2) announces its closure"
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(closing).unwrap().as_str(),
+            "Industria en (3, 7) anuncia su cierre"
+        );
+        assert_eq!(
+            app.world().get::<Text>(closed).unwrap().as_str(),
+            "Industria cerrada en (-4, 12)"
         );
     }
 

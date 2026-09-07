@@ -4,6 +4,8 @@ use bevy::prelude::*;
 use openttdrs_core::format_money;
 use openttdrs_core::prelude::*;
 
+use crate::i18n::localized_text;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
@@ -106,8 +108,8 @@ impl GraphWindowState {
     }
 }
 
-#[derive(Component)]
-pub(crate) struct GraphWindowHintText;
+#[derive(Component, Clone, Copy)]
+pub(crate) struct GraphWindowHintText(pub(crate) FloatingWindowId);
 
 #[derive(Component, Clone, Copy)]
 pub(crate) struct GraphBar {
@@ -133,7 +135,7 @@ fn spawn_one_graph_window(
     );
     commands.entity(content).with_children(|panel| {
         panel.spawn((
-            GraphWindowHintText,
+            GraphWindowHintText(id),
             Text::new(""),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
@@ -257,11 +259,13 @@ fn graph_series_for(
 pub(crate) fn sync_graph_window(
     mut state: ResMut<GraphWindowState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<GraphWindowHintText>>,
-    mut hint_q: Query<&mut Text, (With<GraphWindowHintText>, Without<FloatingWindowTitleText>)>,
+    mut hint_q: Query<(&GraphWindowHintText, &mut Text), Without<FloatingWindowTitleText>>,
     mut bars: Query<(&GraphBar, &mut Node, &mut BackgroundColor)>,
 ) {
+    let locale = prefs.locale();
     if state.filter_company.is_none() {
         state.filter_company = Some(sim.state.active_company);
     }
@@ -275,8 +279,8 @@ pub(crate) fn sync_graph_window(
         .companies
         .iter()
         .find(|c| c.id == filter_id)
-        .map(|c| c.name.as_str())
-        .unwrap_or("Compañía");
+        .map(|c| c.name.clone())
+        .unwrap_or_else(|| localized_text(locale, "Compañía"));
 
     let windows = [
         (
@@ -314,10 +318,13 @@ pub(crate) fn sync_graph_window(
         *vis = Visibility::Visible;
 
         if let Some((_, mut t)) = title_q.iter_mut().find(|(text, _)| text.0 == id) {
-            **t = format!("{} — {company_name}", series_kind.title_label());
+            **t = format!(
+                "{} — {company_name}",
+                localized_text(locale, series_kind.title_label())
+            );
         }
 
-        let (values, _) = graph_series_for(series_kind, &sim, filter_id);
+        let (values, period) = graph_series_for(series_kind, &sim, filter_id);
         let max_abs = values
             .iter()
             .map(|v| v.unsigned_abs())
@@ -325,12 +332,21 @@ pub(crate) fn sync_graph_window(
             .unwrap_or(1)
             .max(1);
 
-        if let Some(mut hint) = hint_q.iter_mut().next() {
+        if let Some((_, mut hint)) = hint_q.iter_mut().find(|(text, _)| text.0 == id) {
             if values.is_empty() {
-                **hint = format!("Sin datos de {company_name} (avanza el tiempo).");
+                **hint = format!(
+                    "{} {company_name} ({}).",
+                    localized_text(locale, "Sin datos de"),
+                    localized_text(locale, "avanza el tiempo")
+                );
             } else {
                 let last = *values.last().unwrap_or(&0);
-                **hint = format!("{company_name} · Último: {}", format_money(last));
+                **hint = format!(
+                    "{company_name} · {}: {} ({})",
+                    localized_text(locale, "Último"),
+                    format_money(last),
+                    localized_text(locale, period)
+                );
             }
         }
 
@@ -379,6 +395,8 @@ mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::MonthlyEconomySample;
+
+    use crate::i18n::Locale;
 
     #[test]
     fn route_opens_income_graph_for_active_company() {
@@ -459,5 +477,29 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(pinned.resolved_company(CompanyId::PLAYER), CompanyId(1));
+    }
+
+    #[test]
+    fn graph_chrome_localizes_period_and_preserves_company_names() {
+        assert_eq!(
+            localized_text(Locale::En, GraphKind::Income.title_label()),
+            "Income"
+        );
+        assert_eq!(
+            localized_text(Locale::En, GraphKind::OperatingProfit.title_label()),
+            "Operating profit"
+        );
+        assert_eq!(
+            localized_text(Locale::En, GraphKind::CompanyValue.title_label()),
+            "Company value"
+        );
+        assert_eq!(localized_text(Locale::En, "mensuales"), "monthly");
+        assert_eq!(localized_text(Locale::En, "trimestrales"), "quarterly");
+        assert_eq!(localized_text(Locale::En, "Sin datos de"), "No data for");
+        assert_eq!(localized_text(Locale::En, "Último"), "Last");
+        assert_eq!(
+            localized_text(Locale::En, "Compañía Ñandú"),
+            "Compañía Ñandú"
+        );
     }
 }

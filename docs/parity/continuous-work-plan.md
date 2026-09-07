@@ -2427,3 +2427,10 @@ población, casas, valores, IDs, comandos, cámara y vínculo con Autoridad loca
 permanecen intactos; la fórmula de crecimiento urbano y su semántica de
 simulación siguen pendientes fuera de este sub-issue. #331 continúa abierto por
 los catálogos upstream y las superficies UI restantes.
+
+Actualización #331-GRAPH-WINDOW-LOCALE-485 (2026-09-07, issue [#485](https://github.com/cavazquez/openttdrs/issues/485)):
+las ventanas de ingresos, beneficio operativo, valor de compañía y rendimiento
+localizan títulos, períodos y hints (incluido el estado vacío), y cada ventana
+actualiza su propio hint. Series, barras, importes, nombres, IDs y selección de
+compañía permanecen intactos; ejes, tooltips por barra y filtro manual siguen
+residuales en #331/#271.

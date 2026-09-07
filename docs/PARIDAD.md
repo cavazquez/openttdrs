@@ -2078,9 +2078,9 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | Refit | depósito | |
 | SharedOrders | vehículo | |
 | Autoreplace | depósito / flota | |
-| GraphIncome | menú Economía → Ingresos | Clase 15.3 separada (#271) |
-| GraphOperatingProfit | menú Economía → Beneficio | (#271) |
-| GraphCompanyValue | menú Economía → Valor | (#271) |
+| GraphIncome | menú Economía → Ingresos | Clase 15.3 separada (#271); títulos y hints localizados (#485) |
+| GraphOperatingProfit | menú Economía → Beneficio | Título, período y hint localizados (#485) |
+| GraphCompanyValue | menú Economía → Valor | Título, período y hint localizados (#485) |
 | CargoPaymentRates | menú Economía | |
 | DisplayOptions | Ajustes | |
 | ExtraViewport | Ajustes | |

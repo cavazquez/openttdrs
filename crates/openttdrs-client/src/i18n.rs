@@ -116,7 +116,7 @@ fn register_catalog_ui_texts(
 ) {
     for (entity, value) in &texts {
         let source = value.as_str();
-        if text(Locale::En, source) != source {
+        if localized_text(Locale::En, source) != source {
             commands
                 .entity(entity)
                 .insert(LocalizedUiText(source.to_owned()));
@@ -155,9 +155,9 @@ fn sync_catalog_ui_texts<F: QueryFilter>(
     texts: &mut Query<(&LocalizedUiText, &mut Text), F>,
 ) {
     for (key, mut value) in texts.iter_mut() {
-        let translated = text(locale, &key.0);
+        let translated = localized_text(locale, &key.0);
         if value.as_str() != translated {
-            **value = translated.to_owned();
+            **value = translated;
         }
     }
 }
@@ -775,7 +775,72 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
 /// Las claves desconocidas se conservan tal cual hasta que entren al catálogo.
 #[must_use]
 pub(crate) fn localized_text(locale: Locale, source: &str) -> String {
-    text(locale, source).to_owned()
+    let translated = text(locale, source);
+    if translated != source {
+        return translated.to_owned();
+    }
+    if locale == Locale::En {
+        return translate_dynamic_news_text(source).unwrap_or_else(|| source.to_owned());
+    }
+    source.to_owned()
+}
+
+/// Traduce sólo plantillas de noticias emitidas por el core cuya forma y
+/// valores dinámicos son identificables sin interpretar texto arbitrario.
+/// Nombres de cargo, importes e IDs se conservan byte a byte.
+fn translate_dynamic_news_text(source: &str) -> Option<String> {
+    if let Some(rest) = source.strip_prefix("Entrega de ")
+        && let Some((units, cargo)) = rest.split_once(" u. de ")
+        && is_ascii_digits(units)
+        && is_news_fragment(cargo)
+    {
+        return Some(format!("Delivery of {units} units of {cargo}"));
+    }
+    if let Some(rest) = source.strip_prefix("¡Primera entrega! ")
+        && let Some((units, cargo)) = rest.split_once(" u. de ")
+        && is_ascii_digits(units)
+        && is_news_fragment(cargo)
+    {
+        return Some(format!("First delivery! {units} units of {cargo}"));
+    }
+    if let Some(rest) = source.strip_prefix("Tu compañía ha cobrado ")
+        && let Some((money, cargo)) = rest.split_once(" por transportar ")
+        && let Some(cargo) = cargo.strip_suffix('.')
+        && is_money_token(money)
+        && is_news_fragment(cargo)
+    {
+        return Some(format!(
+            "Your company earned {money} for transporting {cargo}."
+        ));
+    }
+    if let Some(rest) = source.strip_prefix("El vehículo ")
+        && let Some(vehicle_id) = rest.strip_suffix(" ha salido a operar.")
+        && is_ascii_digits(vehicle_id)
+    {
+        return Some(format!("Vehicle {vehicle_id} has started operating."));
+    }
+    None
+}
+
+fn is_ascii_digits(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn is_money_token(value: &str) -> bool {
+    let digits = value.strip_prefix("$").or_else(|| value.strip_prefix("-$"));
+    digits.is_some_and(|digits| {
+        !digits.is_empty()
+            && digits
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || byte == b'.' || byte == b'M' || byte == b'K')
+    })
+}
+
+fn is_news_fragment(value: &str) -> bool {
+    !value.is_empty()
+        && !value
+            .chars()
+            .any(|character| matches!(character, '\n' | '\r' | '⟦' | '⟧' | '(' | ')'))
 }
 
 /// Formatea una fecha del simulador para la superficie UI activa.
@@ -917,8 +982,8 @@ mod tests {
             assert_eq!(localized_text(Locale::Es, spanish), spanish);
         }
         assert_eq!(
-            localized_text(Locale::En, "Entrega de 3 u. de Carbón"),
-            "Entrega de 3 u. de Carbón"
+            localized_text(Locale::En, "Entrega de muchas u. de Carbón"),
+            "Entrega de muchas u. de Carbón"
         );
     }
 
@@ -995,9 +1060,43 @@ mod tests {
             assert_eq!(localized_text(Locale::Es, spanish), spanish);
         }
         assert_eq!(
-            localized_text(Locale::En, "El vehículo 42 ha salido a operar."),
-            "El vehículo 42 ha salido a operar."
+            localized_text(Locale::En, "El vehículo 42 está detenido."),
+            "El vehículo 42 está detenido."
         );
+    }
+
+    #[test]
+    fn catalog_translates_transport_news_templates_without_mutating_values() {
+        for (spanish, english) in [
+            (
+                "Entrega de 12 u. de Carbón",
+                "Delivery of 12 units of Carbón",
+            ),
+            (
+                "¡Primera entrega! 7 u. de Pasajeros",
+                "First delivery! 7 units of Pasajeros",
+            ),
+            (
+                "Tu compañía ha cobrado -$2.4K por transportar Petróleo.",
+                "Your company earned -$2.4K for transporting Petróleo.",
+            ),
+            (
+                "El vehículo 429 ha salido a operar.",
+                "Vehicle 429 has started operating.",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        for malformed in [
+            "Entrega de muchas u. de Carbón",
+            "Entrega de 12 u. de",
+            "Tu compañía ha cobrado dinero por transportar Petróleo.",
+            "El vehículo 42 ha salido a operar!",
+            "Entrega de 12 u. de Carbón (GameScript)",
+        ] {
+            assert_eq!(localized_text(Locale::En, malformed), malformed);
+        }
     }
 
     #[test]
@@ -1171,7 +1270,7 @@ mod tests {
             .id();
         let dynamic = app
             .world_mut()
-            .spawn(Text::new("Entrega de 3 u. de Carbón"))
+            .spawn(Text::new("Entrega de muchas u. de Carbón"))
             .id();
 
         app.update();
@@ -1187,7 +1286,7 @@ mod tests {
         );
         assert_eq!(
             app.world().get::<Text>(dynamic).unwrap().as_str(),
-            "Entrega de 3 u. de Carbón"
+            "Entrega de muchas u. de Carbón"
         );
 
         app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
@@ -1286,7 +1385,7 @@ mod tests {
             .id();
         let body = app
             .world_mut()
-            .spawn(Text::new("El vehículo 42 ha salido a operar."))
+            .spawn(Text::new("El vehículo 42 está detenido."))
             .id();
 
         app.update();
@@ -1298,7 +1397,7 @@ mod tests {
         );
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
-            "El vehículo 42 ha salido a operar."
+            "El vehículo 42 está detenido."
         );
 
         app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
@@ -1306,6 +1405,65 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(headline).unwrap().as_str(),
             "¡Tu primer avión está en marcha!"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_dynamic_transport_news_late() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let headline = app
+            .world_mut()
+            .spawn(Text::new("Entrega de 12 u. de Carbón"))
+            .id();
+        let body = app
+            .world_mut()
+            .spawn(Text::new(
+                "Tu compañía ha cobrado $42 por transportar Carbón.",
+            ))
+            .id();
+        let malformed = app
+            .world_mut()
+            .spawn(Text::new("Entrega de muchas u. de Carbón"))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Delivery of 12 units of Carbón"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Your company earned $42 for transporting Carbón."
+        );
+        assert_eq!(
+            app.world().get::<Text>(malformed).unwrap().as_str(),
+            "Entrega de muchas u. de Carbón"
+        );
+
+        let late = app
+            .world_mut()
+            .spawn(Text::new("¡Primera entrega! 7 u. de Pasajeros"))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(late).unwrap().as_str(),
+            "First delivery! 7 units of Pasajeros"
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Entrega de 12 u. de Carbón"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Tu compañía ha cobrado $42 por transportar Carbón."
         );
     }
 

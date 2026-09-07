@@ -587,6 +587,12 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Dejará de producir y desaparecerá el mes que viene." => {
             "It will stop producing and disappear next month."
         }
+        "¡Tu primer autobús está en marcha!" => "Your first bus is running!",
+        "¡Tu primer camión está en marcha!" => "Your first truck is running!",
+        "¡Tu primer tranvía está en marcha!" => "Your first tram is running!",
+        "¡Tu primer tren está en marcha!" => "Your first train is running!",
+        "¡Tu primer barco está en marcha!" => "Your first ship is underway!",
+        "¡Tu primer avión está en marcha!" => "Your first aircraft is in the air!",
         // Errores de comandos: se generan durante la partida y por eso no
         // pasan por un constructor de ventana que pueda traducirlos al crear
         // el HUD. Mantener sus claves aquí permite que el feedback se
@@ -958,6 +964,43 @@ mod tests {
     }
 
     #[test]
+    fn catalog_translates_first_vehicle_headlines_without_vehicle_ids() {
+        for (spanish, english) in [
+            (
+                "¡Tu primer autobús está en marcha!",
+                "Your first bus is running!",
+            ),
+            (
+                "¡Tu primer camión está en marcha!",
+                "Your first truck is running!",
+            ),
+            (
+                "¡Tu primer tranvía está en marcha!",
+                "Your first tram is running!",
+            ),
+            (
+                "¡Tu primer tren está en marcha!",
+                "Your first train is running!",
+            ),
+            (
+                "¡Tu primer barco está en marcha!",
+                "Your first ship is underway!",
+            ),
+            (
+                "¡Tu primer avión está en marcha!",
+                "Your first aircraft is in the air!",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        assert_eq!(
+            localized_text(Locale::En, "El vehículo 42 ha salido a operar."),
+            "El vehículo 42 ha salido a operar."
+        );
+    }
+
+    #[test]
     fn catalog_translates_display_options_and_transparency_categories() {
         for (spanish, english) in [
             ("Nombres de pueblos", "Town names"),
@@ -1228,6 +1271,41 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
             "Dejará de producir y desaparecerá el mes que viene."
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_first_vehicle_headline_only() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let headline = app
+            .world_mut()
+            .spawn(Text::new("¡Tu primer avión está en marcha!"))
+            .id();
+        let body = app
+            .world_mut()
+            .spawn(Text::new("El vehículo 42 ha salido a operar."))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Your first aircraft is in the air!"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "El vehículo 42 ha salido a operar."
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "¡Tu primer avión está en marcha!"
         );
     }
 

@@ -132,6 +132,7 @@ fn sync_picker(
     expected: BuildMenuAction,
     id: FloatingWindowId,
     title: &str,
+    locale: Locale,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
 ) {
@@ -151,7 +152,7 @@ fn sync_picker(
         .iter_mut()
         .find(|(title_text, _)| title_text.0 == id)
     {
-        **title_text = title.to_string();
+        **title_text = localized_text(locale, title);
     }
 }
 
@@ -204,6 +205,7 @@ pub(crate) fn setup_dock_picker(mut commands: Commands, asset_server: Res<AssetS
 pub(crate) fn sync_dock_picker(
     tool_state: Res<UiToolState>,
     station_state: Res<StationBuildState>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
     mut buttons: Query<(&DockOrientButton, &mut BackgroundColor), With<Button>>,
@@ -227,7 +229,7 @@ pub(crate) fn sync_dock_picker(
         .iter_mut()
         .find(|(title_text, _)| title_text.0 == FloatingWindowId::DockPicker)
     {
-        **title_text = "Muelle".to_string();
+        **title_text = localized_text(prefs.locale(), "Muelle");
     }
     for (btn, mut bg) in &mut buttons {
         *bg = BackgroundColor(if btn.as_orientation() == station_state.orientation % 4 {
@@ -278,6 +280,7 @@ pub(crate) fn setup_buoy_picker(mut commands: Commands, asset_server: Res<AssetS
 
 pub(crate) fn sync_buoy_picker(
     tool_state: Res<UiToolState>,
+    prefs: Res<ClientPreferences>,
     root_q: Query<(&FloatingWindow, &mut Visibility)>,
     title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
 ) {
@@ -286,6 +289,7 @@ pub(crate) fn sync_buoy_picker(
         BuildMenuAction::Buoy,
         FloatingWindowId::BuoyPicker,
         "Boya",
+        prefs.locale(),
         root_q,
         title_q,
     );
@@ -316,6 +320,7 @@ pub(crate) fn setup_rail_waypoint_picker(mut commands: Commands, asset_server: R
 
 pub(crate) fn sync_rail_waypoint_picker(
     tool_state: Res<UiToolState>,
+    prefs: Res<ClientPreferences>,
     root_q: Query<(&FloatingWindow, &mut Visibility)>,
     title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
 ) {
@@ -324,6 +329,7 @@ pub(crate) fn sync_rail_waypoint_picker(
         BuildMenuAction::RailWaypoint,
         FloatingWindowId::RailWaypointPicker,
         "Waypoint ferroviario",
+        prefs.locale(),
         root_q,
         title_q,
     );
@@ -354,6 +360,7 @@ pub(crate) fn setup_road_waypoint_picker(mut commands: Commands, asset_server: R
 
 pub(crate) fn sync_road_waypoint_picker(
     tool_state: Res<UiToolState>,
+    prefs: Res<ClientPreferences>,
     root_q: Query<(&FloatingWindow, &mut Visibility)>,
     title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
 ) {
@@ -362,6 +369,7 @@ pub(crate) fn sync_road_waypoint_picker(
         BuildMenuAction::RoadWaypoint,
         FloatingWindowId::RoadWaypointPicker,
         "Waypoint de carretera",
+        prefs.locale(),
         root_q,
         title_q,
     );
@@ -392,6 +400,7 @@ pub(crate) fn setup_tree_picker(mut commands: Commands, asset_server: Res<AssetS
 
 pub(crate) fn sync_tree_picker(
     tool_state: Res<UiToolState>,
+    prefs: Res<ClientPreferences>,
     root_q: Query<(&FloatingWindow, &mut Visibility)>,
     title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
 ) {
@@ -400,6 +409,7 @@ pub(crate) fn sync_tree_picker(
         BuildMenuAction::PlantTree,
         FloatingWindowId::TreePicker,
         "Arbolado",
+        prefs.locale(),
         root_q,
         title_q,
     );
@@ -430,6 +440,7 @@ pub(crate) fn setup_terraform_picker(mut commands: Commands, asset_server: Res<A
 
 pub(crate) fn sync_terraform_picker(
     tool_state: Res<UiToolState>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
 ) {
@@ -458,7 +469,7 @@ pub(crate) fn sync_terraform_picker(
         .iter_mut()
         .find(|(title_text, _)| title_text.0 == FloatingWindowId::TerraformPicker)
     {
-        **title_text = "Terraform".to_string();
+        **title_text = localized_text(prefs.locale(), "Terraform");
     }
 }
 
@@ -488,7 +499,7 @@ pub(crate) fn setup_sign_picker(mut commands: Commands, asset_server: Res<AssetS
         &mut commands,
         &asset_server,
         FloatingWindowId::SignPicker,
-        "Cartel",
+        "Cartel de texto",
         "Coloca un cartel de texto en el mapa.",
         Vec2::new(300.0, 96.0),
     );
@@ -496,6 +507,7 @@ pub(crate) fn setup_sign_picker(mut commands: Commands, asset_server: Res<AssetS
 
 pub(crate) fn sync_sign_picker(
     tool_state: Res<UiToolState>,
+    prefs: Res<ClientPreferences>,
     root_q: Query<(&FloatingWindow, &mut Visibility)>,
     title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
 ) {
@@ -503,7 +515,8 @@ pub(crate) fn sync_sign_picker(
         tool_state,
         BuildMenuAction::PlaceSign,
         FloatingWindowId::SignPicker,
-        "Cartel",
+        "Cartel de texto",
+        prefs.locale(),
         root_q,
         title_q,
     );
@@ -720,5 +733,16 @@ mod tests {
     fn depot_kind_button_maps_tools() {
         assert_eq!(DepotKindButton::Ship.as_tool(), BuildMenuAction::ShipDepot);
         assert_eq!(DepotKindButton::Rail.as_tool(), BuildMenuAction::RailDepot);
+    }
+
+    #[test]
+    fn construction_picker_catalog_keeps_sign_distinct_from_news() {
+        assert_eq!(localized_text(Locale::En, "Cartel de texto"), "Text sign");
+        assert_eq!(localized_text(Locale::En, "Cartel"), "Newspaper");
+        assert_eq!(
+            localized_text(Locale::En, "Waypoint ferroviario"),
+            "Rail waypoint"
+        );
+        assert_eq!(localized_text(Locale::En, "Arbolado"), "Trees");
     }
 }

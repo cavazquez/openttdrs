@@ -373,6 +373,24 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Orientación" => "Orientation",
         "Eje X" => "Axis X",
         "Eje Y" => "Axis Y",
+        "Cartel de texto" => "Text sign",
+        "Coloca la boya en agua navegable para abrir rutas." => {
+            "Place the buoy in navigable water to open routes."
+        }
+        "Waypoint ferroviario" => "Rail waypoint",
+        "Coloca el waypoint sobre vía férrea recta." => {
+            "Place the waypoint on straight rail track."
+        }
+        "Waypoint de carretera" => "Road waypoint",
+        "Coloca el waypoint sobre carretera recta." => "Place the waypoint on straight road.",
+        "Arbolado" => "Trees",
+        "Planta o hace crecer árboles en hierba / bosque." => {
+            "Plant or grow trees on grass / forest."
+        }
+        "Elevar, bajar, nivelar o comprar terreno con la herramienta activa." => {
+            "Raise, lower, level or buy land with the active tool."
+        }
+        "Coloca un cartel de texto en el mapa." => "Place a text sign on the map.",
         "Número de andenes" => "Number of platforms",
         "Longitud de andén" => "Platform length",
         "Mostrar área de cobertura" => "Show coverage area",
@@ -1305,6 +1323,34 @@ mod tests {
             ("Orientación", "Orientation"),
             ("Eje X", "Axis X"),
             ("Eje Y", "Axis Y"),
+            ("Cartel de texto", "Text sign"),
+            (
+                "Coloca la boya en agua navegable para abrir rutas.",
+                "Place the buoy in navigable water to open routes.",
+            ),
+            ("Waypoint ferroviario", "Rail waypoint"),
+            (
+                "Coloca el waypoint sobre vía férrea recta.",
+                "Place the waypoint on straight rail track.",
+            ),
+            ("Waypoint de carretera", "Road waypoint"),
+            (
+                "Coloca el waypoint sobre carretera recta.",
+                "Place the waypoint on straight road.",
+            ),
+            ("Arbolado", "Trees"),
+            (
+                "Planta o hace crecer árboles en hierba / bosque.",
+                "Plant or grow trees on grass / forest.",
+            ),
+            (
+                "Elevar, bajar, nivelar o comprar terreno con la herramienta activa.",
+                "Raise, lower, level or buy land with the active tool.",
+            ),
+            (
+                "Coloca un cartel de texto en el mapa.",
+                "Place a text sign on the map.",
+            ),
             ("Número de andenes", "Number of platforms"),
             ("Longitud de andén", "Platform length"),
             ("Mostrar área de cobertura", "Show coverage area"),

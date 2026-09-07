@@ -2359,3 +2359,10 @@ el selector de tipo de depósito localiza el título reescrito por el sync y los
 chips `Road`/`Rail`/`Ship`. Herramientas, IDs y comandos permanecen iguales; la
 regresión cubre el título en ambos locales. #331 sigue abierto por los pickers
 de construcción restantes y los catálogos upstream.
+
+Actualización #331-CONSTRUCTION-PICKERS-475 (2026-09-07, issue [#475](https://github.com/cavazquez/openttdrs/issues/475)):
+los pickers comunes de muelle, boya, waypoints, arbolado, terraformación y
+cartel consultan el locale en sus títulos y ayudas. `Cartel de texto` queda
+separado de la categoría de noticias `Cartel`; orientaciones, herramientas e
+IDs no cambian. #331 sigue abierto por los catálogos upstream y superficies UI
+restantes.

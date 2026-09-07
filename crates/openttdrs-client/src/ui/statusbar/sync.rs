@@ -414,7 +414,10 @@ fn spawn_news_popup(
         NewsType::VehicleAdvice => {
             debug!("noticias: id={} aviso operativo; popup sin sonido", item.id);
         }
-        NewsType::CompanyInfo | NewsType::IndustryClose | NewsType::Economy => {
+        NewsType::CompanyInfo
+        | NewsType::IndustryOpen
+        | NewsType::IndustryClose
+        | NewsType::Economy => {
             feedback.pending_news_ticker = true;
             info!(
                 "noticias: id={} tipo={:?}; aviso sonoro",

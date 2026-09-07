@@ -247,7 +247,8 @@ pub(super) fn place_industry_spec_sandbox(
     }
     check_place_industry_spec(&state.map, c, spec)?;
     let template = industry_template(c, spec);
-    place_industry_spec_template_sandbox(state, c, spec, 0, &template)?;
+    let founder = Some(state.active_company);
+    place_industry_spec_template_sandbox(state, c, spec, 0, &template, founder, true)?;
     // Vanilla farms carry `PlantOnBuild` in the built-in industry table. The
     // generation path uses the layout command plus its own shared RNG pass,
     // so this branch is intentionally limited to the direct player command.
@@ -310,7 +311,34 @@ pub(super) fn place_industry_spec_layout_sandbox(
         .checked_add(1)
         .and_then(|index| u8::try_from(index).ok())
         .ok_or(CommandError::OutOfBounds)?;
-    place_industry_spec_template_sandbox(state, c, spec, selected_layout, &template)
+    let founder = Some(state.active_company);
+    place_industry_spec_template_sandbox(state, c, spec, selected_layout, &template, founder, true)
+}
+
+/// Materializa una industria fundada por el scheduler global, no por la
+/// compañía activa.
+///
+/// Esta es la mitad de escritura de `CreateNewIndustry(..., OWNER_NONE)`: la
+/// selección de layout, el RNG y los gates de ubicación viven en el scheduler
+/// runtime. Mantenerla fuera de [`super::apply_command`] evita cobrar los 250
+/// del comando de jugador o emitir un evento de construcción de la compañía.
+pub(crate) fn place_industry_spec_layout_automatic(
+    state: &mut GameState,
+    c: TileCoord,
+    spec: IndustrySpec,
+    layout_index: usize,
+) -> Result<(), CommandError> {
+    if !spec.available_in(state.climate) {
+        return Err(CommandError::IndustryNotAvailableInClimate);
+    }
+    check_place_industry_spec_layout(&state.map, c, spec, layout_index)?;
+    let template =
+        industry_template_with_layout(c, spec, layout_index).ok_or(CommandError::OutOfBounds)?;
+    let selected_layout = layout_index
+        .checked_add(1)
+        .and_then(|index| u8::try_from(index).ok())
+        .ok_or(CommandError::OutOfBounds)?;
+    place_industry_spec_template_sandbox(state, c, spec, selected_layout, &template, None, false)
 }
 
 fn place_industry_spec_template_sandbox(
@@ -319,6 +347,8 @@ fn place_industry_spec_template_sandbox(
     spec: IndustrySpec,
     selected_layout: u8,
     template: &[(TileCoord, u8)],
+    founder: Option<crate::company::CompanyId>,
+    charge_player: bool,
 ) -> Result<(), CommandError> {
     let footprint: Vec<TileCoord> = template.iter().map(|(tile, _)| *tile).collect();
     let industry_id = next_industry_instance_id(state);
@@ -411,7 +441,7 @@ fn place_industry_spec_template_sandbox(
         Industry::with_tiles_spec(c, spec.kind(), spec, footprint, random_colour)
             .with_instance_id(industry_id)
             .with_selected_layout(selected_layout)
-            .with_founder(Some(state.active_company))
+            .with_founder(founder)
             .with_construction_date(
                 state
                     .calendar
@@ -422,7 +452,9 @@ fn place_industry_spec_template_sandbox(
             .with_last_prod_year(state.economy_timer.year)
             .with_counter(counter),
     );
-    state.economy.money -= 250;
+    if charge_player {
+        state.economy.money -= 250;
+    }
     Ok(())
 }
 
@@ -884,6 +916,36 @@ mod tests {
             crate::industry::INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY
         );
         assert_eq!(state.industries[0].last_prod_year, state.economy_timer.year);
+    }
+
+    #[test]
+    fn automatic_industry_layout_has_no_founder_or_player_charge() {
+        let origin = TileCoord::new(4, 4);
+        let mut state = GameState::new(16, 16);
+        state.economy.money = 123_456;
+        let money_before = state.economy.money;
+
+        assert!(place_industry_spec_layout_automatic(
+            &mut state,
+            origin,
+            IndustrySpec::PowerStation,
+            2,
+        )
+        .is_ok());
+
+        assert_eq!(state.economy.money, money_before);
+        assert_eq!(state.industries.len(), 1);
+        let industry = &state.industries[0];
+        assert_eq!(industry.founder, None);
+        assert_eq!(industry.selected_layout, 3);
+        assert_eq!(
+            industry.construction_type,
+            crate::industry::INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY
+        );
+        assert_eq!(
+            industry.construction_date,
+            crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR
+        );
     }
 
     #[test]

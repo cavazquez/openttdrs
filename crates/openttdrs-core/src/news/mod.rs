@@ -20,6 +20,7 @@ pub use queue::{
     push_cargo_delivery_news, push_disaster_news, push_economy_fluctuation_news,
     push_first_vehicle_running_news, push_rival_achievement_news, push_subsidy_awarded_news,
     push_subsidy_offer_news, report_industry_closed, report_industry_closing,
+    report_industry_opened,
 };
 pub use vehicle_advice::{VehicleAdviceKind, poll_vehicle_advice_news, push_vehicle_advice_news};
 

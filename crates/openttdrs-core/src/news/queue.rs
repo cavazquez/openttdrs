@@ -24,6 +24,8 @@ pub enum NewsType {
     Accident,
     /// Información de compañía (compra, quiebra rival).
     CompanyInfo,
+    /// Industria creada durante la partida (`NewsType::IndustryOpen`).
+    IndustryOpen,
     /// Industria que anuncia cierre o acaba de cerrar (`NewsType::IndustryClose`).
     IndustryClose,
     /// Recesión económica (`NewsType::Economy` en `OpenTTD`).
@@ -124,6 +126,8 @@ pub struct NewsDisplaySettings {
     pub accident: NewsDisplayMode,
     #[serde(default = "default_company_info_display")]
     pub company_info: NewsDisplayMode,
+    #[serde(default = "default_industry_open_display")]
+    pub industry_open: NewsDisplayMode,
     #[serde(default = "default_industry_close_display")]
     pub industry_close: NewsDisplayMode,
     #[serde(default = "default_economy_display")]
@@ -135,6 +139,10 @@ const fn default_accident_display() -> NewsDisplayMode {
 }
 
 const fn default_company_info_display() -> NewsDisplayMode {
+    NewsDisplayMode::Summary
+}
+
+const fn default_industry_open_display() -> NewsDisplayMode {
     NewsDisplayMode::Summary
 }
 
@@ -162,6 +170,7 @@ impl NewsDisplaySettings {
             vehicle_advice: NewsDisplayMode::Summary,
             accident: NewsDisplayMode::Full,
             company_info: NewsDisplayMode::Summary,
+            industry_open: NewsDisplayMode::Summary,
             industry_close: NewsDisplayMode::Summary,
             economy: NewsDisplayMode::Summary,
         }
@@ -176,6 +185,7 @@ impl NewsDisplaySettings {
             NewsType::VehicleAdvice => self.vehicle_advice,
             NewsType::Accident => self.accident,
             NewsType::CompanyInfo => self.company_info,
+            NewsType::IndustryOpen => self.industry_open,
             NewsType::IndustryClose => self.industry_close,
             NewsType::Economy => self.economy,
         }
@@ -189,6 +199,7 @@ impl NewsDisplaySettings {
             NewsType::VehicleAdvice => self.vehicle_advice = mode,
             NewsType::Accident => self.accident = mode,
             NewsType::CompanyInfo => self.company_info = mode,
+            NewsType::IndustryOpen => self.industry_open = mode,
             NewsType::IndustryClose => self.industry_close = mode,
             NewsType::Economy => self.economy = mode,
         }
@@ -283,6 +294,27 @@ pub fn report_industry_closing(state: &mut crate::GameState, at: TileCoord) {
         Some("Dejará de producir y desaparecerá el mes que viene.".into()),
         NewsType::IndustryClose,
         default_display_for_type(NewsType::IndustryClose),
+        state.tick,
+        NewsReference::Tile(at),
+    );
+    add_news_item(state, item);
+}
+
+/// La fundación automática acaba de abrir una industria durante la partida.
+///
+/// `TryBuildNewIndustry` llama a `AdvertiseIndustryOpening` sólo después de
+/// que `PlaceIndustry` materializó la entidad. El modelo todavía no conserva
+/// las cadenas localizadas por especie de `OpenTTD`, pero sí mantiene el tipo,
+/// la categoría de display y la referencia navegable a la tesela.
+pub fn report_industry_opened(state: &mut crate::GameState, at: TileCoord) {
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        format!("Nueva industria inaugurada en ({}, {})", at.x, at.y),
+        Some("Una industria nueva está disponible para ser atendida.".into()),
+        NewsType::IndustryOpen,
+        default_display_for_type(NewsType::IndustryOpen),
         state.tick,
         NewsReference::Tile(at),
     );

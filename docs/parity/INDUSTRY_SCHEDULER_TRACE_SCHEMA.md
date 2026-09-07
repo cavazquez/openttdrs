@@ -1,16 +1,18 @@
 # Contrato de traza del scheduler de industrias
 
-Actualizado: 2026-09-07. Sub-issue: #501; padre de runtime: #499 / RMAP-158.
+Actualizado: 2026-09-07. Sub-issues: #501 (oráculo) y #502 (ejecución vanilla);
+padre de runtime: #499 / RMAP-158.
 
 `OPENTTDRS_INDUSTRY_TRACE_OUT` habilita, exclusivamente en el binario OpenTTD
 instrumentado, una traza JSONL de la rutina diaria
 `_economy_industries_daily`. Sin la variable, el hook no abre archivos ni
 consulta estado adicional y no consume `Random()`.
 
-El objetivo es comparar una candidata con la secuencia nativa antes de unir la
-fundación automática: `ECMY`, `IBLD`, `ITBL`, decisiones `Chance16`, entidades
-y estado del RNG global. No es una captura de pantalla ni un sustituto de la
-comparación raw por tesela cuando una fundación haya materializado una industria.
+El objetivo es comparar la secuencia nativa que consume la candidata: `ECMY`,
+`IBLD`, `ITBL`, decisiones `Chance16`, entidades y estado del RNG global. No
+es una captura de pantalla ni un sustituto de la comparación raw por tesela
+cuando una fundación haya materializado una industria. #502 usa el contrato
+para la cadencia y una regresión física determinista desde 1960.
 
 ## Ejecución
 
@@ -63,6 +65,7 @@ guardado ya contiene sólo la fracción baja de 16.16.
 
 Esta traza observa la selección y el resultado del intento de fundación, pero
 no sustituye la traza individual de los hasta 2.000 `CreateNewIndustry` de
-`PlaceIndustry`. El siguiente corte debe portar el scheduler contra esta
-evidencia y extender el oracle a esos intentos, incluyendo callbacks NewGRF,
-antes de reclamar paridad de #499.
+`PlaceIndustry`. Las muestras post-timer tampoco permiten reconstruir por sí
+solas los consumos RNG de subsistemas intermedios. El scheduler vanilla ya se
+porta en #502; extender el oracle a los intentos y a callbacks NewGRF sigue
+siendo necesario antes de reclamar paridad de #499.

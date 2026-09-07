@@ -63,6 +63,8 @@ pub(crate) struct ClientPreferences {
     pub(crate) news_vehicle_advice: u8,
     pub(crate) news_accident: u8,
     pub(crate) news_company_info: u8,
+    /// Preferencia de noticias de apertura de industria (0=Off, 1=Summary, 2=Full).
+    pub(crate) news_industry_open: u8,
     /// Preferencia de noticias de cierre de industria (0=Off, 1=Summary, 2=Full).
     pub(crate) news_industry_close: u8,
     /// Preferencia de noticias económicas / recesión (0=Off, 1=Summary, 2=Full).
@@ -116,6 +118,7 @@ impl Default for ClientPreferences {
             news_vehicle_advice: crate::news_prefs::DISPLAY_SUMMARY,
             news_accident: crate::news_prefs::DISPLAY_FULL,
             news_company_info: crate::news_prefs::DISPLAY_SUMMARY,
+            news_industry_open: crate::news_prefs::DISPLAY_SUMMARY,
             news_industry_close: crate::news_prefs::DISPLAY_SUMMARY,
             news_economy: crate::news_prefs::DISPLAY_SUMMARY,
             window_layouts: String::new(),

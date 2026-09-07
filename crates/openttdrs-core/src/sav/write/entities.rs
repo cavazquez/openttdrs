@@ -1257,6 +1257,7 @@ fn append_indy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 6, "location.tile")?;
     append_field(header, 2, "location.w")?;
     append_field(header, 2, "location.h")?;
+    append_field(header, 6, "town")?; // REF_TOWN
     append_field(header, 6, "neutral_station")?; // REF_STATION
     append_field(header, 2, "type")?;
     append_field(header, 2, "random_colour")?;
@@ -1697,6 +1698,32 @@ fn neutral_station_ref(state: &GameState, industry: &Industry) -> Result<u32, Sa
         })
 }
 
+fn industry_town_ref(state: &GameState, industry: &Industry) -> Result<u32, SavError> {
+    let Some(town_id) = industry.town_id else {
+        return Ok(0);
+    };
+    // `REF_TOWN` follows the native sparse pool index, not an inferred
+    // nearest town. A dangling reference would make the SAV semantically
+    // different on reload, so reject it instead of silently changing it.
+    town_id
+        .checked_add(1)
+        .ok_or(SavError::ValueOutOfRange {
+            field: "industry town id",
+            value: town_id,
+        })
+        .and_then(|reference| {
+            state
+                .towns
+                .iter()
+                .any(|town| town.id == town_id)
+                .then_some(reference)
+                .ok_or(SavError::ValueOutOfRange {
+                    field: "industry town reference",
+                    value: town_id,
+                })
+        })
+}
+
 pub(super) fn indy_records_with_cargo(
     state: &GameState,
     map_w: u32,
@@ -1713,6 +1740,7 @@ pub(super) fn indy_records_with_cargo(
         rec.extend_from_slice(&tile_idx.to_be_bytes());
         rec.push(w);
         rec.push(h);
+        rec.extend_from_slice(&industry_town_ref(state, ind)?.to_be_bytes());
         rec.extend_from_slice(&neutral_station_ref(state, ind)?.to_be_bytes());
         rec.push(industry_ottd_type(ind));
         rec.push(ind.random_colour % 16);
@@ -2341,6 +2369,12 @@ mod tests {
     #[test]
     fn indy_chunk_preserves_native_cargo_lists() {
         let mut state = GameState::new(8, 8);
+        state.towns.push(crate::town::Town {
+            id: 0,
+            pos: TileCoord::new(2, 2),
+            name: "Town reference fixture".into(),
+            ..crate::town::Town::default()
+        });
         let mut industry = Industry::with_tiles_spec(
             TileCoord::new(3, 3),
             IndustryKind::Factory,
@@ -2354,6 +2388,7 @@ mod tests {
         industry.last_prod_year = 1972;
         industry.was_cargo_delivered = true;
         industry.control_flags = 5;
+        industry.town_id = Some(0);
         industry.neutral_station_id = Some(42);
         industry.exclusive_supplier = Some(crate::company::CompanyId(2));
         industry.founder = Some(crate::company::CompanyId(2));
@@ -2375,6 +2410,7 @@ mod tests {
             pos: TileCoord::new(3, 3),
             width: 1,
             height: 1,
+            town_id: None,
             neutral_station_id: None,
             industry_type: 3,
             random_colour: 0,
@@ -2421,6 +2457,12 @@ mod tests {
         let chunk = indy_chunk(&state, 8).expect("INDY chunk");
         let rows = crate::sav::table::parse_table_chunk(&chunk[5..], false).expect("INDY table");
         let record = &rows[0].1;
+        assert_eq!(
+            crate::sav::table::record_get(record, "town")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(1),
+            "INDY.town is REF_TOWN (TownID + 1), never a reconstructed nearest town"
+        );
         assert_eq!(
             crate::sav::table::record_get(record, "selected_layout")
                 .and_then(crate::sav::table::SlValue::as_u64),

@@ -256,6 +256,98 @@ impl IndustryBuildData {
         // de `SetupTargetCount` nativo.
         true
     }
+
+    /// Selecciona la especie que `TryBuildNewIndustry` intentará fundar.
+    ///
+    /// El caller debe haber ejecutado antes [`Self::setup_target_count`] (o
+    /// su variante que refresca probabilidades) y debe completar la vuelta
+    /// con [`Self::finish_automatic_build_attempt`], incluso si devuelve
+    /// `None`: `OpenTTD` decrementa los backoffs en todos los caminos.
+    #[must_use]
+    pub fn select_automatic_build_type(
+        &mut self,
+        current_type_counts: &[u16],
+        in_recession: bool,
+        rng: &mut Randomizer,
+    ) -> Option<u16> {
+        self.ensure_type_count();
+
+        let mut missing = 0_i32;
+        let mut eligible = 0_u32;
+        let mut total_probability = 0_u32;
+        let mut forced: Option<(u16, i32)> = None;
+
+        for (index, data) in self.builddata.iter().enumerate() {
+            let current = current_type_counts.get(index).copied().unwrap_or(0);
+            let difference = i32::from(data.target_count) - i32::from(current);
+            missing = missing.saturating_add(difference);
+            if data.wait_count > 0 || difference <= 0 {
+                continue;
+            }
+
+            if current == 0
+                && data.min_number > 0
+                && forced.is_none_or(|(_, needed)| difference > needed)
+            {
+                forced = Some((u16::try_from(index).unwrap_or(u16::MAX), difference));
+            }
+            total_probability =
+                total_probability.saturating_add(u32::try_from(difference).unwrap_or(0));
+            eligible = eligible.saturating_add(1);
+        }
+
+        if in_recession || (forced.is_none() && (missing <= 0 || total_probability == 0)) {
+            return None;
+        }
+        let (forced_type, _) = forced.unwrap_or((u16::MAX, 0));
+        if forced_type != u16::MAX {
+            return Some(forced_type);
+        }
+        if eligible == 0 {
+            return None;
+        }
+
+        // `TryBuildNewIndustry` no sortea cuando sólo hay una especie elegible.
+        let mut remaining = if eligible > 1 {
+            rng.random_range(total_probability)
+        } else {
+            0
+        };
+        for (index, data) in self.builddata.iter().enumerate() {
+            let current = current_type_counts.get(index).copied().unwrap_or(0);
+            let difference = i32::from(data.target_count) - i32::from(current);
+            if data.wait_count > 0 || difference <= 0 {
+                continue;
+            }
+            if eligible == 1 || remaining < u32::try_from(difference).unwrap_or(0) {
+                return u16::try_from(index).ok();
+            }
+            remaining = remaining.saturating_sub(u32::try_from(difference).unwrap_or(0));
+        }
+
+        // Las cuentas provienen de las mismas filas con las que se calculó
+        // `eligible`, por lo que llegar aquí señalaría un modelo corrupto.
+        None
+    }
+
+    /// Aplica el resultado de una vuelta de `TryBuildNewIndustry` y reduce
+    /// todos los backoffs al final de la llamada, como el bucle nativo.
+    pub fn finish_automatic_build_attempt(&mut self, industry_type: Option<u16>, succeeded: bool) {
+        self.ensure_type_count();
+        if let Some(industry_type) = industry_type
+            && let Some(data) = self.type_data_mut(industry_type)
+        {
+            if succeeded {
+                data.max_wait = (data.max_wait / 2).max(1);
+            } else {
+                data.wait_count = data.max_wait.saturating_add(1);
+                data.max_wait = data.max_wait.saturating_add(2).min(1_000);
+            }
+        }
+        for data in &mut self.builddata {
+            data.wait_count = data.wait_count.saturating_sub(1);
+        }
+    }
 }
 
 /// Incremento diario derivado de la superficie del mapa (`StartupIndustryDailyChanges`).
@@ -404,6 +496,97 @@ mod tests {
                 .sum::<u32>(),
             2
         );
+    }
+
+    #[test]
+    fn automatic_selection_forces_the_most_missing_minimum_without_rng() {
+        let mut builder = IndustryBuildData::new();
+        builder.builddata[2] = IndustryTypeBuildData {
+            probability: 4,
+            min_number: 1,
+            target_count: 2,
+            max_wait: 1,
+            wait_count: 0,
+        };
+        builder.builddata[7] = IndustryTypeBuildData {
+            probability: 4,
+            min_number: 1,
+            target_count: 3,
+            max_wait: 1,
+            wait_count: 0,
+        };
+        let counts = vec![0_u16; INDUSTRY_BUILD_TYPE_COUNT];
+        let mut rng = Randomizer::new(7);
+        let before = rng.state;
+
+        assert_eq!(
+            builder.select_automatic_build_type(&counts, false, &mut rng),
+            Some(7),
+            "la diferencia más alta de una especie obligatoria gana el empate"
+        );
+        assert_eq!(rng.state, before, "la ruta forced no llama a RandomRange");
+    }
+
+    #[test]
+    fn automatic_selection_uses_weighted_roll_only_for_multiple_candidates() {
+        let mut builder = IndustryBuildData::new();
+        builder.builddata[2].target_count = 2;
+        builder.builddata[7].target_count = 1;
+        let counts = vec![0_u16; INDUSTRY_BUILD_TYPE_COUNT];
+        let mut rng = Randomizer::new(1);
+
+        // El primer Random() conocido de la semilla 1 escala a 0 en [0,3),
+        // que pertenece al peso dos de la fila 2.
+        assert_eq!(
+            builder.select_automatic_build_type(&counts, false, &mut rng),
+            Some(2)
+        );
+        assert_eq!(rng.state, [4_230_244_526, 536_870_911]);
+
+        let mut one_candidate = IndustryBuildData::new();
+        one_candidate.builddata[7].target_count = 1;
+        let mut rng = Randomizer::new(1);
+        let before = rng.state;
+        assert_eq!(
+            one_candidate.select_automatic_build_type(&counts, false, &mut rng),
+            Some(7)
+        );
+        assert_eq!(rng.state, before, "una única fila elegible no consume RNG");
+    }
+
+    #[test]
+    fn automatic_backoff_matches_failure_success_and_final_decrement() {
+        let mut builder = IndustryBuildData::new();
+        builder.builddata[5].max_wait = 1;
+
+        builder.finish_automatic_build_attempt(Some(5), false);
+        assert_eq!(builder.builddata[5].max_wait, 3);
+        assert_eq!(
+            builder.builddata[5].wait_count, 1,
+            "max_wait + 1 se compensa con el decremento de la misma vuelta"
+        );
+
+        builder.finish_automatic_build_attempt(None, false);
+        assert_eq!(builder.builddata[5].wait_count, 0);
+
+        builder.finish_automatic_build_attempt(Some(5), true);
+        assert_eq!(builder.builddata[5].max_wait, 1);
+        assert_eq!(builder.builddata[5].wait_count, 0);
+    }
+
+    #[test]
+    fn recession_skips_selection_without_consuming_rng() {
+        let mut builder = IndustryBuildData::new();
+        builder.builddata[5].target_count = 1;
+        let counts = vec![0_u16; INDUSTRY_BUILD_TYPE_COUNT];
+        let mut rng = Randomizer::new(9);
+        let before = rng.state;
+
+        assert_eq!(
+            builder.select_automatic_build_type(&counts, true, &mut rng),
+            None
+        );
+        assert_eq!(rng.state, before);
     }
 
     #[test]

@@ -1,4 +1,6 @@
-use crate::{ALL_CARGO_TYPES, CUSTOM_CARGO_COUNT, GameState, TileCoord, economy, town};
+use crate::{
+    ALL_CARGO_TYPES, CUSTOM_CARGO_COUNT, GameState, TileCoord, economy, industry_builder, town,
+};
 
 /// Dispara `NewCargo` sólo para las colas que crecieron durante una operación
 /// de producción/distribución. La economía puede repartir un lote entre varias
@@ -65,6 +67,18 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
     apply_monthly_inflation_and_fluctuations(state);
     apply_monthly_interest_and_bankruptcy(state);
     roll_station_newgrf_month(&mut state.stations);
+    // `IndustryBuildData::EconomyMonthlyLoop` corre antes de borrar las
+    // industrias que cerraron: el contador objetivo nativo todavía ve el pool
+    // completo durante este borde mensual. La configuración persistente aún
+    // sólo expone la dificultad vanilla por defecto, que permite fundación
+    // automática (`ID_FUND_ONLY` se conecta con settings en su propio corte).
+    let (map_w, map_h) = state.map.dimensions();
+    state.industry_builder.economy_monthly_loop(
+        u32::try_from(state.industries.len()).unwrap_or(u32::MAX),
+        map_w,
+        map_h,
+        false,
+    );
     // Industrias ya marcadas con prod_level = 0 el mes pasado: fuera del mapa.
     let closed = crate::industry::remove_closed_industries_with_neutral_stations(
         &mut state.industries,
@@ -448,17 +462,13 @@ fn apply_monthly_interest_and_bankruptcy(state: &mut GameState) {
     }
 }
 
-/// Una industria al azar cambia de producción cada día de calendario (modo original).
-///
-/// En mapas grandes `OpenTTD` escala el número de cambios; aquí bastará con uno por día,
-/// que es lo que tocaba en el mapa 256×256 clásico.
-pub(super) fn maybe_change_industry_production(state: &mut GameState) {
-    if state.industries.is_empty() {
+/// Ejecuta una rama de cambio de producción sobre una entidad ya elegida del
+/// pool. Es el cuerpo de `ChangeIndustryProduction(i, false)` y queda
+/// separado de la lotería diaria para que ésta pueda respetar `IndustryID`.
+fn change_industry_production_at(state: &mut GameState, idx: usize) {
+    if idx >= state.industries.len() {
         return;
     }
-    let idx = state
-        .random
-        .random_range(u32::try_from(state.industries.len()).unwrap_or(1)) as usize;
     let climate = state.climate;
     // Las industrias NewGRF con CB29 no deben caer al algoritmo vanilla cuando
     // el callback devuelve `CALLBACK_FAILED`: OpenTTD interpreta ese resultado
@@ -501,6 +511,134 @@ pub(super) fn maybe_change_industry_production(state: &mut GameState) {
     if change == crate::industry::IndustryProductionChange::Closing {
         let at = state.industries[idx].pos;
         crate::news::report_industry_closing(state, at);
+    }
+}
+
+/// Devuelve el índice del `IndustryPool` elegido por `Industry::GetRandom`.
+///
+/// El vector del modelo no es necesariamente el pool: importar una partida o
+/// borrar una entidad puede dejarlo en otro orden. `OpenTTD` sortea de facto por
+/// el ID sparse del pool al recorrer `IsValidID`, por eso la selección debe
+/// ordenar por `instance_id` antes de aplicar el ordinal de `RandomRange`.
+fn random_industry_pool_index(state: &mut GameState) -> Option<usize> {
+    let count = state.industries.len();
+    if count == 0 {
+        return None;
+    }
+    let ordinal = usize::try_from(
+        state
+            .random
+            .random_range(u32::try_from(count).unwrap_or(u32::MAX)),
+    )
+    .ok()?;
+    let mut pool_indices: Vec<_> = (0..count).collect();
+    // El segundo componente conserva un resultado total aun en fixtures
+    // legacy donde más de una entidad todavía tiene el ID cero.
+    pool_indices.sort_unstable_by_key(|&index| (state.industries[index].instance_id, index));
+    pool_indices.get(ordinal).copied()
+}
+
+/// Cuenta los tipos vanilla presentes, exactamente en el espacio de 240
+/// `IndustryType` que usa `ITBL`.
+///
+/// `None` marca que el pool no se puede fundar con la ruta vanilla: una
+/// entidad opaca o `NewGRF` exige sus callbacks de probabilidad/producción y
+/// no debe ser reinterpretada como una especie estándar.
+fn vanilla_industry_type_counts(state: &GameState) -> Option<Vec<u16>> {
+    let mut counts = vec![0_u16; industry_builder::INDUSTRY_BUILD_TYPE_COUNT];
+    for industry in &state.industries {
+        let spec = industry.spec?;
+        if industry.newgrf_type_id.is_some() {
+            return None;
+        }
+        let type_index = usize::from(spec.native_type());
+        *counts.get_mut(type_index)? = counts[type_index].saturating_add(1);
+    }
+    Some(counts)
+}
+
+/// Indica que el runtime puede ejecutar `TryBuildNewIndustry` completo para
+/// el roster vanilla. Un catálogo `NewGRF` requiere sus providers propios;
+/// conservar el contador y dejar la fundación pendiente es más seguro que
+/// redistribuir sus objetivos con las probabilidades vanilla.
+fn can_run_vanilla_industry_builder(state: &GameState) -> bool {
+    state.industry_spec_catalog.is_empty() && vanilla_industry_type_counts(state).is_some()
+}
+
+/// Ejecuta la rama `TryBuildNewIndustry` para una partida estrictamente
+/// vanilla: refresca `ITBL`, elige la especie, intenta los 2.000 sitios y
+/// aplica el backoff incluso cuando no hay una especie elegible.
+fn try_build_new_vanilla_industry(state: &mut GameState) {
+    if !can_run_vanilla_industry_builder(state) {
+        return;
+    }
+    let (map_w, map_h) = state.map.dimensions();
+    let Some(current_counts) = vanilla_industry_type_counts(state) else {
+        return;
+    };
+    state.industry_builder.setup_vanilla_target_count(
+        state.climate,
+        state.calendar.year,
+        false,
+        &mut state.random,
+    );
+    let selected_type = state.industry_builder.select_automatic_build_type(
+        &current_counts,
+        state.global_economy.is_in_recession(),
+        &mut state.random,
+    );
+    let succeeded = selected_type
+        .and_then(crate::IndustrySpec::from_native_type)
+        .is_some_and(|spec| {
+            // `PlaceIndustry` reads the dimensions from the current map. Keep
+            // the locals above only as a cross-check that this branch never
+            // accidentally derives map scale from an entity count.
+            debug_assert_eq!(state.map.dimensions(), (map_w, map_h));
+            crate::world_gen::try_place_runtime_industry(state, spec)
+        });
+    state
+        .industry_builder
+        .finish_automatic_build_attempt(selected_type, succeeded);
+}
+
+fn industry_creation_percent(desired_count: u32, current_count: u32) -> u32 {
+    if desired_count > current_count {
+        3_u32
+            .saturating_add(desired_count.saturating_sub(current_count))
+            .min(9)
+    } else {
+        3
+    }
+}
+
+/// Scheduler diario completo de industrias (`_economy_industries_daily`).
+///
+/// El contador 16.16 reparte las acciones según el tamaño de mapa. Cada
+/// acción consume primero `Chance16(perc, 100)`: la rama falsa selecciona una
+/// industria del pool sparse y cambia su producción; la verdadera intenta una
+/// fundación. Así se evita el antiguo error de cambiar una industria cada día
+/// aun en mapas 64×64.
+pub(super) fn advance_industry_daily_scheduler(state: &mut GameState) {
+    let (map_w, map_h) = state.map.dimensions();
+    let change_loop = industry_builder::advance_industry_daily_change_counter(
+        &mut state.global_economy.industry_daily_change_counter,
+        map_w,
+        map_h,
+    );
+    if change_loop == 0 {
+        return;
+    }
+
+    let current_count = u32::try_from(state.industries.len()).unwrap_or(u32::MAX);
+    let desired_count = state.industry_builder.wanted_count();
+    let creation_percent = industry_creation_percent(desired_count, current_count);
+
+    for _ in 0..change_loop {
+        if state.random.chance16(creation_percent, 100) {
+            try_build_new_vanilla_industry(state);
+        } else if let Some(index) = random_industry_pool_index(state) {
+            change_industry_production_at(state, index);
+        }
     }
 }
 
@@ -925,5 +1063,160 @@ pub(super) fn apply_vehicle_running_costs(state: &mut GameState) {
         }
         state.vehicles[i].profit_this_year =
             state.vehicles[i].profit_this_year.saturating_sub(cost);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::cargodist::parity::Randomizer;
+    use crate::industry::Industry;
+    use crate::{Climate, IndustrySpec};
+
+    fn pool_industry(instance_id: u16) -> Industry {
+        Industry::with_tiles_spec(
+            TileCoord::new(0, 0),
+            IndustrySpec::CoalMine.kind(),
+            IndustrySpec::CoalMine,
+            Vec::new(),
+            0,
+        )
+        .with_instance_id(instance_id)
+    }
+
+    #[test]
+    fn sparse_pool_selection_uses_instance_id_instead_of_vector_order() {
+        // El vector se invierte a propósito para comprobar que no se confunde
+        // su orden de almacenamiento con el `IndustryPool`. El RNG controlado
+        // toma primero la rama de producción y luego el ordinal seis.
+        let mut state = GameState::new(256, 256);
+        state.industries = (0..=70).rev().map(pool_industry).collect();
+        state.random = Randomizer {
+            state: [3_704_038_854, 2_305_091_219],
+        };
+
+        assert!(!state.random.chance16(3, 100));
+        let selected =
+            random_industry_pool_index(&mut state).map(|index| state.industries[index].instance_id);
+        assert_eq!(selected, Some(6));
+    }
+
+    #[test]
+    fn daily_scheduler_preserves_fraction_and_does_not_run_before_boundary() {
+        let mut state = GameState::new(256, 256);
+        state.climate = Climate::Temperate;
+        state.industries = (0..=70).map(pool_industry).collect();
+        state.industry_builder.wanted_inds = 4_670_255;
+        state.random = Randomizer {
+            state: [3_704_038_854, 2_305_091_219],
+        };
+
+        state.global_economy.industry_daily_change_counter = 63_290;
+        let before_rng = state.random.state;
+        advance_industry_daily_scheduler(&mut state);
+        assert_eq!(state.global_economy.industry_daily_change_counter, 65_404);
+        assert_eq!(state.random.state, before_rng, "sin loop no hay RNG diario");
+
+        advance_industry_daily_scheduler(&mut state);
+        assert_eq!(
+            state.global_economy.industry_daily_change_counter, 1_982,
+            "65404 + 2114 conserva la fracción de la fila nativa del tick 20553"
+        );
+    }
+
+    #[test]
+    fn creation_percent_is_capped_at_nine_when_builder_is_behind() {
+        assert_eq!(industry_creation_percent(0, 0), 3);
+        assert_eq!(industry_creation_percent(72, 71), 4);
+        assert_eq!(industry_creation_percent(100, 0), 9);
+    }
+
+    #[test]
+    fn daily_scheduler_founds_post_1960_oil_rig_and_roundtrips_sav() {
+        // Fixture mínima de gameplay: agua abierta y un pueblo válido. La
+        // semilla 13 toma Chance16(4, 100), asigna el único objetivo a Oil Rig
+        // (roll 12 del peso vanilla 34) y deja que PlaceIndustry consuma sus
+        // propios intentos, layout y bytes constructores.
+        let mut state = GameState::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                crate::map::make_water_tile(
+                    &mut state.map,
+                    TileCoord::new(x, y),
+                    crate::map::WaterClass::Sea,
+                )
+                .expect("sea fixture");
+            }
+        }
+        state.towns.push(crate::town::Town {
+            id: 0,
+            pos: TileCoord::new(32, 32),
+            name: "Puerto scheduler".into(),
+            ..crate::town::Town::default()
+        });
+        state.tick = crate::news::tick_for_calendar_year(1960);
+        state.sync_timers_from_tick();
+        state.industry_builder.wanted_inds = 1 << 16;
+        state.global_economy.industry_daily_change_counter = 65_404;
+        state.economy.money = 777_000;
+        let money_before = state.economy.money;
+        state.random = Randomizer::new(13);
+
+        advance_industry_daily_scheduler(&mut state);
+
+        assert_eq!(state.global_economy.industry_daily_change_counter, 0);
+        assert_eq!(state.industries.len(), 1);
+        let industry = &state.industries[0];
+        assert_eq!(industry.spec, Some(IndustrySpec::OilRig));
+        assert_eq!(industry.founder, None);
+        assert_eq!(
+            industry.construction_type,
+            crate::industry::INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY
+        );
+        assert_eq!(industry.town_id, Some(0));
+        assert_eq!(state.economy.money, money_before);
+        assert_eq!(industry.tiles.len(), 6);
+        assert!(industry.tiles.iter().all(|&tile| {
+            state.map.get_kind(tile) == Some(crate::map::TileKind::Industry)
+                && state.map.get(tile).is_some_and(|value| value.m3hi == 0)
+        }));
+        assert_eq!(
+            state.news.items.front().map(|item| item.news_type),
+            Some(crate::news::NewsType::IndustryOpen)
+        );
+        assert_eq!(
+            state
+                .industry_builder
+                .type_data(5)
+                .map(|data| data.max_wait),
+            Some(1),
+            "un éxito reduce max_wait sin generar backoff"
+        );
+
+        let bytes = crate::sav::save_to_bytes_with(&state, crate::sav::SavContainer::Ottn)
+            .expect("export scheduler SAV");
+        let loaded =
+            GameState::from_sav_game(crate::sav::load(&bytes).expect("reload scheduler SAV"));
+        assert_eq!(
+            loaded.random, state.random,
+            "DATE conserva el stream post-placement"
+        );
+        assert_eq!(
+            loaded.global_economy.industry_daily_change_counter,
+            state.global_economy.industry_daily_change_counter
+        );
+        assert_eq!(loaded.industry_builder, state.industry_builder);
+        assert_eq!(loaded.industries.len(), 1);
+        assert_eq!(loaded.industries[0].spec, Some(IndustrySpec::OilRig));
+        assert_eq!(loaded.industries[0].town_id, Some(0));
+        // El pool INDY sólo persiste el rectángulo; el orden interno de
+        // `tiles` no forma parte del SAV. Comparamos la cobertura, que es la
+        // entidad semántica que OpenTTD vuelve a hidratar desde el mapa.
+        let mut loaded_tiles = loaded.industries[0].tiles.clone();
+        let mut original_tiles = industry.tiles.clone();
+        loaded_tiles.sort_unstable_by_key(|tile| (tile.y, tile.x));
+        original_tiles.sort_unstable_by_key(|tile| (tile.y, tile.x));
+        assert_eq!(loaded_tiles, original_tiles);
     }
 }

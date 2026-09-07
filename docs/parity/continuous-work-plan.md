@@ -116,8 +116,9 @@ tipo nativo 5, layout 2×3, agua por tesela, producción, estación neutral
 `Oilrig` (helipuerto y muelle), cierre y round-trip SAV interno. La construcción
 terminada conserva la entidad y los bytes vinculados, y la cohorte Temperate
 512²/seed `1330935382` sigue exacta en `industries` por teselas, bloques 4×4,
-RNG e intentos. No se cierra #499: aún falta la fundación aleatoria posterior
-a 1960 y su oráculo temporal/RNG; el detalle canónico queda sólo en
+RNG e intentos. No se cierra #499: la fundación vanilla posterior a 1960 está
+cubierta por RMAP-161/#502, pero faltan catálogos/callbacks NewGRF, settings
+no vanilla y una matriz temporal amplia; el detalle canónico queda sólo en
 `random-map-issues.md`.
 
 RMAP-159 / #500 completa el estado persistente previo a esa fundación: `IBLD`
@@ -128,9 +129,8 @@ Oil Rig temperate desde 1960 con peso 6 y Oil Wells hasta 1950; `SetupTargetCoun
 no reconsume RNG cuando la tabla no cambió. También quedan cubiertos el paso
 mensual `0x38000/(10*12)`, la acumulación diaria `ECMY` y la escala 64²/256²/512².
 El exportador emite las 240 filas y `OpenTTD` dedicated cargó el SAV rico
-canónico que las contiene. Esto no ejecuta aún `Chance16`, `TryBuildNewIndustry`,
-`PlaceIndustry`, callbacks NewGRF ni la traza temporal: #499/RMAP-158 y los
-padres continúan abiertos para esa ejecución.
+canónico que las contiene. RMAP-161/#502 ejecuta después la ruta vanilla;
+callbacks NewGRF y settings no vanilla continúan fuera de este corte.
 
 RMAP-160 / #501 cierra sólo el corte de observación temporal: el oracle nativo
 emite una muestra post-timer con `ECMY`, `IBLD`/las 240 filas `ITBL`, RNG,
@@ -139,13 +139,21 @@ el validador falla cerrado ante huecos o cardinalidad distinta. La evidencia
 concreta de la fixture y el hash viven canónicamente en
 [`random-map-issues.md`](random-map-issues.md); el formato y el comando están
 en [`INDUSTRY_SCHEDULER_TRACE_SCHEMA.md`](INDUSTRY_SCHEDULER_TRACE_SCHEMA.md).
-Esto habilita el siguiente cambio diferencial, pero no ejecuta aún la
-fundación física ni cierra #499.
+RMAP-161/#502 consume este contrato para la fundación vanilla, pero la traza
+no sustituye todavía el detalle de cada intento ni cierra #499.
 
-Actualizado el 2026-09-07: RMAP-159/#500 y RMAP-160/#501 son sub-issues
-cerrados de estado/selección y observación temporal; los gates continúan siendo
-obligatorios para cada etapa posterior y ningún issue padre se considera
-cerrado por esta cobertura.
+RMAP-161 / #502 cierra el corte ejecutable vanilla del scheduler: conserva el
+contador diario `ECMY`, `Chance16(3…9,100)`, selección sparse por `IndustryID`,
+`IBLD`/backoff y el límite de 2.000 intentos de la fundación automática. La
+fixture 64² desde 1960 funda una Oil Rig sin fundador ni cargo, conserva sus
+teselas/estación y verifica `INDY.town` como `REF_TOWN` después de un round-trip
+OTTN. El alcance y los límites viven sólo en `random-map-issues.md`: NewGRF,
+settings no vanilla y matriz temporal siguen abiertos.
+
+Actualizado el 2026-09-07: RMAP-159/#500, RMAP-160/#501 y RMAP-161/#502 son
+sub-issues cerrados de estado/selección, observación temporal y ejecución
+vanilla; los gates continúan siendo obligatorios y ningún issue padre se
+considera cerrado por esta cobertura.
 
 Reparación #347 validada (2026-09-04): las casas sin PNG suelto se recortan
 del atlas distribuido y conservan la misma paleta; las páginas se decodifican

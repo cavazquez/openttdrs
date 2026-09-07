@@ -48,6 +48,22 @@ impl Randomizer {
     pub fn random_range(&mut self, limit: u32) -> u32 {
         Self::scale_to_limit(self.next(), limit)
     }
+
+    /// `Chance16I(a, b)` de `OpenTTD` sobre los 16 bits bajos de `Random()`.
+    ///
+    /// No es intercambiable con [`Self::random_range`]: el original redondea
+    /// el producto antes de comparar y varios timers usan precisamente esa
+    /// frontera. Un denominador nulo no representa una probabilidad válida y
+    /// no consume el stream.
+    #[must_use]
+    pub fn chance16(&mut self, numerator: u32, denominator: u32) -> bool {
+        if denominator == 0 {
+            return false;
+        }
+        let random_low = u64::from(self.next() & 0xFFFF);
+        let denominator = u64::from(denominator);
+        ((random_low * denominator + denominator / 2) >> 16) < u64::from(numerator)
+    }
 }
 
 #[cfg(test)]
@@ -62,5 +78,19 @@ mod tests {
         assert_eq!(rng.next(), 3_750_006_036);
         assert_eq!(rng.next(), 1_602_748_415);
         assert_eq!(rng.next(), 981_167_158);
+    }
+
+    #[test]
+    fn chance16_uses_low_word_and_native_rounding() {
+        let mut rng = Randomizer {
+            // El siguiente valor tiene low-word 0, por lo que Chance16(1, 7)
+            // debe aceptar independientemente de los bits altos.
+            state: [8, 0],
+        };
+        assert!(rng.chance16(1, 7));
+
+        let before = rng.state;
+        assert!(!rng.chance16(1, 0));
+        assert_eq!(rng.state, before, "denominador nulo no consume Random()");
     }
 }

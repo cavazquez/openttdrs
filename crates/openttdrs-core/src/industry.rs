@@ -143,6 +143,55 @@ pub enum IndustrySpec {
 }
 
 impl IndustrySpec {
+    /// Traduce un `IndustryType` vanilla de `OpenTTD` a la spec interna.
+    ///
+    /// Los IDs a partir de 37 pertenecen al catálogo `NewGRF` y se resuelven
+    /// por separado; no deben caer por accidente en una especie vanilla
+    /// durante la fundación automática.
+    #[must_use]
+    pub const fn from_native_type(native_type: u16) -> Option<Self> {
+        match native_type {
+            0 => Some(Self::CoalMine),
+            1 => Some(Self::PowerStation),
+            2 => Some(Self::Sawmill),
+            3 => Some(Self::Forest),
+            4 => Some(Self::OilRefinery),
+            5 => Some(Self::OilRig),
+            6 => Some(Self::Factory),
+            7 => Some(Self::PrintingWorks),
+            8 => Some(Self::SteelMill),
+            9 => Some(Self::Farm),
+            10 => Some(Self::CopperOreMine),
+            11 => Some(Self::OilWells),
+            12 => Some(Self::Bank),
+            13 => Some(Self::FoodProcessingPlant),
+            14 => Some(Self::PaperMill),
+            15 => Some(Self::GoldMine),
+            16 => Some(Self::BankArcticTropic),
+            17 => Some(Self::DiamondMine),
+            18 => Some(Self::IronOreMine),
+            19 => Some(Self::FruitPlantation),
+            20 => Some(Self::RubberPlantation),
+            21 => Some(Self::WaterSupply),
+            22 => Some(Self::WaterTower),
+            23 => Some(Self::FactoryTropic),
+            24 => Some(Self::FarmTropic),
+            25 => Some(Self::LumberMill),
+            26 => Some(Self::CottonCandy),
+            27 => Some(Self::CandyFactory),
+            28 => Some(Self::BatteryFarm),
+            29 => Some(Self::ColaWells),
+            30 => Some(Self::ToyShop),
+            31 => Some(Self::ToyFactory),
+            32 => Some(Self::PlasticFountain),
+            33 => Some(Self::FizzyDrinkFactory),
+            34 => Some(Self::BubbleGenerator),
+            35 => Some(Self::ToffeeQuarry),
+            36 => Some(Self::SugarMine),
+            _ => None,
+        }
+    }
+
     /// Industrias colocables en este clima (`LandscapeType` en `OpenTTD`).
     #[must_use]
     pub fn specs_for_climate(climate: Climate) -> &'static [IndustrySpec] {
@@ -2832,6 +2881,19 @@ mod tests {
                 .all(|pair| pair[0].native_type() < pair[1].native_type())
         );
         assert_eq!(IndustrySpec::Bank.native_type(), 12);
+    }
+
+    #[test]
+    fn native_type_mapper_is_total_for_vanilla_and_rejects_newgrf_slots() {
+        for native_type in 0_u16..=36 {
+            assert_eq!(
+                IndustrySpec::from_native_type(native_type)
+                    .map_or(u16::MAX, |spec| u16::from(spec.native_type())),
+                native_type
+            );
+        }
+        assert_eq!(IndustrySpec::from_native_type(37), None);
+        assert_eq!(IndustrySpec::from_native_type(239), None);
     }
 
     #[test]

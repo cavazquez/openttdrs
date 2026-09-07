@@ -143,7 +143,7 @@ fn on_tick_industry(state: &mut GameState, t: u64) {
         for industry in &mut state.industries {
             industry.accumulate_accepted_waiting();
         }
-        super::economy::maybe_change_industry_production(state);
+        super::economy::advance_industry_daily_scheduler(state);
     }
 }
 

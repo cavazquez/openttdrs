@@ -2026,6 +2026,7 @@ mod tests {
             pos,
             width: 1,
             height: 1,
+            town_id: None,
             neutral_station_id: None,
             industry_type: 0,
             random_colour: 0,

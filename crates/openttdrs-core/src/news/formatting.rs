@@ -36,6 +36,7 @@ pub fn news_type_label(news_type: NewsType) -> &'static str {
         NewsType::VehicleAdvice => "Avisos de vehículo",
         NewsType::Accident => "Accidentes",
         NewsType::CompanyInfo => "Compañías",
+        NewsType::IndustryOpen => "Apertura de industria",
         NewsType::IndustryClose => "Cierre de industria",
         NewsType::Economy => "Economía",
     }

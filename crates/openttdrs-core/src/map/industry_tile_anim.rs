@@ -202,12 +202,7 @@ fn chance16_rng(
     numerator: u32,
     denominator: u32,
 ) -> bool {
-    if denominator == 0 {
-        return false;
-    }
-    let random_low = u64::from(rng.next() & 0xFFFF);
-    let denominator = u64::from(denominator);
-    ((random_low * denominator + denominator / 2) >> 16) < u64::from(numerator)
+    rng.chance16(numerator, denominator)
 }
 
 /// Reproduce la pasada `AnimateAnimatedTiles` inmediatamente posterior a la

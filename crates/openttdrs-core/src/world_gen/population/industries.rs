@@ -767,6 +767,119 @@ fn try_place_industry(
     false
 }
 
+/// `PlaceIndustry(..., IACT_RANDOMCREATION, false)` durante una partida.
+///
+/// La ruta de generación comparte los cuatro `Random()` de cada intento, pero
+/// no se puede reutilizar literalmente: la plataforma gratuita sólo existe
+/// bajo `_generating_world`, y una fundación automática debe quedar con
+/// `OWNER_NONE`/`ICT_NORMAL_GAMEPLAY`, no cobrar a la compañía activa ni
+/// marcarse como mapa generado. La selección de tipo/backoff pertenece a
+/// `IndustryBuildData`; esta función recibe una especie vanilla ya elegida.
+pub(crate) fn try_place_runtime_industry(state: &mut GameState, spec: IndustrySpec) -> bool {
+    // Esta ruta es exclusivamente `PlaceIndustry(..., IACT_RANDOMCREATION,
+    // false)`: a diferencia del comando manual, respeta `appear_ingame` y
+    // sus gates de fecha (en particular Oil Rig desde 1960).
+    if !spec.available_in(state.climate)
+        || spec.gameplay_probability(state.climate, state.calendar.year) == 0
+    {
+        return false;
+    }
+    let (map_w, map_h) = state.map.dimensions();
+    // Separar temporalmente `_random` permite mutar el mundo y conservar la
+    // secuencia exacta de RandomTile, seeds y construcción sin aliases entre
+    // `state` y `state.random`.
+    let mut rng = std::mem::take(&mut state.random);
+    let result = try_place_runtime_industry_with_rng(state, spec, map_w, map_h, &mut rng);
+    state.random = rng;
+    if result {
+        // `AdvertiseIndustryOpening` ocurre tras `PlaceIndustry`; copiar la
+        // posición evita mantener un préstamo a la entidad mientras se muta
+        // la cola de noticias.
+        if let Some(at) = state.industries.last().map(|industry| industry.pos) {
+            crate::news::report_industry_opened(state, at);
+        }
+    }
+    result
+}
+
+fn try_place_runtime_industry_with_rng(
+    state: &mut GameState,
+    spec: IndustrySpec,
+    map_w: u32,
+    map_h: u32,
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> bool {
+    for _ in 0..INDUSTRY_PLACEMENT_ATTEMPTS {
+        // `CreateNewIndustry` toma RandomTile, seed callback, seed inicial y
+        // layout antes de validar el sitio. Ninguno de los rechazos siguientes
+        // puede devolver esas cuatro palabras al stream.
+        let attempt =
+            generated_industry_attempt(rng, map_w, map_h, industry_template_layout_count(spec));
+        let origin = attempt.origin;
+        if !generated_industry_check_proc_allows(state, origin, spec) {
+            continue;
+        }
+        let associated_town_id = generated_industry_associated_town_id(state, origin);
+        if generated_industry_has_conflict(state, origin, spec)
+            || !generated_industry_can_use_closest_town(state, origin, spec, false)
+        {
+            continue;
+        }
+        let Some(layout) = industry_template_with_layout(origin, spec, attempt.layout_index) else {
+            continue;
+        };
+        if generated_industry_has_vehicle(state, &layout)
+            || check_place_industry_spec_layout(&state.map, origin, spec, attempt.layout_index)
+                .is_err()
+        {
+            continue;
+        }
+
+        // A diferencia de GenerateIndustries, CreateNewIndustryHelper no
+        // nivela plataformas durante gameplay. El comando automático conserva
+        // el mismo writer, pero sin fundador/coste de jugador.
+        if crate::command::place_industry_spec_layout_automatic(
+            state,
+            origin,
+            spec,
+            attempt.layout_index,
+        )
+        .is_err()
+        {
+            continue;
+        }
+
+        let constructor_random =
+            consume_successful_industry_constructor_rng(rng, spec, attempt.layout_index);
+        let industry_id = state
+            .industries
+            .last()
+            .map_or(0, |industry| industry.instance_id);
+        apply_runtime_industry_bytes(
+            state,
+            origin,
+            spec,
+            attempt.layout_index,
+            attempt.initial_random_bits,
+            industry_id,
+            &constructor_random,
+        );
+        if let Some(industry) = state
+            .industries
+            .iter_mut()
+            .find(|industry| industry.instance_id == industry_id)
+        {
+            industry.town_id = associated_town_id;
+        }
+        if matches!(spec, IndustrySpec::Farm | IndustrySpec::FarmTropic) {
+            let (width, height) = farm_industry_location_size(origin, spec, attempt.layout_index);
+            plant_random_farm_fields_runtime(state, origin, width, height, industry_id, rng);
+        }
+        return true;
+    }
+    false
+}
+
 /// Consume el prefijo RNG de un intento de `CreateNewIndustry`.
 ///
 /// `PlaceIndustry` obtiene primero `RandomTile()`. Cada intento consume luego
@@ -917,6 +1030,48 @@ fn apply_generated_industry_bytes(
             .date
             .saturating_add(crate::industry::OPENTTD_CALENDAR_DAYS_TILL_BASE_YEAR);
         industry.construction_type = crate::industry::INDUSTRY_CONSTRUCTION_MAP_GENERATION;
+        industry.last_prod_year = state.economy_timer.year;
+    }
+}
+
+/// Finaliza la parte de `DoCreateNewIndustry` que sólo ocurre en gameplay.
+///
+/// Las teselas siguen en construcción (a diferencia de la ruta generada que
+/// fuerza etapa 2), pero sus bits aleatorios, color, contador y random parent
+/// ya proceden de `_random`. Los callbacks `NewGRF` de construcción se tratan
+/// en su corte propio; esta ruta sólo se invoca para specs vanilla.
+fn apply_runtime_industry_bytes(
+    state: &mut GameState,
+    origin: TileCoord,
+    spec: IndustrySpec,
+    layout_index: usize,
+    initial_random_bits: u16,
+    industry_id: u16,
+    random: &IndustryConstructorRandom,
+) {
+    let Some(layout) = industry_template_with_layout(origin, spec, layout_index) else {
+        return;
+    };
+    for ((coord, _), tile_random) in layout.iter().zip(random.tile_random.iter().copied()) {
+        let Some(mut tile) = state.map.get(*coord) else {
+            continue;
+        };
+        // `MakeIndustry` usa el byte bajo de Random() para MAP3; no fuerza
+        // la etapa/counter de construcción de mapas generados.
+        tile.m3 = tile_random;
+        tile.m3hi = 0;
+        let _ = state.map.set_tile(*coord, tile);
+    }
+    if let Some(industry) = state
+        .industries
+        .iter_mut()
+        .find(|industry| industry.instance_id == industry_id)
+    {
+        industry.random_colour = random.random_colour;
+        industry.counter = random.counter;
+        industry.newgrf_random = initial_random_bits;
+        industry.founder = None;
+        industry.construction_type = crate::industry::INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY;
         industry.last_prod_year = state.economy_timer.year;
     }
 }
@@ -1901,6 +2056,36 @@ mod tests {
         // The ten ConstructionStageChanged callbacks are consumed after the
         // tile writes, preserving the next force-one RandomTile boundary.
         assert_eq!(ctx.rng.state, [2_354_350_958, 520_419_394]);
+    }
+
+    #[test]
+    fn runtime_foundation_uses_normal_gameplay_owner_without_generation_trace() {
+        let (mut state, rng) = generated_towns_state_and_rng(1_330_935_378);
+        state.random = rng;
+        state.economy.money = 777_000;
+        let money_before = state.economy.money;
+
+        assert!(try_place_runtime_industry(
+            &mut state,
+            IndustrySpec::CoalMine
+        ));
+
+        let industry = state.industries.last().expect("runtime industry");
+        assert_eq!(industry.spec, Some(IndustrySpec::CoalMine));
+        assert_eq!(industry.founder, None);
+        assert_eq!(
+            industry.construction_type,
+            crate::industry::INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY
+        );
+        assert!(industry.town_id.is_some());
+        assert_eq!(state.economy.money, money_before);
+        assert!(
+            state.runtime.industry_generation_attempts.is_empty(),
+            "runtime placement must not contaminate the genworld-only trace"
+        );
+        for &tile in &industry.tiles {
+            assert_eq!(state.map.get(tile).map(|value| value.m3hi), Some(0));
+        }
     }
 
     #[test]

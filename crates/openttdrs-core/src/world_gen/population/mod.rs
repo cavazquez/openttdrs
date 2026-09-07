@@ -13,7 +13,9 @@
 mod industries;
 mod towns;
 
-pub(crate) use industries::{plant_random_farm_field_runtime, plant_random_farm_fields_runtime};
+pub(crate) use industries::{
+    plant_random_farm_field_runtime, plant_random_farm_fields_runtime, try_place_runtime_industry,
+};
 
 use crate::cargodist::parity::Randomizer;
 use crate::game_state::GameState;
@@ -265,12 +267,17 @@ pub fn generate_industries_with_rng(
         industry_platform: cfg.industry_platform,
         multiple_industry_per_town: cfg.multiple_industry_per_town,
     };
-    industries::place_industries(
+    let placed = industries::place_industries(
         &mut ctx,
         industry_target_count(cfg.industry_density, mw, mh),
         &town_centers,
         cfg.industry_density,
-    )
+    );
+    // `GenerateIndustries` siempre reinicia `IBLD` al terminar la fase: el
+    // objetivo 16.16 parte del número que realmente pudo colocarse, incluso
+    // cuando una densidad pidió más especies de las que admitió el mapa.
+    state.industry_builder.reset(state.industries.len());
+    placed
 }
 
 /// Genera pueblos e industrias sobre un mapa ya generado (orden genworld).

@@ -462,6 +462,7 @@ pub(crate) fn hydrate_sav_industries(
         industry.last_prod_year = saved.last_prod_year;
         industry.was_cargo_delivered = saved.was_cargo_delivered;
         industry.control_flags = saved.control_flags;
+        industry.town_id = saved.town_id;
         industry.neutral_station_id = saved.neutral_station_id;
         industry.exclusive_supplier = saved.exclusive_supplier.map(crate::company::CompanyId);
         industry.founder = saved.founder.map(crate::company::CompanyId);
@@ -1125,6 +1126,7 @@ mod tests {
             pos: TileCoord::new(2, 2),
             width: 1,
             height: 2,
+            town_id: None,
             neutral_station_id: None,
             industry_type: 0,
             random_colour: 14,

@@ -1143,6 +1143,12 @@ pub struct SavIndustry {
     /// Dimensiones del rectángulo (`location.w` × `location.h`).
     pub width: u8,
     pub height: u8,
+    /// Referencia `Industry::town` (`TownID + 1`, cero = none).
+    ///
+    /// `INDY.town` no se puede inferir de la tesela: en `OpenTTD` se conserva
+    /// como una referencia de pool independiente y afecta la asociación de
+    /// industrias creadas por el scheduler económico.
+    pub town_id: Option<u32>,
     /// Referencia `Industry::neutral_station` (`StationID + 1`, cero = none).
     pub neutral_station_id: Option<u32>,
     /// `IndustryType` de `OpenTTD` (índice en la tabla de specs).
@@ -1263,6 +1269,7 @@ pub(crate) fn industries_from_chunks(
                     pos,
                     width: 1,
                     height: 1,
+                    town_id: None,
                     neutral_station_id: None,
                     industry_type,
                     random_colour: 0,
@@ -1301,6 +1308,14 @@ fn sav_industry_from_record(
     let height = record_get(record, "location.h")
         .and_then(SlValue::as_u64)
         .unwrap_or(1);
+    // `SLE_REF(Industry, town, REF_TOWN)`: zero is null, otherwise the
+    // native Town pool index plus one. Keep the semantic TownID here rather
+    // than recovering a nearest town, which changes after the map evolves.
+    let town_id = record_get(record, "town")
+        .and_then(SlValue::as_u64)
+        .filter(|&value| value > 0)
+        .and_then(|value| value.checked_sub(1))
+        .and_then(|value| u32::try_from(value).ok());
     let neutral_station_id = record_get(record, "neutral_station")
         .and_then(SlValue::as_u64)
         .filter(|&value| value > 0)
@@ -1368,6 +1383,7 @@ fn sav_industry_from_record(
         pos,
         width: width.min(255) as u8,
         height: height.min(255) as u8,
+        town_id,
         neutral_station_id,
         industry_type: industry_type.min(255) as u8,
         random_colour: (random_colour % 16) as u8,

@@ -153,7 +153,7 @@ settings no vanilla y matriz temporal siguen abiertos.
 RMAP-162 / #506 completa el puente diferencial: el candidato Rust exporta el
 mismo JSONL v1 en el corte post-timer y el comparador exige reloj, RNG, `ECMY`,
 `ITBL`, industrias y acciones exactos. #507/#515 restauran el `DATE` completo,
-incluido el cursor LFSR del tile loop, y #514 ejecuta `TileLoop_Industry` sobre
+incluido el cursor LFSR del tile loop, y #514/#516 despachan Industry/Town en
 la visita actual del stream global. La medición diaria, las recurrencias y el
 residual que queda en #512 se mantienen canónicamente en
 [`random-map-issues.md`](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
@@ -165,8 +165,9 @@ Actualizado el 2026-09-07: RMAP-159/#500, RMAP-160/#501, RMAP-161/#502 y
 RMAP-162/#506 son sub-issues cerrados de estado/selección, observación nativa,
 ejecución vanilla e instrumentación diferencial. #507/#515 conservan la carga
 `DATE` incluida la posición LFSR, #510 valida la calidad de la corrida native,
-#511 cierra el contador persistido, #513 el sonido ambiental y #514 el bloque
-actual de `TileLoop_Industry`; #512 mantiene separado el RNG posterior. Los
+#511 cierra el contador persistido, #513 el sonido ambiental y #514/#516 los
+bloques actuales de `TileLoop_Industry`/`TileLoop_Town`; #512 mantiene separado
+el RNG posterior. Los
 gates continúan siendo obligatorios y ningún issue padre se considera cerrado
 por esta cobertura.
 

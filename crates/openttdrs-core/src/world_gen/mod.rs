@@ -45,6 +45,7 @@ pub use population::{
 pub(crate) use population::{
     plant_random_farm_field_runtime, plant_random_farm_fields_runtime, try_place_runtime_industry,
 };
+pub(crate) use tile_loop::advance_town_tile_loop_from_visit_with_rng;
 pub use tile_loop::{
     LANDSCAPE_RIVER_TILE_LOOP_PASSES, STARTUP_TILE_LOOP_PASSES,
     run_first_regular_game_tick_with_rng, run_generation_tile_loop,

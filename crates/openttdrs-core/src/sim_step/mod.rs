@@ -716,33 +716,47 @@ fn phase_tile_loop(state: &mut GameState, t: u64) {
     state.runtime.tile_loop_visited =
         crate::map::collect_tile_loop_visits(&state.map, t, &mut state.cur_tileloop_tile);
 
-    // `TileLoop_Industry` no pertenece a `AnimateAnimatedTiles`: OpenTTD lo
-    // ejecuta sobre la visita LFSR que acaba de recoger `RunTileLoop`. En
-    // particular, `TriggerIndustryTileAnimation(..., TileLoop)` toma una
-    // palabra de `_random` antes de decidir si la tesela tiene callback.
-    // Filtrar por el snapshot evita animar una obra que se haya completado en
-    // otra pasada antes de que esta visita llegara a la cola.
-    let completed_industry_visits: Vec<_> = state
-        .runtime
-        .tile_loop_visited
-        .iter()
-        .copied()
-        .filter(|(_, tile)| {
-            tile.kind == crate::TileKind::Industry && crate::map::is_industry_completed(tile.m1)
-        })
-        .collect();
-    let industry_events = crate::map::industry_tile_anim::
-        advance_industry_tile_loop_events_from_visits_with_rng_and_effects(
-            &mut state.map,
-            t,
-            &completed_industry_visits,
-            &mut state.random,
-        );
-    state
-        .runtime
-        .industry_tile_dirty
-        .extend(industry_events.dirty);
-    for (at, direction) in industry_events.bubble_spawns {
+    // `RunTileLoop` despacha cada visita LFSR en orden, no un barrido por
+    // clase. Mantener esa intercalación es esencial: Town e Industry toman
+    // palabras del mismo `_random` y sus efectos/callbacks ven el resultado
+    // de la visita anterior, aunque sea de otro tipo de tesela.
+    let visits = state.runtime.tile_loop_visited.clone();
+    let mut global_rng = state.random;
+    let mut industry_dirty = Vec::new();
+    let mut bubble_spawns = Vec::new();
+    for (coord, snapshot) in visits {
+        match snapshot.kind {
+            crate::TileKind::Industry if crate::map::is_industry_completed(snapshot.m1) => {
+                // `TileLoop_Industry` no pertenece a
+                // `AnimateAnimatedTiles`: `TriggerIndustryTileAnimation`
+                // toma una palabra antes de decidir si la tesela tiene
+                // callback. El snapshot evita animar una obra completada por
+                // una pasada anterior al llegar a esta visita.
+                let events = crate::map::industry_tile_anim::
+                    advance_industry_tile_loop_events_from_visits_with_rng_and_effects(
+                        &mut state.map,
+                        t,
+                        &[(coord, snapshot)],
+                        &mut global_rng,
+                    );
+                industry_dirty.extend(events.dirty);
+                bubble_spawns.extend(events.bubble_spawns);
+            }
+            crate::TileKind::House => {
+                crate::world_gen::advance_town_tile_loop_from_visit_with_rng(
+                    state,
+                    t,
+                    coord,
+                    snapshot,
+                    &mut global_rng,
+                );
+            }
+            _ => {}
+        }
+    }
+    state.random = global_rng;
+    state.runtime.industry_tile_dirty.extend(industry_dirty);
+    for (at, direction) in bubble_spawns {
         state
             .runtime
             .pending_sim_events
@@ -1315,6 +1329,78 @@ mod tests {
                 direction: expected_direction,
             }]
         );
+    }
+
+    #[test]
+    fn town_tile_loop_uses_the_current_lfsr_visit_and_global_rng() {
+        // Igual que la rama industrial, la casa debe procesarse en la visita
+        // recogida por este `RunTileLoop`, no en el lote anterior usado por
+        // `AnimateAnimatedTiles`. En (0, 0)/tick 0 toca además la franja
+        // binomial, por lo que hay tres extracciones nativas.
+        let coord = TileCoord::new(0, 0);
+        let mut state = GameState::new(64, 64);
+        state
+            .map
+            .set_tile(coord, crate::map::Tile::completed_house(0, 0, 0))
+            .unwrap();
+        state.random = crate::linkgraph_parity::Randomizer {
+            state: [0x1122_3344, 0x5566_7788],
+        };
+        let mut expected_random = state.random;
+        let _house_random = expected_random.next();
+        let _passenger_random = expected_random.next();
+        let _mail_random = expected_random.next();
+
+        phase_tile_loop(&mut state, 0);
+
+        assert!(
+            state
+                .runtime
+                .tile_loop_visited
+                .iter()
+                .any(|(visited, _)| *visited == coord)
+        );
+        assert_eq!(state.random, expected_random);
+    }
+
+    #[test]
+    fn tile_loop_interleaves_town_and_industry_rng_by_lfsr_visit() {
+        // Tick cero visita primero la tesela especial 0 y luego el cursor
+        // LFSR 1. La casa de (0, 0) toma tres palabras y debe cambiar la
+        // tirada posterior de las chispas: agrupar Industry antes de Town
+        // produciría el resultado opuesto con esta semilla.
+        let house_coord = TileCoord::new(0, 0);
+        let mut state = GameState::new(64, 64);
+        let industry_coord = crate::map::tile_index_to_coord(1, &state.map).unwrap();
+        state
+            .map
+            .set_tile(house_coord, crate::map::Tile::completed_house(0, 0, 0))
+            .unwrap();
+        let mut industry = state.map.get(industry_coord).unwrap();
+        industry.kind = crate::TileKind::Industry;
+        industry.m1 = 0x80;
+        industry.m5 = 10; // `GFX_POWERPLANT_SPARKS`, que cabe en MAP5.
+        state.map.set_tile(industry_coord, industry).unwrap();
+        state.random = crate::linkgraph_parity::Randomizer::new(5);
+
+        let mut expected_random = state.random;
+        let _house_random = expected_random.next();
+        let _passenger_random = expected_random.next();
+        let _mail_random = expected_random.next();
+        let _industry_trigger_random = expected_random.next();
+        assert!(expected_random.chance16(1, 3));
+
+        let mut grouped_random = state.random;
+        let _wrong_industry_trigger = grouped_random.next();
+        assert!(
+            !grouped_random.chance16(1, 3),
+            "la semilla debe distinguir el orden por tipo del orden LFSR"
+        );
+
+        phase_tile_loop(&mut state, 0);
+
+        assert_eq!(state.random, expected_random);
+        assert_eq!(state.map.get(industry_coord).unwrap().m6 & 0x03, 0x03);
     }
 
     #[test]

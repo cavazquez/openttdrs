@@ -3,8 +3,9 @@
 Actualizado: 2026-09-07. Sub-issues: #501 (oráculo), #502 (ejecución vanilla)
 y #506 (candidato/comparador); padre de runtime: #499 / RMAP-158. #507/#515
 conservan el `DATE`, incluido el cursor LFSR de tile loop; #510 rechaza una
-ejecución dedicated degradada, #511 alinea el contador de industria, #514 mueve
-el TileLoop industrial al stream actual y #512 aísla el residual posterior.
+ejecución dedicated degradada, #511 alinea el contador de industria y
+#514/#516 mueven los TileLoops industrial/urbano al stream actual; #512 aísla
+el residual posterior.
 
 `OPENTTDRS_INDUSTRY_TRACE_OUT` habilita, exclusivamente en el binario OpenTTD
 instrumentado, una traza JSONL de la rutina diaria
@@ -94,8 +95,8 @@ incompleto. #511 reproduce el decremento con wrapping durante `OnTick_Industry`
 y coloca `_economy_industries_daily` antes de `TimerGameTick`, como el loop
 nativo. La corrida normal de tres días ya iguala tick, ambos relojes, `ECMY`,
 `ITBL`, acciones y los 42 `INDY.counter`; por ejemplo el primero pasa de
-`12730` a `12658` en ambos motores. #513/#514 elevan la recurrencia de la
-primera jornada de `autosave0.sav` a 172; OpenTTD aún alcanza 930, por lo que
+`12730` a `12658` en ambos motores. #513/#514/#516 elevan la recurrencia de la
+primera jornada de `autosave0.sav` a 551; OpenTTD aún alcanza 930, por lo que
 el residual `day[1].random_state` sigue en #512. La atribución y los números
 canónicos están en [RMAP-162](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
 Este contrato no declara aún paridad runtime completa del scheduler.

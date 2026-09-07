@@ -401,6 +401,29 @@ fn tile_loop_house(
     }
 }
 
+/// Despacha una visita actual de `TileLoop_Town` con el stream global.
+///
+/// La cola de creación y el loop normal comparten el contrato de casas
+/// vanilla: obra incompleta o callback `NewGRF` no consumen por este fallback;
+/// una casa completa toma el `Random()` incondicional y, en la franja
+/// `TCGM_BITCOUNT` correspondiente, los dos sorteos de pasajeros/correo.
+/// Mantener la visita individual permite al caller conservar el intercalado
+/// LFSR con `TileLoop_Industry` y futuros despachos de tesela.
+pub(crate) fn advance_town_tile_loop_from_visit_with_rng(
+    state: &mut GameState,
+    tick: u64,
+    coord: TileCoord,
+    snapshot: Tile,
+    rng: &mut Randomizer,
+) {
+    if snapshot.kind != TileKind::House {
+        return;
+    }
+    let tile = state.map.get(coord).unwrap_or(snapshot);
+    let mut shared_rng = Some(rng);
+    tile_loop_house(state, tick, coord, tile, &mut shared_rng);
+}
+
 fn advance_house_construction_tile(map: &mut crate::map::Map, coord: TileCoord) {
     let Some(mut tile) = map.get(coord) else {
         return;

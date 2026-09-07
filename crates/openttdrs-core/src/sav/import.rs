@@ -421,15 +421,24 @@ pub(crate) fn hydrate_sav_industries(
                 }
             }
         }
-        let origin = tiles.first().copied().unwrap_or(saved.pos);
+        // `INDY.location.tile` es la posición autoritativa de la entidad. No
+        // siempre coincide con la primera tesela MP_INDUSTRY: el footprint
+        // puede empezar con una tesela especial, estar en construcción o tener
+        // un hueco materializado. Tomar `tiles.first()` desplaza la entidad y
+        // rompe el round-trip de `location.tile`.
+        let origin = saved.pos;
         if tiles.is_empty() {
             tiles.push(origin);
         }
-        let gfx = state
-            .map
-            .get(origin)
-            .filter(|tile| tile.kind == TileKind::Industry)
-            .map(|tile| get_clean_industry_gfx(tile.m5, tile.m6));
+        // El tipo gráfico sí se toma de una tesela materializada; la de
+        // origen puede no ser MP_INDUSTRY sin que ello invalide `INDY.xy`.
+        let gfx = tiles.iter().find_map(|coord| {
+            state
+                .map
+                .get(*coord)
+                .filter(|tile| tile.kind == TileKind::Industry)
+                .map(|tile| get_clean_industry_gfx(tile.m5, tile.m6))
+        });
         // `BuildOilRig` turns the top-left piece into MP_STATION, so its
         // origin no longer carries IndustryGfx. INDY.type is authoritative
         // for that special case; the remaining five tiles retain gfx 24..28.
@@ -1113,6 +1122,10 @@ mod tests {
     fn indy_hydration_uses_real_rect_production_and_counter() {
         let mut state = GameState::from_map(Map::new_flat(8, 8, 0));
         state.climate = Climate::Temperate;
+        // La ubicación serializada arranca una tesela antes del primer
+        // MP_INDUSTRY materializado. Esto sucede en partidas reales con
+        // footprints especiales; `INDY.location.tile`, no `tiles.first()`,
+        // sigue siendo la fuente de verdad del origen.
         for (x, y, gfx) in [(2, 2, 0u8), (2, 3, 1)] {
             let coord = TileCoord::new(x, y);
             let mut tile = state.map.get(coord).expect("fixture tile");
@@ -1123,8 +1136,8 @@ mod tests {
         }
         let saved = SavIndustry {
             industry_id: 7,
-            pos: TileCoord::new(2, 2),
-            width: 1,
+            pos: TileCoord::new(1, 2),
+            width: 2,
             height: 2,
             town_id: None,
             neutral_station_id: None,
@@ -1174,10 +1187,12 @@ mod tests {
             }],
         };
 
+        state.sav_industry_histories = vec![saved.clone()];
         hydrate_sav_industries(&mut state, &[saved], &OttdmapExtras::default());
 
         assert_eq!(state.industries.len(), 1);
         let industry = &state.industries[0];
+        assert_eq!(industry.pos, TileCoord::new(1, 2));
         assert_eq!(industry.tiles.len(), 2);
         assert_eq!(industry.spec, Some(IndustrySpec::CoalMine));
         assert_eq!(industry.stock, 77);
@@ -1227,6 +1242,15 @@ mod tests {
                 .as_slice()
             )
         );
+
+        let bytes =
+            crate::sav::write::save_to_bytes_with(&state, crate::sav::write::SavContainer::Ottn)
+                .expect("save with sparse industry footprint");
+        let reloaded = crate::sav::load(&bytes).expect("reload sparse industry footprint");
+        assert_eq!(reloaded.industries.len(), 1);
+        assert_eq!(reloaded.industries[0].pos, TileCoord::new(1, 2));
+        assert_eq!(reloaded.industries[0].width, 2);
+        assert_eq!(reloaded.industries[0].height, 2);
         assert_eq!(industry.random_colour, 14);
     }
 }

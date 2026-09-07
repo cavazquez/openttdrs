@@ -1237,7 +1237,14 @@ fn industry_ottd_type(ind: &Industry) -> u8 {
     spec.native_type()
 }
 
-fn industry_footprint(ind: &Industry) -> (u8, u8) {
+fn industry_footprint(ind: &Industry, saved: Option<&crate::sav::SavIndustry>) -> (u8, u8) {
+    // Un SAV puede declarar `location.tile`/w/h incluso cuando no todas las
+    // teselas del rectángulo son MP_INDUSTRY (Oil Rig, construcción o huecos).
+    // Al reexportar una industria importada, esas dimensiones serializadas son
+    // más fieles que volver a inferirlas de las teselas materializadas.
+    if let Some(saved) = saved {
+        return (saved.width.max(1), saved.height.max(1));
+    }
     if ind.tiles.is_empty() {
         return (1, 1);
     }
@@ -1734,8 +1741,8 @@ pub(super) fn indy_records_with_cargo(
         let Some(tile_idx) = coord_to_linear_index(ind.pos, map_w) else {
             continue;
         };
-        let (w, h) = industry_footprint(ind);
         let saved = saved_industry(state, ind);
+        let (w, h) = industry_footprint(ind, saved);
         let mut rec = Vec::new();
         rec.extend_from_slice(&tile_idx.to_be_bytes());
         rec.push(w);

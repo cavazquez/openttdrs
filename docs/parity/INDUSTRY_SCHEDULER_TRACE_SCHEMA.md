@@ -84,11 +84,13 @@ recorrer un arranque distinto; esa salida no se usa como oracle de importación.
 
 Con los relojes ya alineados, el comparador expone su primer residual real:
 `INDY.counter` se cargaba truncado a 12 bits (`12730` nativo frente a `442` en
-el candidato). #508 conserva ahora los 16 bits y la comparación avanza a
-`industries[1].x` (`216` nativo frente a `217`); #509 aísla ese origen
-`INDY.xy` con footprint incompleto. Hasta confirmar ese y los residuales
-posteriores, además de caracterizar los consumos RNG globales de jornadas
-posteriores, este contrato no declara paridad runtime del scheduler.
+el candidato) y #508 ya conserva los 16 bits. #509 mantiene
+`INDY.location.tile` como origen aun con un footprint incompleto; el comparador
+ya supera `industries[1].x` (`216` frente a `217`) y expone la siguiente
+diferencia: `initial.random_state.state_0` del arranque dedicated. Esa ruta de
+arranque debe caracterizarse contra el RNG persistido de `DATE` antes de
+atribuirla al scheduler. Hasta entonces —y hasta los residuales posteriores—
+este contrato no declara paridad runtime del scheduler.
 
 ## Límites explícitos
 

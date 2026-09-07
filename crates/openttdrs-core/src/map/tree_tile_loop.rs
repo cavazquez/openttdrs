@@ -11,6 +11,7 @@
 use crate::GameState;
 use crate::cargodist::parity::Randomizer;
 use crate::company::OWNER_NONE_M1;
+use crate::construction_settings::ExtraTreePlacement;
 use crate::map::industry_construction::is_industry_completed;
 use crate::map::tile_loop::{MAP_TILE_LOOP_STRIDE, TileLoopState, collect_tile_loop_visits};
 use crate::map::water_class::{
@@ -369,6 +370,13 @@ pub fn process_tree_and_field_growth_from_visits(
             TileKind::Grass => {
                 // Releer: el desierto (P3.9) puede haber mutado la tesela antes.
                 let tile = map.get(c).unwrap_or(tile);
+                // Un árbol que se propagó desde una visita LFSR anterior ya
+                // no puede avanzar como césped por conservar un snapshot
+                // previo. `RunTileLoop` siempre vuelve a consultar el tipo
+                // vivo antes del callback siguiente.
+                if tile.kind != TileKind::Grass {
+                    continue;
+                }
                 let ground = clear_ground_type(tile.m5);
                 // `TileLoop_Clear` termina después de `TileLoopClearAlps`
                 // cuando la capa de nieve está activa. No se debe avanzar la
@@ -429,7 +437,6 @@ fn step_one_forest_tile(map: &mut Map, tick: u64, world_seed: u64, c: TileCoord)
     if tile.kind != TileKind::Forest {
         return;
     }
-
     let m5 = normalize_tree_growth(tile.m5);
     if m5 != tile.m5 {
         let _ = map.set_mapt_m5(c, tile.mapt, m5);
@@ -572,6 +579,26 @@ pub(crate) fn process_generation_tree_growth_at(
     rng: &mut Randomizer,
     c: TileCoord,
 ) {
+    process_generation_tree_growth_at_with_placement(
+        map,
+        climate,
+        tick,
+        rng,
+        c,
+        ExtraTreePlacement::SpreadAll,
+    );
+}
+
+/// Variante de [`process_generation_tree_growth_at`] que conserva la política
+/// `construction.extra_tree_placement` de una partida cargada.
+pub(crate) fn process_generation_tree_growth_at_with_placement(
+    map: &mut Map,
+    climate: Climate,
+    tick: u64,
+    rng: &mut Randomizer,
+    c: TileCoord,
+    extra_tree_placement: ExtraTreePlacement,
+) {
     debug_assert!(matches!(
         climate,
         Climate::Temperate | Climate::SubArctic | Climate::SubTropical | Climate::Toyland
@@ -586,8 +613,9 @@ pub(crate) fn process_generation_tree_growth_at(
     // `TileLoopTreesDesert` precede a la lógica común. En selva siempre toma
     // un `Random()`, incluso con sonido ambiente desactivado; en desierto
     // actualiza el sustrato a nieve/desierto y bloquea la propagación.
+    let tropic_zone = tile.mapt & 0x03;
     let can_spread = if climate == Climate::SubTropical {
-        match tile.mapt & 0x03 {
+        match tropic_zone {
             1 => {
                 let tree_m2 = tree_m2_word(tile);
                 if tree_ground(tree_m2) != TREE_GROUND_SNOW_DESERT {
@@ -615,11 +643,34 @@ pub(crate) fn process_generation_tree_growth_at(
             set_tree_m2_word(map, c, make_tree_m2_word(0, density + 1));
         }
     }
+    if !extra_tree_placement.allows_growth() {
+        return;
+    }
     if cycle % TREE_UPDATE_FREQUENCY != TREE_UPDATE_FREQUENCY - 1 {
         return;
     }
 
-    step_one_generation_forest_tile(map, rng, c, can_spread);
+    step_one_generation_forest_tile(
+        map,
+        rng,
+        c,
+        can_spread && tree_spread_allowed(extra_tree_placement, climate, tropic_zone),
+    );
+}
+
+/// `TreesOnTileCanSpread` de `tree_cmd.cpp`, salvo la excepción desértica
+/// que el prelude de [`process_generation_tree_growth_at_with_placement`]
+/// resuelve antes de llegar aquí.
+fn tree_spread_allowed(
+    extra_tree_placement: ExtraTreePlacement,
+    climate: Climate,
+    tropic_zone: u8,
+) -> bool {
+    match extra_tree_placement {
+        ExtraTreePlacement::NoSpread | ExtraTreePlacement::NoGrowthNoSpread => false,
+        ExtraTreePlacement::SpreadAll => true,
+        ExtraTreePlacement::SpreadRainforest => climate == Climate::SubTropical && tropic_zone == 2,
+    }
 }
 
 fn step_one_generation_forest_tile(
@@ -1175,7 +1226,25 @@ pub fn tick_tree_tile_loop(state: &mut GameState) {
         state.world_seed,
         &visits,
     );
-    process_tree_and_field_growth_from_visits(&mut state.map, tick, state.world_seed, &visits);
+    // Temperate ya despacha cada árbol dentro de `phase_tile_loop`, donde
+    // comparte `_random` e intercalado LFSR con Town/Industry. Este pase
+    // conserva Clear/CoalField y los demás climas sin volver a ejecutar los
+    // árboles que ya consumieron su palabra global.
+    let deterministic_visits: Vec<_> = if state.climate == Climate::Temperate {
+        visits
+            .iter()
+            .copied()
+            .filter(|(_, tile)| tile.kind != TileKind::Forest)
+            .collect()
+    } else {
+        visits.clone()
+    };
+    process_tree_and_field_growth_from_visits(
+        &mut state.map,
+        tick,
+        state.world_seed,
+        &deterministic_visits,
+    );
     let snow_dirty = apply_seasonal_snow_from_visits(
         &mut state.map,
         state.climate,
@@ -1522,6 +1591,51 @@ mod tests {
         assert_eq!(planted.kind, TileKind::Forest);
         assert_eq!(planted.m3, 0);
         assert_eq!(planted.m5, TREE_GROWTH_GROWING1);
+    }
+
+    #[test]
+    fn runtime_tree_policy_keeps_no_spread_on_the_single_random_branch() {
+        let mut map = Map::new_flat(32, 32, 0);
+        let c = TileCoord::new(13, 16);
+        force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
+        let mut rng = Randomizer { state: [24, 1] };
+        let mut expected_rng = rng;
+        assert_eq!(expected_rng.next() & 7, 2);
+
+        process_generation_tree_growth_at_with_placement(
+            &mut map,
+            Climate::Temperate,
+            0,
+            &mut rng,
+            c,
+            ExtraTreePlacement::NoSpread,
+        );
+
+        assert_eq!(rng, expected_rng, "NoSpread no toma dirección");
+    }
+
+    #[test]
+    fn runtime_tree_policy_stops_growth_without_touching_global_rng() {
+        let mut map = Map::new_flat(32, 32, 0);
+        let c = TileCoord::new(13, 16);
+        force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
+        let mut rng = Randomizer { state: [8, 1] };
+        let before = rng;
+
+        process_generation_tree_growth_at_with_placement(
+            &mut map,
+            Climate::Temperate,
+            0,
+            &mut rng,
+            c,
+            ExtraTreePlacement::NoGrowthNoSpread,
+        );
+
+        assert_eq!(rng, before);
+        assert_eq!(
+            tree_or_field_stage(map.get(c).unwrap().m5),
+            TREE_GROWTH_GROWN
+        );
     }
 
     #[test]

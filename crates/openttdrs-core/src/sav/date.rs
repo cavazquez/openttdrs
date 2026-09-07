@@ -36,6 +36,8 @@ pub struct SavGameTime {
     /// primera franja de teselas tras un load visite otro conjunto y altere
     /// los callbacks/RNG posteriores.
     pub cur_tileloop_tile: u32,
+    /// Cadencia byte `_trees_tick_ctr` de `OnTick_Trees`.
+    pub trees_tick_counter: u8,
 }
 
 /// Lee el registro global `DATE` (best-effort).
@@ -60,6 +62,7 @@ pub(crate) fn game_time_from_chunks(chunks: &[RawChunk], save_version: u16) -> O
             tick: tick_counter_from_record(record, save_version),
             cur_tileloop_tile: unsigned_u32(record, "cur_tileloop_tile")
                 .unwrap_or_else(crate::map::tile_loop::default_cur_tileloop_tile),
+            trees_tick_counter: unsigned_u8(record, "trees_tick_counter").unwrap_or(0),
         });
     }
 
@@ -74,6 +77,7 @@ pub(crate) fn game_time_from_chunks(chunks: &[RawChunk], save_version: u16) -> O
             days_since_last_month: 0,
             tick,
             cur_tileloop_tile: crate::map::tile_loop::default_cur_tileloop_tile(),
+            trees_tick_counter: 0,
         });
     }
 
@@ -109,6 +113,12 @@ fn unsigned_u16(record: &SlRecord, field: &str) -> Option<u16> {
     record_get(record, field)
         .and_then(SlValue::as_u64)
         .and_then(|value| u16::try_from(value).ok())
+}
+
+fn unsigned_u8(record: &SlRecord, field: &str) -> Option<u8> {
+    record_get(record, field)
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u8::try_from(value).ok())
 }
 
 fn unsigned_u32(record: &SlRecord, field: &str) -> Option<u32> {
@@ -179,6 +189,7 @@ mod tests {
         record.extend_from_slice(&29u32.to_be_bytes());
         record.extend_from_slice(&44u16.to_be_bytes());
         record.extend_from_slice(&0x89AB_CDEFu32.to_be_bytes());
+        record.push(73);
         record.extend_from_slice(&0x1020_3040u32.to_be_bytes());
         record.extend_from_slice(&0x5060_7080u32.to_be_bytes());
         let chunk = date_chunk(
@@ -191,6 +202,7 @@ mod tests {
                 (6, "days_since_last_month"),
                 (4, "calendar_sub_date_fract"),
                 (6, "cur_tileloop_tile"),
+                (2, "trees_tick_counter"),
                 (6, "random_state[0]"),
                 (6, "random_state[1]"),
             ],
@@ -206,6 +218,7 @@ mod tests {
         assert_eq!(time.days_since_last_month, 29);
         assert_eq!(time.tick, 1_472_993);
         assert_eq!(time.cur_tileloop_tile, 0x89AB_CDEF);
+        assert_eq!(time.trees_tick_counter, 73);
         assert_eq!(
             random_state_from_chunks(std::slice::from_ref(&chunk)),
             Some([0x1020_3040, 0x5060_7080])
@@ -224,6 +237,7 @@ mod tests {
         assert_eq!(time.economy_date, 12_345);
         assert_eq!(time.calendar_date_fract, 0);
         assert_eq!(time.tick, 99_000);
+        assert_eq!(time.trees_tick_counter, 0);
         assert_eq!(
             time.cur_tileloop_tile,
             crate::map::tile_loop::default_cur_tileloop_tile()

@@ -2271,6 +2271,7 @@ mod tests {
         state.economy_timer = crate::timer::EconomyTimer::from_openttd_date(732_110, 12, 29, false);
         state.random.state = [0x1020_3040, 0x5060_7080];
         state.cur_tileloop_tile = 0x89AB_CDEF;
+        state.trees_tick_counter = 73;
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let (payload, _) = crate::sav::container::decompress(&bytes).expect("payload");
@@ -2290,6 +2291,7 @@ mod tests {
         assert_eq!(time.days_since_last_month, 29);
         assert_eq!(time.tick, 1_472_993);
         assert_eq!(time.cur_tileloop_tile, 0x89AB_CDEF);
+        assert_eq!(time.trees_tick_counter, 73);
 
         let loaded = GameState::from_sav_game(sav_game);
         assert_eq!(loaded.tick, state.tick);
@@ -2297,6 +2299,7 @@ mod tests {
         assert_eq!(loaded.economy_timer, state.economy_timer);
         assert_eq!(loaded.random, state.random);
         assert_eq!(loaded.cur_tileloop_tile, state.cur_tileloop_tile);
+        assert_eq!(loaded.trees_tick_counter, state.trees_tick_counter);
     }
 
     #[test]

@@ -21,6 +21,7 @@ pub(super) const DATE_FIELDS: &[(u8, &str)] = &[
     (6, "days_since_last_month"),
     (4, "calendar_sub_date_fract"),
     (6, "cur_tileloop_tile"),
+    (2, "trees_tick_counter"),
     (6, "random_state[0]"),
     (6, "random_state[1]"),
 ];
@@ -39,6 +40,7 @@ pub(super) fn date_record(state: &GameState) -> Vec<u8> {
     rec.extend_from_slice(&state.economy_timer.days_since_last_month.to_be_bytes());
     rec.extend_from_slice(&state.calendar.sub_date_fract.to_be_bytes());
     rec.extend_from_slice(&state.cur_tileloop_tile.to_be_bytes());
+    rec.push(state.trees_tick_counter);
     rec.extend_from_slice(&state.random.state[0].to_be_bytes());
     rec.extend_from_slice(&state.random.state[1].to_be_bytes());
     rec
@@ -434,6 +436,7 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
             (2, "vehicle.road_side"),
             (2, "construction.train_signal_side"),
             (1, "construction.freeform_edges"),
+            (2, "construction.extra_tree_placement"),
             (2, "pf.wait_for_pbs_path"),
             (2, "pf.path_backoff_interval"),
             (1, "pf.reverse_at_signals"),
@@ -497,6 +500,7 @@ pub(super) fn pats_record(state: &GameState) -> Vec<u8> {
         road_side,
         signal_side,
         u8::from(state.construction.freeform_edges),
+        state.construction.extra_tree_placement as u8,
         state.pathfinding.wait_for_pbs_path,
         state.pathfinding.path_backoff_interval,
         u8::from(state.pathfinding.reverse_at_signals),

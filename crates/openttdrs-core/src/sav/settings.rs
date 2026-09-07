@@ -8,7 +8,10 @@
 use crate::engine::{RoadVehicleAccelerationModel, TrainAccelerationModel};
 use crate::flow_stat::{CargoDistSettings, DistributionType};
 use crate::town::TownCouncilTolerance;
-use crate::{ConstructionSettings, PathfindingSettings, RoadVehicleDrivingSide, TrainSignalSide};
+use crate::{
+    ConstructionSettings, ExtraTreePlacement, PathfindingSettings, RoadVehicleDrivingSide,
+    TrainSignalSide,
+};
 
 use super::chunks::{RawChunk, find_chunk};
 use super::table::{SlValue, parse_table_chunk, record_get};
@@ -151,6 +154,14 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                 .and_then(bool_from_u64)
             {
                 parsed.construction.freeform_edges = value;
+                found = true;
+            }
+            if let Some(value) = record_get(&record, "construction.extra_tree_placement")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .and_then(ExtraTreePlacement::from_openttd)
+            {
+                parsed.construction.extra_tree_placement = value;
                 found = true;
             }
             if let Some(value) = record_get(&record, "vehicle.wagon_speed_limits")
@@ -479,6 +490,21 @@ mod tests {
     fn reads_disabled_freeform_edges_from_save_table() {
         let settings = settings_from_chunks(&[pats([0, 0, 0])]).construction;
         assert!(!settings.freeform_edges);
+    }
+
+    #[test]
+    fn reads_extra_tree_placement_from_save_table() {
+        let chunk = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(2, "construction.extra_tree_placement")], &[vec![1]]),
+        };
+        assert_eq!(
+            settings_from_chunks(&[chunk])
+                .construction
+                .extra_tree_placement,
+            ExtraTreePlacement::SpreadRainforest
+        );
     }
 
     #[test]

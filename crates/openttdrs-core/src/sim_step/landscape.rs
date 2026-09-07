@@ -12,7 +12,7 @@ pub const LINKGRAPH_SPAWN_JOIN_TICK: u16 = 21;
 /// `CallLandscapeTick` (`landscape.cpp:1727-1740`).
 pub(super) fn call_landscape_tick(state: &mut GameState, t: u64) {
     on_tick_town(state, t);
-    on_tick_trees(state);
+    on_tick_trees(state, t);
     on_tick_water(state);
     on_tick_station(state, t);
     on_tick_industry(state, t);
@@ -44,14 +44,36 @@ fn on_tick_town(state: &mut GameState, t: u64) {
     state.runtime.landscape_tile_dirty.extend(dirty);
 }
 
-/// `OnTick_Trees`: ciclo de vegetación sobre las visitas del tile loop.
-fn on_tick_trees(state: &mut GameState) {
+/// `OnTick_Trees`: ciclo de vegetación y siembra global posterior al tile loop.
+fn on_tick_trees(state: &mut GameState, t: u64) {
     crate::map::tree_tile_loop::tick_tree_tile_loop(state);
+    let planted = crate::world_gen::advance_regular_tree_tick(
+        &mut state.map,
+        state.climate,
+        t,
+        &mut state.random,
+        &mut state.trees_tick_counter,
+        state.construction.extra_tree_placement,
+    );
+    state.runtime.landscape_tile_dirty.extend(planted);
 }
 
 /// Inundación desde agua (`TileLoop_Water` / P3.2) sobre las visitas del tile loop.
 fn on_tick_water(state: &mut GameState) {
-    crate::map::water_flood::tick_water_flood(state);
+    // Las costas de árbol ya se despachan dentro de `RunTileLoop`: el
+    // callback de `TileLoop_Trees` invoca `TileLoop_Water` antes de evaluar
+    // crecimiento. El pase de compatibilidad que todavía cubre los otros
+    // tipos de tesela no debe repetirlas después de `OnTick_Trees`, porque
+    // una inundación de la misma franja podría cambiar la segunda decisión.
+    let remaining_visits: Vec<_> = state
+        .runtime
+        .tile_loop_visited
+        .iter()
+        .copied()
+        .filter(|(_, tile)| tile.kind != crate::TileKind::Forest)
+        .collect();
+    let dirty = crate::map::water_flood::process_water_flood_from_visits(state, &remaining_visits);
+    state.runtime.landscape_tile_dirty.extend(dirty);
 }
 
 /// `OnTick_Station`: rating y trigger de aceptación de animación `NewGRF`.
@@ -264,13 +286,44 @@ fn on_tick_link_graph(state: &mut GameState) {
 mod tests {
     use super::*;
     use crate::cargodist::legacy::flow_stat::DistributionType as GameDistribution;
-    use crate::cargodist::parity::{BaseEdge, BaseNode, DistributionType, Job, LinkGraphSettings};
+    use crate::cargodist::parity::{
+        BaseEdge, BaseNode, DistributionType, Job, LinkGraphSettings, Randomizer,
+    };
     use crate::map::TileKind;
     use crate::newgrf_sprites::{
         Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
     };
     use crate::station::{Station, StopKind};
     use crate::{CargoType, STATION_ANIMATION_TRIGGER_ACCEPTANCE_TICK, TileCoord};
+
+    #[test]
+    fn on_tick_trees_uses_the_persisted_counter_after_the_tile_loop() {
+        let mut state = GameState::new(256, 256);
+        state.random = Randomizer::new(42);
+        state.trees_tick_counter = 0;
+        let mut expected_rng = state.random;
+        let _ = expected_rng.next();
+
+        on_tick_trees(&mut state, 1);
+
+        assert_eq!(state.random, expected_rng);
+        assert_eq!(state.trees_tick_counter, u8::MAX);
+        let forest_count = (0..256)
+            .flat_map(|y| (0..256).map(move |x| TileCoord::new(x, y)))
+            .filter(|&coord| {
+                state
+                    .map
+                    .get(coord)
+                    .is_some_and(|tile| tile.kind == TileKind::Forest)
+            })
+            .count();
+        assert_eq!(forest_count, 1);
+
+        let before = state.random;
+        on_tick_trees(&mut state, 2);
+        assert_eq!(state.random, before);
+        assert_eq!(state.trees_tick_counter, u8::MAX - 1);
+    }
 
     /// CB140 sintético: escribe en el frame el byte bajo de `var 18`.
     fn acceptance_trigger_callbacks() -> TrainSpriteGraphics {

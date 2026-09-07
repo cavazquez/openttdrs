@@ -16,6 +16,7 @@
 
 use crate::cargodist::parity::Randomizer;
 use crate::company::OWNER_NONE_M1;
+use crate::construction_settings::ExtraTreePlacement;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type};
 use crate::map::{
     Map, Tile, TileCoord, TileKind, WaterClass, set_water_class_m1, tile_slope_and_z,
@@ -363,22 +364,25 @@ fn random_tile(seed: u32, map_w: u32, map_h: u32) -> TileCoord {
     )
 }
 
-/// Ejecuta el `OnTick_Trees` inicial que sigue a la cola de generación.
+/// Ejecuta `OnTick_Trees` y conserva `_trees_tick_ctr` entre ticks.
 ///
-/// `GenerateWorld` deja `_trees_tick_ctr` en cero. En el primer tick regular
-/// ese contador se decrementa una vez y, para la configuración vanilla
-/// (`ETP_SPREAD_ALL`), se intenta plantar un árbol con el siguiente valor del
-/// `Random()` global. Los mapas pequeños pueden saltar este intento mediante
-/// la máscara de frecuencia de `OnTick_Trees`; el intento igualmente debe
-/// consumir el mismo stream cuando el tamaño lo admite, aunque el sustrato
-/// finalmente no sea plantable.
-pub(crate) fn advance_first_regular_tree_tick(
+/// La máscara para mapas menores que 256² se evalúa antes de tocar el
+/// contador. Cuando corresponde, el contador se resta como `uint8_t`: en un
+/// mapa máximo el decremento nativo de 256 se convierte en cero y habilita
+/// un intento por tick. Cada intento toma una palabra de `Random()` aunque la
+/// tesela elegida no admita un árbol.
+pub(crate) fn advance_regular_tree_tick(
     map: &mut Map,
     climate: Climate,
     tick: u64,
     rng: &mut Randomizer,
+    trees_tick_counter: &mut u8,
+    extra_tree_placement: ExtraTreePlacement,
 ) -> Vec<TileCoord> {
     let (map_w, map_h) = map.dimensions();
+    if !extra_tree_placement.allows_extra_planting() {
+        return Vec::new();
+    }
     let skip = scale_by_size(16, map_w, map_h);
     if skip < 16 {
         let divisor = 16 / skip.max(1);
@@ -398,16 +402,46 @@ pub(crate) fn advance_first_regular_tree_tick(
         }
     }
 
-    // `_trees_tick_ctr` starts at zero. `DecrementTreeCounter` therefore
-    // underflows and returns true for every supported map size. The default
-    // setting is ETP_SPREAD_ALL, so the non-rainforest attempt follows the
-    // optional tropical pass.
+    // `DecrementTreeCounter`: la asignación compuesta C++ convierte el
+    // decremento a `uint8_t`. `ScaleBySize(1)` llega a 256 en 4096², que
+    // equivale a restar cero y dispara una vez por tick.
+    let decrement = u8::try_from(scale_by_size(1, map_w, map_h) & u32::from(u8::MAX)).unwrap_or(0);
+    let old_counter = *trees_tick_counter;
+    *trees_tick_counter = (*trees_tick_counter).wrapping_sub(decrement);
+    if old_counter > *trees_tick_counter
+        || matches!(extra_tree_placement, ExtraTreePlacement::SpreadRainforest)
+    {
+        return planted;
+    }
+
     let r = rng.next();
     let c = random_tile(r, map_w, map_h);
     if let Some(tree) = plant_random_tree_tick(map, c, r, climate, false) {
         planted.push(tree);
     }
     planted
+}
+
+/// Ejecuta el primer `OnTick_Trees` que sigue a la cola de generación.
+///
+/// `GenerateWorld` deja `_trees_tick_ctr` en cero y usa la política vanilla
+/// `ETP_SPREAD_ALL`. El runtime ordinario debe llamar
+/// [`advance_regular_tree_tick`] con el contador persistido de la partida.
+pub(crate) fn advance_first_regular_tree_tick(
+    map: &mut Map,
+    climate: Climate,
+    tick: u64,
+    rng: &mut Randomizer,
+) -> Vec<TileCoord> {
+    let mut trees_tick_counter = 0;
+    advance_regular_tree_tick(
+        map,
+        climate,
+        tick,
+        rng,
+        &mut trees_tick_counter,
+        ExtraTreePlacement::SpreadAll,
+    )
 }
 
 /// `PlantRandomTree` + `PlantTreesOnTile` de `tree_cmd.cpp` para el tick
@@ -812,13 +846,14 @@ fn point_in_triangle(x: i32, y: i32, v1: Point, v2: Point, v3: Point) -> bool {
 mod tests {
     use super::{
         GROVE_ANGLE_STEP, GROVE_PHASE_DIVISOR, TROPIC_ZONE_DESERT, TROPIC_ZONE_RAINFOREST,
-        advance_first_regular_tree_tick, generate_trees, generate_trees_with_rng_observer,
-        generate_trees_with_rng_observer_with_map_settings,
+        advance_first_regular_tree_tick, advance_regular_tree_tick, generate_trees,
+        generate_trees_with_rng_observer, generate_trees_with_rng_observer_with_map_settings,
         generate_trees_with_rng_with_map_settings, is_plantable, is_slope_with_one_corner_raised,
         place_rainforest_trees, place_tree, place_tree_keep_density, random_tile, random_tree_type,
         same_height_attempt_count, tree_group_count,
     };
     use crate::cargodist::parity::Randomizer;
+    use crate::construction_settings::ExtraTreePlacement;
     use crate::map::{
         Map, TileCoord, TileKind, WaterClass, set_water_class_m1, water_class_from_m1,
     };
@@ -858,6 +893,64 @@ mod tests {
         assert_eq!(tile.m5, 0);
         assert_eq!(tile.m6, 0);
         assert_eq!(tile.m7, 0);
+    }
+
+    #[test]
+    fn regular_tree_tick_persists_counter_and_only_draws_on_underflow() {
+        let mut map = Map::new_flat(256, 256, 0);
+        let mut rng = Randomizer::new(42);
+        let mut expected_rng = rng;
+        let random = expected_rng.next();
+        let expected = random_tile(random, 256, 256);
+        map.set_mapt_m5(expected, 0, 3)
+            .expect("flat test tile must accept tree density");
+        let mut counter = 0;
+
+        let planted = advance_regular_tree_tick(
+            &mut map,
+            Climate::Temperate,
+            1,
+            &mut rng,
+            &mut counter,
+            ExtraTreePlacement::SpreadAll,
+        );
+        assert_eq!(planted, vec![expected]);
+        assert_eq!(counter, u8::MAX);
+        assert_eq!(rng, expected_rng);
+
+        let before = rng;
+        let planted = advance_regular_tree_tick(
+            &mut map,
+            Climate::Temperate,
+            2,
+            &mut rng,
+            &mut counter,
+            ExtraTreePlacement::SpreadAll,
+        );
+        assert!(planted.is_empty());
+        assert_eq!(counter, u8::MAX - 1);
+        assert_eq!(rng, before, "sin underflow no hay Random()");
+    }
+
+    #[test]
+    fn regular_tree_tick_honours_no_spread_before_counter_mutation() {
+        let mut map = Map::new_flat(256, 256, 0);
+        let mut rng = Randomizer::new(42);
+        let before = rng;
+        let mut counter = 0;
+
+        let planted = advance_regular_tree_tick(
+            &mut map,
+            Climate::Temperate,
+            1,
+            &mut rng,
+            &mut counter,
+            ExtraTreePlacement::NoSpread,
+        );
+
+        assert!(planted.is_empty());
+        assert_eq!(counter, 0);
+        assert_eq!(rng, before);
     }
 
     #[test]

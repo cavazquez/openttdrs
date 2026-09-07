@@ -657,6 +657,13 @@ pub struct GameState {
     /// Índice LFSR del tile loop (`_cur_tileloop_tile` en `OpenTTD`).
     #[serde(default = "crate::map::tile_loop::default_cur_tileloop_tile")]
     pub cur_tileloop_tile: u32,
+    /// Contador de cadencia de plantación global (`_trees_tick_ctr`).
+    ///
+    /// `OnTick_Trees` lo decrementa con aritmética de byte; perderlo al
+    /// importar un SAV desplaza el primer `Random()` de vegetación y todos
+    /// los callbacks globales posteriores.
+    #[serde(default)]
+    pub trees_tick_counter: u8,
     /// Inflación compuesta, recesiones y escala global de `max_loan` (`_economy`).
     #[serde(default)]
     pub global_economy: crate::economy::GlobalEconomy,
@@ -965,6 +972,7 @@ impl GameState {
             random: crate::linkgraph_parity::Randomizer::new(1),
             interactive_random: default_interactive_random(),
             cur_tileloop_tile: crate::map::tile_loop::default_cur_tileloop_tile(),
+            trees_tick_counter: 0,
             global_economy: crate::economy::GlobalEconomy::new(),
             industry_builder: crate::industry_builder::IndustryBuildData::new(),
             no_servicing_if_no_breakdowns: true,
@@ -1109,6 +1117,7 @@ impl GameState {
             random: crate::linkgraph_parity::Randomizer::new(1),
             interactive_random: default_interactive_random(),
             cur_tileloop_tile: crate::map::tile_loop::default_cur_tileloop_tile(),
+            trees_tick_counter: 0,
             global_economy: crate::economy::GlobalEconomy::new(),
             industry_builder: crate::industry_builder::IndustryBuildData::new(),
             no_servicing_if_no_breakdowns: true,

@@ -725,6 +725,34 @@ fn phase_tile_loop(state: &mut GameState, t: u64) {
     let mut industry_dirty = Vec::new();
     let mut bubble_spawns = Vec::new();
     for (coord, snapshot) in visits {
+        // Un árbol plantado por una visita anterior puede llegar a su propia
+        // posición más adelante en la misma franja. `RunTileLoop` relee la
+        // tesela viva antes de despachar; no usar sólo el snapshot conserva
+        // también ese caso de propagación.
+        let live_kind = state.map.get(coord).map_or(snapshot.kind, |tile| tile.kind);
+        if state.climate == crate::world_gen::Climate::Temperate
+            && live_kind == crate::TileKind::Forest
+        {
+            // `TileLoop_Trees` delega primero una costa a `TileLoop_Water`.
+            // Esa llamada puede normalizar el sustrato o convertir la tesela;
+            // el procesador de árboles vuelve a leer el estado vivo antes de
+            // decidir si corresponde crecer. Mantenerlo dentro de la visita
+            // LFSR preserva además el orden nativo frente a Town e Industry.
+            if let Some(live_tile) = state.map.get(coord)
+                && (live_tile.m2 >> 6) & 0x07 == 3
+            {
+                crate::map::water_flood::tile_loop_water_at(state, coord, live_tile);
+            }
+            crate::map::tree_tile_loop::process_generation_tree_growth_at_with_placement(
+                &mut state.map,
+                state.climate,
+                t,
+                &mut global_rng,
+                coord,
+                state.construction.extra_tree_placement,
+            );
+            continue;
+        }
         match snapshot.kind {
             crate::TileKind::Industry if crate::map::is_industry_completed(snapshot.m1) => {
                 // `TileLoop_Industry` no pertenece a
@@ -1361,6 +1389,29 @@ mod tests {
                 .any(|(visited, _)| *visited == coord)
         );
         assert_eq!(state.random, expected_random);
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn temperate_tree_tile_loop_runs_the_shore_water_callback_first() {
+        // La visita inicial de tick 0 contiene (0, 0). Una costa de árbol sin
+        // vecino inundable se seca mediante `TileLoop_Water` antes de que
+        // `TileLoop_Trees` evalúe crecimiento; omitir el despacho deja MAP2
+        // en `TreeGround::Shore` y diverge de `tree_cmd.cpp`.
+        let coord = TileCoord::new(0, 0);
+        let mut state = GameState::new(64, 64);
+        let mut tree = state.map.get(coord).expect("tree fixture tile");
+        tree.kind = crate::TileKind::Forest;
+        tree.m2 = (3 << 6) | (3 << 4); // `TreeGround::Shore`, densidad 3.
+        state.map.set_tile(coord, tree).expect("tree fixture write");
+
+        phase_tile_loop(&mut state, 0);
+
+        assert_eq!(
+            state.map.get(coord).expect("tree after tile loop").m2,
+            3 << 4,
+            "TileLoop_Water seca la costa antes del callback de árbol"
+        );
     }
 
     #[test]

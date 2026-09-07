@@ -19,6 +19,52 @@ pub enum TrainSignalSide {
     Right,
 }
 
+/// Política de crecimiento y propagación de árboles extra
+/// (`construction.extra_tree_placement` de `OpenTTD`).
+///
+/// No es una preferencia puramente visual: cambia los callbacks de
+/// `TileLoop_Trees` y el consumo del RNG global de `OnTick_Trees`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[repr(u8)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtraTreePlacement {
+    /// Los árboles existentes crecen, pero no se propagan.
+    NoSpread = 0,
+    /// Sólo se propagan dentro de la selva tropical.
+    SpreadRainforest = 1,
+    /// Crecimiento y propagación sin restricciones adicionales.
+    #[default]
+    SpreadAll = 2,
+    /// No crecen ni se propagan.
+    NoGrowthNoSpread = 3,
+}
+
+impl ExtraTreePlacement {
+    /// Decodifica el valor `SLE_UINT8` del setting nativo.
+    #[must_use]
+    pub const fn from_openttd(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::NoSpread),
+            1 => Some(Self::SpreadRainforest),
+            2 => Some(Self::SpreadAll),
+            3 => Some(Self::NoGrowthNoSpread),
+            _ => None,
+        }
+    }
+
+    /// `TileLoop_Trees` puede avanzar etapas de crecimiento.
+    #[must_use]
+    pub const fn allows_growth(self) -> bool {
+        !matches!(self, Self::NoGrowthNoSpread)
+    }
+
+    /// `OnTick_Trees` puede intentar plantar árboles aleatorios.
+    #[must_use]
+    pub const fn allows_extra_planting(self) -> bool {
+        !matches!(self, Self::NoSpread | Self::NoGrowthNoSpread)
+    }
+}
+
 /// Ajustes persistentes de construcción/conducción.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[allow(clippy::struct_excessive_bools)]
@@ -43,6 +89,9 @@ pub struct ConstructionSettings {
     /// terreno desnudo con la paleta negra, no como agua infinita.
     #[serde(default = "default_freeform_edges")]
     pub freeform_edges: bool,
+    /// Política de crecimiento y propagación de árboles extra.
+    #[serde(default)]
+    pub extra_tree_placement: ExtraTreePlacement,
     /// Permite unir una parte nueva a una estación no adyacente
     /// (`station.distant_join_stations`).
     ///
@@ -105,6 +154,7 @@ impl Default for ConstructionSettings {
             train_signal_side: TrainSignalSide::default(),
             road_vehicle_driving_side: RoadVehicleDrivingSide::default(),
             freeform_edges: default_freeform_edges(),
+            extra_tree_placement: ExtraTreePlacement::default(),
             distant_join_stations: default_distant_join_stations(),
             wagon_speed_limits: default_wagon_speed_limits(),
             disable_elrails: false,
@@ -175,6 +225,19 @@ mod tests {
     #[test]
     fn freeform_edges_follow_openttd_default() {
         assert!(ConstructionSettings::default().freeform_edges);
+    }
+
+    #[test]
+    fn extra_tree_placement_uses_native_default_and_codes() {
+        assert_eq!(
+            ConstructionSettings::default().extra_tree_placement,
+            ExtraTreePlacement::SpreadAll
+        );
+        assert_eq!(
+            ExtraTreePlacement::from_openttd(1),
+            Some(ExtraTreePlacement::SpreadRainforest)
+        );
+        assert_eq!(ExtraTreePlacement::from_openttd(4), None);
     }
 
     #[test]

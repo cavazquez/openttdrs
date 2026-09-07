@@ -51,6 +51,7 @@ pub use tile_loop::{
     run_first_regular_game_tick_with_rng, run_generation_tile_loop,
     run_generation_tile_loops_with_rng, run_landscape_river_tile_loops,
 };
+pub(crate) use trees::advance_regular_tree_tick;
 pub use trees::{
     TreePlacement, TreePlacementOrigin, generate_trees, generate_trees_with_rng,
     generate_trees_with_rng_observer, generate_trees_with_rng_observer_with_height_limit,

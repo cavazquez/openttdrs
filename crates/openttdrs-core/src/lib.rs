@@ -227,7 +227,9 @@ pub use company::{
     feeder_share_of, first_free_company_colour, newgrf_company_info, tile_owner_colour,
     tile_with_owner, vehicle_livery_scheme,
 };
-pub use construction_settings::{ConstructionSettings, RoadVehicleDrivingSide, TrainSignalSide};
+pub use construction_settings::{
+    ConstructionSettings, ExtraTreePlacement, RoadVehicleDrivingSide, TrainSignalSide,
+};
 pub use depot::{
     DEPOT_RESERVATION_M5_BIT, clear_all_depot_reservations, depot_tile_kind_for_vehicle,
     has_depot_reservation, nearest_depot_tile, rail_depot_mouth_dir, set_depot_reservation,

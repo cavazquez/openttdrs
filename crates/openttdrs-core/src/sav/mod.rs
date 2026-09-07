@@ -1226,6 +1226,7 @@ impl GameState {
             } else {
                 time.cur_tileloop_tile
             };
+            state.trees_tick_counter = time.trees_tick_counter;
             state.calendar = crate::timer::CalendarTimer::from_openttd_date(
                 time.calendar_date,
                 time.calendar_date_fract,
@@ -2330,6 +2331,7 @@ mod tests {
             // Deliberately unrelated to `calendar_date * DAY_TICKS`.
             tick: 1_472_993,
             cur_tileloop_tile: 0x89AB_CDEF,
+            trees_tick_counter: 73,
         });
         sav.random_state = Some([0x1020_3040, 0x5060_7080]);
 
@@ -2348,6 +2350,7 @@ mod tests {
         );
         assert_eq!(state.random.state, [0x1020_3040, 0x5060_7080]);
         assert_eq!(state.cur_tileloop_tile, 0x89AB_CDEF);
+        assert_eq!(state.trees_tick_counter, 73);
     }
 
     #[test]
@@ -2364,6 +2367,7 @@ mod tests {
             days_since_last_month: 7,
             tick: 17,
             cur_tileloop_tile: 0,
+            trees_tick_counter: 0,
         });
 
         let state = GameState::from_sav_game(sav);

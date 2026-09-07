@@ -227,6 +227,12 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Cargar heightmap" => "Load heightmap",
         "Salir del editor" => "Exit editor",
         "Directorio de pueblos" => "Town directory",
+        "buscar pueblo…" => "search town…",
+        "Población" => "Population",
+        "No hay pueblos." => "No towns.",
+        "Ningún pueblo coincide con el filtro." => "No towns match the filter.",
+        "población" => "population",
+        "autoridad" => "authority",
         "Lista de estaciones" => "Station list",
         "Todas" => "All",
         "Mía" => "Mine",
@@ -1573,6 +1579,15 @@ mod tests {
             ("Fábrica tropic", "Tropical factory"),
             ("Aserradero tropic", "Tropical lumber mill"),
             ("Gaseosa", "Fizzy drinks"),
+            ("Directorio de pueblos", "Town directory"),
+            ("buscar pueblo…", "search town…"),
+            ("Población", "Population"),
+            ("Fundar pueblo", "Found town"),
+            ("No hay pueblos.", "No towns."),
+            (
+                "Ningún pueblo coincide con el filtro.",
+                "No towns match the filter.",
+            ),
         ] {
             assert_eq!(localized_text(Locale::En, spanish), english);
         }

@@ -2394,3 +2394,10 @@ caché al cambiar de locale. La búsqueda conserva también las fuentes
 españolas; posiciones, stock, capacidad, IDs, acciones y labels sin clave
 vanilla no cambian. #331 sigue abierto por los catálogos upstream y
 superficies UI restantes.
+
+Actualización #331-TOWN-DIRECTORY-LOCALE-480 (2026-09-07, issue [#480](https://github.com/cavazquez/openttdrs/issues/480)):
+el directorio de pueblos localiza título, buscador, orden, fundación, estados
+vacíos y las métricas de población/autoridad, invalidando la caché al cambiar
+de locale. Nombres, valores, selección, IDs, navegación y la restricción del
+editor no cambian. #331 sigue abierto por los catálogos upstream y superficies
+UI restantes.

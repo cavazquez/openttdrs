@@ -4,12 +4,14 @@ use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::text::EditableText;
 
+use crate::i18n::{Locale, localized_text};
 use crate::iso::tile_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
+use crate::settings::ClientPreferences;
 use crate::state::{EditorSession, SimWorld};
 use crate::ui::floating_window::{
-    FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_CREAM, WINDOW_TEXT,
-    spawn_floating_window, window_text_font,
+    FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CREAM,
+    WINDOW_TEXT, spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::list_window::{
@@ -59,11 +61,15 @@ pub(crate) struct TownDirectorySortButton(TownDirectorySort);
 #[derive(Component, Clone, Copy)]
 pub(crate) struct TownDirectoryFundButton;
 
+#[derive(Component)]
+pub(crate) struct TownDirectoryFundButtonText;
+
 #[derive(Default)]
 pub(crate) struct TownDirectoryCache {
     sort: TownDirectorySort,
     sort_dir: SortDir,
     filter: String,
+    locale: Option<Locale>,
     rows: Vec<(u32, String, u32, i16)>,
 }
 
@@ -135,6 +141,7 @@ pub(crate) fn setup_town_directory(mut commands: Commands, asset_server: Res<Ass
             Interaction::default(),
             BuildMenuUi,
             children![(
+                TownDirectoryFundButtonText,
                 Text::new("Fundar pueblo"),
                 window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(WINDOW_TEXT),
@@ -164,6 +171,7 @@ pub(crate) fn town_directory_search_keyboard(
     mut key_events: MessageReader<KeyboardInput>,
     mut state: ResMut<TownDirectoryState>,
     mut inputs: Query<(&mut EditableText, &mut Text), With<TownDirectorySearchInput>>,
+    prefs: Res<ClientPreferences>,
 ) {
     if !state.open {
         key_events.clear();
@@ -179,8 +187,15 @@ pub(crate) fn town_directory_search_keyboard(
         &mut text,
         &mut state.filter_text,
         32,
-        "buscar pueblo…",
+        &localized_text(prefs.locale(), "buscar pueblo…"),
     );
+}
+
+fn town_row_metrics(locale: Locale, population: u32, rating: i16) -> String {
+    match locale {
+        Locale::Es => format!("{population} hab.  ·  autoridad {rating}"),
+        Locale::En => format!("{population} population  ·  authority {rating}"),
+    }
 }
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
@@ -249,7 +264,31 @@ pub(crate) fn sync_town_directory(
     editor: Res<EditorSession>,
     state: Res<TownDirectoryState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
+    mut title_q: Query<
+        (&FloatingWindowTitleText, &mut Text),
+        (
+            Without<TownDirectorySearchInput>,
+            Without<TownDirectoryFundButtonText>,
+        ),
+    >,
+    mut search_q: Query<
+        (&EditableText, &mut Text),
+        (
+            With<TownDirectorySearchInput>,
+            Without<FloatingWindowTitleText>,
+            Without<TownDirectoryFundButtonText>,
+        ),
+    >,
+    mut fund_text_q: Query<
+        &mut Text,
+        (
+            With<TownDirectoryFundButtonText>,
+            Without<FloatingWindowTitleText>,
+            Without<TownDirectorySearchInput>,
+        ),
+    >,
     list_roots: Query<Entity, With<TownDirectoryListRoot>>,
     children_q: Query<&Children>,
     mut commands: Commands,
@@ -261,6 +300,7 @@ pub(crate) fn sync_town_directory(
     >,
     mut fund_btn: Query<&mut Node, With<TownDirectoryFundButton>>,
 ) {
+    let locale = prefs.locale();
     let Some((_, mut visibility)) = root_q
         .iter_mut()
         .find(|(window, _)| window.id == FloatingWindowId::TownDirectory)
@@ -280,6 +320,21 @@ pub(crate) fn sync_town_directory(
         return;
     }
     *visibility = Visibility::Visible;
+
+    if let Some((_, mut title)) = title_q
+        .iter_mut()
+        .find(|(title, _)| title.0 == FloatingWindowId::TownDirectory)
+    {
+        **title = localized_text(locale, "Directorio de pueblos");
+    }
+    if let Ok((editable, mut text)) = search_q.single_mut()
+        && editable.value().to_string().is_empty()
+    {
+        **text = localized_text(locale, "buscar pueblo…");
+    }
+    for mut text in &mut fund_text_q {
+        **text = localized_text(locale, "Fundar pueblo");
+    }
 
     sync_list_sort_colors(&mut sort_buttons, TownDirectorySortButton(state.sort));
 
@@ -324,6 +379,7 @@ pub(crate) fn sync_town_directory(
     if cache.sort == state.sort
         && cache.sort_dir == state.sort_dir
         && cache.filter == state.filter_text
+        && cache.locale == Some(locale)
         && cache.rows == rows
     {
         return;
@@ -331,6 +387,7 @@ pub(crate) fn sync_town_directory(
     cache.sort = state.sort;
     cache.sort_dir = state.sort_dir;
     cache.filter.clone_from(&state.filter_text);
+    cache.locale = Some(locale);
     cache.rows.clone_from(&rows);
 
     let Ok(list_root) = list_roots.single() else {
@@ -340,22 +397,22 @@ pub(crate) fn sync_town_directory(
     let selected = state.selected;
     commands.entity(list_root).with_children(|list| {
         if rows.is_empty() {
-            spawn_list_empty_label(
-                list,
-                &asset_server,
-                if state.filter_text.trim().is_empty() {
-                    "No hay pueblos."
-                } else {
-                    "Ningún pueblo coincide con el filtro."
-                },
-            );
+            let empty_label = if state.filter_text.trim().is_empty() {
+                localized_text(locale, "No hay pueblos.")
+            } else {
+                localized_text(locale, "Ningún pueblo coincide con el filtro.")
+            };
+            spawn_list_empty_label(list, &asset_server, &empty_label);
             return;
         }
         for (town_id, name, population, rating) in rows {
             spawn_list_row_button(
                 list,
                 &asset_server,
-                format!("{name}  ·  {population} hab.  ·  autoridad {rating}"),
+                format!(
+                    "{name}  ·  {}",
+                    town_row_metrics(locale, population, rating)
+                ),
                 TownDirectoryRow { town_id },
                 selected == Some(town_id),
             );
@@ -367,6 +424,7 @@ pub(crate) fn town_directory_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut state: ResMut<TownDirectoryState>,
     mut search_q: Query<(&mut EditableText, &mut Text), With<TownDirectorySearchInput>>,
+    prefs: Res<ClientPreferences>,
 ) {
     for message in closed.read() {
         if message.0.class == FloatingWindowId::TownDirectory {
@@ -375,7 +433,7 @@ pub(crate) fn town_directory_on_closed(
             state.selected = None;
             if let Ok((mut editable, mut text)) = search_q.single_mut() {
                 *editable = EditableText::new("");
-                **text = "buscar pueblo…".into();
+                **text = localized_text(prefs.locale(), "buscar pueblo…");
             }
         }
     }
@@ -508,5 +566,18 @@ mod tests {
             .unwrap();
         assert!((cam.translation.x - expected.x).abs() < 0.01);
         assert!((cam.translation.y - expected.y).abs() < 0.01);
+    }
+
+    #[test]
+    fn town_directory_localizes_dynamic_metrics_without_touching_names() {
+        assert_eq!(
+            town_row_metrics(Locale::Es, 1732, -20),
+            "1732 hab.  ·  autoridad -20"
+        );
+        assert_eq!(
+            town_row_metrics(Locale::En, 1732, -20),
+            "1732 population  ·  authority -20"
+        );
+        assert_eq!(localized_text(Locale::En, "Villa Ñandú"), "Villa Ñandú");
     }
 }

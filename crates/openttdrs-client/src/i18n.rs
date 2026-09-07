@@ -572,6 +572,12 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "(sin puntuaciones)" => "(no high scores)",
         "¿Salir de OpenTTDRS?" => "Exit OpenTTDRS?",
         "No hay noticias todavía." => "There is no news yet.",
+        "Comienza una recesión económica" => "An economic recession begins",
+        "La demanda de carga y la producción industrial se reducirán." => {
+            "Cargo demand and industrial production will decrease."
+        }
+        "La recesión ha terminado" => "The recession has ended",
+        "La economía vuelve a la normalidad." => "The economy returns to normal.",
         // Errores de comandos: se generan durante la partida y por eso no
         // pasan por un constructor de ventana que pueda traducirlos al crear
         // el HUD. Mantener sus claves aquí permite que el feedback se
@@ -876,6 +882,32 @@ mod tests {
     }
 
     #[test]
+    fn catalog_translates_static_economy_news_without_touching_dynamic_text() {
+        for (spanish, english) in [
+            (
+                "Comienza una recesión económica",
+                "An economic recession begins",
+            ),
+            (
+                "La demanda de carga y la producción industrial se reducirán.",
+                "Cargo demand and industrial production will decrease.",
+            ),
+            ("La recesión ha terminado", "The recession has ended"),
+            (
+                "La economía vuelve a la normalidad.",
+                "The economy returns to normal.",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        assert_eq!(
+            localized_text(Locale::En, "Entrega de 3 u. de Carbón"),
+            "Entrega de 3 u. de Carbón"
+        );
+    }
+
+    #[test]
     fn catalog_translates_display_options_and_transparency_categories() {
         for (spanish, english) in [
             ("Nombres de pueblos", "Town names"),
@@ -1025,6 +1057,55 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(late).unwrap().as_str(),
             "No hay noticias todavía."
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_static_economy_news_only() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let headline = app
+            .world_mut()
+            .spawn(Text::new("Comienza una recesión económica"))
+            .id();
+        let body = app
+            .world_mut()
+            .spawn(Text::new(
+                "La demanda de carga y la producción industrial se reducirán.",
+            ))
+            .id();
+        let dynamic = app
+            .world_mut()
+            .spawn(Text::new("Entrega de 3 u. de Carbón"))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "An economic recession begins"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Cargo demand and industrial production will decrease."
+        );
+        assert_eq!(
+            app.world().get::<Text>(dynamic).unwrap().as_str(),
+            "Entrega de 3 u. de Carbón"
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Comienza una recesión económica"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "La demanda de carga y la producción industrial se reducirán."
         );
     }
 

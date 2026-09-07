@@ -1969,6 +1969,14 @@ existe** (UI-2, `vehicle_list.rs` / `FloatingWindowId::VehicleList`) con filtro
 por tipo y acciones básicas. Grupos dedicados (`VehicleGroupWindow`) siguen
 parciales (ciclo de grupo en depósito + HUD).
 
+La lista global localiza ahora título por tipo y estación, filtros, orden,
+acciones, estados de circulación, edad/unidad, grupo, inicio/parada y estados
+vacíos al cambiar entre español e inglés (#491). Nombres de vehículos y grupos
+(incluidos NewGRF/custom), IDs, coordenadas, filtros de datos, orden,
+selección, sprites y comandos no se traducen ni se mutan; el cambio de locale
+invalida la caché de filas. La ventana de grupos, las acciones masivas y el
+resto de catálogos upstream siguen parciales.
+
 - Ventana de lista de flota con ordenamiento y acciones masivas
   (`MassStartStop`, enviar todos a depósito): **A/B** — los comandos masivos
   por depósito ya existen; falta la vista global y un `SendAllToDepot`.

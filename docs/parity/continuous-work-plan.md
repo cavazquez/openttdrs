@@ -2468,3 +2468,13 @@ placeholder de búsqueda se sincroniza al cambiar de locale. Nombres de motor,
 sprites, IDs, cifras, filtros, selección y cargos NewGRF/custom permanecen
 intactos. TE, criterios avanzados y formato numérico completo siguen
 pendientes en #331 y sus bloques funcionales.
+
+Actualización #331-VEHICLE-LIST-LOCALE-491 (2026-09-07, issue [#491](https://github.com/cavazquez/openttdrs/issues/491)):
+la lista global de vehículos localiza título por tipo/estación, filtros, orden,
+acciones, estados de circulación, edad, grupos, inicio/parada y estados vacíos,
+sincronizando el locale con `ClientPreferences` e invalidando la caché de filas
+al cambiarlo. Nombres de vehículos y grupos (incluidos NewGRF/custom), IDs,
+coordenadas, velocidades, filtros de datos, orden, selección, sprites y
+comandos permanecen intactos.
+La ventana de grupos dedicada, acciones masivas, criterios avanzados y
+catálogos upstream restantes siguen abiertos en #331.

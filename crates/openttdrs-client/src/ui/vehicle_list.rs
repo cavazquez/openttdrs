@@ -8,7 +8,7 @@ use bevy::ui::widget::ImageNode;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 
-use crate::i18n::Locale;
+use crate::i18n::{Locale, localized_text};
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles,
     vehicle_world_position,
@@ -22,8 +22,8 @@ use crate::ui::floating_window::{
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error, push_vehicle_start_stop_error};
 use crate::ui::list_window::{
-    LIST_BTN_ACTIVE, LIST_BTN_BG, LIST_BTN_HOVER, SortDir, clear_list_children, list_chip_bg,
-    spawn_list_empty_label, spawn_list_scroll_area, spawn_list_sort_button,
+    LIST_BTN_ACTIVE, LIST_BTN_BG, LIST_BTN_BORDER, LIST_BTN_HOVER, SortDir, clear_list_children,
+    list_chip_bg, spawn_list_empty_label, spawn_list_scroll_area,
 };
 use crate::ui::navigation::{OpenUiRoute, UiRoute};
 use crate::ui::toolbar::BuildMenuUi;
@@ -109,6 +109,7 @@ pub(crate) enum VehicleCompanyFilter {
 #[derive(Resource, Default)]
 pub(crate) struct VehicleListState {
     pub(crate) open: bool,
+    pub(crate) locale: Locale,
     pub(crate) kind: VehicleListKind,
     pub(crate) sort: VehicleListSort,
     pub(crate) sort_dir: SortDir,
@@ -182,8 +183,13 @@ pub(crate) struct VehicleListGroupRenameRow;
 #[derive(Component)]
 pub(crate) struct VehicleListGroupRenameInput;
 
+/// Texto estático de la ventana cuyo valor visible depende del locale activo.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct VehicleListLocalizedText(pub(crate) &'static str);
+
 #[derive(Default)]
 pub(crate) struct VehicleListCache {
+    locale: Locale,
     kind: VehicleListKind,
     sort: VehicleListSort,
     sort_dir: SortDir,
@@ -217,42 +223,42 @@ pub(crate) fn setup_vehicle_list(mut commands: Commands, asset_server: Res<Asset
             BuildMenuUi,
         ))
         .with_children(|row| {
-            spawn_list_sort_button(
+            spawn_vehicle_list_sort_button(
                 row,
                 asset_server,
                 "Trenes",
                 VehicleListKindButton(VehicleListKind::Train),
                 84.0,
             );
-            spawn_list_sort_button(
+            spawn_vehicle_list_sort_button(
                 row,
                 asset_server,
                 "Carretera",
                 VehicleListKindButton(VehicleListKind::Road),
                 84.0,
             );
-            spawn_list_sort_button(
+            spawn_vehicle_list_sort_button(
                 row,
                 asset_server,
                 "Barcos",
                 VehicleListKindButton(VehicleListKind::Ship),
                 84.0,
             );
-            spawn_list_sort_button(
+            spawn_vehicle_list_sort_button(
                 row,
                 asset_server,
                 "Aviones",
                 VehicleListKindButton(VehicleListKind::Aircraft),
                 84.0,
             );
-            spawn_list_sort_button(
+            spawn_vehicle_list_sort_button(
                 row,
                 asset_server,
                 "Mía",
                 VehicleCompanyFilterButton(VehicleCompanyFilter::Active),
                 48.0,
             );
-            spawn_list_sort_button(
+            spawn_vehicle_list_sort_button(
                 row,
                 asset_server,
                 "Todas",
@@ -271,21 +277,21 @@ pub(crate) fn setup_vehicle_list(mut commands: Commands, asset_server: Res<Asset
             BuildMenuUi,
         ))
         .with_children(|row| {
-            spawn_list_sort_button(
+            spawn_vehicle_list_sort_button(
                 row,
                 asset_server,
                 "Nombre",
                 VehicleListSortButton(VehicleListSort::Name),
                 84.0,
             );
-            spawn_list_sort_button(
+            spawn_vehicle_list_sort_button(
                 row,
                 asset_server,
                 "Edad",
                 VehicleListSortButton(VehicleListSort::Age),
                 84.0,
             );
-            spawn_list_sort_button(
+            spawn_vehicle_list_sort_button(
                 row,
                 asset_server,
                 "Velocidad",
@@ -413,10 +419,45 @@ pub(crate) fn setup_vehicle_list(mut commands: Commands, asset_server: Res<Asset
     });
 }
 
+fn spawn_vehicle_list_sort_button<M: Component>(
+    parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    label: &'static str,
+    marker: M,
+    min_width: f32,
+) {
+    parent
+        .spawn((
+            Button,
+            marker,
+            Node {
+                min_width: Val::Px(min_width),
+                height: Val::Px(24.0),
+                padding: UiRect::horizontal(Val::Px(6.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(LIST_BTN_BG),
+            BorderColor::all(LIST_BTN_BORDER),
+            Interaction::default(),
+            BuildMenuUi,
+        ))
+        .with_children(|button| {
+            button.spawn((
+                VehicleListLocalizedText(label),
+                Text::new(label),
+                window_text_font(asset_server, UiFontRole::Caption),
+                TextColor(WINDOW_TEXT),
+            ));
+        });
+}
+
 fn spawn_action_button(
     parent: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
-    label: &str,
+    label: &'static str,
     action: VehicleListAction,
     toggle_label: bool,
 ) {
@@ -443,6 +484,12 @@ fn spawn_action_button(
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
         ));
+        if !matches!(
+            action,
+            VehicleListAction::ToggleRunning | VehicleListAction::CycleGroup
+        ) {
+            text.insert(VehicleListLocalizedText(label));
+        }
         if toggle_label {
             text.insert(VehicleListToggleLabel);
         }
@@ -459,16 +506,29 @@ fn speed_to_kmh(kind: VehicleKind, units: u16) -> u16 {
     }
 }
 
-fn vehicle_status_label(vehicle: &openttdrs_core::Vehicle) -> String {
+fn vehicle_status_label(locale: Locale, vehicle: &openttdrs_core::Vehicle) -> String {
     if vehicle.running {
         if vehicle.no_network_route_to_order {
-            "Sin ruta".to_string()
+            localized_text(locale, "Sin ruta")
         } else {
-            "En marcha".to_string()
+            localized_text(locale, "En marcha")
         }
     } else {
-        "Detenido".to_string()
+        localized_text(locale, "Detenido")
     }
+}
+
+fn vehicle_list_row_label(
+    locale: Locale,
+    name: &str,
+    age: u32,
+    speed: u16,
+    x: i32,
+    y: i32,
+    status: &str,
+) -> String {
+    let age_unit = if locale == Locale::En { "y" } else { "a" };
+    format!("{name}  ·  {age}{age_unit}  ·  {speed} km/h  ·  ({x},{y})  ·  {status}")
 }
 
 pub(crate) fn open_vehicle_list_from_routes(
@@ -480,6 +540,26 @@ pub(crate) fn open_vehicle_list_from_routes(
             state.kind = kind;
             state.open = true;
             state.station_filter = None;
+        }
+    }
+}
+
+pub(crate) fn sync_vehicle_list_locale(
+    prefs: Res<ClientPreferences>,
+    mut state: ResMut<VehicleListState>,
+) {
+    state.locale = prefs.locale();
+}
+
+pub(crate) fn sync_vehicle_list_static_labels(
+    prefs: Res<ClientPreferences>,
+    mut labels: Query<(&VehicleListLocalizedText, &mut Text)>,
+) {
+    let locale = prefs.locale();
+    for (source, mut text) in &mut labels {
+        let translated = localized_text(locale, source.0);
+        if **text != translated {
+            **text = translated;
         }
     }
 }
@@ -749,6 +829,7 @@ pub(crate) fn sync_vehicle_list(
         ),
     >,
 ) {
+    let locale = state.locale;
     let Some((_, mut visibility)) = root_q
         .iter_mut()
         .find(|(window, _)| window.id == FloatingWindowId::VehicleList)
@@ -767,9 +848,15 @@ pub(crate) fn sync_vehicle_list(
         .find(|(text, _)| text.0 == FloatingWindowId::VehicleList)
     {
         **title = if let Some(pos) = state.station_filter {
-            format!("{} · estación ({}, {})", state.kind.title(), pos.x, pos.y)
+            format!(
+                "{} · {} ({}, {})",
+                localized_text(locale, state.kind.title()),
+                localized_text(locale, "estación"),
+                pos.x,
+                pos.y
+            )
         } else {
-            state.kind.title().to_string()
+            localized_text(locale, state.kind.title())
         };
     }
 
@@ -804,9 +891,9 @@ pub(crate) fn sync_vehicle_list(
             .and_then(|id| sim.state.vehicles.iter().find(|v| v.id == id))
             .is_some_and(|v| v.running);
         **toggle = if running {
-            "Detener".to_string()
+            localized_text(locale, "Detener")
         } else {
-            "Iniciar".to_string()
+            localized_text(locale, "Iniciar")
         };
     }
     if let Ok(mut group_label) = group_label_q.single_mut() {
@@ -814,8 +901,8 @@ pub(crate) fn sync_vehicle_list(
             .group_filter
             .and_then(|id| sim.state.vehicle_groups.iter().find(|g| g.id == id))
             .map_or_else(
-                || "Grupos".to_string(),
-                |group| format!("Grupo: {}", group.name),
+                || localized_text(locale, "Grupos"),
+                |group| format!("{}: {}", localized_text(locale, "Grupo"), group.name),
             );
     }
 
@@ -853,7 +940,7 @@ pub(crate) fn sync_vehicle_list(
                 speed_to_kmh(vehicle.kind, vehicle.effective_speed()),
                 vehicle.pos.x,
                 vehicle.pos.y,
-                vehicle_status_label(vehicle),
+                vehicle_status_label(locale, vehicle),
             )
         })
         .collect();
@@ -881,7 +968,8 @@ pub(crate) fn sync_vehicle_list(
         }
     }
 
-    if cache.kind == state.kind
+    if cache.locale == locale
+        && cache.kind == state.kind
         && cache.sort == state.sort
         && cache.sort_dir == state.sort_dir
         && cache.station_filter == state.station_filter
@@ -901,6 +989,7 @@ pub(crate) fn sync_vehicle_list(
         }
         return;
     }
+    cache.locale = locale;
     cache.kind = state.kind;
     cache.sort = state.sort;
     cache.sort_dir = state.sort_dir;
@@ -916,12 +1005,13 @@ pub(crate) fn sync_vehicle_list(
     clear_list_children(&mut commands, list_root, &children_q);
     commands.entity(list_root).with_children(|list| {
         if rows.is_empty() {
-            let empty = if state.station_filter.is_some() {
+            let empty_source = if state.station_filter.is_some() {
                 "Ningún vehículo visita esta estación."
             } else {
                 state.kind.empty_label()
             };
-            spawn_list_empty_label(list, &asset_server, empty);
+            let empty = localized_text(locale, empty_source);
+            spawn_list_empty_label(list, &asset_server, &empty);
             return;
         }
         for (vehicle_id, name, age, speed, x, y, status) in rows {
@@ -931,7 +1021,7 @@ pub(crate) fn sync_vehicle_list(
                 trucks.as_deref(),
                 &sim,
                 vehicle_id,
-                format!("{name}  ·  {age}a  ·  {speed} km/h  ·  ({x},{y})  ·  {status}"),
+                vehicle_list_row_label(locale, &name, age, speed, x, y, &status),
                 Some(vehicle_id) == state.selected,
             );
         }
@@ -1292,5 +1382,80 @@ mod tests {
                 .station_filter
                 .is_none()
         );
+    }
+
+    #[test]
+    fn vehicle_list_localizes_status_title_and_row_without_mutating_identity() {
+        let mut vehicle = Vehicle::new(
+            27,
+            VehicleKind::Bus,
+            TileCoord::new(4, 5),
+            TileCoord::new(4, 5),
+        );
+        vehicle.name = Some("Línea Ñandú".into());
+        vehicle.running = false;
+        let spanish_status = vehicle_status_label(Locale::Es, &vehicle);
+        let english_status = vehicle_status_label(Locale::En, &vehicle);
+        assert_eq!(spanish_status, "Detenido");
+        assert_eq!(english_status, "Stopped");
+
+        let english_row = vehicle_list_row_label(
+            Locale::En,
+            vehicle.name.as_deref().unwrap(),
+            12,
+            56,
+            vehicle.pos.x,
+            vehicle.pos.y,
+            &english_status,
+        );
+        assert!(english_row.contains("Línea Ñandú"));
+        assert!(english_row.contains("12y"));
+        assert!(english_row.contains("Stopped"));
+        assert!(english_row.contains("(4,5)"));
+        assert_eq!(vehicle.id, 27);
+        assert_eq!(vehicle.pos, TileCoord::new(4, 5));
+        assert_eq!(
+            localized_text(Locale::En, VehicleListKind::Train.title()),
+            "Train list"
+        );
+        assert_eq!(
+            localized_text(Locale::En, "Ningún vehículo visita esta estación."),
+            "No vehicle visits this station."
+        );
+    }
+
+    #[test]
+    fn vehicle_list_locale_resource_tracks_client_preferences() {
+        let mut world = World::new();
+        world.init_resource::<VehicleListState>();
+        world.insert_resource(ClientPreferences {
+            language: "en".into(),
+            ..ClientPreferences::default()
+        });
+
+        world.run_system_once(sync_vehicle_list_locale).unwrap();
+
+        assert_eq!(world.resource::<VehicleListState>().locale, Locale::En);
+    }
+
+    #[test]
+    fn vehicle_list_static_labels_follow_client_locale() {
+        let mut world = World::new();
+        world.insert_resource(ClientPreferences {
+            language: "en".into(),
+            ..ClientPreferences::default()
+        });
+        let label = world
+            .spawn((
+                VehicleListLocalizedText("Crear grupo"),
+                Text::new("Crear grupo"),
+            ))
+            .id();
+
+        world
+            .run_system_once(sync_vehicle_list_static_labels)
+            .unwrap();
+
+        assert_eq!(world.get::<Text>(label).unwrap().as_str(), "Create group");
     }
 }

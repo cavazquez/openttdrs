@@ -975,6 +975,26 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
             return Some(format!("{english_prefix}{vehicle_id}"));
         }
     }
+    if let Some(victims) = source
+        .strip_prefix("Choque de trenes (")
+        .and_then(|value| value.strip_suffix(" víctimas)"))
+        && is_ascii_digits(victims)
+    {
+        return Some(format!("Train collision ({victims} victims)"));
+    }
+    if let Some(rest) = source.strip_prefix("Los trenes #")
+        && let Some((first, rest)) = rest.split_once(" y #")
+        && let Some((second, coordinates)) = rest
+            .strip_suffix(").")
+            .and_then(|value| value.split_once(" colisionaron en ("))
+        && is_ascii_digits(first)
+        && is_ascii_digits(second)
+        && is_coordinate_pair(coordinates)
+    {
+        return Some(format!(
+            "Trains #{first} and #{second} collided at ({coordinates})."
+        ));
+    }
     None
 }
 
@@ -1242,6 +1262,33 @@ mod tests {
             "Parada incompatible: vehículo 8 (GS)",
             "Sin carga disponible: vehículo 9 extra",
             "Sin camino reservado: vehículo ",
+        ] {
+            assert_eq!(localized_text(Locale::En, malformed), malformed);
+        }
+    }
+
+    #[test]
+    fn catalog_translates_train_collision_news_without_mutating_values() {
+        for (spanish, english) in [
+            (
+                "Choque de trenes (2 víctimas)",
+                "Train collision (2 victims)",
+            ),
+            (
+                "Los trenes #17 y #23 colisionaron en (-4, 9).",
+                "Trains #17 and #23 collided at (-4, 9).",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        for malformed in [
+            "Choque de trenes (dos víctimas)",
+            "Choque de trenes (2 víctimas",
+            "Los trenes #17 y #23 colisionaron en (x, 9).",
+            "Los trenes #17 y #23 colisionaron en (-4, 9)",
+            "Los trenes #17 y #23 colisionaron en (-4, 9). (GS)",
+            "Los trenes #17 y # colisionaron en (-4, 9).",
         ] {
             assert_eq!(localized_text(Locale::En, malformed), malformed);
         }
@@ -1794,6 +1841,63 @@ mod tests {
         for ((spanish, _), entity) in entries.iter().zip(entities.iter()) {
             assert_eq!(app.world().get::<Text>(*entity).unwrap().as_str(), *spanish);
         }
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_train_collision_news_late() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let headline = app
+            .world_mut()
+            .spawn(Text::new("Choque de trenes (2 víctimas)"))
+            .id();
+        let body = app
+            .world_mut()
+            .spawn(Text::new("Los trenes #17 y #23 colisionaron en (-4, 9)."))
+            .id();
+        let malformed = app
+            .world_mut()
+            .spawn(Text::new("Los trenes #17 y #23 colisionaron en (x, 9)."))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Train collision (2 victims)"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Trains #17 and #23 collided at (-4, 9)."
+        );
+        assert_eq!(
+            app.world().get::<Text>(malformed).unwrap().as_str(),
+            "Los trenes #17 y #23 colisionaron en (x, 9)."
+        );
+
+        let late = app
+            .world_mut()
+            .spawn(Text::new("Choque de trenes (12 víctimas)"))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(late).unwrap().as_str(),
+            "Train collision (12 victims)"
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Choque de trenes (2 víctimas)"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Los trenes #17 y #23 colisionaron en (-4, 9)."
+        );
     }
 
     #[test]

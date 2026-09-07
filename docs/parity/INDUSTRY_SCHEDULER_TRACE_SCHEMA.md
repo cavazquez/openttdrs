@@ -1,9 +1,9 @@
 # Contrato de traza del scheduler de industrias
 
 Actualizado: 2026-09-07. Sub-issues: #501 (oráculo), #502 (ejecución vanilla)
-y #506 (candidato/comparador); padre de runtime: #499 / RMAP-158. La
-importación de `DATE`/tick/RNG que el comparador detectó queda separada en
-#507.
+y #506 (candidato/comparador); padre de runtime: #499 / RMAP-158. #507
+conserva la importación de los relojes `DATE` y el estado RNG de carga; el
+primer residual de entidad se separa de ese contrato.
 
 `OPENTTDRS_INDUSTRY_TRACE_OUT` habilita, exclusivamente en el binario OpenTTD
 instrumentado, una traza JSONL de la rutina diaria
@@ -75,11 +75,19 @@ guardado ya contiene sólo la fracción baja de 16.16.
 ## Estado de comparación
 
 El candidato traduce solamente la base interna relativa de `date` a la escala
-absoluta del contrato; no relaja `year`, `month`, `tick` ni RNG. La primera
-comparación sobre una partida de trabajo detectó una divergencia de carga antes
-del scheduler en esos campos. #507 es dueña de corregirla con una fixture
-versionada; hasta que su fila `initial` sea exacta, este contrato no declara
-paridad runtime del scheduler.
+absoluta del contrato; no relaja `year`, `month`, `tick` ni RNG. La corrección
+de #507 conserva el `DATE` moderno completo —ambos relojes, sus fracciones y
+el tick— y, en la corrida controlada sobre la partida de trabajo, iguala en
+`initial` calendario, economía, tick y las dos palabras RNG que contiene el
+SAV. Un dedicado lanzado en un entorno que no le permite abrir su socket puede
+recorrer un arranque distinto; esa salida no se usa como oracle de importación.
+
+Con los relojes ya alineados, el comparador expone su primer residual real:
+`INDY.counter` se carga truncado a 12 bits (`12730` nativo frente a `442` en el
+candidato). Es una pérdida de entidad anterior al scheduler y debe corregirse
+en un sub-issue separado, con regresión de los 16 bits. Hasta entonces —y hasta
+caracterizar los consumos RNG globales de jornadas posteriores— este contrato
+no declara paridad runtime del scheduler.
 
 ## Límites explícitos
 

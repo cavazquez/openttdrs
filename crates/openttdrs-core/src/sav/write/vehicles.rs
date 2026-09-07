@@ -22,7 +22,7 @@ use super::entities::CargoPacketExport;
 use super::entities::cargo_packet_export;
 use crate::game_state::GameState;
 use crate::map::{TileCoord, TileKind, coord_to_linear_index};
-use crate::news::{CALENDAR_BASE_YEAR, calendar_year_day};
+use crate::news::openttd_date_from_calendar_day_index;
 use crate::vehicle::{
     DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleKind, VehicleOrder, VehicleOrderRuntime,
 };
@@ -77,9 +77,7 @@ const TILE_SIZE: i32 = 16;
 /// Convierte el índice de día del reloj Rust al `Date` que usa `OpenTTD` en
 /// `Vehicle::date_of_last_service`.
 pub(super) fn packed_calendar_date_from_day_index(day_index: u64) -> i32 {
-    let (year, doy) = calendar_year_day(day_index);
-    i32::try_from(u64::from(year) * 365 + doy.saturating_sub(1))
-        .unwrap_or(i32::try_from(u64::from(CALENDAR_BASE_YEAR) * 365).unwrap_or(0))
+    openttd_date_from_calendar_day_index(day_index)
 }
 
 fn station_id_for_pos(state: &GameState, pos: TileCoord) -> Option<u16> {

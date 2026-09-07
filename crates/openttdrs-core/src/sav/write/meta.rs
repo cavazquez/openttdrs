@@ -2,7 +2,8 @@
 
 use crate::game_state::GameState;
 use crate::map::{TileKind, coord_to_linear_index};
-use crate::news::{CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day};
+use crate::news::openttd_date_from_calendar_day_index;
+use crate::timer::openttd_economy_date_from_day_index;
 use crate::vehicle::VehicleKind;
 
 use super::super::SavError;
@@ -10,17 +11,32 @@ use super::super::chunks::CH_TABLE;
 use super::chunks::{raw_table_chunk, table_chunk};
 use super::codec::{write_gamma, write_str};
 
-/// Fecha `OpenTTD` aproximada (días desde año 0) + tick monotónico.
+/// Campos modernos de `DATE` que este writer modela (SLV ≥ 328).
+pub(super) const DATE_FIELDS: &[(u8, &str)] = &[
+    (5, "date"),
+    (4, "date_fract"),
+    (8, "tick_counter"),
+    (5, "economy_date"),
+    (4, "economy_date_fract"),
+    (6, "days_since_last_month"),
+    (4, "calendar_sub_date_fract"),
+    (6, "random_state[0]"),
+    (6, "random_state[1]"),
+];
+
+/// Relojes `DATE` de `OpenTTD` + tick monotónico, sin reconstruir uno desde otro.
 pub(super) fn date_record(state: &GameState) -> Vec<u8> {
-    let day_index = calendar_day_index(state.tick);
-    let (year, doy) = calendar_year_day(day_index);
-    // Aproximación: 365 * year + (doy - 1). Suficiente para roundtrip interno;
-    // OpenTTD usa calendario gregoriano real — ver docs/PLANIFICACION.md § Export SAV.
-    let calendar_date = i32::try_from(u64::from(year) * 365 + (doy.saturating_sub(1)))
-        .unwrap_or(i32::try_from(u64::from(CALENDAR_BASE_YEAR) * 365).unwrap_or(0));
-    let mut rec = Vec::with_capacity(20);
+    let calendar_date = openttd_date_from_calendar_day_index(u64::from(state.calendar.date));
+    let economy_date =
+        openttd_economy_date_from_day_index(state.economy_timer.date, state.using_wallclock_units);
+    let mut rec = Vec::with_capacity(32);
     rec.extend_from_slice(&calendar_date.to_be_bytes());
+    rec.extend_from_slice(&state.calendar.date_fract.to_be_bytes());
     rec.extend_from_slice(&state.tick.get().to_be_bytes());
+    rec.extend_from_slice(&economy_date.to_be_bytes());
+    rec.extend_from_slice(&state.economy_timer.date_fract.to_be_bytes());
+    rec.extend_from_slice(&state.economy_timer.days_since_last_month.to_be_bytes());
+    rec.extend_from_slice(&state.calendar.sub_date_fract.to_be_bytes());
     rec.extend_from_slice(&state.random.state[0].to_be_bytes());
     rec.extend_from_slice(&state.random.state[1].to_be_bytes());
     rec

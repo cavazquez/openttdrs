@@ -152,17 +152,20 @@ settings no vanilla y matriz temporal siguen abiertos.
 
 RMAP-162 / #506 completa el puente diferencial: el candidato Rust exporta el
 mismo JSONL v1 en el corte post-timer y el comparador exige reloj, RNG, `ECMY`,
-`ITBL`, industrias y acciones exactos. La primera ejecución sobre una partida
-real halló una divergencia antes del scheduler (calendario, tick y RNG tras
-cargar); #507 la mantiene como defecto de importación explícito. RMAP-162
-cierra instrumentación y regresiones, no afirma todavía paridad temporal ni
-reduce los pendientes de #499, RMAP-056 o #338.
+`ITBL`, industrias y acciones exactos. #507 ya rehidrata el `DATE` moderno sin
+derivar tick, calendario ni economía entre sí; la corrida controlada iguala el
+estado inicial de reloj y RNG persistido. El siguiente primer campo divergente
+es `INDY.counter`, truncado de 16 a 12 bits durante la importación, y se trata
+como entidad separada. RMAP-162 cierra instrumentación y regresiones, no
+afirma todavía paridad temporal ni reduce los pendientes de #499, RMAP-056 o
+#338.
 
 Actualizado el 2026-09-07: RMAP-159/#500, RMAP-160/#501, RMAP-161/#502 y
 RMAP-162/#506 son sub-issues cerrados de estado/selección, observación nativa,
-ejecución vanilla e instrumentación diferencial; #507 conserva el desfase de
-carga detectado. Los gates continúan siendo obligatorios y ningún issue padre
-se considera cerrado por esta cobertura.
+ejecución vanilla e instrumentación diferencial. #507 conserva la cobertura de
+carga `DATE`; el contador `INDY` truncado y el runtime posterior quedan
+pendientes por separado. Los gates continúan siendo obligatorios y ningún
+issue padre se considera cerrado por esta cobertura.
 
 Reparación #347 validada (2026-09-04): las casas sin PNG suelto se recortan
 del atlas distribuido y conservan la misma paleta; las páginas se decodifican

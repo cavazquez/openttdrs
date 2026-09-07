@@ -6,9 +6,13 @@ mod queue;
 mod vehicle_advice;
 
 pub use calendar::{
-    CALENDAR_BASE_YEAR, CALENDAR_DAYS_PER_YEAR, calendar_day_index, calendar_day_index_from_state,
-    calendar_year_day, format_calendar_date, format_calendar_date_from_state,
-    format_calendar_day_index, tick_for_calendar_year,
+    CALENDAR_BASE_YEAR, CALENDAR_DAYS_PER_YEAR, OPENTTD_CALENDAR_BASE_DATE, calendar_day_index,
+    calendar_day_index_at_start_of_year, calendar_day_index_from_openttd_date,
+    calendar_day_index_from_state, calendar_day_of_month_from_day_index, calendar_days_in_year,
+    calendar_month_from_day_index, calendar_month_name, calendar_year_day,
+    calendar_ymd_from_day_index, format_calendar_date, format_calendar_date_from_state,
+    format_calendar_day_index, is_calendar_leap_year, openttd_date_at_start_of_year,
+    openttd_date_from_calendar_day_index, tick_for_calendar_year,
 };
 pub use formatting::{
     cargo_display_name, format_money, news_display_mode_label, news_type_label, vehicle_kind_label,
@@ -35,10 +39,9 @@ mod tests {
 
     #[test]
     fn tick_for_calendar_year_offsets_from_base() {
-        use crate::economy::TICKS_PER_YEAR;
         use crate::tick::GameTick;
         assert_eq!(tick_for_calendar_year(1950), GameTick::new(0));
-        assert_eq!(tick_for_calendar_year(1960).get(), 10 * TICKS_PER_YEAR);
+        assert_eq!(tick_for_calendar_year(1960).get(), 3_652 * 74);
         assert_eq!(
             format_calendar_date(tick_for_calendar_year(1980)),
             "1 ene 1980"

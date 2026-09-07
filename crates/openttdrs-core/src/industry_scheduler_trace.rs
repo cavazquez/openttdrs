@@ -6,7 +6,7 @@
 
 use crate::{
     GameState, INDUSTRY_BUILD_TYPE_COUNT, industry_daily_increment,
-    news::{CALENDAR_BASE_YEAR, CALENDAR_DAYS_PER_YEAR},
+    news::openttd_date_from_calendar_day_index,
 };
 
 /// El core conserva `date` relativo al año base, mientras `OpenTTD` exporta el
@@ -15,8 +15,10 @@ use crate::{
 /// RNG se conservan sin normalizar para que el comparador exponga cualquier
 /// diferencia real de importación.
 fn openttd_trace_date(relative_date: u32) -> u32 {
-    let base = u64::from(CALENDAR_BASE_YEAR).saturating_mul(CALENDAR_DAYS_PER_YEAR);
-    relative_date.saturating_add(u32::try_from(base).unwrap_or(u32::MAX))
+    u32::try_from(openttd_date_from_calendar_day_index(u64::from(
+        relative_date,
+    )))
+    .unwrap_or(u32::MAX)
 }
 
 /// Reloj serializado por el contrato JSONL del scheduler industrial.
@@ -260,6 +262,6 @@ mod tests {
         assert_eq!(sample.industries[0].id, 3);
         assert_eq!(sample.industries[1].id, 8);
         assert_eq!(sample.actions[0].industry_id, Some(3));
-        assert_eq!(sample.calendar.date, 711_750);
+        assert_eq!(sample.calendar.date, 712_223);
     }
 }

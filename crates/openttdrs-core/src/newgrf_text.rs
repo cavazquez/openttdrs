@@ -791,38 +791,14 @@ fn text_date_day_index(value: &NewGrfTextValue) -> Option<u64> {
 }
 
 fn format_newgrf_date(day_index: u64, style: DateStyle) -> String {
-    let (year, day_of_year) = crate::news::calendar_year_day(day_index);
-    let (month, day) = month_day_from_day_of_year(day_of_year);
+    let (year, month_index, day) = crate::news::calendar_ymd_from_day_index(day_index);
+    let month = crate::news::calendar_month_name(month_index);
     let month_number = month_number(month);
     match style {
         DateStyle::Long => format!("{day} {month} {year}"),
         DateStyle::Short => format!("{month} {year}"),
         DateStyle::Iso => format!("{year:04}-{month_number:02}-{day:02}"),
     }
-}
-
-fn month_day_from_day_of_year(mut day_of_year: u64) -> (&'static str, u64) {
-    const MONTHS: [(&str, u64); 12] = [
-        ("ene", 31),
-        ("feb", 28),
-        ("mar", 31),
-        ("abr", 30),
-        ("may", 31),
-        ("jun", 30),
-        ("jul", 31),
-        ("ago", 31),
-        ("sep", 30),
-        ("oct", 31),
-        ("nov", 30),
-        ("dic", 31),
-    ];
-    for (month, days) in MONTHS {
-        if day_of_year <= days {
-            return (month, day_of_year);
-        }
-        day_of_year = day_of_year.saturating_sub(days);
-    }
-    ("dic", 31)
 }
 
 fn month_number(month: &str) -> u8 {

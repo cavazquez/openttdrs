@@ -1212,12 +1212,28 @@ impl GameState {
         state.sav_object_mappings_dirty = false;
         state.sav_opaque_chunks = sav.opaque_chunks;
         if let Some(time) = sav.game_time {
-            state.tick = date::game_tick_from_sav_time(time);
+            // `DATE` persiste un contador de simulación y dos relojes
+            // independientes. Derivar alguno de los tres a partir de otro
+            // desplaza partidas reales (y pierde `date_fract`), por eso se
+            // hidratan por separado igual que `AfterLoadGame` de OpenTTD.
+            state.tick = crate::GameTick::new(time.tick);
+            state.calendar = crate::timer::CalendarTimer::from_openttd_date(
+                time.calendar_date,
+                time.calendar_date_fract,
+                time.calendar_sub_date_fract,
+            );
+            state.economy_timer = crate::timer::EconomyTimer::from_openttd_date(
+                time.economy_date,
+                time.economy_date_fract,
+                time.days_since_last_month,
+                state.using_wallclock_units,
+            );
+        } else {
+            // Sólo los saves antiguos sin `DATE` necesitan la migración desde
+            // tick. El modo wallclock se fija antes para que no derive el
+            // reloj económico como calendario.
+            state.sync_timers_from_tick();
         }
-        // El modo de tiempo y el tick deben configurar el mismo reloj
-        // económico antes de hidratar vehículos/órdenes; de lo contrario un
-        // save wallclock vuelve a calendario al primer mes simulado.
-        state.sync_timers_from_tick();
         state.jgr_tunnels_from_footer = sav.extras.jgr_tunnels_from_tnbp();
         state.towns = sav.towns;
         state.sav_town_persistent_storage_ids = sav.town_persistent_storage_ids;
@@ -2288,6 +2304,65 @@ mod tests {
             capa_raw_chunk: None,
             opaque_chunks: Vec::new(),
         }
+    }
+
+    #[test]
+    fn from_sav_game_keeps_native_tick_and_both_date_timers_independent() {
+        let mut sav = empty_sav(358, Map::new_flat(4, 4, 0));
+        sav.game_time = Some(date::SavGameTime {
+            // 14 Jun 2004 in OpenTTD's absolute Gregorian coordinate.
+            calendar_date: 732_111,
+            calendar_date_fract: 37,
+            calendar_sub_date_fract: 44,
+            // Economy may legitimately be one day behind the calendar.
+            economy_date: 732_110,
+            economy_date_fract: 12,
+            days_since_last_month: 29,
+            // Deliberately unrelated to `calendar_date * DAY_TICKS`.
+            tick: 1_472_993,
+        });
+        sav.random_state = Some([0x1020_3040, 0x5060_7080]);
+
+        let state = GameState::from_sav_game(sav);
+        assert_eq!(state.tick.get(), 1_472_993);
+        assert_eq!(state.calendar.date, 19_888);
+        assert_eq!(state.calendar.date_fract, 37);
+        assert_eq!(state.calendar.sub_date_fract, 44);
+        assert_eq!((state.calendar.year, state.calendar.month), (2004, 5));
+        assert_eq!(state.economy_timer.date, 19_887);
+        assert_eq!(state.economy_timer.date_fract, 12);
+        assert_eq!(state.economy_timer.days_since_last_month, 29);
+        assert_eq!(
+            (state.economy_timer.year, state.economy_timer.month),
+            (2004, 5)
+        );
+        assert_eq!(state.random.state, [0x1020_3040, 0x5060_7080]);
+    }
+
+    #[test]
+    fn from_sav_game_rehydrates_wallclock_economy_date_from_its_own_epoch() {
+        let mut sav = empty_sav(358, Map::new_flat(4, 4, 0));
+        sav.using_wallclock_units = true;
+        sav.game_time = Some(date::SavGameTime {
+            calendar_date: 732_111,
+            calendar_date_fract: 0,
+            calendar_sub_date_fract: 0,
+            // 1 Feb 1960 in the 360-day wallclock economy calendar.
+            economy_date: crate::timer::OPENTTD_WALLCLOCK_ECONOMY_BASE_DATE + 3_630,
+            economy_date_fract: 21,
+            days_since_last_month: 7,
+            tick: 17,
+        });
+
+        let state = GameState::from_sav_game(sav);
+        assert!(state.economy_timer.using_wallclock_units());
+        assert_eq!(state.economy_timer.date, 3_630);
+        assert_eq!(state.economy_timer.date_fract, 21);
+        assert_eq!(
+            (state.economy_timer.year, state.economy_timer.month),
+            (1960, 1)
+        );
+        assert_eq!(state.economy_timer.days_since_last_month, 7);
     }
 
     #[test]

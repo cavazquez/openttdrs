@@ -626,16 +626,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if let Some(raw) = raw_date {
         data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
     } else {
-        let canonical = chunks::table_chunk(
-            *b"DATE",
-            &[
-                (5, "date"),
-                (8, "tick_counter"),
-                (6, "random_state[0]"),
-                (6, "random_state[1]"),
-            ],
-            &date_records,
-        )?;
+        let canonical = chunks::table_chunk(*b"DATE", meta::DATE_FIELDS, &date_records)?;
         data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
             raw_tables.and_then(|tables| tables.date_chunk.as_ref()),
             canonical,
@@ -2244,6 +2235,39 @@ mod tests {
         assert_eq!(tile.m8, 0x1234);
         let loaded = GameState::from_sav_game(sav_game);
         assert_eq!(loaded.random.state, [0x1020_3040, 0x5060_7080]);
+    }
+
+    #[test]
+    fn ottn_roundtrip_preserves_full_native_date_state() {
+        let mut state = tiny_state();
+        state.tick = GameTick::new(1_472_993);
+        state.calendar = crate::timer::CalendarTimer::from_openttd_date(732_111, 37, 44);
+        state.economy_timer = crate::timer::EconomyTimer::from_openttd_date(732_110, 12, 29, false);
+        state.random.state = [0x1020_3040, 0x5060_7080];
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let (payload, _) = crate::sav::container::decompress(&bytes).expect("payload");
+        let chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
+        let date = crate::sav::chunks::find_chunk(&chunks, "DATE").expect("DATE");
+        for (field_type, field_name) in meta::DATE_FIELDS {
+            assert_table_field_type(&date.body, *field_type, field_name);
+        }
+
+        let sav_game = sav::load(&bytes).expect("load");
+        let time = sav_game.game_time.expect("DATE time");
+        assert_eq!(time.calendar_date, 732_111);
+        assert_eq!(time.calendar_date_fract, 37);
+        assert_eq!(time.calendar_sub_date_fract, 44);
+        assert_eq!(time.economy_date, 732_110);
+        assert_eq!(time.economy_date_fract, 12);
+        assert_eq!(time.days_since_last_month, 29);
+        assert_eq!(time.tick, 1_472_993);
+
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(loaded.tick, state.tick);
+        assert_eq!(loaded.calendar, state.calendar);
+        assert_eq!(loaded.economy_timer, state.economy_timer);
+        assert_eq!(loaded.random, state.random);
     }
 
     #[test]

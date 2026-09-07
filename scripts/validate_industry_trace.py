@@ -161,17 +161,10 @@ def validate_sample(row: dict[str, Any], *, is_initial: bool) -> int:
     return change_loop
 
 
-def main() -> None:
-    if len(sys.argv) not in (3, 4):
-        fail("uso: validate_industry_trace.py <traza.jsonl> <días esperados> [openttd|openttdrs]")
-    path = Path(sys.argv[1])
-    try:
-        expected_days = int(sys.argv[2])
-    except ValueError:
-        fail(f"días inválidos: {sys.argv[2]}")
+def validate_trace(path: Path, expected_days: int, expected_producer: str | None = None) -> None:
+    """Valida una traza ya identificada por su productor esperado."""
     if expected_days <= 0:
         fail("días esperados debe ser positivo")
-    expected_producer = sys.argv[3] if len(sys.argv) == 4 else None
 
     try:
         rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
@@ -221,6 +214,18 @@ def main() -> None:
         previous_economy_date = economy_date
 
     print(f"OK: {path} · {expected_days} días · {producer}")
+
+
+def main() -> None:
+    if len(sys.argv) not in (3, 4):
+        fail("uso: validate_industry_trace.py <traza.jsonl> <días esperados> [openttd|openttdrs]")
+    path = Path(sys.argv[1])
+    try:
+        expected_days = int(sys.argv[2])
+    except ValueError:
+        fail(f"días inválidos: {sys.argv[2]}")
+    expected_producer = sys.argv[3] if len(sys.argv) == 4 else None
+    validate_trace(path, expected_days, expected_producer)
 
 
 if __name__ == "__main__":

@@ -17,9 +17,12 @@ SOURCE = ROOT / "patches" / "openttd-15.3-snapshot-export" / "src" / "snapshot_e
 INTEGRATOR = ROOT / "patches" / "openttd-15.3-snapshot-export" / "integrate.sh"
 EXPORTER = ROOT / "scripts" / "export_openttd_industry_trace.sh"
 VALIDATOR = ROOT / "scripts" / "validate_industry_trace.py"
+CANDIDATE_RUNNER = ROOT / "crates" / "openttdrs-core" / "src" / "bin" / "sav_industry_scheduler_runner.rs"
+CANDIDATE_EXPORTER = ROOT / "scripts" / "export_openttdrs_industry_trace.sh"
+COMPARATOR = ROOT / "scripts" / "compare_industry_scheduler_traces.py"
 
 
-def valid_trace(days: int = 1) -> list[dict[str, object]]:
+def valid_trace(days: int = 1, producer: str = "openttd") -> list[dict[str, object]]:
     builddata = [
         {
             "type": index,
@@ -48,7 +51,7 @@ def valid_trace(days: int = 1) -> list[dict[str, object]]:
         {
             "kind": "metadata",
             "schema_version": 1,
-            "producer": "openttd",
+            "producer": producer,
             "trace": "industry_scheduler",
             "initial_sample_point": "after_load_game",
             "day_sample_point": "after_industry_daily_timer",
@@ -73,12 +76,14 @@ def valid_trace(days: int = 1) -> list[dict[str, object]]:
 
 
 class IndustryTraceSourceContractTest(unittest.TestCase):
-    def run_validator(self, rows: list[dict[str, object]], *, expect_ok: bool) -> subprocess.CompletedProcess[str]:
+    def run_validator(
+        self, rows: list[dict[str, object]], *, expect_ok: bool, producer: str = "openttd"
+    ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as temp:
             trace = Path(temp) / "industry.jsonl"
             trace.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
             result = subprocess.run(
-                [sys.executable, str(VALIDATOR), str(trace), str(len(rows) - 2), "openttd"],
+                [sys.executable, str(VALIDATOR), str(trace), str(len(rows) - 2), producer],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -130,11 +135,27 @@ class IndustryTraceSourceContractTest(unittest.TestCase):
         result = self.run_validator(invalid, expect_ok=False)
         self.assertIn("actions", result.stderr)
 
-    def test_runner_exports_the_same_contract(self) -> None:
+    def test_native_runner_exports_the_contract(self) -> None:
         exporter = EXPORTER.read_text(encoding="utf-8")
         self.assertIn('OPENTTDRS_INDUSTRY_TRACE_OUT="$OUT"', exporter)
         self.assertIn('OPENTTDRS_INDUSTRY_TRACE_DAYS="$DAYS"', exporter)
         self.assertIn('validate_industry_trace.py" "$OUT" "$DAYS" openttd', exporter)
+
+    def test_candidate_runner_exports_and_compares_the_contract(self) -> None:
+        runner = CANDIDATE_RUNNER.read_text(encoding="utf-8")
+        exporter = CANDIDATE_EXPORTER.read_text(encoding="utf-8")
+        comparator = COMPARATOR.read_text(encoding="utf-8")
+
+        self.assertIn('producer: "openttdrs"', runner)
+        self.assertIn("IndustrySchedulerTraceSample::from_state", runner)
+        self.assertIn("enable_industry_scheduler_trace", runner)
+        self.assertIn("take_industry_scheduler_trace_samples", runner)
+        self.assertIn("sav_industry_scheduler_runner", exporter)
+        self.assertIn('validate_industry_trace.py" "$OUT" "$DAYS" openttdrs', exporter)
+        self.assertIn('validate_trace(native, days, "openttd")', comparator)
+        self.assertIn('validate_trace(candidate, days, "openttdrs")', comparator)
+
+        self.run_validator(valid_trace(producer="openttdrs"), expect_ok=True, producer="openttdrs")
 
 
 if __name__ == "__main__":

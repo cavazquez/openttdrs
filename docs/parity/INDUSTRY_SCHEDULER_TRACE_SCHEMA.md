@@ -1,7 +1,9 @@
 # Contrato de traza del scheduler de industrias
 
-Actualizado: 2026-09-07. Sub-issues: #501 (oráculo) y #502 (ejecución vanilla);
-padre de runtime: #499 / RMAP-158.
+Actualizado: 2026-09-07. Sub-issues: #501 (oráculo), #502 (ejecución vanilla)
+y #506 (candidato/comparador); padre de runtime: #499 / RMAP-158. La
+importación de `DATE`/tick/RNG que el comparador detectó queda separada en
+#507.
 
 `OPENTTDRS_INDUSTRY_TRACE_OUT` habilita, exclusivamente en el binario OpenTTD
 instrumentado, una traza JSONL de la rutina diaria
@@ -18,13 +20,22 @@ para la cadencia y una regresión física determinista desde 1960.
 
 ```bash
 ./scripts/export_openttd_industry_trace.sh path/to/game.sav /tmp/industry.jsonl 40
-python3 scripts/validate_industry_trace.py /tmp/industry.jsonl 40 openttd
+./scripts/export_openttdrs_industry_trace.sh path/to/game.sav /tmp/industry-openttdrs.jsonl 40
+python3 scripts/compare_industry_scheduler_traces.py \
+  /tmp/industry.jsonl /tmp/industry-openttdrs.jsonl 40
 ```
 
 El exportador arma el hook después del segundo `AfterLoadGame` por defecto,
 porque el dedicado crea primero una partida temporal antes de cargar `-g`.
 `OPENTTDRS_SNAPSHOT_MIN_CALL=1` sólo se usa para fixtures que no tienen esa
 partida temporal.
+
+El segundo exportador carga el mismo `.sav` mediante el core Rust, escribe una
+fila `initial` y captura cada fila `day` dentro del scheduler, inmediatamente
+después del timer industrial. La instrumentación es efímera, no se serializa y
+no consume `Random()`. El comparador valida primero ambos JSONL y luego exige
+igualdad exacta de metadata contractual, reloj, RNG, `ECMY`, `ITBL`, industrias
+y acciones; informa el primer campo que diverge.
 
 ## JSONL v1
 
@@ -60,6 +71,15 @@ incluye:
 La fila `initial` tiene `change_loop = 0` y acciones vacías. En una fila `day`,
 la cantidad de acciones coincide exactamente con `change_loop`; el contador
 guardado ya contiene sólo la fracción baja de 16.16.
+
+## Estado de comparación
+
+El candidato traduce solamente la base interna relativa de `date` a la escala
+absoluta del contrato; no relaja `year`, `month`, `tick` ni RNG. La primera
+comparación sobre una partida de trabajo detectó una divergencia de carga antes
+del scheduler en esos campos. #507 es dueña de corregirla con una fixture
+versionada; hasta que su fila `initial` sea exacta, este contrato no declara
+paridad runtime del scheduler.
 
 ## Límites explícitos
 

@@ -1356,6 +1356,22 @@ impl GameState {
             .unwrap_or_default()
     }
 
+    /// Habilita muestras efímeras del timer diario de industrias.
+    ///
+    /// La captura se toma dentro del scheduler, inmediatamente después de que
+    /// termina la jornada. No añade llamadas a `Random()` ni se serializa.
+    pub fn enable_industry_scheduler_trace(&mut self) {
+        self.runtime.industry_scheduler_trace_enabled = true;
+        self.runtime.industry_scheduler_trace_samples.clear();
+    }
+
+    /// Extrae las muestras post-timer acumuladas desde la última lectura.
+    pub fn take_industry_scheduler_trace_samples(
+        &mut self,
+    ) -> Vec<crate::IndustrySchedulerTraceSample> {
+        std::mem::take(&mut self.runtime.industry_scheduler_trace_samples)
+    }
+
     /// Avanza un tick de simulación (equivalente conceptual a un frame lógico del juego).
     ///
     /// Orden dentro del tick:

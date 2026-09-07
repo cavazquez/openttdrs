@@ -87,6 +87,14 @@ pub struct SimulationRuntime {
     /// `OpenTTD`; una partida cargada o un `.sav` no conserva este diagnóstico.
     pub industry_generation_attempts: Vec<GenerationIndustryAttempt>,
 
+    /// Muestras opcionales del scheduler diario de industrias.
+    ///
+    /// El runner de paridad las habilita explícitamente para reproducir el
+    /// corte post-timer del hook de `OpenTTD`. Permanecen fuera de JSON/SAV y la
+    /// ruta normal sólo paga una comprobación booleana.
+    pub industry_scheduler_trace_enabled: bool,
+    pub industry_scheduler_trace_samples: Vec<crate::IndustrySchedulerTraceSample>,
+
     /// Industrias que recibieron una entrega directa durante `LoadUnloadStation`.
     ///
     /// `OpenTTD` difiere `TriggerIndustryProduction` hasta que terminó de
@@ -286,6 +294,8 @@ impl SimulationRuntime {
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
             industry_generation_attempts: Vec::new(),
+            industry_scheduler_trace_enabled: false,
+            industry_scheduler_trace_samples: Vec::new(),
             pending_industry_deliveries: Vec::new(),
             cargo_monitor: crate::cargo_monitor::CargoMonitor::default(),
             landscape_tile_dirty: Vec::new(),
@@ -356,6 +366,7 @@ impl SimulationRuntime {
         self.pending_sim_events.discard_all();
         self.industry_tile_dirty.clear();
         self.industry_generation_attempts.clear();
+        self.industry_scheduler_trace_samples.clear();
         self.pending_industry_deliveries.clear();
         self.landscape_tile_dirty.clear();
         self.tile_loop_visited.clear();

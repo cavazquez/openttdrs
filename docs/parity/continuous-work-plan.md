@@ -150,10 +150,19 @@ teselas/estación y verifica `INDY.town` como `REF_TOWN` después de un round-tr
 OTTN. El alcance y los límites viven sólo en `random-map-issues.md`: NewGRF,
 settings no vanilla y matriz temporal siguen abiertos.
 
-Actualizado el 2026-09-07: RMAP-159/#500, RMAP-160/#501 y RMAP-161/#502 son
-sub-issues cerrados de estado/selección, observación temporal y ejecución
-vanilla; los gates continúan siendo obligatorios y ningún issue padre se
-considera cerrado por esta cobertura.
+RMAP-162 / #506 completa el puente diferencial: el candidato Rust exporta el
+mismo JSONL v1 en el corte post-timer y el comparador exige reloj, RNG, `ECMY`,
+`ITBL`, industrias y acciones exactos. La primera ejecución sobre una partida
+real halló una divergencia antes del scheduler (calendario, tick y RNG tras
+cargar); #507 la mantiene como defecto de importación explícito. RMAP-162
+cierra instrumentación y regresiones, no afirma todavía paridad temporal ni
+reduce los pendientes de #499, RMAP-056 o #338.
+
+Actualizado el 2026-09-07: RMAP-159/#500, RMAP-160/#501, RMAP-161/#502 y
+RMAP-162/#506 son sub-issues cerrados de estado/selección, observación nativa,
+ejecución vanilla e instrumentación diferencial; #507 conserva el desfase de
+carga detectado. Los gates continúan siendo obligatorios y ningún issue padre
+se considera cerrado por esta cobertura.
 
 Reparación #347 validada (2026-09-04): las casas sin PNG suelto se recortan
 del atlas distribuido y conservan la misma paleta; las páginas se decodifican

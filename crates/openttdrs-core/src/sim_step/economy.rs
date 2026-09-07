@@ -567,15 +567,15 @@ fn can_run_vanilla_industry_builder(state: &GameState) -> bool {
 
 /// Ejecuta la rama `TryBuildNewIndustry` para una partida estrictamente
 /// vanilla: refresca `ITBL`, elige la especie, intenta los 2.000 sitios y
-/// aplica el backoff incluso cuando no hay una especie elegible.
-fn try_build_new_vanilla_industry(state: &mut GameState) {
+/// aplica el backoff incluso cuando no hay una especie elegible. Devuelve el
+/// resultado que observa el hook nativo: `None` si no hubo especie elegible,
+/// o la especie elegida y si `PlaceIndustry` logró materializarla.
+fn try_build_new_vanilla_industry(state: &mut GameState) -> Option<(u16, bool)> {
     if !can_run_vanilla_industry_builder(state) {
-        return;
+        return None;
     }
     let (map_w, map_h) = state.map.dimensions();
-    let Some(current_counts) = vanilla_industry_type_counts(state) else {
-        return;
-    };
+    let current_counts = vanilla_industry_type_counts(state)?;
     state.industry_builder.setup_vanilla_target_count(
         state.climate,
         state.calendar.year,
@@ -599,6 +599,7 @@ fn try_build_new_vanilla_industry(state: &mut GameState) {
     state
         .industry_builder
         .finish_automatic_build_attempt(selected_type, succeeded);
+    selected_type.map(|industry_type| (industry_type, succeeded))
 }
 
 fn industry_creation_percent(desired_count: u32, current_count: u32) -> u32 {
@@ -619,26 +620,53 @@ fn industry_creation_percent(desired_count: u32, current_count: u32) -> u32 {
 /// fundación. Así se evita el antiguo error de cambiar una industria cada día
 /// aun en mapas 64×64.
 pub(super) fn advance_industry_daily_scheduler(state: &mut GameState) {
+    let trace_enabled = state.runtime.industry_scheduler_trace_enabled;
+    let mut trace_actions = trace_enabled.then(Vec::new);
     let (map_w, map_h) = state.map.dimensions();
     let change_loop = industry_builder::advance_industry_daily_change_counter(
         &mut state.global_economy.industry_daily_change_counter,
         map_w,
         map_h,
     );
-    if change_loop == 0 {
-        return;
+
+    if change_loop != 0 {
+        let current_count = u32::try_from(state.industries.len()).unwrap_or(u32::MAX);
+        let desired_count = state.industry_builder.wanted_count();
+        let creation_percent = industry_creation_percent(desired_count, current_count);
+        let trace_percent = u8::try_from(creation_percent).unwrap_or(u8::MAX);
+
+        for ordinal in 0..change_loop {
+            if state.random.chance16(creation_percent, 100) {
+                let result = try_build_new_vanilla_industry(state);
+                if let Some(actions) = &mut trace_actions {
+                    actions.push(crate::IndustrySchedulerTraceAction::foundation(
+                        ordinal,
+                        trace_percent,
+                        result,
+                    ));
+                }
+            } else {
+                let selected = random_industry_pool_index(state);
+                let industry_id =
+                    selected.map(|index| u32::from(state.industries[index].instance_id));
+                if let Some(index) = selected {
+                    change_industry_production_at(state, index);
+                }
+                if let Some(actions) = &mut trace_actions {
+                    actions.push(crate::IndustrySchedulerTraceAction::production(
+                        ordinal,
+                        trace_percent,
+                        industry_id,
+                    ));
+                }
+            }
+        }
     }
 
-    let current_count = u32::try_from(state.industries.len()).unwrap_or(u32::MAX);
-    let desired_count = state.industry_builder.wanted_count();
-    let creation_percent = industry_creation_percent(desired_count, current_count);
-
-    for _ in 0..change_loop {
-        if state.random.chance16(creation_percent, 100) {
-            try_build_new_vanilla_industry(state);
-        } else if let Some(index) = random_industry_pool_index(state) {
-            change_industry_production_at(state, index);
-        }
+    if let Some(actions) = trace_actions {
+        state.runtime.industry_scheduler_trace_samples.push(
+            crate::IndustrySchedulerTraceSample::from_state(state, change_loop, actions),
+        );
     }
 }
 
@@ -1123,6 +1151,36 @@ mod tests {
             state.global_economy.industry_daily_change_counter, 1_982,
             "65404 + 2114 conserva la fracción de la fila nativa del tick 20553"
         );
+    }
+
+    #[test]
+    fn daily_scheduler_trace_captures_zero_loop_and_foundation_decision() {
+        let mut state = GameState::new(256, 256);
+        state.enable_industry_scheduler_trace();
+        state.global_economy.industry_daily_change_counter = 63_290;
+
+        advance_industry_daily_scheduler(&mut state);
+
+        let zero_loop = state.take_industry_scheduler_trace_samples();
+        assert_eq!(zero_loop.len(), 1);
+        assert_eq!(zero_loop[0].change_loop, 0);
+        assert!(zero_loop[0].actions.is_empty());
+
+        // El siguiente `Random()` tiene low-word cero, por lo que
+        // `Chance16(3, 100)` toma la rama de fundación. El objetivo cero no
+        // tiene especie elegible y replica los campos null del hook nativo.
+        state.random = Randomizer { state: [8, 0] };
+        state.global_economy.industry_daily_change_counter = 65_404;
+        advance_industry_daily_scheduler(&mut state);
+
+        let samples = state.take_industry_scheduler_trace_samples();
+        assert_eq!(samples.len(), 1);
+        assert_eq!(samples[0].change_loop, 1);
+        assert_eq!(samples[0].actions.len(), 1);
+        assert!(samples[0].actions[0].tries_foundation);
+        assert_eq!(samples[0].actions[0].creation_percent, 3);
+        assert_eq!(samples[0].actions[0].foundation_type, None);
+        assert_eq!(samples[0].actions[0].foundation_succeeded, None);
     }
 
     #[test]

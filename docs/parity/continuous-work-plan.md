@@ -2346,3 +2346,10 @@ sin reinterpretar labels/dimensiones NewGRF ni el callback CB15C. IDs,
 miniaturas y comandos no cambian; la regresión cubre ambos locales y un label
 custom. #331 sigue abierto por los catálogos upstream y superficies UI
 restantes.
+
+Actualización #331-BRIDGE-PICKER-473 (2026-09-07, issue [#473](https://github.com/cavazquez/openttdrs/issues/473)):
+el selector de puentes localiza título y resumen dinámico de transporte/vano.
+La longitud, restricciones, velocidades, costes, disponibilidad y nombres de
+tipos permanecen datos del core; la regresión cubre carretera/vía y ambos
+locales. #331 sigue abierto por los catálogos upstream y superficies UI
+restantes.

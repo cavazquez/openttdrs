@@ -10,7 +10,9 @@ use openttdrs_core::{
     BridgeType, bridge_available_at_tick, bridge_build_cost, bridge_middle_length, bridge_spec,
 };
 
+use crate::i18n::Locale;
 use crate::render::RemapMapVisualsPending;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
@@ -45,6 +47,19 @@ pub(crate) struct BridgePickerButton(pub BridgeType);
 
 #[derive(Component)]
 pub(crate) struct BridgePickerHintText;
+
+fn bridge_hint(locale: Locale, road: bool, middle: u16) -> String {
+    match locale {
+        Locale::Es => {
+            let transport = if road { "carretera" } else { "vía" };
+            format!("Puente de {transport}: vano {middle} teselas (sin rampas)")
+        }
+        Locale::En => {
+            let transport = if road { "road" } else { "rail" };
+            format!("{transport} bridge: span {middle} tiles (no ramps)")
+        }
+    }
+}
 
 pub(crate) fn setup_bridge_picker(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -116,6 +131,7 @@ pub(crate) fn sync_bridge_picker(
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut buttons_q: Query<(&BridgePickerButton, &Interaction, &mut BackgroundColor), With<Button>>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut hint_q: Query<&mut Text, With<BridgePickerHintText>>,
 ) {
     let Some((_, mut vis)) = root_q
@@ -132,8 +148,7 @@ pub(crate) fn sync_bridge_picker(
 
     if let Ok(mut hint) = hint_q.single_mut() {
         let middle = bridge_middle_length(pending.start, pending.end);
-        let transport = if pending.road { "carretera" } else { "vía" };
-        **hint = format!("Puente de {transport}: vano {middle} teselas (sin rampas)");
+        **hint = bridge_hint(prefs.locale(), pending.road, middle);
     }
 
     for (button, interaction, mut bg) in &mut buttons_q {
@@ -223,6 +238,22 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
 
     use crate::ui::floating_window::WindowKey;
+
+    #[test]
+    fn bridge_hint_localizes_chrome_without_changing_span_values() {
+        assert_eq!(
+            bridge_hint(Locale::En, true, 7),
+            "road bridge: span 7 tiles (no ramps)"
+        );
+        assert_eq!(
+            bridge_hint(Locale::En, false, 3),
+            "rail bridge: span 3 tiles (no ramps)"
+        );
+        assert_eq!(
+            bridge_hint(Locale::Es, true, 7),
+            "Puente de carretera: vano 7 teselas (sin rampas)"
+        );
+    }
 
     #[test]
     fn bridge_picker_on_closed_clears_pending() {

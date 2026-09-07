@@ -1861,11 +1861,11 @@ OpenTTD: `VehicleViewWindow` (`vehicle_gui.cpp:3007-3503`). Cliente:
 | Feature OpenTTD | Estado en cliente | Cercanía |
 |---|---|---|
 | Viewport siguiendo al vehículo (`WID_VV_VIEWPORT`, zoom) | Cámara render-target 280×120 (preview real del mundo) | ✔ esencial (seguir con doble clic es A) |
-| Barra de estado (`GetVehicleStatusString`): velocidad + destino + «parado» + averiado + atascado | Status corto bajo viewport (#174): Detenido / En marcha a X km/h → destino / Sin ruta / Averiado / PBS | ✔ esencial |
+| Barra de estado (`GetVehicleStatusString`): velocidad + destino + «parado» + averiado + atascado | Status corto bajo viewport (#174): estados y frases localizados (#488), conserva velocidad/destino/colores | ✔ esencial |
 | Start/stop (`StartStopVehicle`) | Icono ▶/■ + tooltip (`ToggleVehicleRunning`) | ✔ |
 | Toolbar de iconos (vista) | Fila de iconos + tooltips (#174); Horario/Detalles/Depósito/… | ✔ chrome; sprites GUI nativos OpenTTD opcionales |
 | Ir a depósito (`SendVehicleToDepot`, Ctrl = servicio) | «Depósito» (`AppendGotoNearestDepot`) | ✔ funcional; core soporta servicio por intervalo y autoenvío road, pero falta exponer el modificador/acción completa en UI |
-| Refit (`ShowVehicleRefitWindow`) | `RefitWindow` lista + coste/cap.; View y Details; parcial por unidad | ✔ (#178); `OrderRefit` sigue **B** |
+| Refit (`ShowVehicleRefitWindow`) | `RefitWindow` lista + coste/cap.; View y Details; parcial por unidad | ✔ (#178); chrome/cargas vanilla localizados (#487); `OrderRefit` sigue **B** |
 | Clonar desde la ventana | Solo desde el depósito | **A** |
 | Dar la vuelta (`ReverseTrainDirection`/`TurnRoadVehicle`) | «Dar la vuelta» (`TurnAroundVehicle`, solo tren) | ✔ tren; road es **B** |
 | Forzar paso (`ForceTrainProceed`) | «Forzar paso» (`ForceVehicleProceed`, solo tren) | ✔ |

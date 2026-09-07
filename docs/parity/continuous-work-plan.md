@@ -2446,3 +2446,9 @@ la ventana de refit localiza hint, unidades, capacidad, coste y etiquetas de
 cargas vanilla por slot, preservando nombres custom/NewGRF no catalogados,
 selección, consist, IDs y comandos. `OrderRefit` y filtros avanzados siguen
 pendientes en #331 y el bloque de órdenes.
+
+Actualización #331-VEHICLE-STATUS-LOCALE-488 (2026-09-07, issue [#488](https://github.com/cavazquez/openttdrs/issues/488)):
+el estado dinámico de `VehicleView` localiza estados, velocidad, ausencia de
+órdenes y destinos fallback, preservando nombres de estación, coordenadas,
+colores, comandos y selección. Details, órdenes y estados avanzados de
+movimiento permanecen pendientes en #331 y sus bloques funcionales.

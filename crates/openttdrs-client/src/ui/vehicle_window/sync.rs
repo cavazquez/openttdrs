@@ -5,6 +5,7 @@ use bevy::text::EditableText;
 use openttdrs_core::VehicleKind;
 
 use crate::render::{PrimaryGameCamera, TruckHandles, vehicle_world_position};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{FloatingWindow, FloatingWindowId, FloatingWindowTitleText};
 use crate::ui::vehicle_chain::{VehicleChainRegistry, VehicleChainSlot};
@@ -28,6 +29,7 @@ pub(crate) fn sync_vehicle_window(
     window_state: Res<VehicleWindowState>,
     chain: Res<VehicleChainRegistry>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(
         Entity,
@@ -95,6 +97,7 @@ pub(crate) fn sync_vehicle_window(
         (With<VehicleWindowPreviewCamera>, Without<PrimaryGameCamera>),
     >,
 ) {
+    let locale = prefs.locale();
     let focused_slot = window_state.vehicle_id.and_then(|id| chain.slot_of(id));
 
     for (root_entity, mut win, slot, mut vis) in &mut root_q {
@@ -201,7 +204,7 @@ pub(crate) fn sync_vehicle_window(
                 **text = title_name.clone();
             }
         }
-        let (status_text, status_color) = format_vehicle_status(vehicle, &sim);
+        let (status_text, status_color) = format_vehicle_status(locale, vehicle, &sim);
         for (status_slot, mut status, mut color) in &mut status_q {
             if status_slot.0 != slot_idx {
                 continue;

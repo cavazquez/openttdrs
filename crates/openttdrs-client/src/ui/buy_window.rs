@@ -433,42 +433,71 @@ pub(crate) fn engines_for_buy_window<'a>(
     engines
 }
 
-fn cargo_label(cargo: Option<CargoType>) -> &'static str {
+fn cargo_label(locale: Locale, cargo: Option<CargoType>) -> String {
     match cargo {
-        Some(c) => c.display_name(),
-        None => "nada (solo locomotora)",
+        Some(c) if matches!(c, CargoType::Custom(_)) => c.display_name().to_string(),
+        Some(c) => localized_text(locale, c.display_name()),
+        None => localized_text(locale, "nada (solo locomotora)"),
     }
 }
 
-fn stats_text(engine: &EngineDef) -> String {
+fn stats_text(locale: Locale, engine: &EngineDef) -> String {
     let role = if engine.is_wagon() {
-        "Tipo: vagón (enganchar a locomotora)\n"
+        format!(
+            "{}: {} ({})\n",
+            localized_text(locale, "Tipo"),
+            localized_text(locale, "vagón"),
+            localized_text(locale, "enganchar a locomotora"),
+        )
     } else if engine.kind == VehicleKind::Train {
-        "Tipo: locomotora / DMU\n"
+        format!(
+            "{}: {} / DMU\n",
+            localized_text(locale, "Tipo"),
+            localized_text(locale, "locomotora"),
+        )
     } else {
-        ""
+        String::new()
     };
     let newgrf = if engine.from_newgrf {
         if engine.newgrf_preview().is_some() {
-            "NewGRF: preview Action1/3\n"
+            "NewGRF: preview Action1/3\n".to_string()
         } else {
-            "NewGRF: metadatos; sin sprites\n"
+            format!(
+                "NewGRF: {}; {}\n",
+                localized_text(locale, "metadatos"),
+                localized_text(locale, "sin sprites"),
+            )
         }
     } else {
-        ""
+        String::new()
     };
+    let power_unit = if locale == Locale::En { "hp" } else { "cv" };
+    let year = localized_text(locale, "año");
     format!(
-        "{role}{newgrf}Precio: ${}  Peso: {}t\nVelocidad: {}km/h  Potencia: {}cv\nCoste de operación: ${}/año\nCapacidad: {} {}\nDiseñado: {}  Fiabilidad: {}%",
+        "{role}{newgrf}{}: ${}  {}: {}t\n{}: {}km/h  {}: {}{power_unit}\n{}: ${}/{}\n{}: {} {}\n{}: {}  {}: {}%",
+        localized_text(locale, "Precio"),
         engine.price,
+        localized_text(locale, "Peso"),
         engine.weight_t,
+        localized_text(locale, "Velocidad"),
         engine.speed_kmh(),
+        localized_text(locale, "Potencia"),
         engine.power_hp,
+        localized_text(locale, "Coste de operación"),
         engine.running_cost_year,
+        year,
+        localized_text(locale, "Capacidad"),
         engine.capacity,
-        cargo_label(engine.cargo),
+        cargo_label(locale, engine.cargo),
+        localized_text(locale, "Diseñado"),
         engine.intro_year,
+        localized_text(locale, "Fiabilidad"),
         engine.reliability_pct,
     )
+}
+
+fn localized_buy_search_placeholder(locale: Locale) -> String {
+    localized_text(locale, "buscar…")
 }
 
 fn buy_window_title(sim: &SimWorld, depot_pos: TileCoord) -> &'static str {
@@ -610,11 +639,12 @@ pub(crate) fn sync_buy_window(
         return;
     };
     *vis = Visibility::Visible;
+    let locale = prefs.locale();
     if let Some((_, mut title)) = title_q
         .iter_mut()
         .find(|(t, _)| t.0 == FloatingWindowId::BuyVehicle)
     {
-        **title = localized_buy_window_title(prefs.locale(), &sim, depot_pos);
+        **title = localized_buy_window_title(locale, &sim, depot_pos);
     }
     let kind = depot_kind_at(&sim, depot_pos);
     if let Ok(mut toolbar) = road_toolbar_q.single_mut() {
@@ -700,8 +730,8 @@ pub(crate) fn sync_buy_window(
                     .or_else(|| openttdrs_core::engine_by_id(id))
             })
             .map_or_else(
-                || "Selecciona un modelo para ver sus características.".to_string(),
-                stats_text,
+                || localized_text(locale, "Selecciona un modelo para ver sus características."),
+                |engine| stats_text(locale, engine),
             );
     }
     if let Ok((mut image, mut node)) = preview_q.single_mut() {
@@ -727,9 +757,26 @@ pub(crate) fn sync_buy_window(
     }
 }
 
+pub(crate) fn sync_buy_window_search_placeholder(
+    buy_state: Res<BuyVehicleWindowState>,
+    prefs: Res<ClientPreferences>,
+    mut search_q: Query<(&EditableText, &mut Text), With<BuyVehicleSearchInput>>,
+) {
+    if buy_state.depot_pos.is_none() {
+        return;
+    }
+    let placeholder = localized_buy_search_placeholder(prefs.locale());
+    for (editable, mut text) in &mut search_q {
+        if editable.value().to_string().is_empty() && text.as_str() != placeholder {
+            **text = placeholder.clone();
+        }
+    }
+}
+
 pub(crate) fn buy_window_search_keyboard(
     mut key_events: MessageReader<KeyboardInput>,
     mut buy_state: ResMut<BuyVehicleWindowState>,
+    prefs: Option<Res<ClientPreferences>>,
     mut inputs: Query<(&mut EditableText, &mut Text), With<BuyVehicleSearchInput>>,
 ) {
     if buy_state.depot_pos.is_none() {
@@ -740,6 +787,7 @@ pub(crate) fn buy_window_search_keyboard(
         key_events.clear();
         return;
     };
+    let locale = prefs.as_ref().map_or(Locale::Es, |prefs| prefs.locale());
     for ev in key_events.read() {
         if ev.state != ButtonState::Pressed {
             continue;
@@ -765,7 +813,7 @@ pub(crate) fn buy_window_search_keyboard(
     }
     buy_state.name_filter = editable.value().to_string();
     if buy_state.name_filter.is_empty() {
-        **text = "buscar…".into();
+        **text = localized_buy_search_placeholder(locale);
     } else {
         **text = buy_state.name_filter.clone();
     }
@@ -906,8 +954,10 @@ pub(crate) fn handle_buy_window_buttons(
 pub(crate) fn buy_window_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut buy_state: ResMut<BuyVehicleWindowState>,
+    prefs: Option<Res<ClientPreferences>>,
     mut search_q: Query<(&mut EditableText, &mut Text), With<BuyVehicleSearchInput>>,
 ) {
+    let locale = prefs.as_ref().map_or(Locale::Es, |prefs| prefs.locale());
     for msg in closed.read() {
         if msg.0.class == FloatingWindowId::BuyVehicle {
             buy_state.depot_pos = None;
@@ -918,7 +968,7 @@ pub(crate) fn buy_window_on_closed(
             buy_state.name_filter.clear();
             if let Ok((mut editable, mut text)) = search_q.single_mut() {
                 *editable = EditableText::new("");
-                **text = "buscar…".into();
+                **text = localized_buy_search_placeholder(locale);
             }
         }
     }
@@ -1104,5 +1154,30 @@ mod tests {
         );
         assert_eq!(road.state.map.get_kind(depot), Some(TileKind::RoadDepot));
         assert_eq!(rail.state.map.get_kind(depot), Some(TileKind::RailDepot));
+    }
+
+    #[test]
+    fn buy_window_stats_follow_locale_without_translating_engine_or_custom_cargo_names() {
+        let engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_BUS_MPS).unwrap();
+        let spanish = stats_text(Locale::Es, engine);
+        assert!(spanish.contains("Precio:"));
+        assert!(spanish.contains("Potencia:"));
+        assert!(spanish.contains("cv"));
+        assert!(spanish.contains("/año"));
+
+        let english = stats_text(Locale::En, engine);
+        assert!(english.contains("Price:"));
+        assert!(english.contains("Power:"));
+        assert!(english.contains("hp"));
+        assert!(english.contains("/year"));
+        assert!(english.contains("passengers"));
+        assert!(!english.contains("Precio:") && !english.contains("Coste de operación:"));
+
+        assert_eq!(
+            cargo_label(Locale::En, Some(CargoType::Custom(7))),
+            "carga personalizada"
+        );
+        assert_eq!(localized_buy_search_placeholder(Locale::En), "search…");
+        assert_eq!(localized_buy_search_placeholder(Locale::Es), "buscar…");
     }
 }

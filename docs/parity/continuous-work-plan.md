@@ -2460,3 +2460,11 @@ coste; las cargas vanilla también siguen el locale activo. Nombres de motor y
 de cargas NewGRF/custom, IDs, coordenadas, importes, capacidad, consist y
 comandos permanecen intactos. Servicio, TE y editor de órdenes avanzado siguen
 pendientes en #331 y sus bloques funcionales.
+
+Actualización #331-BUY-STATS-LOCALE-490 (2026-09-07, issue [#490](https://github.com/cavazquez/openttdrs/issues/490)):
+el panel dinámico de compra localiza tipo, precio, peso, velocidad, potencia,
+coste de operación, capacidad, año, fiabilidad y metadatos NewGRF; el
+placeholder de búsqueda se sincroniza al cambiar de locale. Nombres de motor,
+sprites, IDs, cifras, filtros, selección y cargos NewGRF/custom permanecen
+intactos. TE, criterios avanzados y formato numérico completo siguen
+pendientes en #331 y sus bloques funcionales.

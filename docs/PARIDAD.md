@@ -1957,7 +1957,7 @@ OpenTTD: `BuildVehicleWindow` (`build_vehicle_gui.cpp:1216+`). Cliente:
 | Lista con orden asc/desc y ~11 criterios | Orden por nombre/precio/velocidad/año | ✔ básico; más criterios **A** |
 | Matriz con sprite por fila | Sprite + nombre/precio por fila (#179) | ✔ chrome; preview grande sigue abajo |
 | Filtro por cargo / texto / motores ocultos / badges | Filtro todos/buses/camiones (solo road); rail lista loco+vagón | **A** |
-| Panel de detalle (coste, peso, velocidad, potencia, **TE**, running cost, refit) | Sí salvo TE | ✔ (TE es **B**) |
+| Panel de detalle (coste, peso, velocidad, potencia, **TE**, running cost, refit) | Sí salvo TE; estadísticas, unidades y placeholder localizados (#490) | ✔ (TE es **B**) |
 | **Comprar vagones** (`CcBuildWagon` acopla a la loco) | Compra `ENGINE_WAGON_*` + auto-`AttachWagonToConsist` | ✔ MVP |
 | Ocultar/renombrar motor (`SetVehicleVisibility`, `RenameEngine`) | No existe | **B**, bajo valor |
 

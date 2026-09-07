@@ -430,6 +430,7 @@ pub use map::{
     trigger_industry_randomisation_at_with_catalog_and_world,
     trigger_industry_randomisation_at_with_catalog_and_world_and_cargo_catalog,
     trigger_industry_tile_randomisation, trigger_newgrf_industry_animation,
+    trigger_newgrf_industry_animation_group_with_world_and_cargo_catalog,
     trigger_newgrf_industry_animation_with_world,
     trigger_newgrf_industry_animation_with_world_and_cargo_catalog,
     trigger_newgrf_industry_animation_with_world_and_extra,

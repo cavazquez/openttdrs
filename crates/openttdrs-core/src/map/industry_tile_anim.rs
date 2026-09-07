@@ -1190,6 +1190,103 @@ pub fn trigger_newgrf_industry_animation_with_world_and_extra_and_cargo_catalog<
     )
 }
 
+/// Ejecuta `TriggerIndustryAnimation` para toda la huella de una industria.
+///
+/// Este camino no equivale a llamar repetidamente a
+/// [`trigger_newgrf_industry_animation_with_world_and_cargo_catalog`]. El
+/// original toma una palabra del RNG global antes de mirar la huella, pasa esa
+/// palabra al primer `CB25` y, por cada tesela cuyo trigger está habilitado,
+/// reemplaza solamente sus 16 bits bajos con otra palabra global. Así
+/// `TriggerIndustryAnimation` conserva el mismo `random` compartido entre
+/// teselas que `newgrf_industrytiles.cpp`.
+///
+/// La extracción inicial es incondicional, incluso si no hay teselas NewGRF o
+/// ninguna declara el trigger. Las extracciones posteriores dependen sólo de
+/// la máscara `animation_triggers`: un callback ausente también cuenta como
+/// `DoTriggerIndustryTileAnimation` exitoso para el consumo del stream.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_industry_animation_group_with_world_and_cargo_catalog<S: BuildHasher>(
+    map: &mut Map,
+    coords: &[TileCoord],
+    industries: &mut [Industry],
+    towns: &[Town],
+    tile_spec_catalog: &[IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    active_tiles: &mut HashSet<TileCoord, S>,
+    trigger: IndustryAnimationTrigger,
+    cargo_spec_catalog: &[CargoSpecDef],
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> Vec<TileCoord> {
+    let snapshot = industries.to_vec();
+    // `TriggerIndustryAnimation` llama `Random()` antes de iterar la huella.
+    // No mover esta extracción dentro del filtro: una industria vanilla, una
+    // huella vacía o un trigger deshabilitado también avanzan el stream.
+    let mut random = rng.next();
+    let mut dirty = Vec::new();
+
+    for &coord in coords {
+        let Some(mut tile) = map.get(coord) else {
+            continue;
+        };
+        if tile.kind != TileKind::Industry {
+            continue;
+        }
+        let Some(spec) = industry_tile_spec_def(tile_spec_catalog, industry_gfx(&tile)) else {
+            continue;
+        };
+        if spec.animation_triggers & trigger.mask() == 0 {
+            continue;
+        }
+
+        let before = tile.m3hi;
+        // En OpenTTD `DoTriggerIndustryTileAnimation` devuelve true cuando la
+        // máscara declara el trigger, aun si `ChangeAnimationFrame` termina
+        // devolviendo `CALLBACK_FAILED`. Por eso la palabra hija se consume
+        // después de intentar resolver el callback y no depende de su valor.
+        if let Some(index) = industry_index_for_tile(map, &snapshot, coord) {
+            let result = resolve_industry_tile_animation_callback_with_world_and_cargo_catalog(
+                spec,
+                &mut industries[index],
+                map,
+                coord,
+                &snapshot,
+                towns,
+                tile_spec_catalog,
+                industry_catalog,
+                climate,
+                CBID_INDTILE_ANIMATION_TRIGGER,
+                random,
+                trigger.callback_param(0),
+                cargo_spec_catalog,
+            );
+            if result != CALLBACK_FAILED {
+                match (result & 0xFF) as u8 {
+                    0xFD => {}
+                    0xFE => {
+                        active_tiles.insert(coord);
+                    }
+                    0xFF => {
+                        active_tiles.remove(&coord);
+                    }
+                    frame => {
+                        tile.m3hi = frame;
+                        active_tiles.insert(coord);
+                    }
+                }
+            }
+        }
+
+        if tile.m3hi != before && map.set_tile(coord, tile).is_ok() {
+            dirty.push(coord);
+        }
+        let next_low_word = rng.next();
+        random = (random & 0xFFFF_0000) | (next_low_word & 0x0000_FFFF);
+    }
+
+    dirty
+}
+
 #[allow(clippy::too_many_arguments)]
 fn advance_newgrf_industry_animated_tiles_inner<S: BuildHasher>(
     map: &mut Map,
@@ -1656,6 +1753,78 @@ mod tests {
             IndustryAnimationTrigger::CargoDistributed,
         );
         assert!(active.contains(&coord));
+    }
+
+    #[test]
+    fn industry_group_trigger_replays_global_rng_base_and_enabled_tile_word() {
+        let coord = TileCoord::new(0, 0);
+        let mut map = Map::new_flat(1, 1, 0);
+        map.set_tile(coord, industry_tile(175, 0x80, 0)).unwrap();
+        let catalog = vec![newgrf_animated_spec_for_trigger(
+            INDTILE_CALLBACK_MASK_NEXT_FRAME,
+            IndustryAnimationTrigger::CargoDistributed,
+        )];
+        let mut industries = vec![
+            Industry::with_tiles_spec(
+                coord,
+                crate::industry::IndustryKind::CoalMine,
+                crate::industry::IndustrySpec::CoalMine,
+                vec![coord],
+                0,
+            )
+            .with_instance_id(1),
+        ];
+        let mut active = HashSet::new();
+        let mut actual = crate::cargodist::parity::Randomizer {
+            state: [0x1020_3040, 0x5060_7080],
+        };
+        let mut expected = actual;
+        // `TriggerIndustryAnimation`: una palabra base, seguida por una
+        // palabra que reemplaza el low word para la única tesela habilitada.
+        let _ = expected.next();
+        let _ = expected.next();
+
+        let dirty = trigger_newgrf_industry_animation_group_with_world_and_cargo_catalog(
+            &mut map,
+            &[coord],
+            &mut industries,
+            &[],
+            &catalog,
+            &[],
+            crate::Climate::Temperate,
+            &mut active,
+            IndustryAnimationTrigger::CargoDistributed,
+            &[],
+            &mut actual,
+        );
+
+        assert!(dirty.is_empty(), "0xFE sólo incorpora la tesela activa");
+        assert!(active.contains(&coord));
+        assert_eq!(actual, expected);
+
+        let mut unmatched_rng = crate::cargodist::parity::Randomizer {
+            state: [0x1020_3040, 0x5060_7080],
+        };
+        let mut unmatched_expected = unmatched_rng;
+        // La extracción base ocurre aun cuando ningún tile declara el trigger.
+        let _ = unmatched_expected.next();
+        let mut unmatched_active = HashSet::new();
+        let unmatched_dirty = trigger_newgrf_industry_animation_group_with_world_and_cargo_catalog(
+            &mut map,
+            &[coord],
+            &mut industries,
+            &[],
+            &catalog,
+            &[],
+            crate::Climate::Temperate,
+            &mut unmatched_active,
+            IndustryAnimationTrigger::IndustryTick,
+            &[],
+            &mut unmatched_rng,
+        );
+        assert!(unmatched_dirty.is_empty());
+        assert!(unmatched_active.is_empty());
+        assert_eq!(unmatched_rng, unmatched_expected);
     }
 
     #[test]

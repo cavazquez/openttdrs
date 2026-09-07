@@ -368,20 +368,20 @@ pub(super) fn trigger_delivered_industries(state: &mut GameState, destinations: 
                 &state.cargo_spec_catalog,
             );
         state.runtime.industry_tile_dirty.extend(dirty);
-        let dirty = crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
-            &mut state.map,
-            state.tick.get(),
-            &footprint,
-            &mut state.industries,
-            &state.towns,
-            &state.industry_tile_spec_catalog,
-            &state.industry_spec_catalog,
-            state.climate,
-            state.world_seed,
-            &mut state.newgrf_animated_industry_tiles,
-            crate::map::IndustryAnimationTrigger::CargoReceived,
-            &state.cargo_spec_catalog,
-        );
+        let dirty =
+            crate::map::trigger_newgrf_industry_animation_group_with_world_and_cargo_catalog(
+                &mut state.map,
+                &footprint,
+                &mut state.industries,
+                &state.towns,
+                &state.industry_tile_spec_catalog,
+                &state.industry_spec_catalog,
+                state.climate,
+                &mut state.newgrf_animated_industry_tiles,
+                crate::map::IndustryAnimationTrigger::CargoReceived,
+                &state.cargo_spec_catalog,
+                &mut state.random,
+            );
         state.runtime.industry_tile_dirty.extend(dirty);
     }
 }
@@ -899,20 +899,20 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                 &state.cargo_spec_catalog,
             );
             state.runtime.industry_tile_dirty.extend(dirty);
-            let dirty = crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
-                &mut state.map,
-                tick,
-                &footprint,
-                &mut state.industries,
-                &state.towns,
-                &state.industry_tile_spec_catalog,
-                &state.industry_spec_catalog,
-                state.climate,
-                state.world_seed,
-                &mut state.newgrf_animated_industry_tiles,
-                crate::map::IndustryAnimationTrigger::IndustryTick,
-                &state.cargo_spec_catalog,
-            );
+            let dirty =
+                crate::map::trigger_newgrf_industry_animation_group_with_world_and_cargo_catalog(
+                    &mut state.map,
+                    &footprint,
+                    &mut state.industries,
+                    &state.towns,
+                    &state.industry_tile_spec_catalog,
+                    &state.industry_spec_catalog,
+                    state.climate,
+                    &mut state.newgrf_animated_industry_tiles,
+                    crate::map::IndustryAnimationTrigger::IndustryTick,
+                    &state.cargo_spec_catalog,
+                    &mut state.random,
+                );
             state.runtime.industry_tile_dirty.extend(dirty);
         }
         let extra_produced = state.industries[i]
@@ -958,20 +958,20 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
             state.serve_neutral_industries,
         );
         if moved > 0 {
-            let dirty = crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
-                &mut state.map,
-                tick,
-                &footprint,
-                &mut state.industries,
-                &state.towns,
-                &state.industry_tile_spec_catalog,
-                &state.industry_spec_catalog,
-                state.climate,
-                state.world_seed,
-                &mut state.newgrf_animated_industry_tiles,
-                crate::map::IndustryAnimationTrigger::CargoDistributed,
-                &state.cargo_spec_catalog,
-            );
+            let dirty =
+                crate::map::trigger_newgrf_industry_animation_group_with_world_and_cargo_catalog(
+                    &mut state.map,
+                    &footprint,
+                    &mut state.industries,
+                    &state.towns,
+                    &state.industry_tile_spec_catalog,
+                    &state.industry_spec_catalog,
+                    state.climate,
+                    &mut state.newgrf_animated_industry_tiles,
+                    crate::map::IndustryAnimationTrigger::CargoDistributed,
+                    &state.cargo_spec_catalog,
+                    &mut state.random,
+                );
             state.runtime.industry_tile_dirty.extend(dirty);
         }
         trigger_station_new_cargo_since(state, &station_stock_before);
@@ -1180,10 +1180,17 @@ mod tests {
         let mut expected_rng = state.random;
         let _ = expected_rng.chance16(1, 14);
         let _ = expected_rng.chance16(1, 14);
+        // El contador 1 llega a cero en esta pasada: además de los dos
+        // `Chance16R` de sonido, `TriggerIndustryAnimation` toma su palabra
+        // base aunque ninguna tesela del fixture declare CB25.
+        let _ = expected_rng.next();
 
         produce_industries(&mut state, 17);
 
-        assert_eq!(state.random, expected_rng, "sólo 64 y 0 eran múltiplos");
+        assert_eq!(
+            state.random, expected_rng,
+            "64 y 0 consumen sonido; 1 activa el grupo de animación"
+        );
         assert_eq!(
             state
                 .industries
@@ -1192,6 +1199,45 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![63, 62, u16::MAX, 0],
             "el chequeo ocurre antes del decremento persistido"
+        );
+    }
+
+    #[test]
+    fn due_industry_groups_always_consume_their_global_animation_word() {
+        let mut state = GameState::new(8, 8);
+        state.random = Randomizer {
+            state: [0x1020_3040, 0x5060_7080],
+        };
+        // La tesela no necesita declarar un callback: el `Random()` base de
+        // `TriggerIndustryAnimation` sucede antes de examinar la huella. Es
+        // el caso que cubre los cinco grupos vanilla de autosave0.sav.
+        for instance_id in 0..5 {
+            state.industries.push(
+                Industry::with_tiles_spec(
+                    TileCoord::new(i32::from(instance_id), 0),
+                    IndustrySpec::CoalMine.kind(),
+                    IndustrySpec::CoalMine,
+                    vec![TileCoord::new(i32::from(instance_id), 0)],
+                    0,
+                )
+                .with_instance_id(instance_id)
+                .with_persisted_counter(1),
+            );
+        }
+
+        let mut expected_rng = state.random;
+        for _ in 0..5 {
+            let _ = expected_rng.next();
+        }
+
+        produce_industries(&mut state, 17);
+
+        assert_eq!(state.random, expected_rng);
+        assert!(
+            state
+                .industries
+                .iter()
+                .all(|industry| industry.counter == 0)
         );
     }
 

@@ -5,8 +5,9 @@ y #506 (candidato/comparador); padre de runtime: #499 / RMAP-158. #507/#515
 conservan el `DATE`, incluido el cursor LFSR de tile loop; #510 rechaza una
 ejecución dedicated degradada, #511 alinea el contador de industria y
 #514/#516 mueven los TileLoops industrial/urbano al stream actual; #517 añade
-`TileLoop_Trees` y el contador persistido de `OnTick_Trees`; #512 aísla el
-residual NewGRF posterior.
+`TileLoop_Trees` y el contador persistido de `OnTick_Trees`; #518 reproduce
+el grupo RNG de animación industrial y #519 conserva el residual NewGRF de
+aeropuerto.
 
 `OPENTTDRS_INDUSTRY_TRACE_OUT` habilita, exclusivamente en el binario OpenTTD
 instrumentado, una traza JSONL de la rutina diaria
@@ -99,9 +100,14 @@ nativo. La corrida normal de tres días ya iguala tick, ambos relojes, `ECMY`,
 `12730` a `12658` en ambos motores. #513/#514/#516 elevan la recurrencia de la
 primera jornada de `autosave0.sav` a 551. #517 añade las 320 decisiones y 47
 direcciones de `TileLoop_Trees`, más el `PlantRandomTree` de `OnTick_Trees`,
-por lo que llega a 919; OpenTTD alcanza 930. Los 11 consumos restantes son
-callbacks `NewGRF` de industria/aeropuerto y siguen en #512. La atribución y
-los números canónicos están en [RMAP-162](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
+por lo que llega a 919; #518 reproduce después los cinco grupos
+`TriggerIndustryAnimation` observados antes del corte diario (IDs
+31/44/16/12/23). Cada grupo toma siempre su palabra base y sólo consume una
+palabra hija por tesela cuyo trigger esté habilitado; la fixture no habilita
+ninguna. OpenTTD alcanza 930, y la atribución pendiente se limita a las seis
+llamadas `TriggerAirportAnimation` de #519. La igualdad final sigue siendo
+responsabilidad de #512; los números canónicos están en
+[RMAP-162](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
 Este contrato no declara aún paridad runtime completa del scheduler.
 
 ## Límites explícitos

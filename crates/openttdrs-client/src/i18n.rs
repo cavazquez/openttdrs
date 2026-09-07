@@ -903,6 +903,46 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
     {
         return Some(format!("Industry closed at ({coordinates})"));
     }
+    for (spanish_prefix, spanish_suffix, english_prefix) in [
+        (
+            "Un OVNI pequeño se aproxima a (",
+            ").",
+            "A small UFO is approaching (",
+        ),
+        (
+            "Un OVNI enorme se aproxima a (",
+            ").",
+            "A large UFO is approaching (",
+        ),
+        (
+            "Un avión se estrella cerca de (",
+            ").",
+            "An aircraft crashes near (",
+        ),
+        (
+            "Un helicóptero se estrella en (",
+            ").",
+            "A helicopter crashes at (",
+        ),
+        (
+            "Un submarino provoca daños en (",
+            ").",
+            "A submarine causes damage at (",
+        ),
+        (
+            "Un hundimiento en mina afecta (",
+            ").",
+            "A mine subsidence affects (",
+        ),
+    ] {
+        if let Some(coordinates) = source
+            .strip_prefix(spanish_prefix)
+            .and_then(|value| value.strip_suffix(spanish_suffix))
+            && is_coordinate_pair(coordinates)
+        {
+            return Some(format!("{english_prefix}{coordinates})."));
+        }
+    }
     None
 }
 
@@ -1093,8 +1133,50 @@ mod tests {
         }
         assert_eq!(
             localized_text(Locale::En, "Un avión se estrella cerca de (4, 9)."),
-            "Un avión se estrella cerca de (4, 9)."
+            "An aircraft crashes near (4, 9)."
         );
+    }
+
+    #[test]
+    fn catalog_translates_all_disaster_bodies_without_mutating_coordinates() {
+        for (spanish, english) in [
+            (
+                "Un OVNI pequeño se aproxima a (1, -2).",
+                "A small UFO is approaching (1, -2).",
+            ),
+            (
+                "Un OVNI enorme se aproxima a (-3, 4).",
+                "A large UFO is approaching (-3, 4).",
+            ),
+            (
+                "Un avión se estrella cerca de (5, 6).",
+                "An aircraft crashes near (5, 6).",
+            ),
+            (
+                "Un helicóptero se estrella en (7, -8).",
+                "A helicopter crashes at (7, -8).",
+            ),
+            (
+                "Un submarino provoca daños en (-9, 10).",
+                "A submarine causes damage at (-9, 10).",
+            ),
+            (
+                "Un hundimiento en mina afecta (11, -12).",
+                "A mine subsidence affects (11, -12).",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        for malformed in [
+            "Un OVNI pequeño se aproxima a (uno, 2).",
+            "Un avión se estrella cerca de (4, 9)",
+            "Un helicóptero se estrella en (7, -8) (GS).",
+            "Un submarino provoca daños en (7, 8",
+            "Un hundimiento en mina afecta (7, 8). texto",
+        ] {
+            assert_eq!(localized_text(Locale::En, malformed), malformed);
+        }
     }
 
     #[test]
@@ -1518,7 +1600,7 @@ mod tests {
 
     #[test]
     #[allow(clippy::unwrap_used)]
-    fn localization_plugin_translates_disaster_headline_but_not_body() {
+    fn localization_plugin_translates_disaster_headline_and_body() {
         let mut app = App::new();
         app.insert_resource(ClientPreferences::default());
         app.add_plugins(LocalizationPlugin);
@@ -1540,7 +1622,7 @@ mod tests {
         );
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
-            "Un helicóptero se estrella en (8, 11)."
+            "A helicopter crashes at (8, 11)."
         );
 
         app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
@@ -1549,6 +1631,57 @@ mod tests {
             app.world().get::<Text>(headline).unwrap().as_str(),
             "Accidente de helicóptero"
         );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_all_disaster_bodies_late() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let entries = [
+            (
+                "Un OVNI pequeño se aproxima a (1, -2).",
+                "A small UFO is approaching (1, -2).",
+            ),
+            (
+                "Un OVNI enorme se aproxima a (-3, 4).",
+                "A large UFO is approaching (-3, 4).",
+            ),
+            (
+                "Un avión se estrella cerca de (5, 6).",
+                "An aircraft crashes near (5, 6).",
+            ),
+            (
+                "Un helicóptero se estrella en (7, -8).",
+                "A helicopter crashes at (7, -8).",
+            ),
+            (
+                "Un submarino provoca daños en (-9, 10).",
+                "A submarine causes damage at (-9, 10).",
+            ),
+            (
+                "Un hundimiento en mina afecta (11, -12).",
+                "A mine subsidence affects (11, -12).",
+            ),
+        ];
+        let entities: Vec<_> = entries
+            .iter()
+            .map(|(spanish, _)| app.world_mut().spawn(Text::new(*spanish)).id())
+            .collect();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        for ((_, english), entity) in entries.iter().zip(entities.iter()) {
+            assert_eq!(app.world().get::<Text>(*entity).unwrap().as_str(), *english);
+        }
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        for ((spanish, _), entity) in entries.iter().zip(entities.iter()) {
+            assert_eq!(app.world().get::<Text>(*entity).unwrap().as_str(), *spanish);
+        }
     }
 
     #[test]

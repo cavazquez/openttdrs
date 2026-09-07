@@ -826,6 +826,18 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Elige un destino para añadirlo a la ruta." => "Choose a destination to add to the route.",
         "Elegir en el mapa" => "Choose on map",
         "Elige el tipo de carga." => "Choose the cargo type.",
+        "Refit solo en depósito, sin carga y con tipos alternativos." => {
+            "Refit requires a depot, no cargo and alternative types."
+        }
+        "Unidades" => "Units",
+        "Cap. resultante" => "Resulting capacity",
+        "Clic en unidad para seleccionar; clic en carga para aplicar." => {
+            "Click a unit to select; click cargo to apply."
+        }
+        "Coste" => "Cost",
+        "gratis" => "free",
+        "Clic en una carga de la lista para aplicar." => "Click a cargo in the list to apply.",
+        "cap." => "cap.",
         "Nombre:" => "Name:",
         "Sigue la cámara principal (zoom más alejado)." => {
             "Follows the main camera (more zoomed out)."
@@ -1567,6 +1579,23 @@ mod tests {
             ("Parada de autobús", "Bus stop"),
             ("Selección de aeropuerto", "Airport selection"),
             ("Destinos", "Destinations"),
+            (
+                "Refit solo en depósito, sin carga y con tipos alternativos.",
+                "Refit requires a depot, no cargo and alternative types.",
+            ),
+            ("Unidades", "Units"),
+            ("Cap. resultante", "Resulting capacity"),
+            (
+                "Clic en unidad para seleccionar; clic en carga para aplicar.",
+                "Click a unit to select; click cargo to apply.",
+            ),
+            ("Coste", "Cost"),
+            ("gratis", "free"),
+            (
+                "Clic en una carga de la lista para aplicar.",
+                "Click a cargo in the list to apply.",
+            ),
+            ("cap.", "cap."),
             ("Selección de objeto", "Object selection"),
             ("Selección de puente", "Bridge selection"),
             ("Objeto", "Object"),

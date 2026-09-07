@@ -2075,7 +2075,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | SoundMusic | toolbar audio | |
 | Timetable | vehículo / F4 | |
 | Orders | View → Órdenes / estación (#176) | Flotante; ya no dock fijo |
-| Refit | depósito | |
+| Refit | depósito | Hint, capacidades/coste y cargas vanilla localizados (#487); nombres NewGRF/custom permanecen literales |
 | SharedOrders | vehículo | |
 | Autoreplace | depósito / flota | |
 | GraphIncome | menú Economía → Ingresos | Clase 15.3 separada (#271); títulos y hints localizados (#485) |

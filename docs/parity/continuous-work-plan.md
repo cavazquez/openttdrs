@@ -2440,3 +2440,9 @@ la ventana de finanzas localiza botones, resumen financiero, infraestructura y
 bloque de compañías, invalidando la caché sólo cuando cambia el locale o los
 datos. Nombres, importes, conteos, colores, IDs y comandos permanecen intactos;
 el detalle histórico y la edición avanzada siguen pendientes en #331/#271.
+
+Actualización #331-REFIT-WINDOW-LOCALE-487 (2026-09-07, issue [#487](https://github.com/cavazquez/openttdrs/issues/487)):
+la ventana de refit localiza hint, unidades, capacidad, coste y etiquetas de
+cargas vanilla por slot, preservando nombres custom/NewGRF no catalogados,
+selección, consist, IDs y comandos. `OrderRefit` y filtros avanzados siguen
+pendientes en #331 y el bloque de órdenes.

@@ -11,7 +11,9 @@ use openttdrs_core::{
     refittable_cargo_types_with_catalog,
 };
 
+use crate::i18n::{Locale, localized_text};
 use crate::render::RemapMapVisualsPending;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CRIMSON,
@@ -276,11 +278,29 @@ fn refit_result_capacity(sim: &SimWorld, unit_ids: &[u32]) -> u32 {
         .sum()
 }
 
+fn refit_cargo_row_label(
+    locale: Locale,
+    cargo: CargoType,
+    catalog: &[openttdrs_core::CargoSpecDef],
+    result_capacity: u32,
+    selected: bool,
+) -> String {
+    let mark = if selected { " ●" } else { "" };
+    let cargo_name = cargo_spec_display_name(cargo, catalog);
+    format!(
+        "{} · {} {result_capacity} · {}{mark}",
+        localized_text(locale, &cargo_name),
+        localized_text(locale, "cap."),
+        localized_text(locale, "gratis"),
+    )
+}
+
 #[allow(clippy::type_complexity, clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn sync_refit_window(
     state: Res<RefitWindowState>,
     chain: Res<VehicleChainRegistry>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(
         Entity,
         &mut FloatingWindow,
@@ -342,6 +362,7 @@ pub(crate) fn sync_refit_window(
         ),
     >,
 ) {
+    let locale = prefs.locale();
     fn title_root_entity(child_of: &ChildOf, parents: &Query<&ChildOf>) -> Option<Entity> {
         let center = child_of.parent();
         let bar = parents.get(center).ok()?.parent();
@@ -399,15 +420,28 @@ pub(crate) fn sync_refit_window(
                 continue;
             }
             **hint = if !allowed {
-                "Refit solo en depósito, sin carga y con tipos alternativos.".to_string()
+                localized_text(
+                    locale,
+                    "Refit solo en depósito, sin carga y con tipos alternativos.",
+                )
             } else if show_units {
                 format!(
-                    "Unidades: {selected_count}/{} · Cap. resultante: {result_capacity}\n                 Clic en unidad para seleccionar; clic en carga para aplicar.",
-                    unit_ids.len()
+                    "{}: {selected_count}/{} · {}: {result_capacity}\n                 {}",
+                    localized_text(locale, "Unidades"),
+                    unit_ids.len(),
+                    localized_text(locale, "Cap. resultante"),
+                    localized_text(
+                        locale,
+                        "Clic en unidad para seleccionar; clic en carga para aplicar.",
+                    ),
                 )
             } else {
                 format!(
-                    "Cap. resultante: {result_capacity} · Coste: gratis\n                 Clic en una carga de la lista para aplicar."
+                    "{}: {result_capacity} · {}: {}\n                 {}",
+                    localized_text(locale, "Cap. resultante"),
+                    localized_text(locale, "Coste"),
+                    localized_text(locale, "gratis"),
+                    localized_text(locale, "Clic en una carga de la lista para aplicar."),
                 )
             };
         }
@@ -476,10 +510,12 @@ pub(crate) fn sync_refit_window(
                 continue;
             }
             if let Some(cargo) = options.get(row_text.slot).copied() {
-                let mark = if cargo == current { " ●" } else { "" };
-                **text = format!(
-                    "{} · cap. {result_capacity} · gratis{mark}",
-                    cargo_spec_display_name(cargo, &sim.state.cargo_spec_catalog)
+                **text = refit_cargo_row_label(
+                    locale,
+                    cargo,
+                    &sim.state.cargo_spec_catalog,
+                    result_capacity,
+                    cargo == current,
                 );
             } else {
                 **text = String::new();
@@ -649,6 +685,7 @@ mod tests {
         let mut world = World::new();
         world.init_resource::<RefitWindowState>();
         world.init_resource::<VehicleChainRegistry>();
+        world.init_resource::<ClientPreferences>();
         world.insert_resource(sim_with(GameState::new(8, 8)));
         assert!(
             world.run_system_once(sync_refit_window).is_ok(),
@@ -677,5 +714,26 @@ mod tests {
         assert!(label.contains("cap."));
         assert!(label.contains("gratis"));
         assert!(label.contains(CargoType::Coal.display_name()));
+    }
+
+    #[test]
+    fn refit_cargo_labels_follow_locale_and_preserve_custom_names() {
+        assert_eq!(
+            refit_cargo_row_label(Locale::En, CargoType::Coal, &[], 40, false),
+            "coal · cap. 40 · free"
+        );
+        assert_eq!(
+            refit_cargo_row_label(Locale::Es, CargoType::Coal, &[], 40, true),
+            "carbón · cap. 40 · gratis ●"
+        );
+        let catalog = vec![openttdrs_core::CargoSpecDef {
+            id: openttdrs_core::CUSTOM_CARGO_OFFSET,
+            name: "Carbón XL".into(),
+            ..Default::default()
+        }];
+        assert_eq!(
+            refit_cargo_row_label(Locale::En, CargoType::Custom(0), &catalog, 12, false),
+            "Carbón XL · cap. 12 · free"
+        );
     }
 }

@@ -819,6 +819,39 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
     {
         return Some(format!("Vehicle {vehicle_id} has started operating."));
     }
+    if let Some(cargo) = source.strip_prefix("Subvención: ")
+        && is_news_fragment(cargo)
+    {
+        return Some(format!("Subsidy: {cargo}"));
+    }
+    if let Some(cargo) = source.strip_prefix("Subvención adjudicada: ")
+        && is_news_fragment(cargo)
+    {
+        return Some(format!("Subsidy awarded: {cargo}"));
+    }
+    if let Some(rest) = source.strip_prefix("Transportar ")
+        && let Some((cargo, rest)) = rest.split_once(" desde (")
+        && let Some((source_coord, destination_coord)) = rest
+            .strip_suffix(").")
+            .and_then(|value| value.split_once(") hacia la estación ("))
+        && is_news_fragment(cargo)
+        && is_coordinate_pair(source_coord)
+        && is_coordinate_pair(destination_coord)
+    {
+        return Some(format!(
+            "Transport {cargo} from ({source_coord}) to station ({destination_coord})."
+        ));
+    }
+    if let Some(rest) = source.strip_prefix("«")
+        && let Some((company, rest)) = rest.split_once("» se adjudica el transporte de ")
+        && let Some(cargo) = rest.strip_suffix(" (pago ×2).")
+        && is_news_fragment(company)
+        && is_news_fragment(cargo)
+    {
+        return Some(format!(
+            "«{company}» wins the {cargo} transport contract (payment ×2)."
+        ));
+    }
     None
 }
 
@@ -834,6 +867,13 @@ fn is_money_token(value: &str) -> bool {
                 .bytes()
                 .all(|byte| byte.is_ascii_digit() || byte == b'.' || byte == b'M' || byte == b'K')
     })
+}
+
+fn is_coordinate_pair(value: &str) -> bool {
+    let Some((x, y)) = value.split_once(", ") else {
+        return false;
+    };
+    x.parse::<i32>().is_ok() && y.parse::<i32>().is_ok()
 }
 
 fn is_news_fragment(value: &str) -> bool {
@@ -1094,6 +1134,36 @@ mod tests {
             "Tu compañía ha cobrado dinero por transportar Petróleo.",
             "El vehículo 42 ha salido a operar!",
             "Entrega de 12 u. de Carbón (GameScript)",
+        ] {
+            assert_eq!(localized_text(Locale::En, malformed), malformed);
+        }
+    }
+
+    #[test]
+    fn catalog_translates_subsidy_templates_without_mutating_values() {
+        for (spanish, english) in [
+            ("Subvención: Carbón", "Subsidy: Carbón"),
+            (
+                "Subvención adjudicada: Pasajeros",
+                "Subsidy awarded: Pasajeros",
+            ),
+            (
+                "Transportar Petróleo desde (3, -2) hacia la estación (8, 11).",
+                "Transport Petróleo from (3, -2) to station (8, 11).",
+            ),
+            (
+                "«Transportes Sur» se adjudica el transporte de Correo (pago ×2).",
+                "«Transportes Sur» wins the Correo transport contract (payment ×2).",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        for malformed in [
+            "Transportar Petróleo desde (3, dos) hacia la estación (8, 11).",
+            "Transportar Petróleo desde (3, -2) hacia la estación (8, 11)",
+            "Subvención: Carbón (GameScript)",
+            "«Empresa (GS)» se adjudica el transporte de Correo (pago ×2).",
         ] {
             assert_eq!(localized_text(Locale::En, malformed), malformed);
         }
@@ -1464,6 +1534,50 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
             "Tu compañía ha cobrado $42 por transportar Carbón."
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_subsidy_news_late() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let headline = app.world_mut().spawn(Text::new("Subvención: Carbón")).id();
+        let body = app
+            .world_mut()
+            .spawn(Text::new(
+                "Transportar Petróleo desde (3, -2) hacia la estación (8, 11).",
+            ))
+            .id();
+        let awarded = app
+            .world_mut()
+            .spawn(Text::new(
+                "«Transportes Sur» se adjudica el transporte de Correo (pago ×2).",
+            ))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Subsidy: Carbón"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Transport Petróleo from (3, -2) to station (8, 11)."
+        );
+        assert_eq!(
+            app.world().get::<Text>(awarded).unwrap().as_str(),
+            "«Transportes Sur» wins the Correo transport contract (payment ×2)."
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Transportar Petróleo desde (3, -2) hacia la estación (8, 11)."
         );
     }
 

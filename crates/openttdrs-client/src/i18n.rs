@@ -1020,6 +1020,13 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
             "A road vehicle collided with a train at ({coordinates})."
         ));
     }
+    if let Some(coordinates) = source
+        .strip_prefix("Un vehículo quedó bajo el agua en (")
+        .and_then(|value| value.strip_suffix(")."))
+        && is_coordinate_pair(coordinates)
+    {
+        return Some(format!("A vehicle was flooded at ({coordinates})."));
+    }
     None
 }
 
@@ -1366,6 +1373,31 @@ mod tests {
             "Un vehículo de carretera chocó con un tren en (x, 9).",
             "Un vehículo de carretera chocó con un tren en (-4, 9)",
             "Un vehículo de carretera chocó con un tren en (-4, 9). (GS)",
+        ] {
+            assert_eq!(localized_text(Locale::En, malformed), malformed);
+        }
+    }
+
+    #[test]
+    fn catalog_translates_flooded_vehicle_body_without_mutating_coordinates() {
+        for (spanish, english) in [
+            (
+                "Un vehículo quedó bajo el agua en (4, -9).",
+                "A vehicle was flooded at (4, -9).",
+            ),
+            (
+                "Un vehículo quedó bajo el agua en (-12, 7).",
+                "A vehicle was flooded at (-12, 7).",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        for malformed in [
+            "Un vehículo quedó bajo el agua en (cuatro, 9).",
+            "Un vehículo quedó bajo el agua en (4, 9)",
+            "Un vehículo quedó bajo el agua en (4, 9). (GS)",
+            "Un vehículo quedó bajo el agua en (4, 9",
         ] {
             assert_eq!(localized_text(Locale::En, malformed), malformed);
         }
@@ -2086,6 +2118,51 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
             "Un vehículo de carretera chocó con un tren en (-4, 9)."
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_flooded_vehicle_body_late() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let body = app
+            .world_mut()
+            .spawn(Text::new("Un vehículo quedó bajo el agua en (4, -9)."))
+            .id();
+        let malformed = app
+            .world_mut()
+            .spawn(Text::new("Un vehículo quedó bajo el agua en (cuatro, 9)."))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "A vehicle was flooded at (4, -9)."
+        );
+        assert_eq!(
+            app.world().get::<Text>(malformed).unwrap().as_str(),
+            "Un vehículo quedó bajo el agua en (cuatro, 9)."
+        );
+
+        let late = app
+            .world_mut()
+            .spawn(Text::new("Un vehículo quedó bajo el agua en (-12, 7)."))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(late).unwrap().as_str(),
+            "A vehicle was flooded at (-12, 7)."
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Un vehículo quedó bajo el agua en (4, -9)."
         );
     }
 

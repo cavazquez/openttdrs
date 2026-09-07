@@ -2339,3 +2339,10 @@ vanilla de filas dinámicas. Nombres personalizados/NewGRF, coordenadas, orden
 de candidatos e IDs permanecen intactos; la regresión cubre locales y valores
 con signo. #331 sigue abierto por los catálogos upstream y superficies UI
 restantes.
+
+Actualización #331-OBJECT-PICKER-472 (2026-09-07, issue [#472](https://github.com/cavazquez/openttdrs/issues/472)):
+el selector de objetos localiza título, prefijo de selección y nombres vanilla
+sin reinterpretar labels/dimensiones NewGRF ni el callback CB15C. IDs,
+miniaturas y comandos no cambian; la regresión cubre ambos locales y un label
+custom. #331 sigue abierto por los catálogos upstream y superficies UI
+restantes.

@@ -6,7 +6,7 @@ use openttdrs_core::{
     list_buildable_object_specs, object_spec_def, resolve_object_fund_more_text_callback,
 };
 
-use crate::i18n::Locale;
+use crate::i18n::{Locale, localized_text};
 use crate::render::NewGrfObjectSpriteCache;
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
@@ -182,13 +182,13 @@ fn object_tool_active(tool: &UiToolState) -> bool {
     tool.active_tool == Some(BuildMenuAction::PlaceNewGrfObject)
 }
 
-fn object_label(sim: &SimWorld, id: u16) -> String {
+fn object_label(sim: &SimWorld, id: u16, locale: Locale) -> String {
     match id {
-        0 => "Transmisor".into(),
-        1 => "Faro".into(),
+        0 => localized_text(locale, "Transmisor"),
+        1 => localized_text(locale, "Faro"),
         other => object_spec_def(&sim.state.object_spec_catalog, other)
             .map(|d| format!("{} ({}×{})", d.name, d.size_width(), d.size_height()))
-            .unwrap_or_else(|| format!("Objeto {other}")),
+            .unwrap_or_else(|| format!("{} {other}", localized_text(locale, "Objeto"))),
     }
 }
 
@@ -350,20 +350,20 @@ pub(crate) fn sync_object_picker(
     }
 
     let current = sim.state.current_object_spec;
-    let label = object_label(&sim, current);
+    let locale = prefs
+        .as_deref()
+        .map_or(Locale::Es, ClientPreferences::locale);
+    let label = object_label(&sim, current, locale);
     if let Some((_, mut title)) = title_q
         .iter_mut()
         .find(|(t, _)| t.0 == FloatingWindowId::ObjectPicker)
     {
-        **title = format!("Objeto · {label}");
+        **title = format!("{} · {label}", localized_text(locale, "Objeto"));
     }
     if let Ok(mut text) = label_q.single_mut() {
-        **text = format!("Seleccionado: {label}");
+        **text = format!("{} {label}", localized_text(locale, "Seleccionado:"));
     }
     if let Ok(mut text) = more_text_q.single_mut() {
-        let locale = prefs
-            .as_deref()
-            .map_or(Locale::Es, ClientPreferences::locale);
         **text = object_fund_more_text_label(&sim, current, locale);
     }
     for (button, mut bg) in &mut buttons {
@@ -430,5 +430,21 @@ mod tests {
         ));
         world.run_system_once(object_picker_on_closed).unwrap();
         assert!(world.resource::<UiToolState>().active_tool.is_none());
+    }
+
+    #[test]
+    fn object_picker_localizes_vanilla_labels_but_keeps_custom_names() {
+        let sim = SimWorld::default();
+        assert_eq!(object_label(&sim, 0, Locale::En), "Transmitter");
+        assert_eq!(object_label(&sim, 1, Locale::En), "Lighthouse");
+        assert_eq!(object_label(&sim, 0, Locale::Es), "Transmisor");
+        assert_eq!(
+            format!(
+                "{} · {}",
+                localized_text(Locale::En, "Objeto"),
+                "Custom GRF (2×3)"
+            ),
+            "Object · Custom GRF (2×3)"
+        );
     }
 }

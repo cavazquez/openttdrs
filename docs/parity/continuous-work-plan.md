@@ -2353,3 +2353,9 @@ La longitud, restricciones, velocidades, costes, disponibilidad y nombres de
 tipos permanecen datos del core; la regresión cubre carretera/vía y ambos
 locales. #331 sigue abierto por los catálogos upstream y superficies UI
 restantes.
+
+Actualización #331-DEPOT-PICKER-474 (2026-09-07, issue [#474](https://github.com/cavazquez/openttdrs/issues/474)):
+el selector de tipo de depósito localiza el título reescrito por el sync y los
+chips `Road`/`Rail`/`Ship`. Herramientas, IDs y comandos permanecen iguales; la
+regresión cubre el título en ambos locales. #331 sigue abierto por los pickers
+de construcción restantes y los catálogos upstream.

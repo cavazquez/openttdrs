@@ -2,6 +2,8 @@
 
 use bevy::prelude::*;
 
+use crate::i18n::{Locale, localized_text};
+use crate::settings::ClientPreferences;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
     WINDOW_TEXT, spawn_floating_window, window_text_font,
@@ -45,6 +47,10 @@ pub(crate) enum DepotKindButton {
     Road,
     Rail,
     Ship,
+}
+
+fn depot_picker_title(locale: Locale) -> String {
+    localized_text(locale, "Depósito")
 }
 
 impl DepotKindButton {
@@ -550,6 +556,7 @@ pub(crate) fn setup_depot_build_picker(mut commands: Commands, asset_server: Res
 
 pub(crate) fn sync_depot_build_picker(
     tool_state: Res<UiToolState>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
     mut buttons: Query<(&DepotKindButton, &mut BackgroundColor), With<Button>>,
@@ -578,7 +585,7 @@ pub(crate) fn sync_depot_build_picker(
         .iter_mut()
         .find(|(title_text, _)| title_text.0 == FloatingWindowId::DepotBuildPicker)
     {
-        **title_text = "Depósito".to_string();
+        **title_text = depot_picker_title(prefs.locale());
     }
     for (btn, mut bg) in &mut buttons {
         *bg = BackgroundColor(if Some(btn.as_tool()) == tool_state.active_tool {
@@ -634,6 +641,12 @@ pub(crate) fn depot_build_picker_on_closed(
 mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn depot_picker_title_follows_locale() {
+        assert_eq!(depot_picker_title(Locale::Es), "Depósito");
+        assert_eq!(depot_picker_title(Locale::En), "Depot");
+    }
 
     #[test]
     fn dock_picker_on_closed_clears_active_tool() {

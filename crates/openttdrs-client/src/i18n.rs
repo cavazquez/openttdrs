@@ -468,6 +468,16 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
             "Existing pools. Open from Orders → Pools to link."
         }
         "Vincular vehículo" => "Link vehicle",
+        "Señales" => "Signals",
+        "Bloque" => "Block",
+        "Entrada" => "Entry",
+        "Salida" => "Exit",
+        "Combinada" => "Combo",
+        "Ruta PBS" => "Path",
+        "Ruta 1vía" => "One-way path",
+        "Eléctrica" => "Electric",
+        "Semáforo" => "Semaphore",
+        "densidad" => "density",
         "Orientación del muelle" => "Dock orientation",
         "Tipo de depósito a construir" => "Depot type to build",
         "filtrar…" => "filter…",
@@ -1732,6 +1742,21 @@ mod tests {
             ),
             "Wait for path without reservation (days). 255 = never turn around."
         );
+        for (spanish, english) in [
+            ("Señales", "Signals"),
+            ("Bloque", "Block"),
+            ("Entrada", "Entry"),
+            ("Salida", "Exit"),
+            ("Combinada", "Combo"),
+            ("Ruta PBS", "Path"),
+            ("Ruta 1vía", "One-way path"),
+            ("Eléctrica", "Electric"),
+            ("Semáforo", "Semaphore"),
+            ("densidad", "density"),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
     }
 
     #[test]

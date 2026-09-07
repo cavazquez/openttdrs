@@ -2290,3 +2290,11 @@ badges y fecha relativa. El comando pasa compañía, pool, color y calendario al
 resolver para que preview y execute seleccionen la misma rama Action2. Las
 variables de una estación ya creada y vecinos continúan en los scopes de
 render/animación del parent #329.
+
+Actualización #331-SIGNAL-PICKER-LOCALE-465 (2026-09-07, issue [#465](https://github.com/cavazquez/openttdrs/issues/465)):
+el selector de señales ferroviarias usa ahora claves españolas catalogadas
+para bloque, entrada, salida, combinada, ruta PBS, ruta unidireccional y los
+dos estilos de señal. El título dinámico localiza también tipo, variante y
+densidad sin alterar IDs, ciclo ni encoding. La regresión cubre ambos locales
+y confirma que la selección permanece intacta; #331 sigue abierto por las
+superficies UI y catálogos upstream restantes.

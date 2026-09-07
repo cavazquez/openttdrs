@@ -3,9 +3,10 @@
 use bevy::prelude::*;
 use openttdrs_core::{
     SIGTYPE_BLOCK, SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SIGTYPE_PATH, SIGTYPE_PATH_ONEWAY,
-    signal_type_label,
 };
 
+use crate::i18n::{Locale, localized_text};
+use crate::settings::ClientPreferences;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
     spawn_floating_window, window_text_font,
@@ -19,16 +20,41 @@ const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
 const BTN_ACTIVE: Color = Color::srgb(0.98, 0.92, 0.35);
 
 const SIGNAL_TYPES: [(u8, &str); 6] = [
-    (SIGTYPE_BLOCK, "Block"),
-    (SIGTYPE_ENTRY, "Entry"),
-    (SIGTYPE_EXIT, "Exit"),
-    (SIGTYPE_COMBO, "Combo"),
-    (SIGTYPE_PATH, "Path"),
-    (SIGTYPE_PATH_ONEWAY, "Path 1vía"),
+    (SIGTYPE_BLOCK, "Bloque"),
+    (SIGTYPE_ENTRY, "Entrada"),
+    (SIGTYPE_EXIT, "Salida"),
+    (SIGTYPE_COMBO, "Combinada"),
+    (SIGTYPE_PATH, "Ruta PBS"),
+    (SIGTYPE_PATH_ONEWAY, "Ruta 1vía"),
 ];
 
 const DENSITIES: [u8; 7] = [1, 2, 4, 8, 12, 16, 20];
 const SIGNAL_VARIANTS: [(u8, &str); 2] = [(0, "Eléctrica"), (1, "Semáforo")];
+
+fn signal_type_source(signal_type: u8) -> &'static str {
+    SIGNAL_TYPES
+        .iter()
+        .find_map(|(value, label)| (*value == signal_type).then_some(*label))
+        .unwrap_or("Bloque")
+}
+
+fn signal_variant_source(signal_variant: u8) -> &'static str {
+    SIGNAL_VARIANTS
+        .iter()
+        .find_map(|(value, label)| (*value == signal_variant).then_some(*label))
+        .unwrap_or("Eléctrica")
+}
+
+fn signal_picker_title(locale: Locale, state: &StationBuildState) -> String {
+    format!(
+        "{} · {} · {} · {} {}",
+        localized_text(locale, "Señales"),
+        localized_text(locale, signal_type_source(state.signal_type)),
+        localized_text(locale, signal_variant_source(state.signal_variant)),
+        localized_text(locale, "densidad"),
+        state.signal_density,
+    )
+}
 
 #[derive(Component, Clone, Copy)]
 pub(crate) enum SignalPickerButton {
@@ -161,6 +187,7 @@ fn spawn_chip(
 pub(crate) fn sync_signal_picker(
     tool_state: Res<UiToolState>,
     station_state: Res<StationBuildState>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(
         &crate::ui::floating_window::FloatingWindowTitleText,
@@ -183,16 +210,7 @@ pub(crate) fn sync_signal_picker(
         .iter_mut()
         .find(|(t, _)| t.0 == FloatingWindowId::SignalPicker)
     {
-        **title = format!(
-            "Señales · {} · {} · dens {}",
-            signal_type_label(station_state.signal_type),
-            if station_state.signal_variant == 0 {
-                "eléctrica"
-            } else {
-                "semáforo"
-            },
-            station_state.signal_density
-        );
+        **title = signal_picker_title(prefs.locale(), &station_state);
     }
     for (button, mut bg) in &mut buttons {
         let on = match *button {
@@ -277,5 +295,27 @@ mod tests {
         ));
         world.run_system_once(signal_picker_on_closed).unwrap();
         assert!(world.resource::<UiToolState>().active_tool.is_none());
+    }
+
+    #[test]
+    fn signal_picker_title_uses_the_active_locale_without_changing_values() {
+        let state = StationBuildState {
+            signal_type: SIGTYPE_PATH_ONEWAY,
+            signal_variant: 1,
+            signal_density: 12,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            signal_picker_title(Locale::Es, &state),
+            "Señales · Ruta 1vía · Semáforo · densidad 12"
+        );
+        assert_eq!(
+            signal_picker_title(Locale::En, &state),
+            "Signals · One-way path · Semaphore · density 12"
+        );
+        assert_eq!(state.signal_type, SIGTYPE_PATH_ONEWAY);
+        assert_eq!(state.signal_variant, 1);
+        assert_eq!(state.signal_density, 12);
     }
 }

@@ -2041,7 +2041,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 
 | Id | Apertura típica | Notas |
 |----|-----------------|-------|
-| Town | clic pueblo / menú | Chrome compacto (#179); Aut. → Authority (#269) |
+| Town | clic pueblo / menú | Chrome compacto (#179); ficha localizada (título, acciones, metas, historial, crecimiento y demanda) (#484); Aut. → Authority (#269) |
 | TownAuthority | Town → Aut. | Ocho acciones 15.3 operativas (#295): coste, disponibilidad, sin fondos, ratings por compañía y `DoTownAction` |
 | TownDirectory | menú Info / `UiRoute` | |
 | IndustryDirectory | menú Info | |

@@ -2419,3 +2419,11 @@ la vista de compañía localiza título, botón Finanzas y resumen de dinero,
 préstamo y flota, preservando nombres, importes, conteos, IDs y navegación. El
 residual de Livery/ManagerFace/Infrastructure permanece explícito; #331 sigue
 abierto por ese alcance, catálogos upstream y superficies UI restantes.
+
+Actualización #331-TOWN-WINDOW-LOCALE-484 (2026-09-07, issue [#484](https://github.com/cavazquez/openttdrs/issues/484)):
+la ficha de pueblo localiza acciones, métricas, rating, financiación, demanda,
+metas e historial mensual y refresca sus textos al cambiar el locale. El nombre,
+población, casas, valores, IDs, comandos, cámara y vínculo con Autoridad local
+permanecen intactos; la fórmula de crecimiento urbano y su semántica de
+simulación siguen pendientes fuera de este sub-issue. #331 continúa abierto por
+los catálogos upstream y las superficies UI restantes.

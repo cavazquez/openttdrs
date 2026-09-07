@@ -882,6 +882,19 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
             "Company «{company}» is bankrupt (month {month}/{limit})."
         ));
     }
+    if let Some(company) = source.strip_prefix("Comprada ")
+        && is_news_fragment(company)
+    {
+        return Some(format!("Company bought {company}"));
+    }
+    if let Some(rest) = source.strip_prefix("La compañía «")
+        && let Some((company, price)) = rest.split_once("» fue adquirida por £")
+        && let Some(price) = price.strip_suffix('.')
+        && is_news_fragment(company)
+        && is_ascii_digits(price)
+    {
+        return Some(format!("Company «{company}» was acquired for £{price}."));
+    }
     if let Some(vehicle_id) = source
         .strip_prefix("Autoreemplazo falló (vehículo ")
         .and_then(|value| value.strip_suffix(')'))
@@ -1545,6 +1558,14 @@ mod tests {
                 "La compañía «Transportes Norte» está en quiebra (mes 3/12).",
                 "Company «Transportes Norte» is bankrupt (month 3/12).",
             ),
+            (
+                "Comprada Transportes Centro",
+                "Company bought Transportes Centro",
+            ),
+            (
+                "La compañía «Transportes Centro» fue adquirida por £120000.",
+                "Company «Transportes Centro» was acquired for £120000.",
+            ),
         ] {
             assert_eq!(localized_text(Locale::En, spanish), english);
             assert_eq!(localized_text(Locale::Es, spanish), spanish);
@@ -1558,6 +1579,11 @@ mod tests {
             "La compañía «Transportes Norte» está en quiebra (mes tres/12).",
             "La compañía «Transportes Norte» está en quiebra (mes 3/12)",
             "La compañía «Transportes Norte» está en quiebra (mes 3/12) (GS).",
+            "Comprada ",
+            "Comprada Transportes (GS)",
+            "La compañía «Transportes Centro» fue adquirida por £ciento.",
+            "La compañía «Transportes Centro» fue adquirida por £120000",
+            "La compañía «Transportes Centro» fue adquirida por £120000. (GS)",
         ] {
             assert_eq!(localized_text(Locale::En, malformed), malformed);
         }
@@ -2361,6 +2387,12 @@ mod tests {
             .world_mut()
             .spawn(Text::new("Quiebra: Transportes Norte (GS)"))
             .id();
+        let acquired = app
+            .world_mut()
+            .spawn(Text::new(
+                "La compañía «Transportes Centro» fue adquirida por £120000.",
+            ))
+            .id();
 
         app.update();
         app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
@@ -2377,6 +2409,10 @@ mod tests {
             app.world().get::<Text>(malformed).unwrap().as_str(),
             "Quiebra: Transportes Norte (GS)"
         );
+        assert_eq!(
+            app.world().get::<Text>(acquired).unwrap().as_str(),
+            "Company «Transportes Centro» was acquired for £120000."
+        );
 
         let late = app
             .world_mut()
@@ -2390,6 +2426,16 @@ mod tests {
             "«Transportes Sur» completed the goal: Entregar 100 t de Carbón"
         );
 
+        let late_headline = app
+            .world_mut()
+            .spawn(Text::new("Comprada Transportes Centro"))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(late_headline).unwrap().as_str(),
+            "Company bought Transportes Centro"
+        );
+
         app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
         app.update();
         assert_eq!(
@@ -2399,6 +2445,10 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
             "La compañía «Transportes Norte» está en quiebra (mes 3/12)."
+        );
+        assert_eq!(
+            app.world().get::<Text>(acquired).unwrap().as_str(),
+            "La compañía «Transportes Centro» fue adquirida por £120000."
         );
     }
 

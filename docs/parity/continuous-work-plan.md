@@ -2386,3 +2386,11 @@ Nombres personalizados, compañías, coordenadas, IDs, orden y navegación no se
 traducen ni cambian; los labels NewGRF/cargos sin clave vanilla siguen
 literales. #331 sigue abierto por los catálogos upstream y superficies UI
 restantes.
+
+Actualización #331-INDUSTRY-DIRECTORY-LOCALE-479 (2026-09-07, issue [#479](https://github.com/cavazquez/openttdrs/issues/479)):
+el directorio de industrias localiza título, buscador, orden, fundación,
+estados vacíos, nombres vanilla, cadenas I/O y botones de clima, invalidando la
+caché al cambiar de locale. La búsqueda conserva también las fuentes
+españolas; posiciones, stock, capacidad, IDs, acciones y labels sin clave
+vanilla no cambian. #331 sigue abierto por los catálogos upstream y
+superficies UI restantes.

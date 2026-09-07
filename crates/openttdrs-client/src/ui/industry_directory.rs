@@ -4,14 +4,18 @@ use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::text::EditableText;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{Climate, Industry, IndustryKind, IndustrySpec, cargo_display_name};
+use openttdrs_core::{
+    CargoType, Climate, Industry, IndustryKind, IndustrySpec, cargo_display_name,
+};
 
+use crate::i18n::{Locale, localized_text};
 use crate::iso::tile_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
-    FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
-    spawn_floating_window, window_text_font,
+    FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
+    WINDOW_TEXT, spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::industry_panel::{IndustryPanelState, kind_label, spec_label};
@@ -68,6 +72,7 @@ pub(crate) struct IndustryDirectoryCache {
     sort_dir: SortDir,
     filter: String,
     climate: Option<Climate>,
+    locale: Option<Locale>,
     rows: Vec<(
         TileCoord,
         IndustryKind,
@@ -216,6 +221,48 @@ pub(crate) fn industry_chain_label(industry: &Industry) -> String {
     }
 }
 
+fn localized_industry_name(
+    locale: Locale,
+    kind: IndustryKind,
+    spec: Option<IndustrySpec>,
+) -> String {
+    let source = spec.map_or_else(|| kind_label(kind), spec_label);
+    localized_text(locale, source)
+}
+
+fn localized_cargo_name(locale: Locale, cargo: CargoType) -> String {
+    localized_text(locale, cargo_display_name(cargo))
+}
+
+fn localized_industry_chain_label(locale: Locale, industry: &Industry) -> String {
+    let outputs = industry
+        .produced_cargos()
+        .iter()
+        .map(|cargo| localized_cargo_name(locale, *cargo))
+        .collect::<Vec<_>>()
+        .join("+");
+    let output = if outputs.is_empty() {
+        localized_cargo_name(locale, industry.output_cargo())
+    } else {
+        outputs
+    };
+    let inputs = industry.station_input_requirements();
+    if inputs.is_empty() {
+        format!("→ {output}")
+    } else {
+        let joined = inputs
+            .iter()
+            .map(|(cargo, _)| localized_cargo_name(locale, *cargo))
+            .collect::<Vec<_>>()
+            .join("+");
+        format!("{joined} → {output}")
+    }
+}
+
+fn localized_fund_label(locale: Locale, label: &str) -> String {
+    localized_text(locale, label)
+}
+
 pub(crate) fn open_industry_directory_from_routes(
     mut routes: MessageReader<OpenUiRoute>,
     mut state: ResMut<IndustryDirectoryState>,
@@ -231,6 +278,7 @@ pub(crate) fn industry_directory_search_keyboard(
     mut key_events: MessageReader<KeyboardInput>,
     mut state: ResMut<IndustryDirectoryState>,
     mut inputs: Query<(&mut EditableText, &mut Text), With<IndustryDirectorySearchInput>>,
+    prefs: Res<ClientPreferences>,
 ) {
     if !state.open {
         key_events.clear();
@@ -246,7 +294,7 @@ pub(crate) fn industry_directory_search_keyboard(
         &mut text,
         &mut state.filter_text,
         32,
-        "buscar industria…",
+        &localized_text(prefs.locale(), "buscar industria…"),
     );
 }
 
@@ -311,7 +359,19 @@ pub(crate) fn handle_industry_directory_buttons(
 pub(crate) fn sync_industry_directory(
     state: Res<IndustryDirectoryState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
+    mut title_q: Query<
+        (&FloatingWindowTitleText, &mut Text),
+        Without<IndustryDirectorySearchInput>,
+    >,
+    mut search_q: Query<
+        (&EditableText, &mut Text),
+        (
+            With<IndustryDirectorySearchInput>,
+            Without<FloatingWindowTitleText>,
+        ),
+    >,
     list_roots: Query<Entity, With<IndustryDirectoryListRoot>>,
     fund_roots: Query<Entity, With<IndustryDirectoryFundRoot>>,
     children_q: Query<&Children>,
@@ -327,6 +387,7 @@ pub(crate) fn sync_industry_directory(
         With<Button>,
     >,
 ) {
+    let locale = prefs.locale();
     let Some((_, mut visibility)) = root_q
         .iter_mut()
         .find(|(window, _)| window.id == FloatingWindowId::IndustryDirectory)
@@ -340,10 +401,22 @@ pub(crate) fn sync_industry_directory(
     }
     *visibility = Visibility::Visible;
 
+    if let Some((_, mut title)) = title_q
+        .iter_mut()
+        .find(|(title, _)| title.0 == FloatingWindowId::IndustryDirectory)
+    {
+        **title = localized_text(locale, "Directorio de industrias");
+    }
+    if let Ok((editable, mut text)) = search_q.single_mut()
+        && editable.value().to_string().is_empty()
+    {
+        **text = localized_text(locale, "buscar industria…");
+    }
+
     sync_list_sort_colors(&mut sort_buttons, IndustryDirectorySortButton(state.sort));
 
     let climate = sim.state.climate;
-    if cache.climate != Some(climate)
+    if (cache.climate != Some(climate) || cache.locale != Some(locale))
         && let Ok(fund_root) = fund_roots.single()
     {
         clear_list_children(&mut commands, fund_root, &children_q);
@@ -367,7 +440,7 @@ pub(crate) fn sync_industry_directory(
                     Interaction::default(),
                     BuildMenuUi,
                     children![(
-                        Text::new(label),
+                        Text::new(localized_fund_label(locale, label)),
                         window_text_font(&asset_server, UiFontRole::Caption),
                         TextColor(WINDOW_TEXT),
                     )],
@@ -375,6 +448,7 @@ pub(crate) fn sync_industry_directory(
             }
         });
         cache.climate = Some(climate);
+        cache.locale = Some(locale);
     }
 
     let mut rows: Vec<_> = sim
@@ -382,12 +456,16 @@ pub(crate) fn sync_industry_directory(
         .industries
         .iter()
         .filter(|industry| {
-            let name = industry
+            let source_name = industry
                 .spec
                 .map_or_else(|| kind_label(industry.kind), spec_label);
-            let chain = industry_chain_label(industry);
-            text_filter_matches(&state.filter_text, name)
+            let name = localized_industry_name(locale, industry.kind, industry.spec);
+            let source_chain = industry_chain_label(industry);
+            let chain = localized_industry_chain_label(locale, industry);
+            text_filter_matches(&state.filter_text, &name)
+                || text_filter_matches(&state.filter_text, source_name)
                 || text_filter_matches(&state.filter_text, &chain)
+                || text_filter_matches(&state.filter_text, &source_chain)
         })
         .map(|industry| {
             (
@@ -396,16 +474,16 @@ pub(crate) fn sync_industry_directory(
                 industry.spec,
                 industry.stock,
                 industry.capacity,
-                industry_chain_label(industry),
+                localized_industry_chain_label(locale, industry),
             )
         })
         .collect();
     match state.sort {
         IndustryDirectorySort::Type => rows.sort_by(|a, b| {
-            let la = a.2.map_or_else(|| kind_label(a.1), spec_label);
-            let lb = b.2.map_or_else(|| kind_label(b.1), spec_label);
+            let la = localized_industry_name(locale, a.1, a.2);
+            let lb = localized_industry_name(locale, b.1, b.2);
             state.sort_dir.apply(
-                la.cmp(lb)
+                la.cmp(&lb)
                     .then_with(|| a.0.x.cmp(&b.0.x))
                     .then_with(|| a.0.y.cmp(&b.0.y)),
             )
@@ -413,9 +491,9 @@ pub(crate) fn sync_industry_directory(
         IndustryDirectorySort::Stock => {
             rows.sort_by(|a, b| {
                 state.sort_dir.apply(a.3.cmp(&b.3).then_with(|| {
-                    let la = a.2.map_or_else(|| kind_label(a.1), spec_label);
-                    let lb = b.2.map_or_else(|| kind_label(b.1), spec_label);
-                    la.cmp(lb)
+                    let la = localized_industry_name(locale, a.1, a.2);
+                    let lb = localized_industry_name(locale, b.1, b.2);
+                    la.cmp(&lb)
                 }))
             });
         }
@@ -423,6 +501,7 @@ pub(crate) fn sync_industry_directory(
     if cache.sort == state.sort
         && cache.sort_dir == state.sort_dir
         && cache.filter == state.filter_text
+        && cache.locale == Some(locale)
         && cache.rows == rows
     {
         return;
@@ -430,6 +509,7 @@ pub(crate) fn sync_industry_directory(
     cache.sort = state.sort;
     cache.sort_dir = state.sort_dir;
     cache.filter.clone_from(&state.filter_text);
+    cache.locale = Some(locale);
     cache.rows.clone_from(&rows);
 
     let Ok(list_root) = list_roots.single() else {
@@ -438,19 +518,16 @@ pub(crate) fn sync_industry_directory(
     clear_list_children(&mut commands, list_root, &children_q);
     commands.entity(list_root).with_children(|list| {
         if rows.is_empty() {
-            spawn_list_empty_label(
-                list,
-                &asset_server,
-                if state.filter_text.trim().is_empty() {
-                    "No hay industrias."
-                } else {
-                    "Ninguna industria coincide con el filtro."
-                },
-            );
+            let empty_label = if state.filter_text.trim().is_empty() {
+                localized_text(locale, "No hay industrias.")
+            } else {
+                localized_text(locale, "Ninguna industria coincide con el filtro.")
+            };
+            spawn_list_empty_label(list, &asset_server, &empty_label);
             return;
         }
         for (pos, kind, spec, stock, capacity, chain) in rows {
-            let name = spec.map_or_else(|| kind_label(kind), spec_label);
+            let name = localized_industry_name(locale, kind, spec);
             spawn_list_row_button(
                 list,
                 &asset_server,
@@ -469,6 +546,7 @@ pub(crate) fn industry_directory_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut state: ResMut<IndustryDirectoryState>,
     mut search_q: Query<(&mut EditableText, &mut Text), With<IndustryDirectorySearchInput>>,
+    prefs: Res<ClientPreferences>,
 ) {
     for message in closed.read() {
         if message.0.class == FloatingWindowId::IndustryDirectory {
@@ -476,7 +554,7 @@ pub(crate) fn industry_directory_on_closed(
             state.filter_text.clear();
             if let Ok((mut editable, mut text)) = search_q.single_mut() {
                 *editable = EditableText::new("");
-                **text = "buscar industria…".into();
+                **text = localized_text(prefs.locale(), "buscar industria…");
             }
         }
     }
@@ -628,5 +706,33 @@ mod tests {
         let label = industry_chain_label(&industry);
         assert!(label.contains(cargo_display_name(CargoType::Grain)));
         assert!(label.contains(cargo_display_name(CargoType::Livestock)));
+    }
+
+    #[test]
+    fn industry_directory_localizes_vanilla_labels_and_keeps_custom_values() {
+        assert_eq!(
+            localized_industry_name(Locale::Es, IndustryKind::CoalMine, None),
+            "Carbon"
+        );
+        assert_eq!(
+            localized_industry_name(Locale::En, IndustryKind::CoalMine, None),
+            "Coal"
+        );
+        assert_eq!(
+            localized_industry_name(
+                Locale::En,
+                IndustryKind::Factory,
+                Some(IndustrySpec::Factory)
+            ),
+            "Factory"
+        );
+        let coal_mine = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
+        assert_eq!(
+            localized_industry_chain_label(Locale::En, &coal_mine),
+            "→ coal"
+        );
+        assert_eq!(localized_fund_label(Locale::En, "Carbón"), "Coal");
+        let custom = "Industria Ñandú";
+        assert_eq!(localized_text(Locale::En, custom), custom);
     }
 }

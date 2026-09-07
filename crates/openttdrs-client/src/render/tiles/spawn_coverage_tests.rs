@@ -3104,6 +3104,175 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
 }
 
 #[test]
+fn newgrf_airport_draw_foundations_callback_controls_slope_foundation() {
+    for (callback_value, should_draw_foundation) in [(0_u8, false), (1_u8, true)] {
+        let assets = boot_assets_app();
+        let mut map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(1, 1);
+        // Misma pendiente no empinada que usa DrawFoundation(Leveled) en los
+        // otros objetos: la esquina de la tesela queda a 7 y las cuatro
+        // esquinas vecinas a 4, por lo que el callback se ejecuta realmente.
+        map.set_height(coord, 7).expect("airport tile height");
+        for (x, y) in [(0, 0), (2, 0), (0, 2), (2, 2)] {
+            map.set_height(TileCoord::new(x, y), 4)
+                .expect("airport corner height");
+        }
+        let mut tile = tile_template();
+        tile.kind = TileKind::Airport;
+        tile.mapt = 0x50;
+        tile.m5 = 24;
+        tile.m7 = 1;
+        map.set_tile(coord, tile).expect("airport tile");
+
+        let view = DecodedSprite {
+            width: 2,
+            height: 2,
+            x_offs: -1,
+            y_offs: -2,
+            rgba: [40, 120, 240, 255].repeat(4),
+            mask: Vec::new(),
+        };
+        let mut runtime = callback_literal_runtime(3, callback_value);
+        runtime.sets = vec![vec![view.clone()]];
+        let gfx = 175;
+        let airport_tile = AirportTileSpecDef {
+            gfx: AirportTileGfxId(gfx),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 1 << 5,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            newgrf_local_id: 3,
+            newgrf_grfid: 0x4150_544C,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_preview: Some(view.clone()),
+            newgrf_views: vec![view],
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+        let mut station = Station::new_with_kind(coord, StopKind::Airport);
+        station.airport_newgrf_spec_id = Some(10);
+        station.airport_tiles.push(coord);
+        station.airport_tile_gfx.push((coord, gfx));
+        let stations = vec![station];
+        let catalog = vec![airport_tile];
+        let grid = RenderGrid::from_map(&map, 4, 4);
+        let mut world = World::new();
+        world.insert_resource(TsMap(map));
+        world.insert_resource(TsGrid(grid));
+        world.insert_resource(TsAssets(assets));
+        world.insert_resource(crate::render::NewGrfAction5SpriteCache::default());
+        world.insert_resource(Assets::<Image>::default());
+        world
+            .run_system_once(
+                move |mut commands: Commands,
+                      m: Res<TsMap>,
+                      g: Res<TsGrid>,
+                      a: Res<TsAssets>,
+                      mut cache: ResMut<crate::render::NewGrfAction5SpriteCache>,
+                      mut images: ResMut<Assets<Image>>| {
+                    spawn_transport_object_tile_with_road_types(
+                        &mut commands,
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                        4.0,
+                        false,
+                        &m.0,
+                        m.0.dimensions(),
+                        &stations,
+                        &[],
+                        &catalog,
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        None,
+                        None,
+                        &[],
+                        &[],
+                        TEST_CLIMATE,
+                        0,
+                        &[],
+                        None,
+                        &[],
+                        Some(&mut cache),
+                        Some(&mut images),
+                        &[],
+                        &[],
+                    );
+                },
+            )
+            .expect("airport CB150 spawn");
+
+        let foundation_count = world
+            .query::<&ViewportSortableParent>()
+            .iter(&world)
+            .filter(|parent| {
+                (FOUNDATION_ORIGINAL_SPRITE_BASE
+                    ..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                    .contains(&parent.sprite_id)
+            })
+            .count();
+        assert_eq!(
+            foundation_count,
+            usize::from(should_draw_foundation),
+            "CB150={} debe {} la fundación vanilla",
+            callback_value,
+            if should_draw_foundation {
+                "conservar"
+            } else {
+                "suprimir"
+            }
+        );
+
+        let custom_sprite_found = world
+            .query::<&Sprite>()
+            .iter(&world)
+            .find(|sprite| {
+                world
+                    .resource::<Assets<Image>>()
+                    .get(&sprite.image)
+                    .and_then(|image| image.data.as_deref())
+                    == Some([40, 120, 240, 255].repeat(4).as_slice())
+            })
+            .is_some();
+        assert!(custom_sprite_found, "sprite AirportTile custom");
+        let child = world
+            .query::<&ViewportSortableChild>()
+            .iter(&world)
+            .find(|child| {
+                world
+                    .get_entity(child.parent)
+                    .is_ok_and(|entity| entity.contains::<ViewportSortableParent>())
+            });
+        assert_eq!(
+            child.is_some(),
+            should_draw_foundation,
+            "el sprite AirportTile debe ser child sólo si CB150 conserva la fundación"
+        );
+        if let Some(child) = child {
+            assert!(world.get_entity(child.parent).is_ok_and(|entity| {
+                entity
+                    .get::<ViewportSortableParent>()
+                    .is_some_and(|parent| {
+                        (FOUNDATION_ORIGINAL_SPRITE_BASE
+                            ..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                            .contains(&parent.sprite_id)
+                    })
+            }));
+        }
+    }
+}
+
+#[test]
 fn spawn_land_house_industry_generics_and_batches() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

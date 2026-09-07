@@ -76,6 +76,27 @@ void OpenttdrsMaybeStartPbsTrace(const std::string &source_path);
 void OpenttdrsMaybeExportPbsTraceTick();
 
 /**
+ * Arms an optional JSONL trace of the native daily industry scheduler after
+ * the requested save has completed loading. It is inert unless
+ * OPENTTDRS_INDUSTRY_TRACE_OUT is configured.
+ */
+void OpenttdrsMaybeStartIndustryTrace(const std::string &source_path);
+
+/** Emits one sample immediately after the native daily industry timer. */
+void OpenttdrsMaybeExportIndustryTraceDay(uint16_t change_loop);
+
+/**
+ * Records one branch selected by the daily scheduler. This must not draw a
+ * random value; the caller has already executed the native `Chance16`.
+ */
+void OpenttdrsTraceIndustryDailyAction(
+	uint16_t ordinal, uint8_t creation_percent, bool tries_foundation,
+	uint32_t industry_id, bool has_industry);
+
+/** Records the type/result when a foundation branch reached `PlaceIndustry`. */
+void OpenttdrsTraceIndustryFoundationResult(uint16_t industry_type, bool succeeded);
+
+/**
  * Arms an optional airport FTA JSONL exporter when OPENTTDRS_AIRPORT_FTA_TRACE_OUT is set.
  * Rows are emitted by OpenttdrsMaybeExportAirportFtaTraceTick() after each game tick.
  */

@@ -773,7 +773,7 @@ def integrate_tree_generation_trace(dest: Path) -> None:
 
 
 def integrate_industry_generation_trace(dest: Path) -> None:
-    """Conecta la traza de cada `CreateNewIndustry` al oráculo por fases."""
+    """Conecta trazas de creación y del scheduler diario de industrias."""
     industry_cmd = dest / "src" / "industry_cmd.cpp"
     text = industry_cmd.read_text(encoding="utf-8")
     if '#include "snapshot_export.h"' not in text:
@@ -810,6 +810,85 @@ def integrate_industry_generation_trace(dest: Path) -> None:
         print("industry_cmd: traza CreateNewIndustry")
     else:
         print("industry_cmd: traza CreateNewIndustry ya presente")
+
+    daily_zero_hook = "OpenttdrsMaybeExportIndustryTraceDay(change_loop);"
+    if daily_zero_hook not in text:
+        marker = (
+            "\tif (change_loop == 0) {\n"
+            "\t\treturn;  // Nothing to do? get out\n"
+            "\t}\n"
+        )
+        replacement = (
+            "\tif (change_loop == 0) {\n"
+            "\t\tOpenttdrsMaybeExportIndustryTraceDay(change_loop);\n"
+            "\t\treturn;  // Nothing to do? get out\n"
+            "\t}\n"
+        )
+        if marker not in text:
+            raise SystemExit("no encuentro salida temprana del scheduler diario de industrias")
+        text = text.replace(marker, replacement, 1)
+        print("industry_cmd: hook scheduler diario sin cambios")
+    else:
+        print("industry_cmd: hook scheduler diario sin cambios ya presente")
+
+    daily_action_hook = "OpenttdrsTraceIndustryDailyAction("
+    if daily_action_hook not in text:
+        marker = (
+            "\tfor (uint16_t j = 0; j < change_loop; j++) {\n"
+            "\t\tif (Chance16(perc, 100)) {\n"
+            "\t\t\t_industry_builder.TryBuildNewIndustry();\n"
+            "\t\t} else {\n"
+            "\t\t\tIndustry *i = Industry::GetRandom();\n"
+            "\t\t\tif (i != nullptr) {\n"
+        )
+        replacement = (
+            "\tfor (uint16_t j = 0; j < change_loop; j++) {\n"
+            "\t\tif (Chance16(perc, 100)) {\n"
+            "\t\t\tOpenttdrsTraceIndustryDailyAction(j, static_cast<uint8_t>(perc), true, 0, false);\n"
+            "\t\t\t_industry_builder.TryBuildNewIndustry();\n"
+            "\t\t} else {\n"
+            "\t\t\tIndustry *i = Industry::GetRandom();\n"
+            "\t\t\tOpenttdrsTraceIndustryDailyAction(j, static_cast<uint8_t>(perc), false, i == nullptr ? 0 : static_cast<uint32_t>(i->index.base()), i != nullptr);\n"
+            "\t\t\tif (i != nullptr) {\n"
+        )
+        if marker not in text:
+            raise SystemExit("no encuentro ramas del scheduler diario de industrias")
+        text = text.replace(marker, replacement, 1)
+        print("industry_cmd: decisiones scheduler diario")
+    else:
+        print("industry_cmd: decisiones scheduler diario ya presentes")
+
+    foundation_hook = "OpenttdrsTraceIndustryFoundationResult("
+    if foundation_hook not in text:
+        marker = "\t\tconst Industry *ind = PlaceIndustry(it, IACT_RANDOMCREATION, false);\n"
+        replacement = (
+            "\t\tconst Industry *ind = PlaceIndustry(it, IACT_RANDOMCREATION, false);\n"
+            "\t\tOpenttdrsTraceIndustryFoundationResult(static_cast<uint16_t>(it), ind != nullptr);\n"
+        )
+        if marker not in text:
+            raise SystemExit("no encuentro PlaceIndustry del scheduler runtime")
+        text = text.replace(marker, replacement, 1)
+        print("industry_cmd: resultado de fundación runtime")
+    else:
+        print("industry_cmd: resultado de fundación runtime ya presente")
+
+    daily_end_hook = "OpenttdrsMaybeExportIndustryTraceDay(change_loop);"
+    # La salida temprana ya contiene la misma llamada; el ancla siguiente es
+    # la primera invalidación, que corresponde sólo al timer diario.
+    daily_end_marker = "\tInvalidateWindowData(WC_INDUSTRY_DIRECTORY, 0, IDIWD_PRODUCTION_CHANGE);\n});\n\nstatic const IntervalTimer<TimerGameEconomy> _economy_industries_monthly"
+    if text.count(daily_end_hook) < 2:
+        if daily_end_marker not in text:
+            raise SystemExit("no encuentro cierre del scheduler diario de industrias")
+        text = text.replace(
+            daily_end_marker,
+            "\tInvalidateWindowData(WC_INDUSTRY_DIRECTORY, 0, IDIWD_PRODUCTION_CHANGE);\n"
+            "\tOpenttdrsMaybeExportIndustryTraceDay(change_loop);\n"
+            "});\n\nstatic const IntervalTimer<TimerGameEconomy> _economy_industries_monthly",
+            1,
+        )
+        print("industry_cmd: muestra post scheduler diario")
+    else:
+        print("industry_cmd: muestra post scheduler diario ya presente")
     industry_cmd.write_text(text, encoding="utf-8")
 
 
@@ -825,6 +904,8 @@ if mode == "world_raw_only":
         "OpenttdrsMaybeCaptureTreeGenerationStage",
         "OpenttdrsTraceTreePlacement",
         "OpenttdrsTraceIndustryCreationAttempt",
+        "OpenttdrsMaybeExportIndustryTraceDay",
+        "OpenttdrsTraceIndustryDailyAction",
         "OpenttdrsMaybeExportPbsTraceTick",
         "OpenttdrsMaybeExportAirportFtaTraceTick",
     )
@@ -939,6 +1020,7 @@ if mode == "world_raw_only":
         "\t}\n"
     )
     pbs_hook = "\tOpenttdrsMaybeStartPbsTrace(\"\");\n"
+    industry_hook = "\tOpenttdrsMaybeStartIndustryTrace(\"\");\n"
     fta_hook = "\tOpenttdrsMaybeStartAirportFtaTrace(\"\");\n"
     raw_hook = (
         "\tif (!OpenttdrsMaybeExportWorldRaw(\"\")) {\n"
@@ -962,12 +1044,12 @@ if mode == "world_raw_only":
         "\t\tDebug(misc, 0, \"openttdrs world-screenshot capture failed\");\n"
         "\t}\n"
     )
-    for hook in (snapshot_hook, pbs_hook, fta_hook, raw_hook, semantic_hook, draw_hook, screenshot_hook):
+    for hook in (snapshot_hook, pbs_hook, industry_hook, fta_hook, raw_hook, semantic_hook, draw_hook, screenshot_hook):
         at = at.replace(hook, "", 1)
     anchor = "\treturn true;\n}\n\n/**\n * Reload all NewGRF"
     if anchor not in at:
         raise SystemExit("no encuentro ancla return true de AfterLoadGame")
-    snapshot_hooks = (snapshot_hook + pbs_hook + fta_hook) if preserve_snapshot_export else ""
+    snapshot_hooks = (snapshot_hook + pbs_hook + industry_hook + fta_hook) if preserve_snapshot_export else ""
     at = at.replace(
         anchor,
         snapshot_hooks + raw_hook + semantic_hook + draw_hook + screenshot_hook
@@ -1089,6 +1171,7 @@ hook = (
     "\t\tDebug(misc, 0, \"openttdrs snapshot export failed\");\n"
     "\t}\n"
     "\tOpenttdrsMaybeStartPbsTrace(\"\");\n"
+    "\tOpenttdrsMaybeStartIndustryTrace(\"\");\n"
     "\tOpenttdrsMaybeStartAirportFtaTrace(\"\");\n"
 )
 anchor = "\treturn true;\n}\n\n/**\n * Reload all NewGRF"
@@ -1099,6 +1182,27 @@ if "OpenttdrsMaybeExportSnapshot" not in at:
     print("afterload: hook AfterLoadGame")
 else:
     print("afterload: hook ya presente")
+
+if "OpenttdrsMaybeStartIndustryTrace" not in at:
+    if "\tOpenttdrsMaybeStartAirportFtaTrace(\"\");\n" in at:
+        at = at.replace(
+            "\tOpenttdrsMaybeStartAirportFtaTrace(\"\");\n",
+            "\tOpenttdrsMaybeStartIndustryTrace(\"\");\n"
+            "\tOpenttdrsMaybeStartAirportFtaTrace(\"\");\n",
+            1,
+        )
+    elif "\tOpenttdrsMaybeStartPbsTrace(\"\");\n" in at:
+        at = at.replace(
+            "\tOpenttdrsMaybeStartPbsTrace(\"\");\n",
+            "\tOpenttdrsMaybeStartPbsTrace(\"\");\n"
+            "\tOpenttdrsMaybeStartIndustryTrace(\"\");\n",
+            1,
+        )
+    else:
+        raise SystemExit("no encuentro hook de snapshot para enganchar scheduler de industrias")
+    print("afterload: hook scheduler de industrias")
+else:
+    print("afterload: hook scheduler de industrias ya presente")
 
 raw_hook = (
     "\tif (!OpenttdrsMaybeExportWorldRaw(\"\")) {\n"

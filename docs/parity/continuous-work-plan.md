@@ -132,10 +132,20 @@ canónico que las contiene. Esto no ejecuta aún `Chance16`, `TryBuildNewIndustr
 `PlaceIndustry`, callbacks NewGRF ni la traza temporal: #499/RMAP-158 y los
 padres continúan abiertos para esa ejecución.
 
-Actualizado el 2026-09-07: RMAP-159/#500 es un sub-issue cerrado de
-persistencia y selección pura; los gates continúan siendo obligatorios para
-cada etapa posterior y ningún issue padre se considera cerrado por esta
-cobertura.
+RMAP-160 / #501 cierra sólo el corte de observación temporal: el oracle nativo
+emite una muestra post-timer con `ECMY`, `IBLD`/las 240 filas `ITBL`, RNG,
+industrias ordenadas y decisiones `Chance16`; el runner termina por jornadas y
+el validador falla cerrado ante huecos o cardinalidad distinta. La evidencia
+concreta de la fixture y el hash viven canónicamente en
+[`random-map-issues.md`](random-map-issues.md); el formato y el comando están
+en [`INDUSTRY_SCHEDULER_TRACE_SCHEMA.md`](INDUSTRY_SCHEDULER_TRACE_SCHEMA.md).
+Esto habilita el siguiente cambio diferencial, pero no ejecuta aún la
+fundación física ni cierra #499.
+
+Actualizado el 2026-09-07: RMAP-159/#500 y RMAP-160/#501 son sub-issues
+cerrados de estado/selección y observación temporal; los gates continúan siendo
+obligatorios para cada etapa posterior y ningún issue padre se considera
+cerrado por esta cobertura.
 
 Reparación #347 validada (2026-09-04): las casas sin PNG suelto se recortan
 del atlas distribuido y conservan la misma paleta; las páginas se decodifican

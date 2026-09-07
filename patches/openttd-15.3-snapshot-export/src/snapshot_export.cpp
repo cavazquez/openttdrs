@@ -9,6 +9,7 @@
 #include "company_func.h"
 #include "core/random_func.hpp"
 #include "direction_type.h"
+#include "economy_func.h"
 #include "engine_base.h"
 #include "fileio_type.h"
 #include "group_type.h"
@@ -24,6 +25,8 @@
 #include "table/sprites.h"
 #include "tile_map.h"
 #include "tile_type.h"
+#include "timer/timer_game_calendar.h"
+#include "timer/timer_game_economy.h"
 #include "timer/timer_game_tick.h"
 #include "town.h"
 #include "train.h"
@@ -41,6 +44,7 @@
 #include <limits>
 #include <map>
 #include <queue>
+#include <ranges>
 #include <string>
 #include <utility>
 #include <vector>
@@ -974,6 +978,215 @@ void OpenttdrsMaybeExportPbsTraceTick()
 	if (_openttdrs_pbs_trace.rows >= _openttdrs_pbs_trace.max_rows) {
 		_openttdrs_pbs_trace.armed = false;
 		_openttdrs_pbs_trace.out.close();
+		_exit_game = true;
+	}
+}
+
+namespace {
+
+/** One decision already made by the native daily industry timer. */
+struct IndustryTraceAction {
+	uint16_t ordinal;
+	uint8_t creation_percent;
+	bool tries_foundation;
+	bool has_industry;
+	uint32_t industry_id;
+	bool has_foundation_result = false;
+	uint16_t foundation_type = 0;
+	bool foundation_succeeded = false;
+};
+
+struct IndustryTraceState {
+	std::ofstream out;
+	std::string source_path;
+	uint64_t rows = 0;
+	uint64_t max_rows = 40;
+	bool armed = false;
+	std::vector<IndustryTraceAction> actions;
+};
+
+IndustryTraceState _openttdrs_industry_trace;
+
+uint64_t ParseIndustryTraceDays()
+{
+	const char *raw = std::getenv("OPENTTDRS_INDUSTRY_TRACE_DAYS");
+	if (raw == nullptr || raw[0] == '\0') return 40;
+	const long long parsed = std::atoll(raw);
+	return parsed > 0 ? static_cast<uint64_t>(parsed) : 40;
+}
+
+/**
+ * Serializes only already-existing state. In particular, it must not call
+ * `Random()` because this trace is also the oracle for the global RNG stream.
+ */
+void WriteIndustryTraceRow(const char *kind, uint16_t change_loop)
+{
+	nlohmann::json row;
+	row["kind"] = kind;
+	row["tick"] = TimerGameTick::counter;
+	row["calendar"] = {
+		{"date", TimerGameCalendar::date.base()},
+		{"year", TimerGameCalendar::year.base()},
+		{"month", TimerGameCalendar::month},
+	};
+	row["economy"] = {
+		{"date", TimerGameEconomy::date.base()},
+		{"year", TimerGameEconomy::year.base()},
+		{"month", TimerGameEconomy::month},
+	};
+	row["random_state"] = {
+		{"state_0", _random.state[0]},
+		{"state_1", _random.state[1]},
+	};
+	row["industry_daily_change_counter"] = _economy.industry_daily_change_counter;
+	row["industry_daily_increment"] = _economy.industry_daily_increment;
+	row["wanted_inds"] = _industry_builder.wanted_inds;
+	row["change_loop"] = change_loop;
+
+	nlohmann::json builddata = nlohmann::json::array();
+	for (uint it = 0; it < NUM_INDUSTRYTYPES; it++) {
+		const IndustryTypeBuildData &entry = _industry_builder.builddata[it];
+		builddata.push_back({
+			{"type", it},
+			{"probability", entry.probability},
+			{"min_number", entry.min_number},
+			{"target_count", entry.target_count},
+			{"max_wait", entry.max_wait},
+			{"wait_count", entry.wait_count},
+		});
+	}
+	row["builddata"] = builddata;
+
+	std::vector<const Industry *> industries;
+	for (const Industry *industry : Industry::Iterate()) industries.push_back(industry);
+	std::ranges::sort(industries, {}, [](const Industry *industry) { return industry->index.base(); });
+	row["industries"] = nlohmann::json::array();
+	for (const Industry *industry : industries) {
+		nlohmann::json exported = {
+			{"id", industry->index.base()},
+			{"type", static_cast<uint16_t>(industry->type)},
+			{"prod_level", industry->prod_level},
+			{"counter", industry->counter},
+			{"random", industry->random},
+			{"selected_layout", industry->selected_layout},
+			{"construction_type", industry->construction_type},
+		};
+		if (industry->location.tile == INVALID_TILE) {
+			exported["x"] = nullptr;
+			exported["y"] = nullptr;
+		} else {
+			exported["x"] = TileX(industry->location.tile);
+			exported["y"] = TileY(industry->location.tile);
+		}
+		row["industries"].push_back(exported);
+	}
+
+	row["actions"] = nlohmann::json::array();
+	for (const IndustryTraceAction &action : _openttdrs_industry_trace.actions) {
+		nlohmann::json exported = {
+			{"ordinal", action.ordinal},
+			{"creation_percent", action.creation_percent},
+			{"branch", action.tries_foundation ? "foundation" : "production"},
+			{"industry", action.has_industry ? nlohmann::json(action.industry_id) : nlohmann::json(nullptr)},
+			{"foundation_type", action.has_foundation_result ? nlohmann::json(action.foundation_type) : nlohmann::json(nullptr)},
+			{"foundation_succeeded", action.has_foundation_result ? nlohmann::json(action.foundation_succeeded) : nlohmann::json(nullptr)},
+		};
+		row["actions"].push_back(exported);
+	}
+	_openttdrs_industry_trace.actions.clear();
+
+	_openttdrs_industry_trace.out << row.dump() << '\n';
+	_openttdrs_industry_trace.out.flush();
+	if (!_openttdrs_industry_trace.out) {
+		std::fprintf(stderr, "openttdrs industry trace write failed\n");
+		_openttdrs_industry_trace.out.close();
+		_openttdrs_industry_trace.armed = false;
+	}
+}
+
+} // namespace
+
+void OpenttdrsMaybeStartIndustryTrace(const std::string &source_path)
+{
+	const char *out_path = std::getenv("OPENTTDRS_INDUSTRY_TRACE_OUT");
+	if (out_path == nullptr || out_path[0] == '\0') return;
+
+	/* Dedicated + -g loads a temporary new game before the requested save. */
+	static int call_count = 0;
+	call_count++;
+	const char *min_s = std::getenv("OPENTTDRS_SNAPSHOT_MIN_CALL");
+	const int min_call = (min_s != nullptr && min_s[0] != '\0') ? std::atoi(min_s) : 2;
+	if (call_count < min_call || _openttdrs_industry_trace.armed) return;
+
+	_openttdrs_industry_trace.out.open(out_path, std::ios::out | std::ios::trunc);
+	if (!_openttdrs_industry_trace.out.is_open()) {
+		std::fprintf(stderr, "openttdrs industry trace cannot open %s\n", out_path);
+		return;
+	}
+	const char *trace_source = std::getenv("OPENTTDRS_INDUSTRY_TRACE_SOURCE");
+	_openttdrs_industry_trace.source_path =
+		trace_source != nullptr && trace_source[0] != '\0' ? trace_source : source_path;
+	_openttdrs_industry_trace.rows = 0;
+	_openttdrs_industry_trace.max_rows = ParseIndustryTraceDays();
+	_openttdrs_industry_trace.actions.clear();
+	_openttdrs_industry_trace.armed = true;
+
+	nlohmann::json metadata;
+	metadata["kind"] = "metadata";
+	metadata["schema_version"] = 1;
+	metadata["producer"] = "openttd";
+	metadata["trace"] = "industry_scheduler";
+	const char *commit = std::getenv("OPENTTDRS_OPENTTD_COMMIT");
+	metadata["openttd_commit"] = commit != nullptr ? commit : "";
+	metadata["source_path"] = _openttdrs_industry_trace.source_path;
+	metadata["initial_sample_point"] = "after_load_game";
+	metadata["day_sample_point"] = "after_industry_daily_timer";
+	metadata["max_days"] = _openttdrs_industry_trace.max_rows;
+	metadata["industry_type_count"] = NUM_INDUSTRYTYPES;
+	_openttdrs_industry_trace.out << metadata.dump() << '\n';
+	_openttdrs_industry_trace.out.flush();
+	if (!_openttdrs_industry_trace.out) {
+		std::fprintf(stderr, "openttdrs industry trace metadata write failed\n");
+		_openttdrs_industry_trace.out.close();
+		_openttdrs_industry_trace.armed = false;
+		return;
+	}
+	WriteIndustryTraceRow("initial", 0);
+}
+
+void OpenttdrsTraceIndustryDailyAction(
+	uint16_t ordinal, uint8_t creation_percent, bool tries_foundation,
+	uint32_t industry_id, bool has_industry)
+{
+	if (!_openttdrs_industry_trace.armed) return;
+	_openttdrs_industry_trace.actions.push_back({
+		.ordinal = ordinal,
+		.creation_percent = creation_percent,
+		.tries_foundation = tries_foundation,
+		.has_industry = has_industry,
+		.industry_id = industry_id,
+	});
+}
+
+void OpenttdrsTraceIndustryFoundationResult(uint16_t industry_type, bool succeeded)
+{
+	if (!_openttdrs_industry_trace.armed || _openttdrs_industry_trace.actions.empty()) return;
+	IndustryTraceAction &action = _openttdrs_industry_trace.actions.back();
+	if (!action.tries_foundation) return;
+	action.has_foundation_result = true;
+	action.foundation_type = industry_type;
+	action.foundation_succeeded = succeeded;
+}
+
+void OpenttdrsMaybeExportIndustryTraceDay(uint16_t change_loop)
+{
+	if (!_openttdrs_industry_trace.armed) return;
+	WriteIndustryTraceRow("day", change_loop);
+	if (!_openttdrs_industry_trace.armed) return;
+	_openttdrs_industry_trace.rows++;
+	if (_openttdrs_industry_trace.rows >= _openttdrs_industry_trace.max_rows) {
+		_openttdrs_industry_trace.armed = false;
+		_openttdrs_industry_trace.out.close();
 		_exit_game = true;
 	}
 }

@@ -852,6 +852,36 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
             "«{company}» wins the {cargo} transport contract (payment ×2)."
         ));
     }
+    if let Some(company) = source.strip_prefix("Logro rival: ")
+        && is_news_fragment(company)
+    {
+        return Some(format!("Rival achievement: {company}"));
+    }
+    if let Some(rest) = source.strip_prefix("«")
+        && let Some((company, goal)) = rest.split_once("» cumplió el objetivo: ")
+        && is_news_fragment(company)
+        && is_news_fragment(goal)
+    {
+        return Some(format!("«{company}» completed the goal: {goal}"));
+    }
+    if let Some(company) = source.strip_prefix("Quiebra: ")
+        && is_news_fragment(company)
+    {
+        return Some(format!("Bankruptcy: {company}"));
+    }
+    if let Some(rest) = source.strip_prefix("La compañía «")
+        && let Some((company, rest)) = rest.split_once("» está en quiebra (mes ")
+        && let Some((month, limit)) = rest
+            .strip_suffix(").")
+            .and_then(|value| value.split_once('/'))
+        && is_news_fragment(company)
+        && is_ascii_digits(month)
+        && is_ascii_digits(limit)
+    {
+        return Some(format!(
+            "Company «{company}» is bankrupt (month {month}/{limit})."
+        ));
+    }
     None
 }
 
@@ -1164,6 +1194,43 @@ mod tests {
             "Transportar Petróleo desde (3, -2) hacia la estación (8, 11)",
             "Subvención: Carbón (GameScript)",
             "«Empresa (GS)» se adjudica el transporte de Correo (pago ×2).",
+        ] {
+            assert_eq!(localized_text(Locale::En, malformed), malformed);
+        }
+    }
+
+    #[test]
+    fn catalog_translates_company_news_templates_without_mutating_values() {
+        for (spanish, english) in [
+            (
+                "Logro rival: Transportes Sur",
+                "Rival achievement: Transportes Sur",
+            ),
+            (
+                "«Transportes Sur» cumplió el objetivo: Entregar 100 t de Carbón",
+                "«Transportes Sur» completed the goal: Entregar 100 t de Carbón",
+            ),
+            (
+                "Quiebra: Transportes Norte",
+                "Bankruptcy: Transportes Norte",
+            ),
+            (
+                "La compañía «Transportes Norte» está en quiebra (mes 3/12).",
+                "Company «Transportes Norte» is bankrupt (month 3/12).",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        for malformed in [
+            "Logro rival: ",
+            "Logro rival: Transportes (GameScript)",
+            "«Transportes Sur» cumplió el objetivo: ",
+            "«Transportes (GS)» cumplió el objetivo: Entregar 100 t",
+            "Quiebra: Transportes Norte (GS)",
+            "La compañía «Transportes Norte» está en quiebra (mes tres/12).",
+            "La compañía «Transportes Norte» está en quiebra (mes 3/12)",
+            "La compañía «Transportes Norte» está en quiebra (mes 3/12) (GS).",
         ] {
             assert_eq!(localized_text(Locale::En, malformed), malformed);
         }
@@ -1578,6 +1645,67 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
             "Transportar Petróleo desde (3, -2) hacia la estación (8, 11)."
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_company_news_late() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let headline = app
+            .world_mut()
+            .spawn(Text::new("Logro rival: Transportes Sur"))
+            .id();
+        let body = app
+            .world_mut()
+            .spawn(Text::new(
+                "La compañía «Transportes Norte» está en quiebra (mes 3/12).",
+            ))
+            .id();
+        let malformed = app
+            .world_mut()
+            .spawn(Text::new("Quiebra: Transportes Norte (GS)"))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Rival achievement: Transportes Sur"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Company «Transportes Norte» is bankrupt (month 3/12)."
+        );
+        assert_eq!(
+            app.world().get::<Text>(malformed).unwrap().as_str(),
+            "Quiebra: Transportes Norte (GS)"
+        );
+
+        let late = app
+            .world_mut()
+            .spawn(Text::new(
+                "«Transportes Sur» cumplió el objetivo: Entregar 100 t de Carbón",
+            ))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(late).unwrap().as_str(),
+            "«Transportes Sur» completed the goal: Entregar 100 t de Carbón"
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Logro rival: Transportes Sur"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "La compañía «Transportes Norte» está en quiebra (mes 3/12)."
         );
     }
 

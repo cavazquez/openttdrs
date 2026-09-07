@@ -9,7 +9,9 @@ use openttdrs_core::{
     airport_spec_footprint, list_airport_classes, list_airport_specs, station_coverage_at,
 };
 
+use crate::i18n::{Locale, localized_text};
 use crate::render::NewGrfAction5SpriteCache;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
@@ -150,14 +152,14 @@ pub(crate) fn setup_airport_picker(mut commands: Commands, asset_server: Res<Ass
                     row,
                     asset_server,
                     AirportPickerButton::CoverageOff,
-                    "Off",
+                    "Desactivado",
                     72.0,
                 );
                 spawn_text_button(
                     row,
                     asset_server,
                     AirportPickerButton::CoverageOn,
-                    "On",
+                    "Activado",
                     72.0,
                 );
             });
@@ -228,6 +230,44 @@ fn airport_tool_active(tool: &UiToolState) -> bool {
     tool.active_tool == Some(BuildMenuAction::Airport)
 }
 
+fn localized_airport_title(locale: Locale, label: &str) -> String {
+    format!("{} · {label}", localized_text(locale, "Aeropuerto"))
+}
+
+fn localized_airport_size(locale: Locale, width: i32, height: i32) -> String {
+    format!("{} {width}×{height}", localized_text(locale, "Tamaño:"))
+}
+
+fn localized_airport_coverage_hidden(locale: Locale) -> String {
+    format!(
+        "{} {}",
+        localized_text(locale, "Cobertura:"),
+        localized_text(locale, "oculta")
+    )
+}
+
+fn localized_airport_coverage_at(
+    locale: Locale,
+    radius: i32,
+    house_tiles: u32,
+    supplied_stock: u32,
+) -> String {
+    format!(
+        "{} r={radius}: {} {house_tiles} · {} {supplied_stock}",
+        localized_text(locale, "Cobertura"),
+        localized_text(locale, "casas"),
+        localized_text(locale, "stock ind."),
+    )
+}
+
+fn localized_airport_coverage_hint(locale: Locale, radius: i32) -> String {
+    format!(
+        "{} r={radius}: {}",
+        localized_text(locale, "Cobertura"),
+        localized_text(locale, "apunta al mapa")
+    )
+}
+
 /// Actualiza la miniatura Action5 `0x16` según el aeropuerto seleccionado.
 pub(crate) fn sync_airport_preview_image(
     station_state: Res<StationBuildState>,
@@ -269,6 +309,7 @@ pub(crate) fn sync_airport_picker(
     tool_state: Res<UiToolState>,
     station_state: Res<StationBuildState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     hovered: Option<Res<HoveredTileCoord>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<
@@ -317,30 +358,33 @@ pub(crate) fn sync_airport_picker(
     let axis_y = station_state.airport_axis_y;
     let (w, h) = airport_spec_footprint(spec, axis_y);
     let label = airport_spec_def(spec).map_or("—", |d| d.label);
+    let locale = prefs.locale();
 
     if let Some((_, mut title)) = title_q
         .iter_mut()
         .find(|(t, _)| t.0 == FloatingWindowId::AirportPicker)
     {
-        **title = format!("Aeropuerto · {label}");
+        **title = localized_airport_title(locale, label);
     }
     if let Ok(mut size) = size_q.single_mut() {
-        **size = format!("Tamaño: {w}×{h}");
+        **size = localized_airport_size(locale, w, h);
     }
     if let Ok(mut cov) = coverage_q.single_mut() {
         let radius = airport_spec_def(spec)
             .map(|d| d.catchment)
             .unwrap_or(STATION_COVERAGE_RADIUS);
         let text = if !station_state.airport_show_coverage {
-            "Cobertura: oculta".to_string()
+            localized_airport_coverage_hidden(locale)
         } else if let Some(pos) = hovered.as_ref().and_then(|h| h.pos) {
             let coverage = station_coverage_at(&sim.state.map, &sim.state.industries, pos, radius);
-            format!(
-                "Cobertura r={radius}: casas {} · stock ind. {}",
-                coverage.house_tiles, coverage.supplied_stock
+            localized_airport_coverage_at(
+                locale,
+                radius,
+                coverage.house_tiles,
+                coverage.supplied_stock,
             )
         } else {
-            format!("Cobertura r={radius}: apunta al mapa")
+            localized_airport_coverage_hint(locale, radius)
         };
         **cov = text;
     }
@@ -478,5 +522,30 @@ mod tests {
         ));
         world.run_system_once(airport_picker_on_closed).unwrap();
         assert!(world.resource::<UiToolState>().active_tool.is_none());
+    }
+
+    #[test]
+    fn airport_picker_chrome_localizes_without_touching_spec_labels_or_values() {
+        assert_eq!(
+            localized_airport_title(Locale::En, "Custom Aeródromo"),
+            "Airport · Custom Aeródromo"
+        );
+        assert_eq!(localized_airport_size(Locale::En, 4, 3), "Size: 4×3");
+        assert_eq!(
+            localized_airport_coverage_hidden(Locale::En),
+            "Coverage: hidden"
+        );
+        assert_eq!(
+            localized_airport_coverage_at(Locale::En, 5, 12, 7),
+            "Coverage r=5: houses 12 · industry stock 7"
+        );
+        assert_eq!(
+            localized_airport_coverage_hint(Locale::En, 5),
+            "Coverage r=5: point to the map"
+        );
+        assert_eq!(
+            localized_airport_title(Locale::Es, "Custom Aeródromo"),
+            "Aeropuerto · Custom Aeródromo"
+        );
     }
 }

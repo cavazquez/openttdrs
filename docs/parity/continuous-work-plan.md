@@ -2325,3 +2325,10 @@ cobertura y prefijos dinámicos `Accepts`/`Supplies`. El sentinel vacío se
 traduce, pero cargos y labels de clase/spec permanecen literales; huella,
 orientación, filtros e IDs no cambian. #331 sigue abierto por los catálogos
 upstream y superficies UI restantes.
+
+Actualización #331-AIRPORT-PICKER-470 (2026-09-07, issue [#470](https://github.com/cavazquez/openttdrs/issues/470)):
+el selector de aeropuerto localiza título, ejes, botones de cobertura y los
+resúmenes dinámicos de tamaño/cobertura. El nombre de spec, la huella, el
+radio, los contadores y los IDs permanecen literales o calculados por el core;
+la regresión confirma ambos locales. #331 sigue abierto por los catálogos
+upstream y superficies UI restantes.

@@ -234,7 +234,7 @@ fn localized_cargo_name(locale: Locale, cargo: CargoType) -> String {
     localized_text(locale, cargo_display_name(cargo))
 }
 
-fn localized_industry_chain_label(locale: Locale, industry: &Industry) -> String {
+pub(crate) fn localized_industry_chain_label(locale: Locale, industry: &Industry) -> String {
     let outputs = industry
         .produced_cargos()
         .iter()

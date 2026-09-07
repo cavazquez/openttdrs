@@ -1,8 +1,10 @@
 use bevy::prelude::*;
 use openttdrs_core::industry::{INDUSTRY_PRODUCE_AMOUNT, industry_produce_period_ticks};
 
+use crate::i18n::{Locale, localized_text};
 use crate::iso::{tile_pos, tile_slope_and_min_z};
 use crate::render::{IndustryPreviewCamera, MapPreviewCamera, PrimaryGameCamera};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText,
@@ -16,11 +18,33 @@ use super::{
     IndustryPanelCenterButton, IndustryPanelDetails, IndustryPanelProductionButton,
     IndustryPanelState,
 };
-use crate::ui::industry_directory::industry_chain_label;
+use crate::ui::industry_directory::localized_industry_chain_label;
 use crate::ui::industry_production_window::IndustryProductionWindowState;
 use crate::ui::sparkline::sparkline_u32;
 
 const PREVIEW_SCALE_MUL: f32 = 0.62;
+
+fn localized_panel_title(locale: Locale, title: &str) -> String {
+    let Some((prefix, suffix)) = title.split_once(" - ") else {
+        return title.to_owned();
+    };
+    if prefix != "Industria" {
+        return title.to_owned();
+    }
+    let suffix = suffix
+        .split(" - ")
+        .map(|part| {
+            let translated = localized_text(locale, part);
+            if translated == part && part.contains("sin sprite") {
+                part.replace("sin sprite", &localized_text(locale, "sin sprite"))
+            } else {
+                translated
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" - ");
+    format!("{} - {suffix}", localized_text(locale, prefix))
+}
 
 pub(crate) fn industry_panel_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
@@ -75,9 +99,11 @@ pub(crate) fn industry_panel_center_interaction(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_industry_panel(
     panel: Res<IndustryPanelState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<IndustryPanelDetails>>,
     mut details_q: Query<&mut Text, (With<IndustryPanelDetails>, Without<FloatingWindowTitleText>)>,
@@ -87,6 +113,7 @@ pub(crate) fn sync_industry_panel(
     >,
     primary_proj: Query<&Projection, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
+    let locale = prefs.locale();
     let Some((_, mut root_vis)) = root_q
         .iter_mut()
         .find(|(w, _)| w.id == FloatingWindowId::Industry)
@@ -116,20 +143,22 @@ pub(crate) fn sync_industry_panel(
         .iter_mut()
         .find(|(t, _)| t.0 == FloatingWindowId::Industry)
     {
-        **text = format_panel_title(&sim.state.map, &sim, focus);
+        let source = format_panel_title(&sim.state.map, &sim, focus);
+        **text = localized_panel_title(locale, &source);
     }
     if let Ok(mut details) = details_q.single_mut() {
         let tile_count = flood_industry_tiles(&sim.state.map, focus).len();
         if let Some((kind, spec, stock, capacity, origin)) =
             industry_stats_for_component(&sim.state.map, &sim, focus)
         {
-            let type_label = spec.map_or_else(|| kind_label(kind), spec_label);
+            let type_source = spec.map_or_else(|| kind_label(kind), spec_label);
+            let type_label = localized_text(locale, type_source);
             let chain = sim
                 .state
                 .industries
                 .iter()
                 .find(|i| i.pos == origin)
-                .map(industry_chain_label)
+                .map(|industry| localized_industry_chain_label(locale, industry))
                 .unwrap_or_else(|| "—".to_string());
             let period = industry_produce_period_ticks(kind);
             let industry = sim.state.industries.iter().find(|i| i.pos == origin);
@@ -137,27 +166,41 @@ pub(crate) fn sync_industry_panel(
                 || "Historial: —".to_string(),
                 |ind| {
                     if ind.history.samples.is_empty() {
-                        "Historial mensual: (avanza el tiempo)".to_string()
+                        format!(
+                            "{}: ({})",
+                            localized_text(locale, "Historial mensual"),
+                            localized_text(locale, "avanza el tiempo")
+                        )
                     } else {
                         let produced: Vec<u32> =
                             ind.history.samples.iter().map(|s| s.produced).collect();
                         let transported: Vec<u32> =
                             ind.history.samples.iter().map(|s| s.transported).collect();
-                        let stock: Vec<u32> =
-                            ind.history.samples.iter().map(|s| s.stock).collect();
+                        let stock: Vec<u32> = ind.history.samples.iter().map(|s| s.stock).collect();
                         format!(
-                            "Historial ({} m):\n  Stock       {}\n  Producido   {}\n  Transport.  {}",
+                            "{} ({} m):\n  {}       {}\n  {}   {}\n  {}  {}",
+                            localized_text(locale, "Historial"),
                             ind.history.samples.len(),
+                            localized_text(locale, "Stock"),
                             sparkline_u32(&stock, 24),
+                            localized_text(locale, "Producido"),
                             sparkline_u32(&produced, 24),
+                            localized_text(locale, "Transport."),
                             sparkline_u32(&transported, 24),
                         )
                     }
                 },
             );
             **details = format!(
-                "{type_label}\nPosición: ({}, {}) · tiles: {tile_count}\nStock: {stock}/{capacity}\nProducción: +{INDUSTRY_PRODUCE_AMOUNT} cada {period} ticks\nCadena: {chain}\n\n{hist_block}",
-                origin.x, origin.y,
+                "{type_label}\n{} ({}, {}) · {}: {tile_count}\n{}: {stock}/{capacity}\n{} +{INDUSTRY_PRODUCE_AMOUNT} {} {period} ticks\n{} {chain}\n\n{hist_block}",
+                localized_text(locale, "Posición:"),
+                origin.x,
+                origin.y,
+                localized_text(locale, "tiles"),
+                localized_text(locale, "Stock"),
+                localized_text(locale, "Producción:"),
+                localized_text(locale, "cada"),
+                localized_text(locale, "Cadena:"),
             );
         } else {
             let gfx9 = sim
@@ -166,7 +209,9 @@ pub(crate) fn sync_industry_panel(
                 .get(focus)
                 .map_or(0, |tile| industry_gfx(&tile));
             **details = format!(
-                "Industria sin datos de simulación\nTiles conectadas: {tile_count}\n(gfx {gfx9})"
+                "{}\n{}: {tile_count}\n(gfx {gfx9})",
+                localized_text(locale, "Industria sin datos de simulación"),
+                localized_text(locale, "Tiles conectadas:"),
             );
         }
     }
@@ -197,5 +242,30 @@ pub(crate) fn sync_industry_panel(
         if let Projection::Orthographic(ref mut o) = *proj {
             o.scale = preview_scale;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panel_title_localizes_known_prefix_and_kind_without_mutating_gfx_data() {
+        assert_eq!(
+            localized_panel_title(Locale::Es, "Industria - Fábrica - Sim"),
+            "Industria - Fábrica - Sim"
+        );
+        assert_eq!(
+            localized_panel_title(Locale::En, "Industria - Fábrica - Sim"),
+            "Industry - Factory - Sim"
+        );
+        assert_eq!(
+            localized_panel_title(Locale::En, "Industria - gfx 256 (sin sprite)"),
+            "Industry - gfx 256 (without sprite)"
+        );
+        assert_eq!(
+            localized_panel_title(Locale::En, "Custom Industry — Ñandú"),
+            "Custom Industry — Ñandú"
+        );
     }
 }

@@ -43,6 +43,7 @@ fn sync_industry_panel_closed_is_noop() {
     let mut world = World::new();
     world.insert_resource(IndustryPanelState::default());
     world.insert_resource(SimWorld::default());
+    world.init_resource::<crate::settings::ClientPreferences>();
     world.run_system_once(sync_industry_panel).unwrap();
 }
 

@@ -258,6 +258,31 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Abrir entidad" => "Open entity",
         "Historia" => "Story",
         "Directorio de industrias" => "Industry directory",
+        "Producción industria" => "Industry production",
+        "Producción" => "Production",
+        "Nivel prod" => "Production level",
+        "Rate ciclo" => "Cycle rate",
+        "Producido total" => "Total produced",
+        "Cargas" => "Cargo",
+        "(sin cargo producido)" => "(no produced cargo)",
+        "Sin industria seleccionada." => "No industry selected.",
+        "Industria no encontrada." => "Industry not found.",
+        "Posición:" => "Position:",
+        "tiles" => "tiles",
+        "Producción:" => "Production:",
+        "cada" => "every",
+        "Cadena:" => "Chain:",
+        "Historial" => "History",
+        "Historial mensual" => "Monthly history",
+        "avanza el tiempo" => "time advances",
+        "Producido" => "Produced",
+        "Transport." => "Transported",
+        "Industria sin datos de simulación" => "Industry without simulation data",
+        "Tiles conectadas:" => "Connected tiles:",
+        "sin sprite" => "without sprite",
+        "Stub — gráfico mensual 15.3 residual (#269)." => {
+            "Stub — residual 15.3 monthly graph (#269)."
+        }
         "buscar industria…" => "search industry…",
         "Stock" => "Stock",
         "Carbon" => "Coal",
@@ -1588,6 +1613,7 @@ mod tests {
                 "Ningún pueblo coincide con el filtro.",
                 "No towns match the filter.",
             ),
+            ("sin sprite", "without sprite"),
         ] {
             assert_eq!(localized_text(Locale::En, spanish), english);
         }

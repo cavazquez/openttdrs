@@ -2401,3 +2401,9 @@ vacíos y las métricas de población/autoridad, invalidando la caché al cambia
 de locale. Nombres, valores, selección, IDs, navegación y la restricción del
 editor no cambian. #331 sigue abierto por los catálogos upstream y superficies
 UI restantes.
+
+Actualización #331-INDUSTRY-PANEL-PRODUCTION-481 (2026-09-07, issue [#481](https://github.com/cavazquez/openttdrs/issues/481)):
+la ficha de industria y la ventana hija de producción localizan títulos,
+estados, tipos/cargos vanilla, métricas e historial, preservando GFX/NewGRF,
+valores custom, foco, preview y relación parent/child. El residual de gráfica
+mensual de #269 y los catálogos upstream siguen abiertos en #331.

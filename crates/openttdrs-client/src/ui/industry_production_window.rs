@@ -1,8 +1,10 @@
 //! Stub Industry Production graph (`WC_INDUSTRY_PRODUCTION`) — hija de Industry (#269).
 
 use bevy::prelude::*;
-use openttdrs_core::cargo_display_name;
+use openttdrs_core::{IndustryKind, IndustrySpec, cargo_display_name};
 
+use crate::i18n::{Locale, localized_text};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CREAM,
@@ -19,6 +21,27 @@ pub(crate) struct IndustryProductionWindowState {
 
 #[derive(Component)]
 pub(crate) struct IndustryProductionBodyText;
+
+fn localized_production_title(
+    locale: Locale,
+    kind: IndustryKind,
+    spec: Option<IndustrySpec>,
+) -> String {
+    let source = spec.map_or_else(
+        || match kind {
+            IndustryKind::CoalMine => "Carbon",
+            IndustryKind::Forest => "Bosque",
+            IndustryKind::OilWell => "Petróleo",
+            IndustryKind::Factory => "Fábrica",
+        },
+        crate::ui::industry_panel::spec_label,
+    );
+    format!(
+        "{} — {}",
+        localized_text(locale, "Producción"),
+        localized_text(locale, source)
+    )
+}
 
 pub(crate) fn setup_industry_production_window(
     mut commands: Commands,
@@ -50,6 +73,7 @@ pub(crate) fn sync_industry_production_window(
     state: Res<IndustryProductionWindowState>,
     panel: Res<IndustryPanelState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<IndustryProductionBodyText>>,
     mut body_q: Query<
@@ -60,6 +84,7 @@ pub(crate) fn sync_industry_production_window(
         ),
     >,
 ) {
+    let locale = prefs.locale();
     let Some((_, mut vis)) = root_q
         .iter_mut()
         .find(|(w, _)| w.id == FloatingWindowId::IndustryProduction)
@@ -74,7 +99,7 @@ pub(crate) fn sync_industry_production_window(
 
     let Some(focus) = panel.focus_tile else {
         if let Ok(mut body) = body_q.single_mut() {
-            **body = "Sin industria seleccionada.".into();
+            **body = localized_text(locale, "Sin industria seleccionada.");
         }
         return;
     };
@@ -85,7 +110,7 @@ pub(crate) fn sync_industry_production_window(
         .find(|i| i.tiles.contains(&focus) || i.pos == focus)
     else {
         if let Ok(mut body) = body_q.single_mut() {
-            **body = "Industria no encontrada.".into();
+            **body = localized_text(locale, "Industria no encontrada.");
         }
         return;
     };
@@ -94,26 +119,30 @@ pub(crate) fn sync_industry_production_window(
         .iter_mut()
         .find(|(tt, _)| tt.0 == FloatingWindowId::IndustryProduction)
     {
-        **title = format!("Producción — {:?}", ind.kind);
+        **title = localized_production_title(locale, ind.kind, ind.spec);
     }
 
-    let cargos: Vec<&str> = ind
+    let cargos: Vec<String> = ind
         .produced_cargos()
         .iter()
-        .map(|c| cargo_display_name(*c))
+        .map(|c| localized_text(locale, cargo_display_name(*c)))
         .collect();
     let cargo_line = if cargos.is_empty() {
-        "(sin cargo producido)".into()
+        localized_text(locale, "(sin cargo producido)")
     } else {
         cargos.join(", ")
     };
     if let Ok(mut body) = body_q.single_mut() {
         **body = format!(
-            "Nivel prod: {}\nRate ciclo: {}\nProducido total: {}\nCargas: {cargo_line}\n\
-             Stub — gráfico mensual 15.3 residual (#269).",
+            "{}: {}\n{}: {}\n{}: {}\n{}: {cargo_line}\n{}",
+            localized_text(locale, "Nivel prod"),
             ind.prod_level,
+            localized_text(locale, "Rate ciclo"),
             ind.produce_amount(),
+            localized_text(locale, "Producido total"),
             ind.produced_total,
+            localized_text(locale, "Cargas"),
+            localized_text(locale, "Stub — gráfico mensual 15.3 residual (#269)."),
         );
     }
 }
@@ -165,5 +194,21 @@ mod tests {
             .run_system_once(industry_production_window_on_closed)
             .unwrap();
         assert!(!world.resource::<IndustryProductionWindowState>().open);
+    }
+
+    #[test]
+    fn production_title_localizes_vanilla_industry_kind() {
+        assert_eq!(
+            localized_production_title(Locale::Es, IndustryKind::Factory, None),
+            "Producción — Fábrica"
+        );
+        assert_eq!(
+            localized_production_title(Locale::En, IndustryKind::Factory, None),
+            "Production — Factory"
+        );
+        assert_eq!(
+            localized_production_title(Locale::En, IndustryKind::Forest, Some(IndustrySpec::Farm)),
+            "Production — Farm"
+        );
     }
 }

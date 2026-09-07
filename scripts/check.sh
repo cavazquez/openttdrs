@@ -39,14 +39,10 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; }
 
 cd "$(dirname "$0")/.."
 
-# sccache es opcional en la máquina local: acelera los comandos de este script
-# cuando está disponible, pero no vuelve al repo dependiente de él (en Windows
-# y macOS `cargo` directo sigue siendo portable). CI lo activa siempre con el
-# composite `.github/composite/sccache`.
-if [[ -z "${RUSTC_WRAPPER+x}" ]] && command -v sccache >/dev/null 2>&1; then
-    export RUSTC_WRAPPER=sccache
-    info "sccache local activado ($(sccache --version | head -1))"
-fi
+# sccache es opcional en la máquina local: sólo se activa si puede ejecutar el
+# rustc efectivo. CI puede seguir fijándolo explícitamente en su composite.
+# shellcheck source=setup_sccache.sh
+source "$(dirname "$0")/setup_sccache.sh"
 
 TNBP_FIXTURE="crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap"
 

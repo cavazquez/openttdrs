@@ -1040,6 +1040,16 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
     {
         return Some(format!("A vehicle was flooded at ({coordinates})."));
     }
+    if let Some(name) = source.strip_suffix(" se estrelló al aterrizar")
+        && is_news_fragment(name)
+    {
+        return Some(format!("{name} crashed while landing"));
+    }
+    if let Some(name) = source.strip_suffix(" inundado")
+        && is_news_fragment(name)
+    {
+        return Some(format!("{name} flooded"));
+    }
     None
 }
 
@@ -1411,6 +1421,30 @@ mod tests {
             "Un vehículo quedó bajo el agua en (4, 9)",
             "Un vehículo quedó bajo el agua en (4, 9). (GS)",
             "Un vehículo quedó bajo el agua en (4, 9",
+        ] {
+            assert_eq!(localized_text(Locale::En, malformed), malformed);
+        }
+    }
+
+    #[test]
+    fn catalog_translates_named_vehicle_accident_headlines_safely() {
+        for (spanish, english) in [
+            (
+                "Avión #42 se estrelló al aterrizar",
+                "Avión #42 crashed while landing",
+            ),
+            ("Nave Azul inundado", "Nave Azul flooded"),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        for malformed in [
+            " se estrelló al aterrizar",
+            "Avión (GS) se estrelló al aterrizar",
+            "Avión #42 se estrelló al aterrizar (GS)",
+            "Nave (GS) inundado",
+            "Nave Azul inundado (GS)",
+            "Nave Azul inundad",
         ] {
             assert_eq!(localized_text(Locale::En, malformed), malformed);
         }
@@ -2189,6 +2223,60 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
             "Un vehículo quedó bajo el agua en (4, -9)."
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_named_vehicle_accident_headlines_late() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let aircraft = app
+            .world_mut()
+            .spawn(Text::new("Avión #42 se estrelló al aterrizar"))
+            .id();
+        let flooded = app.world_mut().spawn(Text::new("Nave Azul inundado")).id();
+        let malformed = app
+            .world_mut()
+            .spawn(Text::new("Avión (GS) se estrelló al aterrizar"))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(aircraft).unwrap().as_str(),
+            "Avión #42 crashed while landing"
+        );
+        assert_eq!(
+            app.world().get::<Text>(flooded).unwrap().as_str(),
+            "Nave Azul flooded"
+        );
+        assert_eq!(
+            app.world().get::<Text>(malformed).unwrap().as_str(),
+            "Avión (GS) se estrelló al aterrizar"
+        );
+
+        let late = app
+            .world_mut()
+            .spawn(Text::new("Avión #100 se estrelló al aterrizar"))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(late).unwrap().as_str(),
+            "Avión #100 crashed while landing"
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(aircraft).unwrap().as_str(),
+            "Avión #42 se estrelló al aterrizar"
+        );
+        assert_eq!(
+            app.world().get::<Text>(flooded).unwrap().as_str(),
+            "Nave Azul inundado"
         );
     }
 

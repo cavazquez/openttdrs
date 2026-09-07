@@ -160,6 +160,27 @@ impl AirportTileSpecDef {
         Some(views[idx % views.len()].clone())
     }
 
+    /// Layout `TileSeq` seleccionado por Action2 para esta tesela de
+    /// aeropuerto.
+    ///
+    /// `DrawNewAirportTile` no interpreta un `TileLayoutSpriteGroup` como
+    /// una vista plana: dibuja su suelo y entrega cada entrada BUILD al
+    /// compositor global. Una vez seleccionado el grupo, sus referencias
+    /// Action1 ya apuntan al primer sprite del set, por lo que el frame no se
+    /// reutiliza como desplazamiento dentro del set.
+    pub fn newgrf_tile_layout_runtime(
+        &self,
+        frame: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::ResolvedTileLayout> {
+        let _ = frame;
+        self.newgrf_runtime.as_ref()?.tile_layout_for_local_id_ctx(
+            u16::from(self.newgrf_local_id),
+            0,
+            ctx,
+        )
+    }
+
     /// Indica si el GRF instaló el callback `CBID_AIRPTILE_ANIMATION_NEXT_FRAME`.
     #[must_use]
     pub const fn has_animation_next_frame_callback(&self) -> bool {
@@ -257,4 +278,82 @@ pub fn resolve_airport_tile_piece_gfx(gfx: u16, catalog: &[AirportTileSpecDef]) 
         .iter()
         .find(|d| d.gfx.as_u16() == gfx)
         .map_or(0, |d| u8::try_from(d.subst_id.min(255)).unwrap_or(0))
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::newgrf_sprites::{
+        DecodedSprite, TileLayout, TileLayoutSpriteRef, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+
+    fn sprite(red: u8) -> DecodedSprite {
+        DecodedSprite {
+            width: 2,
+            height: 2,
+            x_offs: -1,
+            y_offs: -2,
+            rgba: [red, 0, 0, 255].repeat(4),
+            mask: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn airport_tile_layout_runtime_keeps_tile_seq_and_uses_first_action1_sprite() {
+        let mut runtime = TrainSpriteGraphics {
+            sets: vec![vec![sprite(1), sprite(2)], vec![sprite(3)]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 6,
+                set_id: 9,
+            }],
+            ..Default::default()
+        };
+        runtime.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    ..Default::default()
+                },
+                sequence: vec![TileLayoutSpriteRef {
+                    action1_set: Some(1),
+                    origin: [4, 5, 6],
+                    extent: [7, 8, 9],
+                    ..Default::default()
+                }],
+            },
+        );
+        let def = AirportTileSpecDef {
+            gfx: AirportTileGfxId(74),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            newgrf_local_id: 6,
+            newgrf_grfid: 1,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        let layout = def
+            .newgrf_tile_layout_runtime(11, &mut ctx)
+            .expect("AirportTile TileSeq");
+        assert!(layout.complete);
+        assert_eq!(layout.ground.expect("ground").sprite.rgba[0], 1);
+        assert_eq!(layout.sequence.len(), 1);
+        assert_eq!(layout.sequence[0].sprite.rgba[0], 3);
+        assert_eq!(layout.sequence[0].origin, [4, 5, 6]);
+        assert_eq!(layout.sequence[0].extent, [7, 8, 9]);
+    }
 }

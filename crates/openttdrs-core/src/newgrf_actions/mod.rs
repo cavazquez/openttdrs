@@ -6399,6 +6399,59 @@ mod tests {
         assert_eq!(resolve_airport_tile_draw_gfx(23, &cat), 23);
     }
 
+    /// Un `TileLayoutSpriteGroup` estático no activa ramas Action2
+    /// variacionales, pero no puede degradarse a una vista plana: el cliente
+    /// necesita conservar el grafo para dibujar ground + `TILE_SEQ`.
+    #[test]
+    fn airport_tiles_keep_static_tile_layout_graph_after_apply() {
+        use crate::newgrf_sprites::{Action2EvalCtx, build_grf_v2_feature_with_action2_chain};
+
+        let tile = build_action0_airport_tile_payload(0, 24, None, 0);
+        // `02 11 09 01`: un ground y un parent BUILD. Ambos sprites usan el
+        // set Action1 0 (`palette & 0x8000`); la línea conserva origin y
+        // extent para comprobar que no se pierde al aplicar Action0.
+        let mut layout = vec![0x02, ACTION0_FEATURE_AIRPORTTILES, 9, 1];
+        layout.extend_from_slice(&[0, 0, 0, 0x80]);
+        layout.extend_from_slice(&[0, 0, 0, 0x80, 1, 2, 3, 4, 5, 6]);
+        let bytes = build_grf_v2_feature_with_action2_chain(
+            &tile,
+            ACTION0_FEATURE_AIRPORTTILES,
+            0,
+            9,
+            &layout,
+            8,
+            8,
+            &sample_tile_indices(),
+            [b'A', b'L', 0, 1],
+            "airport-layout",
+        );
+        let dir = tempfile_dir_with("airport-layout.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("airport-layout.grf", 0x414C_0001));
+
+        apply_newgrf_airport_tiles(&mut state, &[&dir]);
+
+        let spec = state
+            .airport_tile_spec_catalog
+            .first()
+            .expect("AirportTile aplicado");
+        assert!(
+            spec.newgrf_runtime.is_some(),
+            "un TileLayout estático debe sobrevivir apply_newgrf_airport_tiles"
+        );
+        let mut ctx = Action2EvalCtx::default();
+        let resolved = spec
+            .newgrf_tile_layout_runtime(0, &mut ctx)
+            .expect("TileLayout AirportTile runtime");
+        assert!(resolved.complete);
+        assert!(resolved.ground.is_some());
+        assert_eq!(resolved.sequence.len(), 1);
+        assert_eq!(resolved.sequence[0].origin, [1, 2, 3]);
+        assert_eq!(resolved.sequence[0].extent, [4, 5, 6]);
+    }
+
     /// #231: Airport purchase (`0xFF`) + default group usables en picker/preview.
     #[test]
     fn airports_ac_purchase_default_groups() {

@@ -50,7 +50,12 @@ pub fn apply_newgrf_airport_tiles(state: &mut GameState, search_dirs: &[&Path]) 
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
             let preview = views.first().cloned();
-            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+            // Los AirportTiles estáticos pueden publicar solamente un
+            // `TileLayoutSpriteGroup`: no necesitan una rama Action2
+            // variacional, pero el renderer sí debe conservar el grafo para
+            // materializar suelo + TILE_SEQ. Tratarlo igual que stations,
+            // houses e industry tiles evita degradarlo a `subst_id`.
+            let newgrf_runtime = if gfx.needs_runtime_resolve() || gfx.has_tile_layouts() {
                 Some(Box::new(gfx.clone()))
             } else {
                 None

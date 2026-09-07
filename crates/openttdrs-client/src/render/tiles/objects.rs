@@ -3604,6 +3604,286 @@ pub(crate) fn spawn_transport_object_tile(
     );
 }
 
+/// Tipo sintético de caché para vistas y layouts Action3 de `AirportTile`.
+const AIRPORT_TILE_ACTION3_CACHE_TYPE: u8 = 0x11;
+
+/// Cada `AirportTile` tiene como máximo 256 slots Action1/`TileSeq`: el id
+/// global válido ya está acotado a `0..256`, así que reservar un bloque entero
+/// evita que el suelo y los BUILD de dos teselas se reutilicen en la caché.
+///
+/// `None` no es un error de parseo: deja que el caller use el fallback atómico
+/// si un catálogo externo llegó con un gfx o una secuencia fuera del contrato
+/// representable por la caché compacta.
+fn airport_tile_layout_cache_slot(gfx: u16, layer: usize) -> Option<u16> {
+    let layer = u16::try_from(layer).ok()?;
+    gfx.checked_mul(256)?.checked_add(layer)
+}
+
+fn airport_tile_layout_is_renderable(
+    gfx: u16,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+) -> bool {
+    if !layout.complete {
+        return false;
+    }
+    if layout.ground.is_some() && airport_tile_layout_cache_slot(gfx, 0).is_none() {
+        return false;
+    }
+    layout
+        .sequence
+        .iter()
+        .enumerate()
+        .all(|(index, _)| airport_tile_layout_cache_slot(gfx, index.saturating_add(1)).is_some())
+}
+
+/// Resuelve el `TileLayoutSpriteGroup` de un `AirportTile` con el mismo scope
+/// Action2 que usa su vista plana. OpenTTD pasa el frame, el layout padre y
+/// los vecinos al resolver antes de entregar el resultado a
+/// `AirportDrawTileLayout`; el contexto de core conserva esas variables.
+#[allow(clippy::too_many_arguments)]
+fn resolve_newgrf_airport_layout_for_tile(
+    def: &openttdrs_core::AirportTileSpecDef,
+    map: &Map,
+    stations: &[Station],
+    towns: &[openttdrs_core::Town],
+    ctx: &TileRenderContext,
+    catalog: &[openttdrs_core::AirportTileSpecDef],
+    climate: Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+) -> Option<(openttdrs_core::newgrf_sprites::ResolvedTileLayout, u32)> {
+    let mut action2 = openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns(
+        map, stations, towns, ctx.coord, catalog, def, climate,
+    );
+    action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+        newgrf_stack,
+        def.newgrf_grfid,
+    ));
+    let frame = usize::from(ctx.tile.map_or(0, |tile| tile.m7));
+    let layout = def.newgrf_tile_layout_runtime(frame, &mut action2)?;
+    // `ProcessRegisters` puede modificar STO/0x100 mientras resuelve el
+    // layout. El fingerprint posterior impide que una variante dinámica deje
+    // vivas la textura o la geometría de la evaluación anterior.
+    let runtime_fp = def.newgrf_runtime.as_ref().map_or(0, |_| {
+        runtime_fingerprint(&action2, vars::AIRPORT_TILE, false)
+    });
+    Some((layout, runtime_fp))
+}
+
+/// Emite el suelo de un `TileLayoutSpriteGroup` de aeropuerto. La fundación
+/// nivelada, cuando `CBID_AIRPTILE_DRAW_FOUNDATIONS` la conserva, recibe sólo
+/// este sprite como child; los BUILD siguen siendo parents independientes tal
+/// como hace `AirportDrawTileLayout` antes de `DrawNewGRFTileSeq`.
+#[allow(clippy::too_many_arguments)]
+fn spawn_newgrf_airport_layout_ground(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
+    gfx: u16,
+    runtime_fp: u32,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    cache: &mut crate::render::NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
+) -> bool {
+    if !airport_tile_layout_is_renderable(gfx, layout) {
+        return false;
+    }
+    let Some(ground) = layout.ground.as_ref() else {
+        // DODRAW=0 es un resultado completo: no volver al césped ni al
+        // `subst_id`, igual que `AirportDrawTileLayout`.
+        return true;
+    };
+    let Some(slot) = airport_tile_layout_cache_slot(gfx, 0) else {
+        return false;
+    };
+    let image = cache.handle_for_variant(
+        AIRPORT_TILE_ACTION3_CACHE_TYPE,
+        slot,
+        runtime_fp,
+        &ground.sprite,
+        images,
+    );
+    let position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(ground.sprite.x_offs),
+        f32::from(ground.sprite.y_offs),
+        f32::from(ground.sprite.width),
+        f32::from(ground.sprite.height),
+        base_z,
+        0.025,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    let sprite = tint_building_sprite(Sprite {
+        image,
+        color: Color::WHITE,
+        ..default()
+    });
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
+    true
+}
+
+/// Emite las entradas BUILD de `AirportDrawTileLayout`. Cada parent porta la
+/// caja `TILE_SEQ_LINE` y los children quedan anclados al último parent con
+/// offsets de pantalla, que es exactamente la distinción entre
+/// `AddSortableSpriteToDraw` y `AddChildSpriteScreen` en OpenTTD.
+#[allow(clippy::too_many_arguments)]
+fn spawn_newgrf_airport_layout_sequence(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    map_width: u32,
+    gfx: u16,
+    runtime_fp: u32,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    cache: &mut crate::render::NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
+) -> bool {
+    if !airport_tile_layout_is_renderable(gfx, layout) || layout.sequence.is_empty() {
+        return false;
+    }
+
+    let mut last_parent: Option<(Entity, Vec2)> = None;
+    let mut emitted = false;
+    for (index, layer) in layout.sequence.iter().enumerate() {
+        let Some(slot) = airport_tile_layout_cache_slot(gfx, index.saturating_add(1)) else {
+            return false;
+        };
+        let handle = cache.handle_for_variant(
+            AIRPORT_TILE_ACTION3_CACHE_TYPE,
+            slot,
+            runtime_fp,
+            &layer.sprite,
+            images,
+        );
+        let width = f32::from(layer.sprite.width);
+        let height = f32::from(layer.sprite.height);
+        let origin = crate::iso::RoadStopSeqGfx {
+            dx: f32::from(layer.origin[0]),
+            dy: f32::from(layer.origin[1]),
+            dz: if layer.is_parent() {
+                f32::from(layer.origin[2])
+            } else {
+                0.0
+            },
+            x_offs: f32::from(layer.sprite.x_offs),
+            y_offs: f32::from(layer.sprite.y_offs),
+            remap_x_adj: 0.0,
+        };
+        let layer_z = 0.05 + index as f32 * 0.0003;
+        let sprite = tint_building_sprite(Sprite {
+            image: handle,
+            color: Color::WHITE,
+            ..default()
+        });
+
+        if layer.is_parent() {
+            let position = road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                layer_z,
+                origin,
+                width,
+                height,
+            );
+            let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+            let sprite_id = u32::MAX.saturating_sub(u32::try_from(index).unwrap_or(u32::MAX));
+            let bounds = tile_seq_parent_sprite(
+                index as u64,
+                sprite_id,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                i32::from(layer.origin[0]),
+                i32::from(layer.origin[1]),
+                i32::from(layer.origin[2]),
+                i32::from(layer.extent[0]),
+                i32::from(layer.extent[1]),
+                i32::from(layer.extent[2]),
+            )
+            .bounds;
+            let entity = commands
+                .spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                    ViewportSortableParent {
+                        sprite_id,
+                        bounds,
+                        insertion_key: viewport_insertion_key(
+                            ctx.tx,
+                            ctx.ty,
+                            u8::try_from(index.saturating_add(2)).unwrap_or(u8::MAX),
+                        ),
+                        source_depth,
+                    },
+                ))
+                .id();
+            last_parent = Some((
+                entity,
+                Vec2::new(position.x - width / 2.0, position.y + height / 2.0),
+            ));
+        } else if let Some((parent, parent_top_left)) = last_parent {
+            let position = newgrf_road_stop_child_center(
+                parent_top_left,
+                layer.origin,
+                width,
+                height,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                layer_z,
+            );
+            let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                crate::render::ViewportSortableChild {
+                    parent,
+                    source_depth,
+                },
+            ));
+        } else {
+            // Un child huérfano es válido en el formato; OpenTTD lo entrega
+            // como sprite de suelo. Mantenerlo en el ancla de la tesela evita
+            // esconder una pieza visible de un GRF imperfecto.
+            let position = road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                layer_z,
+                origin,
+                width,
+                height,
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(position),
+            ));
+        }
+        emitted = true;
+    }
+    emitted
+}
+
 /// Emite el sprite `AirportTile` de un aeropuerto `NewGRF` cuando el layout
 /// de construcción conservó un gfx global por tesela. El mapa sigue llevando
 /// el `subst` vanilla en `m5` para FTA/compatibilidad, pero la imagen visible
@@ -3659,7 +3939,13 @@ fn spawn_newgrf_airport_tile(
     let (Some(cache), Some(images)) = (cache, images) else {
         return false;
     };
-    let image = cache.handle_for_variant(0x11, gfx, runtime_fp, &view, images);
+    let image = cache.handle_for_variant(
+        AIRPORT_TILE_ACTION3_CACHE_TYPE,
+        gfx,
+        runtime_fp,
+        &view,
+        images,
+    );
     WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
         "airport-newgrf-tile",
         "sortable",
@@ -3799,6 +4085,11 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             | TileKind::RailBridge
             | TileKind::RoadDepot
             | TileKind::RailDepot
+            // Un AirportTile NewGRF con TileLayout reemplaza el ground
+            // vanilla por su propio `DrawGroundSprite` (o DODRAW=0). El
+            // branch especializado decide después si debe reponer césped
+            // para el fallback Action1/3 o vanilla.
+            | TileKind::Airport
     ) {
         let ground = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
         spawn_ground_sprite(commands, &ground, Color::WHITE, ctx, slope_half_ground);
@@ -4305,15 +4596,109 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             // A newly built NewGRF airport stores the vanilla `subst` in
             // `m5`, so use the per-tile global gfx retained on its Station
             // before falling back to the vanilla AirportPiece renderer.
-            if let Some(gfx) = stations.iter().find_map(|station| {
+            let newgrf_gfx = stations.iter().find_map(|station| {
                 station
                     .airport_tile_gfx
                     .iter()
                     .find(|(coord, _)| *coord == ctx.coord)
                     .map(|(_, gfx)| *gfx)
-            }) && let Some(def) = airport_tile_catalog
-                .iter()
-                .find(|candidate| candidate.gfx.as_u16() == gfx && candidate.has_newgrf_sprites())
+            });
+
+            // `DrawNewAirportTile` acepta un TileLayout completo antes de
+            // regresar al sustituto vanilla. Su suelo sustituye el rombo de
+            // césped y sus BUILD entran al sorter global como parents/children.
+            // Resolverlo antes de emitir el fallback evita que el grass se
+            // transparente indebidamente detrás de un custom ground.
+            if let Some(gfx) = newgrf_gfx
+                && let Some(def) = airport_tile_catalog.iter().find(|candidate| {
+                    candidate.gfx.as_u16() == gfx && candidate.has_newgrf_sprites()
+                })
+                && let (Some(cache), Some(images)) =
+                    (action5_sprites.as_deref_mut(), images.as_deref_mut())
+                && let Some((layout, runtime_fp)) = resolve_newgrf_airport_layout_for_tile(
+                    def,
+                    map,
+                    stations,
+                    towns,
+                    ctx,
+                    airport_tile_catalog,
+                    climate,
+                    newgrf_stack,
+                )
+                && airport_tile_layout_is_renderable(gfx, &layout)
+            {
+                let draws_foundation = tileh != 0
+                    && airport_tile_draws_default_foundation(
+                        def,
+                        map,
+                        stations,
+                        towns,
+                        ctx.coord,
+                        airport_tile_catalog,
+                        climate,
+                        newgrf_stack,
+                    );
+                let (custom_base_z, child_parent) = if draws_foundation {
+                    let foundation = spawn_forced_leveled_foundation_with_child_parent(
+                        commands,
+                        map,
+                        dims,
+                        assets,
+                        ctx,
+                        tileh,
+                        "airport",
+                        "airport-foundation",
+                        foundation_newgrf,
+                        Some(&mut *cache),
+                        Some(&mut *images),
+                    );
+                    (foundation.surface_base_z, foundation.child_parent)
+                } else {
+                    (base_z, None)
+                };
+                let ground_spawned = spawn_newgrf_airport_layout_ground(
+                    commands,
+                    ctx,
+                    custom_base_z,
+                    dims.0,
+                    child_parent,
+                    gfx,
+                    runtime_fp,
+                    &layout,
+                    cache,
+                    images,
+                );
+                // La comprobación de renderabilidad anterior hace que este
+                // resultado sea verdadero; mantener la guarda evita mezclar
+                // una fundación ya emitida con el fallback si un catálogo
+                // externo rompe ese invariante.
+                if !ground_spawned {
+                    return;
+                }
+                let _ = spawn_newgrf_airport_layout_sequence(
+                    commands,
+                    ctx,
+                    custom_base_z,
+                    dims.0,
+                    gfx,
+                    runtime_fp,
+                    &layout,
+                    cache,
+                    images,
+                );
+                return;
+            }
+
+            // El fallback plano Action1/3 y la ruta vanilla sí se apoyan en
+            // el ground normal que la pasarela unificada emite para una
+            // estación. Los layouts completos ya retornaron arriba.
+            let ground = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
+            spawn_ground_sprite(commands, &ground, Color::WHITE, ctx, slope_half_ground);
+
+            if let Some(gfx) = newgrf_gfx
+                && let Some(def) = airport_tile_catalog.iter().find(|candidate| {
+                    candidate.gfx.as_u16() == gfx && candidate.has_newgrf_sprites()
+                })
             {
                 let draws_foundation = tileh != 0
                     && airport_tile_draws_default_foundation(

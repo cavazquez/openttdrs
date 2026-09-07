@@ -3153,7 +3153,212 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
 }
 
 #[test]
+fn newgrf_airport_tile_layout_emits_ground_sortable_parent_and_child() {
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let coord = TileCoord::new(2, 2);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Airport,
+            mapt: 0x50,
+            m5: 24,
+            ..tile_template()
+        },
+    )
+    .expect("newgrf airport TileLayout tile");
+
+    let ground = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: [240, 10, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let parent = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -3,
+        y_offs: -4,
+        rgba: [10, 240, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let child = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -5,
+        y_offs: -6,
+        rgba: [10, 10, 240, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![
+            vec![ground.clone()],
+            vec![parent.clone()],
+            vec![child.clone()],
+        ],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 2,
+            set_id: 9,
+        }],
+        ..Default::default()
+    };
+    runtime.tile_layouts.insert(
+        9,
+        TileLayout {
+            ground: TileLayoutSpriteRef {
+                action1_set: Some(0),
+                ..Default::default()
+            },
+            sequence: vec![
+                TileLayoutSpriteRef {
+                    action1_set: Some(1),
+                    origin: [1, 2, 3],
+                    extent: [4, 5, 6],
+                    ..Default::default()
+                },
+                TileLayoutSpriteRef {
+                    action1_set: Some(2),
+                    origin: [7, -4, i8::MIN],
+                    ..Default::default()
+                },
+            ],
+        },
+    );
+    let gfx = 74;
+    let airport_tile = AirportTileSpecDef {
+        gfx: AirportTileGfxId(gfx),
+        subst_id: 24,
+        from_newgrf: true,
+        callback_mask: 0,
+        animation_frames: 0,
+        animation_status: 0xFF,
+        animation_speed: 2,
+        animation_triggers: 0,
+        animation_special_flags: 0,
+        newgrf_local_id: 2,
+        newgrf_grfid: 0x4150_544C,
+        newgrf_grf_version: 0,
+        newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_runtime: Some(Box::new(runtime)),
+    };
+    let mut station = Station::new_with_kind(coord, StopKind::Airport);
+    station.airport_newgrf_spec_id = Some(10);
+    station.airport_tiles.push(coord);
+    station.airport_tile_gfx.push((coord, gfx));
+    let stations = vec![station];
+    let catalog = vec![airport_tile];
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfAction5SpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: ResMut<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &stations,
+                    &[],
+                    &catalog,
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &[],
+                    None,
+                    &[],
+                    Some(&mut cache),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                );
+            },
+        )
+        .expect("AirportTile TileLayout spawn");
+
+    let sprites: Vec<_> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .map(|sprite| sprite.image.clone())
+        .collect();
+    let parent_sprites: Vec<_> = world
+        .query::<(Entity, &ViewportSortableParent, &Sprite)>()
+        .iter(&world)
+        .map(|(entity, parent, sprite)| (entity, *parent, sprite.image.clone()))
+        .collect();
+    let child_sprites: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Sprite)>()
+        .iter(&world)
+        .map(|(child, sprite)| (*child, sprite.image.clone()))
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let has_rgba = |handle: &Handle<Image>, rgba: &[u8]| {
+        images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba)
+    };
+    assert!(
+        sprites
+            .iter()
+            .any(|handle| has_rgba(handle, [240, 10, 10, 255].repeat(4).as_slice())),
+        "el ground del TileLayout debe reemplazar el fallback"
+    );
+    let (parent_entity, parent_component, _) = parent_sprites
+        .iter()
+        .find(|(_, _, handle)| has_rgba(handle, [10, 240, 10, 255].repeat(4).as_slice()))
+        .expect("parent TileSeq custom");
+    assert_eq!(
+        parent_component.bounds,
+        crate::render::viewport_sort::ParentSpriteBounds::new(33, 34, 3, 36, 38, 8),
+        "el parent conserva el prisma TILE_SEQ_LINE inclusivo"
+    );
+    assert_eq!(
+        parent_component.insertion_key,
+        crate::render::viewport_insertion_key(2, 2, 2),
+        "el parent entra en el mismo ordinal BUILD del compositor"
+    );
+    assert!(
+        child_sprites.iter().any(|(child_component, handle)| {
+            child_component.parent == *parent_entity
+                && has_rgba(handle, [10, 10, 240, 255].repeat(4).as_slice())
+        }),
+        "el child TileSeq debe permanecer unido al parent anterior"
+    );
+}
+
+#[test]
 fn newgrf_airport_draw_foundations_callback_controls_slope_foundation() {
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
     for (callback_value, should_draw_foundation) in [(0_u8, false), (1_u8, true)] {
         let assets = boot_assets_app();
         let mut map = Map::new_flat(4, 4, 0);
@@ -3183,6 +3388,24 @@ fn newgrf_airport_draw_foundations_callback_controls_slope_foundation() {
         };
         let mut runtime = callback_literal_runtime(3, callback_value);
         runtime.sets = vec![vec![view.clone()]];
+        // El callback CB150 y el layout residen en el mismo grupo Action3:
+        // la fundación sólo combina el ground; el BUILD debe continuar como
+        // parent independiente del compositor.
+        runtime.tile_layouts.insert(
+            0,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    ..Default::default()
+                },
+                sequence: vec![TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    origin: [1, 2, 3],
+                    extent: [4, 5, 6],
+                    ..Default::default()
+                }],
+            },
+        );
         let gfx = 175;
         let airport_tile = AirportTileSpecDef {
             gfx: AirportTileGfxId(gfx),
@@ -3280,6 +3503,15 @@ fn newgrf_airport_draw_foundations_callback_controls_slope_foundation() {
             } else {
                 "suprimir"
             }
+        );
+        assert_eq!(
+            world
+                .query::<&ViewportSortableParent>()
+                .iter(&world)
+                .filter(|parent| parent.sprite_id == u32::MAX)
+                .count(),
+            1,
+            "el BUILD de AirportTile conserva un parent TILE_SEQ separado de la fundación"
         );
 
         let custom_sprite_found = world

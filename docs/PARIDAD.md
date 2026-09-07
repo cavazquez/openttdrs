@@ -399,6 +399,14 @@ parámetros parent para que no reutilice sprites entre aeropuertos distintos.
 La FTA propia, paletas, foundations/rotaciones y sonidos siguen abiertos en
 #326/#329; ver [#503](parity/newgrf-airport-parent-badges-503.md).
 
+Actualización #504 (2026-09-07): el mismo `AirportScope` padre ahora expone
+`F0` (facilities de estación) y `FA` (fecha relativa de construcción saturada
+a `WORD`) antes de la delegación residual de StationScope. `7C` ya conserva el
+PSA de aeropuerto; `parent_vars` ya participa en el fingerprint. Ver
+[#504](parity/newgrf-airport-parent-scope-504.md). Permanecen fuera la
+delegación StationScope completa, FTA, paletas, foundations/rotaciones y
+sonidos de #326/#329.
+
 Actualización #329-CARGO-CTT-069 (2026-09-04, `b80b8362`): `CB3D`
 (`IndustryRefuseCargo`) resuelve labels de cargas custom contra el catálogo
 `CargoSpec` activo. La ruta cubre tanto la descarga de estaciones como el

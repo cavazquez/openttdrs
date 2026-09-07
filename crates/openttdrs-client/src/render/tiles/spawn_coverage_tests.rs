@@ -3043,18 +3043,37 @@ fn built_newgrf_airport_uses_parent_badge_action2_sprite() {
             local_id: 0,
             set_id: 7,
         }],
-        action2_to_action1: [(0, 0), (1, 1)].into_iter().collect(),
+        action2_to_action1: [(0, 0), (1, 1), (9, 1)].into_iter().collect(),
         ..Default::default()
     };
     runtime.action2_var.insert(
         7,
         Action2VarEntry {
             first: Action2VarTerm {
+                variable: 0xF0,
+                param: None,
+                adjust: Action2VarAdjust {
+                    // La primera rama exige que el renderer construya el
+                    // AirportScope padre con las facilities de la estación.
+                    shift: 0x80,
+                    and_mask: u32::MAX,
+                    ..Default::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: vec![(8, 1 << 3, 1 << 3)],
+            default: 9,
+        },
+    );
+    runtime.action2_var.insert(
+        8,
+        Action2VarEntry {
+            first: Action2VarTerm {
                 variable: 0x7A,
                 param: Some(0),
                 adjust: Action2VarAdjust {
-                    // El renderer debe conservar el marker de los grupos
-                    // Action2 parent y entregar AirportScope 7A al tile.
+                    // Tras F0, el renderer debe conservar el marker de los
+                    // grupos Action2 parent y entregar AirportScope 7A.
                     shift: 0x80,
                     and_mask: u32::MAX,
                     ..Default::default()
@@ -3177,7 +3196,7 @@ fn built_newgrf_airport_uses_parent_badge_action2_sprite() {
         sprite_handles.iter().any(|handle| {
             images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba.as_slice())
         }),
-        "el aeropuerto construido debe reevaluar Action2 con el badge del AirportScope padre"
+        "el aeropuerto construido debe reevaluar Action2 con F0 y el badge del AirportScope padre"
     );
 }
 

@@ -141,6 +141,12 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(
     // Parent scope: AirportScopeResolver var 40 = selected layout.
     ctx.parent_vars
         .insert(0x40, u32::from(station.airport_layout));
+    // `AirportScopeResolver` expone las variables explícitas de estación
+    // antes de delegar el resto a `Station::GetNewGRFVariable`.
+    ctx.parent_vars
+        .insert(0xF0, station.stop_kind.facilities_mask());
+    ctx.parent_vars
+        .insert(0xFA, station.newgrf_build_date_value());
 
     // El padre vanilla existe y simplemente no tiene badges. Un id NewGRF
     // ausente del catálogo activo, en cambio, equivale a un spec que OpenTTD
@@ -737,6 +743,126 @@ mod tests {
                 .newgrf_view_runtime(0, &mut ctx_without_badge)
                 .map(|sprite| sprite.rgba[0]),
             Some(0xB2)
+        );
+    }
+
+    #[test]
+    fn airport_tile_parent_scope_exposes_facilities_and_build_date() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let coord = TileCoord::new(1, 1);
+        let mut tile = map.get(coord).expect("tile");
+        tile.kind = TileKind::Airport;
+        map.set_tile(coord, tile).expect("airport tile");
+
+        let mut station = Station::new_with_kind(coord, StopKind::Airport);
+        station.airport_tiles = vec![coord];
+        station.build_date = crate::station::STATION_BUILD_DATE_DEFAULT + 123;
+        station.newgrf_persistent_regs.insert(7, 0xCAFE_BABE);
+
+        let mut runtime = TrainSpriteGraphics {
+            assigns: vec![TrainSpriteAssign {
+                local_id: 3,
+                set_id: 7,
+            }],
+            ..Default::default()
+        };
+        // El primer grupo exige la facility Airport. Si coincide, el segundo
+        // devuelve la fecha de construcción del mismo scope padre.
+        runtime.action2_var.insert(
+            7,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0xF0,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0x80,
+                        and_mask: u32::MAX,
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(
+                    8,
+                    StopKind::Airport.facilities_mask(),
+                    StopKind::Airport.facilities_mask(),
+                )],
+                default: 9,
+            },
+        );
+        runtime.action2_var.insert(
+            8,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0xFA,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0x80,
+                        and_mask: u32::MAX,
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        runtime.action2_var.insert(
+            9,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: 0,
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        let current = AirportTileSpecDef {
+            gfx: AirportTileGfxId(74),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            newgrf_local_id: 3,
+            newgrf_grfid: 0xAABB_CCDD,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+        let mut ctx = action2_eval_ctx_for_airport_tile(
+            &map,
+            &[station],
+            coord,
+            std::slice::from_ref(&current),
+            &current,
+            Climate::Temperate,
+        );
+        assert_eq!(
+            ctx.parent_vars.get(&0xF0),
+            Some(&StopKind::Airport.facilities_mask())
+        );
+        assert_eq!(ctx.parent_vars.get(&0xFA), Some(&123));
+        assert_eq!(ctx.parent_persistent_registers.get(&7), Some(&0xCAFE_BABE));
+        assert_eq!(
+            current
+                .newgrf_runtime
+                .as_ref()
+                .expect("runtime")
+                .resolve_callback_ctx(current.newgrf_local_id, 0, 0, 0, &mut ctx),
+            123
         );
     }
 }

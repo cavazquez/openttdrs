@@ -502,6 +502,15 @@ La evidencia y los límites están en
 Esto no cierra #326 ni #329: FTA, paletas, foundations/rotaciones y sonidos
 siguen fuera de este subtramo.
 
+Actualización #504-AIRPORT-PARENT-STATION-VARS (2026-09-07): el
+`AirportScope` padre publica ahora `F0` (facilities) y `FA` (fecha relativa
+`WORD`) con la misma escala de OpenTTD; `7C` ya conserva el PSA de estación.
+La prueba core encadena `F0` → `FA` y la de renderer ECS exige `F0` antes de
+resolver el badge padre. La evidencia y los límites están en
+[newgrf-airport-parent-scope-504.md](newgrf-airport-parent-scope-504.md).
+No se declara completa la delegación de `Station::GetNewGRFVariable` ni los
+residuales FTA/raster de #326/#329.
+
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. `d9b0537c` limita el sorter runtime a la región relevante del viewport y excluye ocultos; el corte actual incorpora el `TileLayoutSpriteGroup` de AirportTile: conserva layouts estáticos, sustituye ground, emite BUILD como `TILE_SEQ_LINE` parents/children y combina únicamente el ground con la fundación. La evidencia cuantitativa vive sólo en `PARIDAD.md`. Foundations Action5/rotaciones de aeropuertos, sprite-stack y el orden completo de framebuffer siguen sin equivalencia global. | Contrastar la traza scoped nativa/candidata para elegir la primera familia visible restante; después verificar `0,12×`, `0,25×`, `0,50×`, `1×` y los seis zooms si cambia viewport, culling u overview. |

@@ -578,6 +578,12 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         }
         "La recesión ha terminado" => "The recession has ended",
         "La economía vuelve a la normalidad." => "The economy returns to normal.",
+        "OVNI pequeño avistado" => "Small UFO sighted",
+        "OVNI enorme avistado" => "Large UFO sighted",
+        "Accidente aéreo" => "Aircraft accident",
+        "Accidente de helicóptero" => "Helicopter accident",
+        "Submarino a la deriva" => "Submarine adrift",
+        "Hundimiento minero" => "Mine subsidence",
         // Errores de comandos: se generan durante la partida y por eso no
         // pasan por un constructor de ventana que pueda traducirlos al crear
         // el HUD. Mantener sus claves aquí permite que el feedback se
@@ -908,6 +914,25 @@ mod tests {
     }
 
     #[test]
+    fn catalog_translates_static_disaster_headlines_without_dynamic_bodies() {
+        for (spanish, english) in [
+            ("OVNI pequeño avistado", "Small UFO sighted"),
+            ("OVNI enorme avistado", "Large UFO sighted"),
+            ("Accidente aéreo", "Aircraft accident"),
+            ("Accidente de helicóptero", "Helicopter accident"),
+            ("Submarino a la deriva", "Submarine adrift"),
+            ("Hundimiento minero", "Mine subsidence"),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        assert_eq!(
+            localized_text(Locale::En, "Un avión se estrella cerca de (4, 9)."),
+            "Un avión se estrella cerca de (4, 9)."
+        );
+    }
+
+    #[test]
     fn catalog_translates_display_options_and_transparency_categories() {
         for (spanish, english) in [
             ("Nombres de pueblos", "Town names"),
@@ -1106,6 +1131,41 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
             "La demanda de carga y la producción industrial se reducirán."
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_disaster_headline_but_not_body() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let headline = app
+            .world_mut()
+            .spawn(Text::new("Accidente de helicóptero"))
+            .id();
+        let body = app
+            .world_mut()
+            .spawn(Text::new("Un helicóptero se estrella en (8, 11)."))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Helicopter accident"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Un helicóptero se estrella en (8, 11)."
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Accidente de helicóptero"
         );
     }
 

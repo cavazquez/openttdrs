@@ -120,9 +120,22 @@ RNG e intentos. No se cierra #499: aún falta la fundación aleatoria posterior
 a 1960 y su oráculo temporal/RNG; el detalle canónico queda sólo en
 `random-map-issues.md`.
 
-Actualizado el 2026-09-07: RMAP-158 es una etapa parcial publicada sobre el
-ciclo Oil Rig; los gates continúan siendo obligatorios para cada etapa
-posterior y ningún issue padre se considera cerrado por esta cobertura.
+RMAP-159 / #500 completa el estado persistente previo a esa fundación: `IBLD`
+(`wanted_inds` 16.16) e `ITBL` (las 240 filas nativas con probabilidad,
+mínimo, objetivo y backoff) entran al modelo, JSON v28 y lectura/escritura SAV.
+El selector puro replica `GetIndustryGamePlayProbability` vanilla, incluido
+Oil Rig temperate desde 1960 con peso 6 y Oil Wells hasta 1950; `SetupTargetCount`
+no reconsume RNG cuando la tabla no cambió. También quedan cubiertos el paso
+mensual `0x38000/(10*12)`, la acumulación diaria `ECMY` y la escala 64²/256²/512².
+El exportador emite las 240 filas y `OpenTTD` dedicated cargó el SAV rico
+canónico que las contiene. Esto no ejecuta aún `Chance16`, `TryBuildNewIndustry`,
+`PlaceIndustry`, callbacks NewGRF ni la traza temporal: #499/RMAP-158 y los
+padres continúan abiertos para esa ejecución.
+
+Actualizado el 2026-09-07: RMAP-159/#500 es un sub-issue cerrado de
+persistencia y selección pura; los gates continúan siendo obligatorios para
+cada etapa posterior y ningún issue padre se considera cerrado por esta
+cobertura.
 
 Reparación #347 validada (2026-09-04): las casas sin PNG suelto se recortan
 del atlas distribuido y conservan la misma paleta; las páginas se decodifican

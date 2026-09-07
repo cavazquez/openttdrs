@@ -20,6 +20,7 @@ pub(super) fn migrate_loaded_state(
             }
             3 => migrate_state_v3_to_v4(&mut state),
             4 | 6 | 7 | 8 | 9 | 15 | 24 | 26 => {}
+            27 => migrate_state_v27_to_v28(&mut state),
             25 => migrate_state_v25_to_v26(&mut state),
             5 => migrate_state_v5_to_v6(&mut state),
             10 => migrate_state_v10_to_v11(&mut state),
@@ -44,6 +45,11 @@ pub(super) fn migrate_loaded_state(
     state.rebuild_station_flows();
     state.sanitize_all_vehicle_orders();
     Ok(state)
+}
+
+/// v28: los JSON anteriores no llevaban el vector fijo de `ITBL`.
+fn migrate_state_v27_to_v28(state: &mut GameState) {
+    state.industry_builder.ensure_type_count();
 }
 
 /// v26: `max_loan` anterior era sólo el valor efectivo. Si se aparta del

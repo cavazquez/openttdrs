@@ -44,7 +44,8 @@ pub use io::{load, load_from_str, save};
 /// (`CompanyEconomy.max_loan_override`); migra el valor único de JSON antiguo.
 /// v27: completa el último slot custom de cargo (`CargoType` 63) y acepta
 /// arrays propios de 32 slots al deserializar estados anteriores.
-pub const CURRENT_SAVE_VERSION: u32 = 27;
+/// v28: estado persistente del planificador de industrias (`IBLD`/`ITBL`).
+pub const CURRENT_SAVE_VERSION: u32 = 28;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 

@@ -40,6 +40,7 @@ pub mod ground_crash;
 pub mod gs;
 pub mod house_spec;
 pub mod industry;
+pub mod industry_builder;
 pub mod industry_spec;
 pub mod industry_tile;
 pub mod map;
@@ -323,6 +324,11 @@ pub use industry::{
     change_industry_production, industry_produce_period_ticks, remove_closed_industries,
     remove_closed_industries_with_neutral_stations, transport_industry_goods,
     transport_industry_goods_with_settings,
+};
+pub use industry_builder::{
+    INDUSTRY_BUILD_TYPE_COUNT, INDUSTRY_DAILY_CHANGE_DAYS, IndustryBuildData,
+    IndustryTypeBuildData, NEW_INDS_PER_MONTH, advance_industry_daily_change_counter,
+    industry_daily_increment,
 };
 pub use industry_spec::{
     INDUSTRY_BEHAVIOUR_CARGO_TYPES_UNLIMITED_MASK, INDUSTRY_BEHAVIOUR_CUT_TREES_MASK,

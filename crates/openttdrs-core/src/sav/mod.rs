@@ -19,6 +19,7 @@ mod entities;
 mod fleet;
 pub(crate) mod house_population_generated;
 mod import;
+mod industry_builder;
 mod landscape;
 mod newgrf;
 mod settings;
@@ -134,6 +135,10 @@ pub(crate) struct SavTablePassthrough {
     pub(crate) city_semantic_records: Vec<Vec<u8>>,
     pub(crate) indy_chunk: Option<SavOpaqueChunk>,
     pub(crate) indy_semantic_records: Vec<Vec<u8>>,
+    pub(crate) ibld_chunk: Option<SavOpaqueChunk>,
+    pub(crate) ibld_semantic_records: Vec<Vec<u8>>,
+    pub(crate) itbl_chunk: Option<SavOpaqueChunk>,
+    pub(crate) itbl_semantic_records: Vec<Vec<u8>>,
     pub(crate) pats_chunk: Option<SavOpaqueChunk>,
     pub(crate) pats_semantic_records: Vec<Vec<u8>>,
     pub(crate) ecmy_chunk: Option<SavOpaqueChunk>,
@@ -165,9 +170,9 @@ pub(crate) struct SavTablePassthrough {
 /// interpretar sus campos.
 const REBUILT_CHUNKS: &[[u8; 4]] = &[
     *b"MAPS", *b"MAPT", *b"MAPH", *b"MAPO", *b"MAP2", *b"M3LO", *b"M3HI", *b"MAP5", *b"MAPE",
-    *b"MAP7", *b"MAP8", *b"STNN", *b"CITY", *b"INDY", *b"ORDL", *b"ORDR", *b"VEHS", *b"LGRP",
-    *b"LGRJ", *b"LGRS", *b"PATS", *b"ECMY", *b"CAPY", *b"GRPS", *b"ERNW", *b"NGRF", *b"DATE",
-    *b"PLYR",
+    *b"MAP7", *b"MAP8", *b"STNN", *b"CITY", *b"INDY", *b"IBLD", *b"ITBL", *b"ORDL", *b"ORDR",
+    *b"VEHS", *b"LGRP", *b"LGRJ", *b"LGRS", *b"PATS", *b"ECMY", *b"CAPY", *b"GRPS", *b"ERNW",
+    *b"NGRF", *b"DATE", *b"PLYR",
 ];
 
 /// Conserva los chunks nativos cuyo contenido todavía no tiene un modelo de
@@ -353,6 +358,8 @@ pub struct SavGame {
     pub recessions_enabled: bool,
     /// Estado económico global del chunk `ECMY`.
     pub global_economy: crate::economy::GlobalEconomy,
+    /// Planificador de fundación de industrias (`IBLD`/`ITBL`).
+    pub industry_builder: crate::industry_builder::IndustryBuildData,
     /// Grupos de vehículos del chunk `GRPS` (nombres/índices básicos).
     pub vehicle_groups: Vec<crate::vehicle_group::VehicleGroup>,
     /// Reglas de autoreemplazo del chunk `ERNW`.
@@ -382,6 +389,10 @@ pub struct SavGame {
     /// Cuerpo original de `INDY`, separado de `opaque_chunks` por ser una
     /// tabla reconstruida semánticamente.
     pub(crate) indy_raw_chunk: Option<SavOpaqueChunk>,
+    /// Cuerpo original de `IBLD`, separado para conservar campos futuros.
+    pub(crate) ibld_raw_chunk: Option<SavOpaqueChunk>,
+    /// Cuerpo original de `ITBL`, separado para conservar campos futuros.
+    pub(crate) itbl_raw_chunk: Option<SavOpaqueChunk>,
     /// Cuerpo original de `PATS`, separado para conservar ajustes desconocidos.
     pub(crate) pats_raw_chunk: Option<SavOpaqueChunk>,
     /// Cuerpo original de `ECMY`, separado para conservar contadores futuros.
@@ -461,6 +472,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let mut global_economy = economy::global_economy_from_chunks(&chunk_list);
     global_economy.inflation_enabled = parsed_settings.inflation_enabled;
     global_economy.recessions_enabled = parsed_settings.recessions_enabled;
+    let industry_builder = industry_builder::industry_builder_from_chunks(&chunk_list);
     let vehicle_groups = fleet::vehicle_groups_from_chunks(&chunk_list);
     let mut autoreplace_rules = fleet::autoreplace_rules_from_chunks(&chunk_list);
     fleet::assign_autoreplace_owners(&mut autoreplace_rules, &companies);
@@ -488,6 +500,16 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         body: chunk.body.clone(),
     });
     let indy_raw_chunk = chunks::find_chunk(&chunk_list, "INDY").map(|chunk| SavOpaqueChunk {
+        name: chunk.name,
+        ch_type: chunk.ch_type,
+        body: chunk.body.clone(),
+    });
+    let ibld_raw_chunk = chunks::find_chunk(&chunk_list, "IBLD").map(|chunk| SavOpaqueChunk {
+        name: chunk.name,
+        ch_type: chunk.ch_type,
+        body: chunk.body.clone(),
+    });
+    let itbl_raw_chunk = chunks::find_chunk(&chunk_list, "ITBL").map(|chunk| SavOpaqueChunk {
         name: chunk.name,
         ch_type: chunk.ch_type,
         body: chunk.body.clone(),
@@ -591,6 +613,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         inflation_enabled: parsed_settings.inflation_enabled,
         recessions_enabled: parsed_settings.recessions_enabled,
         global_economy,
+        industry_builder,
         vehicle_groups,
         autoreplace_rules,
         newgrf_stack,
@@ -601,6 +624,8 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         stnn_raw_chunk,
         city_raw_chunk,
         indy_raw_chunk,
+        ibld_raw_chunk,
+        itbl_raw_chunk,
         pats_raw_chunk,
         ecmy_raw_chunk,
         capy_raw_chunk,
@@ -1105,6 +1130,8 @@ impl GameState {
         let stnn_raw_chunk = sav.stnn_raw_chunk.take();
         let city_raw_chunk = sav.city_raw_chunk.take();
         let indy_raw_chunk = sav.indy_raw_chunk.take();
+        let ibld_raw_chunk = sav.ibld_raw_chunk.take();
+        let itbl_raw_chunk = sav.itbl_raw_chunk.take();
         let pats_raw_chunk = sav.pats_raw_chunk.take();
         let ecmy_raw_chunk = sav.ecmy_raw_chunk.take();
         let capy_raw_chunk = sav.capy_raw_chunk.take();
@@ -1140,6 +1167,8 @@ impl GameState {
         state.global_economy = sav.global_economy;
         state.global_economy.inflation_enabled = sav.inflation_enabled;
         state.global_economy.recessions_enabled = sav.recessions_enabled;
+        state.industry_builder = sav.industry_builder;
+        state.industry_builder.ensure_type_count();
         state.sync_scaled_max_loan();
         state.cargo_payments = sav.cargo_payments;
         state.construction = sav.construction;
@@ -2009,6 +2038,8 @@ impl GameState {
             || stnn_raw_chunk.is_some()
             || city_raw_chunk.is_some()
             || indy_raw_chunk.is_some()
+            || ibld_raw_chunk.is_some()
+            || itbl_raw_chunk.is_some()
             || pats_raw_chunk.is_some()
             || ecmy_raw_chunk.is_some()
             || capy_raw_chunk.is_some()
@@ -2032,6 +2063,10 @@ impl GameState {
                 city_semantic_records: records.city,
                 indy_chunk: indy_raw_chunk,
                 indy_semantic_records: records.indy,
+                ibld_chunk: ibld_raw_chunk,
+                ibld_semantic_records: records.ibld,
+                itbl_chunk: itbl_raw_chunk,
+                itbl_semantic_records: records.itbl,
                 pats_chunk: pats_raw_chunk,
                 pats_semantic_records: records.pats,
                 ecmy_chunk: ecmy_raw_chunk,
@@ -2228,6 +2263,7 @@ mod tests {
             inflation_enabled: true,
             recessions_enabled: false,
             global_economy: crate::economy::GlobalEconomy::new(),
+            industry_builder: crate::industry_builder::IndustryBuildData::new(),
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),
             newgrf_stack: Vec::new(),
@@ -2238,6 +2274,8 @@ mod tests {
             stnn_raw_chunk: None,
             city_raw_chunk: None,
             indy_raw_chunk: None,
+            ibld_raw_chunk: None,
+            itbl_raw_chunk: None,
             pats_raw_chunk: None,
             ecmy_raw_chunk: None,
             capy_raw_chunk: None,
@@ -3546,6 +3584,7 @@ mod tests {
             inflation_enabled: true,
             recessions_enabled: false,
             global_economy: crate::economy::GlobalEconomy::new(),
+            industry_builder: crate::industry_builder::IndustryBuildData::new(),
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),
             newgrf_stack: Vec::new(),
@@ -3556,6 +3595,8 @@ mod tests {
             stnn_raw_chunk: None,
             city_raw_chunk: None,
             indy_raw_chunk: None,
+            ibld_raw_chunk: None,
+            itbl_raw_chunk: None,
             pats_raw_chunk: None,
             ecmy_raw_chunk: None,
             capy_raw_chunk: None,

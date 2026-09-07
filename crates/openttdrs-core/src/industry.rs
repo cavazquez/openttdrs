@@ -384,6 +384,83 @@ impl IndustrySpec {
         }
     }
 
+    /// Probabilidad base `appear_ingame` de `build_industry.h` para una
+    /// partida ya iniciada (`GetIndustryGamePlayProbability`).
+    ///
+    /// El valor aún no incorpora callbacks `NewGRF`, disponibilidad dinámica ni
+    /// dificultad `FundedOnly`; esos filtros pertenecen al constructor
+    /// persistente. Sí conserva los gates vanilla `Before1950` de `OilWells` y
+    /// `After1960` de `OilRig`, porque cambian la tabla de pesos antes de que se
+    /// haga cualquier sorteo de `SetupTargetCount`.
+    #[must_use]
+    pub const fn gameplay_probability(self, climate: Climate, calendar_year: u32) -> u8 {
+        let probability = match climate {
+            Climate::Temperate => match self {
+                Self::CoalMine
+                | Self::PowerStation
+                | Self::Sawmill
+                | Self::OilRefinery
+                | Self::Factory
+                | Self::SteelMill
+                | Self::Farm
+                | Self::IronOreMine => 2,
+                Self::Forest => 3,
+                Self::OilRig => 6,
+                Self::OilWells => 5,
+                Self::Bank => 7,
+                _ => 0,
+            },
+            Climate::SubArctic => match self {
+                Self::PowerStation
+                | Self::FoodProcessingPlant
+                | Self::PrintingWorks
+                | Self::PaperMill
+                | Self::OilRefinery => 2,
+                Self::Forest | Self::Farm => 4,
+                Self::OilWells => 5,
+                Self::CoalMine | Self::GoldMine | Self::BankArcticTropic => 3,
+                _ => 0,
+            },
+            Climate::SubTropical => match self {
+                Self::OilRefinery
+                | Self::FoodProcessingPlant
+                | Self::FactoryTropic
+                | Self::FruitPlantation => 2,
+                Self::CopperOreMine
+                | Self::OilWells
+                | Self::BankArcticTropic
+                | Self::DiamondMine
+                | Self::RubberPlantation
+                | Self::WaterSupply => 3,
+                Self::WaterTower => 4,
+                Self::FarmTropic => 1,
+                _ => 0,
+            },
+            Climate::Toyland => match self {
+                Self::SugarMine => 2,
+                Self::CottonCandy
+                | Self::CandyFactory
+                | Self::BatteryFarm
+                | Self::ColaWells
+                | Self::ToyShop
+                | Self::ToyFactory
+                | Self::PlasticFountain
+                | Self::FizzyDrinkFactory
+                | Self::BubbleGenerator
+                | Self::ToffeeQuarry => 3,
+                _ => 0,
+            },
+        };
+
+        if matches!(self, Self::OilWells) && calendar_year > 1950 {
+            return 0;
+        }
+        if matches!(self, Self::OilRig) && calendar_year < 1960 {
+            return 0;
+        }
+        probability
+    }
+
     /// `IndustryBehaviour::BuiltOnWater`: la huella sustituye agua válida y
     /// conserva su `WaterClass` bajo las piezas de industria/estación.
     #[must_use]
@@ -2835,6 +2912,91 @@ mod tests {
             let actual = IndustrySpec::specs_for_climate(*climate)
                 .iter()
                 .map(|spec| (*spec, spec.map_creation_probability(*climate)))
+                .collect::<Vec<_>>();
+            assert_eq!(&actual, expected);
+        }
+    }
+
+    #[test]
+    fn gameplay_probabilities_match_vanilla_tables_before_date_gates_change() {
+        use crate::Climate;
+
+        // `appear_ingame` (las cuatro columnas `ai*` de `build_industry.h`)
+        // a 1950: Oil Wells todavía está disponible y Oil Rig aún no.
+        let cases: &[(Climate, &[(IndustrySpec, u8)])] = &[
+            (
+                Climate::Temperate,
+                &[
+                    (IndustrySpec::CoalMine, 2),
+                    (IndustrySpec::PowerStation, 2),
+                    (IndustrySpec::Sawmill, 2),
+                    (IndustrySpec::Forest, 3),
+                    (IndustrySpec::OilRefinery, 2),
+                    (IndustrySpec::OilRig, 0),
+                    (IndustrySpec::Factory, 2),
+                    (IndustrySpec::SteelMill, 2),
+                    (IndustrySpec::Farm, 2),
+                    (IndustrySpec::OilWells, 5),
+                    (IndustrySpec::Bank, 7),
+                    (IndustrySpec::IronOreMine, 2),
+                ],
+            ),
+            (
+                Climate::SubArctic,
+                &[
+                    (IndustrySpec::CoalMine, 3),
+                    (IndustrySpec::PowerStation, 2),
+                    (IndustrySpec::Forest, 4),
+                    (IndustrySpec::OilRefinery, 2),
+                    (IndustrySpec::PrintingWorks, 2),
+                    (IndustrySpec::Farm, 4),
+                    (IndustrySpec::OilWells, 5),
+                    (IndustrySpec::FoodProcessingPlant, 2),
+                    (IndustrySpec::PaperMill, 2),
+                    (IndustrySpec::GoldMine, 3),
+                    (IndustrySpec::BankArcticTropic, 3),
+                ],
+            ),
+            (
+                Climate::SubTropical,
+                &[
+                    (IndustrySpec::OilRefinery, 2),
+                    (IndustrySpec::CopperOreMine, 3),
+                    (IndustrySpec::OilWells, 3),
+                    (IndustrySpec::FoodProcessingPlant, 2),
+                    (IndustrySpec::BankArcticTropic, 3),
+                    (IndustrySpec::DiamondMine, 3),
+                    (IndustrySpec::FruitPlantation, 2),
+                    (IndustrySpec::RubberPlantation, 3),
+                    (IndustrySpec::WaterSupply, 3),
+                    (IndustrySpec::WaterTower, 4),
+                    (IndustrySpec::FactoryTropic, 2),
+                    (IndustrySpec::FarmTropic, 1),
+                    (IndustrySpec::LumberMill, 0),
+                ],
+            ),
+            (
+                Climate::Toyland,
+                &[
+                    (IndustrySpec::CottonCandy, 3),
+                    (IndustrySpec::CandyFactory, 3),
+                    (IndustrySpec::BatteryFarm, 3),
+                    (IndustrySpec::ColaWells, 3),
+                    (IndustrySpec::ToyShop, 3),
+                    (IndustrySpec::ToyFactory, 3),
+                    (IndustrySpec::PlasticFountain, 3),
+                    (IndustrySpec::FizzyDrinkFactory, 3),
+                    (IndustrySpec::BubbleGenerator, 3),
+                    (IndustrySpec::ToffeeQuarry, 3),
+                    (IndustrySpec::SugarMine, 2),
+                ],
+            ),
+        ];
+
+        for (climate, expected) in cases {
+            let actual = IndustrySpec::specs_for_climate(*climate)
+                .iter()
+                .map(|spec| (*spec, spec.gameplay_probability(*climate, 1950)))
                 .collect::<Vec<_>>();
             assert_eq!(&actual, expected);
         }

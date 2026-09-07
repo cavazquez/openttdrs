@@ -660,6 +660,11 @@ pub struct GameState {
     /// Inflación compuesta, recesiones y escala global de `max_loan` (`_economy`).
     #[serde(default)]
     pub global_economy: crate::economy::GlobalEconomy,
+    /// Planificador persistente de fundación automática de industrias
+    /// (`IBLD`/`ITBL`). La colocación física se ejecuta por separado para
+    /// mantener el stream RNG verificable contra `OpenTTD`.
+    #[serde(default)]
+    pub industry_builder: crate::industry_builder::IndustryBuildData,
     /// No mandar a servicio si no hay averías (`order.no_servicing_if_no_breakdowns`).
     #[serde(default = "default_true")]
     pub no_servicing_if_no_breakdowns: bool,
@@ -961,6 +966,7 @@ impl GameState {
             interactive_random: default_interactive_random(),
             cur_tileloop_tile: crate::map::tile_loop::default_cur_tileloop_tile(),
             global_economy: crate::economy::GlobalEconomy::new(),
+            industry_builder: crate::industry_builder::IndustryBuildData::new(),
             no_servicing_if_no_breakdowns: true,
             vehicle_breakdowns: default_vehicle_breakdowns(),
             subsidy_duration: default_subsidy_duration(),
@@ -1104,6 +1110,7 @@ impl GameState {
             interactive_random: default_interactive_random(),
             cur_tileloop_tile: crate::map::tile_loop::default_cur_tileloop_tile(),
             global_economy: crate::economy::GlobalEconomy::new(),
+            industry_builder: crate::industry_builder::IndustryBuildData::new(),
             no_servicing_if_no_breakdowns: true,
             vehicle_breakdowns: default_vehicle_breakdowns(),
             subsidy_duration: default_subsidy_duration(),
@@ -1122,6 +1129,7 @@ impl GameState {
     /// correctamente los campos de [`SimulationRuntime`].
     pub fn hydrate_runtime(&mut self) {
         self.ensure_timers_from_tick();
+        self.industry_builder.ensure_type_count();
         if self.cur_tileloop_tile == 0 {
             self.cur_tileloop_tile = crate::map::tile_loop::default_cur_tileloop_tile();
         }

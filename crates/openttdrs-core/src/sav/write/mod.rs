@@ -1,11 +1,12 @@
 //! Export mínimo de [`GameState`] a savegame `OpenTTD` (`.sav`).
 //!
 //! Contenedor por defecto: `OTTZ` (zlib). Versión de save: [`EXPORT_SAVE_VERSION`].
-//! Chunks: `MAPS` (`CH_TABLE`) + planos RIFF + `STNN`/`CITY`/`INDY`/`PSAC`/`ORDL`/`VEHS`/`CAPA`/`LGRP` + `DATE` + `PLYR`.
+//! Chunks: `MAPS` (`CH_TABLE`) + planos RIFF + `STNN`/`CITY`/`INDY`/`IBLD`/`ITBL`/`PSAC`/`ORDL`/`VEHS`/`CAPA`/`LGRP` + `DATE` + `PLYR`.
 //!
-//! Subconjunto prometido (MVP #226/#267): mapa + `CITY` (≥1) + `STNN` moderno
-//! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD + ship + aircraft ala fija)
-//! + `INDY` + `CAPA` + `ECMY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
+//! Subconjunto prometido (MVP #226/#267): mapa, `CITY` (≥1), `STNN` moderno
+//! (SAVEBYTE + structs), `VEHS`/`ORDL` (tren, carretera, barco y aeronave de ala fija),
+//! `INDY`, `IBLD`/`ITBL`, `CAPA`, `ECMY` y `DATE`/`PLYR`, cargable por
+//! `OpenTTD` ≥15.3 dedicated.
 //!
 //! Residual: tranvía, settings fuera del subconjunto modelado de `PATS`,
 //! ejecución de `ENGN`/`SRND`/callbacks `NewGRF` y flags completos de `PLYR`.
@@ -13,7 +14,7 @@
 //! las filas base de `OBJS` se reconstruyen cuando se modifican en el runtime;
 //! `OBID` fusiona sus campos conocidos sobre el cuerpo original cuando conserva
 //! sus IDs, y sólo un cambio estructural cae al writer canónico;
-//! `ORDL`/`VEHS`/`STNN`/`CITY`/`INDY` reutilizan sus cuerpos originales cuando
+//! `ORDL`/`VEHS`/`STNN`/`CITY`/`INDY`/`IBLD`/`ITBL` reutilizan sus cuerpos originales cuando
 //! las filas semánticas no cambiaron.
 //! `PATS`/`ECMY`/`CAPY` aplican la misma regla para ajustes y pagos conocidos.
 //! Los chunks nativos no modelados se conservan como passthrough al reexportar.
@@ -25,6 +26,7 @@ mod chunks;
 pub(crate) mod codec;
 mod entities;
 mod fleet;
+mod industry_builder;
 mod map;
 mod meta;
 mod newgrf;
@@ -104,6 +106,8 @@ pub(crate) struct SavSemanticTableRecords {
     pub(crate) stnn: Vec<Vec<u8>>,
     pub(crate) city: Vec<Vec<u8>>,
     pub(crate) indy: Vec<Vec<u8>>,
+    pub(crate) ibld: Vec<Vec<u8>>,
+    pub(crate) itbl: Vec<Vec<u8>>,
     pub(crate) pats: Vec<Vec<u8>>,
     pub(crate) ecmy: Vec<Vec<u8>>,
     pub(crate) capy: Vec<Vec<u8>>,
@@ -126,6 +130,8 @@ pub(crate) fn semantic_table_records(
     let stnn = entities::stnn_records_with_cargo(state, map_w, &cargo_export)?;
     let city = entities::city_records(state, map_w)?;
     let indy = entities::indy_records_with_cargo(state, map_w)?;
+    let ibld = vec![industry_builder::ibld_record(&state.industry_builder)];
+    let itbl = industry_builder::itbl_records(&state.industry_builder);
     let autoreplace_export = fleet::autoreplace_export(state)?;
     let plyr = meta::plyr_records(state, &autoreplace_export)?;
     let grps = fleet::group_records(&state.vehicle_groups)?;
@@ -139,6 +145,8 @@ pub(crate) fn semantic_table_records(
         stnn,
         city,
         indy,
+        ibld,
+        itbl,
         pats: vec![meta::pats_record(state)],
         ecmy: vec![meta::ecmy_record(state)],
         capy: meta::capy_records(state)?,
@@ -207,10 +215,10 @@ fn scan_chunk_names(payload: &[u8]) -> Vec<String> {
     // Tras CH_TABLE el tamaño del header no basta: completar con búsqueda de fourcc.
     for &want in REQUIRED_EXPORT_CHUNKS.iter().chain(
         [
-            "STNN", "CITY", "INDY", "ORDL", "VEHS", "CAPA", "LGRP", "LGRJ", "LGRS", "PATS", "ECMY",
-            "CAPY", "GRPS", "ERNW", "ENGN", "ENGS", "EIDS", "GSET", "NGRF", "OBJS", "OBID", "SRND",
-            "PSAC", "IIDS", "TIDS", "APID", "ATID", "RAIL", "ROTT", "GLOG", "GOAL", "STPE", "STPA",
-            "SIGN",
+            "STNN", "CITY", "INDY", "IBLD", "ITBL", "ORDL", "VEHS", "CAPA", "LGRP", "LGRJ", "LGRS",
+            "PATS", "ECMY", "CAPY", "GRPS", "ERNW", "ENGN", "ENGS", "EIDS", "GSET", "NGRF", "OBJS",
+            "OBID", "SRND", "PSAC", "IIDS", "TIDS", "APID", "ATID", "RAIL", "ROTT", "GLOG", "GOAL",
+            "STPE", "STPA", "SIGN",
         ]
         .iter(),
     ) {
@@ -359,6 +367,44 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
             raw_tables.and_then(|tables| tables.indy_chunk.as_ref()),
             canonical,
             raw_tables.map(|tables| tables.indy_semantic_records.as_slice()),
+        )?);
+    }
+
+    let ibld = vec![industry_builder::ibld_record(&state.industry_builder)];
+    let raw_ibld = raw_tables.and_then(|passthrough| {
+        passthrough.ibld_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"IBLD"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.ibld_semantic_records == ibld
+        })
+    });
+    if let Some(raw) = raw_ibld {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else {
+        let canonical = industry_builder::ibld_chunk(state)?;
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
+            raw_tables.and_then(|tables| tables.ibld_chunk.as_ref()),
+            canonical,
+            raw_tables.map(|tables| tables.ibld_semantic_records.as_slice()),
+        )?);
+    }
+
+    let itbl = industry_builder::itbl_records(&state.industry_builder);
+    let raw_itbl = raw_tables.and_then(|passthrough| {
+        passthrough.itbl_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"ITBL"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.itbl_semantic_records == itbl
+        })
+    });
+    if let Some(raw) = raw_itbl {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else {
+        let canonical = industry_builder::itbl_chunk(state)?;
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
+            raw_tables.and_then(|tables| tables.itbl_chunk.as_ref()),
+            canonical,
+            raw_tables.map(|tables| tables.itbl_semantic_records.as_slice()),
         )?);
     }
 
@@ -854,6 +900,43 @@ mod tests {
                 .iter()
                 .any(|name| name == "CAPY")
         );
+    }
+
+    #[test]
+    fn ottn_roundtrip_preserves_industry_builder_ibld_and_itbl() {
+        let mut state = tiny_state();
+        state.industry_builder.wanted_inds = (37 << 16) | 0x1234;
+        let oil_rig = crate::IndustryTypeBuildData {
+            probability: 6,
+            min_number: 1,
+            target_count: 12,
+            max_wait: 9,
+            wait_count: 3,
+        };
+        *state
+            .industry_builder
+            .type_data_mut(5)
+            .expect("Oil Rig slot") = oil_rig;
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let (payload, _) = crate::sav::container::decompress(&bytes).expect("payload");
+        let chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
+        let ibld = crate::sav::chunks::find_chunk(&chunks, "IBLD").expect("IBLD");
+        let itbl = crate::sav::chunks::find_chunk(&chunks, "ITBL").expect("ITBL");
+        assert_table_field_type(&ibld.body, 6, "wanted_inds");
+        assert_table_field_type(&itbl.body, 6, "probability");
+        assert_table_field_type(&itbl.body, 4, "wait_count");
+        let itbl_rows = crate::sav::table::parse_table_chunk(&itbl.body, false).expect("ITBL rows");
+        assert_eq!(itbl_rows.len(), crate::INDUSTRY_BUILD_TYPE_COUNT);
+
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.industry_builder, state.industry_builder);
+        assert_eq!(sav_game.industry_builder.builddata[5], oil_rig);
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(loaded.industry_builder, state.industry_builder);
+        let names = exported_chunk_names(&state).expect("chunk names");
+        assert!(names.iter().any(|name| name == "IBLD"));
+        assert!(names.iter().any(|name| name == "ITBL"));
     }
 
     #[test]

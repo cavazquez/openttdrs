@@ -671,7 +671,7 @@ mod tests {
     #[test]
     fn oilrig_m6_wins_over_the_station_airport_capability() {
         assert_eq!(
-            station_tile_class(STATION_TYPE_OILRIG << 3, Some(StopKind::Airport)),
+            station_tile_class(STATION_TYPE_OILRIG << 3, Some(StopKind::OilRig)),
             StationTileClass::Oilrig
         );
     }

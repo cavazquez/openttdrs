@@ -1532,6 +1532,7 @@ mod tests {
             (StopKind::TruckStop, 1_u32 << 1, 0b010_u32),
             (StopKind::Dock, 1_u32 << 4, 0b111_u32),
             (StopKind::Airport, 1_u32 << 3, 0b101_u32),
+            (StopKind::OilRig, (1_u32 << 3) | (1_u32 << 4), 0b111_u32),
             (StopKind::RailWaypoint, (1_u32 << 0) | (1_u32 << 7), 0),
             (
                 StopKind::RoadWaypoint,

@@ -66,7 +66,11 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
     apply_monthly_interest_and_bankruptcy(state);
     roll_station_newgrf_month(&mut state.stations);
     // Industrias ya marcadas con prod_level = 0 el mes pasado: fuera del mapa.
-    let closed = crate::industry::remove_closed_industries(&mut state.industries, &mut state.map);
+    let closed = crate::industry::remove_closed_industries_with_neutral_stations(
+        &mut state.industries,
+        &mut state.map,
+        &mut state.stations,
+    );
     for at in closed {
         crate::news::report_industry_closed(state, at);
     }

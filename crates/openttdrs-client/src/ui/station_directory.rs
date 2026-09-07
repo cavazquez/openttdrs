@@ -55,8 +55,8 @@ impl StationFacilityFilter {
             Self::Bus => kind == StopKind::BusStop,
             Self::Truck => kind == StopKind::TruckStop,
             Self::Rail => kind == StopKind::RailStation,
-            Self::Dock => matches!(kind, StopKind::Dock | StopKind::Buoy),
-            Self::Airport => kind == StopKind::Airport,
+            Self::Dock => kind.has_dock_facility(),
+            Self::Airport => kind.has_airport_facility(),
             Self::Waypoint => matches!(kind, StopKind::RailWaypoint | StopKind::RoadWaypoint),
         }
     }
@@ -614,6 +614,7 @@ fn station_kind_label(locale: Locale, kind: StopKind) -> String {
         StopKind::Dock => "Muelle",
         StopKind::Buoy => "Boya",
         StopKind::Airport => "Aeropuerto",
+        StopKind::OilRig => "Plataforma petrolera",
         StopKind::RailWaypoint => "Waypoint",
         StopKind::RoadWaypoint => "WP road",
     };

@@ -314,6 +314,7 @@ fn stop_kind_mismatch_note(
         StopKind::TruckStop => " — incompatible: solo camiones/carga",
         StopKind::Dock | StopKind::Buoy => " — incompatible: solo barcos",
         StopKind::Airport => " — incompatible: solo aviones",
+        StopKind::OilRig => " — incompatible: solo barcos o aviones",
         StopKind::RailStation | StopKind::RailWaypoint => " — incompatible: solo trenes",
         StopKind::RoadWaypoint => " — incompatible: solo vehículos de carretera",
     };
@@ -359,6 +360,7 @@ fn order_row_label(
             Some(StopKind::Dock) => "Muelle",
             Some(StopKind::Buoy) => "Boya",
             Some(StopKind::Airport) => "Aeropuerto",
+            Some(StopKind::OilRig) => "Plataforma petrolera",
             None => "Estación",
         },
         VehicleOrder::Waypoint { .. } => "Waypoint",

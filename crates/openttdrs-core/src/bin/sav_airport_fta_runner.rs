@@ -164,7 +164,7 @@ fn trace_row(
             let station = state
                 .stations
                 .iter()
-                .find(|s| s.pos == fa.pos && s.stop_kind == openttdrs_core::StopKind::Airport)?;
+                .find(|s| s.pos == fa.pos && s.stop_kind.has_airport_facility())?;
             Some(FtaAirport {
                 station: fa.station_id,
                 x: fa.pos.x,

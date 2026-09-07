@@ -8,7 +8,7 @@ use crate::industry_spec::{
 };
 use crate::map::{
     SLOPE_STEEP, Tile, TileCoord, TileKind, clear_neighbour_non_flooding_states,
-    tile_has_water_class, tile_slope_and_z, water_class_from_m1,
+    has_tile_water_ground, tile_has_water_class, tile_slope_and_z, water_class_from_m1,
 };
 use crate::town::{nearest_town_index, update_town_radius};
 use crate::world_gen::{CLEAR_GROUND_GRASS, clear_ground_m5, plant_random_farm_fields_runtime};
@@ -101,6 +101,7 @@ fn check_industry_template(
     for (tile, _) in template {
         super::transport::check_in_bounds(map, *tile)?;
         let existing_kind = map.get_kind(*tile).unwrap_or(TileKind::Grass);
+        let current = map.get(*tile).ok_or(CommandError::OutOfBounds)?;
         // `CheckIfIndustryTilesAreFree` treats `OnlyInTown` industries
         // specially: every footprint tile must already be a town building,
         // and the clear command runs as OWNER_TOWN. In particular this is
@@ -117,14 +118,17 @@ fn check_industry_template(
         {
             return Err(error);
         }
-        // `CheckIfIndustryTilesAreFree` rejects a land industry on any tile
-        // carrying a valid water class, including a coastal tree. Water-built
-        // industries are not in the vanilla procedural catalog yet; keeping
-        // this gate explicit prevents a later clear from silently drying a
-        // coast while that model is added.
-        if tile_has_water_class(existing_kind)
-            && water_class_from_m1(map.get(*tile).map_or(0, |current| current.m1))
-                != crate::map::WaterClass::Invalid
+        // `CheckIfIndustryTilesAreFree` compara `IsTileOnWater` con
+        // `BuiltOnWater`. Oil Rig es la excepción temperate: ocupa agua real
+        // (no costa ni una estación/industria que sólo conserve WaterClass),
+        // mientras que todas las especies terrestres siguen rechazándola.
+        let on_water = existing_kind == TileKind::Water && has_tile_water_ground(current);
+        if spec.built_on_water() {
+            if !on_water {
+                return Err(CommandError::IndustryMustBeBuiltOnWater);
+            }
+        } else if tile_has_water_class(existing_kind)
+            && water_class_from_m1(current.m1) != crate::map::WaterClass::Invalid
         {
             return Err(CommandError::CannotPlaceRoadOnWater);
         }
@@ -133,7 +137,8 @@ fn check_industry_template(
             // industry (`IsBridgeAbove`/`ClearTile_TunnelBridge` in C++).
             return Err(CommandError::IndustryTileCannotBeCleared);
         }
-        if !requires_house && !transport_tile_is_buildable(existing_kind) {
+        if !requires_house && !spec.built_on_water() && !transport_tile_is_buildable(existing_kind)
+        {
             return Err(build_error_for_kind(existing_kind));
         }
         // Todas las teselas vanilla que forman las diez industrias force-one
@@ -330,10 +335,9 @@ fn place_industry_spec_template_sandbox(
         if industry_replaces_house_tiles(spec) {
             clear_town_house_for_industry(state, *tile, &mut cleared_house_tiles);
         }
-        let low_mapt = state
-            .map
-            .get(*tile)
-            .map_or(0, |current| current.mapt & 0x0F);
+        let source_tile = state.map.get(*tile).ok_or(CommandError::OutOfBounds)?;
+        let low_mapt = source_tile.mapt & 0x0F;
+        let source_water_class = water_class_from_m1(source_tile.m1);
         state
             .map
             .set_kind(*tile, TileKind::Industry)
@@ -343,9 +347,12 @@ fn place_industry_spec_template_sandbox(
             .set_mapt_m5(*tile, 0x80 | low_mapt, *m5)
             .map_err(|_| CommandError::OutOfBounds)?;
         // Obra desde etapa 0; el tile loop (P6) avanza `m1` hasta `IsIndustryCompleted`.
-        // OpenTTD `MakeIndustry`: tierra → WaterClass::Invalid; oil rig → Sea.
-        // `m1 = 0` sería Sea y el cliente pintaría agua bajo la fábrica.
-        let m1 = if crate::map::industry_gfx_is_oil_rig(u16::from(*m5)) {
+        // OpenTTD `MakeIndustry`: tierra → WaterClass::Invalid; Oil Rig
+        // conserva la clase de agua de cada tesela que reemplaza. `m1 = 0`
+        // sería Sea y el cliente pintaría agua bajo una fábrica terrestre.
+        let m1 = if spec.built_on_water() {
+            crate::map::set_water_class_m1(0, source_water_class)
+        } else if crate::map::industry_gfx_is_oil_rig(u16::from(*m5)) {
             crate::map::set_water_class_m1(0, crate::map::WaterClass::Sea)
         } else {
             crate::map::set_water_class_m1(0, crate::map::WaterClass::Invalid)
@@ -811,7 +818,9 @@ pub fn place_industry_spec_def_layout_sandbox(
 mod tests {
     use super::*;
     use crate::command::{Command, apply_command};
-    use crate::map::{Map, TileCoord, tile_slope_and_z};
+    use crate::map::{
+        Map, TileCoord, WaterClass, make_water_tile, tile_slope_and_z, water_class_from_m1,
+    };
 
     fn test_newgrf_industry_spec() -> IndustrySpecDef {
         IndustrySpecDef {
@@ -875,6 +884,59 @@ mod tests {
             crate::industry::INDUSTRY_CONSTRUCTION_NORMAL_GAMEPLAY
         );
         assert_eq!(state.industries[0].last_prod_year, state.economy_timer.year);
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn oil_rig_requires_open_water_and_preserves_each_water_class() {
+        let origin = TileCoord::new(4, 4);
+        let template = industry_template_with_layout(origin, IndustrySpec::OilRig, 0)
+            .expect("native Oil Rig layout");
+        let mut state = GameState::new(16, 16);
+        for (index, (coord, _)) in template.iter().enumerate() {
+            let class = if index == 3 {
+                WaterClass::River
+            } else {
+                WaterClass::Sea
+            };
+            make_water_tile(&mut state.map, *coord, class).expect("water footprint tile");
+        }
+
+        assert!(
+            apply_command(
+                &mut state,
+                &Command::PlaceIndustrySpecLayout(origin, IndustrySpec::OilRig, 0),
+            )
+            .is_ok()
+        );
+        assert_eq!(state.industries.len(), 1);
+        assert_eq!(state.industries[0].spec, Some(IndustrySpec::OilRig));
+        assert_eq!(state.industries[0].tiles.len(), 6);
+        for (index, (coord, _)) in template.iter().enumerate() {
+            assert_eq!(state.map.get_kind(*coord), Some(TileKind::Industry));
+            let class = state
+                .map
+                .get(*coord)
+                .map(|tile| water_class_from_m1(tile.m1));
+            assert_eq!(
+                class,
+                Some(if index == 3 {
+                    WaterClass::River
+                } else {
+                    WaterClass::Sea
+                })
+            );
+        }
+
+        let mut land = GameState::new(16, 16);
+        assert_eq!(
+            apply_command(
+                &mut land,
+                &Command::PlaceIndustrySpec(origin, IndustrySpec::OilRig),
+            ),
+            Err(CommandError::IndustryMustBeBuiltOnWater)
+        );
+        assert!(land.industries.is_empty());
     }
 
     #[test]

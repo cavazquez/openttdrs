@@ -81,6 +81,7 @@ pub fn stop_kind_from_m6(m6: u8) -> StopKind {
     match station_type_from_m6(m6) {
         2 => StopKind::TruckStop,
         3 => StopKind::BusStop,
+        STATION_TYPE_OILRIG => StopKind::OilRig,
         STATION_TYPE_DOCK => StopKind::Dock,
         1 => StopKind::Airport,
         STATION_TYPE_BUOY => StopKind::Buoy,

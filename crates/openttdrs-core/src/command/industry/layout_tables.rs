@@ -241,6 +241,18 @@ pub(super) const OIL_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
     // OpenTTD _tile_table_oil_well_1.
     &[(0, 0, 29), (1, 0, 29), (1, 1, 29), (2, 2, 29), (2, 3, 29)],
 ];
+
+/// `OpenTTD` `_tile_table_oil_rig_0` (`IT_OIL_RIG`). La tesela 24 pasa a ser
+/// `StationType::Oilrig` al terminar la construcción; las demás siguen como
+/// industria y conservan la clase de agua de origen.
+pub(super) const OIL_RIG_LAYOUTS: [&[(i32, i32, u8)]; 1] = [&[
+    (0, 0, 24),
+    (0, 1, 24),
+    (0, 2, 25),
+    (1, 0, 26),
+    (1, 1, 27),
+    (1, 2, 28),
+]];
 pub(super) const BANK_LAYOUTS: [&[(i32, i32, u8)]; 1] = [
     // OpenTTD _tile_table_bank_0.
     &[(0, 0, 58), (1, 0, 59)],

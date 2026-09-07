@@ -87,7 +87,7 @@ pub fn step_airport_tiles(map: &mut Map, tick: u64, stations: &[Station]) -> Vec
         // StationID. En ese caso `ottd_station_id` identifica que `m5` es el
         // StationGfx airport real, aun si `stop_kind` no quedó Airport.
         let imported_station_gfx = station.ottd_station_id.is_some();
-        if !imported_station_gfx && station.stop_kind != StopKind::Airport {
+        if !imported_station_gfx && !station.stop_kind.has_airport_facility() {
             continue;
         }
         let tiles = if station.airport_tiles.is_empty() {
@@ -136,7 +136,7 @@ fn airport_tile_gfx(station: &Station, map: &Map, coord: TileCoord) -> Option<u1
 fn airport_station_index(stations: &[Station], coord: TileCoord) -> Option<usize> {
     stations
         .iter()
-        .position(|station| station.stop_kind == StopKind::Airport && station.covers_tile(coord))
+        .position(|station| station.stop_kind.has_airport_facility() && station.covers_tile(coord))
 }
 
 fn airport_animation_context_with_towns(
@@ -434,7 +434,7 @@ pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog
 ) -> Vec<TileCoord> {
     let Some(station) = stations
         .iter()
-        .find(|station| station.pos == station_anchor && station.stop_kind == StopKind::Airport)
+        .find(|station| station.pos == station_anchor && station.stop_kind.has_airport_facility())
     else {
         return Vec::new();
     };
@@ -633,7 +633,7 @@ pub fn step_newgrf_airport_tiles_with_towns<S: BuildHasher>(
 
     let mut candidates = Vec::new();
     for station in stations.iter() {
-        if station.stop_kind != StopKind::Airport {
+        if !station.stop_kind.has_airport_facility() {
             continue;
         }
         let tiles = if station.airport_tiles.is_empty() {

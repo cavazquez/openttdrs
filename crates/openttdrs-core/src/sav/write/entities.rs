@@ -104,6 +104,10 @@ fn facilities_for_stop(kind: StopKind) -> u8 {
         StopKind::BusStop => FACIL_BUS_STOP,
         StopKind::Dock | StopKind::Buoy => FACIL_DOCK,
         StopKind::Airport => FACIL_AIRPORT,
+        // `BuildOilRig` creates one neutral station exposing both the
+        // helipad and the dock.  Serialising it as an airport alone loses
+        // the ship facility on the next OpenTTD load.
+        StopKind::OilRig => FACIL_AIRPORT | FACIL_DOCK,
         StopKind::RailWaypoint => FACIL_WAYPOINT | FACIL_TRAIN,
         StopKind::RoadWaypoint => FACIL_WAYPOINT | FACIL_BUS_STOP | FACIL_TRUCK_STOP,
     }
@@ -739,9 +743,17 @@ fn write_stnn_normal(
     buf.extend_from_slice(&0u32.to_be_bytes());
     buf.extend_from_slice(&0u32.to_be_bytes());
 
-    buf.extend_from_slice(&INVALID_TILE.to_be_bytes()); // ship_station.tile
-    buf.push(0);
-    buf.push(0);
+    // `BuildOilRig` añade la plataforma al área de barcos, pero no al área
+    // de atraque de un muelle convencional. Así un save exportado conserva
+    // tanto la ruta naval como el helipuerto especial de AT_OILRIG.
+    let (ship_tile, ship_w, ship_h) = if st.stop_kind == StopKind::OilRig {
+        (tile_idx, 1u8, 1u8)
+    } else {
+        (INVALID_TILE, 0u8, 0u8)
+    };
+    buf.extend_from_slice(&ship_tile.to_be_bytes()); // ship_station.tile
+    buf.push(ship_w);
+    buf.push(ship_h);
     buf.extend_from_slice(&INVALID_TILE.to_be_bytes()); // docking_station.tile
     buf.push(0);
     buf.push(0);
@@ -1213,30 +1225,16 @@ pub(super) fn city_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>
 }
 
 fn industry_ottd_type(ind: &Industry) -> u8 {
-    // Índices temperate OpenTTD (`table/industry.h`); best-effort.
+    // `IndustryType` vanilla (`table/build_industry.h`). El `IndustrySpec`
+    // ya conserva el ID nativo, incluido Oil Rig=5; no usar el antiguo orden
+    // visual de los grupos de industria porque rompe un round-trip `.sav`.
     let spec = ind.spec.unwrap_or(match ind.kind {
         IndustryKind::CoalMine => IndustrySpec::CoalMine,
         IndustryKind::Forest => IndustrySpec::Forest,
         IndustryKind::OilWell => IndustrySpec::OilWells,
         IndustryKind::Factory => IndustrySpec::Factory,
     });
-    match spec {
-        IndustrySpec::CoalMine => 0,
-        IndustrySpec::PowerStation => 1,
-        IndustrySpec::Sawmill => 2,
-        IndustrySpec::Forest => 3,
-        IndustrySpec::OilRefinery => 4,
-        IndustrySpec::OilWells => 5,
-        IndustrySpec::Farm => 6,
-        IndustrySpec::Factory => 7,
-        IndustrySpec::IronOreMine => 8,
-        IndustrySpec::GoldMine => 18,
-        IndustrySpec::CopperOreMine => 24,
-        other => {
-            let _ = other;
-            0
-        }
-    }
+    spec.native_type()
 }
 
 fn industry_footprint(ind: &Industry) -> (u8, u8) {
@@ -1677,7 +1675,9 @@ fn neutral_station_ref(state: &GameState, industry: &Industry) -> Result<u32, Sa
     let Some(station_id) = industry.neutral_station_id else {
         return Ok(0);
     };
-    // `REF_STATION` is an index + 1; zero is the null reference.
+    // `REF_STATION` is `StationID + 1`; zero is the null reference. El pool
+    // de OpenTTD puede tener huecos, así que el índice compacto del Vec no
+    // sustituye al ID semántico que vive también en MAP2.
     station_id
         .checked_add(1)
         .ok_or(SavError::ValueOutOfRange {
@@ -1774,7 +1774,7 @@ fn station_persistent_storage_ids(state: &GameState) -> Result<Vec<Option<u32>>,
 }
 
 fn station_has_persistent_storage(station: &Station) -> bool {
-    matches!(station.stop_kind, StopKind::Airport)
+    matches!(station.stop_kind, StopKind::Airport | StopKind::OilRig)
         || !station.airport_tiles.is_empty()
         || station.airport_newgrf_spec_id.is_some()
 }
@@ -2196,6 +2196,56 @@ mod tests {
             record_get(normal, "airport.psa").and_then(SlValue::as_u64),
             Some(4)
         );
+    }
+
+    #[test]
+    fn stnn_oil_rig_record_exposes_native_airport_and_ship_facilities() {
+        let mut state = GameState::new(16, 16);
+        let pos = TileCoord::new(3, 4);
+        let mut oil_rig = Station::new_with_kind(pos, StopKind::OilRig);
+        oil_rig.owner = crate::company::CompanyId::NONE;
+        oil_rig.ottd_station_id = Some(0);
+        oil_rig.airport_spec = crate::AirportSpecId::Oilrig;
+        oil_rig.airport_tiles = vec![pos];
+        state.stations.push(oil_rig);
+
+        let records = stnn_records(&state, 16).expect("STNN records");
+        assert_eq!(records[0][0], FACIL_AIRPORT | FACIL_DOCK);
+        let chunk = stnn_chunk(&records).expect("STNN chunk");
+        let rows = crate::sav::table::parse_table_chunk(&chunk[5..], false).expect("table");
+        let normal = match record_get(&rows[0].1, "normal") {
+            Some(SlValue::Structs(items)) => items.first().expect("normal"),
+            other => panic!("normal ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(normal, "ship_station.tile").and_then(SlValue::as_u64),
+            Some(67)
+        );
+        assert_eq!(
+            record_get(normal, "ship_station.w").and_then(SlValue::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            record_get(normal, "ship_station.h").and_then(SlValue::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            record_get(normal, "airport.type").and_then(SlValue::as_u64),
+            Some(9)
+        );
+        assert_eq!(
+            record_get(normal, "airport.tile").and_then(SlValue::as_u64),
+            Some(67)
+        );
+
+        let industry = Industry::with_tiles_spec(
+            pos,
+            crate::IndustryKind::OilWell,
+            IndustrySpec::OilRig,
+            vec![pos],
+            0,
+        );
+        assert_eq!(industry_ottd_type(&industry), 5);
     }
 
     #[test]

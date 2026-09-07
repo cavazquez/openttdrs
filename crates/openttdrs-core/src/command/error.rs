@@ -119,6 +119,8 @@ pub enum CommandError {
     IndustryTileCannotBeCleared,
     /// La industria sólo puede ocupar edificios ya pertenecientes a un pueblo.
     IndustryMustBeBuiltInTown,
+    /// La industria marítima sólo puede fundarse sobre agua navegable válida.
+    IndustryMustBeBuiltOnWater,
     /// Préstamo ya al máximo permitido.
     LoanAtMaximum,
     /// No hay préstamo suficiente para devolver.

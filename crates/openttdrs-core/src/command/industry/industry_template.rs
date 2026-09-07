@@ -5,7 +5,7 @@ use super::layout_tables::{
     BANK_LAYOUTS, BANK2_LAYOUTS, COAL_MINE_LAYOUTS, DIAMOND_MINE_LAYOUTS, FACTORY_LAYOUTS,
     FACTORY_TROPIC_LAYOUTS, FARM_LAYOUTS, FARM_TROPIC_LAYOUTS, FOOD_PROCESS_LAYOUTS,
     FOREST_LAYOUTS, FRUIT_PLANTATION_LAYOUTS, GOLD_MINE_LAYOUTS, IRON_MINE_LAYOUTS,
-    LUMBER_MILL_LAYOUTS, METAL_MINE_LAYOUTS, OIL_LAYOUTS, PAPER_MILL_LAYOUTS,
+    LUMBER_MILL_LAYOUTS, METAL_MINE_LAYOUTS, OIL_LAYOUTS, OIL_RIG_LAYOUTS, PAPER_MILL_LAYOUTS,
     POWER_STATION_LAYOUTS, PRINTING_WORKS_LAYOUTS, REFINERY_LAYOUTS, RUBBER_PLANTATION_LAYOUTS,
     SAWMILL_LAYOUTS, STEEL_MILL_LAYOUTS, WATER_SUPPLY_LAYOUTS, WATER_TOWER_LAYOUTS,
 };
@@ -69,6 +69,7 @@ fn layouts_for_spec(spec: IndustrySpec) -> &'static [IndustryLayout] {
         IndustrySpec::Farm => &FARM_LAYOUTS,
         IndustrySpec::FarmTropic => &FARM_TROPIC_LAYOUTS,
         IndustrySpec::OilWells => &OIL_LAYOUTS,
+        IndustrySpec::OilRig => &OIL_RIG_LAYOUTS,
         IndustrySpec::WaterSupply => &WATER_SUPPLY_LAYOUTS,
         IndustrySpec::OilRefinery => &REFINERY_LAYOUTS,
         IndustrySpec::Factory => &FACTORY_LAYOUTS,
@@ -163,6 +164,12 @@ mod tests {
         assert_eq!(steel.len(), 14);
         assert_eq!(steel[13], (TileCoord::new(22, 33), 57));
         assert!(industry_template_with_layout(origin, IndustrySpec::CoalMine, 4).is_none());
+
+        let oil_rig =
+            industry_template_with_layout(origin, IndustrySpec::OilRig, 0).unwrap_or_default();
+        assert_eq!(oil_rig.len(), 6);
+        assert_eq!(oil_rig[0], (origin, 24));
+        assert_eq!(oil_rig[5], (TileCoord::new(21, 32), 28));
 
         let printing = industry_template_with_layout(origin, IndustrySpec::PrintingWorks, 0)
             .unwrap_or_default();

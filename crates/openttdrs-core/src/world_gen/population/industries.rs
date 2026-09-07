@@ -44,9 +44,9 @@ pub(super) fn place_industries(
     let (map_w, map_h) = ctx.state.map.dimensions();
     // `GenerateIndustries` mantiene dos distribuciones independientes: una
     // para industrias en tierra y otra para `IndustryBehaviour::BuiltOnWater`.
-    // El catálogo vanilla representado hoy sólo contiene especies terrestres,
-    // pero conservar la pasada vacía es importante: el total y el stream RNG
-    // deben quedar listos para añadir `IT_OIL_RIG` sin reescribir esta fase.
+    // El catálogo incluye Oil Rig, pero OpenTTD le asigna `appear_creation=0`:
+    // no participa al crear el mapa y la pasada acuática sigue vacía sin
+    // consumir RNG. Su aparición pertenece al ciclo runtime desde 1960.
     let land_probabilities =
         generation_probabilities(ctx.state.climate, map_w, map_h, specs, false);
     let water_probabilities =
@@ -125,11 +125,10 @@ fn generation_probabilities(
     specs
         .iter()
         .filter_map(|spec| {
-            // Ningún `IndustrySpec` vanilla del catálogo es `BuiltOnWater`.
-            // La condición queda en la función común para que el día que se
-            // modele `IT_OIL_RIG` la distribución acuática no contamine la
-            // terrestre ni cambie el orden de consumo de RNG.
-            if water {
+            // Mantener ambas distribuciones disjuntas es importante incluso
+            // para Oil Rig: su probabilidad de creación inicial es cero, por
+            // lo que no debe contaminar la pasada terrestre ni consumir RNG.
+            if spec.built_on_water() != water {
                 return None;
             }
             let base = u32::from(spec.map_creation_probability(climate));
@@ -1426,8 +1425,8 @@ mod tests {
             ]
         );
 
-        // El roster vanilla actual no tiene una industria `BuiltOnWater`; la
-        // pasada acuática debe quedar vacía y no consumir RNG por accidente.
+        // Oil Rig es `BuiltOnWater`, pero `appear_creation=0`: la pasada
+        // acuática sigue vacía y no consume RNG durante generación de mapa.
         assert!(generation_probabilities(Climate::Temperate, 64, 64, specs, true).is_empty());
     }
 

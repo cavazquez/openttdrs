@@ -131,6 +131,10 @@ mod coherence_tests {
         assert_eq!(stop_kind_from_m6(2 << 3), StopKind::TruckStop);
         assert_eq!(stop_kind_from_m6(3 << 3), StopKind::BusStop);
         assert_eq!(stop_kind_from_m6(0), StopKind::RailStation);
+        assert_eq!(
+            stop_kind_from_m6(STATION_TYPE_OILRIG << 3),
+            StopKind::OilRig
+        );
         assert_eq!(stop_kind_from_m6(7 << 3), StopKind::RailWaypoint);
     }
 

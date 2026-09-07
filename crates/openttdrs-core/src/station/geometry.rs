@@ -529,13 +529,17 @@ pub fn vehicle_physically_at_station(
                 && train_on_rail_platform(map, vpos)
         }
         VehicleKind::Ship => {
-            matches!(station.stop_kind, StopKind::Dock | StopKind::Buoy)
-                && (if station.stop_kind == StopKind::Buoy {
-                    vpos == station.pos
-                } else {
-                    vpos.x.abs_diff(station.pos.x) + vpos.y.abs_diff(station.pos.y) == 1
-                        && crate::ship_movement::is_water_network_tile_at(map, vpos)
-                })
+            matches!(
+                station.stop_kind,
+                StopKind::Dock | StopKind::Buoy | StopKind::OilRig
+            ) && (if station.stop_kind == StopKind::Buoy {
+                vpos == station.pos
+            } else if station.stop_kind == StopKind::OilRig {
+                vpos == station.pos && crate::ship_movement::is_water_network_tile_at(map, vpos)
+            } else {
+                vpos.x.abs_diff(station.pos.x) + vpos.y.abs_diff(station.pos.y) == 1
+                    && crate::ship_movement::is_water_network_tile_at(map, vpos)
+            })
         }
         VehicleKind::Aircraft => false,
     }

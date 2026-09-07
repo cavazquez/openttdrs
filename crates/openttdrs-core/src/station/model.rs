@@ -488,6 +488,9 @@ pub enum StopKind {
     Dock,
     /// Helipuerto / aeropuerto 1×1 (`StationType::Airport`).
     Airport,
+    /// Plataforma petrolera neutral (`StationType::Oilrig`): comparte el
+    /// helipuerto del aeropuerto, pero también expone muelle para barcos.
+    OilRig,
     /// Boya (`StationType::Buoy`); waypoint acuático sin carga.
     Buoy,
     /// Punto de paso ferroviario (`StationType::RailWaypoint`); sin carga ni parada.
@@ -505,10 +508,23 @@ impl StopKind {
             Self::TruckStop => 1 << 1,
             Self::BusStop => 1 << 2,
             Self::Airport => 1 << 3,
+            Self::OilRig => (1 << 3) | (1 << 4),
             Self::Dock | Self::Buoy => 1 << 4,
             Self::RailWaypoint => (1 << 0) | (1 << 7),
             Self::RoadWaypoint => (1 << 1) | (1 << 2) | (1 << 7),
         }
+    }
+
+    /// La estación expone una facilidad aérea (aeropuerto u Oil Rig).
+    #[must_use]
+    pub const fn has_airport_facility(self) -> bool {
+        matches!(self, Self::Airport | Self::OilRig)
+    }
+
+    /// La estación expone una facilidad naval (muelle, boya u Oil Rig).
+    #[must_use]
+    pub const fn has_dock_facility(self) -> bool {
+        matches!(self, Self::Dock | Self::Buoy | Self::OilRig)
     }
 }
 
@@ -858,8 +874,11 @@ impl Station {
                     VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram,
                     StopKind::RoadWaypoint,
                 )
-                | (VehicleKind::Ship, StopKind::Dock | StopKind::Buoy)
-                | (VehicleKind::Aircraft, StopKind::Airport)
+                | (
+                    VehicleKind::Ship,
+                    StopKind::Dock | StopKind::Buoy | StopKind::OilRig
+                )
+                | (VehicleKind::Aircraft, StopKind::Airport | StopKind::OilRig)
         )
     }
 
@@ -885,7 +904,7 @@ impl Station {
                 !matches!(cargo, CargoType::Passengers | CargoType::Mail)
             }
             // Muelle: mercancía + pasajeros (ferry).
-            StopKind::Dock => true,
+            StopKind::Dock | StopKind::OilRig => true,
             StopKind::Airport => matches!(cargo, CargoType::Passengers | CargoType::Mail),
             StopKind::RailWaypoint | StopKind::Buoy | StopKind::RoadWaypoint => false,
         }

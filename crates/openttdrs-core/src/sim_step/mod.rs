@@ -514,6 +514,12 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             &state.cargo_spec_catalog,
         ),
     );
+    // `MakeIndustryTileBigger` llama a `BuildOilRig` cuando las dos piezas
+    // superiores `GFX_OILRIG_1` terminan. La plataforma no sustituye a la
+    // industria: sólo la tesela norte pasa a estación neutral con helipuerto
+    // y muelle; las cinco piezas restantes siguen perteneciendo al INDY.
+    let oil_rig_dirty = materialize_completed_oil_rigs(state);
+    state.runtime.industry_tile_dirty.extend(oil_rig_dirty);
     state
         .runtime
         .industry_tile_dirty
@@ -599,6 +605,107 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         .industry_tile_dirty
         .sort_by_key(|coord| (coord.x, coord.y));
     state.runtime.industry_tile_dirty.dedup();
+}
+
+/// Materializa la estación neutral que `OpenTTD` crea al terminar un Oil Rig.
+///
+/// En `industry_cmd.cpp`, `BuildOilRig` se activa al ver dos piezas verticales
+/// `GFX_OILRIG_1` terminadas. Conservamos esa guarda, en vez de transformar
+/// cualquier industria con agua, para que la transición sea idempotente y no
+/// altere Oil Wells ni plataformas importadas ya materializadas.
+fn materialize_completed_oil_rigs(state: &mut GameState) -> Vec<crate::TileCoord> {
+    let rigs: Vec<_> = state
+        .industries
+        .iter()
+        .enumerate()
+        .filter_map(|(index, industry)| {
+            (industry.spec == Some(crate::IndustrySpec::OilRig)
+                && industry.neutral_station_id.is_none())
+            .then_some((
+                index,
+                industry.instance_id,
+                oil_rig_station_tile(state, industry)?,
+            ))
+        })
+        .collect();
+    let mut dirty = Vec::with_capacity(rigs.len());
+
+    for (industry_index, industry_id, origin) in rigs {
+        let Some(station_id) = next_neutral_station_id(state) else {
+            // El ID de estación cabe en MAP2 (u16). Un pool lleno no debe
+            // degradar la plataforma ni inventar un enlace inválido.
+            continue;
+        };
+        let Some(mut tile) = state.map.get(origin) else {
+            continue;
+        };
+        let water_class = crate::map::water_class_from_m1(tile.m1);
+
+        tile.kind = crate::TileKind::Station;
+        tile.mapt = 0x50 | (tile.mapt & 0x0F);
+        tile.m1 = crate::map::set_water_class_m1(crate::company::OWNER_NONE_M1, water_class);
+        let [station_id_low, station_id_high] = station_id.to_le_bytes();
+        tile.m2 = station_id_low;
+        tile.m2_hi = station_id_high;
+        tile.m3 = 0;
+        tile.m3hi = 0;
+        tile.m5 = 0;
+        tile.m6 = crate::station::STATION_TYPE_OILRIG << 3;
+        tile.m7 = 0;
+        tile.m8 = 0;
+        if state.map.set_tile(origin, tile).is_err() {
+            continue;
+        }
+
+        let mut station = crate::Station::new_with_kind(origin, crate::StopKind::OilRig);
+        station.ottd_station_id = Some(u32::from(station_id));
+        station.owner = crate::company::CompanyId::NONE;
+        station.neutral_industry_id = Some(industry_id);
+        station.airport_spec = crate::AirportSpecId::Oilrig;
+        station.airport_tiles.push(origin);
+        station.build_date =
+            crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
+        state.stations.push(station);
+        state.industries[industry_index].neutral_station_id = Some(u32::from(station_id));
+        state.newgrf_animated_industry_tiles.remove(&origin);
+        dirty.push(origin);
+    }
+    dirty
+}
+
+/// Primer `StationID` libre en el rango que MAP2 puede representar.
+fn next_neutral_station_id(state: &GameState) -> Option<u16> {
+    (0..=u16::MAX).find(|candidate| {
+        !state
+            .stations
+            .iter()
+            .any(|station| station.ottd_station_id == Some(u32::from(*candidate)))
+    })
+}
+
+/// Devuelve la pieza norte que `BuildOilRig` convierte en estación.
+fn oil_rig_station_tile(state: &GameState, industry: &crate::Industry) -> Option<crate::TileCoord> {
+    let mut candidates: Vec<_> = industry.tiles.clone();
+    candidates.sort_by_key(|coord| (coord.x, coord.y));
+    candidates.into_iter().find(|&coord| {
+        let south = crate::TileCoord::new(coord.x, coord.y + 1);
+        let Some(tile) = state.map.get(coord) else {
+            return false;
+        };
+        let Some(south_tile) = state.map.get(south) else {
+            return false;
+        };
+        tile.kind == crate::TileKind::Industry
+            && south_tile.kind == crate::TileKind::Industry
+            && crate::map::industry_gfx(&tile) == crate::map::industry_terrain::GFX_OILRIG_FIRST
+            && crate::map::industry_gfx(&south_tile)
+                == crate::map::industry_terrain::GFX_OILRIG_FIRST
+            && crate::map::is_industry_completed(tile.m1)
+            && crate::map::is_industry_completed(south_tile.m1)
+            && crate::map::industry_instance_id(&tile) == industry.instance_id
+            && crate::map::industry_instance_id(&south_tile) == industry.instance_id
+            && industry.contains_tile(south)
+    })
 }
 
 /// `RunTileLoop`: LFSR de Galois.
@@ -766,7 +873,7 @@ pub(super) fn trigger_airport_animation_at(
 ) {
     let Some(station_anchor) =
         crate::station::station_at_tile(&state.map, &state.stations, trigger_tile)
-            .filter(|station| station.stop_kind == crate::station::StopKind::Airport)
+            .filter(|station| station.stop_kind.has_airport_facility())
             .map(|station| station.pos)
     else {
         return;
@@ -1059,6 +1166,81 @@ mod tests {
             newgrf_badge_translation: Vec::new(),
         });
         (state, pos)
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn completed_oil_rig_creates_one_neutral_airport_and_dock() {
+        let origin = TileCoord::new(4, 4);
+        let mut state = GameState::new(16, 16);
+        // Layout nativo: (0,0)/(0,1) son las dos piezas GFX_OILRIG_1 que
+        // disparan BuildOilRig; cada tesela conserva su WaterClass propia.
+        for (coord, water_class) in [
+            (origin, crate::WaterClass::River),
+            (TileCoord::new(4, 5), crate::WaterClass::Sea),
+            (TileCoord::new(4, 6), crate::WaterClass::Sea),
+            (TileCoord::new(5, 4), crate::WaterClass::Sea),
+            (TileCoord::new(5, 5), crate::WaterClass::Sea),
+            (TileCoord::new(5, 6), crate::WaterClass::Sea),
+        ] {
+            crate::map::make_water_tile(&mut state.map, coord, water_class)
+                .expect("water footprint");
+        }
+        apply_command(
+            &mut state,
+            &Command::PlaceIndustrySpecLayout(origin, crate::IndustrySpec::OilRig, 0),
+        )
+        .expect("place oil rig");
+        for coord in state.industries[0].tiles.clone() {
+            let mut tile = state.map.get(coord).expect("industry tile");
+            tile.m1 |= 0x80;
+            state.map.set_tile(coord, tile).expect("complete tile");
+        }
+
+        assert_eq!(materialize_completed_oil_rigs(&mut state), vec![origin]);
+        assert_eq!(state.stations.len(), 1);
+        let station = &state.stations[0];
+        assert_eq!(station.stop_kind, crate::StopKind::OilRig);
+        assert_eq!(station.owner, crate::company::CompanyId::NONE);
+        assert_eq!(station.airport_spec, crate::AirportSpecId::Oilrig);
+        assert_eq!(station.airport_tiles, vec![origin]);
+        assert!(station.can_service_vehicle(VehicleKind::Ship));
+        assert!(station.can_service_vehicle(VehicleKind::Aircraft));
+        assert_eq!(station.ottd_station_id, Some(0));
+        assert_eq!(station.neutral_industry_id, Some(0));
+        assert_eq!(state.industries[0].neutral_station_id, Some(0));
+
+        let tile = state.map.get(origin).expect("oilrig station tile");
+        assert_eq!(tile.kind, crate::TileKind::Station);
+        assert_eq!(tile.m6, crate::station::STATION_TYPE_OILRIG << 3);
+        assert_eq!(
+            crate::map::water_class_from_m1(tile.m1),
+            crate::WaterClass::River
+        );
+        assert_eq!(
+            state.industries[0]
+                .tiles
+                .iter()
+                .filter(|&&coord| state.map.get_kind(coord) == Some(crate::TileKind::Industry))
+                .count(),
+            5
+        );
+
+        assert!(materialize_completed_oil_rigs(&mut state).is_empty());
+        assert_eq!(state.stations.len(), 1, "BuildOilRig is idempotent");
+
+        let bytes = crate::sav::save_to_bytes_with(&state, crate::sav::SavContainer::Ottn)
+            .expect("export oil rig save");
+        let loaded = GameState::from_sav_game(crate::sav::load(&bytes).expect("reload oil rig"));
+        assert_eq!(loaded.industries.len(), 1);
+        assert_eq!(loaded.industries[0].spec, Some(crate::IndustrySpec::OilRig));
+        assert_eq!(loaded.industries[0].tiles.len(), 6);
+        assert!(loaded.industries[0].tiles.contains(&origin));
+        assert_eq!(loaded.industries[0].neutral_station_id, Some(0));
+        assert_eq!(loaded.stations.len(), 1);
+        assert_eq!(loaded.stations[0].stop_kind, crate::StopKind::OilRig);
+        assert_eq!(loaded.stations[0].neutral_industry_id, Some(0));
+        assert_eq!(loaded.map.get_kind(origin), Some(crate::TileKind::Station));
     }
 
     #[test]

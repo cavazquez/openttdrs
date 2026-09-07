@@ -190,7 +190,8 @@ pub fn is_water_network_tile(kind: TileKind) -> bool {
     matches!(kind, TileKind::Water | TileKind::ShipDepot)
 }
 
-/// Incluye muelles y boyas (`StationType::Dock` = 5, `Buoy` = 6 en `m6`).
+/// Incluye Oil Rig, muelles y boyas (`StationType::Oilrig` = 4,
+/// `Dock` = 5, `Buoy` = 6 en `m6`).
 #[must_use]
 pub fn is_water_network_tile_at(map: &Map, c: TileCoord) -> bool {
     let Some(tile) = map.get(c) else {
@@ -204,7 +205,9 @@ pub fn is_water_network_tile_at(map: &Map, c: TileCoord) -> bool {
     }
     matches!(
         crate::station::station_type_from_m6(tile.m6),
-        crate::station::STATION_TYPE_DOCK | crate::station::STATION_TYPE_BUOY
+        crate::station::STATION_TYPE_OILRIG
+            | crate::station::STATION_TYPE_DOCK
+            | crate::station::STATION_TYPE_BUOY
     )
 }
 

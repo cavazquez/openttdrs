@@ -13,14 +13,16 @@ use crate::newgrf_callback::{
 };
 use crate::town::Town;
 
-use super::model::{Station, StopKind};
+use super::model::Station;
+#[cfg(test)]
+use super::model::StopKind;
 
 pub const STATION_COVERAGE_RADIUS: i32 = 4;
 
 /// Radio de cobertura efectivo (`OpenTTD` catchment por `AirportSpec`, resto = 4).
 #[must_use]
 pub fn station_catchment_radius(station: &Station) -> i32 {
-    if station.stop_kind == StopKind::Airport
+    if station.stop_kind.has_airport_facility()
         && let Some(def) = airport_spec_def(station.airport_spec)
     {
         return def.catchment.max(0);

@@ -1103,6 +1103,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Esta industria solo puede construirse sobre edificios de un pueblo." => {
             "This industry can only be built on town buildings."
         }
+        "Esta industria marítima solo puede construirse sobre agua abierta." => {
+            "This maritime industry can only be built on open water."
+        }
         "El préstamo ya está al máximo permitido." => {
             "The loan is already at the allowed maximum."
         }

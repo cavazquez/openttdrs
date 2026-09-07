@@ -25,7 +25,7 @@ pub fn station_uses_airport_fta(station: &Station) -> bool {
     if station.airport_newgrf_spec_id.is_some() {
         return false;
     }
-    station.stop_kind == crate::station::StopKind::Airport
+    station.stop_kind.has_airport_facility()
         && fta_profile_for_spec(station.airport_spec).is_some_and(|p| {
             station.airport_tiles.len()
                 >= usize::try_from(p.footprint_w * p.footprint_h).unwrap_or(1)

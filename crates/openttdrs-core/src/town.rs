@@ -1233,7 +1233,12 @@ pub fn produce_town_cargo_with_towns(
     let station_coverage: Vec<(usize, TileCoord, i32)> = stations
         .iter()
         .enumerate()
-        .filter(|(_, station)| matches!(station.stop_kind, StopKind::BusStop | StopKind::Airport))
+        .filter(|(_, station)| {
+            matches!(
+                station.stop_kind,
+                StopKind::BusStop | StopKind::Airport | StopKind::OilRig
+            )
+        })
         .map(|(idx, station)| (idx, station.pos, station::station_catchment_radius(station)))
         .collect();
     if station_coverage.is_empty() {

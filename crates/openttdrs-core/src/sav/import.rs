@@ -274,7 +274,7 @@ pub fn industry_kind_from_ottd_type(industry_type: u8) -> IndustryKind {
     match industry_type {
         2 | 3 | 9 | 14 | 19 | 20 | 24 | 25 => IndustryKind::Forest,
         11..=13 => IndustryKind::Factory,
-        16 | 17 | 33 => IndustryKind::OilWell,
+        5 | 16 | 17 | 33 => IndustryKind::OilWell,
         _ => IndustryKind::CoalMine,
     }
 }
@@ -359,7 +359,8 @@ pub fn industry_spec_from_gfx(gfx: u16) -> Option<IndustrySpec> {
         11..=15 => Some(IndustrySpec::Sawmill),
         16..=17 => Some(IndustrySpec::Forest),
         18..=23 => Some(IndustrySpec::OilRefinery),
-        24..=32 => Some(IndustrySpec::OilWells),
+        24..=28 => Some(IndustrySpec::OilRig),
+        29..=32 => Some(IndustrySpec::OilWells),
         33..=38 => Some(IndustrySpec::Farm),
         39..=42 => Some(IndustrySpec::Factory),
         43..=46 => Some(IndustrySpec::PrintingWorks),
@@ -402,11 +403,20 @@ pub(crate) fn hydrate_sav_industries(
     state.industries.clear();
 
     for saved in sav_industries {
+        let is_oil_rig = saved.industry_type == IndustrySpec::OilRig.native_type();
         let mut tiles = Vec::new();
         for dy in 0..i32::from(saved.height.max(1)) {
             for dx in 0..i32::from(saved.width.max(1)) {
                 let coord = TileCoord::new(saved.pos.x + dx, saved.pos.y + dy);
-                if state.map.get_kind(coord) == Some(TileKind::Industry) {
+                let is_rig_station = is_oil_rig
+                    && state.map.get(coord).is_some_and(|tile| {
+                        tile.kind == TileKind::Station
+                            && crate::station::stop_kind_from_m6(tile.m6) == crate::StopKind::OilRig
+                            && saved.neutral_station_id.is_some_and(|station_id| {
+                                (u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8)) == station_id
+                            })
+                    });
+                if state.map.get_kind(coord) == Some(TileKind::Industry) || is_rig_station {
                     tiles.push(coord);
                 }
             }
@@ -418,16 +428,26 @@ pub(crate) fn hydrate_sav_industries(
         let gfx = state
             .map
             .get(origin)
+            .filter(|tile| tile.kind == TileKind::Industry)
             .map(|tile| get_clean_industry_gfx(tile.m5, tile.m6));
-        let spec = gfx.and_then(industry_spec_from_gfx);
+        // `BuildOilRig` turns the top-left piece into MP_STATION, so its
+        // origin no longer carries IndustryGfx. INDY.type is authoritative
+        // for that special case; the remaining five tiles retain gfx 24..28.
+        let spec = is_oil_rig
+            .then_some(IndustrySpec::OilRig)
+            .or_else(|| gfx.and_then(industry_spec_from_gfx));
         let kind = spec
             .map(IndustrySpec::kind)
             .or_else(|| gfx.map(industry_kind_from_gfx))
             .unwrap_or_else(|| industry_kind_from_ottd_type(saved.industry_type));
-        let instance_id = state.map.get(origin).map_or_else(
-            || u16::try_from(saved.industry_id).unwrap_or(0),
-            |tile| crate::map::industry_instance_id(&tile),
-        );
+        let instance_id = tiles
+            .iter()
+            .filter_map(|coord| state.map.get(*coord))
+            .find(|tile| tile.kind == TileKind::Industry)
+            .map_or_else(
+                || u16::try_from(saved.industry_id).unwrap_or(0),
+                |tile| crate::map::industry_instance_id(&tile),
+            );
         let mut industry = if let Some(spec) = spec {
             Industry::with_tiles_spec(origin, kind, spec, tiles, saved.random_colour)
         } else {
@@ -1045,7 +1065,8 @@ mod tests {
     #[test]
     fn classify_known_gfx_ranges() {
         assert_eq!(industry_spec_from_gfx(7), Some(IndustrySpec::PowerStation));
-        assert_eq!(industry_spec_from_gfx(24), Some(IndustrySpec::OilWells));
+        assert_eq!(industry_spec_from_gfx(24), Some(IndustrySpec::OilRig));
+        assert_eq!(industry_spec_from_gfx(29), Some(IndustrySpec::OilWells));
         assert_eq!(industry_spec_from_gfx(33), Some(IndustrySpec::Farm));
         assert_eq!(industry_kind_from_gfx(48), IndustryKind::CoalMine);
         assert_eq!(industry_group_from_gfx(142), "Toy Factory");

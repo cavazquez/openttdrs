@@ -107,6 +107,10 @@ pub enum IndustrySpec {
     FarmTropic,
     OilWells,
     OilRefinery,
+    /// Plataforma petrolera marítima (`IT_OIL_RIG`). No se crea durante la
+    /// generación inicial del mapa: `OpenTTD` la habilita para fundación
+    /// aleatoria a partir de 1960.
+    OilRig,
     Factory,
     /// Fábrica tropic (`IT_FACTORY_2`): caucho + cobre + madera → goods.
     FactoryTropic,
@@ -149,6 +153,7 @@ impl IndustrySpec {
                 Self::Sawmill,
                 Self::Forest,
                 Self::OilRefinery,
+                Self::OilRig,
                 Self::Factory,
                 Self::SteelMill,
                 Self::Farm,
@@ -216,6 +221,7 @@ impl IndustrySpec {
             Self::Sawmill => 2,
             Self::Forest => 3,
             Self::OilRefinery => 4,
+            Self::OilRig => 5,
             Self::Factory => 6,
             Self::PrintingWorks => 7,
             Self::SteelMill => 8,
@@ -254,9 +260,7 @@ impl IndustrySpec {
     ///
     /// Es el campo `IndustrySpec::conflicting` de
     /// `table/build_industry.h`. Sólo enumera tipos representables por este
-    /// catálogo Rust: `IT_OIL_RIG` sigue fuera del modelo de industria
-    /// procedural y, por tanto, no se puede expresar todavía como conflicto
-    /// del refinery.
+    /// catálogo Rust.
     #[must_use]
     pub const fn conflicting_specs(self) -> &'static [IndustrySpec] {
         match self {
@@ -264,7 +268,8 @@ impl IndustrySpec {
             Self::PowerStation => &[Self::CoalMine],
             Self::Sawmill => &[Self::Forest],
             Self::Forest => &[Self::Sawmill, Self::PaperMill],
-            Self::OilRefinery => &[],
+            Self::OilRefinery => &[Self::OilRig],
+            Self::OilRig | Self::OilWells => &[Self::OilRefinery],
             Self::Factory => &[Self::Farm, Self::SteelMill],
             Self::PrintingWorks => &[Self::PaperMill],
             Self::SteelMill => &[Self::IronOreMine, Self::Factory],
@@ -272,7 +277,6 @@ impl IndustrySpec {
             Self::CopperOreMine | Self::RubberPlantation | Self::LumberMill => {
                 &[Self::FactoryTropic]
             }
-            Self::OilWells => &[Self::OilRefinery],
             Self::Bank => &[Self::Bank],
             Self::FoodProcessingPlant => &[Self::FruitPlantation, Self::Farm, Self::FarmTropic],
             Self::PaperMill => &[Self::Forest, Self::PrintingWorks],
@@ -380,6 +384,24 @@ impl IndustrySpec {
         }
     }
 
+    /// `IndustryBehaviour::BuiltOnWater`: la huella sustituye agua válida y
+    /// conserva su `WaterClass` bajo las piezas de industria/estación.
+    #[must_use]
+    pub const fn built_on_water(self) -> bool {
+        matches!(self, Self::OilRig)
+    }
+
+    /// Año desde el que `GetIndustryGamePlayProbability` puede elegir la
+    /// especie en una partida ya iniciada. `None` significa que no tiene un
+    /// gate de fecha propio.
+    #[must_use]
+    pub const fn gameplay_appearance_year(self) -> Option<u16> {
+        match self {
+            Self::OilRig => Some(1960),
+            _ => None,
+        }
+    }
+
     #[must_use]
     pub const fn kind(self) -> IndustryKind {
         match self {
@@ -400,7 +422,9 @@ impl IndustrySpec {
             | Self::RubberPlantation
             | Self::CottonCandy
             | Self::BubbleGenerator => IndustryKind::Forest,
-            Self::OilWells | Self::OilRefinery | Self::ColaWells => IndustryKind::OilWell,
+            Self::OilWells | Self::OilRefinery | Self::OilRig | Self::ColaWells => {
+                IndustryKind::OilWell
+            }
             Self::PowerStation
             | Self::Factory
             | Self::FactoryTropic
@@ -429,6 +453,7 @@ impl IndustrySpec {
             Self::Farm => &[CargoType::Grain, CargoType::Livestock],
             Self::FarmTropic => &[CargoType::Maize],
             Self::OilWells => &[CargoType::Oil],
+            Self::OilRig => &[CargoType::Oil, CargoType::Passengers],
             Self::IronOreMine => &[CargoType::IronOre],
             Self::CopperOreMine => &[CargoType::CopperOre],
             Self::GoldMine => &[CargoType::Gold],
@@ -467,7 +492,7 @@ impl IndustrySpec {
             Self::Forest | Self::LumberMill => CargoType::Wood,
             Self::Farm => CargoType::Grain,
             Self::FarmTropic => CargoType::Maize,
-            Self::OilWells => CargoType::Oil,
+            Self::OilWells | Self::OilRig => CargoType::Oil,
             Self::IronOreMine => CargoType::IronOre,
             Self::CopperOreMine => CargoType::CopperOre,
             Self::GoldMine => CargoType::Gold,
@@ -675,7 +700,7 @@ impl IndustrySpec {
     #[must_use]
     pub const fn production_rate(self) -> u8 {
         match self {
-            Self::CoalMine => 15,
+            Self::CoalMine | Self::OilRig => 15,
             Self::Forest | Self::CottonCandy | Self::BubbleGenerator => 13,
             Self::OilWells | Self::ColaWells | Self::WaterSupply => 12,
             Self::Farm
@@ -712,6 +737,7 @@ impl IndustrySpec {
     pub const fn production_rate_secondary(self) -> Option<u8> {
         match self {
             Self::Farm => Some(10),
+            Self::OilRig => Some(2),
             _ => None,
         }
     }
@@ -726,6 +752,7 @@ impl IndustrySpec {
             | Self::GoldMine
             | Self::DiamondMine
             | Self::OilWells
+            | Self::OilRig
             | Self::ColaWells
             | Self::WaterSupply
             | Self::PlasticFountain
@@ -2640,10 +2667,23 @@ pub fn remove_closed_industries(
         }
         closed_at.push(ind.pos);
         for &tile in &ind.tiles {
-            let _ = map.set_kind(tile, crate::map::TileKind::Grass);
-            let _ = map.set_m1(tile, 0);
-            let _ = map.set_m2(tile, 0);
-            let _ = map.set_mapt_m5(tile, 0, 0);
+            if ind.spec == Some(IndustrySpec::OilRig) {
+                // La estación neutral ocupa una de las seis piezas cuando la
+                // obra ya terminó. Al cerrar, OpenTTD devuelve toda la
+                // plataforma al agua y no deja césped ni un StationType
+                // huérfano sobre el mar.
+                let water_class = map
+                    .get(tile)
+                    .map(|current| crate::map::water_class_from_m1(current.m1))
+                    .filter(|class| *class != crate::map::WaterClass::Invalid)
+                    .unwrap_or(crate::map::WaterClass::Sea);
+                let _ = crate::map::make_water_tile(map, tile, water_class);
+            } else {
+                let _ = map.set_kind(tile, crate::map::TileKind::Grass);
+                let _ = map.set_m1(tile, 0);
+                let _ = map.set_m2(tile, 0);
+                let _ = map.set_mapt_m5(tile, 0, 0);
+            }
         }
         if ind.tiles.is_empty() {
             let _ = map.set_kind(ind.pos, crate::map::TileKind::Grass);
@@ -2651,6 +2691,37 @@ pub fn remove_closed_industries(
         false
     });
     closed_at
+}
+
+/// Elimina industrias cerradas y sus estaciones neutrales asociadas.
+///
+/// El camino de simulación usa esta variante: `INDY.neutral_station` es una
+/// referencia bidireccional y una Oil Rig cerrada debe retirar también el
+/// helipuerto/muelle que creó durante la construcción. La API histórica sin
+/// estaciones se conserva para callers que sólo administran entidades INDY.
+pub fn remove_closed_industries_with_neutral_stations(
+    industries: &mut Vec<Industry>,
+    map: &mut crate::map::Map,
+    stations: &mut Vec<Station>,
+) -> Vec<TileCoord> {
+    let closed_industry_ids: std::collections::HashSet<_> = industries
+        .iter()
+        .filter(|industry| industry.is_closing())
+        .map(|industry| industry.instance_id)
+        .collect();
+    let closed_station_ids: std::collections::HashSet<_> = industries
+        .iter()
+        .filter(|industry| industry.is_closing())
+        .filter_map(|industry| industry.neutral_station_id)
+        .collect();
+    let closed = remove_closed_industries(industries, map);
+    if !closed_station_ids.is_empty() || !closed_industry_ids.is_empty() {
+        stations.retain(|station| {
+            !closed_station_ids.contains(&station.ottd_station_id.unwrap_or(u32::MAX))
+                && !closed_industry_ids.contains(&station.neutral_industry_id.unwrap_or(u16::MAX))
+        });
+    }
+    closed
 }
 
 #[cfg(test)]
@@ -2699,6 +2770,7 @@ mod tests {
                     (IndustrySpec::Sawmill, 5),
                     (IndustrySpec::Forest, 5),
                     (IndustrySpec::OilRefinery, 4),
+                    (IndustrySpec::OilRig, 0),
                     (IndustrySpec::Factory, 5),
                     (IndustrySpec::SteelMill, 5),
                     (IndustrySpec::Farm, 9),
@@ -2982,6 +3054,80 @@ mod tests {
         assert_eq!(closed, vec![pos]);
         assert!(industries.is_empty());
         assert_eq!(map.get_kind(pos), Some(crate::map::TileKind::Grass));
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn closing_oil_rig_restores_water_and_removes_neutral_station() {
+        let origin = TileCoord::new(3, 3);
+        let tiles = vec![
+            origin,
+            TileCoord::new(3, 4),
+            TileCoord::new(3, 5),
+            TileCoord::new(4, 3),
+            TileCoord::new(4, 4),
+            TileCoord::new(4, 5),
+        ];
+        let mut map = crate::map::Map::new_flat(8, 8, 0);
+        for (index, coord) in tiles.iter().copied().enumerate() {
+            let class = if index == 0 {
+                crate::map::WaterClass::River
+            } else {
+                crate::map::WaterClass::Sea
+            };
+            crate::map::make_water_tile(&mut map, coord, class).expect("water tile");
+            let mut tile = map.get(coord).expect("map tile");
+            tile.kind = if coord == origin {
+                crate::map::TileKind::Station
+            } else {
+                crate::map::TileKind::Industry
+            };
+            tile.m2 = if coord == origin { 4 } else { 7 };
+            tile.m6 = if coord == origin {
+                crate::station::STATION_TYPE_OILRIG << 3
+            } else {
+                0
+            };
+            map.set_tile(coord, tile).expect("set rig tile");
+        }
+        let mut rig = Industry::with_tiles_spec(
+            origin,
+            IndustryKind::OilWell,
+            IndustrySpec::OilRig,
+            tiles.clone(),
+            0,
+        )
+        .with_instance_id(7);
+        rig.neutral_station_id = Some(4);
+        rig.prod_level = PRODLEVEL_CLOSURE;
+        let mut station = Station::new_with_kind(origin, StopKind::OilRig);
+        station.ottd_station_id = Some(4);
+        station.neutral_industry_id = Some(7);
+        let mut industries = vec![rig];
+        let mut stations = vec![station];
+
+        assert_eq!(
+            remove_closed_industries_with_neutral_stations(
+                &mut industries,
+                &mut map,
+                &mut stations,
+            ),
+            vec![origin]
+        );
+        assert!(industries.is_empty());
+        assert!(stations.is_empty());
+        for (index, coord) in tiles.into_iter().enumerate() {
+            assert_eq!(map.get_kind(coord), Some(crate::map::TileKind::Water));
+            assert_eq!(
+                map.get(coord)
+                    .map(|tile| crate::map::water_class_from_m1(tile.m1)),
+                Some(if index == 0 {
+                    crate::map::WaterClass::River
+                } else {
+                    crate::map::WaterClass::Sea
+                })
+            );
+        }
     }
 
     #[test]

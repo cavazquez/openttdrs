@@ -23,7 +23,7 @@ El bloque termina sólo con `git commit` y `git push`. La captura raster se usa
 cuando hay compositor WGPU; si el entorno no lo permite, se registra el bloqueo
 y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
-## Handoff de issues — 2026-09-06
+## Handoff de issues — 2026-09-07
 
 Última etapa: RMAP-143 / #346 amplía el gate por fases a RNG y secuencia
 ID/posición de pueblos, además de bytes de teselas; las 30 fronteras de la
@@ -111,10 +111,18 @@ RMAP-157 / #498 aplica esa evidencia a Tropic/ríos 1024²: la seed
 industriales. La configuración, timeout, hashes y límites quedan sólo en
 `random-map-issues.md` y `evidence/rmap-157.json`; #338 no se cierra.
 
-Actualizado el 2026-09-05: el último `main` observado antes de RMAP-152
-(`3a4736fd`) completó CI, Parity docs, Fuzz replay y Platform check en verde.
-La reparación del checkout limpio está incluida y #333 se cerró con esa
-evidencia; los gates continúan siendo obligatorios para cada etapa posterior.
+RMAP-158 / #499 porta la plataforma Oil Rig que faltaba del ciclo de runtime:
+tipo nativo 5, layout 2×3, agua por tesela, producción, estación neutral
+`Oilrig` (helipuerto y muelle), cierre y round-trip SAV interno. La construcción
+terminada conserva la entidad y los bytes vinculados, y la cohorte Temperate
+512²/seed `1330935382` sigue exacta en `industries` por teselas, bloques 4×4,
+RNG e intentos. No se cierra #499: aún falta la fundación aleatoria posterior
+a 1960 y su oráculo temporal/RNG; el detalle canónico queda sólo en
+`random-map-issues.md`.
+
+Actualizado el 2026-09-07: RMAP-158 es una etapa parcial publicada sobre el
+ciclo Oil Rig; los gates continúan siendo obligatorios para cada etapa
+posterior y ningún issue padre se considera cerrado por esta cobertura.
 
 Reparación #347 validada (2026-09-04): las casas sin PNG suelto se recortan
 del atlas distribuido y conservan la misma paleta; las páginas se decodifican

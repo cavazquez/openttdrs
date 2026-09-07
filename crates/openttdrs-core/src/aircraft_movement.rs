@@ -44,7 +44,7 @@ pub fn aircraft_requires_path(kind: VehicleKind) -> bool {
 pub fn airport_station_at(stations: &[Station], pos: TileCoord) -> Option<&Station> {
     stations
         .iter()
-        .find(|s| s.stop_kind == crate::station::StopKind::Airport && s.covers_tile(pos))
+        .find(|s| s.stop_kind.has_airport_facility() && s.covers_tile(pos))
 }
 
 /// Actualiza fase/altitud de un avión una vez por tick (antes o después de `step`).

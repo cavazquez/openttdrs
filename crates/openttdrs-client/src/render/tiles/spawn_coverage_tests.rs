@@ -265,7 +265,7 @@ fn oilrig_station_uses_water_even_when_its_station_has_airport_service() {
     )
     .expect("oilrig station tile");
     let grid = RenderGrid::from_map(&map, 8, 8);
-    let mut station = Station::new_with_kind(oilrig, StopKind::Airport);
+    let mut station = Station::new_with_kind(oilrig, StopKind::OilRig);
     station.airport_tiles.push(oilrig);
     let mut world = World::new();
     world.insert_resource(TsMap(map));

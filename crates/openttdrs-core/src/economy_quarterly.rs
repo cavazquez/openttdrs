@@ -191,7 +191,9 @@ fn score_component(part: i64, info: ScoreInfo) -> i32 {
 pub fn station_facility_count(station: &Station) -> u32 {
     match station.stop_kind {
         StopKind::RailWaypoint | StopKind::RoadWaypoint | StopKind::Buoy => 0,
-        StopKind::Airport => u32::try_from(station.airport_tiles.len().max(1)).unwrap_or(1),
+        StopKind::Airport | StopKind::OilRig => {
+            u32::try_from(station.airport_tiles.len().max(1)).unwrap_or(1)
+        }
         _ => 1_u32.saturating_add(u32::try_from(station.joined_tiles.len()).unwrap_or(0)),
     }
 }

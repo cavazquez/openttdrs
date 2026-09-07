@@ -12,7 +12,9 @@ use crate::airport_tile_spec::{AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET};
 use crate::house_spec::{distance_square, get_town_radius_group};
 use crate::map::{Map, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
 use crate::newgrf_sprites::Action2EvalCtx;
-use crate::station::{Station, StopKind, station_at_tile};
+#[cfg(test)]
+use crate::station::StopKind;
+use crate::station::{Station, station_at_tile};
 use crate::world_gen::{CLEAR_GROUND_DESERT, Climate};
 
 /// Construye el contexto de una tesela de aeropuerto con la estación padre.
@@ -58,7 +60,7 @@ pub fn action2_eval_ctx_for_airport_tile_with_towns(
 ) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
     let Some(station) = station_at_tile(map, stations, coord)
-        .filter(|candidate| candidate.stop_kind == StopKind::Airport)
+        .filter(|candidate| candidate.stop_kind.has_airport_facility())
     else {
         return ctx;
     };
@@ -200,7 +202,9 @@ fn nearby_animation_frame(
     nearby: TileCoord,
 ) -> u32 {
     station_at_tile(map, stations, nearby)
-        .filter(|candidate| candidate.stop_kind == StopKind::Airport && candidate.pos == source.pos)
+        .filter(|candidate| {
+            candidate.stop_kind.has_airport_facility() && candidate.pos == source.pos
+        })
         .map_or(u32::MAX, |candidate| {
             if candidate.airport_tiles.contains(&nearby) || candidate.pos == nearby {
                 u32::from(map.get(nearby).map_or(0, |tile| tile.m7))
@@ -231,7 +235,7 @@ fn nearby_land_info(
     let terrain = airport_terrain_type(map, nearby, climate, Some(tile));
     let tile_type = u32::from(tile_kind_as_ottd(map, stations, nearby, tile));
     let same_airport = station_at_tile(map, stations, nearby).is_some_and(|candidate| {
-        candidate.stop_kind == StopKind::Airport
+        candidate.stop_kind.has_airport_facility()
             && candidate.pos == source.pos
             && (candidate.airport_tiles.contains(&nearby) || candidate.pos == nearby)
     });
@@ -251,7 +255,7 @@ fn airport_tile_id_at_offset(
     current_grfid: u32,
 ) -> u32 {
     let Some(candidate) = station_at_tile(map, stations, nearby).filter(|station| {
-        station.stop_kind == StopKind::Airport
+        station.stop_kind.has_airport_facility()
             && station.pos == source.pos
             && (station.airport_tiles.contains(&nearby) || station.pos == nearby)
     }) else {
@@ -316,7 +320,7 @@ fn airport_terrain_type(map: &Map, coord: TileCoord, climate: Climate, tile: Opt
 fn tile_kind_as_ottd(map: &Map, stations: &[Station], coord: TileCoord, tile: Tile) -> u8 {
     if tile.kind == TileKind::Station
         && station_at_tile(map, stations, coord)
-            .is_some_and(|station| station.stop_kind == StopKind::Airport)
+            .is_some_and(|station| station.stop_kind.has_airport_facility())
     {
         return 5;
     }

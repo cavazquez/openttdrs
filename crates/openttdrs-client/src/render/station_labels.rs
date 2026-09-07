@@ -45,6 +45,7 @@ const fn station_kind_short(kind: StopKind) -> &'static str {
         StopKind::Dock => "Muelle",
         StopKind::Buoy => "Boya",
         StopKind::Airport => "Aero",
+        StopKind::OilRig => "Plataforma",
         StopKind::RailWaypoint => "WP",
         StopKind::RoadWaypoint => "WP-R",
     }

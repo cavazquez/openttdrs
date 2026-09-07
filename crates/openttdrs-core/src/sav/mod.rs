@@ -1378,7 +1378,7 @@ impl GameState {
                     continue;
                 };
                 if tile.kind != TileKind::Station
-                    || crate::station::stop_kind_from_m6(tile.m6) != StopKind::Airport
+                    || !crate::station::stop_kind_from_m6(tile.m6).has_airport_facility()
                 {
                     continue;
                 }
@@ -1390,7 +1390,17 @@ impl GameState {
             }
         }
         for st in &sav.stations {
-            let stop_kind = stop_kind_from_facilities(st.facilities);
+            let airport_spec = AirportSpecId::from_ottd_airport_type(st.airport_type);
+            // Oil rigs are structurally airport + dock stations, but their
+            // `StationType::Oilrig` and the special FTA must survive import.
+            // The facilities alone cannot distinguish this from a combined
+            // airport/dock, so the native `AT_OILRIG` is authoritative.
+            let stop_kind =
+                if st.facilities & FACIL_AIRPORT != 0 && airport_spec == AirportSpecId::Oilrig {
+                    StopKind::OilRig
+                } else {
+                    stop_kind_from_facilities(st.facilities)
+                };
             let mut station = Station::new_with_kind(st.pos, stop_kind);
             station.ottd_station_id = Some(st.station_id);
             station.town_id = st.town_id;
@@ -1429,7 +1439,7 @@ impl GameState {
             // deducir el aeropuerto del `StopKind`: éste sólo conserva una
             // facilidad principal para la simulación simplificada.
             if st.facilities & FACIL_AIRPORT != 0 {
-                let spec = AirportSpecId::from_ottd_airport_type(st.airport_type);
+                let spec = airport_spec;
                 let axis_y = airport_axis_y_from_saved_footprint(spec, st.airport_w, st.airport_h);
                 station.airport_spec = spec;
                 // `STNN.airport_type` keeps the global id for custom
@@ -2557,7 +2567,7 @@ mod tests {
             pos: oilrig,
             owner: crate::company::CompanyId::NONE.0,
             name: Some("Plataforma".to_string()),
-            facilities: FACIL_AIRPORT,
+            facilities: FACIL_AIRPORT | FACIL_DOCK,
             string_id: None,
             build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
             town_id: None,
@@ -2576,6 +2586,7 @@ mod tests {
         let state = GameState::from_sav_game(sav);
         let station = state.stations.first().expect("station");
         assert!(station.owner.is_neutral());
+        assert_eq!(station.stop_kind, StopKind::OilRig);
         assert_eq!(station.airport_tiles, vec![oilrig]);
         assert_eq!(state.map.get_kind(oilrig), Some(TileKind::Station));
         assert_eq!(

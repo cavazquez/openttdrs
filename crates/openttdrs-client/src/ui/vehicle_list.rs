@@ -144,6 +144,10 @@ impl VehicleListState {
                 VehicleListKind::Ship
             }
             openttdrs_core::StopKind::Airport => VehicleListKind::Aircraft,
+            // Una plataforma acepta barcos y aviones. Esta ventana filtra un
+            // único tipo; abrir por defecto la lista naval refleja su flujo
+            // principal de petróleo y el usuario puede cambiar a aviones.
+            openttdrs_core::StopKind::OilRig => VehicleListKind::Ship,
         };
     }
 }

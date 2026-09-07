@@ -368,6 +368,7 @@ fn station_kind_label(kind: openttdrs_core::StopKind) -> &'static str {
         openttdrs_core::StopKind::Dock => "Muelle",
         openttdrs_core::StopKind::Buoy => "Boya",
         openttdrs_core::StopKind::Airport => "Aeropuerto",
+        openttdrs_core::StopKind::OilRig => "Plataforma petrolera",
         openttdrs_core::StopKind::RailWaypoint => "Waypoint",
         openttdrs_core::StopKind::RoadWaypoint => "Waypoint road",
     }

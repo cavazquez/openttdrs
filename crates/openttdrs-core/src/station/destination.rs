@@ -1,11 +1,11 @@
 use crate::map::{Map, TileCoord};
 use crate::vehicle::{VehicleKind, VehicleOrder};
 
+use super::Station;
 use super::geometry::{
     is_connected_bay_road_stop, is_drive_through_road_stop, rail_station_approach_tile,
     rail_station_stop_tile_for_approach, road_stop_approach_tile,
 };
-use super::{Station, StopKind};
 
 /// Destino de movimiento según tipo de vehículo y orden.
 ///
@@ -74,7 +74,7 @@ pub fn resolve_aircraft_station_dest(
 ) -> TileCoord {
     stations
         .iter()
-        .find(|s| s.stop_kind == StopKind::Airport && s.covers_tile(station_pos))
+        .find(|s| s.stop_kind.has_airport_facility() && s.covers_tile(station_pos))
         .map_or(station_pos, |s| {
             crate::airport::airport_loading_tile(s, map)
         })

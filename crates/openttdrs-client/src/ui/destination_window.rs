@@ -236,6 +236,7 @@ fn destinations_for_vehicle(sim: &SimWorld, vehicle_id: u32, locale: Locale) -> 
             StopKind::Dock => "Muelle",
             StopKind::Buoy => "Boya",
             StopKind::Airport => "Aeropuerto",
+            StopKind::OilRig => "Plataforma petrolera",
             StopKind::RailWaypoint => "Waypoint",
             StopKind::RoadWaypoint => "Waypoint road",
         };

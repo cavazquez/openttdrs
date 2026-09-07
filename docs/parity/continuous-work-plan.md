@@ -2378,3 +2378,11 @@ los tooltips RailType/RoadType y la abreviatura `Eléc` consultan el catálogo
 inglés. Selectores, filtros, IDs y labels NewGRF permanecen intactos; la
 regresión cubre todas las descripciones nuevas. #331 sigue abierto por los
 catálogos upstream y superficies UI restantes.
+
+Actualización #331-STATION-DIRECTORY-LOCALE-478 (2026-09-07, issue [#478](https://github.com/cavazquez/openttdrs/issues/478)):
+el directorio de estaciones localiza filtros, estado vacío, tipos de parada y
+métricas dinámicas de rating/espera, invalidando su caché al cambiar de locale.
+Nombres personalizados, compañías, coordenadas, IDs, orden y navegación no se
+traducen ni cambian; los labels NewGRF/cargos sin clave vanilla siguen
+literales. #331 sigue abierto por los catálogos upstream y superficies UI
+restantes.

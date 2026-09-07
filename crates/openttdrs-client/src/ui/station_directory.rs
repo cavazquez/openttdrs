@@ -4,8 +4,10 @@ use bevy::prelude::*;
 use openttdrs_core::CargoType;
 use openttdrs_core::prelude::*;
 
+use crate::i18n::{Locale, localized_text};
 use crate::iso::tile_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, spawn_floating_window,
@@ -134,6 +136,7 @@ pub(crate) struct StationDirectoryCache {
     facility: StationFacilityFilter,
     cargo: StationCargoFilter,
     active_company: CompanyId,
+    locale: Option<Locale>,
     rows: Vec<(TileCoord, String, StopKind, u8, u32, CompanyId)>,
 }
 
@@ -409,6 +412,7 @@ fn company_short_name(sim: &SimWorld, owner: CompanyId) -> String {
 pub(crate) fn sync_station_directory(
     state: Res<StationDirectoryState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     list_roots: Query<Entity, With<StationDirectoryListRoot>>,
     children_q: Query<&Children>,
@@ -468,6 +472,7 @@ pub(crate) fn sync_station_directory(
         ),
     >,
 ) {
+    let locale = prefs.locale();
     let Some((_, mut visibility)) = root_q
         .iter_mut()
         .find(|(window, _)| window.id == FloatingWindowId::StationDirectory)
@@ -513,7 +518,7 @@ pub(crate) fn sync_station_directory(
                 .unwrap_or_else(|| {
                     format!(
                         "{} ({}, {})",
-                        station_kind_label(station.stop_kind),
+                        station_kind_label(locale, station.stop_kind),
                         station.pos.x,
                         station.pos.y
                     )
@@ -557,6 +562,7 @@ pub(crate) fn sync_station_directory(
         && cache.facility == state.facility
         && cache.cargo == state.cargo
         && cache.active_company == active_company
+        && cache.locale == Some(locale)
         && cache.rows == rows
     {
         return;
@@ -567,6 +573,7 @@ pub(crate) fn sync_station_directory(
     cache.facility = state.facility;
     cache.cargo = state.cargo;
     cache.active_company = active_company;
+    cache.locale = Some(locale);
     cache.rows.clone_from(&rows);
 
     let Ok(list_root) = list_roots.single() else {
@@ -575,7 +582,11 @@ pub(crate) fn sync_station_directory(
     clear_list_children(&mut commands, list_root, &children_q);
     commands.entity(list_root).with_children(|list| {
         if rows.is_empty() {
-            spawn_list_empty_label(list, &asset_server, "No hay estaciones con estos filtros.");
+            spawn_list_empty_label(
+                list,
+                &asset_server,
+                &localized_text(locale, "No hay estaciones con estos filtros."),
+            );
             return;
         }
         for (pos, name, kind, rating, waiting, owner) in rows {
@@ -584,8 +595,9 @@ pub(crate) fn sync_station_directory(
                 list,
                 &asset_server,
                 format!(
-                    "{name}  ·  {}  ·  {owner_name}  ·  rating {rating}  ·  espera {waiting}",
-                    station_kind_label(kind)
+                    "{name}  ·  {}  ·  {owner_name}  ·  {}",
+                    station_kind_label(locale, kind),
+                    station_row_metrics(locale, rating, waiting),
                 ),
                 StationDirectoryRow { pos },
                 false,
@@ -594,8 +606,8 @@ pub(crate) fn sync_station_directory(
     });
 }
 
-fn station_kind_label(kind: StopKind) -> &'static str {
-    match kind {
+fn station_kind_label(locale: Locale, kind: StopKind) -> String {
+    let source = match kind {
         StopKind::BusStop => "Bus",
         StopKind::TruckStop => "Camión",
         StopKind::RailStation => "Tren",
@@ -604,6 +616,14 @@ fn station_kind_label(kind: StopKind) -> &'static str {
         StopKind::Airport => "Aeropuerto",
         StopKind::RailWaypoint => "Waypoint",
         StopKind::RoadWaypoint => "WP road",
+    };
+    localized_text(locale, source)
+}
+
+fn station_row_metrics(locale: Locale, rating: u8, waiting: u32) -> String {
+    match locale {
+        Locale::Es => format!("rating {rating}  ·  espera {waiting}"),
+        Locale::En => format!("rating {rating}  ·  waiting {waiting}"),
     }
 }
 
@@ -727,5 +747,28 @@ mod tests {
             StationCargoFilter::Passengers
         ));
         let _ = GameState::new(4, 4);
+    }
+
+    #[test]
+    fn station_directory_localizes_fallbacks_without_touching_data_values() {
+        assert_eq!(
+            station_kind_label(Locale::Es, StopKind::TruckStop),
+            "Camión"
+        );
+        assert_eq!(station_kind_label(Locale::En, StopKind::TruckStop), "Truck");
+        assert_eq!(station_kind_label(Locale::En, StopKind::Dock), "Dock");
+        assert_eq!(
+            station_row_metrics(Locale::Es, 87, 12),
+            "rating 87  ·  espera 12"
+        );
+        assert_eq!(
+            station_row_metrics(Locale::En, 87, 12),
+            "rating 87  ·  waiting 12"
+        );
+
+        let custom_name = "Estación Ñandú";
+        let custom_company = "Empresa Águila";
+        assert_eq!(localized_text(Locale::En, custom_name), custom_name);
+        assert_eq!(localized_text(Locale::En, custom_company), custom_company);
     }
 }

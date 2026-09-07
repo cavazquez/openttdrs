@@ -13,6 +13,7 @@ introdujo.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -255,6 +256,88 @@ def include_generation_state(tile_comparison: dict[str, Any], reference: dict[st
     }
 
 
+def _sequence_summary(sequence: list[dict[str, Any]]) -> dict[str, Any]:
+    """Resume una secuencia completa sin perder su identidad ordenada."""
+    canonical = json.dumps(
+        sequence,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return {
+        "count": len(sequence),
+        "sha256": hashlib.sha256(canonical).hexdigest(),
+        "first": sequence[0] if sequence else None,
+        "last": sequence[-1] if sequence else None,
+    }
+
+
+def compact_generation_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Conserva RNG y huellas completas de pools sin serializar sus listas."""
+    towns = _sequence_summary(metadata["town_positions"])
+    industries = _sequence_summary(metadata["industry_positions"])
+    attempts = _sequence_summary(metadata["industry_attempts"])
+    attempts["succeeded_count"] = sum(attempt["succeeded"] for attempt in metadata["industry_attempts"])
+    attempts["rejected_count"] = len(metadata["industry_attempts"]) - attempts["succeeded_count"]
+    objects = _sequence_summary(metadata["object_positions"])
+    return {
+        "width": metadata["width"],
+        "height": metadata["height"],
+        "random_state_0": metadata["random_state_0"],
+        "random_state_1": metadata["random_state_1"],
+        "towns": towns,
+        "industries": industries,
+        "industry_attempts": attempts,
+        "objects": objects,
+    }
+
+
+def compact_generation_phase_report(report: dict[str, Any]) -> dict[str, Any]:
+    """Convierte un informe v6 en evidencia portable para mapas grandes.
+
+    La comparación se realiza sobre el informe completo y fail-closed; esta
+    función sólo reduce lo que se persiste al final. Las muestras de diferencias
+    de tiles y la primera diferencia de cada pool se conservan para diagnóstico.
+    """
+    compact: dict[str, Any] = {
+        "schema_version": 1,
+        "contract": "generation-phase-parity-compact",
+        "source_report_schema_version": report["schema_version"],
+    }
+    for field in (
+        "reference",
+        "candidate",
+        "size",
+        "seed",
+        "climate",
+        "phases",
+        "block_size",
+        "generation_settings",
+        "first_divergent_stage",
+        "exact_match",
+        "error",
+    ):
+        if field in report:
+            compact[field] = report[field]
+    if "comparisons" not in report:
+        return compact
+    comparisons: dict[str, dict[str, Any]] = {}
+    for phase, comparison in report["comparisons"].items():
+        comparisons[phase] = {
+            key: value
+            for key, value in comparison.items()
+            if key not in {"reference_raw", "candidate_raw", "reference_metadata", "candidate_metadata"}
+        }
+        comparisons[phase]["reference_metadata"] = compact_generation_metadata(
+            comparison["reference_metadata"]
+        )
+        comparisons[phase]["candidate_metadata"] = compact_generation_metadata(
+            comparison["candidate_metadata"]
+        )
+    compact["comparisons"] = comparisons
+    return compact
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reference-bin", type=Path, default=ROOT / "reference/openttd-upstream/build/openttd")
@@ -297,6 +380,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--phases", default=",".join(PHASES))
     parser.add_argument("--out-dir", type=Path, help="directorio para artefactos")
     parser.add_argument("--report", type=Path, help="ruta del informe JSON")
+    parser.add_argument(
+        "--compact-report",
+        action="store_true",
+        help="persiste hashes, extremos y conteos de pools, no listas completas",
+    )
     parser.add_argument(
         "--require-exact",
         action="store_true",
@@ -550,7 +638,11 @@ def main() -> int:
         print(f"ERROR: {error}", file=sys.stderr)
     finally:
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        persisted_report = compact_generation_phase_report(report) if args.compact_report else report
+        report_path.write_text(
+            json.dumps(persisted_report, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
         print(f"Reporte escrito en {report_path}")
         if holder:
             holder.cleanup()

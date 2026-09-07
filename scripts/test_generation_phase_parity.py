@@ -82,6 +82,68 @@ def valid_generation_state() -> dict[str, object]:
     }
 
 
+def test_compact_report_hashes_full_pools_without_serializing_them() -> None:
+    """Una mutación central cambia el hash aunque los extremos no cambien."""
+    metadata = valid_generation_state()
+    metadata["width"] = 64
+    metadata["height"] = 64
+    metadata["town_count"] = 3
+    metadata["town_positions"] = [
+        {"id": 0, "x": 2, "y": 3, "population": 40, "num_houses": 3},
+        {"id": 1, "x": 3, "y": 4, "population": 45, "num_houses": 4},
+        {"id": 2, "x": 4, "y": 5, "population": 50, "num_houses": 4},
+    ]
+    summary = phase.compact_generation_metadata(metadata)
+    assert summary["towns"]["count"] == 3
+    assert summary["towns"]["first"] == metadata["town_positions"][0]
+    assert summary["towns"]["last"] == metadata["town_positions"][-1]
+    assert len(summary["towns"]["sha256"]) == 64
+    assert summary["industry_attempts"]["succeeded_count"] == 1
+    assert summary["industry_attempts"]["rejected_count"] == 1
+
+    changed = copy.deepcopy(metadata)
+    changed["town_positions"][1]["population"] += 1
+    changed_summary = phase.compact_generation_metadata(changed)
+    assert changed_summary["towns"]["first"] == summary["towns"]["first"]
+    assert changed_summary["towns"]["last"] == summary["towns"]["last"]
+    assert changed_summary["towns"]["sha256"] != summary["towns"]["sha256"]
+
+    full = {
+        "schema_version": 6,
+        "contract": "generation-phase-parity",
+        "reference": {"binary": "reference", "commit": "pin"},
+        "candidate": {"binary": "candidate"},
+        "size": 64,
+        "seed": 1,
+        "climate": "temperate",
+        "phases": ["industries"],
+        "block_size": 4,
+        "generation_settings": {},
+        "first_divergent_stage": None,
+        "exact_match": True,
+        "comparisons": {
+            "industries": {
+                "reference_raw": "/tmp/reference.raw.jsonl",
+                "candidate_raw": "/tmp/candidate.raw.jsonl",
+                "reference_metadata": metadata,
+                "candidate_metadata": metadata,
+                "tile_difference_count": 0,
+                "generation_state": {"differing_fields": []},
+            }
+        },
+    }
+    compact = phase.compact_generation_phase_report(full)
+    assert compact["schema_version"] == 1
+    assert compact["contract"] == "generation-phase-parity-compact"
+    assert compact["source_report_schema_version"] == 6
+    persisted = compact["comparisons"]["industries"]
+    assert "reference_raw" not in persisted and "candidate_raw" not in persisted
+    assert persisted["reference_metadata"] == summary
+    serialized = json.dumps(compact)
+    assert "town_positions" not in serialized
+    assert "reference.raw" not in serialized
+
+
 def test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles() -> None:
     reference = valid_generation_state()
     tiles = {"exact_match": True, "tile_difference_count": 0}
@@ -1078,6 +1140,7 @@ def test_rmap_155_evidence_records_toyland_ordered_industry_attempts() -> None:
 
 
 if __name__ == "__main__":
+    test_compact_report_hashes_full_pools_without_serializing_them()
     test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles()
     test_state_gate_fails_closed_for_unobserved_or_malformed_state()
     test_versioned_oracle_exports_generation_state()

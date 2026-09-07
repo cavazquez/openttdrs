@@ -100,6 +100,12 @@ la seed `1330935381` conserva las seis fronteras y 908 intentos exactos; su
 pool de objetos vacío se declara como tal. Evidencia y límites quedan sólo en
 `random-map-issues.md` y `evidence/rmap-155.json`; #338 no se cierra.
 
+RMAP-156 / #496 agrega `--compact-report` al oráculo por fases: valida el
+reporte completo antes de persistir una huella portable de sus pools, por lo
+que habilita casos grandes sin convertir sus trazas en artefactos versionados
+gigantes. No sustituye el reporte completo al diagnosticar una divergencia ni
+reduce el alcance pendiente de #338.
+
 Actualizado el 2026-09-05: el último `main` observado antes de RMAP-152
 (`3a4736fd`) completó CI, Parity docs, Fuzz replay y Platform check en verde.
 La reparación del checkout limpio está incluida y #333 se cerró con esa

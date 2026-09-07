@@ -4,13 +4,15 @@ use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
 use openttdrs_core::Command;
-use openttdrs_core::MAX_SIGN_NAME_CHARS;
+use openttdrs_core::{MAX_SIGN_NAME_CHARS, TileCoord};
 
+use crate::i18n::{Locale, localized_text};
 use crate::iso::tile_pos;
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending,
     request_map_visual_remap_with_labels,
 };
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
@@ -42,6 +44,24 @@ pub(crate) enum SignListAction {
     Delete,
     ApplyRename,
     CancelRename,
+}
+
+fn sign_list_empty_text(locale: Locale) -> String {
+    match locale {
+        Locale::Es => "Sin carteles.\n\nUsa Paisaje → Cartel para colocar uno.".to_owned(),
+        Locale::En => "No signs.\n\nUse Landscape → Text sign to place one.".to_owned(),
+    }
+}
+
+fn sign_list_heading(locale: Locale) -> String {
+    format!(
+        "{}\n",
+        localized_text(locale, "Clic en una fila para seleccionar:")
+    )
+}
+
+fn sign_row_line(mark: &str, id: u32, pos: TileCoord, name: &str) -> String {
+    format!("{mark} #{id:<3} ({}, {})  {name}\n", pos.x, pos.y)
 }
 
 pub(crate) fn setup_sign_list_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -83,7 +103,7 @@ pub(crate) fn setup_sign_list_window(mut commands: Commands, asset_server: Res<A
                 for (label, action) in [
                     ("Centrar", SignListAction::Center),
                     ("Renombrar", SignListAction::Rename),
-                    ("Borrar", SignListAction::Delete),
+                    ("Eliminar cartel", SignListAction::Delete),
                 ] {
                     spawn_action_btn(row, asset_server, label, action);
                 }
@@ -164,6 +184,7 @@ pub(crate) fn open_sign_list_from_routes(
 
 pub(crate) fn sync_sign_list_window(
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut state: ResMut<SignListWindowState>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut body_q: Query<&mut Text, (With<SignListBodyText>, Without<SignListRenameInput>)>,
@@ -194,20 +215,18 @@ pub(crate) fn sync_sign_list_window(
         state.rename_editing = false;
     }
     if let Ok(mut body) = body_q.single_mut() {
+        let locale = prefs.locale();
         if sim.state.signs.is_empty() {
-            **body = "Sin carteles.\n\nUsa Paisaje → Cartel para colocar uno.".into();
+            **body = sign_list_empty_text(locale);
         } else {
-            let mut lines = String::from("Clic en una fila para seleccionar:\n");
+            let mut lines = sign_list_heading(locale);
             for sign in &sim.state.signs {
                 let mark = if state.selected == Some(sign.id) {
                     ">"
                 } else {
                     " "
                 };
-                lines.push_str(&format!(
-                    "{mark} #{:<3} ({}, {})  {}\n",
-                    sign.id, sign.pos.x, sign.pos.y, sign.name
-                ));
+                lines.push_str(&sign_row_line(mark, sign.id, sign.pos, &sign.name));
             }
             **body = lines;
         }
@@ -402,5 +421,18 @@ mod tests {
         world.write_message(OpenUiRoute(UiRoute::SignList));
         world.run_system_once(open_sign_list_from_routes).unwrap();
         assert!(world.resource::<SignListWindowState>().open);
+    }
+
+    #[test]
+    fn sign_list_localizes_chrome_without_translating_user_names() {
+        assert_eq!(
+            sign_list_empty_text(Locale::En),
+            "No signs.\n\nUse Landscape → Text sign to place one."
+        );
+        assert_eq!(sign_list_heading(Locale::En), "Click a row to select:\n");
+        assert_eq!(
+            sign_row_line(">", 7, TileCoord::new(-2, 9), "Cartel Ñandú"),
+            "> #7   (-2, 9)  Cartel Ñandú\n"
+        );
     }
 }

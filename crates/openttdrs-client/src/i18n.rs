@@ -374,6 +374,11 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Eje X" => "Axis X",
         "Eje Y" => "Axis Y",
         "Cartel de texto" => "Text sign",
+        "Centrar" => "Center",
+        "Renombrar" => "Rename",
+        "Eliminar cartel" => "Delete sign",
+        "Aplicar" => "Apply",
+        "Clic en una fila para seleccionar:" => "Click a row to select:",
         "Coloca la boya en agua navegable para abrir rutas." => {
             "Place the buoy in navigable water to open routes."
         }
@@ -1324,6 +1329,14 @@ mod tests {
             ("Eje X", "Axis X"),
             ("Eje Y", "Axis Y"),
             ("Cartel de texto", "Text sign"),
+            ("Centrar", "Center"),
+            ("Renombrar", "Rename"),
+            ("Eliminar cartel", "Delete sign"),
+            ("Aplicar", "Apply"),
+            (
+                "Clic en una fila para seleccionar:",
+                "Click a row to select:",
+            ),
             (
                 "Coloca la boya en agua navegable para abrir rutas.",
                 "Place the buoy in navigable water to open routes.",

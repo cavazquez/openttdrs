@@ -2366,3 +2366,9 @@ cartel consultan el locale en sus títulos y ayudas. `Cartel de texto` queda
 separado de la categoría de noticias `Cartel`; orientaciones, herramientas e
 IDs no cambian. #331 sigue abierto por los catálogos upstream y superficies UI
 restantes.
+
+Actualización #331-SIGN-LIST-476 (2026-09-07, issue [#476](https://github.com/cavazquez/openttdrs/issues/476)):
+la lista de carteles localiza acciones, estado vacío y encabezado dinámico.
+ID, coordenadas y nombres de usuario permanecen literales; centrar, renombrar,
+borrar y remapear no cambian. #331 sigue abierto por los catálogos upstream y
+superficies UI restantes.

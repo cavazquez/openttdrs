@@ -738,26 +738,27 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
         let tiles = state.industries[i].tiles.clone();
         let pos = state.industries[i].pos;
         let footprint: Vec<TileCoord> = if tiles.is_empty() { vec![pos] } else { tiles };
-        let production_tick = state.industries[i].produces_on_tick(tick);
+        // `ProduceIndustryGoods` decrementa el contador persistido antes de
+        // evaluar producción, callbacks y efectos. No se puede reconstruir
+        // esa fase con `tick + counter` tras importar un SAV.
+        let production_tick = state.industries[i].advance_production_counter();
         if state.industries[i].requires_station_inputs() {
             let processed = if callback_on_arrival || callback_on_tick {
-                state.industries[i]
-                    .produce_from_nearby_stations_with_callback_and_newgrf_and_catalog(
-                        &mut state.stations,
-                        tick,
-                        true,
-                        newgrf_def.as_ref(),
-                        &state.cargo_spec_catalog,
-                    )
+                state.industries[i].produce_from_nearby_stations_on_production_tick(
+                    &mut state.stations,
+                    true,
+                    newgrf_def.as_ref(),
+                    &state.cargo_spec_catalog,
+                    production_tick,
+                )
             } else {
-                state.industries[i]
-                    .produce_from_nearby_stations_with_callback_and_newgrf_and_catalog(
-                        &mut state.stations,
-                        tick,
-                        false,
-                        newgrf_def.as_ref(),
-                        &state.cargo_spec_catalog,
-                    )
+                state.industries[i].produce_from_nearby_stations_on_production_tick(
+                    &mut state.stations,
+                    false,
+                    newgrf_def.as_ref(),
+                    &state.cargo_spec_catalog,
+                    production_tick,
+                )
             };
             if processed {
                 state.industries[i].was_cargo_delivered = true;
@@ -809,7 +810,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                 &state.cargo_spec_catalog,
             );
         } else {
-            state.industries[i].produce(tick);
+            state.industries[i].produce_if_due(production_tick);
         }
         if production_tick {
             let behaviour = industry_behaviour(&state.industries[i], newgrf_def.as_ref());
@@ -852,15 +853,11 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                         1,
                     )
                     .unwrap_or_else(|| {
-                        (tick + u64::from(state.industries[i].counter))
+                        u64::from(state.industries[i].counter)
                             .is_multiple_of(INDUSTRY_CUT_TREE_TICKS)
                     })
                 } else {
-                    // `i->counter` is represented by the fixed phase in the
-                    // local model; adding it to the global tick reproduces the
-                    // decremented counter used by OpenTTD's modulo check.
-                    (tick + u64::from(state.industries[i].counter))
-                        .is_multiple_of(INDUSTRY_CUT_TREE_TICKS)
+                    u64::from(state.industries[i].counter).is_multiple_of(INDUSTRY_CUT_TREE_TICKS)
                 };
                 if cut
                     && !state.industries[i].produced_cargos().is_empty()
@@ -1128,6 +1125,28 @@ mod tests {
         let selected =
             random_industry_pool_index(&mut state).map(|index| state.industries[index].instance_id);
         assert_eq!(selected, Some(6));
+    }
+
+    #[test]
+    fn runtime_decrements_industry_counter_before_the_production_cycle() {
+        let mut state = GameState::new(4, 4);
+        state.industries.push(
+            Industry::with_tiles_spec(
+                TileCoord::new(1, 1),
+                IndustrySpec::CoalMine.kind(),
+                IndustrySpec::CoalMine,
+                vec![TileCoord::new(1, 1)],
+                0,
+            )
+            .with_persisted_counter(1),
+        );
+
+        produce_industries(&mut state, 17);
+        assert_eq!(state.industries[0].counter, 0);
+        assert!(state.industries[0].stock > 0, "el cero posterior produce");
+
+        produce_industries(&mut state, 18);
+        assert_eq!(state.industries[0].counter, u16::MAX);
     }
 
     #[test]

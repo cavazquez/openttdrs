@@ -1414,11 +1414,11 @@ impl Industry {
         self
     }
 
-    /// ¿Este tick cae en el ciclo de producción de esta industria?
+    /// ¿Este tick cae en el ciclo de producción de esta industria sin mutarla?
     ///
-    /// `OpenTTD` decrementa `counter` cada tick y produce cuando es múltiplo de
-    /// `INDUSTRY_PRODUCE_TICKS`; el desfase equivalente sobre el tick global es
-    /// sumar la fase, que reparte las industrias entre ticks distintos.
+    /// Es una proyección útil para llamadas aisladas y pruebas antiguas. La
+    /// simulación real debe usar [`Self::advance_production_counter`], pues
+    /// `OpenTTD` conserva y decrementa `Industry::counter` en cada tick.
     #[must_use]
     pub const fn produces_on_tick(&self, tick: u64) -> bool {
         if tick == 0 {
@@ -1426,6 +1426,17 @@ impl Industry {
         }
         let period = industry_produce_period_ticks(self.kind);
         (tick + self.counter as u64).is_multiple_of(period)
+    }
+
+    /// Decrementa `Industry::counter` igual que `ProduceIndustryGoods` y
+    /// devuelve si el valor posterior habilita el ciclo de producción.
+    ///
+    /// El contador persistido es `u16`: al cruzar cero debe envolver a
+    /// `u16::MAX`, no saturar ni reconstruirse desde el tick global. Esto es
+    /// observable tanto en `INDY` como en callbacks `NewGRF`.
+    pub fn advance_production_counter(&mut self) -> bool {
+        self.counter = self.counter.wrapping_sub(1);
+        u64::from(self.counter).is_multiple_of(industry_produce_period_ticks(self.kind))
     }
 
     #[must_use]
@@ -2009,6 +2020,13 @@ impl Industry {
 
     /// Produce cargo primario (y secundario si aplica) si el tick cae en el periodo.
     pub fn produce(&mut self, tick: u64) {
+        let production_tick = self.produces_on_tick(tick);
+        self.produce_if_due(production_tick);
+    }
+
+    /// Variante del ciclo principal, cuyo contador ya fue actualizado antes
+    /// de llegar a la producción.
+    pub(crate) fn produce_if_due(&mut self, production_tick: bool) {
         if self.requires_station_inputs() || self.is_closing() {
             return;
         }
@@ -2017,7 +2035,7 @@ impl Industry {
         if amounts.iter().all(|&amount| amount == 0) {
             return;
         }
-        if self.produces_on_tick(tick) {
+        if production_tick {
             for (index, (&cargo, &amount)) in outputs.iter().zip(&amounts).enumerate() {
                 if amount == 0 {
                     continue;
@@ -2090,11 +2108,32 @@ impl Industry {
         newgrf_def: Option<&IndustrySpecDef>,
         cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
     ) -> bool {
+        let production_tick = self.produces_on_tick(tick);
+        self.produce_from_nearby_stations_on_production_tick(
+            stations,
+            callback_on_arrival,
+            newgrf_def,
+            cargo_catalog,
+            production_tick,
+        )
+    }
+
+    /// Variante del ciclo principal, cuyo contador ya fue decrementado en
+    /// este tick. Evita volver a derivar la fase desde el tick global después
+    /// de cargar una partida real.
+    pub(crate) fn produce_from_nearby_stations_on_production_tick(
+        &mut self,
+        stations: &mut [Station],
+        callback_on_arrival: bool,
+        newgrf_def: Option<&IndustrySpecDef>,
+        cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
+        production_tick: bool,
+    ) -> bool {
         let inputs = self.processing_inputs();
         if inputs.is_empty() || self.is_closing() {
             return false;
         }
-        if !self.produces_on_tick(tick) || self.all_output_stocks_full() {
+        if !production_tick || self.all_output_stocks_full() {
             return false;
         }
 
@@ -3105,6 +3144,17 @@ mod tests {
         let ind = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine)
             .with_persisted_counter(0xFFFF);
         assert_eq!(ind.counter, 0xFFFF);
+    }
+
+    #[test]
+    fn persisted_counter_decrements_with_u16_wrapping_before_production() {
+        let mut ind =
+            Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine).with_persisted_counter(1);
+
+        assert!(ind.advance_production_counter());
+        assert_eq!(ind.counter, 0);
+        assert!(!ind.advance_production_counter());
+        assert_eq!(ind.counter, u16::MAX);
     }
 
     #[test]

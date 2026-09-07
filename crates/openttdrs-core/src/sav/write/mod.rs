@@ -2154,6 +2154,28 @@ mod tests {
     }
 
     #[test]
+    fn ottn_roundtrip_preserves_counter_after_a_runtime_decrement() {
+        use crate::industry::{Industry, IndustryKind, IndustrySpec};
+
+        let mut state = tiny_state();
+        state.industries = vec![
+            Industry::with_tiles_spec(
+                TileCoord::new(36, 20),
+                IndustryKind::CoalMine,
+                IndustrySpec::CoalMine,
+                vec![TileCoord::new(36, 20)],
+                0,
+            )
+            .with_persisted_counter(1),
+        ];
+        assert!(state.industries[0].advance_production_counter());
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.industries[0].counter, 0);
+    }
+
+    #[test]
     fn ottn_roundtrip_preserves_vehicles_and_orders() {
         use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
 

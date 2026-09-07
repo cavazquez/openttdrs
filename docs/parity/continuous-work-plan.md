@@ -155,18 +155,22 @@ mismo JSONL v1 en el corte post-timer y el comparador exige reloj, RNG, `ECMY`,
 `ITBL`, industrias y acciones exactos. #507 ya rehidrata el `DATE` moderno sin
 derivar tick, calendario ni economía entre sí; la corrida controlada iguala el
 estado inicial de reloj y RNG persistido. #508 conserva el `INDY.counter` de
-16 bits y #509 conserva `INDY.location.tile` ante footprints incompletos; la
-comparación normal avanza al primer residual de runtime, el decremento por tick
-de `INDY.counter` (#511). #510 impide que una ejecución dedicated sin socket
-se acepte como oracle aunque produzca JSONL válida. RMAP-162 cierra
+16 bits y #509 conserva `INDY.location.tile` ante footprints incompletos. #511
+decrementa el contador como `u16` por tick y mueve el scheduler diario al timer
+económico previo a `TimerGameTick`: en tres días normales igualan reloj, tick,
+`ECMY`, `ITBL`, acciones y los 42 contadores. El primer residual posterior es
+el RNG global (#512), no un salto artificial del contador. #510 impide que una
+ejecución dedicated sin socket se acepte como oracle aunque produzca JSONL
+válida. RMAP-162 cierra
 instrumentación y regresiones, no afirma todavía paridad temporal ni reduce
 los pendientes de #499, RMAP-056 o #338.
 
 Actualizado el 2026-09-07: RMAP-159/#500, RMAP-160/#501, RMAP-161/#502 y
 RMAP-162/#506 son sub-issues cerrados de estado/selección, observación nativa,
 ejecución vanilla e instrumentación diferencial. #507 conserva la cobertura de
-carga `DATE`, #510 valida la calidad de la corrida native y #511 mantiene
-separado el runtime posterior. Los gates continúan siendo obligatorios y
+carga `DATE`, #510 valida la calidad de la corrida native, #511 cierra el
+contador persistido y #512 mantiene separado el RNG posterior. Los gates
+continúan siendo obligatorios y
 ningún issue padre se considera cerrado por esta cobertura.
 
 Reparación #347 validada (2026-09-04): las casas sin PNG suelto se recortan

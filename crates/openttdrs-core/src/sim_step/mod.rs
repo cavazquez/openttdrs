@@ -2,16 +2,17 @@
 //!
 //! ## Fases autoritativas del tick (orden `OpenTTD`; P2.2 / P2.4)
 //!
-//! 1. **timers**: `tick.advance` + calendario/economía.
-//! 2. **`timer_economy`**: economía mensual/anual y rollover de beneficios.
-//! 3. **`tile_animation`**: `AnimateAnimatedTiles` (industrias / aeropuertos).
-//! 4. **`tile_loop`**: `RunTileLoop` (LFSR).
-//! 5. **`path_recompute`**: liberación de depot + rutas (sin PBS completo).
-//! 6. **`cargo_transfer`**: descarga y carga (`LoadUnloadStation`) + barridos diarios.
-//! 7. **`vehicle_ops_pre_move`**: horarios, autoreemplazo, wander, aeronaves.
-//! 8. **`movement`**: movimiento + PBS post-move.
-//! 9. **`landscape`**: `CallLandscapeTick` town → trees → station → industry → companies → linkgraph.
-//! 10. **`post_tick`**: refits, señales, costos, noticias, paridad.
+//! 1. **timers**: calendario/economía sobre el tick persistido.
+//! 2. **`timer_economy`**: economía diaria/mensual/anual antes de avanzar el tick.
+//! 3. **tick**: incremento de `TimerGameTick` tras los timers, como `OpenTTD`.
+//! 4. **`tile_animation`**: `AnimateAnimatedTiles` (industrias / aeropuertos).
+//! 5. **`tile_loop`**: `RunTileLoop` (LFSR).
+//! 6. **`path_recompute`**: liberación de depot + rutas (sin PBS completo).
+//! 7. **`cargo_transfer`**: descarga y carga (`LoadUnloadStation`) + barridos diarios.
+//! 8. **`vehicle_ops_pre_move`**: horarios, autoreemplazo, wander, aeronaves.
+//! 9. **`movement`**: movimiento + PBS post-move.
+//! 10. **`landscape`**: `CallLandscapeTick` town → trees → station → industry → companies → linkgraph.
+//! 11. **`post_tick`**: refits, señales, costos, noticias, paridad.
 
 mod cargo_transfer;
 mod economy;
@@ -194,11 +195,13 @@ pub(crate) fn step(state: &mut GameState) {
         .terminal_spatial_index
         .rebuild(&state.map, &state.stations);
     refresh_road_stop_statuses(state);
-    state.tick.advance();
     state.advance_game_timers();
-    let t = state.tick.get();
-
     phase_timer_economy(state);
+    // `StateGameLoop` avanza calendario/economía y sus callbacks antes de
+    // `TimerGameTick`. Es observable: el scheduler diario de industrias toma
+    // su snapshot antes de que `OnTick_Industry` decremente los counters.
+    state.tick.advance();
+    let t = state.tick.get();
     phase_tile_animation(state, t);
     phase_tile_loop(state, t);
     phase_path_recompute(state);
@@ -244,13 +247,15 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
         .terminal_spatial_index
         .rebuild(&state.map, &state.stations);
     refresh_road_stop_statuses(state);
-    state.tick.advance();
     state.advance_game_timers();
-    let t = state.tick.get();
-
     let p0 = Instant::now();
     phase_timer_economy(state);
     timings.timer_economy_ns = nanos(p0);
+
+    // Mantener la misma frontera que `step`: los callbacks de calendario y
+    // economía observan el tick persistido; landscape observa el incrementado.
+    state.tick.advance();
+    let t = state.tick.get();
 
     let p0 = Instant::now();
     phase_tile_animation(state, t);
@@ -396,6 +401,12 @@ fn nanos(start: Instant) -> u64 {
 
 /// Economía disparada por timers (mes/año), no landscape.
 fn phase_timer_economy(state: &mut GameState) {
+    // `_economy_industries_daily` corre en TimerGameEconomy, antes de
+    // TimerGameTick y de OnTick_Industry. Usar el reloj económico (no el
+    // calendario) preserva también el modo wallclock.
+    if state.runtime.economy_triggers.new_day {
+        economy::advance_industry_daily_scheduler(state);
+    }
     if state.runtime.economy_triggers.new_month {
         economy::process_monthly_economy(state);
     }
@@ -1095,7 +1106,7 @@ mod tests {
         Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
     };
     use crate::{
-        GameState, PathNetwork, STATION_ANIMATION_TRIGGER_PATH_RESERVATION,
+        GameState, Industry, IndustrySpec, PathNetwork, STATION_ANIMATION_TRIGGER_PATH_RESERVATION,
         STATION_ANIMATION_TRIGGER_VEHICLE_ARRIVES, STATION_ANIMATION_TRIGGER_VEHICLE_DEPARTS,
         TileCoord, Vehicle, VehicleKind, VehicleOrder, find_path,
     };
@@ -1168,6 +1179,35 @@ mod tests {
             newgrf_badge_translation: Vec::new(),
         });
         (state, pos)
+    }
+
+    #[test]
+    fn daily_industry_scheduler_samples_before_same_tick_production() {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(4, 4);
+        state.tick = crate::GameTick::new(17);
+        state.calendar.date_fract = crate::DAY_TICKS - 1;
+        state.economy_timer.date_fract = crate::DAY_TICKS - 1;
+        state.industries.push(
+            Industry::with_tiles_spec(
+                pos,
+                IndustrySpec::CoalMine.kind(),
+                IndustrySpec::CoalMine,
+                vec![pos],
+                0,
+            )
+            .with_persisted_counter(42),
+        );
+        state.enable_industry_scheduler_trace();
+
+        state.step();
+
+        let samples = state.take_industry_scheduler_trace_samples();
+        assert_eq!(samples.len(), 1);
+        assert_eq!(samples[0].tick, 17, "timer antes de TimerGameTick");
+        assert_eq!(samples[0].industries[0].counter, 42);
+        assert_eq!(state.tick.get(), 18);
+        assert_eq!(state.industries[0].counter, 41, "OnTick_Industry posterior");
     }
 
     #[test]

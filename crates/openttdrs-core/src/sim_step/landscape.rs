@@ -4,7 +4,7 @@ use crate::flow_stat::StationFlows;
 use crate::linkgraph_parity::{
     Job, build_jobs_from_cargo_dist, run_full_pipeline, to_station_flows_helper,
 };
-use crate::{CargoType, GameState, station};
+use crate::{CargoType, DAY_TICKS, GameState, station};
 
 /// Tick de economía en el que se spawnean/unen jobs del linkgraph (`SPAWN_JOIN_TICK`).
 pub const LINKGRAPH_SPAWN_JOIN_TICK: u16 = 21;
@@ -136,14 +136,18 @@ fn trigger_station_acceptance_animations(state: &mut GameState, t: u64) {
     }
 }
 
-/// `OnTick_Industry`: producción y cambio diario de nivel.
+/// `OnTick_Industry`: producción y acumulado de entradas escalonado.
 fn on_tick_industry(state: &mut GameState, t: u64) {
     super::economy::produce_industries(state, t);
-    if state.runtime.calendar_triggers.new_day {
-        for industry in &mut state.industries {
+    // El loop nativo acumula cada industria cuando `(tick + IndustryID) %
+    // DAY_TICKS == 0`, después de que TimerGameTick fue incrementado. No es
+    // un barrido global en el borde del calendario.
+    for industry in &mut state.industries {
+        if t.wrapping_add(u64::from(industry.instance_id))
+            .is_multiple_of(u64::from(DAY_TICKS))
+        {
             industry.accumulate_accepted_waiting();
         }
-        super::economy::advance_industry_daily_scheduler(state);
     }
 }
 

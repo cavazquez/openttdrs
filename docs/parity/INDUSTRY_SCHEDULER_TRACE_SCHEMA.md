@@ -3,8 +3,8 @@
 Actualizado: 2026-09-07. Sub-issues: #501 (oráculo), #502 (ejecución vanilla)
 y #506 (candidato/comparador); padre de runtime: #499 / RMAP-158. #507
 conserva la importación de los relojes `DATE` y el estado RNG de carga; #510
-rechaza una ejecución dedicated degradada y #511 aísla el primer residual de
-runtime posterior.
+rechaza una ejecución dedicated degradada, #511 alinea el contador de industria
+y #512 aísla el residual RNG posterior.
 
 `OPENTTDRS_INDUSTRY_TRACE_OUT` habilita, exclusivamente en el binario OpenTTD
 instrumentado, una traza JSONL de la rutina diaria
@@ -91,11 +91,14 @@ ruta recorre un arranque distinto y no es un oracle de importación.
 
 Con el estado inicial ya alineado, #508 conserva los 16 bits de `INDY.counter`
 y #509 mantiene `INDY.location.tile` como origen aun con un footprint
-incompleto. La primera diferencia válida queda en
-`day[1].industries[0].counter`: OpenTTD produce `12658` y el candidato
-`12730`. #511 cubre el decremento con wrapping que OpenTTD hace durante la
-producción por tick y su persistencia; hasta resolverlo —y los residuales que
-sigan— este contrato no declara paridad runtime del scheduler.
+incompleto. #511 reproduce el decremento con wrapping durante `OnTick_Industry`
+y coloca `_economy_industries_daily` antes de `TimerGameTick`, como el loop
+nativo. La corrida normal de tres días ya iguala tick, ambos relojes, `ECMY`,
+`ITBL`, acciones y los 42 `INDY.counter`; por ejemplo el primero pasa de
+`12730` a `12658` en ambos motores. El primer residual válido es ahora
+`day[1].random_state` (#512): OpenTTD
+`[703151878, 1259678577]` frente a openttdrs `[2833653817, 3599663225]`.
+Este contrato no declara aún paridad runtime completa del scheduler.
 
 ## Límites explícitos
 

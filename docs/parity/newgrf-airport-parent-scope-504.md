@@ -28,9 +28,9 @@ Sólo después delega las demás variables a `Station::GetNewGRFVariable`.
   es el bit de aeropuerto (`1 << 3`).
 - `FA` reutiliza `Station::newgrf_build_date_value`: días desde el año base
   original, saturados al `WORD` nativo.
-- `7C` ya copiaba los registros persistentes de la estación al scope padre;
-  se conserva esa identidad de PSA, incluida su hidratación desde
-  `STNN.normal.airport.psa`/`PSAC`.
+- `7C` carga los registros persistentes existentes de la estación al scope
+  padre, incluida su hidratación desde `STNN.normal.airport.psa`/`PSAC`. El
+  writeback de `\\2psto` parent se completa separadamente en #505.
 - No hace falta otra vía de caché: `runtime_fingerprint` ya mezcla en orden
   determinista `parent_vars`, por lo que los nuevos valores invalidan una
   variante Action2 de renderer cuando cambian.

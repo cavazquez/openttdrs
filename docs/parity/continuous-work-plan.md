@@ -504,12 +504,20 @@ siguen fuera de este subtramo.
 
 Actualización #504-AIRPORT-PARENT-STATION-VARS (2026-09-07): el
 `AirportScope` padre publica ahora `F0` (facilities) y `FA` (fecha relativa
-`WORD`) con la misma escala de OpenTTD; `7C` ya conserva el PSA de estación.
+`WORD`) con la misma escala de OpenTTD; `7C` carga el PSA de estación.
 La prueba core encadena `F0` → `FA` y la de renderer ECS exige `F0` antes de
 resolver el badge padre. La evidencia y los límites están en
 [newgrf-airport-parent-scope-504.md](newgrf-airport-parent-scope-504.md).
 No se declara completa la delegación de `Station::GetNewGRFVariable` ni los
 residuales FTA/raster de #326/#329.
+
+Actualización #505-AIRPORT-PARENT-PSA (2026-09-07): `\\2psto` de un Action2
+parent de `AirportTile` ya vuelve al PSA del aeropuerto tras CB152/153/154,
+en vez de perderse en el mapa del scope propio sin storage. La escritura inicial
+de cero conserva la asignación perezosa nativa; el renderer sigue sin writeback.
+La regresión cubre CB152 → PSA → CB153 y la evidencia está en
+[newgrf-airport-parent-psa-505.md](newgrf-airport-parent-psa-505.md). Esto no
+cierra #326 ni #329: siguen pendientes StationScope, FTA y raster/sonido.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|

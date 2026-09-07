@@ -14,7 +14,8 @@ use crate::industry::Industry;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::newgrf_callback::{
     RoadStopCallbackWorld, advance_road_stop_animation_at_with_world,
-    trigger_road_stop_animation_at_with_world, writeback_station_persistent_registers,
+    trigger_road_stop_animation_at_with_world, writeback_airport_tile_parent_persistent_registers,
+    writeback_station_persistent_registers,
 };
 use crate::newgrf_sprites::{
     CALLBACK_FAILED, CBID_AIRPTILE_ANIMATION_NEXT_FRAME, CBID_AIRPTILE_ANIMATION_SPEED,
@@ -252,7 +253,7 @@ fn resolve_airport_animation_callback(
     };
     ctx.random_bits = param1;
     let result = runtime.resolve_callback_ctx(def.newgrf_local_id, callback, param1, param2, ctx);
-    writeback_station_persistent_registers(station, ctx);
+    writeback_airport_tile_parent_persistent_registers(station, ctx);
     result
 }
 
@@ -2244,7 +2245,8 @@ mod tests {
     use super::*;
     use crate::airport_class::{AirportClassId, AirportSpecId, NewgrfAirportSpecDef};
     use crate::newgrf_sprites::{
-        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+        Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, TrainSpriteAssign,
+        TrainSpriteGraphics,
     };
     use crate::road_stop_spec::{
         ROADSTOP_ANIMATION_TRIGGER_TILE_LOOP, ROADSTOP_CALLBACK_MASK_ANIMATION_NEXT_FRAME,
@@ -2362,6 +2364,91 @@ mod tests {
         );
         gfx.action2_var.insert(5, callback_literal(0xFE));
         gfx.action2_var.insert(6, callback_literal(0xFF));
+        gfx
+    }
+
+    /// Runtime sintético que guarda un valor en `AirportScope 7C[7]` desde
+    /// CB152 y lo vuelve a leer desde CB153. El marker `0x80` selecciona el
+    /// scope padre en ambos Action2.
+    fn airport_parent_psa_callbacks() -> TrainSpriteGraphics {
+        let parent_literal = |value: u32| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                shift: 0x80,
+                and_mask: value,
+                ..Action2VarAdjust::default()
+            },
+        };
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: u32::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![
+                    (
+                        4,
+                        u32::from(CBID_AIRPTILE_ANIMATION_TRIGGER),
+                        u32::from(CBID_AIRPTILE_ANIMATION_TRIGGER),
+                    ),
+                    (
+                        5,
+                        u32::from(CBID_AIRPTILE_ANIMATION_NEXT_FRAME),
+                        u32::from(CBID_AIRPTILE_ANIMATION_NEXT_FRAME),
+                    ),
+                ],
+                default: 8,
+            },
+        );
+        // CB152: `\\2psto` escribe 0xCAFE_BABE en el PSA del aeropuerto y
+        // luego retorna 0xFE para registrar la tesela en AnimatedTileList.
+        gfx.action2_var.insert(
+            4,
+            Action2VarEntry {
+                first: parent_literal(0xCAFE_BABE),
+                ops: vec![Action2VarOp {
+                    operator: 0x10,
+                    rhs: parent_literal(7),
+                }],
+                ranges: vec![(6, 0xCAFE_BABE, 0xCAFE_BABE)],
+                default: 8,
+            },
+        );
+        // CB153 debe observar la escritura del callback anterior a través
+        // del mismo AirportScope padre y fija el frame 4.
+        gfx.action2_var.insert(
+            5,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x7C,
+                    param: Some(7),
+                    adjust: Action2VarAdjust {
+                        shift: 0x80,
+                        and_mask: u32::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(7, 0xCAFE_BABE, 0xCAFE_BABE)],
+                default: 8,
+            },
+        );
+        gfx.action2_var.insert(6, callback_literal(0xFE));
+        gfx.action2_var.insert(7, callback_literal(4));
+        gfx.action2_var.insert(8, callback_literal(0xFF));
         gfx
     }
 
@@ -2809,6 +2896,87 @@ mod tests {
             )
         );
         assert!(!active.contains(&coord));
+    }
+
+    #[test]
+    fn airport_parent_psto_persists_from_event_to_scheduler() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut tile = map.get(coord).unwrap();
+        tile.kind = TileKind::Airport;
+        tile.m5 = AirportPiece::Apron as u8;
+        map.set_tile(coord, tile).unwrap();
+
+        let mut station = Station::new_with_kind(coord, StopKind::Airport);
+        station.airport_tiles = vec![coord];
+        station.airport_tile_gfx = vec![(coord, 75)];
+        let mut stations = vec![station];
+        let catalog = vec![AirportTileSpecDef {
+            gfx: crate::AirportTileGfxId(75),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 1,
+            animation_frames: 5,
+            animation_status: 1,
+            animation_speed: 0,
+            animation_triggers: AirportAnimationTrigger::Built.mask(),
+            animation_special_flags: 0,
+            newgrf_local_id: 0,
+            newgrf_grfid: 0x4150_0002,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(airport_parent_psa_callbacks())),
+        }];
+        let mut active = HashSet::new();
+
+        assert!(
+            trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog(
+                &mut map,
+                1,
+                &mut stations,
+                &[],
+                Climate::Temperate,
+                &catalog,
+                &[],
+                &mut active,
+                &[],
+                coord,
+                AirportAnimationTrigger::Built,
+                None,
+                0,
+            )
+        );
+        assert!(active.contains(&coord));
+        assert_eq!(
+            stations[0].newgrf_persistent_regs.get(&7),
+            Some(&0xCAFE_BABE),
+            "CB152 debe persistir \\2psto en AirportScope, no en el scope de AirportTile"
+        );
+
+        assert_eq!(
+            step_newgrf_airport_tiles_with_towns_and_airport_catalog(
+                &mut map,
+                2,
+                &mut stations,
+                &[],
+                Climate::Temperate,
+                &catalog,
+                &[],
+                &mut active,
+                &[],
+                &[],
+            ),
+            vec![coord]
+        );
+        assert_eq!(map.get(coord).unwrap().m7, 4);
+        assert_eq!(
+            stations[0].newgrf_persistent_regs.get(&7),
+            Some(&0xCAFE_BABE)
+        );
     }
 
     #[test]

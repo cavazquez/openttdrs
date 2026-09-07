@@ -111,6 +111,34 @@ pub fn writeback_station_persistent_registers(station: &mut Station, ctx: &Actio
         .clone_from(&ctx.persistent_registers);
 }
 
+/// Escribe el PSA del `AirportScope` padre de una tesela `AirportTile`.
+///
+/// `AirportTileScopeResolver` no implementa storage propio: el
+/// `AirportScopeResolver` padre es quien implementa `StorePSA` en `OpenTTD`.
+/// Por eso un `\\2psto` de un grupo Action2 parent debe volver desde
+/// `parent_persistent_registers`, no desde el mapa del scope de la tesela.
+///
+/// El resolver nativo tampoco crea `st->airport.psa` para una primera
+/// escritura de cero. El modelo disperso conserva esa propiedad: si no había
+/// storage importado ni registros vivos y todos los valores evaluados son cero,
+/// no materializa una fila `PSAC` al guardar.
+pub fn writeback_airport_tile_parent_persistent_registers(
+    station: &mut Station,
+    ctx: &Action2EvalCtx,
+) {
+    let has_existing_storage = station.newgrf_persistent_storage_id.is_some()
+        || !station.newgrf_persistent_regs.is_empty();
+    let writes_nonzero_value = ctx
+        .parent_persistent_registers
+        .values()
+        .any(|value| *value != 0);
+    if has_existing_storage || writes_nonzero_value {
+        station
+            .newgrf_persistent_regs
+            .clone_from(&ctx.parent_persistent_registers);
+    }
+}
+
 /// Ctx Action2 desde estación (storage no-vehículo).
 #[must_use]
 pub fn action2_eval_ctx_from_station(station: &Station) -> Action2EvalCtx {
@@ -6443,6 +6471,27 @@ mod tests {
         let json = state.save_json().unwrap();
         let loaded = crate::GameState::load_json(&json).unwrap();
         assert_eq!(loaded.vehicles[0].newgrf_persistent_regs.get(&3), Some(&42));
+    }
+
+    #[test]
+    fn airport_tile_parent_writeback_keeps_native_zero_allocation_rule() {
+        let mut station = Station::new_with_kind(TileCoord::new(1, 1), StopKind::Airport);
+        let mut ctx = Action2EvalCtx::default();
+        ctx.parent_persistent_registers.insert(7, 0);
+
+        writeback_airport_tile_parent_persistent_registers(&mut station, &ctx);
+        assert!(station.newgrf_persistent_regs.is_empty());
+        assert_eq!(station.newgrf_persistent_storage_id, None);
+
+        ctx.parent_persistent_registers.insert(7, 0xCAFE_BABE);
+        writeback_airport_tile_parent_persistent_registers(&mut station, &ctx);
+        assert_eq!(station.newgrf_persistent_regs.get(&7), Some(&0xCAFE_BABE));
+
+        // Una vez materializado, StorePSA nativo sí conserva las escrituras
+        // posteriores de cero en el mismo storage.
+        ctx.parent_persistent_registers.insert(7, 0);
+        writeback_airport_tile_parent_persistent_registers(&mut station, &ctx);
+        assert_eq!(station.newgrf_persistent_regs.get(&7), Some(&0));
     }
 
     #[test]

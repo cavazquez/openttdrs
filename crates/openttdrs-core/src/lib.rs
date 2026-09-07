@@ -546,7 +546,8 @@ pub use newgrf_callback::{
     trigger_road_stop_randomisation_at_with_world, trigger_vehicle_randomisation,
     trigger_vehicle_randomisation_chain, vehicle_cost_factor, vehicle_max_speed, vehicle_power_hp,
     vehicle_start_stop_callback_allows, vehicle_tractive_effort, vehicle_visual_effect_kind,
-    vehicle_visual_effect_spec, vehicle_weight_t, writeback_industry_persistent_registers,
+    vehicle_visual_effect_spec, vehicle_weight_t,
+    writeback_airport_tile_parent_persistent_registers, writeback_industry_persistent_registers,
     writeback_industry_tile_parent_persistent_registers, writeback_station_persistent_registers,
     writeback_town_persistent_registers, writeback_vehicle_persistent_registers,
 };

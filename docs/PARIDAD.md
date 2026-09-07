@@ -401,11 +401,19 @@ La FTA propia, paletas, foundations/rotaciones y sonidos siguen abiertos en
 
 Actualización #504 (2026-09-07): el mismo `AirportScope` padre ahora expone
 `F0` (facilities de estación) y `FA` (fecha relativa de construcción saturada
-a `WORD`) antes de la delegación residual de StationScope. `7C` ya conserva el
-PSA de aeropuerto; `parent_vars` ya participa en el fingerprint. Ver
+a `WORD`) antes de la delegación residual de StationScope. `7C` ya carga el
+PSA de aeropuerto y `parent_vars` participa en el fingerprint. Ver
 [#504](parity/newgrf-airport-parent-scope-504.md). Permanecen fuera la
 delegación StationScope completa, FTA, paletas, foundations/rotaciones y
 sonidos de #326/#329.
+
+Actualización #505 (2026-09-07): los callbacks runtime `AirportTile` escriben
+ahora `\\2psto` del scope padre en el PSA de `STNN.normal.airport`, como
+`AirportScopeResolver::StorePSA`; una primera escritura de cero no crea una
+fila `PSAC`. La regresión recorre `CB152 → CB153` y comprueba la lectura del
+valor persistido en el scheduler. El renderer se mantiene inmutable. Ver
+[#505](parity/newgrf-airport-parent-psa-505.md). Siguen abiertos la delegación
+StationScope, FTA, paletas, foundations/rotaciones y sonidos de #326/#329.
 
 Actualización #329-CARGO-CTT-069 (2026-09-04, `b80b8362`): `CB3D`
 (`IndustryRefuseCargo`) resuelve labels de cargas custom contra el catálogo

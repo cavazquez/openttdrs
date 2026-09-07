@@ -95,6 +95,11 @@ la seed `1330935379` conserva las seis fronteras exactas y sus 17.039 intentos
 ordenados. La evidencia canónica y los mismos límites permanecen sólo en
 `random-map-issues.md` y `evidence/rmap-154.json`; #338 no se cierra.
 
+RMAP-155 / #495 completa esta cohorte v6 por clima con Toyland/default 512²:
+la seed `1330935381` conserva las seis fronteras y 908 intentos exactos; su
+pool de objetos vacío se declara como tal. Evidencia y límites quedan sólo en
+`random-map-issues.md` y `evidence/rmap-155.json`; #338 no se cierra.
+
 Actualizado el 2026-09-05: el último `main` observado antes de RMAP-152
 (`3a4736fd`) completó CI, Parity docs, Fuzz replay y Platform check en verde.
 La reparación del checkout limpio está incluida y #333 se cerró con esa

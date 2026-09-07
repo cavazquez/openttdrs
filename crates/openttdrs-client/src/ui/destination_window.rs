@@ -5,7 +5,9 @@
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 
+use crate::i18n::{Locale, localized_text};
 use crate::render::RemapMapVisualsPending;
+use crate::settings::ClientPreferences;
 use crate::state::{OrderPickState, SimWorld};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT, WindowKey,
@@ -74,6 +76,18 @@ impl DestinationPickerState {
 struct DestCandidate {
     label: String,
     pos: TileCoord,
+}
+
+fn format_destination_label(
+    locale: Locale,
+    name: Option<&str>,
+    fallback: &str,
+    pos: TileCoord,
+) -> String {
+    let label = name
+        .map(str::to_owned)
+        .unwrap_or_else(|| localized_text(locale, fallback));
+    format!("{label} ({}, {})", pos.x, pos.y)
 }
 
 #[derive(Component, Clone, Copy)]
@@ -206,7 +220,7 @@ fn spawn_destination_content(
     });
 }
 
-fn destinations_for_vehicle(sim: &SimWorld, vehicle_id: u32) -> Vec<DestCandidate> {
+fn destinations_for_vehicle(sim: &SimWorld, vehicle_id: u32, locale: Locale) -> Vec<DestCandidate> {
     let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
         return Vec::new();
     };
@@ -225,13 +239,13 @@ fn destinations_for_vehicle(sim: &SimWorld, vehicle_id: u32) -> Vec<DestCandidat
             StopKind::RailWaypoint => "Waypoint",
             StopKind::RoadWaypoint => "Waypoint road",
         };
-        let name = station
-            .name
-            .as_deref()
-            .filter(|n| !n.is_empty())
-            .unwrap_or(kind_label);
         out.push(DestCandidate {
-            label: format!("{name} ({}, {})", station.pos.x, station.pos.y),
+            label: format_destination_label(
+                locale,
+                station.name.as_deref().filter(|n| !n.is_empty()),
+                kind_label,
+                station.pos,
+            ),
             pos: station.pos,
         });
     }
@@ -249,13 +263,13 @@ fn destinations_for_vehicle(sim: &SimWorld, vehicle_id: u32) -> Vec<DestCandidat
                 if sim.state.map.get_kind(pos) == Some(kind)
                     && order_for_clicked_tile(sim, vehicle_id, pos).is_some()
                 {
-                    let label = if kind == TileKind::RailDepot {
+                    let fallback = if kind == TileKind::RailDepot {
                         "Depósito vía"
                     } else {
                         "Depósito"
                     };
                     out.push(DestCandidate {
-                        label: format!("{label} ({x}, {y})"),
+                        label: format_destination_label(locale, None, fallback, pos),
                         pos,
                     });
                 }
@@ -283,7 +297,9 @@ pub(crate) fn sync_destination_picker(
     >,
     mut row_text_q: Query<(&VehicleChainSlot, &DestinationPickerRowText, &mut Text)>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
 ) {
+    let locale = prefs.locale();
     for (mut win, chain_slot, mut vis) in &mut root_q {
         if win.id != FloatingWindowId::DestinationPicker {
             continue;
@@ -306,7 +322,7 @@ pub(crate) fn sync_destination_picker(
         }
         *vis = Visibility::Visible;
         let candidates = vehicle_id
-            .map(|id| destinations_for_vehicle(&sim, id))
+            .map(|id| destinations_for_vehicle(&sim, id, locale))
             .unwrap_or_default();
         for (row_chain, row, interaction, mut node, mut bg) in &mut row_q {
             if row_chain.0 != chain_slot.0 {
@@ -364,6 +380,7 @@ pub(crate) fn handle_destination_picker_buttons(
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
+    prefs: Res<ClientPreferences>,
 ) {
     if !picker_state.any_open() {
         return;
@@ -380,7 +397,7 @@ pub(crate) fn handle_destination_picker_buttons(
             continue;
         };
         order_state.focused = Some(vehicle_id);
-        let candidates = destinations_for_vehicle(&sim, vehicle_id);
+        let candidates = destinations_for_vehicle(&sim, vehicle_id, prefs.locale());
         let Some(candidate) = candidates.get(row.slot) else {
             continue;
         };
@@ -432,8 +449,10 @@ pub(crate) fn destination_picker_on_closed(
 
 #[cfg(test)]
 mod tests {
-    use super::DestinationPickerState;
+    use super::{DestinationPickerState, format_destination_label};
+    use crate::i18n::Locale;
     use crate::ui::toolbar::OrderEditState;
+    use openttdrs_core::TileCoord;
 
     #[test]
     fn picker_open_close_tracks_chain_slot() {
@@ -460,5 +479,22 @@ mod tests {
         state.close_vehicle(&orders, 42);
 
         assert!(!state.any_open());
+    }
+
+    #[test]
+    fn destination_picker_localizes_only_vanilla_fallback_labels() {
+        let pos = TileCoord::new(12, -4);
+        assert_eq!(
+            format_destination_label(Locale::En, None, "Parada bus", pos),
+            "Bus stop (12, -4)"
+        );
+        assert_eq!(
+            format_destination_label(Locale::En, Some("Mi estación"), "Parada bus", pos),
+            "Mi estación (12, -4)"
+        );
+        assert_eq!(
+            format_destination_label(Locale::Es, None, "Parada bus", pos),
+            "Parada bus (12, -4)"
+        );
     }
 }

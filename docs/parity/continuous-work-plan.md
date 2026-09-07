@@ -2332,3 +2332,10 @@ resúmenes dinámicos de tamaño/cobertura. El nombre de spec, la huella, el
 radio, los contadores y los IDs permanecen literales o calculados por el core;
 la regresión confirma ambos locales. #331 sigue abierto por los catálogos
 upstream y superficies UI restantes.
+
+Actualización #331-DESTINATION-PICKER-471 (2026-09-07, issue [#471](https://github.com/cavazquez/openttdrs/issues/471)):
+el selector de destinos localiza título, ayuda, selección en mapa y fallbacks
+vanilla de filas dinámicas. Nombres personalizados/NewGRF, coordenadas, orden
+de candidatos e IDs permanecen intactos; la regresión cubre locales y valores
+con signo. #331 sigue abierto por los catálogos upstream y superficies UI
+restantes.

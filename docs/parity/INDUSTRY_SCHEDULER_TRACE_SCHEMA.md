@@ -7,7 +7,8 @@ ejecución dedicated degradada, #511 alinea el contador de industria y
 #514/#516 mueven los TileLoops industrial/urbano al stream actual; #517 añade
 `TileLoop_Trees` y el contador persistido de `OnTick_Trees`; #518 reproduce
 el grupo RNG de animación industrial, #519 el grupo NewGRF de aeropuerto y
-#520 conserva el siguiente residual diario.
+#520 conserva el siguiente residual diario; #521 normaliza la atribución
+diagnóstica nativa para que el comparador alcance ese campo contractual.
 
 `OPENTTDRS_INDUSTRY_TRACE_OUT` habilita, exclusivamente en el binario OpenTTD
 instrumentado, una traza JSONL de la rutina diaria
@@ -46,6 +47,11 @@ después del timer industrial. La instrumentación es efímera, no se serializa 
 no consume `Random()`. El comparador valida primero ambos JSONL y luego exige
 igualdad exacta de metadata contractual, reloj, RNG, `ECMY`, `ITBL`, industrias
 y acciones; informa el primer campo que diverge.
+
+El hook nativo puede adjuntar `random_calls` por archivo/línea como
+instrumentación diagnóstica del oracle. No pertenece al contrato v1 ni debe
+ser inventado por Rust: el comparador lo omite sólo del producer `openttd` y
+sigue rechazando ese u otro campo extra del candidato.
 
 ## JSONL v1
 

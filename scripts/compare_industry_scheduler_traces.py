@@ -20,6 +20,13 @@ METADATA_FIELDS = (
     "industry_type_count",
 )
 
+# El hook nativo puede adjuntar esta atribución por archivo/línea para ayudar a
+# aislar el siguiente producer RNG. No forma parte del JSONL v1 que debe
+# emitir el candidato: no hay una correspondencia uno a uno entre los paths
+# C++ del oracle y el port Rust. Sólo se tolera en OpenTTD; cualquier extra en
+# openttdrs sigue haciendo fallar la comparación.
+NATIVE_SAMPLE_DIAGNOSTICS = frozenset(("random_calls",))
+
 
 def read_rows(path: Path) -> list[dict[str, Any]]:
     try:
@@ -60,6 +67,17 @@ def first_difference(expected: Any, actual: Any, path: str) -> str | None:
     return None
 
 
+def contractual_sample(row: dict[str, Any], producer: str) -> dict[str, Any]:
+    """Descarta diagnósticos explícitamente no contractuales del oracle."""
+    if producer != "openttd":
+        return row
+    return {
+        field: value
+        for field, value in row.items()
+        if field not in NATIVE_SAMPLE_DIAGNOSTICS
+    }
+
+
 def compare(native: Path, candidate: Path, days: int) -> None:
     validate_trace(native, days, "openttd")
     validate_trace(candidate, days, "openttdrs")
@@ -84,7 +102,11 @@ def compare(native: Path, candidate: Path, days: int) -> None:
         )
     for index, (expected, actual) in enumerate(zip(native_samples, candidate_samples, strict=True)):
         kind = expected.get("kind", f"sample-{index}")
-        difference = first_difference(expected, actual, f"{kind}[{index}]")
+        difference = first_difference(
+            contractual_sample(expected, "openttd"),
+            contractual_sample(actual, "openttdrs"),
+            f"{kind}[{index}]",
+        )
         if difference is not None:
             fail(difference)
 

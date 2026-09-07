@@ -99,6 +99,27 @@ class IndustrySchedulerTraceCompareTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("day[1].random_state.state_0", result.stderr)
 
+    def test_ignores_native_rng_attribution_diagnostic(self) -> None:
+        native = trace("openttd")
+        for row in native[1:]:
+            assert isinstance(row, dict)
+            row["random_calls"] = {"airporttiles.cpp:327": 6}
+
+        result = self.compare(native, trace("openttdrs"))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_native_only_diagnostic_from_candidate(self) -> None:
+        candidate = trace("openttdrs")
+        initial = candidate[1]
+        assert isinstance(initial, dict)
+        initial["random_calls"] = {"airporttiles.cpp:327": 6}
+
+        result = self.compare(trace("openttd"), candidate)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("initial[0]", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

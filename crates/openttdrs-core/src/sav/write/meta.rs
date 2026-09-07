@@ -20,6 +20,7 @@ pub(super) const DATE_FIELDS: &[(u8, &str)] = &[
     (4, "economy_date_fract"),
     (6, "days_since_last_month"),
     (4, "calendar_sub_date_fract"),
+    (6, "cur_tileloop_tile"),
     (6, "random_state[0]"),
     (6, "random_state[1]"),
 ];
@@ -37,6 +38,7 @@ pub(super) fn date_record(state: &GameState) -> Vec<u8> {
     rec.extend_from_slice(&state.economy_timer.date_fract.to_be_bytes());
     rec.extend_from_slice(&state.economy_timer.days_since_last_month.to_be_bytes());
     rec.extend_from_slice(&state.calendar.sub_date_fract.to_be_bytes());
+    rec.extend_from_slice(&state.cur_tileloop_tile.to_be_bytes());
     rec.extend_from_slice(&state.random.state[0].to_be_bytes());
     rec.extend_from_slice(&state.random.state[1].to_be_bytes());
     rec

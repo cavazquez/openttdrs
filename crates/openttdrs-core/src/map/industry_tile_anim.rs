@@ -533,19 +533,51 @@ fn apply_tile_loop_industry(tile: &mut Tile, tick: u64, x: i32, y: i32) -> Indus
     IndustryAnimUpdate::None
 }
 
+/// Efectos no persistentes creados por una visita de `TileLoop_Industry`.
+///
+/// El mapa conserva los cambios de tesela en [`dirty`](Self::dirty), mientras
+/// que el vehículo de efecto de una burbuja se entrega al runtime para que lo
+/// encole con la dirección obtenida de la misma palabra RNG nativa.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct IndustryTileLoopRngEvents {
+    /// Teselas cuyo estado persistido cambió durante la visita.
+    pub dirty: Vec<TileCoord>,
+    /// Efectos `EV_BUBBLE` en el orden de las visitas LFSR.
+    pub bubble_spawns: Vec<(TileCoord, u8)>,
+}
+
 /// Parte vanilla de `TileLoop_Industry` que depende del `_random` global.
 ///
 /// La API de animación usada por la simulación conserva un fallback
 /// determinista para callers que no tienen el stream del juego. La generación
 /// de una partida nueva sí lo conserva y debe ejecutar cada `Chance16` en el
 /// mismo orden, además de escribir el frame en `MAP7` (`Tile::m7`).
+///
+/// Esta envoltura conserva la API previa para generación de mundo, donde los
+/// efectos visuales no se encolan. El runtime debe usar
+/// [`advance_industry_tile_loop_events_from_visits_with_rng_and_effects`] para
+/// no volver a extraer una palabra al crear una burbuja.
 pub fn advance_industry_tile_loop_events_from_visits_with_rng(
     map: &mut Map,
     tick: u64,
     visits: &[(TileCoord, Tile)],
     rng: &mut crate::cargodist::parity::Randomizer,
 ) -> Vec<TileCoord> {
-    let mut dirty = Vec::new();
+    advance_industry_tile_loop_events_from_visits_with_rng_and_effects(map, tick, visits, rng).dirty
+}
+
+/// Variante RNG-aware que conserva además los efectos de burbuja de la visita.
+///
+/// `TileLoopIndustry_BubbleGenerator` toma una única palabra después de
+/// `TriggerIndustryTileAnimation`; devolver la dirección evita que el caller
+/// consuma una segunda palabra al materializar el `SimEvent`.
+pub fn advance_industry_tile_loop_events_from_visits_with_rng_and_effects(
+    map: &mut Map,
+    tick: u64,
+    visits: &[(TileCoord, Tile)],
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> IndustryTileLoopRngEvents {
+    let mut events = IndustryTileLoopRngEvents::default();
     for &(coord, snapshot) in visits {
         if snapshot.kind != TileKind::Industry {
             continue;
@@ -631,17 +663,20 @@ pub fn advance_industry_tile_loop_events_from_visits_with_rng(
             GFX_BUBBLE_GENERATOR => {
                 // `TileLoopIndustry_BubbleGenerator` chooses an effect
                 // direction with `Random() & 3`, even when audio/effects are
-                // unavailable in a headless generation run.
-                let _ = rng.next() & 3;
+                // unavailable in a headless generation run. El runtime
+                // conserva la dirección para crear el mismo `EV_BUBBLE`
+                // sin tomar otra palabra del stream.
+                let direction = u8::try_from(rng.next() & 3).unwrap_or(0);
+                events.bubble_spawns.push((coord, direction));
             }
             _ => {}
         }
 
         if changed && map.set_tile(coord, tile).is_ok() {
-            dirty.push(coord);
+            events.dirty.push(coord);
         }
     }
-    dirty
+    events
 }
 
 fn apply_animate_industry(tile: &mut Tile, tick: u64, x: i32, y: i32) -> IndustryAnimUpdate {

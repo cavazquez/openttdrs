@@ -30,6 +30,12 @@ pub struct SavGameTime {
     pub days_since_last_month: u32,
     /// Contador monotónico `TimerGameTick::counter`.
     pub tick: u64,
+    /// Estado LFSR `_cur_tileloop_tile` de `RunTileLoop`.
+    ///
+    /// Este cursor es independiente del tick: restaurarlo evita que la
+    /// primera franja de teselas tras un load visite otro conjunto y altere
+    /// los callbacks/RNG posteriores.
+    pub cur_tileloop_tile: u32,
 }
 
 /// Lee el registro global `DATE` (best-effort).
@@ -52,6 +58,8 @@ pub(crate) fn game_time_from_chunks(chunks: &[RawChunk], save_version: u16) -> O
             economy_date_fract,
             days_since_last_month: unsigned_u32(record, "days_since_last_month").unwrap_or(0),
             tick: tick_counter_from_record(record, save_version),
+            cur_tileloop_tile: unsigned_u32(record, "cur_tileloop_tile")
+                .unwrap_or_else(crate::map::tile_loop::default_cur_tileloop_tile),
         });
     }
 
@@ -65,6 +73,7 @@ pub(crate) fn game_time_from_chunks(chunks: &[RawChunk], save_version: u16) -> O
             economy_date_fract: 0,
             days_since_last_month: 0,
             tick,
+            cur_tileloop_tile: crate::map::tile_loop::default_cur_tileloop_tile(),
         });
     }
 
@@ -169,6 +178,7 @@ mod tests {
         record.extend_from_slice(&12u16.to_be_bytes());
         record.extend_from_slice(&29u32.to_be_bytes());
         record.extend_from_slice(&44u16.to_be_bytes());
+        record.extend_from_slice(&0x89AB_CDEFu32.to_be_bytes());
         record.extend_from_slice(&0x1020_3040u32.to_be_bytes());
         record.extend_from_slice(&0x5060_7080u32.to_be_bytes());
         let chunk = date_chunk(
@@ -180,6 +190,7 @@ mod tests {
                 (4, "economy_date_fract"),
                 (6, "days_since_last_month"),
                 (4, "calendar_sub_date_fract"),
+                (6, "cur_tileloop_tile"),
                 (6, "random_state[0]"),
                 (6, "random_state[1]"),
             ],
@@ -194,6 +205,7 @@ mod tests {
         assert_eq!(time.economy_date_fract, 12);
         assert_eq!(time.days_since_last_month, 29);
         assert_eq!(time.tick, 1_472_993);
+        assert_eq!(time.cur_tileloop_tile, 0x89AB_CDEF);
         assert_eq!(
             random_state_from_chunks(std::slice::from_ref(&chunk)),
             Some([0x1020_3040, 0x5060_7080])
@@ -212,6 +224,10 @@ mod tests {
         assert_eq!(time.economy_date, 12_345);
         assert_eq!(time.calendar_date_fract, 0);
         assert_eq!(time.tick, 99_000);
+        assert_eq!(
+            time.cur_tileloop_tile,
+            crate::map::tile_loop::default_cur_tileloop_tile()
+        );
     }
 
     #[test]

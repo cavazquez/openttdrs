@@ -1217,6 +1217,15 @@ impl GameState {
             // desplaza partidas reales (y pierde `date_fract`), por eso se
             // hidratan por separado igual que `AfterLoadGame` de OpenTTD.
             state.tick = crate::GameTick::new(time.tick);
+            // `DATE.cur_tileloop_tile` es el estado del LFSR, no una función
+            // del tick. `AfterLoadGame` normaliza cero a uno porque el LFSR
+            // no puede quedar bloqueado; conservar esa regla evita cambiar la
+            // primera franja de `RunTileLoop` después de abrir un SAV nativo.
+            state.cur_tileloop_tile = if time.cur_tileloop_tile == 0 {
+                crate::map::tile_loop::default_cur_tileloop_tile()
+            } else {
+                time.cur_tileloop_tile
+            };
             state.calendar = crate::timer::CalendarTimer::from_openttd_date(
                 time.calendar_date,
                 time.calendar_date_fract,
@@ -2320,6 +2329,7 @@ mod tests {
             days_since_last_month: 29,
             // Deliberately unrelated to `calendar_date * DAY_TICKS`.
             tick: 1_472_993,
+            cur_tileloop_tile: 0x89AB_CDEF,
         });
         sav.random_state = Some([0x1020_3040, 0x5060_7080]);
 
@@ -2337,6 +2347,7 @@ mod tests {
             (2004, 5)
         );
         assert_eq!(state.random.state, [0x1020_3040, 0x5060_7080]);
+        assert_eq!(state.cur_tileloop_tile, 0x89AB_CDEF);
     }
 
     #[test]
@@ -2352,11 +2363,16 @@ mod tests {
             economy_date_fract: 21,
             days_since_last_month: 7,
             tick: 17,
+            cur_tileloop_tile: 0,
         });
 
         let state = GameState::from_sav_game(sav);
         assert!(state.economy_timer.using_wallclock_units());
         assert_eq!(state.economy_timer.date, 3_630);
+        assert_eq!(
+            state.cur_tileloop_tile,
+            crate::map::tile_loop::default_cur_tileloop_tile()
+        );
         assert_eq!(state.economy_timer.date_fract, 21);
         assert_eq!(
             (state.economy_timer.year, state.economy_timer.month),

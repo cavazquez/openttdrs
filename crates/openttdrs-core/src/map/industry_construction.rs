@@ -229,10 +229,78 @@ pub fn step_industry_tiles_with_seed_and_catalog_and_world_and_cargo_catalog(
     climate: crate::world_gen::Climate,
     cargo_spec_catalog: &[crate::cargo_spec::CargoSpecDef],
 ) -> Vec<TileCoord> {
+    step_industry_tiles_with_seed_and_catalog_and_world_and_cargo_catalog_inner(
+        map,
+        tick,
+        visits,
+        world_seed,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        cargo_spec_catalog,
+        true,
+    )
+}
+
+/// Variante para el runtime que deja `TileLoop_Industry` al dispatcher que
+/// posee el RNG global y la visita LFSR actual.
+///
+/// Las fases de construcción, frames y randomización NewGRF todavía comparten
+/// el mismo pipeline; sólo se omite el fallback determinista de la animación
+/// vanilla para que no se ejecute una visita después de la llamada real de
+/// `RunTileLoop`.
+#[allow(clippy::too_many_arguments)]
+pub fn step_industry_tiles_without_tile_loop_events_with_seed_and_catalog_and_world_and_cargo_catalog(
+    map: &mut Map,
+    tick: u64,
+    visits: &[(TileCoord, super::Tile)],
+    world_seed: u64,
+    industries: &mut [Industry],
+    towns: &[crate::town::Town],
+    tile_spec_catalog: &[crate::industry_tile::IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    cargo_spec_catalog: &[crate::cargo_spec::CargoSpecDef],
+) -> Vec<TileCoord> {
+    step_industry_tiles_with_seed_and_catalog_and_world_and_cargo_catalog_inner(
+        map,
+        tick,
+        visits,
+        world_seed,
+        industries,
+        towns,
+        tile_spec_catalog,
+        industry_catalog,
+        climate,
+        cargo_spec_catalog,
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn step_industry_tiles_with_seed_and_catalog_and_world_and_cargo_catalog_inner(
+    map: &mut Map,
+    tick: u64,
+    visits: &[(TileCoord, super::Tile)],
+    world_seed: u64,
+    industries: &mut [Industry],
+    towns: &[crate::town::Town],
+    tile_spec_catalog: &[crate::industry_tile::IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+    cargo_spec_catalog: &[crate::cargo_spec::CargoSpecDef],
+    include_tile_loop_events: bool,
+) -> Vec<TileCoord> {
     let mut dirty = advance_industry_construction_from_visits(map, visits, industries);
-    dirty.extend(
-        super::industry_tile_anim::advance_industry_tile_loop_events_from_visits(map, tick, visits),
-    );
+    if include_tile_loop_events {
+        dirty.extend(
+            super::industry_tile_anim::advance_industry_tile_loop_events_from_visits(
+                map, tick, visits,
+            ),
+        );
+    }
     let anim_coords = industry_animation_coords(industries);
     dirty.extend(super::industry_tile_anim::advance_industry_animated_tiles(
         map,

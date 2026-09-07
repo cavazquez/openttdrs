@@ -422,7 +422,6 @@ fn phase_timer_economy(state: &mut GameState) {
 #[allow(clippy::too_many_lines)]
 fn phase_tile_animation(state: &mut GameState, t: u64) {
     let visits = std::mem::take(&mut state.runtime.tile_loop_visited);
-    let bubble_spawns = crate::map::bubble_generator_spawns_from_visits(&visits);
     let tile_loop_animation_coords: Vec<_> = visits
         .iter()
         .filter(|(_, tile)| tile.kind == crate::TileKind::Industry)
@@ -456,7 +455,7 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         })
         .collect();
     state.runtime.industry_tile_dirty =
-        crate::map::step_industry_tiles_with_seed_and_catalog_and_world_and_cargo_catalog(
+        crate::map::industry_construction::step_industry_tiles_without_tile_loop_events_with_seed_and_catalog_and_world_and_cargo_catalog(
             &mut state.map,
             t,
             &visits,
@@ -536,15 +535,6 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         .industry_tile_dirty
         .sort_by_key(|coord| (coord.x, coord.y));
     state.runtime.industry_tile_dirty.dedup();
-    for at in bubble_spawns {
-        state
-            .runtime
-            .pending_sim_events
-            .push(crate::sim_events::SimEvent::Bubble {
-                at,
-                direction: (state.random.next() & 3) as u8,
-            });
-    }
     let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t, &state.stations);
     state.runtime.industry_tile_dirty.extend(airport_dirty);
     let newgrf_airport_dirty = crate::map::step_newgrf_airport_tiles_with_towns_and_airport_catalog(
@@ -725,6 +715,44 @@ fn phase_tile_loop(state: &mut GameState, t: u64) {
     state.runtime.landscape_tile_dirty.clear();
     state.runtime.tile_loop_visited =
         crate::map::collect_tile_loop_visits(&state.map, t, &mut state.cur_tileloop_tile);
+
+    // `TileLoop_Industry` no pertenece a `AnimateAnimatedTiles`: OpenTTD lo
+    // ejecuta sobre la visita LFSR que acaba de recoger `RunTileLoop`. En
+    // particular, `TriggerIndustryTileAnimation(..., TileLoop)` toma una
+    // palabra de `_random` antes de decidir si la tesela tiene callback.
+    // Filtrar por el snapshot evita animar una obra que se haya completado en
+    // otra pasada antes de que esta visita llegara a la cola.
+    let completed_industry_visits: Vec<_> = state
+        .runtime
+        .tile_loop_visited
+        .iter()
+        .copied()
+        .filter(|(_, tile)| {
+            tile.kind == crate::TileKind::Industry && crate::map::is_industry_completed(tile.m1)
+        })
+        .collect();
+    let industry_events = crate::map::industry_tile_anim::
+        advance_industry_tile_loop_events_from_visits_with_rng_and_effects(
+            &mut state.map,
+            t,
+            &completed_industry_visits,
+            &mut state.random,
+        );
+    state
+        .runtime
+        .industry_tile_dirty
+        .extend(industry_events.dirty);
+    for (at, direction) in industry_events.bubble_spawns {
+        state
+            .runtime
+            .pending_sim_events
+            .push(crate::sim_events::SimEvent::Bubble { at, direction });
+    }
+    state
+        .runtime
+        .industry_tile_dirty
+        .sort_by_key(|coord| (coord.x, coord.y));
+    state.runtime.industry_tile_dirty.dedup();
 }
 
 /// Recálculo de rutas sin reservas PBS (el PBS se resuelve tras el movimiento / en B4).
@@ -1208,6 +1236,85 @@ mod tests {
         assert_eq!(samples[0].industries[0].counter, 42);
         assert_eq!(state.tick.get(), 18);
         assert_eq!(state.industries[0].counter, 41, "OnTick_Industry posterior");
+    }
+
+    #[test]
+    fn industry_tile_loop_uses_the_current_lfsr_visit_and_global_rng() {
+        // En tick 0 `RunTileLoop` visita explícitamente la tesela cero. No
+        // sembramos `runtime.tile_loop_visited`: la aserción prueba que el
+        // dispatcher usa la visita que acaba de recoger, no la del tick
+        // anterior que consume `AnimateAnimatedTiles`.
+        let coord = TileCoord::new(0, 0);
+        let mut state = GameState::new(64, 64);
+        let mut tile = state.map.get(coord).unwrap();
+        tile.kind = crate::TileKind::Industry;
+        tile.m1 = 0x80;
+        let powerplant_sparks =
+            u8::try_from(crate::map::industry_tile_anim::GFX_POWERPLANT_SPARKS).unwrap_or(u8::MAX);
+        assert_eq!(
+            u16::from(powerplant_sparks),
+            crate::map::industry_tile_anim::GFX_POWERPLANT_SPARKS
+        );
+        tile.m5 = powerplant_sparks;
+        state.map.set_tile(coord, tile).unwrap();
+        state.random = crate::linkgraph_parity::Randomizer {
+            // La segunda palabra (`Chance16(1, 3)`) fuerza AddAnimatedTile.
+            state: [0x3849_BDDF, 0x221D_69C1],
+        };
+        let mut expected_random = state.random;
+        let _trigger_random = expected_random.next();
+        assert!(expected_random.chance16(1, 3));
+
+        phase_tile_loop(&mut state, 0);
+
+        assert!(
+            state
+                .runtime
+                .tile_loop_visited
+                .iter()
+                .any(|(visited, _)| *visited == coord)
+        );
+        assert_eq!(state.random, expected_random);
+        assert_eq!(state.map.get(coord).unwrap().m6 & 0x03, 0x03);
+        assert!(state.runtime.industry_tile_dirty.contains(&coord));
+    }
+
+    #[test]
+    fn industry_tile_loop_bubble_reuses_its_rng_word_for_the_effect_direction() {
+        let coord = TileCoord::new(0, 0);
+        let mut state = GameState::new(64, 64);
+        let mut tile = state.map.get(coord).unwrap();
+        tile.kind = crate::TileKind::Industry;
+        tile.m1 = 0x80;
+        let bubble_generator = u8::try_from(crate::map::GFX_BUBBLE_GENERATOR).unwrap_or(u8::MAX);
+        assert_eq!(
+            u16::from(bubble_generator),
+            crate::map::GFX_BUBBLE_GENERATOR
+        );
+        tile.m5 = bubble_generator;
+        state.map.set_tile(coord, tile).unwrap();
+        state.random = crate::linkgraph_parity::Randomizer {
+            state: [0x1133_5577, 0x2244_6688],
+        };
+        let mut expected_random = state.random;
+        let _trigger_random = expected_random.next();
+        let expected_direction = u8::try_from(expected_random.next() & 3).unwrap();
+
+        phase_tile_loop(&mut state, 0);
+
+        assert_eq!(state.random, expected_random);
+        assert_eq!(
+            state
+                .runtime
+                .pending_sim_events
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![crate::sim_events::SimEvent::Bubble {
+                at: coord,
+                direction: expected_direction,
+            }]
+        );
     }
 
     #[test]

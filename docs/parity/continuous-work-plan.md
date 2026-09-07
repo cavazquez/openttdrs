@@ -90,6 +90,11 @@ intentos ordenados. La evidencia canónica y los límites —motivos de rechazo,
 campos INDY restantes, agua/OilRig, más settings y ticks— están sólo en
 `random-map-issues.md` y `evidence/rmap-153.json`; #338 permanece abierto.
 
+RMAP-154 / #494 completa la comprobación equivalente Arctic 512² con ríos:
+la seed `1330935379` conserva las seis fronteras exactas y sus 17.039 intentos
+ordenados. La evidencia canónica y los mismos límites permanecen sólo en
+`random-map-issues.md` y `evidence/rmap-154.json`; #338 no se cierra.
+
 Actualizado el 2026-09-05: el último `main` observado antes de RMAP-152
 (`3a4736fd`) completó CI, Parity docs, Fuzz replay y Platform check en verde.
 La reparación del checkout limpio está incluida y #333 se cerró con esa

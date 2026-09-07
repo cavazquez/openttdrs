@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "kind": "focused-world-screenshot-baseline",
+  "recorded_on": "2026-09-07",
+  "status": "different",
+  "fixture": {
+    "path": "save/Kale_TitleGame.sav",
+    "sha256": "584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69"
+  },
+  "reference": {
+    "openttd_version": "15.3",
+    "official_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "oracle_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+    "oracle_worktree": "instrumented export hooks; never committed from openttdrs"
+  },
+  "candidate": {
+    "commit": "d9b0537c8126ca8586ab6d9de3aeb8d887744b1f"
+  },
+  "capture": {
+    "profile": "clean-static",
+    "reference_graphics": "OpenGFX 8.0 · 8bpp",
+    "candidate_graphics": "OpenGFX · 8bpp",
+    "center": [189, 126],
+    "resolution": [1280, 720],
+    "alignment_radius_px": 8,
+    "hotspot_cell_size_px": 64
+  },
+  "results": [
+    {
+      "scale": 0.25,
+      "openttd_zoom": "In4x",
+      "candidate_translation": [-2, 0],
+      "changed_pixels": 357288,
+      "total_pixels": 921600,
+      "changed_ratio": 0.3876822916666667,
+      "artifacts": {
+        "reference_sha256": "a0d010937977ca8b7d4a6ee681c2b830a3959416288f7c5e5ac35a57eda8c308",
+        "candidate_sha256": "f90af971d90fb01466f27af88734137757910df4f1ab75ffaafaa0ee13286003",
+        "diff_sha256": "41edc06c445e084dca83c65aad49a37d5f2631d558273487960a8a7e9971f073"
+      }
+    },
+    {
+      "scale": 0.5,
+      "openttd_zoom": "In2x",
+      "candidate_translation": [-1, 0],
+      "changed_pixels": 421700,
+      "total_pixels": 921600,
+      "changed_ratio": 0.4575737847222222,
+      "artifacts": {
+        "reference_sha256": "cc641be2f381003241e33250efb56abb31559346a9b54934724de768bf9aa24f",
+        "candidate_sha256": "1ef627f634b48c66179ab0b97b8c45e4a706e56d01b9c82752bbaa398589e645",
+        "diff_sha256": "06a9f86aeaa7c8082edd6fc6531c3cdabc1d475d2334b3247f090e2c2a2bbfdb"
+      }
+    },
+    {
+      "scale": 1.0,
+      "openttd_zoom": "Normal",
+      "candidate_translation": [0, 0],
+      "changed_pixels": 155118,
+      "total_pixels": 921600,
+      "changed_ratio": 0.16831380208333332,
+      "artifacts": {
+        "reference_sha256": "1c1b0c85ee26ab9ae24db3c5395e9fae4abea9033e5f0548508dac98b1604524",
+        "candidate_sha256": "1ba8e21a7254c131045da91c0dbac86caeb907f8c6c9c0b74ddaa425df5b125c",
+        "diff_sha256": "360f552cfeed162a1d290a352bd6e6a363997ac0564a0c0c57e7acdc104cdadf"
+      }
+    },
+    {
+      "scale": 2.0,
+      "openttd_zoom": "Out2x",
+      "candidate_translation": [1, 0],
+      "changed_pixels": 556026,
+      "total_pixels": 921600,
+      "changed_ratio": 0.6033268229166666,
+      "artifacts": {
+        "reference_sha256": "ee0347c1950b0a8fa01b1ccdd247fd1124906960b6134a3988497784fcbd7cf9",
+        "candidate_sha256": "422b51b48a425cbe4cf623387c2f7f7364fb6bc7c7eac60aa5f522857fbeb767",
+        "diff_sha256": "3cd3f2685b907908c6115a8c1306a966f5778310f53fb913d49cc72b8e4b32f1"
+      }
+    },
+    {
+      "scale": 4.0,
+      "openttd_zoom": "Out4x",
+      "candidate_translation": [1, 0],
+      "changed_pixels": 754329,
+      "total_pixels": 921600,
+      "changed_ratio": 0.8184993489583333,
+      "artifacts": {
+        "reference_sha256": "5a24d7bfd43a92bc656348e5c464eaf7149f63fc6a6e5f2ac24a76cf115cf33e",
+        "candidate_sha256": "f000b1a9b6c5b2c9720dbdb24d83528f573f7576e9f2269015c427b805defd6b",
+        "diff_sha256": "958fbfcaaaff82e97debc7c794e3508ad23c275343d29604b34092cc5dd48dbd"
+      }
+    },
+    {
+      "scale": 8.0,
+      "openttd_zoom": "Out8x",
+      "candidate_translation": [-7, -5],
+      "changed_pixels": 691520,
+      "total_pixels": 921600,
+      "changed_ratio": 0.7503472222222223,
+      "artifacts": {
+        "reference_sha256": "243cf41ec513a706b49b486ae3d7996ef8cebb93404959d1d9ea7712024de2be",
+        "candidate_sha256": "0cd65bcd96f4dc82027fe09da9bfbaad7cb82ca2142d428e489dea25bb41abb1",
+        "diff_sha256": "71a1e0f8c96c2ee7bc7e72282f0bf4da557d6e8eeb51d7db068316dbb657e46d"
+      }
+    }
+  ]
+}

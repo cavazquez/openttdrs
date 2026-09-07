@@ -54,6 +54,24 @@ industria/estación y Link Graph aunque estén activados en preferencias locales
 o mediante variables de entorno. Esas capas sirven para depurar, no son parte
 del raster comparable.
 
+### Traza diagnóstica del orden de composición
+
+Cuando una diferencia depende de la superposición, se pueden activar trazas
+efímeras junto con una captura normal:
+
+```bash
+OPENTTDRS_WORLD_SCREENSHOT_SORT_OUT=/tmp/reference-sort.jsonl \
+  ./scripts/export_openttd_world_screenshot.sh "$SAV" /tmp/reference.png 189,126 1280x720
+OPENTTDRS_VIEWPORT_SORT_TRACE_OUT=/tmp/candidate-sort.json \
+  ./scripts/export_openttdrs_world_screenshot.sh "$SAV" /tmp/candidate.png 189,126 1280x720 1
+```
+
+La traza nativa JSONL registra el vector de parents después de
+`_vp_sprite_sorter` para los segmentos de la captura. La candidata registra el
+scope seleccionado, los parents de entrada, su orden resultante y profundidad.
+Son instrumentos de diagnóstico: no sustituyen `report.json`, no se publican
+como baseline y no permiten declarar paridad por una sola región.
+
 ## Métricas y registro
 
 El comparador calcula primero el diff sin corrección y luego busca una

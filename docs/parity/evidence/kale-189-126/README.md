@@ -10,7 +10,7 @@ diagnóstico.
 Las PNG versionadas se publicaron en `7f7d528e` (2026-08-20) y son una
 ilustración archivada de la brecha, no un baseline cuantitativo vigente. El
 reporte reproducible del corte actual está en
-[`baseline-2026-09-05.json`](baseline-2026-09-05.json); la única interpretación
+[`baseline-2026-09-07.json`](baseline-2026-09-07.json); la única interpretación
 canónica de sus métricas vive en
 [`PARIDAD.md`](../../../PARIDAD.md#evidencia-visual-raster-vigente). Estas
 imágenes antiguas no se usan para atribuir mejoras posteriores.

@@ -12,7 +12,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BASELINE = ROOT / "docs/parity/evidence/kale-189-126/baseline-2026-09-05.json"
+BASELINE = ROOT / "docs/parity/evidence/kale-189-126/baseline-2026-09-07.json"
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 SCALES = {
     0.25: "In4x",

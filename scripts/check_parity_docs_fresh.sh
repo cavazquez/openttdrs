@@ -73,9 +73,9 @@ require_pat 'Esto no bloquea los callbacks de' docs/parity/newgrf-action0-matrix
 require_pat 'recupera el `ObjectType` asignado' docs/parity/sav-compatibility.md
 require_pat 'fusiona esos campos sobre' docs/parity/sav-compatibility.md
 require_pat 'Corte cuantitativo canónico' docs/PARIDAD.md
-require_pat 'baseline-2026-09-05\.json' docs/PARIDAD.md
-require_pat '155\.322 / 921\.600' docs/PARIDAD.md
-require_pat 'cd3c424108be4c8ed285169db2daa4829066d8be' docs/PARIDAD.md
+require_pat 'baseline-2026-09-07\.json' docs/PARIDAD.md
+require_pat '155\.118 / 921\.600' docs/PARIDAD.md
+require_pat 'd9b0537c8126ca8586ab6d9de3aeb8d887744b1f' docs/PARIDAD.md
 require_pat 'c2661164bcb6cbf5ab97b56ccbee7506a3b26833' docs/PARIDAD.md
 require_pat '^\| \*\*RMAP-056\*\* \|.*\*\*Abierto' docs/parity/random-map-issues.md
 require_pat '^\| \*\*RMAP-082\*\* \|.*\*\*Abierto' docs/parity/random-map-issues.md

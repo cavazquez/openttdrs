@@ -645,16 +645,16 @@ backlog de implementación.
 
 ### Evidencia visual raster vigente
 
-**Corte cuantitativo canónico — 2026-09-05.** La evidencia inmutable de esta
+**Corte cuantitativo canónico — 2026-09-07.** La evidencia inmutable de esta
 corrida está en
-[`baseline-2026-09-05.json`](parity/evidence/kale-189-126/baseline-2026-09-05.json).
+[`baseline-2026-09-07.json`](parity/evidence/kale-189-126/baseline-2026-09-07.json).
 Usa `save/Kale_TitleGame.sav` SHA-256
 `584d98c3d1dc389e938ce92aa357cc4a1c179bf9849133f9b85d2e956f3e0a69`, centro
 `189,126`, `1280×720`, OpenGFX 8bpp y perfil `clean-static` (sin UI, rótulos,
 vehículos ni capas de diagnóstico). La referencia es OpenTTD 15.3, pin oficial
 `14ec60f248547d4d062a1160f0fc26d742319888`, a través del oracle instrumentado
 `c2661164bcb6cbf5ab97b56ccbee7506a3b26833`; la candidata es
-`cd3c424108be4c8ed285169db2daa4829066d8be`. El JSON conserva además los SHA-256
+`d9b0537c8126ca8586ab6d9de3aeb8d887744b1f`. El JSON conserva además los SHA-256
 de los tres PNG de cada nivel y la traducción de cámara, de modo que la tabla no
 depende de una captura manual ni de un hash autorreferencial del commit documental.
 
@@ -666,11 +666,11 @@ muestreo y las familias visibles. Ninguna fila declara paridad de framebuffer.
 | Escala openttdrs | Zoom nativo OpenTTD | Alineación candidata | Píxeles distintos / total | Porcentaje | Rol |
 |---:|---|---:|---:|---:|---|
 | `0,25×` | `In4x` | `[-2, 0]` | 357.288 / 921.600 | 38,768229167 % | Diagnóstico de zoom cercano |
-| `0,5×` | `In2x` | `[-1, 0]` | 422.082 / 921.600 | 45,798828125 % | Diagnóstico de zoom cercano |
-| `1×` | `Normal` | `[0, 0]` | **155.322 / 921.600** | **16,853515625 %** | Baseline global de esta fixture |
-| `2×` | `Out2x` | `[1, 0]` | 556.148 / 921.600 | 60,345920139 % | Diagnóstico de zoom alejado |
-| `4×` | `Out4x` | `[1, 0]` | 754.334 / 921.600 | 81,850477431 % | Diagnóstico de zoom alejado |
-| `8×` | `Out8x` | `[-7, -5]` | 691.518 / 921.600 | 75,034505208 % | Diagnóstico de máximo alejamiento |
+| `0,5×` | `In2x` | `[-1, 0]` | 421.700 / 921.600 | 45,757378472 % | Diagnóstico de zoom cercano |
+| `1×` | `Normal` | `[0, 0]` | **155.118 / 921.600** | **16,831380208 %** | Baseline global de esta fixture |
+| `2×` | `Out2x` | `[1, 0]` | 556.026 / 921.600 | 60,332682292 % | Diagnóstico de zoom alejado |
+| `4×` | `Out4x` | `[1, 0]` | 754.329 / 921.600 | 81,849934896 % | Diagnóstico de zoom alejado |
+| `8×` | `Out8x` | `[-7, -5]` | 691.520 / 921.600 | 75,034722222 % | Diagnóstico de máximo alejamiento |
 
 La corrida normal queda alineada en `[0, 0]`, pero sigue diferente. Las
 traslaciones de las otras filas son señales de cámara/viewport que el reporte
@@ -684,8 +684,14 @@ estaciones, fundaciones y depósitos dentro de su fila diagonal; el helper de
 alineación de depósitos comparte ahora la misma codificación. El `world-draw`
 estricto de la casa/fuente `(189,116)` contiene sus dos comandos, y las
 capturas limpias en `0,25×`, `0,5×`, `1×`, `2×` y `4×` conservan el mapa visible.
-Es una garantía local de profundidad y de viewport, no la aplicación del sort
-global de parents: esa composición completa continúa en #326.
+Desde `d9b0537c`, el sorter runtime se acota a la región relevante del
+viewport de la captura y excluye entidades ocultas antes de reservar slots:
+la corrida normal determinista baja de 155.322 a 155.118 píxeles distintos y
+de 6,3069 a 6,2971 de delta medio por canal. También incorpora al sorter los
+parents `TILE_SEQ_LINE` de estaciones aeroportuarias. La selección de scope
+corrige una regla de composición concreta, pero no completa producers,
+children, clipping, pivotes ni el framebuffer por segmentos; #326 continúa
+abierto.
 
 La contención `--strict-reference` de `world-draw` sigue siendo útil, pero
 compara decisiones y orden relativo por tesela antes de atlas/composición. El

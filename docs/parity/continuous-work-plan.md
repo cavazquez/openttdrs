@@ -155,9 +155,10 @@ mismo JSONL v1 en el corte post-timer y el comparador exige reloj, RNG, `ECMY`,
 `ITBL`, industrias y acciones exactos. #507/#515 restauran el `DATE` completo,
 incluido el cursor LFSR del tile loop, y #514/#516 despachan Industry/Town;
 #517 Tree/`OnTick_Trees`, #518 el grupo global de animación industrial y #519
-las seis animaciones de aeropuerto `AcceptanceTick`. La primera jornada ya
-iguala RNG; el residual de `day[2]` que queda en #512 es #520 y la medición
-diaria canónica se mantiene en
+las seis animaciones de aeropuerto `AcceptanceTick`. #520/#522 corrigen la
+cadencia de fábrica a 256 ticks, por lo que las jornadas 1 y 2 ya igualan RNG;
+el residual de `day[3]` que queda en #512 es #523 y la medición diaria
+canónica se mantiene en
 [`random-map-issues.md`](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
 #510 impide que una ejecución dedicated sin socket se acepte como oracle aunque
 produzca JSONL válida. RMAP-162 cierra instrumentación y regresiones, no afirma
@@ -170,8 +171,9 @@ ejecución vanilla e instrumentación diferencial. #507/#515 conservan la carga
 #511 cierra el contador persistido, #513 el sonido ambiental, #514/#516 los
 bloques actuales de `TileLoop_Industry`/`TileLoop_Town`, #517
 `TileLoop_Trees`/`OnTick_Trees`, #518 el grupo global de animación industrial
-y #519 los grupos aeroportuarios de la primera jornada; #512 mantiene separado
-#520, el siguiente residual diario. Los
+y #519 los grupos aeroportuarios de la primera jornada; #520/#522 alinean
+la segunda jornada con diez `IndustryTick` de fábrica y #512 mantiene separado
+#523, el siguiente residual diario. Los
 gates continúan siendo obligatorios y ningún issue padre se considera cerrado
 por esta cobertura.
 

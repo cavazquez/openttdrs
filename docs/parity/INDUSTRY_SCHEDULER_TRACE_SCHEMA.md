@@ -6,9 +6,10 @@ conservan el `DATE`, incluido el cursor LFSR de tile loop; #510 rechaza una
 ejecución dedicated degradada, #511 alinea el contador de industria y
 #514/#516 mueven los TileLoops industrial/urbano al stream actual; #517 añade
 `TileLoop_Trees` y el contador persistido de `OnTick_Trees`; #518 reproduce
-el grupo RNG de animación industrial, #519 el grupo NewGRF de aeropuerto y
-#520 conserva el siguiente residual diario; #521 normaliza la atribución
-diagnóstica nativa para que el comparador alcance ese campo contractual.
+el grupo RNG de animación industrial, #519 el grupo NewGRF de aeropuerto,
+#520/#522 corrigen la segunda jornada y #523 conserva el siguiente residual;
+#521 normaliza la atribución diagnóstica nativa para que el comparador alcance
+ese campo contractual.
 
 `OPENTTDRS_INDUSTRY_TRACE_OUT` habilita, exclusivamente en el binario OpenTTD
 instrumentado, una traza JSONL de la rutina diaria
@@ -112,11 +113,14 @@ por lo que llega a 919; #518 reproduce después los cinco grupos
 palabra hija por tesela cuyo trigger esté habilitado; la fixture no habilita
 ninguna. #519 reproduce las seis llamadas `TriggerAirportAnimation` de
 `AcceptanceTick` (estaciones 6/5/4/2/1/0, ticks 1472994…1473000): cada una
-es 1×1, no habilita un hijo y consume su palabra base. Por eso la primera
-jornada ya iguala el estado nativo **`[703151878,1259678577]`**. La extensión
-de tres jornadas localiza el siguiente residual en `day[2]` —nativo
-`[3637992764,1476054595]`, candidato `[1586407340,1515188588]`— bajo #520;
-#512 permanece abierto. Los números y atribuciones canónicos están en
+es 1×1, no habilita un hijo y consume su palabra base. #522 corrige la
+cadencia errónea de 512 ticks de las fábricas: `ProduceIndustryGoods` usa 256
+para todo tipo y por ello las diez llamadas `IndustryTick` omitidas vuelven al
+stream. La corrida normal confirma ahora dos jornadas exactas, incluida
+`day[2] = [3637992764,1476054595]`. La extensión de tres jornadas localiza el
+siguiente residual en `day[3]` —nativo `[435117145,1402898353]`, candidato
+`[605993338,874158254]`— bajo #523; #512 permanece abierto. Los números y
+atribuciones canónicos están en
 [RMAP-162](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
 Este contrato no declara aún paridad runtime completa del scheduler.
 

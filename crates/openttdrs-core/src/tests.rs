@@ -345,11 +345,15 @@ fn game_state_json_roundtrip() {
 }
 
 #[test]
-fn factory_produces_half_as_often_as_mine() {
-    assert_eq!(
-        industry_produce_period_ticks(IndustryKind::Factory),
-        industry_produce_period_ticks(IndustryKind::CoalMine) * 2
-    );
+fn industries_share_the_native_256_tick_production_cycle() {
+    for kind in [
+        IndustryKind::CoalMine,
+        IndustryKind::Forest,
+        IndustryKind::OilWell,
+        IndustryKind::Factory,
+    ] {
+        assert_eq!(industry_produce_period_ticks(kind), INDUSTRY_PRODUCE_TICKS);
+    }
     let mut coal = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
     let mut fact = Industry::new(TileCoord::new(1, 0), IndustryKind::Factory);
     let coal_amount = coal.produce_amount();
@@ -357,7 +361,7 @@ fn factory_produces_half_as_often_as_mine() {
     fact.produce(256);
     assert_eq!(coal.stock, coal_amount);
     assert_eq!(fact.stock, 0);
-    fact.produce(512);
+    assert!(fact.produces_on_tick(256));
     assert_eq!(fact.stock, 0, "fábrica sin insumos en estación no produce");
 }
 

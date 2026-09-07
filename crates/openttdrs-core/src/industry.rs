@@ -88,7 +88,7 @@ pub enum IndustryKind {
     Forest,
     /// Extracción liviana (pozos de petróleo, etc.): mismo ritmo de stock que mina.
     OilWell,
-    /// Procesamiento: produce la mitad de frecuencia que mina/bosque.
+    /// Procesamiento: comparte el ciclo base de 256 ticks de toda industria.
     Factory,
 }
 
@@ -1140,13 +1140,11 @@ impl Default for Industry {
 
 #[inline]
 #[must_use]
-pub const fn industry_produce_period_ticks(kind: IndustryKind) -> u64 {
-    match kind {
-        IndustryKind::Factory => INDUSTRY_PRODUCE_TICKS * 2,
-        IndustryKind::CoalMine | IndustryKind::Forest | IndustryKind::OilWell => {
-            INDUSTRY_PRODUCE_TICKS
-        }
-    }
+pub const fn industry_produce_period_ticks(_kind: IndustryKind) -> u64 {
+    // `ProduceIndustryGoods` usa `Ticks::INDUSTRY_PRODUCE_TICKS` para todo
+    // tipo de industria. El tipo modifica los cargos/tasas, no la cadencia
+    // del contador persistido ni los triggers IndustryTick que le siguen.
+    INDUSTRY_PRODUCE_TICKS
 }
 
 impl Industry {
@@ -3439,7 +3437,7 @@ mod tests {
         stations[0].cargo_stock.grain = 10;
         stations[0].cargo_stock.steel = 10;
 
-        assert!(fact.produce_from_nearby_stations(&mut stations, 512));
+        assert!(fact.produce_from_nearby_stations(&mut stations, INDUSTRY_PRODUCE_TICKS));
         assert_eq!(fact.stock, fact.processing_output_amount());
         assert_eq!(
             stations[0].cargo_stock.livestock,

@@ -8,7 +8,9 @@ use openttdrs_core::{
     road_stop_spec_def,
 };
 
+use crate::i18n::{Locale, localized_text};
 use crate::render::NewGrfAction5SpriteCache;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
@@ -179,6 +181,21 @@ fn road_stop_tool_kind(tool: &UiToolState) -> Option<StopKind> {
     }
 }
 
+fn road_stop_title_source(kind: StopKind) -> &'static str {
+    match kind {
+        StopKind::BusStop => "Parada de autobús",
+        StopKind::TruckStop => "Parada de camión",
+        _ => "Parada",
+    }
+}
+
+fn localized_road_stop_title(locale: Locale, kind: StopKind, spec_label: &str) -> String {
+    format!(
+        "{} · {spec_label}",
+        localized_text(locale, road_stop_title_source(kind))
+    )
+}
+
 /// Añade botones de clase/spec que aún no existen (tras apply NewGRF RoadStops).
 pub(crate) fn sync_road_stop_catalog_entries(
     mut commands: Commands,
@@ -282,6 +299,7 @@ pub(crate) fn sync_road_stop_preview_image(
 pub(crate) fn sync_road_stop_picker(
     tool_state: Res<UiToolState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility), Without<RoadStopPickerButton>>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<RoadStopPickerEmptyHint>>,
     mut hint_q: Query<&mut Node, With<RoadStopPickerEmptyHint>>,
@@ -304,11 +322,6 @@ pub(crate) fn sync_road_stop_picker(
 
     let class = sim.state.current_road_stop_class;
     let spec = sim.state.current_road_stop_spec;
-    let kind_label = match kind {
-        StopKind::BusStop => "Bus",
-        StopKind::TruckStop => "Camión",
-        _ => "Parada",
-    };
     let spec_label = spec
         .and_then(|id| road_stop_spec_def(&sim.state.road_stop_spec_catalog, id))
         .map_or("—", |d| d.label.as_str());
@@ -317,7 +330,7 @@ pub(crate) fn sync_road_stop_picker(
         .iter_mut()
         .find(|(t, _)| t.0 == FloatingWindowId::RoadStopPicker)
     {
-        **title = format!("Parada {kind_label} · {spec_label}");
+        **title = localized_road_stop_title(prefs.locale(), kind, spec_label);
     }
 
     let matching = list_road_stop_specs(&sim.state.road_stop_spec_catalog, None, kind);
@@ -468,5 +481,17 @@ mod tests {
         ));
         world.run_system_once(road_stop_picker_on_closed).unwrap();
         assert!(world.resource::<UiToolState>().active_tool.is_none());
+    }
+
+    #[test]
+    fn road_stop_title_localizes_prefix_but_preserves_newgrf_label() {
+        assert_eq!(
+            localized_road_stop_title(Locale::Es, StopKind::BusStop, "Terminal Custom"),
+            "Parada de autobús · Terminal Custom"
+        );
+        assert_eq!(
+            localized_road_stop_title(Locale::En, StopKind::TruckStop, "Terminal Custom"),
+            "Truck stop · Terminal Custom"
+        );
     }
 }

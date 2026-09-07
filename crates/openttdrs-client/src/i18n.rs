@@ -346,6 +346,12 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Parada bus" => "Bus stop",
         "Parada carga" => "Truck stop",
         "Estacion tren" => "Train station",
+        "Selección de parada" => "Road stop selection",
+        "Clase" => "Class",
+        "Vista previa" => "Preview",
+        "Tipo" => "Type",
+        "Parada" => "Stop",
+        "Parada de autobús" => "Bus stop",
         "Parada de bus" => "Bus stop",
         "Parada de camión" => "Truck stop",
         "Estación de tren" => "Train station",
@@ -1242,6 +1248,12 @@ mod tests {
             ("Tranvías", "Trams"),
             ("Locomotoras", "Locomotives"),
             ("Vagones", "Wagons"),
+            ("Selección de parada", "Road stop selection"),
+            ("Clase", "Class"),
+            ("Vista previa", "Preview"),
+            ("Tipo", "Type"),
+            ("Parada", "Stop"),
+            ("Parada de autobús", "Bus stop"),
         ] {
             assert_eq!(localized_text(Locale::En, spanish), english);
         }

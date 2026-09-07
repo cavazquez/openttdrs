@@ -2312,3 +2312,9 @@ de ordenar y filtros. El título dinámico recibe el locale sin cambiar la clase
 de depósito; nombres de motores, cargos y estadísticas permanecen datos
 literales. #331 sigue abierto por los catálogos upstream y superficies UI
 restantes.
+
+Actualización #331-ROAD-STOP-PICKER-468 (2026-09-07, issue [#468](https://github.com/cavazquez/openttdrs/issues/468)):
+el selector de paradas viales localiza título, secciones y prefijo de tipo en
+vivo. Los labels NewGRF de clase/especificación permanecen literales; IDs,
+visibilidad y comandos de selección no cambian. #331 sigue abierto por los
+catálogos upstream y superficies UI restantes.

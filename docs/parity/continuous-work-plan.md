@@ -156,8 +156,9 @@ mismo JSONL v1 en el corte post-timer y el comparador exige reloj, RNG, `ECMY`,
 incluido el cursor LFSR del tile loop, y #514/#516 despachan Industry/Town;
 #517 Tree/`OnTick_Trees`, #518 el grupo global de animación industrial y #519
 las seis animaciones de aeropuerto `AcceptanceTick`. #520/#522 corrigen la
-cadencia de fábrica a 256 ticks, por lo que las jornadas 1 y 2 ya igualan RNG;
-el residual de `day[3]` que queda en #512 es #523 y la medición diaria
+cadencia de fábrica a 256 ticks y #523 recupera la semántica `Chance16` de
+`PlantFields`, por lo que la corrida auditada ya iguala diez jornadas; la
+medición diaria
 canónica se mantiene en
 [`random-map-issues.md`](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
 #510 impide que una ejecución dedicated sin socket se acepte como oracle aunque
@@ -172,8 +173,9 @@ ejecución vanilla e instrumentación diferencial. #507/#515 conservan la carga
 bloques actuales de `TileLoop_Industry`/`TileLoop_Town`, #517
 `TileLoop_Trees`/`OnTick_Trees`, #518 el grupo global de animación industrial
 y #519 los grupos aeroportuarios de la primera jornada; #520/#522 alinean
-la segunda jornada con diez `IndustryTick` de fábrica y #512 mantiene separado
-#523, el siguiente residual diario. Los
+la cadencia de fábrica con diez `IndustryTick` y #523 corrige el fallback
+`PlantFields` para que `Chance16` no se sustituya por `RandomRange`. #512
+permanece abierto por cobertura runtime pendiente. Los
 gates continúan siendo obligatorios y ningún issue padre se considera cerrado
 por esta cobertura.
 

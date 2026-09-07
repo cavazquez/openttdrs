@@ -7,7 +7,8 @@ ejecución dedicated degradada, #511 alinea el contador de industria y
 #514/#516 mueven los TileLoops industrial/urbano al stream actual; #517 añade
 `TileLoop_Trees` y el contador persistido de `OnTick_Trees`; #518 reproduce
 el grupo RNG de animación industrial, #519 el grupo NewGRF de aeropuerto,
-#520/#522 corrigen la segunda jornada y #523 conserva el siguiente residual;
+#520/#522 corrigen la segunda jornada y #523 alinea `PlantFields` con
+`Chance16`;
 #521 normaliza la atribución diagnóstica nativa para que el comparador alcance
 ese campo contractual.
 
@@ -116,13 +117,13 @@ ninguna. #519 reproduce las seis llamadas `TriggerAirportAnimation` de
 es 1×1, no habilita un hijo y consume su palabra base. #522 corrige la
 cadencia errónea de 512 ticks de las fábricas: `ProduceIndustryGoods` usa 256
 para todo tipo y por ello las diez llamadas `IndustryTick` omitidas vuelven al
-stream. La corrida normal confirma ahora dos jornadas exactas, incluida
-`day[2] = [3637992764,1476054595]`. La extensión de tres jornadas localiza el
-siguiente residual en `day[3]` —nativo `[435117145,1402898353]`, candidato
-`[605993338,874158254]`— bajo #523; #512 permanece abierto. Los números y
-atribuciones canónicos están en
+stream. #523 sustituye el fallback incorrecto `RandomRange(8)` de `PlantFields`
+por `Chance16(1,8)`, igual que `ProduceIndustryGoods`: evita plantar un campo
+cuando el low-word nativo lo rechaza y recupera el stream posterior. La
+evidencia canónica, incluida la corrida de diez jornadas exactas, está en
 [RMAP-162](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
-Este contrato no declara aún paridad runtime completa del scheduler.
+#512 permanece abierto por el alcance runtime restante; este contrato no
+declara aún paridad runtime completa del scheduler.
 
 ## Límites explícitos
 

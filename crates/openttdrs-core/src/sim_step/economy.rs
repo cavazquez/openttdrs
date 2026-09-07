@@ -257,7 +257,12 @@ fn industry_special_effect(
         });
     match callback {
         Some(value) => value,
-        None => fallback_chance.is_some_and(|denominator| rng.random_range(denominator) == 0),
+        // `ProduceIndustryGoods` usa `Chance16`, no `RandomRange`: la
+        // probabilidad se calcula sobre los 16 bits bajos de la misma palabra
+        // que se consume para el callback. Usar los bits altos cambia tanto la
+        // decisión como los `Random()` posteriores (por ejemplo, puede plantar
+        // un campo que el original rechaza).
+        None => fallback_chance.is_some_and(|denominator| rng.chance16(1, denominator)),
     }
 }
 
@@ -1133,6 +1138,31 @@ mod tests {
         let selected =
             random_industry_pool_index(&mut state).map(|index| state.industries[index].instance_id);
         assert_eq!(selected, Some(6));
+    }
+
+    #[test]
+    fn vanilla_industry_special_effect_uses_chance16_low_word() {
+        // Esta palabra aparece inmediatamente después del grupo IndustryTick
+        // de la industria 8 de autosave0.sav. Sus bits altos hacen que
+        // `RandomRange(8)` devuelva cero, mientras que `Chance16(1, 8)` —la
+        // regla nativa de PlantFields— la rechaza usando los bits bajos.
+        let mut rng = Randomizer {
+            state: [628_366_352, 2_882_224_545],
+        };
+        let mut random_range = rng;
+        assert_eq!(random_range.random_range(8), 0);
+
+        let mut expected = rng;
+        assert!(!expected.chance16(1, 8));
+        let mut industry = pool_industry(8);
+        assert!(!industry_special_effect(
+            &mut rng,
+            &mut industry,
+            None,
+            0,
+            Some(8),
+        ));
+        assert_eq!(rng, expected, "consume una sola palabra Chance16");
     }
 
     #[test]

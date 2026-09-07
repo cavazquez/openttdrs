@@ -2318,3 +2318,10 @@ el selector de paradas viales localiza título, secciones y prefijo de tipo en
 vivo. Los labels NewGRF de clase/especificación permanecen literales; IDs,
 visibilidad y comandos de selección no cambian. #331 sigue abierto por los
 catálogos upstream y superficies UI restantes.
+
+Actualización #331-RAIL-STATION-PICKER-469 (2026-09-07, issue [#469](https://github.com/cavazquez/openttdrs/issues/469)):
+el selector de estación ferroviaria localiza título, controles de andenes,
+cobertura y prefijos dinámicos `Accepts`/`Supplies`. El sentinel vacío se
+traduce, pero cargos y labels de clase/spec permanecen literales; huella,
+orientación, filtros e IDs no cambian. #331 sigue abierto por los catálogos
+upstream y superficies UI restantes.

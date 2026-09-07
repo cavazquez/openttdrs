@@ -18,6 +18,8 @@ use openttdrs_core::{
 };
 use std::collections::HashMap;
 
+use crate::i18n::{Locale, localized_text};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
@@ -572,11 +574,29 @@ fn coverage_texts(sim: &SimWorld, state: &StationBuildState, hover: TileCoord) -
     )
 }
 
+fn localized_coverage_line(locale: Locale, line: &str) -> String {
+    let Some((prefix, value)) = line.split_once(' ') else {
+        return line.to_owned();
+    };
+    let prefix = match prefix {
+        "Acepta:" => localized_text(locale, "Acepta:"),
+        "Suministra:" => localized_text(locale, "Suministra:"),
+        _ => return line.to_owned(),
+    };
+    let value = if value == "Nada" {
+        localized_text(locale, "Nada")
+    } else {
+        value.to_owned()
+    };
+    format!("{prefix} {value}")
+}
+
 #[allow(clippy::type_complexity, clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn sync_rail_station_picker(
     tool_state: Res<UiToolState>,
     station_state: Res<StationBuildState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     hovered: Res<HoveredTileCoord>,
     catalog: Res<StationCatalogPickerState>,
     mut root_q: Query<
@@ -745,10 +765,10 @@ pub(crate) fn sync_rail_station_picker(
     if let Some(hover) = hovered.pos {
         let (accepts, supplies) = coverage_texts(&sim, &station_state, hover);
         if let Ok(mut text) = accepts_q.single_mut() {
-            **text = accepts;
+            **text = localized_coverage_line(prefs.locale(), &accepts);
         }
         if let Ok(mut text) = supplies_q.single_mut() {
-            **text = supplies;
+            **text = localized_coverage_line(prefs.locale(), &supplies);
         }
     }
 }
@@ -1032,5 +1052,25 @@ mod tests {
             Some(BuildMenuAction::Rail)
         );
         assert_eq!(world.resource::<StationCatalogPickerState>().filter, "keep");
+    }
+
+    #[test]
+    fn coverage_prefixes_localize_without_interpreting_cargo_labels() {
+        assert_eq!(
+            localized_coverage_line(Locale::Es, "Acepta: Nada"),
+            "Acepta: Nada"
+        );
+        assert_eq!(
+            localized_coverage_line(Locale::En, "Suministra: Nada"),
+            "Supplies: Nothing"
+        );
+        assert_eq!(
+            localized_coverage_line(Locale::En, "Acepta: mercancías, correo"),
+            "Accepts: mercancías, correo"
+        );
+        assert_eq!(
+            localized_coverage_line(Locale::En, "custom cargo"),
+            "custom cargo"
+        );
     }
 }

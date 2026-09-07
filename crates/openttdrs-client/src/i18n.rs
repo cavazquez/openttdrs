@@ -584,6 +584,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Accidente de helicóptero" => "Helicopter accident",
         "Submarino a la deriva" => "Submarine adrift",
         "Hundimiento minero" => "Mine subsidence",
+        "Dejará de producir y desaparecerá el mes que viene." => {
+            "It will stop producing and disappear next month."
+        }
         // Errores de comandos: se generan durante la partida y por eso no
         // pasan por un constructor de ventana que pueda traducirlos al crear
         // el HUD. Mantener sus claves aquí permite que el feedback se
@@ -933,6 +936,28 @@ mod tests {
     }
 
     #[test]
+    fn catalog_translates_industry_closing_body_without_coordinates() {
+        assert_eq!(
+            localized_text(
+                Locale::En,
+                "Dejará de producir y desaparecerá el mes que viene."
+            ),
+            "It will stop producing and disappear next month."
+        );
+        assert_eq!(
+            localized_text(
+                Locale::Es,
+                "Dejará de producir y desaparecerá el mes que viene."
+            ),
+            "Dejará de producir y desaparecerá el mes que viene."
+        );
+        assert_eq!(
+            localized_text(Locale::En, "Industria en (3, 7) anuncia su cierre"),
+            "Industria en (3, 7) anuncia su cierre"
+        );
+    }
+
+    #[test]
     fn catalog_translates_display_options_and_transparency_categories() {
         for (spanish, english) in [
             ("Nombres de pueblos", "Town names"),
@@ -1166,6 +1191,43 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(headline).unwrap().as_str(),
             "Accidente de helicóptero"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_industry_closing_body_only() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let headline = app
+            .world_mut()
+            .spawn(Text::new("Industria en (3, 7) anuncia su cierre"))
+            .id();
+        let body = app
+            .world_mut()
+            .spawn(Text::new(
+                "Dejará de producir y desaparecerá el mes que viene.",
+            ))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Industria en (3, 7) anuncia su cierre"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "It will stop producing and disappear next month."
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Dejará de producir y desaparecerá el mes que viene."
         );
     }
 

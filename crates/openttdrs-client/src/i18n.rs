@@ -1004,6 +1004,22 @@ fn translate_dynamic_news_text(source: &str) -> Option<String> {
             "A jet attempted to land on a short runway at ({coordinates})."
         ));
     }
+    if let Some(vehicle_id) = source
+        .strip_prefix("Choque en paso a nivel (vehículo #")
+        .and_then(|value| value.strip_suffix(')'))
+        && is_ascii_digits(vehicle_id)
+    {
+        return Some(format!("Level crossing crash (vehicle #{vehicle_id})"));
+    }
+    if let Some(coordinates) = source
+        .strip_prefix("Un vehículo de carretera chocó con un tren en (")
+        .and_then(|value| value.strip_suffix(")."))
+        && is_coordinate_pair(coordinates)
+    {
+        return Some(format!(
+            "A road vehicle collided with a train at ({coordinates})."
+        ));
+    }
     None
 }
 
@@ -1323,6 +1339,33 @@ mod tests {
             "Un jet intentó aterrizar en pista corta en (4, 9)",
             "Un jet intentó aterrizar en pista corta en (4, 9). (GS)",
             "Un jet intentó aterrizar en pista corta en (4, 9",
+        ] {
+            assert_eq!(localized_text(Locale::En, malformed), malformed);
+        }
+    }
+
+    #[test]
+    fn catalog_translates_level_crossing_crash_news_without_mutating_values() {
+        for (spanish, english) in [
+            (
+                "Choque en paso a nivel (vehículo #17)",
+                "Level crossing crash (vehicle #17)",
+            ),
+            (
+                "Un vehículo de carretera chocó con un tren en (-4, 9).",
+                "A road vehicle collided with a train at (-4, 9).",
+            ),
+        ] {
+            assert_eq!(localized_text(Locale::En, spanish), english);
+            assert_eq!(localized_text(Locale::Es, spanish), spanish);
+        }
+        for malformed in [
+            "Choque en paso a nivel (vehículo #diecisiete)",
+            "Choque en paso a nivel (vehículo #17",
+            "Choque en paso a nivel (vehículo #17) (GS)",
+            "Un vehículo de carretera chocó con un tren en (x, 9).",
+            "Un vehículo de carretera chocó con un tren en (-4, 9)",
+            "Un vehículo de carretera chocó con un tren en (-4, 9). (GS)",
         ] {
             assert_eq!(localized_text(Locale::En, malformed), malformed);
         }
@@ -1982,6 +2025,67 @@ mod tests {
         assert_eq!(
             app.world().get::<Text>(body).unwrap().as_str(),
             "Un jet intentó aterrizar en pista corta en (4, -9)."
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn localization_plugin_translates_level_crossing_crash_news_late() {
+        let mut app = App::new();
+        app.insert_resource(ClientPreferences::default());
+        app.add_plugins(LocalizationPlugin);
+        let headline = app
+            .world_mut()
+            .spawn(Text::new("Choque en paso a nivel (vehículo #17)"))
+            .id();
+        let body = app
+            .world_mut()
+            .spawn(Text::new(
+                "Un vehículo de carretera chocó con un tren en (-4, 9).",
+            ))
+            .id();
+        let malformed = app
+            .world_mut()
+            .spawn(Text::new(
+                "Un vehículo de carretera chocó con un tren en (x, 9).",
+            ))
+            .id();
+
+        app.update();
+        app.world_mut().resource_mut::<ClientPreferences>().language = "en".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Level crossing crash (vehicle #17)"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "A road vehicle collided with a train at (-4, 9)."
+        );
+        assert_eq!(
+            app.world().get::<Text>(malformed).unwrap().as_str(),
+            "Un vehículo de carretera chocó con un tren en (x, 9)."
+        );
+
+        let late = app
+            .world_mut()
+            .spawn(Text::new("Choque en paso a nivel (vehículo #42)"))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(late).unwrap().as_str(),
+            "Level crossing crash (vehicle #42)"
+        );
+
+        app.world_mut().resource_mut::<ClientPreferences>().language = "es-AR".into();
+        app.update();
+        assert_eq!(
+            app.world().get::<Text>(headline).unwrap().as_str(),
+            "Choque en paso a nivel (vehículo #17)"
+        );
+        assert_eq!(
+            app.world().get::<Text>(body).unwrap().as_str(),
+            "Un vehículo de carretera chocó con un tren en (-4, 9)."
         );
     }
 

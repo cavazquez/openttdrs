@@ -2407,3 +2407,9 @@ la ficha de industria y la ventana hija de producción localizan títulos,
 estados, tipos/cargos vanilla, métricas e historial, preservando GFX/NewGRF,
 valores custom, foco, preview y relación parent/child. El residual de gráfica
 mensual de #269 y los catálogos upstream siguen abiertos en #331.
+
+Actualización #331-TOWN-AUTHORITY-LOCALE-482 (2026-09-07, issue [#482](https://github.com/cavazquez/openttdrs/issues/482)):
+la ventana de autoridad localiza título, estado, resumen, ratings, las ocho
+acciones y sus estados de disponibilidad, sin mutar costes, máscaras, nombres,
+IDs, cascada ni efectos diferidos. #331 sigue abierto por los catálogos
+upstream y superficies UI restantes.

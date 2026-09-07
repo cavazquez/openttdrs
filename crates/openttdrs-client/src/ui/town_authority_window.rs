@@ -10,6 +10,8 @@ use openttdrs_core::{
     Command, TownAction, TownAuthoritySettings, format_money, mask_of_town_actions,
 };
 
+use crate::i18n::{Locale, localized_text};
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CREAM,
@@ -143,6 +145,7 @@ pub(crate) fn sync_town_authority_window(
     state: Res<TownAuthorityWindowState>,
     town: Res<TownWindowState>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<
         (&FloatingWindowTitleText, &mut Text),
@@ -164,6 +167,7 @@ pub(crate) fn sync_town_authority_window(
     mut action_button_q: Query<(&TownAuthorityActionButton, &mut BackgroundColor)>,
     mut action_text_q: Query<(&TownAuthorityActionText, &mut Text, &mut TextColor)>,
 ) {
+    let locale = prefs.locale();
     let Some((_, mut vis)) = root_q
         .iter_mut()
         .find(|(w, _)| w.id == FloatingWindowId::TownAuthority)
@@ -179,7 +183,7 @@ pub(crate) fn sync_town_authority_window(
     let town_id = state.town_id.or(town.town_id);
     let Some(t) = town_id.and_then(|id| sim.state.towns.iter().find(|x| x.id == id)) else {
         if let Ok(mut body) = body_q.single_mut() {
-            **body = "Sin pueblo seleccionado.".into();
+            **body = localized_text(locale, "Sin pueblo seleccionado.");
         }
         return;
     };
@@ -188,11 +192,11 @@ pub(crate) fn sync_town_authority_window(
         .iter_mut()
         .find(|(tt, _)| tt.0 == FloatingWindowId::TownAuthority)
     {
-        **title = format!("Autoridad — {}", t.name);
+        **title = format!("{} — {}", localized_text(locale, "Autoridad"), t.name);
     }
 
     let rating = t.authority_rating(sim.state.active_company);
-    let ratings = authority_ratings_text(t, sim.state.companies.len());
+    let ratings = authority_ratings_text_locale(locale, t, sim.state.companies.len());
     let settings = TownAuthoritySettings::default();
     let available_mask = mask_of_town_actions(
         t,
@@ -213,9 +217,9 @@ pub(crate) fn sync_town_authority_window(
         let status = town_action_availability(label.0, available_mask, unrestricted_mask);
         **text = format!(
             "{}  {} — {}",
-            town_action_name(label.0),
+            localized_town_action_name(locale, label.0),
             format_money(label.0.cost()),
-            town_action_status_text(status),
+            localized_town_action_status(locale, status),
         );
         *color = TextColor(if status == TownActionAvailability::Enabled {
             ACTION_ENABLED_TEXT
@@ -225,9 +229,14 @@ pub(crate) fn sync_town_authority_window(
     }
     if let Ok(mut body) = body_q.single_mut() {
         **body = format!(
-            "Pueblo: {}\nDinero: {}\nRating compañía activa: {rating}\n\nRatings por compañía:\n{ratings}\n\nAcciones de autoridad:",
+            "{}: {}\n{}: {}\n{}: {rating}\n\n{}:\n{ratings}\n\n{}:",
+            localized_text(locale, "Pueblo"),
             t.name,
+            localized_text(locale, "Dinero"),
             format_money(sim.state.economy.money),
+            localized_text(locale, "Rating compañía activa"),
+            localized_text(locale, "Ratings por compañía"),
+            localized_text(locale, "Acciones de autoridad"),
         );
     }
 }
@@ -243,6 +252,10 @@ fn town_action_name(action: TownAction) -> &'static str {
         TownAction::BuyRights => "Comprar derechos exclusivos",
         TownAction::Bribe => "Sobornar autoridad",
     }
+}
+
+fn localized_town_action_name(locale: Locale, action: TownAction) -> String {
+    localized_text(locale, town_action_name(action))
 }
 
 fn town_action_availability(
@@ -268,12 +281,21 @@ fn town_action_status_text(status: TownActionAvailability) -> &'static str {
     }
 }
 
-fn authority_ratings_text(town: &openttdrs_core::Town, company_count: usize) -> String {
+fn localized_town_action_status(locale: Locale, status: TownActionAvailability) -> String {
+    localized_text(locale, town_action_status_text(status))
+}
+
+fn authority_ratings_text_locale(
+    locale: Locale,
+    town: &openttdrs_core::Town,
+    company_count: usize,
+) -> String {
     let count = company_count.max(1).min(town.authority_ratings.len());
     (0..count)
         .map(|index| {
             format!(
-                "  Compañía {}: {}",
+                "  {} {}: {}",
+                localized_text(locale, "Compañía"),
                 index + 1,
                 town.authority_ratings[index]
             )
@@ -664,8 +686,29 @@ mod tests {
             ..Town::default()
         };
         assert_eq!(
-            authority_ratings_text(&town, 2),
+            authority_ratings_text_locale(Locale::Es, &town, 2),
             "  Compañía 1: 120\n  Compañía 2: -50"
         );
+    }
+
+    #[test]
+    fn authority_window_localizes_actions_and_ratings_without_mutating_values() {
+        assert_eq!(
+            localized_town_action_name(Locale::En, TownAction::RoadRebuild),
+            "Rebuild roads"
+        );
+        assert_eq!(
+            localized_town_action_status(Locale::En, TownActionAvailability::InsufficientFunds),
+            "Insufficient funds"
+        );
+        let town = Town {
+            authority_ratings: vec![120, -50],
+            ..Town::default()
+        };
+        assert_eq!(
+            authority_ratings_text_locale(Locale::En, &town, 2),
+            "  Company 1: 120\n  Company 2: -50"
+        );
+        assert_eq!(localized_text(Locale::En, "Pueblo Ñandú"), "Pueblo Ñandú");
     }
 }

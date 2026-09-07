@@ -774,6 +774,108 @@ def test_rmap_152_evidence_records_ordered_industry_attempts() -> None:
     ]
 
 
+def test_rmap_153_evidence_records_tropic_river_ordered_industry_attempts() -> None:
+    """La cohorte con ríos conserva la traza larga, no sólo sus pools finales."""
+    evidence = json.loads(
+        (phase.ROOT / "docs/parity/evidence/rmap-153.json").read_text(encoding="utf-8")
+    )
+    assert evidence["issue"] == 493
+    assert (
+        evidence["contract"]
+        == "RMAP-153 Tropic river ordered industry attempts at generation boundaries"
+    )
+    assert evidence["scope"] == {
+        "size": 512,
+        "seed": 1330935380,
+        "climate": "tropic",
+        "generation_settings": {
+            "amount_of_rivers": 1,
+            "min_river_length": 2,
+            "river_route_random": 1,
+            "water_borders": 0,
+        },
+        "phases": ["landscape", "clear", "towns", "industries", "objects", "trees"],
+    }
+    comparison = evidence["comparison"]
+    assert comparison["report_schema_version"] == 6
+    assert comparison["all_exact"] and comparison["first_divergent_stage"] is None
+    assert comparison["block_size"] == 4
+    assert comparison["block_grid"] == {"width": 128, "height": 128, "count": 16384}
+    assert comparison["generation_state_fields"] == [
+        "random_state_0",
+        "random_state_1",
+        "town_count",
+        "town_positions[id,x,y,population,num_houses]",
+        "industry_count",
+        "industry_positions[id,type,x,y,selected_layout,random,random_colour,counter,prod_level,town_id]",
+        "industry_attempt_count",
+        "industry_attempts[ordinal,type,x,y,random_var8f,initial_random_bits,layout_index,succeeded]",
+        "object_count",
+        "object_positions[id,type,x,y,width,height,view]",
+    ]
+    results = evidence["phase_results"]
+    assert [result["phase"] for result in results] == evidence["scope"]["phases"]
+    assert all(
+        result["tile_difference_count"] == 0 and result["changed_block_count"] == 0
+        for result in results
+    )
+    assert [
+        (
+            result["town_count"],
+            result["industry_count"],
+            result["industry_attempt_count"],
+            result["object_count"],
+        )
+        for result in results
+    ] == [
+        (0, 0, 0, 0),
+        (0, 0, 0, 0),
+        (98, 0, 0, 0),
+        (98, 213, 39662, 0),
+        (98, 213, 39662, 60),
+        (98, 213, 39662, 60),
+    ]
+    assert evidence["industry_attempt_trace_at_industries"] == {
+        "count": 39662,
+        "succeeded_count": 213,
+        "rejected_count": 39449,
+        "first": {
+            "ordinal": 0,
+            "type": 4,
+            "x": 488,
+            "y": 35,
+            "random_var8f": 3556206328,
+            "initial_random_bits": 54525,
+            "layout_index": 1,
+            "succeeded": True,
+        },
+        "last": {
+            "ordinal": 39661,
+            "type": 17,
+            "x": 76,
+            "y": 465,
+            "random_var8f": 4158973513,
+            "initial_random_bits": 22087,
+            "layout_index": 0,
+            "succeeded": True,
+        },
+    }
+    assert set(evidence["ordered_sequence_sha256"]) == {
+        "towns_at_towns",
+        "industries_at_industries",
+        "industry_attempts_at_industries",
+        "objects_at_objects",
+    }
+    assert evidence["not_observed"] == [
+        "industry fields outside identity, constructor random/colour/counter/level/town and selected_layout",
+        "industry creation-helper rejection reason and per-layout retry diagnostics",
+        "aquatic industries including IT_OIL_RIG",
+        "object fields outside identity, type, origin, footprint and view",
+        "startup and subsequent simulation ticks",
+        "other seeds, sizes, climates and generation setting combinations",
+    ]
+
+
 if __name__ == "__main__":
     test_state_gate_rejects_rng_or_town_divergence_with_identical_tiles()
     test_state_gate_fails_closed_for_unobserved_or_malformed_state()
@@ -791,4 +893,5 @@ if __name__ == "__main__":
     test_rmap_150_evidence_records_toyland_empty_object_pool()
     test_rmap_151_evidence_records_industry_constructor_state()
     test_rmap_152_evidence_records_ordered_industry_attempts()
+    test_rmap_153_evidence_records_tropic_river_ordered_industry_attempts()
     print("OK: generation_phase_parity tests")

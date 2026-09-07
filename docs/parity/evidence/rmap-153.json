@@ -1,0 +1,172 @@
+{
+  "date": "2026-09-07",
+  "issue": 493,
+  "contract": "RMAP-153 Tropic river ordered industry attempts at generation boundaries",
+  "scope": {
+    "size": 512,
+    "seed": 1330935380,
+    "climate": "tropic",
+    "generation_settings": {
+      "amount_of_rivers": 1,
+      "min_river_length": 2,
+      "river_route_random": 1,
+      "water_borders": 0
+    },
+    "phases": [
+      "landscape",
+      "clear",
+      "towns",
+      "industries",
+      "objects",
+      "trees"
+    ]
+  },
+  "reference": {
+    "openttd_release_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "instrumented_exporter_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+    "binary_sha256": "58491f635f0dddfabaabca422c76ef4f34476948fcf94b1e9ed9d3c03a1b2a66",
+    "exporter_sha256": "9c5f47105f616e0abf25bb445c4bf246b7d081b74167f648850c7c247fae9568"
+  },
+  "candidate": {
+    "source_commit_before_documentation": "5661d553d8699cbcbc96d1722f227f237d3c1f71",
+    "source_tracked_changes": [],
+    "build": "cargo-build-locked",
+    "binary_sha256": "089c4cc6a2f879b9cea26d97c84c6071b95af8b3002357bf1c5e30651edf551d"
+  },
+  "comparison": {
+    "report_schema_version": 6,
+    "raw_tile_fields": [
+      "height",
+      "type",
+      "m1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "m7",
+      "m8"
+    ],
+    "block_size": 4,
+    "block_grid": {
+      "width": 128,
+      "height": 128,
+      "count": 16384
+    },
+    "generation_state_fields": [
+      "random_state_0",
+      "random_state_1",
+      "town_count",
+      "town_positions[id,x,y,population,num_houses]",
+      "industry_count",
+      "industry_positions[id,type,x,y,selected_layout,random,random_colour,counter,prod_level,town_id]",
+      "industry_attempt_count",
+      "industry_attempts[ordinal,type,x,y,random_var8f,initial_random_bits,layout_index,succeeded]",
+      "object_count",
+      "object_positions[id,type,x,y,width,height,view]"
+    ],
+    "all_exact": true,
+    "first_divergent_stage": null
+  },
+  "phase_results": [
+    {
+      "phase": "landscape",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [4163415730, 2298960756],
+      "town_count": 0,
+      "industry_count": 0,
+      "industry_attempt_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "clear",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [2203928443, 2112881359],
+      "town_count": 0,
+      "industry_count": 0,
+      "industry_attempt_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "towns",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [3697426249, 3192394782],
+      "town_count": 98,
+      "industry_count": 0,
+      "industry_attempt_count": 0,
+      "object_count": 0
+    },
+    {
+      "phase": "industries",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [1234748255, 1358958707],
+      "town_count": 98,
+      "industry_count": 213,
+      "industry_attempt_count": 39662,
+      "object_count": 0
+    },
+    {
+      "phase": "objects",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [3899294086, 1593191862],
+      "town_count": 98,
+      "industry_count": 213,
+      "industry_attempt_count": 39662,
+      "object_count": 60
+    },
+    {
+      "phase": "trees",
+      "tile_difference_count": 0,
+      "changed_block_count": 0,
+      "random_state": [3325069790, 2747377369],
+      "town_count": 98,
+      "industry_count": 213,
+      "industry_attempt_count": 39662,
+      "object_count": 60
+    }
+  ],
+  "industry_attempt_trace_at_industries": {
+    "count": 39662,
+    "succeeded_count": 213,
+    "rejected_count": 39449,
+    "first": {
+      "ordinal": 0,
+      "type": 4,
+      "x": 488,
+      "y": 35,
+      "random_var8f": 3556206328,
+      "initial_random_bits": 54525,
+      "layout_index": 1,
+      "succeeded": true
+    },
+    "last": {
+      "ordinal": 39661,
+      "type": 17,
+      "x": 76,
+      "y": 465,
+      "random_var8f": 4158973513,
+      "initial_random_bits": 22087,
+      "layout_index": 0,
+      "succeeded": true
+    }
+  },
+  "ordered_sequence_sha256": {
+    "towns_at_towns": "9caba85a8d1ef1338d52ccaf4d5bd1838869146fe04b49f265f84e2f9b49064a",
+    "industries_at_industries": "2ea2ca04807ed32f6732fdefa8690f5cf4f703e1d3a3edf3229b25b69c297db7",
+    "industry_attempts_at_industries": "ba820c402ff6b2f5f593db5a47101d37af149e70f89ffc7785043c64a93d0a5a",
+    "objects_at_objects": "85da7a0ca958f0f74199ef5f42476886f5f5ff263a6b12aa21fd76e414be3850"
+  },
+  "not_observed": [
+    "industry fields outside identity, constructor random/colour/counter/level/town and selected_layout",
+    "industry creation-helper rejection reason and per-layout retry diagnostics",
+    "aquatic industries including IT_OIL_RIG",
+    "object fields outside identity, type, origin, footprint and view",
+    "startup and subsequent simulation ticks",
+    "other seeds, sizes, climates and generation setting combinations"
+  ]
+}

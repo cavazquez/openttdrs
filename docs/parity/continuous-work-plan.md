@@ -84,6 +84,12 @@ canónica y sus límites quedan en `random-map-issues.md` y
 `evidence/rmap-152.json`; #338 sigue abierto para diagnósticos de rechazo,
 campos INDY restantes, agua/OilRig, matriz ampliada y ticks.
 
+RMAP-153 / #493 aplica ese gate v6 a Tropic 512² con ríos explícitos: la seed
+`1330935380` conserva exactas las seis fronteras, incluidos sus 39.662
+intentos ordenados. La evidencia canónica y los límites —motivos de rechazo,
+campos INDY restantes, agua/OilRig, más settings y ticks— están sólo en
+`random-map-issues.md` y `evidence/rmap-153.json`; #338 permanece abierto.
+
 Actualizado el 2026-09-05: el último `main` observado antes de RMAP-152
 (`3a4736fd`) completó CI, Parity docs, Fuzz replay y Platform check en verde.
 La reparación del checkout limpio está incluida y #333 se cerró con esa

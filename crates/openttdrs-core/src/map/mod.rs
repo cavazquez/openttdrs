@@ -140,6 +140,7 @@ pub use station_tile_anim::{
     trigger_newgrf_airport_animation_for_station_with_towns,
     trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog,
     trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog,
+    trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_with_global_rng,
     trigger_newgrf_airport_tile_animation, trigger_newgrf_airport_tile_animation_with_towns,
     trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog,
     trigger_newgrf_station_animation, trigger_newgrf_station_animation_for_platform,

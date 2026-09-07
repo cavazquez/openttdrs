@@ -461,6 +461,30 @@ mod tests {
         assert_eq!(state.stations[0].road_stop_animation_frame, 6);
     }
 
+    #[test]
+    fn acceptance_tick_airport_group_consumes_its_global_base_word() {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(4, 4);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Airport;
+        tile.mapt = 0x50;
+        state.map.set_tile(pos, tile).unwrap();
+        let mut station = Station::new_with_kind(pos, StopKind::Airport);
+        station.ottd_station_id = Some(0);
+        station.airport_tiles = vec![pos];
+        state.stations.push(station);
+        state.random = Randomizer {
+            state: [0x1020_3040, 0x5060_7080],
+        };
+        let mut expected = state.random;
+        // El grupo existe aunque la única pieza sea vanilla y no haya CB152.
+        let _ = expected.next();
+
+        on_tick_station(&mut state, 250);
+
+        assert_eq!(state.random, expected);
+    }
+
     fn linkgraph_test_state() -> GameState {
         let mut state = GameState::new(8, 8);
         let source = TileCoord::new(1, 1);

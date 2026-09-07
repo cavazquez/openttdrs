@@ -6,8 +6,8 @@ conservan el `DATE`, incluido el cursor LFSR de tile loop; #510 rechaza una
 ejecución dedicated degradada, #511 alinea el contador de industria y
 #514/#516 mueven los TileLoops industrial/urbano al stream actual; #517 añade
 `TileLoop_Trees` y el contador persistido de `OnTick_Trees`; #518 reproduce
-el grupo RNG de animación industrial y #519 conserva el residual NewGRF de
-aeropuerto.
+el grupo RNG de animación industrial, #519 el grupo NewGRF de aeropuerto y
+#520 conserva el siguiente residual diario.
 
 `OPENTTDRS_INDUSTRY_TRACE_OUT` habilita, exclusivamente en el binario OpenTTD
 instrumentado, una traza JSONL de la rutina diaria
@@ -104,9 +104,13 @@ por lo que llega a 919; #518 reproduce después los cinco grupos
 `TriggerIndustryAnimation` observados antes del corte diario (IDs
 31/44/16/12/23). Cada grupo toma siempre su palabra base y sólo consume una
 palabra hija por tesela cuyo trigger esté habilitado; la fixture no habilita
-ninguna. OpenTTD alcanza 930, y la atribución pendiente se limita a las seis
-llamadas `TriggerAirportAnimation` de #519. La igualdad final sigue siendo
-responsabilidad de #512; los números canónicos están en
+ninguna. #519 reproduce las seis llamadas `TriggerAirportAnimation` de
+`AcceptanceTick` (estaciones 6/5/4/2/1/0, ticks 1472994…1473000): cada una
+es 1×1, no habilita un hijo y consume su palabra base. Por eso la primera
+jornada ya iguala el estado nativo **`[703151878,1259678577]`**. La extensión
+de tres jornadas localiza el siguiente residual en `day[2]` —nativo
+`[3637992764,1476054595]`, candidato `[1586407340,1515188588]`— bajo #520;
+#512 permanece abierto. Los números y atribuciones canónicos están en
 [RMAP-162](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
 Este contrato no declara aún paridad runtime completa del scheduler.
 

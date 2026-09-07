@@ -559,6 +559,122 @@ pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog
         .collect()
 }
 
+/// Ejecuta `TriggerAirportAnimation` sobre el stream RNG global de la partida.
+///
+/// Esta variante modela el camino de grupo de OpenTTD, que no equivale a
+/// llamar repetidamente a
+/// [`trigger_newgrf_airport_tile_animation_with_towns_and_airport_catalog`].
+/// Una vez validada la huella de aeropuerto, el original toma una palabra del
+/// RNG global antes de examinar las teselas. La entrega al primer `CB152` y,
+/// tras cada tesela cuyo trigger está declarado, reemplaza sólo sus 16 bits
+/// bajos con la siguiente palabra global.
+///
+/// `Airport` deriva de `TileArea`, por lo que la iteración nativa es por índice
+/// de mapa (fila, luego columna), no por el orden en que se construyó el
+/// layout. Las coordenadas preservadas en `Station` se normalizan a ese orden
+/// antes de filtrar las piezas que pueden ejecutar el callback.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_with_global_rng<
+    S: BuildHasher,
+>(
+    map: &mut Map,
+    stations: &mut [Station],
+    towns: &[crate::town::Town],
+    cargo_catalog: &[CargoSpecDef],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    airport_catalog: &[crate::airport_class::NewgrfAirportSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    station_anchor: TileCoord,
+    trigger: AirportAnimationTrigger,
+    cargo: Option<CargoType>,
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> Vec<TileCoord> {
+    let Some(station) = stations
+        .iter()
+        .find(|station| station.pos == station_anchor && station.stop_kind.has_airport_facility())
+    else {
+        return Vec::new();
+    };
+
+    // `TriggerAirportAnimation` retorna antes del `Random()` únicamente si
+    // `st->airport.tile == INVALID_TILE`. Una estación aérea válida con
+    // tiles vanilla, sin GRF o sin trigger todavía consume la palabra base.
+    let mut coords = if station.airport_tiles.is_empty() {
+        vec![station.pos]
+    } else {
+        station.airport_tiles.clone()
+    };
+    coords.sort_by_key(|coord| (coord.y, coord.x));
+    coords.dedup();
+
+    let mut random = rng.next();
+    let mut dirty = Vec::new();
+    for coord in coords {
+        let Some((station_index, def, mut ctx)) = airport_animation_context_with_towns(
+            map,
+            stations,
+            towns,
+            catalog,
+            airport_catalog,
+            climate,
+            newgrf_stack,
+            coord,
+        ) else {
+            // `GetAirportTileCallback` no existe para un tile vanilla o que
+            // ya no pertenece a esta estación; OpenTTD lo salta antes de
+            // `DoTriggerAirportTileAnimation`.
+            continue;
+        };
+        if def.animation_triggers & trigger.mask() == 0 {
+            continue;
+        }
+        let Some(mut tile) = map.get(coord) else {
+            continue;
+        };
+        let before = tile.m7;
+        let var18_extra =
+            airport_cargo_local_id(map, stations, catalog, climate, coord, cargo, cargo_catalog);
+        let result = resolve_airport_animation_callback(
+            &mut stations[station_index],
+            &def,
+            &mut ctx,
+            CBID_AIRPTILE_ANIMATION_TRIGGER,
+            random,
+            trigger.callback_param(var18_extra),
+        );
+        if result != CALLBACK_FAILED {
+            match (result & 0xFF) as u8 {
+                0xFD => {}
+                0xFE => {
+                    active_tiles.insert(coord);
+                }
+                0xFF => {
+                    active_tiles.remove(&coord);
+                }
+                frame => {
+                    tile.m7 = frame;
+                    active_tiles.insert(coord);
+                }
+            }
+        }
+        if tile.m7 != before && map.set_tile(coord, tile).is_ok() {
+            dirty.push(coord);
+        }
+
+        // `DoTriggerAirportTileAnimation` retorna true por la máscara del
+        // trigger, incluso cuando el GRF no implementa CB152 y el resultado
+        // es CALLBACK_FAILED. Por eso el consumo hijo depende de la máscara,
+        // no del resultado del callback.
+        let next_low_word = rng.next();
+        random = (random & 0xFFFF_0000) | (next_low_word & 0x0000_FFFF);
+    }
+    dirty.sort_by_key(|coord| (coord.x, coord.y));
+    dirty.dedup();
+    dirty
+}
+
 #[allow(clippy::too_many_arguments)]
 fn advance_newgrf_airport_tile<S: BuildHasher>(
     map: &mut Map,
@@ -2771,6 +2887,136 @@ mod tests {
         let loaded = crate::GameState::load_json(&json).unwrap();
         assert_eq!(loaded.map.get(coord).unwrap().m7, 6);
         assert!(loaded.newgrf_animated_airport_tiles.contains(&coord));
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn airport_group_trigger_replays_global_rng_base_and_enabled_tile_words() {
+        let first = TileCoord::new(0, 0);
+        let second = TileCoord::new(1, 0);
+        let mut map = Map::new_flat(2, 1, 0);
+        for coord in [first, second] {
+            let mut tile = map.get(coord).unwrap();
+            tile.kind = TileKind::Airport;
+            tile.mapt = 0x50;
+            tile.m5 = AirportPiece::Apron as u8;
+            map.set_tile(coord, tile).unwrap();
+        }
+        let mut station = Station::new_with_kind(first, StopKind::Airport);
+        // La construcción puede entregar el layout en su orden Action0; el
+        // grupo nativo lo normaliza por TileIndex antes de disparar CB152.
+        station.airport_tiles = vec![second, first];
+        station.airport_tile_gfx = vec![(second, 74), (first, 74)];
+        let mut stations = vec![station];
+        let catalog = vec![AirportTileSpecDef {
+            gfx: crate::AirportTileGfxId(74),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0,
+            animation_frames: 5,
+            animation_status: 1,
+            animation_speed: 0,
+            animation_triggers: AirportAnimationTrigger::NewCargo.mask(),
+            animation_special_flags: 0,
+            newgrf_local_id: 0,
+            newgrf_grfid: 0x4150_0001,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(airport_animation_callbacks())),
+        }];
+        let stack = vec![crate::NewGrfEntry::new("airport.grf", 0x4150_0001)];
+        let mut active = HashSet::new();
+        let mut actual = crate::cargodist::parity::Randomizer {
+            state: [0x1020_3040, 0x5060_7080],
+        };
+        let mut expected = actual;
+        // Una extracción base y una por cada una de las dos teselas cuyo
+        // trigger está declarado, incluso si el callback no cambia MAP7.
+        for _ in 0..3 {
+            let _ = expected.next();
+        }
+
+        let dirty = trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_with_global_rng(
+            &mut map,
+            &mut stations,
+            &[],
+            &[],
+            Climate::Temperate,
+            &catalog,
+            &[],
+            &mut active,
+            &stack,
+            first,
+            AirportAnimationTrigger::NewCargo,
+            None,
+            &mut actual,
+        );
+
+        assert!(dirty.is_empty(), "0xFE sólo registra las teselas activas");
+        assert_eq!(active, HashSet::from([first, second]));
+        assert_eq!(actual, expected);
+
+        let mut no_callback_catalog = catalog.clone();
+        no_callback_catalog[0].newgrf_runtime = None;
+        let mut callback_failed_rng = crate::cargodist::parity::Randomizer {
+            state: [0x1020_3040, 0x5060_7080],
+        };
+        let mut callback_failed_expected = callback_failed_rng;
+        for _ in 0..3 {
+            let _ = callback_failed_expected.next();
+        }
+        let mut callback_failed_active = HashSet::new();
+        assert!(
+            trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_with_global_rng(
+                &mut map,
+                &mut stations,
+                &[],
+                &[],
+                Climate::Temperate,
+                &no_callback_catalog,
+                &[],
+                &mut callback_failed_active,
+                &stack,
+                first,
+                AirportAnimationTrigger::NewCargo,
+                None,
+                &mut callback_failed_rng,
+            )
+            .is_empty()
+        );
+        assert!(callback_failed_active.is_empty());
+        assert_eq!(callback_failed_rng, callback_failed_expected);
+
+        let mut unmatched_rng = crate::cargodist::parity::Randomizer {
+            state: [0x1020_3040, 0x5060_7080],
+        };
+        let mut unmatched_expected = unmatched_rng;
+        let _ = unmatched_expected.next();
+        let mut unmatched_active = HashSet::new();
+        assert!(
+            trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_with_global_rng(
+                &mut map,
+                &mut stations,
+                &[],
+                &[],
+                Climate::Temperate,
+                &catalog,
+                &[],
+                &mut unmatched_active,
+                &stack,
+                first,
+                AirportAnimationTrigger::Built,
+                None,
+                &mut unmatched_rng,
+            )
+            .is_empty()
+        );
+        assert!(unmatched_active.is_empty());
+        assert_eq!(unmatched_rng, unmatched_expected);
     }
 
     #[test]

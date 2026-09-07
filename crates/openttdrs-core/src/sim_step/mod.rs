@@ -960,7 +960,31 @@ pub(super) fn trigger_airport_animation_at(
     else {
         return;
     };
-    let dirty =
+    // Esta etapa se limita a los producers observados en la traza diaria:
+    // AcceptanceTick, NewCargo y CargoTaken. Los demás triggers conservan el
+    // camino local hasta tener una medición native que pruebe su cadencia.
+    let dirty = if matches!(
+        trigger,
+        crate::AirportAnimationTrigger::AcceptanceTick
+            | crate::AirportAnimationTrigger::NewCargo
+            | crate::AirportAnimationTrigger::CargoTaken
+    ) {
+        crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog_with_global_rng(
+            &mut state.map,
+            &mut state.stations,
+            &state.towns,
+            &state.cargo_spec_catalog,
+            state.climate,
+            &state.airport_tile_spec_catalog,
+            &state.airport_spec_catalog,
+            &mut state.newgrf_animated_airport_tiles,
+            &state.newgrf_stack,
+            station_anchor,
+            trigger,
+            cargo,
+            &mut state.random,
+        )
+    } else {
         crate::map::trigger_newgrf_airport_animation_for_station_with_towns_and_cargo_catalog_and_airport_catalog(
             &mut state.map,
             state.tick.get(),
@@ -975,7 +999,8 @@ pub(super) fn trigger_airport_animation_at(
             station_anchor,
             trigger,
             cargo,
-        );
+        )
+    };
     state.runtime.industry_tile_dirty.extend(dirty);
 }
 

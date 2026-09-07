@@ -154,9 +154,10 @@ RMAP-162 / #506 completa el puente diferencial: el candidato Rust exporta el
 mismo JSONL v1 en el corte post-timer y el comparador exige reloj, RNG, `ECMY`,
 `ITBL`, industrias y acciones exactos. #507/#515 restauran el `DATE` completo,
 incluido el cursor LFSR del tile loop, y #514/#516 despachan Industry/Town;
-#517 Tree/`OnTick_Trees` y #518 el grupo global de animación industrial. El
-residual que queda en #512 es ahora #519 (grupo de animación de aeropuerto) y
-la medición diaria canónica se mantiene en
+#517 Tree/`OnTick_Trees`, #518 el grupo global de animación industrial y #519
+las seis animaciones de aeropuerto `AcceptanceTick`. La primera jornada ya
+iguala RNG; el residual de `day[2]` que queda en #512 es #520 y la medición
+diaria canónica se mantiene en
 [`random-map-issues.md`](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
 #510 impide que una ejecución dedicated sin socket se acepte como oracle aunque
 produzca JSONL válida. RMAP-162 cierra instrumentación y regresiones, no afirma
@@ -168,8 +169,9 @@ ejecución vanilla e instrumentación diferencial. #507/#515 conservan la carga
 `DATE` incluida la posición LFSR, #510 valida la calidad de la corrida native,
 #511 cierra el contador persistido, #513 el sonido ambiental, #514/#516 los
 bloques actuales de `TileLoop_Industry`/`TileLoop_Town`, #517
-`TileLoop_Trees`/`OnTick_Trees` y #518 el grupo global de animación industrial;
-#512 mantiene separado #519, el RNG NewGRF de aeropuerto posterior. Los
+`TileLoop_Trees`/`OnTick_Trees`, #518 el grupo global de animación industrial
+y #519 los grupos aeroportuarios de la primera jornada; #512 mantiene separado
+#520, el siguiente residual diario. Los
 gates continúan siendo obligatorios y ningún issue padre se considera cerrado
 por esta cobertura.
 

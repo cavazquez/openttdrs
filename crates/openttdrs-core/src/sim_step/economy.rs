@@ -216,9 +216,13 @@ fn roll_and_change_monthly_industries(state: &mut GameState) {
     let mut closing = Vec::new();
     for industry in &mut state.industries {
         // Las industrias con CB35 se resuelven en la pasada siguiente para
-        // conservar su contrato específico. Las vanilla siguen ET_SMOOTH y
-        // consumen una palabra por cada salida válida.
-        if industry.newgrf_type_id.is_some() {
+        // conservar su contrato específico. Sólo la economía ET_SMOOTH
+        // ejecuta la rama vanilla mensual y consume una palabra por salida;
+        // ET_ORIGINAL lo hace desde el scheduler diario y ET_FROZEN no lo
+        // evalúa en ninguno de los dos puntos.
+        if industry.newgrf_type_id.is_some()
+            || state.economy_type != crate::economy::EconomyType::Smooth
+        {
             continue;
         }
         if crate::industry::change_industry_production_smooth(
@@ -517,7 +521,8 @@ fn apply_monthly_interest_and_bankruptcy(state: &mut GameState) {
 
 /// Ejecuta una rama de cambio de producción sobre una entidad ya elegida del
 /// pool. Es el cuerpo de `ChangeIndustryProduction(i, false)` y queda
-/// separado de la lotería diaria para que ésta pueda respetar `IndustryID`.
+/// separado de la lotería diaria para que ésta pueda respetar `IndustryID` y
+/// `economy.type` no ejecute a la vez la variante original y la suave.
 fn change_industry_production_at(state: &mut GameState, idx: usize) {
     if idx >= state.industries.len() {
         return;
@@ -553,6 +558,15 @@ fn change_industry_production_at(state: &mut GameState, idx: usize) {
         }
         Some(action) => {
             crate::industry::apply_industry_production_action(&mut state.industries[idx], action)
+        }
+        // Una especie vanilla sin callback sólo cambia a diario bajo
+        // ET_ORIGINAL. En ET_SMOOTH el scheduler todavía elige la industria
+        // (y por eso conserva su prefijo RNG), pero ChangeIndustryProduction
+        // retorna antes de tomar una palabra; en ET_FROZEN sucede lo mismo.
+        None if state.industries[idx].newgrf_type_id.is_none()
+            && state.economy_type != crate::economy::EconomyType::Original =>
+        {
+            crate::industry::IndustryProductionChange::None
         }
         None => crate::industry::change_industry_production(
             &mut state.industries[idx],
@@ -1169,6 +1183,7 @@ pub(super) fn apply_vehicle_running_costs(state: &mut GameState) {
 mod tests {
     use super::*;
     use crate::cargodist::parity::Randomizer;
+    use crate::economy::EconomyType;
     use crate::industry::Industry;
     use crate::{Climate, IndustrySpec};
 
@@ -1351,6 +1366,78 @@ mod tests {
         assert_eq!(
             state.global_economy.industry_daily_change_counter, 1_982,
             "65404 + 2114 conserva la fracción de la fila nativa del tick 20553"
+        );
+    }
+
+    #[test]
+    fn smooth_or_frozen_economy_does_not_apply_original_daily_industry_change() {
+        // `autosave0.sav` llega con economy.type=ET_SMOOTH. La jornada 139
+        // selecciona su Oil Rig 6 en la lotería diaria, pero OpenTTD sólo
+        // toma el prefijo del scheduler: ChangeIndustryProduction retorna
+        // antes de consumir la palabra que el algoritmo original usaría para
+        // duplicar prod_level.
+        let mut state = GameState::new(16, 16);
+        let mut rig = Industry::with_tiles_spec(
+            TileCoord::new(4, 4),
+            IndustrySpec::OilRig.kind(),
+            IndustrySpec::OilRig,
+            vec![TileCoord::new(4, 4)],
+            0,
+        );
+        rig.history.push_month(0, 1, 0);
+        state.industries.push(rig);
+        state.random = Randomizer { state: [8, 0] };
+        let before = state.random;
+
+        state.economy_type = EconomyType::Smooth;
+        change_industry_production_at(&mut state, 0);
+        assert_eq!(state.random, before);
+        assert_eq!(
+            state.industries[0].prod_level,
+            crate::industry::PRODLEVEL_DEFAULT
+        );
+
+        state.economy_type = EconomyType::Frozen;
+        change_industry_production_at(&mut state, 0);
+        assert_eq!(state.random, before);
+        assert_eq!(
+            state.industries[0].prod_level,
+            crate::industry::PRODLEVEL_DEFAULT
+        );
+
+        state.economy_type = EconomyType::Original;
+        change_industry_production_at(&mut state, 0);
+        assert_ne!(
+            state.random, before,
+            "ET_ORIGINAL sí evalúa la chance diaria"
+        );
+    }
+
+    #[test]
+    fn only_smooth_economy_consumes_vanilla_monthly_production_rng() {
+        let mut state = GameState::new(16, 16);
+        state.industries.push(pool_industry(0));
+        let before = state.random;
+
+        state.economy_type = EconomyType::Original;
+        roll_and_change_monthly_industries(&mut state);
+        assert_eq!(
+            state.random, before,
+            "ET_ORIGINAL no tiene rama mensual suave"
+        );
+
+        state.economy_type = EconomyType::Frozen;
+        roll_and_change_monthly_industries(&mut state);
+        assert_eq!(
+            state.random, before,
+            "ET_FROZEN no cambia producción vanilla"
+        );
+
+        state.economy_type = EconomyType::Smooth;
+        roll_and_change_monthly_industries(&mut state);
+        assert_ne!(
+            state.random, before,
+            "ET_SMOOTH toma una palabra por salida vanilla válida"
         );
     }
 

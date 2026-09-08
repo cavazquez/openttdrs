@@ -23,7 +23,7 @@ El bloque termina sólo con `git commit` y `git push`. La captura raster se usa
 cuando hay compositor WGPU; si el entorno no lo permite, se registra el bloqueo
 y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
-## Handoff de issues — 2026-09-07
+## Handoff de issues — 2026-09-08
 
 Actualización runtime: RMAP-163 / #524 deja exactos los 24 cortes iniciales
 de `autosave0.sav` al alinear el cierre mensual y la actividad global de
@@ -38,6 +38,12 @@ sin RNG extra y renovación dentro de `TileLoop_Town` con la misma palabra
 permanece abierto para ampliar la ventana y cubrir huellas/protección/NewGRF;
 no amplía el cierre de #512. La evidencia canónica vive sólo en
 [random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
+
+RMAP-167 / #528 restaura `PATS.economy.type` y evita ejecutar la rama diaria
+original sobre una partida `ET_SMOOTH`; su corte, regresiones y la siguiente
+frontera pendiente se mantienen únicamente en
+[random-map-issues.md](random-map-issues.md#rmap-167--respetar-economytype-al-importar-sav-y-ejecutar-producción-vanilla).
+No cierra #512 ni amplía la paridad de runtime fuera de esa fixture.
 
 Última etapa: RMAP-143 / #346 amplía el gate por fases a RNG y secuencia
 ID/posición de pueblos, además de bytes de teselas; las 30 fronteras de la

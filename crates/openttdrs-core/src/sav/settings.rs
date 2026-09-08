@@ -5,6 +5,7 @@
 //! de todos los postes de señal y hace que la misma partida se renderice de
 //! forma distinta a `OpenTTD`.
 
+use crate::economy::EconomyType;
 use crate::engine::{RoadVehicleAccelerationModel, TrainAccelerationModel};
 use crate::flow_stat::{CargoDistSettings, DistributionType};
 use crate::town::TownCouncilTolerance;
@@ -79,6 +80,7 @@ pub(crate) struct ParsedSettings {
     pub disasters_enabled: bool,
     pub town_council_tolerance: TownCouncilTolerance,
     pub using_wallclock_units: bool,
+    pub economy_type: EconomyType,
     pub inflation_enabled: bool,
     pub recessions_enabled: bool,
     pub cargo_dist: CargoDistSettings,
@@ -102,6 +104,7 @@ impl Default for ParsedSettings {
             disasters_enabled: true,
             town_council_tolerance: TownCouncilTolerance::default(),
             using_wallclock_units: false,
+            economy_type: EconomyType::default(),
             inflation_enabled: true,
             recessions_enabled: false,
             cargo_dist: CargoDistSettings::default(),
@@ -339,6 +342,14 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                 parsed.using_wallclock_units = value == 1;
                 found = true;
             }
+            if let Some(value) = record_get(&record, "economy.type")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .and_then(EconomyType::from_openttd)
+            {
+                parsed.economy_type = value;
+                found = true;
+            }
             if let Some(value) = record_get(&record, "economy.inflation")
                 .and_then(SlValue::as_u64)
                 .and_then(bool_from_u64)
@@ -490,6 +501,19 @@ mod tests {
     fn reads_disabled_freeform_edges_from_save_table() {
         let settings = settings_from_chunks(&[pats([0, 0, 0])]).construction;
         assert!(!settings.freeform_edges);
+    }
+
+    #[test]
+    fn reads_industry_economy_type_from_modern_save_table() {
+        let chunk = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(2, "economy.type")], &[vec![2]]),
+        };
+        assert_eq!(
+            settings_from_chunks(&[chunk]).economy_type,
+            EconomyType::Frozen
+        );
     }
 
     #[test]

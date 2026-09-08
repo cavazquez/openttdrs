@@ -14,7 +14,7 @@ pub use build_costs::{
     terraform_cost_per_corner, terraform_cost_per_corner_inflated, waypoint_build_cost,
 };
 pub use global::{
-    DEFAULT_DIFFICULTY_MOD, DEFAULT_INTEREST_RATE, FluctuationEvent, GlobalEconomy,
+    DEFAULT_DIFFICULTY_MOD, DEFAULT_INTEREST_RATE, EconomyType, FluctuationEvent, GlobalEconomy,
     INFLATION_FRAC_ONE, MAX_INFLATION, ORIGINAL_BASE_YEAR, ORIGINAL_MAX_YEAR,
 };
 pub use payments::{

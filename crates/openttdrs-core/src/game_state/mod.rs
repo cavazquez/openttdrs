@@ -667,6 +667,12 @@ pub struct GameState {
     /// Inflación compuesta, recesiones y escala global de `max_loan` (`_economy`).
     #[serde(default)]
     pub global_economy: crate::economy::GlobalEconomy,
+    /// `economy.type` persistido en `PATS`.
+    ///
+    /// Selecciona la cadencia del cambio de producción vanilla: diario
+    /// discreto, mensual suave o congelado.
+    #[serde(default)]
+    pub economy_type: crate::economy::EconomyType,
     /// Planificador persistente de fundación automática de industrias
     /// (`IBLD`/`ITBL`). La colocación física se ejecuta por separado para
     /// mantener el stream RNG verificable contra `OpenTTD`.
@@ -974,6 +980,7 @@ impl GameState {
             cur_tileloop_tile: crate::map::tile_loop::default_cur_tileloop_tile(),
             trees_tick_counter: 0,
             global_economy: crate::economy::GlobalEconomy::new(),
+            economy_type: crate::economy::EconomyType::default(),
             industry_builder: crate::industry_builder::IndustryBuildData::new(),
             no_servicing_if_no_breakdowns: true,
             vehicle_breakdowns: default_vehicle_breakdowns(),
@@ -1119,6 +1126,7 @@ impl GameState {
             cur_tileloop_tile: crate::map::tile_loop::default_cur_tileloop_tile(),
             trees_tick_counter: 0,
             global_economy: crate::economy::GlobalEconomy::new(),
+            economy_type: crate::economy::EconomyType::default(),
             industry_builder: crate::industry_builder::IndustryBuildData::new(),
             no_servicing_if_no_breakdowns: true,
             vehicle_breakdowns: default_vehicle_breakdowns(),

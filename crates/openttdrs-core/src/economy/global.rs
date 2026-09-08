@@ -18,6 +18,47 @@ pub const DEFAULT_INTEREST_RATE: u8 = 10;
 /// Dificultad media: `construction_cost` / `vehicle_costs` = 1 → multiplicador ×8.
 pub const DEFAULT_DIFFICULTY_MOD: u8 = 1;
 
+/// `EconomyType` de `economy.type` (`PATS`).
+///
+/// El ajuste no es meramente visual: determina si el cambio de producción
+/// vanilla ocurre en la lotería diaria, en el cierre mensual o queda
+/// congelado. Mantenerlo junto al resto de la economía evita ejecutar ambas
+/// variantes sobre una partida importada.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+pub enum EconomyType {
+    /// `ET_ORIGINAL`: cambios discretos desde el scheduler diario.
+    Original,
+    /// `ET_SMOOTH`: ajustes graduales de cada salida al cierre mensual.
+    /// Es el default moderno y el fallback seguro de JSON históricos.
+    #[default]
+    Smooth,
+    /// `ET_FROZEN`: no se evalúan cambios vanilla de producción.
+    Frozen,
+}
+
+impl EconomyType {
+    /// Decodifica los valores estables de `economy_type.h`.
+    #[must_use]
+    pub const fn from_openttd(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Original),
+            1 => Some(Self::Smooth),
+            2 => Some(Self::Frozen),
+            _ => None,
+        }
+    }
+
+    /// Codificación persistida de `PATS.economy.type`.
+    #[must_use]
+    pub const fn as_openttd(self) -> u8 {
+        match self {
+            Self::Original => 0,
+            Self::Smooth => 1,
+            Self::Frozen => 2,
+        }
+    }
+}
+
 /// Evento mensual de fluctuación económica (`HandleEconomyFluctuations`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FluctuationEvent {

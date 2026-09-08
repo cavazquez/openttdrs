@@ -187,7 +187,7 @@ pub use water_flood::{
 };
 
 /// Mapa rectangular denso en memoria.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Map {
     width: u32,
     height: u32,
@@ -205,6 +205,56 @@ pub struct Map {
     /// distingue ese formato viejo de un import moderno con un pool vacío.
     #[serde(default)]
     imported_object_types: Option<std::collections::BTreeMap<u32, u16>>,
+}
+
+#[derive(serde::Deserialize)]
+struct SerializedMap {
+    width: u32,
+    height: u32,
+    tiles: Vec<Tile>,
+    #[serde(default)]
+    legacy_zero_water_height_repair: bool,
+    #[serde(default)]
+    imported_object_types: Option<std::collections::BTreeMap<u32, u16>>,
+}
+
+/// Calcula el número de teselas de una geometría densa sin saturar el valor.
+///
+/// El resultado se usa en las fronteras de deserialización: saturar un
+/// producto corrupto transforma una geometría inválida en un vector que luego
+/// se indexa como si fuera válido.
+pub(super) fn dense_tile_count(width: u32, height: u32) -> Result<usize, MapError> {
+    u64::from(width)
+        .checked_mul(u64::from(height))
+        .and_then(|count| usize::try_from(count).ok())
+        .ok_or(MapError::InvalidDenseGeometry)
+}
+
+impl<'de> serde::Deserialize<'de> for Map {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let serialized = <SerializedMap as serde::Deserialize>::deserialize(deserializer)?;
+        let expected = dense_tile_count(serialized.width, serialized.height).map_err(|_| {
+            <D::Error as serde::de::Error>::custom(
+                "map dense geometry does not fit the platform address space",
+            )
+        })?;
+        if serialized.tiles.len() != expected {
+            return Err(<D::Error as serde::de::Error>::custom(format!(
+                "map dense geometry requires {expected} tiles but contains {}",
+                serialized.tiles.len()
+            )));
+        }
+        Ok(Self {
+            width: serialized.width,
+            height: serialized.height,
+            tiles: serialized.tiles,
+            legacy_zero_water_height_repair: serialized.legacy_zero_water_height_repair,
+            imported_object_types: serialized.imported_object_types,
+        })
+    }
 }
 
 impl Map {
@@ -911,6 +961,54 @@ mod ottdmap_binary_tests {
         let mut b = minimal_ottdmap_v1();
         b[0] = b'X';
         assert!(Map::from_ottd_binary(&b).is_err());
+    }
+
+    #[test]
+    fn from_ottd_binary_rejects_extreme_geometry_without_overflowing() {
+        let mut bytes = Vec::new();
+        push_map1_header(&mut bytes, u32::MAX, u32::MAX);
+
+        assert!(matches!(
+            Map::from_ottd_binary(&bytes),
+            Err(MapError::InvalidDenseGeometry)
+        ));
+    }
+
+    #[test]
+    fn from_ottd_binary_rejects_truncated_dense_planes() {
+        let mut bytes = Vec::new();
+        push_map1_header(&mut bytes, 1, 1);
+        bytes.extend_from_slice(&[0; 11]);
+
+        assert!(Map::from_ottd_binary(&bytes).is_err());
+    }
+
+    #[test]
+    fn json_deserialization_rejects_mismatched_dense_geometry() {
+        let original = crate::GameState::new(8, 8);
+        let mut wrong_dimensions = serde_json::to_value(&original).unwrap();
+        wrong_dimensions["map"]["width"] = 16.into();
+        let error = crate::GameState::load_json(&wrong_dimensions.to_string()).unwrap_err();
+        assert!(error.to_string().contains("map dense geometry"));
+
+        let mut extra_tile = serde_json::to_value(&original).unwrap();
+        let tile = extra_tile["map"]["tiles"][0].clone();
+        extra_tile["map"]["tiles"]
+            .as_array_mut()
+            .unwrap()
+            .push(tile);
+        assert!(crate::GameState::load_json(&extra_tile.to_string()).is_err());
+    }
+
+    #[test]
+    fn json_deserialization_keeps_a_valid_map_safe_to_mutate() {
+        let original = crate::GameState::new(8, 8);
+        let mut loaded = crate::GameState::load_json(&original.save_json().unwrap()).unwrap();
+
+        loaded
+            .map
+            .set_height(TileCoord::new(7, 7), 3)
+            .expect("last tile remains addressable");
     }
 
     #[test]

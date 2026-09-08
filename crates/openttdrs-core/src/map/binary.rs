@@ -1,4 +1,4 @@
-use super::{Map, MapError, Tile, TileKind};
+use super::{Map, MapError, Tile, TileKind, dense_tile_count};
 
 pub(crate) const OTTDMAP_MAGIC_VERSIONED: &[u8; 4] = b"MAP1";
 pub(crate) const OTTDMAP_HEADER_LEN_VERSIONED: usize = 16;
@@ -70,12 +70,18 @@ fn ottdmap_dense_slices(
     n: usize,
 ) -> Result<OttdmapDenseSlices<'_>, MapError> {
     let dense_offset = header.dense_offset;
-    let dense_len = if header.flags & OTTDMAP_FLAG_HAS_M2_HI != 0 {
-        n * 12
+    let planes_per_tile = if header.flags & OTTDMAP_FLAG_HAS_M2_HI != 0 {
+        12
     } else {
-        n * 11
+        11
     };
-    if data.len() < dense_offset + dense_len {
+    let dense_len = n
+        .checked_mul(planes_per_tile)
+        .ok_or(MapError::InvalidDenseGeometry)?;
+    let dense_end = dense_offset
+        .checked_add(dense_len)
+        .ok_or(MapError::InvalidDenseGeometry)?;
+    if data.len() < dense_end {
         return Err(MapError::OutOfBounds);
     }
 
@@ -222,7 +228,7 @@ impl Map {
         let header = parse_ottdmap_header(data)?;
         let width = header.width;
         let height = header.height;
-        let n = (width as usize).saturating_mul(height as usize);
+        let n = dense_tile_count(width, height)?;
         let s = ottdmap_dense_slices(data, header, n)?;
 
         let mut tiles = Vec::with_capacity(n);
@@ -265,8 +271,7 @@ impl Map {
         data: &[u8],
     ) -> Result<(Self, crate::ottdmap_extras::OttdmapExtras), MapError> {
         let mut map = Self::from_ottd_binary(data)?;
-        let n = (map.width as usize).saturating_mul(map.height as usize);
-        let dense_end = crate::ottdmap_extras::dense_payload_end(data, n);
+        let dense_end = crate::ottdmap_extras::dense_payload_end(data, map.tiles.len());
         let extras = crate::ottdmap_extras::OttdmapExtras::parse_footers(data, dense_end);
         if let Some(object_types) = extras.object_types.as_deref() {
             map.set_imported_object_types_from_footer(object_types);

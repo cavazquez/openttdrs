@@ -220,4 +220,6 @@ pub const TOWN_HOUSE_COMPLETED: u8 = 3;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MapError {
     OutOfBounds,
+    /// Las dimensiones o los planos no pueden representar un mapa denso seguro.
+    InvalidDenseGeometry,
 }

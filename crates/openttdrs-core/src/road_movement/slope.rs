@@ -1,5 +1,6 @@
 //! `RoadZPosAffectSpeed` — corrección de velocidad por pendiente en carretera.
 
+use crate::engine::RoadVehicleAccelerationModel;
 use crate::map::{Map, slope_pixel_z};
 use crate::road_movement::traffic::is_road_vehicle_kind;
 use crate::vehicle::Vehicle;
@@ -12,11 +13,24 @@ pub const ROAD_Z_UP_DEN: u32 = 256;
 /// Empuje al bajar (`+2`), acotado por el techo de vía.
 pub const ROAD_Z_DOWN_BOOST: u16 = 2;
 
-/// Techo equivalente a `RoadVehicle::GetCurrentMaxSpeed` para el estado actual.
+/// Techo vial con `AM_ORIGINAL`, igual que los wrappers históricos de tick.
 #[must_use]
 pub fn current_road_max_speed(v: &Vehicle, map: Option<&Map>) -> u16 {
+    current_road_max_speed_with_acceleration(v, map, RoadVehicleAccelerationModel::Original)
+}
+
+/// Techo de velocidad con el modelo de aceleración activo.
+///
+/// `RoadVehicle::GetCurrentMaxSpeed` limita curvas/reversa sólo en
+/// `AM_REALISTIC`; el modelo original aplica su penalización al cambiar dirección.
+#[must_use]
+pub fn current_road_max_speed_with_acceleration(
+    v: &Vehicle,
+    map: Option<&Map>,
+    acceleration_model: RoadVehicleAccelerationModel,
+) -> u16 {
     let engine_speed = v.effective_engine().max_speed;
-    current_road_max_speed_for_engine(v, map, engine_speed)
+    current_road_max_speed_for_engine(v, map, engine_speed, acceleration_model)
 }
 
 /// Como [`current_road_max_speed`], consultando CB36 para el techo del motor.
@@ -35,23 +49,46 @@ pub fn current_road_max_speed_with_callbacks_in_catalog(
     map: Option<&Map>,
     engine_catalog: &[crate::engine::EngineDef],
 ) -> u16 {
-    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
-    let engine_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
-    current_road_max_speed_for_engine(v, map, engine_speed)
+    current_road_max_speed_with_callbacks_in_catalog_and_acceleration(
+        v,
+        map,
+        engine_catalog,
+        RoadVehicleAccelerationModel::Original,
+    )
 }
 
-fn current_road_max_speed_for_engine(v: &Vehicle, map: Option<&Map>, engine_speed: u16) -> u16 {
+/// Consulta CB36 y respeta el modelo vial persistido en la partida.
+pub fn current_road_max_speed_with_callbacks_in_catalog_and_acceleration(
+    v: &mut Vehicle,
+    map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+    acceleration_model: RoadVehicleAccelerationModel,
+) -> u16 {
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
+    let engine_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
+    current_road_max_speed_for_engine(v, map, engine_speed, acceleration_model)
+}
+
+fn current_road_max_speed_for_engine(
+    v: &Vehicle,
+    map: Option<&Map>,
+    engine_speed: u16,
+    acceleration_model: RoadVehicleAccelerationModel,
+) -> u16 {
     let mut max_speed = if v.cached_max_track_speed > 0 {
         v.cached_max_track_speed.min(engine_speed)
     } else {
         engine_speed
     };
 
-    let trackdir = v.road_state & crate::road_movement::rvsb::RVSB_TRACKDIR_MASK;
-    if REVERSING_TRACKDIRS.contains(&trackdir) {
-        max_speed /= 2;
-    } else if v.direction & 1 == 0 {
-        max_speed = max_speed.saturating_mul(3) / 4;
+    if acceleration_model == RoadVehicleAccelerationModel::Realistic {
+        if v.road_state <= crate::road_movement::rvsb::RVSB_TRACKDIR_MASK
+            && REVERSING_TRACKDIRS.contains(&v.road_state)
+        {
+            max_speed /= 2;
+        } else if v.direction & 1 == 0 {
+            max_speed = u16::try_from(u32::from(max_speed) * 3 / 4).unwrap_or(max_speed);
+        }
     }
 
     if let Some(map) = map
@@ -183,14 +220,30 @@ mod tests {
     fn current_max_speed_caps_curves_at_three_quarters() {
         let mut v = road_vehicle();
         v.direction = DIR_E;
-        assert_eq!(current_road_max_speed(&v, None), 84);
+        assert_eq!(current_road_max_speed(&v, None), 112);
+        assert_eq!(
+            current_road_max_speed_with_acceleration(
+                &v,
+                None,
+                RoadVehicleAccelerationModel::Realistic,
+            ),
+            84
+        );
     }
 
     #[test]
     fn current_max_speed_caps_reversing_trackdir_at_half() {
         let mut v = road_vehicle();
         v.road_state = 6;
-        assert_eq!(current_road_max_speed(&v, None), 56);
+        assert_eq!(current_road_max_speed(&v, None), 112);
+        assert_eq!(
+            current_road_max_speed_with_acceleration(
+                &v,
+                None,
+                RoadVehicleAccelerationModel::Realistic,
+            ),
+            56
+        );
     }
 
     #[test]
@@ -199,6 +252,50 @@ mod tests {
         v.set_station_orders(vec![TileCoord::new(1, 0)]);
         v.orders[0] = v.orders[0].with_max_speed(80);
         assert_eq!(current_road_max_speed(&v, None), 80);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn current_max_speed_matches_native_model_and_state_matrix() {
+        let fixture = include_str!("../../tests/fixtures/parity/road_curve_speed.tsv");
+        let mut samples = 0;
+        for line in fixture.lines().skip(1) {
+            let values: Vec<u32> = line
+                .split('\t')
+                .map(|value| value.parse().unwrap())
+                .collect();
+            let model = match values[0] {
+                0 => RoadVehicleAccelerationModel::Original,
+                1 => RoadVehicleAccelerationModel::Realistic,
+                other => panic!("unexpected acceleration model {other}"),
+            };
+            let mut v = road_vehicle();
+            v.road_state = u8::try_from(values[1]).unwrap();
+            v.direction = u8::try_from(values[2]).unwrap();
+            v.cached_max_track_speed = u16::try_from(values[3]).unwrap();
+            if let Ok(order_cap) = u16::try_from(values[4]) {
+                v.set_station_orders(vec![TileCoord::new(1, 0)]);
+                v.orders[0] = v.orders[0].with_max_speed(order_cap);
+            }
+            let expected = u16::try_from(values[5]).unwrap();
+            assert_eq!(
+                current_road_max_speed_with_acceleration(&v, None, model),
+                expected,
+                "immutable native case: {line}",
+            );
+            assert_eq!(
+                current_road_max_speed_with_callbacks_in_catalog_and_acceleration(
+                    &mut v,
+                    None,
+                    &[],
+                    model,
+                ),
+                expected,
+                "runtime native case: {line}",
+            );
+            samples += 1;
+        }
+        assert_eq!(samples, 128);
     }
 
     #[test]

@@ -537,8 +537,12 @@ fn road_vehicle_tick_side_with_traffic(
         }
     }
 
-    let max_speed =
-        super::slope::current_road_max_speed_with_callbacks_in_catalog(v, map, engine_catalog);
+    let max_speed = super::slope::current_road_max_speed_with_callbacks_in_catalog_and_acceleration(
+        v,
+        map,
+        engine_catalog,
+        acceleration_model,
+    );
 
     let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
     let cargo_weight = crate::train_consist::cargo_weight_t(v.cargo, v.cargo_type, cargo_catalog);
@@ -790,6 +794,47 @@ mod tests {
     fn overtaking_uses_accel_512() {
         assert_eq!(crate::road_movement::ROAD_ACCEL_OVERTAKE, 512);
         assert_eq!(crate::engine::ROAD_ACCEL_ORIGINAL, 256);
+    }
+
+    #[test]
+    fn road_tick_uses_the_active_model_for_curve_and_reverse_speed_limits() {
+        for (state, direction, speed, original, realistic) in [
+            (2, crate::vehicle::DIR_E, 85, 86, 84),
+            (6, DIR_NE, 57, 58, 56),
+        ] {
+            for (model, expected) in [
+                (RoadVehicleAccelerationModel::Original, original),
+                (RoadVehicleAccelerationModel::Realistic, realistic),
+            ] {
+                let start = TileCoord::new(0, 0);
+                let end = TileCoord::new(1, 0);
+                let mut v = Vehicle::new(1, VehicleKind::Bus, start, end);
+                v.road_state = state;
+                v.direction = direction;
+                v.cur_speed = speed;
+                v.frame = 2;
+                v.progress = 0;
+                v.path = VecDeque::from([end]);
+                let mut vehicles = vec![v];
+
+                road_vehicle_tick_side_with_traffic(
+                    &mut vehicles,
+                    0,
+                    None,
+                    false,
+                    model,
+                    None,
+                    &[],
+                    &[],
+                );
+
+                assert_eq!(vehicles[0].cur_speed, expected, "{model:?}, state={state}");
+                // La distancia no alcanza otro frame: se aísla UpdateSpeed
+                // de las penalizaciones instantáneas del controlador de giro.
+                assert_eq!(vehicles[0].frame, 2);
+                assert_eq!(vehicles[0].direction, direction);
+            }
+        }
     }
 
     #[test]

@@ -140,6 +140,10 @@ class IndustryTraceSourceContractTest(unittest.TestCase):
         exporter = EXPORTER.read_text(encoding="utf-8")
         self.assertIn('OPENTTDRS_INDUSTRY_TRACE_OUT="$OUT"', exporter)
         self.assertIn('OPENTTDRS_INDUSTRY_TRACE_DAYS="$DAYS"', exporter)
+        self.assertIn('DEFAULT_TIMEOUT_SECONDS=$((DAYS * 3))', exporter)
+        self.assertIn('OPENTTDRS_INDUSTRY_TRACE_TIMEOUT', exporter)
+        self.assertIn('timeout "${TRACE_TIMEOUT_SECONDS}s"', exporter)
+        self.assertIn("no se acepta una traza parcial", exporter)
         self.assertIn('Could not bind socket', exporter)
         self.assertIn('validate_industry_trace.py" "$OUT" "$DAYS" openttd', exporter)
 

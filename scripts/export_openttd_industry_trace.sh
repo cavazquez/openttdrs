@@ -29,6 +29,21 @@ if [[ ! "$DAYS" =~ ^[1-9][0-9]*$ ]]; then
   echo "error: días debe ser entero positivo: $DAYS" >&2
   exit 2
 fi
+# El dedicated tarda aproximadamente de dos a tres segundos por jornada en
+# fixtures cargadas grandes. El límite fijo de 180 s truncaba una comparación
+# de 180 días cerca de la muestra 90 y el validador sólo podía informar una
+# JSONL incompleta. Conservamos un mínimo acotado para la invocación usual y
+# escalamos la ventana larga; un CI o una máquina lenta puede ajustarlo sin
+# editar el exportador.
+DEFAULT_TIMEOUT_SECONDS=$((DAYS * 3))
+if (( DEFAULT_TIMEOUT_SECONDS < 180 )); then
+  DEFAULT_TIMEOUT_SECONDS=180
+fi
+TRACE_TIMEOUT_SECONDS="${OPENTTDRS_INDUSTRY_TRACE_TIMEOUT:-$DEFAULT_TIMEOUT_SECONDS}"
+if [[ ! "$TRACE_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: OPENTTDRS_INDUSTRY_TRACE_TIMEOUT debe ser entero positivo: $TRACE_TIMEOUT_SECONDS" >&2
+  exit 2
+fi
 if [[ ! -x "$BIN" ]]; then
   echo "error: no hay binario OpenTTD parcheado en $BIN" >&2
   echo "  ./patches/openttd-15.3-snapshot-export/integrate.sh" >&2
@@ -54,10 +69,17 @@ export OPENTTDRS_INDUSTRY_TRACE_SOURCE="${SAV#"$ROOT"/}"
 export OPENTTDRS_OPENTTD_COMMIT="$COMMIT"
 export OPENTTDRS_SNAPSHOT_MIN_CALL="${OPENTTDRS_SNAPSHOT_MIN_CALL:-2}"
 
-echo "oráculo scheduler industrias OpenTTD: bin=$BIN sav=$SAV días=$DAYS out=$OUT commit=$COMMIT"
+echo "oráculo scheduler industrias OpenTTD: bin=$BIN sav=$SAV días=$DAYS timeout=${TRACE_TIMEOUT_SECONDS}s out=$OUT commit=$COMMIT"
 cd "$BUILD_DIR"
-timeout 180s ./openttd -X -I opengfx -D -g "$SAV" >"$TRACE_LOG" 2>&1 || rc=$?
+timeout "${TRACE_TIMEOUT_SECONDS}s" ./openttd -X -I opengfx -D -g "$SAV" >"$TRACE_LOG" 2>&1 || rc=$?
 rc="${rc:-0}"
+
+if [[ "$rc" -eq 124 ]]; then
+  echo "error: el oráculo agotó ${TRACE_TIMEOUT_SECONDS}s antes de exportar $DAYS jornadas." >&2
+  echo "  aumentá OPENTTDRS_INDUSTRY_TRACE_TIMEOUT para esta máquina o reducí la ventana; no se acepta una traza parcial." >&2
+  tail -n 40 "$TRACE_LOG" >&2 || true
+  exit 1
+fi
 
 if grep -Fq "Could not bind socket" "$TRACE_LOG"; then
   echo "error: OpenTTD dedicated no pudo abrir un socket; la traza puede seguir una ruta de arranque distinta." >&2

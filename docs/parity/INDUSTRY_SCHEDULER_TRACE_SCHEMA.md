@@ -43,6 +43,12 @@ traza incluso si su JSONL es sintácticamente válida cuando el log contiene
 un sandbox se debe ejecutar el oracle con sockets permitidos; no se normaliza
 ni se compara esa salida degradada.
 
+El límite del oracle es `max(180 s, 3 s × días)` para que una ventana larga no
+quede truncada a mitad de la traza; se puede ajustar por máquina mediante
+`OPENTTDRS_INDUSTRY_TRACE_TIMEOUT=<segundos>`. Si vence el límite, el
+exportador falla explícitamente y rechaza la JSONL parcial, en vez de dejar que
+el comparador la interprete como una diferencia de simulación.
+
 El segundo exportador carga el mismo `.sav` mediante el core Rust, escribe una
 fila `initial` y captura cada fila `day` dentro del scheduler, inmediatamente
 después del timer industrial. La instrumentación es efímera, no se serializa y

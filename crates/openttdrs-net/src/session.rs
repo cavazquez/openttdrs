@@ -1,6 +1,5 @@
 //! Sesiones listen-server y cliente (protocolo v3 / ADR 0004).
 
-use std::io::Read;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -11,7 +10,7 @@ use std::time::Duration;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{Command, CompanyId};
 
-use crate::codec::{read_message, write_message};
+use crate::codec::{FrameDecoder, read_message, write_message};
 use crate::protocol::{NetError, NetMessage, PROTOCOL_VERSION};
 
 /// Elige el nuevo host: menor `peer_id` vivo (ADR 0004).
@@ -354,6 +353,7 @@ impl Drop for ListenServer {
 
 struct ClientSlot {
     stream: TcpStream,
+    decoder: FrameDecoder,
     peer_id: u64,
     company_id: CompanyId,
 }
@@ -444,6 +444,7 @@ fn server_thread(
                             .push(peer_id);
                         clients.push(ClientSlot {
                             stream,
+                            decoder: FrameDecoder::default(),
                             peer_id,
                             company_id,
                         });
@@ -464,7 +465,11 @@ fn server_thread(
         // Propuestas de clientes (non-blocking peek via set_nonblocking on clients).
         let mut i = 0;
         while i < clients.len() {
-            match try_read_client(&mut clients[i].stream) {
+            let incoming = {
+                let client = &mut clients[i];
+                try_read_client(&mut client.stream, &mut client.decoder)
+            };
+            match incoming {
                 Ok(Some(NetMessage::Propose {
                     company_id,
                     command,
@@ -713,26 +718,17 @@ fn handshake_server(
     Ok(())
 }
 
-fn try_read_client(stream: &mut TcpStream) -> Result<Option<NetMessage>, NetError> {
+fn try_read_client(
+    stream: &mut TcpStream,
+    decoder: &mut FrameDecoder,
+) -> Result<Option<NetMessage>, NetError> {
     stream.set_nonblocking(true)?;
-    let mut len_buf = [0u8; 4];
-    match stream.read_exact(&mut len_buf) {
-        Ok(()) => {
-            stream.set_nonblocking(false)?;
-            let len = u32::from_le_bytes(len_buf) as usize;
-            if len > 64 * 1024 * 1024 {
-                return Err(NetError::Protocol(format!("frame too large: {len}")));
-            }
-            let mut payload = vec![0u8; len];
-            stream.read_exact(&mut payload)?;
-            Ok(Some(serde_json::from_slice(&payload)?))
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-            stream.set_nonblocking(false)?;
-            Ok(None)
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => Err(NetError::Closed),
-        Err(e) => Err(NetError::Io(e)),
+    let read_result = decoder.try_read(stream);
+    let restore_result = stream.set_nonblocking(false);
+    match (read_result, restore_result) {
+        (Err(error), _) => Err(error),
+        (Ok(_), Err(error)) => Err(NetError::Io(error)),
+        (Ok(message), Ok(())) => Ok(message),
     }
 }
 
@@ -928,6 +924,7 @@ fn client_thread(
     }
 
     stream.set_nonblocking(true)?;
+    let mut decoder = FrameDecoder::default();
     loop {
         match cmd_rx.try_recv() {
             Ok(ClientCmd::Propose {
@@ -964,7 +961,7 @@ fn client_thread(
             Err(TryRecvError::Empty) => {}
         }
 
-        match try_read_client(&mut stream) {
+        match try_read_client(&mut stream, &mut decoder) {
             Ok(None) => thread::sleep(Duration::from_millis(2)),
             Ok(Some(NetMessage::Welcome {
                 protocol,

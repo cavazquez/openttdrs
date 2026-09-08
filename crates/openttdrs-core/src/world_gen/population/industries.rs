@@ -559,8 +559,8 @@ fn generated_industry_check_proc_allows(
             state.climate != crate::Climate::SubArctic
                 || tile_z.saturating_add(2) < state.snow_line_height
         }
-        // `CHECK_REFINERY`: el límite vanilla por defecto es 32 teselas a
-        // cualquiera de los cuatro bordes. `TileAddXY(tile, 1, 1)` forma
+        // `CHECK_REFINERY`: el límite persistido se aplica a cualquiera de
+        // los cuatro bordes. `TileAddXY(tile, 1, 1)` forma
         // parte del contrato nativo y evita admitir la última fila/columna.
         IndustrySpec::OilRefinery => generated_industry_is_near_edge(state, origin),
         // `CHECK_PLANTATION` (incluye factory/farm tropic): nunca en desierto.
@@ -582,8 +582,7 @@ fn generated_industry_check_proc_allows(
     }
 }
 
-/// `CheckScaledDistanceFromEdge(TileAddXY(tile, 1, 1), 32)` con bordes
-/// `freeform_edges`, que es la topología usada por los mapas generados.
+/// `CheckScaledDistanceFromEdge(TileAddXY(tile, 1, 1), oil_refinery_limit)`.
 /// `OpenTTD` sólo escala el límite cuando una dimensión supera 256 teselas;
 /// hacerlo por eje es importante en mapas rectangulares y evita que una
 /// refinería válida de 512×512 sea rechazada después de consumir su intento.
@@ -595,11 +594,13 @@ fn generated_industry_is_near_edge(state: &GameState, origin: TileCoord) -> bool
     let max_y = i32::try_from(map_h).unwrap_or(i32::MAX).saturating_sub(1);
     let scale_x = if map_w > 256 { map_w / 256 } else { 1 };
     let scale_y = if map_h > 256 { map_h / 256 } else { 1 };
-    let max_distance_x = 32_u32.saturating_mul(scale_x);
-    let max_distance_y = 32_u32.saturating_mul(scale_y);
+    let limit = u32::from(state.construction.oil_refinery_limit.clamp(12, 128));
+    let max_distance_x = limit.saturating_mul(scale_x);
+    let max_distance_y = limit.saturating_mul(scale_y);
+    let north_border = i32::from(state.construction.freeform_edges);
     let distances = [
-        x.saturating_sub(1),
-        y.saturating_sub(1),
+        x.saturating_sub(north_border),
+        y.saturating_sub(north_border),
         max_x.saturating_sub(x).saturating_sub(1),
         max_y.saturating_sub(y).saturating_sub(1),
     ];
@@ -2291,6 +2292,51 @@ mod tests {
             &small,
             TileCoord::new(32, 64)
         ));
+    }
+
+    #[test]
+    fn imported_refinery_limit_controls_rectangular_edges_and_topology() {
+        // Native CheckScaledDistanceFromEdge + DistanceFromEdgeDir:
+        // 512x256 with limit48 gives thresholds96/48. The northern
+        // distances include tile(0,*) only when freeform edges are disabled.
+        let mut original = GameState::new(512, 256);
+        original.construction.oil_refinery_limit = 48;
+        let bytes = crate::sav::save_to_bytes_with(&original, crate::sav::SavContainer::Ottn)
+            .expect("export refinery limit");
+        let mut state = GameState::from_sav_game(crate::sav::load(&bytes).expect("load limit"));
+        assert_eq!(state.construction.oil_refinery_limit, 48);
+
+        for (freeform, allowed, rejected) in [
+            (true, TileCoord::new(95, 100), TileCoord::new(96, 100)),
+            (true, TileCoord::new(200, 47), TileCoord::new(200, 48)),
+            (false, TileCoord::new(94, 100), TileCoord::new(95, 100)),
+            (false, TileCoord::new(200, 46), TileCoord::new(200, 47)),
+            (true, TileCoord::new(414, 100), TileCoord::new(413, 100)),
+            (false, TileCoord::new(414, 100), TileCoord::new(413, 100)),
+            (true, TileCoord::new(200, 206), TileCoord::new(200, 205)),
+            (false, TileCoord::new(200, 206), TileCoord::new(200, 205)),
+        ] {
+            state.construction.freeform_edges = freeform;
+            assert!(
+                generated_industry_check_proc_allows(&state, allowed, IndustrySpec::OilRefinery),
+                "native refinery permits {allowed:?}, freeform={freeform}"
+            );
+            assert!(
+                !generated_industry_check_proc_allows(&state, rejected, IndustrySpec::OilRefinery),
+                "native refinery rejects {rejected:?}, freeform={freeform}"
+            );
+        }
+
+        state.construction.freeform_edges = true;
+        state.construction.oil_refinery_limit = 32;
+        assert!(
+            !generated_industry_check_proc_allows(
+                &state,
+                TileCoord::new(95, 100),
+                IndustrySpec::OilRefinery,
+            ),
+            "default32 must not admit the same site as imported48"
+        );
     }
 
     #[test]

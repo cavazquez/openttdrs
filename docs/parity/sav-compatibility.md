@@ -89,6 +89,12 @@ anidadas ya cargan/re-guardan en OpenTTD 15.3; no implica que el runtime propio
 aplique autenticación o permisos de red. La evidencia está en
 [`sav-company-allow-list-381.md`](sav-company-allow-list-381.md).
 
+Actualización #533 (2026-09-08): `PATS`/`OPTS.game_creation.oil_refinery_limit`
+se conserva y gobierna el chequeo existente de refinerías. La evidencia de
+round-trip nativo, límites por eje y compatibilidad JSON está en
+[`sav-oil-refinery-limit.md`](sav-oil-refinery-limit.md). El consumer de Oil Rig
+y su perímetro permanecen pendientes en #531.
+
 Actualización #382 (2026-09-05): `PATS.order.selectgoods` ya viaja desde la
 tabla nativa hasta `GameState.order` y vuelve a emitirse como `SLE_BOOL`.
 Es un setting ejecutado: `false` permite que una estación sin visita previa

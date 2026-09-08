@@ -131,6 +131,13 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
         // no dejar que el fallback sobrescriba valores explícitos.
         let mut found = false;
         for (_, record) in rows {
+            if let Some(value) = record_get(&record, "game_creation.oil_refinery_limit")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+            {
+                parsed.construction.oil_refinery_limit = value.clamp(12, 128);
+                found = true;
+            }
             if let Some(value) = record_get(&record, "construction.map_height_limit")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value).ok())
@@ -522,6 +529,50 @@ mod tests {
         assert_eq!(
             settings_from_chunks(&[chunk]).economy_type,
             EconomyType::Frozen
+        );
+    }
+
+    #[test]
+    fn reads_and_clamps_oil_refinery_limit_with_pats_precedence() {
+        assert_eq!(
+            settings_from_chunks(&[]).construction.oil_refinery_limit,
+            32
+        );
+        for (value, expected) in [(0, 12), (12, 12), (48, 48), (128, 128), (255, 128)] {
+            for name in [*b"PATS", *b"OPTS"] {
+                let chunk = RawChunk {
+                    name,
+                    ch_type: CH_TABLE,
+                    body: build_table_body(
+                        &[(2, "game_creation.oil_refinery_limit")],
+                        &[vec![value]],
+                    ),
+                };
+                assert_eq!(
+                    settings_from_chunks(&[chunk])
+                        .construction
+                        .oil_refinery_limit,
+                    expected
+                );
+            }
+        }
+        let chunks = [
+            RawChunk {
+                name: *b"OPTS",
+                ch_type: CH_TABLE,
+                body: build_table_body(&[(2, "game_creation.oil_refinery_limit")], &[vec![64]]),
+            },
+            RawChunk {
+                name: *b"PATS",
+                ch_type: CH_TABLE,
+                body: build_table_body(&[(2, "game_creation.oil_refinery_limit")], &[vec![48]]),
+            },
+        ];
+        assert_eq!(
+            settings_from_chunks(&chunks)
+                .construction
+                .oil_refinery_limit,
+            48
         );
     }
 

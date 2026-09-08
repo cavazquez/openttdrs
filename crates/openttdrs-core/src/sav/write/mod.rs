@@ -746,6 +746,7 @@ mod tests {
         let mut state = tiny_state();
         state.climate = crate::Climate::SubTropical;
         state.snow_line_height = 2;
+        state.construction.oil_refinery_limit = 48;
         state.construction.map_height_limit = 75;
         state.construction.road_vehicle_driving_side = crate::RoadVehicleDrivingSide::Right;
         state.construction.train_signal_side = crate::TrainSignalSide::Right;
@@ -811,6 +812,7 @@ mod tests {
         let (payload, _) = crate::sav::container::decompress(&bytes).expect("payload");
         let chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
         let pats = crate::sav::chunks::find_chunk(&chunks, "PATS").expect("PATS");
+        assert_table_field_type(&pats.body, 2, "game_creation.oil_refinery_limit");
         assert_table_field_type(&pats.body, 1, "order.selectgoods");
         assert_table_field_type(&pats.body, 1, "station.distant_join_stations");
         assert_table_field_type(&pats.body, 1, "vehicle.wagon_speed_limits");
@@ -1007,6 +1009,28 @@ mod tests {
             save_to_bytes_with(&imported, SavContainer::Ottn).expect("save changed setting");
         let reimported = sav::load(&changed).expect("import changed setting");
         assert_eq!(reimported.construction.plane_speed, 2);
+    }
+
+    #[test]
+    fn imported_pats_oil_refinery_limit_mutation_is_reexported() {
+        let original =
+            save_to_bytes_with(&tiny_state(), SavContainer::Ottn).expect("save original");
+        let mut imported = GameState::from_sav_game(sav::load(&original).expect("import original"));
+        assert_eq!(imported.construction.oil_refinery_limit, 32);
+
+        for (value, expected) in [(48, 48), (0, 12), (255, 128)] {
+            imported.construction.oil_refinery_limit = value;
+            let changed =
+                save_to_bytes_with(&imported, SavContainer::Ottn).expect("save changed setting");
+            let reimported = sav::load(&changed).expect("import changed setting");
+            assert_eq!(reimported.construction.oil_refinery_limit, expected);
+            assert_eq!(
+                GameState::from_sav_game(reimported)
+                    .construction
+                    .oil_refinery_limit,
+                expected
+            );
+        }
     }
 
     #[test]
@@ -2989,6 +3013,7 @@ mod tests {
         state.construction.disable_elrails = true;
         state.construction.plane_speed = 2;
         state.construction.plane_crashes = 1;
+        state.construction.oil_refinery_limit = 48;
         state.cargo_dist.per_cargo = Some(crate::flow_stat::CargoDistPerCargoSettings {
             recalc_interval_seconds: 6,
             recalc_time_seconds: 31,

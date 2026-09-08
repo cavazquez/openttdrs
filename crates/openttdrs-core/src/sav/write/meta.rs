@@ -432,6 +432,7 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
         &[
             (2, "game_creation.landscape"),
             (2, "game_creation.snow_line_height"),
+            (2, "game_creation.oil_refinery_limit"),
             (2, "construction.map_height_limit"),
             (2, "vehicle.road_side"),
             (2, "construction.train_signal_side"),
@@ -498,6 +499,7 @@ pub(super) fn pats_record(state: &GameState) -> Vec<u8> {
     let mut record = vec![
         landscape,
         state.snow_line_height,
+        state.construction.oil_refinery_limit.clamp(12, 128),
         state.construction.map_height_limit,
         road_side,
         signal_side,

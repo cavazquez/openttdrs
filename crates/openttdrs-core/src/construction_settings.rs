@@ -79,6 +79,11 @@ pub struct ConstructionSettings {
     /// `world_gen::effective_new_game_map_height_limit`.
     #[serde(default)]
     pub map_height_limit: u8,
+    /// Distancia máxima de refinerías al borde en un mapa de hasta 256×256
+    /// (`game_creation.oil_refinery_limit`). Se escala por eje en mapas
+    /// mayores. El rango nativo es `12..=128`, con default `32`.
+    #[serde(default = "default_oil_refinery_limit")]
+    pub oil_refinery_limit: u8,
     #[serde(default)]
     pub train_signal_side: TrainSignalSide,
     #[serde(default)]
@@ -131,6 +136,10 @@ const fn default_freeform_edges() -> bool {
     true
 }
 
+const fn default_oil_refinery_limit() -> u8 {
+    32
+}
+
 const fn default_distant_join_stations() -> bool {
     true
 }
@@ -151,6 +160,7 @@ impl Default for ConstructionSettings {
     fn default() -> Self {
         Self {
             map_height_limit: 0,
+            oil_refinery_limit: default_oil_refinery_limit(),
             train_signal_side: TrainSignalSide::default(),
             road_vehicle_driving_side: RoadVehicleDrivingSide::default(),
             freeform_edges: default_freeform_edges(),
@@ -258,6 +268,31 @@ mod tests {
     #[test]
     fn plane_speed_uses_openttd_default() {
         assert_eq!(ConstructionSettings::default().plane_speed, 4);
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn oil_refinery_limit_survives_json_and_defaults_for_old_settings() {
+        let settings = ConstructionSettings {
+            oil_refinery_limit: 48,
+            ..ConstructionSettings::default()
+        };
+        let mut json = serde_json::to_value(settings).expect("settings JSON");
+        assert_eq!(
+            serde_json::from_value::<ConstructionSettings>(json.clone())
+                .expect("settings round-trip")
+                .oil_refinery_limit,
+            48
+        );
+        json.as_object_mut()
+            .expect("settings object")
+            .remove("oil_refinery_limit");
+        assert_eq!(
+            serde_json::from_value::<ConstructionSettings>(json)
+                .expect("older settings")
+                .oil_refinery_limit,
+            32
+        );
     }
 
     #[test]

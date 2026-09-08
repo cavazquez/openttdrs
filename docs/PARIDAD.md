@@ -2511,7 +2511,10 @@ Inventario y verificación de reproducibilidad de `*_generated.rs`.
 
 Los generadores OpenGFX tienen `--check` (exit 2 si faltan assets). Tras regenerar con el set local, actualizá `output_sha256` en el manifiesto (PR de datos de render).
 
-OpenGFX (`assets/opengfx/tiles/`) **no** está vendorizado ni se descarga en CI.
+Los PNG fuente de OpenGFX (`assets/opengfx/tiles/`) siguen sin versionarse; el
+atlas derivado (`assets/opengfx/atlas/`) sí se distribuye con el checkout y el
+cliente puede reconstruir `tiles/` localmente. CI no descarga OpenGFX para los
+checks de tablas que sólo verifican hashes.
 
 ### Comandos
 

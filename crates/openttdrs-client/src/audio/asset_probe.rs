@@ -161,6 +161,10 @@ fn probe_graphics(root: &Path) -> GraphicsAssetStatus {
             Some("32bpp".into())
         } else if first_dir_name_with_prefix(&opengfx, "opengfx-").is_some() {
             Some("8bpp".into())
+        } else if opengfx.join("atlas/tiles_atlas_0.png").is_file() {
+            // El clone jugable sólo versiona el atlas. Los PNG de `tiles/`
+            // se derivan de él durante el primer arranque del cliente.
+            Some("8bpp".into())
         } else {
             None
         }
@@ -436,6 +440,19 @@ mod tests {
         );
         assert_eq!(status.sfx_hud_label(), "sin SFX");
         assert_eq!(status.music_hud_label(), "sin OpenMSX");
+        Ok(())
+    }
+
+    #[test]
+    fn bundled_atlas_is_reported_as_the_playable_opengfx_base_set()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let atlas = dir.path().join("assets/opengfx/atlas");
+        fs::create_dir_all(&atlas)?;
+        fs::write(atlas.join("tiles_atlas_0.png"), b"atlas")?;
+
+        let status = ClientAssetStatus::probe(dir.path());
+        assert_eq!(status.graphics_hud_label(), "OpenGFX · 8bpp");
         Ok(())
     }
 }

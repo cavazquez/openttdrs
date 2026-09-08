@@ -5,6 +5,10 @@ members = [
     "crates/openttdrs-client",
     "crates/openttdrs-net",
 ]
+# La experiencia de un checkout es `cargo run`: el cliente gráfico es el
+# producto predeterminado, mientras que los bins de soporte siguen accesibles
+# explícitamente con `-p`/`--bin`.
+default-members = ["crates/openttdrs-client"]
 
 [workspace.package]
 version = "0.1.0-alpha.1"

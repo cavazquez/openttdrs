@@ -25,8 +25,11 @@ Este documento registra todo lo aprendido sobre la extracción y uso de sprites 
 
 ### Estructura del paquete OpenGFX
 
-Descargado con `scripts/descargar_graficos.sh` (versión 8.0 por defecto) en
-`assets/opengfx/` (carpeta ignorada por git).
+El pipeline de mantenimiento descarga OpenGFX con
+`scripts/descargar_graficos.sh` (versión 8.0 por defecto) bajo
+`assets/opengfx/`. Para un jugador, en cambio, basta el atlas OpenGFX 8bpp que
+está versionado: `cargo run` deriva automáticamente los PNG locales de `tiles/`
+en el primer arranque, sin descargar ni ejecutar ese script.
 
 ```
 assets/opengfx/opengfx-8.0/
@@ -604,7 +607,7 @@ compilada:
 
 - **En el repo (sí):** `crates/openttdrs-client/src/sprites/tile_atlas_generated.rs`
 - **En el repo (sí):** metadatos de draw (`*_draw_data_generated.rs`, p. ej. `effect_vehicle_draw_data_generated.rs`)
-- **Gitignored (no):** `assets/opengfx/tiles/*.png` (~11 MB)
+- **Gitignored (derivado):** `assets/opengfx/tiles/*.png` (~11 MB)
 - **En el repo (sí):** `assets/opengfx/atlas/tiles_atlas_*.png` (~2–3 MB por página)
 
 #### Atlas PNG en el repositorio
@@ -617,7 +620,9 @@ python3 scripts/gen_tile_atlas.py
 git add assets/opengfx/atlas/ crates/openttdrs-client/src/sprites/tile_atlas_generated.rs
 ```
 
-Los PNG sueltos en `tiles/` siguen ignorados; hace falta `descargar_graficos.sh` solo para
+Los PNG sueltos en `tiles/` siguen ignorados. El cliente los materializa desde
+el atlas incluido cuando faltan, para que un `git clone` + `cargo run` sea
+jugable. `descargar_graficos.sh` sólo hace falta a mantenedores que quieran
 regenerar el atlas o añadir sprites nuevos.
 
 La comprobación no destructiva también valida que cada página PNG versionada sea
@@ -633,7 +638,7 @@ python3 scripts/gen_tile_atlas.py --check
 
 | Script | Descripción |
 |--------|-------------|
-| `scripts/descargar_graficos.sh` | Descarga OpenGFX y extrae sprites a `assets/opengfx/tiles/` |
+| `scripts/descargar_graficos.sh` | Desarrollo: descarga OpenGFX y extrae sprites para regenerar el atlas |
 | `scripts/crop_tree_ground_sprites.py` | Extrae incrementalmente los 152 suelos que usa `DrawTile_Trees` |
 | `scripts/gen_effect_vehicle_sprites.py` | Humo tren, chispas, explosión, avería → `effect_vehicle_draw_data_generated.rs` |
 | `scripts/gen_tile_atlas.py` | Empaqueta `tiles/` en atlas + `tile_atlas_generated.rs`; `--check` compara también los PNG píxel a píxel |
@@ -641,7 +646,9 @@ python3 scripts/gen_tile_atlas.py --check
 | `scripts/fetch-openttd-reference.sh` | Clona el código fuente de OpenTTD en `reference/` |
 
 Los sprites extraídos se guardan en `assets/opengfx/tiles/` (ignorado por git).
-El script de descarga incluye extracción automática con PIL si `grfcodec` está disponible.
+El cliente también puede reconstruirlos desde el atlas versionado; el script de
+descarga incluye extracción con PIL si `grfcodec` está disponible para el
+pipeline de mantenimiento.
 
 ## Bugs visuales de terreno (handoff)
 

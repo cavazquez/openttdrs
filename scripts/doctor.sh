@@ -167,22 +167,22 @@ check_pkgconfig() {
   done
 }
 
-# --- Herramientas para descargar/procesar assets ---
+# --- Herramientas opcionales para regenerar/procesar assets ---
 check_asset_tools() {
-  log "${CYAN}== Herramientas de assets ==${NC}"
+  log "${CYAN}== Herramientas opcionales de assets ==${NC}"
   local cmd
   for cmd in curl tar unzip; do
     if have_cmd "$cmd"; then
       pass "$cmd"
     else
-      need "falta comando: $cmd"
+      soft "falta comando opcional: $cmd (sólo regenerar assets)"
       suggest "sudo apt-get install -y $cmd"
     fi
   done
   if have_cmd grfcodec; then
-    pass "grfcodec (necesario para ./scripts/descargar_graficos.sh)"
+    pass "grfcodec (opcional; regenerar gráficos)"
   else
-    need "falta grfcodec (sin esto no se generan assets/opengfx/tiles)"
+    soft "falta grfcodec (opcional; el atlas incluido basta para jugar)"
     suggest "sudo apt-get install -y grfcodec"
   fi
   if have_cmd python3; then
@@ -201,7 +201,7 @@ check_asset_tools() {
       if python3 -c "import ${mod}" 2>/dev/null; then
         pass "python3: import ${mod}"
       else
-        need "falta módulo Python '${mod}' (post-proceso de gráficos)"
+        soft "falta módulo Python opcional '${mod}' (post-proceso de gráficos)"
         py_missing+=("$mod")
       fi
     done
@@ -225,44 +225,38 @@ check_asset_tools() {
 check_assets() {
   log "${CYAN}== Assets del juego ==${NC}"
   local tiles="$ROOT/assets/opengfx/tiles"
+  local atlas="$ROOT/assets/opengfx/atlas/tiles_atlas_0.png"
   local sounds="$ROOT/assets/sounds"
   local music="$ROOT/assets/music"
   local font="$ROOT/static/fonts/DejaVuSansMono.ttf"
 
+  if [[ -f "$atlas" ]]; then
+    pass "atlas OpenGFX versionado: assets/opengfx/atlas/tiles_atlas_0.png"
+    if [[ -d "$tiles" ]]; then
+      local n
+      n="$(find "$tiles" -type f -name '*.png' 2>/dev/null | wc -l | tr -d ' ')"
+      if [[ "$n" -ge 100 ]]; then
+        pass "OpenGFX tiles derivados: $n PNG en assets/opengfx/tiles"
+      else
+        soft "OpenGFX tiles todavía no materializados ($n PNG; `cargo run` los crea desde el atlas)"
+      fi
+    else
+      pass "OpenGFX tiles se materializarán automáticamente en el primer `cargo run`"
+    fi
+  else
+    need "falta assets/opengfx/atlas/tiles_atlas_0.png (gráficos incluidos)"
+    suggest "restaurá el checkout o regenerá el atlas con ./scripts/descargar_assets.sh graficos --32bpp"
+  fi
+
+  # Los PNG sueltos son un caché local derivado del atlas; no son requisito
+  # para un clone nuevo. Sólo se informa el estado para quienes trabajan en el
+  # pipeline gráfico.
   if [[ -d "$tiles" ]]; then
     local n
     n="$(find "$tiles" -type f -name '*.png' 2>/dev/null | wc -l | tr -d ' ')"
-    if [[ "$n" -ge 100 ]]; then
-      pass "OpenGFX tiles: $n PNG en assets/opengfx/tiles"
-    elif [[ "$n" -gt 0 ]]; then
-      soft "OpenGFX tiles incompletos ($n PNG). Suele indicar descarga a medias."
-      suggest "./scripts/descargar_assets.sh graficos --32bpp"
-    else
-      need "assets/opengfx/tiles vacío"
-      suggest "./scripts/descargar_assets.sh graficos --32bpp"
+    if [[ "$n" -gt 0 && ! -f "$tiles/grass.png" ]]; then
+      soft "tiles derivados sin grass.png; el próximo `cargo run` los reconstruirá desde el atlas"
     fi
-    if [[ -f "$tiles/grass.png" ]]; then
-      pass "sprite clave: grass.png"
-    else
-      need "falta assets/opengfx/tiles/grass.png"
-      suggest "./scripts/descargar_assets.sh graficos --32bpp"
-    fi
-    # Señales de post-proceso incompleto (p. ej. falló gen_tile_select por falta de numpy)
-    if [[ -f "$tiles/tile_select.png" ]]; then
-      pass "post-proceso: tile_select.png"
-    else
-      soft "falta tile_select.png (post-proceso de descargar_graficos interrumpido)"
-      suggest "./scripts/descargar_assets.sh graficos --32bpp"
-    fi
-    if [[ -d "$ROOT/assets/opengfx/atlas" ]] && [[ -n "$(find "$ROOT/assets/opengfx/atlas" -type f 2>/dev/null | head -1)" ]]; then
-      pass "texture atlas presente"
-    else
-      soft "atlas vacío/ausente (último paso: gen_tile_atlas.py)"
-      suggest "./scripts/descargar_assets.sh graficos --32bpp"
-    fi
-  else
-    need "no existe assets/opengfx/tiles (gráficos no descargados)"
-    suggest "./scripts/descargar_assets.sh graficos --32bpp"
   fi
 
   if [[ -d "$sounds" ]] && [[ "$(find "$sounds" -type f 2>/dev/null | wc -l | tr -d ' ')" -gt 0 ]]; then
@@ -303,7 +297,7 @@ print_fix() {
   done
   log ""
   log "Después: ${CYAN}./scripts/doctor.sh${NC} otra vez, y si todo OK:"
-  log "  ${CYAN}cargo run -p openttdrs-client${NC}"
+  log "  ${CYAN}cargo run${NC}"
 }
 
 # --- main ---
@@ -365,5 +359,5 @@ if [[ "$warn" -gt 0 ]]; then
   soft "Hay avisos no bloqueantes; el cliente debería poder arrancar."
   print_fix
 fi
-log "${GREEN}Entorno listo para cargo run -p openttdrs-client${NC}"
+log "${GREEN}Entorno listo para cargo run${NC}"
 exit 0

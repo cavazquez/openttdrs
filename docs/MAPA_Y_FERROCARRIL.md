@@ -32,24 +32,27 @@ Guía única que enlaza el pipeline principal del repo. Para detalle binario de 
 
 ### 2. Cliente con mapa real
 
-1. Generar assets OpenGFX: `./scripts/descargar_graficos.sh --8bpp` (requiere `grfcodec`; salida bajo `assets/`, ignorada por git).
-2. Arrancar:
+1. Arrancar desde un checkout normal; el atlas OpenGFX versionado prepara los
+   PNG derivados automáticamente durante el primer inicio (sin `grfcodec` ni
+   scripts de assets):
    ```bash
-   OTTDMAP_FILE=salida.ottdmap cargo run -p openttdrs-client
+   OTTDMAP_FILE=salida.ottdmap cargo run
    ```
+2. `./scripts/descargar_graficos.sh --8bpp` queda reservado para desarrollo:
+   regenerar el atlas o investigar/añadir sprites.
 
 ### 3. Simulación y persistencia JSON
 
 - El núcleo expone `openttdrs_core::save` (`save` / `load` / `load_from_str`): JSON con `version` + `state`, o legado sin envoltorio (sigue cargando).
 - `GameState::save_json` / `load_json` siguen disponibles para tests y serialización en memoria.
-- **Arranque desde JSON:** `OTTDJSON_LOAD=estado.json cargo run -p openttdrs-client`.
+- **Arranque desde JSON:** `OTTDJSON_LOAD=estado.json cargo run`.
 - **En ventana:** **F5** o **Ctrl+S** guardan; **F9** o **Ctrl+L** cargan y **redibujan** suelo/vías/vehículos. Ruta por defecto `save/openttdrs_sim.json` o `OPENTTDRS_JSON_SAVE`; **F4** alterna entre `save/openttdrs_sim.json` y `save/openttdrs_autosave.json`. La cámara no usa **S** para moverse cuando va **Ctrl+S**.
 - **P** pausa el avance de ticks de simulación.
 - **Ctrl+H** alterna el HUD informativo de la esquina superior izquierda (datos de
   mapa, assets y diagnóstico); arranca oculto y no afecta toolbar, minimapa ni
   barra de estado. Para arrancar mostrándolo: en bash
-  `OPENTTDRS_SHOW_HUD=1 cargo run -p openttdrs-client`; en fish
-  `env OPENTTDRS_SHOW_HUD=1 cargo run -p openttdrs-client`.
+  `OPENTTDRS_SHOW_HUD=1 cargo run`; en fish
+  `env OPENTTDRS_SHOW_HUD=1 cargo run`.
 - El cliente arranca con zoom **fijo OpenTTD**. **Ctrl+Alt+Z** alterna entre
   ese modo y el zoom **libre**. El modo fijo usa los seis niveles discretos del
   original (4×, 2×, normal, ½×, ¼× y ⅛×); en mapas grandes sólo deja

@@ -17,13 +17,13 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Gobierno:** [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [ADRs](docs/adr/)
 
-**Última actualización:** 2026-08-31
+**Última actualización:** 2026-09-08
 
 ---
 
 ## Estado del proyecto
 
-> Actualizado: 2026-08-31.
+> Actualizado: 2026-09-08.
 
 | Capa | Qué hay |
 |------|---------|
@@ -48,6 +48,11 @@ climas y configuraciones sigue abierta. El detalle y
 el alcance pendiente viven en el [plan continuo de
 paridad](docs/parity/continuous-work-plan.md) y en los [issues abiertos](https://github.com/cavazquez/openttdrs/issues).
 
+**Arranque desde checkout (septiembre 2026):** el atlas OpenGFX 8bpp, la fuente,
+los sonidos y la música están versionados. `cargo run` selecciona el cliente y,
+en el primer inicio, materializa localmente los PNG que necesita la UI desde el
+atlas incluido. No descarga assets ni requiere ejecutar scripts auxiliares.
+
 **Siguiente corte (roadmap):** cerrar la primera divergencia restante de
 `RMAP-004` y continuar con composición raster, SAV, NewGRF runtime, movimiento
 y economía, y settings/idiomas, en ese orden. Editor #42 ✅ · GameScript-lite
@@ -57,57 +62,58 @@ y economía, y settings/idiomas, en ese orden. Editor #42 ✅ · GameScript-lite
 
 ## Arranque rápido
 
-> Actualizado: 2026-08-31.
+> Actualizado: 2026-09-08.
 
 ```bash
-# 0) Diagnóstico de entorno (no adivinar qué falta)
-./scripts/doctor.sh
-# Si hay FAIL: ./scripts/doctor.sh --fix
-
-# 1) Gráficos (obligatorio la primera vez; audio ya viene en git)
-./scripts/descargar_assets.sh graficos --32bpp
-
-# 2) Cliente (menú: Nueva partida / Cargar / Demo / Salir)
-cargo run -p openttdrs-client
+git clone https://github.com/cavazquez/openttdrs.git
+cd openttdrs
+cargo run
 ```
+
+Eso abre el menú con **Nueva partida / Cargar / Demo / Salir**. En el primer
+inicio se crean bajo `assets/opengfx/tiles/` los PNG derivados del atlas
+versionado; no se usa red, `grfcodec`, Python ni un script de preparación. La
+carpeta derivada está ignorada por Git y se reconstruye automáticamente si falta.
 
 ### Dependencias (máquina nueva)
 
-> Actualizado: 2026-08-31.
+> Actualizado: 2026-09-08.
 
-`./scripts/doctor.sh` chequea toolchain Rust, paquetes APT (misma lista que CI en [`.github/apt-packages.txt`](.github/apt-packages.txt)), `grfcodec`, Python (`numpy` / `Pillow`) y assets. Con `--fix` imprime los comandos a correr. **pip no es obligatorio**: solo es alternativa si no usás paquetes del sistema.
+Para jugar desde el checkout hacen falta Rust **1.98+** y las bibliotecas nativas
+de ventana/audio que use tu distribución. En Ubuntu/Debian, la misma lista que
+CI está en [`.github/apt-packages.txt`](.github/apt-packages.txt). `cargo` baja
+sus dependencias Rust normalmente; no hay un paso manual de assets.
 
 ```bash
 # Libs Bevy (X11 / Wayland / ALSA / …) — misma lista que CI
 sudo apt-get update
 sudo apt-get install -y $(grep -v '^#' .github/apt-packages.txt | grep -v '^[[:space:]]*$')
 
-# Decodificar OpenGFX + post-proceso de sprites (preferido en Ubuntu/Debian)
+# Sólo para contribuir o regenerar/cambiar el baseset gráfico, no para jugar:
 sudo apt-get install -y grfcodec python3-numpy python3-pil
-
-# Alternativa sin APT (otras distros): pip + requirements
-# python3 -m pip install --user -r scripts/requirements-assets.txt
 ```
 
-`descargar_graficos.sh` valida `numpy` y `Pillow` **antes** de borrar/descargar, para no fallar al final del pipeline.
+`./scripts/doctor.sh` queda como diagnóstico para desarrollo y
+`./scripts/descargar_assets.sh graficos --32bpp` sólo sirve para regenerar o
+probar un baseset alternativo; el flujo normal de jugador no los necesita.
 
 | Asset | ¿En el repo? | Notas |
 |-------|----------------|-------|
-| Sonidos / música | Sí (`assets/sounds`, `assets/music`) | No hace falta regenerar para jugar |
-| Gráficos OpenGFX | No | Una vez: script de arriba |
-| Fuente UI | Sí (`static/fonts/`) | Fuera de `assets/` (ignorado por git) |
+| Sonidos / música | Sí (`assets/sounds`, `assets/music`) | Listos tras `git clone` |
+| Gráficos OpenGFX | Sí (`assets/opengfx/atlas/`) | `cargo run` deriva `tiles/` localmente una vez |
+| Fuente UI | Sí (`static/fonts/`) | Lista tras `git clone` |
 
 Otras formas de arrancar:
 
 ```bash
 # Mapa desde fixture / save convertido
-OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/p6_p4_showcase.ottdmap cargo run -p openttdrs-client
+OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/p6_p4_showcase.ottdmap cargo run
 
 # Partida JSON
-OTTDJSON_LOAD=save/openttdrs_sim.json cargo run -p openttdrs-client
+OTTDJSON_LOAD=save/openttdrs_sim.json cargo run
 
 # Mundo procedural headless (sin menú)
-OPENTTDRS_WORLD_GEN=1 OPENTTDRS_WORLD_ISLAND=1 OPENTTDRS_WORLD_SEED=42 cargo run -p openttdrs-client
+OPENTTDRS_WORLD_GEN=1 OPENTTDRS_WORLD_ISLAND=1 OPENTTDRS_WORLD_SEED=42 cargo run
 ```
 
 En juego: **F5** guardar · **F9** cargar · pausa/velocidad en toolbar · preferencias en `~/.config/com.github.cavazquez.openttdrs/`.
@@ -116,12 +122,12 @@ En juego: **F5** guardar · **F9** cargar · pausa/velocidad en toolbar · prefe
 
 ## Desarrollo
 
-> Actualizado: 2026-08-31.
+> Actualizado: 2026-09-08.
 
 Flujo de PRs y DoD: [CONTRIBUTING.md](CONTRIBUTING.md). Capas: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ```bash
-./scripts/doctor.sh         # deps de sistema + toolchain + assets (antes de adivinar)
+./scripts/doctor.sh         # diagnóstico de toolchain y pipeline opcional de assets
 ./scripts/check.sh          # fmt + clippy + tests (día a día)
 ./scripts/check.sh ci       # núcleo compartido con ci.yml (ver excepciones GHA en check.sh)
 ./scripts/check.sh ci-python  # solo goldens/py del manifiesto scripts/ci_python_manifest.json
@@ -135,7 +141,7 @@ cargo +nightly fuzz run net_message
 FUZZ_TOOLCHAIN=nightly-2026-07-31 ./scripts/replay_fuzz_regressions.sh  # corpus de PR
 
 # Verificar un paquete extraído sin abrir la ventana
-./openttdrs-client --check-assets
+cargo run -- --check-assets
 
 # Validar documentación (enlaces rustdoc, code fences)
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
@@ -150,7 +156,7 @@ cargo deny check       # licencias + advisories + sources + bans (deny.toml)
 
 ### Caché de compilación (`sccache`)
 
-> Actualizado: 2026-08-31.
+> Actualizado: 2026-09-08.
 
 GitHub Actions activa `sccache` con el backend de caché de Actions en todos los
 jobs que compilan Rust. En local es opcional: `./scripts/check.sh` lo detecta y
@@ -190,7 +196,7 @@ Detalle: [docs/PARIDAD.md](docs/PARIDAD.md).
 
 ## CI y calidad
 
-> Actualizado: 2026-08-31.
+> Actualizado: 2026-09-08.
 
 Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (sccache + caché Cargo + APT):
 
@@ -213,7 +219,7 @@ Cobertura manual: [.github/workflows/coverage.yml](.github/workflows/coverage.ym
 
 ### Release alpha
 
-> Actualizado: 2026-08-31.
+> Actualizado: 2026-09-08.
 
 El workflow [release.yml](.github/workflows/release.yml) se puede ejecutar manualmente
 para probar artefactos sin publicar. Un tag que coincida exactamente con la versión
@@ -235,7 +241,7 @@ Notas: [CHANGELOG.md](CHANGELOG.md) · [RELEASE_NOTES.md](RELEASE_NOTES.md) ·
 
 ## Qué está hecho / qué falta (resumen)
 
-> Actualizado: 2026-08-31. Las matrices canónicas enlazadas abajo tienen
+> Actualizado: 2026-09-08. Las matrices canónicas enlazadas abajo tienen
 > prioridad sobre cualquier resumen de esta tabla.
 
 Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
@@ -255,7 +261,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | Multijugador (I8) | 🟡 | MVP lockstep + dedicated + host migration; desync/UI OOS |
 | IA rivales / GameScript / editor | 🟡 | TransCargo + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
 
-Backlog vivo al 2026-08-31: [issues del repo](https://github.com/cavazquez/openttdrs/issues),
+Backlog vivo al 2026-09-08: [issues del repo](https://github.com/cavazquez/openttdrs/issues),
 con el alcance vigente consolidado en [continuous-work-plan.md](docs/parity/continuous-work-plan.md)
 y [PARIDAD.md](docs/PARIDAD.md).
 
@@ -263,7 +269,7 @@ y [PARIDAD.md](docs/PARIDAD.md).
 
 ## Documentación
 
-> Actualizado: 2026-08-31.
+> Actualizado: 2026-09-08.
 
 | Documento | Uso |
 |-----------|-----|
@@ -280,16 +286,16 @@ Saves OpenTTD → mapa del cliente:
 
 ```bash
 python3 scripts/parse_sav.py partida.sav salida.ottdmap
-OTTDMAP_FILE=salida.ottdmap cargo run -p openttdrs-client
+OTTDMAP_FILE=salida.ottdmap cargo run
 ```
 
-Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.md#formato-ottdmap). Regenerar assets: `./scripts/descargar_assets.sh --help`.
+Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.md#formato-ottdmap). Para regenerar assets de desarrollo: `./scripts/descargar_assets.sh --help`.
 
 ---
 
 ## Stack
 
-> Actualizado: 2026-08-31.
+> Actualizado: 2026-09-08.
 
 | Tecnología | Rol |
 |------------|-----|
@@ -304,7 +310,7 @@ Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.m
 
 ## Estructura del repo
 
-> Actualizado: 2026-08-31.
+> Actualizado: 2026-09-08.
 
 ```
 Cargo.toml                 # Workspace
@@ -322,6 +328,6 @@ reference/                 # Clon OpenTTD (gitignored)
 
 ## Licencia
 
-> Actualizado: 2026-08-31.
+> Actualizado: 2026-09-08.
 
 **GPL-2.0-only** (ver `LICENSE`). El código de OpenTTD usado como referencia conserva su propia licencia y copyright.

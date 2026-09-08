@@ -335,6 +335,7 @@ fn build_selected_town_with_generated_growth(
         snow_line_height: ctx.state.snow_line_height,
         calendar_year: ctx.state.calendar.year,
         bridge_spec_catalog: ctx.state.bridge_spec_catalog.clone(),
+        house_construction: TownHouseConstructionMode::WorldGeneration,
     };
     let initial_growth_calls = temporary_house_budget.saturating_mul(4);
     // La primera llamada de `GrowTown` ya está representada por el bootstrap
@@ -1721,6 +1722,16 @@ fn try_grow_generated_town_road_bridge(
 /// Datos de partida que `GrowTown` consulta al filtrar el catálogo de casas.
 /// Agruparlos conserva una frontera explícita entre el walker y el contexto de
 /// generación, sin convertir la fixture en un supuesto de clima o fecha.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TownHouseConstructionMode {
+    /// `BuildTownHouse` llamado mientras `OpenTTD` genera el mundo: usa una
+    /// palabra para la obra y otra para `Chance16(1, 7)`.
+    WorldGeneration,
+    /// `BuildTownHouse` llamado por `TownTickHandler` durante una partida: la
+    /// casa comienza en obra y no consume RNG adicional.
+    Runtime,
+}
+
 #[derive(Clone)]
 struct GeneratedTownGrowthContext {
     climate: crate::world_gen::Climate,
@@ -1730,6 +1741,7 @@ struct GeneratedTownGrowthContext {
     /// tabla fija: Action0 Bridges ya pudo alterar sus límites antes de la
     /// generación del mapa.
     bridge_spec_catalog: Vec<BridgeSpecDef>,
+    house_construction: TownHouseConstructionMode,
 }
 
 /// Parte vial de `GrowTownInTile` usada por la fundación procedural.
@@ -1923,7 +1935,7 @@ fn grow_generated_town_road_in_tile(
             context.snow_line_height,
             context.calendar_year,
             rng,
-        ) && materialize_generated_town_house(map, town, candidate, rng)
+        ) && materialize_town_house(map, town, candidate, context.house_construction, rng)
         {
             return GeneratedRoadGrowthResult::House(candidate.base);
         }
@@ -2013,6 +2025,7 @@ pub(crate) fn grow_vanilla_town_once_with_rng(
         snow_line_height,
         calendar_year,
         bridge_spec_catalog: bridge_spec_catalog.to_vec(),
+        house_construction: TownHouseConstructionMode::Runtime,
     };
     if let Some(base_road) = generated_town_growth_base_road(map, town) {
         return grow_generated_town_at_road(map, town, base_road, &context, rng);
@@ -2026,6 +2039,43 @@ pub(crate) fn grow_vanilla_town_once_with_rng(
     let bootstrap = initial_town_growth_bootstrap(map, town.pos, rng)?;
     write_generated_town_road_to_map(map, bootstrap.pos, bootstrap.bits, town.id)
         .then_some(bootstrap.pos)
+}
+
+/// Reconstruye la casa que `TileLoop_Town` acaba de retirar durante una
+/// partida normal.
+///
+/// A diferencia del crecimiento de un pueblo, esta ruta entra directamente a
+/// `TryBuildTownHouse`: la tesela ya fue elegida por la visita LFSR y el
+/// `Random()` que decide si habrá reemplazo ya se consumió. Conservamos por
+/// tanto el selector vanilla y el estado de obra runtime, sin volver a
+/// sortear la apariencia de construcción de `GenerateWorld`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn rebuild_vanilla_town_house_with_rng(
+    map: &mut crate::map::Map,
+    town: &mut Town,
+    tile: TileCoord,
+    climate: crate::world_gen::Climate,
+    snow_line_height: u8,
+    calendar_year: u32,
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> Option<TileCoord> {
+    let candidate = choose_generated_town_house_candidate(
+        town,
+        map,
+        tile,
+        climate,
+        snow_line_height,
+        calendar_year,
+        rng,
+    )?;
+    materialize_town_house(
+        map,
+        town,
+        candidate,
+        TownHouseConstructionMode::Runtime,
+        rng,
+    )
+    .then_some(candidate.base)
 }
 
 fn grow_generated_town_at_road(
@@ -2136,6 +2186,17 @@ fn generated_town_house_construction(
     TownHouseConstruction { counter, stage }
 }
 
+/// Estado inicial de una casa que `TownTickHandler` construye durante una
+/// partida ya iniciada. A diferencia de `GenerateWorld`, `OpenTTD` no sortea su
+/// aspecto ni termina la obra aquí: `TileLoop_Town` avanzará sus 24 pasos y
+/// sólo entonces añadirá la población.
+const fn runtime_town_house_construction() -> TownHouseConstruction {
+    TownHouseConstruction {
+        counter: 0,
+        stage: 0,
+    }
+}
+
 /// Convierte los flags de `HouseSpec` a la geometría que `MakeTownHouse`
 /// escribe en los cuatro `MAP*` consecutivos. La prioridad coincide con las
 /// ramas de `TryBuildTownHouse` / `MakeTownHouse`.
@@ -2154,17 +2215,23 @@ const fn generated_town_house_footprint(building_flags: u8) -> TownHouseFootprin
 /// Materializa el tramo final de `BuildTownHouse` después de que el pool de
 /// `TryBuildTownHouse` aceptó una entrada. `cache.num_houses` de `OpenTTD`
 /// cuenta edificios, no subteselas, por eso se incrementa una única vez aun
-/// cuando `MakeTownHouse` escriba una huella 2×2.
-fn materialize_generated_town_house(
+/// cuando `MakeTownHouse` escriba una huella 2×2. El modo de construcción es
+/// observable: sólo `GenerateWorld` sortea y puede completar la casa de forma
+/// inmediata; el runtime siempre deja una obra en etapa cero.
+fn materialize_town_house(
     map: &mut crate::map::Map,
     town: &mut Town,
     candidate: TownHouseCandidate,
+    construction_mode: TownHouseConstructionMode,
     rng: &mut crate::cargodist::parity::Randomizer,
 ) -> bool {
     let Some(house) = HouseSpec::get(candidate.id) else {
         return false;
     };
-    let construction = generated_town_house_construction(rng);
+    let construction = match construction_mode {
+        TownHouseConstructionMode::WorldGeneration => generated_town_house_construction(rng),
+        TownHouseConstructionMode::Runtime => runtime_town_house_construction(),
+    };
     let spec = TownHouseSpec {
         house_id: candidate.id,
         town_id: town.id,
@@ -2773,6 +2840,7 @@ mod tests {
             snow_line_height: state.snow_line_height,
             calendar_year: 1950,
             bridge_spec_catalog: state.bridge_spec_catalog.clone(),
+            house_construction: TownHouseConstructionMode::WorldGeneration,
         };
         grow_generated_town_road_once(&mut state.map, town, &context, rng)
     }
@@ -4312,6 +4380,52 @@ mod tests {
     }
 
     #[test]
+    fn runtime_town_house_starts_under_construction_without_extra_rng() {
+        // OpenTTD `BuildTownHouse` fuera de GenerateWorld deja la obra en
+        // etapa cero: el `Random()` que ya eligió `random_bits` es la última
+        // palabra de esta construcción. Este caso reproduce la casa 26 de
+        // autosave0 (Town 22, tick 1474722), que antes se terminaba de forma
+        // errónea y adelantaba el stream dos palabras.
+        let base = TileCoord::new(106, 95);
+        let mut map = Map::new_flat(128, 128, 0);
+        let mut town = Town {
+            id: 22,
+            population: 1_539,
+            num_houses: 43,
+            ..Town::default()
+        };
+        let candidate = TownHouseCandidate {
+            id: 26,
+            base,
+            random_bits: 159,
+            probability_max: 0,
+            candidate_count: 0,
+            attempts: 0,
+        };
+        let mut rng = Randomizer {
+            state: [2_320_280_143, 2_056_847_007],
+        };
+        let before = rng;
+
+        assert!(materialize_town_house(
+            &mut map,
+            &mut town,
+            candidate,
+            TownHouseConstructionMode::Runtime,
+            &mut rng,
+        ));
+
+        let house = map.get(base).expect("runtime house");
+        assert_eq!(rng, before, "runtime BuildTownHouse consumes no extra RNG");
+        assert_eq!(house.m1, 159);
+        assert_eq!(house.m2, 22);
+        assert_eq!(house.m3 & 0x80, 0, "house remains unfinished");
+        assert_eq!(house.m5 & 0x1F, 0, "stage and counter start at zero");
+        assert_eq!(town.population, 1_539, "population waits for completion");
+        assert_eq!(town.num_houses, 44);
+    }
+
+    #[test]
     fn generated_town_road_keeps_native_owner_and_absent_tram_bytes() {
         let mut state = GameState::new(8, 8);
         let coord = TileCoord::new(3, 4);
@@ -4376,6 +4490,7 @@ mod tests {
             snow_line_height: state.snow_line_height,
             calendar_year: 1950,
             bridge_spec_catalog: state.bridge_spec_catalog.clone(),
+            house_construction: TownHouseConstructionMode::WorldGeneration,
         };
         let mut rng = Randomizer {
             state: [653_263_232, 3_923_936_600],
@@ -4492,6 +4607,7 @@ mod tests {
             snow_line_height: state.snow_line_height,
             calendar_year: 1950,
             bridge_spec_catalog: state.bridge_spec_catalog.clone(),
+            house_construction: TownHouseConstructionMode::WorldGeneration,
         };
         let mut rng = Randomizer {
             state: [653_263_232, 3_923_936_600],
@@ -4637,6 +4753,7 @@ mod tests {
             snow_line_height: state.snow_line_height,
             calendar_year: 1950,
             bridge_spec_catalog: state.bridge_spec_catalog.clone(),
+            house_construction: TownHouseConstructionMode::WorldGeneration,
         };
         // Estado tras las cuatro decisiones del walker y justo antes de
         // seleccionar el tipo de puente en la referencia.
@@ -4723,6 +4840,7 @@ mod tests {
             snow_line_height: state.snow_line_height,
             calendar_year: 1950,
             bridge_spec_catalog: state.bridge_spec_catalog.clone(),
+            house_construction: TownHouseConstructionMode::WorldGeneration,
         };
         let mut rng = Randomizer {
             state: [653_263_232, 3_923_936_600],
@@ -5235,6 +5353,7 @@ mod tests {
             snow_line_height: 0,
             calendar_year: 1950,
             bridge_spec_catalog: Vec::new(),
+            house_construction: TownHouseConstructionMode::WorldGeneration,
         };
         let mut rng = Randomizer {
             state: [0x1234_5678, 0x9ABC_DEF0],

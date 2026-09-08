@@ -44,7 +44,8 @@ pub use population::{
 };
 pub(crate) use population::{
     grow_vanilla_town_once_with_rng, plant_random_farm_field_runtime,
-    plant_random_farm_fields_runtime, try_place_runtime_industry,
+    plant_random_farm_fields_runtime, rebuild_vanilla_town_house_with_rng,
+    try_place_runtime_industry,
 };
 pub(crate) use tile_loop::advance_town_tile_loop_from_visit_with_rng;
 pub use tile_loop::{

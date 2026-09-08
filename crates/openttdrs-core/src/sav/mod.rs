@@ -194,6 +194,34 @@ fn opaque_chunks_from_chunks(chunks: &[chunks::RawChunk]) -> Vec<SavOpaqueChunk>
         .collect()
 }
 
+/// Extrae el vector global `ANIT` sin reclamar que el resto de sus clases de
+/// tesela ya tenga un runtime propio. Desde los saves modernos `ANIT` es una
+/// tabla con un único campo vectorial `tiles`; conservar su orden es esencial
+/// para los ascensores vanilla, porque `AnimateAnimatedTiles` recorre el vector
+/// y cada entrada puede consumir `_random`.
+fn animated_tile_indices_from_opaque_chunks(chunks: &[SavOpaqueChunk]) -> Vec<u32> {
+    let Some(anit) = chunks.iter().find(|chunk| chunk.name == *b"ANIT") else {
+        return Vec::new();
+    };
+    if anit.ch_type != chunks::CH_TABLE {
+        return Vec::new();
+    }
+    let Ok(rows) = table::parse_table_chunk(&anit.body, false) else {
+        return Vec::new();
+    };
+    rows.into_iter()
+        .flat_map(|(_, record)| {
+            let Some(table::SlValue::List(entries)) = table::record_get(&record, "tiles") else {
+                return Vec::new();
+            };
+            entries
+                .iter()
+                .filter_map(|entry| entry.as_u64().and_then(|value| u32::try_from(value).ok()))
+                .collect()
+        })
+        .collect()
+}
+
 /// Bits `FACIL_*` de `OpenTTD`.
 const FACIL_TRAIN: u8 = 0x01;
 const FACIL_TRUCK_STOP: u8 = 0x02;
@@ -1175,6 +1203,10 @@ impl GameState {
     #[allow(clippy::too_many_lines)]
     pub fn from_sav_game(mut sav: SavGame) -> Self {
         let clear_legacy_depot_reservations = sav.version < SLV_DEPOT_RESERVATION_PERSISTED;
+        // `ANIT` sigue opaco para industrias/estaciones/objetos hasta que
+        // compartan un dispatcher común, pero la sublista de casas vanilla sí
+        // tiene semántica exacta y debe rehidratarse antes del primer tick.
+        let animated_tile_indices = animated_tile_indices_from_opaque_chunks(&sav.opaque_chunks);
         let linkgraph_jobs = std::mem::take(&mut sav.linkgraph_jobs);
         let linkgraph_schedule = std::mem::take(&mut sav.linkgraph_schedule);
         let vehs_raw_chunk = sav.vehs_raw_chunk.take();
@@ -1263,6 +1295,21 @@ impl GameState {
         state.sav_objects_dirty = false;
         state.sav_object_mappings_dirty = false;
         state.sav_opaque_chunks = sav.opaque_chunks;
+        for tile_index in animated_tile_indices {
+            let Some(coord) = crate::map::tile_index_to_coord(tile_index, &state.map) else {
+                continue;
+            };
+            if state
+                .map
+                .get(coord)
+                .is_some_and(crate::map::house_tile_has_lift)
+            {
+                crate::map::add_house_lift_to_animation(
+                    &mut state.runtime.active_house_lifts,
+                    coord,
+                );
+            }
+        }
         if let Some(time) = sav.game_time {
             // `DATE` persiste un contador de simulación y dos relojes
             // independientes. Derivar alguno de los tres a partir de otro

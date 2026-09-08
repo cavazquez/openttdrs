@@ -9,7 +9,11 @@
 
 use crate::GameState;
 use crate::cargodist::parity::Randomizer;
-use crate::house_spec::get_town_radius_group;
+use crate::house_spec::{
+    BUILDING_FLAG_IS_CHURCH, BUILDING_FLAG_IS_STADIUM, BUILDING_FLAG_SIZE_1X1,
+    BUILDING_FLAG_SIZE_1X2, BUILDING_FLAG_SIZE_2X1, BUILDING_FLAG_SIZE_2X2, HouseSpec,
+    get_town_radius_group,
+};
 use crate::map::{
     Map, Tile, TileCoord, TileKind, TileLoopState, collect_tile_loop_visits, coord_to_linear_index,
     industry_instance_id,
@@ -346,12 +350,11 @@ fn tile_loop_house(
     generation_rng: &mut Option<&mut Randomizer>,
 ) {
     let house_id = tile.m8 & 0x0FFF;
-    let Some(house) =
+    let Some(_house) =
         crate::house_spec::vanilla_or_newgrf_house(&state.house_spec_catalog, house_id)
     else {
         return;
     };
-
     // `NewHouseTileLoop` (CB21/CB22) may remove or replace a NewGRF house
     // before construction. Until that callback has a stateful generation
     // context, leaving the tile untouched is safer than consuming RNG or
@@ -360,16 +363,20 @@ fn tile_loop_house(
         return;
     }
 
+    let Some(house) = HouseSpec::get(house_id) else {
+        return;
+    };
+
     if tile.m3 & 0x80 == 0 {
         // Las subteselas de una casa multitesela llevan un `HouseID` propio
         // pero su spec tiene flags vacías. OpenTTD sólo avanza el conjunto
         // cuando visita la tesela norte (la que conserva las flags de la
         // huella); avanzar una subtesela por separado terminaría la obra
         // varias visitas antes que el original.
-        if house.building_flags() == 0 {
+        if house.building_flags == 0 {
             return;
         }
-        for (dx, dy) in crate::house_spec::house_footprint_offsets(house.building_flags()) {
+        for (dx, dy) in crate::house_spec::house_footprint_offsets(house.building_flags) {
             let part = TileCoord::new(coord.x + dx, coord.y + dy);
             advance_house_construction_tile(&mut state.map, part);
         }
@@ -380,12 +387,18 @@ fn tile_loop_house(
         return;
     };
     // `TileLoop_Town` tests the vanilla lift before taking the unconditional
-    // random value used by cargo generation. The result only registers an
-    // animated tile (not a raw map byte), but the draw must remain in order.
-    if house.building_flags() & crate::house_spec::BUILDING_FLAG_IS_ANIMATED != 0
-        && !crate::map::house_lift::lift_has_destination(tile)
-    {
-        let _ = rng.random_range(2);
+    // random value used by cargo generation. `AddAnimatedTile` sólo cambia la
+    // lista efímera, pero tanto la decisión como el orden de inserción deben
+    // seguir el stream global para que `AnimateAnimatedTiles` tome luego el
+    // mismo `RandomRange(7)`.
+    let can_activate_lift = house.building_flags & crate::house_spec::BUILDING_FLAG_IS_ANIMATED
+        != 0
+        && !crate::map::house_lift::lift_has_destination(tile);
+    if can_activate_lift {
+        let activated = rng.chance16(1, 2);
+        if activated {
+            crate::map::add_house_lift_to_animation(&mut state.runtime.active_house_lifts, coord);
+        }
     }
 
     // `r = Random()` siempre se extrae antes de la producción. El perfil de
@@ -393,12 +406,195 @@ fn tile_loop_house(
     // sólo visita las dos especificaciones (pasajeros/correo) cuando los dos
     // bits altos del contador de tick coinciden con los dos bits bajos de
     // `TileIndex`. Esto también mantiene el stream exacto en la cola 0x500.
-    let _random = rng.next();
+    let house_random = rng.next();
     let tile_index = coord_to_linear_index(coord, state.map.dimensions().0).unwrap_or(0);
     if ((tick >> 8) & 0x03) == u64::from(tile_index & 0x03) {
         let _passengers = rng.next();
         let _mail = rng.next();
     }
+
+    // La renovación no es una pasada posterior de economía: `TileLoop_Town`
+    // reutiliza `r = Random()` de esta misma visita después de generar carga.
+    // Ejecutarla aquí conserva tanto el intercalado LFSR como el mapa que ven
+    // las teselas siguientes de la franja.
+    maybe_rebuild_vanilla_town_house(state, coord, tile, house, house_random, rng);
+}
+
+/// Máscara `BUILDING_HAS_1_TILE` de `OpenTTD`. Los bits no representan una
+/// cuenta: `Size1x1` es el bit cero y los otros tamaños ocupan bits 2--4.
+const VANILLA_HOUSE_FOOTPRINT_FLAGS: u8 = BUILDING_FLAG_SIZE_1X1
+    | BUILDING_FLAG_SIZE_2X1
+    | BUILDING_FLAG_SIZE_1X2
+    | BUILDING_FLAG_SIZE_2X2;
+const VANILLA_HOUSE_MULTI_TILE_FLAGS: u8 =
+    BUILDING_FLAG_SIZE_2X1 | BUILDING_FLAG_SIZE_1X2 | BUILDING_FLAG_SIZE_2X2;
+
+/// Replica la cola de reconstrucción de `TileLoop_Town` para una casa vanilla
+/// completa. El contador se decrementa con wrapping, igual que el `uint16_t`
+/// nativo: un valor cero no dispara una reconstrucción prematura.
+fn maybe_rebuild_vanilla_town_house(
+    state: &mut GameState,
+    coord: TileCoord,
+    tile: Tile,
+    house: HouseSpec,
+    house_random: u32,
+    rng: &mut Randomizer,
+) {
+    if house.building_flags & VANILLA_HOUSE_FOOTPRINT_FLAGS == 0
+        || tile.m3 & 0x20 != 0
+        || tile.m5 < house.minimum_life
+    {
+        return;
+    }
+
+    // Validar antes de tocar el caché municipal. `ClearTownHouse` asume una
+    // huella íntegra; un `.sav` corrupto no debe perder población sólo porque
+    // una de sus subteselas quedó fuera del mapa.
+    let footprint_is_intact = crate::house_spec::house_footprint_offsets(house.building_flags)
+        .into_iter()
+        .map(|(dx, dy)| TileCoord::new(coord.x + dx, coord.y + dy))
+        .all(
+            |part| matches!(state.map.get(part), Some(current) if current.kind == TileKind::House),
+        );
+    if !footprint_is_intact {
+        return;
+    }
+
+    let persisted_town_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
+    let Some(town_index) = state
+        .towns
+        .iter()
+        .position(|town| town.id == persisted_town_id)
+        .or_else(|| crate::town::nearest_town_index(&state.towns, coord).map(|(index, _)| index))
+    else {
+        return;
+    };
+
+    let rebuild_tile = {
+        let town = &mut state.towns[town_index];
+        if !town.is_growing {
+            return;
+        }
+
+        town.time_until_rebuild = town.time_until_rebuild.wrapping_sub(1);
+        if town.time_until_rebuild != 0 {
+            return;
+        }
+        town.time_until_rebuild = u16::try_from((house_random >> 16) & 0xFF)
+            .unwrap_or(0)
+            .saturating_add(192);
+
+        // `ClearTownHouse` reduce la población sólo si la construcción ya
+        // había terminado, quita un edificio (no una subtesela) y actualiza
+        // los flags únicos antes de que `TryBuildTownHouse` elija un reemplazo.
+        town.population = town.population.saturating_sub(u32::from(house.population));
+        town.num_houses = town.num_houses.saturating_sub(1);
+        if house.building_flags & BUILDING_FLAG_IS_CHURCH != 0 {
+            town.has_church = false;
+        } else if house.building_flags & BUILDING_FLAG_IS_STADIUM != 0 {
+            town.has_stadium = false;
+        }
+        crate::town::update_town_radius(town);
+
+        rebuild_house_tile_closest_to_town(coord, house.building_flags, town.pos)
+    };
+
+    let Some(cleared) = clear_vanilla_town_house_footprint(&mut state.map, coord, house) else {
+        // Un footprint corrupto no existe en OpenTTD; no hacemos que una
+        // importación parcial borre una tesela aislada ni deje contadores
+        // municipales inconsistentes.
+        return;
+    };
+    state.runtime.landscape_tile_dirty.extend(cleared);
+
+    // `GB(r, 24, 8) < 12` deja el solar vacío, sin otro sorteo.
+    if (house_random >> 24) & 0xFF < 12 {
+        return;
+    }
+
+    if let Some(base) = crate::world_gen::rebuild_vanilla_town_house_with_rng(
+        &mut state.map,
+        &mut state.towns[town_index],
+        rebuild_tile,
+        state.climate,
+        state.snow_line_height,
+        state.calendar.year,
+        rng,
+    ) {
+        let flags = state
+            .map
+            .get(base)
+            .and_then(|rebuilt| HouseSpec::get(rebuilt.m8 & 0x0FFF))
+            .map_or(0, |rebuilt| rebuilt.building_flags);
+        for (dx, dy) in crate::house_spec::house_footprint_offsets(flags) {
+            state
+                .runtime
+                .landscape_tile_dirty
+                .push(TileCoord::new(base.x + dx, base.y + dy));
+        }
+    }
+}
+
+/// Después de despejar un edificio multitile, `OpenTTD` desplaza el nuevo intento
+/// hacia el centro de la ciudad para que las casas grandes no se alejen de la
+/// red vial. `TileIndexToTileIndexDiffC(town, tile)` es `town - tile`.
+fn rebuild_house_tile_closest_to_town(
+    coord: TileCoord,
+    building_flags: u8,
+    town_pos: TileCoord,
+) -> TileCoord {
+    if building_flags & VANILLA_HOUSE_MULTI_TILE_FLAGS == 0 {
+        return coord;
+    }
+    let x = (town_pos.x - coord.x).clamp(0, 1);
+    let y = (town_pos.y - coord.y).clamp(0, 1);
+    if building_flags & BUILDING_FLAG_SIZE_2X2 != 0 {
+        TileCoord::new(coord.x + x, coord.y + y)
+    } else if building_flags & BUILDING_FLAG_SIZE_1X2 != 0 {
+        TileCoord::new(coord.x, coord.y + y)
+    } else {
+        TileCoord::new(coord.x + x, coord.y)
+    }
+}
+
+/// `ClearTownHouse` + `DoClearSquare` para cada subtesela de una huella
+/// vanilla. La comprobación previa mantiene la operación atómica ante mapas
+/// corruptos; en un mapa válido coincide con el orden base, `+Y`, `+X`,
+/// `+X+Y` de `OpenTTD`.
+fn clear_vanilla_town_house_footprint(
+    map: &mut Map,
+    coord: TileCoord,
+    house: HouseSpec,
+) -> Option<Vec<TileCoord>> {
+    let parts: Vec<_> = crate::house_spec::house_footprint_offsets(house.building_flags)
+        .into_iter()
+        .map(|(dx, dy)| TileCoord::new(coord.x + dx, coord.y + dy))
+        .collect();
+    if parts.is_empty()
+        || parts
+            .iter()
+            .any(|&part| !matches!(map.get(part), Some(current) if current.kind == TileKind::House))
+    {
+        return None;
+    }
+
+    for &part in &parts {
+        let mut clear = map.get(part)?;
+        crate::map::clear_neighbour_non_flooding_states(map, part);
+        clear.kind = TileKind::Grass;
+        clear.mapt &= 0x0F;
+        clear.m1 = crate::company::OWNER_NONE_M1;
+        clear.m2 = 0;
+        clear.m2_hi = 0;
+        clear.m3 = 0;
+        clear.m3hi = 0;
+        clear.m5 = crate::world_gen::clear_ground_m5(crate::world_gen::CLEAR_GROUND_GRASS, 3);
+        clear.m6 = 0;
+        clear.m7 = 0;
+        clear.m8 = 0;
+        map.set_tile(part, clear).ok()?;
+    }
+    Some(parts)
 }
 
 /// Despacha una visita actual de `TileLoop_Town` con el stream global.
@@ -846,6 +1042,45 @@ mod tests {
         tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn town_rebuild_uses_the_house_random_without_an_extra_chance_roll() {
+        let mut map = Map::new_flat(16, 16, 0);
+        let coord = TileCoord::new(8, 8);
+        let house = HouseSpec::get(6).expect("vanilla house");
+        map.set_completed_house(coord, house.id, u8::MAX).unwrap();
+        map.set_house_town_id(coord, 7).unwrap();
+        let mut state = GameState::from_map(map);
+        state.towns.push(crate::town::Town {
+            id: 7,
+            pos: coord,
+            population: u32::from(house.population),
+            num_houses: 1,
+            is_growing: true,
+            time_until_rebuild: 1,
+            ..Default::default()
+        });
+        let mut rng = Randomizer::new(42);
+        let before_rng = rng;
+        let current = state.map.get(coord).expect("house tile");
+
+        // En `TileLoop_Town`, el byte alto menor que 12 borra la casa y deja
+        // el solar vacío. El byte 16--23 programa el próximo intento. No hay
+        // otro `Chance16` ni `RandomRange` después de `r = Random()`.
+        maybe_rebuild_vanilla_town_house(&mut state, coord, current, house, 0x0001_0000, &mut rng);
+
+        let cleared = state.map.get(coord).expect("cleared tile");
+        assert_eq!(cleared.kind, TileKind::Grass);
+        assert_eq!(cleared.m1, crate::company::OWNER_NONE_M1);
+        assert_eq!(
+            cleared.m5,
+            crate::world_gen::clear_ground_m5(crate::world_gen::CLEAR_GROUND_GRASS, 3)
+        );
+        assert_eq!(state.towns[0].time_until_rebuild, 193);
+        assert_eq!(state.towns[0].population, 0);
+        assert_eq!(state.towns[0].num_houses, 0);
+        assert_eq!(rng, before_rng, "no debe sortear una segunda chance");
     }
 
     #[test]

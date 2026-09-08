@@ -114,8 +114,13 @@ pub struct SimulationRuntime {
     /// Teselas visitadas por `RunTileLoop` este tick (una pasada LFSR; no persistido).
     pub tile_loop_visited: Vec<(TileCoord, Tile)>,
 
-    /// Teselas con ascensor Large Office en movimiento (`AnimatedTileList`).
-    pub active_house_lifts: HashSet<TileCoord>,
+    /// Subconjunto urbano de `AnimatedTileList`, en el mismo orden de alta.
+    ///
+    /// No es un conjunto: `AnimateAnimatedTiles` de `OpenTTD` recorre un vector
+    /// y dos ascensores pueden consumir palabras distintas de `_random` según
+    /// ese orden. El importador preserva el orden de `ANIT` y `TileLoop_Town`
+    /// agrega al final como `AddAnimatedTile`.
+    pub active_house_lifts: Vec<TileCoord>,
 
     /// Teselas con señales cuyo estado verde/rojo cambió este tick (remap cliente).
     pub signal_tile_dirty: Vec<TileCoord>,
@@ -300,7 +305,7 @@ impl SimulationRuntime {
             cargo_monitor: crate::cargo_monitor::CargoMonitor::default(),
             landscape_tile_dirty: Vec::new(),
             tile_loop_visited: Vec::new(),
-            active_house_lifts: HashSet::new(),
+            active_house_lifts: Vec::new(),
             signal_tile_dirty: Vec::new(),
             signal_globset: HashSet::new(),
             signal_spatial_index: crate::rail_signals::SignalSpatialIndex::default(),

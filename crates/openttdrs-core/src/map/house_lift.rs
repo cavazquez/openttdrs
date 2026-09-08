@@ -1,7 +1,5 @@
 //! Ascensor de Large Office (`AnimateTile_Town` / `town_map.h`).
 
-use std::collections::HashSet;
-
 use crate::cargodist::parity::Randomizer;
 use crate::house_spec::{BUILDING_FLAG_IS_ANIMATED, HouseSpec};
 
@@ -96,57 +94,68 @@ fn choose_lift_destination(position: u8, rng: &mut Randomizer) -> u8 {
     }
 }
 
-/// Activa ascensores desde las visitas de `TileLoop_Town` y avanza solo los
-/// activos, sin barrer todo el mapa cada cuatro ticks.
-pub fn step_house_lifts<S: std::hash::BuildHasher>(
+/// Equivalente urbano de `AddAnimatedTile`.
+///
+/// La lista conserva el orden de inserción de OpenTTD. No usar un `HashSet`:
+/// cuando dos ascensores toman destinos en la misma pasada, intercambiarlos
+/// puede alterar qué posición recibe cada palabra del stream global.
+pub fn add_house_lift_to_animation(active: &mut Vec<TileCoord>, coord: TileCoord) {
+    if !active.contains(&coord) {
+        active.push(coord);
+    }
+}
+
+/// Ejecuta el subconjunto de ascensores de `AnimateAnimatedTiles`.
+///
+/// `TileLoop_Town` ya hizo el `Chance16(1, 2)` que añade un ascensor a la
+/// lista. Aquí no se vuelve a sortear esa decisión: una entrada activa que no
+/// tenga destino toma `RandomRange(7)` únicamente cuando el contador global es
+/// múltiplo de cuatro, igual que `AnimateTile_Town`.
+pub fn step_house_lifts(
     map: &mut Map,
     tick: u64,
-    visits: &[(TileCoord, Tile)],
     rng: &mut Randomizer,
-    active: &mut HashSet<TileCoord, S>,
+    active: &mut Vec<TileCoord>,
 ) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
-    for &(coord, _) in visits {
-        let Some(mut tile) = map.get(coord) else {
-            continue;
-        };
-        if !house_tile_has_lift(tile) {
-            active.remove(&coord);
-            continue;
-        }
-        if lift_has_destination(tile) {
-            active.insert(coord);
-        } else if rng.random_range(2) == 0 {
-            tile = with_lift_destination(tile, choose_lift_destination(lift_position(tile), rng));
-            let _ = map.set_tile(coord, tile);
-            active.insert(coord);
-            dirty.push(coord);
-        }
-    }
-
+    // `AnimateTile_Town` retorna antes de validar el tipo en tres de cada
+    // cuatro ticks, por lo que una entrada vieja sobrevive hasta la próxima
+    // pasada divisible por cuatro.
     if tick & 3 != 0 {
         return dirty;
     }
-    let mut coords: Vec<_> = active.iter().copied().collect();
-    coords.sort_by_key(|coord| (coord.y, coord.x));
-    for coord in coords {
+
+    let mut index = 0;
+    while index < active.len() {
+        let coord = active[index];
         let Some(mut tile) = map.get(coord) else {
-            active.remove(&coord);
+            // `AnimateAnimatedTiles` elimina con el último elemento, no
+            // preservando el orden del resto del vector.
+            active.swap_remove(index);
             continue;
         };
-        let step = advance_house_lift(&mut tile);
-        if step == LiftStep::Idle {
-            active.remove(&coord);
+        if !house_tile_has_lift(tile) {
+            active.swap_remove(index);
             continue;
         }
+
+        if !lift_has_destination(tile) {
+            let destination = choose_lift_destination(lift_position(tile), rng);
+            tile = with_lift_destination(tile, destination);
+        }
+        let step = advance_house_lift(&mut tile);
         let _ = map.set_tile(coord, tile);
         dirty.push(coord);
         if step == LiftStep::Arrived {
-            active.remove(&coord);
+            // El original marca la entrada para borrar; quitarla ahora evita
+            // una segunda animación local y conserva la semántica observable
+            // de MAP6/MAP7. Una reactivación posterior vuelve a agregarla al
+            // final mediante `AddAnimatedTile`.
+            active.swap_remove(index);
+        } else {
+            index += 1;
         }
     }
-    dirty.sort_unstable_by_key(|coord| (coord.y, coord.x));
-    dirty.dedup();
     dirty
 }
 
@@ -182,5 +191,38 @@ mod tests {
         assert_eq!(lift_position(tile), 12);
         assert!(!lift_has_destination(tile));
         assert_eq!(advance_house_lift(&mut tile), LiftStep::Idle);
+    }
+
+    #[test]
+    fn active_lift_chooses_destination_with_native_range_and_insertion_order() {
+        let coord = TileCoord::new(2, 2);
+        let mut map = Map::new_flat(8, 8, 0);
+        map.set_tile(coord, large_office()).expect("office");
+        let mut active = vec![coord];
+        let mut rng = Randomizer::new(1);
+        let mut expected = rng;
+        // El primer resultado es piso 0, inválido porque ya está allí; el
+        // segundo es 6. El bucle debe consumir ambas palabras.
+        assert_eq!(expected.random_range(7), 0);
+        assert_eq!(expected.random_range(7), 6);
+
+        let dirty = step_house_lifts(&mut map, 4, &mut rng, &mut active);
+
+        let tile = map.get(coord).expect("office after animation");
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(rng, expected);
+        assert_eq!(lift_destination(tile), 6);
+        assert_eq!(lift_position(tile), 1);
+        assert_eq!(active, vec![coord]);
+    }
+
+    #[test]
+    fn adding_lift_animation_is_stable_and_deduplicated() {
+        let first = TileCoord::new(3, 5);
+        let second = TileCoord::new(1, 7);
+        let mut active = vec![first];
+        add_house_lift_to_animation(&mut active, first);
+        add_house_lift_to_animation(&mut active, second);
+        assert_eq!(active, vec![first, second]);
     }
 }

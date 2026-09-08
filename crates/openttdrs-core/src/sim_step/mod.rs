@@ -2,10 +2,10 @@
 //!
 //! ## Fases autoritativas del tick (orden `OpenTTD`; P2.2 / P2.4)
 //!
-//! 1. **timers**: calendario/economía sobre el tick persistido.
-//! 2. **`timer_economy`**: economía diaria/mensual/anual antes de avanzar el tick.
-//! 3. **tick**: incremento de `TimerGameTick` tras los timers, como `OpenTTD`.
-//! 4. **`tile_animation`**: `AnimateAnimatedTiles` (industrias / aeropuertos).
+//! 1. **`tile_animation`**: `AnimateAnimatedTiles` sobre el tick persistido.
+//! 2. **timers**: calendario/economía sobre el mismo tick persistido.
+//! 3. **`timer_economy`**: economía diaria/mensual/anual antes de avanzar el tick.
+//! 4. **tick**: incremento de `TimerGameTick` tras los timers, como `OpenTTD`.
 //! 5. **`tile_loop`**: `RunTileLoop` (LFSR).
 //! 6. **`path_recompute`**: liberación de depot + rutas (sin PBS completo).
 //! 7. **`cargo_transfer`**: descarga y carga (`LoadUnloadStation`) + barridos diarios.
@@ -195,6 +195,11 @@ pub(crate) fn step(state: &mut GameState) {
         .terminal_spatial_index
         .rebuild(&state.map, &state.stations);
     refresh_road_stop_statuses(state);
+    // `StateGameLoop` anima antes de hacer avanzar los timers. Esto se
+    // observa en `AnimateTile_Town`: comprueba `TimerGameTick::counter & 3`
+    // antes de `TimerGameTick::Elapsed(1)`. Usar el tick ya incrementado
+    // desplaza los `RandomRange(7)` de la lista global de ascensores.
+    phase_tile_animation(state, state.tick.get());
     state.advance_game_timers();
     phase_timer_economy(state);
     // `StateGameLoop` avanza calendario/economía y sus callbacks antes de
@@ -202,7 +207,6 @@ pub(crate) fn step(state: &mut GameState) {
     // su snapshot antes de que `OnTick_Industry` decremente los counters.
     state.tick.advance();
     let t = state.tick.get();
-    phase_tile_animation(state, t);
     phase_tile_loop(state, t);
     phase_path_recompute(state);
 
@@ -247,6 +251,9 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
         .terminal_spatial_index
         .rebuild(&state.map, &state.stations);
     refresh_road_stop_statuses(state);
+    let p0 = Instant::now();
+    phase_tile_animation(state, state.tick.get());
+    timings.tile_animation_ns = nanos(p0);
     state.advance_game_timers();
     let p0 = Instant::now();
     phase_timer_economy(state);
@@ -256,10 +263,6 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     // economía observan el tick persistido; landscape observa el incrementado.
     state.tick.advance();
     let t = state.tick.get();
-
-    let p0 = Instant::now();
-    phase_tile_animation(state, t);
-    timings.tile_animation_ns = nanos(p0);
 
     let p0 = Instant::now();
     phase_tile_loop(state, t);
@@ -430,7 +433,6 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
     let _lift_dirty = crate::map::step_house_lifts(
         &mut state.map,
         t,
-        &visits,
         &mut state.random,
         &mut state.runtime.active_house_lifts,
     );

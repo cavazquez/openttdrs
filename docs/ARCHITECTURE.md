@@ -544,7 +544,7 @@ Fecha de actualización: 2026-09-08. Crate: `openttdrs-client`. ADR red: [adr/00
 | Grupo | Archivos | Motivo |
 |-------|----------|--------|
 | Story page nav | `ui/story_window.rs` → `StoryWindowState.page_index` | Navegación por cliente; no afecta sim |
-| Presentación de noticias | `NewsDisplayPrefs` + `ui/statusbar/*` | Off/Summary/Full es por cliente; `NewsItem.display` legacy sólo se preserva al cargar |
+| Presentación de noticias | `NewsDisplayPrefs` + `ui/statusbar/*` | Off/Summary/Full es por cliente; se hidrata desde y se devuelve a `ClientPreferences` para persistir los nueve tipos sin escrituras vacías. `NewsItem.display` legacy sólo se preserva al cargar |
 | Ticks/segundos del horario | `TimetableDisplayPrefs` | Override local por vehículo; el campo legacy sólo aporta el default de una partida antigua |
 
 #### Deuda I8 restante

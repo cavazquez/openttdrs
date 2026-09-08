@@ -376,8 +376,12 @@ impl Plugin for ClientSettingsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(SettingsPlugin::new(CLIENT_SETTINGS_APP_ID));
         app.init_resource::<SettingsHydrated>();
+        app.init_resource::<crate::news_prefs::NewsDisplayPrefsHydrated>();
         app.add_systems(Startup, hydrate_runtime_from_preferences);
-        app.add_systems(Startup, crate::news_prefs::hydrate_news_display_prefs);
+        app.add_systems(
+            Startup,
+            crate::news_prefs::hydrate_news_display_prefs.after(hydrate_runtime_from_preferences),
+        );
         app.add_systems(
             Startup,
             apply_window_resolution_from_preferences.after(hydrate_runtime_from_preferences),
@@ -385,7 +389,7 @@ impl Plugin for ClientSettingsPlugin {
         app.add_systems(
             Update,
             (
-                queue_save_preferences,
+                queue_save_preferences.after(crate::news_prefs::sync_news_display_prefs_to_client),
                 save_preferences_on_exit,
                 sync_preferences_from_hud,
                 sync_transparency_render_preferences,

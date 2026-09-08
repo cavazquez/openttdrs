@@ -18,6 +18,15 @@ impl Default for NewsDisplayPrefs {
     }
 }
 
+/// Señal compartida entre la hidratación de arranque y la sincronización de
+/// vuelta a preferencias persistentes.
+///
+/// No usar `Local<bool>` aquí: cada sistema obtiene su propia instancia local,
+/// por lo que el sistema de escritura nunca observaba la hidratación hecha por
+/// el sistema de arranque.
+#[derive(Resource, Default)]
+pub(crate) struct NewsDisplayPrefsHydrated(pub(crate) bool);
+
 #[must_use]
 pub(crate) fn mode_from_u8(value: u8) -> NewsDisplayMode {
     match value {
@@ -69,21 +78,21 @@ pub(crate) fn apply_settings_to_client_prefs(
 pub(crate) fn hydrate_news_display_prefs(
     client: Res<ClientPreferences>,
     mut news: ResMut<NewsDisplayPrefs>,
-    mut hydrated: Local<bool>,
+    mut hydrated: ResMut<NewsDisplayPrefsHydrated>,
 ) {
-    if *hydrated {
+    if hydrated.0 {
         return;
     }
     news.0 = settings_from_client_prefs(&client);
-    *hydrated = true;
+    hydrated.0 = true;
 }
 
 pub(crate) fn sync_news_display_prefs_to_client(
     news: Res<NewsDisplayPrefs>,
     mut client: ResMut<ClientPreferences>,
-    hydrated: Local<bool>,
+    hydrated: Res<NewsDisplayPrefsHydrated>,
 ) {
-    if !*hydrated {
+    if !hydrated.0 {
         return;
     }
     let mut scratch = ClientPreferences::default();
@@ -107,6 +116,19 @@ pub(crate) fn sync_news_display_prefs_to_client(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::change_detection::DetectChanges;
+    use openttdrs_core::NewsType;
+
+    fn news_preferences_app(client: ClientPreferences) -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(client)
+            .init_resource::<NewsDisplayPrefs>()
+            .init_resource::<NewsDisplayPrefsHydrated>()
+            .add_systems(Startup, hydrate_news_display_prefs)
+            .add_systems(Update, sync_news_display_prefs_to_client);
+        app
+    }
 
     #[test]
     fn mode_u8_roundtrip() {
@@ -124,6 +146,97 @@ mod tests {
         assert_eq!(
             settings_from_client_prefs(&prefs).cargo_delivered,
             NewsDisplayMode::Summary
+        );
+    }
+
+    #[test]
+    fn startup_edit_and_rehydrate_keep_all_news_preferences_persistent() {
+        let stored = ClientPreferences {
+            news_cargo_delivered: DISPLAY_OFF,
+            news_first_cargo: DISPLAY_SUMMARY,
+            news_first_vehicle: DISPLAY_FULL,
+            news_vehicle_advice: DISPLAY_OFF,
+            news_accident: DISPLAY_SUMMARY,
+            news_company_info: DISPLAY_FULL,
+            news_industry_open: DISPLAY_OFF,
+            news_industry_close: DISPLAY_FULL,
+            news_economy: DISPLAY_OFF,
+            ..ClientPreferences::default()
+        };
+        let loaded_before_edit = stored.clone();
+
+        let mut app = news_preferences_app(stored);
+        let client_last_changed = |app: &App| {
+            let Some(client) = app.world().get_resource_ref::<ClientPreferences>() else {
+                panic!("ClientPreferences");
+            };
+            client.last_changed()
+        };
+        let client_tick_before_startup = client_last_changed(&app);
+        // El estado cargado no debe verse cambiado sólo por la primera
+        // hidratación NewsDisplayPrefs → ClientPreferences.
+        app.world_mut().clear_trackers();
+        app.update();
+        assert_eq!(
+            app.world().resource::<NewsDisplayPrefs>().0,
+            settings_from_client_prefs(&loaded_before_edit),
+            "Startup conserva los valores persistidos, no los defaults de NewsDisplayPrefs"
+        );
+        assert!(app.world().resource::<NewsDisplayPrefsHydrated>().0);
+        assert_eq!(
+            client_last_changed(&app),
+            client_tick_before_startup,
+            "la sincronización inicial equivalente no marca ClientPreferences"
+        );
+
+        let expected_after_edit = {
+            let mut news = app.world_mut().resource_mut::<NewsDisplayPrefs>();
+            for (kind, mode) in [
+                (NewsType::CargoDelivered, NewsDisplayMode::Full),
+                (NewsType::FirstCargoDelivered, NewsDisplayMode::Off),
+                (NewsType::FirstVehicleRunning, NewsDisplayMode::Summary),
+                (NewsType::VehicleAdvice, NewsDisplayMode::Full),
+                (NewsType::Accident, NewsDisplayMode::Off),
+                (NewsType::CompanyInfo, NewsDisplayMode::Summary),
+                (NewsType::IndustryOpen, NewsDisplayMode::Full),
+                (NewsType::IndustryClose, NewsDisplayMode::Summary),
+                (NewsType::Economy, NewsDisplayMode::Full),
+            ] {
+                news.0.set_display(kind, mode);
+            }
+            news.0
+        };
+        app.update();
+        assert_eq!(
+            settings_from_client_prefs(app.world().resource::<ClientPreferences>()),
+            expected_after_edit,
+            "cada uno de los nueve modos vuelve al recurso persistido"
+        );
+        let client_tick_after_edit = client_last_changed(&app);
+        assert_ne!(
+            client_tick_after_edit, client_tick_before_startup,
+            "una edición de noticias marca la preferencia para SettingsPlugin"
+        );
+
+        let persisted_after_edit = app.world().resource::<ClientPreferences>().clone();
+        app.world_mut().clear_trackers();
+        app.update();
+        assert_eq!(
+            client_last_changed(&app),
+            client_tick_after_edit,
+            "un Update posterior sin edición no vuelve a marcar preferencias"
+        );
+
+        // Simula el siguiente arranque después de que SettingsPlugin escribió
+        // `ClientPreferences`: la hidratación recibe exactamente el modo
+        // elegido, sin depender de Local de otro sistema.
+        let mut restarted = news_preferences_app(persisted_after_edit);
+        restarted.world_mut().clear_trackers();
+        restarted.update();
+        assert_eq!(
+            restarted.world().resource::<NewsDisplayPrefs>().0,
+            expected_after_edit,
+            "la edición persistida se rehidrata en el siguiente arranque"
         );
     }
 }

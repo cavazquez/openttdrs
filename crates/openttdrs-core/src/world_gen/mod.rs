@@ -43,7 +43,8 @@ pub use population::{
     industry_target_count, road_tiles_are_flat, scale_by_size, town_target_count,
 };
 pub(crate) use population::{
-    plant_random_farm_field_runtime, plant_random_farm_fields_runtime, try_place_runtime_industry,
+    grow_vanilla_town_once_with_rng, plant_random_farm_field_runtime,
+    plant_random_farm_fields_runtime, try_place_runtime_industry,
 };
 pub(crate) use tile_loop::advance_town_tile_loop_from_visit_with_rng;
 pub use tile_loop::{

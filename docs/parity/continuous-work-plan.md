@@ -30,8 +30,10 @@ de `autosave0.sav` al alinear el cierre mensual y la actividad global de
 estación. RMAP-165 / #526 reconstruye al cargar las caches urbanas derivadas
 de `MP_HOUSE` y aplica la cadencia de `larger_town`: con una corrida nativa
 dedicated válida, ciudad 22 alcanza su intento en `1474722` en ambos lados.
-La expansión física de Rust aún usa un LCG local, mientras OpenTTD consume el
-RNG global dentro de su walker; RMAP-164 / #525 continúa desde ese límite sin
+RMAP-164 / #525 elimina el gate duplicado de estación/financiación de
+`TownTickHandler` y conecta el walker vanilla con el RNG global: la corrida
+dedicated válida coincide durante 25 jornadas. La primera frontera siguiente,
+la animación de ascensores de casas en `1475063`, queda en RMAP-166 / #527 sin
 ampliar el cierre de #512. La evidencia canónica vive sólo en
 [random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
 
@@ -172,8 +174,8 @@ medición diaria
 canónica se mantiene en
 [`random-map-issues.md`](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
 RMAP-163/#524 extiende esa frontera a 23 jornadas y concentra su evidencia
-actualizada en la fila canónica de RMAP-163; la divergencia posterior pertenece
-a RMAP-164/#525.
+actualizada en la fila canónica de RMAP-163; RMAP-164/#525 la lleva a 25 y la
+divergencia posterior pertenece a RMAP-166/#527.
 #510 impide que una ejecución dedicated sin socket se acepte como oracle aunque
 produzca JSONL válida. RMAP-162 cierra instrumentación y regresiones, no afirma
 todavía paridad temporal ni reduce los pendientes de #499, RMAP-056 o #338.
@@ -189,7 +191,8 @@ y #519 los grupos aeroportuarios de la primera jornada; #520/#522 alinean
 la cadencia de fábrica con diez `IndustryTick` y #523 corrige el fallback
 `PlantFields` para que `Chance16` no se sustituya por `RandomRange`. #512
 permanece abierto por cobertura runtime pendiente; RMAP-163/#524 ya alineó el
-cierre mensual y RMAP-164/#525 conserva abierta la expansión urbana posterior.
+cierre mensual, RMAP-164/#525 el primer walker posterior y RMAP-166/#527
+conserva la siguiente divergencia de animación urbana.
 Los
 gates continúan siendo obligatorios y ningún issue padre se considera cerrado
 por esta cobertura.

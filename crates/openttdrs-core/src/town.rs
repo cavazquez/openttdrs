@@ -6,7 +6,7 @@ use crate::company::CompanyId;
 use crate::entity_history::TownHistory;
 use crate::industry::Industry;
 use crate::map::{Map, TileCoord, TileKind, tile_slope_and_z};
-use crate::station::{self, STATION_COVERAGE_RADIUS, Station, StopKind};
+use crate::station::{self, Station, StopKind};
 use crate::world_gen::{
     CLEAR_GROUND_DESERT, Climate, DEF_SNOW_LINE_HEIGHT, desert_patch, effective_clear_ground,
 };
@@ -1383,6 +1383,76 @@ pub fn grow_town_if_served_with_ctx(
     house_catalog: &[crate::house_spec::HouseSpecDef],
     house_overrides: &[u16],
 ) -> Vec<TileCoord> {
+    grow_town_if_served_with_ctx_inner(
+        map,
+        industries,
+        stations,
+        towns,
+        tick,
+        climate,
+        calendar_year,
+        house_catalog,
+        house_overrides,
+        None,
+    )
+}
+
+/// Variante de runtime que conecta el walker vanilla con el RNG global de la
+/// partida. El contexto `NewGRF` sigue por la ruta existente hasta que sus
+/// callbacks de construcción participen en el mismo stream nativo.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn grow_town_if_served_with_runtime_ctx(
+    map: &mut Map,
+    industries: &[Industry],
+    stations: &[Station],
+    towns: &mut [Town],
+    tick: u64,
+    climate: Climate,
+    snow_line_height: u8,
+    calendar_year: u32,
+    house_catalog: &[crate::house_spec::HouseSpecDef],
+    house_overrides: &[u16],
+    bridge_spec_catalog: &[crate::bridge_spec::BridgeSpecDef],
+    rng: &mut Randomizer,
+) -> Vec<TileCoord> {
+    let mut runtime = TownGrowthRuntimeContext {
+        snow_line_height,
+        bridge_spec_catalog,
+        rng,
+    };
+    grow_town_if_served_with_ctx_inner(
+        map,
+        industries,
+        stations,
+        towns,
+        tick,
+        climate,
+        calendar_year,
+        house_catalog,
+        house_overrides,
+        Some(&mut runtime),
+    )
+}
+
+struct TownGrowthRuntimeContext<'a> {
+    snow_line_height: u8,
+    bridge_spec_catalog: &'a [crate::bridge_spec::BridgeSpecDef],
+    rng: &'a mut Randomizer,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn grow_town_if_served_with_ctx_inner(
+    map: &mut Map,
+    industries: &[Industry],
+    stations: &[Station],
+    towns: &mut [Town],
+    tick: u64,
+    climate: Climate,
+    calendar_year: u32,
+    house_catalog: &[crate::house_spec::HouseSpecDef],
+    house_overrides: &[u16],
+    mut runtime: Option<&mut TownGrowthRuntimeContext<'_>>,
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for town in towns {
         if !town.is_growing {
@@ -1390,28 +1460,38 @@ pub fn grow_town_if_served_with_ctx(
         }
         let mut counter = i32::from(town.grow_counter) - 1;
         if counter < 0 {
-            // `growth_funded` es una estadística acumulada para la UI; sólo
-            // el programa activo de tres meses habilita crecimiento sin
-            // estación, igual que `Town::fund_buildings_months` en OpenTTD.
-            let funded = town.fund_buildings_months > 0;
-            let has_station = !stations_near_town(town, stations).is_empty();
-            if !funded && !has_station {
-                counter = i32::from(
-                    town.growth_rate
-                        .min(u16::try_from(TOWN_GROWTH_TICKS - 1).unwrap_or(0)),
-                );
-            } else if try_expand_growing_town_with_ctx(
-                map,
-                industries,
-                stations,
-                town,
-                tick,
-                climate,
-                calendar_year,
-                house_catalog,
-                house_overrides,
-                &mut dirty,
-            ) {
+            // `TownTickHandler` no vuelve a comprobar estaciones ni la
+            // financiación aquí: `UpdateTownGrowth` ya decidió `is_growing`
+            // y el tick nativo invoca `GrowTown` directamente mientras esa
+            // bandera siga activa. Repetir el gate silenciaba ciudades
+            // cargadas desde SAV cuyo estado mensual ya era válido.
+            if match runtime.as_deref_mut() {
+                Some(runtime) => try_expand_growing_town_with_runtime_ctx(
+                    map,
+                    industries,
+                    stations,
+                    town,
+                    tick,
+                    climate,
+                    calendar_year,
+                    house_catalog,
+                    house_overrides,
+                    runtime,
+                    &mut dirty,
+                ),
+                None => try_expand_growing_town_with_ctx(
+                    map,
+                    industries,
+                    stations,
+                    town,
+                    tick,
+                    climate,
+                    calendar_year,
+                    house_catalog,
+                    house_overrides,
+                    &mut dirty,
+                ),
+            } {
                 counter = i32::from(town.growth_rate);
             } else {
                 counter = i32::from(
@@ -1439,28 +1519,115 @@ pub fn try_expand_growing_town_with_ctx(
     house_overrides: &[u16],
     dirty: &mut Vec<TileCoord>,
 ) -> bool {
-    let funded = town.fund_buildings_months > 0;
-    let has_station = !stations_near_town(town, stations).is_empty();
-    if !funded && !has_station {
-        return false;
-    }
-    let coverage = station::station_coverage_at(map, industries, town.pos, STATION_COVERAGE_RADIUS);
-    if coverage.house_tiles == 0 && !funded && !has_station {
-        return false;
-    }
-    let ctx = crate::town_expand::TownExpandContext {
+    try_expand_growing_town_with_ctx_inner(
+        map,
+        industries,
+        stations,
+        town,
+        tick,
         climate,
         calendar_year,
         house_catalog,
         house_overrides,
-    };
+        None,
+        dirty,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn try_expand_growing_town_with_runtime_ctx(
+    map: &mut Map,
+    industries: &[Industry],
+    stations: &[Station],
+    town: &mut Town,
+    tick: u64,
+    climate: crate::world_gen::Climate,
+    calendar_year: u32,
+    house_catalog: &[crate::house_spec::HouseSpecDef],
+    house_overrides: &[u16],
+    runtime: &mut TownGrowthRuntimeContext<'_>,
+    dirty: &mut Vec<TileCoord>,
+) -> bool {
+    try_expand_growing_town_with_ctx_inner(
+        map,
+        industries,
+        stations,
+        town,
+        tick,
+        climate,
+        calendar_year,
+        house_catalog,
+        house_overrides,
+        Some(runtime),
+        dirty,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn try_expand_growing_town_with_ctx_inner(
+    map: &mut Map,
+    _industries: &[Industry],
+    _stations: &[Station],
+    town: &mut Town,
+    tick: u64,
+    climate: crate::world_gen::Climate,
+    calendar_year: u32,
+    house_catalog: &[crate::house_spec::HouseSpecDef],
+    house_overrides: &[u16],
+    runtime: Option<&mut TownGrowthRuntimeContext<'_>>,
+    dirty: &mut Vec<TileCoord>,
+) -> bool {
     let before_houses = town.num_houses;
-    let placed = crate::town_expand::expand_town_physically_with_ctx(map, town, tick, ctx);
+    let has_newgrf_houses = !house_catalog.is_empty()
+        || house_overrides
+            .iter()
+            .any(|&override_id| override_id != crate::house_spec::INVALID_HOUSE);
+    let (placed, used_global_vanilla_walker) = if has_newgrf_houses {
+        let ctx = crate::town_expand::TownExpandContext {
+            climate,
+            calendar_year,
+            house_catalog,
+            house_overrides,
+        };
+        (
+            crate::town_expand::expand_town_physically_with_ctx(map, town, tick, ctx),
+            false,
+        )
+    } else if let Some(runtime) = runtime {
+        (
+            crate::world_gen::grow_vanilla_town_once_with_rng(
+                map,
+                town,
+                climate,
+                runtime.snow_line_height,
+                calendar_year,
+                runtime.bridge_spec_catalog,
+                runtime.rng,
+            )
+            .into_iter()
+            .collect(),
+            true,
+        )
+    } else {
+        let ctx = crate::town_expand::TownExpandContext {
+            climate,
+            calendar_year,
+            house_catalog,
+            house_overrides,
+        };
+        (
+            crate::town_expand::expand_town_physically_with_ctx(map, town, tick, ctx),
+            false,
+        )
+    };
     if placed.is_empty() {
         return false;
     }
-    // Feedback de crecimiento si solo se extendió calle (sin casa nueva).
-    if town.num_houses == before_houses {
+    // El expansor histórico añadía un habitante abstracto si sólo extendía
+    // calle. `GrowTown` nativo no lo hace: el cambio de población llega sólo
+    // desde `BuildTownHouse`, por lo que esa aproximación no puede aplicarse a
+    // la ruta que ya usa el caminador global.
+    if !used_global_vanilla_walker && town.num_houses == before_houses {
         town.population = town.population.saturating_add(TOWN_GROWTH_POPULATION_STEP);
     }
     dirty.extend(placed);
@@ -2056,6 +2223,57 @@ mod tests {
     }
 
     #[test]
+    fn runtime_vanilla_growth_consumes_the_game_randomizer() {
+        let mut map = Map::new_flat(32, 32, 0);
+        let town_pos = TileCoord::new(16, 16);
+        let mut road = map.get(town_pos).unwrap();
+        road.kind = TileKind::Road;
+        road.m1 = crate::company::OWNER_TOWN_M1;
+        road.m3 = 0xF0;
+        road.m5 = 0x0A;
+        road.m8 = 0x0FC0;
+        map.set_tile(town_pos, road).unwrap();
+        let mut towns = vec![Town {
+            id: 0,
+            pos: town_pos,
+            name: "Global RNG".into(),
+            population: 100,
+            is_growing: true,
+            grow_counter: 0,
+            growth_rate: 70,
+            num_houses: 22,
+            ..Default::default()
+        }];
+        update_town_radius(&mut towns[0]);
+        let mut rng = Randomizer {
+            state: [3_488_465_418, 1_441_958_355],
+        };
+        let before = rng.state;
+
+        let dirty = grow_town_if_served_with_runtime_ctx(
+            &mut map,
+            &[],
+            &[],
+            &mut towns,
+            1,
+            Climate::Temperate,
+            10,
+            1950,
+            &[],
+            &[],
+            &crate::bridge_spec::vanilla_bridge_spec_catalog(),
+            &mut rng,
+        );
+
+        assert_eq!(dirty, vec![town_pos]);
+        assert_ne!(rng.state, before, "el walker debe consumir _random global");
+        assert_eq!(rng.state, [2_803_164_071, 1_158_654_456]);
+        assert_eq!(towns[0].population, 100, "una calle no añade población");
+        assert_eq!(towns[0].num_houses, 22);
+        assert_eq!(towns[0].grow_counter, 70);
+    }
+
+    #[test]
     fn town_does_not_grow_when_goals_unmet() {
         let mut map = Map::new_flat(16, 16, 0);
         let town_pos = TileCoord::new(8, 8);
@@ -2149,14 +2367,13 @@ mod tests {
     }
 
     #[test]
-    fn fund_buildings_grows_without_station() {
+    fn active_town_tick_grows_without_rechecking_station_or_funding() {
         let mut map = Map::new_flat(16, 16, 0);
         let mut towns = vec![Town {
             id: 0,
             pos: TileCoord::new(8, 8),
             name: "Funded".into(),
             population: 50,
-            fund_buildings_months: 3,
             is_growing: true,
             grow_counter: 0,
             growth_rate: 70,
@@ -2168,7 +2385,7 @@ mod tests {
     }
 
     #[test]
-    fn historical_funding_count_does_not_keep_growth_forced() {
+    fn historical_funding_count_does_not_reenable_growth() {
         let mut map = Map::new_flat(16, 16, 0);
         let mut towns = vec![Town {
             id: 0,
@@ -2176,7 +2393,7 @@ mod tests {
             name: "Expired funding".into(),
             population: 50,
             growth_funded: 1,
-            is_growing: true,
+            is_growing: false,
             grow_counter: 0,
             growth_rate: 70,
             ..Default::default()
@@ -2186,10 +2403,7 @@ mod tests {
 
         assert!(dirty.is_empty());
         assert_eq!(towns[0].population, 50);
-        assert_eq!(
-            towns[0].grow_counter,
-            u16::try_from(TOWN_GROWTH_TICKS - 1).unwrap_or(u16::MAX)
-        );
+        assert_eq!(towns[0].grow_counter, 0);
     }
 
     #[test]

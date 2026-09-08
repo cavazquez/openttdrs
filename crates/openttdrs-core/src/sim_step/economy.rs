@@ -1051,16 +1051,19 @@ pub(super) fn produce_town_demand(state: &mut GameState, tick: u64) {
 }
 
 pub(super) fn grow_towns(state: &mut GameState, tick: u64) {
-    let dirty = town::grow_town_if_served_with_ctx(
+    let dirty = town::grow_town_if_served_with_runtime_ctx(
         &mut state.map,
         &state.industries,
         &state.stations,
         &mut state.towns,
         tick,
         state.climate,
+        state.snow_line_height,
         state.calendar.year,
         &state.house_spec_catalog,
         &state.house_overrides,
+        &state.bridge_spec_catalog,
+        &mut state.random,
     );
     state.runtime.landscape_tile_dirty.extend(dirty);
 }

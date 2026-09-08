@@ -1970,15 +1970,62 @@ fn grow_generated_town_road_once(
     context: &GeneratedTownGrowthContext,
     rng: &mut crate::cargodist::parity::Randomizer,
 ) -> Option<TileCoord> {
+    let tile = generated_town_growth_base_road(map, town)?;
+    grow_generated_town_at_road(map, town, tile, context, rng)
+}
+
+/// Encuentra la carretera base que `GrowTown` entrega a `GrowTownAtRoad`.
+///
+/// Encontrar una calle y que la caminata falle no es equivalente a no encontrar
+/// ninguna: sólo el segundo caso llega a la rama final de `GenRandomRoadBits`.
+fn generated_town_growth_base_road(map: &crate::map::Map, town: &Town) -> Option<TileCoord> {
     let mut tile = town.pos;
     for &(dx, dy) in &TOWN_GROWTH_COORD_MOD {
         let bits = generated_town_road_bits(map, tile);
         if bits != 0 {
-            return grow_generated_town_at_road(map, town, tile, context, rng);
+            return Some(tile);
         }
         tile = TileCoord::new(tile.x + dx, tile.y + dy);
     }
     None
+}
+
+/// Ejecuta una llamada vanilla de `GrowTown` sobre el stream RNG de la partida.
+///
+/// La creación procedural ya usa el mismo caminador, pero el runtime no puede
+/// derivar un LCG de su tick: `TownTickHandler` llama a `RandomDiagDir`,
+/// `Chance16` y `TryBuildTownHouse` sobre `_random`.  Esta entrada conserva la
+/// misma frontera para pueblos vanilla cargados desde un `.sav`; el llamador
+/// debe seguir usando la ruta específica de `NewGRF` cuando haya catálogo de
+/// casas activo, porque sus callbacks todavía no pertenecen a este walker.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn grow_vanilla_town_once_with_rng(
+    map: &mut crate::map::Map,
+    town: &mut Town,
+    climate: crate::world_gen::Climate,
+    snow_line_height: u8,
+    calendar_year: u32,
+    bridge_spec_catalog: &[BridgeSpecDef],
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> Option<TileCoord> {
+    let context = GeneratedTownGrowthContext {
+        climate,
+        snow_line_height,
+        calendar_year,
+        bridge_spec_catalog: bridge_spec_catalog.to_vec(),
+    };
+    if let Some(base_road) = generated_town_growth_base_road(map, town) {
+        return grow_generated_town_at_road(map, town, base_road, &context, rng);
+    }
+
+    // La última rama de `GrowTown` sólo se alcanza cuando la ciudad ya no
+    // tiene ninguna calle base. `GenRandomRoadBits` toma una única palabra de
+    // `_random`; reutilizar el bootstrap preserva tanto esa palabra como los
+    // bytes municipales de `CMD_BUILD_ROAD` para el caso raro de una red
+    // completamente demolida.
+    let bootstrap = initial_town_growth_bootstrap(map, town.pos, rng)?;
+    write_generated_town_road_to_map(map, bootstrap.pos, bootstrap.bits, town.id)
+        .then_some(bootstrap.pos)
 }
 
 fn grow_generated_town_at_road(
@@ -3014,6 +3061,51 @@ mod tests {
         assert_eq!(road.pos, TileCoord::new(47, 23));
         assert_eq!(road.bits, ROAD_BITS_AXIS_Y);
         assert_eq!(rng.state, [679_301_066, 1_509_800_000]);
+    }
+
+    #[test]
+    fn runtime_walker_does_not_seed_after_an_existing_road_fails() {
+        let mut map = Map::new_flat(16, 16, 0);
+        for y in 0..16 {
+            for x in 0..16 {
+                map.set_kind(TileCoord::new(x, y), TileKind::Water)
+                    .expect("inundar fixture");
+            }
+        }
+        let center = TileCoord::new(8, 8);
+        let fallback = TileCoord::new(10, 8);
+        map.set_kind(fallback, TileKind::Grass)
+            .expect("candidato de fallback");
+        let mut road = map.get(center).expect("carretera base");
+        road.kind = TileKind::Road;
+        road.m1 = crate::company::OWNER_TOWN_M1;
+        road.m3 = TOWN_ROAD_NO_TRAM_OWNER;
+        road.m5 = ROAD_BITS_AXIS_X;
+        road.m8 = TOWN_ROAD_INVALID_TRAM_TYPE;
+        map.set_tile(center, road).expect("escribir carretera base");
+        let mut town = Town {
+            id: 0,
+            pos: center,
+            num_houses: 22,
+            layout: TownLayout::Original,
+            ..Town::default()
+        };
+        update_town_radius(&mut town);
+        let mut rng = Randomizer::new(1);
+
+        assert_eq!(
+            grow_vanilla_town_once_with_rng(
+                &mut map,
+                &mut town,
+                Climate::Temperate,
+                10,
+                1950,
+                &crate::bridge_spec::vanilla_bridge_spec_catalog(),
+                &mut rng,
+            ),
+            None,
+        );
+        assert_eq!(map.get_kind(fallback), Some(TileKind::Grass));
     }
 
     #[test]

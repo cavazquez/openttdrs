@@ -16,6 +16,7 @@ mod towns;
 pub(crate) use industries::{
     plant_random_farm_field_runtime, plant_random_farm_fields_runtime, try_place_runtime_industry,
 };
+pub(crate) use towns::grow_vanilla_town_once_with_rng;
 
 use crate::cargodist::parity::Randomizer;
 use crate::game_state::GameState;

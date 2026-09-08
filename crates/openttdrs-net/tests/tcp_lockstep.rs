@@ -87,6 +87,46 @@ fn wait_heartbeat(client: &ClientSession, expected_tick: u64, timeout: Duration)
     }
 }
 
+fn assert_no_state_event_before_heartbeat(
+    client: &ClientSession,
+    expected_tick: u64,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match client.try_recv() {
+            Some(SessionEvent::Heartbeat { tick }) => {
+                assert_eq!(tick, expected_tick);
+                return;
+            }
+            Some(SessionEvent::PeerList { .. }) => {}
+            Some(SessionEvent::AdvanceTicks { count }) => {
+                panic!("avance duplicado de {count} antes de la barrera heartbeat")
+            }
+            Some(SessionEvent::Commit { seq, .. }) => {
+                panic!("commit duplicado seq={seq} antes de la barrera heartbeat")
+            }
+            Some(other) => panic!("evento inesperado antes de heartbeat: {other:?}"),
+            None if Instant::now() < deadline => thread::sleep(Duration::from_millis(5)),
+            None => panic!("timeout esperando heartbeat de frontera"),
+        }
+    }
+}
+
+fn wait_resync_welcome(client: &ClientSession, timeout: Duration) -> SessionEvent {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match client.try_recv() {
+            Some(welcome @ SessionEvent::Welcome { .. }) => return welcome,
+            Some(SessionEvent::Desync { .. } | SessionEvent::PeerList { .. }) => {}
+            Some(SessionEvent::Heartbeat { .. }) => {}
+            Some(other) => panic!("se esperaba Welcome de resync, llegó {other:?}"),
+            None if Instant::now() < deadline => thread::sleep(Duration::from_millis(5)),
+            None => panic!("timeout esperando Welcome de resync"),
+        }
+    }
+}
+
 fn wait_for_peer_count(server: &ListenServer, expected: usize, timeout: Duration) {
     let deadline = Instant::now() + timeout;
     while server.peer_ids().len() != expected && Instant::now() < deadline {
@@ -493,7 +533,9 @@ fn late_joiner_gets_live_snapshot_not_boot() {
         host.step();
     }
     server.update_snapshot(host.save_json().unwrap());
-    thread::sleep(Duration::from_millis(30));
+    server
+        .synchronize()
+        .expect("snapshot live publicado antes del late join");
 
     let client = match maybe_connect_client(&bind) {
         Some(client) => client,
@@ -508,6 +550,200 @@ fn late_joiner_gets_live_snapshot_not_boot() {
         "late join debe recibir el tick actual"
     );
     assert_eq!(host.canonical_hash(), remote.canonical_hash());
+}
+
+#[test]
+fn snapshot_frontier_applies_commits_and_advances_exactly_once() {
+    let mut host = GameState::new(16, 16);
+    let server = match maybe_start_server("127.0.0.1:0", host.save_json().unwrap()) {
+        Some(server) => server,
+        None => return,
+    };
+    let bind = server.local_addr().to_string();
+
+    // Join antes del commit: debe recibir la operación por el log, no en el
+    // snapshot con el que entró.
+    let early = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    let early_welcome = wait_event(&early, Duration::from_secs(2));
+    let mut early_state = GameState::new(1, 1);
+    apply_session_event(&mut early_state, &early_welcome).unwrap();
+
+    let command = Command::PlaceRoad(TileCoord::new(3, 3));
+    apply_command(&mut host, &command).unwrap();
+    server
+        .handle()
+        .broadcast_commit_for_company_with_snapshot(
+            CompanyId::PLAYER,
+            command.clone(),
+            host.save_json().unwrap(),
+        )
+        .unwrap();
+    server.synchronize().unwrap();
+
+    let commit = wait_event(&early, Duration::from_secs(2));
+    assert!(matches!(
+        commit,
+        SessionEvent::Commit {
+            seq: 1,
+            company_id: CompanyId::PLAYER,
+            command: Command::PlaceRoad(coord),
+        } if coord == TileCoord::new(3, 3)
+    ));
+    apply_session_event(&mut early_state, &commit).unwrap();
+    assert_eq!(early_state.canonical_hash(), host.canonical_hash());
+    assert_eq!(server.next_seq(), 2);
+
+    // Join después del commit: el Welcome ya lo contiene y su next_seq forma
+    // parte de la misma frontera que el snapshot.
+    let after_commit = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    let after_commit_welcome = wait_event(&after_commit, Duration::from_secs(2));
+    let SessionEvent::Welcome { next_seq, .. } = &after_commit_welcome else {
+        panic!("se esperaba Welcome después del commit");
+    };
+    assert_eq!(*next_seq, server.next_seq());
+    let mut after_commit_state = GameState::new(1, 1);
+    apply_session_event(&mut after_commit_state, &after_commit_welcome).unwrap();
+    assert_eq!(after_commit_state.canonical_hash(), host.canonical_hash());
+
+    // Los peers que ya estaban conectados reciben el Advance una sola vez;
+    // el snapshot publicado en la misma orden será para los joins posteriores.
+    host.step();
+    server
+        .broadcast_advance_with_snapshot(1, host.save_json().unwrap())
+        .unwrap();
+    server.synchronize().unwrap();
+
+    let early_advance = wait_event(&early, Duration::from_secs(2));
+    let after_commit_advance = wait_event(&after_commit, Duration::from_secs(2));
+    assert!(matches!(
+        early_advance,
+        SessionEvent::AdvanceTicks { count: 1 }
+    ));
+    assert!(matches!(
+        after_commit_advance,
+        SessionEvent::AdvanceTicks { count: 1 }
+    ));
+    apply_session_event(&mut early_state, &early_advance).unwrap();
+    apply_session_event(&mut after_commit_state, &after_commit_advance).unwrap();
+    assert_eq!(early_state.canonical_hash(), host.canonical_hash());
+    assert_eq!(after_commit_state.canonical_hash(), host.canonical_hash());
+
+    let after_advance = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    let after_advance_welcome = wait_event(&after_advance, Duration::from_secs(2));
+    let mut after_advance_state = GameState::new(1, 1);
+    apply_session_event(&mut after_advance_state, &after_advance_welcome).unwrap();
+    assert_eq!(after_advance_state.canonical_hash(), host.canonical_hash());
+
+    // El heartbeat es una barrera ordenada: un evento previo duplicado tendría
+    // que aparecer antes y fallaría el test sin depender de una espera fija.
+    server.broadcast_heartbeat(host.tick.get()).unwrap();
+    server.synchronize().unwrap();
+    assert_no_state_event_before_heartbeat(&early, host.tick.get(), Duration::from_secs(2));
+    assert_no_state_event_before_heartbeat(&after_commit, host.tick.get(), Duration::from_secs(2));
+    assert_no_state_event_before_heartbeat(&after_advance, host.tick.get(), Duration::from_secs(2));
+
+    // Resync usa la misma frontera actual: el Welcome posterior reemplaza el
+    // estado una vez, sin reaplicar el commit ni el advance incluidos.
+    early.report_desync(host.tick.get(), 0x11, 0x22).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match server.try_recv() {
+            Some(SessionEvent::Desync { .. }) => break,
+            Some(_) => {}
+            None if Instant::now() < deadline => thread::sleep(Duration::from_millis(5)),
+            None => panic!("timeout esperando desync en el servidor"),
+        }
+    }
+    server.synchronize().unwrap();
+    let resync = wait_resync_welcome(&early, Duration::from_secs(2));
+    let SessionEvent::Welcome { next_seq, .. } = &resync else {
+        panic!("se esperaba Welcome de resync");
+    };
+    assert_eq!(*next_seq, server.next_seq());
+    let mut resynced = GameState::new(1, 1);
+    apply_session_event(&mut resynced, &resync).unwrap();
+    assert_eq!(resynced.canonical_hash(), host.canonical_hash());
+
+    server.broadcast_heartbeat(host.tick.get()).unwrap();
+    server.synchronize().unwrap();
+    assert_no_state_event_before_heartbeat(&early, host.tick.get(), Duration::from_secs(2));
+}
+
+#[test]
+fn pending_handshake_crossing_advance_frontier_never_replays_it() {
+    let mut host = GameState::new(8, 8);
+    let server = match maybe_start_server("127.0.0.1:0", host.save_json().unwrap()) {
+        Some(server) => server,
+        None => return,
+    };
+    let bind = server.local_addr().to_string();
+
+    // Reproduce la carrera auditada: TCP ya aceptado, pero Hello todavía no
+    // llegó. La barrera confirma que el hilo de listen vio esa conexión antes
+    // de cruzar la frontera de simulación.
+    let mut pending = TcpStream::connect(&bind).expect("conecta socket pendiente");
+    pending
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .expect("configura timeout socket pendiente");
+    server.synchronize().unwrap();
+
+    host.step();
+    server
+        .broadcast_advance_with_snapshot(1, host.save_json().unwrap())
+        .unwrap();
+    server.synchronize().unwrap();
+
+    write_message(
+        &mut pending,
+        &NetMessage::Hello {
+            protocol: PROTOCOL_VERSION,
+        },
+    )
+    .unwrap();
+    let welcome = read_message(&mut pending).expect("recibe Welcome de frontera");
+    let NetMessage::Welcome {
+        snapshot_json,
+        next_seq,
+        ..
+    } = welcome
+    else {
+        panic!("se esperaba Welcome después de la frontera")
+    };
+    let remote = GameState::load_json(&snapshot_json).expect("snapshot de Welcome válido");
+    assert_eq!(remote.tick.get(), host.tick.get());
+    assert_eq!(remote.canonical_hash(), host.canonical_hash());
+    assert_eq!(next_seq, server.next_seq());
+
+    // La promoción puede añadir PeerList, por eso Heartbeat funciona como
+    // marcador ordenado del stream: AdvanceTicks antes de él sería la doble
+    // aplicación que disparaba el bug original.
+    server.broadcast_heartbeat(host.tick.get()).unwrap();
+    server.synchronize().unwrap();
+    let mut heartbeat_seen = false;
+    for _ in 0..3 {
+        match read_message(&mut pending).expect("drena frontera del handshake") {
+            NetMessage::PeerList { .. } => {}
+            NetMessage::Heartbeat { tick } => {
+                assert_eq!(tick, host.tick.get());
+                heartbeat_seen = true;
+                break;
+            }
+            NetMessage::AdvanceTicks { count } => {
+                panic!("avance duplicado de {count} para snapshot ya avanzado")
+            }
+            other => panic!("mensaje inesperado tras Welcome de frontera: {other:?}"),
+        }
+    }
+    assert!(heartbeat_seen, "Heartbeat debe cerrar la barrera de stream");
 }
 
 #[test]

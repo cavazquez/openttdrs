@@ -12,7 +12,8 @@ pub const PROTOCOL_VERSION: u16 = 3;
 pub enum NetMessage {
     /// Cliente → servidor al conectar.
     Hello { protocol: u16 },
-    /// Servidor → cliente: snapshot JSON de `GameState` (`save_json`).
+    /// Servidor → cliente: snapshot JSON de `GameState` (`save_json`) y la
+    /// frontera `next_seq` tomada junto a él.
     Welcome {
         protocol: u16,
         snapshot_json: String,

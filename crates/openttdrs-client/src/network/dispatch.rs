@@ -79,11 +79,26 @@ pub fn apply_player_command(state: &mut GameState, cmd: &Command) -> Result<(), 
         NetworkRole::Offline => apply_command(state, cmd),
         NetworkRole::ListenServer => {
             apply_command(state, cmd)?;
-            if let Some(server) = &guard.server
-                && let Err(e) =
-                    server.broadcast_commit_for_company(state.active_company, cmd.clone())
-            {
-                bevy::log::warn!("network: broadcast commit failed: {e}");
+            if let Some(server) = &guard.server {
+                match state.save_json() {
+                    Ok(snapshot) => {
+                        if let Err(e) = server.broadcast_commit_for_company_with_snapshot(
+                            state.active_company,
+                            cmd.clone(),
+                            snapshot,
+                        ) {
+                            bevy::log::warn!("network: broadcast commit failed: {e}");
+                        }
+                    }
+                    Err(e) => {
+                        bevy::log::warn!("network: commit snapshot failed: {e}");
+                        if let Err(e) =
+                            server.broadcast_commit_for_company(state.active_company, cmd.clone())
+                        {
+                            bevy::log::warn!("network: broadcast commit failed: {e}");
+                        }
+                    }
+                }
             }
             Ok(())
         }

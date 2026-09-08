@@ -103,11 +103,11 @@ impl NetworkRuntime {
         }
     }
 
-    pub(crate) fn publish_snapshot(&self, snapshot_json: String) {
+    pub(crate) fn broadcast_advance_with_snapshot(&self, count: u32, snapshot_json: String) {
         if let Some(server) = &self.server
             && let Ok(g) = server.lock()
         {
-            g.update_snapshot(snapshot_json);
+            let _ = g.broadcast_advance_with_snapshot(count, snapshot_json);
         }
     }
 
@@ -503,10 +503,12 @@ fn handle_event(
 }
 
 fn broadcast_tick_after_step(net: Res<NetworkRuntime>, sim: Res<SimWorld>) {
-    net.broadcast_advance(1);
     match sim.state.save_json() {
-        Ok(json) => net.publish_snapshot(json),
-        Err(e) => warn!("network: snapshot update failed: {e}"),
+        Ok(json) => net.broadcast_advance_with_snapshot(1, json),
+        Err(e) => {
+            warn!("network: snapshot update failed: {e}");
+            net.broadcast_advance(1);
+        }
     }
     let tick = sim.state.tick.get();
     // Heartbeat frecuente (~cada tick) para failover; hash cada segundo de juego.

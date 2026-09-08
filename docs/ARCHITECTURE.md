@@ -429,6 +429,10 @@ que no round-trippea están en la [matriz SAV](parity/sav-compatibility.md).
 - ✅ Las compañías remotas reciben IDs exclusivos `1..14`; al agotarse el
   pool, el handshake responde `Reject` antes de enviar `Welcome` y reutiliza
   el slot liberado al desconectar.
+- ✅ Snapshot, `next_seq` y copia autoritativa comparten una frontera FIFO: un
+  peer anterior recibe el commit/avance por el log, mientras que un late-joiner
+  posterior recibe sólo el snapshot que ya lo contiene. El resync usa la misma
+  frontera; las pruebas TCP fijan el interleaving con barreras, no sleeps.
 - ✅ Bin `openttdrs-dedicated` — headless (`--bind HOST:PORT`).
 ```
 TCP: servidor envía Commit / AdvanceTicks / HashCheck;

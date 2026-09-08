@@ -77,11 +77,19 @@ fn main() {
 
         if last_tick.elapsed() >= tick_period {
             state.step();
-            // Primero avisar a peers ya conectados; luego publicar snapshot para late-join.
-            let _ = server.broadcast_advance(1);
+            // Una única frontera evita que un late-joiner reciba tanto el
+            // snapshot ya avanzado como el AdvanceTicks que lo produjo.
+            match state.save_json() {
+                Ok(snapshot) => {
+                    let _ = server.broadcast_advance_with_snapshot(1, snapshot);
+                }
+                Err(e) => {
+                    eprintln!("dedicated: snapshot failed: {e}");
+                    let _ = server.broadcast_advance(1);
+                }
+            }
             let tick = state.tick.get();
             let _ = server.broadcast_heartbeat(tick);
-            publish_snapshot(&server, &state);
             ticks_since_hash += 1;
             if ticks_since_hash >= 37 {
                 ticks_since_hash = 0;

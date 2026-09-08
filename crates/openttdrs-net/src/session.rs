@@ -93,8 +93,18 @@ enum ServerCmd {
     LocalCommit {
         company_id: CompanyId,
         command: Command,
+        snapshot_json: Option<String>,
     },
-    Advance(u32),
+    Advance {
+        count: u32,
+        snapshot_json: Option<String>,
+    },
+    PublishSnapshot {
+        snapshot_json: String,
+    },
+    /// Barrera FIFO para pruebas y hosts que necesitan saber que el hilo de
+    /// transporte ya publicó todos los comandos previos.
+    Synchronize(Sender<()>),
     HashCheck {
         tick: u64,
         hash: u64,
@@ -110,9 +120,16 @@ enum ServerCmd {
     Shutdown,
 }
 
-/// Snapshot vivo compartido con el hilo de accept (late join).
-type LiveSnapshot = Arc<Mutex<String>>;
-type SharedSeq = Arc<Mutex<u64>>;
+/// Estado visible a handshakes/resync en una sola frontera. El snapshot y la
+/// secuencia se leen juntos: no puede existir un `Welcome` que combine uno
+/// posterior con el otro anterior.
+#[derive(Clone)]
+struct SnapshotFrontier {
+    snapshot_json: String,
+    next_seq: u64,
+}
+
+type SharedFrontier = Arc<Mutex<SnapshotFrontier>>;
 type SharedPeerIds = Arc<Mutex<Vec<u64>>>;
 
 /// Límites de progreso para el transporte TCP de una sesión.
@@ -145,8 +162,7 @@ impl Default for SessionTimeouts {
 #[derive(Clone)]
 pub struct ListenServerHandle {
     cmd_tx: Sender<ServerCmd>,
-    live_snapshot: LiveSnapshot,
-    next_seq: SharedSeq,
+    frontier: SharedFrontier,
     peer_ids: SharedPeerIds,
 }
 
@@ -165,13 +181,49 @@ impl ListenServerHandle {
             .send(ServerCmd::LocalCommit {
                 company_id,
                 command,
+                snapshot_json: None,
+            })
+            .map_err(|_| NetError::Closed)
+    }
+
+    /// Publica un commit local y el snapshot que ya lo contiene como una sola
+    /// frontera. Los late-joiners verán el snapshot o el commit, nunca ambos.
+    pub fn broadcast_commit_for_company_with_snapshot(
+        &self,
+        company_id: CompanyId,
+        command: Command,
+        snapshot_json: String,
+    ) -> Result<(), NetError> {
+        self.cmd_tx
+            .send(ServerCmd::LocalCommit {
+                company_id,
+                command,
+                snapshot_json: Some(snapshot_json),
             })
             .map_err(|_| NetError::Closed)
     }
 
     pub fn broadcast_advance(&self, count: u32) -> Result<(), NetError> {
         self.cmd_tx
-            .send(ServerCmd::Advance(count))
+            .send(ServerCmd::Advance {
+                count,
+                snapshot_json: None,
+            })
+            .map_err(|_| NetError::Closed)
+    }
+
+    /// Publica un avance y el snapshot que ya lo contiene como una sola
+    /// frontera de simulación.
+    pub fn broadcast_advance_with_snapshot(
+        &self,
+        count: u32,
+        snapshot_json: String,
+    ) -> Result<(), NetError> {
+        self.cmd_tx
+            .send(ServerCmd::Advance {
+                count,
+                snapshot_json: Some(snapshot_json),
+            })
             .map_err(|_| NetError::Closed)
     }
 
@@ -204,22 +256,31 @@ impl ListenServerHandle {
             .map_err(|_| NetError::Closed)
     }
 
-    /// Actualiza de inmediato el JSON de `Welcome` (visible al próximo accept).
+    /// Encola un snapshot para la frontera posterior a todos los eventos ya
+    /// publicados; no escribe el mutex desde el hilo de UI.
     pub fn update_snapshot(&self, snapshot_json: String) {
-        let mut guard = self
-            .live_snapshot
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        *guard = snapshot_json;
+        let _ = self
+            .cmd_tx
+            .send(ServerCmd::PublishSnapshot { snapshot_json });
+    }
+
+    /// Espera a que el hilo de transporte procese lo que estaba antes en su
+    /// cola. Es principalmente útil para oráculos deterministas de red.
+    pub fn synchronize(&self) -> Result<(), NetError> {
+        let (ack_tx, ack_rx) = mpsc::channel();
+        self.cmd_tx
+            .send(ServerCmd::Synchronize(ack_tx))
+            .map_err(|_| NetError::Closed)?;
+        ack_rx.recv().map_err(|_| NetError::Closed)
     }
 
     /// Próximo `seq` de commit (para continuidad tras failover).
     #[must_use]
     pub fn next_seq(&self) -> u64 {
-        *self
-            .next_seq
+        self.frontier
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .next_seq
     }
 
     /// `peer_id` de clientes actualmente conectados.
@@ -262,9 +323,10 @@ impl ListenServer {
 
     /// Arranca el servidor continuando desde `initial_next_seq` (failover ADR 0004).
     ///
-    /// `snapshot_json` es el Welcome inicial; el host debe llamar
-    /// [`ListenServerHandle::update_snapshot`] tras cada avance de sim para que
-    /// los late-joiners reciban el estado **actual** (no el del arranque).
+    /// `snapshot_json` es el `Welcome` inicial. Los productores de ticks y
+    /// commits deben preferir los métodos `*_with_snapshot` para publicar una
+    /// frontera única a los late-joiners; `update_snapshot` queda para cambios
+    /// de estado sin evento de log asociado.
     pub fn start_with_seq(
         bind: &str,
         snapshot_json: String,
@@ -288,11 +350,12 @@ impl ListenServer {
         let local_addr = listener.local_addr()?;
         let (cmd_tx, cmd_rx) = mpsc::channel();
         let (event_tx, event_rx) = mpsc::channel();
-        let live: LiveSnapshot = Arc::new(Mutex::new(snapshot_json));
-        let next_seq: SharedSeq = Arc::new(Mutex::new(initial_next_seq.max(1)));
+        let frontier: SharedFrontier = Arc::new(Mutex::new(SnapshotFrontier {
+            snapshot_json,
+            next_seq: initial_next_seq.max(1),
+        }));
         let peer_ids: SharedPeerIds = Arc::new(Mutex::new(Vec::new()));
-        let live_thread = Arc::clone(&live);
-        let next_seq_thread = Arc::clone(&next_seq);
+        let frontier_thread = Arc::clone(&frontier);
         let peer_ids_thread = Arc::clone(&peer_ids);
         let bind_owned = bind.to_string();
         let join = thread::Builder::new()
@@ -300,8 +363,7 @@ impl ListenServer {
             .spawn(move || {
                 server_thread(
                     listener,
-                    live_thread,
-                    next_seq_thread,
+                    frontier_thread,
                     peer_ids_thread,
                     cmd_rx,
                     event_tx,
@@ -313,8 +375,7 @@ impl ListenServer {
         Ok(Self {
             handle: ListenServerHandle {
                 cmd_tx,
-                live_snapshot: live,
-                next_seq,
+                frontier,
                 peer_ids,
             },
             event_rx,
@@ -355,6 +416,17 @@ impl ListenServer {
         self.handle.broadcast_advance(count)
     }
 
+    /// Retransmite un avance junto al snapshot que ya lo incorpora para que los
+    /// late-joiners crucen una única frontera de simulación.
+    pub fn broadcast_advance_with_snapshot(
+        &self,
+        count: u32,
+        snapshot_json: String,
+    ) -> Result<(), NetError> {
+        self.handle
+            .broadcast_advance_with_snapshot(count, snapshot_json)
+    }
+
     pub fn broadcast_hash(&self, tick: u64, hash: u64) -> Result<(), NetError> {
         self.handle.broadcast_hash(tick, hash)
     }
@@ -375,6 +447,12 @@ impl ListenServer {
 
     pub fn update_snapshot(&self, snapshot_json: String) {
         self.handle.update_snapshot(snapshot_json);
+    }
+
+    /// Espera la frontera de publicación actual. Útil para pruebas de carrera
+    /// y para hosts que coordinan un late-join con un snapshot recién emitido.
+    pub fn synchronize(&self) -> Result<(), NetError> {
+        self.handle.synchronize()
     }
 
     #[must_use]
@@ -438,8 +516,7 @@ enum PendingHandshakePoll {
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn server_thread(
     listener: TcpListener,
-    live_snapshot: LiveSnapshot,
-    shared_next_seq: SharedSeq,
+    shared_frontier: SharedFrontier,
     shared_peer_ids: SharedPeerIds,
     cmd_rx: Receiver<ServerCmd>,
     event_tx: Sender<SessionEvent>,
@@ -458,27 +535,20 @@ fn server_thread(
     // Copia autoritativa para validar propuestas antes de asignarles secuencia.
     // El host publica snapshots; cuando cambian, esta copia se realinea para
     // incluir ticks y mutaciones locales.
-    let mut authority_snapshot = live_snapshot
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clone();
+    let mut authority_snapshot = snapshot_frontier(&shared_frontier).snapshot_json;
     let mut authority_state = GameState::load_json(&authority_snapshot).ok();
     eprintln!("openttdrs-net: listen-server on {bind}");
 
     loop {
-        let current_snapshot = live_snapshot
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone();
+        let current_frontier = snapshot_frontier(&shared_frontier);
+        let current_snapshot = current_frontier.snapshot_json;
         if current_snapshot != authority_snapshot
             && let Ok(state) = GameState::load_json(&current_snapshot)
         {
             authority_state = Some(state);
             authority_snapshot.clone_from(&current_snapshot);
         }
-        let next_seq = *shared_next_seq
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let next_seq = current_frontier.next_seq;
 
         if let Err(error) =
             accept_pending_handshakes(&listener, &mut pending_handshakes, &mut next_peer_id)
@@ -546,7 +616,16 @@ fn server_thread(
                         i += 1;
                         continue;
                     }
-                    let seq = reserve_next_seq(&shared_next_seq);
+                    let snapshot_after_commit = authority_state
+                        .as_ref()
+                        .and_then(|state| state.save_json().ok());
+                    let seq = reserve_next_seq_and_publish(
+                        &shared_frontier,
+                        snapshot_after_commit.as_deref(),
+                    );
+                    if let Some(snapshot) = snapshot_after_commit {
+                        authority_snapshot = snapshot;
+                    }
                     let commit = NetMessage::Commit {
                         seq,
                         company_id,
@@ -578,10 +657,11 @@ fn server_thread(
                     broadcast_and_refresh_peer_list(&mut clients, &shared_peer_ids, &report);
                     if let Some(index) = clients.iter().position(|client| client.peer_id == peer_id)
                     {
+                        let resync_frontier = snapshot_frontier(&shared_frontier);
                         let resync = NetMessage::Welcome {
                             protocol: PROTOCOL_VERSION,
-                            snapshot_json: current_snapshot.clone(),
-                            next_seq,
+                            snapshot_json: resync_frontier.snapshot_json,
+                            next_seq: resync_frontier.next_seq,
                             peer_id,
                             company_id: clients[index].company_id,
                         };
@@ -619,6 +699,7 @@ fn server_thread(
             Ok(ServerCmd::LocalCommit {
                 company_id,
                 command,
+                snapshot_json,
             }) => {
                 if let Some(state) = authority_state.as_mut() {
                     // El host ya aplicó la mutación en su hilo de simulación;
@@ -626,24 +707,65 @@ fn server_thread(
                     // posteriores. Un error aquí indica snapshot atrasado.
                     let _ = apply_command_as_company(state, company_id, &command);
                 }
+                let snapshot_after_commit = snapshot_json.or_else(|| {
+                    authority_state
+                        .as_ref()
+                        .and_then(|state| state.save_json().ok())
+                });
+                let seq = reserve_next_seq_and_publish(
+                    &shared_frontier,
+                    snapshot_after_commit.as_deref(),
+                );
+                if let Some(snapshot) = snapshot_after_commit {
+                    update_authority_from_snapshot(
+                        &mut authority_state,
+                        &mut authority_snapshot,
+                        snapshot,
+                    );
+                }
                 let commit = NetMessage::Commit {
-                    seq: reserve_next_seq(&shared_next_seq),
+                    seq,
                     company_id,
                     command,
                 };
                 broadcast_and_refresh_peer_list(&mut clients, &shared_peer_ids, &commit);
             }
-            Ok(ServerCmd::Advance(count)) => {
-                if let Some(state) = authority_state.as_mut() {
-                    for _ in 0..count {
-                        state.step();
-                    }
+            Ok(ServerCmd::Advance {
+                count,
+                snapshot_json,
+            }) => {
+                let snapshot_after_advance = snapshot_json.or_else(|| {
+                    authority_state.as_mut().and_then(|state| {
+                        for _ in 0..count {
+                            state.step();
+                        }
+                        state.save_json().ok()
+                    })
+                });
+                if let Some(snapshot) = snapshot_after_advance {
+                    update_authority_from_snapshot(
+                        &mut authority_state,
+                        &mut authority_snapshot,
+                        snapshot.clone(),
+                    );
+                    publish_snapshot(&shared_frontier, snapshot);
                 }
                 broadcast_and_refresh_peer_list(
                     &mut clients,
                     &shared_peer_ids,
                     &NetMessage::AdvanceTicks { count },
                 );
+            }
+            Ok(ServerCmd::PublishSnapshot { snapshot_json }) => {
+                update_authority_from_snapshot(
+                    &mut authority_state,
+                    &mut authority_snapshot,
+                    snapshot_json.clone(),
+                );
+                publish_snapshot(&shared_frontier, snapshot_json);
+            }
+            Ok(ServerCmd::Synchronize(ack)) => {
+                let _ = ack.send(());
             }
             Ok(ServerCmd::HashCheck { tick, hash }) => {
                 broadcast_and_refresh_peer_list(
@@ -866,13 +988,44 @@ fn poll_client_transport(
     Ok(incoming.message)
 }
 
-fn reserve_next_seq(shared_next_seq: &SharedSeq) -> u64 {
-    let mut guard = shared_next_seq
+fn snapshot_frontier(shared_frontier: &SharedFrontier) -> SnapshotFrontier {
+    shared_frontier
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+}
+
+fn publish_snapshot(shared_frontier: &SharedFrontier, snapshot_json: String) {
+    shared_frontier
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .snapshot_json = snapshot_json;
+}
+
+fn reserve_next_seq_and_publish(
+    shared_frontier: &SharedFrontier,
+    snapshot_json: Option<&str>,
+) -> u64 {
+    let mut guard = shared_frontier
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let seq = *guard;
-    *guard = seq.saturating_add(1);
+    let seq = guard.next_seq;
+    guard.next_seq = seq.saturating_add(1);
+    if let Some(snapshot_json) = snapshot_json {
+        guard.snapshot_json = snapshot_json.to_string();
+    }
     seq
+}
+
+fn update_authority_from_snapshot(
+    authority_state: &mut Option<GameState>,
+    authority_snapshot: &mut String,
+    snapshot_json: String,
+) {
+    if let Ok(state) = GameState::load_json(&snapshot_json) {
+        *authority_state = Some(state);
+    }
+    *authority_snapshot = snapshot_json;
 }
 
 fn remove_peer_id(shared: &SharedPeerIds, peer_id: u64) {

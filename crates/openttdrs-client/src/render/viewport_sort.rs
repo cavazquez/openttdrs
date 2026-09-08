@@ -246,6 +246,36 @@ pub(crate) fn viewport_sort_parent_sprites(parents: &[ParentSprite]) -> Vec<usiz
 /// final del sorter. Esto es el puente incremental entre el port puro y los
 /// spawners: cada familia que ya conoce sus bounds puede aplicarlo sin volver
 /// a inventar un `layer` por sprite.
+///
+/// `order` debe ser la permutación emitida por
+/// [`viewport_sort_parent_sprites`] para el mismo conjunto de parents.
+#[must_use]
+pub(crate) fn depths_in_viewport_sort_order_from_order(
+    order: &[usize],
+    source_depths: &[f32],
+) -> Vec<f32> {
+    assert_eq!(
+        order.len(),
+        source_depths.len(),
+        "el orden y los slots de profundidad deben tener el mismo tamaño"
+    );
+
+    let mut slots = source_depths.to_vec();
+    slots.sort_by(f32::total_cmp);
+
+    let mut depths = source_depths.to_vec();
+    for (rank, &parent_index) in order.iter().enumerate() {
+        depths[parent_index] = slots[rank];
+    }
+    depths
+}
+
+/// Reasigna slots de profundidad después de calcular el orden de OpenTTD.
+///
+/// Es el wrapper conveniente para callers que todavía no necesitan el vector
+/// de índices. Los callers que ya lo tienen deben usar
+/// [`depths_in_viewport_sort_order_from_order`] para no ordenar dos veces el
+/// mismo conjunto de parents.
 #[must_use]
 pub(crate) fn depths_in_viewport_sort_order(
     parents: &[ParentSprite],
@@ -259,25 +289,16 @@ pub(crate) fn depths_in_viewport_sort_order(
     if parents.len() < 2 {
         return source_depths.to_vec();
     }
-
-    let mut slots = source_depths.to_vec();
-    slots.sort_by(f32::total_cmp);
-
-    let mut depths = source_depths.to_vec();
-    for (rank, parent_index) in viewport_sort_parent_sprites(parents)
-        .into_iter()
-        .enumerate()
-    {
-        depths[parent_index] = slots[rank];
-    }
-    depths
+    let order = viewport_sort_parent_sprites(parents);
+    depths_in_viewport_sort_order_from_order(&order, source_depths)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         ChildScreenSprite, ParentSprite, ParentSpriteBounds, ParentSpriteKind,
-        depths_in_viewport_sort_order, viewport_sort_parent_sprites,
+        depths_in_viewport_sort_order, depths_in_viewport_sort_order_from_order,
+        viewport_sort_parent_sprites,
     };
 
     fn bounds(
@@ -395,9 +416,42 @@ mod tests {
         // Los slots del spawner preservan la banda de la tesela. El segundo
         // parent debe recibir el menor Z (se pinta primero) y el primero el
         // mayor Z, exactamente como el stream post-sort de OpenTTD.
-        let depths = depths_in_viewport_sort_order(&parents, &[4.000_05, 4.000_06]);
-        assert_eq!(depths, vec![4.000_06, 4.000_05]);
         let order = viewport_sort_parent_sprites(&parents);
+        let depths = depths_in_viewport_sort_order_from_order(&order, &[4.000_05, 4.000_06]);
+        assert_eq!(depths, vec![4.000_06, 4.000_05]);
+        assert_eq!(
+            depths,
+            depths_in_viewport_sort_order(&parents, &[4.000_05, 4.000_06])
+        );
         assert!(depths[order[0]] < depths[order[1]]);
+    }
+
+    #[test]
+    fn precomputed_order_preserves_wrapper_depths_for_edge_cases() {
+        let assert_matches_wrapper = |parents: &[ParentSprite], source_depths: &[f32]| {
+            let order = viewport_sort_parent_sprites(parents);
+            assert_eq!(
+                depths_in_viewport_sort_order_from_order(&order, source_depths),
+                depths_in_viewport_sort_order(parents, source_depths)
+            );
+        };
+
+        let empty: [ParentSprite; 0] = [];
+        assert_matches_wrapper(&empty, &[]);
+
+        let single = [ParentSprite::sprite(1, 100, bounds(0, 0, 0, 2, 2, 2))];
+        assert_matches_wrapper(&single, &[7.0]);
+
+        let equal_depths = [
+            ParentSprite::sprite(20, 200, bounds(4, 4, 4, 6, 6, 6)),
+            ParentSprite::sprite(10, 100, bounds(0, 0, 0, 2, 2, 2)),
+        ];
+        assert_matches_wrapper(&equal_depths, &[4.0, 4.0]);
+
+        let with_empty_bounding_box = [
+            ParentSprite::sprite(20, 200, bounds(4, 4, 4, 6, 6, 6)),
+            ParentSprite::empty_bounding_box(10, bounds(0, 0, 0, 2, 2, 2)),
+        ];
+        assert_matches_wrapper(&with_empty_bounding_box, &[4.000_05, 4.000_06]);
     }
 }

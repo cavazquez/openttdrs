@@ -16,8 +16,11 @@ use bevy::window::PrimaryWindow;
 use serde_json::json;
 
 use crate::render::viewport::{TileViewportBounds, ortho_visible_tile_bounds};
+#[cfg(test)]
+use crate::render::viewport_sort::depths_in_viewport_sort_order;
 use crate::render::viewport_sort::{
-    ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order, viewport_sort_parent_sprites,
+    ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order_from_order,
+    viewport_sort_parent_sprites,
 };
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
@@ -326,7 +329,7 @@ pub(crate) fn sort_viewport_sortable_parents(
         .map(|(_, parent, _)| parent.source_depth)
         .collect();
     let order = viewport_sort_parent_sprites(&sprite_parents);
-    let sorted_depths = depths_in_viewport_sort_order(&sprite_parents, &source_depths);
+    let sorted_depths = depths_in_viewport_sort_order_from_order(&order, &source_depths);
     export_viewport_sort_trace(&input, &order, &sorted_depths, scope);
 
     // En el stream final, cada parent reserva el espacio hasta el siguiente.

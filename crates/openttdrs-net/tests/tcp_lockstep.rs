@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use openttdrs_core::{Command, CompanyId, GameState, TileCoord, apply_command};
 use openttdrs_net::{
     ClientSession, ListenServer, NetError, NetMessage, PROTOCOL_VERSION, SessionEvent,
-    apply_session_event, read_message, write_message,
+    SessionTimeouts, apply_session_event, read_message, write_message,
 };
 
 fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
@@ -38,6 +38,18 @@ fn maybe_start_server(bind: &str, snapshot: String) -> Option<ListenServer> {
     }
 }
 
+fn maybe_start_server_with_timeouts(
+    bind: &str,
+    snapshot: String,
+    timeouts: SessionTimeouts,
+) -> Option<ListenServer> {
+    match ListenServer::start_with_timeouts(bind, snapshot, timeouts) {
+        Ok(server) => Some(server),
+        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => None,
+        Err(error) => panic!("ListenServer::start_with_timeouts falló: {error}"),
+    }
+}
+
 fn maybe_connect_client(bind: &str) -> Option<ClientSession> {
     match ClientSession::connect(bind) {
         Ok(client) => Some(client),
@@ -56,6 +68,162 @@ fn framed_message(message: &NetMessage) -> Vec<u8> {
     );
     frame.extend_from_slice(&payload);
     frame
+}
+
+fn wait_heartbeat(client: &ClientSession, expected_tick: u64, timeout: Duration) {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match client.try_recv() {
+            Some(SessionEvent::Heartbeat { tick }) => {
+                assert_eq!(tick, expected_tick);
+                return;
+            }
+            Some(SessionEvent::PeerList { .. }) => {}
+            Some(other) => panic!("se esperaba Heartbeat, llegó {other:?}"),
+            None if Instant::now() < deadline => thread::sleep(Duration::from_millis(5)),
+            None => panic!("timeout esperando heartbeat {expected_tick}"),
+        }
+    }
+}
+
+fn short_timeouts() -> SessionTimeouts {
+    SessionTimeouts {
+        handshake: Duration::from_millis(150),
+        stalled_peer: Duration::from_millis(150),
+        poll_interval: Duration::from_millis(1),
+    }
+}
+
+#[test]
+fn silent_handshake_does_not_block_a_healthy_peer_or_shutdown() {
+    let server = match maybe_start_server_with_timeouts(
+        "127.0.0.1:0",
+        GameState::new(16, 16).save_json().unwrap(),
+        short_timeouts(),
+    ) {
+        Some(server) => server,
+        None => return,
+    };
+    let bind = server.local_addr().to_string();
+    let healthy = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    assert!(matches!(
+        wait_event(&healthy, Duration::from_secs(2)),
+        SessionEvent::Welcome { .. }
+    ));
+
+    let _silent = TcpStream::connect(&bind).unwrap();
+    // Dar una vuelta al accept para reproducir el punto donde la versión
+    // previa se quedaba dentro del handshake bloqueante.
+    thread::sleep(Duration::from_millis(20));
+    server.broadcast_heartbeat(123).unwrap();
+    wait_heartbeat(&healthy, 123, Duration::from_millis(700));
+
+    let started = Instant::now();
+    drop(server);
+    assert!(
+        started.elapsed() < Duration::from_millis(500),
+        "Drop no debe esperar un Hello silencioso"
+    );
+}
+
+#[test]
+fn partial_peer_payload_expires_without_stalling_a_healthy_peer() {
+    let server = match maybe_start_server_with_timeouts(
+        "127.0.0.1:0",
+        GameState::new(16, 16).save_json().unwrap(),
+        short_timeouts(),
+    ) {
+        Some(server) => server,
+        None => return,
+    };
+    let bind = server.local_addr().to_string();
+    let healthy = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    assert!(matches!(
+        wait_event(&healthy, Duration::from_secs(2)),
+        SessionEvent::Welcome { .. }
+    ));
+
+    let mut stalled = TcpStream::connect(&bind).unwrap();
+    write_message(
+        &mut stalled,
+        &NetMessage::Hello {
+            protocol: PROTOCOL_VERSION,
+        },
+    )
+    .unwrap();
+    let welcome = read_message(&mut stalled).unwrap();
+    let company_id = match welcome {
+        NetMessage::Welcome { company_id, .. } => company_id,
+        other => panic!("se esperaba Welcome, llegó {other:?}"),
+    };
+    let frame = framed_message(&NetMessage::Propose {
+        company_id,
+        command: Command::PlaceRoad(TileCoord::new(2, 2)),
+    });
+    stalled.write_all(&frame[..2]).unwrap();
+    stalled.flush().unwrap();
+    thread::sleep(Duration::from_millis(20));
+
+    server.broadcast_heartbeat(456).unwrap();
+    wait_heartbeat(&healthy, 456, Duration::from_millis(700));
+
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while server.peer_ids().len() != 1 && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        server.peer_ids().len(),
+        1,
+        "el peer con payload incompleto debe expirar solo"
+    );
+
+    server.broadcast_heartbeat(457).unwrap();
+    wait_heartbeat(&healthy, 457, Duration::from_millis(700));
+}
+
+#[test]
+fn client_handshake_timeout_and_drop_are_bounded_against_a_silent_server() {
+    let listener = match TcpListener::bind("127.0.0.1:0") {
+        Ok(listener) => listener,
+        Err(error) if error.kind() == ErrorKind::PermissionDenied => return,
+        Err(error) => panic!("no se pudo crear listener de prueba: {error}"),
+    };
+    let bind = listener.local_addr().unwrap().to_string();
+    let (accepted_tx, accepted_rx) = mpsc::channel();
+    let (stop_tx, stop_rx) = mpsc::channel();
+    let silent_server = thread::spawn(move || {
+        let (_stream, _) = listener.accept().expect("acepta cliente silencioso");
+        accepted_tx.send(()).expect("notifica accept");
+        stop_rx.recv().expect("termina servidor silencioso");
+    });
+
+    let client = match ClientSession::connect_with_timeouts(&bind, short_timeouts()) {
+        Ok(client) => client,
+        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => return,
+        Err(error) => panic!("ClientSession::connect_with_timeouts falló: {error}"),
+    };
+    accepted_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("servidor silencioso acepta el cliente");
+    assert!(matches!(
+        wait_event(&client, Duration::from_secs(1)),
+        SessionEvent::Disconnected { reason } if reason.contains("handshake timed out")
+    ));
+
+    let started = Instant::now();
+    drop(client);
+    assert!(
+        started.elapsed() < Duration::from_millis(500),
+        "Drop de cliente no debe depender del servidor silencioso"
+    );
+    stop_tx.send(()).unwrap();
+    silent_server.join().expect("servidor silencioso termina");
 }
 
 #[test]

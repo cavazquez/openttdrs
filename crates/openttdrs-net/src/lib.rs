@@ -21,5 +21,5 @@ pub use peer::{DEFAULT_PORT, connect, failover_connect_addr, failover_listen_bin
 pub use protocol::{NetError, NetMessage, PROTOCOL_VERSION};
 pub use session::{
     ClientSession, ClientSessionHandle, ListenServer, ListenServerHandle, SessionEvent,
-    apply_command_as_company, apply_session_event, elect_new_host,
+    SessionTimeouts, apply_command_as_company, apply_session_event, elect_new_host,
 };

@@ -1,16 +1,17 @@
 //! Sesiones listen-server y cliente (protocolo v3 / ADR 0004).
 
+use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use openttdrs_core::prelude::*;
 use openttdrs_core::{Command, CompanyId};
 
-use crate::codec::{FrameDecoder, read_message, write_message};
+use crate::codec::{FrameDecoder, FrameWriter};
 use crate::protocol::{NetError, NetMessage, PROTOCOL_VERSION};
 
 /// Elige el nuevo host: menor `peer_id` vivo (ADR 0004).
@@ -113,6 +114,32 @@ enum ServerCmd {
 type LiveSnapshot = Arc<Mutex<String>>;
 type SharedSeq = Arc<Mutex<u64>>;
 type SharedPeerIds = Arc<Mutex<Vec<u64>>>;
+
+/// Límites de progreso para el transporte TCP de una sesión.
+///
+/// Los plazos se reinician con cada byte leído o escrito. Por tanto un save
+/// grande puede continuar mientras haya progreso, pero una conexión que queda
+/// detenida a mitad de handshake, frame o envío no inmoviliza el resto de la
+/// sesión.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionTimeouts {
+    /// Máximo sin progreso mientras se espera Hello/Welcome.
+    pub handshake: Duration,
+    /// Máximo sin progreso para un frame o una cola de salida ya iniciados.
+    pub stalled_peer: Duration,
+    /// Pausa cooperativa entre sondeos non-blocking sin trabajo pendiente.
+    pub poll_interval: Duration,
+}
+
+impl Default for SessionTimeouts {
+    fn default() -> Self {
+        Self {
+            handshake: Duration::from_secs(10),
+            stalled_peer: Duration::from_secs(30),
+            poll_interval: Duration::from_millis(2),
+        }
+    }
+}
 
 /// Handle clonable para emitir commits/ticks desde el hilo de UI.
 #[derive(Clone)]
@@ -217,7 +244,20 @@ pub struct ListenServer {
 impl ListenServer {
     /// Arranca el servidor en un hilo con `next_seq = 1`.
     pub fn start(bind: &str, snapshot_json: String) -> Result<Self, NetError> {
-        Self::start_with_seq(bind, snapshot_json, 1)
+        Self::start_with_timeouts(bind, snapshot_json, SessionTimeouts::default())
+    }
+
+    /// Arranca un servidor con plazos de transporte explícitos.
+    ///
+    /// Es útil para hosts que quieren una política distinta y para pruebas que
+    /// verifican la expiración de peers detenidos sin esperar los valores de
+    /// producción.
+    pub fn start_with_timeouts(
+        bind: &str,
+        snapshot_json: String,
+        timeouts: SessionTimeouts,
+    ) -> Result<Self, NetError> {
+        Self::start_with_seq_and_timeouts(bind, snapshot_json, 1, timeouts)
     }
 
     /// Arranca el servidor continuando desde `initial_next_seq` (failover ADR 0004).
@@ -229,6 +269,20 @@ impl ListenServer {
         bind: &str,
         snapshot_json: String,
         initial_next_seq: u64,
+    ) -> Result<Self, NetError> {
+        Self::start_with_seq_and_timeouts(
+            bind,
+            snapshot_json,
+            initial_next_seq,
+            SessionTimeouts::default(),
+        )
+    }
+
+    fn start_with_seq_and_timeouts(
+        bind: &str,
+        snapshot_json: String,
+        initial_next_seq: u64,
+        timeouts: SessionTimeouts,
     ) -> Result<Self, NetError> {
         let listener = crate::listen(bind)?;
         let local_addr = listener.local_addr()?;
@@ -252,6 +306,7 @@ impl ListenServer {
                     cmd_rx,
                     event_tx,
                     &bind_owned,
+                    timeouts,
                 );
             })
             .map_err(NetError::Io)?;
@@ -351,14 +406,34 @@ impl Drop for ListenServer {
     }
 }
 
+const MAX_PENDING_HANDSHAKES: usize = 64;
+const MAX_ACCEPTS_PER_TICK: usize = 16;
+
 struct ClientSlot {
     stream: TcpStream,
     decoder: FrameDecoder,
+    writer: FrameWriter,
     peer_id: u64,
     company_id: CompanyId,
+    last_progress: Instant,
 }
 
-#[allow(clippy::too_many_lines)]
+struct PendingHandshake {
+    stream: TcpStream,
+    decoder: FrameDecoder,
+    writer: FrameWriter,
+    peer_id: u64,
+    company_id: Option<CompanyId>,
+    last_progress: Instant,
+}
+
+enum PendingHandshakePoll {
+    Keep,
+    Promote,
+    Drop(String),
+}
+
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn server_thread(
     listener: TcpListener,
     live_snapshot: LiveSnapshot,
@@ -367,6 +442,7 @@ fn server_thread(
     cmd_rx: Receiver<ServerCmd>,
     event_tx: Sender<SessionEvent>,
     bind: &str,
+    timeouts: SessionTimeouts,
 ) {
     if let Err(e) = listener.set_nonblocking(true) {
         let _ = event_tx.send(SessionEvent::Disconnected {
@@ -375,6 +451,7 @@ fn server_thread(
         return;
     }
     let mut clients: Vec<ClientSlot> = Vec::new();
+    let mut pending_handshakes: Vec<PendingHandshake> = Vec::new();
     let mut next_peer_id: u64 = 1;
     // Copia autoritativa para validar propuestas antes de asignarles secuencia.
     // El host publica snapshots; cuando cambian, esta copia se realinea para
@@ -395,80 +472,34 @@ fn server_thread(
             && let Ok(state) = GameState::load_json(&current_snapshot)
         {
             authority_state = Some(state);
-            authority_snapshot = current_snapshot;
+            authority_snapshot.clone_from(&current_snapshot);
         }
         let next_seq = *shared_next_seq
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-        match listener.accept() {
-            Ok((stream, addr)) => {
-                eprintln!("openttdrs-net: client connected {addr}");
-                if let Err(e) = configure_stream(&stream) {
-                    eprintln!("openttdrs-net: configure failed: {e}");
-                    continue;
-                }
-                let mut stream = stream;
-                let snapshot = live_snapshot
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .clone();
-                let peer_id = next_peer_id;
-                next_peer_id = next_peer_id.saturating_add(1);
-                let company_id = allocate_company_id(&clients);
-                match handshake_server(&mut stream, &snapshot, next_seq, peer_id, company_id) {
-                    Ok(()) => {
-                        // Si el host avanzó durante el handshake, reenviar snapshot vivo.
-                        let fresh = live_snapshot
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .clone();
-                        if fresh != snapshot
-                            && let Err(e) = write_message(
-                                &mut stream,
-                                &NetMessage::Welcome {
-                                    protocol: PROTOCOL_VERSION,
-                                    snapshot_json: fresh,
-                                    next_seq,
-                                    peer_id,
-                                    company_id,
-                                },
-                            )
-                        {
-                            eprintln!("openttdrs-net: late-join resync failed: {e}");
-                            continue;
-                        }
-                        shared_peer_ids
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .push(peer_id);
-                        clients.push(ClientSlot {
-                            stream,
-                            decoder: FrameDecoder::default(),
-                            peer_id,
-                            company_id,
-                        });
-                        broadcast_peer_list(&mut clients, &shared_peer_ids);
-                    }
-                    Err(e) => eprintln!("openttdrs-net: handshake failed: {e}"),
-                }
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(e) => {
-                let _ = event_tx.send(SessionEvent::Disconnected {
-                    reason: format!("accept: {e}"),
-                });
-                return;
-            }
+        if let Err(error) =
+            accept_pending_handshakes(&listener, &mut pending_handshakes, &mut next_peer_id)
+        {
+            let _ = event_tx.send(SessionEvent::Disconnected {
+                reason: format!("accept: {error}"),
+            });
+            return;
         }
+        poll_pending_handshakes(
+            &mut pending_handshakes,
+            &mut clients,
+            &current_snapshot,
+            next_seq,
+            &shared_peer_ids,
+            timeouts,
+        );
 
-        // Propuestas de clientes (non-blocking peek via set_nonblocking on clients).
+        let now = Instant::now();
         let mut i = 0;
         while i < clients.len() {
-            let incoming = {
-                let client = &mut clients[i];
-                try_read_client(&mut client.stream, &mut client.decoder)
-            };
+            let peer_id = clients[i].peer_id;
+            let incoming = poll_client_transport(&mut clients[i], now, timeouts);
             match incoming {
                 Ok(Some(NetMessage::Propose {
                     company_id,
@@ -478,14 +509,19 @@ fn server_thread(
                     if company_id != assigned_company {
                         let message = format!(
                             "peer {} no puede emitir como compañía {} (asignada {})",
-                            clients[i].peer_id, company_id.0, assigned_company.0
+                            peer_id, company_id.0, assigned_company.0
                         );
-                        let _ = write_message(
-                            &mut clients[i].stream,
-                            &NetMessage::Reject {
-                                message: message.clone(),
-                            },
-                        );
+                        let response = NetMessage::Reject {
+                            message: message.clone(),
+                        };
+                        if let Err(error) = enqueue_for_client(&mut clients[i], &response) {
+                            eprintln!(
+                                "openttdrs-net: reject queue failed peer_id={peer_id}: {error}"
+                            );
+                            remove_client(&mut clients, &shared_peer_ids, i);
+                            broadcast_peer_list(&mut clients, &shared_peer_ids);
+                            continue;
+                        }
                         let _ = event_tx.send(SessionEvent::CommandRejected { message });
                         i += 1;
                         continue;
@@ -493,37 +529,36 @@ fn server_thread(
                     if let Some(state) = authority_state.as_mut()
                         && let Err(error) = apply_command_as_company(state, company_id, &command)
                     {
-                        let message = error;
-                        let _ = write_message(
-                            &mut clients[i].stream,
-                            &NetMessage::Reject {
-                                message: message.clone(),
-                            },
-                        );
-                        let _ = event_tx.send(SessionEvent::CommandRejected { message });
+                        let response = NetMessage::Reject {
+                            message: error.clone(),
+                        };
+                        if let Err(queue_error) = enqueue_for_client(&mut clients[i], &response) {
+                            eprintln!(
+                                "openttdrs-net: reject queue failed peer_id={peer_id}: {queue_error}"
+                            );
+                            remove_client(&mut clients, &shared_peer_ids, i);
+                            broadcast_peer_list(&mut clients, &shared_peer_ids);
+                            continue;
+                        }
+                        let _ = event_tx.send(SessionEvent::CommandRejected { message: error });
                         i += 1;
                         continue;
                     }
-                    let seq = {
-                        let mut guard = shared_next_seq
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner);
-                        let seq = *guard;
-                        *guard = seq.saturating_add(1);
-                        seq
-                    };
+                    let seq = reserve_next_seq(&shared_next_seq);
                     let commit = NetMessage::Commit {
                         seq,
                         company_id,
                         command: command.clone(),
                     };
-                    broadcast_raw(&mut clients, &shared_peer_ids, &commit);
+                    broadcast_and_refresh_peer_list(&mut clients, &shared_peer_ids, &commit);
                     let _ = event_tx.send(SessionEvent::Commit {
                         seq,
                         company_id,
                         command,
                     });
-                    i += 1;
+                    if clients.get(i).map(|client| client.peer_id) == Some(peer_id) {
+                        i += 1;
+                    }
                 }
                 Ok(Some(NetMessage::Desync {
                     tick,
@@ -531,56 +566,48 @@ fn server_thread(
                     actual_hash,
                 })) => {
                     // Propagar el diagnóstico para que todos los peers lo hagan
-                    // visible y, además, reparar al emisor con el último snapshot
-                    // autoritativo. Antes sólo se registraba el hash: el cliente
-                    // quedaba divergido hasta reconectar manualmente.
+                    // visible y reparar al emisor con el último snapshot
+                    // autoritativo, sin realizar una escritura bloqueante.
                     let report = NetMessage::Desync {
                         tick,
                         expected_hash,
                         actual_hash,
                     };
-                    broadcast_raw(&mut clients, &shared_peer_ids, &report);
-                    let snapshot = live_snapshot
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .clone();
-                    let resync = NetMessage::Welcome {
-                        protocol: PROTOCOL_VERSION,
-                        snapshot_json: snapshot,
-                        next_seq,
-                        peer_id: clients[i].peer_id,
-                        company_id: clients[i].company_id,
-                    };
-                    if let Err(error) = write_message(&mut clients[i].stream, &resync) {
-                        eprintln!(
-                            "openttdrs-net: desync resync failed peer_id={}: {error}",
-                            clients[i].peer_id
-                        );
+                    broadcast_and_refresh_peer_list(&mut clients, &shared_peer_ids, &report);
+                    if let Some(index) = clients.iter().position(|client| client.peer_id == peer_id)
+                    {
+                        let resync = NetMessage::Welcome {
+                            protocol: PROTOCOL_VERSION,
+                            snapshot_json: current_snapshot.clone(),
+                            next_seq,
+                            peer_id,
+                            company_id: clients[index].company_id,
+                        };
+                        if let Err(error) = enqueue_for_client(&mut clients[index], &resync) {
+                            eprintln!(
+                                "openttdrs-net: desync resync queue failed peer_id={peer_id}: {error}"
+                            );
+                            remove_client(&mut clients, &shared_peer_ids, index);
+                            broadcast_peer_list(&mut clients, &shared_peer_ids);
+                        }
                     }
                     let _ = event_tx.send(SessionEvent::Desync {
                         tick,
                         expected_hash,
                         actual_hash,
                     });
-                    i += 1;
+                    if clients.get(i).map(|client| client.peer_id) == Some(peer_id) {
+                        i += 1;
+                    }
                 }
                 Ok(None | Some(NetMessage::Hello { .. })) => i += 1,
                 Ok(Some(other)) => {
                     eprintln!("openttdrs-net: unexpected from client: {other:?}");
                     i += 1;
                 }
-                Err(NetError::Closed | NetError::Io(_)) => {
-                    let peer_id = clients[i].peer_id;
-                    eprintln!("openttdrs-net: client dropped peer_id={peer_id}");
-                    remove_peer_id(&shared_peer_ids, peer_id);
-                    clients.remove(i);
-                    broadcast_peer_list(&mut clients, &shared_peer_ids);
-                }
-                Err(e) => {
-                    let peer_id = clients[i].peer_id;
-                    eprintln!("openttdrs-net: client read error peer_id={peer_id}: {e}");
-                    remove_peer_id(&shared_peer_ids, peer_id);
-                    clients.remove(i);
+                Err(error) => {
+                    eprintln!("openttdrs-net: client dropped peer_id={peer_id}: {error}");
+                    remove_client(&mut clients, &shared_peer_ids, i);
                     broadcast_peer_list(&mut clients, &shared_peer_ids);
                 }
             }
@@ -597,20 +624,12 @@ fn server_thread(
                     // posteriores. Un error aquí indica snapshot atrasado.
                     let _ = apply_command_as_company(state, company_id, &command);
                 }
-                let seq = {
-                    let mut guard = shared_next_seq
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    let seq = *guard;
-                    *guard = seq.saturating_add(1);
-                    seq
-                };
                 let commit = NetMessage::Commit {
-                    seq,
+                    seq: reserve_next_seq(&shared_next_seq),
                     company_id,
-                    command: command.clone(),
+                    command,
                 };
-                broadcast_raw(&mut clients, &shared_peer_ids, &commit);
+                broadcast_and_refresh_peer_list(&mut clients, &shared_peer_ids, &commit);
             }
             Ok(ServerCmd::Advance(count)) => {
                 if let Some(state) = authority_state.as_mut() {
@@ -618,21 +637,21 @@ fn server_thread(
                         state.step();
                     }
                 }
-                broadcast_raw(
+                broadcast_and_refresh_peer_list(
                     &mut clients,
                     &shared_peer_ids,
                     &NetMessage::AdvanceTicks { count },
                 );
             }
             Ok(ServerCmd::HashCheck { tick, hash }) => {
-                broadcast_raw(
+                broadcast_and_refresh_peer_list(
                     &mut clients,
                     &shared_peer_ids,
                     &NetMessage::HashCheck { tick, hash },
                 );
             }
             Ok(ServerCmd::Heartbeat { tick }) => {
-                broadcast_raw(
+                broadcast_and_refresh_peer_list(
                     &mut clients,
                     &shared_peer_ids,
                     &NetMessage::Heartbeat { tick },
@@ -643,7 +662,7 @@ fn server_thread(
                 next_seq,
                 new_host_peer_id,
             }) => {
-                broadcast_raw(
+                broadcast_and_refresh_peer_list(
                     &mut clients,
                     &shared_peer_ids,
                     &NetMessage::HostAnnounce {
@@ -654,11 +673,193 @@ fn server_thread(
                 );
             }
             Ok(ServerCmd::Shutdown) | Err(TryRecvError::Disconnected) => return,
-            Err(TryRecvError::Empty) => {
-                thread::sleep(Duration::from_millis(2));
+            Err(TryRecvError::Empty) => thread::sleep(timeouts.poll_interval),
+        }
+    }
+}
+
+fn accept_pending_handshakes(
+    listener: &TcpListener,
+    pending_handshakes: &mut Vec<PendingHandshake>,
+    next_peer_id: &mut u64,
+) -> Result<(), NetError> {
+    for _ in 0..MAX_ACCEPTS_PER_TICK {
+        match listener.accept() {
+            Ok((stream, addr)) => {
+                eprintln!("openttdrs-net: client connected {addr}");
+                if pending_handshakes.len() >= MAX_PENDING_HANDSHAKES {
+                    eprintln!("openttdrs-net: pending handshake limit reached; dropping {addr}");
+                    continue;
+                }
+                configure_stream(&stream)?;
+                let peer_id = *next_peer_id;
+                *next_peer_id = next_peer_id.saturating_add(1);
+                pending_handshakes.push(PendingHandshake {
+                    stream,
+                    decoder: FrameDecoder::default(),
+                    writer: FrameWriter::default(),
+                    peer_id,
+                    company_id: None,
+                    last_progress: Instant::now(),
+                });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+            Err(error) => return Err(NetError::Io(error)),
+        }
+    }
+    Ok(())
+}
+
+fn poll_pending_handshakes(
+    pending_handshakes: &mut Vec<PendingHandshake>,
+    clients: &mut Vec<ClientSlot>,
+    snapshot_json: &str,
+    next_seq: u64,
+    shared_peer_ids: &SharedPeerIds,
+    timeouts: SessionTimeouts,
+) {
+    let now = Instant::now();
+    let mut i = 0;
+    while i < pending_handshakes.len() {
+        let candidate_company = allocate_company_id(clients, pending_handshakes);
+        let outcome = poll_pending_handshake(
+            &mut pending_handshakes[i],
+            snapshot_json,
+            next_seq,
+            candidate_company,
+            now,
+            timeouts,
+        );
+        match outcome {
+            PendingHandshakePoll::Keep => i += 1,
+            PendingHandshakePoll::Drop(reason) => {
+                eprintln!(
+                    "openttdrs-net: handshake dropped peer_id={}: {reason}",
+                    pending_handshakes[i].peer_id
+                );
+                pending_handshakes.remove(i);
+            }
+            PendingHandshakePoll::Promote => {
+                let pending = pending_handshakes.remove(i);
+                let Some(company_id) = pending.company_id else {
+                    eprintln!(
+                        "openttdrs-net: handshake promotion without company peer_id={}",
+                        pending.peer_id
+                    );
+                    continue;
+                };
+                let peer_id = pending.peer_id;
+                shared_peer_ids
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(peer_id);
+                clients.push(ClientSlot {
+                    stream: pending.stream,
+                    decoder: pending.decoder,
+                    writer: pending.writer,
+                    peer_id,
+                    company_id,
+                    last_progress: pending.last_progress,
+                });
+                broadcast_peer_list(clients, shared_peer_ids);
             }
         }
     }
+}
+
+fn poll_pending_handshake(
+    pending: &mut PendingHandshake,
+    snapshot_json: &str,
+    next_seq: u64,
+    candidate_company: CompanyId,
+    now: Instant,
+    timeouts: SessionTimeouts,
+) -> PendingHandshakePoll {
+    let incoming = match pending.decoder.try_read_with_progress(&mut pending.stream) {
+        Ok(incoming) => incoming,
+        Err(error) => return PendingHandshakePoll::Drop(error.to_string()),
+    };
+    if incoming.made_progress {
+        pending.last_progress = now;
+    }
+    if let Some(message) = incoming.message {
+        if pending.company_id.is_some() {
+            return PendingHandshakePoll::Drop(
+                "message received before Welcome was flushed".into(),
+            );
+        }
+        match message {
+            NetMessage::Hello {
+                protocol: PROTOCOL_VERSION,
+            } => {
+                let welcome = NetMessage::Welcome {
+                    protocol: PROTOCOL_VERSION,
+                    snapshot_json: snapshot_json.to_string(),
+                    next_seq,
+                    peer_id: pending.peer_id,
+                    company_id: candidate_company,
+                };
+                if let Err(error) = pending.writer.queue(&welcome) {
+                    return PendingHandshakePoll::Drop(error.to_string());
+                }
+                pending.company_id = Some(candidate_company);
+                pending.last_progress = now;
+            }
+            NetMessage::Hello { protocol } => {
+                return PendingHandshakePoll::Drop(format!("unsupported protocol {protocol}"));
+            }
+            other => {
+                return PendingHandshakePoll::Drop(format!("expected Hello, got {other:?}"));
+            }
+        }
+    }
+
+    let output = match pending.writer.try_flush(&mut pending.stream) {
+        Ok(output) => output,
+        Err(error) => return PendingHandshakePoll::Drop(error.to_string()),
+    };
+    if output.made_progress {
+        pending.last_progress = now;
+    }
+    if pending.company_id.is_some() && output.is_empty {
+        return PendingHandshakePoll::Promote;
+    }
+    if now.duration_since(pending.last_progress) >= timeouts.handshake {
+        return PendingHandshakePoll::Drop("handshake timed out without progress".into());
+    }
+    PendingHandshakePoll::Keep
+}
+
+fn poll_client_transport(
+    client: &mut ClientSlot,
+    now: Instant,
+    timeouts: SessionTimeouts,
+) -> Result<Option<NetMessage>, NetError> {
+    let incoming = client.decoder.try_read_with_progress(&mut client.stream)?;
+    if incoming.made_progress {
+        client.last_progress = now;
+    }
+    let output = client.writer.try_flush(&mut client.stream)?;
+    if output.made_progress {
+        client.last_progress = now;
+    }
+    if (client.decoder.has_partial_frame() || client.writer.has_pending())
+        && now.duration_since(client.last_progress) >= timeouts.stalled_peer
+    {
+        return Err(NetError::Protocol(
+            "peer stalled without transport progress".into(),
+        ));
+    }
+    Ok(incoming.message)
+}
+
+fn reserve_next_seq(shared_next_seq: &SharedSeq) -> u64 {
+    let mut guard = shared_next_seq
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let seq = *guard;
+    *guard = seq.saturating_add(1);
+    seq
 }
 
 fn remove_peer_id(shared: &SharedPeerIds, peer_id: u64) {
@@ -668,87 +869,88 @@ fn remove_peer_id(shared: &SharedPeerIds, peer_id: u64) {
     guard.retain(|id| *id != peer_id);
 }
 
+fn remove_client(clients: &mut Vec<ClientSlot>, shared_peer_ids: &SharedPeerIds, index: usize) {
+    let peer_id = clients[index].peer_id;
+    clients.remove(index);
+    remove_peer_id(shared_peer_ids, peer_id);
+}
+
 /// Asigna una compañía exclusiva a cada peer conectado. La compañía 0 queda
 /// reservada al host; los clientes reciben el primer id libre del pool de
-/// `OpenTTD` (0..15).
-fn allocate_company_id(clients: &[ClientSlot]) -> CompanyId {
+/// `OpenTTD` (0..15). Los handshakes que ya enviaron Welcome también reservan
+/// su id para que dos conexiones simultáneas no reciban la misma compañía.
+fn allocate_company_id(clients: &[ClientSlot], pending: &[PendingHandshake]) -> CompanyId {
     (1..=15)
         .map(CompanyId)
-        .find(|candidate| clients.iter().all(|slot| slot.company_id != *candidate))
+        .find(|candidate| {
+            clients.iter().all(|slot| slot.company_id != *candidate)
+                && pending
+                    .iter()
+                    .all(|handshake| handshake.company_id != Some(*candidate))
+        })
         .unwrap_or(CompanyId::PLAYER)
 }
 
-fn broadcast_peer_list(clients: &mut Vec<ClientSlot>, shared_peer_ids: &SharedPeerIds) {
-    let peer_ids = shared_peer_ids
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clone();
-    broadcast_raw(clients, shared_peer_ids, &NetMessage::PeerList { peer_ids });
-}
-
-fn handshake_server(
-    stream: &mut TcpStream,
-    snapshot_json: &str,
-    next_seq: u64,
-    peer_id: u64,
-    company_id: CompanyId,
-) -> Result<(), NetError> {
-    let hello = read_message(stream)?;
-    match hello {
-        NetMessage::Hello { protocol } if protocol == PROTOCOL_VERSION => {}
-        NetMessage::Hello { protocol } => {
-            return Err(NetError::Protocol(format!(
-                "unsupported protocol {protocol}"
-            )));
-        }
-        other => {
-            return Err(NetError::Protocol(format!("expected hello, got {other:?}")));
-        }
-    }
-    write_message(
-        stream,
-        &NetMessage::Welcome {
-            protocol: PROTOCOL_VERSION,
-            snapshot_json: snapshot_json.to_string(),
-            next_seq,
-            peer_id,
-            company_id,
-        },
-    )?;
+fn enqueue_for_client(client: &mut ClientSlot, message: &NetMessage) -> Result<(), NetError> {
+    client.writer.queue(message)?;
+    // Encolar una operación inicia un nuevo plazo de progreso, incluso si el
+    // peer llevaba tiempo idle antes de recibir este broadcast.
+    client.last_progress = Instant::now();
     Ok(())
 }
 
-fn try_read_client(
-    stream: &mut TcpStream,
-    decoder: &mut FrameDecoder,
-) -> Result<Option<NetMessage>, NetError> {
-    stream.set_nonblocking(true)?;
-    let read_result = decoder.try_read(stream);
-    let restore_result = stream.set_nonblocking(false);
-    match (read_result, restore_result) {
-        (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(NetError::Io(error)),
-        (Ok(message), Ok(())) => Ok(message),
+/// Encola un broadcast y elimina sólo los peers cuya cola ya no puede
+/// aceptar el frame. Nunca realiza I/O bloqueante dentro del loop compartido.
+fn broadcast_raw(
+    clients: &mut Vec<ClientSlot>,
+    shared_peer_ids: &SharedPeerIds,
+    message: &NetMessage,
+) -> bool {
+    let mut dead = Vec::new();
+    for (index, client) in clients.iter_mut().enumerate() {
+        if let Err(error) = enqueue_for_client(client, message) {
+            eprintln!(
+                "openttdrs-net: broadcast queue failed peer_id={}: {error}",
+                client.peer_id
+            );
+            dead.push(index);
+        }
+    }
+    let removed = !dead.is_empty();
+    for index in dead.into_iter().rev() {
+        remove_client(clients, shared_peer_ids, index);
+    }
+    removed
+}
+
+fn broadcast_and_refresh_peer_list(
+    clients: &mut Vec<ClientSlot>,
+    shared_peer_ids: &SharedPeerIds,
+    message: &NetMessage,
+) {
+    if broadcast_raw(clients, shared_peer_ids, message) {
+        broadcast_peer_list(clients, shared_peer_ids);
     }
 }
 
-fn broadcast_raw(clients: &mut Vec<ClientSlot>, shared_peer_ids: &SharedPeerIds, msg: &NetMessage) {
-    let mut dead = Vec::new();
-    for (i, client) in clients.iter_mut().enumerate() {
-        if let Err(e) = write_message(&mut client.stream, msg) {
-            eprintln!("openttdrs-net: broadcast failed: {e}");
-            dead.push(i);
+fn broadcast_peer_list(clients: &mut Vec<ClientSlot>, shared_peer_ids: &SharedPeerIds) {
+    // Un peer puede agotar su cola al intentar enviarle la primera lista; una
+    // segunda vuelta informa la lista final a quienes siguen sanos sin entrar
+    // en recursión si varios peers fallan a la vez.
+    for _ in 0..2 {
+        let peer_ids = shared_peer_ids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if !broadcast_raw(clients, shared_peer_ids, &NetMessage::PeerList { peer_ids }) {
+            break;
         }
-    }
-    for i in dead.into_iter().rev() {
-        let peer_id = clients[i].peer_id;
-        remove_peer_id(shared_peer_ids, peer_id);
-        clients.remove(i);
     }
 }
 
 fn configure_stream(stream: &TcpStream) -> Result<(), NetError> {
     stream.set_nodelay(true)?;
+    stream.set_nonblocking(true)?;
     Ok(())
 }
 
@@ -822,6 +1024,11 @@ pub struct ClientSession {
 
 impl ClientSession {
     pub fn connect(addr: &str) -> Result<Self, NetError> {
+        Self::connect_with_timeouts(addr, SessionTimeouts::default())
+    }
+
+    /// Conecta un cliente con plazos de progreso explícitos.
+    pub fn connect_with_timeouts(addr: &str, timeouts: SessionTimeouts) -> Result<Self, NetError> {
         let stream = crate::connect(addr)?;
         let (cmd_tx, cmd_rx) = mpsc::channel();
         let (event_tx, event_rx) = mpsc::channel();
@@ -831,7 +1038,8 @@ impl ClientSession {
         let join = thread::Builder::new()
             .name("openttdrs-client-net".into())
             .spawn(move || {
-                if let Err(e) = client_thread(stream, cmd_rx, event_tx, company_id_thread) {
+                if let Err(e) = client_thread(stream, cmd_rx, event_tx, company_id_thread, timeouts)
+                {
                     eprintln!("openttdrs-net: client ended ({addr_owned}): {e}");
                 }
             })
@@ -880,169 +1088,210 @@ impl Drop for ClientSession {
     }
 }
 
+const MAX_PENDING_CLIENT_COMMANDS: usize = 256;
+
 #[allow(clippy::too_many_lines)]
 fn client_thread(
     mut stream: TcpStream,
     cmd_rx: Receiver<ClientCmd>,
     event_tx: Sender<SessionEvent>,
     company_id: std::sync::Arc<std::sync::Mutex<CompanyId>>,
+    timeouts: SessionTimeouts,
 ) -> Result<(), NetError> {
-    write_message(
-        &mut stream,
-        &NetMessage::Hello {
-            protocol: PROTOCOL_VERSION,
-        },
-    )?;
-    let welcome = read_message(&mut stream)?;
-    match welcome {
-        NetMessage::Welcome {
-            protocol,
-            snapshot_json,
-            next_seq,
-            peer_id,
-            company_id: assigned_company,
-        } if protocol == PROTOCOL_VERSION => {
-            *company_id
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = assigned_company;
-            let _ = event_tx.send(SessionEvent::Welcome {
-                snapshot_json,
-                next_seq,
-                peer_id,
-            });
-        }
-        NetMessage::Welcome { protocol, .. } => {
-            return Err(NetError::Protocol(format!(
-                "unsupported protocol {protocol}"
-            )));
-        }
-        other => {
-            return Err(NetError::Protocol(format!(
-                "expected welcome, got {other:?}"
-            )));
-        }
-    }
-
-    stream.set_nonblocking(true)?;
+    configure_stream(&stream)?;
     let mut decoder = FrameDecoder::default();
+    let mut writer = FrameWriter::default();
+    writer.queue(&NetMessage::Hello {
+        protocol: PROTOCOL_VERSION,
+    })?;
+    let mut waiting_for_welcome = true;
+    let mut pending_commands = VecDeque::new();
+    let mut last_progress = Instant::now();
+
     loop {
-        match cmd_rx.try_recv() {
-            Ok(ClientCmd::Propose {
-                company_id,
-                command,
-            }) => {
-                stream.set_nonblocking(false)?;
-                write_message(
-                    &mut stream,
-                    &NetMessage::Propose {
+        let now = Instant::now();
+        for _ in 0..MAX_PENDING_CLIENT_COMMANDS {
+            match cmd_rx.try_recv() {
+                Ok(ClientCmd::Shutdown) | Err(TryRecvError::Disconnected) => return Ok(()),
+                Ok(command) => {
+                    if pending_commands.len() >= MAX_PENDING_CLIENT_COMMANDS {
+                        let reason = "client command queue limit exceeded".into();
+                        let _ = event_tx.send(SessionEvent::Disconnected { reason });
+                        return Ok(());
+                    }
+                    pending_commands.push_back(command);
+                }
+                Err(TryRecvError::Empty) => break,
+            }
+        }
+
+        if !waiting_for_welcome {
+            while let Some(command) = pending_commands.pop_front() {
+                let message = match command {
+                    ClientCmd::Propose {
+                        company_id,
+                        command,
+                    } => NetMessage::Propose {
                         company_id,
                         command,
                     },
-                )?;
-                stream.set_nonblocking(true)?;
-            }
-            Ok(ClientCmd::ReportDesync {
-                tick,
-                expected_hash,
-                actual_hash,
-            }) => {
-                stream.set_nonblocking(false)?;
-                write_message(
-                    &mut stream,
-                    &NetMessage::Desync {
+                    ClientCmd::ReportDesync {
+                        tick,
+                        expected_hash,
+                        actual_hash,
+                    } => NetMessage::Desync {
                         tick,
                         expected_hash,
                         actual_hash,
                     },
-                )?;
-                stream.set_nonblocking(true)?;
+                    ClientCmd::Shutdown => return Ok(()),
+                };
+                writer.queue(&message)?;
+                last_progress = now;
             }
-            Ok(ClientCmd::Shutdown) | Err(TryRecvError::Disconnected) => return Ok(()),
-            Err(TryRecvError::Empty) => {}
         }
 
-        match try_read_client(&mut stream, &mut decoder) {
-            Ok(None) => thread::sleep(Duration::from_millis(2)),
-            Ok(Some(NetMessage::Welcome {
-                protocol,
-                snapshot_json,
-                next_seq,
-                peer_id,
-                company_id: assigned_company,
-            })) if protocol == PROTOCOL_VERSION => {
-                *company_id
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) = assigned_company;
-                // Resync post-handshake (host avanzó durante el Welcome).
-                let _ = event_tx.send(SessionEvent::Welcome {
-                    snapshot_json,
-                    next_seq,
-                    peer_id,
+        let output = match writer.try_flush(&mut stream) {
+            Ok(output) => output,
+            Err(error) => {
+                let _ = event_tx.send(SessionEvent::Disconnected {
+                    reason: format!("server write failed: {error}"),
                 });
+                return Err(error);
             }
-            Ok(Some(NetMessage::Commit {
-                seq,
-                company_id,
-                command,
-            })) => {
-                let _ = event_tx.send(SessionEvent::Commit {
-                    seq,
-                    company_id,
-                    command,
-                });
-            }
-            Ok(Some(NetMessage::AdvanceTicks { count })) => {
-                let _ = event_tx.send(SessionEvent::AdvanceTicks { count });
-            }
-            Ok(Some(NetMessage::HashCheck { tick, hash })) => {
-                let _ = event_tx.send(SessionEvent::HashCheck { tick, hash });
-            }
-            Ok(Some(NetMessage::HostAnnounce {
-                bind,
-                next_seq,
-                new_host_peer_id,
-            })) => {
-                let _ = event_tx.send(SessionEvent::HostAnnounce {
-                    bind,
-                    next_seq,
-                    new_host_peer_id,
-                });
-            }
-            Ok(Some(NetMessage::PeerList { peer_ids })) => {
-                let _ = event_tx.send(SessionEvent::PeerList { peer_ids });
-            }
-            Ok(Some(NetMessage::Heartbeat { tick })) => {
-                let _ = event_tx.send(SessionEvent::Heartbeat { tick });
-            }
-            Ok(Some(NetMessage::Reject { message })) => {
-                let _ = event_tx.send(SessionEvent::CommandRejected { message });
-            }
-            Ok(Some(NetMessage::Desync {
-                tick,
-                expected_hash,
-                actual_hash,
-            })) => {
-                let _ = event_tx.send(SessionEvent::Desync {
-                    tick,
-                    expected_hash,
-                    actual_hash,
-                });
-            }
-            Ok(Some(NetMessage::Error { message })) => {
-                let _ = event_tx.send(SessionEvent::Disconnected { reason: message });
-                return Ok(());
-            }
-            Ok(Some(other)) => {
-                eprintln!("openttdrs-net: ignore msg {other:?}");
-            }
+        };
+        if output.made_progress {
+            last_progress = now;
+        }
+
+        let incoming = match decoder.try_read_with_progress(&mut stream) {
+            Ok(incoming) => incoming,
             Err(NetError::Closed) => {
                 let _ = event_tx.send(SessionEvent::Disconnected {
                     reason: "server closed".into(),
                 });
                 return Ok(());
             }
-            Err(e) => return Err(e),
+            Err(error) => {
+                let _ = event_tx.send(SessionEvent::Disconnected {
+                    reason: format!("server read failed: {error}"),
+                });
+                return Err(error);
+            }
+        };
+        if incoming.made_progress {
+            last_progress = now;
         }
+
+        match incoming.message {
+            Some(NetMessage::Welcome {
+                protocol,
+                snapshot_json,
+                next_seq,
+                peer_id,
+                company_id: assigned_company,
+            }) if protocol == PROTOCOL_VERSION => {
+                *company_id
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = assigned_company;
+                let _ = event_tx.send(SessionEvent::Welcome {
+                    snapshot_json,
+                    next_seq,
+                    peer_id,
+                });
+                waiting_for_welcome = false;
+            }
+            Some(NetMessage::Welcome { protocol, .. }) => {
+                let reason = format!("unsupported protocol {protocol}");
+                let _ = event_tx.send(SessionEvent::Disconnected {
+                    reason: reason.clone(),
+                });
+                return Err(NetError::Protocol(reason));
+            }
+            Some(other) if waiting_for_welcome => {
+                let reason = format!("expected welcome, got {other:?}");
+                let _ = event_tx.send(SessionEvent::Disconnected {
+                    reason: reason.clone(),
+                });
+                return Err(NetError::Protocol(reason));
+            }
+            Some(NetMessage::Commit {
+                seq,
+                company_id,
+                command,
+            }) => {
+                let _ = event_tx.send(SessionEvent::Commit {
+                    seq,
+                    company_id,
+                    command,
+                });
+            }
+            Some(NetMessage::AdvanceTicks { count }) => {
+                let _ = event_tx.send(SessionEvent::AdvanceTicks { count });
+            }
+            Some(NetMessage::HashCheck { tick, hash }) => {
+                let _ = event_tx.send(SessionEvent::HashCheck { tick, hash });
+            }
+            Some(NetMessage::HostAnnounce {
+                bind,
+                next_seq,
+                new_host_peer_id,
+            }) => {
+                let _ = event_tx.send(SessionEvent::HostAnnounce {
+                    bind,
+                    next_seq,
+                    new_host_peer_id,
+                });
+            }
+            Some(NetMessage::PeerList { peer_ids }) => {
+                let _ = event_tx.send(SessionEvent::PeerList { peer_ids });
+            }
+            Some(NetMessage::Heartbeat { tick }) => {
+                let _ = event_tx.send(SessionEvent::Heartbeat { tick });
+            }
+            Some(NetMessage::Reject { message }) => {
+                let _ = event_tx.send(SessionEvent::CommandRejected { message });
+            }
+            Some(NetMessage::Desync {
+                tick,
+                expected_hash,
+                actual_hash,
+            }) => {
+                let _ = event_tx.send(SessionEvent::Desync {
+                    tick,
+                    expected_hash,
+                    actual_hash,
+                });
+            }
+            Some(NetMessage::Error { message }) => {
+                let _ = event_tx.send(SessionEvent::Disconnected { reason: message });
+                return Ok(());
+            }
+            Some(other) => {
+                eprintln!("openttdrs-net: ignore msg {other:?}");
+            }
+            None => {}
+        }
+
+        let deadline = if waiting_for_welcome {
+            timeouts.handshake
+        } else {
+            timeouts.stalled_peer
+        };
+        if (waiting_for_welcome || decoder.has_partial_frame() || writer.has_pending())
+            && now.duration_since(last_progress) >= deadline
+        {
+            let reason = if waiting_for_welcome {
+                "handshake timed out without progress"
+            } else {
+                "server stalled without transport progress"
+            };
+            let _ = event_tx.send(SessionEvent::Disconnected {
+                reason: reason.into(),
+            });
+            return Ok(());
+        }
+        thread::sleep(timeouts.poll_interval);
     }
 }
 

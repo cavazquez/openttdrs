@@ -179,6 +179,7 @@ pub(crate) struct NewGrfTrainSpriteCacheMetrics {
     pub(crate) bytes: usize,
     pub(crate) hits: usize,
     pub(crate) misses: usize,
+    pub(crate) resolutions: usize,
 }
 
 /// Caché in-world / preview de imágenes NewGRF por resultado visual horneado.
@@ -191,6 +192,8 @@ pub(crate) struct NewGrfTrainSpriteCache {
     hits: usize,
     #[cfg(test)]
     misses: usize,
+    #[cfg(test)]
+    resolutions: usize,
 }
 
 impl NewGrfTrainSpriteCache {
@@ -200,6 +203,7 @@ impl NewGrfTrainSpriteCache {
         {
             self.hits = 0;
             self.misses = 0;
+            self.resolutions = 0;
         }
     }
 
@@ -260,7 +264,13 @@ impl NewGrfTrainSpriteCache {
                 .sum(),
             hits: self.hits,
             misses: self.misses,
+            resolutions: self.resolutions,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn resolution_count(&self) -> usize {
+        self.resolutions
     }
 
     /// Textura para la vista `dir` (0..=7) de un motor NewGRF (vistas horneadas).
@@ -359,6 +369,10 @@ impl NewGrfTrainSpriteCache {
         let Some(runtime) = engine.newgrf_runtime.as_ref() else {
             return Vec::new();
         };
+        #[cfg(test)]
+        {
+            self.resolutions += 1;
+        }
         let max_stack = if engine.sprite_stack { 8 } else { 1 };
         let mut layers = Vec::with_capacity(max_stack);
         let base_ctx = ctx.clone();

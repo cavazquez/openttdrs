@@ -35,12 +35,6 @@ fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
 
 const VEHICLE_SORT_SPRITE_ID: u32 = 0xFFFE_0000;
 
-fn vehicle_uses_newgrf_stack(sim: &SimWorld, v: &Vehicle) -> bool {
-    v.engine_id
-        .and_then(|id| super::engine_in_sim(sim, id))
-        .is_some_and(|engine| engine.sprite_stack)
-}
-
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_stack_children(
     commands: &mut Commands,
@@ -53,7 +47,7 @@ fn spawn_newgrf_stack_children(
     visibility: Visibility,
     layers: &[NewGrfVehicleLayer],
 ) {
-    if !vehicle_uses_newgrf_stack(sim, vehicle) {
+    if !super::vehicle_uses_newgrf_stack(sim, vehicle) {
         return;
     }
     let fallback = layers

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::ecs::change_detection::DetectChangesMut;
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
@@ -6,7 +8,7 @@ use crate::render::{CompanyColoredSprites, ViewportSortableChild, ViewportSortab
 use crate::simulation::SimClock;
 use crate::state::SimWorld;
 
-use super::assets::{NewGrfTrainSpriteCache, TruckHandles, vehicle_layers};
+use super::assets::{NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles, vehicle_layers};
 use super::pose::{
     aircraft_aux_sprite_pos_at, vehicle_insertion_key, vehicle_parent_bounds,
     vehicle_pose_for_construction, vehicle_source_depth, vehicle_sprite_pos,
@@ -83,6 +85,16 @@ fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
     Vec3::new(vehicle_pos.x, vehicle_pos.y + 21.0, vehicle_pos.z + 0.35)
 }
 
+/// Resultado de Action2 que un parent y sus children comparten dentro de un
+/// solo `update_vehicles`. La pose forma parte del resultado para que un
+/// trailer conserve su pose discreta y nunca herede la interpolada de la
+/// cabeza.
+struct ResolvedNewGrfStack {
+    vehicle_id: u32,
+    pose: openttdrs_core::VehiclePose,
+    layers: Vec<NewGrfVehicleLayer>,
+}
+
 /// Actualiza sólo la traslación que entrega la simulación.
 ///
 /// La `Z` de un parent/child sortable es salida de
@@ -127,6 +139,7 @@ pub(crate) fn update_vehicles(
     mut cache: ResMut<NewGrfTrainSpriteCache>,
     mut images: ResMut<Assets<Image>>,
     mut q: Query<(
+        Entity,
         &VehicleSprite,
         &mut Transform,
         &mut Sprite,
@@ -135,6 +148,7 @@ pub(crate) fn update_vehicles(
     )>,
     mut trailers: Query<
         (
+            Entity,
             &ConsistUnitSprite,
             &mut Transform,
             &mut Sprite,
@@ -153,7 +167,7 @@ pub(crate) fn update_vehicles(
             &mut Transform,
             &mut Sprite,
             &mut Visibility,
-            Option<&mut ViewportSortableChild>,
+            &mut ViewportSortableChild,
         ),
         (
             Without<VehicleSprite>,
@@ -216,7 +230,12 @@ pub(crate) fn update_vehicles(
         );
     }
     super::ensure_vehicle_livery_palettes(&sim, &mut company, &mut images);
-    for (vs, mut transform, mut sprite, mut visibility, parent) in &mut q {
+    // Vive sólo durante este update: cada entity parent materializa una vez
+    // su secuencia Action2 y sus children consumen exactamente ese resultado.
+    // La clave es la entity, no el id de cabeza, para no cruzar trailers ni
+    // poses discretas con la pose interpolada de otra representación.
+    let mut stack_layers_by_parent: HashMap<Entity, ResolvedNewGrfStack> = HashMap::new();
+    for (entity, vs, mut transform, mut sprite, mut visibility, parent) in &mut q {
         let Some(i) = vehicle_index.core.slot(vs.0) else {
             continue;
         };
@@ -274,9 +293,19 @@ pub(crate) fn update_vehicles(
                 trucks.for_vehicle(v, pose, Some(&company), Some(vehicle_owner_colour(&sim, v)))
             });
         sprite.color = vehicle_tint(v);
+        if super::vehicle_uses_newgrf_stack(&sim, v) {
+            stack_layers_by_parent.insert(
+                entity,
+                ResolvedNewGrfStack {
+                    vehicle_id: v.id,
+                    pose,
+                    layers,
+                },
+            );
+        }
     }
 
-    for (trailer, mut transform, mut sprite, mut visibility, parent) in &mut trailers {
+    for (entity, trailer, mut transform, mut sprite, mut visibility, parent) in &mut trailers {
         let Some(i) = vehicle_index.core.slot(trailer.head_id) else {
             visibility.set_if_neq(Visibility::Hidden);
             continue;
@@ -356,9 +385,19 @@ pub(crate) fn update_vehicles(
                 )
             });
         sprite.color = vehicle_tint(unit);
+        if super::vehicle_uses_newgrf_stack(&sim, unit) {
+            stack_layers_by_parent.insert(
+                entity,
+                ResolvedNewGrfStack {
+                    vehicle_id: unit.id,
+                    pose: trailer_pose,
+                    layers,
+                },
+            );
+        }
     }
 
-    for (layer, mut transform, mut sprite, mut visibility, child) in &mut stack_layers {
+    for (layer, mut transform, mut sprite, mut visibility, mut child) in &mut stack_layers {
         let Some(i) = vehicle_index.core.slot(layer.vehicle_id) else {
             visibility.set_if_neq(Visibility::Hidden);
             continue;
@@ -367,21 +406,19 @@ pub(crate) fn update_vehicles(
             visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
-        let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
+        let Some(resolved) = stack_layers_by_parent
+            .get(&child.parent)
+            .filter(|resolved| resolved.vehicle_id == layer.vehicle_id)
+        else {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        };
+        let pose = resolved.pose;
         if vehicle_is_hidden_from_view(&sim, v, pose) {
             visibility.set_if_neq(Visibility::Hidden);
             continue;
         }
-        let layers = trucks.for_vehicle_with_newgrf_layers(
-            v,
-            pose,
-            Some(&company),
-            Some(vehicle_owner_colour(&sim, v)),
-            &sim,
-            &mut cache,
-            &mut images,
-        );
-        let Some(layer_data) = layers.get(layer.stack_index) else {
+        let Some(layer_data) = resolved.layers.get(layer.stack_index) else {
             visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
@@ -397,16 +434,13 @@ pub(crate) fn update_vehicles(
         );
         let source_depth = vehicle_source_depth(v, &sim.state.map, pose, pos3);
         pos3.z = source_depth;
-        let preserves_sorted_depth = child.is_some();
-        set_vehicle_translation_if_changed(&mut transform, pos3, preserves_sorted_depth);
+        set_vehicle_translation_if_changed(&mut transform, pos3, true);
         sprite.image = layer_data.handle.clone();
         sprite.color = vehicle_tint(v);
-        if let Some(mut child) = child {
-            child.set_if_neq(ViewportSortableChild {
-                parent: child.parent,
-                source_depth,
-            });
-        }
+        child.set_if_neq(ViewportSortableChild {
+            parent: child.parent,
+            source_depth,
+        });
     }
 
     for (shadow, mut transform, mut sprite, mut visibility, child) in &mut shadows {

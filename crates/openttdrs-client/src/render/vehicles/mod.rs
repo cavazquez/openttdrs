@@ -27,6 +27,14 @@ fn engine_in_sim(sim: &SimWorld, engine_id: u16) -> Option<&EngineDef> {
         .or_else(|| openttdrs_core::engine_by_id(engine_id))
 }
 
+/// Sólo estos vehículos tienen children estables para `SpriteStack`.
+fn vehicle_uses_newgrf_stack(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) -> bool {
+    vehicle
+        .engine_id
+        .and_then(|id| engine_in_sim(sim, id))
+        .is_some_and(|engine| engine.sprite_stack)
+}
+
 /// Devuelve la cabeza de un consist sin confiar en que los enlaces cargados
 /// desde un SAV sean acíclicos. OpenTTD aplica la librea de la cabeza a todas
 /// sus unidades, incluidos vagones y partes articuladas.
@@ -175,6 +183,84 @@ mod tests {
             aircraft_rotor: Default::default(),
             train_groups: Default::default(),
         }
+    }
+
+    fn eight_layer_sprite_stack_engine(id: u16, red: u8) -> openttdrs_core::EngineDef {
+        use openttdrs_core::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        let literal = |value: u32| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                and_mask: value,
+                ..Default::default()
+            },
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![
+                Vec::new(),
+                vec![openttdrs_core::DecodedSprite {
+                    width: 1,
+                    height: 1,
+                    x_offs: i16::from(red),
+                    y_offs: 0,
+                    rgba: vec![red, 0, 0, 255],
+                    mask: Vec::new(),
+                }],
+            ],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 1,
+            }],
+            ..Default::default()
+        };
+        // El bit de continuación permanece encendido para los slots 0..=6 y
+        // se apaga en el 7; así el fixture usa los ocho slots estables.
+        graphics.action2_var.insert(
+            1,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x10,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 8,
+                        and_mask: 0xFF,
+                        ..Default::default()
+                    },
+                },
+                ops: vec![
+                    Action2VarOp {
+                        operator: 0x12,
+                        rhs: literal(7),
+                    },
+                    Action2VarOp {
+                        operator: 0x12,
+                        rhs: literal(0),
+                    },
+                    Action2VarOp {
+                        operator: 0x14,
+                        rhs: literal(31),
+                    },
+                    Action2VarOp {
+                        operator: 0x0E,
+                        rhs: literal(0x100),
+                    },
+                ],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train")
+            .clone();
+        engine.id = id;
+        engine.newgrf_local_id = 0;
+        engine.sprite_stack = true;
+        engine.newgrf_runtime = Some(Box::new(graphics));
+        engine
     }
 
     #[test]
@@ -1171,6 +1257,194 @@ mod tests {
             &mut images,
         );
         assert_eq!(layers.len(), 2);
+    }
+
+    #[test]
+    fn newgrf_stack_sync_resolves_once_per_parent_without_crossing_trailers() {
+        use crate::render::ViewportSortableChild;
+        use sync::VehicleNewGrfStackSprite;
+
+        const HEAD_ID: u32 = 801;
+        const TRAILER_ID: u32 = 802;
+        const TRAILER_ENGINE_ID: u16 = 9_999;
+
+        let mut state = GameState::new(8, 8);
+        let head_engine = eight_layer_sprite_stack_engine(openttdrs_core::ENGINE_TRAIN_KIRBY, 33);
+        let catalog_head = state
+            .engine_catalog
+            .iter_mut()
+            .find(|engine| engine.id == head_engine.id)
+            .expect("Kirby in catalog");
+        *catalog_head = head_engine;
+        state
+            .engine_catalog
+            .push(eight_layer_sprite_stack_engine(TRAILER_ENGINE_ID, 77));
+
+        let mut head = Vehicle::new(
+            HEAD_ID,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        head.engine_id = Some(openttdrs_core::ENGINE_TRAIN_KIRBY);
+        head.next_unit = Some(TRAILER_ID);
+        let mut trailer = Vehicle::new(
+            TRAILER_ID,
+            VehicleKind::Train,
+            TileCoord::new(2, 1),
+            TileCoord::new(3, 1),
+        );
+        trailer.engine_id = Some(TRAILER_ENGINE_ID);
+        trailer.prev_unit = Some(HEAD_ID);
+        trailer.cur_speed = 96;
+        trailer.rail_pixel = 8;
+        trailer.progress = 64;
+        trailer.path.push_back(TileCoord::new(3, 1));
+        state.vehicles.extend([head, trailer]);
+
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        });
+        world.insert_resource(crate::simulation::SimClock { tick_alpha: 0.5 });
+        world.insert_resource(default_handles());
+        world.insert_resource(crate::render::CompanyColoredSprites::default());
+        world.insert_resource(VehicleIndex::default());
+        world.insert_resource(NewGrfTrainSpriteCache::default());
+        world.init_resource::<Assets<Image>>();
+
+        let head_parent = world
+            .spawn((
+                sync::VehicleSprite(HEAD_ID),
+                Transform::default(),
+                Sprite::default(),
+                Visibility::Hidden,
+            ))
+            .id();
+        let trailer_parent = world
+            .spawn((
+                sync::ConsistUnitSprite {
+                    head_id: HEAD_ID,
+                    unit_index: 1,
+                },
+                Transform::default(),
+                Sprite::default(),
+                Visibility::Hidden,
+            ))
+            .id();
+        let head_children: Vec<_> = (1..8)
+            .map(|stack_index| {
+                world
+                    .spawn((
+                        VehicleNewGrfStackSprite {
+                            vehicle_id: HEAD_ID,
+                            stack_index,
+                        },
+                        Transform::default(),
+                        Sprite::default(),
+                        Visibility::Hidden,
+                        ViewportSortableChild {
+                            parent: head_parent,
+                            source_depth: 0.0,
+                        },
+                    ))
+                    .id()
+            })
+            .collect();
+        let trailer_child = world
+            .spawn((
+                VehicleNewGrfStackSprite {
+                    vehicle_id: TRAILER_ID,
+                    stack_index: 1,
+                },
+                Transform::default(),
+                Sprite::default(),
+                Visibility::Hidden,
+                ViewportSortableChild {
+                    parent: trailer_parent,
+                    source_depth: 0.0,
+                },
+            ))
+            .id();
+
+        world.run_system_once(rebuild_vehicle_index).unwrap();
+        world.run_system_once(update_vehicles).unwrap();
+        assert_eq!(
+            world
+                .resource::<NewGrfTrainSpriteCache>()
+                .resolution_count(),
+            2,
+            "la cabeza y el trailer resuelven una vez cada uno, no una vez por child"
+        );
+
+        let head_image = world
+            .entity(head_parent)
+            .get::<Sprite>()
+            .expect("head sprite")
+            .image
+            .clone();
+        let trailer_image = world
+            .entity(trailer_parent)
+            .get::<Sprite>()
+            .expect("trailer sprite")
+            .image
+            .clone();
+        assert_ne!(head_image, trailer_image);
+        for child in head_children {
+            assert_eq!(
+                *world.entity(child).get::<Visibility>().expect("head child"),
+                Visibility::Visible
+            );
+            assert_eq!(
+                world
+                    .entity(child)
+                    .get::<Sprite>()
+                    .expect("head child sprite")
+                    .image,
+                head_image
+            );
+        }
+        assert_eq!(
+            *world
+                .entity(trailer_child)
+                .get::<Visibility>()
+                .expect("trailer child"),
+            Visibility::Visible
+        );
+        assert_eq!(
+            world
+                .entity(trailer_child)
+                .get::<Sprite>()
+                .expect("trailer child sprite")
+                .image,
+            trailer_image
+        );
+        assert_eq!(
+            world
+                .entity(trailer_child)
+                .get::<Transform>()
+                .expect("trailer child transform")
+                .translation
+                .truncate(),
+            world
+                .entity(trailer_parent)
+                .get::<Transform>()
+                .expect("trailer parent transform")
+                .translation
+                .truncate(),
+            "el child del trailer debe usar la misma pose discreta que su parent"
+        );
+
+        world.run_system_once(update_vehicles).unwrap();
+        assert_eq!(
+            world
+                .resource::<NewGrfTrainSpriteCache>()
+                .resolution_count(),
+            4,
+            "la compartición es temporal: una vez por parent en cada frame"
+        );
     }
 
     #[test]

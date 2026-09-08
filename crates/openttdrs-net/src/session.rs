@@ -2,6 +2,7 @@
 
 use std::io::Read;
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -58,6 +59,34 @@ pub enum SessionEvent {
     CommandRejected { message: String },
     /// Peer desconectado o error fatal.
     Disconnected { reason: String },
+}
+
+/// Drena un evento de sesión y sintetiza el fin del hilo una sola vez.
+///
+/// `mpsc::Receiver::try_recv` devuelve `Disconnected` en cada consulta una vez
+/// que se cerró el canal. Los consumidores drenan hasta `None`, por lo que
+/// convertir ese estado directamente en un evento infinito bloquea su frame.
+/// Los eventos encolados siguen saliendo primero; después se entrega una única
+/// desconexión terminal y las consultas posteriores devuelven `None`.
+fn try_recv_session_event(
+    event_rx: &Receiver<SessionEvent>,
+    terminal_delivered: &AtomicBool,
+    terminal_reason: &str,
+) -> Option<SessionEvent> {
+    match event_rx.try_recv() {
+        Ok(event) => {
+            if matches!(&event, SessionEvent::Disconnected { .. }) {
+                terminal_delivered.store(true, Ordering::Relaxed);
+            }
+            Some(event)
+        }
+        Err(TryRecvError::Disconnected) if !terminal_delivered.swap(true, Ordering::Relaxed) => {
+            Some(SessionEvent::Disconnected {
+                reason: terminal_reason.into(),
+            })
+        }
+        Err(TryRecvError::Empty | TryRecvError::Disconnected) => None,
+    }
 }
 
 enum ServerCmd {
@@ -181,6 +210,7 @@ impl ListenServerHandle {
 pub struct ListenServer {
     handle: ListenServerHandle,
     event_rx: Receiver<SessionEvent>,
+    terminal_delivered: AtomicBool,
     join: Option<JoinHandle<()>>,
     local_addr: SocketAddr,
 }
@@ -234,6 +264,7 @@ impl ListenServer {
                 peer_ids,
             },
             event_rx,
+            terminal_delivered: AtomicBool::new(false),
             join: Some(join),
             local_addr,
         })
@@ -304,13 +335,11 @@ impl ListenServer {
 
     /// Eventos remotos (p.ej. Propose ya convertido en Commit por el hilo).
     pub fn try_recv(&self) -> Option<SessionEvent> {
-        match self.event_rx.try_recv() {
-            Ok(e) => Some(e),
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => Some(SessionEvent::Disconnected {
-                reason: "server thread ended".into(),
-            }),
-        }
+        try_recv_session_event(
+            &self.event_rx,
+            &self.terminal_delivered,
+            "server thread ended",
+        )
     }
 }
 
@@ -791,6 +820,7 @@ impl ClientSessionHandle {
 pub struct ClientSession {
     handle: ClientSessionHandle,
     event_rx: Receiver<SessionEvent>,
+    terminal_delivered: AtomicBool,
     join: Option<JoinHandle<()>>,
 }
 
@@ -813,6 +843,7 @@ impl ClientSession {
         Ok(Self {
             handle: ClientSessionHandle { cmd_tx, company_id },
             event_rx,
+            terminal_delivered: AtomicBool::new(false),
             join: Some(join),
         })
     }
@@ -836,13 +867,11 @@ impl ClientSession {
     }
 
     pub fn try_recv(&self) -> Option<SessionEvent> {
-        match self.event_rx.try_recv() {
-            Ok(e) => Some(e),
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => Some(SessionEvent::Disconnected {
-                reason: "client thread ended".into(),
-            }),
-        }
+        try_recv_session_event(
+            &self.event_rx,
+            &self.terminal_delivered,
+            "client thread ended",
+        )
     }
 }
 
@@ -1113,7 +1142,10 @@ pub fn apply_session_event(state: &mut GameState, event: &SessionEvent) -> Resul
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_command_as_company, elect_new_host};
+    use std::sync::atomic::AtomicBool;
+    use std::sync::mpsc;
+
+    use super::{SessionEvent, apply_command_as_company, elect_new_host, try_recv_session_event};
     use openttdrs_core::{Command, CompanyId, GameState, TileCoord};
 
     #[test]
@@ -1141,5 +1173,43 @@ mod tests {
             state.map.get(TileCoord::new(3, 3)).map(|tile| tile.m1),
             Some(1)
         );
+    }
+
+    #[test]
+    fn closed_receiver_delivers_pending_events_then_one_terminal_event() {
+        let (sender, receiver) = mpsc::channel();
+        assert!(sender.send(SessionEvent::Heartbeat { tick: 7 }).is_ok());
+        drop(sender);
+        let terminal_delivered = AtomicBool::new(false);
+
+        assert!(matches!(
+            try_recv_session_event(&receiver, &terminal_delivered, "thread ended"),
+            Some(SessionEvent::Heartbeat { tick: 7 })
+        ));
+        assert!(matches!(
+            try_recv_session_event(&receiver, &terminal_delivered, "thread ended"),
+            Some(SessionEvent::Disconnected { reason }) if reason == "thread ended"
+        ));
+        assert!(try_recv_session_event(&receiver, &terminal_delivered, "thread ended").is_none());
+    }
+
+    #[test]
+    fn explicit_disconnect_is_not_followed_by_a_synthetic_one() {
+        let (sender, receiver) = mpsc::channel();
+        assert!(
+            sender
+                .send(SessionEvent::Disconnected {
+                    reason: "socket closed".into(),
+                })
+                .is_ok()
+        );
+        drop(sender);
+        let terminal_delivered = AtomicBool::new(false);
+
+        assert!(matches!(
+            try_recv_session_event(&receiver, &terminal_delivered, "thread ended"),
+            Some(SessionEvent::Disconnected { reason }) if reason == "socket closed"
+        ));
+        assert!(try_recv_session_event(&receiver, &terminal_delivered, "thread ended").is_none());
     }
 }

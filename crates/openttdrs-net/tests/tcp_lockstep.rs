@@ -88,6 +88,44 @@ fn two_peers_same_log_same_hash_over_tcp() {
 }
 
 #[test]
+fn client_reports_a_closed_server_once_then_the_drain_finishes() {
+    let snapshot = GameState::new(16, 16).save_json().unwrap();
+    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
+        Some(server) => server,
+        None => return,
+    };
+    let bind = server.local_addr().to_string();
+    let client = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    assert!(matches!(
+        wait_event(&client, Duration::from_secs(2)),
+        SessionEvent::Welcome { .. }
+    ));
+
+    drop(server);
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match client.try_recv() {
+            Some(SessionEvent::Disconnected { .. }) => break,
+            Some(_) => {}
+            None if Instant::now() >= deadline => {
+                panic!("timeout esperando el cierre del servidor")
+            }
+            None => thread::sleep(Duration::from_millis(5)),
+        }
+    }
+    for _ in 0..100 {
+        assert!(
+            client.try_recv().is_none(),
+            "el cierre ya comunicado no debe prolongar el drenaje"
+        );
+    }
+}
+
+#[test]
 fn late_joiner_gets_live_snapshot_not_boot() {
     let mut host = GameState::new(32, 32);
     let boot = host.save_json().unwrap();

@@ -1,6 +1,9 @@
 //! UI de información de tile seleccionado y menú de construcción (I6).
 
+use bevy::ecs::system::SystemParam;
+use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
+use bevy::text::EditableText;
 
 mod lifecycle;
 mod plugins;
@@ -78,6 +81,48 @@ pub(crate) use save_window::SaveWindowState;
 pub(crate) use statusbar::{NewsUiState, drain_news_events};
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState, ToolbarState, UiToolState};
 pub(crate) use ui5_blocked_stubs::{LinkGraphView, LinkGraphWindowState};
+
+/// Estado compartido que determina si el teclado pertenece a la UI y no al
+/// mundo. Conserva la política que ya aplicaban los atajos globales para que
+/// cámara y toolbar no discrepen sobre el mismo frame de entrada.
+#[derive(SystemParam)]
+pub(crate) struct KeyboardCapture<'w, 's> {
+    focus: Option<Res<'w, InputFocus>>,
+    editable: Query<'w, 's, (), With<EditableText>>,
+    save_window: Option<Res<'w, SaveWindowState>>,
+    console: Option<Res<'w, dev_console::DevConsoleState>>,
+    exit_modal: Query<'w, 's, &'static Node, With<toolbar::editor_toolbar::EditorExitConfirmRoot>>,
+}
+
+impl KeyboardCapture<'_, '_> {
+    /// `true` cuando texto, guardado, consola o confirmación modal deben
+    /// recibir las teclas antes que los controles de juego.
+    #[must_use]
+    pub(crate) fn active(&self) -> bool {
+        let text_focused = self
+            .focus
+            .as_deref()
+            .and_then(InputFocus::get)
+            .is_some_and(|entity| self.editable.get(entity).is_ok());
+        text_focused
+            || self
+                .save_window
+                .as_deref()
+                .is_some_and(|window| window.open)
+            || self
+                .console
+                .as_deref()
+                .is_some_and(dev_console::dev_console_captures_keyboard)
+            || self
+                .exit_modal
+                .iter()
+                .any(|node| node.display != Display::None)
+    }
+}
+
+#[cfg(test)]
+pub(crate) use toolbar::editor_toolbar::EditorExitConfirmRoot;
+
 pub(crate) struct ClientUiPlugin;
 
 impl Plugin for ClientUiPlugin {

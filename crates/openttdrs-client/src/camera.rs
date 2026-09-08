@@ -11,6 +11,7 @@ use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, clamp_ortho_scale, large_map_viewport_cull_enabled,
 };
 use crate::state::{ClientScreen, SimWorld};
+use crate::ui::KeyboardCapture;
 
 /// Paneo con botón derecho: factor × `OrthographicProjection::scale` × delta en píxeles.
 const PAN_RMB_SCALE: f32 = 1.35;
@@ -215,6 +216,7 @@ pub fn move_camera(
     windows: Query<&Window, With<PrimaryWindow>>,
     sim: Res<SimWorld>,
     zoom_mode: Option<Res<ZoomMode>>,
+    keyboard_capture: KeyboardCapture,
     mut cam_q: Query<
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
@@ -238,6 +240,7 @@ pub fn move_camera(
         .unwrap_or((1280.0, 720.0));
 
     let dt = presentation_delta_secs(&time);
+    let keyboard_captured = keyboard_capture.active();
 
     // Arrastre con botón derecho (inmediato, sin inercia)
     if mouse.pressed(MouseButton::Right) && motion.delta != Vec2::ZERO {
@@ -247,56 +250,64 @@ pub fn move_camera(
         vel.0 = Vec2::ZERO;
     }
 
-    // WASD: acumular dirección deseada
-    let mut dir = Vec2::ZERO;
-    if kbd.pressed(KeyCode::KeyW) || kbd.pressed(KeyCode::ArrowUp) {
-        dir.y += 1.0;
-    }
-    let save_combo = kbd.pressed(KeyCode::ControlLeft) || kbd.pressed(KeyCode::ControlRight);
-    if (kbd.pressed(KeyCode::KeyS) && !save_combo) || kbd.pressed(KeyCode::ArrowDown) {
-        dir.y -= 1.0;
-    }
-    if kbd.pressed(KeyCode::KeyA) || kbd.pressed(KeyCode::ArrowLeft) {
-        dir.x -= 1.0;
-    }
-    if kbd.pressed(KeyCode::KeyD) || kbd.pressed(KeyCode::ArrowRight) {
-        dir.x += 1.0;
-    }
-
-    let max_speed = WASD_MAX_SPEED * proj.scale;
-    if dir != Vec2::ZERO {
-        vel.0 += dir.normalize() * WASD_ACCEL * proj.scale * dt;
-        if vel.0.length() > max_speed {
-            vel.0 = vel.0.normalize() * max_speed;
-        }
-    }
-
-    // Fricción: desacelera aunque no haya tecla presionada
-    let friction = (1.0 - WASD_FRICTION * dt).max(0.0);
-    vel.0 *= friction;
-    if vel.0.length() < 0.5 {
+    if keyboard_captured {
+        // Al enfocar texto o abrir un modal, la velocidad acumulada no debe
+        // seguir desplazando el mapa detrás de la UI.
         vel.0 = Vec2::ZERO;
-    }
+    } else {
+        // WASD: acumular dirección deseada
+        let mut dir = Vec2::ZERO;
+        if kbd.pressed(KeyCode::KeyW) || kbd.pressed(KeyCode::ArrowUp) {
+            dir.y += 1.0;
+        }
+        let save_combo = kbd.pressed(KeyCode::ControlLeft) || kbd.pressed(KeyCode::ControlRight);
+        if (kbd.pressed(KeyCode::KeyS) && !save_combo) || kbd.pressed(KeyCode::ArrowDown) {
+            dir.y -= 1.0;
+        }
+        if kbd.pressed(KeyCode::KeyA) || kbd.pressed(KeyCode::ArrowLeft) {
+            dir.x -= 1.0;
+        }
+        if kbd.pressed(KeyCode::KeyD) || kbd.pressed(KeyCode::ArrowRight) {
+            dir.x += 1.0;
+        }
 
-    transform.translation.x += vel.0.x * dt;
-    transform.translation.y += vel.0.y * dt;
+        let max_speed = WASD_MAX_SPEED * proj.scale;
+        if dir != Vec2::ZERO {
+            vel.0 += dir.normalize() * WASD_ACCEL * proj.scale * dt;
+            if vel.0.length() > max_speed {
+                vel.0 = vel.0.normalize() * max_speed;
+            }
+        }
+
+        // Fricción: desacelera aunque no haya tecla presionada
+        let friction = (1.0 - WASD_FRICTION * dt).max(0.0);
+        vel.0 *= friction;
+        if vel.0.length() < 0.5 {
+            vel.0 = Vec2::ZERO;
+        }
+
+        transform.translation.x += vel.0.x * dt;
+        transform.translation.y += vel.0.y * dt;
+    }
 
     // Zoom con teclado. En modo libre se conserva el ajuste continuo; el
     // atajo configurable `+`/`-` se atiende también en `handle_zoom_hotkeys`.
     // En modo fijo ese atajo da un solo paso discreto allí; aquí solo se
     // mantienen los equivalentes del teclado numérico.
-    if zoom_mode == ZoomMode::Free {
-        let z = ZOOM_KEY_RATE * dt;
-        if kbd.pressed(KeyCode::Equal) || kbd.pressed(KeyCode::NumpadAdd) {
-            proj.scale = clamp_ortho_scale(proj.scale * (1.0 - z), win_w, win_h, large_cull);
+    if !keyboard_captured {
+        if zoom_mode == ZoomMode::Free {
+            let z = ZOOM_KEY_RATE * dt;
+            if kbd.pressed(KeyCode::Equal) || kbd.pressed(KeyCode::NumpadAdd) {
+                proj.scale = clamp_ortho_scale(proj.scale * (1.0 - z), win_w, win_h, large_cull);
+            }
+            if kbd.pressed(KeyCode::Minus) || kbd.pressed(KeyCode::NumpadSubtract) {
+                proj.scale = clamp_ortho_scale(proj.scale * (1.0 + z), win_w, win_h, large_cull);
+            }
+        } else if kbd.just_pressed(KeyCode::NumpadAdd) {
+            proj.scale = zoom_step_scale(proj.scale, true, zoom_mode, win_w, win_h, large_cull);
+        } else if kbd.just_pressed(KeyCode::NumpadSubtract) {
+            proj.scale = zoom_step_scale(proj.scale, false, zoom_mode, win_w, win_h, large_cull);
         }
-        if kbd.pressed(KeyCode::Minus) || kbd.pressed(KeyCode::NumpadSubtract) {
-            proj.scale = clamp_ortho_scale(proj.scale * (1.0 + z), win_w, win_h, large_cull);
-        }
-    } else if kbd.just_pressed(KeyCode::NumpadAdd) {
-        proj.scale = zoom_step_scale(proj.scale, true, zoom_mode, win_w, win_h, large_cull);
-    } else if kbd.just_pressed(KeyCode::NumpadSubtract) {
-        proj.scale = zoom_step_scale(proj.scale, false, zoom_mode, win_w, win_h, large_cull);
     }
 
     // Zoom con rueda del ratón hacia la posición del cursor
@@ -378,14 +389,16 @@ mod tests {
 
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
+    use bevy::input_focus::InputFocus;
     use bevy::state::app::StatesPlugin;
+    use bevy::text::EditableText;
     use bevy::window::{PrimaryWindow, WindowResolution};
 
     use crate::render::{RemapMapVisualsPending, VehicleIndex};
     use crate::settings::ClientPreferences;
     use crate::simulation::SimulationPlugin;
     use crate::state::{ClientScreen, SimRunState};
-    use crate::ui::SimHudControls;
+    use crate::ui::{EditorExitConfirmRoot, SimHudControls};
 
     /// Ejecuta los plugins de producción con los tres relojes que instala
     /// `TimePlugin`. El helper avanza `Virtual` usando la función real de
@@ -585,6 +598,136 @@ mod tests {
         assert!(virtual_at_1x < virtual_at_4x && virtual_at_4x < virtual_at_8x);
         assert!((at_1x - at_4x).abs() < f32::EPSILON);
         assert!((at_1x - at_8x).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn focused_text_captures_camera_keys_clears_inertia_and_releases_controls() {
+        let mut world = World::new();
+        let mut time = Time::<Real>::default();
+        time.advance_by(Duration::from_millis(16));
+        world.insert_resource(time);
+
+        let mut keyboard = ButtonInput::<KeyCode>::default();
+        keyboard.press(KeyCode::KeyD);
+        keyboard.press(KeyCode::NumpadAdd);
+        world.insert_resource(keyboard);
+        world.insert_resource(ButtonInput::<MouseButton>::default());
+        world.insert_resource(AccumulatedMouseMotion::default());
+        world.insert_resource(AccumulatedMouseScroll::default());
+        world.insert_resource(CameraVelocity(Vec2::new(320.0, -50.0)));
+        world.insert_resource(SimWorld::default());
+
+        let field = world.spawn(EditableText::new("wasd")).id();
+        world.insert_resource(InputFocus::from_entity(field));
+        let camera = world
+            .spawn((
+                PrimaryGameCamera,
+                Transform::default(),
+                Projection::Orthographic(OrthographicProjection::default_2d()),
+            ))
+            .id();
+
+        world.run_system_once(move_camera).unwrap();
+
+        assert_eq!(
+            world.get::<Transform>(camera).unwrap().translation,
+            Vec3::ZERO
+        );
+        let Projection::Orthographic(projection) = world.get::<Projection>(camera).unwrap() else {
+            panic!("se esperaba cámara ortográfica");
+        };
+        assert_eq!(projection.scale, 1.0, "el zoom de teclado queda en la UI");
+        assert_eq!(world.resource::<CameraVelocity>().0, Vec2::ZERO);
+
+        assert!(world.remove_resource::<InputFocus>().is_some());
+        world.run_system_once(move_camera).unwrap();
+
+        assert!(
+            world.get::<Transform>(camera).unwrap().translation.x > 0.0,
+            "la cámara vuelve a responder al perder el foco de texto"
+        );
+        let Projection::Orthographic(projection) = world.get::<Projection>(camera).unwrap() else {
+            panic!("se esperaba cámara ortográfica");
+        };
+        assert_eq!(
+            projection.scale, 0.5,
+            "el zoom vuelve a responder sin captura"
+        );
+    }
+
+    #[test]
+    fn visible_exit_modal_captures_camera_keys_until_hidden() {
+        let mut world = World::new();
+        let mut time = Time::<Real>::default();
+        time.advance_by(Duration::from_millis(16));
+        world.insert_resource(time);
+
+        let mut keyboard = ButtonInput::<KeyCode>::default();
+        keyboard.press(KeyCode::KeyW);
+        keyboard.press(KeyCode::NumpadSubtract);
+        world.insert_resource(keyboard);
+        world.insert_resource(ButtonInput::<MouseButton>::default());
+        world.insert_resource(AccumulatedMouseMotion::default());
+        world.insert_resource(AccumulatedMouseScroll::default());
+        world.insert_resource(CameraVelocity::default());
+        world.insert_resource(SimWorld::default());
+
+        let modal = world
+            .spawn((
+                EditorExitConfirmRoot,
+                Node {
+                    display: Display::Flex,
+                    ..default()
+                },
+            ))
+            .id();
+        let camera = world
+            .spawn((
+                PrimaryGameCamera,
+                Transform::default(),
+                Projection::Orthographic(OrthographicProjection::default_2d()),
+            ))
+            .id();
+
+        world.run_system_once(move_camera).unwrap();
+        assert_eq!(
+            world.get::<Transform>(camera).unwrap().translation,
+            Vec3::ZERO
+        );
+
+        world.get_mut::<Node>(modal).unwrap().display = Display::None;
+        world.run_system_once(move_camera).unwrap();
+
+        assert!(
+            world.get::<Transform>(camera).unwrap().translation.y > 0.0,
+            "ocultar el modal libera el teclado de la cámara"
+        );
+    }
+
+    #[test]
+    fn keyboard_capture_does_not_block_explicit_camera_focus_requests() {
+        let (mut app, camera) = camera_schedule_app();
+        let field = app.world_mut().spawn(EditableText::new("wasd")).id();
+        app.world_mut()
+            .insert_resource(InputFocus::from_entity(field));
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyW);
+        app.world_mut().resource_mut::<CameraFocusRequest>().target = Some(Vec2::new(120.0, 0.0));
+
+        advance_presentation_and_virtual_time(&mut app, Duration::from_millis(16));
+        app.update();
+
+        let transform = app.world().get::<Transform>(camera).unwrap();
+        assert!(
+            transform.translation.x > 0.0,
+            "el foco explícito sigue avanzando"
+        );
+        assert_eq!(
+            transform.translation.y, 0.0,
+            "WASD queda capturado aunque el request de UI sea válido"
+        );
+        assert_eq!(app.world().resource::<CameraVelocity>().0, Vec2::ZERO);
     }
 
     #[test]

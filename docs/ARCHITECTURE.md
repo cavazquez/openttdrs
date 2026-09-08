@@ -43,7 +43,7 @@ Contrato del repo: capas, reglas duras, diseño incremental, inventarios de dete
 2. **Determinismo** → mismo seed + mismos comandos + mismos ticks ⇒ mismo `canonical_hash` ([ADR 0002](adr/0002-determinismo-tick-referencia.md)). HashMap: [Inventario HashMap](#inventario-hashmap-y-determinismo).
 3. **Referencia OpenTTD** → commit fijado en [parity/openttd-reference.json](parity/openttd-reference.json); no clonar `master` móvil.
 4. **Red** → lockstep TCP ([ADR 0001](adr/0001-multiplayer-v1.md)); host migration listen-server post-v1 ([ADR 0004](adr/0004-host-migration-post-v1.md)). Tick ~37 Hz: [ADR 0003](adr/0003-tick-37hz-openttd.md).
-5. **Cámara de presentación** → `Time<Real>`, nunca el reloj virtual de simulación: debe responder durante pausa y a la misma cadencia en 1×/4×/8×; el delta se acota localmente ante stalls del sistema.
+5. **Cámara de presentación** → `Time<Real>`, nunca el reloj virtual de simulación: debe responder durante pausa y a la misma cadencia en 1×/4×/8×; el delta se acota localmente ante stalls del sistema. WASD/flechas y zoom de teclado respetan `KeyboardCapture`, la misma política de foco/modal que los hotkeys; rueda, RMB y `CameraFocusRequest` siguen siendo acciones explícitas de presentación.
 
 ## Dónde va código nuevo
 

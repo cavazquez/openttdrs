@@ -2,13 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
-use bevy::text::EditableText;
 
 use crate::settings::ClientPreferences;
-use crate::ui::save_window::SaveWindowState;
-use crate::ui::toolbar::editor_toolbar::EditorExitConfirmRoot;
+use crate::ui::KeyboardCapture;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum UiCommandId {
@@ -356,29 +353,15 @@ fn rebuild_bindings(hotkeys: &mut UiHotkeys, overrides: &str) {
 pub(crate) fn dispatch_ui_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     preferences: Res<ClientPreferences>,
-    focus: Option<Res<InputFocus>>,
-    editable: Query<(), With<EditableText>>,
-    save_window: Option<Res<SaveWindowState>>,
-    console: Option<Res<crate::ui::dev_console::DevConsoleState>>,
+    keyboard_capture: KeyboardCapture,
     network: Option<Res<crate::network::NetworkRuntime>>,
-    exit_modal: Query<&Node, With<EditorExitConfirmRoot>>,
     mut hotkeys: ResMut<UiHotkeys>,
 ) {
     if hotkeys.bindings.is_empty() || hotkeys.loaded_overrides != preferences.toolbar_hotkeys {
         rebuild_bindings(&mut hotkeys, &preferences.toolbar_hotkeys);
     }
     hotkeys.fired.clear();
-    let text_focused = focus
-        .as_deref()
-        .and_then(InputFocus::get)
-        .is_some_and(|entity| editable.get(entity).is_ok());
-    let captured = text_focused
-        || save_window.as_deref().is_some_and(|window| window.open)
-        || console
-            .as_deref()
-            .is_some_and(crate::ui::dev_console::dev_console_captures_keyboard)
-        || exit_modal.iter().any(|node| node.display != Display::None);
-    if captured {
+    if keyboard_capture.active() {
         return;
     }
     let client_only = network
@@ -535,8 +518,19 @@ pub(crate) fn handle_zoom_hotkeys(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
+    use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
+    use bevy::input_focus::InputFocus;
+    use bevy::text::EditableText;
+    use bevy::time::Real;
+
+    use crate::bevy_app::UpdateSet;
+    use crate::camera::CameraVelocity;
+    use crate::render::PrimaryGameCamera;
+    use crate::state::SimWorld;
 
     #[test]
     fn modifiers_distinguish_f1_from_shift_f1() {
@@ -634,5 +628,53 @@ mod tests {
         world.run_system_once(dispatch_ui_hotkeys).unwrap();
 
         assert!(!world.resource::<UiHotkeys>().fired(UiCommandId::Pause));
+    }
+
+    #[test]
+    fn save_window_capture_is_shared_by_input_and_camera_sets() {
+        let mut app = App::new();
+        app.configure_sets(Update, (UpdateSet::Input, UpdateSet::Camera).chain());
+
+        let mut time = Time::<Real>::default();
+        time.advance_by(Duration::from_millis(16));
+        app.insert_resource(time)
+            .insert_resource(ClientPreferences::default())
+            .insert_resource(UiHotkeys::default())
+            .insert_resource(crate::ui::SaveWindowState {
+                open: true,
+                ..default()
+            })
+            .insert_resource(ButtonInput::<MouseButton>::default())
+            .insert_resource(AccumulatedMouseMotion::default())
+            .insert_resource(AccumulatedMouseScroll::default())
+            .insert_resource(SimWorld::default())
+            .insert_resource(CameraVelocity(Vec2::new(300.0, 0.0)));
+        let mut keyboard = ButtonInput::<KeyCode>::default();
+        keyboard.press(KeyCode::F1);
+        keyboard.press(KeyCode::KeyD);
+        app.insert_resource(keyboard);
+        let camera = app
+            .world_mut()
+            .spawn((
+                PrimaryGameCamera,
+                Transform::default(),
+                Projection::Orthographic(OrthographicProjection::default_2d()),
+            ))
+            .id();
+
+        app.add_systems(Update, dispatch_ui_hotkeys.in_set(UpdateSet::Input))
+            .add_systems(Update, crate::camera::move_camera.in_set(UpdateSet::Camera));
+        app.update();
+
+        assert!(
+            !app.world()
+                .resource::<UiHotkeys>()
+                .fired(UiCommandId::Pause)
+        );
+        assert_eq!(
+            app.world().get::<Transform>(camera).unwrap().translation,
+            Vec3::ZERO
+        );
+        assert_eq!(app.world().resource::<CameraVelocity>().0, Vec2::ZERO);
     }
 }

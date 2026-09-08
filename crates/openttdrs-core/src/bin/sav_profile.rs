@@ -348,7 +348,7 @@ fn run(args: &Args) -> Result<(), String> {
     state
         .runtime
         .terminal_spatial_index
-        .rebuild(&state.map, &state.stations);
+        .ensure_current(&state.map, &state.stations);
     let fleet = summarize_fleet(&state);
     let train_routes = summarize_train_routes(&state);
     let cargo_load_sites = summarize_cargo_load_sites(&state);
@@ -387,6 +387,11 @@ fn run(args: &Args) -> Result<(), String> {
             .saturating_sub(fleet.route_pending_moving),
     );
     println!("estaciones: {}", state.stations.len());
+    println!(
+        "índice de terminales: {} rebuilds, {} barridos completos",
+        state.runtime.terminal_spatial_index.rebuilds(),
+        state.runtime.terminal_spatial_index.full_map_scans(),
+    );
     println!(
         "carga: {} industrias (INDY {}), {} estaciones con espera, {} paquetes / {} u. (CAPA {}); vehículos en tesela terminal indexada {}, en tesela de industria {}; loading {}, ventana de carga {}",
         state.industries.len(),
@@ -438,6 +443,11 @@ fn run(args: &Args) -> Result<(), String> {
         aggregate.mean(u64::from(args.ticks)),
     );
     print_tick_timings(&format!("peor tick (muestra {max_tick})"), max);
+    println!(
+        "índice de terminales tras ticks: {} rebuilds, {} barridos completos",
+        state.runtime.terminal_spatial_index.rebuilds(),
+        state.runtime.terminal_spatial_index.full_map_scans(),
+    );
     println!(
         "\nvisual dirty (máximo / último): industria {} / {}, paisaje {} / {}, señales {} / {}, reservas {} / {}",
         visual_dirty.max_industry,

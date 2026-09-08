@@ -193,7 +193,7 @@ pub(crate) fn step(state: &mut GameState) {
     state
         .runtime
         .terminal_spatial_index
-        .rebuild(&state.map, &state.stations);
+        .ensure_current(&state.map, &state.stations);
     refresh_road_stop_statuses(state);
     // `StateGameLoop` anima antes de hacer avanzar los timers. Esto se
     // observa en `AnimateTile_Town`: comprueba `TimerGameTick::counter & 3`
@@ -249,7 +249,7 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     state
         .runtime
         .terminal_spatial_index
-        .rebuild(&state.map, &state.stations);
+        .ensure_current(&state.map, &state.stations);
     refresh_road_stop_statuses(state);
     let p0 = Instant::now();
     phase_tile_animation(state, state.tick.get());

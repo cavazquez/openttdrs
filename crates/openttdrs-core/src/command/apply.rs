@@ -26,7 +26,7 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
     state
         .runtime
         .terminal_spatial_index
-        .rebuild(&state.map, &state.stations);
+        .ensure_current(&state.map, &state.stations);
     let money_before = state.economy.money;
     let result = apply_command_inner(state, cmd);
     if result.is_ok() {
@@ -60,7 +60,7 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
         state
             .runtime
             .terminal_spatial_index
-            .rebuild(&state.map, &state.stations);
+            .ensure_current(&state.map, &state.stations);
         if let Some(rec) = state.runtime.command_recorder.as_mut() {
             rec.push_back(cmd.clone());
         }

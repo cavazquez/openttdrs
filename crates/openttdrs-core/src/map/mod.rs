@@ -205,6 +205,22 @@ pub struct Map {
     /// distingue ese formato viejo de un import moderno con un pool vacío.
     #[serde(default)]
     imported_object_types: Option<std::collections::BTreeMap<u32, u16>>,
+    /// Identidad efímera de esta instancia de mapa. Una carga conserva las
+    /// teselas pero recibe una época nueva, de modo que los índices runtime no
+    /// pueden reutilizar por accidente datos del mapa anterior.
+    #[serde(skip)]
+    terminal_topology_epoch: u64,
+    /// Revisión de los únicos campos de tesela que afectan el índice de
+    /// terminales: tipo `Station`/`Airport` e `StationID` MAP2.
+    #[serde(skip)]
+    terminal_topology_revision: u64,
+}
+
+static NEXT_TERMINAL_TOPOLOGY_EPOCH: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(1);
+
+pub(super) fn next_terminal_topology_epoch() -> u64 {
+    NEXT_TERMINAL_TOPOLOGY_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 #[derive(serde::Deserialize)]
@@ -253,6 +269,8 @@ impl<'de> serde::Deserialize<'de> for Map {
             tiles: serialized.tiles,
             legacy_zero_water_height_repair: serialized.legacy_zero_water_height_repair,
             imported_object_types: serialized.imported_object_types,
+            terminal_topology_epoch: next_terminal_topology_epoch(),
+            terminal_topology_revision: 0,
         })
     }
 }
@@ -289,12 +307,24 @@ impl Map {
             ],
             legacy_zero_water_height_repair: false,
             imported_object_types: None,
+            terminal_topology_epoch: next_terminal_topology_epoch(),
+            terminal_topology_revision: 0,
         }
     }
 
     #[must_use]
     pub const fn dimensions(&self) -> (u32, u32) {
         (self.width, self.height)
+    }
+
+    /// Token efímero que cambia sólo si una tesela puede cambiar la asociación
+    /// `StationID` → terminal. No se serializa: una carga recibe otra época.
+    #[must_use]
+    pub(crate) const fn terminal_topology_version(&self) -> (u64, u64) {
+        (
+            self.terminal_topology_epoch,
+            self.terminal_topology_revision,
+        )
     }
 
     /// Indica si el renderer debe reparar el antiguo export `.ottdmap` que
@@ -364,6 +394,21 @@ impl Map {
         coord_to_dense_index(c, self.width, self.height)
     }
 
+    fn replace_tile_at(&mut self, index: usize, tile: Tile) {
+        let previous = self.tiles[index];
+        self.tiles[index] = tile;
+        if terminal_tile_station_id(previous) != terminal_tile_station_id(tile) {
+            self.bump_terminal_topology_revision();
+        }
+    }
+
+    fn bump_terminal_topology_revision(&mut self) {
+        self.terminal_topology_revision = self.terminal_topology_revision.wrapping_add(1);
+        if self.terminal_topology_revision == 0 {
+            self.terminal_topology_epoch = next_terminal_topology_epoch();
+        }
+    }
+
     #[must_use]
     pub fn get(&self, c: TileCoord) -> Option<Tile> {
         let i = self.index(c)?;
@@ -378,7 +423,9 @@ impl Map {
 
     pub fn set_kind(&mut self, c: TileCoord, kind: TileKind) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
-        self.tiles[i].kind = kind;
+        let mut tile = self.tiles[i];
+        tile.kind = kind;
+        self.replace_tile_at(i, tile);
         Ok(())
     }
 
@@ -397,7 +444,9 @@ impl Map {
 
     pub fn set_m2(&mut self, c: TileCoord, m2: u8) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
-        self.tiles[i].m2 = m2;
+        let mut tile = self.tiles[i];
+        tile.m2 = m2;
+        self.replace_tile_at(i, tile);
         Ok(())
     }
 
@@ -410,8 +459,10 @@ impl Map {
     pub fn set_m2_u16(&mut self, c: TileCoord, m2: u16) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
         let [low, high] = m2.to_le_bytes();
-        self.tiles[i].m2 = low;
-        self.tiles[i].m2_hi = high;
+        let mut tile = self.tiles[i];
+        tile.m2 = low;
+        tile.m2_hi = high;
+        self.replace_tile_at(i, tile);
         Ok(())
     }
 
@@ -469,7 +520,10 @@ impl Map {
                 house_id: spec.house_id.wrapping_add([0, 1, 2, 3][offset]),
                 ..spec
             };
-            self.tiles[index] = Tile::town_house(sub_spec, previous.height, previous.mapt);
+            self.replace_tile_at(
+                index,
+                Tile::town_house(sub_spec, previous.height, previous.mapt),
+            );
         }
         Ok(())
     }
@@ -490,7 +544,7 @@ impl Map {
     /// Sustituye la tesela en `c` (tests, fixtures y herramientas de edición).
     pub fn set_tile(&mut self, c: TileCoord, tile: Tile) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
-        self.tiles[i] = tile;
+        self.replace_tile_at(i, tile);
         Ok(())
     }
 
@@ -499,6 +553,11 @@ impl Map {
         let i = self.index(c)?;
         Some(self.tiles[i].kind)
     }
+}
+
+fn terminal_tile_station_id(tile: Tile) -> Option<u16> {
+    matches!(tile.kind, TileKind::Station | TileKind::Airport)
+        .then(|| u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8))
 }
 
 #[cfg(test)]

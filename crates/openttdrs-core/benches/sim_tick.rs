@@ -11,8 +11,8 @@ use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_mai
 mod common;
 
 use common::{
-    cargodist_unload_burst, indexed_signal_map_sized, large_world_gen_map,
-    large_world_gen_map_sized, scenario, step_n,
+    cargodist_unload_burst, imported_terminal_map_sized, indexed_signal_map_sized,
+    large_world_gen_map, large_world_gen_map_sized, scenario, step_n,
 };
 
 fn bench_sim_tick(c: &mut Criterion) {
@@ -85,6 +85,25 @@ fn bench_sim_tick(c: &mut Criterion) {
         );
     });
 
+    group.finish();
+
+    let mut group = c.benchmark_group("terminal_spatial_index");
+    for side in [256_u32, 1_024] {
+        let template = imported_terminal_map_sized(side);
+        group.throughput(Throughput::Elements(50));
+        group.bench_function(format!("imported_{side}_steady_tick_50"), |b| {
+            b.iter_batched(
+                || template.clone(),
+                |mut state| {
+                    step_n(&mut state, 50);
+                    let scans = state.runtime.terminal_spatial_index.full_map_scans();
+                    assert_eq!(scans, 1, "un tick estable no debe reescanear el mapa");
+                    black_box(scans);
+                },
+                BatchSize::LargeInput,
+            );
+        });
+    }
     group.finish();
 
     let mut group = c.benchmark_group("signal_glob_indexed");

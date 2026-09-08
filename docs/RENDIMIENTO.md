@@ -259,6 +259,7 @@ Informes HTML: `target/criterion/*/report/index.html`.
 | `sim_tick/large_1024_world_gen/50` | mapa 1024×1024 procedural (clon plantilla) | tick mapa grande sin flota |
 | `sim_tick/large_4096_world_gen/20` | mapa 4096×4096 (estado estable, sin clon) | tick mapa máximo sin flota |
 | `sim_tick/cargodist/unload_burst_128` | 128 camiones descargan con CargoDist asimétrico | una reconstrucción Demand + MCF por tick |
+| `terminal_spatial_index/imported_{256,1024}_steady_tick_50` | mapa plano con estación importada (`StationID` MAP2) | 50 ticks estables; el setup hace un scan y la medición comprueba que sigue siendo uno |
 | `signal_glob_indexed/dense_{1024,4096}` | corredores señalizados + un tren por corredor | drain incremental sin barrido completo de mapa |
 | `pathfinding/road/truck_bay/cold` | `truck_bay` | `find_path` Road load→deliver |
 | `pathfinding/road/truck_bay/hot_cache` | idem + `PathCache` | hit de `find_path_cached` |
@@ -273,6 +274,32 @@ Throughput Criterion: elementos = ticks (sim) o 1 ruta (pathfinding).
 - Cinco ejecuciones independientes; el script calcula media y coeficiente de variación del tiempo medio Criterion.
 - **No** se versionan goldens de tiempo (dependen de máquina). Adjuntar `latest.md` al PR cuando se cierre una medición.
 - Los benches **no** escriben fixtures ni tablas generadas.
+
+### Terminales importadas (#558)
+
+La fixture de `terminal_spatial_index` separa el setup (un índice ya
+materializado con una estación cuyo `StationID` es 42) de 50 ticks de medición.
+Ejecutar en perfil release:
+
+```bash
+cargo bench -p openttdrs-core --bench sim_tick -- terminal_spatial_index \
+  --warm-up-time 0.2 --measurement-time 0.4 --sample-size 10
+```
+
+Medición local en Linux 7.0.0-31, AMD Ryzen 5 9600X; el corte previo fue
+`49abccc9`. Los tiempos son la estimación central de Criterion y sirven como
+evidencia reproducible de esta fixture, no como un umbral portable.
+
+| Fixture | Antes (50 ticks) | Después (50 ticks) | scans completos, setup + 50 ticks |
+|---------|-----------------:|-------------------:|----------------------------------:|
+| importada 256² | 8,901 ms | 7,364 ms | 51 → 1 |
+| importada 1024² | 144,94 ms | 116,85 ms | 51 → 1 |
+
+El workload de 4096² no se incluyó en esta comparación: el criterio del issue
+lo deja condicionado al presupuesto de memoria y estas dos fixtures cubren el
+baseline obligatorio con la misma cardinalidad de estación importada. El
+benchmark verifica además el contador para que una regresión no pueda
+presentar un tiempo menor a costa de omitir la comprobación.
 
 ### Perfil por fase del tick
 

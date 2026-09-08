@@ -46,6 +46,37 @@ pub fn large_world_gen_map_sized(side: u32) -> GameState {
     state
 }
 
+/// Mapa plano con una estación importada: MAP2 identifica toda la tesela y
+/// fuerza el recorrido denso del índice de terminales.
+///
+/// El único rebuild inicial se hace durante el setup del benchmark. Así las
+/// iteraciones miden ticks estables y pueden comprobar cuántos scans completos
+/// añadió cada implementación.
+#[must_use]
+pub fn imported_terminal_map_sized(side: u32) -> GameState {
+    assert!(side >= 4, "fixture de terminal requiere al menos 4×4");
+    let mut state = GameState::new(side, side);
+    let side_i32 = i32::try_from(side).expect("lado de benchmark cabe en i32");
+    let pos = TileCoord::new(side_i32 / 2, side_i32 / 2);
+    let mut station = Station::new(pos);
+    station.ottd_station_id = Some(42);
+    state.stations.push(station);
+
+    let mut tile = state.map.get(pos).expect("tesela terminal de benchmark");
+    tile.kind = TileKind::Station;
+    tile.m2 = 42;
+    state
+        .map
+        .set_tile(pos, tile)
+        .expect("escritura terminal de benchmark");
+    state
+        .runtime
+        .terminal_spatial_index
+        .ensure_current(&state.map, &state.stations);
+    assert_eq!(state.runtime.terminal_spatial_index.full_map_scans(), 1);
+    state
+}
+
 /// Ráfaga de vehículos que descargan en el mismo tick con CargoDist activo.
 ///
 /// Expone regresiones donde cada entrega vuelve a ejecutar Demand + MCF (#215).

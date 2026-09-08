@@ -1,4 +1,4 @@
-use super::{Map, MapError, Tile, TileKind, dense_tile_count};
+use super::{Map, MapError, Tile, TileKind, dense_tile_count, next_terminal_topology_epoch};
 
 pub(crate) const OTTDMAP_MAGIC_VERSIONED: &[u8; 4] = b"MAP1";
 pub(crate) const OTTDMAP_HEADER_LEN_VERSIONED: usize = 16;
@@ -262,6 +262,8 @@ impl Map {
             // reconstruir un save real de OpenTTD.
             legacy_zero_water_height_repair: true,
             imported_object_types: None,
+            terminal_topology_epoch: next_terminal_topology_epoch(),
+            terminal_topology_revision: 0,
         })
     }
 

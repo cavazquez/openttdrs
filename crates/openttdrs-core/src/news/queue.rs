@@ -51,6 +51,8 @@ pub struct NewsItem {
     pub headline: String,
     pub body: Option<String>,
     pub news_type: NewsType,
+    /// Snapshot legado de presentación conservado para compatibilidad de saves.
+    /// El cliente resuelve la presentación actual desde sus preferencias locales.
     pub display: NewsDisplayMode,
     pub economy_tick: u64,
     pub calendar_day: u64,

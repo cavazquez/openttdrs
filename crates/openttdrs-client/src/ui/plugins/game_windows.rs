@@ -48,8 +48,8 @@ use crate::ui::shared_orders_window::{
     shared_orders_window_on_closed, sync_shared_orders_locale, sync_shared_orders_window,
 };
 use crate::ui::timetable_window::{
-    TimetableWindowState, handle_timetable_window_buttons, setup_timetable_window,
-    sync_timetable_window, timetable_window_on_closed,
+    TimetableDisplayPrefs, TimetableWindowState, handle_timetable_window_buttons,
+    setup_timetable_window, sync_timetable_window, timetable_window_on_closed,
 };
 use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_details_window::{
@@ -82,6 +82,7 @@ impl Plugin for GameWindowsPlugin {
             .init_resource::<SharedOrdersWindowState>()
             .init_resource::<AutoreplaceWindowState>()
             .init_resource::<TimetableWindowState>()
+            .init_resource::<TimetableDisplayPrefs>()
             .add_systems(
                 OnEnter(ClientScreen::InGame),
                 (

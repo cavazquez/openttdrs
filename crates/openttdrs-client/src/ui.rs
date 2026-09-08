@@ -69,9 +69,13 @@ mod vehicle_window;
 mod window_lifecycle;
 mod windows_shot;
 
+#[cfg(test)]
+pub(crate) use hud::HudBuildFeedback;
 pub(crate) use hud::SimHudControls;
 pub(crate) use main_menu::{MainMenuCamera, MainMenuUi, leave_main_menu};
 pub(crate) use save_window::SaveWindowState;
+#[cfg(test)]
+pub(crate) use statusbar::{NewsUiState, drain_news_events};
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState, ToolbarState, UiToolState};
 pub(crate) use ui5_blocked_stubs::{LinkGraphView, LinkGraphWindowState};
 pub(crate) struct ClientUiPlugin;

@@ -498,7 +498,10 @@ pub struct Vehicle {
     /// Orden visual en ventana de depósito.
     #[serde(default)]
     pub depot_display_slot: Option<u8>,
-    /// Modo de visualización del horario (persistido por partida).
+    /// Default legado para el modo visual de horario.
+    ///
+    /// Se conserva serializado para que partidas anteriores no pierdan el
+    /// valor, pero el cliente lo usa sólo como default de su override local.
     #[serde(default)]
     pub timetable_display_seconds: bool,
     /// Tick actual (efímero; no se guarda).

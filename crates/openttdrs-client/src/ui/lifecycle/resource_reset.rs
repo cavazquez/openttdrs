@@ -50,7 +50,7 @@ use super::super::statusbar::{NewsHistoryState, NewsUiState};
 use super::super::story_window::StoryWindowState;
 use super::super::subsidy_list::SubsidyListState;
 use super::super::tile_inspector_window::TileInspectorWindowState;
-use super::super::timetable_window::TimetableWindowState;
+use super::super::timetable_window::{TimetableDisplayPrefs, TimetableWindowState};
 use super::super::toolbar::EditorTownMenuState;
 use super::super::toolbar::{
     BridgeBuildState, DepotPanelState, DragBuildState, NewGrfRoadTypePreviewCache,
@@ -377,6 +377,10 @@ pub(super) static RESOURCE_RESETS: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "TimetableWindowState",
         apply: reset_default::<TimetableWindowState>,
+    },
+    ResourceTeardown {
+        name: "TimetableDisplayPrefs",
+        apply: reset_default::<TimetableDisplayPrefs>,
     },
     ResourceTeardown {
         name: "FinancesWindowState",

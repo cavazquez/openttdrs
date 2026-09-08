@@ -493,7 +493,7 @@ La cadena **I0→I7** es la base técnica ya mergeada: cada incremento extiende 
 
 <!-- fuente: INVENTARIO_MUTACIONES_CLIENTE.md -->
 
-Fecha: 2026-07-16. Crate: `openttdrs-client`. ADR red: [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md).
+Fecha de actualización: 2026-09-08. Crate: `openttdrs-client`. ADR red: [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md).
 
 ### Resumen
 
@@ -509,7 +509,7 @@ Fecha: 2026-07-16. Crate: `openttdrs-client`. ADR red: [adr/0001-multiplayer-v1.
 |-------|--------------------------|--------|
 | Tick de sim | `simulation.rs` → `sim.state.step()` | Reloj de partida; en red lo dispara el protocolo |
 | Persistencia | `persistence.rs` → `sim.state = loaded` | Reemplazo de mundo al cargar |
-| Drenaje UI runtime | `ui/statusbar/sync.rs` (news/display) | Colas efímeras de `runtime` |
+| Drenaje UI runtime | `ui/statusbar/sync.rs` (`pending_news_events`) | Consume colas efímeras; no reescribe `NewsItem.display` |
 | Bootstrap pre-partida | `state/bootstrap/*`, población procedural | Antes de que exista log de red |
 
 #### Migrado a `Command` (I8 settings)
@@ -531,6 +531,8 @@ Fecha: 2026-07-16. Crate: `openttdrs-client`. ADR red: [adr/0001-multiplayer-v1.
 | Grupo | Archivos | Motivo |
 |-------|----------|--------|
 | Story page nav | `ui/story_window.rs` → `StoryWindowState.page_index` | Navegación por cliente; no afecta sim |
+| Presentación de noticias | `NewsDisplayPrefs` + `ui/statusbar/*` | Off/Summary/Full es por cliente; `NewsItem.display` legacy sólo se preserva al cargar |
+| Ticks/segundos del horario | `TimetableDisplayPrefs` | Override local por vehículo; el campo legacy sólo aporta el default de una partida antigua |
 
 #### Deuda I8 restante
 

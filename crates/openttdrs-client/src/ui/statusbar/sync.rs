@@ -161,9 +161,6 @@ pub(crate) fn drain_news_events(
             .find(|item| item.id == id)
             .map(|item| (news_prefs.0.display_for(item.news_type), item.news_type))
             .unwrap_or((NewsDisplayMode::Full, NewsType::CompanyInfo));
-        if let Some(item) = sim.state.news.items.iter_mut().find(|item| item.id == id) {
-            item.display = display;
-        }
         if news_is_history_only(news_type) {
             debug!("noticias: id={id} tipo={news_type:?}; sólo historial y log");
             continue;
@@ -190,11 +187,38 @@ pub(crate) fn drain_news_events(
     }
 }
 
+/// Reubica una noticia ya encolada cuando la preferencia local cambió entre
+/// frames. Sólo modifica recursos de UI: la cola de noticias de `GameState`
+/// conserva su snapshot legacy intacto.
+fn reroute_pending_news(
+    id: u64,
+    news_type: NewsType,
+    display: NewsDisplayMode,
+    news_ui: &mut NewsUiState,
+    feedback: &mut HudBuildFeedback,
+    now_secs: f32,
+) {
+    match display {
+        NewsDisplayMode::Full => news_ui.waiting_full.push_front(id),
+        NewsDisplayMode::Summary => {
+            news_ui.waiting_ticker.push_front(id);
+            if news_has_audible_alert(news_type) {
+                feedback.pending_news_ticker = true;
+            }
+        }
+        NewsDisplayMode::Off => {
+            news_ui.reminder_until_secs = now_secs + 1.35;
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)] // sistema ECS: reproducción, UI y recursos de cliente.
 pub(crate) fn update_news_playback(
     mut commands: Commands,
     time: Res<Time>,
     run_state: Res<State<SimRunState>>,
     sim: Res<SimWorld>,
+    news_prefs: Res<NewsDisplayPrefs>,
     mut news_ui: ResMut<NewsUiState>,
     mut feedback: ResMut<HudBuildFeedback>,
     mut popup_nodes: Query<&mut Node, With<super::NewsPopupRoot>>,
@@ -204,12 +228,69 @@ pub(crate) fn update_news_playback(
         return;
     }
 
-    if news_ui.popup.is_none()
-        && let Some(id) = news_ui.waiting_full.pop_front()
-        && let Some(item) = sim.state.news.get(id).cloned()
-    {
-        spawn_news_popup(&mut commands, &item, &mut news_ui, &mut feedback);
-        news_ui.shown_full.insert(id);
+    let popup_reroute = news_ui.popup.as_ref().and_then(|popup| {
+        sim.state.news.get(popup.item_id).and_then(|item| {
+            let display = news_prefs.0.display_for(item.news_type);
+            (display != NewsDisplayMode::Full).then_some((
+                popup.entity,
+                item.id,
+                item.news_type,
+                display,
+            ))
+        })
+    });
+    if let Some((entity, id, news_type, display)) = popup_reroute {
+        commands.entity(entity).despawn();
+        news_ui.popup = None;
+        reroute_pending_news(
+            id,
+            news_type,
+            display,
+            &mut news_ui,
+            &mut feedback,
+            time.elapsed_secs(),
+        );
+    }
+
+    let ticker_reroute = news_ui.ticker.as_ref().and_then(|ticker| {
+        sim.state.news.get(ticker.item_id).and_then(|item| {
+            let display = news_prefs.0.display_for(item.news_type);
+            (display != NewsDisplayMode::Summary).then_some((item.id, item.news_type, display))
+        })
+    });
+    if let Some((id, news_type, display)) = ticker_reroute {
+        news_ui.ticker = None;
+        reroute_pending_news(
+            id,
+            news_type,
+            display,
+            &mut news_ui,
+            &mut feedback,
+            time.elapsed_secs(),
+        );
+    }
+
+    if news_ui.popup.is_none() {
+        while let Some(id) = news_ui.waiting_full.pop_front() {
+            let Some(item) = sim.state.news.get(id).cloned() else {
+                continue;
+            };
+            let display = news_prefs.0.display_for(item.news_type);
+            if display != NewsDisplayMode::Full {
+                reroute_pending_news(
+                    id,
+                    item.news_type,
+                    display,
+                    &mut news_ui,
+                    &mut feedback,
+                    time.elapsed_secs(),
+                );
+                continue;
+            }
+            spawn_news_popup(&mut commands, &item, &mut news_ui, &mut feedback);
+            news_ui.shown_full.insert(id);
+            break;
+        }
     }
 
     let mut popup_despawn: Option<Entity> = None;
@@ -242,14 +323,29 @@ pub(crate) fn update_news_playback(
         node.bottom = Val::Px(bottom);
     }
 
-    if news_ui.popup.is_none()
-        && news_ui.ticker.is_none()
-        && let Some(id) = news_ui.waiting_ticker.pop_front()
-    {
-        news_ui.ticker = Some(TickerState {
-            item_id: id,
-            scroll: 0.0,
-        });
+    if news_ui.popup.is_none() && news_ui.ticker.is_none() {
+        while let Some(id) = news_ui.waiting_ticker.pop_front() {
+            let Some(item) = sim.state.news.get(id) else {
+                continue;
+            };
+            let display = news_prefs.0.display_for(item.news_type);
+            if display != NewsDisplayMode::Summary {
+                reroute_pending_news(
+                    id,
+                    item.news_type,
+                    display,
+                    &mut news_ui,
+                    &mut feedback,
+                    time.elapsed_secs(),
+                );
+                continue;
+            }
+            news_ui.ticker = Some(TickerState {
+                item_id: id,
+                scroll: 0.0,
+            });
+            break;
+        }
     }
     if let Some(ticker) = news_ui.ticker.as_mut() {
         ticker.scroll += TICKER_SCROLL_SPEED * dt;
@@ -491,6 +587,7 @@ pub(crate) fn handle_status_bar_center_click(
         (Changed<Interaction>, With<super::StatusBarCenterButton>),
     >,
     sim: Res<SimWorld>,
+    news_prefs: Res<NewsDisplayPrefs>,
     mut feedback: ResMut<HudBuildFeedback>,
     mut focus: ResMut<CameraFocusRequest>,
     mut selected: ResMut<SelectedTileInfo>,
@@ -508,7 +605,7 @@ pub(crate) fn handle_status_bar_center_click(
         let Some(item) = sim.state.news.items.front().cloned() else {
             continue;
         };
-        if item.display != NewsDisplayMode::Full {
+        if news_prefs.0.display_for(item.news_type) != NewsDisplayMode::Full {
             continue;
         }
         focus_news_reference(item.reference, &sim, &mut focus, &mut selected);
@@ -524,11 +621,18 @@ pub(crate) fn handle_status_bar_center_click(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
+    use openttdrs_core::{
+        GameState, NewsDisplayMode, NewsDisplaySettings, NewsItem, NewsReference, NewsType,
+        add_news_item,
+    };
 
-    use super::sync_status_bar;
+    use super::{drain_news_events, sync_status_bar, update_news_playback};
+    use crate::news_prefs::NewsDisplayPrefs;
     use crate::settings::ClientPreferences;
     use crate::state::{EditorSession, SimRunState, SimWorld};
+    use crate::ui::hud::HudBuildFeedback;
     use crate::ui::statusbar::{NewsUiState, StatusBarDefaultText};
 
     #[test]
@@ -561,5 +665,80 @@ mod tests {
             world.entity(label).get::<Text>().unwrap().as_str(),
             "Pausado"
         );
+    }
+
+    #[test]
+    fn local_news_prefs_drive_playback_without_changing_loaded_news() {
+        let mut state = GameState::new(8, 8);
+        let tick = state.tick;
+        add_news_item(
+            &mut state,
+            NewsItem::new(
+                7,
+                "Legacy headline",
+                None,
+                NewsType::CompanyInfo,
+                NewsDisplayMode::Full,
+                tick,
+                NewsReference::None,
+            ),
+        );
+        let mut state = GameState::load_json(&state.save_json().unwrap()).unwrap();
+        assert_eq!(state.news.items[0].display, NewsDisplayMode::Full);
+        let tick = state.tick;
+        add_news_item(
+            &mut state,
+            NewsItem::new(
+                8,
+                "Noticia tras cargar",
+                None,
+                NewsType::CompanyInfo,
+                NewsDisplayMode::Full,
+                tick,
+                NewsReference::None,
+            ),
+        );
+        let hash_before = state.canonical_hash();
+        let mut settings = NewsDisplaySettings::openttd_defaults();
+        settings.company_info = NewsDisplayMode::Full;
+
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state,
+            ..SimWorld::default()
+        });
+        world.insert_resource(NewsDisplayPrefs(settings));
+        world.init_resource::<NewsUiState>();
+        world.init_resource::<HudBuildFeedback>();
+        world.insert_resource(Time::<()>::default());
+        world.insert_resource(State::new(SimRunState::Running));
+
+        world.run_system_once(drain_news_events).unwrap();
+        assert_eq!(
+            world.resource::<SimWorld>().state.canonical_hash(),
+            hash_before,
+            "una preferencia local no puede alterar el estado hasheado"
+        );
+        assert_eq!(
+            world.resource::<SimWorld>().state.news.items[0].display,
+            NewsDisplayMode::Full,
+            "se conserva el valor legacy cargado"
+        );
+        assert_eq!(world.resource::<NewsUiState>().waiting_full.len(), 1);
+        assert!(world.resource::<NewsUiState>().waiting_ticker.is_empty());
+
+        world.resource_mut::<NewsDisplayPrefs>().0.company_info = NewsDisplayMode::Summary;
+
+        world.run_system_once(update_news_playback).unwrap();
+        assert_eq!(
+            world
+                .resource::<NewsUiState>()
+                .ticker
+                .as_ref()
+                .map(|ticker| ticker.item_id),
+            Some(8),
+            "el playback reencola el modo local cambiado, no display del save"
+        );
+        assert!(world.resource::<NewsUiState>().popup.is_none());
     }
 }

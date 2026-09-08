@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use openttdrs_core::NewsDisplayMode;
 
+use crate::news_prefs::NewsDisplayPrefs;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
@@ -38,7 +39,16 @@ pub(crate) struct NewsHistoryRow {
 
 #[derive(Default)]
 pub(crate) struct NewsHistoryListCache {
-    ids: Vec<u64>,
+    entries: Vec<(u64, NewsDisplayMode)>,
+}
+
+fn history_entries(sim: &SimWorld, news_prefs: &NewsDisplayPrefs) -> Vec<(u64, NewsDisplayMode)> {
+    sim.state
+        .news
+        .items
+        .iter()
+        .map(|item| (item.id, news_prefs.0.display_for(item.news_type)))
+        .collect()
 }
 
 pub(crate) fn setup_news_history_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -100,6 +110,7 @@ pub(crate) fn handle_open_news_history(
 pub(crate) fn sync_news_history_window(
     history: Res<NewsHistoryState>,
     sim: Res<SimWorld>,
+    news_prefs: Res<NewsDisplayPrefs>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     list_roots: Query<Entity, With<NewsHistoryListRoot>>,
     children_q: Query<&Children>,
@@ -115,16 +126,16 @@ pub(crate) fn sync_news_history_window(
     };
     if !history.open {
         *vis = Visibility::Hidden;
-        cache.ids.clear();
+        cache.entries.clear();
         return;
     }
     *vis = Visibility::Visible;
 
-    let ids: Vec<u64> = sim.state.news.items.iter().map(|item| item.id).collect();
-    if ids == cache.ids {
+    let entries = history_entries(&sim, &news_prefs);
+    if entries == cache.entries {
         return;
     }
-    cache.ids.clone_from(&ids);
+    cache.entries.clone_from(&entries);
 
     let Ok(list_root) = list_roots.single() else {
         return;
@@ -135,7 +146,7 @@ pub(crate) fn sync_news_history_window(
         }
     }
 
-    if ids.is_empty() {
+    if entries.is_empty() {
         commands.entity(list_root).with_children(|list| {
             list.spawn((
                 Text::new("No hay noticias todavía."),
@@ -151,13 +162,13 @@ pub(crate) fn sync_news_history_window(
     }
 
     commands.entity(list_root).with_children(|list| {
-        for id in ids {
+        for (id, display) in entries {
             let Some(item) = sim.state.news.get(id) else {
                 continue;
             };
             let date = item.date_label();
             let headline = truncate_headline(&item.headline);
-            let mode = display_mode_tag(item.display);
+            let mode = display_mode_tag(display);
             list.spawn((
                 Button,
                 NewsHistoryRow { item_id: id },
@@ -184,9 +195,11 @@ pub(crate) fn sync_news_history_window(
     });
 }
 
+#[allow(clippy::too_many_arguments)] // sistema ECS: interacción, foco y recursos locales.
 pub(crate) fn handle_news_history_row_click(
     history: Res<NewsHistoryState>,
     sim: Res<SimWorld>,
+    news_prefs: Res<NewsDisplayPrefs>,
     mut news_ui: ResMut<NewsUiState>,
     mut focus: ResMut<crate::camera::CameraFocusRequest>,
     mut selected: ResMut<crate::ui::hud::SelectedTileInfo>,
@@ -204,7 +217,7 @@ pub(crate) fn handle_news_history_row_click(
             continue;
         };
         focus_news_reference(item.reference, &sim, &mut focus, &mut selected);
-        if item.display == NewsDisplayMode::Full {
+        if news_prefs.0.display_for(item.news_type) == NewsDisplayMode::Full {
             news_ui.shown_full.remove(&item.id);
             news_ui.waiting_full.push_front(item.id);
             if news_has_audible_alert(item.news_type) {
@@ -247,8 +260,16 @@ fn display_mode_tag(display: NewsDisplayMode) -> &'static str {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use openttdrs_core::{
+        GameState, NewsDisplaySettings, NewsItem, NewsReference, NewsType, add_news_item,
+    };
+
+    use crate::camera::CameraFocusRequest;
+    use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo};
 
     #[test]
     fn truncate_headline_adds_ellipsis_when_long() {
@@ -256,5 +277,77 @@ mod tests {
         let out = truncate_headline(&long);
         assert!(out.ends_with('…'));
         assert!(out.chars().count() <= HEADLINE_MAX_CHARS + 1);
+    }
+
+    fn loaded_sim_with_legacy_news() -> SimWorld {
+        let mut state = GameState::new(8, 8);
+        let tick = state.tick;
+        add_news_item(
+            &mut state,
+            NewsItem::new(
+                7,
+                "Noticia legacy",
+                None,
+                NewsType::CompanyInfo,
+                NewsDisplayMode::Off,
+                tick,
+                NewsReference::None,
+            ),
+        );
+        SimWorld {
+            state: GameState::load_json(&state.save_json().unwrap()).unwrap(),
+            ..SimWorld::default()
+        }
+    }
+
+    #[test]
+    fn history_entries_follow_local_mode_after_load_and_preference_change() {
+        let sim = loaded_sim_with_legacy_news();
+        let mut settings = NewsDisplaySettings::openttd_defaults();
+        settings.company_info = NewsDisplayMode::Summary;
+        let mut prefs = NewsDisplayPrefs(settings);
+
+        assert_eq!(
+            history_entries(&sim, &prefs),
+            vec![(7, NewsDisplayMode::Summary)]
+        );
+        prefs.0.company_info = NewsDisplayMode::Full;
+        assert_eq!(
+            history_entries(&sim, &prefs),
+            vec![(7, NewsDisplayMode::Full)]
+        );
+        assert_eq!(sim.state.news.items[0].display, NewsDisplayMode::Off);
+    }
+
+    #[test]
+    fn history_click_uses_the_current_local_mode() {
+        let mut settings = NewsDisplaySettings::openttd_defaults();
+        settings.company_info = NewsDisplayMode::Summary;
+        let mut world = World::new();
+        world.insert_resource(NewsHistoryState { open: true });
+        world.insert_resource(loaded_sim_with_legacy_news());
+        world.insert_resource(NewsDisplayPrefs(settings));
+        world.init_resource::<NewsUiState>();
+        world.init_resource::<CameraFocusRequest>();
+        world.init_resource::<SelectedTileInfo>();
+        world.init_resource::<HudBuildFeedback>();
+        let row = world
+            .spawn((Button, NewsHistoryRow { item_id: 7 }, Interaction::Pressed))
+            .id();
+
+        world
+            .run_system_once(handle_news_history_row_click)
+            .unwrap();
+        assert!(world.resource::<NewsUiState>().waiting_full.is_empty());
+
+        world.resource_mut::<NewsDisplayPrefs>().0.company_info = NewsDisplayMode::Full;
+        world.entity_mut(row).insert(Interaction::Pressed);
+        world
+            .run_system_once(handle_news_history_row_click)
+            .unwrap();
+        assert_eq!(
+            world.resource::<NewsUiState>().waiting_full.front(),
+            Some(&7)
+        );
     }
 }

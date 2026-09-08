@@ -19,7 +19,7 @@ use super::super::pathfinding_settings_window::PathfindingSettingsWindowState;
 use super::super::refit_window::RefitWindowState;
 use super::super::shared_orders_window::SharedOrdersWindowState;
 use super::super::statusbar::{NewsHistoryState, NewsUiState};
-use super::super::timetable_window::TimetableWindowState;
+use super::super::timetable_window::{TimetableDisplayPrefs, TimetableWindowState};
 use super::super::toolbar::{
     BridgeBuildState, DepotPanelState, DragBuildState, OrderEditState, RailSignalGhostState,
     StationBuildState, StationCargoPanelState, ToolbarState, UiToolState,
@@ -90,6 +90,7 @@ const REQUIRED_SESSION_POLICIES: &[&str] = &[
     "SharedOrdersWindowState",
     "AutoreplaceWindowState",
     "TimetableWindowState",
+    "TimetableDisplayPrefs",
     "FinancesWindowState",
     "GraphWindowState",
     "CargoPaymentWindowState",
@@ -214,6 +215,7 @@ fn leave_ingame_despawns_world_entities() {
     world.init_resource::<SharedOrdersWindowState>();
     world.init_resource::<AutoreplaceWindowState>();
     world.init_resource::<TimetableWindowState>();
+    world.init_resource::<TimetableDisplayPrefs>();
     world.init_resource::<FinancesWindowState>();
     world.init_resource::<GraphWindowState>();
     world.init_resource::<CargoPaymentWindowState>();

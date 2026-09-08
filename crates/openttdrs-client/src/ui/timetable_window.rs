@@ -1,5 +1,7 @@
 //! Ventana flotante de horario por orden (Sprint F4).
 
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
@@ -57,6 +59,32 @@ impl TimetableWindowState {
         if self.focused == Some(vehicle_id) {
             self.focused = self.slots.iter().flatten().next().copied();
         }
+    }
+}
+
+/// Overrides de presentación de horario que pertenecen sólo a este cliente.
+///
+/// Los SAV/JSON previos pueden traer `Vehicle::timetable_display_seconds`.
+/// Ese valor se usa como default de compatibilidad hasta que el jugador cambie
+/// la vista; el override nunca se escribe de vuelta a `GameState` ni viaja por
+/// el protocolo lockstep.
+#[derive(Resource, Debug, Default)]
+pub(crate) struct TimetableDisplayPrefs {
+    seconds_by_vehicle: HashMap<u32, bool>,
+}
+
+impl TimetableDisplayPrefs {
+    #[must_use]
+    pub(crate) fn seconds_for(&self, vehicle: &Vehicle) -> bool {
+        self.seconds_by_vehicle
+            .get(&vehicle.id)
+            .copied()
+            .unwrap_or(vehicle.timetable_display_seconds)
+    }
+
+    pub(crate) fn toggle_for(&mut self, vehicle: &Vehicle) {
+        let next = !self.seconds_for(vehicle);
+        self.seconds_by_vehicle.insert(vehicle.id, next);
     }
 }
 
@@ -397,6 +425,7 @@ pub(crate) fn open_timetable_for_vehicle(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_timetable_window(
     tt_state: Res<TimetableWindowState>,
+    display_prefs: Res<TimetableDisplayPrefs>,
     chain: Res<VehicleChainRegistry>,
     sim: Res<SimWorld>,
     prefs: Res<ClientPreferences>,
@@ -467,7 +496,7 @@ pub(crate) fn sync_timetable_window(
             }
             **summary = timetable_summary(locale, vehicle);
         }
-        let seconds_mode = vehicle.timetable_display_seconds;
+        let seconds_mode = display_prefs.seconds_for(vehicle);
         for (strip_slot, strip, mut node) in &mut row_strip_q {
             if strip_slot.0 != slot.0 {
                 continue;
@@ -511,6 +540,7 @@ pub(crate) fn timetable_window_on_closed(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // sistema ECS: dos queries y recursos de UI/sim.
 pub(crate) fn handle_timetable_window_buttons(
     mut btn_q: Query<
         (&Interaction, &TimetableWindowButton, &VehicleChainSlot),
@@ -525,6 +555,7 @@ pub(crate) fn handle_timetable_window_buttons(
         ),
     >,
     mut tt_state: ResMut<TimetableWindowState>,
+    mut display_prefs: ResMut<TimetableDisplayPrefs>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
@@ -602,8 +633,8 @@ pub(crate) fn handle_timetable_window_buttons(
                 pending.pending = true;
             }
             TimetableWindowButton::ToggleSeconds => {
-                if let Some(v) = sim.state.vehicles.iter_mut().find(|v| v.id == vehicle_id) {
-                    v.timetable_display_seconds = !v.timetable_display_seconds;
+                if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
+                    display_prefs.toggle_for(vehicle);
                 }
             }
             TimetableWindowButton::Close => {
@@ -618,7 +649,10 @@ pub(crate) fn handle_timetable_window_buttons(
 mod tests {
     use super::*;
     use crate::i18n::LocalizationPlugin;
+    use crate::render::RemapMapVisualsPending;
+    use crate::ui::hud::HudBuildFeedback;
     use bevy::asset::AssetPlugin;
+    use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::OrderConditionKind;
 
     #[test]
@@ -725,6 +759,7 @@ mod tests {
                 slots: [Some(42), Some(99)],
                 focused: Some(99),
             })
+            .init_resource::<TimetableDisplayPrefs>()
             .add_plugins(LocalizationPlugin)
             .add_systems(Startup, setup_timetable_window)
             .add_systems(Update, sync_timetable_window);
@@ -820,5 +855,73 @@ mod tests {
 
         assert_eq!(state.slots[0], None);
         assert_eq!(state.focused, Some(99));
+    }
+
+    #[test]
+    fn timetable_seconds_toggle_is_local_and_legacy_default_survives_save_load() {
+        let pos = TileCoord::new(2, 3);
+
+        // Una partida anterior conserva su dato serializado y el cliente lo
+        // toma como default hasta que el usuario elige un override local.
+        let mut legacy = GameState::new(8, 8);
+        let mut legacy_vehicle = Vehicle::new(42, VehicleKind::Train, pos, pos);
+        legacy_vehicle.timetable_display_seconds = true;
+        legacy.vehicles.push(legacy_vehicle);
+        let loaded = GameState::load_json(&legacy.save_json().unwrap()).unwrap();
+        let loaded_vehicle = &loaded.vehicles[0];
+        assert!(loaded_vehicle.timetable_display_seconds);
+        let mut legacy_prefs = TimetableDisplayPrefs::default();
+        assert!(legacy_prefs.seconds_for(loaded_vehicle));
+        legacy_prefs.toggle_for(loaded_vehicle);
+        assert!(!legacy_prefs.seconds_for(loaded_vehicle));
+        assert!(loaded_vehicle.timetable_display_seconds);
+
+        let mut state = GameState::new(8, 8);
+        state
+            .vehicles
+            .push(Vehicle::new(7, VehicleKind::Train, pos, pos));
+        let hash_before = state.canonical_hash();
+        let mut slots = [None; MAX_VEHICLE_CHAIN_SLOTS];
+        slots[0] = Some(7);
+
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state,
+            ..SimWorld::default()
+        });
+        world.insert_resource(TimetableWindowState {
+            slots,
+            focused: Some(7),
+        });
+        world.init_resource::<TimetableDisplayPrefs>();
+        world.init_resource::<RemapMapVisualsPending>();
+        world.init_resource::<HudBuildFeedback>();
+        world.insert_resource(Time::<()>::default());
+        world.spawn((
+            Button,
+            TimetableWindowButton::ToggleSeconds,
+            VehicleChainSlot(0),
+            Interaction::Pressed,
+        ));
+
+        world
+            .run_system_once(handle_timetable_window_buttons)
+            .unwrap();
+
+        let sim = world.resource::<SimWorld>();
+        let vehicle = sim
+            .state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.id == 7)
+            .unwrap();
+        assert!(!vehicle.timetable_display_seconds);
+        assert_eq!(sim.state.canonical_hash(), hash_before);
+        assert!(
+            world
+                .resource::<TimetableDisplayPrefs>()
+                .seconds_for(vehicle)
+        );
+        assert!(!world.resource::<RemapMapVisualsPending>().pending);
     }
 }

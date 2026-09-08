@@ -557,3 +557,106 @@ mod desync_message_tests {
         assert_eq!(parse_desync_message("network timeout"), None);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod local_visual_preferences_tests {
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::*;
+    use openttdrs_core::{
+        GameState, NewsDisplayMode, NewsDisplaySettings, NewsItem, NewsReference, NewsType,
+        add_news_item,
+    };
+    use openttdrs_net::SessionEvent;
+
+    use super::{EventOutcome, NetworkRole, NetworkStatus, handle_event};
+    use crate::news_prefs::NewsDisplayPrefs;
+    use crate::render::VehicleIndex;
+    use crate::state::SimWorld;
+    use crate::ui::{HudBuildFeedback, NewsUiState, drain_news_events};
+
+    fn state_with_legacy_news_display() -> GameState {
+        let mut state = GameState::new(8, 8);
+        let tick = state.tick;
+        add_news_item(
+            &mut state,
+            NewsItem::new(
+                7,
+                "Noticia compartida",
+                None,
+                NewsType::CompanyInfo,
+                NewsDisplayMode::Off,
+                tick,
+                NewsReference::None,
+            ),
+        );
+        state
+    }
+
+    fn news_prefs(display: NewsDisplayMode) -> NewsDisplayPrefs {
+        let mut settings = NewsDisplaySettings::openttd_defaults();
+        settings.company_info = display;
+        NewsDisplayPrefs(settings)
+    }
+
+    fn client_world(state: GameState, display: NewsDisplayMode) -> World {
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state,
+            ..SimWorld::default()
+        });
+        world.insert_resource(news_prefs(display));
+        world.init_resource::<NewsUiState>();
+        world.init_resource::<HudBuildFeedback>();
+        world.insert_resource(Time::<()>::default());
+        world.run_system_once(drain_news_events).unwrap();
+        world
+    }
+
+    #[test]
+    fn host_and_client_with_different_local_news_prefs_pass_hashcheck_at_tick_37() {
+        let state = state_with_legacy_news_display();
+        let mut host = client_world(state.clone(), NewsDisplayMode::Full);
+        let mut client = client_world(state, NewsDisplayMode::Summary);
+
+        assert_ne!(
+            host.resource::<NewsDisplayPrefs>()
+                .0
+                .display_for(NewsType::CompanyInfo),
+            client
+                .resource::<NewsDisplayPrefs>()
+                .0
+                .display_for(NewsType::CompanyInfo)
+        );
+        assert_eq!(host.resource::<NewsUiState>().waiting_full.len(), 1);
+        assert_eq!(client.resource::<NewsUiState>().waiting_ticker.len(), 1);
+        assert_eq!(
+            host.resource::<SimWorld>().state.canonical_hash(),
+            client.resource::<SimWorld>().state.canonical_hash(),
+            "las colas visuales locales no cambian el snapshot compartido"
+        );
+
+        for _ in 0..37 {
+            host.resource_mut::<SimWorld>().state.step();
+            client.resource_mut::<SimWorld>().state.step();
+        }
+        let tick = host.resource::<SimWorld>().state.tick.get();
+        let hash = host.resource::<SimWorld>().state.canonical_hash();
+        let mut remote = client.remove_resource::<SimWorld>().unwrap();
+        let mut vehicle_index = VehicleIndex::default();
+        let mut status = NetworkStatus::default();
+
+        assert!(matches!(
+            handle_event(
+                &mut remote,
+                &mut vehicle_index,
+                &mut status,
+                None,
+                NetworkRole::Client,
+                &SessionEvent::HashCheck { tick, hash },
+            ),
+            Ok(EventOutcome::Ok)
+        ));
+        assert!(status.desync.is_none());
+    }
+}

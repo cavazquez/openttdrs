@@ -2,6 +2,8 @@
 //!
 //! Cold: `find_path` / YAPF sin caché.
 //! Hot: `find_path_cached` con el mismo par origen→destino dentro del tick.
+//! `iter_batched_ref` mantiene el escenario, caché y ruta devuelta fuera del
+//! intervalo: cada routine debe retornar la ruta opaca, no destruirla dentro.
 
 use std::hint::black_box;
 
@@ -21,23 +23,22 @@ fn bench_pathfinding(c: &mut Criterion) {
     let mut group = c.benchmark_group("pathfinding");
 
     group.bench_function("road/truck_bay/cold", |b| {
-        b.iter_batched(
+        b.iter_batched_ref(
             || scenario("truck_bay"),
             |state| {
-                let path = find_path(
+                black_box(find_path(
                     &state.map,
                     TRUCK_BAY_LOAD_ROAD,
                     TRUCK_BAY_DELIVER_ROAD,
                     PathNetwork::Road,
-                );
-                black_box(path.map(|p| p.len()));
+                ))
             },
             BatchSize::SmallInput,
         );
     });
 
     group.bench_function("road/truck_bay/hot_cache", |b| {
-        b.iter_batched(
+        b.iter_batched_ref(
             || {
                 let state = scenario("truck_bay");
                 let mut cache = PathCache::default();
@@ -53,48 +54,45 @@ fn bench_pathfinding(c: &mut Criterion) {
                 );
                 (state, cache)
             },
-            |(state, mut cache)| {
-                let path = find_path_cached(
+            |(state, cache)| {
+                black_box(find_path_cached(
                     &state.map,
-                    &mut cache,
+                    cache,
                     TRUCK_BAY_LOAD_ROAD,
                     TRUCK_BAY_DELIVER_ROAD,
                     PathNetwork::Road,
                     None,
-                );
-                black_box(path.map(|p| p.len()));
+                ))
             },
             BatchSize::SmallInput,
         );
     });
 
     group.bench_function("rail/train_line/cold", |b| {
-        b.iter_batched(
+        b.iter_batched_ref(
             || scenario("train_line"),
             |state| {
-                let path = find_path(
+                black_box(find_path(
                     &state.map,
                     TRAIN_LINE_DEPOT,
                     TRAIN_LINE_STATION_A,
                     PathNetwork::Rail,
-                );
-                black_box(path.map(|p| p.len()));
+                ))
             },
             BatchSize::SmallInput,
         );
     });
 
     group.bench_function("rail/train_line/a_to_b/cold", |b| {
-        b.iter_batched(
+        b.iter_batched_ref(
             || scenario("train_line"),
             |state| {
-                let path = find_path(
+                black_box(find_path(
                     &state.map,
                     TRAIN_LINE_STATION_A,
                     TRAIN_LINE_STATION_B,
                     PathNetwork::Rail,
-                );
-                black_box(path.map(|p| p.len()));
+                ))
             },
             BatchSize::SmallInput,
         );

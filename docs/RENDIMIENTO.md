@@ -261,10 +261,10 @@ Informes HTML: `target/criterion/*/report/index.html`.
 | `sim_tick/cargodist/unload_burst_128` | 128 camiones descargan con CargoDist asimétrico | una reconstrucción Demand + MCF por tick |
 | `terminal_spatial_index/imported_{256,1024}_steady_tick_50` | mapa plano con estación importada (`StationID` MAP2) | 50 ticks estables; el setup hace un scan y la medición comprueba que sigue siendo uno |
 | `signal_glob_indexed/dense_{1024,4096}` | corredores señalizados + un tren por corredor | drain incremental sin barrido completo de mapa |
-| `pathfinding/road/truck_bay/cold` | `truck_bay` | `find_path` Road load→deliver |
-| `pathfinding/road/truck_bay/hot_cache` | idem + `PathCache` | hit de `find_path_cached` |
-| `pathfinding/rail/train_line/cold` | `train_line` | YAPF depósito→estación A |
-| `pathfinding/rail/train_line/a_to_b/cold` | `train_line` | YAPF A→B |
+| `pathfinding/road/truck_bay/cold` | `truck_bay` | una consulta `find_path` Road load→deliver; setup y `Drop` fuera del intervalo |
+| `pathfinding/road/truck_bay/hot_cache` | idem + `PathCache` | hit de `find_path_cached`; miss de calentamiento, cache y `Drop` fuera del intervalo |
+| `pathfinding/rail/train_line/cold` | `train_line` | una consulta YAPF depósito→estación A; setup y `Drop` fuera del intervalo |
+| `pathfinding/rail/train_line/a_to_b/cold` | `train_line` | una consulta YAPF A→B; setup y `Drop` fuera del intervalo |
 
 Throughput Criterion: elementos = ticks (sim) o 1 ruta (pathfinding).
 
@@ -274,6 +274,37 @@ Throughput Criterion: elementos = ticks (sim) o 1 ruta (pathfinding).
 - Cinco ejecuciones independientes; el script calcula media y coeficiente de variación del tiempo medio Criterion.
 - **No** se versionan goldens de tiempo (dependen de máquina). Adjuntar `latest.md` al PR cuando se cierre una medición.
 - Los benches **no** escriben fixtures ni tablas generadas.
+
+### Contrato de consulta de pathfinding (#559)
+
+Desde #559 los cuatro workloads usan `iter_batched_ref`: el `GameState` cold,
+el `PathCache` hot y la ruta `Option<Vec<TileCoord>>` que devuelve la consulta
+viven hasta después de `Measurement::end`. Por tanto se mide la búsqueda,
+construcción de la ruta y el hit de caché, pero no la destrucción de fixtures,
+cache ni resultado. El miss que precalienta hot sigue en setup.
+
+La regresión `criterion_batched_ref_boundary` combina un `DropProbe` con un
+`Measurement` controlado y acredita que Criterion 0.8 libera tanto input como
+output sólo después del intervalo. Las rutas de la fixture permanecen fijadas:
+road = 18 teselas, depósito→A = 4, A→B = 15, y el hit hot coincide con el
+miss inicial.
+
+```bash
+cargo bench -p openttdrs-core --bench pathfinding --locked --offline -j2 -- \
+  --warm-up-time 0.3 --measurement-time 0.8 --sample-size 20
+```
+
+Nuevo baseline release local, Linux 7.0.0-31 / AMD Ryzen 5 9600X, mismo host,
+perfil, escenarios y parámetros. La columna histórica fue tomada con el
+contrato anterior; no representa una mejora del algoritmo ni es comparable
+con la nueva medición.
+
+| Benchmark | Histórico con destrucción | Nuevo contrato de consulta |
+|-----------|---------------------------:|---------------------------:|
+| `road/truck_bay/cold` | 3,481 µs | 2,213 µs |
+| `road/truck_bay/hot_cache` | 1,513 µs | 39,232 ns |
+| `rail/train_line/cold` | 3,768 µs | 2,275 µs |
+| `rail/train_line/a_to_b/cold` | 6,300 µs | 4,934 µs |
 
 ### Terminales importadas (#558)
 

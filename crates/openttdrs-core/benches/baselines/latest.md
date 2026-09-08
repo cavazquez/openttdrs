@@ -1,5 +1,10 @@
 # Baseline headless (#116)
 
+> Las filas `pathfinding/*` de este informe son históricas: se tomaron antes
+> de #559 con `iter_batched`, que incluía la destrucción de `GameState` y
+> `PathCache`. El baseline de consultas aisladas y no comparable está en
+> [`docs/RENDIMIENTO.md`](../../../../docs/RENDIMIENTO.md#contrato-de-consulta-de-pathfinding-559).
+
 - Generado (UTC): `20260716T223358Z`
 - Commit: `38ec06e`
 - Host: `Linux 7.0.0-27-generic x86_64 GNU/Linux`

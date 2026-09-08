@@ -186,6 +186,65 @@ mod tests {
     }
 
     #[test]
+    fn benchmark_fixture_paths_keep_lengths_and_hot_cache_result() {
+        use crate::parity::{
+            TRAIN_LINE_DEPOT, TRAIN_LINE_STATION_A, TRAIN_LINE_STATION_B, TRUCK_BAY_DELIVER_ROAD,
+            TRUCK_BAY_LOAD_ROAD, build_train_line, build_truck_bay,
+        };
+
+        let truck = build_truck_bay();
+        let road = find_path(
+            &truck.map,
+            TRUCK_BAY_LOAD_ROAD,
+            TRUCK_BAY_DELIVER_ROAD,
+            PathNetwork::Road,
+        )
+        .expect("ruta road de la fixture de benchmark");
+        assert_eq!(road.len(), 18);
+
+        let mut cache = PathCache::default();
+        cache.begin_tick(1);
+        let miss = find_path_cached(
+            &truck.map,
+            &mut cache,
+            TRUCK_BAY_LOAD_ROAD,
+            TRUCK_BAY_DELIVER_ROAD,
+            PathNetwork::Road,
+            None,
+        )
+        .expect("miss inicial de la fixture hot");
+        let hit = find_path_cached(
+            &truck.map,
+            &mut cache,
+            TRUCK_BAY_LOAD_ROAD,
+            TRUCK_BAY_DELIVER_ROAD,
+            PathNetwork::Road,
+            None,
+        )
+        .expect("hit de la fixture hot");
+        assert_eq!(miss, road);
+        assert_eq!(hit, road);
+
+        let train = build_train_line();
+        let depot_to_a = find_path(
+            &train.map,
+            TRAIN_LINE_DEPOT,
+            TRAIN_LINE_STATION_A,
+            PathNetwork::Rail,
+        )
+        .expect("ruta depósito a estación A de la fixture");
+        assert_eq!(depot_to_a.len(), 4);
+        let a_to_b = find_path(
+            &train.map,
+            TRAIN_LINE_STATION_A,
+            TRAIN_LINE_STATION_B,
+            PathNetwork::Rail,
+        )
+        .expect("ruta estación A a B de la fixture");
+        assert_eq!(a_to_b.len(), 15);
+    }
+
+    #[test]
     fn astar_respects_road_bit_gap() {
         let mut m = Map::new_flat(8, 8, 0);
         write_road(&mut m, TileCoord::new(0, 0), 0x0A);

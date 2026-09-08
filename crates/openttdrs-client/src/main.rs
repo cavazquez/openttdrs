@@ -13,7 +13,8 @@
 //! Persistencia JSON (`openttdrs_core::save`, versión + `state` o legado plano):
 //! `OTTDJSON_LOAD=/ruta/estado.json` al arranque (falla con mensaje si el path/JSON es inválido;
 //! no cae a partida procedural), o **F5** / **Ctrl+S** para guardar y **F9** / **Ctrl+L** para
-//! cargar (archivo por defecto `save/openttdrs_sim.json`, o `OPENTTDRS_JSON_SAVE`). Tras cargar se
+//! cargar (JSON por defecto `save/openttdrs_sim.json`, o `OPENTTDRS_JSON_SAVE`; una ruta `.sav`
+//! elegida desde la ventana conserva el contenedor OpenTTD). Tras cargar se
 //! redibuja todo el mapa y se reajusta la cámara (también si cambia el tamaño del mapa en el JSON).
 //! Para importar un save nativo sin pasar por el selector: `OPENTTDRS_SAV_LOAD=/ruta/partida.sav`.
 //! **P** pausa el tick de simulación; **F4** alterna la ruta de guardado entre `save/openttdrs_sim.json` y

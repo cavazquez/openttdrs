@@ -24,7 +24,8 @@ pub(crate) use sound_ping::{
     HudSfxHandles, HudSfxKind, PlayHudSfx, UiClickBeep, flush_hud_sfx, load_hud_sfx, play_hud_sfx,
 };
 
-/// Pausa simulacion y ruta del JSON de **F5/F9** (alternativa a variable de entorno al arranque).
+/// Pausa simulación y ruta activa de **F5/F9** (JSON por defecto o SAV elegido
+/// desde la ventana de partidas; alternativa a variable de entorno al arranque).
 #[derive(Resource)]
 pub(crate) struct SimHudControls {
     pub(crate) sim_speed: f32,

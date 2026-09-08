@@ -46,7 +46,7 @@ Guía única que enlaza el pipeline principal del repo. Para detalle binario de 
 - El núcleo expone `openttdrs_core::save` (`save` / `load` / `load_from_str`): JSON con `version` + `state`, o legado sin envoltorio (sigue cargando).
 - `GameState::save_json` / `load_json` siguen disponibles para tests y serialización en memoria.
 - **Arranque desde JSON:** `OTTDJSON_LOAD=estado.json cargo run`.
-- **En ventana:** **F5** o **Ctrl+S** guardan; **F9** o **Ctrl+L** cargan y **redibujan** suelo/vías/vehículos. Ruta por defecto `save/openttdrs_sim.json` o `OPENTTDRS_JSON_SAVE`; **F4** alterna entre `save/openttdrs_sim.json` y `save/openttdrs_autosave.json`. La cámara no usa **S** para moverse cuando va **Ctrl+S**.
+- **En ventana:** **F5** o **Ctrl+S** guardan; **F9** o **Ctrl+L** cargan y **redibujan** suelo/vías/vehículos. La ruta por defecto es `save/openttdrs_sim.json` o `OPENTTDRS_JSON_SAVE`; si se guarda o carga una partida `.sav` desde el selector, los atajos conservan el contenedor SAV activo. **F4** alterna entre `save/openttdrs_sim.json` y `save/openttdrs_autosave.json`. La cámara no usa **S** para moverse cuando va **Ctrl+S**.
 - **P** pausa el avance de ticks de simulación.
 - **Ctrl+H** alterna el HUD informativo de la esquina superior izquierda (datos de
   mapa, assets y diagnóstico); arranca oculto y no afecta toolbar, minimapa ni

@@ -9,9 +9,7 @@ use bevy::text::{EditableText, TextEdit};
 // depender de `smol_str` directo (y de que su versión coincida con la de winit).
 use winit::keyboard::SmolStr;
 
-use openttdrs_core::{sav, save};
-
-use crate::persistence::apply_loaded_state;
+use crate::persistence::{apply_loaded_state, load_state_from_path, save_state_to_path};
 use crate::render::{MapVisualLayer, RemapMapVisualsPending, ShoreTile, VehicleIndex, WaterTile};
 use crate::state::SuspendedGameSession;
 use crate::state::{ClientScreen, SimWorld};
@@ -19,10 +17,10 @@ use crate::ui::SimHudControls;
 use crate::ui::main_menu::{MainMenuCamera, MainMenuUi, leave_main_menu};
 
 use super::{
-    SAVE_WINDOW_ROWS, SaveFileKind, SaveWindowButton, SaveWindowConfirmText, SaveWindowMode,
-    SaveWindowNameRow, SaveWindowNameText, SaveWindowPageText, SaveWindowRoot, SaveWindowRow,
-    SaveWindowRowText, SaveWindowState, SaveWindowStatusText, SaveWindowTitle, default_save_name,
-    list_save_entries, sanitize_filename_char, save_dir_from,
+    SAVE_WINDOW_ROWS, SaveWindowButton, SaveWindowConfirmText, SaveWindowMode, SaveWindowNameRow,
+    SaveWindowNameText, SaveWindowPageText, SaveWindowRoot, SaveWindowRow, SaveWindowRowText,
+    SaveWindowState, SaveWindowStatusText, SaveWindowTitle, default_save_name, list_save_entries,
+    sanitize_filename_char, save_dir_from,
 };
 
 /// Largo máximo del nombre al guardar.
@@ -267,21 +265,15 @@ fn confirm_save(
         return false;
     }
     let lower = name.to_ascii_lowercase();
-    let (file, as_json) = if lower.ends_with(".json") {
-        (name.to_string(), true)
-    } else if lower.ends_with(".sav") {
-        (name.to_string(), false)
+    let file = if lower.ends_with(".json") || lower.ends_with(".sav") {
+        name.to_string()
     } else {
         // Por defecto: formato OpenTTD `.sav` (mapa + DATE + PLYR).
         // Sufijo `.json` explícito conserva el save nativo completo.
-        (format!("{name}.sav"), false)
+        format!("{name}.sav")
     };
     let path = dir.join(file);
-    let result = if as_json {
-        save::save(&sim.state, &path).map_err(|e| e.to_string())
-    } else {
-        sav::save(&sim.state, &path).map_err(|e| e.to_string())
-    };
+    let result = save_state_to_path(&sim.state, &path);
     match result {
         Ok(()) => {
             let path_s = path.to_string_lossy().to_string();
@@ -310,33 +302,12 @@ fn confirm_load(
         return false;
     };
     let entry = state.entries[idx].clone();
-    let loaded = match entry.kind {
-        SaveFileKind::Json => match std::fs::read_to_string(&entry.path) {
-            Ok(text) => match save::load_from_str(&text) {
-                Ok(loaded) => loaded,
-                Err(e) => {
-                    state.status = format!("JSON inválido ({}): {e}", entry.name);
-                    return false;
-                }
-            },
-            Err(e) => {
-                state.status = format!("No se pudo leer {}: {e}", entry.name);
-                return false;
-            }
-        },
-        SaveFileKind::Sav => match std::fs::read(&entry.path) {
-            Ok(bytes) => match crate::state::load_sav_state(&bytes) {
-                Ok(loaded) => loaded,
-                Err(e) => {
-                    state.status = format!("Save OpenTTD ({}): {e}", entry.name);
-                    return false;
-                }
-            },
-            Err(e) => {
-                state.status = format!("No se pudo leer {}: {e}", entry.name);
-                return false;
-            }
-        },
+    let loaded = match load_state_from_path(&entry.path) {
+        Ok(loaded) => loaded,
+        Err(e) => {
+            state.status = format!("No se pudo cargar {}: {e}", entry.name);
+            return false;
+        }
     };
     apply_loaded_state(sim, vehicle_index, remap, commands, loaded);
     hud.json_save_path = entry.path.to_string_lossy().to_string();
@@ -431,6 +402,7 @@ mod tests {
     use bevy::prelude::*;
     use bevy::text::EditableText;
 
+    use crate::persistence::{PauseAfterLoad, handle_sim_save_hotkeys};
     use crate::render::{RemapMapVisualsPending, VehicleIndex};
     use crate::state::SimWorld;
     use crate::ui::SimHudControls;
@@ -513,6 +485,69 @@ mod tests {
         world.run_system_once(handle_save_window_buttons).unwrap();
         assert!(dir.path().join("mi_partida.json").exists());
         assert!(!dir.path().join("mi_partida.sav").exists());
+
+        world.resource_mut::<SimWorld>().state.economy.money = 135_790;
+        let mut save_keys = ButtonInput::<KeyCode>::default();
+        save_keys.press(KeyCode::F5);
+        world.insert_resource(save_keys);
+        world.run_system_once(handle_sim_save_hotkeys).unwrap();
+
+        let json_path = dir.path().join("mi_partida.json");
+        let json = std::fs::read_to_string(&json_path).expect("JSON quick save");
+        assert!(json.starts_with('{'));
+        openttdrs_core::save::load(&json_path).expect("quick save remains JSON");
+
+        world.resource_mut::<SimWorld>().state.economy.money = 1;
+        let mut load_keys = ButtonInput::<KeyCode>::default();
+        load_keys.press(KeyCode::F9);
+        world.insert_resource(load_keys);
+        world.run_system_once(handle_sim_save_hotkeys).unwrap();
+
+        assert_eq!(world.resource::<SimWorld>().state.economy.money, 135_790);
+        assert!(world.resource::<RemapMapVisualsPending>().pending);
+        assert!(world.contains_resource::<PauseAfterLoad>());
+    }
+
+    #[test]
+    fn window_saved_sav_stays_sav_for_quick_save_and_load() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let save_path = dir.path().join("x.json").to_string_lossy().to_string();
+        let mut world = base_world(&save_path);
+
+        world
+            .resource_mut::<SaveWindowState>()
+            .open_in_mode(SaveWindowMode::Save, &save_dir_from(&save_path));
+        press(&mut world, SaveWindowButton::Confirm);
+        world.run_system_once(handle_save_window_buttons).unwrap();
+
+        let sav_path = dir.path().join("mi_partida.sav");
+        assert_eq!(
+            world.resource::<SimHudControls>().json_save_path,
+            sav_path.to_string_lossy()
+        );
+
+        world.resource_mut::<SimWorld>().state.economy.money = 246_810;
+        let mut save_keys = ButtonInput::<KeyCode>::default();
+        save_keys.press(KeyCode::F5);
+        world.insert_resource(save_keys);
+        world.run_system_once(handle_sim_save_hotkeys).unwrap();
+
+        let bytes = std::fs::read(&sav_path).expect("SAV quick save");
+        assert!(
+            bytes.starts_with(b"OTT"),
+            "quick save must preserve SAV format"
+        );
+        crate::state::load_sav_state(&bytes).expect("quick save remains loadable SAV");
+
+        world.resource_mut::<SimWorld>().state.economy.money = 1;
+        let mut load_keys = ButtonInput::<KeyCode>::default();
+        load_keys.press(KeyCode::F9);
+        world.insert_resource(load_keys);
+        world.run_system_once(handle_sim_save_hotkeys).unwrap();
+
+        assert_eq!(world.resource::<SimWorld>().state.economy.money, 246_810);
+        assert!(world.resource::<RemapMapVisualsPending>().pending);
+        assert!(world.contains_resource::<PauseAfterLoad>());
     }
 
     #[test]

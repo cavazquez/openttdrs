@@ -399,7 +399,7 @@ save.rs
 - `save_load_after_N_steps()` — determinismo no se rompe al reanudar.
 
 **Cliente Bevy:**
-- **Hecho:** `F5` / **Ctrl+S** guardan y `F9` / **Ctrl+L** cargan (ruta configurable); formato versionado en `openttdrs_core::save`.
+- **Hecho:** `F5` / **Ctrl+S** guardan y `F9` / **Ctrl+L** cargan la ruta activa configurable; JSON versionado por defecto en `openttdrs_core::save` y contenedor OpenTTD cuando la ruta seleccionada termina en `.sav`.
 
 **Estado actual:** el formato nativo JSON conserva el estado propio completo.
 La compatibilidad `.sav` ya tiene import/export nativo parcial; el alcance y lo

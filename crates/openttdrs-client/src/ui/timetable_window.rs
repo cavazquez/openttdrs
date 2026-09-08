@@ -5,7 +5,9 @@ use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{cycle_travel_ticks, cycle_wait_ticks};
 
+use crate::i18n::{Locale, text as localized};
 use crate::render::RemapMapVisualsPending;
+use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CRIMSON,
@@ -105,7 +107,9 @@ pub(crate) fn setup_timetable_window(mut commands: Commands, asset_server: Res<A
                 class: FloatingWindowId::Timetable,
                 instance: 0,
             },
-            "Horario",
+            // El título incluye un nombre de vehículo y se materializa en el
+            // sync. No registrarlo como clave estática del catálogo.
+            "",
             TITLE_CRIMSON,
             pos,
             420.0,
@@ -162,7 +166,7 @@ fn spawn_timetable_content(
                     asset_server,
                     chain,
                     TimetableWindowButton::ToggleAutofill,
-                    "Autofill",
+                    "Autorrelleno",
                 );
                 spawn_tt_button(
                     row,
@@ -312,7 +316,41 @@ fn format_ticks(ticks: u32, seconds_mode: bool) -> String {
     }
 }
 
-fn order_timing_label(order: VehicleOrder, seconds_mode: bool) -> String {
+fn timetable_title(locale: Locale, vehicle: &Vehicle) -> String {
+    format!(
+        "{} — {}",
+        localized(locale, "Horario"),
+        vehicle.display_name()
+    )
+}
+
+fn timetable_summary(locale: Locale, vehicle: &Vehicle) -> String {
+    let late = vehicle.timetable_lateness;
+    let late_label = if late > 0 {
+        format!("+{late}t {}", localized(locale, "tarde"))
+    } else if late < 0 {
+        format!("{late}t {}", localized(locale, "adelantado"))
+    } else {
+        localized(locale, "en hora").to_owned()
+    };
+    format!(
+        "{}: {} · {}: {} · {late_label}",
+        localized(locale, "Horario"),
+        if vehicle.timetable_active {
+            "ON"
+        } else {
+            "OFF"
+        },
+        localized(locale, "Autorrelleno"),
+        if vehicle.timetable_autofill {
+            "ON"
+        } else {
+            "OFF"
+        },
+    )
+}
+
+fn order_timing_label(locale: Locale, order: VehicleOrder, seconds_mode: bool) -> String {
     match order {
         VehicleOrder::Station {
             wait_ticks,
@@ -325,15 +363,21 @@ fn order_timing_label(order: VehicleOrder, seconds_mode: bool) -> String {
             ..
         } => {
             format!(
-                "esp.{} viaje {}",
+                "{}{} {} {}",
+                localized(locale, "esp."),
                 format_ticks(wait_ticks, seconds_mode),
+                localized(locale, "viaje"),
                 format_ticks(travel_ticks, seconds_mode)
             )
         }
         VehicleOrder::Waypoint { travel_ticks, .. } => {
-            format!("viaje {}", format_ticks(travel_ticks, seconds_mode))
+            format!(
+                "{} {}",
+                localized(locale, "viaje"),
+                format_ticks(travel_ticks, seconds_mode)
+            )
         }
-        VehicleOrder::Conditional { .. } => "condicional".into(),
+        VehicleOrder::Conditional { .. } => localized(locale, "condicional").to_owned(),
         VehicleOrder::Tile(_) => "—".into(),
     }
 }
@@ -355,6 +399,7 @@ pub(crate) fn sync_timetable_window(
     tt_state: Res<TimetableWindowState>,
     chain: Res<VehicleChainRegistry>,
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     mut root_q: Query<(
         Entity,
         &mut FloatingWindow,
@@ -379,6 +424,9 @@ pub(crate) fn sync_timetable_window(
         ),
     >,
 ) {
+    // No hay caché de textos: cada slot vuelve a leer el locale activo junto
+    // con los tiempos actuales, también al reabrir la ventana.
+    let locale = prefs.locale();
     fn title_root_entity(child_of: &ChildOf, parents: &Query<&ChildOf>) -> Option<Entity> {
         let center = child_of.parent();
         let bar = parents.get(center).ok()?.parent();
@@ -404,7 +452,7 @@ pub(crate) fn sync_timetable_window(
             continue;
         };
         *vis = Visibility::Visible;
-        let title_name = format!("Horario — {}", vehicle.display_name());
+        let title_name = timetable_title(locale, vehicle);
         for (title, mut text, child_of) in &mut title_q {
             if title.0 != FloatingWindowId::Timetable {
                 continue;
@@ -417,27 +465,7 @@ pub(crate) fn sync_timetable_window(
             if sum_slot.0 != slot.0 {
                 continue;
             }
-            let late = vehicle.timetable_lateness;
-            let late_label = if late > 0 {
-                format!("+{late}t tarde")
-            } else if late < 0 {
-                format!("{late}t adelantado")
-            } else {
-                "en hora".into()
-            };
-            **summary = format!(
-                "Horario: {} · Autofill: {} · {late_label}",
-                if vehicle.timetable_active {
-                    "ON"
-                } else {
-                    "OFF"
-                },
-                if vehicle.timetable_autofill {
-                    "ON"
-                } else {
-                    "OFF"
-                },
-            );
+            **summary = timetable_summary(locale, vehicle);
         }
         let seconds_mode = vehicle.timetable_display_seconds;
         for (strip_slot, strip, mut node) in &mut row_strip_q {
@@ -458,7 +486,7 @@ pub(crate) fn sync_timetable_window(
                 **text = format!(
                     "{}. {}",
                     label.index + 1,
-                    order_timing_label(vehicle.orders[label.index], seconds_mode)
+                    order_timing_label(locale, vehicle.orders[label.index], seconds_mode)
                 );
             } else {
                 **text = String::new();
@@ -586,8 +614,189 @@ pub(crate) fn handle_timetable_window_buttons(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
-    use super::TimetableWindowState;
+    use super::*;
+    use crate::i18n::LocalizationPlugin;
+    use bevy::asset::AssetPlugin;
+    use openttdrs_core::OrderConditionKind;
+
+    #[test]
+    fn timetable_labels_cover_order_types_and_signed_lateness() {
+        let pos = TileCoord::new(2, 3);
+        for order in [VehicleOrder::station(pos), VehicleOrder::depot(pos)] {
+            let order = order.with_wait_ticks(30).unwrap().with_travel_ticks(60);
+            assert_eq!(
+                order_timing_label(Locale::Es, order, false),
+                "esp.30t viaje 60t"
+            );
+            assert_eq!(
+                order_timing_label(Locale::En, order, false),
+                "wait 30t travel 60t"
+            );
+            assert_eq!(
+                order_timing_label(Locale::En, order, true),
+                "wait 1s travel 2s"
+            );
+        }
+        let waypoint = VehicleOrder::waypoint(pos).with_travel_ticks(60);
+        assert_eq!(
+            order_timing_label(Locale::En, waypoint, false),
+            "travel 60t"
+        );
+        assert_eq!(order_timing_label(Locale::Es, waypoint, true), "viaje 2s");
+        let conditional = VehicleOrder::conditional(OrderConditionKind::CargoLoadAbove, 50, 1);
+        assert_eq!(
+            order_timing_label(Locale::En, conditional, false),
+            "conditional"
+        );
+        assert_eq!(
+            order_timing_label(Locale::Es, conditional, true),
+            "condicional"
+        );
+        assert_eq!(
+            order_timing_label(Locale::En, VehicleOrder::tile(pos), false),
+            "—"
+        );
+
+        let mut vehicle = Vehicle::new(7, VehicleKind::Train, pos, pos);
+        for (lateness, spanish, english) in [
+            (0, "en hora", "on time"),
+            (42, "+42t tarde", "+42t late"),
+            (-42, "-42t adelantado", "-42t early"),
+            (i32::MIN, "-2147483648t adelantado", "-2147483648t early"),
+        ] {
+            vehicle.timetable_lateness = lateness;
+            assert_eq!(
+                timetable_summary(Locale::Es, &vehicle),
+                format!("Horario: OFF · Autorrelleno: OFF · {spanish}")
+            );
+            assert_eq!(
+                timetable_summary(Locale::En, &vehicle),
+                format!("Timetable: OFF · Autofill: OFF · {english}")
+            );
+        }
+    }
+
+    #[test]
+    // Mantener juntos fixture, aplicación ECS y aserciones de ambos slots
+    // permite auditar que el cambio de locale no modifica los vehículos.
+    #[allow(clippy::too_many_lines)]
+    fn timetable_windows_follow_locale_in_both_slots_without_mutating_vehicles() {
+        let pos = TileCoord::new(2, 3);
+        let mut game = GameState::new(8, 8);
+        let mut first = Vehicle::new(42, VehicleKind::Train, pos, pos);
+        first.name = Some("Horario".into());
+        first.orders = vec![
+            VehicleOrder::station(pos)
+                .with_wait_ticks(30)
+                .unwrap()
+                .with_travel_ticks(60),
+        ];
+        first.timetable_active = true;
+        first.timetable_lateness = 7;
+        let mut second = Vehicle::new(99, VehicleKind::Bus, pos, pos);
+        second.name = Some("Ñandú | Custom 99".into());
+        second.orders = vec![VehicleOrder::waypoint(pos).with_travel_ticks(60)];
+        second.timetable_autofill = true;
+        second.timetable_display_seconds = true;
+        second.timetable_lateness = -3;
+        game.vehicles = vec![first, second];
+        let vehicles_before = serde_json::to_value(&game.vehicles).unwrap();
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_plugins(AssetPlugin {
+                file_path: concat!(env!("CARGO_MANIFEST_DIR"), "/../..").into(),
+                ..default()
+            })
+            .init_asset::<Image>()
+            .init_asset::<Font>()
+            .insert_resource(ClientPreferences::default())
+            .insert_resource(SimWorld {
+                state: game,
+                ..SimWorld::default()
+            })
+            .insert_resource(VehicleChainRegistry {
+                slots: [Some(42), Some(99)],
+                focused: Some(99),
+            })
+            .insert_resource(TimetableWindowState {
+                slots: [Some(42), Some(99)],
+                focused: Some(99),
+            })
+            .add_plugins(LocalizationPlugin)
+            .add_systems(Startup, setup_timetable_window)
+            .add_systems(Update, sync_timetable_window);
+
+        for language in ["es", "en", "es"] {
+            app.world_mut().resource_mut::<ClientPreferences>().language = language.into();
+            // Más de un frame detecta también que el catálogo estático no
+            // recupere el caption sin nombre sobre el título ya sincronizado.
+            app.update();
+            app.update();
+            let world = app.world_mut();
+            let mut texts = world.query::<&Text>();
+            let texts = texts
+                .iter(world)
+                .map(|text| text.as_str())
+                .collect::<Vec<_>>();
+            let expected: &[&str] = if language == "en" {
+                &[
+                    "Timetable — Horario",
+                    "Timetable — Ñandú | Custom 99",
+                    "Timetable: ON · Autofill: OFF · +7t late",
+                    "Timetable: OFF · Autofill: ON · -3t early",
+                    "Timetable ON/OFF",
+                    "Autofill",
+                    "Reset lateness",
+                    "Ticks/Sec",
+                    "Travel",
+                    "Wait",
+                    "Close",
+                ]
+            } else {
+                &[
+                    "Horario — Horario",
+                    "Horario — Ñandú | Custom 99",
+                    "Horario: ON · Autorrelleno: OFF · +7t tarde",
+                    "Horario: OFF · Autorrelleno: ON · -3t adelantado",
+                    "Horario ON/OFF",
+                    "Autorrelleno",
+                    "Poner en hora",
+                    "Ticks/Seg",
+                    "Viaje",
+                    "Espera",
+                    "Cerrar",
+                ]
+            };
+            for expected in expected {
+                assert!(texts.contains(expected), "{language}: falta {expected:?}");
+            }
+            let mut rows = world.query::<(&VehicleChainSlot, &TimetableOrderRowLabel, &Text)>();
+            for (slot, row, text) in rows.iter(world) {
+                let expected = match (row.index, slot.0, language) {
+                    (0, 0, "en") => "1. wait 30t travel 60t",
+                    (0, 0, _) => "1. esp.30t viaje 60t",
+                    (0, 1, "en") => "1. travel 2s",
+                    (0, 1, _) => "1. viaje 2s",
+                    _ => "",
+                };
+                assert_eq!(text.as_str(), expected);
+            }
+            let mut windows = world.query::<(&FloatingWindow, &VehicleChainSlot, &Visibility)>();
+            for (window, slot, visibility) in windows.iter(world) {
+                assert_eq!(window.key.instance, [42, 99][slot.0 as usize]);
+                assert_eq!(*visibility, Visibility::Visible);
+            }
+            assert_eq!(world.resource::<TimetableWindowState>().focused, Some(99));
+            assert_eq!(world.resource::<VehicleChainRegistry>().focused, Some(99));
+            assert_eq!(
+                serde_json::to_value(&world.resource::<SimWorld>().state.vehicles).unwrap(),
+                vehicles_before
+            );
+        }
+    }
 
     #[test]
     fn focused_vehicle_is_validated_against_open_slots() {

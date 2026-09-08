@@ -9,6 +9,8 @@
 //!
 //! Resolución opcional: `OPENTTDRS_SHOT_RES=1280x720` o `1920x1080`.
 //! Escala opcional: `OPENTTDRS_SHOT_UI_SCALE=1` o `2`.
+//! En captura individual, `OPENTTDRS_MAP_SHOT_SCALE=1/2/4/8` fija además el
+//! zoom de la cámara del mapa antes de abrir la ventana (UI sin escalar).
 //! Para `TownAuthority`, `OPENTTDRS_TOWN_AUTHORITY_SHOT_STATE=normal|no-funds|unavailable`
 //! prepara estados reproducibles para el oráculo visual de #295.
 
@@ -79,7 +81,7 @@ use crate::ui::town_authority_window::TownAuthorityWindowState;
 use crate::ui::town_directory::TownDirectoryState;
 use crate::ui::town_window::TownWindowState;
 use crate::ui::ui5_blocked_stubs::LinkGraphWindowState;
-use crate::ui::vehicle_chain::VehicleChainRegistry;
+use crate::ui::vehicle_chain::{MAX_VEHICLE_CHAIN_SLOTS, VehicleChainRegistry, VehicleChainSlot};
 use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 use crate::ui::vehicle_list::VehicleListState;
 use crate::ui::vehicle_window::VehicleWindowState;
@@ -1240,6 +1242,10 @@ impl Plugin for WindowsShotPlugin {
                 Update,
                 (
                     auto_start_game.run_if(in_state(ClientScreen::MainMenu)),
+                    windows_shot_camera_driver
+                        .run_if(in_state(ClientScreen::InGame))
+                        .in_set(UpdateSet::Camera)
+                        .after(crate::camera::move_camera),
                     windows_shot_driver
                         .run_if(in_state(ClientScreen::InGame))
                         // Los sync de cada ventana también viven en `UpdateSet::Ui`.
@@ -1679,6 +1685,70 @@ fn parse_map_shot_settle_frames(spec: &str) -> Option<u32> {
         .then_some(frame)
 }
 
+/// La captura individual no debe poner el slot de horario vacío delante del
+/// vehículo real. `Some(0)` es un vehículo válido, no un sentinel de ausencia.
+fn timetable_shot_instance_visible(
+    selected: Option<FloatingWindowId>,
+    slot: Option<&VehicleChainSlot>,
+    timetable_slots: &[Option<u32>; MAX_VEHICLE_CHAIN_SLOTS],
+) -> bool {
+    selected != Some(FloatingWindowId::Timetable)
+        || slot
+            .and_then(|slot| timetable_slots.get(slot.0 as usize))
+            .is_some_and(Option::is_some)
+}
+
+/// Ajuste explícito de QA: `None` conserva cámara y peticiones de remap.
+fn apply_window_shot_scale(world: &mut World, requested: Option<f32>) -> Option<f32> {
+    let requested = requested?;
+    let (map_width, map_height) = world.resource::<SimWorld>().state.map.dimensions();
+    let viewport_cull = large_map_viewport_cull_enabled(map_width, map_height);
+    let (width, height) = world
+        .query_filtered::<&Window, With<PrimaryWindow>>()
+        .iter(world)
+        .next()
+        .map_or((1280.0, 720.0), |window| (window.width(), window.height()));
+    let scale = clamp_ortho_scale(requested, width, height, viewport_cull);
+    let mut cameras = world
+        .query_filtered::<&mut Projection, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>();
+    let Ok(mut projection) = cameras.single_mut(world) else {
+        return None;
+    };
+    let Projection::Orthographic(ortho) = &mut *projection else {
+        return None;
+    };
+    ortho.scale = scale;
+    world.resource_mut::<CameraVelocity>().0 = Vec2::ZERO;
+    let mut remap = world.resource_mut::<crate::render::RemapMapVisualsPending>();
+    remap.sync_camera = false;
+    if viewport_cull {
+        // No rebajar una reconstrucción completa que ya estuviera pendiente.
+        if !remap.pending {
+            remap.full = false;
+        }
+        remap.pending = true;
+        remap.labels_dirty = true;
+    }
+    Some(scale)
+}
+
+/// Corre antes de RenderRefresh y de OPEN_FRAME para que cámara, culling y
+/// etiquetas se estabilicen antes de capturar las ventanas en SHOT_FRAME.
+fn windows_shot_camera_driver(world: &mut World, mut frame: Local<u32>) {
+    *frame += 1;
+    if *frame != OPEN_FRAME - 1
+        || !requested_window_shot_id().is_ok_and(|selection| selection.is_some())
+    {
+        return;
+    }
+    if let Some(scale) = apply_window_shot_scale(world, map_shot_scale_from_env()) {
+        info!(
+            "windows_shot: escala de cámara {scale} (zoom {}x)",
+            scale.recip()
+        );
+    }
+}
+
 /// Abre todas las ventanas flotantes + paneles auxiliares para captura de paridad.
 /// Sistema exclusivo: demasiados `ResMut` para el límite de SystemParam de Bevy.
 fn windows_shot_driver(world: &mut World, mut frame: Local<u32>) {
@@ -1692,12 +1762,13 @@ fn windows_shot_driver(world: &mut World, mut frame: Local<u32>) {
     // resto aunque sus sistemas de sync intenten reabrirlos.
     if (OPEN_FRAME..=SHOT_FRAME).contains(&*frame) {
         let selection = requested_window_shot_id();
-        let mut q = world.query::<(&FloatingWindow, &mut Visibility)>();
-        for (window, mut vis) in q.iter_mut(world) {
-            *vis = if selection
-                .as_ref()
-                .is_ok_and(|selected| selected.is_none_or(|id| id == window.id))
-            {
+        let timetable_slots = world.resource::<TimetableWindowState>().slots;
+        let mut q = world.query::<(&FloatingWindow, Option<&VehicleChainSlot>, &mut Visibility)>();
+        for (window, slot, mut vis) in q.iter_mut(world) {
+            *vis = if selection.as_ref().is_ok_and(|selected| {
+                selected.is_none_or(|id| id == window.id)
+                    && timetable_shot_instance_visible(*selected, slot, &timetable_slots)
+            }) {
                 Visibility::Visible
             } else {
                 Visibility::Hidden
@@ -1972,6 +2043,70 @@ mod tests {
     }
 
     #[test]
+    fn window_shot_scale_updates_primary_camera_and_preserves_unspecified_state() {
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state: GameState::new(64, 64),
+            loaded_file: false,
+            ottdmap_extras: None,
+        });
+        world.insert_resource(CameraVelocity(Vec2::new(3.0, 4.0)));
+        world.insert_resource(crate::render::RemapMapVisualsPending {
+            sync_camera: true,
+            ..default()
+        });
+        world.spawn((Window::default(), PrimaryWindow));
+        let projection = || {
+            Projection::Orthographic(OrthographicProjection {
+                scale: 2.0,
+                ..OrthographicProjection::default_2d()
+            })
+        };
+        let primary = world.spawn((PrimaryGameCamera, projection())).id();
+        let preview = world.spawn((MapPreviewCamera, projection())).id();
+
+        assert_eq!(apply_window_shot_scale(&mut world, None), None);
+        assert_eq!(world.resource::<CameraVelocity>().0, Vec2::new(3.0, 4.0));
+        let remap = world.resource::<crate::render::RemapMapVisualsPending>();
+        assert!(!remap.pending && remap.sync_camera && remap.full && !remap.labels_dirty);
+        let Projection::Orthographic(ortho) = world.get::<Projection>(primary).unwrap() else {
+            panic!("primary projection changed type");
+        };
+        assert_eq!(ortho.scale, 2.0);
+
+        for scale in [1.0, 2.0, 4.0, 8.0] {
+            assert_eq!(
+                apply_window_shot_scale(&mut world, Some(scale)),
+                Some(scale)
+            );
+            let Projection::Orthographic(ortho) = world.get::<Projection>(primary).unwrap() else {
+                panic!("primary projection changed type");
+            };
+            assert_eq!(ortho.scale, scale);
+        }
+        assert_eq!(world.resource::<CameraVelocity>().0, Vec2::ZERO);
+        let remap = world.resource::<crate::render::RemapMapVisualsPending>();
+        assert!(remap.pending && !remap.sync_camera && !remap.full && remap.labels_dirty);
+        let Projection::Orthographic(ortho) = world.get::<Projection>(preview).unwrap() else {
+            panic!("preview projection changed type");
+        };
+        assert_eq!(ortho.scale, 2.0);
+
+        world
+            .resource_mut::<crate::render::RemapMapVisualsPending>()
+            .full = true;
+        assert_eq!(
+            apply_window_shot_scale(&mut world, Some(1000.0)),
+            Some(20.0)
+        );
+        assert!(
+            world
+                .resource::<crate::render::RemapMapVisualsPending>()
+                .full
+        );
+    }
+
+    #[test]
     fn clean_map_shot_profile_is_temporary_and_deterministic() {
         let mut prefs = ClientPreferences {
             show_debug_gizmos: true,
@@ -2008,6 +2143,46 @@ mod tests {
         assert!(guard.restore(&mut prefs));
         assert_eq!(prefs, original);
         assert!(!guard.restore(&mut prefs));
+    }
+
+    #[test]
+    fn timetable_shot_hides_only_unpopulated_individual_slots() {
+        let selected = Some(FloatingWindowId::Timetable);
+        let slots = [Some(0), None];
+        assert!(timetable_shot_instance_visible(
+            selected,
+            Some(&VehicleChainSlot(0)),
+            &slots
+        ));
+        assert!(!timetable_shot_instance_visible(
+            selected,
+            Some(&VehicleChainSlot(1)),
+            &slots
+        ));
+        assert!(!timetable_shot_instance_visible(
+            selected,
+            Some(&VehicleChainSlot(2)),
+            &slots
+        ));
+        assert!(!timetable_shot_instance_visible(selected, None, &slots));
+        let slots = [Some(0), Some(99)];
+        assert!(timetable_shot_instance_visible(
+            selected,
+            Some(&VehicleChainSlot(0)),
+            &slots
+        ));
+        assert!(timetable_shot_instance_visible(
+            selected,
+            Some(&VehicleChainSlot(1)),
+            &slots
+        ));
+        // Capturas globales y otras clases conservan su comportamiento.
+        assert!(timetable_shot_instance_visible(None, None, &[None, None]));
+        assert!(timetable_shot_instance_visible(
+            Some(FloatingWindowId::Orders),
+            Some(&VehicleChainSlot(1)),
+            &[None, None]
+        ));
     }
 
     #[test]

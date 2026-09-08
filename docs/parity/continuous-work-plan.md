@@ -25,6 +25,44 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-08
 
+### Lote acotado solicitado: Road/Rail, SAV y UI
+
+La instrucción más reciente limita esta entrega a tres sub-issues. Después
+de validarlos y publicar cada commit se detiene el trabajo; no se activa el
+siguiente bloque del ciclo continuo en esta entrega.
+
+1. #532 cerrado y publicado en `d97db526`: techo de velocidad vial en
+   curvas/reversa según el modelo de aceleración. Evidencia y límites en
+   [road-curve-speed-model.md](road-curve-speed-model.md).
+2. #533 cerrado y publicado en `f35b1850`: persistencia y chequeo de
+   refinerías de `oil_refinery_limit`.
+   Evidencia y límites en [sav-oil-refinery-limit.md](sav-oil-refinery-limit.md).
+3. #534 implementado y validado en esta etapa: localización reactiva ES/EN
+   de la ventana de horarios y captura reproducible en seis zooms.
+   Evidencia y límites en [ui-timetable-window.md](ui-timetable-window.md).
+
+#330, #328 y #331 conservan sus alcances generales abiertos. La fundación
+automática de Oil Rig diagnosticada antes de este lote queda en #531; se
+retiró la instrumentación temporal sin dar por resuelta esa colocación.
+
+Incidencia de validación ajena al lote: #535 registra el fallo preexistente
+de `test_parity_docs_portability.py`. El harness copia el baseline raster
+del 2026-09-05, pero el checker exige el del 2026-09-07 desde `021f023b`.
+El gate directo pasa; la prueba aislada y el workflow **Parity docs** fallan.
+La reparación queda pendiente para otra entrega: no se inicia una cuarta
+tarea después de las tres acordadas ni se presenta el CI global como verde.
+
+Verificación del lote: core 2.287 tests unitarios y sus integraciones
+aprobados; cliente 1.190 aprobados/2 opt-in ignorados; formatter y Clippy
+core/client sin warnings. Oráculo vial 128/128, re-save SAV nativo con
+límite 48 y control de seis fases exacto por teselas/bloques4×4/estado.
+Se ejecutó el cliente y se revisaron doce capturas de horarios (dos idiomas,
+seis zooms), además del mapa local en los cuatro zooms de alejamiento.
+La evidencia detallada y las limitaciones están en los tres documentos
+anteriores. Tras publicar esta etapa UI finaliza el lote solicitado.
+
+### Frontera runtime anterior al lote
+
 Actualización runtime: RMAP-163 / #524 deja exactos los 24 cortes iniciales
 de `autosave0.sav` al alinear el cierre mensual y la actividad global de
 estación. RMAP-165 / #526 reconstruye al cargar las caches urbanas derivadas

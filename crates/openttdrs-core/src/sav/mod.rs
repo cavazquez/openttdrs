@@ -640,16 +640,58 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     })
 }
 
-/// Reconstruye `Town::population` como `RebuildTownCaches` (`town_sl.cpp`):
-/// `OpenTTD` no guarda la población en el save, la recalcula sumando
-/// `HouseSpec::population` de cada tesela `MP_HOUSE` completada (bit 7 de
-/// `m3`), atribuida a la ciudad indicada por `m2` (`GetTownIndex`).
+/// `GetHouseNorthPart` para los IDs vanilla disponibles en el catálogo base.
+///
+/// `RebuildTownCaches` incrementa `num_houses` una vez por edificio, no una
+/// vez por subtesela. Los IDs de una casa multitile ocupan las posiciones
+/// consecutivas base, `+Y`, `+X`, `+X+Y`; por eso la regla mira los tres IDs
+/// inmediatamente anteriores, como `town_cmd.cpp` del oráculo.
+fn house_is_north_part(house_id: u16) -> bool {
+    use crate::house_spec::{
+        BUILDING_FLAG_SIZE_1X2, BUILDING_FLAG_SIZE_2X1, BUILDING_FLAG_SIZE_2X2, HouseSpec,
+    };
+
+    if house_id < 3 {
+        return true;
+    }
+    if HouseSpec::get(house_id - 1)
+        .is_some_and(|house| house.building_flags & BUILDING_FLAG_SIZE_2X1 != 0)
+    {
+        return false;
+    }
+    if HouseSpec::get(house_id - 1).is_some_and(|house| {
+        house.building_flags & (BUILDING_FLAG_SIZE_1X2 | BUILDING_FLAG_SIZE_2X2) != 0
+    }) {
+        return false;
+    }
+    if HouseSpec::get(house_id - 2)
+        .is_some_and(|house| house.building_flags & BUILDING_FLAG_SIZE_2X2 != 0)
+    {
+        return false;
+    }
+    if HouseSpec::get(house_id - 3)
+        .is_some_and(|house| house.building_flags & BUILDING_FLAG_SIZE_2X2 != 0)
+    {
+        return false;
+    }
+    true
+}
+
+/// Reconstruye las caches `Town::population` y `Town::num_houses` como
+/// `RebuildTownCaches` (`town_sl.cpp`). `OpenTTD` no persiste estos caches:
+/// recorre el mapa, atribuye cada casa al `TownID` de `MAP2`, suma población
+/// sólo si está terminada y cuenta un edificio una vez desde su parte norte.
+///
+/// La importación anterior restauraba únicamente las filas `CITY`; dejaba
+/// ambas caches en cero. Eso deformaba la tasa de crecimiento, los radios de
+/// zona y, con ello, el orden futuro de RNG urbano tras abrir un SAV real.
 fn rebuild_town_populations(map: &Map, towns: &mut [Town]) {
     use house_population_generated::HOUSE_POPULATION;
     if towns.is_empty() {
         return;
     }
     let mut pop_by_id: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+    let mut houses_by_id: std::collections::HashMap<u32, u16> = std::collections::HashMap::new();
     let (w, h) = map.dimensions();
     for y in 0..h {
         for x in 0..w {
@@ -657,20 +699,30 @@ fn rebuild_town_populations(map: &Map, towns: &mut [Town]) {
             let Some(t) = map.get(crate::map::TileCoord::new(x as i32, y as i32)) else {
                 continue;
             };
-            if t.kind != crate::map::TileKind::House || t.m3 & 0x80 == 0 {
+            if t.kind != crate::map::TileKind::House {
                 continue;
             }
             let house_id = usize::from(t.m8 & 0x0FFF);
-            // HouseIDs NewGRF (≥ 110) no tienen spec original: se omiten.
-            let Some(&pop) = HOUSE_POPULATION.get(house_id) else {
-                continue;
-            };
             let town_id = u32::from(t.m2) | (u32::from(t.m2_hi) << 8);
-            *pop_by_id.entry(town_id).or_insert(0) += u32::from(pop);
+            if t.m3 & 0x80 != 0 {
+                // HouseIDs NewGRF (≥ 110) no tienen spec original: se
+                // conservan como población desconocida hasta hidratar su
+                // catálogo; no se inventa un valor para alterar el runtime.
+                if let Some(&pop) = HOUSE_POPULATION.get(house_id) {
+                    *pop_by_id.entry(town_id).or_insert(0) += u32::from(pop);
+                }
+            }
+            let clean_house_id = u16::try_from(house_id).unwrap_or(u16::MAX);
+            if house_is_north_part(clean_house_id) {
+                let count = houses_by_id.entry(town_id).or_insert(0);
+                *count = count.saturating_add(1);
+            }
         }
     }
     for town in towns {
         town.population = pop_by_id.get(&town.id).copied().unwrap_or(0);
+        town.num_houses = houses_by_id.get(&town.id).copied().unwrap_or(0);
+        crate::town::update_town_radius(town);
     }
 }
 
@@ -1263,6 +1315,11 @@ impl GameState {
                 town.init_growth_goals(state.climate);
             }
         }
+        // `AfterLoadGame` reconstruye las caches que `CITY` no persiste.
+        // Debe suceder antes de cualquier timer mensual: la tasa y el
+        // contador de crecimiento dependen de `num_houses`, y los radios
+        // reconstruidos también participan en los gates de estación.
+        rebuild_town_populations(&state.map, &mut state.towns);
         if let Some(money) = sav.money {
             state.economy.money = money;
         }
@@ -2183,6 +2240,38 @@ fn normalize_company_yearly_expenses(values: &[i64]) -> Vec<i64> {
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rebuild_town_caches_counts_multitile_house_once_from_its_north_part() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let town_id = 7;
+        let single = TileCoord::new(1, 1);
+        let multi_north = TileCoord::new(3, 1);
+        let multi_part = TileCoord::new(4, 1);
+        for (tile, house_id) in [(single, 6), (multi_north, 7), (multi_part, 8)] {
+            map.set_completed_house(tile, house_id, 0)
+                .expect("house inside map");
+            map.set_house_town_id(tile, town_id)
+                .expect("town house inside map");
+        }
+        let mut towns = vec![Town {
+            id: town_id,
+            ..Town::default()
+        }];
+
+        rebuild_town_populations(&map, &mut towns);
+
+        assert!(house_is_north_part(7));
+        assert!(!house_is_north_part(8));
+        assert_eq!(towns[0].num_houses, 2);
+        assert_eq!(
+            towns[0].population,
+            u32::from(house_spec_population(6))
+                + u32::from(house_spec_population(7))
+                + u32::from(house_spec_population(8)),
+        );
+        assert_ne!(towns[0].squared_town_zone_radius, [0; 5]);
+    }
 
     #[test]
     fn imported_linkgraph_jobs_resume_in_lgrs_running_order() {

@@ -27,10 +27,13 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 Actualización runtime: RMAP-163 / #524 deja exactos los 24 cortes iniciales
 de `autosave0.sav` al alinear el cierre mensual y la actividad global de
-estación. La evidencia y el límite actual viven sólo en
-[random-map-issues.md](random-map-issues.md#rmap-163--alinear-el-cierre-mensual-runtime-de-la-jornada-18);
-RMAP-164 / #525 continúa con la primera divergencia de expansión urbana, sin
-ampliar el cierre de #512.
+estación. RMAP-165 / #526 reconstruye al cargar las caches urbanas derivadas
+de `MP_HOUSE` y aplica la cadencia de `larger_town`: con una corrida nativa
+dedicated válida, ciudad 22 alcanza su intento en `1474722` en ambos lados.
+La expansión física de Rust aún usa un LCG local, mientras OpenTTD consume el
+RNG global dentro de su walker; RMAP-164 / #525 continúa desde ese límite sin
+ampliar el cierre de #512. La evidencia canónica vive sólo en
+[random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
 
 Última etapa: RMAP-143 / #346 amplía el gate por fases a RNG y secuencia
 ID/posición de pueblos, además de bytes de teselas; las 30 fronteras de la

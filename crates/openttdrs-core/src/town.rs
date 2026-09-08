@@ -1025,7 +1025,13 @@ pub fn get_normal_growth_rate(
         &GROW_COUNT_VALUES_NORMAL
     };
     let idx = n.min(5);
-    let m = table[idx];
+    let mut m = table[idx];
+    // `GetNormalGrowthRate` acelera las ciudades marcadas por OpenTTD. El
+    // indicador `CITY.larger_town` se conserva al cargar SAV, por lo que no
+    // debe quedar como metadato visual: también modifica la cadencia runtime.
+    if town.larger_town {
+        m /= 2;
+    }
     let houses = count_houses_for_growth(map, industries, town);
     let divisor = u16::try_from((houses / 50) + 1).unwrap_or(1);
     town_ticks_to_game_ticks(m / divisor)
@@ -2268,6 +2274,31 @@ mod tests {
         assert!(
             well_served < unserved,
             "más estaciones activas aceleran el crecimiento"
+        );
+    }
+
+    #[test]
+    fn larger_town_halves_normal_growth_cadence() {
+        let map = Map::new_flat(16, 16, 0);
+        let town = Town {
+            id: 0,
+            pos: TileCoord::new(8, 8),
+            name: "Ciudad".into(),
+            ..Default::default()
+        };
+        let city = Town {
+            larger_town: true,
+            ..town.clone()
+        };
+
+        assert_eq!(
+            get_normal_growth_rate(&city, &[], &map, &[]),
+            town_ticks_to_game_ticks(GROW_COUNT_VALUES_NORMAL[0] / 2)
+        );
+        assert!(
+            get_normal_growth_rate(&city, &[], &map, &[])
+                < get_normal_growth_rate(&town, &[], &map, &[]),
+            "una ciudad debe intentar crecer antes que un pueblo ordinario"
         );
     }
 

@@ -35,7 +35,7 @@ pub(crate) const EMPTY_BOUNDING_BOX_SPRITE_ID: u32 = 6_139;
 /// `source_depth` no se recalcula después de ordenar: es el slot Bevy que la
 /// parent tenía al generarse y permite repetir el sort de forma idempotente
 /// tras recargar o recortar chunks.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ViewportSortableParent {
     pub(crate) sprite_id: u32,
     pub(crate) bounds: ParentSpriteBounds,
@@ -49,7 +49,7 @@ pub(crate) struct ViewportSortableParent {
 /// que `OpenTTD` agrega mediante `AddChildSpriteScreen`. Al mover el parent
 /// entre slots, ambos deben acompañarlo incluso cuando el ascensor actualiza
 /// su posición vertical en cada frame.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ViewportSortableChild {
     pub(crate) parent: Entity,
     pub(crate) source_depth: f32,
@@ -67,6 +67,9 @@ pub(crate) struct ViewportSortableChild {
 #[derive(Resource, Default)]
 pub(crate) struct ViewportSortableChildDepthWindows {
     next_parent_depth: HashMap<Entity, f32>,
+    /// Sonda de tests para distinguir el fast path de una ejecución real del sorter.
+    #[cfg(test)]
+    pub(crate) sort_runs: usize,
 }
 
 /// Clave de inserción de `ViewportAddLandscape`: fila `x + y`, luego `x`
@@ -289,6 +292,11 @@ pub(crate) fn sort_viewport_sortable_parents(
     }
     if !needs_sort {
         return;
+    }
+
+    #[cfg(test)]
+    {
+        child_depth_windows.sort_runs += 1;
     }
 
     // La caché sólo es válida para el conjunto actual de parents. Limpiarla

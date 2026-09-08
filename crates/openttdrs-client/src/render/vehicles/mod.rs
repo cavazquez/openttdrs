@@ -522,6 +522,219 @@ mod tests {
     }
 
     #[test]
+    fn stable_vehicle_sync_keeps_the_viewport_sorter_idle() {
+        use crate::render::viewport_sort::ParentSpriteBounds;
+        use crate::render::{
+            ViewportSortableChild, ViewportSortableChildDepthWindows, ViewportSortableParent,
+            sort_viewport_sortable_parents, sync_viewport_sortable_children,
+        };
+
+        let mut sim = SimWorld {
+            state: GameState::new(4, 4),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        sim.state.vehicles.push(sample_vehicle(11));
+
+        let mut world = World::new();
+        world.insert_resource(sim);
+        world.insert_resource(crate::simulation::SimClock::default());
+        world.insert_resource(default_handles());
+        world.insert_resource(crate::render::CompanyColoredSprites::default());
+        world.insert_resource(VehicleIndex::default());
+        world.insert_resource(crate::render::NewGrfTrainSpriteCache::default());
+        world.init_resource::<Assets<Image>>();
+        world.init_resource::<ViewportSortableChildDepthWindows>();
+
+        let vehicle = world
+            .spawn((
+                sync::VehicleSprite(11),
+                Transform::default(),
+                Sprite::default(),
+                Visibility::Visible,
+                ViewportSortableParent {
+                    sprite_id: 0,
+                    bounds: ParentSpriteBounds::new(0, 0, 0, 0, 0, 0),
+                    insertion_key: 0,
+                    source_depth: 0.0,
+                },
+            ))
+            .id();
+
+        world.run_system_once(rebuild_vehicle_index).unwrap();
+        world.run_system_once(update_vehicles).unwrap();
+        let initial_parent = *world
+            .entity(vehicle)
+            .get::<ViewportSortableParent>()
+            .unwrap();
+
+        // Esta caja inmediatamente anterior hace que la primera ejecución
+        // intercambie los slots de profundidad del vehículo y del blocker.
+        // Así el test detecta si un sync estable restaura erróneamente la Z
+        // fuente antes de que el fast path pueda devolver temprano.
+        world.spawn((
+            ViewportSortableParent {
+                sprite_id: 9_999,
+                bounds: ParentSpriteBounds::new(
+                    initial_parent.bounds.xmin - 1,
+                    initial_parent.bounds.ymin - 1,
+                    initial_parent.bounds.zmin - 1,
+                    initial_parent.bounds.xmax - 1,
+                    initial_parent.bounds.ymax - 1,
+                    initial_parent.bounds.zmax - 1,
+                ),
+                insertion_key: initial_parent.insertion_key + 1,
+                source_depth: initial_parent.source_depth + 0.000_5,
+            },
+            Transform::from_xyz(0.0, 0.0, initial_parent.source_depth + 0.000_5),
+        ));
+        let child = world
+            .spawn((
+                ViewportSortableChild {
+                    parent: vehicle,
+                    source_depth: initial_parent.source_depth + 0.000_1,
+                },
+                Transform::default(),
+            ))
+            .id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(
+            (
+                update_vehicles,
+                sort_viewport_sortable_parents,
+                sync_viewport_sortable_children,
+            )
+                .chain(),
+        );
+        schedule.run(&mut world);
+
+        let sorted_vehicle_depth = world
+            .entity(vehicle)
+            .get::<Transform>()
+            .unwrap()
+            .translation
+            .z;
+        let sorted_child_depth = world
+            .entity(child)
+            .get::<Transform>()
+            .unwrap()
+            .translation
+            .z;
+        assert!(
+            sorted_vehicle_depth > initial_parent.source_depth,
+            "el fixture debe entrar por el sorter antes de comprobar el fast path"
+        );
+        assert!((sorted_child_depth - sorted_vehicle_depth - 0.000_1).abs() < 1e-6);
+        assert_eq!(
+            world
+                .resource::<ViewportSortableChildDepthWindows>()
+                .sort_runs,
+            1
+        );
+
+        for _ in 0..3 {
+            schedule.run(&mut world);
+        }
+
+        assert_eq!(
+            world
+                .resource::<ViewportSortableChildDepthWindows>()
+                .sort_runs,
+            1,
+            "un vehículo pausado y estable no debe volver a entrar al sorter"
+        );
+        assert_eq!(
+            world
+                .entity(vehicle)
+                .get::<Transform>()
+                .unwrap()
+                .translation
+                .z,
+            sorted_vehicle_depth,
+            "el sync no puede restaurar la profundidad fuente ya ordenada"
+        );
+        assert_eq!(
+            world
+                .entity(child)
+                .get::<Transform>()
+                .unwrap()
+                .translation
+                .z,
+            sorted_child_depth,
+            "el child debe conservar su relación con el parent estable"
+        );
+
+        world.resource_mut::<SimWorld>().state.vehicles[0].pos = TileCoord::new(2, 1);
+        schedule.run(&mut world);
+
+        let moved_parent = world
+            .entity(vehicle)
+            .get::<ViewportSortableParent>()
+            .unwrap();
+        let moved_vehicle_depth = world
+            .entity(vehicle)
+            .get::<Transform>()
+            .unwrap()
+            .translation
+            .z;
+        let moved_child_depth = world
+            .entity(child)
+            .get::<Transform>()
+            .unwrap()
+            .translation
+            .z;
+        assert_ne!(moved_parent.bounds, initial_parent.bounds);
+        assert_eq!(
+            world
+                .resource::<ViewportSortableChildDepthWindows>()
+                .sort_runs,
+            2,
+            "un cambio real de pose debe invalidar y ejecutar el sorter"
+        );
+        assert!(
+            (moved_child_depth
+                - (initial_parent.source_depth
+                    + 0.000_1
+                    + (moved_vehicle_depth - moved_parent.source_depth)))
+                .abs()
+                < 1e-6,
+            "el child debe seguir la profundidad resuelta del parent tras moverse"
+        );
+
+        {
+            let mut sim = world.resource_mut::<SimWorld>();
+            let depot = {
+                let vehicle = &mut sim.state.vehicles[0];
+                vehicle.running = false;
+                vehicle.pos
+            };
+            sim.state.map.set_kind(depot, TileKind::RoadDepot).unwrap();
+        }
+        schedule.run(&mut world);
+        assert_eq!(
+            *world.entity(vehicle).get::<Visibility>().unwrap(),
+            Visibility::Hidden
+        );
+        assert_eq!(
+            world
+                .resource::<ViewportSortableChildDepthWindows>()
+                .sort_runs,
+            3,
+            "ocultar el vehículo debe invalidar el sort exactamente una vez"
+        );
+
+        schedule.run(&mut world);
+        assert_eq!(
+            world
+                .resource::<ViewportSortableChildDepthWindows>()
+                .sort_runs,
+            3,
+            "un vehículo oculto estable tampoco puede invalidar el sorter"
+        );
+    }
+
+    #[test]
     fn newgrf_train_sprite_cache_and_pos_use_decoded_views() {
         use crate::sprites::CompanyColour;
         use openttdrs_core::apply_newgrf_vehicles_trains;

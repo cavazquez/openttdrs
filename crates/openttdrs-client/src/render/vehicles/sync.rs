@@ -1,3 +1,4 @@
+use bevy::ecs::change_detection::DetectChangesMut;
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 
@@ -80,6 +81,31 @@ pub(super) fn vehicle_tint(v: &Vehicle) -> Color {
 
 fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
     Vec3::new(vehicle_pos.x, vehicle_pos.y + 21.0, vehicle_pos.z + 0.35)
+}
+
+/// Actualiza sólo la traslación que entrega la simulación.
+///
+/// La `Z` de un parent/child sortable es salida de
+/// `sort_viewport_sortable_parents`, no pose de entrada. Reescribirla con la
+/// profundidad fuente en un frame estable deshace el sort aunque sus entradas
+/// no hayan cambiado.
+fn set_vehicle_translation_if_changed(
+    transform: &mut Mut<Transform>,
+    source_translation: Vec3,
+    preserves_sorted_depth: bool,
+) {
+    let translation = if preserves_sorted_depth {
+        Vec3::new(
+            source_translation.x,
+            source_translation.y,
+            transform.translation.z,
+        )
+    } else {
+        source_translation
+    };
+    if transform.translation != translation {
+        transform.translation = translation;
+    }
 }
 
 #[must_use]
@@ -190,7 +216,7 @@ pub(crate) fn update_vehicles(
         );
     }
     super::ensure_vehicle_livery_palettes(&sim, &mut company, &mut images);
-    for (vs, mut transform, mut sprite, mut visibility, mut parent) in &mut q {
+    for (vs, mut transform, mut sprite, mut visibility, parent) in &mut q {
         let Some(i) = vehicle_index.core.slot(vs.0) else {
             continue;
         };
@@ -199,10 +225,10 @@ pub(crate) fn update_vehicles(
         };
         let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
         if vehicle_is_hidden_from_view(&sim, v, pose) {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         }
-        *visibility = Visibility::Visible;
+        visibility.set_if_neq(Visibility::Visible);
         let mut pos3 = vehicle_sprite_pos_at_with_catalog(
             v,
             &sim.state.map,
@@ -231,11 +257,15 @@ pub(crate) fn update_vehicles(
         }
         let source_depth = vehicle_source_depth(v, &sim.state.map, pose, pos3);
         pos3.z = source_depth;
-        transform.translation = pos3;
-        if let Some(parent) = parent.as_deref_mut() {
-            parent.bounds = vehicle_parent_bounds(v, &sim.state.map, pose);
-            parent.insertion_key = vehicle_insertion_key(v, pose);
-            parent.source_depth = source_depth;
+        let preserves_sorted_depth = parent.is_some();
+        set_vehicle_translation_if_changed(&mut transform, pos3, preserves_sorted_depth);
+        if let Some(mut parent) = parent {
+            parent.set_if_neq(ViewportSortableParent {
+                sprite_id: parent.sprite_id,
+                bounds: vehicle_parent_bounds(v, &sim.state.map, pose),
+                insertion_key: vehicle_insertion_key(v, pose),
+                source_depth,
+            });
         }
         sprite.image = layers
             .first()
@@ -246,18 +276,18 @@ pub(crate) fn update_vehicles(
         sprite.color = vehicle_tint(v);
     }
 
-    for (trailer, mut transform, mut sprite, mut visibility, mut parent) in &mut trailers {
+    for (trailer, mut transform, mut sprite, mut visibility, parent) in &mut trailers {
         let Some(i) = vehicle_index.core.slot(trailer.head_id) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
         let Some(head) = sim.state.vehicles.get(i) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
         let ids = vehicle_index.core.consist(head.id);
         let Some(&uid) = ids.get(trailer.unit_index) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
         let Some(unit) = vehicle_index
@@ -265,16 +295,16 @@ pub(crate) fn update_vehicles(
             .slot(uid)
             .and_then(|slot| sim.state.vehicles.get(slot))
         else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
         let trailer_pose = openttdrs_core::VehiclePose::from_vehicle(unit)
             .with_drive_on_right(sim.state.construction.road_drive_on_right());
         if vehicle_is_hidden_from_view(&sim, unit, trailer_pose) {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         }
-        *visibility = Visibility::Visible;
+        visibility.set_if_neq(Visibility::Visible);
         let mut base = vehicle_sprite_pos_at_with_catalog(
             unit,
             &sim.state.map,
@@ -304,11 +334,15 @@ pub(crate) fn update_vehicles(
         let source_depth = vehicle_source_depth(unit, &sim.state.map, trailer_pose, base);
         let mut sorted_base = base;
         sorted_base.z = source_depth;
-        transform.translation = sorted_base;
-        if let Some(parent) = parent.as_deref_mut() {
-            parent.bounds = vehicle_parent_bounds(unit, &sim.state.map, trailer_pose);
-            parent.insertion_key = vehicle_insertion_key(unit, trailer_pose);
-            parent.source_depth = source_depth;
+        let preserves_sorted_depth = parent.is_some();
+        set_vehicle_translation_if_changed(&mut transform, sorted_base, preserves_sorted_depth);
+        if let Some(mut parent) = parent {
+            parent.set_if_neq(ViewportSortableParent {
+                sprite_id: parent.sprite_id,
+                bounds: vehicle_parent_bounds(unit, &sim.state.map, trailer_pose),
+                insertion_key: vehicle_insertion_key(unit, trailer_pose),
+                source_depth,
+            });
         }
         sprite.image = layers
             .first()
@@ -324,18 +358,18 @@ pub(crate) fn update_vehicles(
         sprite.color = vehicle_tint(unit);
     }
 
-    for (layer, mut transform, mut sprite, mut visibility, mut child) in &mut stack_layers {
+    for (layer, mut transform, mut sprite, mut visibility, child) in &mut stack_layers {
         let Some(i) = vehicle_index.core.slot(layer.vehicle_id) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
         let Some(v) = sim.state.vehicles.get(i) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
         let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
         if vehicle_is_hidden_from_view(&sim, v, pose) {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         }
         let layers = trucks.for_vehicle_with_newgrf_layers(
@@ -348,10 +382,10 @@ pub(crate) fn update_vehicles(
             &mut images,
         );
         let Some(layer_data) = layers.get(layer.stack_index) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
-        *visibility = Visibility::Visible;
+        visibility.set_if_neq(Visibility::Visible);
         let mut pos3 = vehicle_sprite_pos_at_offsets(
             v,
             &sim.state.map,
@@ -363,65 +397,77 @@ pub(crate) fn update_vehicles(
         );
         let source_depth = vehicle_source_depth(v, &sim.state.map, pose, pos3);
         pos3.z = source_depth;
-        transform.translation = pos3;
+        let preserves_sorted_depth = child.is_some();
+        set_vehicle_translation_if_changed(&mut transform, pos3, preserves_sorted_depth);
         sprite.image = layer_data.handle.clone();
         sprite.color = vehicle_tint(v);
-        if let Some(child) = child.as_deref_mut() {
-            child.source_depth = source_depth;
+        if let Some(mut child) = child {
+            child.set_if_neq(ViewportSortableChild {
+                parent: child.parent,
+                source_depth,
+            });
         }
     }
 
-    for (shadow, mut transform, mut sprite, mut visibility, mut child) in &mut shadows {
+    for (shadow, mut transform, mut sprite, mut visibility, child) in &mut shadows {
         let Some(i) = vehicle_index.core.slot(shadow.0) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
         let Some(v) = sim.state.vehicles.get(i) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
         let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
         if vehicle_is_hidden_from_view(&sim, v, pose) {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         }
-        *visibility = Visibility::Visible;
+        visibility.set_if_neq(Visibility::Visible);
         let dir = openttdrs_core::vehicle_render_direction_at(v, pose).min(7) as usize;
         let layer = &vehicle_layers(v)[dir];
         let mut shadow_pos =
             aircraft_aux_sprite_pos_at(v, &sim.state.map, pose, layer, false, 0.85);
         let source_depth = vehicle_source_depth(v, &sim.state.map, pose, shadow_pos);
         shadow_pos.z = source_depth;
-        transform.translation = shadow_pos;
-        if let Some(child) = child.as_deref_mut() {
-            child.source_depth = source_depth;
+        let preserves_sorted_depth = child.is_some();
+        set_vehicle_translation_if_changed(&mut transform, shadow_pos, preserves_sorted_depth);
+        if let Some(mut child) = child {
+            child.set_if_neq(ViewportSortableChild {
+                parent: child.parent,
+                source_depth,
+            });
         }
         sprite.image = trucks.for_vehicle(v, pose, None, None);
     }
 
-    for (rotor, mut transform, mut sprite, mut visibility, mut child) in &mut rotors {
+    for (rotor, mut transform, mut sprite, mut visibility, child) in &mut rotors {
         let Some(i) = vehicle_index.core.slot(rotor.0) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
         let Some(v) = sim.state.vehicles.get(i) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
         let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
         if vehicle_is_hidden_from_view(&sim, v, pose) {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         }
         let frame = aircraft_rotor_frame(v, sim.state.tick.get());
         let layer = &super::assets::AIRCRAFT_ROTOR_LAYERS[frame];
-        *visibility = Visibility::Visible;
+        visibility.set_if_neq(Visibility::Visible);
         let mut rotor_pos = aircraft_aux_sprite_pos_at(v, &sim.state.map, pose, layer, true, 1.1);
         let source_depth = vehicle_source_depth(v, &sim.state.map, pose, rotor_pos);
         rotor_pos.z = source_depth;
-        transform.translation = rotor_pos;
-        if let Some(child) = child.as_deref_mut() {
-            child.source_depth = source_depth;
+        let preserves_sorted_depth = child.is_some();
+        set_vehicle_translation_if_changed(&mut transform, rotor_pos, preserves_sorted_depth);
+        if let Some(mut child) = child {
+            child.set_if_neq(ViewportSortableChild {
+                parent: child.parent,
+                source_depth,
+            });
         }
         sprite.image = trucks.aircraft_rotor(frame);
     }
@@ -435,12 +481,12 @@ pub(crate) fn update_vehicles(
         };
         let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
         if vehicle_is_hidden_from_view(&sim, v, pose) {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         }
-        *visibility = Visibility::Visible;
+        visibility.set_if_neq(Visibility::Visible);
         let pos3 = vehicle_sprite_pos(v, &sim.state.map, sim_clock.tick_alpha);
-        transform.translation = vehicle_cargo_label_pos(pos3);
+        set_vehicle_translation_if_changed(&mut transform, vehicle_cargo_label_pos(pos3), false);
         **text = vehicle_cargo_label(v);
         color.0 = vehicle_cargo_color(v);
     }

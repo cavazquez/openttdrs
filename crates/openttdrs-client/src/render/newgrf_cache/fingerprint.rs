@@ -1,6 +1,27 @@
 //! Fingerprint estable de contexto Action2 para keys de caché NewGRF.
 
+use std::collections::HashMap;
+
 use openttdrs_core::Action2EvalCtx;
+
+fn hash_persistent_registers(mut h: u32, scope_tag: u32, registers: &HashMap<u8, u32>) -> u32 {
+    // La etiqueta y el cardinal separan scopes incluso si sólo uno de ellos
+    // contiene la misma pareja índice/valor. Sin esa separación, self `7C`
+    // y parent `7C` podrían producir la misma secuencia de mezclas.
+    h = h
+        .wrapping_mul(31)
+        .wrapping_add(scope_tag)
+        .wrapping_add(u32::try_from(registers.len()).unwrap_or(u32::MAX));
+    let mut ordered: Vec<_> = registers.iter().collect();
+    ordered.sort_unstable_by_key(|entry| *entry.0);
+    for (&index, &value) in ordered {
+        h = h
+            .wrapping_mul(31)
+            .wrapping_add(value)
+            .wrapping_add(u32::from(index).rotate_left(12));
+    }
+    h
+}
 
 /// Hash de vars/params (y opcionalmente consist random) usados por caches runtime.
 pub(crate) fn runtime_fingerprint(
@@ -119,11 +140,22 @@ pub(crate) fn runtime_fingerprint(
             .wrapping_add(u32::from(parameter).rotate_left(24))
             .wrapping_add((offset as i32 as u32).rotate_left(11));
     }
-    for (i, &p) in ctx.grf_params.iter().enumerate().take(16) {
+    // `7C` elige explícitamente el scope self o parent. Ambos almacenes se
+    // escriben en callbacks y pueden elegir sprites Action2 distintos.
+    h = hash_persistent_registers(h, 0x7C00_0001, &ctx.persistent_registers);
+    h = hash_persistent_registers(h, 0x7C00_0002, &ctx.parent_persistent_registers);
+    // Action2 7F acepta cualquier índice u8; limitar la identidad a los
+    // primeros dieciséis parámetros dejaba reutilizar una textura que el GRF
+    // acababa de seleccionar de otra forma.
+    h = h
+        .wrapping_mul(31)
+        .wrapping_add(0x7F00_0000)
+        .wrapping_add(u32::try_from(ctx.grf_params.len()).unwrap_or(u32::MAX));
+    for (i, &p) in ctx.grf_params.iter().enumerate() {
         h = h
             .wrapping_mul(31)
             .wrapping_add(p)
-            .wrapping_add(u32::try_from(i).unwrap_or(0) << 20);
+            .wrapping_add(u32::try_from(i).unwrap_or(u32::MAX).rotate_left(20));
     }
     h
 }
@@ -241,6 +273,59 @@ mod tests {
         assert_ne!(
             runtime_fingerprint(&first, vars::ROAD_STOP, false),
             runtime_fingerprint(&second, vars::ROAD_STOP, false)
+        );
+    }
+
+    #[test]
+    fn persistent_scopes_and_all_grf_parameters_invalidate_deterministically() {
+        let mut first = Action2EvalCtx::default();
+        first.persistent_registers.insert(3, 0x1111);
+        first.persistent_registers.insert(7, 0x2222);
+        first.parent_persistent_registers.insert(2, 0x3333);
+        first.parent_persistent_registers.insert(9, 0x4444);
+        first.grf_params = vec![0; 17];
+
+        let mut same = Action2EvalCtx::default();
+        same.persistent_registers.insert(7, 0x2222);
+        same.persistent_registers.insert(3, 0x1111);
+        same.parent_persistent_registers.insert(9, 0x4444);
+        same.parent_persistent_registers.insert(2, 0x3333);
+        same.grf_params = first.grf_params.clone();
+        assert_eq!(
+            runtime_fingerprint(&first, vars::INDUSTRY, false),
+            runtime_fingerprint(&same, vars::INDUSTRY, false),
+            "el orden de inserción de los registros no puede cambiar la key"
+        );
+
+        let mut self_changed = first.clone();
+        self_changed.persistent_registers.insert(3, 0xAAAA);
+        assert_ne!(
+            runtime_fingerprint(&first, vars::INDUSTRY, false),
+            runtime_fingerprint(&self_changed, vars::INDUSTRY, false)
+        );
+
+        let mut parent_changed = first.clone();
+        parent_changed.parent_persistent_registers.insert(2, 0xBBBB);
+        assert_ne!(
+            runtime_fingerprint(&first, vars::INDUSTRY, false),
+            runtime_fingerprint(&parent_changed, vars::INDUSTRY, false)
+        );
+
+        let mut parameter_changed = first.clone();
+        parameter_changed.grf_params[16] = 1;
+        assert_ne!(
+            runtime_fingerprint(&first, vars::INDUSTRY, false),
+            runtime_fingerprint(&parameter_changed, vars::INDUSTRY, false)
+        );
+
+        let mut self_scope = Action2EvalCtx::default();
+        self_scope.persistent_registers.insert(1, 5);
+        let mut parent_scope = Action2EvalCtx::default();
+        parent_scope.parent_persistent_registers.insert(1, 5);
+        assert_ne!(
+            runtime_fingerprint(&self_scope, vars::INDUSTRY, false),
+            runtime_fingerprint(&parent_scope, vars::INDUSTRY, false),
+            "self 7C y parent 7C son scopes distintos"
         );
     }
 }

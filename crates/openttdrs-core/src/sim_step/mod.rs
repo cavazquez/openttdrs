@@ -781,6 +781,11 @@ fn phase_tile_loop(state: &mut GameState, t: u64) {
                     &mut global_rng,
                 );
             }
+            crate::TileKind::Grass
+                if crate::world_gen::advance_clear_field_tile_loop_from_visit(state, coord) =>
+            {
+                state.runtime.landscape_tile_dirty.push(coord);
+            }
             _ => {}
         }
     }
@@ -1439,6 +1444,39 @@ mod tests {
             3 << 4,
             "TileLoop_Water seca la costa antes del callback de árbol"
         );
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn regular_tile_loop_advances_clear_fields_without_consuming_global_rng() {
+        // Tick 0 visita expresamente la tesela cero. La prueba cubre el
+        // despacho regular, distinto de la cola usada al generar un mundo,
+        // y conserva el contrato de `TileLoop_Clear`: campos no toman
+        // palabras del RNG global.
+        let coord = TileCoord::new(0, 0);
+        let mut state = GameState::new(64, 64);
+        let mut field = state.map.get(coord).expect("field fixture tile");
+        field.kind = crate::TileKind::Grass;
+        field.mapt = 0;
+        field.m5 = crate::world_gen::clear_ground_m5(crate::world_gen::CLEAR_GROUND_FIELDS, 3);
+        field.m3 = 0;
+        field.m3hi = 0;
+        field.m6 = 0;
+        state
+            .map
+            .set_tile(coord, field)
+            .expect("field fixture write");
+        state.random = crate::linkgraph_parity::Randomizer {
+            state: [0x1122_3344, 0x5566_7788],
+        };
+        let before_random = state.random;
+
+        phase_tile_loop(&mut state, 0);
+
+        let updated = state.map.get(coord).expect("field after tile loop");
+        assert_eq!(crate::map::tree_tile_loop::clear_counter(updated.m5), 1);
+        assert_eq!(state.random, before_random);
+        assert!(state.runtime.landscape_tile_dirty.contains(&coord));
     }
 
     #[test]

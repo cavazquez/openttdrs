@@ -695,6 +695,31 @@ fn tile_loop_road(state: &mut GameState, coord: TileCoord, tile: Tile) {
 /// ocho estados. Cuando un campo huérfano supera el tipo 7, `OpenTTD` lo
 /// convierte en hierba de densidad 2; los campos ligados a una industria
 /// vuelven al tipo 0 después del tipo 8.
+/// Despacha una visita regular de `TileLoop_Clear` para un campo vivo.
+///
+/// La cola de generación ya utiliza [`tile_loop_clear_field`], pero la
+/// simulación regular mantiene su propio despacho LFSR. Validar el nibble
+/// crudo además del tipo semántico evita tratar como campos a una tesela que
+/// el cargador represente como `Grass` por compatibilidad.
+pub(crate) fn advance_clear_field_tile_loop_from_visit(
+    state: &mut GameState,
+    coord: TileCoord,
+) -> bool {
+    let Some(tile) = state.map.get(coord) else {
+        return false;
+    };
+    if tile.kind != TileKind::Grass
+        || tile.ottd_type_nibble() != 0
+        || crate::map::tree_tile_loop::clear_ground_type(tile.m5)
+            != crate::world_gen::CLEAR_GROUND_FIELDS
+    {
+        return false;
+    }
+
+    tile_loop_clear_field(state, coord, tile);
+    state.map.get(coord).is_some_and(|updated| updated != tile)
+}
+
 fn tile_loop_clear_field(state: &mut GameState, coord: TileCoord, tile: Tile) {
     if tile.m3 & 0x10 != 0 {
         return;

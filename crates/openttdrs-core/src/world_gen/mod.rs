@@ -47,11 +47,13 @@ pub(crate) use population::{
     plant_random_farm_fields_runtime, rebuild_vanilla_town_house_with_rng,
     try_place_runtime_industry,
 };
-pub(crate) use tile_loop::advance_town_tile_loop_from_visit_with_rng;
 pub use tile_loop::{
     LANDSCAPE_RIVER_TILE_LOOP_PASSES, STARTUP_TILE_LOOP_PASSES,
     run_first_regular_game_tick_with_rng, run_generation_tile_loop,
     run_generation_tile_loops_with_rng, run_landscape_river_tile_loops,
+};
+pub(crate) use tile_loop::{
+    advance_clear_field_tile_loop_from_visit, advance_town_tile_loop_from_visit_with_rng,
 };
 pub(crate) use trees::advance_regular_tree_tick;
 pub use trees::{

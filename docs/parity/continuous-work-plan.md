@@ -47,9 +47,11 @@ No cierra #512 ni amplía la paridad de runtime fuera de esa fixture.
 RMAP-168 / #529 conserva además `PATS.economy.town_growth_rate`, su semántica
 `0…4` y la cache `Town::num_houses` al recalcular la cadencia mensual: elimina
 la frontera RNG de `day[168]` y deja exactos los cortes hasta `day[169]`. La
-nueva frontera de fundación industrial de `day[170]`, el alcance residual de
-#527 y la evidencia canónica viven sólo en
-[random-map-issues.md](random-map-issues.md#rmap-168--conservar-economytown_growth_rate-de-sav-y-la-cadencia-de-crecimiento).
+nueva frontera de fundación industrial de `day[170]` sigue abierta. RMAP-169 /
+#530 restaura además `TileLoop_Clear` de los campos en la partida regular y
+reduce el residuo raw previo a esa fundación sin cambiar el RNG; sus conteos,
+frontera restante y alcance residual de #527 viven sólo en
+[random-map-issues.md](random-map-issues.md#rmap-169--despachar-tileloop_clear-para-campos-durante-una-partida-regular).
 
 Última etapa: RMAP-143 / #346 amplía el gate por fases a RNG y secuencia
 ID/posición de pueblos, además de bytes de teselas; las 30 fronteras de la

@@ -395,11 +395,37 @@ mod coherence_tests {
     fn new_station_starts_at_initial_rating() {
         let station = Station::new(TileCoord::new(2, 2));
         assert_eq!(station.rating, INITIAL_STATION_RATING);
+        assert_eq!(station.time_since_load, u8::MAX);
+        assert_eq!(station.time_since_unload, u8::MAX);
         assert_eq!(
             station_rating_for_cargo(&station, CargoType::Coal),
             INITIAL_STATION_RATING
         );
         assert_eq!(INITIAL_STATION_RATING, 175);
+    }
+
+    #[test]
+    fn station_activity_ages_follow_rating_ticks_and_loading() {
+        let mut station = Station::new(TileCoord::new(2, 2));
+        station.time_since_load = 254;
+        station.time_since_unload = 19;
+
+        sweep(&mut station, 1, false);
+        assert_eq!(station.time_since_load, u8::MAX);
+        assert_eq!(station.time_since_unload, 20);
+
+        on_station_cargo_pickup(
+            &mut station,
+            CargoType::Coal,
+            CompanyId::PLAYER,
+            StationVisit {
+                vehicle_kind: crate::vehicle::VehicleKind::Train,
+                last_speed: 100,
+                last_age: 0,
+            },
+        );
+        assert_eq!(station.time_since_load, 0);
+        assert_eq!(station.time_since_unload, 20);
     }
 
     /// Servir con material rápido y nuevo sube el objetivo, pero el rating solo se mueve de

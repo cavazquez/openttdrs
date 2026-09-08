@@ -791,8 +791,8 @@ fn write_stnn_normal(
     buf.extend_from_slice(&psa.to_be_bytes()); // airport.psa (REF_STORAGE)
 
     buf.push(0); // indtype
-    buf.push(0); // time_since_load
-    buf.push(0); // time_since_unload
+    buf.push(st.time_since_load);
+    buf.push(st.time_since_unload);
     buf.push(last_vehicle_type_byte(st.last_vehicle_type));
     buf.push(u8::try_from(st.had_vehicle_of_type & u16::from(u8::MAX)).unwrap_or(u8::MAX)); // had_vehicle_of_type
     write_gamma(0, buf)?; // loading_vehicles
@@ -2133,6 +2133,8 @@ mod tests {
         rail.build_date = crate::station::STATION_BUILD_DATE_DEFAULT + 123;
         rail.last_vehicle_type = Some(VehicleKind::Aircraft);
         rail.had_vehicle_of_type = 0x2A;
+        rail.time_since_load = 17;
+        rail.time_since_unload = 19;
         state.stations = vec![rail];
         let recs = stnn_records(&state, 64).unwrap();
         assert_eq!(recs.len(), 1);
@@ -2148,6 +2150,8 @@ mod tests {
         let decoded = crate::sav::entities::stations_from_chunks(&chunks, 64, 352);
         assert_eq!(decoded[0].last_vehicle_type, VEH_AIRCRAFT);
         assert_eq!(decoded[0].had_vehicle_of_type, 0x2A);
+        assert_eq!(decoded[0].time_since_load, 17);
+        assert_eq!(decoded[0].time_since_unload, 19);
         assert_eq!(decoded[0].string_id, Some(0x6027));
         assert_eq!(
             decoded[0].build_date,

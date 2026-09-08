@@ -231,6 +231,12 @@ pub fn update_station_ratings_with_cargo_callbacks(
     rng: &mut Randomizer,
 ) {
     for station in stations {
+        // `UpdateStationRating` envejece la actividad global de la estación
+        // antes de recorrer cada `GoodsEntry` (station_cmd.cpp). No confundir
+        // estos contadores con `time_since_pickup`, que es por carga y sólo
+        // participa en el rating de dicha carga.
+        station.time_since_load = station.time_since_load.saturating_add(1);
+        station.time_since_unload = station.time_since_unload.saturating_add(1);
         station.ensure_packets_from_stock();
         if !station.cargo_packets.is_empty() {
             station.cargo_packets.age_waiting_one_period();
@@ -388,6 +394,7 @@ pub fn on_station_cargo_pickup(
     visit: StationVisit,
 ) {
     note_station_load_attempt(station, cargo, visit);
+    station.time_since_load = 0;
     station.time_since_pickup.set(cargo, 0);
     station.company_pickup_slot_mut(company).set(cargo, 0);
     // La carga que sigue en el andén no rejuvenece: su antigüedad es la que cobrará al

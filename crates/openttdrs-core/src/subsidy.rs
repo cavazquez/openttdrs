@@ -122,31 +122,73 @@ pub const fn subsidy_payment_multiplier_from_index(index: u8) -> i64 {
     }
 }
 
-/// Purga ofertas caducadas y genera nuevas mensualmente.
+/// Mantiene compatibilidad con el hook de landscape.
+///
+/// La creación mensual pertenece a `TimerGameEconomy` y ocurre antes del
+/// timer de pueblos. Dejarla aquí hacía que el RNG se consumiera después de
+/// vehículos y landscape; el hook por tick sólo puede purgar estados vencidos.
 pub fn tick_subsidies(state: &mut GameState) {
     let tick = state.tick.get();
     state
         .subsidies
-        .retain(|s| s.awarded || s.is_offer_active(tick));
+        .retain(|s| s.is_offer_active(tick) || s.is_award_active(tick));
+}
 
-    if state.runtime.economy_triggers.new_month {
-        let _ = try_create_monthly_subsidy(state);
+/// Actualiza subsidios en el borde mensual de `TimerGameEconomy`.
+///
+/// El original sortea una sola vez `RandomRange(16)` antes de decidir qué
+/// clase de ruta intentar. Sólo la ruta elegida puede reintentar hasta 1001
+/// veces; no se debe volver a sortear la clase por cada intento.
+pub(crate) fn process_monthly_subsidies(state: &mut GameState) {
+    tick_subsidies(state);
+
+    if state.subsidy_duration == 0 || !has_manually_distributed_cargo(state) {
+        return;
+    }
+
+    let random_chance = state.random.random_range(16);
+    match random_chance {
+        0 | 1 if passenger_distribution_is_manual(state) => {
+            let _ = retry_subsidy_route(state, try_create_passenger_subsidy);
+        }
+        2 => {
+            let _ = retry_subsidy_route(state, try_create_town_cargo_subsidy);
+        }
+        3 => {
+            let _ = retry_subsidy_route(state, try_create_industry_subsidy);
+        }
+        _ => {}
     }
 }
 
-fn try_create_monthly_subsidy(state: &mut GameState) -> bool {
-    for _ in 0..1000 {
-        let chance = state.random.next() % 16;
-        let created = if chance < 2 {
-            try_create_passenger_subsidy(state)
-        } else if chance == 2 {
-            try_create_town_cargo_subsidy(state)
-        } else if chance == 3 {
-            try_create_industry_subsidy(state)
-        } else {
-            false
-        };
-        if created {
+fn has_manually_distributed_cargo(state: &GameState) -> bool {
+    use crate::flow_stat::DistributionType;
+
+    let settings = state.cargo_dist.openttd_settings();
+    [
+        settings.distribution_pax,
+        settings.distribution_mail,
+        settings.distribution_armoured,
+        settings.distribution_default,
+    ]
+    .into_iter()
+    .any(|distribution| matches!(distribution, DistributionType::Manual))
+}
+
+fn passenger_distribution_is_manual(state: &GameState) -> bool {
+    use crate::flow_stat::DistributionType;
+
+    matches!(
+        state.cargo_dist.openttd_settings().distribution_pax,
+        DistributionType::Manual
+    )
+}
+
+fn retry_subsidy_route(state: &mut GameState, route: fn(&mut GameState) -> bool) -> bool {
+    // `do { ... } while (!route && n--)` con n=1000: una primera llamada y
+    // hasta mil reintentos adicionales.
+    for _ in 0..=1000 {
+        if route(state) {
             return true;
         }
     }
@@ -495,10 +537,28 @@ mod tests {
     #[test]
     fn monthly_tick_can_create_subsidy() {
         let mut state = setup_subsidy_route();
-        state.random = crate::linkgraph_parity::Randomizer::new(7);
-        state.runtime.economy_triggers.new_month = true;
-        tick_subsidies(&mut state);
+        // La primera palabra escala a 3 con RandomRange(16), por lo que la
+        // pasada mensual elige la ruta industria → destino.
+        state.random = crate::linkgraph_parity::Randomizer {
+            state: [0x8000_0009, 0],
+        };
+        process_monthly_subsidies(&mut state);
         assert!(!state.subsidies.is_empty());
+    }
+
+    #[test]
+    fn monthly_selection_uses_one_random_range_before_route_choice() {
+        let mut state = setup_subsidy_route();
+        // La siguiente palabra es 0x7FFF_FFFF, por lo que RandomRange(16)
+        // elige 7: no hay ruta que buscar ni otra palabra que consumir.
+        state.random = crate::linkgraph_parity::Randomizer { state: [4, 0] };
+        let mut expected = state.random;
+        assert_eq!(expected.random_range(16), 7);
+
+        process_monthly_subsidies(&mut state);
+
+        assert_eq!(state.random, expected);
+        assert!(state.subsidies.is_empty());
     }
 
     #[test]

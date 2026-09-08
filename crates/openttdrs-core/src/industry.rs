@@ -1498,7 +1498,13 @@ impl Industry {
             .min(255)
     }
 
-    fn production_rate_for_output(&self, index: usize) -> u8 {
+    /// Tasa persistida de una salida concreta.
+    ///
+    /// En economía suave `OpenTTD` cambia `Industry::ProducedCargo::rate`, no
+    /// `prod_level`. Las dos primeras tasas reutilizan los campos históricos
+    /// del runtime y las restantes quedan alineadas con los outputs `NewGRF`.
+    #[must_use]
+    pub(crate) fn production_rate_for_output(&self, index: usize) -> u8 {
         match index {
             0 => self.production_rate(),
             1 => self
@@ -1510,6 +1516,26 @@ impl Industry {
                 .get(index - 2)
                 .copied()
                 .unwrap_or(0),
+        }
+    }
+
+    /// Actualiza la tasa persistida de una salida sin tocar `prod_level`.
+    ///
+    /// También se usa para especies vanilla: los `Option` no significan que
+    /// el valor sea exclusivamente `NewGRF`, sino que sobrescribe la tasa base
+    /// del spec cuando un SAV o la economía suave ya la modificó.
+    pub(crate) fn set_production_rate_for_output(&mut self, index: usize, rate: u8) {
+        match index {
+            0 => self.newgrf_production_rate = Some(rate),
+            1 => self.newgrf_secondary_production_rate = Some(rate),
+            _ => {
+                let extra_index = index - 2;
+                if self.newgrf_extra_production_rates.len() <= extra_index {
+                    self.newgrf_extra_production_rates
+                        .resize(extra_index + 1, 0);
+                }
+                self.newgrf_extra_production_rates[extra_index] = rate;
+            }
         }
     }
 
@@ -2014,6 +2040,28 @@ impl Industry {
         }
         let pct = (u64::from(sample.transported) * 256) / u64::from(sample.produced);
         u8::try_from(pct.min(255)).unwrap_or(255)
+    }
+
+    /// Porcentaje de la salida del mes cerrado (`LAST_MONTH`) en escala 0–255.
+    ///
+    /// `rollover_accepted_history` abre el mes actual en índice cero, por lo
+    /// que la muestra que `ChangeIndustryProduction` consulta es la posición
+    /// uno. No usar el histórico agregado legacy: una industria con dos
+    /// salidas puede crecer una tasa y reducir la otra en el mismo cierre.
+    #[must_use]
+    pub(crate) fn last_month_output_pct_transported(&self, cargo: CargoType) -> u8 {
+        let Some(sample) = self
+            .produced_history
+            .get(&cargo)
+            .and_then(|history| history.get(1))
+        else {
+            return 0;
+        };
+        if sample.production == 0 {
+            return 0;
+        }
+        let pct = (u32::from(sample.transported) * 256) / u32::from(sample.production);
+        u8::try_from(pct.min(u32::from(u8::MAX))).unwrap_or(u8::MAX)
     }
 
     /// Produce cargo primario (y secundario si aplica) si el tick cae en el periodo.
@@ -2645,6 +2693,162 @@ pub enum IndustryProductionChange {
     Closing,
 }
 
+/// `IndustryControlFlag::{NoProductionDecrease, NoProductionIncrease,
+/// NoClosure}` en el mismo orden de bits que `industry.h`.
+const INDUSTRY_CONTROL_NO_PRODUCTION_DECREASE: u8 = 1 << 0;
+const INDUSTRY_CONTROL_NO_PRODUCTION_INCREASE: u8 = 1 << 1;
+const INDUSTRY_CONTROL_NO_CLOSURE: u8 = 1 << 2;
+
+#[must_use]
+const fn has_industry_control_flag(flags: u8, flag: u8) -> bool {
+    flags & flag != 0
+}
+
+/// `Chance16I(a, b, r)` sobre una palabra que ya fue consumida del RNG.
+///
+/// La producción suave comparte los 16 bits bajos con la decisión de signo y
+/// los altos con la de si hay cambio. Hacer dos llamadas a `Chance16` aquí
+/// consumiría una palabra de más y desplazaría todo el runtime posterior.
+#[must_use]
+pub(crate) fn chance16_i(numerator: u32, denominator: u32, random: u32) -> bool {
+    if denominator == 0 {
+        return false;
+    }
+    ((u64::from((random & 0xFFFF) as u16) * u64::from(denominator) + u64::from(denominator / 2))
+        >> 16)
+        < u64::from(numerator)
+}
+
+/// Reproduce la rama `ET_SMOOTH` de `ChangeIndustryProduction`.
+///
+/// Las industrias orgánicas y extractivas modifican las tasas individuales de
+/// sus salidas; las procesadoras sólo sortean abandono tras cinco años sin
+/// producción. El llamador debe haber rotado previamente el historial del
+/// mes para que `LAST_MONTH` esté en el índice uno.
+#[allow(clippy::too_many_lines)]
+pub(crate) fn change_industry_production_smooth(
+    industry: &mut Industry,
+    climate: Climate,
+    economy_year: u32,
+    rng: &mut Randomizer,
+) -> IndustryProductionChange {
+    if industry.is_closing() {
+        return IndustryProductionChange::None;
+    }
+
+    match industry.life_type() {
+        IndustryLifeType::BlackHole => IndustryProductionChange::None,
+        IndustryLifeType::Processing => {
+            let abandoned_long_enough = economy_year.saturating_sub(industry.last_prod_year) >= 5;
+            if abandoned_long_enough
+                && rng.chance16(1, 180)
+                && !has_industry_control_flag(industry.control_flags, INDUSTRY_CONTROL_NO_CLOSURE)
+            {
+                industry.prod_level = PRODLEVEL_CLOSURE;
+                IndustryProductionChange::Closing
+            } else {
+                IndustryProductionChange::None
+            }
+        }
+        IndustryLifeType::Organic | IndustryLifeType::Extractive => {
+            let only_decrease = industry
+                .spec
+                .is_some_and(IndustrySpec::only_decreases_production)
+                && climate == Climate::Temperate;
+            let mut close_it = !has_industry_control_flag(
+                industry.control_flags,
+                INDUSTRY_CONTROL_NO_CLOSURE | INDUSTRY_CONTROL_NO_PRODUCTION_DECREASE,
+            );
+            let mut increased = false;
+            let mut decreased = false;
+            let outputs = industry.produced_cargos();
+
+            for (index, cargo) in outputs.into_iter().enumerate() {
+                // `ChangeIndustryProduction` toma una única palabra por
+                // salida y reutiliza sus mitades mediante `Chance16I`.
+                let random = rng.next();
+                let old_rate = industry.production_rate_for_output(index);
+                let transported = industry.last_month_output_pct_transported(cargo);
+                let mut multiplier = if transported > PERCENT_TRANSPORTED_60 {
+                    1_i32
+                } else {
+                    -1_i32
+                };
+
+                if only_decrease {
+                    multiplier = -1;
+                } else if chance16_i(
+                    1,
+                    if transported > PERCENT_TRANSPORTED_80 {
+                        6
+                    } else {
+                        3
+                    },
+                    random,
+                ) {
+                    multiplier = -multiplier;
+                }
+
+                let mut new_rate = i32::from(old_rate);
+                if chance16_i(1, 22, random >> 16) {
+                    let step = (((rng.random_range(50) + 10) * u32::from(old_rate)) >> 8).max(1);
+                    new_rate += multiplier * i32::try_from(step).unwrap_or(i32::MAX);
+                }
+                new_rate = new_rate.clamp(1, i32::from(u8::MAX));
+                // La única salida vanilla de pasajeros es Oil Rig; no tiene
+                // `NoPaxProdClamp`, por lo que conserva el límite nativo 16.
+                if cargo == CargoType::Passengers {
+                    new_rate = new_rate.clamp(0, 16);
+                }
+                let new_rate = u8::try_from(new_rate).unwrap_or(u8::MAX);
+
+                if has_industry_control_flag(
+                    industry.control_flags,
+                    INDUSTRY_CONTROL_NO_PRODUCTION_DECREASE,
+                ) && new_rate < old_rate
+                {
+                    continue;
+                }
+                if has_industry_control_flag(
+                    industry.control_flags,
+                    INDUSTRY_CONTROL_NO_PRODUCTION_INCREASE,
+                ) && new_rate > old_rate
+                {
+                    continue;
+                }
+
+                if new_rate == old_rate && old_rate > 1 {
+                    close_it = false;
+                    continue;
+                }
+
+                industry.set_production_rate_for_output(index, new_rate);
+                if new_rate > old_rate {
+                    increased = true;
+                } else if new_rate < old_rate {
+                    decreased = true;
+                }
+                if new_rate > 1 {
+                    close_it = false;
+                }
+            }
+
+            if close_it
+                && !has_industry_control_flag(industry.control_flags, INDUSTRY_CONTROL_NO_CLOSURE)
+            {
+                industry.prod_level = PRODLEVEL_CLOSURE;
+                IndustryProductionChange::Closing
+            } else if increased {
+                IndustryProductionChange::Increased
+            } else if decreased {
+                IndustryProductionChange::Decreased
+            } else {
+                IndustryProductionChange::None
+            }
+        }
+    }
+}
+
 /// Acción decodificada de los callbacks `CBID_INDUSTRY_PRODUCTION_CHANGE` /
 /// `CBID_INDUSTRY_MONTHLYPROD_CHANGE` (bits 0..3 del resultado `NewGRF`).
 ///
@@ -2822,10 +3026,7 @@ pub fn change_industry_production(
 
 /// `Chance16(a, b)`: probabilidad `a/b`.
 fn chance16(rng: &mut Randomizer, a: u32, b: u32) -> bool {
-    if b == 0 {
-        return false;
-    }
-    rng.random_range(b) < a
+    rng.chance16(a, b)
 }
 
 /// Borra del mapa las industrias marcadas para cierre el mes pasado.
@@ -3183,6 +3384,47 @@ mod tests {
         let mine = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
         assert_eq!(mine.prod_level, PRODLEVEL_DEFAULT);
         assert_eq!(mine.produce_amount(), 15);
+    }
+
+    #[test]
+    fn smooth_monthly_change_reuses_random_halves_per_output() {
+        let mut mine = Industry::with_tiles_spec(
+            TileCoord::new(0, 0),
+            IndustrySpec::CoalMine.kind(),
+            IndustrySpec::CoalMine,
+            vec![TileCoord::new(0, 0)],
+            0,
+        );
+        // La primera fila es THIS_MONTH y la segunda LAST_MONTH. Con cero
+        // transportado, la palabra nula invierte el signo y además habilita
+        // el cambio usando respectivamente las mitades baja y alta.
+        mine.produced_history.insert(
+            CargoType::Coal,
+            vec![
+                crate::entity_history::IndustryProducedHistorySample::default(),
+                crate::entity_history::IndustryProducedHistorySample {
+                    production: 100,
+                    transported: 0,
+                },
+            ],
+        );
+        let mut rng = Randomizer { state: [8, 0] };
+        let mut expected = rng;
+        let random = expected.next();
+        assert_eq!(random, 0);
+        assert!(chance16_i(1, 3, random));
+        assert!(chance16_i(1, 22, random >> 16));
+        let step = (((expected.random_range(50) + 10) * 15) >> 8).max(1);
+
+        let change =
+            change_industry_production_smooth(&mut mine, Climate::Temperate, 2000, &mut rng);
+
+        assert_eq!(rng, expected, "una palabra base y RandomRange(50)");
+        assert_eq!(change, IndustryProductionChange::Increased);
+        assert_eq!(
+            mine.production_rate_for_output(0),
+            15_u8.saturating_add(u8::try_from(step).unwrap_or(u8::MAX))
+        );
     }
 
     #[test]

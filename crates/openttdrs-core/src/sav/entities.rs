@@ -88,6 +88,12 @@ pub struct SavStation {
     /// `Station::last_vehicle_type` (`STNN.normal`), código `VehicleType`
     /// nativo (`0` train, `1` road, `2` ship, `3` aircraft, `0xFF` none).
     pub last_vehicle_type: u8,
+    /// `Station::time_since_load` (`STNN.normal`), en días de actualización
+    /// de rating. `255` significa que la estación todavía no fue servida.
+    pub time_since_load: u8,
+    /// `Station::time_since_unload` (`STNN.normal`), en días de actualización
+    /// de rating. `255` significa que la estación todavía no fue servida.
+    pub time_since_unload: u8,
     /// Índice del pool `PersistentStorage` referenciado por `airport.psa`.
     pub airport_persistent_storage_id: Option<u32>,
     /// Paquetes de carga en espera, agrupados por slot de cargo de `OpenTTD`.
@@ -363,6 +369,40 @@ pub(crate) fn station_last_vehicle_types_from_chunks(
         .collect()
 }
 
+/// Extrae la actividad global de cada estación desde `STNN.normal`.
+///
+/// `time_since_pickup` pertenece a cada `GoodsEntry` y no es equivalente:
+/// `OpenTTD` decide el servicio urbano con estos dos contadores de estación.
+/// Los saves legacy sin los campos conservan el valor del constructor nativo
+/// (`255`, nunca servida), en vez de inventar una actividad reciente.
+#[must_use]
+pub(crate) fn station_activity_ages_from_chunks(
+    chunks: &[RawChunk],
+    save_version: u16,
+) -> std::collections::HashMap<u32, (u8, u8)> {
+    let Some(stnn) = find_chunk(chunks, "STNN") else {
+        return std::collections::HashMap::new();
+    };
+    table_rows(stnn, save_version)
+        .into_iter()
+        .map(|(station_id, record)| {
+            let normal = nested_struct(&record, "normal");
+            let value = |name| {
+                normal
+                    .and_then(|n| record_get(n, name))
+                    .or_else(|| record_get(&record, name))
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u8::try_from(value).ok())
+                    .unwrap_or(u8::MAX)
+            };
+            (
+                station_id,
+                (value("time_since_load"), value("time_since_unload")),
+            )
+        })
+        .collect()
+}
+
 fn table_rows(chunk: &RawChunk, save_version: u16) -> Vec<(u32, super::table::SlRecord)> {
     super::array_legacy::chunk_rows(chunk, save_version)
 }
@@ -502,6 +542,7 @@ pub(crate) fn stations_from_chunks(
     let mut cargo_by_station = station_cargo_from_chunks(chunks, save_version);
     let had_vehicle_flags = station_had_vehicle_flags_from_chunks(chunks, save_version);
     let last_vehicle_types = station_last_vehicle_types_from_chunks(chunks, save_version);
+    let station_activity_ages = station_activity_ages_from_chunks(chunks, save_version);
     let mut indexed: Vec<_> = station_index_from_chunks(chunks, map_w, save_version)
         .into_iter()
         .filter(|(_, st)| !st.is_waypoint)
@@ -528,6 +569,12 @@ pub(crate) fn stations_from_chunks(
             airport_blocks: st.airport_blocks,
             had_vehicle_of_type: had_vehicle_flags.get(&station_id).copied().unwrap_or(0),
             last_vehicle_type: last_vehicle_types.get(&station_id).copied().unwrap_or(0xFF),
+            time_since_load: station_activity_ages
+                .get(&station_id)
+                .map_or(u8::MAX, |(load, _)| *load),
+            time_since_unload: station_activity_ages
+                .get(&station_id)
+                .map_or(u8::MAX, |(_, unload)| *unload),
             airport_persistent_storage_id: st.airport_persistent_storage_id,
             cargo: cargo_by_station.remove(&station_id).unwrap_or_default(),
         })
@@ -3071,6 +3118,8 @@ mod tests {
         assert_eq!(stations[0].facilities, 1);
         assert_eq!(stations[0].last_vehicle_type, 2);
         assert_eq!(stations[0].had_vehicle_of_type, 0x3E);
+        assert_eq!(stations[0].time_since_load, u8::MAX);
+        assert_eq!(stations[0].time_since_unload, u8::MAX);
     }
 
     #[test]

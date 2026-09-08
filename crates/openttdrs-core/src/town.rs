@@ -1,6 +1,6 @@
 //! Demanda urbana mínima: casas en cobertura de parada generan pasajeros y correo.
 
-use crate::cargo::{ALL_CARGO_TYPES, CargoType};
+use crate::cargo::CargoType;
 use crate::cargodist::parity::Randomizer;
 use crate::company::CompanyId;
 use crate::entity_history::TownHistory;
@@ -974,16 +974,33 @@ fn stations_near_town<'a>(town: &'a Town, stations: &'a [Station]) -> Vec<&'a St
             !matches!(
                 st.stop_kind,
                 StopKind::RailWaypoint | StopKind::RoadWaypoint | StopKind::Buoy
-            ) && crate::economy::manhattan_distance(st.pos, town.pos) <= TOWN_AUTHORITY_RADIUS
+            ) && station_is_in_town_growth_radius(town, st)
         })
         .collect()
 }
 
+/// Equivalente semántico de `ForAllStationsNearTown`: la estación debe caer
+/// dentro del radio cuadrado de la zona exterior, no sólo dentro del radio de
+/// autoridad Manhattan. El recorrido nativo usa un radio más amplio como
+/// optimización de búsqueda y vuelve a aplicar esta comparación exacta.
+#[must_use]
+fn station_is_in_town_growth_radius(town: &Town, station: &Station) -> bool {
+    let radius_sq = town.squared_town_zone_radius[HouseZone::TownEdge as usize];
+    if radius_sq == 0 {
+        // Los escenarios JSON y varias fixtures antiguas no persistían el
+        // cache de radios. Mantener su alcance histórico hasta que el runtime
+        // lo recalcule, sin afectar los pueblos importados de OpenTTD.
+        return crate::economy::manhattan_distance(station.pos, town.pos) <= TOWN_AUTHORITY_RADIUS;
+    }
+    let dx = i64::from(station.pos.x) - i64::from(town.pos.x);
+    let dy = i64::from(station.pos.y) - i64::from(town.pos.y);
+    dx * dx + dy * dy <= i64::from(radius_sq)
+}
+
 #[must_use]
 fn station_recently_active(station: &Station) -> bool {
-    ALL_CARGO_TYPES
-        .iter()
-        .any(|cargo| station.time_since_pickup.get(*cargo) <= STATION_ACTIVE_DAYS)
+    station.time_since_load <= STATION_ACTIVE_DAYS
+        || station.time_since_unload <= STATION_ACTIVE_DAYS
 }
 
 #[must_use]
@@ -1039,10 +1056,7 @@ pub fn update_town_growth_rate(
 }
 
 fn chance16(rng: &mut Randomizer, a: u32, b: u32) -> bool {
-    if b == 0 {
-        return false;
-    }
-    rng.random_range(b) < a
+    rng.chance16(a, b)
 }
 
 /// Actualiza `is_growing` (`UpdateTownGrowth`).
@@ -1063,11 +1077,6 @@ pub fn update_town_growth_state(
         return;
     }
 
-    let has_station = !stations_near_town(town, stations).is_empty();
-    if !has_station {
-        return;
-    }
-
     for (i, &goal) in town.goals.iter().enumerate() {
         if !town_goal_satisfied_with_context(
             goal,
@@ -1082,6 +1091,10 @@ pub fn update_town_growth_state(
         }
     }
 
+    // Un pueblo sin estaciones activas no queda bloqueado de forma absoluta:
+    // `UpdateTownGrowth` consume Chance16(1, 12) aun cuando no haya una sola
+    // estación cercana. Además de permitir ese crecimiento ocasional, esa
+    // palabra forma parte del stream RNG global mensual.
     if count_active_stations_near_town(town, stations) == 0 && !chance16(rng, 1, 12) {
         return;
     }
@@ -2085,10 +2098,9 @@ mod tests {
         };
         map.set_height(town.pos, 12).unwrap();
         town.init_growth_goals(Climate::SubArctic);
-        let stations = vec![Station::new_with_kind(
-            TileCoord::new(5, 6),
-            StopKind::BusStop,
-        )];
+        let mut station = Station::new_with_kind(TileCoord::new(5, 6), StopKind::BusStop);
+        station.time_since_load = 0;
+        let stations = vec![station];
         let mut rng = Randomizer::new(1);
         update_town_growth_state(
             &mut town,
@@ -2218,12 +2230,10 @@ mod tests {
         };
         let mut good = Station::new_with_kind(TileCoord::new(10, 11), StopKind::BusStop);
         good.owner = CompanyId::PLAYER;
-        good.time_since_pickup.passengers = 0;
+        good.time_since_load = 0;
         let mut bad = Station::new_with_kind(TileCoord::new(11, 10), StopKind::BusStop);
         bad.owner = CompanyId(1);
-        for cargo in ALL_CARGO_TYPES {
-            bad.time_since_pickup.set(cargo, 50);
-        }
+        bad.time_since_unload = 50;
         update_town_rating(&mut town, &[good, bad], 2);
         assert_eq!(town.authority_rating(CompanyId::PLAYER), 17);
         assert_eq!(town.authority_rating(CompanyId(1)), 90);
@@ -2251,7 +2261,7 @@ mod tests {
         let mut active: Vec<Station> = Vec::new();
         for i in 0..5 {
             let mut st = Station::new_with_kind(TileCoord::new(8 + i, 9), StopKind::BusStop);
-            st.time_since_pickup.passengers = 0;
+            st.time_since_load = 0;
             active.push(st);
         }
         let well_served = get_normal_growth_rate(&town, &active, &map, &[]);
@@ -2259,6 +2269,72 @@ mod tests {
             well_served < unserved,
             "más estaciones activas aceleran el crecimiento"
         );
+    }
+
+    #[test]
+    fn town_station_activity_uses_global_ages_and_exact_edge_radius() {
+        let town = Town {
+            id: 0,
+            pos: TileCoord::new(10, 10),
+            name: "Radius".into(),
+            squared_town_zone_radius: [4, 0, 0, 0, 0],
+            ..Default::default()
+        };
+        let mut served_after_unload =
+            Station::new_with_kind(TileCoord::new(11, 11), StopKind::BusStop);
+        // La edad por cargo no sirve para CountActiveStations: sólo los dos
+        // campos globales importados de STNN deben decidirlo.
+        served_after_unload.time_since_pickup.passengers = 0;
+        assert_eq!(
+            count_active_stations_near_town(&town, &[served_after_unload.clone()]),
+            0
+        );
+        served_after_unload.time_since_unload = STATION_ACTIVE_DAYS;
+        assert_eq!(
+            count_active_stations_near_town(&town, &[served_after_unload]),
+            1
+        );
+
+        let mut outside_edge = Station::new_with_kind(TileCoord::new(13, 10), StopKind::BusStop);
+        outside_edge.time_since_load = 0;
+        assert_eq!(
+            count_active_stations_near_town(&town, &[outside_edge]),
+            0,
+            "DistanceSquare=9 queda fuera del radio nativo 4 aunque Manhattan sea 3"
+        );
+    }
+
+    #[test]
+    fn inactive_station_with_recent_cargo_pickup_consumes_growth_chance() {
+        let map = Map::new_flat(24, 24, 0);
+        let mut town = Town {
+            id: 0,
+            pos: TileCoord::new(10, 10),
+            name: "Global age".into(),
+            squared_town_zone_radius: [4, 0, 0, 0, 0],
+            ..Default::default()
+        };
+        let mut station = Station::new_with_kind(TileCoord::new(11, 11), StopKind::BusStop);
+        // Este era el caso que omitía un `Chance16` mensual: el cargo parecía
+        // reciente, pero la estación nativa nunca había cargado ni descargado.
+        station.time_since_pickup.passengers = 0;
+        let mut rng = Randomizer {
+            state: [3_758_283_595, 1_473_904_283],
+        };
+        let mut expected = rng;
+        let _ = expected.chance16(1, 12);
+
+        update_town_growth_state(
+            &mut town,
+            &[station],
+            &map,
+            &[],
+            Climate::Temperate,
+            0,
+            &mut rng,
+        );
+
+        assert_eq!(rng, expected);
     }
 
     #[test]
@@ -2272,11 +2348,12 @@ mod tests {
             ..Default::default()
         };
         let mut station = Station::new_with_kind(TileCoord::new(4, 5), StopKind::BusStop);
-        for cargo in ALL_CARGO_TYPES {
-            station.time_since_pickup.set(cargo, 30);
-        }
+        station.time_since_load = 30;
+        station.time_since_unload = 30;
         let stations = vec![station];
-        let mut never = Randomizer::new(42);
+        // La próxima palabra tiene low-word `0xFFFF`, que rechaza
+        // Chance16(1, 12) independientemente de sus bits altos.
+        let mut never = Randomizer { state: [4, 0] };
         update_town_growth_state(
             &mut town,
             &stations,
@@ -2306,6 +2383,27 @@ mod tests {
             }
         }
         assert!(lucky_found, "alguna semilla debe pasar Chance16(1,12)");
+    }
+
+    #[test]
+    fn town_without_any_station_still_consumes_monthly_growth_chance() {
+        let map = Map::new_flat(8, 8, 0);
+        let mut town = Town {
+            id: 1,
+            pos: TileCoord::new(4, 4),
+            name: "Sin parada".into(),
+            population: 80,
+            ..Default::default()
+        };
+        let mut rng = Randomizer {
+            state: [3_758_283_595, 1_473_904_283],
+        };
+        let mut expected = rng;
+        let _ = expected.chance16(1, 12);
+
+        update_town_growth_state(&mut town, &[], &map, &[], Climate::Temperate, 0, &mut rng);
+
+        assert_eq!(rng, expected, "UpdateTownGrowth usa Chance16(1,12)");
     }
 
     #[test]

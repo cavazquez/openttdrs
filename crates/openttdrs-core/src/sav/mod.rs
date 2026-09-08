@@ -1490,6 +1490,8 @@ impl GameState {
                 3 => Some(VehicleKind::Aircraft),
                 _ => None,
             };
+            station.time_since_load = st.time_since_load;
+            station.time_since_unload = st.time_since_unload;
             // Una misma estación puede combinar tren, bus y aeropuerto. No
             // deducir el aeropuerto del `StopKind`: éste sólo conserva una
             // facilidad principal para la simulación simplificada.
@@ -2714,6 +2716,8 @@ mod tests {
             airport_blocks: 0,
             had_vehicle_of_type: 0,
             last_vehicle_type: 0xFF,
+            time_since_load: u8::MAX,
+            time_since_unload: u8::MAX,
             airport_persistent_storage_id: None,
             cargo: Vec::new(),
         });
@@ -2765,6 +2769,8 @@ mod tests {
             airport_blocks: 0,
             had_vehicle_of_type: 0,
             last_vehicle_type: 0xFF,
+            time_since_load: u8::MAX,
+            time_since_unload: u8::MAX,
             airport_persistent_storage_id: None,
             cargo: Vec::new(),
         });
@@ -2831,6 +2837,8 @@ mod tests {
             airport_blocks: 0,
             had_vehicle_of_type: 0x0E,
             last_vehicle_type: 2,
+            time_since_load: 17,
+            time_since_unload: 19,
             airport_persistent_storage_id: None,
             cargo: Vec::new(),
         });
@@ -2858,6 +2866,8 @@ mod tests {
         let state = GameState::from_sav_game(sav);
         assert_eq!(state.stations[0].had_vehicle_of_type, 0x0E);
         assert_eq!(state.stations[0].last_vehicle_type, Some(VehicleKind::Ship));
+        assert_eq!(state.stations[0].time_since_load, 17);
+        assert_eq!(state.stations[0].time_since_unload, 19);
         let tile_state = state.stations[0]
             .road_stop_tile_state(tile_pos)
             .expect("estado custom por tesela");
@@ -2869,6 +2879,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn from_sav_game_imports_station_capa_packets_in_core() {
         let source = TileCoord::new(1, 1);
         let destination = TileCoord::new(5, 5);
@@ -2891,6 +2902,8 @@ mod tests {
                 airport_blocks: 0,
                 had_vehicle_of_type: 0,
                 last_vehicle_type: 0xFF,
+                time_since_load: u8::MAX,
+                time_since_unload: u8::MAX,
                 airport_persistent_storage_id: None,
                 cargo: vec![entities::SavStationCargo {
                     cargo_slot: 1,
@@ -2915,6 +2928,8 @@ mod tests {
                 airport_blocks: 0,
                 had_vehicle_of_type: 0,
                 last_vehicle_type: 0xFF,
+                time_since_load: u8::MAX,
+                time_since_unload: u8::MAX,
                 airport_persistent_storage_id: None,
                 cargo: Vec::new(),
             },
@@ -2994,6 +3009,8 @@ mod tests {
             airport_blocks: 0,
             had_vehicle_of_type: 0,
             last_vehicle_type: 0xFF,
+            time_since_load: u8::MAX,
+            time_since_unload: u8::MAX,
             airport_persistent_storage_id: None,
             cargo: vec![
                 entities::SavStationCargo {
@@ -3176,6 +3193,8 @@ mod tests {
                     airport_blocks: 0,
                     had_vehicle_of_type: 0,
                     last_vehicle_type: 0xFF,
+                    time_since_load: u8::MAX,
+                    time_since_unload: u8::MAX,
                     airport_persistent_storage_id: None,
                     cargo: Vec::new(),
                 },
@@ -3196,6 +3215,8 @@ mod tests {
                     airport_blocks: 0,
                     had_vehicle_of_type: 0,
                     last_vehicle_type: 0xFF,
+                    time_since_load: u8::MAX,
+                    time_since_unload: u8::MAX,
                     airport_persistent_storage_id: None,
                     cargo: Vec::new(),
                 },

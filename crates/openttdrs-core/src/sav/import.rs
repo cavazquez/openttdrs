@@ -500,6 +500,13 @@ fn import_industry_output_stock(
         else {
             continue;
         };
+        // `INDY.produced[].rate` es mutable también para industrias vanilla:
+        // la economía suave cambia esta tasa por salida sin tocar
+        // `prod_level`. Conservarla al importar evita volver al valor del spec
+        // después de abrir un SAV que ya atravesó un cierre mensual.
+        if let Some(output_index) = outputs.iter().position(|&output| output == cargo) {
+            industry.set_production_rate_for_output(output_index, produced.rate);
+        }
         let waiting = u32::from(produced.waiting);
         if !produced.history.is_empty() {
             industry.produced_history.insert(

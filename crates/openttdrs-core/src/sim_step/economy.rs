@@ -88,6 +88,11 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
     for at in closed {
         crate::news::report_industry_closed(state, at);
     }
+    // TimerGameEconomy ordena estas familias por prioridad: INDUSTRY antes de
+    // SUBSIDY y TOWN. El cierre de estadísticas debe suceder antes de CB35 y
+    // de la economía suave, pues ambas consultan `LAST_MONTH`.
+    roll_and_change_monthly_industries(state);
+    crate::subsidy::process_monthly_subsidies(state);
     // Cierre mensual tras intereses: deltas por compañía + espejo global (activa).
     for i in 0..state.companies.len() {
         let company_id = state.companies[i].id;
@@ -159,7 +164,9 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
         }
     }
     state.runtime.landscape_tile_dirty.extend(road_dirty);
-    // Metas de crecimiento urbano + historiales de pueblos e industrias (UI-3).
+    // Metas de crecimiento urbano e historiales de pueblos (UI-3). Esto va
+    // después de subsidios: `UpdateTownGrowth` puede consumir Chance16(1,12)
+    // para cada pueblo sin estaciones activas.
     let company_count = state.companies.len();
     town::process_town_monthly_growth(
         &mut state.towns,
@@ -180,13 +187,54 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
         town.history
             .push_month(population, passengers, mail, rating);
     }
+}
+
+/// `TimerGameEconomy::Priority::INDUSTRY`: rota estadísticas, actualiza la
+/// economía suave vanilla y luego procesa CB35 de las especies `NewGRF`.
+fn roll_and_change_monthly_industries(state: &mut GameState) {
+    let economy_year = state.economy_timer.year;
     for industry in &mut state.industries {
+        // `UpdateIndustryStatistics` marca actividad del año a partir de la
+        // producción del mes que acaba de terminar, antes de rotar el buffer.
+        let produced_this_month = industry.produced_cargos().iter().any(|cargo| {
+            industry
+                .produced_history_for(*cargo)
+                .and_then(|history| history.first())
+                .is_some_and(|sample| sample.production != 0)
+        });
+        if produced_this_month {
+            industry.last_prod_year = economy_year;
+        }
+
         let stock = industry.stock;
         let produced = industry.produced_total;
         let transported = industry.transported_total;
         industry.history.push_month(stock, produced, transported);
         industry.rollover_accepted_history();
     }
+
+    let mut closing = Vec::new();
+    for industry in &mut state.industries {
+        // Las industrias con CB35 se resuelven en la pasada siguiente para
+        // conservar su contrato específico. Las vanilla siguen ET_SMOOTH y
+        // consumen una palabra por cada salida válida.
+        if industry.newgrf_type_id.is_some() {
+            continue;
+        }
+        if crate::industry::change_industry_production_smooth(
+            industry,
+            state.climate,
+            economy_year,
+            &mut state.random,
+        ) == crate::industry::IndustryProductionChange::Closing
+        {
+            closing.push(industry.pos);
+        }
+    }
+    for at in closing {
+        crate::news::report_industry_closing(state, at);
+    }
+
     // OpenTTD evalúa CB35 después de actualizar las estadísticas mensuales.
     maybe_change_industry_production_monthly(state);
 }

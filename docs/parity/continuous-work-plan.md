@@ -25,6 +25,13 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Handoff de issues — 2026-09-07
 
+Actualización runtime: RMAP-163 / #524 deja exactos los 24 cortes iniciales
+de `autosave0.sav` al alinear el cierre mensual y la actividad global de
+estación. La evidencia y el límite actual viven sólo en
+[random-map-issues.md](random-map-issues.md#rmap-163--alinear-el-cierre-mensual-runtime-de-la-jornada-18);
+RMAP-164 / #525 continúa con la primera divergencia de expansión urbana, sin
+ampliar el cierre de #512.
+
 Última etapa: RMAP-143 / #346 amplía el gate por fases a RNG y secuencia
 ID/posición de pueblos, además de bytes de teselas; las 30 fronteras de la
 cohorte 64²→512² pasan. Evidencia y alcance en
@@ -161,6 +168,9 @@ cadencia de fábrica a 256 ticks y #523 recupera la semántica `Chance16` de
 medición diaria
 canónica se mantiene en
 [`random-map-issues.md`](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
+RMAP-163/#524 extiende esa frontera a 23 jornadas y concentra su evidencia
+actualizada en la fila canónica de RMAP-163; la divergencia posterior pertenece
+a RMAP-164/#525.
 #510 impide que una ejecución dedicated sin socket se acepte como oracle aunque
 produzca JSONL válida. RMAP-162 cierra instrumentación y regresiones, no afirma
 todavía paridad temporal ni reduce los pendientes de #499, RMAP-056 o #338.
@@ -175,7 +185,9 @@ bloques actuales de `TileLoop_Industry`/`TileLoop_Town`, #517
 y #519 los grupos aeroportuarios de la primera jornada; #520/#522 alinean
 la cadencia de fábrica con diez `IndustryTick` y #523 corrige el fallback
 `PlantFields` para que `Chance16` no se sustituya por `RandomRange`. #512
-permanece abierto por cobertura runtime pendiente. Los
+permanece abierto por cobertura runtime pendiente; RMAP-163/#524 ya alineó el
+cierre mensual y RMAP-164/#525 conserva abierta la expansión urbana posterior.
+Los
 gates continúan siendo obligatorios y ningún issue padre se considera cerrado
 por esta cobertura.
 

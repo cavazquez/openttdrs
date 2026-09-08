@@ -316,6 +316,19 @@ pub struct Station {
     /// Barridos de rating sin recogida por tipo de carga en espera.
     #[serde(default)]
     pub time_since_pickup: CargoTimeSincePickup,
+    /// Días desde que un vehículo cargó mercancía en la estación
+    /// (`Station::time_since_load`).
+    ///
+    /// Es distinto de [`Self::time_since_pickup`]: `OpenTTD` usa este contador
+    /// global de estación, junto con `time_since_unload`, para decidir si una
+    /// estación sigue sirviendo a una ciudad. Las partidas JSON anteriores no
+    /// lo tenían y deben conservar la semántica nativa de «nunca servida».
+    #[serde(default = "default_station_activity_age")]
+    pub time_since_load: u8,
+    /// Días desde que un vehículo descargó mercancía en la estación
+    /// (`Station::time_since_unload`).
+    #[serde(default = "default_station_activity_age")]
+    pub time_since_unload: u8,
     /// Estado persistente por carga (`Station::goods`): rating, velocidad y edad del último
     /// vehículo, carga en espera del barrido anterior.
     #[serde(default)]
@@ -444,6 +457,12 @@ const fn default_station_rating() -> u8 {
     super::goods_entry::INITIAL_STATION_RATING
 }
 
+/// Valor inicial de `Station::time_since_load`/`time_since_unload` en
+/// `OpenTTD`: una estación recién construida todavía no cuenta como servida.
+const fn default_station_activity_age() -> u8 {
+    u8::MAX
+}
+
 /// `STR_SV_STNAME`, nombre generado vanilla de una estación nueva.
 pub const STATION_STRING_ID_DEFAULT: u32 = 0x6006;
 /// `STR_SV_STNAME_FALLBACK`, usado cuando la estación tiene nombre custom.
@@ -552,6 +571,8 @@ impl Station {
             cargo_packets: StationCargoList::default(),
             income: 0,
             time_since_pickup: CargoTimeSincePickup::default(),
+            time_since_load: default_station_activity_age(),
+            time_since_unload: default_station_activity_age(),
             goods: super::goods_entry::StationGoods::default(),
             rating: default_station_rating(),
             last_vehicle_type: None,

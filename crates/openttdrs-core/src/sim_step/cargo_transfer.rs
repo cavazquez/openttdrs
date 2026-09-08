@@ -573,6 +573,9 @@ pub(super) fn unload_vehicles(
             continue;
         }
         let unload_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
+        // OpenTTD reinicia este contador en cuanto una unidad abandona el
+        // vehículo, tanto si se entrega como si queda en trasbordo.
+        state.stations[station_idx].time_since_unload = 0;
         let vehicle_owner = state.vehicles[i].owner;
         if let Some(from) = state.vehicles[i].last_pickup_station {
             let capacity = state.vehicles[i].capacity.max(unload_units);

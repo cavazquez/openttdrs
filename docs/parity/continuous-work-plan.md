@@ -45,12 +45,13 @@ siguiente bloque del ciclo continuo en esta entrega.
 automática de Oil Rig diagnosticada antes de este lote queda en #531; se
 retiró la instrumentación temporal sin dar por resuelta esa colocación.
 
-Incidencia de validación ajena al lote: #535 registra el fallo preexistente
-de `test_parity_docs_portability.py`. El harness copia el baseline raster
-del 2026-09-05, pero el checker exige el del 2026-09-07 desde `021f023b`.
-El gate directo pasa; la prueba aislada y el workflow **Parity docs** fallan.
-La reparación queda pendiente para otra entrega: no se inicia una cuarta
-tarea después de las tres acordadas ni se presenta el CI global como verde.
+Incidencia de validación ajena al lote: al cerrarlo, #535 registraba que
+`test_parity_docs_portability.py` copiaba el baseline raster del 2026-09-05
+mientras el checker exigía el del 2026-09-07 desde `021f023b`. La corrección
+posterior deriva ahora la fixture desde `check_raster_baseline.BASELINE`, para
+que los casos limpio y corrupto sigan el mismo baseline que el gate. El gate
+directo y las diez pruebas aisladas —con y sin `rg`— pasan localmente; el
+workflow **Parity docs** de esta publicación verificará la misma suite.
 
 Verificación del lote: core 2.287 tests unitarios y sus integraciones
 aprobados; cliente 1.190 aprobados/2 opt-in ignorados; formatter y Clippy

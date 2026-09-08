@@ -10,9 +10,12 @@ import subprocess
 import tempfile
 import unittest
 
+from check_raster_baseline import BASELINE
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER = Path("scripts/check_parity_docs_fresh.sh")
+RASTER_BASELINE = BASELINE.relative_to(ROOT)
 
 
 class ParityDocsPortabilityTest(unittest.TestCase):
@@ -44,7 +47,7 @@ class ParityDocsPortabilityTest(unittest.TestCase):
                 "scripts/random_map_parity.py",
                 "scripts/test_random_map_parity.py",
                 "docs/parity/active-backlog.json",
-                "docs/parity/evidence/kale-189-126/baseline-2026-09-05.json",
+                str(RASTER_BASELINE),
                 "docs/parity/evidence/random-map-matrix/report.json",
             ]
             for relative in paths:
@@ -70,7 +73,7 @@ class ParityDocsPortabilityTest(unittest.TestCase):
                 )
                 manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             if corrupt_raster_field:
-                baseline_path = root / "docs/parity/evidence/kale-189-126/baseline-2026-09-05.json"
+                baseline_path = root / RASTER_BASELINE
                 baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
                 if corrupt_raster_field == "recorded_on":
                     baseline["recorded_on"] = "2026-99-99"

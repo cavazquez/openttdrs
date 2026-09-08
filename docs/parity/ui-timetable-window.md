@@ -145,6 +145,7 @@ arribos/salidas, edición avanzada, límites de velocidad, unidades y formato
 numérico nativos, semántica de ejecución y los demás idiomas de OpenTTD.
 #331 permanece abierto. Las capturas son diagnóstico complementario: el
 contrato de esta etapa es el cambio de idioma sin alterar la partida.
-El CI global tampoco se declara verde: #535 registra el fallo preexistente
-del harness aislado de portabilidad documental, ajeno a estas tres
-correcciones. Se deja pendiente para respetar el límite de tareas acordado.
+El bloqueo documental de #535 citado al cierre del lote se reparó
+posteriormente: el harness aislado deriva su fixture raster del mismo baseline
+que valida el gate. No amplía el alcance de esta etapa UI ni convierte las
+capturas en una comparación raster nativa.

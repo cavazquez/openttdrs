@@ -560,29 +560,32 @@ mod tests {
     #[test]
     #[allow(clippy::expect_used)]
     fn excessive_json_file_is_rejected() {
-        // Crear archivo JSON > 100 MB
-        let dir = std::env::temp_dir();
-        let path = dir.join(format!("openttdrs_json_bomb_{}.json", std::process::id()));
-        let huge_json = format!(
-            r#"{{"version": 1, "state": {{"map": {{"tiles": [{}]}}}}}}"#,
-            "0,".repeat(60_000_000) // ~240 MB de JSON
-        );
-        std::fs::write(&path, huge_json).unwrap();
+        // Un archivo sparse permite verificar el preflight real de `load`
+        // sin reservar cientos de MiB en la suite ordinaria.
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("json_bomb.json");
+        std::fs::File::create(&path)
+            .unwrap()
+            .set_len(io::MAX_JSON_SAVE_BYTES + 1)
+            .unwrap();
         let err = load(&path).expect_err("debe rechazar JSON excesivo");
         assert!(matches!(err, SaveError::JsonSizeExceeded { .. }));
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     #[allow(clippy::expect_used)]
     fn excessive_json_string_is_rejected() {
-        // String JSON > 100 MB
-        let huge_json = format!(
-            r#"{{"version": 1, "state": {{"map": {{"tiles": [{}]}}}}}}"#,
-            "0,".repeat(60_000_000) // ~240 MB de JSON
-        );
-        let err = load_from_str(&huge_json).expect_err("debe rechazar JSON excesivo");
-        assert!(matches!(err, SaveError::JsonSizeExceeded { .. }));
+        // La misma frontera se prueba con una cuota reducida para evitar una
+        // asignación masiva; el helper es el que usa el loader público.
+        let err = io::load_from_str_with_limit("{}", 1)
+            .expect_err("debe rechazar JSON excesivo para la cuota reducida");
+        assert!(matches!(
+            err,
+            SaveError::JsonSizeExceeded {
+                actual: 2,
+                limit: 1
+            }
+        ));
     }
 
     #[test]

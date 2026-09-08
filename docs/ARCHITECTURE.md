@@ -405,6 +405,19 @@ save.rs
 La compatibilidad `.sav` ya tiene import/export nativo parcial; el alcance y lo
 que no round-trippea están en la [matriz SAV](parity/sav-compatibility.md).
 
+**Política de tamaño JSON (actualizada 2026-09-08):** el formato versionado
+tiene una cuota de 100 MiB para proteger la memoria del parser. `save` primero
+cuenta el stream `serde_json` pretty exacto y rechaza el exceso antes de crear o
+reemplazar el destino; luego escribe ese mismo stream en forma atómica. Así, un
+guardado que informa éxito no será rechazado por `load` sólo por la cuota. Las
+fronteras se prueban con cuotas reducidas y el smoke ignorado de 1024² cuenta
+bytes sin materializar un JSON gigante. La medición reproducible del estado
+vacío versionado actual da: 16² = 182.845 bytes, 64² = 1.208.125, 128² =
+4.489.023, 256² = 17.612.607, 512² = 70.106.943 y 1024² = 280.084.289
+(267,1 MiB). Por eso 1024² se rechaza preventivamente con la cuota actual;
+entidades y datos de una partida real pueden elevar cualquiera de esos valores,
+de modo que el conteo final por guardado es la fuente de verdad.
+
 **Referencia upstream:** `SaveLoadVersion` inmutable y tablas por subsistema (`saveload/saveload.h`, `*_sl.cpp`). MVP: campo `version` en el JSON del envoltorio (`save.rs`).
 
 ---

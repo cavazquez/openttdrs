@@ -462,6 +462,7 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
             (2, "difficulty.town_council_tolerance"),
             (2, "economy.timekeeping_units"),
             (2, "economy.type"),
+            (2, "economy.town_growth_rate"),
             (1, "economy.inflation"),
             (1, "difficulty.economy"),
             (4, "linkgraph.recalc_interval"),
@@ -529,6 +530,7 @@ pub(super) fn pats_record(state: &GameState) -> Vec<u8> {
         state.town_council_tolerance as u8,
         u8::from(state.using_wallclock_units),
         state.economy_type.as_openttd(),
+        crate::town::normalize_town_growth_rate_setting(state.town_growth_rate),
         u8::from(state.global_economy.inflation_enabled),
         u8::from(state.global_economy.recessions_enabled),
     ]);

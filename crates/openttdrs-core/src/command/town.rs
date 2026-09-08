@@ -4,7 +4,7 @@ use crate::GameState;
 use crate::map::tree_tile_loop::clear_ground_type;
 use crate::map::{TileCoord, TileKind, tile_slope_and_z};
 use crate::town::{
-    Town, cap_grow_counter_after_fund, update_town_growth_state, update_town_radius,
+    Town, cap_grow_counter_after_fund, update_town_growth_state_with_setting, update_town_radius,
 };
 use crate::town_action::{
     TownAction, TownActionError, TownAuthoritySettings, execute_town_action, mask_of_town_actions,
@@ -80,11 +80,12 @@ pub(crate) fn do_town_action(
                 // OpenTTD recalcula la cadencia financiada antes de limitar
                 // el contador. Sin esta actualización `growth_rate` puede
                 // quedar en cero y hacer que el pueblo construya en cada tick.
-                update_town_growth_state(
+                update_town_growth_state_with_setting(
                     &mut state.towns[idx],
                     &state.stations,
                     &state.map,
                     &state.industries,
+                    state.town_growth_rate,
                     state.climate,
                     state.world_seed,
                     &mut state.random,
@@ -387,8 +388,8 @@ mod tests {
         assert_eq!(s.towns[0].population, 0, "funding does not invent citizens");
         assert_eq!(
             s.towns[0].growth_rate,
-            crate::town::town_ticks_to_game_ticks(120),
-            "the first construction must schedule the next funded interval"
+            crate::town::town_ticks_to_game_ticks(60),
+            "el default nativo 2 desplaza una vez la cadencia financiada"
         );
     }
 

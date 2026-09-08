@@ -168,11 +168,12 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
     // después de subsidios: `UpdateTownGrowth` puede consumir Chance16(1,12)
     // para cada pueblo sin estaciones activas.
     let company_count = state.companies.len();
-    town::process_town_monthly_growth(
+    town::process_town_monthly_growth_with_setting(
         &mut state.towns,
         &state.stations,
         &state.map,
         &state.industries,
+        state.town_growth_rate,
         state.climate,
         state.world_seed,
         &mut state.random,

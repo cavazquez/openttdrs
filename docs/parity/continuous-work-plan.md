@@ -44,6 +44,12 @@ original sobre una partida `ET_SMOOTH`; su corte, regresiones y la siguiente
 frontera pendiente se mantienen únicamente en
 [random-map-issues.md](random-map-issues.md#rmap-167--respetar-economytype-al-importar-sav-y-ejecutar-producción-vanilla).
 No cierra #512 ni amplía la paridad de runtime fuera de esa fixture.
+RMAP-168 / #529 conserva además `PATS.economy.town_growth_rate`, su semántica
+`0…4` y la cache `Town::num_houses` al recalcular la cadencia mensual: elimina
+la frontera RNG de `day[168]` y deja exactos los cortes hasta `day[169]`. La
+nueva frontera de fundación industrial de `day[170]`, el alcance residual de
+#527 y la evidencia canónica viven sólo en
+[random-map-issues.md](random-map-issues.md#rmap-168--conservar-economytown_growth_rate-de-sav-y-la-cadencia-de-crecimiento).
 
 Última etapa: RMAP-143 / #346 amplía el gate por fases a RNG y secuencia
 ID/posición de pueblos, además de bytes de teselas; las 30 fronteras de la
@@ -183,8 +189,9 @@ canónica se mantiene en
 [`random-map-issues.md`](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
 RMAP-163/#524 extiende esa frontera a 23 jornadas y concentra su evidencia
 actualizada en la fila canónica de RMAP-163; RMAP-164/#525 la lleva a 25 y
-RMAP-166/#527 a 35 mediante el tile loop urbano, sin cerrar su cobertura
-residual.
+RMAP-166/#527 a 35 mediante el tile loop urbano y RMAP-168/#529 extiende la
+misma fixture al alinear el setting de crecimiento persistido; #527 conserva
+su cobertura residual.
 #510 impide que una ejecución dedicated sin socket se acepte como oracle aunque
 produzca JSONL válida. RMAP-162 cierra instrumentación y regresiones, no afirma
 todavía paridad temporal ni reduce los pendientes de #499, RMAP-056 o #338.
@@ -201,8 +208,9 @@ la cadencia de fábrica con diez `IndustryTick` y #523 corrige el fallback
 `PlantFields` para que `Chance16` no se sustituya por `RandomRange`. #512
 permanece abierto por cobertura runtime pendiente; RMAP-163/#524 ya alineó el
 cierre mensual, RMAP-164/#525 el primer walker posterior y RMAP-166/#527
-alinea 35 jornadas de ascensores/obra/renovación, pero conserva abierta la
-ventana larga y las variantes urbanas no cubiertas.
+alinea 35 jornadas de ascensores/obra/renovación; RMAP-168/#529 elimina la
+siguiente recadencia mensual, pero conserva abierta la ventana larga y las
+variantes urbanas no cubiertas.
 Los
 gates continúan siendo obligatorios y ningún issue padre se considera cerrado
 por esta cobertura.

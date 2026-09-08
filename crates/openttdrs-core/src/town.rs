@@ -32,6 +32,25 @@ pub enum HouseZone {
 /// Número de zonas de radio (edge…centre).
 pub const NUM_HOUSE_ZONES: usize = 5;
 
+/// Valor nativo por defecto de `economy.town_growth_rate`.
+///
+/// `OpenTTD` lo persiste en `PATS` desde `SLV_54`. El valor no es una tasa de
+/// ticks directa: `0` deshabilita el crecimiento no financiado y `1..=4`
+/// desplaza la cadencia normal entre cero y tres bits.
+pub const DEFAULT_TOWN_GROWTH_RATE_SETTING: u8 = 2;
+/// Límite superior del ajuste `economy.town_growth_rate` de `OpenTTD`.
+pub const MAX_TOWN_GROWTH_RATE_SETTING: u8 = 4;
+
+/// Normaliza el rango persistido por `economy.town_growth_rate`.
+#[must_use]
+pub const fn normalize_town_growth_rate_setting(value: u8) -> u8 {
+    if value > MAX_TOWN_GROWTH_RATE_SETTING {
+        MAX_TOWN_GROWTH_RATE_SETTING
+    } else {
+        value
+    }
+}
+
 impl HouseZone {
     /// Índice 0..4 → zona urbana; `None` si está fuera de rango.
     #[must_use]
@@ -955,17 +974,6 @@ pub fn town_ticks_to_game_ticks(ticks: u16) -> u16 {
 static GROW_COUNT_VALUES_FUNDED: [u16; 6] = [120, 120, 120, 100, 80, 60];
 static GROW_COUNT_VALUES_NORMAL: [u16; 6] = [320, 420, 300, 220, 160, 100];
 
-#[must_use]
-fn count_houses_for_growth(map: &Map, industries: &[Industry], town: &Town) -> u32 {
-    station::station_coverage_at(
-        map,
-        industries,
-        town.pos,
-        i32::try_from(TOWN_AUTHORITY_RADIUS).unwrap_or(i32::MAX),
-    )
-    .house_tiles
-}
-
 /// Estaciones cerca del pueblo que no son waypoints/boyas.
 fn stations_near_town<'a>(town: &'a Town, stations: &'a [Station]) -> Vec<&'a Station> {
     stations
@@ -1018,6 +1026,28 @@ pub fn get_normal_growth_rate(
     map: &Map,
     industries: &[Industry],
 ) -> u16 {
+    get_normal_growth_rate_with_setting(
+        town,
+        stations,
+        map,
+        industries,
+        DEFAULT_TOWN_GROWTH_RATE_SETTING,
+    )
+}
+
+/// Equivalente de `GetNormalGrowthRate` con `economy.town_growth_rate` explícito.
+///
+/// La función pública histórica conserva el default nativo; el runtime de un
+/// `.sav` debe usar esta variante para no convertir un cierre mensual en una
+/// cadencia distinta de la partida original.
+#[must_use]
+pub fn get_normal_growth_rate_with_setting(
+    town: &Town,
+    stations: &[Station],
+    _map: &Map,
+    _industries: &[Industry],
+    town_growth_rate: u8,
+) -> u16 {
     let n = count_active_stations_near_town(town, stations);
     let table = if town.fund_buildings_months > 0 {
         &GROW_COUNT_VALUES_FUNDED
@@ -1026,14 +1056,26 @@ pub fn get_normal_growth_rate(
     };
     let idx = n.min(5);
     let mut m = table[idx];
+    // `GetNormalGrowthRate` trata el ajuste "None" como la velocidad normal
+    // al calcular la tasa. `UpdateTownGrowth` decide después que un pueblo no
+    // financiado no debe crecer con ese valor 0.
+    let configured_rate = normalize_town_growth_rate_setting(town_growth_rate);
+    let growth_multiplier = if configured_rate == 0 {
+        1
+    } else {
+        configured_rate - 1
+    };
+    m >>= growth_multiplier;
     // `GetNormalGrowthRate` acelera las ciudades marcadas por OpenTTD. El
     // indicador `CITY.larger_town` se conserva al cargar SAV, por lo que no
     // debe quedar como metadato visual: también modifica la cadencia runtime.
     if town.larger_town {
         m /= 2;
     }
-    let houses = count_houses_for_growth(map, industries, town);
-    let divisor = u16::try_from((houses / 50) + 1).unwrap_or(1);
+    // OpenTTD usa `Town::cache.num_houses`, no una nueva cobertura de
+    // estación. La cache ya se rehidrata al abrir un SAV y puede diferir de
+    // las teselas visibles durante una obra o una footprint multitile.
+    let divisor = town.num_houses / 50 + 1;
     town_ticks_to_game_ticks(m / divisor)
 }
 
@@ -1056,8 +1098,26 @@ pub fn update_town_growth_rate(
     map: &Map,
     industries: &[Industry],
 ) {
+    update_town_growth_rate_with_setting(
+        town,
+        stations,
+        map,
+        industries,
+        DEFAULT_TOWN_GROWTH_RATE_SETTING,
+    );
+}
+
+/// Actualiza la cadencia con el setting de crecimiento persistido.
+pub fn update_town_growth_rate_with_setting(
+    town: &mut Town,
+    stations: &[Station],
+    map: &Map,
+    industries: &[Industry],
+    town_growth_rate: u8,
+) {
     let old_rate = town.growth_rate;
-    town.growth_rate = get_normal_growth_rate(town, stations, map, industries);
+    town.growth_rate =
+        get_normal_growth_rate_with_setting(town, stations, map, industries, town_growth_rate);
     update_town_grow_counter(town, old_rate);
 }
 
@@ -1075,11 +1135,39 @@ pub fn update_town_growth_state(
     world_seed: u64,
     rng: &mut Randomizer,
 ) {
-    update_town_growth_rate(town, stations, map, industries);
+    update_town_growth_state_with_setting(
+        town,
+        stations,
+        map,
+        industries,
+        DEFAULT_TOWN_GROWTH_RATE_SETTING,
+        climate,
+        world_seed,
+        rng,
+    );
+}
+
+/// Actualiza `is_growing` con `economy.town_growth_rate` explícito.
+#[allow(clippy::too_many_arguments)]
+pub fn update_town_growth_state_with_setting(
+    town: &mut Town,
+    stations: &[Station],
+    map: &Map,
+    industries: &[Industry],
+    town_growth_rate: u8,
+    climate: Climate,
+    world_seed: u64,
+    rng: &mut Randomizer,
+) {
+    update_town_growth_rate_with_setting(town, stations, map, industries, town_growth_rate);
     town.is_growing = false;
 
     if town.fund_buildings_months > 0 {
         town.is_growing = true;
+        return;
+    }
+
+    if normalize_town_growth_rate_setting(town_growth_rate) == 0 {
         return;
     }
 
@@ -1120,6 +1208,32 @@ pub fn process_town_monthly_growth(
     rng: &mut Randomizer,
     company_count: usize,
 ) {
+    process_town_monthly_growth_with_setting(
+        towns,
+        stations,
+        map,
+        industries,
+        DEFAULT_TOWN_GROWTH_RATE_SETTING,
+        climate,
+        world_seed,
+        rng,
+        company_count,
+    );
+}
+
+/// Rollover mensual con la cadencia urbana persistida por la partida.
+#[allow(clippy::too_many_arguments)]
+pub fn process_town_monthly_growth_with_setting(
+    towns: &mut [Town],
+    stations: &[Station],
+    map: &Map,
+    industries: &[Industry],
+    town_growth_rate: u8,
+    climate: Climate,
+    world_seed: u64,
+    rng: &mut Randomizer,
+    company_count: usize,
+) {
     for town in &mut *towns {
         town.ensure_authority_ratings(company_count);
         update_town_rating(town, stations, company_count);
@@ -1130,7 +1244,16 @@ pub fn process_town_monthly_growth(
         if town.fund_buildings_months > 0 {
             town.fund_buildings_months = town.fund_buildings_months.saturating_sub(1);
         }
-        update_town_growth_state(town, stations, map, industries, climate, world_seed, rng);
+        update_town_growth_state_with_setting(
+            town,
+            stations,
+            map,
+            industries,
+            town_growth_rate,
+            climate,
+            world_seed,
+            rng,
+        );
     }
     crate::town_action::tick_town_authority_months(towns);
 }
@@ -2387,6 +2510,74 @@ mod tests {
     }
 
     #[test]
+    fn growth_rate_uses_cached_house_count_and_native_setting_multiplier() {
+        // El mapa está vacío de forma deliberada: `GetNormalGrowthRate` usa
+        // `Town::cache.num_houses`, no una nueva búsqueda de cobertura.
+        let map = Map::new_flat(16, 16, 0);
+        let town = Town {
+            id: 0,
+            pos: TileCoord::new(8, 8),
+            name: "Cache".into(),
+            num_houses: 50,
+            ..Default::default()
+        };
+
+        let slow = get_normal_growth_rate_with_setting(&town, &[], &map, &[], 1);
+        let native_default = get_normal_growth_rate_with_setting(&town, &[], &map, &[], 2);
+        let fast = get_normal_growth_rate_with_setting(&town, &[], &map, &[], 4);
+
+        assert_eq!(slow, town_ticks_to_game_ticks(160));
+        assert_eq!(native_default, town_ticks_to_game_ticks(80));
+        assert_eq!(fast, town_ticks_to_game_ticks(20));
+        assert_eq!(
+            get_normal_growth_rate_with_setting(&town, &[], &map, &[], 0),
+            native_default,
+            "OpenTTD calcula None con el shift de Normal; el gate se aplica después"
+        );
+    }
+
+    #[test]
+    fn town_growth_setting_none_stops_unfunded_growth_without_rng() {
+        let map = Map::new_flat(8, 8, 0);
+        let mut town = Town {
+            id: 0,
+            pos: TileCoord::new(4, 4),
+            name: "Paused".into(),
+            population: 80,
+            ..Default::default()
+        };
+        let mut rng = Randomizer::new(123);
+        let before = rng;
+
+        update_town_growth_state_with_setting(
+            &mut town,
+            &[],
+            &map,
+            &[],
+            0,
+            Climate::Temperate,
+            0,
+            &mut rng,
+        );
+        assert!(!town.is_growing);
+        assert_eq!(rng, before, "None no evalúa Chance16 mensual");
+
+        town.fund_buildings_months = 1;
+        update_town_growth_state_with_setting(
+            &mut town,
+            &[],
+            &map,
+            &[],
+            0,
+            Climate::Temperate,
+            0,
+            &mut rng,
+        );
+        assert!(town.is_growing, "la financiación prevalece sobre None");
+        assert_eq!(rng, before);
+    }
+
+    #[test]
     fn larger_town_halves_normal_growth_cadence() {
         let map = Map::new_flat(16, 16, 0);
         let town = Town {
@@ -2402,7 +2593,7 @@ mod tests {
 
         assert_eq!(
             get_normal_growth_rate(&city, &[], &map, &[]),
-            town_ticks_to_game_ticks(GROW_COUNT_VALUES_NORMAL[0] / 2)
+            town_ticks_to_game_ticks((GROW_COUNT_VALUES_NORMAL[0] >> 1) / 2)
         );
         assert!(
             get_normal_growth_rate(&city, &[], &map, &[])

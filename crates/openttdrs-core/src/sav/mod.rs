@@ -382,6 +382,8 @@ pub struct SavGame {
     pub using_wallclock_units: bool,
     /// Cadencia de producción vanilla (`economy.type` de `PATS` / `OPTS`).
     pub economy_type: crate::economy::EconomyType,
+    /// Cadencia de crecimiento urbano (`economy.town_growth_rate` de `PATS` / `OPTS`).
+    pub town_growth_rate: u8,
     /// Inflación compuesta habilitada (`PATS` / `OPTS`).
     pub inflation_enabled: bool,
     /// Recesiones habilitadas (`PATS` / `OPTS`).
@@ -641,6 +643,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         town_council_tolerance: parsed_settings.town_council_tolerance,
         using_wallclock_units: parsed_settings.using_wallclock_units,
         economy_type: parsed_settings.economy_type,
+        town_growth_rate: parsed_settings.town_growth_rate,
         inflation_enabled: parsed_settings.inflation_enabled,
         recessions_enabled: parsed_settings.recessions_enabled,
         global_economy,
@@ -1283,6 +1286,7 @@ impl GameState {
         state.town_council_tolerance = sav.town_council_tolerance;
         state.using_wallclock_units = sav.using_wallclock_units;
         state.economy_type = sav.economy_type;
+        state.town_growth_rate = sav.town_growth_rate;
         state.vehicle_groups = sav.vehicle_groups;
         state.autoreplace_rules = sav.autoreplace_rules;
         state.newgrf_stack = if sav.newgrf_stack.is_empty() {
@@ -2429,6 +2433,7 @@ mod tests {
             town_council_tolerance: crate::town::TownCouncilTolerance::default(),
             using_wallclock_units: false,
             economy_type: crate::economy::EconomyType::default(),
+            town_growth_rate: crate::town::DEFAULT_TOWN_GROWTH_RATE_SETTING,
             inflation_enabled: true,
             recessions_enabled: false,
             global_economy: crate::economy::GlobalEconomy::new(),
@@ -3842,6 +3847,7 @@ mod tests {
             town_council_tolerance: crate::town::TownCouncilTolerance::default(),
             using_wallclock_units: false,
             economy_type: crate::economy::EconomyType::default(),
+            town_growth_rate: crate::town::DEFAULT_TOWN_GROWTH_RATE_SETTING,
             inflation_enabled: true,
             recessions_enabled: false,
             global_economy: crate::economy::GlobalEconomy::new(),

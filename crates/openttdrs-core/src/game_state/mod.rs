@@ -673,6 +673,13 @@ pub struct GameState {
     /// discreto, mensual suave o congelado.
     #[serde(default)]
     pub economy_type: crate::economy::EconomyType,
+    /// Velocidad de crecimiento urbano (`economy.town_growth_rate` de `PATS`).
+    ///
+    /// El valor 0 desactiva el crecimiento no financiado; 1..=4 modifica la
+    /// cadencia por shifts. Se conserva para que el primer cierre mensual de
+    /// un `.sav` no reprograme sus pueblos con el default equivocado.
+    #[serde(default = "default_town_growth_rate")]
+    pub town_growth_rate: u8,
     /// Planificador persistente de fundación automática de industrias
     /// (`IBLD`/`ITBL`). La colocación física se ejecuta por separado para
     /// mantener el stream RNG verificable contra `OpenTTD`.
@@ -725,6 +732,10 @@ const fn default_subsidy_duration() -> u16 {
 
 const fn default_subsidy_multiplier() -> u8 {
     1
+}
+
+const fn default_town_growth_rate() -> u8 {
+    crate::town::DEFAULT_TOWN_GROWTH_RATE_SETTING
 }
 
 const fn default_disaster_timer() -> u64 {
@@ -981,6 +992,7 @@ impl GameState {
             trees_tick_counter: 0,
             global_economy: crate::economy::GlobalEconomy::new(),
             economy_type: crate::economy::EconomyType::default(),
+            town_growth_rate: default_town_growth_rate(),
             industry_builder: crate::industry_builder::IndustryBuildData::new(),
             no_servicing_if_no_breakdowns: true,
             vehicle_breakdowns: default_vehicle_breakdowns(),
@@ -1127,6 +1139,7 @@ impl GameState {
             trees_tick_counter: 0,
             global_economy: crate::economy::GlobalEconomy::new(),
             economy_type: crate::economy::EconomyType::default(),
+            town_growth_rate: default_town_growth_rate(),
             industry_builder: crate::industry_builder::IndustryBuildData::new(),
             no_servicing_if_no_breakdowns: true,
             vehicle_breakdowns: default_vehicle_breakdowns(),

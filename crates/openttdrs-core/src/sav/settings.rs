@@ -81,6 +81,7 @@ pub(crate) struct ParsedSettings {
     pub town_council_tolerance: TownCouncilTolerance,
     pub using_wallclock_units: bool,
     pub economy_type: EconomyType,
+    pub town_growth_rate: u8,
     pub inflation_enabled: bool,
     pub recessions_enabled: bool,
     pub cargo_dist: CargoDistSettings,
@@ -105,6 +106,7 @@ impl Default for ParsedSettings {
             town_council_tolerance: TownCouncilTolerance::default(),
             using_wallclock_units: false,
             economy_type: EconomyType::default(),
+            town_growth_rate: crate::town::DEFAULT_TOWN_GROWTH_RATE_SETTING,
             inflation_enabled: true,
             recessions_enabled: false,
             cargo_dist: CargoDistSettings::default(),
@@ -350,6 +352,13 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                 parsed.economy_type = value;
                 found = true;
             }
+            if let Some(value) = record_get(&record, "economy.town_growth_rate")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+            {
+                parsed.town_growth_rate = crate::town::normalize_town_growth_rate_setting(value);
+                found = true;
+            }
             if let Some(value) = record_get(&record, "economy.inflation")
                 .and_then(SlValue::as_u64)
                 .and_then(bool_from_u64)
@@ -513,6 +522,30 @@ mod tests {
         assert_eq!(
             settings_from_chunks(&[chunk]).economy_type,
             EconomyType::Frozen
+        );
+    }
+
+    #[test]
+    fn reads_and_clamps_town_growth_rate_from_modern_save_table() {
+        assert_eq!(
+            settings_from_chunks(&[]).town_growth_rate,
+            crate::town::DEFAULT_TOWN_GROWTH_RATE_SETTING
+        );
+        let normal = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(2, "economy.town_growth_rate")], &[vec![2]]),
+        };
+        assert_eq!(settings_from_chunks(&[normal]).town_growth_rate, 2);
+
+        let out_of_range = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(2, "economy.town_growth_rate")], &[vec![9]]),
+        };
+        assert_eq!(
+            settings_from_chunks(&[out_of_range]).town_growth_rate,
+            crate::town::MAX_TOWN_GROWTH_RATE_SETTING
         );
     }
 

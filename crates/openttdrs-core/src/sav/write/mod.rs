@@ -776,6 +776,7 @@ mod tests {
         state.town_council_tolerance = crate::town::TownCouncilTolerance::Permissive;
         state.using_wallclock_units = true;
         state.economy_type = crate::economy::EconomyType::Frozen;
+        state.town_growth_rate = crate::town::MAX_TOWN_GROWTH_RATE_SETTING;
         state.global_economy.inflation_enabled = false;
         state.global_economy.recessions_enabled = true;
         state.cargo_dist.per_cargo = Some(crate::flow_stat::CargoDistPerCargoSettings {
@@ -817,6 +818,7 @@ mod tests {
         assert_table_field_type(&pats.body, 2, "vehicle.plane_speed");
         assert_table_field_type(&pats.body, 2, "vehicle.plane_crashes");
         assert_table_field_type(&pats.body, 2, "economy.type");
+        assert_table_field_type(&pats.body, 2, "economy.town_growth_rate");
         assert_table_field_type(&pats.body, 4, "linkgraph.recalc_interval");
         assert_table_field_type(&pats.body, 4, "linkgraph.recalc_time");
         assert_table_field_type(&pats.body, 2, "linkgraph.distribution_pax");
@@ -856,6 +858,7 @@ mod tests {
         );
         assert_eq!(sav_game.using_wallclock_units, state.using_wallclock_units);
         assert_eq!(sav_game.economy_type, state.economy_type);
+        assert_eq!(sav_game.town_growth_rate, state.town_growth_rate);
         assert_eq!(
             sav_game.global_economy.inflation_enabled,
             state.global_economy.inflation_enabled
@@ -870,6 +873,7 @@ mod tests {
         let loaded = GameState::from_sav_game(sav_game);
         assert!(!loaded.order.selectgoods);
         assert_eq!(loaded.economy_type, state.economy_type);
+        assert_eq!(loaded.town_growth_rate, state.town_growth_rate);
         assert_eq!(loaded.cargo_dist, state.cargo_dist);
         let unvisited = Station::new_with_kind(TileCoord::new(1, 1), StopKind::TruckStop);
         assert!(crate::station::can_move_goods_to_station(

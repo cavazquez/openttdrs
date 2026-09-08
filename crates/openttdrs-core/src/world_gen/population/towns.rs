@@ -18,7 +18,8 @@ use crate::map::{
 };
 use crate::sav::house_spec_population;
 use crate::town::{
-    Town, TownLayout, town_ticks_to_game_ticks, update_town_growth_rate, update_town_radius,
+    Town, TownLayout, town_ticks_to_game_ticks, update_town_growth_rate_with_setting,
+    update_town_radius,
 };
 use crate::town_expand::{
     can_build_house, resolve_town_house_footprint, town_house_tile_max_z,
@@ -357,11 +358,12 @@ fn build_selected_town_with_generated_growth(
         .num_houses
         .saturating_sub(u16::try_from(temporary_house_budget).unwrap_or(u16::MAX));
     update_town_radius(&mut town);
-    update_town_growth_rate(
+    update_town_growth_rate_with_setting(
         &mut town,
         &ctx.state.stations,
         &ctx.state.map,
         &ctx.state.industries,
+        ctx.state.town_growth_rate,
     );
     ctx.state.towns.push(town);
     town_centers.push(center);

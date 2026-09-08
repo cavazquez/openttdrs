@@ -32,6 +32,11 @@ const WASD_ACCEL: f32 = 2000.0;
 const WASD_FRICTION: f32 = 12.0;
 /// Velocidad máxima WASD (unidades de mundo/s, relativa a scale=1).
 const WASD_MAX_SPEED: f32 = 600.0;
+/// Cota de un frame de presentación para no convertir una suspensión del SO en
+/// un salto de cámara. Antes la cámara leía `Time<Virtual>`, cuyo máximo se
+/// ajusta a un tick de OpenTTD; conservar una cota equivalente sólo afecta
+/// pausas/stalls anómalos, no la velocidad de simulación.
+const MAX_PRESENTATION_DELTA_SECS: f32 = 0.03;
 
 /// Velocidad de la cámara (inercia WASD).
 #[derive(Resource, Default)]
@@ -173,7 +178,7 @@ pub(crate) fn zoom_step_scale(
 }
 
 fn apply_camera_focus_request(
-    time: Res<Time>,
+    time: Res<Time<Real>>,
     mut request: ResMut<CameraFocusRequest>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut vel: ResMut<CameraVelocity>,
@@ -188,7 +193,7 @@ fn apply_camera_focus_request(
         return;
     };
     let current = Vec2::new(transform.translation.x, transform.translation.y);
-    let dt = time.delta_secs();
+    let dt = presentation_delta_secs(&time);
     let lerp = (dt / 0.3).clamp(0.0, 1.0);
     let next = current.lerp(target, lerp);
     transform.translation.x = next.x;
@@ -202,7 +207,7 @@ fn apply_camera_focus_request(
 /// Mueve la cámara con WASD (con inercia), arrastre con botón derecho y rueda del ratón.
 #[allow(clippy::too_many_arguments)] // firma dictada por el sistema ECS de Bevy
 pub fn move_camera(
-    time: Res<Time>,
+    time: Res<Time<Real>>,
     kbd: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     motion: Res<AccumulatedMouseMotion>,
@@ -232,7 +237,7 @@ pub fn move_camera(
         .map(|w| (w.width(), w.height()))
         .unwrap_or((1280.0, 720.0));
 
-    let dt = time.delta_secs();
+    let dt = presentation_delta_secs(&time);
 
     // Arrastre con botón derecho (inmediato, sin inercia)
     if mouse.pressed(MouseButton::Right) && motion.delta != Vec2::ZERO {
@@ -349,6 +354,15 @@ pub fn move_camera(
     }
 }
 
+/// El reloj de presentación no se pausa ni se escala junto con la simulación.
+///
+/// OpenTTD actualiza su viewport desde `steady_clock` en `UpdateWindows`, por
+/// fuera del game tick. La cota conserva la protección previa ante un frame
+/// extraordinariamente largo sin reintroducir dependencia de `Time<Virtual>`.
+fn presentation_delta_secs(time: &Time<Real>) -> f32 {
+    time.delta_secs().min(MAX_PRESENTATION_DELTA_SECS)
+}
+
 /// Valor para HUD / título: **aumento aparente** respecto a `orthographic_scale = 1`.
 /// En Bevy, [`OrthographicProjection::scale`] alto cubre más mundo en pantalla (sensación de alejado);
 /// su recíproco se comporta como un “×” de acercar en sentido coloquial (más grande = más cerca).
@@ -360,14 +374,72 @@ pub(crate) fn zoom_display_magnification(orthographic_scale: f32) -> f32 {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
+    use bevy::state::app::StatesPlugin;
     use bevy::window::{PrimaryWindow, WindowResolution};
+
+    use crate::render::{RemapMapVisualsPending, VehicleIndex};
+    use crate::settings::ClientPreferences;
+    use crate::simulation::SimulationPlugin;
+    use crate::state::{ClientScreen, SimRunState};
+    use crate::ui::SimHudControls;
+
+    /// Ejecuta los plugins de producción con los tres relojes que instala
+    /// `TimePlugin`. El helper avanza `Virtual` usando la función real de
+    /// Bevy, para poder probar pausa y multiplicadores sin convertir el
+    /// reloj genérico en un doble artificial.
+    fn camera_schedule_app() -> (App, Entity) {
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin)
+            .init_state::<ClientScreen>()
+            .add_sub_state::<SimRunState>()
+            .insert_resource(Time::<()>::default())
+            .insert_resource(Time::<Real>::default())
+            .insert_resource(Time::<Virtual>::default())
+            .insert_resource(Time::<Fixed>::default())
+            .insert_resource(ButtonInput::<KeyCode>::default())
+            .insert_resource(ButtonInput::<MouseButton>::default())
+            .insert_resource(AccumulatedMouseMotion::default())
+            .insert_resource(AccumulatedMouseScroll::default())
+            .insert_resource(SimWorld::default())
+            .insert_resource(VehicleIndex::default())
+            .insert_resource(RemapMapVisualsPending::default())
+            .insert_resource(ClientPreferences::default())
+            .insert_resource(SimHudControls::default())
+            .add_plugins((SimulationPlugin, CameraControlPlugin));
+        let camera = app
+            .world_mut()
+            .spawn((
+                PrimaryGameCamera,
+                Transform::default(),
+                Projection::Orthographic(OrthographicProjection::default_2d()),
+            ))
+            .id();
+        app.world_mut()
+            .resource_mut::<NextState<ClientScreen>>()
+            .set(ClientScreen::InGame);
+        app.update();
+        (app, camera)
+    }
+
+    fn advance_presentation_and_virtual_time(app: &mut App, delta: Duration) {
+        let mut real = *app.world().resource::<Time<Real>>();
+        real.advance_by(delta);
+        let mut virtual_time = *app.world().resource::<Time<Virtual>>();
+        let mut game_time = *app.world().resource::<Time<()>>();
+        bevy::time::update_virtual_time(&mut game_time, &mut virtual_time, &real);
+        app.world_mut().insert_resource(real);
+        app.world_mut().insert_resource(virtual_time);
+        app.world_mut().insert_resource(game_time);
+    }
 
     #[test]
     fn move_camera_without_camera_query_is_noop() {
         let mut world = World::new();
-        world.insert_resource(Time::<()>::default());
+        world.insert_resource(Time::<Real>::default());
         world.insert_resource(ButtonInput::<KeyCode>::default());
         world.insert_resource(ButtonInput::<MouseButton>::default());
         world.insert_resource(AccumulatedMouseMotion::default());
@@ -380,8 +452,8 @@ mod tests {
     #[test]
     fn move_camera_handles_keyboard_drag_and_scroll() {
         let mut world = World::new();
-        let mut time = Time::<()>::default();
-        time.advance_by(std::time::Duration::from_millis(16));
+        let mut time = Time::<Real>::default();
+        time.advance_by(Duration::from_millis(16));
         world.insert_resource(time);
 
         let mut kbd = ButtonInput::<KeyCode>::default();
@@ -422,8 +494,8 @@ mod tests {
     #[test]
     fn move_camera_handles_non_ortho_and_ctrl_s_combo() {
         let mut world = World::new();
-        let mut time = Time::<()>::default();
-        time.advance_by(std::time::Duration::from_millis(30));
+        let mut time = Time::<Real>::default();
+        time.advance_by(Duration::from_millis(30));
         world.insert_resource(time);
 
         let mut kbd = ButtonInput::<KeyCode>::default();
@@ -443,6 +515,83 @@ mod tests {
             Projection::Perspective(PerspectiveProjection::default()),
         ));
         world.run_system_once(move_camera).unwrap();
+    }
+
+    #[test]
+    fn camera_moves_and_focuses_with_real_time_while_simulation_is_paused() {
+        let (mut app, camera) = camera_schedule_app();
+        app.world_mut()
+            .resource_mut::<NextState<SimRunState>>()
+            .set(SimRunState::Paused);
+        app.update();
+        assert_eq!(
+            *app.world().resource::<State<SimRunState>>().get(),
+            SimRunState::Paused
+        );
+        assert!(app.world().resource::<Time<Virtual>>().is_paused());
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyW);
+        app.world_mut().resource_mut::<CameraFocusRequest>().target = Some(Vec2::new(120.0, 0.0));
+        let tick_before = app.world().resource::<SimWorld>().state.tick.get();
+
+        advance_presentation_and_virtual_time(&mut app, Duration::from_millis(16));
+        assert_eq!(app.world().resource::<Time<Real>>().delta_secs(), 0.016);
+        assert_eq!(app.world().resource::<Time<Virtual>>().delta_secs(), 0.0);
+        app.update();
+
+        let transform = app.world().get::<Transform>(camera).unwrap();
+        assert!(
+            transform.translation.x > 0.0,
+            "el foco avanza con reloj real"
+        );
+        assert!(transform.translation.y > 0.0, "WASD avanza con reloj real");
+        assert_eq!(
+            app.world().resource::<SimWorld>().state.tick.get(),
+            tick_before,
+            "mover la cámara pausada no avanza la simulación"
+        );
+        assert_eq!(
+            *app.world().resource::<State<SimRunState>>().get(),
+            SimRunState::Paused
+        );
+    }
+
+    #[test]
+    fn camera_response_is_independent_of_virtual_simulation_speed() {
+        let move_once = |speed: f32| {
+            let (mut app, camera) = camera_schedule_app();
+            app.world_mut().resource_mut::<SimHudControls>().sim_speed = speed;
+            // `sync_sim_time_controls` aplica exactamente el multiplicador que
+            // usa producción antes de que Bevy derive Virtual desde Real.
+            app.update();
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::KeyW);
+            advance_presentation_and_virtual_time(&mut app, Duration::from_millis(16));
+            let virtual_delta = app.world().resource::<Time<Virtual>>().delta_secs();
+            app.update();
+            (
+                app.world().get::<Transform>(camera).unwrap().translation.y,
+                virtual_delta,
+            )
+        };
+
+        let (at_1x, virtual_at_1x) = move_once(1.0);
+        let (at_4x, virtual_at_4x) = move_once(4.0);
+        let (at_8x, virtual_at_8x) = move_once(8.0);
+
+        assert!(virtual_at_1x < virtual_at_4x && virtual_at_4x < virtual_at_8x);
+        assert!((at_1x - at_4x).abs() < f32::EPSILON);
+        assert!((at_1x - at_8x).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn presentation_delta_is_bounded_after_a_long_system_stall() {
+        let mut time = Time::<Real>::default();
+        time.advance_by(Duration::from_secs(1));
+        assert_eq!(presentation_delta_secs(&time), MAX_PRESENTATION_DELTA_SECS);
     }
 
     #[test]
@@ -531,8 +680,8 @@ mod tests {
     #[test]
     fn move_camera_scroll_without_window_returns_after_zoom_branch() {
         let mut world = World::new();
-        let mut time = Time::<()>::default();
-        time.advance_by(std::time::Duration::from_millis(16));
+        let mut time = Time::<Real>::default();
+        time.advance_by(Duration::from_millis(16));
         world.insert_resource(time);
         world.insert_resource(ButtonInput::<KeyCode>::default());
         world.insert_resource(ButtonInput::<MouseButton>::default());

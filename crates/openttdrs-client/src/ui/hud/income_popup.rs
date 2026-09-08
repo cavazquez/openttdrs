@@ -18,6 +18,9 @@ pub(crate) fn spawn_income_popups(
     hud_font: Res<HudUiFont>,
     mut commands: Commands,
 ) {
+    if sim.state.runtime.pending_income_popups.is_empty() {
+        return;
+    }
     let popups = std::mem::take(&mut sim.state.runtime.pending_income_popups);
     // SFX de ingreso vía SimEvent::Income (SimEventsPlugin), no pending_income_ping.
     let map = &sim.state.map;
@@ -62,13 +65,33 @@ pub(crate) fn animate_income_popups(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
     use openttdrs_core::IncomePopup;
     use openttdrs_core::prelude::*;
 
     #[test]
-    fn pending_popups_drained_after_spawn_system() {
+    fn empty_pending_popups_do_not_mark_simworld_changed() {
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(HudUiFont(Handle::default()));
+        world.clear_trackers();
+        let before = world.get_resource_ref::<SimWorld>().unwrap().last_changed();
+
+        world.run_system_once(spawn_income_popups).unwrap();
+
+        assert_eq!(
+            world.get_resource_ref::<SimWorld>().unwrap().last_changed(),
+            before,
+            "un drain vacío no invalida consumidores de SimWorld"
+        );
+    }
+
+    #[test]
+    fn pending_popups_spawn_exactly_once() {
+        let mut world = World::new();
         let mut sim = SimWorld {
             state: GameState::new(4, 4),
             ..Default::default()
@@ -77,8 +100,29 @@ mod tests {
             amount: 42,
             at: TileCoord::new(1, 1),
         });
-        assert_eq!(sim.state.runtime.pending_income_popups.len(), 1);
-        sim.state.runtime.pending_income_popups.drain(..).count();
-        assert!(sim.state.runtime.pending_income_popups.is_empty());
+        world.insert_resource(sim);
+        world.insert_resource(HudUiFont(Handle::default()));
+
+        world.run_system_once(spawn_income_popups).unwrap();
+        assert!(
+            world
+                .resource::<SimWorld>()
+                .state
+                .runtime
+                .pending_income_popups
+                .is_empty()
+        );
+        assert_eq!(
+            world.query::<&IncomePopupText>().iter(&world).count(),
+            1,
+            "el popup pendiente se materializa"
+        );
+
+        world.run_system_once(spawn_income_popups).unwrap();
+        assert_eq!(
+            world.query::<&IncomePopupText>().iter(&world).count(),
+            1,
+            "un segundo drain vacío no duplica el popup"
+        );
     }
 }

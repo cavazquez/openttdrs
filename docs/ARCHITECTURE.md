@@ -523,7 +523,7 @@ Fecha de actualización: 2026-09-08. Crate: `openttdrs-client`. ADR red: [adr/00
 |-------|--------------------------|--------|
 | Tick de sim | `simulation.rs` → `sim.state.step()` | Reloj de partida; en red lo dispara el protocolo |
 | Persistencia | `persistence.rs` → `sim.state = loaded` | Reemplazo de mundo al cargar |
-| Drenaje UI runtime | `ui/statusbar/sync.rs` (`pending_news_events`) | Consume colas efímeras; no reescribe `NewsItem.display` |
+| Drenaje UI runtime | `ui/statusbar/sync.rs`, `ui/hud/income_popup.rs`, `audio/world_sfx.rs` | Consume colas efímeras; comprueba vacío antes de mutar `SimWorld`, para conservar la detección de cambios y no reescribe estado autoritativo |
 | Bootstrap pre-partida | `state/bootstrap/*`, población procedural | Antes de que exista log de red |
 
 #### Migrado a `Command` (I8 settings)

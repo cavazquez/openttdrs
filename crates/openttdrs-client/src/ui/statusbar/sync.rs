@@ -150,6 +150,9 @@ pub(crate) fn drain_news_events(
     news_prefs: Res<NewsDisplayPrefs>,
     time: Res<Time>,
 ) {
+    if sim.state.runtime.pending_news_events.is_empty() {
+        return;
+    }
     let events = std::mem::take(&mut sim.state.runtime.pending_news_events);
     for event in events {
         let PendingNewsEvent::ItemAdded { id } = event;
@@ -727,6 +730,13 @@ mod tests {
         assert_eq!(world.resource::<NewsUiState>().waiting_full.len(), 1);
         assert!(world.resource::<NewsUiState>().waiting_ticker.is_empty());
 
+        world.run_system_once(drain_news_events).unwrap();
+        assert_eq!(
+            world.resource::<NewsUiState>().waiting_full.len(),
+            1,
+            "la noticia pendiente se entrega una sola vez"
+        );
+
         world.resource_mut::<NewsDisplayPrefs>().0.company_info = NewsDisplayMode::Summary;
 
         world.run_system_once(update_news_playback).unwrap();
@@ -740,5 +750,25 @@ mod tests {
             "el playback reencola el modo local cambiado, no display del save"
         );
         assert!(world.resource::<NewsUiState>().popup.is_none());
+    }
+
+    #[test]
+    fn empty_pending_news_does_not_mark_simworld_changed() {
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(NewsDisplayPrefs::default());
+        world.init_resource::<NewsUiState>();
+        world.init_resource::<HudBuildFeedback>();
+        world.insert_resource(Time::<()>::default());
+        world.clear_trackers();
+        let before = world.get_resource_ref::<SimWorld>().unwrap().last_changed();
+
+        world.run_system_once(drain_news_events).unwrap();
+
+        assert_eq!(
+            world.get_resource_ref::<SimWorld>().unwrap().last_changed(),
+            before,
+            "un drain vacío no invalida consumidores de SimWorld"
+        );
     }
 }

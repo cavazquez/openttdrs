@@ -226,47 +226,49 @@ fn play_world_sfx(
     // decodifique sin escribir archivos temporales. No conocemos una tesela
     // para todos los callbacks de vehículo, por eso estos efectos son globales
     // (sin atenuación espacial), igual que `SndPlayFx` de OpenTTD.
-    let pending_newgrf = std::mem::take(&mut sim.state.runtime.pending_newgrf_sounds);
-    for pending in pending_newgrf {
-        let Some(def) = sim
-            .state
-            .sound_effect_catalog
-            .iter()
-            .find(|def| def.grfid == pending.grfid && def.local_id == pending.local_id)
-        else {
-            continue;
-        };
-        if !def.has_sample || def.sample_pcm.is_empty() {
-            continue;
+    if !sim.state.runtime.pending_newgrf_sounds.is_empty() {
+        let pending_newgrf = std::mem::take(&mut sim.state.runtime.pending_newgrf_sounds);
+        for pending in pending_newgrf {
+            let Some(def) = sim
+                .state
+                .sound_effect_catalog
+                .iter()
+                .find(|def| def.grfid == pending.grfid && def.local_id == pending.local_id)
+            else {
+                continue;
+            };
+            if !def.has_sample || def.sample_pcm.is_empty() {
+                continue;
+            }
+            let handle = handles.newgrf_handle(
+                pending.grfid,
+                pending.local_id,
+                &def.sample_pcm,
+                &mut assets,
+            );
+            let vol = (base * pending.volume.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+            if vol < 0.02 {
+                continue;
+            }
+            let Some((channel, steal)) = allocate_channel(&mut mixer, pending.priority) else {
+                continue;
+            };
+            if let Some(old) = steal {
+                commands.entity(old).despawn();
+            }
+            let entity = commands
+                .spawn((
+                    AudioPlayer::new(handle),
+                    PlaybackSettings::DESPAWN.with_volume(bevy::audio::Volume::Linear(vol)),
+                    WorldSfxChannel(channel as u8),
+                ))
+                .id();
+            mixer.slots[channel] = Some(MixerSlot {
+                entity,
+                priority: pending.priority,
+                age: 0,
+            });
         }
-        let handle = handles.newgrf_handle(
-            pending.grfid,
-            pending.local_id,
-            &def.sample_pcm,
-            &mut assets,
-        );
-        let vol = (base * pending.volume.clamp(0.0, 1.0)).clamp(0.0, 1.0);
-        if vol < 0.02 {
-            continue;
-        }
-        let Some((channel, steal)) = allocate_channel(&mut mixer, pending.priority) else {
-            continue;
-        };
-        if let Some(old) = steal {
-            commands.entity(old).despawn();
-        }
-        let entity = commands
-            .spawn((
-                AudioPlayer::new(handle),
-                PlaybackSettings::DESPAWN.with_volume(bevy::audio::Volume::Linear(vol)),
-                WorldSfxChannel(channel as u8),
-            ))
-            .id();
-        mixer.slots[channel] = Some(MixerSlot {
-            entity,
-            priority: pending.priority,
-            age: 0,
-        });
     }
 
     for msg in reader.read() {
@@ -327,8 +329,28 @@ fn pcm_to_wav(pcm: &[u8]) -> Vec<u8> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use openttdrs_core::{GameState, PendingNewgrfSound, SoundEffectDef, TileCoord};
+
+    use crate::state::SimWorld;
+
+    fn sfx_test_app(sim: SimWorld) -> App {
+        let hud = SimHudControls {
+            sfx_volume: 1.0,
+            ..Default::default()
+        };
+        let mut app = App::new();
+        app.add_message::<PlayWorldSfx>()
+            .insert_resource(WorldSfxHandles::default())
+            .insert_resource(Assets::<AudioSource>::default())
+            .insert_resource(sim)
+            .insert_resource(SfxMixer::default())
+            .insert_resource(hud)
+            .add_systems(Update, play_world_sfx);
+        app
+    }
 
     #[test]
     fn pcm_to_wav_writes_a_decodable_mono_header() {
@@ -371,5 +393,118 @@ mod tests {
         };
         assert_eq!(c, 0);
         assert_eq!(steal, Some(Entity::from_bits(1)));
+    }
+
+    #[test]
+    fn empty_newgrf_queue_keeps_sim_clean_and_still_plays_regular_messages() {
+        let mut app = sfx_test_app(SimWorld::default());
+        app.world_mut()
+            .resource_mut::<WorldSfxHandles>()
+            .handles
+            .insert(SoundId::CashTill, Handle::default());
+        app.world_mut().clear_trackers();
+        let before = app
+            .world()
+            .get_resource_ref::<SimWorld>()
+            .unwrap()
+            .last_changed();
+        app.world_mut().write_message(PlayWorldSfx::new(
+            SoundId::CashTill,
+            TileCoord::new(1, 1),
+            1.0,
+        ));
+
+        app.update();
+
+        assert_eq!(
+            app.world()
+                .get_resource_ref::<SimWorld>()
+                .unwrap()
+                .last_changed(),
+            before,
+            "la cola NewGRF vacía no marca SimWorld"
+        );
+        assert_eq!(
+            app.world()
+                .resource::<SfxMixer>()
+                .slots
+                .iter()
+                .flatten()
+                .count(),
+            1,
+            "un PlayWorldSfx normal no se pierde cuando la cola NewGRF está vacía"
+        );
+
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<SfxMixer>()
+                .slots
+                .iter()
+                .flatten()
+                .count(),
+            1,
+            "el mensaje se consume exactamente una vez"
+        );
+    }
+
+    #[test]
+    fn pending_newgrf_sound_is_materialized_once() {
+        let mut state = GameState::new(4, 4);
+        state.sound_effect_catalog.push(SoundEffectDef {
+            local_id: 7,
+            grfid: 0x5346_0001,
+            volume: 128,
+            priority: 42,
+            override_old: None,
+            has_sample: true,
+            sample_pcm: vec![0x10, 0x80, 0xF0],
+            from_newgrf: true,
+        });
+        state
+            .runtime
+            .pending_newgrf_sounds
+            .push(PendingNewgrfSound {
+                grfid: 0x5346_0001,
+                local_id: 7,
+                volume: 1.0,
+                priority: 42,
+            });
+        let mut app = sfx_test_app(SimWorld {
+            state,
+            ..Default::default()
+        });
+
+        app.update();
+
+        assert!(
+            app.world()
+                .resource::<SimWorld>()
+                .state
+                .runtime
+                .pending_newgrf_sounds
+                .is_empty()
+        );
+        assert_eq!(
+            app.world()
+                .resource::<SfxMixer>()
+                .slots
+                .iter()
+                .flatten()
+                .count(),
+            1
+        );
+
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<SfxMixer>()
+                .slots
+                .iter()
+                .flatten()
+                .count(),
+            1,
+            "un segundo frame no vuelve a reproducir la cola ya drenada"
+        );
     }
 }

@@ -81,7 +81,7 @@ pub fn save(state: &GameState, path: &Path) -> Result<(), SavError> {
 /// Como [`save`], con contenedor explícito.
 pub fn save_with(state: &GameState, path: &Path, container: SavContainer) -> Result<(), SavError> {
     let bytes = save_to_bytes_with(state, container)?;
-    std::fs::write(path, bytes).map_err(|e| SavError::Io(e.to_string()))
+    crate::save::write_atomic(path, &bytes).map_err(|e| SavError::Io(e.to_string()))
 }
 
 /// Serializa a bytes (`OTTZ` por defecto).
@@ -689,6 +689,19 @@ mod tests {
         tile.height = 2;
         state.map.set_tile(c, tile).expect("set");
         state
+    }
+
+    #[test]
+    fn save_with_replaces_an_existing_file_with_a_loadable_save() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let path = directory.path().join("partida.sav");
+        std::fs::write(&path, b"previous save").expect("write previous save");
+
+        save_with(&tiny_state(), &path, SavContainer::Ottn).expect("write SAV");
+
+        let bytes = std::fs::read(&path).expect("read SAV");
+        assert_ne!(bytes, b"previous save");
+        sav::load(&bytes).expect("load written SAV");
     }
 
     fn assert_table_field_type(body: &[u8], field_type: u8, field_name: &str) {

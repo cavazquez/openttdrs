@@ -6,6 +6,7 @@
 mod io;
 mod migrate;
 
+pub(crate) use io::write_atomic;
 pub use io::{load, load_from_str, save};
 
 /// Versión de esquema del JSON en disco (`GameStateFile.version`).

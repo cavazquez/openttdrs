@@ -24,6 +24,9 @@ rayon = "1"
 # Índices efímeros de simulación: hash rápido con semilla aleatoria (vehículos,
 # estaciones y teselas se consultan miles de veces por tick).
 ahash = "0.8"
+# El reemplazo atómico de partidas escribe primero un temporal hermano y sólo
+# reemplaza el destino cuando los bytes quedaron completos en disco.
+tempfile = "3"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }

@@ -1,8 +1,10 @@
 //! Operaciones de E/S para persistencia en disco del [`GameState`].
 
+use std::io::{self, Write};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use tempfile::NamedTempFile;
 
 use crate::GameState;
 
@@ -22,6 +24,49 @@ pub(super) struct GameStateFile {
     pub state: GameState,
 }
 
+/// Escribe bytes en un temporal hermano y reemplaza `path` sólo al terminar.
+///
+/// El destino anterior nunca se abre para truncarlo. Si la serialización, la
+/// escritura, el `sync_all` o el reemplazo fallan, el temporal se elimina al
+/// salir y el archivo previo sigue siendo el destino visible.
+///
+/// Se comparte con el exportador SAV para que los dos formatos tengan la misma
+/// garantía frente a disco lleno, cuotas y errores parciales de E/S.
+///
+/// # Errors
+///
+/// Propaga el fallo de crear/escribir/sincronizar el temporal o de reemplazar
+/// el destino.
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    write_atomic_with(path, |file| file.write_all(bytes))
+}
+
+fn write_atomic_with<F>(path: &Path, write: F) -> io::Result<()>
+where
+    F: FnOnce(&mut std::fs::File) -> io::Result<()>,
+{
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let existing_permissions = match std::fs::metadata(path) {
+        Ok(metadata) => Some(metadata.permissions()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+
+    let mut temporary = NamedTempFile::new_in(parent)?;
+    write(temporary.as_file_mut())?;
+    if let Some(permissions) = existing_permissions {
+        temporary.as_file().set_permissions(permissions)?;
+    }
+    temporary.as_file().sync_all()?;
+    temporary
+        .persist(path)
+        .map(|_| ())
+        .map_err(|error| error.error)
+}
+
 /// Escribe `state` en `path` como JSON formateado (versión + estado).
 ///
 /// # Errors
@@ -38,7 +83,7 @@ pub fn save(state: &GameState, path: &Path) -> Result<(), SaveError> {
         state: state.clone(),
     };
     let json = serde_json::to_string_pretty(&file)?;
-    std::fs::write(path, json)?;
+    write_atomic(path, json.as_bytes())?;
     Ok(())
 }
 
@@ -91,5 +136,40 @@ pub fn load_from_str(text: &str) -> Result<GameState, SaveError> {
         state.infer_legacy_company_max_loan_overrides();
         state.sync_scaled_max_loan();
         Ok(state)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use std::io::{self, Write};
+
+    use super::{write_atomic, write_atomic_with};
+
+    #[test]
+    fn failed_atomic_write_keeps_existing_contents_and_cleans_temporary() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("partida.json");
+        std::fs::write(&path, b"previous save").unwrap();
+
+        let error = write_atomic_with(&path, |file| {
+            file.write_all(b"partially written replacement")?;
+            Err(io::Error::other("injected write failure"))
+        });
+
+        assert!(error.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"previous save");
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn successful_atomic_write_replaces_existing_contents() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("partida.json");
+        std::fs::write(&path, b"previous save").unwrap();
+
+        write_atomic(&path, b"complete replacement").unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), b"complete replacement");
     }
 }

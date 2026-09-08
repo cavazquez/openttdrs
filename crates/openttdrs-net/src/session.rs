@@ -9,7 +9,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use openttdrs_core::prelude::*;
-use openttdrs_core::{Command, CompanyId};
+use openttdrs_core::{Command, CompanyId, MAX_COMPANIES};
 
 use crate::codec::{FrameDecoder, FrameWriter};
 use crate::protocol::{NetError, NetMessage, PROTOCOL_VERSION};
@@ -408,6 +408,7 @@ impl Drop for ListenServer {
 
 const MAX_PENDING_HANDSHAKES: usize = 64;
 const MAX_ACCEPTS_PER_TICK: usize = 16;
+const NO_COMPANY_SLOT_MESSAGE: &str = "no hay compañías exclusivas disponibles";
 
 struct ClientSlot {
     stream: TcpStream,
@@ -424,6 +425,7 @@ struct PendingHandshake {
     writer: FrameWriter,
     peer_id: u64,
     company_id: Option<CompanyId>,
+    rejecting_capacity: bool,
     last_progress: Instant,
 }
 
@@ -700,6 +702,7 @@ fn accept_pending_handshakes(
                     writer: FrameWriter::default(),
                     peer_id,
                     company_id: None,
+                    rejecting_capacity: false,
                     last_progress: Instant::now(),
                 });
             }
@@ -771,7 +774,7 @@ fn poll_pending_handshake(
     pending: &mut PendingHandshake,
     snapshot_json: &str,
     next_seq: u64,
-    candidate_company: CompanyId,
+    candidate_company: Option<CompanyId>,
     now: Instant,
     timeouts: SessionTimeouts,
 ) -> PendingHandshakePoll {
@@ -783,7 +786,7 @@ fn poll_pending_handshake(
         pending.last_progress = now;
     }
     if let Some(message) = incoming.message {
-        if pending.company_id.is_some() {
+        if pending.company_id.is_some() || pending.rejecting_capacity {
             return PendingHandshakePoll::Drop(
                 "message received before Welcome was flushed".into(),
             );
@@ -792,17 +795,24 @@ fn poll_pending_handshake(
             NetMessage::Hello {
                 protocol: PROTOCOL_VERSION,
             } => {
-                let welcome = NetMessage::Welcome {
-                    protocol: PROTOCOL_VERSION,
-                    snapshot_json: snapshot_json.to_string(),
-                    next_seq,
-                    peer_id: pending.peer_id,
-                    company_id: candidate_company,
+                let response = if let Some(company_id) = candidate_company {
+                    pending.company_id = Some(company_id);
+                    NetMessage::Welcome {
+                        protocol: PROTOCOL_VERSION,
+                        snapshot_json: snapshot_json.to_string(),
+                        next_seq,
+                        peer_id: pending.peer_id,
+                        company_id,
+                    }
+                } else {
+                    pending.rejecting_capacity = true;
+                    NetMessage::Reject {
+                        message: NO_COMPANY_SLOT_MESSAGE.into(),
+                    }
                 };
-                if let Err(error) = pending.writer.queue(&welcome) {
+                if let Err(error) = pending.writer.queue(&response) {
                     return PendingHandshakePoll::Drop(error.to_string());
                 }
-                pending.company_id = Some(candidate_company);
                 pending.last_progress = now;
             }
             NetMessage::Hello { protocol } => {
@@ -823,6 +833,9 @@ fn poll_pending_handshake(
     }
     if pending.company_id.is_some() && output.is_empty {
         return PendingHandshakePoll::Promote;
+    }
+    if pending.rejecting_capacity && output.is_empty {
+        return PendingHandshakePoll::Drop(NO_COMPANY_SLOT_MESSAGE.into());
     }
     if now.duration_since(pending.last_progress) >= timeouts.handshake {
         return PendingHandshakePoll::Drop("handshake timed out without progress".into());
@@ -876,11 +889,12 @@ fn remove_client(clients: &mut Vec<ClientSlot>, shared_peer_ids: &SharedPeerIds,
 }
 
 /// Asigna una compañía exclusiva a cada peer conectado. La compañía 0 queda
-/// reservada al host; los clientes reciben el primer id libre del pool de
-/// `OpenTTD` (0..15). Los handshakes que ya enviaron Welcome también reservan
-/// su id para que dos conexiones simultáneas no reciban la misma compañía.
-fn allocate_company_id(clients: &[ClientSlot], pending: &[PendingHandshake]) -> CompanyId {
-    (1..=15)
+/// reservada al host; los clientes reciben el primer id libre del pool válido
+/// de `OpenTTD` (`1..MAX_COMPANIES`). Los handshakes que ya enviaron Welcome
+/// también reservan su id para que dos conexiones simultáneas no reciban la
+/// misma compañía. Sin slot, el handshake recibe `Reject`, nunca `PLAYER`.
+fn allocate_company_id(clients: &[ClientSlot], pending: &[PendingHandshake]) -> Option<CompanyId> {
+    ((CompanyId::PLAYER.0 + 1)..MAX_COMPANIES)
         .map(CompanyId)
         .find(|candidate| {
             clients.iter().all(|slot| slot.company_id != *candidate)
@@ -888,7 +902,6 @@ fn allocate_company_id(clients: &[ClientSlot], pending: &[PendingHandshake]) -> 
                     .iter()
                     .all(|handshake| handshake.company_id != Some(*candidate))
         })
-        .unwrap_or(CompanyId::PLAYER)
 }
 
 fn enqueue_for_client(client: &mut ClientSlot, message: &NetMessage) -> Result<(), NetError> {
@@ -1208,6 +1221,11 @@ fn client_thread(
                 });
                 return Err(NetError::Protocol(reason));
             }
+            Some(NetMessage::Reject { message }) if waiting_for_welcome => {
+                let reason = format!("connection rejected: {message}");
+                let _ = event_tx.send(SessionEvent::Disconnected { reason });
+                return Ok(());
+            }
             Some(other) if waiting_for_welcome => {
                 let reason = format!("expected welcome, got {other:?}");
                 let _ = event_tx.send(SessionEvent::Disconnected {
@@ -1320,9 +1338,8 @@ pub fn apply_command_as_company(
 /// un mapa mínimo que todavía sólo contenía al jugador. Los slots creados por
 /// peers son empresas humanas, no IA, y quedan dentro del estado replicado.
 fn ensure_company_slot(state: &mut GameState, company_id: CompanyId) -> Result<(), String> {
-    const MAX_COMPANIES: usize = 15;
     let index = company_id.index();
-    if index >= MAX_COMPANIES {
+    if !is_valid_company_slot(company_id) {
         return Err(format!("compañía fuera de rango: {}", company_id.0));
     }
     state.ensure_companies();
@@ -1337,6 +1354,13 @@ fn ensure_company_slot(state: &mut GameState, company_id: CompanyId) -> Result<(
         state.companies.push(company);
     }
     Ok(())
+}
+
+/// Los únicos IDs de compañías que puede materializar el estado son el rango
+/// jugable del core. Mantener esta invariante junto al asignador evita volver a
+/// conceder un ID que el validador rechaza.
+const fn is_valid_company_slot(company_id: CompanyId) -> bool {
+    company_id.0 < MAX_COMPANIES
 }
 
 /// Aplica commits y ticks a un [`GameState`] (útil en tests / dedicated).

@@ -2,13 +2,14 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use std::collections::BTreeSet;
 use std::io::{ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use openttdrs_core::{Command, CompanyId, GameState, TileCoord, apply_command};
+use openttdrs_core::{Command, CompanyId, GameState, MAX_COMPANIES, TileCoord, apply_command};
 use openttdrs_net::{
     ClientSession, ListenServer, NetError, NetMessage, PROTOCOL_VERSION, SessionEvent,
     SessionTimeouts, apply_session_event, read_message, write_message,
@@ -84,6 +85,18 @@ fn wait_heartbeat(client: &ClientSession, expected_tick: u64, timeout: Duration)
             None => panic!("timeout esperando heartbeat {expected_tick}"),
         }
     }
+}
+
+fn wait_for_peer_count(server: &ListenServer, expected: usize, timeout: Duration) {
+    let deadline = Instant::now() + timeout;
+    while server.peer_ids().len() != expected && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        server.peer_ids().len(),
+        expected,
+        "cantidad de peers no alcanzó el valor esperado"
+    );
 }
 
 fn short_timeouts() -> SessionTimeouts {
@@ -568,6 +581,118 @@ fn peers_receive_exclusive_company_identity_and_commit_issuer() {
         thread::sleep(Duration::from_millis(5));
     }
     panic!("timeout esperando commit con issuer");
+}
+
+#[test]
+fn company_pool_rejects_overflow_and_reuses_released_slot() {
+    let server =
+        match maybe_start_server("127.0.0.1:0", GameState::new(64, 64).save_json().unwrap()) {
+            Some(server) => server,
+            None => return,
+        };
+    let bind = server.local_addr().to_string();
+    let client_capacity = usize::from(MAX_COMPANIES) - 1;
+    let mut clients = Vec::with_capacity(client_capacity);
+
+    for _ in 0..client_capacity {
+        let Some(client) = maybe_connect_client(&bind) else {
+            return;
+        };
+        assert!(matches!(
+            wait_event(&client, Duration::from_secs(2)),
+            SessionEvent::Welcome { .. }
+        ));
+        clients.push(client);
+    }
+    wait_for_peer_count(&server, client_capacity, Duration::from_secs(2));
+
+    let company_ids: Vec<_> = clients
+        .iter()
+        .map(|client| client.handle().company_id())
+        .collect();
+    let unique_ids: BTreeSet<_> = company_ids.iter().map(|company| company.0).collect();
+    assert_eq!(unique_ids.len(), client_capacity);
+    assert!(
+        company_ids
+            .iter()
+            .all(|company| { *company != CompanyId::PLAYER && company.0 < MAX_COMPANIES })
+    );
+
+    // El wire protocol debe rechazar el peer excedente antes de emitir Welcome.
+    let mut overflow_wire = TcpStream::connect(&bind).expect("conecta peer excedente");
+    overflow_wire
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .expect("configura timeout del peer excedente");
+    write_message(
+        &mut overflow_wire,
+        &NetMessage::Hello {
+            protocol: PROTOCOL_VERSION,
+        },
+    )
+    .expect("envía Hello excedente");
+    match read_message(&mut overflow_wire).expect("recibe rechazo por capacidad") {
+        NetMessage::Reject { message } => assert!(message.contains("compañías exclusivas")),
+        other => panic!("el peer excedente no debe recibir Welcome: {other:?}"),
+    }
+    drop(overflow_wire);
+
+    // El cliente de alto nivel transforma ese rechazo de handshake en una
+    // desconexión explícita, en vez de dejarlo esperando un Welcome imposible.
+    let rejected = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    assert!(matches!(
+        wait_event(&rejected, Duration::from_secs(2)),
+        SessionEvent::Disconnected { reason } if reason.contains("compañías exclusivas")
+    ));
+    assert_eq!(rejected.handle().company_id(), CompanyId::PLAYER);
+    drop(rejected);
+    wait_for_peer_count(&server, client_capacity, Duration::from_secs(2));
+
+    // Cada identidad admitida puede materializar su propia compañía y emitir
+    // una orden válida; ningún Commit debe heredar la compañía del host.
+    for (index, client) in clients.iter().enumerate() {
+        client
+            .propose(Command::PlaceRoad(TileCoord::new(
+                i32::try_from(index).expect("índice de cliente cabe en i32") + 2,
+                2,
+            )))
+            .expect("encola propuesta de compañía válida");
+    }
+    let expected_ids: BTreeSet<_> = company_ids.iter().map(|company| company.0).collect();
+    let mut committed_ids = BTreeSet::new();
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while committed_ids.len() != expected_ids.len() && Instant::now() < deadline {
+        match server.try_recv() {
+            Some(SessionEvent::Commit { company_id, .. }) => {
+                assert_ne!(company_id, CompanyId::PLAYER);
+                assert!(expected_ids.contains(&company_id.0));
+                committed_ids.insert(company_id.0);
+            }
+            Some(_) | None => thread::sleep(Duration::from_millis(5)),
+        }
+    }
+    assert_eq!(committed_ids, expected_ids);
+
+    let released_company = clients.remove(0).handle().company_id();
+    wait_for_peer_count(&server, client_capacity - 1, Duration::from_secs(2));
+    assert!(
+        clients
+            .iter()
+            .all(|client| client.handle().company_id() != released_company)
+    );
+
+    let replacement = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    assert!(matches!(
+        wait_event(&replacement, Duration::from_secs(2)),
+        SessionEvent::Welcome { .. }
+    ));
+    assert_eq!(replacement.handle().company_id(), released_company);
+    wait_for_peer_count(&server, client_capacity, Duration::from_secs(2));
 }
 
 #[test]

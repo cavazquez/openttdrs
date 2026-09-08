@@ -426,6 +426,9 @@ que no round-trippea están en la [matriz SAV](parity/sav-compatibility.md).
 
 **Infraestructura:**
 - ✅ Crate `openttdrs-net` — TCP length-prefixed JSON, `ListenServer` / `ClientSession`.
+- ✅ Las compañías remotas reciben IDs exclusivos `1..14`; al agotarse el
+  pool, el handshake responde `Reject` antes de enviar `Welcome` y reutiliza
+  el slot liberado al desconectar.
 - ✅ Bin `openttdrs-dedicated` — headless (`--bind HOST:PORT`).
 ```
 TCP: servidor envía Commit / AdvanceTicks / HashCheck;

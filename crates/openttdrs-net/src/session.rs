@@ -1,4 +1,4 @@
-//! Sesiones listen-server y cliente (protocolo v4 / ADR 0004).
+//! Sesiones listen-server y cliente (protocolo v5 / ADR 0004).
 
 use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpListener, TcpStream};

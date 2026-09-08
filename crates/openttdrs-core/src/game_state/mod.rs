@@ -378,6 +378,16 @@ pub struct GameState {
     // ───── Campos persistidos ─────
     pub map: Map,
     pub tick: GameTick,
+    /// Subconjunto urbano persistido de `AnimatedTileList`, en orden de alta.
+    ///
+    /// No es un conjunto: dos ascensores pueden consumir palabras distintas
+    /// de `_random` según esta secuencia y `step_house_lifts` conserva la
+    /// semántica de `swap_remove` de `OpenTTD`. JSON anterior al campo recibe una
+    /// cola vacía de forma explícita: no se intenta inferir un orden desde las
+    /// teselas ni se consume RNG durante la migración. Los SAV nativos usan el
+    /// orden de `ANIT` cuando está disponible.
+    #[serde(default)]
+    pub active_house_lifts: Vec<TileCoord>,
     /// Reloj de calendario (edad de vehículos, noticias, año mostrado).
     #[serde(default)]
     pub calendar: crate::timer::CalendarTimer,
@@ -919,6 +929,7 @@ impl GameState {
         let mut state = Self {
             map: Map::new_flat(map_width, map_height, 1),
             tick: GameTick::default(),
+            active_house_lifts: Vec::new(),
             calendar: crate::timer::CalendarTimer::from_tick(0),
             economy_timer: crate::timer::EconomyTimer::from_tick(0),
             industries: Vec::new(),
@@ -1066,6 +1077,7 @@ impl GameState {
         let mut state = Self {
             map,
             tick: GameTick::default(),
+            active_house_lifts: Vec::new(),
             calendar: crate::timer::CalendarTimer::from_tick(0),
             economy_timer: crate::timer::EconomyTimer::from_tick(0),
             industries: Vec::new(),

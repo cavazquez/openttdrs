@@ -10,9 +10,9 @@ use super::GameState;
 
 const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0100_0000_01b3;
-// v2 canoniza los arrays de HashSet de animación NewGRF. Mantenerlo separado
+// v3 incorpora la cola ordenada de ascensores activos. Mantenerlo separado
 // evita presentar hashes de dos algoritmos como si fueran comparables.
-const DOMAIN: &[u8] = b"openttdrs-gs-v2";
+const DOMAIN: &[u8] = b"openttdrs-gs-v3";
 
 #[derive(Debug, Clone, Copy)]
 struct Fnv1a64(u64);

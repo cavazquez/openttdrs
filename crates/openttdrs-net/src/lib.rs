@@ -1,6 +1,6 @@
 //! Transporte TCP mínimo para multijugador lockstep ([#21](https://github.com/cavazquez/openttdrs/issues/21)).
 //!
-//! Protocolo v4: frames `u32` LE + JSON [`NetMessage`]. El servidor es autoritativo:
+//! Protocolo v5: frames `u32` LE + JSON [`NetMessage`]. El servidor es autoritativo:
 //! asigna `seq`, retransmite [`NetMessage::Commit`] y avanza ticks.
 //! Host migration listen-server: [`elect_new_host`] / ADR 0004.
 //! Ver `docs/adr/0001-multiplayer-v1.md` y `docs/adr/0004-host-migration-post-v1.md`.

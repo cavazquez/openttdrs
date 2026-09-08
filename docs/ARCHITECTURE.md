@@ -562,7 +562,8 @@ Fecha de actualización: 2026-09-08. Depende de [#108](https://github.com/cavazq
 
 - **No** migrar todo a `BTreeMap`.
 - El hash canónico (#108) **ordena claves** de objetos JSON; el orden de iteración de `HashMap` en estado persistido **no** afecta el fingerprint.
-- Los cuatro `HashSet<TileCoord>` persistidos de animación NewGRF se emiten como arrays de coordenadas ordenadas. Así se conserva el JSON histórico (array) sin permitir que el `RandomState` altere un snapshot o su fingerprint. El dominio cambió a `openttdrs-gs-v2` y el protocolo lockstep v4 impide mezclarlo con peers v3.
+- Los cuatro `HashSet<TileCoord>` persistidos de animación NewGRF se emiten como arrays de coordenadas ordenadas. Así se conserva el JSON histórico (array) sin permitir que el `RandomState` altere un snapshot o su fingerprint.
+- La cola ordenada de ascensores urbanos activos también vive en `GameState`: afecta el RNG, admite `swap_remove` y por eso se conserva como `Vec` con orden semántico. JSON antiguo sin el campo inicia una cola vacía sin escanear teselas ni consumir RNG; un SAV nativo copia el orden de `ANIT` cuando existe y, al cambiar, reemite sólo esa subsecuencia sin reordenar las animaciones todavía opacas. El dominio actual es `openttdrs-gs-v3` y el protocolo lockstep v5 impide mezclarlo con peers v4.
 - Estabilizar iteración en simulación solo si un test de repetibilidad falla por orden de visita.
 - Estado en `SimulationRuntime` queda **fuera** del hash.
 
@@ -572,6 +573,7 @@ Fecha de actualización: 2026-09-08. Depende de [#108](https://github.com/cavazq
 |------|-----|------------|---------------|
 | `game_state/runtime.rs` | `HashSet` señales/PBS/news | No (`runtime`) | Bajo — excluido del hash; PBS se reconstruye |
 | `game_state/mod.rs` | cuatro `HashSet<TileCoord>` de animación NewGRF | Sí (array JSON) | Resuelto — serializer de frontera ordena sólo al persistir; scheduler conserva HashSet |
+| `game_state/mod.rs` | `Vec<TileCoord>` de ascensores urbanos activos | Sí (array JSON ordenado) | Resuelto — cola autoritativa; JSON legacy usa vacía y SAV fusiona la subsecuencia `ANIT` sin perder entradas opacas |
 | `vehicle/model.rs` | `newgrf_persistent_regs: HashMap<u8,u32>` | Sí | Bajo — hash ordena claves |
 | `cargodist/legacy/flow_stat.rs` | `by_origin` / `by_cargo` / `by_station` | Sí (vía `station_flows` / settings) | Medio si MCF itera y el orden cambia resultados |
 | `cargodist/legacy/mcf.rs` | índices y agrupación temporales | No (locales) | Medio — revisar si fallan tests CargoDist |
@@ -589,6 +591,7 @@ Tras #108:
 
 - `canonical_hash` tests (truck_bay ×120 ticks, save/load mid-run) **pasan**.
 - Permutaciones y `RandomState` distintos de las cuatro listas de animación producen el mismo hash; cambiar una membresía, guardar/reabrir y aplicar un snapshot de bienvenida conserva el fingerprint.
+- La cola de ascensores distingue orden en el hash y preserva RNG, `MAP6`/`MAP7` y trayectoria tras JSON/snapshot, tanto pendiente como con destino ya asignado; las fixtures `ANIT` conservan el orden sin extraer RNG, reescriben la cola SAV actual sin restablecer una copia obsoleta y comprueban el framing gamma largo.
 - No se requirió cambiar contenedores a `BTreeMap`.
 
 ### Seguimiento

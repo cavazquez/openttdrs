@@ -162,6 +162,7 @@ pub fn step_house_lifts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::GameState;
 
     fn large_office() -> Tile {
         Tile::completed_house(4, 0, 0)
@@ -224,5 +225,104 @@ mod tests {
         add_house_lift_to_animation(&mut active, first);
         add_house_lift_to_animation(&mut active, second);
         assert_eq!(active, vec![first, second]);
+    }
+
+    fn lift_game(order: Vec<TileCoord>) -> GameState {
+        let mut state = GameState::new(8, 8);
+        for &coord in &order {
+            state
+                .map
+                .set_tile(coord, large_office())
+                .expect("office inside map");
+        }
+        state.active_house_lifts = order;
+        state.random = Randomizer::new(1);
+        state
+    }
+
+    fn assert_lift_progress_matches(
+        control: &GameState,
+        resumed: &GameState,
+        coords: &[TileCoord],
+    ) {
+        assert_eq!(control.active_house_lifts, resumed.active_house_lifts);
+        assert_eq!(control.random, resumed.random);
+        assert_eq!(control.canonical_hash(), resumed.canonical_hash());
+        for &coord in coords {
+            let control_tile = control.map.get(coord).expect("control office");
+            let resumed_tile = resumed.map.get(coord).expect("resumed office");
+            assert_eq!(control_tile.m6, resumed_tile.m6, "MAP6 at {coord:?}");
+            assert_eq!(control_tile.m7, resumed_tile.m7, "MAP7 at {coord:?}");
+        }
+    }
+
+    fn assert_save_resume_lift_trajectory(save_after_destination_assignment: bool) {
+        let first = TileCoord::new(2, 2);
+        let second = TileCoord::new(5, 5);
+        let coords = [first, second];
+        let mut control = lift_game(vec![second, first]);
+        let mut subject = lift_game(vec![second, first]);
+
+        if save_after_destination_assignment {
+            control.step();
+            subject.step();
+            assert_lift_progress_matches(&control, &subject, &coords);
+            assert!(
+                coords
+                    .iter()
+                    .all(|&coord| { control.map.get(coord).is_some_and(lift_has_destination) }),
+                "el snapshot de mitad de animación tiene destinos ya asignados"
+            );
+        }
+
+        let saved = subject.save_json().expect("save JSON");
+        let mut resumed = GameState::load_json(&saved).expect("load JSON");
+        assert_eq!(resumed.active_house_lifts, vec![second, first]);
+
+        for _ in 0..32 {
+            control.step();
+            resumed.step();
+            assert_lift_progress_matches(&control, &resumed, &coords);
+        }
+    }
+
+    #[test]
+    fn pending_house_lift_queue_survives_json_save_resume_tick_by_tick() {
+        assert_save_resume_lift_trajectory(false);
+    }
+
+    #[test]
+    fn assigned_house_lift_queue_survives_json_save_resume_tick_by_tick() {
+        assert_save_resume_lift_trajectory(true);
+    }
+
+    #[test]
+    fn inverse_house_lift_queue_order_is_persisted_and_changes_the_hash() {
+        let first = TileCoord::new(2, 2);
+        let second = TileCoord::new(5, 5);
+        let forward = lift_game(vec![first, second]);
+        let reverse = lift_game(vec![second, first]);
+        assert_ne!(forward.canonical_hash(), reverse.canonical_hash());
+
+        let loaded =
+            GameState::load_json(&reverse.save_json().expect("save JSON")).expect("load JSON");
+        assert_eq!(loaded.active_house_lifts, vec![second, first]);
+    }
+
+    #[test]
+    fn legacy_json_without_lift_queue_keeps_rng_and_uses_an_empty_queue() {
+        let state = lift_game(vec![TileCoord::new(2, 2), TileCoord::new(5, 5)]);
+        let random_before_load = state.random;
+        let mut legacy = serde_json::to_value(&state).expect("serialize legacy fixture");
+        legacy
+            .as_object_mut()
+            .expect("GameState serializes to an object")
+            .remove("active_house_lifts");
+
+        let loaded =
+            GameState::load_json(&serde_json::to_string(&legacy).expect("encode legacy fixture"))
+                .expect("load JSON without persistent queue");
+        assert!(loaded.active_house_lifts.is_empty());
+        assert_eq!(loaded.random, random_before_load);
     }
 }

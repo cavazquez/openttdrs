@@ -388,7 +388,7 @@ fn tile_loop_house(
     };
     // `TileLoop_Town` tests the vanilla lift before taking the unconditional
     // random value used by cargo generation. `AddAnimatedTile` sólo cambia la
-    // lista efímera, pero tanto la decisión como el orden de inserción deben
+    // lista persistida, pero tanto la decisión como el orden de inserción deben
     // seguir el stream global para que `AnimateAnimatedTiles` tome luego el
     // mismo `RandomRange(7)`.
     let can_activate_lift = house.building_flags & crate::house_spec::BUILDING_FLAG_IS_ANIMATED
@@ -397,7 +397,7 @@ fn tile_loop_house(
     if can_activate_lift {
         let activated = rng.chance16(1, 2);
         if activated {
-            crate::map::add_house_lift_to_animation(&mut state.runtime.active_house_lifts, coord);
+            crate::map::add_house_lift_to_animation(&mut state.active_house_lifts, coord);
         }
     }
 

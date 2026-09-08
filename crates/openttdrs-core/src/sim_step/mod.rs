@@ -434,7 +434,7 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         &mut state.map,
         t,
         &mut state.random,
-        &mut state.runtime.active_house_lifts,
+        &mut state.active_house_lifts,
     );
     let animation_coords: Vec<_> = state
         .industries

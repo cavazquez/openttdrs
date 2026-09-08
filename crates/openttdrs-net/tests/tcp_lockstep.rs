@@ -524,7 +524,47 @@ fn welcome_snapshot_preserves_canonical_animation_tile_sets() {
 }
 
 #[test]
-fn server_rejects_the_previous_hash_protocol_before_welcome() {
+fn welcome_snapshot_preserves_active_house_lift_trajectory() {
+    let first = TileCoord::new(2, 2);
+    let second = TileCoord::new(5, 5);
+    let mut host = GameState::new(8, 8);
+    for coord in [first, second] {
+        host.map
+            .set_completed_house(coord, 4, 0)
+            .expect("large office inside map");
+    }
+    host.active_house_lifts = vec![second, first];
+    host.step();
+    assert_eq!(host.active_house_lifts, vec![second, first]);
+
+    let welcome = SessionEvent::Welcome {
+        snapshot_json: host.save_json().unwrap(),
+        next_seq: 23,
+        peer_id: 1,
+    };
+    let mut remote = GameState::new(1, 1);
+    apply_session_event(&mut remote, &welcome).unwrap();
+    assert_eq!(host.active_house_lifts, remote.active_house_lifts);
+    assert_eq!(host.random, remote.random);
+    assert_eq!(host.canonical_hash(), remote.canonical_hash());
+
+    for _ in 0..32 {
+        host.step();
+        remote.step();
+        assert_eq!(host.active_house_lifts, remote.active_house_lifts);
+        assert_eq!(host.random, remote.random);
+        assert_eq!(host.canonical_hash(), remote.canonical_hash());
+        for coord in [first, second] {
+            let host_tile = host.map.get(coord).expect("host office");
+            let remote_tile = remote.map.get(coord).expect("remote office");
+            assert_eq!(host_tile.m6, remote_tile.m6, "MAP6 at {coord:?}");
+            assert_eq!(host_tile.m7, remote_tile.m7, "MAP7 at {coord:?}");
+        }
+    }
+}
+
+#[test]
+fn server_rejects_the_previous_authoritative_state_protocol_before_welcome() {
     let snapshot = GameState::new(8, 8).save_json().unwrap();
     let server = match maybe_start_server("127.0.0.1:0", snapshot) {
         Some(server) => server,
@@ -545,7 +585,7 @@ fn server_rejects_the_previous_hash_protocol_before_welcome() {
             assert!(message.contains("unsupported protocol"));
             assert!(message.contains(&PROTOCOL_VERSION.to_string()));
         }
-        other => panic!("un peer v3 no debe recibir Welcome: {other:?}"),
+        other => panic!("un peer v4 no debe recibir Welcome: {other:?}"),
     }
     assert!(server.peer_ids().is_empty());
 }

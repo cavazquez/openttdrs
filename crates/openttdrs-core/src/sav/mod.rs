@@ -199,27 +199,28 @@ fn opaque_chunks_from_chunks(chunks: &[chunks::RawChunk]) -> Vec<SavOpaqueChunk>
 /// tabla con un único campo vectorial `tiles`; conservar su orden es esencial
 /// para los ascensores vanilla, porque `AnimateAnimatedTiles` recorre el vector
 /// y cada entrada puede consumir `_random`.
-fn animated_tile_indices_from_opaque_chunks(chunks: &[SavOpaqueChunk]) -> Vec<u32> {
-    let Some(anit) = chunks.iter().find(|chunk| chunk.name == *b"ANIT") else {
-        return Vec::new();
-    };
+pub(super) fn animated_tile_indices_from_opaque_chunks(
+    chunks: &[SavOpaqueChunk],
+) -> Option<Vec<u32>> {
+    let anit = chunks.iter().find(|chunk| chunk.name == *b"ANIT")?;
     if anit.ch_type != chunks::CH_TABLE {
-        return Vec::new();
+        return None;
     }
-    let Ok(rows) = table::parse_table_chunk(&anit.body, false) else {
-        return Vec::new();
-    };
-    rows.into_iter()
-        .flat_map(|(_, record)| {
-            let Some(table::SlValue::List(entries)) = table::record_get(&record, "tiles") else {
-                return Vec::new();
-            };
-            entries
-                .iter()
-                .filter_map(|entry| entry.as_u64().and_then(|value| u32::try_from(value).ok()))
-                .collect()
-        })
-        .collect()
+    let rows = table::parse_table_chunk(&anit.body, false).ok()?;
+    Some(
+        rows.into_iter()
+            .flat_map(|(_, record)| {
+                let Some(table::SlValue::List(entries)) = table::record_get(&record, "tiles")
+                else {
+                    return Vec::new();
+                };
+                entries
+                    .iter()
+                    .filter_map(|entry| entry.as_u64().and_then(|value| u32::try_from(value).ok()))
+                    .collect()
+            })
+            .collect(),
+    )
 }
 
 /// Bits `FACIL_*` de `OpenTTD`.
@@ -1211,8 +1212,10 @@ impl GameState {
         let clear_legacy_depot_reservations = sav.version < SLV_DEPOT_RESERVATION_PERSISTED;
         // `ANIT` sigue opaco para industrias/estaciones/objetos hasta que
         // compartan un dispatcher común, pero la sublista de casas vanilla sí
-        // tiene semántica exacta y debe rehidratarse antes del primer tick.
-        let animated_tile_indices = animated_tile_indices_from_opaque_chunks(&sav.opaque_chunks);
+        // tiene semántica exacta y debe copiarse al GameState persistido antes
+        // del primer tick.
+        let animated_tile_indices =
+            animated_tile_indices_from_opaque_chunks(&sav.opaque_chunks).unwrap_or_default();
         let linkgraph_jobs = std::mem::take(&mut sav.linkgraph_jobs);
         let linkgraph_schedule = std::mem::take(&mut sav.linkgraph_schedule);
         let vehs_raw_chunk = sav.vehs_raw_chunk.take();
@@ -1312,10 +1315,7 @@ impl GameState {
                 .get(coord)
                 .is_some_and(crate::map::house_tile_has_lift)
             {
-                crate::map::add_house_lift_to_animation(
-                    &mut state.runtime.active_house_lifts,
-                    coord,
-                );
+                crate::map::add_house_lift_to_animation(&mut state.active_house_lifts, coord);
             }
         }
         if let Some(time) = sav.game_time {
@@ -2462,6 +2462,37 @@ mod tests {
             capa_raw_chunk: None,
             opaque_chunks: Vec::new(),
         }
+    }
+
+    #[test]
+    fn from_sav_game_copies_anit_house_lift_order_without_consuming_rng() {
+        let first = TileCoord::new(2, 2);
+        let second = TileCoord::new(5, 5);
+        let mut map = Map::new_flat(8, 8, 0);
+        for coord in [first, second] {
+            map.set_completed_house(coord, 4, 0)
+                .expect("large office inside map");
+        }
+        let random_state = [0x1234_5678, 0x9abc_def0];
+        let mut sav = empty_sav(358, map);
+        sav.random_state = Some(random_state);
+
+        let mut anit_record = Vec::new();
+        table::tests::write_gamma(2, &mut anit_record);
+        for coord in [second, first] {
+            let tile_index = crate::map::coord_to_linear_index(coord, 8)
+                .expect("office has an OpenTTD tile index");
+            anit_record.extend_from_slice(&tile_index.to_be_bytes());
+        }
+        sav.opaque_chunks.push(SavOpaqueChunk {
+            name: *b"ANIT",
+            ch_type: chunks::CH_TABLE,
+            body: table::tests::build_table_body(&[(0x16, "tiles")], &[anit_record]),
+        });
+
+        let state = GameState::from_sav_game(sav);
+        assert_eq!(state.active_house_lifts, vec![second, first]);
+        assert_eq!(state.random.state, random_state);
     }
 
     #[test]

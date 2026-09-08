@@ -217,8 +217,8 @@ fn scan_chunk_names(payload: &[u8]) -> Vec<String> {
         [
             "STNN", "CITY", "INDY", "IBLD", "ITBL", "ORDL", "VEHS", "CAPA", "LGRP", "LGRJ", "LGRS",
             "PATS", "ECMY", "CAPY", "GRPS", "ERNW", "ENGN", "ENGS", "EIDS", "GSET", "NGRF", "OBJS",
-            "OBID", "SRND", "PSAC", "IIDS", "TIDS", "APID", "ATID", "RAIL", "ROTT", "GLOG", "GOAL",
-            "STPE", "STPA", "SIGN",
+            "OBID", "SRND", "PSAC", "ANIT", "IIDS", "TIDS", "APID", "ATID", "RAIL", "ROTT", "GLOG",
+            "GOAL", "STPE", "STPA", "SIGN",
         ]
         .iter(),
     ) {
@@ -259,6 +259,138 @@ fn wrap_container(
         }
     }
     Ok(out)
+}
+
+/// Índices `TileIndex` persistibles de la porción de `ANIT` que este runtime
+/// simula: los ascensores de casas. Se conserva el vector tal cual (incluidas
+/// entradas que serán retiradas en el próximo tick) porque el orden es parte
+/// de la secuencia RNG y de la semántica `swap_remove` de `OpenTTD`.
+fn active_house_lift_tile_indices(state: &GameState, map_w: u32, map_h: u32) -> Vec<u32> {
+    state
+        .active_house_lifts
+        .iter()
+        .filter_map(|&coord| {
+            crate::map::coord_to_dense_index(coord, map_w, map_h)?;
+            crate::map::coord_to_linear_index(coord, map_w)
+        })
+        .collect()
+}
+
+/// `true` si una entrada nativa pertenece a la sublista de ascensores que el
+/// runtime puede reemitir. Las demás animaciones siguen siendo opacas: no se
+/// reordenan ni se descartan al actualizar la cola de ascensores.
+fn is_modeled_house_lift_index(state: &GameState, active_indices: &[u32], index: u32) -> bool {
+    active_indices.contains(&index)
+        || crate::map::tile_index_to_coord(index, &state.map)
+            .and_then(|coord| state.map.get(coord))
+            .is_some_and(crate::map::house_tile_has_lift)
+}
+
+/// Codifica el único registro moderno de `ANIT` (`SLEG_VECTOR("tiles",
+/// SLE_UINT32)`). `SlWriteSimpleGamma` admite valores u32 completos, por lo
+/// que el tamaño de la lista no queda artificialmente limitado a 16 KiB.
+fn encode_animated_tiles_chunk(indices: &[u32]) -> Result<Vec<u8>, SavError> {
+    let count = u32::try_from(indices.len()).map_err(|_| SavError::ValueOutOfRange {
+        field: "ANIT.tiles",
+        value: u32::MAX,
+    })?;
+    let values_len = indices
+        .len()
+        .checked_mul(std::mem::size_of::<u32>())
+        .ok_or(SavError::ValueOutOfRange {
+            field: "ANIT.tiles",
+            value: u32::MAX,
+        })?;
+    let mut header = Vec::with_capacity(8);
+    header.push(0x16); // SLE_UINT32 | SLE_VAR
+    codec::write_str("tiles", &mut header)?;
+    header.push(0);
+
+    let mut record = Vec::with_capacity(values_len.saturating_add(5));
+    codec::write_full_gamma(count, &mut record);
+    for &index in indices {
+        record.extend_from_slice(&index.to_be_bytes());
+    }
+
+    let header_len = u32::try_from(header.len())
+        .ok()
+        .and_then(|length| length.checked_add(1))
+        .ok_or(SavError::ValueOutOfRange {
+            field: "ANIT.header",
+            value: u32::MAX,
+        })?;
+    let record_len = u32::try_from(record.len())
+        .ok()
+        .and_then(|length| length.checked_add(1))
+        .ok_or(SavError::ValueOutOfRange {
+            field: "ANIT.record",
+            value: u32::MAX,
+        })?;
+
+    let mut out = Vec::with_capacity(5 + header.len() + record.len() + 12);
+    out.extend_from_slice(b"ANIT");
+    out.push(crate::sav::chunks::CH_TABLE);
+    codec::write_full_gamma(header_len, &mut out);
+    out.extend_from_slice(&header);
+    codec::write_full_gamma(record_len, &mut out);
+    out.extend_from_slice(&record);
+    codec::write_full_gamma(0, &mut out);
+    Ok(out)
+}
+
+/// Reemplaza sólo la subsecuencia de ascensores del `ANIT` importado.
+///
+/// Cuando la cola no cambió, el chunk nativo viaja byte a byte como opaque
+/// passthrough. Si cambió, se inserta la cola persistida en el primer lugar
+/// que ocupaba un ascensor y se conservan, en el mismo orden, las animaciones
+/// que este runtime todavía no ejecuta. Así un re-save no puede reintroducir
+/// una cola de ascensores obsoleta sin borrar las entradas ajenas conocidas.
+fn rebuilt_animated_tiles_chunk(
+    state: &GameState,
+    map_w: u32,
+    map_h: u32,
+) -> Result<Option<Vec<u8>>, SavError> {
+    let active_indices = active_house_lift_tile_indices(state, map_w, map_h);
+    let Some(raw_indices) =
+        super::animated_tile_indices_from_opaque_chunks(&state.sav_opaque_chunks)
+    else {
+        return if active_indices.is_empty() {
+            Ok(None)
+        } else {
+            encode_animated_tiles_chunk(&active_indices).map(Some)
+        };
+    };
+
+    let raw_lift_indices: Vec<_> = raw_indices
+        .iter()
+        .copied()
+        .filter(|&index| is_modeled_house_lift_index(state, &active_indices, index))
+        .collect();
+    if raw_lift_indices == active_indices {
+        return Ok(None);
+    }
+
+    let mut merged = Vec::with_capacity(
+        raw_indices
+            .len()
+            .saturating_sub(raw_lift_indices.len())
+            .saturating_add(active_indices.len()),
+    );
+    let mut inserted_lifts = false;
+    for index in raw_indices {
+        if is_modeled_house_lift_index(state, &active_indices, index) {
+            if !inserted_lifts {
+                merged.extend_from_slice(&active_indices);
+                inserted_lifts = true;
+            }
+        } else {
+            merged.push(index);
+        }
+    }
+    if !inserted_lifts {
+        merged.extend_from_slice(&active_indices);
+    }
+    encode_animated_tiles_chunk(&merged).map(Some)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -604,8 +736,13 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if let Some(psac) = psac {
         data.extend_from_slice(&psac);
     }
+    let rebuilt_anit = rebuilt_animated_tiles_chunk(state, w, h)?;
+    if let Some(anit) = &rebuilt_anit {
+        data.extend_from_slice(anit);
+    }
     for chunk in &state.sav_opaque_chunks {
         if super::REBUILT_CHUNKS.contains(&chunk.name)
+            || (rebuilt_anit.is_some() && chunk.name == *b"ANIT")
             || (rebuild_objects && chunk.name == *b"OBJS")
             || (rebuild_object_mappings && chunk.name == *b"OBID")
             || (rebuild_psac && chunk.name == *b"PSAC")
@@ -664,6 +801,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
 )]
 mod tests {
     use super::*;
+    use crate::cargodist::parity::Randomizer;
     use crate::map::{TileCoord, TileKind};
     use crate::sav;
     use crate::station::{Station, StopKind};
@@ -702,6 +840,140 @@ mod tests {
         let bytes = std::fs::read(&path).expect("read SAV");
         assert_ne!(bytes, b"previous save");
         sav::load(&bytes).expect("load written SAV");
+    }
+
+    fn anit_opaque(indices: &[u32]) -> crate::sav::SavOpaqueChunk {
+        let mut record = Vec::with_capacity(1 + indices.len() * 4);
+        crate::sav::table::tests::write_gamma(
+            u32::try_from(indices.len()).expect("test list fits u32"),
+            &mut record,
+        );
+        for &index in indices {
+            record.extend_from_slice(&index.to_be_bytes());
+        }
+        crate::sav::SavOpaqueChunk {
+            name: *b"ANIT",
+            ch_type: crate::sav::chunks::CH_TABLE,
+            body: crate::sav::table::tests::build_table_body(&[(0x16, "tiles")], &[record]),
+        }
+    }
+
+    #[test]
+    fn anit_encoder_supports_a_record_larger_than_the_short_gamma_boundary() {
+        // 4096 × u32, más el prefijo de lista, exige una longitud de registro
+        // superior a 0x3FFF. `SlWriteSimpleGamma` nativo usa la forma larga.
+        let indices: Vec<u32> = (0..4096).collect();
+        let encoded = encode_animated_tiles_chunk(&indices).expect("encode long ANIT");
+        let rows =
+            crate::sav::table::parse_table_chunk(&encoded[5..], false).expect("parse encoded ANIT");
+        let Some(crate::sav::table::SlValue::List(values)) =
+            crate::sav::table::record_get(&rows[0].1, "tiles")
+        else {
+            panic!("tiles list");
+        };
+        assert_eq!(values.len(), indices.len());
+        assert_eq!(
+            values.first().and_then(crate::sav::table::SlValue::as_u64),
+            Some(0)
+        );
+        assert_eq!(
+            values.last().and_then(crate::sav::table::SlValue::as_u64),
+            Some(4095)
+        );
+    }
+
+    #[test]
+    fn unchanged_anit_passes_through_byte_for_byte() {
+        let first = TileCoord::new(2, 2);
+        let second = TileCoord::new(5, 5);
+        let mut state = GameState::new(8, 8);
+        for coord in [first, second] {
+            state
+                .map
+                .set_completed_house(coord, 4, 0)
+                .expect("large office inside map");
+        }
+        state.active_house_lifts = vec![first, second];
+        let index =
+            |coord| crate::map::coord_to_linear_index(coord, 8).expect("coordinate in 8×8 map");
+        let original = anit_opaque(&[index(TileCoord::new(0, 0)), index(first), index(second)]);
+        let expected_body = original.body.clone();
+        state.sav_opaque_chunks.push(original);
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save unchanged ANIT");
+        let saved = sav::load(&bytes).expect("load unchanged ANIT");
+        let emitted = saved
+            .opaque_chunks
+            .iter()
+            .find(|chunk| chunk.name == *b"ANIT")
+            .expect("ANIT passthrough");
+        assert_eq!(emitted.body, expected_body);
+    }
+
+    #[test]
+    fn sav_resave_replaces_lift_entries_in_anit_and_preserves_unknown_order() {
+        let first = TileCoord::new(2, 2);
+        let second = TileCoord::new(5, 5);
+        let unknown_before = TileCoord::new(0, 0);
+        let unknown_after = TileCoord::new(7, 7);
+        let mut state = GameState::new(8, 8);
+        for coord in [first, second] {
+            state
+                .map
+                .set_completed_house(coord, 4, 0)
+                .expect("large office inside map");
+        }
+        state.active_house_lifts = vec![second, first];
+        state.random = Randomizer::new(1);
+
+        let index =
+            |coord| crate::map::coord_to_linear_index(coord, 8).expect("coordinate in 8×8 map");
+        // Es la cola importada antes de que el runtime hiciera un swap/remove:
+        // el re-save debe usar la cola actual, pero no puede tirar las
+        // animaciones que todavía son opacas.
+        state.sav_opaque_chunks.push(anit_opaque(&[
+            index(unknown_before),
+            index(first),
+            index(unknown_after),
+            index(second),
+        ]));
+        let mut control = state.clone();
+        assert!(
+            exported_chunk_names(&state)
+                .expect("list exported chunks")
+                .contains(&"ANIT".to_owned())
+        );
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save ANIT");
+        let sav_game = sav::load(&bytes).expect("load saved ANIT");
+        let exported =
+            super::super::animated_tile_indices_from_opaque_chunks(&sav_game.opaque_chunks)
+                .expect("canonical ANIT remains parseable");
+        assert_eq!(
+            exported,
+            vec![
+                index(unknown_before),
+                index(second),
+                index(first),
+                index(unknown_after),
+            ]
+        );
+
+        let mut resumed = GameState::from_sav_game(sav_game);
+        assert_eq!(resumed.active_house_lifts, vec![second, first]);
+        assert_eq!(resumed.random, control.random);
+        for _ in 0..32 {
+            control.step();
+            resumed.step();
+            assert_eq!(control.active_house_lifts, resumed.active_house_lifts);
+            assert_eq!(control.random, resumed.random);
+            for coord in [first, second] {
+                let control_tile = control.map.get(coord).expect("control office");
+                let resumed_tile = resumed.map.get(coord).expect("resumed office");
+                assert_eq!(control_tile.m6, resumed_tile.m6, "MAP6 at {coord:?}");
+                assert_eq!(control_tile.m7, resumed_tile.m7, "MAP7 at {coord:?}");
+            }
+        }
     }
 
     fn assert_table_field_type(body: &[u8], field_type: u8, field_name: &str) {

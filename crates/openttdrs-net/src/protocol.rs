@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 ///
 /// Sube tanto con cambios de [`NetMessage`] como con cambios del estado o del
 /// fingerprint que harían que dos binarios apliquen el mismo log pero no
-/// puedan comparar hashes. v4 separa `canonical_hash` v2 (conjuntos `NewGRF`
-/// canónicos) de los peers v3.
-pub const PROTOCOL_VERSION: u16 = 4;
+/// puedan comparar hashes. v5 separa `canonical_hash` v3 (cola de ascensores
+/// activos) de los peers v4.
+pub const PROTOCOL_VERSION: u16 = 5;
 
 /// Mensaje de red (serializado como JSON dentro de un frame length-prefixed).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

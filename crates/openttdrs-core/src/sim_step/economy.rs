@@ -1086,7 +1086,7 @@ pub(super) fn grow_towns(state: &mut GameState, tick: u64) {
             .get(coord)
             .is_some_and(crate::map::house_tile_has_lift)
         {
-            crate::map::add_house_lift_to_animation(&mut state.runtime.active_house_lifts, coord);
+            crate::map::add_house_lift_to_animation(&mut state.active_house_lifts, coord);
         }
     }
     state.runtime.landscape_tile_dirty.extend(dirty);

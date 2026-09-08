@@ -44,9 +44,7 @@ pub(crate) fn sync_company_colored_sprites(
     }
     company.colour = colour;
     company.build_all(&mut images);
-    pending.pending = true;
-    pending.full = true;
-    pending.sync_camera = false;
+    pending.request_full();
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -74,7 +72,7 @@ pub(crate) fn apply_remap_map_visuals(
     mut loaded_chunks: ResMut<LoadedMapTileChunks>,
     prefs: Res<crate::settings::ClientPreferences>,
 ) {
-    if !pending.pending {
+    if !pending.is_pending() {
         return;
     }
     let Some(assets) = assets else {
@@ -86,13 +84,13 @@ pub(crate) fn apply_remap_map_visuals(
     let Some(images) = images.as_mut() else {
         return;
     };
-    let do_sync_camera = pending.sync_camera;
-    let full_rebuild = pending.full;
-    let mut refresh_chunks = std::mem::take(&mut pending.refresh_chunks);
-    let labels_dirty = std::mem::take(&mut pending.labels_dirty);
-    pending.pending = false;
-    pending.sync_camera = false;
-    pending.full = true;
+    let Some(request) = pending.take_request() else {
+        return;
+    };
+    let do_sync_camera = request.sync_camera;
+    let full_rebuild = request.full;
+    let mut refresh_chunks = request.refresh_chunks;
+    let labels_dirty = request.labels_dirty;
 
     let (mw, mh) = sim.state.map.dimensions();
     if full_rebuild || labels_dirty {

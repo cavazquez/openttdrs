@@ -1322,10 +1322,8 @@ fn apply_clean_map_shot_preferences(
         return;
     }
     crate::sprites::set_transparency_preferences(prefs.transparency_opt, prefs.invisibility_opt);
-    remap.pending = true;
-    remap.full = true;
-    remap.sync_camera = false;
-    remap.labels_dirty = true;
+    remap.request_full();
+    remap.mark_labels_dirty();
     info!("map_shot: perfil visual limpio temporal aplicado");
 }
 
@@ -1526,9 +1524,8 @@ fn map_shot_driver(
         let (map_width, map_height) = sim.state.map.dimensions();
         let viewport_cull = large_map_viewport_cull_enabled(map_width, map_height);
         if viewport_cull {
-            remap.pending = true;
-            remap.full = false;
-            remap.labels_dirty = true;
+            remap.request_incremental();
+            remap.mark_labels_dirty();
         }
 
         if let Some(scale) = map_shot_scale_from_env()
@@ -1578,7 +1575,7 @@ fn map_shot_driver(
             let res = crate::network::apply_player_command(&mut sim.state, &cmd);
             info!("map_shot: place en ({x},{y}) → {res:?}");
         }
-        remap.pending = true;
+        remap.request_full();
     }
     if progress.frame >= OPEN_FRAME
         && let Ok(tool) = std::env::var("OPENTTDRS_MAP_SHOT_TOOL")
@@ -1720,14 +1717,12 @@ fn apply_window_shot_scale(world: &mut World, requested: Option<f32>) -> Option<
     ortho.scale = scale;
     world.resource_mut::<CameraVelocity>().0 = Vec2::ZERO;
     let mut remap = world.resource_mut::<crate::render::RemapMapVisualsPending>();
-    remap.sync_camera = false;
     if viewport_cull {
-        // No rebajar una reconstrucción completa que ya estuviera pendiente.
-        if !remap.pending {
-            remap.full = false;
-        }
-        remap.pending = true;
-        remap.labels_dirty = true;
+        // La API conserva una reconstrucción completa o sincronización de
+        // cámara ya pendientes: ajustar una captura sólo puede añadir trabajo
+        // incremental, nunca degradarlo.
+        remap.request_incremental();
+        remap.mark_labels_dirty();
     }
     Some(scale)
 }
@@ -2051,10 +2046,9 @@ mod tests {
             ottdmap_extras: None,
         });
         world.insert_resource(CameraVelocity(Vec2::new(3.0, 4.0)));
-        world.insert_resource(crate::render::RemapMapVisualsPending {
-            sync_camera: true,
-            ..default()
-        });
+        let mut remap = crate::render::RemapMapVisualsPending::default();
+        remap.request_full_and_sync_camera();
+        world.insert_resource(remap);
         world.spawn((Window::default(), PrimaryWindow));
         let projection = || {
             Projection::Orthographic(OrthographicProjection {
@@ -2068,7 +2062,12 @@ mod tests {
         assert_eq!(apply_window_shot_scale(&mut world, None), None);
         assert_eq!(world.resource::<CameraVelocity>().0, Vec2::new(3.0, 4.0));
         let remap = world.resource::<crate::render::RemapMapVisualsPending>();
-        assert!(!remap.pending && remap.sync_camera && remap.full && !remap.labels_dirty);
+        assert!(
+            remap.is_pending()
+                && remap.sync_camera_requested()
+                && remap.is_full()
+                && !remap.labels_dirty_requested()
+        );
         let Projection::Orthographic(ortho) = world.get::<Projection>(primary).unwrap() else {
             panic!("primary projection changed type");
         };
@@ -2086,7 +2085,13 @@ mod tests {
         }
         assert_eq!(world.resource::<CameraVelocity>().0, Vec2::ZERO);
         let remap = world.resource::<crate::render::RemapMapVisualsPending>();
-        assert!(remap.pending && !remap.sync_camera && !remap.full && remap.labels_dirty);
+        assert!(
+            remap.is_pending()
+                && remap.sync_camera_requested()
+                && remap.is_full()
+                && remap.labels_dirty_requested(),
+            "una solicitud incremental de captura no puede rebajar una carga completa"
+        );
         let Projection::Orthographic(ortho) = world.get::<Projection>(preview).unwrap() else {
             panic!("preview projection changed type");
         };
@@ -2094,7 +2099,7 @@ mod tests {
 
         world
             .resource_mut::<crate::render::RemapMapVisualsPending>()
-            .full = true;
+            .request_full();
         assert_eq!(
             apply_window_shot_scale(&mut world, Some(1000.0)),
             Some(20.0)
@@ -2102,7 +2107,7 @@ mod tests {
         assert!(
             world
                 .resource::<crate::render::RemapMapVisualsPending>()
-                .full
+                .is_full()
         );
     }
 

@@ -194,8 +194,7 @@ pub(crate) fn handle_settings_menu_buttons(
                     prefs.transparency_opt,
                     prefs.invisibility_opt,
                 );
-                pending_remap.pending = true;
-                pending_remap.full = true;
+                pending_remap.request_full();
                 info!("Catenaria: {}", next.label_es().to_ascii_lowercase());
             }
             SaveMenuAction::ReturnToMainMenu => {
@@ -814,7 +813,7 @@ mod tests {
         assert!(
             world
                 .resource::<crate::render::RemapMapVisualsPending>()
-                .full
+                .is_full()
         );
     }
 }

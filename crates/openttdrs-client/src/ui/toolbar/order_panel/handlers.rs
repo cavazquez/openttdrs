@@ -223,7 +223,7 @@ pub(crate) fn handle_order_panel_buttons(
                     &Command::RemoveVehicleOrderAt { vehicle_id, index },
                 ) {
                     Ok(()) => {
-                        pending.pending = true;
+                        pending.request_full();
                         refresh_orders_from_sim(&mut order_state, &sim);
                         clamp_selected_after_remove(&mut order_state, index);
                     }
@@ -239,7 +239,7 @@ pub(crate) fn handle_order_panel_buttons(
                     &Command::SkipVehicleOrder(vehicle_id),
                 ) {
                     Ok(()) => {
-                        pending.pending = true;
+                        pending.request_full();
                         refresh_orders_from_sim(&mut order_state, &sim);
                         if let Some(vehicle) =
                             sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
@@ -345,7 +345,7 @@ pub(crate) fn handle_order_panel_buttons(
                     &Command::CreateSharedOrdersFromVehicle(vehicle_id),
                 ) {
                     Ok(()) => {
-                        pending.pending = true;
+                        pending.request_full();
                         refresh_orders_from_sim(&mut order_state, &sim);
                     }
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
@@ -360,7 +360,7 @@ pub(crate) fn handle_order_panel_buttons(
                     &Command::UnlinkVehicleSharedOrders(vehicle_id),
                 ) {
                     Ok(()) => {
-                        pending.pending = true;
+                        pending.request_full();
                         refresh_orders_from_sim(&mut order_state, &sim);
                     }
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
@@ -434,7 +434,7 @@ fn append_conditional_order(
     orders.push(VehicleOrder::conditional(condition, 50, jump_to));
     match apply_order_edit(&mut sim.state, vehicle_id, &orders) {
         Ok(()) => {
-            pending.pending = true;
+            pending.request_full();
             refresh_orders_from_sim(order_state, sim);
             order_state.set_selected_slot(order_state.orders().len().checked_sub(1));
         }
@@ -522,7 +522,7 @@ fn cycle_selected_conditional(
         },
     ) {
         Ok(()) => {
-            pending.pending = true;
+            pending.request_full();
             refresh_orders_from_sim(order_state, sim);
         }
         Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
@@ -550,7 +550,7 @@ fn toggle_order_flag(
     };
     match crate::network::apply_player_command(&mut sim.state, &make_cmd(vehicle_id, index)) {
         Ok(()) => {
-            pending.pending = true;
+            pending.request_full();
             refresh_orders_from_sim(order_state, sim);
         }
         Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
@@ -591,7 +591,7 @@ fn edit_selected_station_order(
     orders[index] = updated;
     match apply_order_edit(&mut sim.state, vehicle_id, &orders) {
         Ok(()) => {
-            pending.pending = true;
+            pending.request_full();
             refresh_orders_from_sim(order_state, sim);
         }
         Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
@@ -695,7 +695,7 @@ fn apply_move_vehicle_order(
         },
     ) {
         Ok(()) => {
-            pending.pending = true;
+            pending.request_full();
             refresh_orders_from_sim(order_state, sim);
             Some(match direction {
                 OrderMoveDirection::Up => index.saturating_sub(1),
@@ -790,7 +790,7 @@ pub(crate) fn handle_order_destination_click(
         };
         match result {
             Ok(()) => {
-                pending.pending = true;
+                pending.request_full();
                 let len = order_state.orders().len();
                 order_state.set_selected_slot(len.checked_sub(1));
             }

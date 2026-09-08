@@ -85,7 +85,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 };
                 match result {
                     Ok(()) => {
-                        ctx.pending.pending = true;
+                        ctx.pending.request_full();
                         let len = ctx.order_state.orders().len();
                         ctx.order_state.set_selected_slot(len.checked_sub(1));
                     }

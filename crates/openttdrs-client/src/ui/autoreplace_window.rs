@@ -664,7 +664,7 @@ pub(crate) fn handle_autoreplace_buttons(
                     },
                 ) {
                     Ok(()) => {
-                        pending.pending = true;
+                        pending.request_full();
                         state.selected_rule_from = Some(from);
                     }
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
@@ -680,7 +680,7 @@ pub(crate) fn handle_autoreplace_buttons(
                         from_engine_id: from,
                     },
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => pending.request_full(),
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
                 }
             }
@@ -694,7 +694,7 @@ pub(crate) fn handle_autoreplace_buttons(
                         from_engine_id: from,
                     },
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => pending.request_full(),
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
                 }
             }
@@ -709,7 +709,7 @@ pub(crate) fn handle_autoreplace_buttons(
                     },
                 ) {
                     Ok(()) => {
-                        pending.pending = true;
+                        pending.request_full();
                         state.selected_rule_from = None;
                     }
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
@@ -723,7 +723,7 @@ pub(crate) fn handle_autoreplace_buttons(
                     &mut sim.state,
                     &Command::DepotMassAutoreplace { depot_pos },
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => pending.request_full(),
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
                 }
             }

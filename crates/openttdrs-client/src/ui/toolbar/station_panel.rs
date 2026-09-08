@@ -829,7 +829,7 @@ pub(crate) fn handle_station_cargo_panel_buttons(
                 };
                 match append_result {
                     Ok(()) => {
-                        pending.pending = true;
+                        pending.request_full();
                         let len = order_state.orders().len();
                         order_state.set_selected_slot(len.checked_sub(1));
                     }

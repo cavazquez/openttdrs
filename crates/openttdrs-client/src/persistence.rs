@@ -90,8 +90,9 @@ pub(crate) fn apply_loaded_state(
     sim.ottdmap_extras = None;
     sim.loaded_file = true;
     vehicle_index.rebuild(&sim.state.vehicles);
-    remap.pending = true;
-    remap.sync_camera = true;
+    // Una carga sustituye el estado aunque conserve dimensiones: nunca se
+    // pueden reutilizar sprites/chunks de la partida anterior.
+    remap.request_full_and_sync_camera();
     // La importación de un SAV grande restituye rutas y reservas de forma
     // incremental. Detener el reloj evita que el primer frame de la UI quede
     // esperando esa recuperación y deja el control al jugador.
@@ -203,8 +204,9 @@ mod tests {
         world.run_system_once(handle_sim_save_hotkeys).unwrap();
 
         let remap = world.resource::<RemapMapVisualsPending>();
-        assert!(remap.pending);
-        assert!(remap.sync_camera);
+        assert!(remap.is_pending());
+        assert!(remap.is_full());
+        assert!(remap.sync_camera_requested());
         assert!(world.contains_resource::<PauseAfterLoad>());
     }
 
@@ -318,7 +320,7 @@ mod tests {
         world.run_system_once(handle_sim_save_hotkeys).unwrap();
 
         assert_eq!(world.resource::<SimWorld>().state.economy.money, 246_810);
-        assert!(world.resource::<RemapMapVisualsPending>().pending);
+        assert!(world.resource::<RemapMapVisualsPending>().is_pending());
         assert!(world.contains_resource::<PauseAfterLoad>());
     }
 }

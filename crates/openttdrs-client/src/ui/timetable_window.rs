@@ -596,7 +596,7 @@ pub(crate) fn handle_timetable_window_buttons(
             }
         };
         match crate::network::apply_player_command(&mut sim.state, &cmd) {
-            Ok(()) => pending.pending = true,
+            Ok(()) => pending.request_full(),
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
         }
     }
@@ -616,21 +616,21 @@ pub(crate) fn handle_timetable_window_buttons(
                     &mut sim.state,
                     &Command::ToggleVehicleTimetable(vehicle_id),
                 );
-                pending.pending = true;
+                pending.request_full();
             }
             TimetableWindowButton::ToggleAutofill => {
                 let _ = crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::ToggleVehicleTimetableAutofill(vehicle_id),
                 );
-                pending.pending = true;
+                pending.request_full();
             }
             TimetableWindowButton::ClearLateness => {
                 let _ = crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::ClearVehicleTimetableLateness(vehicle_id),
                 );
-                pending.pending = true;
+                pending.request_full();
             }
             TimetableWindowButton::ToggleSeconds => {
                 if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
@@ -922,6 +922,6 @@ mod tests {
                 .resource::<TimetableDisplayPrefs>()
                 .seconds_for(vehicle)
         );
-        assert!(!world.resource::<RemapMapVisualsPending>().pending);
+        assert!(!world.resource::<RemapMapVisualsPending>().is_pending());
     }
 }

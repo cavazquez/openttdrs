@@ -54,7 +54,7 @@ pub(crate) fn handle_vehicle_window_buttons(
                     &mut sim.state,
                     &Command::ToggleVehicleRunning(vehicle_id),
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => pending.request_full(),
                     Err(e) => {
                         push_vehicle_start_stop_error(
                             &mut hud_feedback,
@@ -85,7 +85,7 @@ pub(crate) fn handle_vehicle_window_buttons(
                     &mut sim.state,
                     &Command::AppendGotoNearestDepot(vehicle_id),
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => pending.request_full(),
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                     }
@@ -133,7 +133,7 @@ pub(crate) fn handle_vehicle_window_buttons(
                     &mut sim.state,
                     &Command::TurnAroundVehicle(vehicle_id),
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => pending.request_full(),
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                     }

@@ -603,7 +603,7 @@ pub(crate) fn handle_refit_window_buttons(
                 unit_ids: selected,
             },
         ) {
-            Ok(()) => pending.pending = true,
+            Ok(()) => pending.request_full(),
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
         }
     }

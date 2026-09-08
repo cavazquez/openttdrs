@@ -32,8 +32,7 @@ pub(crate) fn handle_pause_toggle(
     }
     if hotkeys.fired(UiCommandId::ToggleReservations) {
         prefs.show_pbs_reservations = !prefs.show_pbs_reservations;
-        pending_remap.pending = true;
-        pending_remap.full = true;
+        pending_remap.request_full();
         info!(
             "Reservas PBS: {}",
             if prefs.show_pbs_reservations {

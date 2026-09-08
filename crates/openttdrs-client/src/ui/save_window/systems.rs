@@ -458,7 +458,7 @@ mod tests {
         world.run_system_once(handle_save_window_buttons).unwrap();
 
         assert!(!world.resource::<SaveWindowState>().open);
-        assert!(world.resource::<RemapMapVisualsPending>().pending);
+        assert!(world.resource::<RemapMapVisualsPending>().is_pending());
     }
 
     #[test]
@@ -504,7 +504,7 @@ mod tests {
         world.run_system_once(handle_sim_save_hotkeys).unwrap();
 
         assert_eq!(world.resource::<SimWorld>().state.economy.money, 135_790);
-        assert!(world.resource::<RemapMapVisualsPending>().pending);
+        assert!(world.resource::<RemapMapVisualsPending>().is_pending());
         assert!(world.contains_resource::<PauseAfterLoad>());
     }
 
@@ -546,7 +546,7 @@ mod tests {
         world.run_system_once(handle_sim_save_hotkeys).unwrap();
 
         assert_eq!(world.resource::<SimWorld>().state.economy.money, 246_810);
-        assert!(world.resource::<RemapMapVisualsPending>().pending);
+        assert!(world.resource::<RemapMapVisualsPending>().is_pending());
         assert!(world.contains_resource::<PauseAfterLoad>());
     }
 

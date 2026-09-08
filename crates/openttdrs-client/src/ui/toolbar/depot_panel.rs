@@ -866,7 +866,7 @@ pub(crate) fn finish_depot_list_drag(
                 },
             ) {
                 Ok(()) => {
-                    pending.pending = true;
+                    pending.request_full();
                     depot_state.selected_vehicle = Some(head_id);
                     depot_state.reorder_from_slot = None;
                 }
@@ -885,7 +885,7 @@ pub(crate) fn finish_depot_list_drag(
             },
         ) {
             Ok(()) => {
-                pending.pending = true;
+                pending.request_full();
                 if let Some(vehicle) = vehicles_at_depot(&sim, depot_pos).get(to_slot) {
                     depot_state.selected_vehicle = Some(vehicle.id);
                 }
@@ -959,7 +959,7 @@ fn apply_depot_sell_drop(
     for id in ids.iter().rev().copied() {
         match crate::network::apply_player_command(&mut sim.state, &Command::SellVehicle(id)) {
             Ok(()) => {
-                pending.pending = true;
+                pending.request_full();
                 if depot_state.selected_vehicle == Some(id) {
                     depot_state.selected_vehicle = None;
                 }
@@ -1066,7 +1066,7 @@ fn activate_depot_row_click(
                         move_chain: false,
                     },
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => pending.request_full(),
                     Err(e) => {
                         push_build_command_error(hud_feedback, e, now);
                     }
@@ -1135,7 +1135,7 @@ pub(crate) fn handle_depot_panel_buttons(
             &Command::SellVehicle(vehicle_id),
         ) {
             Ok(()) => {
-                pending.pending = true;
+                pending.request_full();
                 if depot_state.selected_vehicle == Some(vehicle_id) {
                     depot_state.selected_vehicle = None;
                 }
@@ -1165,7 +1165,7 @@ pub(crate) fn handle_depot_panel_buttons(
             &Command::ToggleVehicleRunning(vehicle_id),
         ) {
             Ok(()) => {
-                pending.pending = true;
+                pending.request_full();
                 depot_state.selected_vehicle = Some(vehicle_id);
             }
             Err(e) => push_vehicle_start_stop_error(
@@ -1213,7 +1213,7 @@ pub(crate) fn handle_depot_panel_buttons(
                     &Command::DetachConsistUnit(tail_id),
                 ) {
                     Ok(()) => {
-                        pending.pending = true;
+                        pending.request_full();
                         depot_state.selected_vehicle = Some(head_id);
                     }
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
@@ -1246,7 +1246,7 @@ pub(crate) fn handle_depot_panel_buttons(
                         to_slot,
                     },
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => pending.request_full(),
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
                 }
             }
@@ -1265,7 +1265,7 @@ pub(crate) fn handle_depot_panel_buttons(
                     },
                 ) {
                     Ok(()) => {
-                        pending.pending = true;
+                        pending.request_full();
                         if let Some(new_id) = sim.state.vehicles.last().map(|v| v.id) {
                             depot_state.selected_vehicle = Some(new_id);
                         }
@@ -1339,7 +1339,7 @@ mod tests {
             world.resource::<DepotPanelState>().selected_vehicle,
             Some(source_id)
         );
-        assert!(world.resource::<RemapMapVisualsPending>().pending);
+        assert!(world.resource::<RemapMapVisualsPending>().is_pending());
     }
 
     #[test]
@@ -1352,7 +1352,7 @@ mod tests {
         world.run_system_once(handle_depot_panel_buttons).unwrap();
 
         assert!(world.resource::<SimWorld>().state.vehicles.is_empty());
-        assert!(world.resource::<RemapMapVisualsPending>().pending);
+        assert!(world.resource::<RemapMapVisualsPending>().is_pending());
     }
 
     #[test]

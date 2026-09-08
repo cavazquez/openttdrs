@@ -102,17 +102,19 @@ pub(crate) fn sync_map_tile_spawn_viewport(
         viewport.bounds = needed;
         viewport.last_ortho_scale = ortho_scale;
         viewport.last_overview_stride = overview_stride;
-        pending.pending = true;
-        pending.sync_camera = false;
         // Overview y detalle no comparten entidades: tratar el cambio como
         // rebuild completo evita conservar rombos agregados al volver a
         // acercar (o dejar huecos al alejar) mientras el índice de chunks aún
         // describe la representación anterior.
-        pending.full |= representation_changed;
+        if representation_changed {
+            pending.request_full();
+        } else {
+            pending.request_incremental();
+        }
         // El borde del viewport puede cambiar dentro del mismo chunk de 16×16;
         // en ese caso el plan incremental no agrega/quita chunks, pero sí hay
         // que volver a filtrar las etiquetas por el nuevo viewport.
-        pending.labels_dirty = true;
+        pending.mark_labels_dirty();
     }
 }
 

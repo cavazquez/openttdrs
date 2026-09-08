@@ -148,9 +148,11 @@ fn flag_map_tile_dirty_remap(
         && !large_map_viewport_cull_enabled(mw, mh);
 
     request_map_visual_remap(&mut pending, mw, mh, &tiles);
-    pending.labels_dirty |= labels_dirty;
+    if labels_dirty {
+        pending.mark_labels_dirty();
+    }
     if force_full {
-        pending.full = true;
+        pending.request_full();
     }
 }
 
@@ -271,17 +273,21 @@ mod tests {
                     at: TileCoord::new(4, 4),
                 });
         }
-        assert!(!app.world().resource::<RemapMapVisualsPending>().pending);
+        assert!(
+            !app.world()
+                .resource::<RemapMapVisualsPending>()
+                .is_pending()
+        );
         app.world_mut()
             .run_system_once(flag_map_tile_dirty_remap)
             .unwrap();
         let pending = app.world().resource::<RemapMapVisualsPending>();
         assert!(
-            pending.pending,
+            pending.is_pending(),
             "Construction del tick debe encolar remap visual (#186)"
         );
         assert!(
-            pending.labels_dirty,
+            pending.labels_dirty_requested(),
             "Una construcción puede crear o eliminar etiquetas del mapa"
         );
     }
@@ -314,13 +320,15 @@ mod tests {
             .unwrap();
 
         assert!(
-            !app.world().resource::<RemapMapVisualsPending>().pending,
+            !app.world()
+                .resource::<RemapMapVisualsPending>()
+                .is_pending(),
             "Una reserva invisible no debe regenerar chunks del mapa"
         );
         assert!(
             !app.world()
                 .resource::<RemapMapVisualsPending>()
-                .labels_dirty,
+                .labels_dirty_requested(),
             "Una reserva invisible tampoco altera etiquetas"
         );
     }

@@ -268,9 +268,7 @@ pub(crate) fn handle_editor_file_routes(
                 } else {
                     document.mark_dirty();
                     if let Some(remap) = pending_remap.as_deref_mut() {
-                        remap.pending = true;
-                        remap.sync_camera = true;
-                        remap.full = true;
+                        remap.request_full_and_sync_camera();
                     }
                 }
             }

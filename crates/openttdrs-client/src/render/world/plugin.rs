@@ -168,25 +168,66 @@ pub(crate) struct NewGrfMapSpriteCaches<'w> {
     pub action5: ResMut<'w, crate::render::NewGrfAction5SpriteCache>,
 }
 
+/// Prioridad de una petición de redibujo pendiente.
+///
+/// Varias fuentes pueden encolar trabajo durante el mismo frame. La prioridad
+/// sólo puede subir: una actualización incremental posterior nunca debe
+/// convertir una carga, un cambio de representación o una preferencia visual
+/// ya pendiente en un remapeo parcial.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+enum RemapRequestPriority {
+    #[default]
+    None,
+    Incremental,
+    Full,
+}
+
+/// Petición consumida por [`super::remap::apply_remap_map_visuals`].
+pub(super) struct RemapMapVisualsRequest {
+    pub(super) sync_camera: bool,
+    pub(super) full: bool,
+    pub(super) refresh_chunks: HashSet<(u32, u32)>,
+    pub(super) labels_dirty: bool,
+}
+
 /// Petición de redibujo del mapa. `sync_camera`: solo tras F9 / cambio de tamaño.
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub(crate) struct RemapMapVisualsPending {
-    pub(crate) pending: bool,
-    pub(crate) sync_camera: bool,
-    /// Rebuild completo (construcción, F9). Pan en mapas grandes usa `full = false`.
-    pub(crate) full: bool,
+    priority: RemapRequestPriority,
+    sync_camera: bool,
     /// Chunks a regenerar in-place (construcción dentro del viewport ya cargado).
-    pub(crate) refresh_chunks: HashSet<(u32, u32)>,
+    refresh_chunks: HashSet<(u32, u32)>,
     /// Las etiquetas de pueblos, estaciones o carteles deben recalcularse aunque
     /// el conjunto de chunks visibles no cambie.
     ///
     /// Las etiquetas viven fuera de los chunks. No se marca para cambios de
     /// señales o reservas: esos cambios pueden ocurrir cada tick y no alteran
     /// ninguna etiqueta.
-    pub(crate) labels_dirty: bool,
+    labels_dirty: bool,
 }
 
 impl RemapMapVisualsPending {
+    /// Encola trabajo incremental sin degradar una petición completa existente.
+    pub(crate) fn request_incremental(&mut self) {
+        self.priority = self.priority.max(RemapRequestPriority::Incremental);
+    }
+
+    /// Encola una reconstrucción completa.
+    pub(crate) fn request_full(&mut self) {
+        self.priority = RemapRequestPriority::Full;
+    }
+
+    /// Encola una reconstrucción completa y restablece la cámara tras una carga.
+    pub(crate) fn request_full_and_sync_camera(&mut self) {
+        self.request_full();
+        self.sync_camera = true;
+    }
+
+    /// Marca las etiquetas externas a los chunks para su resincronización.
+    pub(crate) fn mark_labels_dirty(&mut self) {
+        self.labels_dirty = true;
+    }
+
     pub(crate) fn extend_refresh_chunks(&mut self, tiles: &[(i32, i32)]) {
         for &(tx, ty) in tiles {
             if tx >= 0 && ty >= 0 {
@@ -195,17 +236,43 @@ impl RemapMapVisualsPending {
             }
         }
     }
-}
 
-impl Default for RemapMapVisualsPending {
-    fn default() -> Self {
-        Self {
-            pending: false,
-            sync_camera: false,
-            full: true,
-            refresh_chunks: HashSet::new(),
-            labels_dirty: false,
+    #[must_use]
+    pub(crate) fn is_pending(&self) -> bool {
+        self.priority != RemapRequestPriority::None
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn is_full(&self) -> bool {
+        self.priority == RemapRequestPriority::Full
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn sync_camera_requested(&self) -> bool {
+        self.sync_camera
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn labels_dirty_requested(&self) -> bool {
+        self.labels_dirty
+    }
+
+    /// Extrae la petición sólo una vez que el renderer dispone de todos sus
+    /// recursos. Así una espera de assets no pierde ni baja la prioridad.
+    pub(super) fn take_request(&mut self) -> Option<RemapMapVisualsRequest> {
+        let priority = std::mem::take(&mut self.priority);
+        if priority == RemapRequestPriority::None {
+            return None;
         }
+        Some(RemapMapVisualsRequest {
+            sync_camera: std::mem::take(&mut self.sync_camera),
+            full: priority == RemapRequestPriority::Full,
+            refresh_chunks: std::mem::take(&mut self.refresh_chunks),
+            labels_dirty: std::mem::take(&mut self.labels_dirty),
+        })
     }
 }
 
@@ -216,13 +283,11 @@ pub(crate) fn request_map_visual_remap(
     mh: u32,
     tiles: &[(i32, i32)],
 ) {
-    pending.pending = true;
-    pending.sync_camera = false;
     if large_map_viewport_cull_enabled(mw, mh) {
-        pending.full = false;
+        pending.request_incremental();
         pending.extend_refresh_chunks(tiles);
     } else {
-        pending.full = true;
+        pending.request_full();
     }
 }
 
@@ -235,7 +300,7 @@ pub(crate) fn request_map_visual_remap_with_labels(
     tiles: &[(i32, i32)],
 ) {
     request_map_visual_remap(pending, mw, mh, tiles);
-    pending.labels_dirty = true;
+    pending.mark_labels_dirty();
 }
 
 /// Bloques 16×16 ya instanciados (solo mapas con culling por viewport).
@@ -385,9 +450,41 @@ mod tests {
 
     use super::{
         FLAT_WATER_RASTER_FOOTPRINT, FlatWaterRasterFootprintState, LoadedMapTileChunks,
-        flat_water_raster_footprint, sync_flat_water_raster_footprint,
+        RemapMapVisualsPending, flat_water_raster_footprint, sync_flat_water_raster_footprint,
     };
     use crate::render::{TileViewportBounds, chunks_in_bounds};
+
+    #[test]
+    fn remap_requests_are_monotonic_and_keep_all_pending_work() {
+        let mut pending = RemapMapVisualsPending::default();
+        assert!(!pending.is_pending());
+
+        pending.request_incremental();
+        pending.extend_refresh_chunks(&[(1, 2)]);
+        pending.mark_labels_dirty();
+        pending.request_full_and_sync_camera();
+        // El helper real de simulación pide incremental en mapas con culling;
+        // no puede rebajar una carga completa que ya está pendiente.
+        super::request_map_visual_remap(&mut pending, 256, 256, &[(17, 2)]);
+
+        assert!(pending.is_pending());
+        assert!(pending.is_full());
+        assert!(pending.sync_camera_requested());
+        assert!(pending.labels_dirty_requested());
+
+        let Some(request) = pending.take_request() else {
+            panic!("petición acumulada");
+        };
+        assert!(request.full);
+        assert!(request.sync_camera);
+        assert!(request.labels_dirty);
+        assert_eq!(request.refresh_chunks.len(), 2);
+        assert!(request.refresh_chunks.contains(&(0, 0)));
+        assert!(request.refresh_chunks.contains(&(1, 0)));
+        assert!(!pending.is_pending(), "consumir restablece sólo esta cola");
+        assert!(!pending.sync_camera_requested());
+        assert!(!pending.labels_dirty_requested());
+    }
 
     #[test]
     fn small_label_scale_matches_out_levels() {

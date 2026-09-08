@@ -263,8 +263,7 @@ pub(crate) fn handle_genland_buttons(
                 ) {
                     Ok(()) => {
                         if let Some(remap) = remap.as_deref_mut() {
-                            remap.pending = true;
-                            remap.full = true;
+                            remap.request_full();
                         }
                         feedback.message = Some(format!(
                             "Paisaje regenerado (semilla {}, {:?})",

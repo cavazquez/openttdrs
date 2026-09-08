@@ -406,8 +406,7 @@ pub(crate) fn handle_display_options_buttons(
 
 fn request_full_remap(pending: Option<&mut RemapMapVisualsPending>) {
     if let Some(pending) = pending {
-        pending.pending = true;
-        pending.full = true;
+        pending.request_full();
     }
 }
 
@@ -570,7 +569,7 @@ mod tests {
             .run_system_once(handle_display_options_buttons)
             .unwrap();
         assert!(!world.resource::<ClientPreferences>().full_detail);
-        assert!(world.resource::<RemapMapVisualsPending>().pending);
+        assert!(world.resource::<RemapMapVisualsPending>().is_pending());
     }
 
     #[test]
@@ -595,6 +594,6 @@ mod tests {
             prefs.transparency_mode(TransparencyOption::Trees),
             TransparencyMode::Hidden
         );
-        assert!(world.resource::<RemapMapVisualsPending>().pending);
+        assert!(world.resource::<RemapMapVisualsPending>().is_pending());
     }
 }

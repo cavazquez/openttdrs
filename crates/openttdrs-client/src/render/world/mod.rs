@@ -16,6 +16,7 @@ pub(crate) use viewport::initial_map_camera_pose;
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
+    use std::collections::HashSet;
     use std::fs;
 
     use super::*;
@@ -24,6 +25,7 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use bevy::image::ImagePlugin;
     use bevy::prelude::*;
+    use openttdrs_core::prelude::{TileCoord, TileKind, Vehicle, VehicleKind};
 
     use super::tile_spawn::setup;
     use crate::iso::ground_draw_z;
@@ -32,10 +34,16 @@ mod tests {
     use crate::render::viewport::{
         VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES, ortho_visible_tile_bounds,
     };
-    use crate::render::{MapPreviewCamera, MapTileChunk, MapVisualLayer, PrimaryGameCamera};
+    use crate::render::{
+        MapPreviewCamera, MapTileChunk, MapVisualLayer, PrimaryGameCamera, VehicleSprite,
+    };
     use crate::state::SimWorld;
 
     fn with_assets_app() -> App {
+        with_assets_app_for_map(64, 64)
+    }
+
+    fn with_assets_app_for_map(width: u32, height: u32) -> App {
         let dir = tempfile::tempdir().expect("tempdir");
         stub_opengfx_tiles_for_tests(dir.path());
         let root = dir.path().to_str().expect("utf8");
@@ -53,7 +61,11 @@ mod tests {
         app.init_asset::<ColorMaterial>();
         app.init_asset::<TextureAtlasLayout>();
         app.update();
-        app.insert_resource(SimWorld::default());
+        app.insert_resource(SimWorld {
+            state: openttdrs_core::GameState::new(width, height),
+            loaded_file: false,
+            ottdmap_extras: None,
+        });
         app.insert_resource(crate::settings::ClientPreferences::default());
         app.insert_resource(RemapMapVisualsPending::default());
         app.insert_resource(VehicleIndex::default());
@@ -69,8 +81,7 @@ mod tests {
         world.run_system_once(setup).unwrap();
         {
             let mut pending = world.resource_mut::<RemapMapVisualsPending>();
-            pending.pending = true;
-            pending.sync_camera = true;
+            pending.request_full_and_sync_camera();
         }
         world
             .run_system_once(remap::apply_remap_map_visuals)
@@ -98,9 +109,7 @@ mod tests {
             }
             {
                 let mut pending = world.resource_mut::<RemapMapVisualsPending>();
-                pending.pending = true;
-                pending.full = true;
-                pending.sync_camera = false;
+                pending.request_full();
             }
             world
                 .run_system_once(remap::apply_remap_map_visuals)
@@ -113,6 +122,196 @@ mod tests {
                 "el nivel de zoom {scale} no materializó sprites del mapa"
             );
         }
+    }
+
+    fn map_layer_entities_for_chunk(world: &mut World, chunk: (u32, u32)) -> HashSet<Entity> {
+        let mut layers = world.query_filtered::<(Entity, &MapTileChunk), With<MapVisualLayer>>();
+        layers
+            .iter(world)
+            .filter_map(|(entity, tile_chunk)| {
+                ((tile_chunk.cx, tile_chunk.cy) == chunk).then_some(entity)
+            })
+            .collect()
+    }
+
+    fn map_layer_count(world: &mut World) -> usize {
+        let mut layers = world.query_filtered::<Entity, With<MapVisualLayer>>();
+        layers.iter(world).count()
+    }
+
+    fn move_primary_camera(world: &mut World, delta: Vec3) {
+        let mut cameras = world.query_filtered::<&mut Transform, With<PrimaryGameCamera>>();
+        let mut transform = cameras.single_mut(world).expect("cámara principal");
+        transform.translation += delta;
+    }
+
+    #[test]
+    fn viewport_pan_uses_incremental_remap_and_reuses_shared_chunks() {
+        // 256² activa culling real y deja margen para panear sin que el
+        // viewport inicial cubra el mapa completo.
+        let mut app = with_assets_app_for_map(256, 256);
+        let world = app.world_mut();
+        world
+            .resource_mut::<SimWorld>()
+            .state
+            .vehicles
+            .push(Vehicle::new(
+                77,
+                VehicleKind::Bus,
+                TileCoord::new(128, 128),
+                TileCoord::new(129, 128),
+            ));
+        world.run_system_once(setup).expect("setup del mapa grande");
+
+        let initial_full_chunks = world.resource::<LoadedMapTileChunks>().chunks.clone();
+        let vehicle_before: HashSet<Entity> = {
+            let mut vehicles = world.query_filtered::<Entity, With<VehicleSprite>>();
+            vehicles.iter(world).collect()
+        };
+        assert_eq!(
+            vehicle_before.len(),
+            1,
+            "fixture con vehículo materializado"
+        );
+        move_primary_camera(world, Vec3::new(1_024.0, 0.0, 0.0));
+        world
+            .run_system_once(viewport::sync_map_tile_spawn_viewport)
+            .expect("paneo de viewport");
+
+        let needed =
+            crate::render::chunks_in_bounds(world.resource::<MapTileSpawnViewport>().bounds);
+        let shared_chunk = initial_full_chunks
+            .intersection(&needed)
+            .copied()
+            .next()
+            .expect("el paneo conserva al menos un chunk completo");
+        let shared_before = map_layer_entities_for_chunk(world, shared_chunk);
+        assert!(
+            !shared_before.is_empty(),
+            "el chunk completo elegido debe tener sprites materializados"
+        );
+        {
+            let pending = world.resource::<RemapMapVisualsPending>();
+            assert!(pending.is_pending());
+            assert!(
+                !pending.is_full(),
+                "pan detallado no debe pedir reconstrucción completa"
+            );
+            assert!(pending.labels_dirty_requested());
+        }
+        world
+            .run_system_once(remap::apply_remap_map_visuals)
+            .expect("remapeo incremental tras paneo");
+        assert_eq!(
+            map_layer_entities_for_chunk(world, shared_chunk),
+            shared_before,
+            "un chunk completo compartido conserva sus entidades ECS"
+        );
+        let vehicle_after: HashSet<Entity> = {
+            let mut vehicles = world.query_filtered::<Entity, With<VehicleSprite>>();
+            vehicles.iter(world).collect()
+        };
+        assert_eq!(
+            vehicle_after, vehicle_before,
+            "el paneo incremental no reinstancia vehículos ni sus cachés visuales"
+        );
+
+        // Tras estabilizar ambos extremos, volver a panear no puede acumular
+        // entidades fuera del viewport. Es la ruta que antes degradaba una
+        // carga/petición completa cuando se mezclaba con el paneo.
+        move_primary_camera(world, Vec3::new(-1_024.0, 0.0, 0.0));
+        world
+            .run_system_once(viewport::sync_map_tile_spawn_viewport)
+            .expect("paneo de retorno");
+        world
+            .run_system_once(remap::apply_remap_map_visuals)
+            .expect("remapeo de retorno");
+        let settled_count = map_layer_count(world);
+        move_primary_camera(world, Vec3::new(1_024.0, 0.0, 0.0));
+        world
+            .run_system_once(viewport::sync_map_tile_spawn_viewport)
+            .expect("segundo paneo");
+        world
+            .run_system_once(remap::apply_remap_map_visuals)
+            .expect("segundo remapeo");
+        move_primary_camera(world, Vec3::new(-1_024.0, 0.0, 0.0));
+        world
+            .run_system_once(viewport::sync_map_tile_spawn_viewport)
+            .expect("segundo retorno");
+        world
+            .run_system_once(remap::apply_remap_map_visuals)
+            .expect("segundo remapeo de retorno");
+        assert_eq!(
+            map_layer_count(world),
+            settled_count,
+            "panear ida/vuelta no debe dejar capas visuales acumuladas"
+        );
+    }
+
+    #[test]
+    fn same_size_hot_load_replaces_existing_map_visuals() {
+        let mut app = with_assets_app();
+        let world = app.world_mut();
+        world
+            .resource_mut::<SimWorld>()
+            .state
+            .map
+            .set_kind(TileCoord::new(1, 1), TileKind::Water)
+            .expect("tesela del mundo previo");
+        world.run_system_once(setup).expect("setup inicial");
+        let old_layers: HashSet<Entity> = {
+            let mut layers = world.query_filtered::<Entity, With<MapVisualLayer>>();
+            layers.iter(world).collect()
+        };
+        assert!(!old_layers.is_empty());
+        {
+            let mut pending = world.resource_mut::<RemapMapVisualsPending>();
+            pending.request_incremental();
+            pending.extend_refresh_chunks(&[(1, 1)]);
+        }
+
+        world
+            .run_system_once(
+                |mut sim: ResMut<SimWorld>,
+                 mut vehicle_index: ResMut<VehicleIndex>,
+                 mut pending: ResMut<RemapMapVisualsPending>,
+                 mut commands: Commands| {
+                    let mut loaded = openttdrs_core::GameState::new(64, 64);
+                    loaded
+                        .map
+                        .set_kind(TileCoord::new(2, 2), TileKind::Water)
+                        .expect("tesela del mundo cargado");
+                    crate::persistence::apply_loaded_state(
+                        &mut sim,
+                        &mut vehicle_index,
+                        &mut pending,
+                        &mut commands,
+                        loaded,
+                    );
+                },
+            )
+            .expect("carga en caliente");
+        {
+            let pending = world.resource::<RemapMapVisualsPending>();
+            assert!(pending.is_pending());
+            assert!(pending.is_full());
+            assert!(pending.sync_camera_requested());
+        }
+        world
+            .run_system_once(remap::apply_remap_map_visuals)
+            .expect("remapeo completo tras carga");
+
+        assert!(
+            old_layers
+                .iter()
+                .all(|entity| world.get_entity(*entity).is_err()),
+            "una carga de igual tamaño no puede conservar capas de la partida previa"
+        );
+        let mut layers = world.query_filtered::<Entity, With<MapVisualLayer>>();
+        assert!(
+            layers.iter(world).next().is_some(),
+            "la nueva partida se dibuja"
+        );
     }
 
     #[test]

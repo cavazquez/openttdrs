@@ -659,7 +659,7 @@ pub(crate) fn handle_vehicle_list_buttons(
                 &mut sim.state,
                 &Command::CreateVehicleGroup { name },
             ) {
-                Ok(()) => pending.pending = true,
+                Ok(()) => pending.request_full(),
                 Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
             }
             continue;
@@ -678,7 +678,7 @@ pub(crate) fn handle_vehicle_list_buttons(
                 &mut sim.state,
                 &Command::SetVehicleGroupRunning { group_id, running },
             ) {
-                Ok(()) => pending.pending = true,
+                Ok(()) => pending.request_full(),
                 Err(e) => {
                     let diagnostic_vehicle_id = sim
                         .state
@@ -707,7 +707,7 @@ pub(crate) fn handle_vehicle_list_buttons(
                     &mut sim.state,
                     &Command::ToggleVehicleRunning(vehicle_id),
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => pending.request_full(),
                     Err(e) => {
                         push_vehicle_start_stop_error(
                             &mut hud_feedback,
@@ -725,7 +725,7 @@ pub(crate) fn handle_vehicle_list_buttons(
                     &mut sim.state,
                     &Command::AppendGotoNearestDepot(vehicle_id),
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => pending.request_full(),
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                     }
@@ -753,7 +753,7 @@ pub(crate) fn handle_vehicle_list_buttons(
                         group_id: Some(group_id),
                     },
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => pending.request_full(),
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
                 }
             }
@@ -1077,7 +1077,7 @@ pub(crate) fn handle_vehicle_group_rename_buttons(
                     &Command::RenameVehicleGroup { group_id, name },
                 ) {
                     Ok(()) => {
-                        pending.pending = true;
+                        pending.request_full();
                         state.group_rename_editing = false;
                     }
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),

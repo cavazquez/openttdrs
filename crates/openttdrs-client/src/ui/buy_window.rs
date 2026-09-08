@@ -943,7 +943,7 @@ pub(crate) fn handle_buy_window_buttons(
                         );
                     }
                 }
-                pending.pending = true;
+                pending.request_full();
             }
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
         }
@@ -1089,7 +1089,7 @@ mod tests {
             sim.state.vehicles[0].engine_id,
             Some(openttdrs_core::ENGINE_BUS_MPS)
         );
-        assert!(world.resource::<RemapMapVisualsPending>().pending);
+        assert!(world.resource::<RemapMapVisualsPending>().is_pending());
     }
 
     #[test]

@@ -1028,6 +1028,16 @@ reutiliza los chunks que describían la capa anterior. Esto corrige el caso de
 rombos persistentes/franjas negras después de alejar y volver a acercar; no
 reduce la diferencia raster global ni cierra #326.
 
+Actualización #549 (2026-09-08): las solicitudes de remapeo visual ya tienen
+prioridad monótona `None < Incremental < Full`. Un paneo detallado sólo agrega
+o retira chunks, conserva las entidades de chunks solapados y los vehículos;
+una carga, una transición overview/detalle o una opción visual exige `Full` y
+no puede ser rebajada por trabajo incremental posterior. La carga en caliente
+de un mundo de iguales dimensiones reconstruye la capa completa y sincroniza
+la cámara. Las regresiones headless cubren coalescencia, paneo real 256² de
+ida/vuelta y carga de igual tamaño; la matriz de zoom sigue siendo la evidencia
+del contrato de cobertura, no una declaración de paridad raster general.
+
 En #331, el feedback de errores de comandos del HUD se traduce al consumir la
 cadena española del comando, por lo que también cambia en vivo al alternar
 `es`/`en`. Esto cubre construcción, vehículos, órdenes, estaciones, terreno,

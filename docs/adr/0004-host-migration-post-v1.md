@@ -4,7 +4,7 @@
 - **Fecha:** 2026-07-16
 - **Issues:** [#21](https://github.com/cavazquez/openttdrs/issues/21) (transporte v1); [#171](https://github.com/cavazquez/openttdrs/issues/171) (auto-promote Bevy + heartbeats)
 - **Supersede:** el punto «fuera de v1 — host migration» de [ADR 0001](0001-multiplayer-v1.md)
-- **Protocolo:** `PROTOCOL_VERSION = 2` (`openttdrs-net`)
+- **Protocolo:** `PROTOCOL_VERSION = 4` (`openttdrs-net`)
 
 ## Contexto
 
@@ -25,16 +25,18 @@ el caso desatendido y queda fuera de este MVP.
 4. **Sincronización:** pausa → nuevo host levanta `ListenServer` con snapshot
    actual + `next_seq` → resto reconecta con `Hello`/`Welcome` (mismo late-join).
 5. **Protocolo v2:** `Welcome.peer_id`, `PeerList`, `Heartbeat`, `HostAnnounce`.
-6. **Cliente Bevy (#171):** silencio >2 s o `Disconnected` → `elect_new_host` →
+6. **Protocolo v3:** la frontera snapshot + `next_seq` se publica de forma atómica respecto de commits y avances.
+7. **Protocolo v4:** el dominio de `canonical_hash` v2 canoniza las listas de animación NewGRF; se rechazan peers v3 para que no comparen algoritmos de hash distintos.
+8. **Cliente Bevy (#171):** silencio >2 s o `Disconnected` → `elect_new_host` →
    bind `puerto+1` (ganador) o reconnect (perdedor); pausa de sim + banner
    “reconectando…” / “promoviendo host…”; `HostAnnounce` fija destino sin
    orquestación manual.
-7. **Fuera aún:** migración de dedicated entre máquinas, failover sin pausa,
+9. **Fuera aún:** migración de dedicated entre máquinas, failover sin pausa,
    anti-cheat, log completo en disco.
 
 ## Consecuencias
 
-- Clientes v1 (`PROTOCOL_VERSION = 1`) no son compatibles; bump explícito.
+- Clientes v1–v3 no son compatibles; cada bump explícito protege una semántica lockstep distinta.
 - Bevy auto-promueve / reconecta (puerto+1 + `HostAnnounce`); banner mínimo de failover.
 - ADR 0001 sigue vigente para el modelo lockstep; solo cambia el “fuera de v1” de migración.
 

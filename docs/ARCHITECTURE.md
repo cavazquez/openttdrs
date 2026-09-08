@@ -556,12 +556,13 @@ Para listen-server / cliente-only, todo lo marcado **Deuda I8** que altere estad
 
 <!-- fuente: INVENTARIO_HASHMAP_DETERMINISMO.md -->
 
-Fecha: 2026-07-16. Depende de [#108](https://github.com/cavazquez/openttdrs/issues/108) (`GameState::canonical_hash`).
+Fecha de actualización: 2026-09-08. Depende de [#108](https://github.com/cavazquez/openttdrs/issues/108) (`GameState::canonical_hash`).
 
 ### Criterio
 
 - **No** migrar todo a `BTreeMap`.
 - El hash canónico (#108) **ordena claves** de objetos JSON; el orden de iteración de `HashMap` en estado persistido **no** afecta el fingerprint.
+- Los cuatro `HashSet<TileCoord>` persistidos de animación NewGRF se emiten como arrays de coordenadas ordenadas. Así se conserva el JSON histórico (array) sin permitir que el `RandomState` altere un snapshot o su fingerprint. El dominio cambió a `openttdrs-gs-v2` y el protocolo lockstep v4 impide mezclarlo con peers v3.
 - Estabilizar iteración en simulación solo si un test de repetibilidad falla por orden de visita.
 - Estado en `SimulationRuntime` queda **fuera** del hash.
 
@@ -570,6 +571,7 @@ Fecha: 2026-07-16. Depende de [#108](https://github.com/cavazquez/openttdrs/issu
 | Área | Uso | Persistido | Riesgo actual |
 |------|-----|------------|---------------|
 | `game_state/runtime.rs` | `HashSet` señales/PBS/news | No (`runtime`) | Bajo — excluido del hash; PBS se reconstruye |
+| `game_state/mod.rs` | cuatro `HashSet<TileCoord>` de animación NewGRF | Sí (array JSON) | Resuelto — serializer de frontera ordena sólo al persistir; scheduler conserva HashSet |
 | `vehicle/model.rs` | `newgrf_persistent_regs: HashMap<u8,u32>` | Sí | Bajo — hash ordena claves |
 | `cargodist/legacy/flow_stat.rs` | `by_origin` / `by_cargo` / `by_station` | Sí (vía `station_flows` / settings) | Medio si MCF itera y el orden cambia resultados |
 | `cargodist/legacy/mcf.rs` | índices y agrupación temporales | No (locales) | Medio — revisar si fallan tests CargoDist |
@@ -581,11 +583,12 @@ Fecha: 2026-07-16. Depende de [#108](https://github.com/cavazquez/openttdrs/issu
 | `sav/*` | índices al cargar `.sav` | No (pipeline load) | Nulo para sim en curso |
 | `train_collision.rs` | `HashSet` doomed | Local | Nulo |
 
-### Verificación 2026-07-16
+### Verificación 2026-09-08
 
 Tras #108:
 
 - `canonical_hash` tests (truck_bay ×120 ticks, save/load mid-run) **pasan**.
+- Permutaciones y `RandomState` distintos de las cuatro listas de animación producen el mismo hash; cambiar una membresía, guardar/reabrir y aplicar un snapshot de bienvenida conserva el fingerprint.
 - No se requirió cambiar contenedores a `BTreeMap`.
 
 ### Seguimiento

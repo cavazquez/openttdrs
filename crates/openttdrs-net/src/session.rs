@@ -1,4 +1,4 @@
-//! Sesiones listen-server y cliente (protocolo v3 / ADR 0004).
+//! Sesiones listen-server y cliente (protocolo v4 / ADR 0004).
 
 use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -503,7 +503,7 @@ struct PendingHandshake {
     writer: FrameWriter,
     peer_id: u64,
     company_id: Option<CompanyId>,
-    rejecting_capacity: bool,
+    rejection_reason: Option<String>,
     last_progress: Instant,
 }
 
@@ -824,7 +824,7 @@ fn accept_pending_handshakes(
                     writer: FrameWriter::default(),
                     peer_id,
                     company_id: None,
-                    rejecting_capacity: false,
+                    rejection_reason: None,
                     last_progress: Instant::now(),
                 });
             }
@@ -908,9 +908,9 @@ fn poll_pending_handshake(
         pending.last_progress = now;
     }
     if let Some(message) = incoming.message {
-        if pending.company_id.is_some() || pending.rejecting_capacity {
+        if pending.company_id.is_some() || pending.rejection_reason.is_some() {
             return PendingHandshakePoll::Drop(
-                "message received before Welcome was flushed".into(),
+                "message received before handshake response was flushed".into(),
             );
         }
         match message {
@@ -927,7 +927,7 @@ fn poll_pending_handshake(
                         company_id,
                     }
                 } else {
-                    pending.rejecting_capacity = true;
+                    pending.rejection_reason = Some(NO_COMPANY_SLOT_MESSAGE.into());
                     NetMessage::Reject {
                         message: NO_COMPANY_SLOT_MESSAGE.into(),
                     }
@@ -938,7 +938,13 @@ fn poll_pending_handshake(
                 pending.last_progress = now;
             }
             NetMessage::Hello { protocol } => {
-                return PendingHandshakePoll::Drop(format!("unsupported protocol {protocol}"));
+                let message =
+                    format!("unsupported protocol {protocol}; server requires {PROTOCOL_VERSION}");
+                pending.rejection_reason = Some(message.clone());
+                if let Err(error) = pending.writer.queue(&NetMessage::Reject { message }) {
+                    return PendingHandshakePoll::Drop(error.to_string());
+                }
+                pending.last_progress = now;
             }
             other => {
                 return PendingHandshakePoll::Drop(format!("expected Hello, got {other:?}"));
@@ -956,8 +962,12 @@ fn poll_pending_handshake(
     if pending.company_id.is_some() && output.is_empty {
         return PendingHandshakePoll::Promote;
     }
-    if pending.rejecting_capacity && output.is_empty {
-        return PendingHandshakePoll::Drop(NO_COMPANY_SLOT_MESSAGE.into());
+    if let Some(reason) = pending
+        .rejection_reason
+        .as_ref()
+        .filter(|_| output.is_empty)
+    {
+        return PendingHandshakePoll::Drop(reason.clone());
     }
     if now.duration_since(pending.last_progress) >= timeouts.handshake {
         return PendingHandshakePoll::Drop("handshake timed out without progress".into());

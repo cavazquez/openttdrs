@@ -12,6 +12,38 @@ use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::Vehicle;
 use crate::world_gen::Climate;
 
+/// Conserva el contrato JSON de los conjuntos de teselas como arrays, pero
+/// emite las coordenadas en un orden canónico.
+///
+/// `HashSet` usa un hasher aleatorizado: delegar su `Serialize` directamente
+/// haría que los snapshots equivalentes tuviesen bytes y `canonical_hash`
+/// diferentes. El almacenamiento sigue siendo un `HashSet`, por lo que el
+/// scheduler conserva exactamente su representación y sus mutaciones de
+/// runtime; el orden sólo existe en el borde persistido.
+mod sorted_tile_set {
+    use std::collections::HashSet;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use crate::map::TileCoord;
+
+    pub fn serialize<S>(tiles: &HashSet<TileCoord>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut ordered: Vec<_> = tiles.iter().copied().collect();
+        ordered.sort_unstable();
+        ordered.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashSet<TileCoord>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Vec::<TileCoord>::deserialize(deserializer).map(|tiles| tiles.into_iter().collect())
+    }
+}
+
 /// Evento efímero para animación «+$» en el cliente (no se serializa).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IncomePopup {
@@ -427,16 +459,16 @@ pub struct GameState {
     #[serde(default)]
     pub industry_tile_spec_catalog: Vec<crate::industry_tile::IndustryTileSpecDef>,
     /// Equivalente persistido de `AnimatedTileList` para animaciones `NewGRF` de industria.
-    #[serde(default)]
+    #[serde(default, with = "sorted_tile_set")]
     pub newgrf_animated_industry_tiles: std::collections::HashSet<TileCoord>,
     /// Equivalente persistido de `AnimatedTileList` para estaciones ferroviarias `NewGRF`.
-    #[serde(default)]
+    #[serde(default, with = "sorted_tile_set")]
     pub newgrf_animated_station_tiles: std::collections::HashSet<TileCoord>,
     /// Equivalente persistido de `AnimatedTileList` para teselas de aeropuerto `NewGRF`.
-    #[serde(default)]
+    #[serde(default, with = "sorted_tile_set")]
     pub newgrf_animated_airport_tiles: std::collections::HashSet<TileCoord>,
     /// Equivalente persistido de `AnimatedTileList` para objetos `NewGRF`.
-    #[serde(default)]
+    #[serde(default, with = "sorted_tile_set")]
     pub newgrf_animated_object_tiles: std::collections::HashSet<TileCoord>,
     /// Indica que la siembra inicial de objetos importados ya ocurrió.
     #[serde(default)]

@@ -3,8 +3,13 @@
 use openttdrs_core::{Command, CompanyId};
 use serde::{Deserialize, Serialize};
 
-/// Versión del framing JSON. Subir si cambia el esquema de [`NetMessage`].
-pub const PROTOCOL_VERSION: u16 = 3;
+/// Versión de compatibilidad lockstep.
+///
+/// Sube tanto con cambios de [`NetMessage`] como con cambios del estado o del
+/// fingerprint que harían que dos binarios apliquen el mismo log pero no
+/// puedan comparar hashes. v4 separa `canonical_hash` v2 (conjuntos `NewGRF`
+/// canónicos) de los peers v3.
+pub const PROTOCOL_VERSION: u16 = 4;
 
 /// Mensaje de red (serializado como JSON dentro de un frame length-prefixed).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

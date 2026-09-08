@@ -481,6 +481,76 @@ fn two_peers_same_log_same_hash_over_tcp() {
 }
 
 #[test]
+fn welcome_snapshot_preserves_canonical_animation_tile_sets() {
+    let mut host = GameState::new(8, 8);
+    let tiles = [
+        TileCoord::new(0, 0),
+        TileCoord::new(7, 1),
+        TileCoord::new(2, 6),
+        TileCoord::new(5, 3),
+    ];
+    for tile in tiles {
+        host.newgrf_animated_industry_tiles.insert(tile);
+        host.newgrf_animated_station_tiles.insert(tile);
+        host.newgrf_animated_airport_tiles.insert(tile);
+        host.newgrf_animated_object_tiles.insert(tile);
+    }
+    let expected_hash = host.canonical_hash();
+    let welcome = SessionEvent::Welcome {
+        snapshot_json: host.save_json().unwrap(),
+        next_seq: 17,
+        peer_id: 1,
+    };
+
+    let mut remote = GameState::new(1, 1);
+    apply_session_event(&mut remote, &welcome).unwrap();
+    assert_eq!(expected_hash, remote.canonical_hash());
+    assert_eq!(
+        host.newgrf_animated_industry_tiles,
+        remote.newgrf_animated_industry_tiles
+    );
+    assert_eq!(
+        host.newgrf_animated_station_tiles,
+        remote.newgrf_animated_station_tiles
+    );
+    assert_eq!(
+        host.newgrf_animated_airport_tiles,
+        remote.newgrf_animated_airport_tiles
+    );
+    assert_eq!(
+        host.newgrf_animated_object_tiles,
+        remote.newgrf_animated_object_tiles
+    );
+}
+
+#[test]
+fn server_rejects_the_previous_hash_protocol_before_welcome() {
+    let snapshot = GameState::new(8, 8).save_json().unwrap();
+    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
+        Some(server) => server,
+        None => return,
+    };
+    let mut peer = TcpStream::connect(server.local_addr()).unwrap();
+    peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+    write_message(
+        &mut peer,
+        &NetMessage::Hello {
+            protocol: PROTOCOL_VERSION - 1,
+        },
+    )
+    .unwrap();
+
+    match read_message(&mut peer).unwrap() {
+        NetMessage::Reject { message } => {
+            assert!(message.contains("unsupported protocol"));
+            assert!(message.contains(&PROTOCOL_VERSION.to_string()));
+        }
+        other => panic!("un peer v3 no debe recibir Welcome: {other:?}"),
+    }
+    assert!(server.peer_ids().is_empty());
+}
+
+#[test]
 fn client_reports_a_closed_server_once_then_the_drain_finishes() {
     let snapshot = GameState::new(16, 16).save_json().unwrap();
     let server = match maybe_start_server("127.0.0.1:0", snapshot) {

@@ -31,5 +31,9 @@ pub(crate) mod vars {
     /// posición, frame o estado de una tesela vecina. Las tablas
     /// `parameterized_vars` se incorporan además por `runtime_fingerprint`.
     pub const AIRPORT_TILE: &[u8] = &[0x41, 0x42, 0x43, 0x44, 0x5F, 0x60, 0x61, 0x62, 0x7A];
+    /// Dominio de vehículo conservado para las regresiones unitarias del
+    /// fingerprint histórico; el renderer ya no usa un fingerprint de contexto
+    /// como identidad del asset.
+    #[cfg(test)]
     pub const TRAIN: &[u8] = &[0x10, 0x40, 0x47, 0x43, 0x5F, 0xB2, 0xB4, 0xC8];
 }

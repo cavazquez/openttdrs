@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
+};
 
 use bevy::prelude::*;
 use openttdrs_core::EngineDef;
@@ -7,7 +10,6 @@ use openttdrs_core::prelude::*;
 use crate::render::CompanyColoredSprites;
 use crate::render::newgrf_cache::{
     DecodedSpriteImagePolicy, decoded_sprite_image, decoded_sprite_image_with_twocc_map,
-    runtime_fingerprint, vars,
 };
 use crate::sprites::CompanyColour;
 
@@ -152,21 +154,113 @@ fn overriding_engine_local_id(
     (head_engine.newgrf_grfid == wagon_engine.newgrf_grfid).then_some(head_engine.newgrf_local_id)
 }
 
-/// Caché in-world / preview: `(engine_id, view_idx, company_colour)` → textura.
+/// Huella de cribado para una imagen ya horneada.
+///
+/// La clave no es la identidad final: los handles bajo la misma huella se
+/// comparan con la [`Image`] completa antes de reutilizarse. Esto mantiene la
+/// caché correcta aun si dos resultados distintos tienen la misma huella.
+fn rendered_image_fingerprint(image: &Image) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    image.data.hash(&mut hasher);
+    image.data_order.hash(&mut hasher);
+    image.texture_descriptor.size.hash(&mut hasher);
+    image.texture_descriptor.mip_level_count.hash(&mut hasher);
+    image.texture_descriptor.sample_count.hash(&mut hasher);
+    image.texture_descriptor.dimension.hash(&mut hasher);
+    image.texture_descriptor.format.hash(&mut hasher);
+    image.texture_descriptor.usage.hash(&mut hasher);
+    hasher.finish()
+}
+
+#[cfg(test)]
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct NewGrfTrainSpriteCacheMetrics {
+    pub(crate) entries: usize,
+    pub(crate) bytes: usize,
+    pub(crate) hits: usize,
+    pub(crate) misses: usize,
+}
+
+/// Caché in-world / preview de imágenes NewGRF por resultado visual horneado.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfTrainSpriteCache {
-    /// `(engine_id, view_idx, colour, stack, palette, runtime_fp)` → textura.
-    handles: HashMap<(u16, u8, u8, u8, u16, u32), Handle<Image>>,
+    /// Huella del resultado RGBA → candidatas; una colisión se verifica con
+    /// igualdad completa de [`Image`] antes de compartir el asset.
+    handles: HashMap<u64, Vec<Handle<Image>>>,
+    #[cfg(test)]
+    hits: usize,
+    #[cfg(test)]
+    misses: usize,
 }
 
 impl NewGrfTrainSpriteCache {
     pub(crate) fn clear(&mut self) {
         self.handles.clear();
+        #[cfg(test)]
+        {
+            self.hits = 0;
+            self.misses = 0;
+        }
+    }
+
+    /// Inserta una imagen sólo si ningún resultado visual idéntico ya existe.
+    ///
+    /// Action2 se sigue resolviendo en cada llamada: sólo la vida del asset
+    /// Bevy queda acotada por los píxeles y el descriptor que se van a mostrar.
+    fn handle_for_image(&mut self, image: Image, images: &mut Assets<Image>) -> Handle<Image> {
+        let fingerprint = rendered_image_fingerprint(&image);
+        let matching_handle = self.handles.get(&fingerprint).and_then(|handles| {
+            handles.iter().find_map(|handle| {
+                images
+                    .get(handle)
+                    .is_some_and(|existing| existing == &image)
+                    .then(|| handle.clone())
+            })
+        });
+        if let Some(handle) = matching_handle {
+            #[cfg(test)]
+            {
+                self.hits += 1;
+            }
+            return handle;
+        }
+
+        let handle = images.add(image);
+        self.handles
+            .entry(fingerprint)
+            .or_default()
+            .push(handle.clone());
+        #[cfg(test)]
+        {
+            self.misses += 1;
+        }
+        handle
+    }
+
+    #[cfg(test)]
+    fn entry_count(&self) -> usize {
+        self.handles.values().map(Vec::len).sum()
     }
 
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
-        self.handles.len()
+        self.entry_count()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn metrics(&self, images: &Assets<Image>) -> NewGrfTrainSpriteCacheMetrics {
+        NewGrfTrainSpriteCacheMetrics {
+            entries: self.entry_count(),
+            bytes: self
+                .handles
+                .values()
+                .flatten()
+                .filter_map(|handle| images.get(handle))
+                .map(|image| image.data.as_ref().map_or(0, Vec::len))
+                .sum(),
+            hits: self.hits,
+            misses: self.misses,
+        }
     }
 
     /// Textura para la vista `dir` (0..=7) de un motor NewGRF (vistas horneadas).
@@ -190,28 +284,12 @@ impl NewGrfTrainSpriteCache {
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
         let view = engine.newgrf_view(dir)?;
-        let view_idx = u8::try_from(dir % engine.newgrf_views.len()).unwrap_or(0);
-        let palette = if engine.uses_2cc {
-            openttdrs_core::TWOCC_PALETTE_BASE
-                + u16::from(primary.as_u8())
-                + u16::from(secondary.as_u8()) * 16
+        let policy = if engine.uses_2cc {
+            DecodedSpriteImagePolicy::TwoCompany { primary, secondary }
         } else {
-            0
+            DecodedSpriteImagePolicy::Masked { colour: primary }
         };
-        let key = (engine.id, view_idx, primary.as_u8(), 0, palette, 0);
-        Some(
-            self.handles
-                .entry(key)
-                .or_insert_with(|| {
-                    let policy = if engine.uses_2cc {
-                        DecodedSpriteImagePolicy::TwoCompany { primary, secondary }
-                    } else {
-                        DecodedSpriteImagePolicy::Masked { colour: primary }
-                    };
-                    images.add(decoded_sprite_image(view, policy))
-                })
-                .clone(),
-        )
+        Some(self.handle_for_image(decoded_sprite_image(view, policy), images))
     }
 
     /// Textura re-resolviendo Action2 con bits del vehículo / consist.
@@ -334,17 +412,6 @@ impl NewGrfTrainSpriteCache {
             if stack > 0 && register_100.is_none() && previous.as_ref() == Some(&view) {
                 break;
             }
-            let view_idx = u8::try_from(dir % views.len()).unwrap_or(0);
-            let fp = runtime_fingerprint(&stack_ctx, vars::TRAIN, true);
-            let stack_idx = u8::try_from(stack).unwrap_or(u8::MAX);
-            let key = (
-                engine.id,
-                view_idx,
-                primary.as_u8(),
-                stack_idx,
-                palette_id,
-                fp,
-            );
             let image_policy = if palette_id == 0 {
                 if palette_override.is_some() {
                     DecodedSpriteImagePolicy::Raw
@@ -384,17 +451,10 @@ impl NewGrfTrainSpriteCache {
                         .and_then(Option::as_ref)
                 })
                 .flatten();
-            let handle = self
-                .handles
-                .entry(key)
-                .or_insert_with(|| {
-                    images.add(decoded_sprite_image_with_twocc_map(
-                        &view,
-                        image_policy,
-                        twocc_map,
-                    ))
-                })
-                .clone();
+            let handle = self.handle_for_image(
+                decoded_sprite_image_with_twocc_map(&view, image_policy, twocc_map),
+                images,
+            );
             layers.push(NewGrfVehicleLayer {
                 handle,
                 x_offs: view.x_offs,

@@ -813,6 +813,205 @@ mod tests {
     }
 
     #[test]
+    fn newgrf_runtime_cache_deduplicates_resolved_images_across_contexts() {
+        use crate::sprites::CompanyColour;
+        use openttdrs_core::newgrf_sprites::{TrainSpriteAssign, TrainSpriteGraphics};
+
+        let shared_view = |x_offs, y_offs| openttdrs_core::DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs,
+            y_offs,
+            rgba: vec![255, 255, 255, 255, 255, 255, 255, 255],
+            // Primario (C6) y secundario (50), para verificar también 2CC.
+            mask: vec![0xC6, 0x50],
+        };
+        let distinct_view = openttdrs_core::DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 9,
+            y_offs: 3,
+            rgba: vec![40, 80, 120, 255],
+            mask: vec![0xC6],
+        };
+        let runtime = TrainSpriteGraphics {
+            sets: vec![vec![shared_view(-3, 4), shared_view(7, -5), distinct_view]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            }],
+            ..Default::default()
+        };
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train")
+            .clone();
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(runtime));
+
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+        {
+            let mut first_handle = None;
+            // Ninguna de estas entradas interviene en el Action2 fijo. Antes,
+            // cada combinación terminaba en una clave runtime distinta.
+            for age in 0..100_u32 {
+                for speed in [0_u32, 48, 96] {
+                    let mut ctx = openttdrs_core::Action2EvalCtx::default();
+                    ctx.vars.insert(0xB4, speed);
+                    ctx.relative_vars.insert((0, 0xC0), age);
+                    ctx.random_bits = age << 8 | speed;
+                    ctx.vehicle_palette_generation = age;
+                    let layer = cache
+                        .handles_for_runtime(
+                            &engine,
+                            0,
+                            None,
+                            CompanyColour::DarkBlue,
+                            &mut ctx,
+                            &mut images,
+                        )
+                        .into_iter()
+                        .next()
+                        .expect("runtime layer");
+                    if let Some(first) = &first_handle {
+                        assert_eq!(&layer.handle, first);
+                    } else {
+                        first_handle = Some(layer.handle);
+                    }
+                }
+            }
+            let first_handle = first_handle.expect("first runtime image");
+            let metrics = cache.metrics(&images);
+            assert_eq!(metrics.entries, 1);
+            assert_eq!(metrics.bytes, 8);
+            assert_eq!(metrics.hits, 299);
+            assert_eq!(metrics.misses, 1);
+            assert_eq!(images.len(), 1);
+
+            let mut ctx = openttdrs_core::Action2EvalCtx::default();
+            let same_raster_different_offset = cache
+                .handles_for_runtime(
+                    &engine,
+                    1,
+                    None,
+                    CompanyColour::DarkBlue,
+                    &mut ctx,
+                    &mut images,
+                )
+                .into_iter()
+                .next()
+                .expect("second runtime layer");
+            assert_eq!(same_raster_different_offset.handle, first_handle);
+            assert_eq!(same_raster_different_offset.x_offs, 7);
+            assert_eq!(same_raster_different_offset.y_offs, -5);
+            assert_eq!(same_raster_different_offset.width, 2);
+            assert_eq!(same_raster_different_offset.height, 1);
+
+            let distinct_selection = cache
+                .handles_for_runtime(
+                    &engine,
+                    2,
+                    None,
+                    CompanyColour::DarkBlue,
+                    &mut ctx,
+                    &mut images,
+                )
+                .into_iter()
+                .next()
+                .expect("distinct runtime layer");
+            assert_ne!(distinct_selection.handle, first_handle);
+            assert_eq!(distinct_selection.x_offs, 9);
+            assert_eq!(distinct_selection.y_offs, 3);
+            assert_eq!(distinct_selection.width, 1);
+            assert_eq!(distinct_selection.height, 1);
+
+            let red = cache
+                .handles_for_runtime(&engine, 0, None, CompanyColour::Red, &mut ctx, &mut images)
+                .into_iter()
+                .next()
+                .expect("red runtime layer");
+            assert_ne!(red.handle, first_handle);
+
+            let palette_red = cache
+                .handles_for_runtime_with_override(
+                    &engine,
+                    0,
+                    None,
+                    CompanyColour::DarkBlue,
+                    CompanyColour::DarkBlue,
+                    None,
+                    Some(775 + u16::from(CompanyColour::Red.as_u8())),
+                    &[],
+                    &mut ctx,
+                    &mut images,
+                )
+                .into_iter()
+                .next()
+                .expect("company palette layer");
+            assert_eq!(palette_red.handle, red.handle);
+
+            let crash = cache
+                .handles_for_runtime_with_override(
+                    &engine,
+                    0,
+                    None,
+                    CompanyColour::DarkBlue,
+                    CompanyColour::DarkBlue,
+                    None,
+                    Some(804),
+                    &[],
+                    &mut ctx,
+                    &mut images,
+                )
+                .into_iter()
+                .next()
+                .expect("crash layer");
+            assert_ne!(crash.handle, first_handle);
+
+            let twocc_dark_blue = cache
+                .handles_for_runtime_with_override(
+                    &engine,
+                    0,
+                    None,
+                    CompanyColour::Red,
+                    CompanyColour::DarkBlue,
+                    None,
+                    Some(openttdrs_core::TWOCC_PALETTE_BASE + 4),
+                    &[],
+                    &mut ctx,
+                    &mut images,
+                )
+                .into_iter()
+                .next()
+                .expect("2CC dark-blue layer");
+            let twocc_green = cache
+                .handles_for_runtime_with_override(
+                    &engine,
+                    0,
+                    None,
+                    CompanyColour::Red,
+                    CompanyColour::Green,
+                    None,
+                    Some(openttdrs_core::TWOCC_PALETTE_BASE + 4 + 6 * 16),
+                    &[],
+                    &mut ctx,
+                    &mut images,
+                )
+                .into_iter()
+                .next()
+                .expect("2CC green layer");
+            assert_ne!(twocc_dark_blue.handle, twocc_green.handle);
+        }
+
+        cache.clear();
+        let cleared = cache.metrics(&images);
+        assert_eq!(cleared.entries, 0);
+        assert_eq!(cleared.bytes, 0);
+        assert_eq!(cleared.hits, 0);
+        assert_eq!(cleared.misses, 0);
+    }
+
+    #[test]
     fn newgrf_sprite_stack_resolves_var10_layers() {
         use crate::sprites::CompanyColour;
         use assets::NewGrfVehicleLayer;

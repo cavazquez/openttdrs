@@ -45,6 +45,7 @@ Contrato del repo: capas, reglas duras, diseño incremental, inventarios de dete
 4. **Red** → lockstep TCP ([ADR 0001](adr/0001-multiplayer-v1.md)); host migration listen-server post-v1 ([ADR 0004](adr/0004-host-migration-post-v1.md)). Tick ~37 Hz: [ADR 0003](adr/0003-tick-37hz-openttd.md).
 5. **Cámara de presentación** → `Time<Real>`, nunca el reloj virtual de simulación: debe responder durante pausa y a la misma cadencia en 1×/4×/8×; el delta se acota localmente ante stalls del sistema. WASD/flechas y zoom de teclado respetan `KeyboardCapture`, la misma política de foco/modal que los hotkeys; rueda, RMB y `CameraFocusRequest` siguen siendo acciones explícitas de presentación.
 6. **Sort del viewport** → `ViewportSortableParent::source_depth` es entrada y `Transform.z` es salida del sorter. Un sync visual debe comparar pose, visibilidad y metadatos semánticos antes de escribir; en un frame estable conserva la Z resuelta y deja que el fast path omita el pase global.
+7. **Assets visuales NewGRF** → Action2 se reevalúa para elegir la vista, pero la caché de `Image` se identifica por el resultado horneado final, no por el contexto de evaluación. Los offsets y dimensiones siguen siendo metadatos de cada capa.
 
 ## Dónde va código nuevo
 

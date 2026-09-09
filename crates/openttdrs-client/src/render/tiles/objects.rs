@@ -641,6 +641,26 @@ fn tile_seq_parent_sprite(
 
 /// Construye las cajas que entrega `AddSortableSpriteToDraw` para las capas
 /// BUILD de una parada vial.
+fn road_stop_parent_bounds(
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layer: &RoadStopLayerGfx,
+) -> ParentSpriteBounds {
+    let (ex, ey, ez) = layer.bounds;
+    let xmin = tx * 16 + layer.dx as i32;
+    let ymin = ty * 16 + layer.dy as i32;
+    let zmin = i32::from(base_z) * 8 + layer.dz as i32;
+    ParentSpriteBounds::new(
+        xmin,
+        ymin,
+        zmin,
+        xmin + ex - 1,
+        ymin + ey - 1,
+        zmin + ez - 1,
+    )
+}
+
 fn road_stop_parent_sprites(
     tx: i32,
     ty: i32,
@@ -651,26 +671,65 @@ fn road_stop_parent_sprites(
         .iter()
         .enumerate()
         .map(|(index, layer)| {
-            let (ex, ey, ez) = layer.bounds;
-            tile_seq_parent_sprite(
+            ParentSprite::sprite(
                 index as u64,
                 layer.sprite_id,
-                tx,
-                ty,
-                base_z,
-                layer.dx as i32,
-                layer.dy as i32,
-                layer.dz as i32,
-                ex,
-                ey,
-                ez,
+                road_stop_parent_bounds(tx, ty, base_z, layer),
             )
         })
         .collect()
 }
 
+/// `DrawRailTileSeq` de una parada vial ocurre después de la fundación y de
+/// la catenaria de carretera. Se reservan 0/1 para que una migración futura
+/// de esos productores pueda preceder las capas BUILD sin renumerarlas.
+const ROAD_STOP_BUILDING_PARENT_ORDINAL: u8 = 2;
+
+/// Emite una capa BUILD vanilla de parada vial como parent del compositor
+/// global. Las cajas siguen el `TILE_SEQ_LINE` publicado por OpenTTD y la
+/// profundidad fuente queda intacta para que el sorter decida entre teselas.
+fn spawn_road_stop_building_parent(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    map_width: u32,
+    layer_index: usize,
+    layer: &RoadStopLayerGfx,
+    sprite: Sprite,
+) {
+    let position = road_stop_build_sprite_center(
+        ctx.iso_pos,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        base_z,
+        layer.z,
+        road_stop_seq_gfx(layer),
+        layer.w,
+        layer.h,
+    );
+    let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        sprite,
+        Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+        ViewportSortableParent {
+            sprite_id: layer.sprite_id,
+            bounds: road_stop_parent_bounds(ctx.tx_i32(), ctx.ty_i32(), base_z, layer),
+            insertion_key: viewport_insertion_key(
+                ctx.tx,
+                ctx.ty,
+                ROAD_STOP_BUILDING_PARENT_ORDINAL
+                    .saturating_add(u8::try_from(layer_index).unwrap_or(u8::MAX)),
+            ),
+            source_depth,
+        },
+    ));
+}
+
 /// Centros de las capas BUILD con los mismos slots locales de Z, pero asignados
-/// en el orden final de `ViewportSortParentSprites`.
+/// en el orden final de `ViewportSortParentSprites`. Sólo lo usan aún los
+/// waypoints viales: sus parents/fundaciones se migran en un corte separado.
 ///
 /// No cambia su ancla ni expande la banda de profundidad de la tesela: sólo
 /// corrige las inversiones como `5982 → 5983` de Kale, donde el C++ devuelve
@@ -3339,23 +3398,22 @@ fn spawn_road_stop_buildings(
         for spec in drive_through {
             record_road_stop_layer_trace(spec, owner_colour, false, world_z_delta);
         }
-        for (layer_i, center) in road_stop_sorted_layer_centers(ctx, base_z, drive_through)
-            .into_iter()
-            .enumerate()
-        {
-            let spec = &drive_through[layer_i];
+        for (layer_i, spec) in drive_through.iter().enumerate() {
             let image = &handles[axis][layer_i];
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
+            spawn_road_stop_building_parent(
+                commands,
+                ctx,
+                base_z,
+                map.dimensions().0,
+                layer_i,
+                spec,
                 tint_building_sprite(sprite_from_atlas_or_company_white_colour(
                     company,
                     owner_colour,
                     image,
                     spec.path,
                 )),
-                Transform::from_translation(center),
-            ));
+            );
         }
         return;
     }
@@ -3371,11 +3429,7 @@ fn spawn_road_stop_buildings(
     for spec in build_layers {
         record_road_stop_layer_trace(spec, owner_colour, false, world_z_delta);
     }
-    for (layer_i, center) in road_stop_sorted_layer_centers(ctx, base_z, build_layers)
-        .into_iter()
-        .enumerate()
-    {
-        let spec = &build_layers[layer_i];
+    for (layer_i, spec) in build_layers.iter().enumerate() {
         // Action5 `0x11`: sustituye la primera capa si hay sprite en el slot.
         if layer_i == 0
             && let Some(slot) = openttdrs_core::roadstop_action5_slot(is_truck, build_dir)
@@ -3388,26 +3442,32 @@ fn spawn_road_stop_buildings(
                 images,
             )
         {
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
+            spawn_road_stop_building_parent(
+                commands,
+                ctx,
+                base_z,
+                map.dimensions().0,
+                layer_i,
+                spec,
                 sprite,
-                Transform::from_translation(center),
-            ));
+            );
             continue;
         }
         let image = &handles[build_dir][layer_i];
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
+        spawn_road_stop_building_parent(
+            commands,
+            ctx,
+            base_z,
+            map.dimensions().0,
+            layer_i,
+            spec,
             tint_building_sprite(sprite_from_atlas_or_company_white_colour(
                 company,
                 owner_colour,
                 image,
                 spec.path,
             )),
-            Transform::from_translation(center),
-        ));
+        );
     }
 }
 

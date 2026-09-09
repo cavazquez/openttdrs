@@ -675,6 +675,94 @@ fn road_stop_bay_uses_only_its_vanilla_ground_and_build_layers() {
 }
 
 #[test]
+fn road_stop_vanilla_layers_join_global_sort() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let coord = TileCoord::new(1, 1);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+            m6: 3 << 3, // StationType::Bus.
+            ..tile_template()
+        },
+    )
+    .expect("drive-through bus stop");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &[],
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("drive-through bus stop spawn");
+
+    let mut parents: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter_map(|(parent, transform)| {
+            [5980, 5981]
+                .contains(&parent.sprite_id)
+                .then_some((*parent, transform.translation.z))
+        })
+        .collect();
+    parents.sort_by_key(|(parent, _)| parent.insertion_key);
+    assert_eq!(
+        parents
+            .iter()
+            .map(|(parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                5980,
+                ParentSpriteBounds::new(16, 16, 0, 31, 18, 15),
+                viewport_insertion_key(1, 1, 2),
+            ),
+            (
+                5981,
+                ParentSpriteBounds::new(16, 29, 0, 31, 31, 15),
+                viewport_insertion_key(1, 1, 3),
+            ),
+        ],
+        "cada capa TILE_SEQ_LINE de la parada debe ser un parent global"
+    );
+    assert!(
+        parents
+            .iter()
+            .all(|(parent, depth)| parent.source_depth == *depth),
+        "los parents mantienen su profundidad fuente antes del sort global"
+    );
+}
+
+#[test]
 fn drive_through_tram_stop_draws_vanilla_catenary_after_stop_layers() {
     let assets = boot_assets_app();
     let expected_back = assets

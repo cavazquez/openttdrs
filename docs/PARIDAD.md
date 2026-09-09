@@ -1067,8 +1067,9 @@ pixel-perfect: mientras el orden global de composición siga divergente, la
 captura debe servir para localizar y medir, no para certificar paridad.
 
 Ya existe un port puro y testeado de `ViewportSortParentSprites` en
-`render/viewport_sort.rs`, incluidos parents vacíos y children. Las paradas
-viales vanilla, depósitos viales, árboles `MP_TREES` y sus copas combinadas,
+`render/viewport_sort.rs`, incluidos parents vacíos y children. Las capas BUILD
+vanilla de paradas Bus/Truck, depósitos viales, árboles `MP_TREES` y sus copas
+combinadas,
 las seis mitades StationGfx de muelle, los seis layouts del depósito naval, los
 bundles de catenaria/fachada de depósitos ferroviarios, los faroles viales,
 casas vanilla y el subconjunto plano/estático de industrias vanilla ya aportan
@@ -1112,6 +1113,27 @@ mejora no es monótona: `2×` aumenta 144 píxeles y el delta medio sube en
 `0,25×`, `2×` y `8×`. Esta etapa corrige el productor y su orden global, no la
 composición segmentada, clipping, pivotes ni framebuffer; #326 y el contrato
 global completo de children de #561 siguen abiertos.
+
+Actualización #326-ROAD-STOP-GLOBAL (2026-09-09): las capas BUILD
+`TILE_SEQ_LINE` vanilla de paradas Bus/Truck ya no usan el vector local: cada
+una publica un parent global con la caja literal del layout y conserva la
+profundidad fuente antes del sort. Sus claves empiezan en el ordinal 2, dejando
+reservados los slots nativos de fundación y catenaria; esta última todavía es
+un productor local separado, por lo que el corte no afirma que la secuencia
+vial completa esté globalmente compuesta. Waypoints, depósitos viales y layouts
+NewGRF tampoco se mezclan aquí. En Kale `(189,117)`, la traza candidata añade
+56 registros de la familia visible `5978`–`5983` y la intersección de tuplas
+parent exactas normalizadas pasa de 1.330 a 1.385. No queda una tupla única
+nativa de esa familia sin contraparte candidata; los segmentos del oráculo
+nativo repiten algunas geometrías, así que eso no equivale a emparejar sus
+registros crudos uno a uno. La captura limpia normal cambia de 93.173
+(10,110 %, delta medio 3,672) a 93.226 (10,116 %, 3,674) píxeles distintos.
+La matriz completa es `0,25×` 233.640→234.056, `0,5×`
+388.068→388.170, `1×` 93.173→93.226, `2×` 532.807→532.855, `4×`
+750.107→750.092 y `8×` 705.907→705.908. Sólo `4×` baja 15 píxeles;
+las otras escalas empeoran levemente. Esta etapa corrige el productor y hace
+visible su contrato al compositor, no declara mejora raster ni paridad global;
+#326 permanece abierto.
 
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,

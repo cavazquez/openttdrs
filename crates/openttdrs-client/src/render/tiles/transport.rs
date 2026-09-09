@@ -30,16 +30,18 @@ use crate::render::viewport_sort::{
 };
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    CompanyColoredSprites, MapVisualLayer, TileRenderContext, ViewportSortableChild, WaterTile,
-    WorldAssets, sprite_from_atlas_or_company_white_colour, viewport_source_depth,
+    CompanyColoredSprites, MapVisualLayer, TileRenderContext, ViewportSortableChild,
+    ViewportSortableParent, WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
+    viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
-    CompanyColour, ONEWAY_ROAD_SPRITE_META, RAIL_GROUND_HALF_TILE_SNOW,
-    RAIL_GROUND_HALF_TILE_WATER, RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_CROSS, RAIL_TB_HORZ,
-    RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y,
-    ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS, ROADSIDE_TREE_META, ROADSIDE_TREES,
-    SPR_ROADSIDE_TREE, catenary_hidden, catenary_pylon_world_z_delta, catenary_reference_sprite_id,
-    catenary_sprite_color, catenary_tunnel_exterior_pcp, catenary_wire_world_z_delta,
+    CatenarySpriteDraw, CatenaryWireDraw, CompanyColour, ONEWAY_ROAD_SPRITE_META,
+    RAIL_GROUND_HALF_TILE_SNOW, RAIL_GROUND_HALF_TILE_WATER, RAIL_GROUND_SNOW_OR_DESERT,
+    RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
+    RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
+    ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE, catenary_hidden,
+    catenary_pylon_world_z_delta, catenary_reference_sprite_id, catenary_sprite_color,
+    catenary_tunnel_exterior_pcp, catenary_wire_world_z_delta,
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
     collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
     collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
@@ -723,6 +725,50 @@ pub(crate) const fn catenary_local_z_delta(
     surface_base_z: u8,
 ) -> i32 {
     world_z_delta - (surface_base_z as i32 - raw_base_z as i32) * 8
+}
+
+/// Primeros slots locales reservados para los `AddSortableSpriteToDraw` de
+/// catenaria. `DrawTrackDetails` los precede y las señales los siguen; dejar
+/// un intervalo entre familias evita que una tesela con varias curvas pierda
+/// su orden de inserción al entrar al sorter global.
+const RAIL_CATENARY_PYLON_PARENT_ORDINAL: u8 = 64;
+const RAIL_CATENARY_WIRE_PARENT_ORDINAL: u8 = 72;
+
+/// Caja global del poste PPP que OpenTTD entrega a
+/// `ViewportSortParentSprites`.
+///
+/// El origen `(-1, -1, 0)` ya forma parte de `AddSortableSpriteToDraw`: el
+/// desplazamiento visual se aplica al sprite, mientras que esta caja conserva
+/// la misma coordenada inclusiva que usa el ordenador nativo.
+fn rail_catenary_pylon_parent_bounds(
+    tx: i32,
+    ty: i32,
+    raw_base_z: u8,
+    world_z_delta: i32,
+    draw: CatenarySpriteDraw,
+) -> ParentSpriteBounds {
+    let x = tx * 16 + draw.tile_dx as i32 - 1;
+    let y = ty * 16 + draw.tile_dy as i32 - 1;
+    let z = i32::from(raw_base_z) * 8 + world_z_delta;
+    ParentSpriteBounds::new(x, y, z, x, y, z + 5)
+}
+
+/// Caja global de un cable PCP. El origen 3D pertenece al ancla de dibujo y
+/// también al prisma del sorter; omitir `oz` hace que un cable plano parezca
+/// cruzar edificios que OpenTTD deja delante.
+fn rail_catenary_wire_parent_bounds(
+    tx: i32,
+    ty: i32,
+    raw_base_z: u8,
+    world_z_delta: i32,
+    draw: CatenaryWireDraw,
+) -> ParentSpriteBounds {
+    let (ox, oy, oz) = draw.bounds_origin;
+    let (ex, ey, ez) = draw.bounds_extent;
+    let x = tx * 16 + ox;
+    let y = ty * 16 + oy;
+    let z = i32::from(raw_base_z) * 8 + world_z_delta + oz;
+    ParentSpriteBounds::new(x, y, z, x + ex - 1, y + ey - 1, z + ez - 1)
 }
 
 /// Offset extra de las pistas de esquina PBS en `DrawTrackBits`, ya
@@ -1783,7 +1829,7 @@ pub(crate) fn spawn_rail_catenary_for_surface(
     {
         pylons.retain(|draw| draw.pcp_direction == Some(exterior_pcp));
     }
-    for draw in pylons {
+    for (index, draw) in pylons.into_iter().enumerate() {
         let anchor = catenary_sprite_anchor(draw.sprite_id, catenary_newgrf);
         let sprite = catenary_sprite_colored(
             assets,
@@ -1824,11 +1870,29 @@ pub(crate) fn spawn_rail_catenary_for_surface(
             local_z as f32,
             anchor,
         );
+        let source_depth = viewport_source_depth(position.z, ctx.tx, map_dims.0);
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
-            Transform::from_translation(position),
+            Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+            ViewportSortableParent {
+                sprite_id: catenary_reference_sprite_id(draw.sprite_id),
+                bounds: rail_catenary_pylon_parent_bounds(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    ctx.info.base_z,
+                    world_z_delta,
+                    draw,
+                ),
+                insertion_key: viewport_insertion_key(
+                    ctx.tx,
+                    ctx.ty,
+                    RAIL_CATENARY_PYLON_PARENT_ORDINAL
+                        .saturating_add(u8::try_from(index).unwrap_or(u8::MAX)),
+                ),
+                source_depth,
+            },
         ));
     }
     // OpenTTD emite primero los postes PPP y después los cables PCP. El
@@ -1875,11 +1939,29 @@ pub(crate) fn spawn_rail_catenary_for_surface(
             local_z as f32,
             anchor,
         );
+        let source_depth = viewport_source_depth(position.z, ctx.tx, map_dims.0);
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
-            Transform::from_translation(position),
+            Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+            ViewportSortableParent {
+                sprite_id: catenary_reference_sprite_id(sid),
+                bounds: rail_catenary_wire_parent_bounds(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    ctx.info.base_z,
+                    world_z_delta,
+                    draw,
+                ),
+                insertion_key: viewport_insertion_key(
+                    ctx.tx,
+                    ctx.ty,
+                    RAIL_CATENARY_WIRE_PARENT_ORDINAL
+                        .saturating_add(u8::try_from(i).unwrap_or(u8::MAX)),
+                ),
+                source_depth,
+            },
         ));
     }
 }
@@ -2885,17 +2967,19 @@ mod tests {
     use super::{
         RTO_CROSSING_XY, RTO_E, RTO_JUNCTION_SE, RTO_N, RTO_S, RTO_W, RTO_X, RTO_Y, RailGroundKind,
         RailTrackTraceMode, catenary_local_z_delta, halftile_track_subsprite, pbs_extra_y_in_bevy,
-        pbs_track_sprite_extra_y, rail_custom_overlay_offsets, rail_custom_underlay_offsets,
-        rail_foundation_after_pass, rail_ground_complete_offset, rail_ground_sprite_id,
-        rail_initial_ground_draw, rail_track_trace_mode, rail_upper_halftile_ground_draw,
-        road_detail_world_z_delta, road_foundation_child_offset,
+        pbs_track_sprite_extra_y, rail_catenary_pylon_parent_bounds,
+        rail_catenary_wire_parent_bounds, rail_custom_overlay_offsets,
+        rail_custom_underlay_offsets, rail_foundation_after_pass, rail_ground_complete_offset,
+        rail_ground_sprite_id, rail_initial_ground_draw, rail_track_trace_mode,
+        rail_upper_halftile_ground_draw, road_detail_world_z_delta, road_foundation_child_offset,
         roadside_streetlight_parent_sprites, roadside_streetlight_sorted_depths,
         signal_trace_geometry,
     };
+    use crate::render::viewport_sort::ParentSpriteBounds;
     use crate::sprites::{
-        RAIL_GROUND_HALF_TILE_SNOW, RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_CROSS, RAIL_TB_HORZ,
-        RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X,
-        RAIL_TB_Y, ROADSIDE_LAMPS,
+        CatenarySpriteDraw, CatenaryWireDraw, RAIL_GROUND_HALF_TILE_SNOW,
+        RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER,
+        RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, ROADSIDE_LAMPS,
     };
     use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_LEVELED};
 
@@ -3219,6 +3303,34 @@ mod tests {
         let screen_delta =
             crate::iso::remap_tile_offset(0.0, 0.0, catenary_local_z_delta(16, 1, 2) as f32) * 0.5;
         assert_eq!(screen_delta, Vec2::new(0.0, 8.0));
+    }
+
+    #[test]
+    fn rail_catenary_parents_keep_the_upstream_sortable_prisms() {
+        // Kale: una tesela plana con base Z=2. El PPP desplaza su origin
+        // `(-1,-1)`, mientras que el cable mantiene su origin Z=10 dentro de
+        // la caja global; ambos valores son los que usa el sorter C++.
+        let pylon = CatenarySpriteDraw {
+            sprite_id: 5660,
+            tile_dx: 4.0,
+            tile_dy: 0.0,
+            z_layer: 0.036,
+            pcp_direction: Some(0),
+        };
+        assert_eq!(
+            rail_catenary_pylon_parent_bounds(170, 105, 2, 0, pylon),
+            ParentSpriteBounds::new(2723, 1679, 16, 2723, 1679, 21)
+        );
+
+        let wire = CatenaryWireDraw {
+            sprite_id: 5651,
+            bounds_origin: (8, 0, 10),
+            bounds_extent: (15, 1, 1),
+        };
+        assert_eq!(
+            rail_catenary_wire_parent_bounds(170, 105, 2, 0, wire),
+            ParentSpriteBounds::new(2728, 1680, 26, 2742, 1680, 26)
+        );
     }
 
     #[test]

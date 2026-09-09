@@ -242,6 +242,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             preview_depot_any(map, *c, |m, tile, dir| {
                 check_station_placement(m, stations, tile, dir, StopKind::TruckStop)
             })
+            .or_else(|| check_object_can_be_cleared(state, *c).err())
         }
         Command::PlaceStationDir(c, dir) | Command::PlaceTruckStop(c, dir) => {
             preview_station_with_authority(state, *c, *dir, StopKind::TruckStop)
@@ -436,6 +437,9 @@ fn preview_station_with_authority(
         return Some(CommandError::AuthorityRatingTooLow);
     }
     if let Err(e) = check_station_placement(&state.map, &state.stations, c, dir, stop_kind) {
+        return Some(e);
+    }
+    if let Err(e) = check_object_can_be_cleared(state, c) {
         return Some(e);
     }
     if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {

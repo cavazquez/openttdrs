@@ -2,7 +2,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use crate::command::{Command, CommandError, apply_command};
+use crate::command::{Command, CommandError, apply_command, command_would_fail};
 use crate::economy::{station_build_cost, waypoint_build_cost};
 use crate::{
     GameState, STATION_TYPE_RAIL_WAYPOINT, StopKind, TileCoord, TileKind, station_type_from_m6,
@@ -24,6 +24,38 @@ fn place_rail_station_sets_m6_and_axis_in_m5() {
     assert!(crate::station_tile_can_have_wires(tile.m3));
     assert!(crate::station_tile_can_have_pylons(tile.m3));
     assert_eq!(s.stations[0].stop_kind, StopKind::RailStation);
+}
+
+#[test]
+fn rail_station_area_cannot_overwrite_nonremovable_object() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 3);
+    apply_command(
+        &mut s,
+        &Command::BuildObject {
+            pos: c,
+            object_type: crate::OBJECT_TYPE_LIGHTHOUSE,
+        },
+    )
+    .expect("build lighthouse");
+    let command = Command::PlaceRailStationArea {
+        origin: c,
+        axis_y: false,
+        platforms: 1,
+        length: 1,
+    };
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(CommandError::ObjectCannotBeRemoved)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(CommandError::ObjectCannotBeRemoved)
+    );
+    assert!(crate::is_map_object_tile(
+        s.map.get(c).expect("lighthouse remains").mapt
+    ));
 }
 
 #[test]

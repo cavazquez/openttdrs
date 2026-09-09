@@ -1,5 +1,5 @@
 use crate::economy::{road_stop_build_cost_factored, station_build_cost, waypoint_build_cost};
-use crate::map::{Map, TileCoord, TileKind, tile_slope_and_z};
+use crate::map::{Map, TileCoord, TileKind, is_map_object_tile, tile_slope_and_z};
 use crate::pathfinder::{
     station_entrance_faces_rail, station_entrance_faces_road, station_site_tile_allows_build,
     station_site_tile_needs_clear,
@@ -8,6 +8,7 @@ use crate::station::is_rail_waypoint_tile;
 use crate::{CLEAR_TILE_COST, GameState, Station, StopKind};
 
 use super::super::{CommandError, require_tile_owned_by_active};
+use super::shared::{check_object_can_be_cleared, clear_tile};
 use crate::town::{self, authority_allows_new_station};
 
 #[allow(unused_imports)]
@@ -265,6 +266,7 @@ pub(in crate::command) fn check_rail_station_area(
                 }
                 _ => {}
             }
+            check_object_can_be_cleared(state, c)?;
         }
     }
     Ok(())
@@ -461,9 +463,8 @@ pub(in crate::command) fn place_rail_station_area(
             };
             let idx = usize::from(n) * usize::from(length) + usize::from(l);
             let gfx = tile_gfx[idx];
-            if station_site_tile_needs_clear(state.map.get_kind(c).unwrap_or(TileKind::Grass)) {
-                clear_station_site_tile(state, c)?;
-            }
+            let kind = state.map.get_kind(c).unwrap_or(TileKind::Grass);
+            prepare_station_site_for_placement(state, c, kind)?;
             let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
             tile.kind = TileKind::Station;
             tile.mapt = 0x50;
@@ -544,6 +545,27 @@ pub(in crate::command::transport) fn clear_station_site_tile(
     Ok(())
 }
 
+/// Limpia el sustrato de una estación antes de sobrescribirlo. Los objetos no
+/// se pueden tratar como simple césped: pueden abarcar varias teselas y tener
+/// metadata en `OBJS`, por lo que usan la demolición normal.
+fn prepare_station_site_for_placement(
+    state: &mut GameState,
+    c: TileCoord,
+    kind: TileKind,
+) -> Result<(), CommandError> {
+    if state
+        .map
+        .get(c)
+        .is_some_and(|tile| is_map_object_tile(tile.mapt))
+    {
+        clear_tile(state, c)
+    } else if station_site_tile_needs_clear(kind) {
+        clear_station_site_tile(state, c)
+    } else {
+        Ok(())
+    }
+}
+
 /// Spec `NewGRF` a persistir (ya validado por `check_road_stop_spec_restrictions`).
 fn resolve_road_stop_spec_for_placement(state: &GameState) -> Option<u16> {
     state.current_road_stop_spec.filter(|&id| {
@@ -582,12 +604,14 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     } else {
         station_build_cost(&state.global_economy)
     };
+    // `CmdBuildRailStation` / `CmdBuildRoadStop` limpian el sitio con el
+    // comando normal de demolición. Un MP_OBJECT importado conserva `Grass`
+    // como fallback visual, así que debe validarse aparte antes de escribirlo.
+    check_object_can_be_cleared(state, c)?;
     // Snapshot para rollback si `connect_road_stop` falla (antes dejaba Station huérfana
     // y RoadHaul no podía reintentar otra boca).
     let prev_tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
-    if station_site_tile_needs_clear(kind) {
-        clear_station_site_tile(state, c)?;
-    }
+    prepare_station_site_for_placement(state, c, kind)?;
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     tile.kind = TileKind::Station;
     tile.mapt = 0x50;

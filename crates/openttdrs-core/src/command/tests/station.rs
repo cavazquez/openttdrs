@@ -51,6 +51,77 @@ fn place_station_on_forest_clears_and_builds_when_entrance_faces_road() {
 }
 
 #[test]
+fn station_cannot_overwrite_nonremovable_object() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 4);
+    apply_command(
+        &mut s,
+        &Command::BuildObject {
+            pos: c,
+            object_type: crate::OBJECT_TYPE_LIGHTHOUSE,
+        },
+    )
+    .unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(3, 3))).unwrap();
+
+    assert_eq!(
+        command_would_fail(&s, &Command::PlaceStationDir(c, 3)),
+        Some(CommandError::ObjectCannotBeRemoved)
+    );
+    assert_eq!(
+        apply_command(&mut s, &Command::PlaceStationDir(c, 3)),
+        Err(CommandError::ObjectCannotBeRemoved)
+    );
+    assert!(crate::is_map_object_tile(s.map.get(c).unwrap().mapt));
+}
+
+#[test]
+fn station_demolishes_entire_removable_object_footprint() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 4);
+    let catalog_len = u16::try_from(s.object_spec_catalog.len()).unwrap();
+    let object_type = u8::try_from(crate::NEW_OBJECT_OFFSET + catalog_len).unwrap();
+    s.object_spec_catalog.push(crate::ObjectSpecDef {
+        id: u16::from(object_type),
+        class_label: "OBJ ".into(),
+        name: "Removable station site".into(),
+        size: 0x12,
+        from_newgrf: true,
+        local_id: 0,
+        grfid: 0x5354_4154,
+        newgrf_grf_version: 0,
+        climate_mask: crate::DEFAULT_OBJECT_CLIMATE_MASK,
+        build_cost_factor: 1,
+        flags: 0,
+        animation_frames: 0,
+        animation_status: 0xFF,
+        animation_speed: 2,
+        animation_triggers: 0,
+        callback_mask: 0,
+        views: Vec::new(),
+        newgrf_runtime: None,
+        associated_badges: Vec::new(),
+    });
+    apply_command(
+        &mut s,
+        &Command::BuildObject {
+            pos: c,
+            object_type,
+        },
+    )
+    .unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(3, 3))).unwrap();
+
+    apply_command(&mut s, &Command::PlaceStationDir(c, 3)).unwrap();
+
+    assert_eq!(s.map.get_kind(c), Some(TileKind::Station));
+    assert!(!crate::is_map_object_tile(
+        s.map.get(TileCoord::new(4, 4)).unwrap().mapt
+    ));
+    assert!(s.objects.is_empty());
+}
+
+#[test]
 fn place_station_on_road_tile_fails() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(1, 1);

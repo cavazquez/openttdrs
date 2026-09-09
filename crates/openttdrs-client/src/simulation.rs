@@ -25,6 +25,19 @@ pub(crate) struct SimClock {
     pub(crate) tick_alpha: f32,
 }
 
+/// Impide cualquier tick autoritativo durante una captura visual.
+///
+/// `SimRunState` se crea como `Running` al entrar en `InGame`; la transición
+/// solicitada a `Paused` desde `OnEnter` se materializa en el siguiente ciclo
+/// de estados. Este cerrojo ya existe al construir la app, por lo que ni esos
+/// ticks iniciales pueden cambiar el frame que mide un oráculo raster.
+#[derive(Resource, Debug, Clone, Copy, Default)]
+pub(crate) struct VisualCaptureFreeze(pub(crate) bool);
+
+fn simulation_step_allowed(capture_freeze: Option<Res<VisualCaptureFreeze>>) -> bool {
+    !capture_freeze.is_some_and(|freeze| freeze.0)
+}
+
 pub(crate) struct SimulationPlugin;
 
 impl Plugin for SimulationPlugin {
@@ -42,9 +55,8 @@ impl Plugin for SimulationPlugin {
                 (step_sim, flag_map_tile_dirty_remap)
                     .chain()
                     .in_set(FixedUpdateSet::Sim)
-                    .run_if(
-                        in_state(ClientScreen::InGame).and_then(in_state(SimRunState::Running)),
-                    ),
+                    .run_if(in_state(ClientScreen::InGame).and_then(in_state(SimRunState::Running)))
+                    .run_if(simulation_step_allowed),
             );
     }
 }
@@ -173,8 +185,9 @@ pub(crate) fn sync_tick_alpha(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::{
-        SIM_TICK_HZ, SimClock, flag_map_tile_dirty_remap, init_sim_fixed_timestep, step_sim,
-        sync_sim_time_controls, sync_tick_alpha,
+        SIM_TICK_HZ, SimClock, VisualCaptureFreeze, flag_map_tile_dirty_remap,
+        init_sim_fixed_timestep, simulation_step_allowed, step_sim, sync_sim_time_controls,
+        sync_tick_alpha,
     };
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
@@ -196,11 +209,17 @@ mod tests {
         app.insert_resource(VehicleIndex::default());
         app.insert_resource(ClientPreferences::default());
         app.insert_resource(SimHudControls::default());
+        app.insert_resource(VisualCaptureFreeze::default());
         app.add_systems(Startup, init_sim_fixed_timestep);
         app.add_systems(OnEnter(SimRunState::Paused), super::pause_virtual_time);
         app.add_systems(OnEnter(SimRunState::Running), super::unpause_virtual_time);
         app.add_systems(PreUpdate, sync_sim_time_controls);
-        app.add_systems(FixedUpdate, step_sim.run_if(in_state(SimRunState::Running)));
+        app.add_systems(
+            FixedUpdate,
+            step_sim
+                .run_if(in_state(SimRunState::Running))
+                .run_if(simulation_step_allowed),
+        );
         app.add_systems(Update, sync_tick_alpha);
         app.world_mut()
             .resource_mut::<NextState<ClientScreen>>()
@@ -243,6 +262,21 @@ mod tests {
         let before = app.world().resource::<SimWorld>().state.tick.get();
         advance_app_time(&mut app, 500);
         let after = app.world().resource::<SimWorld>().state.tick.get();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn visual_capture_blocks_ticks_before_the_pause_state_applies() {
+        let mut app = sim_test_app();
+        app.world_mut().resource_mut::<VisualCaptureFreeze>().0 = true;
+
+        // El primer update entra en InGame y crea el subestado Running. La
+        // prueba cubre justamente el intervalo previo al OnEnter(Paused).
+        app.update();
+        let before = app.world().resource::<SimWorld>().state.tick.get();
+        advance_app_time(&mut app, 500);
+        let after = app.world().resource::<SimWorld>().state.tick.get();
+
         assert_eq!(before, after);
     }
 

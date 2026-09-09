@@ -40,7 +40,7 @@ use crate::render::{
 use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
 use crate::render_trace::RenderTracePlugin;
 use crate::settings::{ClientSettingsPlugin, patch_window_plugin_for_settings};
-use crate::simulation::SimulationPlugin;
+use crate::simulation::{SimulationPlugin, VisualCaptureFreeze};
 use crate::state::{
     BootstrapLoadError, ClientScreen, EditorSession, SimWorld, SuspendedGameSession,
 };
@@ -227,6 +227,10 @@ pub(crate) fn build_client_app(
         _ => SimWorld::try_bootstrap_from_env()?,
     };
     app.insert_resource(sim_world);
+    // Debe existir antes de la primera transición a InGame: el subestado de
+    // simulación nace como Running y la pausa de los screenshots se aplica en
+    // el ciclo siguiente. El cerrojo impide que ese intervalo mute el SAV.
+    app.insert_resource(VisualCaptureFreeze(visual_capture));
     app.init_resource::<SuspendedGameSession>();
     app.init_resource::<EditorSession>();
     app.insert_resource(ClientAudioEnabled(!audio_disabled));

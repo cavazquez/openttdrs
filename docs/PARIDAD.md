@@ -1171,6 +1171,21 @@ normal baja de 3,674402 a 3,668558. Es una corrección local de composición,
 no paridad global: familias restantes, clipping, pivotes y framebuffer siguen
 abiertos en #326, y el contrato global completo de children sigue en #561.
 
+Actualización #326-CAPTURE-FREEZE (2026-09-09): el modo de captura instala
+`VisualCaptureFreeze` antes de la primera transición a `InGame`. Así cubre el
+intervalo en que `SimRunState` nace como `Running` y la petición de `Paused`
+desde `OnEnter` todavía no se materializó: antes se filtraban tres ticks y las
+capas aeroportuarias animadas de Kale pasaban del radar/manga nativos
+`2685`/`2678` a `2686`/`2679`. La regresión de simulación prueba que no avanza
+ningún tick en ese intervalo, y las capturas limpias a 40 y 180 frames son
+byte-idénticas; la traza vuelve a publicar los dos IDs y sus cajas nativas.
+La matriz del mismo SAV mejora en cinco escalas: `0,25×` 234.056→233.848,
+`0,5×` 388.158→387.222, `1×` 93.194→92.419, `2×` 532.788→532.259 y `4×`
+750.081→749.705 píxeles distintos; a `8×` sube levemente
+705.905→705.953 y el delta medio 30,018109→30,022781. Esa excepción queda
+registrada: este corte hace reproducible el instante del SAV, no declara una
+mejora general del framebuffer ni cierra #326 o #561.
+
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
 `y_offs`). El renderer aplica además `SpriteBounds::origin` y

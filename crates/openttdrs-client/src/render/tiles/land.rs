@@ -2282,7 +2282,7 @@ fn spawn_newgrf_object_layout_ground(
         return true;
     };
     let handle = cache.handle_for_layout(def, 0, runtime_fp, &ground.sprite, images);
-    let position = overlay_pos(
+    let mut position = overlay_pos(
         ctx.iso_pos,
         f32::from(ground.sprite.x_offs),
         f32::from(ground.sprite.y_offs),
@@ -2293,6 +2293,9 @@ fn spawn_newgrf_object_layout_ground(
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
+    // `DrawNewObjectTile` entrega el ground TileLayout a `DrawGroundSprite`;
+    // la secuencia BUILD se materializa separadamente en el compositor global.
+    position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.55);
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),

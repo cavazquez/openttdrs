@@ -10,9 +10,9 @@ use openttdrs_core::{
     Action2VarAdjust, Action2VarEntry, Action2VarTerm, AirportClassId, AirportSpecId,
     AirportTileGfxId, AirportTileSpecDef, BridgeType, Climate, DecodedSprite,
     FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef, IndustryTileGfxId, IndustryTileSpecDef,
-    NewgrfAirportSpecDef, RailType, RoadStopSpecDef, RoadTramType, RoadType, RoadTypeDef,
-    StationClassId, StationSpecDef, StationSpecId, TrainSpriteAssign, TrainSpriteGraphics,
-    WaterClass, set_water_class_m1, vanilla_road_type_catalog,
+    NewgrfAirportSpecDef, ObjectSpecDef, RailType, RoadStopSpecDef, RoadTramType, RoadType,
+    RoadTypeDef, StationClassId, StationSpecDef, StationSpecId, TrainSpriteAssign,
+    TrainSpriteGraphics, WaterClass, set_water_class_m1, vanilla_road_type_catalog,
 };
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
@@ -6921,6 +6921,142 @@ fn flat_newgrf_industry_tile_layout_keeps_ground_in_ground_pass() {
         ground_depths,
         vec![ground_draw_z(coord.x, coord.y, 0.45)],
         "DrawNewIndustryTile debe dejar el ground TileLayout en DrawGroundSprite"
+    );
+}
+
+#[test]
+fn flat_newgrf_object_tile_layout_keeps_ground_in_ground_pass() {
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let object_type = openttdrs_core::NEW_OBJECT_OFFSET;
+    let mut map = Map::new_flat(4, 4, 0);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Grass,
+            mapt: 0xA0,
+            m5: u8::try_from(object_type).expect("NewGRF object type byte"),
+            ..tile_template()
+        },
+    )
+    .expect("object TileLayout tile");
+
+    let ground = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: [240, 10, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![vec![ground.clone()]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 4,
+            set_id: 9,
+        }],
+        ..Default::default()
+    };
+    runtime.tile_layouts.insert(
+        9,
+        TileLayout {
+            ground: TileLayoutSpriteRef {
+                action1_set: Some(0),
+                ..Default::default()
+            },
+            sequence: Vec::new(),
+        },
+    );
+    let object_def = ObjectSpecDef {
+        id: object_type,
+        class_label: "TEST".into(),
+        name: "TileLayout object".into(),
+        size: openttdrs_core::OBJECT_SIZE_1X1,
+        from_newgrf: true,
+        local_id: 4,
+        grfid: 0x4F42_4A54,
+        newgrf_grf_version: 8,
+        climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
+        build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+        clear_cost_factor: openttdrs_core::DEFAULT_OBJECT_CLEAR_COST_FACTOR,
+        flags: 0,
+        animation_frames: 0,
+        animation_status: 0xFF,
+        animation_speed: 2,
+        animation_triggers: 0,
+        callback_mask: 0,
+        views: vec![ground.clone()],
+        newgrf_runtime: Some(Box::new(runtime)),
+        associated_badges: Vec::new(),
+    };
+
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfObjectSpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: ResMut<crate::render::NewGrfObjectSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_generic_land_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &m.0,
+                    4.0,
+                    TEST_CLIMATE,
+                    TEST_WORLD_SEED,
+                    m.0.dimensions().0,
+                    std::slice::from_ref(&object_def),
+                    &[],
+                    Some(&mut cache),
+                    Some(&mut images),
+                );
+            },
+        )
+        .expect("object TileLayout spawn");
+
+    let expected_position = overlay_pos(
+        crate::iso::iso(coord.x, coord.y),
+        f32::from(ground.x_offs),
+        f32::from(ground.y_offs),
+        f32::from(ground.width),
+        f32::from(ground.height),
+        0,
+        0.55,
+        coord.x,
+        coord.y,
+    );
+    let sprites: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(sprite, transform)| (sprite.image.clone(), transform.translation))
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let ground_depths: Vec<_> = sprites
+        .iter()
+        .filter_map(|(handle, translation)| {
+            (images.get(handle).and_then(|image| image.data.as_deref())
+                == Some(ground.rgba.as_slice())
+                && translation.truncate() == expected_position.truncate())
+            .then_some(translation.z)
+        })
+        .collect();
+    assert_eq!(
+        ground_depths,
+        vec![ground_draw_z(coord.x, coord.y, 0.55)],
+        "DrawNewObjectTile debe dejar el ground TileLayout en DrawGroundSprite"
     );
 }
 

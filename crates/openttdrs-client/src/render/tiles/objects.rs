@@ -3103,7 +3103,7 @@ fn spawn_newgrf_road_stop_layout_ground(
         &ground.sprite,
         images,
     );
-    let position = overlay_pos(
+    let mut position = overlay_pos(
         ctx.iso_pos,
         f32::from(ground.sprite.x_offs),
         f32::from(ground.sprite.y_offs),
@@ -3122,6 +3122,10 @@ fn spawn_newgrf_road_stop_layout_ground(
     if let Some(parent) = foundation_child_parent {
         spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
     } else {
+        // `DrawGroundSprite` conserva el ancla NFO, pero no participa del
+        // stream de parents. Separarlo del pase sortable evita que el asfalto
+        // custom cubra BUILD/catenaria que OpenTTD dibuja después.
+        position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.025);
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),

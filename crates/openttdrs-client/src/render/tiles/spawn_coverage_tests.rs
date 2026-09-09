@@ -18,7 +18,7 @@ use openttdrs_core::{
 const TEST_CLIMATE: Climate = Climate::Temperate;
 const TEST_WORLD_SEED: u64 = 0;
 
-use crate::iso::ground_draw_z;
+use crate::iso::{ground_draw_z, overlay_pos};
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::tiles::{
     HouseSpawnResources, flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle,
@@ -1312,28 +1312,63 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
         .iter(&world)
         .map(|sprite| sprite.image.clone())
         .collect();
-    let images = world.resource::<Assets<Image>>();
-    let has_rgba = |handle: &Handle<Image>, rgba: &[u8]| {
-        images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba)
-    };
-    assert!(
-        sprite_handles
-            .iter()
-            .any(|handle| has_rgba(handle, ground_rgba.as_slice())),
-        "el ground del TileLayout estático debe materializarse"
-    );
     let (parent_entity, _, parent_handle, _) = parents
         .iter()
         .find(|(_, parent, _, _)| parent.sprite_id == u32::MAX)
         .expect("parent TileSeq estático");
+    let (ground_handles, parent_matches, child_matches) = {
+        let images = world.resource::<Assets<Image>>();
+        let has_rgba = |handle: &Handle<Image>, rgba: &[u8]| {
+            images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba)
+        };
+        let mut ground_handles = Vec::new();
+        for handle in &sprite_handles {
+            if has_rgba(handle, ground_rgba.as_slice()) && !ground_handles.contains(handle) {
+                ground_handles.push(handle.clone());
+            }
+        }
+        let parent_matches = has_rgba(parent_handle, parent_rgba.as_slice());
+        let child_matches = children.iter().any(|(child_component, handle)| {
+            child_component.parent == *parent_entity && has_rgba(handle, child_rgba.as_slice())
+        });
+        (ground_handles, parent_matches, child_matches)
+    };
+    assert_eq!(
+        ground_handles.len(),
+        1,
+        "el ground debe materializarse una vez"
+    );
+    let expected_ground_position = overlay_pos(
+        crate::iso::iso(coord.x, coord.y),
+        -1.0,
+        -2.0,
+        2.0,
+        2.0,
+        0,
+        0.025,
+        coord.x,
+        coord.y,
+    );
+    let ground_depths: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .filter_map(|(sprite, transform)| {
+            (ground_handles.contains(&sprite.image)
+                && transform.translation.truncate() == expected_ground_position.truncate())
+            .then_some(transform.translation.z)
+        })
+        .collect();
+    assert_eq!(
+        ground_depths,
+        vec![ground_draw_z(coord.x, coord.y, 0.025)],
+        "el ground TileLayout de parada/waypoint usa DrawGroundSprite, no el pase sortable"
+    );
     assert!(
-        has_rgba(parent_handle, parent_rgba.as_slice()),
+        parent_matches,
         "el parent debe usar el sprite NewGRF del TileLayout"
     );
     assert!(
-        children.iter().any(|(child_component, handle)| {
-            child_component.parent == *parent_entity && has_rgba(handle, child_rgba.as_slice())
-        }),
+        child_matches,
         "el child TileSeq debe seguir unido al parent NewGRF"
     );
 }

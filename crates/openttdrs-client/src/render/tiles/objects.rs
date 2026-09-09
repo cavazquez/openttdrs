@@ -718,22 +718,22 @@ fn road_stop_sorted_layer_centers(
     centers
 }
 
-/// Parents BUILD heredados de las paradas Bus/Truck.
+/// Ordinal de los parents BUILD que siguen en la ruta local de layout custom.
 ///
 /// El flujo nativo llama a `DrawRoadCatenary` antes de `DrawRailTileSeq`,
-/// pero la catenaria de estas paradas sigue temporalmente fuera del compositor
-/// global. Sus parents BUILD conservan el contrato ya publicado hasta que esa
-/// migración se haga como una etapa propia.
-const ROAD_STOP_BUILDING_PARENT_ORDINAL: u8 = 2;
+/// pero la catenaria de un layout custom sigue temporalmente fuera del
+/// compositor global. Sus parents BUILD conservan este contrato hasta una
+/// migración dedicada.
+const ROAD_STOP_LEGACY_BUILDING_PARENT_ORDINAL: u8 = 2;
 
 /// `DrawRoadTypeCatenary` puede publicar tres columnas y un frente por road
 /// type. El bloque 4..=11 deja 0..=3 a la foundation y cubre carretera más
-/// tranvía antes de los postes BUILD de un road waypoint vanilla.
-const ROAD_WAYPOINT_CATENARY_PARENT_ORDINAL: u8 = 4;
+/// tranvía antes de las capas BUILD vanilla de una parada o waypoint.
+const ROAD_STOP_CATENARY_PARENT_ORDINAL: u8 = 4;
 
-/// `DrawRailTileSeq(TO_BUILDINGS)` sigue a la catenaria en un road waypoint.
-/// Se reservan dos slots después del máximo de ocho parents de cable/postes.
-const ROAD_WAYPOINT_BUILDING_PARENT_ORDINAL: u8 = 12;
+/// `DrawRailTileSeq(TO_BUILDINGS)` sigue a la catenaria vanilla. Se reservan
+/// dos slots después del máximo de ocho parents de cable/postes.
+const ROAD_VANILLA_BUILDING_PARENT_ORDINAL: u8 = 12;
 
 /// Emite una capa BUILD vanilla de parada vial como parent del compositor
 /// global. Las cajas siguen el `TILE_SEQ_LINE` publicado por OpenTTD y la
@@ -2164,37 +2164,17 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     );
                 }
             }
-            spawn_road_stop_buildings(
-                commands,
-                assets,
-                company,
-                owner_colour,
-                map,
-                stations,
-                ctx,
-                road_stop_base_z,
-                class,
-                view_idx,
-                road_stop_catalog,
-                roadstop_action5,
-                action5_sprites.as_deref_mut(),
-                images.as_deref_mut(),
-                climate,
-                newgrf_stack,
-                world,
-            );
-            // Pendiente: `DrawTile_Station` nativo emite la catenaria entre
-            // el suelo y `DrawRailTileSeq(TO_BUILDINGS)`. En Bus/Truck la
-            // catenaria todavía queda fuera del compositor global y se migra
-            // por separado.
-            // La entrada de una bahía es un único brazo diagonal; una
-            // drive-through usa el eje completo. En pendientes la parada ya
-            // fue nivelada, por eso el selector recibe SLOPE_FLAT (0) y la
-            // altura de la superficie resultante de `DrawFoundation`.
-            if !road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord)
-                && let Some(tile) = ctx.tile
-            {
-                spawn_road_stop_catenary(
+            // OpenTTD emite la catenaria entre el suelo/overlay y
+            // `DrawRailTileSeq(TO_BUILDINGS)`. Sólo el layout vanilla puede
+            // reservar el stream global 4..=11: los layouts NewGRF aún tienen
+            // sus propios ordinales BUILD y conservan temporalmente la ruta
+            // directa.
+            let catenary_suppressed =
+                road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord);
+            let catenary_parent_ordinal = (!catenary_suppressed && custom_layout.is_none())
+                .then_some(ROAD_STOP_CATENARY_PARENT_ORDINAL);
+            if !catenary_suppressed && let Some(tile) = ctx.tile {
+                let _ = spawn_road_stop_catenary(
                     commands,
                     map,
                     dims,
@@ -2210,9 +2190,34 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     newgrf_stack,
                     catenary_newgrf,
                     catenary_sprites.as_deref_mut(),
-                    None,
+                    catenary_parent_ordinal,
                 );
             }
+            let building_parent_ordinal = if catenary_parent_ordinal.is_some() {
+                ROAD_VANILLA_BUILDING_PARENT_ORDINAL
+            } else {
+                ROAD_STOP_LEGACY_BUILDING_PARENT_ORDINAL
+            };
+            spawn_road_stop_buildings(
+                commands,
+                assets,
+                company,
+                owner_colour,
+                map,
+                stations,
+                ctx,
+                road_stop_base_z,
+                building_parent_ordinal,
+                class,
+                view_idx,
+                road_stop_catalog,
+                roadstop_action5,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+                climate,
+                newgrf_stack,
+                world,
+            );
         }
         StationTileClass::RoadWaypoint => {
             // `DrawTile_Station` trata el waypoint vial como un
@@ -2459,7 +2464,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             // de catenaria sin colisionar con ellos.
             let waypoint_catenary_parent_ordinal = waypoint_layout
                 .is_none()
-                .then_some(ROAD_WAYPOINT_CATENARY_PARENT_ORDINAL);
+                .then_some(ROAD_STOP_CATENARY_PARENT_ORDINAL);
             if !road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord)
                 && let Some(tile) = ctx.tile
             {
@@ -2514,7 +2519,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     u8::from(waypoint_bits == 0x05),
                     dims.0,
                     foundation_child_parent,
-                    ROAD_WAYPOINT_BUILDING_PARENT_ORDINAL,
+                    ROAD_VANILLA_BUILDING_PARENT_ORDINAL,
                 );
             }
         }
@@ -3296,6 +3301,7 @@ fn spawn_road_stop_buildings(
     stations: &[Station],
     ctx: &TileRenderContext,
     base_z: u8,
+    vanilla_parent_ordinal: u8,
     class: StationTileClass,
     dir: usize,
     road_stop_catalog: &[RoadStopSpecDef],
@@ -3424,8 +3430,7 @@ fn spawn_road_stop_buildings(
                 ctx,
                 base_z,
                 map.dimensions().0,
-                ROAD_STOP_BUILDING_PARENT_ORDINAL
-                    .saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
+                vanilla_parent_ordinal.saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
                 spec,
                 tint_building_sprite(sprite_from_atlas_or_company_white_colour(
                     company,
@@ -3467,8 +3472,7 @@ fn spawn_road_stop_buildings(
                 ctx,
                 base_z,
                 map.dimensions().0,
-                ROAD_STOP_BUILDING_PARENT_ORDINAL
-                    .saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
+                vanilla_parent_ordinal.saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
                 spec,
                 sprite,
             );
@@ -3480,8 +3484,7 @@ fn spawn_road_stop_buildings(
             ctx,
             base_z,
             map.dimensions().0,
-            ROAD_STOP_BUILDING_PARENT_ORDINAL
-                .saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
+            vanilla_parent_ordinal.saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
             spec,
             tint_building_sprite(sprite_from_atlas_or_company_white_colour(
                 company,

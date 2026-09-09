@@ -1257,6 +1257,19 @@ contiene un foco vial de waypoint/catenaria para medir raster, así que #326
 permanece abierto por esos productores, clipping, pivotes, children globales y
 framebuffer.
 
+Actualización #326-ROAD-STOP-CATENARY-GLOBAL (2026-09-09): las paradas
+Bus/Truck vanilla sin `TileLayout` custom ya respetan el orden nativo
+suelo/overlay → `DrawRoadCatenary` → `DrawRailTileSeq(TO_BUILDINGS)`. Sus
+columnas traseras y frente road/tram son parents globales con los prismas de
+`road_cmd.cpp`, la base efectiva posterior a foundation y profundidad fuente;
+los ordinales 4–11 preceden a las capas BUILD desde 12. La regresión ECS cubre
+una drive-through plana y otra nivelada en pendiente, verificando bounds,
+altura efectiva, ordinales y el vínculo child de sus capas de suelo. Las
+paradas y waypoints con layout NewGRF siguen en su ruta local de ordinales y
+no se declaran cubiertos. Kale no tiene un foco vial reproducible para medir
+raster; #326 permanece abierto por esos layouts, clipping, pivotes, children
+globales y framebuffer.
+
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
 `y_offs`). El renderer aplica además `SpriteBounds::origin` y

@@ -744,12 +744,12 @@ fn road_stop_vanilla_layers_join_global_sort() {
             (
                 5980,
                 ParentSpriteBounds::new(16, 16, 0, 31, 18, 15),
-                viewport_insertion_key(1, 1, 2),
+                viewport_insertion_key(1, 1, 12),
             ),
             (
                 5981,
                 ParentSpriteBounds::new(16, 29, 0, 31, 31, 15),
-                viewport_insertion_key(1, 1, 3),
+                viewport_insertion_key(1, 1, 13),
             ),
         ],
         "cada capa TILE_SEQ_LINE de la parada debe ser un parent global"
@@ -1034,6 +1034,62 @@ fn drive_through_tram_stop_draws_vanilla_catenary() {
             .filter(|(sprite, _)| expected_front.matches(sprite))
             .count(),
         1
+    );
+
+    let mut parents: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter_map(|(parent, transform)| {
+            [6071, 6043, 5980, 5981]
+                .contains(&parent.sprite_id)
+                .then_some((*parent, transform.translation.z))
+        })
+        .collect();
+    parents.sort_by_key(|(parent, _)| parent.insertion_key);
+    assert_eq!(
+        parents
+            .iter()
+            .map(|(parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                6071,
+                ParentSpriteBounds::new(63, 48, 0, 63, 48, 1),
+                viewport_insertion_key(3, 3, 4),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(48, 48, 0, 48, 48, 1),
+                viewport_insertion_key(3, 3, 5),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(48, 63, 0, 48, 63, 1),
+                viewport_insertion_key(3, 3, 6),
+            ),
+            (
+                6043,
+                ParentSpriteBounds::new(48, 48, 2, 63, 63, 2),
+                viewport_insertion_key(3, 3, 7),
+            ),
+            (
+                5980,
+                ParentSpriteBounds::new(48, 48, 0, 63, 50, 15),
+                viewport_insertion_key(3, 3, 12),
+            ),
+            (
+                5981,
+                ParentSpriteBounds::new(48, 61, 0, 63, 63, 15),
+                viewport_insertion_key(3, 3, 13),
+            ),
+        ],
+        "la catenaria de la parada vanilla precede a sus capas BUILD en el stream global"
+    );
+    assert!(
+        parents
+            .iter()
+            .all(|(parent, depth)| parent.source_depth == *depth),
+        "catenaria y BUILD conservan profundidad fuente antes del sort global"
     );
 }
 
@@ -2916,17 +2972,17 @@ fn sloped_road_stop_grounds_attach_to_their_foundation_parent() {
         (bay, 0),
         (drive_through, openttdrs_core::RSV_DRIVE_THROUGH_X),
     ] {
-        map.set_tile(
-            coord,
-            Tile {
-                kind: TileKind::Station,
-                mapt: 0x50,
-                m5,
-                m6: 3 << 3, // StationType::Bus.
-                ..tile_template()
-            },
-        )
-        .expect("parada vial inclinada");
+        let mut tile = Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5,
+            m6: 3 << 3, // StationType::Bus.
+            ..tile_template()
+        };
+        if coord == drive_through {
+            tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::TRAM));
+        }
+        map.set_tile(coord, tile).expect("parada vial inclinada");
         for corner in [
             c(coord.x + 1, coord.y),
             c(coord.x, coord.y + 1),
@@ -2938,6 +2994,12 @@ fn sloped_road_stop_grounds_attach_to_their_foundation_parent() {
     }
 
     let grid = RenderGrid::from_map(&map, 8, 8);
+    let drive_through_ctx = TileRenderContext::new(&map, &grid, 5, 1);
+    assert_ne!(
+        drive_through_ctx.info.tileh, 0,
+        "la parada debe seguir inclinada"
+    );
+    let catenary_z = i32::from(drive_through_ctx.info.base_z.saturating_add(1)) * 8;
     let mut world = World::new();
     world.insert_resource(TsMap(map));
     world.insert_resource(TsGrid(grid));
@@ -2992,6 +3054,52 @@ fn sloped_road_stop_grounds_attach_to_their_foundation_parent() {
         foundation_parents.len(),
         2,
         "cada parada inclinada tiene fundación"
+    );
+
+    let mut catenary: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter_map(|(parent, transform)| {
+            [6071, 6043]
+                .contains(&parent.sprite_id)
+                .then_some((*parent, transform.translation.z))
+        })
+        .collect();
+    catenary.sort_by_key(|(parent, _)| parent.insertion_key);
+    assert_eq!(
+        catenary
+            .iter()
+            .map(|(parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                6071,
+                ParentSpriteBounds::new(95, 16, catenary_z, 95, 16, catenary_z + 1),
+                viewport_insertion_key(5, 1, 4),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(80, 16, catenary_z, 80, 16, catenary_z + 1),
+                viewport_insertion_key(5, 1, 5),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(80, 31, catenary_z, 80, 31, catenary_z + 1),
+                viewport_insertion_key(5, 1, 6),
+            ),
+            (
+                6043,
+                ParentSpriteBounds::new(80, 16, catenary_z + 2, 95, 31, catenary_z + 2),
+                viewport_insertion_key(5, 1, 7),
+            ),
+        ],
+        "la catenaria de una parada nivelada usa la altura efectiva como parent global"
+    );
+    assert!(
+        catenary
+            .iter()
+            .all(|(parent, depth)| parent.source_depth == *depth),
+        "la catenaria inclinada preserva profundidad fuente antes del sort global"
     );
 
     let attached: Vec<_> = world

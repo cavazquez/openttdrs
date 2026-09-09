@@ -45,7 +45,7 @@ const TREE_GROUND_ROUGH: u8 = 1;
 const TREE_GROUND_SNOW_DESERT: u8 = 2;
 const TREE_GROUND_ROUGH_SNOW: u8 = 4;
 
-/// `TileType` crudos usados por las guardas de árbol.
+/// `TileType` crudos usados por las guardas de árbol y suelo despejado.
 ///
 /// `TileKind::Grass` es un fallback de render para varios tipos sin handler
 /// propio (entre ellos `MP_OBJECT`), así que no basta para autorizar una
@@ -383,7 +383,7 @@ pub fn process_tree_and_field_growth_from_visits(
                 // no puede avanzar como césped por conservar un snapshot
                 // previo. `RunTileLoop` siempre vuelve a consultar el tipo
                 // vivo antes del callback siguiente.
-                if tile.kind != TileKind::Grass {
+                if tile.kind != TileKind::Grass || tile.ottd_type_nibble() != OTTD_TILETYPE_CLEAR {
                     continue;
                 }
                 let ground = clear_ground_type(tile.m5);
@@ -876,7 +876,7 @@ pub fn tile_loop_clear_desert(
     let Some(tile) = map.get(c) else {
         return false;
     };
-    if tile.kind != TileKind::Grass {
+    if tile.kind != TileKind::Grass || tile.ottd_type_nibble() != OTTD_TILETYPE_CLEAR {
         return false;
     }
     let ground = clear_ground_type(tile.m5);
@@ -983,7 +983,7 @@ pub(crate) fn tile_loop_clear_alps_at(map: &mut Map, c: TileCoord, snow_line_hei
     let Some(tile) = map.get(c) else {
         return false;
     };
-    if tile.kind != TileKind::Grass {
+    if tile.kind != TileKind::Grass || tile.ottd_type_nibble() != OTTD_TILETYPE_CLEAR {
         return false;
     }
     let Some((_, z)) = tile_slope_and_z(map, c) else {
@@ -1716,6 +1716,35 @@ mod tests {
             Err(crate::command::CommandError::CannotPlantTreeHere)
         );
         assert_eq!(state.map.get(c), Some(object));
+    }
+
+    #[test]
+    fn clear_landscape_loop_does_not_mutate_raw_object_fallback() {
+        let mut map = Map::new_flat(4, 4, 12);
+        let c = TileCoord::new(1, 1);
+        let mut object = map.get(c).unwrap();
+        // El fallback de importación lo expone como Grass, pero el dispatcher
+        // nativo nunca llama TileLoop_Clear para MP_OBJECT.
+        object.mapt = 0xA1;
+        object.m1 = 0x70;
+        object.m2 = 9;
+        object.m3 = 0;
+        object.m5 = clear_ground_m5(CLEAR_GROUND_GRASS, 0);
+        map.set_tile(c, object).unwrap();
+
+        process_tree_and_field_growth_from_visits(&mut map, 0, 0, &[(c, object)]);
+        assert_eq!(map.get(c), Some(object));
+
+        assert!(!tile_loop_clear_desert(
+            &mut map,
+            c,
+            Climate::SubTropical,
+            0
+        ));
+        assert_eq!(map.get(c), Some(object));
+
+        assert!(!tile_loop_clear_alps_at(&mut map, c, 10));
+        assert_eq!(map.get(c), Some(object));
     }
 
     #[test]

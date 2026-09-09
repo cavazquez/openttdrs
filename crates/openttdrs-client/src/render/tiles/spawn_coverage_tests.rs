@@ -1094,6 +1094,246 @@ fn drive_through_tram_stop_draws_vanilla_catenary() {
 }
 
 #[test]
+fn static_newgrf_road_stop_layout_joins_global_catenary_sort() {
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(3, 3);
+    let mut map = fresh_map8();
+    let mut tile = Tile {
+        kind: TileKind::Station,
+        mapt: 0x50,
+        m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+        m6: 3 << 3, // StationType::Bus.
+        ..tile_template()
+    };
+    tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::TRAM));
+    map.set_tile(coord, tile)
+        .expect("parada NewGRF drive-through con tranvía");
+
+    let ground_rgba = [240, 10, 10, 255].repeat(4);
+    let parent_rgba = [10, 240, 10, 255].repeat(4);
+    let child_rgba = [10, 10, 240, 255].repeat(4);
+    let ground = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: ground_rgba.clone(),
+        mask: Vec::new(),
+    };
+    let parent = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -3,
+        y_offs: -4,
+        rgba: parent_rgba.clone(),
+        mask: Vec::new(),
+    };
+    let child = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -5,
+        y_offs: -6,
+        rgba: child_rgba.clone(),
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![vec![ground], vec![parent], vec![child]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 0,
+            set_id: 9,
+        }],
+        ..Default::default()
+    };
+    runtime.tile_layouts.insert(
+        9,
+        TileLayout {
+            ground: TileLayoutSpriteRef {
+                action1_set: Some(0),
+                ..Default::default()
+            },
+            sequence: vec![
+                TileLayoutSpriteRef {
+                    action1_set: Some(1),
+                    origin: [1, 2, 3],
+                    extent: [4, 5, 6],
+                    ..Default::default()
+                },
+                TileLayoutSpriteRef {
+                    action1_set: Some(2),
+                    origin: [7, -4, i8::MIN],
+                    ..Default::default()
+                },
+            ],
+        },
+    );
+    let spec = RoadStopSpecDef {
+        id: 7,
+        class: 0,
+        label: "TileLayout estático".into(),
+        short_label: "TLS".into(),
+        stop_type: openttdrs_core::ROADSTOP_TYPE_BUS,
+        from_newgrf: true,
+        grfid: 0x5449_4C45,
+        newgrf_local_id: 0,
+        newgrf_grf_version: 8,
+        draw_mode: openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        random_cargo_triggers: 0,
+        flags: 0,
+        build_cost_multiplier: 16,
+        clear_cost_multiplier: 16,
+        bridgeable_info: [openttdrs_core::road_stop_spec::RoadStopBridgeableInfo::default();
+            openttdrs_core::road_stop_spec::ROADSTOP_LAYOUT_COUNT],
+        callback_mask: 0,
+        animation_status: 0xFF,
+        animation_frames: 0,
+        animation_speed: 2,
+        animation_triggers: 0,
+        newgrf_views: Vec::new(),
+        newgrf_runtime: Some(Box::new(runtime)),
+        newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
+    };
+    let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+    station.road_stop_spec = Some(spec.id);
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfAction5SpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: ResMut<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    std::slice::from_ref(&station),
+                    4.0,
+                    true,
+                    &[],
+                    std::slice::from_ref(&spec),
+                    None,
+                    Some(&mut images),
+                    &[],
+                    None,
+                    &[],
+                    Some(&mut cache),
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("TileLayout estático de parada vial");
+
+    let mut parents: Vec<_> = world
+        .query::<(Entity, &ViewportSortableParent, &Sprite, &Transform)>()
+        .iter(&world)
+        .filter_map(|(entity, parent, sprite, transform)| {
+            [6071, 6043, u32::MAX]
+                .contains(&parent.sprite_id)
+                .then_some((
+                    entity,
+                    *parent,
+                    sprite.image.clone(),
+                    transform.translation.z,
+                ))
+        })
+        .collect();
+    parents.sort_by_key(|(_, parent, _, _)| parent.insertion_key);
+    assert_eq!(
+        parents
+            .iter()
+            .map(|(_, parent, _, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                6071,
+                ParentSpriteBounds::new(63, 48, 0, 63, 48, 1),
+                viewport_insertion_key(3, 3, 4),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(48, 48, 0, 48, 48, 1),
+                viewport_insertion_key(3, 3, 5),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(48, 63, 0, 48, 63, 1),
+                viewport_insertion_key(3, 3, 6),
+            ),
+            (
+                6043,
+                ParentSpriteBounds::new(48, 48, 2, 63, 63, 2),
+                viewport_insertion_key(3, 3, 7),
+            ),
+            (
+                u32::MAX,
+                ParentSpriteBounds::new(49, 50, 3, 52, 54, 8),
+                viewport_insertion_key(3, 3, 12),
+            ),
+        ],
+        "la catenaria debe preceder el TileSeq estático NewGRF en el stream global"
+    );
+    assert!(
+        parents
+            .iter()
+            .all(|(_, parent, _, depth)| parent.source_depth == *depth),
+        "catenaria y TileSeq conservan la profundidad fuente antes del sort global"
+    );
+
+    let children: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Sprite)>()
+        .iter(&world)
+        .map(|(child, sprite)| (*child, sprite.image.clone()))
+        .collect();
+    let sprite_handles: Vec<_> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .map(|sprite| sprite.image.clone())
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let has_rgba = |handle: &Handle<Image>, rgba: &[u8]| {
+        images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba)
+    };
+    assert!(
+        sprite_handles
+            .iter()
+            .any(|handle| has_rgba(handle, ground_rgba.as_slice())),
+        "el ground del TileLayout estático debe materializarse"
+    );
+    let (parent_entity, _, parent_handle, _) = parents
+        .iter()
+        .find(|(_, parent, _, _)| parent.sprite_id == u32::MAX)
+        .expect("parent TileSeq estático");
+    assert!(
+        has_rgba(parent_handle, parent_rgba.as_slice()),
+        "el parent debe usar el sprite NewGRF del TileLayout"
+    );
+    assert!(
+        children.iter().any(|(child_component, handle)| {
+            child_component.parent == *parent_entity && has_rgba(handle, child_rgba.as_slice())
+        }),
+        "el child TileSeq debe seguir unido al parent NewGRF"
+    );
+}
+
+#[test]
 fn normal_road_catenary_layers_join_global_sort() {
     let assets = boot_assets_app();
     let coord = TileCoord::new(1, 1);

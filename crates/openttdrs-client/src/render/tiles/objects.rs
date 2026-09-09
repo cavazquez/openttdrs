@@ -2165,13 +2165,18 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 }
             }
             // OpenTTD emite la catenaria entre el suelo/overlay y
-            // `DrawRailTileSeq(TO_BUILDINGS)`. Sólo el layout vanilla puede
-            // reservar el stream global 4..=11: los layouts NewGRF aún tienen
-            // sus propios ordinales BUILD y conservan temporalmente la ruta
-            // directa.
+            // `DrawRailTileSeq(TO_BUILDINGS)`. Un TileLayout completo ya se
+            // materializa como parents/children propios, por lo que puede
+            // reservar el stream global igual que el layout vanilla. Los
+            // layouts incompletos conservan su ruta local: su fallback puede
+            // mezclar sprites base que el cliente todavía no materializa.
             let catenary_suppressed =
                 road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord);
-            let catenary_parent_ordinal = (!catenary_suppressed && custom_layout.is_none())
+            let custom_layout_joins_global_sort = match custom_layout.as_ref() {
+                None => true,
+                Some((_, layout, _, _)) => road_stop_layout_is_static(layout),
+            };
+            let catenary_parent_ordinal = (!catenary_suppressed && custom_layout_joins_global_sort)
                 .then_some(ROAD_STOP_CATENARY_PARENT_ORDINAL);
             if !catenary_suppressed && let Some(tile) = ctx.tile {
                 let _ = spawn_road_stop_catenary(
@@ -2501,6 +2506,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     ctx,
                     waypoint_base_z,
                     dims.0,
+                    ROAD_STOP_LEGACY_BUILDING_PARENT_ORDINAL,
                     *spec_id,
                     *runtime_fp,
                     layout,
@@ -3149,6 +3155,7 @@ fn spawn_newgrf_road_stop_layout_sequence(
     ctx: &TileRenderContext,
     base_z: u8,
     map_width: u32,
+    parent_ordinal: u8,
     spec_id: u16,
     runtime_fp: u32,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
@@ -3231,7 +3238,7 @@ fn spawn_newgrf_road_stop_layout_sequence(
                         insertion_key: viewport_insertion_key(
                             ctx.tx,
                             ctx.ty,
-                            u8::try_from(index.saturating_add(2)).unwrap_or(u8::MAX),
+                            parent_ordinal.saturating_add(u8::try_from(index).unwrap_or(u8::MAX)),
                         ),
                         source_depth,
                     },
@@ -3363,6 +3370,7 @@ fn spawn_road_stop_buildings(
                 ctx,
                 base_z,
                 map.dimensions().0,
+                vanilla_parent_ordinal,
                 spec_id,
                 runtime_fp,
                 &layout,

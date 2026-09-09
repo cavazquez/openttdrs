@@ -1270,6 +1270,18 @@ no se declaran cubiertos. Kale no tiene un foco vial reproducible para medir
 raster; #326 permanece abierto por esos layouts, clipping, pivotes, children
 globales y framebuffer.
 
+Actualización #326-ROAD-STOP-STATIC-TILELAYOUT-GLOBAL (2026-09-09): las
+paradas Bus/Truck con `TileLayout` NewGRF completo y materializable entran
+también en el stream global nativo: la catenaria road/tram ocupa 4–11 y sus
+parents BUILD arrancan en 12. El cambio conserva el prisma `TILE_SEQ_LINE`,
+la profundidad fuente y el child ligado a su parent NewGRF; la regresión ECS
+verifica esos bounds/ordinales y las texturas Action1 de ground, parent y
+child. Los layouts incompletos —sprites base o paletas sin materialización
+atómica— conservan deliberadamente su fallback/orden local, y los road
+waypoints con layout NewGRF siguen pendientes. No hay foco Kale vial para
+atribuir una variación raster; #326 y #561 continúan abiertos por composición,
+clipping, pivotes, children globales y framebuffer.
+
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
 `y_offs`). El renderer aplica además `SpriteBounds::origin` y

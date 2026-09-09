@@ -4291,6 +4291,114 @@ fn sloped_rail_station_levels_platform_without_sloped_grass() {
 }
 
 #[test]
+fn rail_station_platform_parents_and_roof_glass_join_global_sort() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let coord = TileCoord::new(1, 1);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            // Gfx 4: plataforma, borde frontal, techo y vidrio child.
+            m5: 4,
+            m6: 0,
+            ..tile_template()
+        },
+    )
+    .expect("station roof glass");
+    let expected_glass = assets.rail.get(&1083).expect("roof glass").clone();
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &[],
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("station roof glass spawn");
+
+    let mut parents: Vec<_> = world
+        .query::<(Entity, &ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter_map(|(entity, parent, transform)| {
+            [1076, 1072, 1079].contains(&parent.sprite_id).then_some((
+                entity,
+                *parent,
+                transform.translation.z,
+            ))
+        })
+        .collect();
+    parents.sort_by_key(|(_, parent, _)| parent.insertion_key);
+    assert_eq!(
+        parents
+            .iter()
+            .map(|(_, parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                1076,
+                ParentSpriteBounds::new(16, 16, 0, 31, 20, 6),
+                viewport_insertion_key(1, 1, 16),
+            ),
+            (
+                1072,
+                ParentSpriteBounds::new(16, 27, 0, 31, 31, 1),
+                viewport_insertion_key(1, 1, 17),
+            ),
+            (
+                1079,
+                ParentSpriteBounds::new(16, 16, 16, 31, 31, 25),
+                viewport_insertion_key(1, 1, 18),
+            ),
+        ],
+        "cada TILE_SEQ_LINE debe entrar al compositor como parent independiente"
+    );
+    assert!(
+        parents
+            .iter()
+            .all(|(_, parent, depth)| parent.source_depth == *depth),
+        "los parents conservan su slot fuente antes del sort global"
+    );
+    let roof_parent = parents
+        .iter()
+        .find_map(|(entity, parent, _)| (parent.sprite_id == 1079).then_some(*entity))
+        .expect("roof parent");
+    let glass = world
+        .query::<(&ViewportSortableChild, &Sprite, &Transform)>()
+        .iter(&world)
+        .find(|(_, sprite, _)| expected_glass.matches(sprite))
+        .expect("roof glass child");
+    assert_eq!(glass.0.parent, roof_parent);
+    assert_eq!(glass.0.source_depth, glass.2.translation.z);
+}
+
+#[test]
 fn sloped_newgrf_station_overlay_follows_foundation_parent() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(3, 3, 0);

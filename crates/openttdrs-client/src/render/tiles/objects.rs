@@ -40,8 +40,8 @@ use crate::render::viewport_sort::{
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     AirportStationAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext,
-    ViewportSortableParent, WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
-    viewport_insertion_key, viewport_source_depth,
+    ViewportSortableChild, ViewportSortableParent, WaterTile, WorldAssets,
+    sprite_from_atlas_or_company_white_colour, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
     CatenarySpriteDraw, CatenaryWireDraw, CompanyColour, DockTileLayer,
@@ -1181,186 +1181,87 @@ fn station_catenary_wire_trace_geometry(
     )
 }
 
-/// Slots ya reasignados para la subsecuencia local que OpenTTD entrega desde
-/// `DrawRailCatenary` hasta `DrawRailTileSeq` de una estación ferroviaria.
-///
-/// Los vidrios de techo son children del último parent de la secuencia, no
-/// entradas propias del sorter. Los layouts NewGRF tampoco llegan aún con sus
-/// bounds completos, por lo que ambos quedan fuera de este puente parcial.
-#[derive(Debug, Default, PartialEq)]
-struct RailStationLocalSortDepths {
-    pylons: Vec<f32>,
-    wires: Vec<f32>,
-    layers: Vec<Option<f32>>,
-}
-
 /// Parent que OpenTTD crea para un poste PPP de la catenaria de estación.
 /// El offset sub-tesela pertenece al origen de mundo; la caja de un poste es
 /// `(-1, -1, 0; 1×1×6)` relativa a ese punto.
-fn station_catenary_pylon_parent_sprite(
-    id: u64,
+fn station_catenary_pylon_parent_bounds(
     tx: i32,
     ty: i32,
     raw_base_z: u8,
     tileh: u8,
     station_tb: u8,
     draw: CatenarySpriteDraw,
-) -> ParentSprite {
+) -> ParentSpriteBounds {
     let world_z_delta = draw.pcp_direction.map_or(0, |pcp| {
         catenary_pylon_world_z_delta(tileh, raw_base_z, station_tb, pcp)
     });
     let x = tx * 16 + draw.tile_dx as i32;
     let y = ty * 16 + draw.tile_dy as i32;
     let z = i32::from(raw_base_z) * 8 + world_z_delta;
-    ParentSprite::sprite(
-        id,
-        catenary_reference_sprite_id(draw.sprite_id),
-        ParentSpriteBounds::new(x - 1, y - 1, z, x - 1, y - 1, z + 5),
-    )
+    ParentSpriteBounds::new(x - 1, y - 1, z, x - 1, y - 1, z + 5)
 }
 
 /// Parent que OpenTTD crea para un cable de estación. El ancla Z se consulta
 /// en la pendiente y puede diferir de la base plana de la plataforma.
-fn station_catenary_wire_parent_sprite(
-    id: u64,
+fn station_catenary_wire_parent_bounds(
     tx: i32,
     ty: i32,
     raw_base_z: u8,
     tileh: u8,
     station_tb: u8,
     draw: CatenaryWireDraw,
-) -> ParentSprite {
+) -> ParentSpriteBounds {
     let (world_z_delta, bounds) =
         station_catenary_wire_trace_geometry(tileh, raw_base_z, station_tb, draw);
     let x = tx * 16 + bounds.ox;
     let y = ty * 16 + bounds.oy;
     let z = i32::from(raw_base_z) * 8 + world_z_delta + bounds.oz;
-    ParentSprite::sprite(
-        id,
-        catenary_reference_sprite_id(draw.sprite_id),
-        ParentSpriteBounds::new(
-            x,
-            y,
-            z,
-            x + bounds.ex - 1,
-            y + bounds.ey - 1,
-            z + bounds.ez - 1,
-        ),
+    ParentSpriteBounds::new(
+        x,
+        y,
+        z,
+        x + bounds.ex - 1,
+        y + bounds.ey - 1,
+        z + bounds.ez - 1,
     )
 }
 
 /// Parent BUILD de una capa rail vanilla. `DrawFoundation(Leveled)` ya alteró
 /// la altura de `TileInfo`, de modo que la caja toma el delta respecto de la
 /// altura cruda, igual que la traza `world-draw`.
-fn station_rail_layer_parent_sprite(
-    id: u64,
+fn station_rail_layer_parent_bounds(
     tx: i32,
     ty: i32,
     raw_base_z: u8,
     rail_base_z: u8,
     layer: RailStationLayer,
-) -> Option<ParentSprite> {
+) -> Option<ParentSpriteBounds> {
     let (ex, ey, ez) = rail_station_layer_bounds(layer.sprite_id)?;
     let x = tx * 16 + layer.dx as i32;
     let y = ty * 16 + layer.dy as i32;
     let z = i32::from(raw_base_z) * 8
         + station_rail_foundation_world_z_delta(raw_base_z, rail_base_z)
         + layer.dz as i32;
-    Some(ParentSprite::sprite(
-        id,
-        layer.sprite_id,
-        ParentSpriteBounds::new(x, y, z, x + ex - 1, y + ey - 1, z + ez - 1),
+    Some(ParentSpriteBounds::new(
+        x,
+        y,
+        z,
+        x + ex - 1,
+        y + ey - 1,
+        z + ez - 1,
     ))
 }
 
-/// Aplica el sorter C++ a los parents locales que la estación vanilla ya
-/// conoce: postes, cables y capas BUILD. Conserva los slots Bevy existentes
-/// para no extender la banda de profundidad a teselas vecinas.
-#[allow(clippy::too_many_arguments)]
-fn station_rail_local_sorted_depths(
-    tx: i32,
-    ty: i32,
-    raw_base_z: u8,
-    rail_base_z: u8,
-    tileh: u8,
-    station_tb: u8,
-    pylons: &[CatenarySpriteDraw],
-    wires: &[CatenaryWireDraw],
-    layers: &[RailStationLayer],
-) -> RailStationLocalSortDepths {
-    let mut parents = Vec::with_capacity(pylons.len() + wires.len() + layers.len());
-    let mut source_depths = Vec::with_capacity(parents.capacity());
-
-    for draw in pylons {
-        parents.push(station_catenary_pylon_parent_sprite(
-            parents.len() as u64,
-            tx,
-            ty,
-            raw_base_z,
-            tileh,
-            station_tb,
-            *draw,
-        ));
-        source_depths.push(sortable_draw_z(tx, ty, rail_base_z, draw.z_layer));
-    }
-    for (index, draw) in wires.iter().copied().enumerate() {
-        parents.push(station_catenary_wire_parent_sprite(
-            parents.len() as u64,
-            tx,
-            ty,
-            raw_base_z,
-            tileh,
-            station_tb,
-            draw,
-        ));
-        source_depths.push(sortable_draw_z(
-            tx,
-            ty,
-            rail_base_z,
-            0.035 + index as f32 * 0.0004,
-        ));
-    }
-
-    let mut layer_parent_indices = Vec::new();
-    for (layer_index, layer) in layers.iter().copied().enumerate() {
-        // El vidrio de techo no tiene bounds porque es un child del parent
-        // BUILD anterior; no puede asignarse como parent independiente.
-        if let Some(parent) = station_rail_layer_parent_sprite(
-            parents.len() as u64,
-            tx,
-            ty,
-            raw_base_z,
-            rail_base_z,
-            layer,
-        ) {
-            parents.push(parent);
-            source_depths.push(sortable_draw_z(tx, ty, rail_base_z, layer.z));
-            layer_parent_indices.push(layer_index);
-        }
-    }
-
-    let sorted_depths = depths_in_viewport_sort_order(&parents, &source_depths);
-    let mut next = 0;
-    let pylons = sorted_depths[next..next + pylons.len()].to_vec();
-    next += pylons.len();
-    let wires = sorted_depths[next..next + wires.len()].to_vec();
-    next += wires.len();
-    let mut layers = vec![None; layers.len()];
-    for layer_index in layer_parent_indices {
-        layers[layer_index] = Some(sorted_depths[next]);
-        next += 1;
-    }
-    debug_assert_eq!(next, sorted_depths.len());
-    RailStationLocalSortDepths {
-        pylons,
-        wires,
-        layers,
-    }
-}
+/// Los cuatro PPP, hasta seis cables y las cuatro capas BUILD caben antes de
+/// `DrawBridgeMiddle` (que comienza en el ordinal 32). Los subrangos conservan
+/// la emisión nativa catenaria → estación y no colisionan con fundaciones.
+const STATION_RAIL_CATENARY_PYLON_PARENT_ORDINAL: u8 = 4;
+const STATION_RAIL_CATENARY_WIRE_PARENT_ORDINAL: u8 = 8;
+const STATION_RAIL_LAYER_PARENT_ORDINAL: u8 = 16;
 
 /// Reúne exactamente la parte de `DrawRailCatenary` que se emite antes del
 /// `DrawRailTileSeq` de estación. Separar la selección del spawn permite que
-/// ambos pasen por el mismo vector local del sorter.
+/// ambos conserven sus bounds antes de entrar al compositor global.
 fn collect_station_rail_catenary_draws(
     map: &Map,
     dims: (u32, u32),
@@ -1418,9 +1319,9 @@ fn spawn_station_rail_catenary(
     station_tb: u8,
     tileh: u8,
     rail_base_z: u8,
+    map_width: u32,
     pylons: &[CatenarySpriteDraw],
     wires: &[CatenaryWireDraw],
-    sorted_depths: Option<&RailStationLocalSortDepths>,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: &mut Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     images: &mut Option<&mut Assets<Image>>,
@@ -1467,17 +1368,31 @@ fn spawn_station_rail_catenary(
             local_z as f32,
             anchor,
         );
-        if let Some(depth) = sorted_depths
-            .and_then(|depths| depths.pylons.get(index))
-            .copied()
-        {
-            position.z = depth;
-        }
+        let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+        position.z = source_depth;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
             Transform::from_translation(position),
+            ViewportSortableParent {
+                sprite_id: catenary_reference_sprite_id(draw.sprite_id),
+                bounds: station_catenary_pylon_parent_bounds(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    ctx.info.base_z,
+                    tileh,
+                    station_tb,
+                    draw,
+                ),
+                insertion_key: viewport_insertion_key(
+                    ctx.tx,
+                    ctx.ty,
+                    STATION_RAIL_CATENARY_PYLON_PARENT_ORDINAL
+                        .saturating_add(u8::try_from(index).unwrap_or(u8::MAX)),
+                ),
+                source_depth,
+            },
         ));
     }
 
@@ -1520,17 +1435,31 @@ fn spawn_station_rail_catenary(
             local_z as f32,
             anchor,
         );
-        if let Some(depth) = sorted_depths
-            .and_then(|depths| depths.wires.get(i))
-            .copied()
-        {
-            position.z = depth;
-        }
+        let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+        position.z = source_depth;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
             Transform::from_translation(position),
+            ViewportSortableParent {
+                sprite_id: catenary_reference_sprite_id(sid),
+                bounds: station_catenary_wire_parent_bounds(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    ctx.info.base_z,
+                    tileh,
+                    station_tb,
+                    draw,
+                ),
+                insertion_key: viewport_insertion_key(
+                    ctx.tx,
+                    ctx.ty,
+                    STATION_RAIL_CATENARY_WIRE_PARENT_ORDINAL
+                        .saturating_add(u8::try_from(i).unwrap_or(u8::MAX)),
+                ),
+                source_depth,
+            },
         ));
     }
 }
@@ -1883,25 +1812,9 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 || (Vec::new(), Vec::new()),
                 |tile| collect_station_rail_catenary_draws(map, dims, ctx, tile, station_tb, tileh),
             );
-            // La secuencia vanilla aporta todas las cajas BUILD conocidas. Un
-            // layout NewGRF aún no publica sus parents/children completos, de
-            // modo que no se lo mezcla con la catenaria en este paso parcial.
-            let station_sort_depths = (class == StationTileClass::Rail
-                && !buildings_hidden()
-                && !used_newgrf)
-                .then(|| {
-                    station_rail_local_sorted_depths(
-                        ctx.tx_i32(),
-                        ctx.ty_i32(),
-                        ctx.info.base_z,
-                        rail_base_z,
-                        tileh,
-                        station_tb,
-                        &station_pylons,
-                        &station_wires,
-                        overlay_layers,
-                    )
-                });
+            // La catenaria tiene geometría vanilla completa aun si el layout
+            // BUILD es NewGRF. Cada PPP/cable entra al compositor global antes
+            // de la secuencia de estación, como en `DrawTile_Station`.
             spawn_station_rail_catenary(
                 commands,
                 assets,
@@ -1909,9 +1822,9 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 station_tb,
                 tileh,
                 rail_base_z,
+                dims.0,
                 &station_pylons,
                 &station_wires,
-                station_sort_depths.as_ref(),
                 catenary_newgrf,
                 &mut catenary_sprites,
                 &mut images,
@@ -1954,6 +1867,10 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 }
             }
             if !buildings_hidden() && !used_newgrf {
+                // Sólo la secuencia vanilla de estación conoce todos sus
+                // prismas `TILE_SEQ_LINE`; los waypoints y layouts NewGRF
+                // permanecen fuera hasta publicar sus parents/children.
+                let mut previous_station_parent = None;
                 for (layer_index, base_layer) in overlay_layers.iter().enumerate() {
                     // `DrawStationTile` deja los waypoints vanilla sin offset,
                     // pero suma el desplazamiento de railtype a cada capa de
@@ -2011,14 +1928,6 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                             ctx.ty_i32(),
                         )
                     };
-                    if let Some(depth) = station_sort_depths
-                        .as_ref()
-                        .and_then(|depths| depths.layers.get(layer_index))
-                        .copied()
-                        .flatten()
-                    {
-                        pos3.z = depth;
-                    }
                     let sprite = if crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id)
                     {
                         // OpenTTD: `PALETTE_TO_TRANSPARENT` oscurece el destino (máscara),
@@ -2035,12 +1944,54 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                             &format!("rail_{}.png", layer.sprite_id),
                         ))
                     };
-                    commands.spawn((
+                    let source_depth = viewport_source_depth(pos3.z, ctx.tx, dims.0);
+                    let sortable_parent = (class == StationTileClass::Rail)
+                        .then(|| {
+                            station_rail_layer_parent_bounds(
+                                ctx.tx_i32(),
+                                ctx.ty_i32(),
+                                ctx.info.base_z,
+                                rail_base_z,
+                                layer,
+                            )
+                        })
+                        .flatten()
+                        .map(|bounds| ViewportSortableParent {
+                            sprite_id: layer.sprite_id,
+                            bounds,
+                            insertion_key: viewport_insertion_key(
+                                ctx.tx,
+                                ctx.ty,
+                                STATION_RAIL_LAYER_PARENT_ORDINAL
+                                    .saturating_add(u8::try_from(layer_index).unwrap_or(u8::MAX)),
+                            ),
+                            source_depth,
+                        });
+                    if sortable_parent.is_some()
+                        || (class == StationTileClass::Rail
+                            && crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id)
+                            && previous_station_parent.is_some())
+                    {
+                        pos3.z = source_depth;
+                    }
+                    let mut entity = commands.spawn((
                         MapVisualLayer,
                         ctx.map_tile_chunk(),
                         sprite,
                         Transform::from_translation(pos3),
                     ));
+                    if let Some(parent) = sortable_parent {
+                        previous_station_parent = Some(entity.id());
+                        entity.insert(parent);
+                    } else if class == StationTileClass::Rail
+                        && crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id)
+                        && let Some(parent) = previous_station_parent
+                    {
+                        entity.insert(ViewportSortableChild {
+                            parent,
+                            source_depth,
+                        });
+                    }
                 }
             }
         }
@@ -5776,13 +5727,14 @@ mod tests {
         rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
         rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
         road_depot_parent_sprites, road_stop_foundation_child_offset, road_stop_parent_sprites,
-        station_catenary_pylon_parent_sprite, station_catenary_wire_parent_sprite,
+        station_catenary_pylon_parent_bounds, station_catenary_wire_parent_bounds,
         station_catenary_wire_trace_geometry, station_rail_child_offset,
-        station_rail_foundation_world_z_delta, station_rail_layer_parent_sprite,
-        station_rail_local_sorted_depths, tunnel_catenary_trace_geometry, tunnel_sortable_parents,
+        station_rail_foundation_world_z_delta, station_rail_layer_parent_bounds,
+        tunnel_catenary_trace_geometry, tunnel_sortable_parents,
     };
     use openttdrs_core::{Map, TileCoord, TileKind, WaterClass, set_water_class_m1};
 
+    use crate::render::viewport_sort::{ParentSprite, ParentSpriteBounds};
     use crate::render::world_draw_trace::TraceSpriteBounds;
     use crate::sprites::{
         CatenarySpriteDraw, CatenaryWireDraw, PYLON_SPRITE_BASE, StationTileClass,
@@ -6108,7 +6060,7 @@ mod tests {
     }
 
     #[test]
-    fn electric_rail_station_orders_pylon_wire_and_platforms_like_kale() {
+    fn electric_rail_station_global_parent_prisms_keep_kale_order() {
         // Kale `(195,21)`: la emisión local es PPP 5661, wire 5641,
         // plataforma 1071 y alero 1069. El sorter final cambia el orden a
         // 1071, 1069, 5661, 5641. Es una inversión que cruza las dos fases
@@ -6126,14 +6078,19 @@ mod tests {
             bounds_extent: (1, 15, 1),
         };
         let layers = rail_station_draw_layers(1);
-        let mut parents = vec![station_catenary_pylon_parent_sprite(
-            0, 195, 21, 1, 0, 0x02, pylon,
+        let mut parents = vec![ParentSprite::sprite(
+            0,
+            crate::sprites::catenary_reference_sprite_id(pylon.sprite_id),
+            station_catenary_pylon_parent_bounds(195, 21, 1, 0, 0x02, pylon),
         )];
-        parents.push(station_catenary_wire_parent_sprite(
-            1, 195, 21, 1, 0, 0x02, wire,
+        parents.push(ParentSprite::sprite(
+            1,
+            crate::sprites::catenary_reference_sprite_id(wire.sprite_id),
+            station_catenary_wire_parent_bounds(195, 21, 1, 0, 0x02, wire),
         ));
         parents.extend(layers.iter().enumerate().filter_map(|(index, layer)| {
-            station_rail_layer_parent_sprite((index + 2) as u64, 195, 21, 1, 1, *layer)
+            station_rail_layer_parent_bounds(195, 21, 1, 1, *layer)
+                .map(|bounds| ParentSprite::sprite((index + 2) as u64, layer.sprite_id, bounds))
         }));
         assert_eq!(
             parents.iter().map(|parent| parent.kind).collect::<Vec<_>>(),
@@ -6148,23 +6105,10 @@ mod tests {
             crate::render::viewport_sort::viewport_sort_parent_sprites(&parents),
             vec![2, 3, 0, 1]
         );
-
-        let depths =
-            station_rail_local_sorted_depths(195, 21, 1, 1, 0, 0x02, &[pylon], &[wire], layers);
         assert_eq!(
-            depths.pylons,
-            vec![crate::iso::sortable_draw_z(195, 21, 1, 0.036)]
-        );
-        assert_eq!(
-            depths.wires,
-            vec![crate::iso::sortable_draw_z(195, 21, 1, 0.04)]
-        );
-        assert_eq!(
-            depths.layers,
-            vec![
-                Some(crate::iso::sortable_draw_z(195, 21, 1, 0.03)),
-                Some(crate::iso::sortable_draw_z(195, 21, 1, 0.035)),
-            ]
+            parents[2].bounds,
+            ParentSpriteBounds::new(3120, 336, 8, 3124, 351, 9),
+            "la plataforma conserva el prisma TILE_SEQ_LINE global"
         );
     }
 

@@ -1070,12 +1070,13 @@ Ya existe un port puro y testeado de `ViewportSortParentSprites` en
 `render/viewport_sort.rs`, incluidos parents vacíos y children. Las paradas
 viales vanilla, depósitos viales, árboles `MP_TREES` y sus copas combinadas,
 las seis mitades StationGfx de muelle, los seis layouts del depósito naval, los
-bundles de catenaria/fachada de depósitos ferroviarios, los faroles viales y la subsecuencia
-PPP/cable/plataforma de estaciones rail vanilla, casas vanilla y el subconjunto
-plano/estático de industrias vanilla ya alimentan sus bounds y reasignan sus
-slots locales de Bevy con el orden resultante. Las demás familias todavía
-carecen de bounds, identidad de parent o vínculo de children completos; esa
-cobertura parcial no es evidencia de composición global aplicada.
+bundles de catenaria/fachada de depósitos ferroviarios, los faroles viales,
+casas vanilla y el subconjunto plano/estático de industrias vanilla ya aportan
+bounds al compositor. En particular, la secuencia vanilla de estación rail
+PPP/cable/plataforma ahora materializa sus prismas como parents globales, y el
+vidrio de techo queda como child de su techo precedente. Las demás familias
+todavía carecen de bounds, identidad de parent o vínculo de children completos;
+esa cobertura parcial no es evidencia de composición global aplicada.
 
 Actualización #326-ROADSIDE-DETAILS (2026-09-09): los detalles de
 `DrawRoadDetail` —faroles `1406`/`1407` y árboles roadside `4626`— entran
@@ -1090,6 +1091,27 @@ píxeles distintos y el delta medio por canal de 3,828 a 3,705. Las otras cinco
 escalas de la matriz (`0,25×`, `0,5×`, `2×`, `4×`, `8×`) no cambian. Es una
 mejora focal del productor y no resuelve composición por segmentos, clipping,
 pivotes ni framebuffer; #326 permanece abierto.
+
+Actualización #326-RAIL-STATION-GLOBAL (2026-09-09): `DrawRailCatenary` y
+`DrawRailTileSeq` de estaciones rail vanilla dejan de reordenarse en un vector
+local. Cada PPP, cable y capa `TILE_SEQ_LINE` conocida entra como parent del
+compositor global antes de `DrawBridgeMiddle`; `1083`–`1086` conserva su
+semántica de máscara como child del techo inmediatamente anterior. Waypoints y
+layouts NewGRF quedan deliberadamente fuera: aún no publican el contrato de
+parents/children completo. En la traza scoped de Kale `(189,117)`, al
+normalizar el flag nativo de transparencia, las tuplas parent exactas comunes
+con OpenTTD pasan de 1.136 a 1.330: se añaden 195 sin perder ninguna. La
+candidata contiene 17 plataformas `1070`, 18 `1072` y las entradas de
+catenaria asociadas; quedan tres `1072` y tres tuplas de catenaria nativas sin
+contraparte en este corte. La captura limpia normal baja de 93.780 (10,176 %)
+a 93.173 (10,110 %) píxeles distintos y el delta medio por canal de 3,705 a
+3,672. La matriz completa de píxeles distintos es `0,25×`
+234.392→233.640, `0,5×` 389.710→388.068, `1×` 93.780→93.173, `2×`
+532.663→532.807, `4×` 750.289→750.107 y `8×` 705.911→705.907. Por tanto la
+mejora no es monótona: `2×` aumenta 144 píxeles y el delta medio sube en
+`0,25×`, `2×` y `8×`. Esta etapa corrige el productor y su orden global, no la
+composición segmentada, clipping, pivotes ni framebuffer; #326 y el contrato
+global completo de children de #561 siguen abiertos.
 
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,

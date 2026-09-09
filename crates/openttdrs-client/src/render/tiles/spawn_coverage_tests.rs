@@ -6788,6 +6788,143 @@ fn sloped_newgrf_industry_overlay_is_child_of_foundation() {
 }
 
 #[test]
+fn flat_newgrf_industry_tile_layout_keeps_ground_in_ground_pass() {
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Industry,
+            mapt: 0x80,
+            m5: 175,
+            m1: 0x80,
+            ..tile_template()
+        },
+    )
+    .expect("industry TileLayout tile");
+
+    let ground = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: [240, 10, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![vec![ground.clone()]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 3,
+            set_id: 9,
+        }],
+        ..Default::default()
+    };
+    runtime.tile_layouts.insert(
+        9,
+        TileLayout {
+            ground: TileLayoutSpriteRef {
+                action1_set: Some(0),
+                ..Default::default()
+            },
+            sequence: Vec::new(),
+        },
+    );
+    let industry_def = IndustryTileSpecDef {
+        gfx: IndustryTileGfxId(175),
+        subst_id: 0,
+        from_newgrf: true,
+        slopes_refused: 0,
+        accepts_cargo_indices: Vec::new(),
+        accepts_cargo_labels: Vec::new(),
+        acceptance: Vec::new(),
+        callback_mask: 0,
+        animation_frames: 0,
+        animation_status: 0,
+        animation_speed: 0,
+        animation_triggers: 0,
+        animation_special_flags: 0,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
+        newgrf_local_id: 3,
+        newgrf_grfid: 0x494E_4454,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_runtime: Some(Box::new(runtime)),
+    };
+
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfIndustrySpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut company: Local<CompanyColoredSprites>,
+                  mut cache: ResMut<crate::render::NewGrfIndustrySpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_industry_tile(
+                    &mut commands,
+                    &a.0,
+                    &m.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    &[],
+                    &mut company,
+                    &mut images,
+                    std::slice::from_ref(&industry_def),
+                    &openttdrs_core::empty_industry_tile_overrides(),
+                    Some(&mut cache),
+                    &[],
+                    None,
+                    &[],
+                );
+            },
+        )
+        .expect("industry TileLayout spawn");
+
+    let expected_position = overlay_pos(
+        crate::iso::iso(coord.x, coord.y),
+        f32::from(ground.x_offs),
+        f32::from(ground.y_offs),
+        f32::from(ground.width),
+        f32::from(ground.height),
+        0,
+        0.45,
+        coord.x,
+        coord.y,
+    );
+    let sprites: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(sprite, transform)| (sprite.image.clone(), transform.translation))
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let ground_depths: Vec<_> = sprites
+        .iter()
+        .filter_map(|(handle, translation)| {
+            (images.get(handle).and_then(|image| image.data.as_deref())
+                == Some(ground.rgba.as_slice())
+                && translation.truncate() == expected_position.truncate())
+            .then_some(translation.z)
+        })
+        .collect();
+    assert_eq!(
+        ground_depths,
+        vec![ground_draw_z(coord.x, coord.y, 0.45)],
+        "DrawNewIndustryTile debe dejar el ground TileLayout en DrawGroundSprite"
+    );
+}
+
+#[test]
 fn newgrf_industry_draw_foundations_callback_can_suppress_default() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);

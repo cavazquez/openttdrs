@@ -97,9 +97,8 @@ round-trip nativo y las fronteras de ubicación anteriores.
 
 ## Límites
 
-Este corte no conecta el ajuste a `CHECK_OIL_RIG`, no implementa el perímetro
-de agua de las plataformas petrolíferas y no declara equivalencia del
-constructor completo, del editor ni de los callbacks NewGRF de ubicación.
-Esas diferencias siguen abiertas en [#531](https://github.com/cavazquez/openttdrs/issues/531)
-y los padres correspondientes. #328 continúa abierto por los demás settings,
-pools, órdenes y mutaciones de SAV pendientes.
+La corrección posterior de [#531](runtime-oil-rig-placement-531.md) consume el
+mismo ajuste en `CHECK_OIL_RIG` y valida su perímetro de agua plana. Este corte
+SAV sigue sin declarar equivalencia del constructor completo, del editor ni de
+los callbacks NewGRF de ubicación. #328 continúa abierto por los demás
+settings, pools, órdenes y mutaciones de SAV pendientes.

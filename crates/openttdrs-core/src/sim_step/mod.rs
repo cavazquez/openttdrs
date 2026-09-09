@@ -1526,6 +1526,16 @@ mod tests {
         let mut state = GameState::new(16, 16);
         // Layout nativo: (0,0)/(0,1) son las dos piezas GFX_OILRIG_1 que
         // disparan BuildOilRig; cada tesela conserva su WaterClass propia.
+        for y in 0..16 {
+            for x in 0..16 {
+                crate::map::make_water_tile(
+                    &mut state.map,
+                    TileCoord::new(x, y),
+                    crate::WaterClass::Sea,
+                )
+                .expect("mar plano para los checks Oil Rig");
+            }
+        }
         for (coord, water_class) in [
             (origin, crate::WaterClass::River),
             (TileCoord::new(4, 5), crate::WaterClass::Sea),

@@ -77,7 +77,7 @@ pub fn check_place_industry_spec(
     spec: IndustrySpec,
 ) -> Result<(), CommandError> {
     let template = industry_template(c, spec);
-    check_industry_template(map, spec, &template)
+    check_industry_template(map, c, spec, &template)
 }
 
 /// Variante interna de `CreateNewIndustry` que conserva el layout ya elegido
@@ -90,11 +90,12 @@ pub fn check_place_industry_spec_layout(
 ) -> Result<(), CommandError> {
     let template =
         industry_template_with_layout(c, spec, layout_index).ok_or(CommandError::OutOfBounds)?;
-    check_industry_template(map, spec, &template)
+    check_industry_template(map, c, spec, &template)
 }
 
 fn check_industry_template(
     map: &crate::map::Map,
+    origin: TileCoord,
     spec: IndustrySpec,
     template: &[(TileCoord, u8)],
 ) -> Result<(), CommandError> {
@@ -147,6 +148,39 @@ fn check_industry_template(
         if force_one_temperate_rejects_steep_slope(spec)
             && tile_slope_and_z(map, *tile).is_some_and(|(slope, _)| slope & SLOPE_STEEP != 0)
         {
+            return Err(CommandError::InvalidTerrainSlope);
+        }
+    }
+    if matches!(spec, IndustrySpec::OilRig) {
+        check_oil_rig_water_checks(map, origin)?;
+    }
+    Ok(())
+}
+
+/// Repite las entradas `GFX_WATERTILE_SPECIALCHECK` que siguen a las seis
+/// teselas materializadas de `_tile_table_oil_rig_0`.
+///
+/// `CheckIfIndustryTilesAreFree` primero comprueba las teselas de la huella y
+/// después estas 52 posiciones. Cada una debe existir, ser `MP_WATER` y ser
+/// plana; no se entrega al writer ni al `IndustryPool`.
+fn check_oil_rig_water_checks(
+    map: &crate::map::Map,
+    origin: TileCoord,
+) -> Result<(), CommandError> {
+    for &(dx, dy) in &layout_tables::OIL_RIG_WATER_CHECKS {
+        let Some(x) = origin.x.checked_add(dx) else {
+            return Err(CommandError::OutOfBounds);
+        };
+        let Some(y) = origin.y.checked_add(dy) else {
+            return Err(CommandError::OutOfBounds);
+        };
+        let check = TileCoord::new(x, y);
+        super::transport::check_in_bounds(map, check)?;
+        let tile = map.get(check).ok_or(CommandError::OutOfBounds)?;
+        if tile.kind != TileKind::Water {
+            return Err(CommandError::IndustryMustBeBuiltOnWater);
+        }
+        if tile_slope_and_z(map, check).is_none_or(|(slope, _)| slope != 0) {
             return Err(CommandError::InvalidTerrainSlope);
         }
     }
@@ -884,6 +918,25 @@ mod tests {
         }
     }
 
+    fn oil_rig_check_coord(origin: TileCoord, dx: i32, dy: i32) -> TileCoord {
+        TileCoord::new(origin.x + dx, origin.y + dy)
+    }
+
+    #[allow(clippy::expect_used)] // helper de fixture con offsets nativos conocidos.
+    fn fill_oil_rig_water_checks(map: &mut Map, origin: TileCoord) {
+        let footprint =
+            industry_template_with_layout(origin, IndustrySpec::OilRig, 0).expect("layout Oil Rig");
+        for (tile, _) in footprint {
+            make_water_tile(map, tile, WaterClass::Sea).expect("huella Oil Rig en agua");
+        }
+        for &(dx, dy) in &super::layout_tables::OIL_RIG_WATER_CHECKS {
+            let check = oil_rig_check_coord(origin, dx, dy);
+            if map.get(check).is_some() {
+                make_water_tile(map, check, WaterClass::Sea).expect("check Oil Rig en agua");
+            }
+        }
+    }
+
     #[test]
     fn selected_layout_is_used_by_the_industry_command() {
         let origin = TileCoord::new(4, 4);
@@ -955,6 +1008,7 @@ mod tests {
         let template = industry_template_with_layout(origin, IndustrySpec::OilRig, 0)
             .expect("native Oil Rig layout");
         let mut state = GameState::new(16, 16);
+        fill_oil_rig_water_checks(&mut state.map, origin);
         for (index, (coord, _)) in template.iter().enumerate() {
             let class = if index == 3 {
                 WaterClass::River
@@ -999,6 +1053,64 @@ mod tests {
             Err(CommandError::IndustryMustBeBuiltOnWater)
         );
         assert!(land.industries.is_empty());
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn oil_rig_special_water_checks_match_vanilla_and_do_not_materialize() {
+        assert_eq!(
+            super::layout_tables::OIL_RIG_WATER_CHECKS.len(),
+            52,
+            "_tile_table_oil_rig_0 conserva 52 GFX_WATERTILE_SPECIALCHECK"
+        );
+
+        // El candidato que el port aceptaba en la traza de #531 alcanza una
+        // de las 52 comprobaciones fuera del mapa. Las seis teselas reales
+        // sí están dentro: el rechazo procede sólo del anillo de agua.
+        let rejected = TileCoord::new(151, 252);
+        let mut rejected_map = Map::new_flat(256, 256, 0);
+        fill_oil_rig_water_checks(&mut rejected_map, rejected);
+        assert_eq!(
+            check_place_industry_spec_layout(&rejected_map, rejected, IndustrySpec::OilRig, 0),
+            Err(CommandError::OutOfBounds)
+        );
+
+        let accepted = TileCoord::new(239, 71);
+        let mut state = GameState::new(256, 256);
+        fill_oil_rig_water_checks(&mut state.map, accepted);
+        assert!(
+            check_place_industry_spec_layout(&state.map, accepted, IndustrySpec::OilRig, 0).is_ok()
+        );
+        assert!(
+            place_industry_spec_layout_automatic(&mut state, accepted, IndustrySpec::OilRig, 0)
+                .is_ok()
+        );
+
+        let footprint = industry_template_with_layout(accepted, IndustrySpec::OilRig, 0)
+            .expect("layout Oil Rig");
+        let industry = state.industries.last().expect("Oil Rig materializada");
+        assert_eq!(industry.tiles.len(), 6);
+        assert_eq!(
+            industry.tiles,
+            footprint.iter().map(|(tile, _)| *tile).collect::<Vec<_>>()
+        );
+        for &(dx, dy) in &super::layout_tables::OIL_RIG_WATER_CHECKS {
+            let check = oil_rig_check_coord(accepted, dx, dy);
+            assert_eq!(state.map.get_kind(check), Some(TileKind::Water));
+            assert!(!industry.tiles.contains(&check));
+        }
+
+        let mut sloped = GameState::new(256, 256);
+        fill_oil_rig_water_checks(&mut sloped.map, accepted);
+        let first_check = oil_rig_check_coord(accepted, -4, -4);
+        sloped
+            .map
+            .set_height(first_check, 2)
+            .expect("pendiente en check Oil Rig");
+        assert_eq!(
+            check_place_industry_spec_layout(&sloped.map, accepted, IndustrySpec::OilRig, 0),
+            Err(CommandError::InvalidTerrainSlope)
+        );
     }
 
     #[test]

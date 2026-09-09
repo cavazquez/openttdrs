@@ -563,6 +563,11 @@ fn generated_industry_check_proc_allows(
         // los cuatro bordes. `TileAddXY(tile, 1, 1)` forma
         // parte del contrato nativo y evita admitir la última fila/columna.
         IndustrySpec::OilRefinery => generated_industry_is_near_edge(state, origin),
+        // `CHECK_OIL_RIG` usa `TileHeight`, la altura de la esquina norte
+        // guardada en la tesela, no `GetTileZ`. Comparte el límite escalado
+        // de Oil Refinery; las 52 comprobaciones de agua plana pertenecen al
+        // layout y se validan en `check_place_industry_spec_layout`.
+        IndustrySpec::OilRig => tile.height == 0 && generated_industry_is_near_edge(state, origin),
         // `CHECK_PLANTATION` (incluye factory/farm tropic): nunca en desierto.
         IndustrySpec::FruitPlantation
         | IndustrySpec::RubberPlantation
@@ -1659,6 +1664,50 @@ mod tests {
             low,
             IndustrySpec::BubbleGenerator
         ));
+    }
+
+    #[test]
+    fn oil_rig_check_uses_north_height_and_the_persisted_edge_limit() {
+        let mut state = GameState::from_map(Map::new_flat(256, 256, 0));
+        state.construction.oil_refinery_limit = 32;
+        let premature = TileCoord::new(151, 252);
+        let native = TileCoord::new(239, 71);
+
+        // Ambos orígenes pasan CHECK_OIL_RIG; la segunda capa de 52 teselas
+        // acuáticas rechaza el primero por salir del mapa y admite el segundo.
+        assert!(generated_industry_check_proc_allows(
+            &state,
+            premature,
+            IndustrySpec::OilRig
+        ));
+        assert!(generated_industry_check_proc_allows(
+            &state,
+            native,
+            IndustrySpec::OilRig
+        ));
+        assert!(!generated_industry_check_proc_allows(
+            &state,
+            TileCoord::new(128, 128),
+            IndustrySpec::OilRig
+        ));
+
+        state
+            .map
+            .set_height(native, 1)
+            .expect("altura norte Oil Rig");
+        assert!(
+            !generated_industry_check_proc_allows(&state, native, IndustrySpec::OilRig),
+            "CHECK_OIL_RIG usa TileHeight, no el mínimo GetTileZ"
+        );
+        state
+            .map
+            .set_height(native, 0)
+            .expect("restaurar altura norte Oil Rig");
+        state.construction.oil_refinery_limit = 12;
+        assert!(
+            !generated_industry_check_proc_allows(&state, native, IndustrySpec::OilRig),
+            "el límite persistido también gobierna CHECK_OIL_RIG"
+        );
     }
 
     #[test]

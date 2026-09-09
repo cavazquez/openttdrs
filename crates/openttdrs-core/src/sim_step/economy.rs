@@ -1485,7 +1485,7 @@ mod tests {
         // semilla 13 toma Chance16(4, 100), asigna el único objetivo a Oil Rig
         // (roll 12 del peso vanilla 34) y deja que PlaceIndustry consuma sus
         // propios intentos, layout y bytes constructores.
-        let mut state = GameState::new(64, 64);
+        let mut state = GameState::from_map(crate::map::Map::new_flat(64, 64, 0));
         for y in 0..64 {
             for x in 0..64 {
                 crate::map::make_water_tile(

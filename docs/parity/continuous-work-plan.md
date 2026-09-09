@@ -42,8 +42,11 @@ siguiente bloque del ciclo continuo en esta entrega.
    Evidencia y límites en [ui-timetable-window.md](ui-timetable-window.md).
 
 #330, #328 y #331 conservan sus alcances generales abiertos. La fundación
-automática de Oil Rig diagnosticada antes de este lote queda en #531; se
-retiró la instrumentación temporal sin dar por resuelta esa colocación.
+automática de Oil Rig diagnosticada antes de este lote se corrigió después en
+#531/RMAP-170: `CHECK_OIL_RIG` usa altura norte y límite persistido, y las 52
+teselas especiales de agua se validan sin materializarlas. La traza de 171
+jornadas vuelve a ser exacta; los límites del corte están en
+[runtime-oil-rig-placement-531.md](runtime-oil-rig-placement-531.md).
 
 Incidencia de validación ajena al lote: al cerrarlo, #535 registraba que
 `test_parity_docs_portability.py` copiaba el baseline raster del 2026-09-05

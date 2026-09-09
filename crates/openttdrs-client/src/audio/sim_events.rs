@@ -359,7 +359,7 @@ fn dispatch_sim_events(
                         85,
                     );
                 }
-                fx.push_breakdown(at);
+                fx.push_breakdown(vehicle_id, at);
             }
             SimEvent::Bubble { at, direction } => {
                 bubbles.push(at, direction);
@@ -375,13 +375,13 @@ fn dispatch_sim_events(
                 }
                 fx.push_explosion(at);
             }
-            SimEvent::TrainCollision { at, .. } => {
+            SimEvent::TrainCollision { at, vehicle_a, .. } => {
                 if hud.sound_disaster || hud.sound_vehicle {
                     sfx.write(
                         PlayWorldSfx::new(SoundId::TrainCollision, at, 1.0).with_priority(130),
                     );
                 }
-                fx.push_explosion(at);
+                fx.push_vehicle_explosion(vehicle_a, at);
             }
             SimEvent::NewsTicker => {
                 if hud.sound_confirm {
@@ -460,23 +460,23 @@ fn dispatch_sim_events(
                     );
                 }
             }
-            SimEvent::AircraftCrash { at, .. } => {
+            SimEvent::AircraftCrash { vehicle_id, at } => {
                 if hud.sound_disaster || hud.sound_vehicle {
                     sfx.write(PlayWorldSfx::new(SoundId::Explosion, at, 1.0).with_priority(130));
                 }
-                fx.push_explosion(at);
+                fx.push_vehicle_explosion(vehicle_id, at);
             }
-            SimEvent::RoadVehCrash { at, .. } => {
+            SimEvent::RoadVehCrash { vehicle_id, at } => {
                 if hud.sound_disaster || hud.sound_vehicle {
                     sfx.write(PlayWorldSfx::new(SoundId::Explosion, at, 1.0).with_priority(130));
                 }
-                fx.push_explosion(at);
+                fx.push_vehicle_explosion(vehicle_id, at);
             }
-            SimEvent::VehicleFlooded { at, .. } => {
+            SimEvent::VehicleFlooded { vehicle_id, at, .. } => {
                 if hud.sound_disaster || hud.sound_vehicle {
                     sfx.write(PlayWorldSfx::new(SoundId::Explosion, at, 1.0).with_priority(125));
                 }
-                fx.push_explosion(at);
+                fx.push_vehicle_explosion(vehicle_id, at);
             }
             SimEvent::TownRatingChanged { .. } => {}
             SimEvent::SubsidyCreated { station_pos, .. } => {

@@ -42,7 +42,6 @@ impl EffectVehicleFrames {
 pub(crate) struct EffectSpriteSet<'a> {
     pub frames: &'a [AtlasSprite],
     pub meta: &'a [(f32, f32, f32, f32)],
-    pub frame_secs: f32,
 }
 
 impl EffectVehicleFrames {
@@ -51,7 +50,6 @@ impl EffectVehicleFrames {
         EffectSpriteSet {
             frames: &self.steam,
             meta: &STEAM_SMOKE_META,
-            frame_secs: 0.43,
         }
     }
 
@@ -60,7 +58,6 @@ impl EffectVehicleFrames {
         EffectSpriteSet {
             frames: &self.diesel,
             meta: &DIESEL_SMOKE_META,
-            frame_secs: 0.36,
         }
     }
 
@@ -69,7 +66,6 @@ impl EffectVehicleFrames {
         EffectSpriteSet {
             frames: &self.electric_spark,
             meta: &ELECTRIC_SPARK_META,
-            frame_secs: 0.18,
         }
     }
 
@@ -78,7 +74,6 @@ impl EffectVehicleFrames {
         EffectSpriteSet {
             frames: &self.explosion_large,
             meta: &EXPLOSION_LARGE_META,
-            frame_secs: 0.07,
         }
     }
 
@@ -87,7 +82,6 @@ impl EffectVehicleFrames {
         EffectSpriteSet {
             frames: &self.breakdown,
             meta: &BREAKDOWN_SMOKE_META,
-            frame_secs: 0.43,
         }
     }
 }
@@ -100,24 +94,6 @@ pub(crate) fn effect_frame_count(set: &EffectSpriteSet<'_>) -> usize {
     } else {
         set.frames.len().min(n)
     }
-}
-
-#[must_use]
-pub(crate) fn effect_frame_index(
-    elapsed_secs: f32,
-    phase: usize,
-    set: &EffectSpriteSet<'_>,
-) -> usize {
-    let n = effect_frame_count(set);
-    if n == 0 {
-        return 0;
-    }
-    ((elapsed_secs / set.frame_secs) as usize + phase) % n
-}
-
-#[must_use]
-pub(crate) fn effect_lifetime_secs(set: &EffectSpriteSet<'_>) -> f32 {
-    effect_frame_count(set) as f32 * set.frame_secs
 }
 
 /// Posición en mundo para un frame de efecto anclado a `anchor` (p. ej. locomotora).
@@ -150,22 +126,5 @@ pub(crate) fn effect_overlay_pos(
 pub(crate) fn apply_effect_frame(sprite: &mut Sprite, set: &EffectSpriteSet<'_>, frame: usize) {
     if let Some(atlas) = set.frames.get(frame) {
         atlas.apply_to(sprite);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn frame_index_cycles() {
-        let set = EffectSpriteSet {
-            frames: &[],
-            meta: &STEAM_SMOKE_META,
-            frame_secs: 0.43,
-        };
-        assert_eq!(effect_frame_index(0.0, 0, &set), 0);
-        assert_eq!(effect_frame_index(0.86, 0, &set), 2);
-        assert_eq!(effect_frame_index(0.0, 3, &set), 3);
     }
 }

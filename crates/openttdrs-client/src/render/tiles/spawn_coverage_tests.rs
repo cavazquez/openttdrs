@@ -5885,7 +5885,7 @@ fn flat_industry_draw_proc_layers_follow_building_parent() {
 }
 
 #[test]
-fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
+fn paved_roadside_uses_paved_set_and_details_join_global_sort() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();
     let c = |x: i32, y: i32| TileCoord::new(x, y);
@@ -5903,6 +5903,11 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
     // Misma carretera con faroles (Roadside::StreetLights = 3).
     paved.m6 = 3 << 3;
     map.set_tile(c(4, 4), paved).expect("street lights road");
+
+    // Mismo trazado con árboles (Roadside::Trees = 5). Cada árbol debe
+    // entregar su propio parent al compositor, igual que DrawRoadDetail.
+    paved.m6 = 5 << 3;
+    map.set_tile(c(6, 2), paved).expect("roadside trees road");
 
     let grid = RenderGrid::from_map(&map, 8, 8);
     let mut world = World::new();
@@ -5983,33 +5988,108 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
         .run_system_once(
             |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
                 let (mw, mh) = m.0.dimensions();
-                spawn_road_tile(
-                    &mut commands,
-                    &m.0,
-                    mw,
-                    mh,
-                    &a.0,
-                    &TileRenderContext::new(&m.0, &g.0, 4, 4),
-                    4.0,
-                    TEST_CLIMATE,
-                    true,
-                    true,
-                    &[],
-                    None,
-                    None,
-                    &[],
-                    &[],
-                    &[],
-                    None,
-                    &[],
-                    None,
-                );
+                for (x, y) in [(4, 4), (6, 2)] {
+                    spawn_road_tile(
+                        &mut commands,
+                        &m.0,
+                        mw,
+                        mh,
+                        &a.0,
+                        &TileRenderContext::new(&m.0, &g.0, x, y),
+                        4.0,
+                        TEST_CLIMATE,
+                        true,
+                        true,
+                        &[],
+                        None,
+                        None,
+                        &[],
+                        &[],
+                        &[],
+                        None,
+                        &[],
+                        None,
+                    );
+                }
             },
         )
-        .expect("street lights road tile");
+        .expect("roadside detail tiles");
     let total = world.query::<&Sprite>().iter(&world).count();
-    // `_roadside_lamps[5]`: dos faroles además del suelo pavimentado.
-    assert_eq!(total - 1, 3, "suelo pavimentado + 2 faroles");
+    // `_roadside_lamps[5]`: dos faroles; `_roadside_trees[5]`: cuatro
+    // árboles. Ambos aportan también el suelo de su carretera.
+    assert_eq!(total - 1, 8, "dos suelos + 2 faroles + 4 árboles");
+
+    let mut lights: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter(|(parent, _)| matches!(parent.sprite_id, 1_406 | 1_407))
+        .map(|(parent, transform)| (*parent, transform.translation.z))
+        .collect();
+    lights.sort_by_key(|(parent, _)| parent.insertion_key);
+    assert_eq!(
+        lights
+            .iter()
+            .map(|(parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                1_407,
+                ParentSpriteBounds::new(65, 72, 0, 66, 73, 15),
+                viewport_insertion_key(4, 4, 16),
+            ),
+            (
+                1_406,
+                ParentSpriteBounds::new(78, 72, 0, 79, 73, 15),
+                viewport_insertion_key(4, 4, 17),
+            ),
+        ],
+        "cada farol debe conservar el prisma 2×2×16 de DrawRoadDetail"
+    );
+    assert!(
+        lights
+            .iter()
+            .all(|(parent, depth)| parent.source_depth == *depth),
+        "el slot fuente del parent debe ser el Transform previo al sort global"
+    );
+
+    let mut trees: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter(|(parent, _)| parent.sprite_id == 4_626)
+        .map(|(parent, transform)| (*parent, transform.translation.z))
+        .collect();
+    trees.sort_by_key(|(parent, _)| parent.insertion_key);
+    assert_eq!(
+        trees
+            .iter()
+            .map(|(parent, _)| (parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                ParentSpriteBounds::new(96, 34, 0, 97, 35, 15),
+                viewport_insertion_key(6, 2, 16),
+            ),
+            (
+                ParentSpriteBounds::new(96, 42, 0, 97, 43, 15),
+                viewport_insertion_key(6, 2, 17),
+            ),
+            (
+                ParentSpriteBounds::new(108, 34, 0, 109, 35, 15),
+                viewport_insertion_key(6, 2, 18),
+            ),
+            (
+                ParentSpriteBounds::new(108, 42, 0, 109, 43, 15),
+                viewport_insertion_key(6, 2, 19),
+            ),
+        ],
+        "los árboles entran individualmente al sorter, no como una capa plana"
+    );
+    assert!(
+        trees
+            .iter()
+            .all(|(parent, depth)| parent.source_depth == *depth),
+        "cada árbol reserva un slot de profundidad antes del sort global"
+    );
 }
 
 /// `SPR_ONEWAY_BASE` (Action5 0x09) pertenece al `openttd.grf` oficial, no

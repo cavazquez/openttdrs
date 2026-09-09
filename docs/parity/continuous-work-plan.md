@@ -681,6 +681,15 @@ distintos no cambia: esta corrección sólo ajusta el tono de la máscara, no
 declara paridad total ni corrige orden global. #326 permanece abierto; el
 vínculo parent/child global de esas secuencias sigue separado en #561.
 
+Actualización #326-ROADSIDE-DETAILS (2026-09-09): los faroles y árboles
+roadside de `DrawRoadDetail` ya emiten parents individuales en el compositor
+global con prismas nativos `2×2×16`, altura de superficie e inserción entre
+fundaciones y `DrawBridgeMiddle`. La traza Kale scoped añade 313 detalles y la
+medición limpia normal mejora de 10,553 % a 10,176 % de píxeles distintos; las
+cinco escalas restantes no cambian. Quedan composición segmentada, clipping,
+pivotes y framebuffer, por lo que #326 sigue abierto; el detalle cuantitativo
+canónico queda en `PARIDAD.md`.
+
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. `d9b0537c` limita el sorter runtime a la región relevante del viewport y excluye ocultos; el corte actual incorpora el `TileLayoutSpriteGroup` de AirportTile: conserva layouts estáticos, sustituye ground, emite BUILD como `TILE_SEQ_LINE` parents/children y combina únicamente el ground con la fundación. [#560](https://github.com/cavazquez/openttdrs/issues/560) sólo limpia del oráculo los `IncomePopupText` efímeros; [#562](https://github.com/cavazquez/openttdrs/issues/562) calibra la máscara `PALETTE_TO_TRANSPARENT` de los techos rail vanilla sin cambiar selección ni orden. Ninguno altera productores, pivotes ni framebuffer. La evidencia cuantitativa vive sólo en `PARIDAD.md`. Foundations Action5/rotaciones de aeropuertos, sprite-stack y el orden completo de framebuffer siguen sin equivalencia global; el vínculo global parent/child de techo queda separado en [#561](https://github.com/cavazquez/openttdrs/issues/561). | Contrastar la traza scoped nativa/candidata para elegir la primera familia visible restante; después verificar `0,12×`, `0,25×`, `0,50×`, `1×` y los seis zooms si cambia viewport, culling u overview. |

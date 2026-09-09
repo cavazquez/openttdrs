@@ -1077,6 +1077,20 @@ slots locales de Bevy con el orden resultante. Las demás familias todavía
 carecen de bounds, identidad de parent o vínculo de children completos; esa
 cobertura parcial no es evidencia de composición global aplicada.
 
+Actualización #326-ROADSIDE-DETAILS (2026-09-09): los detalles de
+`DrawRoadDetail` —faroles `1406`/`1407` y árboles roadside `4626`— entran
+ahora como parents individuales en el compositor global. Cada uno conserva la
+caja nativa `{dx,dy,0} × {2,2,16}`, ancla su Z sobre la superficie efectiva y
+recibe un orden de inserción posterior a las fundaciones y anterior a
+`DrawBridgeMiddle`. En Kale `(189,117)`, `1280×720`, escala normal y perfil
+limpio, la traza candidata pasó de cero a 313 detalles roadside; frente a la
+traza nativa scoped quedan cuatro tuplas ausentes y tres adicionales de
+borde/scope. La captura limpia baja de 97.256 (10,553 %) a 93.780 (10,176 %)
+píxeles distintos y el delta medio por canal de 3,828 a 3,705. Las otras cinco
+escalas de la matriz (`0,25×`, `0,5×`, `2×`, `4×`, `8×`) no cambian. Es una
+mejora focal del productor y no resuelve composición por segmentos, clipping,
+pivotes ni framebuffer; #326 permanece abierto.
+
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
 `y_offs`). El renderer aplica además `SpriteBounds::origin` y

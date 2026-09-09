@@ -32,7 +32,7 @@ use crate::debug_gizmos::DebugGizmosPlugin;
 use crate::network::{NetCli, NetworkPlugin};
 use crate::persistence::PersistencePlugin;
 use crate::render::{
-    AirportRadarAnimPlugin, BubbleEffectPlugin, DisasterCraftPlugin, EffectVehiclePlugin,
+    AirportStationAnimPlugin, BubbleEffectPlugin, DisasterCraftPlugin, EffectVehiclePlugin,
     FizzyDrinkAnimPlugin, HouseLiftAnimPlugin, IndustryBuildingAnimPlugin, IndustryDrawProcPlugin,
     IndustrySmokePlugin, LighthouseAnimPlugin, RefineryFireAnimPlugin, TileAnimPlugin,
     TrainSmokePlugin, WaterAnimationPlugin,
@@ -258,7 +258,7 @@ pub(crate) fn build_client_app(
             HouseLiftAnimPlugin,
             IndustrySmokePlugin,
             IndustryBuildingAnimPlugin,
-            AirportRadarAnimPlugin,
+            AirportStationAnimPlugin,
         ),
         (
             IndustryDrawProcPlugin,

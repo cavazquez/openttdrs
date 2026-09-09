@@ -28,8 +28,8 @@ use crate::render::tiles::{
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
-    AirportRadarAnim, CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid,
-    TileRenderContext, ViewportSortableChild, ViewportSortableParent,
+    AirportStationAnim, CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid,
+    TileRenderContext, ViewportSortableChild, ViewportSortableParent, viewport_insertion_key,
 };
 use crate::sprites::{RAIL_TB_X, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS};
 
@@ -3155,7 +3155,7 @@ fn imported_airport_radar_keeps_its_rotating_parent_and_frame_anchor() {
         .expect("radar airport spawn");
 
     let mut radars = world.query::<(
-        &AirportRadarAnim,
+        &AirportStationAnim,
         &ViewportSortableParent,
         &Transform,
         &Sprite,
@@ -3170,6 +3170,84 @@ fn imported_airport_radar_keeps_its_rotating_parent_and_frame_anchor() {
         assets
             .airport_station_sprite(2_683)
             .expect("sprite radar tres")
+            .matches(sprite),
+        "el spawn debe comenzar en el frame m7 vivo, no en el frame cero"
+    );
+}
+
+#[test]
+fn imported_airport_wind_keeps_its_rotating_parent_and_frame_anchor() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let coord = TileCoord::new(3, 3);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Airport,
+            mapt: 0x50,
+            m2: 23,
+            // APT_AIRFIELD_WIND_1: el cuarto frame cambia ancho y ancla NFO,
+            // pero conserva la caja TILE_SEQ de la manga de viento.
+            m5: 39,
+            m7: 3,
+            ..tile_template()
+        },
+    )
+    .expect("wind airport tile");
+    let mut station = Station::new_with_kind(coord, StopKind::Airport);
+    station.ottd_station_id = Some(23);
+    station.airport_tiles.push(coord);
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets.clone()));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_transport_object_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[station.clone()],
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("wind airport spawn");
+
+    let mut winds = world.query::<(
+        &AirportStationAnim,
+        &ViewportSortableParent,
+        &Transform,
+        &Sprite,
+    )>();
+    let (anim, parent, transform, sprite) = winds.single(&world).expect("manga animada");
+    let expected = anim.frame_for_m7(3, 39).expect("frame manga tres");
+    assert_eq!(parent.sprite_id, 2_679);
+    assert_eq!(
+        parent.bounds,
+        ParentSpriteBounds::new(52, 59, 0, 52, 59, 19)
+    );
+    assert_eq!(parent.insertion_key, viewport_insertion_key(3, 3, 1));
+    assert_eq!(*parent, expected.parent);
+    assert_eq!(transform.translation, expected.translation);
+    assert!(
+        assets
+            .airport_station_sprite(2_679)
+            .expect("sprite manga tres")
             .matches(sprite),
         "el spawn debe comenzar en el frame m7 vivo, no en el frame cero"
     );

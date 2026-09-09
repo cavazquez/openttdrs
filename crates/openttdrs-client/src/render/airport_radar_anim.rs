@@ -1,13 +1,16 @@
-//! Radar animado de aeropuerto (`SPR_AIRPORT_RADAR_*`).
+//! Overlays animados de aeropuerto (`SPR_AIRPORT_RADAR_*` y manga de viento).
 //!
 //! La simulación avanza `m7` en `step_airport_tiles`; el cliente lee el frame
-//! vivo del mapa cada tick visual. Los doce frames cambian tanto de PNG como
-//! de ancla NFO, por lo que deben actualizar también su parent global.
+//! vivo del mapa cada tick visual. Los frames cambian tanto de PNG como de
+//! ancla NFO, por lo que deben actualizar también su parent global.
 
 use bevy::ecs::change_detection::DetectChangesMut;
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{airport_radar_frame, is_airport_radar_station_gfx, is_airport_tower_tile};
+use openttdrs_core::{
+    airport_radar_frame, is_airport_flag_station_gfx, is_airport_radar_station_gfx,
+    is_airport_tower_tile,
+};
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::overlay_pos;
@@ -23,35 +26,43 @@ use crate::sprites::{
 use crate::state::{ClientScreen, SimWorld};
 
 const FIRST_AIRPORT_RADAR_SPRITE_ID: u32 = 2_680;
+const FIRST_AIRPORT_WIND_SPRITE_ID: u32 = 2_676;
 
-pub(crate) struct AirportRadarAnimPlugin;
+pub(crate) struct AirportStationAnimPlugin;
 
-impl Plugin for AirportRadarAnimPlugin {
+impl Plugin for AirportStationAnimPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            animate_airport_radar
+            animate_airport_station_overlays
                 .in_set(UpdateSet::Visuals)
                 .run_if(in_state(ClientScreen::InGame)),
         );
     }
 }
 
-/// Origen de la capa radar: la ruta simplificada antigua o un `StationGfx`
-/// importado, donde las entradas 31/51/52 contienen el `TILE_SEQ_LINE` real.
+/// Origen de la capa animada: la ruta simplificada antigua del radar o un
+/// `StationGfx` importado, que conserva el `TILE_SEQ_LINE` real.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AirportRadarSource {
+enum AirportStationAnimSource {
     LegacyTower,
     StationGfx,
 }
 
-/// Overlay del radar. Conserva el contexto de dibujo porque las aspas no
-/// comparten ancla con el frame 0 y porque la Z del parent pertenece al
-/// compositor, no al `Transform` ya reordenado.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AirportStationAnimKind {
+    Radar,
+    Wind,
+}
+
+/// Overlay animado de una estación airport. Conserva el contexto de dibujo
+/// porque sus frames pueden no compartir ancla con el frame 0 y porque la Z
+/// del parent pertenece al compositor, no al `Transform` ya reordenado.
 #[derive(Component, Clone, Copy)]
-pub(crate) struct AirportRadarAnim {
+pub(crate) struct AirportStationAnim {
     pos: TileCoord,
-    source: AirportRadarSource,
+    source: AirportStationAnimSource,
+    kind: AirportStationAnimKind,
     iso_pos: Vec2,
     base_z: u8,
     tx: i32,
@@ -63,23 +74,25 @@ pub(crate) struct AirportRadarAnim {
 /// Estado puro de un frame: permite que el spawner y la animación compartan
 /// exactamente la misma geometría `TILE_SEQ_LINE`.
 #[derive(Clone, Copy)]
-pub(crate) struct AirportRadarFrame {
+pub(crate) struct AirportStationAnimFrame {
     pub(crate) sprite_id: u32,
     pub(crate) translation: Vec3,
     pub(crate) parent: ViewportSortableParent,
 }
 
-impl AirportRadarAnim {
+impl AirportStationAnim {
     fn new(
         ctx: &TileRenderContext,
         base_z: u8,
         map_width: u32,
-        source: AirportRadarSource,
+        source: AirportStationAnimSource,
+        kind: AirportStationAnimKind,
         local_ordinal: u8,
     ) -> Self {
         Self {
             pos: ctx.coord,
             source,
+            kind,
             iso_pos: ctx.iso_pos,
             base_z,
             tx: ctx.tx_i32(),
@@ -91,14 +104,21 @@ impl AirportRadarAnim {
 
     /// Radar de la ruta de aeropuerto procedural anterior a `StationGfx`.
     #[must_use]
-    pub(crate) fn legacy_tower(ctx: &TileRenderContext, base_z: u8, map_width: u32) -> Self {
-        Self::new(ctx, base_z, map_width, AirportRadarSource::LegacyTower, 0)
+    pub(crate) fn legacy_radar_tower(ctx: &TileRenderContext, base_z: u8, map_width: u32) -> Self {
+        Self::new(
+            ctx,
+            base_z,
+            map_width,
+            AirportStationAnimSource::LegacyTower,
+            AirportStationAnimKind::Radar,
+            0,
+        )
     }
 
     /// Radar dentro de la secuencia importada; `local_ordinal` conserva el
     /// orden nativo respecto de las cercas que siguen en la misma tesela.
     #[must_use]
-    pub(crate) fn station_gfx(
+    pub(crate) fn station_radar(
         ctx: &TileRenderContext,
         base_z: u8,
         map_width: u32,
@@ -108,15 +128,59 @@ impl AirportRadarAnim {
             ctx,
             base_z,
             map_width,
-            AirportRadarSource::StationGfx,
+            AirportStationAnimSource::StationGfx,
+            AirportStationAnimKind::Radar,
             local_ordinal,
         )
     }
 
-    fn is_still_radar(&self, tile: &Tile) -> bool {
-        match self.source {
-            AirportRadarSource::LegacyTower => is_airport_tower_tile(tile.kind, tile.m5),
-            AirportRadarSource::StationGfx => is_airport_radar_station_gfx(tile.m5),
+    /// Manga dentro de la secuencia importada; `local_ordinal` conserva el
+    /// orden nativo respecto de la cerca que la precede en la misma tesela.
+    #[must_use]
+    pub(crate) fn station_wind(
+        ctx: &TileRenderContext,
+        base_z: u8,
+        map_width: u32,
+        local_ordinal: u8,
+    ) -> Self {
+        Self::new(
+            ctx,
+            base_z,
+            map_width,
+            AirportStationAnimSource::StationGfx,
+            AirportStationAnimKind::Wind,
+            local_ordinal,
+        )
+    }
+
+    fn is_still_animated(&self, tile: &Tile) -> bool {
+        match (self.source, self.kind) {
+            (AirportStationAnimSource::LegacyTower, AirportStationAnimKind::Radar) => {
+                is_airport_tower_tile(tile.kind, tile.m5)
+            }
+            (AirportStationAnimSource::StationGfx, AirportStationAnimKind::Radar) => {
+                is_airport_radar_station_gfx(tile.m5)
+            }
+            (AirportStationAnimSource::StationGfx, AirportStationAnimKind::Wind) => {
+                is_airport_flag_station_gfx(tile.m5)
+            }
+            (AirportStationAnimSource::LegacyTower, AirportStationAnimKind::Wind) => false,
+        }
+    }
+
+    const fn first_sprite_id(self) -> u32 {
+        match self.kind {
+            AirportStationAnimKind::Radar => FIRST_AIRPORT_RADAR_SPRITE_ID,
+            AirportStationAnimKind::Wind => FIRST_AIRPORT_WIND_SPRITE_ID,
+        }
+    }
+
+    fn sprite_id_for_m7(self, m7: u8) -> u32 {
+        match self.kind {
+            AirportStationAnimKind::Radar => {
+                FIRST_AIRPORT_RADAR_SPRITE_ID + u32::from(airport_radar_frame(m7))
+            }
+            AirportStationAnimKind::Wind => FIRST_AIRPORT_WIND_SPRITE_ID + u32::from(m7 % 4),
         }
     }
 
@@ -126,21 +190,20 @@ impl AirportRadarAnim {
     ) -> Option<&'static crate::sprites::AirportStationLayer> {
         // La ruta legacy usa el mismo `TILE_SEQ_LINE` que APT_RADAR_GRASS_FENCE_SW.
         let gfx = match self.source {
-            AirportRadarSource::LegacyTower => 31,
-            AirportRadarSource::StationGfx => station_gfx,
+            AirportStationAnimSource::LegacyTower => 31,
+            AirportStationAnimSource::StationGfx => station_gfx,
         };
         airport_station_layers_for_gfx(gfx)
             .iter()
-            .find(|layer| layer.sprite_id == FIRST_AIRPORT_RADAR_SPRITE_ID)
+            .find(|layer| layer.sprite_id == self.first_sprite_id())
     }
 
-    /// Construye el sprite, ancla y prisma de un frame de radar. Cada frame
-    /// conserva la misma caja `M(7,7,0,2,2,8)`, pero no el mismo PNG ni el
-    /// mismo desplazamiento de pantalla.
+    /// Construye el sprite, ancla y prisma de un frame. La caja `TILE_SEQ`
+    /// se conserva entre frames, aunque cambien el PNG o su ancla NFO.
     #[must_use]
-    pub(crate) fn frame_for_m7(&self, m7: u8, station_gfx: u8) -> Option<AirportRadarFrame> {
+    pub(crate) fn frame_for_m7(&self, m7: u8, station_gfx: u8) -> Option<AirportStationAnimFrame> {
         let layer = self.layer_for_station_gfx(station_gfx)?;
-        let sprite_id = FIRST_AIRPORT_RADAR_SPRITE_ID + u32::from(airport_radar_frame(m7));
+        let sprite_id = self.sprite_id_for_m7(m7);
         let sprite = airport_station_sprite_for_id(sprite_id)?;
         let (xrel, yrel) = airport_station_overlay_rel_for_sprite(layer, sprite);
         let source_translation = overlay_pos(
@@ -173,7 +236,7 @@ impl AirportRadarAnim {
             insertion_key: viewport_insertion_key(source_x, source_y, self.local_ordinal),
             source_depth,
         };
-        Some(AirportRadarFrame {
+        Some(AirportStationAnimFrame {
             sprite_id,
             translation: Vec3::new(
                 source_translation.x,
@@ -185,9 +248,9 @@ impl AirportRadarAnim {
     }
 }
 
-/// La Z efectiva pertenece al sorter global; la rotación no puede devolver
-/// el radar a su depth fuente entre dos pases de composición.
-fn set_airport_radar_translation_if_changed(
+/// La Z efectiva pertenece al sorter global; la animación no puede devolver
+/// una capa a su depth fuente entre dos pases de composición.
+fn set_airport_station_translation_if_changed(
     transform: &mut Mut<Transform>,
     source_translation: Vec3,
     preserves_sorted_depth: bool,
@@ -206,13 +269,13 @@ fn set_airport_radar_translation_if_changed(
     }
 }
 
-fn animate_airport_radar(
+fn animate_airport_station_overlays(
     sim: Res<SimWorld>,
     assets: Option<Res<WorldAssets>>,
     mut commands: Commands,
     mut q: Query<(
         Entity,
-        &AirportRadarAnim,
+        &AirportStationAnim,
         &mut Sprite,
         &mut Transform,
         &mut Visibility,
@@ -230,7 +293,7 @@ fn animate_airport_radar(
             }
             continue;
         };
-        if !anim.is_still_radar(&tile) {
+        if !anim.is_still_animated(&tile) {
             visibility.set_if_neq(Visibility::Hidden);
             if sortable_parent.is_some() {
                 commands.entity(entity).remove::<ViewportSortableParent>();
@@ -256,7 +319,7 @@ fn animate_airport_radar(
             frame_sprite.apply_to(&mut sprite);
         }
         let preserves_sorted_depth = sortable_parent.is_some();
-        set_airport_radar_translation_if_changed(
+        set_airport_station_translation_if_changed(
             &mut transform,
             frame.translation,
             preserves_sorted_depth,
@@ -278,7 +341,7 @@ mod tests {
     use crate::render::grid::TileRenderInfo;
     use crate::render::{ViewportSortableChildDepthWindows, sort_viewport_sortable_parents};
 
-    fn radar_ctx() -> TileRenderContext {
+    fn airport_ctx() -> TileRenderContext {
         TileRenderContext {
             tx: 186,
             ty: 1,
@@ -297,7 +360,7 @@ mod tests {
 
     #[test]
     fn station_radar_uses_native_prism_and_frame_specific_anchor() {
-        let anim = AirportRadarAnim::station_gfx(&radar_ctx(), 1, 256, 0);
+        let anim = AirportStationAnim::station_radar(&airport_ctx(), 1, 256, 0);
         let first = anim.frame_for_m7(0, 31).expect("frame inicial");
         let fourth = anim.frame_for_m7(3, 31).expect("frame rotado");
 
@@ -321,7 +384,7 @@ mod tests {
 
     #[test]
     fn legacy_tower_reuses_the_same_native_radar_contract() {
-        let legacy = AirportRadarAnim::legacy_tower(&radar_ctx(), 1, 256);
+        let legacy = AirportStationAnim::legacy_radar_tower(&airport_ctx(), 1, 256);
         let frame = legacy.frame_for_m7(11, 6).expect("frame de tower legacy");
         assert_eq!(frame.sprite_id, 2_691);
         assert_eq!(
@@ -331,8 +394,32 @@ mod tests {
     }
 
     #[test]
+    fn station_wind_uses_native_prism_and_frame_specific_anchor() {
+        let anim = AirportStationAnim::station_wind(&airport_ctx(), 1, 256, 1);
+        let first = anim.frame_for_m7(0, 39).expect("frame inicial");
+        let fourth = anim.frame_for_m7(3, 39).expect("frame rotado");
+
+        assert_eq!(first.sprite_id, 2_676);
+        assert_eq!(fourth.sprite_id, 2_679);
+        assert_eq!(
+            first.parent.bounds,
+            ParentSpriteBounds::new(2980, 27, 8, 2980, 27, 27)
+        );
+        assert_eq!(first.parent.bounds, fourth.parent.bounds);
+        assert_ne!(
+            first.translation.truncate(),
+            fourth.translation.truncate(),
+            "los frames de manga tienen offsets NFO distintos"
+        );
+        assert_eq!(
+            first.parent.insertion_key,
+            viewport_insertion_key(186, 1, 1)
+        );
+    }
+
+    #[test]
     fn airport_radar_enters_global_sorter_and_keeps_its_resolved_depth() {
-        let anim = AirportRadarAnim::station_gfx(&radar_ctx(), 1, 256, 0);
+        let anim = AirportStationAnim::station_radar(&airport_ctx(), 1, 256, 0);
         let frame = anim.frame_for_m7(0, 31).expect("frame radar");
         let parent = frame.parent;
         let mut world = World::new();
@@ -374,7 +461,7 @@ mod tests {
         let mut transform = world
             .get_mut::<Transform>(radar)
             .expect("transform para rotación");
-        set_airport_radar_translation_if_changed(&mut transform, frame.translation, true);
+        set_airport_station_translation_if_changed(&mut transform, frame.translation, true);
         assert_eq!(transform.translation.z, sorted_depth);
     }
 }

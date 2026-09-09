@@ -39,7 +39,7 @@ use crate::render::viewport_sort::{
 };
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    AirportRadarAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext,
+    AirportStationAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext,
     ViewportSortableParent, WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
     viewport_insertion_key, viewport_source_depth,
 };
@@ -811,7 +811,7 @@ fn spawn_airport_radar_overlay(
     map_width: u32,
 ) {
     let m7 = ctx.tile.map(|t| t.m7).unwrap_or(0);
-    let anim = AirportRadarAnim::legacy_tower(ctx, base_z, map_width);
+    let anim = AirportStationAnim::legacy_radar_tower(ctx, base_z, map_width);
     let Some(frame) = anim.frame_for_m7(m7, 0) else {
         return;
     };
@@ -968,16 +968,25 @@ fn spawn_airport_station_overlays(
         } else {
             image.sprite()
         };
-        let radar_anim = (openttdrs_core::is_airport_radar_station_gfx(gfx)
-            && layer.sprite_id == 2_680)
-            .then(|| {
-                AirportRadarAnim::station_gfx(
+        let local_ordinal = u8::try_from(layer_index).unwrap_or(u8::MAX);
+        let station_anim =
+            if openttdrs_core::is_airport_radar_station_gfx(gfx) && layer.sprite_id == 2_680 {
+                Some(AirportStationAnim::station_radar(
                     ctx,
                     base_z,
                     map_width,
-                    u8::try_from(layer_index).unwrap_or(u8::MAX),
-                )
-            });
+                    local_ordinal,
+                ))
+            } else if openttdrs_core::is_airport_flag_station_gfx(gfx) && layer.sprite_id == 2_676 {
+                Some(AirportStationAnim::station_wind(
+                    ctx,
+                    base_z,
+                    map_width,
+                    local_ordinal,
+                ))
+            } else {
+                None
+            };
         let mut entity = commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -992,12 +1001,12 @@ fn spawn_airport_station_overlays(
                     // El apron se emite con `DrawGroundSprite` y no entra a
                     // `parent_sprites_to_draw`: la primera TILE_SEQ_LINE es
                     // por lo tanto el ordinal sortable cero de la tesela.
-                    u8::try_from(layer_index).unwrap_or(u8::MAX),
+                    local_ordinal,
                 ),
                 source_depth,
             },
         ));
-        if let Some(anim) = radar_anim {
+        if let Some(anim) = station_anim {
             entity.insert(anim);
         }
     }

@@ -399,8 +399,16 @@ fn sync_tile_kind_after_heights(map: &mut Map, c: TileCoord) {
     let Some((tileh, z)) = tile_slope_and_z(map, c) else {
         return;
     };
-    let kind = map.get_kind(c).unwrap_or(TileKind::Void);
-    if matches!(kind, TileKind::Grass | TileKind::Forest) && z == 0 {
+    let Some(tile) = map.get(c) else {
+        return;
+    };
+    let kind = tile.kind;
+    // MP_OBJECT is rendered as Grass by the import fallback, but successful
+    // TerraformTile_Object autoslope keeps the raw object tile intact.
+    if !is_map_object_tile(tile.mapt)
+        && matches!(kind, TileKind::Grass | TileKind::Forest)
+        && z == 0
+    {
         let _ = map.set_kind(c, TileKind::Water);
         let _ = map.set_mapt_m5(c, MAPT_WATER, 0);
     } else if kind == TileKind::Water && (z > 0 || tileh != 0) {
@@ -961,6 +969,37 @@ mod tests {
         let (mut state, coord) = state_with_object_autoslope_callback(0);
         apply_command(&mut state, &Command::RaiseLand(coord)).unwrap();
         assert_eq!(state.map.get(coord).unwrap().height, 4);
+    }
+
+    #[test]
+    fn object_autoslope_at_sea_level_preserves_raw_object_tile() {
+        let (mut state, coord) = state_with_object_autoslope_callback(0);
+        for y in 0..8 {
+            for x in 0..8 {
+                state.map.set_height(TileCoord::new(x, y), 0).unwrap();
+            }
+        }
+
+        // The object starts on a non-steep slope with max Z = 1. Raising a
+        // second corner keeps that max Z, so TerraformTile_Object accepts the
+        // autoslope operation while the object's base Z remains zero.
+        state
+            .map
+            .set_height(TileCoord::new(coord.x + 1, coord.y), 1)
+            .unwrap();
+        let raw_before = state.map.get(coord).unwrap();
+        apply_command(
+            &mut state,
+            &Command::RaiseLand(TileCoord::new(coord.x, coord.y + 1)),
+        )
+        .unwrap();
+
+        let raw_after = state.map.get(coord).unwrap();
+        assert!(crate::map::is_map_object_tile(raw_after.mapt));
+        assert_eq!(raw_after.mapt, raw_before.mapt);
+        assert_eq!(raw_after.m5, raw_before.m5);
+        assert_eq!(raw_after.m2, raw_before.m2);
+        assert_eq!(raw_after.m2_hi, raw_before.m2_hi);
     }
 
     #[test]

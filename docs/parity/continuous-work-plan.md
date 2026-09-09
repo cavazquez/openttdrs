@@ -118,7 +118,10 @@ runtime `TryBuildTownHouse` programa el temporizador de cada subtesela nueva;
 Action0 `0x19` también se conserva: el crecimiento runtime omite casas
 históricas y marca como protegida toda la huella de un spec protegido. Los
 flags de sincronización y aleatoriedad de callbacks quedan almacenados, no
-ejecutados. Al vencer el timer, `NewHouseTileLoop` ya resuelve Action2 de
+ejecutados. Action0 `0x1A`/`0x1B` conserva además frames, loop/no-loop y la
+velocidad limitada nativa `2..=16` (con defaults `NoAnimation`/`2`), junto
+con las máscaras CB1A/CB1B/CB1C; el scheduler y su integración `ANIT` aún no
+se ejecutan. Al vencer el timer, `NewHouseTileLoop` ya resuelve Action2 de
 `TileLoop`/`TileLoopNorth`: conserva los triggers pendientes, aplica sólo la
 máscara de reseed y comparte el resultado norte en huellas multitile, con el
 consumo global por tesela nativo. Luego rearma el período, preserva

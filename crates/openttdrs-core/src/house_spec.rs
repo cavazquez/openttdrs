@@ -53,6 +53,14 @@ pub const HOUSE_EXTRA_FLAG_CALLBACK_1A_RANDOM_BITS: u8 = 1 << 3;
 pub const STATION_ACCEPTANCE_THRESHOLD: u32 = 8;
 /// Bit `HouseCallbackMask::AllowConstruction`: consulta CB `0x17` al crecer.
 pub const HOUSE_CALLBACK_ALLOW_CONSTRUCTION_MASK: u16 = 1;
+/// Bit `HouseCallbackMask::AnimationNextFrame`: consulta CB `0x1A` al avanzar.
+pub const HOUSE_CALLBACK_ANIMATION_NEXT_FRAME_MASK: u16 = 1 << 1;
+/// Bit `HouseCallbackMask::AnimationTriggerTileLoop`: consulta CB `0x1B` al
+/// expirar el procesamiento periódico de una casa.
+pub const HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK: u16 = 1 << 2;
+/// Bit `HouseCallbackMask::AnimationSpeed`: consulta CB `0x1C` para elegir
+/// la cadencia de la animación.
+pub const HOUSE_CALLBACK_ANIMATION_SPEED_MASK: u16 = 1 << 6;
 /// Bit `HouseCallbackMask::DrawFoundations`: consulta CB `0x150` al dibujar
 /// una casa sobre una pendiente.
 pub const HOUSE_CALLBACK_DRAW_FOUNDATIONS_MASK: u16 = 1 << 11;
@@ -151,6 +159,15 @@ pub struct HouseSpecDef {
     /// callbacks de animación.
     #[serde(default)]
     pub extra_flags: u8,
+    /// Action0 `0x1A`: último frame de la animación de casa.
+    #[serde(default)]
+    pub animation_frames: u8,
+    /// Action0 `0x1A`: `0` no-loop, `1` loop, `0xFF` sin animación.
+    #[serde(default = "default_house_animation_status")]
+    pub animation_status: u8,
+    /// Action0 `0x1B`: espera `2^speed` ticks entre frames.
+    #[serde(default = "default_house_animation_speed")]
+    pub animation_speed: u8,
     /// Override de casa vanilla (`prop 0x15`).
     pub override_id: Option<u8>,
     /// Callback mask (`0x14` lo + `0x1D` hi); CB17 se ejecuta al construir.
@@ -164,6 +181,14 @@ pub struct HouseSpecDef {
     pub newgrf_local_id: u8,
     #[serde(default, skip)]
     pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
+}
+
+const fn default_house_animation_status() -> u8 {
+    0xFF
+}
+
+const fn default_house_animation_speed() -> u8 {
+    2
 }
 
 /// Conteos de edificios que consume `HouseScopeResolver`.
@@ -237,6 +262,49 @@ impl HouseSpecDef {
     #[must_use]
     pub const fn has_construction_callback(&self) -> bool {
         self.callback_mask & HOUSE_CALLBACK_ALLOW_CONSTRUCTION_MASK != 0
+    }
+
+    /// `true` cuando la casa declara metadata de animación `NewGRF`.
+    #[must_use]
+    pub const fn has_animation(&self) -> bool {
+        self.animation_status != 0xFF
+    }
+
+    /// El callback CB1A decide el siguiente frame de la animación.
+    #[must_use]
+    pub const fn has_animation_next_frame_callback(&self) -> bool {
+        self.callback_mask & HOUSE_CALLBACK_ANIMATION_NEXT_FRAME_MASK != 0
+    }
+
+    /// El callback CB1B se dispara desde el tile loop periódico.
+    #[must_use]
+    pub const fn has_animation_tile_loop_callback(&self) -> bool {
+        self.callback_mask & HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK != 0
+    }
+
+    /// El callback CB1C decide la cadencia de la animación.
+    #[must_use]
+    pub const fn has_animation_speed_callback(&self) -> bool {
+        self.callback_mask & HOUSE_CALLBACK_ANIMATION_SPEED_MASK != 0
+    }
+
+    /// CB1A recibe random bits cuando lo declara Action0 `0x19`.
+    #[must_use]
+    pub const fn animation_next_frame_uses_random_bits(&self) -> bool {
+        self.extra_flags & HOUSE_EXTRA_FLAG_CALLBACK_1A_RANDOM_BITS != 0
+    }
+
+    /// CB1B debe coordinar los subtiles de la huella cuando lo declara
+    /// Action0 `0x19`.
+    #[must_use]
+    pub const fn animation_tile_loop_is_synchronized(&self) -> bool {
+        self.extra_flags & HOUSE_EXTRA_FLAG_SYNCHRONIZED_CALLBACK_1B != 0
+    }
+
+    /// La secuencia Action0 vuelve al frame cero al llegar al último frame.
+    #[must_use]
+    pub const fn animation_loops(&self) -> bool {
+        self.animation_status == 1
     }
 
     /// ¿El GRF decide si se dibuja la fundación nivelada (`CB 0x150`)?
@@ -1060,6 +1128,9 @@ mod tests {
             probability: DEFAULT_HOUSE_PROBABILITY,
             processing_time: 0,
             extra_flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
             override_id: None,
             callback_mask: 0,
             name: "H".into(),
@@ -1088,6 +1159,9 @@ mod tests {
             probability: DEFAULT_HOUSE_PROBABILITY,
             processing_time: 0,
             extra_flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
             override_id: None,
             callback_mask: 0,
             name: "foundation-callback".into(),
@@ -1100,6 +1174,37 @@ mod tests {
         assert!(!def.has_draw_foundations_callback());
         def.callback_mask = HOUSE_CALLBACK_DRAW_FOUNDATIONS_MASK;
         assert!(def.has_draw_foundations_callback());
+
+        assert!(!def.has_animation());
+        def.animation_status = 1;
+        def.extra_flags =
+            HOUSE_EXTRA_FLAG_CALLBACK_1A_RANDOM_BITS | HOUSE_EXTRA_FLAG_SYNCHRONIZED_CALLBACK_1B;
+        def.callback_mask = HOUSE_CALLBACK_ANIMATION_NEXT_FRAME_MASK
+            | HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK
+            | HOUSE_CALLBACK_ANIMATION_SPEED_MASK;
+        assert!(def.has_animation());
+        assert!(def.has_animation_next_frame_callback());
+        assert!(def.has_animation_tile_loop_callback());
+        assert!(def.has_animation_speed_callback());
+        assert!(def.animation_next_frame_uses_random_bits());
+        assert!(def.animation_tile_loop_is_synchronized());
+        assert!(def.animation_loops());
+
+        let Ok(mut legacy) = serde_json::to_value(&def) else {
+            panic!("house spec JSON");
+        };
+        let Some(legacy_object) = legacy.as_object_mut() else {
+            panic!("house spec object");
+        };
+        legacy_object.remove("animation_frames");
+        legacy_object.remove("animation_status");
+        legacy_object.remove("animation_speed");
+        let Ok(legacy) = serde_json::from_value::<HouseSpecDef>(legacy) else {
+            panic!("legacy house spec");
+        };
+        assert_eq!(legacy.animation_frames, 0);
+        assert_eq!(legacy.animation_status, 0xFF);
+        assert_eq!(legacy.animation_speed, 2);
     }
 
     #[test]
@@ -1213,6 +1318,9 @@ mod tests {
             probability: DEFAULT_HOUSE_PROBABILITY,
             processing_time: 0,
             extra_flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
             override_id: None,
             callback_mask: 0,
             name: "town-psa".into(),
@@ -1283,6 +1391,9 @@ mod tests {
             probability: DEFAULT_HOUSE_PROBABILITY,
             processing_time: 0,
             extra_flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
             override_id: None,
             callback_mask: 0,
             name: "layout".into(),

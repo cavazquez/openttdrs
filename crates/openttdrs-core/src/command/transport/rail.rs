@@ -1,4 +1,5 @@
-use crate::economy::rail_build_cost_factored;
+use crate::GameState;
+use crate::economy::{rail_build_cost_factored, train_depot_build_cost};
 use crate::map::{
     Map, TileCoord, TileKind, opposite_diag_dir, rail_bit_for_sides, rail_bits_touching_side,
     rail_trackbits_valid_on_slope, tile_slope_and_z,
@@ -8,7 +9,6 @@ use crate::rail_signals::{
     RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST,
     SIGNAL_REMOVE_REFUND, rail_signal_present_mask, rail_signal_state_mask, rail_tile_is_signals,
 };
-use crate::{DEPOT_BUILD_COST, GameState};
 
 use super::super::terraform::{apply_autoslope_if_needed, check_autoslope_flat};
 use super::super::{CommandError, require_tile_owned_by_active};
@@ -343,6 +343,8 @@ pub(in crate::command) fn place_rail_depot_dir(
     let dir = dir & 0x03;
     check_rail_depot_placement(&state.map, c, dir)?;
     check_object_can_be_auto_cleared(state, c)?;
+    let rail_cost_multiplier =
+        state.runtime.rail_type_props[usize::from(state.current_rail_type.as_u8())].cost_multiplier;
     let connection = rail_depot_connection(&state.map, c, dir);
     if let Some((exit, before, after)) = connection
         && before != after
@@ -356,7 +358,7 @@ pub(in crate::command) fn place_rail_depot_dir(
         TileKind::RailDepot,
         0x10,
         (2 << 6) | dir,
-        DEPOT_BUILD_COST,
+        train_depot_build_cost(&state.global_economy, rail_cost_multiplier),
     )?;
     if let Some((exit, before, after)) = connection
         && before != after
@@ -364,7 +366,6 @@ pub(in crate::command) fn place_rail_depot_dir(
         // El empalme automático afecta sólo a la salida. No debe ejecutar la
         // propagación de autorraíl, que contaminaría líneas paralelas vecinas.
         write_normal_rail_tile(state, exit, after)?;
-        charge_rail_build(state);
     }
     Ok(())
 }

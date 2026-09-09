@@ -1,10 +1,10 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
-use crate::economy::station_build_cost;
+use crate::economy::{ship_depot_build_cost, station_build_cost};
 use crate::test_fixtures::SandboxMap;
 use crate::{
-    Command, DEPOT_BUILD_COST, GameState, StopKind, TileCoord, TileKind, VehicleKind,
-    apply_command, bridge_above_axis_from_mapt,
+    Command, GameState, StopKind, TileCoord, TileKind, VehicleKind, apply_command,
+    bridge_above_axis_from_mapt,
 };
 
 #[test]
@@ -17,7 +17,10 @@ fn place_ship_depot_on_water_with_water_entrance() {
     let money = s.economy.money;
     apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
     assert_eq!(s.map.get_kind(depot), Some(TileKind::ShipDepot));
-    assert_eq!(s.economy.money, money - DEPOT_BUILD_COST);
+    assert_eq!(
+        s.economy.money,
+        money - ship_depot_build_cost(&s.global_economy)
+    );
 }
 
 #[test]

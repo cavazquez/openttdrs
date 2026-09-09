@@ -3,6 +3,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::command::{Command, CommandError, apply_command};
+use crate::economy::train_depot_build_cost;
 use crate::map::{RAIL_TB_LOWER, RAIL_TB_RIGHT};
 use crate::test_fixtures::SandboxMap;
 use crate::{GameState, TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder};
@@ -113,7 +114,13 @@ fn rail_depot_connects_exit_without_touching_parallel_neighbors() {
             })
             .collect()
     };
+    let money_before = s.economy.money;
     apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+    assert_eq!(
+        s.economy.money,
+        money_before - train_depot_build_cost(&s.global_economy, 0),
+        "el empalme implícito ya está incluido en el tramo de vía del depósito"
+    );
 
     for (pos, tile_before) in before {
         if pos == depot {

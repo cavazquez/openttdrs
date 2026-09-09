@@ -79,6 +79,28 @@ pub fn road_build_cost_factored(ge: &GlobalEconomy, cost_multiplier: u16) -> i64
     base.saturating_mul(i64::from(factor)) / 8
 }
 
+/// Coste del depósito ferroviario (`PR_BUILD_DEPOT_TRAIN`) y su tramo de vía.
+///
+/// `CmdBuildTrainDepot` suma ambos conceptos incluso cuando la boca ya toca una
+/// vía existente. El factor Action0 de rail sólo afecta al segundo término.
+#[must_use]
+pub fn train_depot_build_cost(ge: &GlobalEconomy, rail_cost_multiplier: u16) -> i64 {
+    get_price(ge, PriceIndex::BuildDepotTrain, 1, 0)
+        .saturating_add(rail_build_cost_factored(ge, rail_cost_multiplier))
+}
+
+/// Coste del depósito de carretera (`PR_BUILD_DEPOT_ROAD`).
+#[must_use]
+pub fn road_depot_build_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::BuildDepotRoad, 1, 0)
+}
+
+/// Coste del depósito naval (`PR_BUILD_DEPOT_SHIP`).
+#[must_use]
+pub fn ship_depot_build_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::BuildDepotShip, 1, 0)
+}
+
 /// Coste base de estación jugable (`Price::BuildStationRail` y equivalentes road).
 #[must_use]
 pub fn station_build_cost(ge: &GlobalEconomy) -> i64 {
@@ -158,6 +180,19 @@ mod tests {
         assert_eq!(
             station_build_cost(&ge),
             medium_default_price(PriceIndex::BuildStationRail)
+        );
+        assert_eq!(
+            train_depot_build_cost(&ge, 0),
+            medium_default_price(PriceIndex::BuildDepotTrain)
+                + medium_default_price(PriceIndex::BuildRail)
+        );
+        assert_eq!(
+            road_depot_build_cost(&ge),
+            medium_default_price(PriceIndex::BuildDepotRoad)
+        );
+        assert_eq!(
+            ship_depot_build_cost(&ge),
+            medium_default_price(PriceIndex::BuildDepotShip)
         );
     }
 

@@ -1,4 +1,5 @@
-use crate::economy::road_build_cost_factored;
+use crate::GameState;
+use crate::economy::{road_build_cost_factored, road_depot_build_cost};
 
 fn charge_road_build(state: &mut GameState) {
     let mult = state
@@ -19,7 +20,6 @@ fn road_build_amount(state: &GameState) -> i64 {
 }
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{diag_dir_offset, station_site_tile_allows_build};
-use crate::{DEPOT_BUILD_COST, GameState};
 
 use super::super::terraform::apply_autoslope_if_needed;
 use super::super::{CommandError, require_tile_owned_by_active, tile_owner};
@@ -96,12 +96,14 @@ pub(in crate::command) fn place_road_depot_dir(
         TileKind::RoadDepot,
         0x20,
         (2 << 6) | dir,
-        DEPOT_BUILD_COST,
+        road_depot_build_cost(&state.global_economy),
     )?;
     if let Some((exit, road_bits)) = road_depot_exit_for_dir(&state.map, c, dir)
         && state.map.get_kind(exit) == Some(TileKind::Road)
     {
-        let _ = place_road_bits(state, exit, road_bits);
+        // El empalme representa los dos roadbits que trae el depósito; OpenTTD
+        // no cobra una carretera adicional por actualizar la tesela vecina.
+        let _ = place_road_bits_without_charge(state, exit, road_bits);
     }
     Ok(())
 }
@@ -137,6 +139,25 @@ pub(in crate::command) fn place_road_bits(
     c: TileCoord,
     bits: u8,
 ) -> Result<(), CommandError> {
+    place_road_bits_inner(state, c, bits, true)
+}
+
+/// Variante interna para conexiones implícitas de un depósito ya cobradas por
+/// `PR_BUILD_DEPOT_ROAD`.
+pub(in crate::command) fn place_road_bits_without_charge(
+    state: &mut GameState,
+    c: TileCoord,
+    bits: u8,
+) -> Result<(), CommandError> {
+    place_road_bits_inner(state, c, bits, false)
+}
+
+fn place_road_bits_inner(
+    state: &mut GameState,
+    c: TileCoord,
+    bits: u8,
+    charge: bool,
+) -> Result<(), CommandError> {
     check_place_road_bits(&state.map, c)?;
     check_object_can_be_auto_cleared(state, c)?;
     apply_autoslope_if_needed(state, c)?;
@@ -161,12 +182,16 @@ pub(in crate::command) fn place_road_bits(
             .map
             .set_tile(c, tile)
             .map_err(|_| CommandError::OutOfBounds)?;
-        charge_road_build(state);
+        if charge {
+            charge_road_build(state);
+        }
         return Ok(());
     }
     write_normal_road_tile(state, c, road_bits)?;
     propagate_road_bits_to_neighbors(state, c, road_bits)?;
-    charge_road_build(state);
+    if charge {
+        charge_road_build(state);
+    }
     Ok(())
 }
 

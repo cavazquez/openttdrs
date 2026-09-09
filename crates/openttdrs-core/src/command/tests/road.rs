@@ -1,5 +1,5 @@
 use crate::command::{Command, CommandError, apply_command, command_would_fail};
-use crate::economy::{road_build_cost, waypoint_build_cost};
+use crate::economy::{road_build_cost, road_depot_build_cost, waypoint_build_cost};
 use crate::{
     GameState, ROAD_BUILD_COST, ROAD_PLACE_FORCE_AXIS, TileCoord, TileKind, Vehicle, VehicleKind,
     infer_road_drag_axis, road_bits_for_autoroute, road_locked_tool_axis, tile_slope_and_z,
@@ -428,6 +428,22 @@ fn place_road_depot_dir_preserves_orientation_in_m5() {
         s.map.get(exit).unwrap().m5 & 0x04,
         0,
         "boca NW hacia el depósito"
+    );
+}
+
+#[test]
+fn road_depot_uses_native_price_without_charging_the_entrance_road() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    let exit = TileCoord::new(2, 1);
+    apply_command(&mut s, &Command::PlaceRoad(exit)).unwrap();
+    let money_before = s.economy.money;
+
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 3)).unwrap();
+
+    assert_eq!(
+        s.economy.money,
+        money_before - road_depot_build_cost(&s.global_economy)
     );
 }
 

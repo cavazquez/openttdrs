@@ -3,12 +3,12 @@
 use crate::bridge_spec::{
     BridgeType, axis_line, bridge_build_cost_in, set_bridge_middle_mapt, set_bridge_type_m6,
 };
-use crate::economy::station_build_cost;
+use crate::economy::{ship_depot_build_cost, station_build_cost};
 use crate::map::{
     Map, TileCoord, TileKind, WaterClass, inclined_slope_direction, is_tunnel_entrance_slope,
     make_water_tile, tile_slope_and_z,
 };
-use crate::{DEPOT_BUILD_COST, GameState, Station, StopKind};
+use crate::{GameState, Station, StopKind};
 
 use super::super::CommandError;
 use super::shared::check_in_bounds;
@@ -75,7 +75,7 @@ pub(in crate::command) fn place_ship_depot_dir(
         .map
         .set_mapt_m5(c, 0x60, (2 << 6) | dir)
         .map_err(|_| CommandError::OutOfBounds)?;
-    state.economy.money -= DEPOT_BUILD_COST;
+    state.economy.money -= ship_depot_build_cost(&state.global_economy);
     Ok(())
 }
 

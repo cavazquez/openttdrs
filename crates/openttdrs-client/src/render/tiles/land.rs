@@ -1587,8 +1587,7 @@ pub(crate) fn spawn_industry_tile_with_world(
             )
         }
     };
-    let overlay_ctx =
-        crate::render::IndustryOverlayContext::from_tile_ctx(ctx, base_z, overlay_z, leveled);
+    let overlay_ctx = crate::render::IndustryOverlayContext::from_tile_ctx(ctx, overlay_z);
     if industries_hidden {
         return;
     }
@@ -1711,137 +1710,135 @@ pub(crate) fn spawn_industry_tile_with_world(
             );
         }
         let anim_base = |ground: bool| {
-            crate::render::IndustryBuildingAnim::new(gfx, m1, phase, ground, overlay_ctx, map_width)
+            crate::render::IndustryBuildingAnim::new(
+                gfx,
+                m1,
+                phase,
+                ground,
+                overlay_ctx,
+                map_width,
+                foundation.child_parent,
+            )
         };
-        if s.ground_sprite_id != 0 && s.ground_w > 0.0 && s.ground_h > 0.0 {
-            if client_anim && industry_anim_layer_used_in_any_frame(gfx, true) {
-                crate::render::spawn_industry_anim_layer(
-                    commands,
-                    assets,
-                    chunk,
-                    anim_base(true),
-                    s,
-                );
-            } else if let Some(img) = assets.industries.get(&s.ground_sprite_id) {
-                // Acería: metal fundido está en la capa ground (ciclo `oil_refinery`).
-                let ground_fire = industry_gfx_uses_refinery_fire_anim(gfx, m1)
-                    && assets
-                        .refinery_fire_frames
-                        .contains_key(&s.ground_sprite_id);
-                let mut sprite = if ground_fire {
-                    assets.refinery_fire_frames[&s.ground_sprite_id][0].sprite()
-                } else if industry_gfx_uses_random_colour(gfx) {
-                    sprite_from_atlas_or_industry_palette(
-                        company,
-                        images,
-                        img,
-                        s.ground_sprite_id,
-                        palette_colour,
-                    )
-                } else {
-                    img.sprite()
-                };
-                sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
-                let pos_g = overlay_at(s.ground_xrel, s.ground_yrel, s.ground_w, s.ground_h, 0.45);
-                let entity_id = if let Some(parent) = foundation.child_parent {
-                    // `DrawGroundSprite` ocurre después de `DrawFoundation`.
-                    // El viewport nativo lo suma como `AddChildSpriteScreen`
-                    // al último muro del cimiento, no como un parent nuevo.
-                    spawn_foundation_child_sprite_at(
-                        commands, sprite, ctx, pos_g, map_width, parent,
-                    )
-                } else {
-                    commands
-                        .spawn((
-                            MapVisualLayer,
-                            chunk,
-                            sprite,
-                            Transform::from_translation(pos_g),
-                        ))
-                        .id()
-                };
-                if ground_fire {
-                    commands
-                        .entity(entity_id)
-                        .insert(crate::render::RefineryFireAnim {
-                            sprite_id: s.ground_sprite_id,
-                        });
-                }
+        if client_anim && industry_anim_layer_used_in_any_frame(gfx, true) {
+            crate::render::spawn_industry_anim_layer(commands, assets, chunk, anim_base(true), s);
+        } else if s.ground_sprite_id != 0
+            && s.ground_w > 0.0
+            && s.ground_h > 0.0
+            && let Some(img) = assets.industries.get(&s.ground_sprite_id)
+        {
+            // Acería: metal fundido está en la capa ground (ciclo `oil_refinery`).
+            let ground_fire = industry_gfx_uses_refinery_fire_anim(gfx, m1)
+                && assets
+                    .refinery_fire_frames
+                    .contains_key(&s.ground_sprite_id);
+            let mut sprite = if ground_fire {
+                assets.refinery_fire_frames[&s.ground_sprite_id][0].sprite()
+            } else if industry_gfx_uses_random_colour(gfx) {
+                sprite_from_atlas_or_industry_palette(
+                    company,
+                    images,
+                    img,
+                    s.ground_sprite_id,
+                    palette_colour,
+                )
+            } else {
+                img.sprite()
+            };
+            sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
+            let pos_g = overlay_at(s.ground_xrel, s.ground_yrel, s.ground_w, s.ground_h, 0.45);
+            let entity_id = if let Some(parent) = foundation.child_parent {
+                // `DrawGroundSprite` ocurre después de `DrawFoundation`.
+                // El viewport nativo lo suma como `AddChildSpriteScreen`
+                // al último muro del cimiento, no como un parent nuevo.
+                spawn_foundation_child_sprite_at(commands, sprite, ctx, pos_g, map_width, parent)
+            } else {
+                commands
+                    .spawn((
+                        MapVisualLayer,
+                        chunk,
+                        sprite,
+                        Transform::from_translation(pos_g),
+                    ))
+                    .id()
+            };
+            if ground_fire {
+                commands
+                    .entity(entity_id)
+                    .insert(crate::render::RefineryFireAnim {
+                        sprite_id: s.ground_sprite_id,
+                    });
             }
         }
-        if s.sprite_id != 0 && s.w > 0.0 && s.h > 0.0 {
-            if client_anim && industry_anim_layer_used_in_any_frame(gfx, false) {
-                crate::render::spawn_industry_anim_layer(
-                    commands,
-                    assets,
-                    chunk,
-                    anim_base(false),
-                    s,
-                );
-            } else if let Some(img) = assets.industries.get(&s.sprite_id) {
-                let refinery_fire = industry_gfx_uses_refinery_fire_anim(gfx, m1)
-                    && assets.refinery_fire_frames.contains_key(&s.sprite_id);
-                let fizzy_drink = industry_gfx_uses_fizzy_drink_anim(gfx, m1)
-                    && assets.fizzy_drink_frames.contains_key(&s.sprite_id);
-                // Fuego: nunca recolorear con paleta de compañía el PNG base
-                // (congela la llama); usar frames `oil_refinery` o el atlas.
-                let mut sprite = if refinery_fire {
-                    assets.refinery_fire_frames[&s.sprite_id][0].sprite()
-                } else if fizzy_drink {
-                    assets.fizzy_drink_frames[&s.sprite_id][0].sprite()
-                } else if industry_gfx_uses_random_colour(gfx)
-                    && !industry_gfx_uses_refinery_fire_anim(gfx, m1)
-                {
-                    sprite_from_atlas_or_industry_palette(
-                        company,
-                        images,
-                        img,
-                        s.sprite_id,
-                        palette_colour,
-                    )
-                } else {
-                    img.sprite()
-                };
-                sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
-                let mut pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
-                // Los frames de paleta sólo reemplazan píxeles del mismo PNG:
-                // conservan ancla y prisma `M(...)`, por lo que siguen siendo
-                // parents globales. Sólo `anim_state` puede cambiar de fila y
-                // reconstruye su parent en `IndustryBuildingAnim`. Una
-                // fundación ya ajustó `ti->z`, pero no reemplaza al parent
-                // propio que `AddSortableSpriteToDraw` crea para el edificio.
-                let sortable_parent = if !client_anim {
-                    let source_depth = viewport_source_depth(pos3.z, ctx.tx, map_width);
-                    pos3.z = source_depth;
-                    Some(ViewportSortableParent {
-                        sprite_id: s.sprite_id,
-                        bounds: industry_building_parent_bounds(ctx, s, foundation.surface_base_z),
-                        insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 2),
-                        source_depth,
-                    })
-                } else {
-                    None
-                };
-                let mut entity = commands.spawn((
-                    MapVisualLayer,
-                    chunk,
-                    sprite,
-                    Transform::from_translation(pos3),
-                ));
-                let entity_id = entity.id();
-                if let Some(parent) = sortable_parent {
-                    entity.insert(parent);
-                    draw_proc_parent = Some(entity_id);
-                }
-                if refinery_fire {
-                    entity.insert(crate::render::RefineryFireAnim {
-                        sprite_id: s.sprite_id,
-                    });
-                } else if fizzy_drink {
-                    entity.insert(crate::render::FizzyDrinkAnim {
-                        sprite_id: s.sprite_id,
-                    });
-                }
+        if client_anim && industry_anim_layer_used_in_any_frame(gfx, false) {
+            crate::render::spawn_industry_anim_layer(commands, assets, chunk, anim_base(false), s);
+        } else if s.sprite_id != 0
+            && s.w > 0.0
+            && s.h > 0.0
+            && let Some(img) = assets.industries.get(&s.sprite_id)
+        {
+            let refinery_fire = industry_gfx_uses_refinery_fire_anim(gfx, m1)
+                && assets.refinery_fire_frames.contains_key(&s.sprite_id);
+            let fizzy_drink = industry_gfx_uses_fizzy_drink_anim(gfx, m1)
+                && assets.fizzy_drink_frames.contains_key(&s.sprite_id);
+            // Fuego: nunca recolorear con paleta de compañía el PNG base
+            // (congela la llama); usar frames `oil_refinery` o el atlas.
+            let mut sprite = if refinery_fire {
+                assets.refinery_fire_frames[&s.sprite_id][0].sprite()
+            } else if fizzy_drink {
+                assets.fizzy_drink_frames[&s.sprite_id][0].sprite()
+            } else if industry_gfx_uses_random_colour(gfx)
+                && !industry_gfx_uses_refinery_fire_anim(gfx, m1)
+            {
+                sprite_from_atlas_or_industry_palette(
+                    company,
+                    images,
+                    img,
+                    s.sprite_id,
+                    palette_colour,
+                )
+            } else {
+                img.sprite()
+            };
+            sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
+            let mut pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
+            // Los frames de paleta sólo reemplazan píxeles del mismo PNG:
+            // conservan ancla y prisma `M(...)`, por lo que siguen siendo
+            // parents globales. Sólo `anim_state` puede cambiar de fila y
+            // reconstruye su parent en `IndustryBuildingAnim`. Una
+            // fundación ya ajustó `ti->z`, pero no reemplaza al parent
+            // propio que `AddSortableSpriteToDraw` crea para el edificio.
+            let sortable_parent = if !client_anim {
+                let source_depth = viewport_source_depth(pos3.z, ctx.tx, map_width);
+                pos3.z = source_depth;
+                Some(ViewportSortableParent {
+                    sprite_id: s.sprite_id,
+                    bounds: industry_building_parent_bounds(ctx, s, foundation.surface_base_z),
+                    insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 2),
+                    source_depth,
+                })
+            } else {
+                None
+            };
+            let mut entity = commands.spawn((
+                MapVisualLayer,
+                chunk,
+                sprite,
+                Transform::from_translation(pos3),
+            ));
+            let entity_id = entity.id();
+            if let Some(parent) = sortable_parent {
+                entity.insert(parent);
+                draw_proc_parent = Some(entity_id);
+            }
+            if refinery_fire {
+                entity.insert(crate::render::RefineryFireAnim {
+                    sprite_id: s.sprite_id,
+                });
+            } else if fizzy_drink {
+                entity.insert(crate::render::FizzyDrinkAnim {
+                    sprite_id: s.sprite_id,
+                });
             }
         }
     }

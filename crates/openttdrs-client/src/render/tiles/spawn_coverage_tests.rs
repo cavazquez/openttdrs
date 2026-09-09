@@ -4519,6 +4519,150 @@ fn spawn_industry_on_slope_spawns_foundation_layer() {
 }
 
 #[test]
+fn steep_animated_industry_keeps_foundation_contract_across_frames() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 4);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    // Norte dos niveles por encima del resto: `SLOPE_STEEP | SLOPE_N`.
+    // `DrawFoundation(Leveled)` debe elevar la superficie resultante dos
+    // unidades, no sólo la habitual de una pendiente simple.
+    let industry_tile = |m3hi| Tile {
+        kind: TileKind::Industry,
+        mapt: 0x80,
+        // Gfx 1 usa anim_state y cambia tanto el edificio como el suelo
+        // mientras permanece terminado.
+        m5: 1,
+        m1: 0x80,
+        m3hi,
+        ..tile_template()
+    };
+    map.set_tile(c(1, 1), industry_tile(0))
+        .expect("animated industry tile");
+    // `set_tile` copia también `height`; restaurar la esquina después evita
+    // convertir accidentalmente la fixture en una pendiente irregular.
+    map.set_height(c(1, 1), 6).expect("steep north corner");
+
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let ctx = TileRenderContext::new(&map, &grid, 1, 1);
+    let plan =
+        openttdrs_core::foundation_draw_plan(ctx.info.tileh, openttdrs_core::FOUNDATION_LEVELED, 0);
+    assert_eq!(
+        plan.surface_z_delta, 2,
+        "la fixture debe ejercer la elevación de una pendiente empinada"
+    );
+    let surface_z = ctx.info.base_z.saturating_add(plan.surface_z_delta);
+    assert!(industry_building_needs_client_anim(1, 0x80));
+    let initial = industry_gfx_entry_for_tile(1, 0x80, 0).expect("primer frame de torre");
+    let next = industry_gfx_entry_for_tile(1, 0x80, 1).expect("segundo frame de torre");
+
+    let mut sim_state = GameState::new(4, 4);
+    sim_state
+        .map
+        .set_tile(c(1, 1), industry_tile(0))
+        .expect("simulated animated industry tile");
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets.clone()));
+    world.insert_resource(assets);
+    world.insert_resource(crate::state::SimWorld {
+        state: sim_state,
+        loaded_file: false,
+        ottdmap_extras: None,
+    });
+    world
+        .run_system_once(
+            |mut commands: Commands,
+             m: Res<TsMap>,
+             g: Res<TsGrid>,
+             a: Res<TsAssets>,
+             mut company: Local<CompanyColoredSprites>,
+             mut images: Local<Assets<Image>>| {
+                spawn_industry_tile(
+                    &mut commands,
+                    &a.0,
+                    &m.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    &[],
+                    &mut company,
+                    &mut images,
+                    &[],
+                    &openttdrs_core::empty_industry_tile_overrides(),
+                    None,
+                    &[],
+                    None,
+                    &[],
+                );
+            },
+        )
+        .expect("animated industry slope spawn");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    let (building_entity, building_parent) = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .find_map(|(entity, parent)| {
+            (parent.sprite_id == initial.sprite_id).then_some((entity, *parent))
+        })
+        .expect("el edificio animado debe abrir un parent aun sobre fundación");
+    assert_eq!(
+        building_parent.bounds.zmin,
+        i32::from(surface_z) * 8 + initial.sort_oz,
+        "el prisma inicial usa la superficie efectiva empinada"
+    );
+    let (ground_entity, ground_child) = world
+        .query::<(Entity, &ViewportSortableChild)>()
+        .iter(&world)
+        .find_map(|(entity, child)| {
+            foundation_parents
+                .contains(&child.parent)
+                .then_some((entity, *child))
+        })
+        .expect("el suelo animado debe ser child de la fundación");
+    assert!(
+        !foundation_parents.contains(&building_entity),
+        "el edificio no puede reutilizar el parent del muro"
+    );
+
+    world
+        .resource_mut::<crate::state::SimWorld>()
+        .state
+        .map
+        .set_tile(c(1, 1), industry_tile(1))
+        .expect("segundo frame simulado");
+    world
+        .run_system_once(crate::render::industry_anim::animate_industry_building_layers)
+        .expect("animated industry update");
+
+    let updated_parent = world
+        .get::<ViewportSortableParent>(building_entity)
+        .expect("el parent del edificio debe sobrevivir al cambio de frame");
+    assert_eq!(updated_parent.sprite_id, next.sprite_id);
+    assert_eq!(
+        updated_parent.bounds.zmin,
+        i32::from(surface_z) * 8 + next.sort_oz,
+        "el frame vivo no puede restaurar la altura cruda de la tesela"
+    );
+    let updated_ground = world
+        .get::<ViewportSortableChild>(ground_entity)
+        .expect("el child de suelo debe sobrevivir al cambio de frame");
+    assert_eq!(updated_ground.parent, ground_child.parent);
+    assert!(
+        foundation_parents.contains(&updated_ground.parent),
+        "el frame vivo conserva la asociación del suelo con DrawFoundation"
+    );
+}
+
+#[test]
 fn sloped_industry_draw_proc_layers_follow_the_building_not_foundation() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);

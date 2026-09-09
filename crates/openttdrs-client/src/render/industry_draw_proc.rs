@@ -4,8 +4,7 @@ use bevy::prelude::*;
 use openttdrs_core::TileCoord;
 
 use crate::bevy_app::UpdateSet;
-use crate::iso::{overlay_pos, remap_tile_offset};
-use crate::render::tiles::leveled_foundation_overlay_pos;
+use crate::iso::remap_tile_offset;
 use crate::render::{
     IndustryOverlayContext, MapVisualLayer, ViewportSortableChild, WorldAssets,
     viewport_source_depth,
@@ -49,31 +48,11 @@ impl IndustryDrawProcAnim {
         let (w, h, xrel, yrel) = DRAW_PROC_WH;
         let off = remap_tile_offset(layer.dx as f32, layer.dy as f32, 0.0) * 0.5;
         let anchor = self.ctx.iso_pos + off;
-        if self.ctx.leveled {
-            leveled_foundation_overlay_pos(
-                anchor,
-                xrel,
-                yrel,
-                w,
-                h,
-                self.ctx.base_z,
-                0.56,
-                self.ctx.tx,
-                self.ctx.ty,
-            )
-        } else {
-            overlay_pos(
-                anchor,
-                xrel,
-                yrel,
-                w,
-                h,
-                self.ctx.overlay_z,
-                0.56,
-                self.ctx.tx,
-                self.ctx.ty,
-            )
+        IndustryOverlayContext {
+            iso_pos: anchor,
+            ..self.ctx
         }
+        .overlay_at(xrel, yrel, w, h, 0.56)
     }
 
     fn source_depth(&self, position: Vec3) -> f32 {
@@ -129,9 +108,9 @@ pub(crate) fn spawn_industry_draw_proc_overlays(
         let mut pos3 = anim.pos3(&layer);
         // `IndustryDraw*` se ejecuta inmediatamente después de
         // `AddSortableSpriteToDraw` y añade estas capas con
-        // `AddChildSpriteScreen`. En la ruta plana el edificio ya tiene su
-        // parent exacto; conservar la profundidad fuente deja que el sorter
-        // emita edificio y efectos como un bloque atómico.
+        // `AddChildSpriteScreen`. El edificio, plano o sobre fundación, ya
+        // tiene su parent exacto; conservar la profundidad fuente deja que el
+        // sorter emita edificio y efectos como un bloque atómico.
         let sortable_child = parent.map(|parent| {
             let source_depth = anim.source_depth(pos3);
             pos3.z = source_depth;

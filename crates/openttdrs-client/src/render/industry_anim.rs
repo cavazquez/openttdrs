@@ -10,11 +10,10 @@ use openttdrs_core::prelude::*;
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::{overlay_pos, wang_hash};
-use crate::render::tiles::leveled_foundation_overlay_pos;
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
-    MapVisualLayer, TileRenderContext, ViewportSortableParent, WorldAssets, viewport_insertion_key,
-    viewport_source_depth,
+    MapVisualLayer, TileRenderContext, ViewportSortableChild, ViewportSortableParent, WorldAssets,
+    viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{industry_effective_m4_for_draw, industry_gfx_entry_for_tile};
 use crate::state::{ClientScreen, SimWorld};
@@ -33,12 +32,14 @@ impl Plugin for IndustryBuildingAnimPlugin {
 }
 
 /// Contexto para recalcular posición al cambiar sprite (offsets NFO por frame).
+///
+/// `overlay_z` ya es la superficie que deja `DrawFoundation`; no se vuelve a
+/// inferir desde el terreno crudo porque una pendiente empinada puede elevarla
+/// dos niveles.
 #[derive(Component, Clone, Copy)]
 pub(crate) struct IndustryOverlayContext {
     pub(crate) iso_pos: Vec2,
-    pub(crate) base_z: u8,
     pub(crate) overlay_z: u8,
-    pub(crate) leveled: bool,
     pub(crate) tx: i32,
     pub(crate) ty: i32,
 }
@@ -55,6 +56,10 @@ pub(crate) struct IndustryBuildingAnim {
     /// Dimensión del mapa que produjo esta capa; forma parte del slot fuente
     /// del compositor y no debe inferirse desde la Z ya ordenada.
     map_width: u32,
+    /// Último parent que dejó `DrawFoundation`. Sólo el suelo animado se
+    /// agrega como `AddChildSpriteScreen` de esta entidad; el edificio abre
+    /// siempre su propio parent sortable.
+    foundation_parent: Option<Entity>,
 }
 
 impl IndustryBuildingAnim {
@@ -65,6 +70,7 @@ impl IndustryBuildingAnim {
         ground: bool,
         ctx: IndustryOverlayContext,
         map_width: u32,
+        foundation_parent: Option<Entity>,
     ) -> Self {
         Self {
             gfx,
@@ -73,64 +79,45 @@ impl IndustryBuildingAnim {
             ground,
             ctx,
             map_width,
+            foundation_parent,
         }
     }
 }
 
 impl IndustryOverlayContext {
-    pub(crate) fn from_tile_ctx(
-        ctx: &TileRenderContext,
-        base_z: u8,
-        overlay_z: u8,
-        leveled: bool,
-    ) -> Self {
+    pub(crate) fn from_tile_ctx(ctx: &TileRenderContext, overlay_z: u8) -> Self {
         Self {
             iso_pos: ctx.iso_pos,
-            base_z,
             overlay_z,
-            leveled,
             tx: ctx.tx_i32(),
             ty: ctx.ty_i32(),
         }
     }
 
-    fn overlay_at(&self, xrel: f32, yrel: f32, w: f32, h: f32, layer: f32) -> Vec3 {
-        if self.leveled {
-            leveled_foundation_overlay_pos(
-                self.iso_pos,
-                xrel,
-                yrel,
-                w,
-                h,
-                self.base_z,
-                layer,
-                self.tx,
-                self.ty,
-            )
-        } else {
-            overlay_pos(
-                self.iso_pos,
-                xrel,
-                yrel,
-                w,
-                h,
-                self.overlay_z,
-                layer,
-                self.tx,
-                self.ty,
-            )
-        }
+    pub(crate) fn overlay_at(&self, xrel: f32, yrel: f32, w: f32, h: f32, layer: f32) -> Vec3 {
+        overlay_pos(
+            self.iso_pos,
+            xrel,
+            yrel,
+            w,
+            h,
+            self.overlay_z,
+            layer,
+            self.tx,
+            self.ty,
+        )
     }
 }
 
-/// Resultado visual de un frame de edificio animado. La capa de suelo sigue
-/// siendo un draw de terreno; sólo el edificio plano se convierte en parent
-/// porque `DrawTile_Industry` le entrega la caja `M(...)` al compositor.
+/// Resultado visual de un frame animado. La cadena de OpenTTD es distinta
+/// para cada capa: `DrawGroundSprite` se cuelga de `DrawFoundation`, mientras
+/// el edificio posterior siempre abre su `AddSortableSpriteToDraw` propio.
 #[derive(Clone, Copy)]
 struct IndustryBuildingFrame {
     sprite_id: u32,
     translation: Vec3,
     parent: Option<ViewportSortableParent>,
+    child: Option<ViewportSortableChild>,
 }
 
 /// Bounds inclusivos del `AddSortableSpriteToDraw` de una fila vanilla de
@@ -142,7 +129,7 @@ fn industry_building_parent_bounds(
 ) -> ParentSpriteBounds {
     let x = ctx.tx * 16 + spec.sort_ox;
     let y = ctx.ty * 16 + spec.sort_oy;
-    let z = i32::from(ctx.base_z) * 8 + spec.sort_oz;
+    let z = i32::from(ctx.overlay_z) * 8 + spec.sort_oz;
     ParentSpriteBounds::new(
         x,
         y,
@@ -183,10 +170,10 @@ fn industry_building_frame(
     }
 
     let source_translation = anim.ctx.overlay_at(xrel, yrel, w, h, layer);
-    let parent = (!anim.ground && !anim.ctx.leveled).then(|| {
-        let source_x = u32::try_from(anim.ctx.tx).unwrap_or(0);
+    let source_x = u32::try_from(anim.ctx.tx).unwrap_or(0);
+    let source_depth = viewport_source_depth(source_translation.z, source_x, anim.map_width);
+    let parent = (!anim.ground).then(|| {
         let source_y = u32::try_from(anim.ctx.ty).unwrap_or(0);
-        let source_depth = viewport_source_depth(source_translation.z, source_x, anim.map_width);
         ViewportSortableParent {
             sprite_id,
             bounds: industry_building_parent_bounds(anim.ctx, entry),
@@ -195,23 +182,31 @@ fn industry_building_frame(
             source_depth,
         }
     });
-    let translation = parent.map_or(source_translation, |parent| {
-        Vec3::new(
-            source_translation.x,
-            source_translation.y,
-            parent.source_depth,
-        )
-    });
+    let child = anim
+        .ground
+        .then(|| {
+            anim.foundation_parent.map(|parent| ViewportSortableChild {
+                parent,
+                source_depth,
+            })
+        })
+        .flatten();
+    let translation = if parent.is_some() || child.is_some() {
+        Vec3::new(source_translation.x, source_translation.y, source_depth)
+    } else {
+        source_translation
+    };
     Some(IndustryBuildingFrame {
         sprite_id,
         translation,
         parent,
+        child,
     })
 }
 
 /// La Z efectiva pertenece al compositor global. Al avanzar un frame no se
 /// puede restaurar el slot fuente antes de que corra el siguiente sort.
-fn set_industry_building_translation_if_changed(
+fn set_industry_layer_translation_if_changed(
     transform: &mut Mut<Transform>,
     source_translation: Vec3,
     preserves_sorted_depth: bool,
@@ -238,6 +233,22 @@ pub(crate) fn industry_anim_phase(tx: i32, ty: i32, m4: u8) -> u8 {
     (wang_hash(tx, ty, 0x1A07) as u8).wrapping_add(m4 & 3)
 }
 
+/// El primer frame puede omitir temporalmente una capa que otro frame vivo
+/// vuelve a usar. Dejamos la entidad oculta con una muestra válida para no
+/// requerir reconstruir el chunk al cambiar `m3hi`.
+fn industry_building_frame_or_sample(
+    anim: &IndustryBuildingAnim,
+    entry: &crate::sprites::IndustryGfxSprite,
+) -> Option<(IndustryBuildingFrame, bool)> {
+    if let Some(frame) = industry_building_frame(anim, entry) {
+        return Some((frame, true));
+    }
+    (0..4)
+        .filter_map(|frame| industry_gfx_entry_for_tile(anim.gfx, anim.m1, frame))
+        .find_map(|sample| industry_building_frame(anim, sample))
+        .map(|frame| (frame, false))
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_industry_anim_layer(
     commands: &mut Commands,
@@ -246,7 +257,7 @@ pub(crate) fn spawn_industry_anim_layer(
     anim: IndustryBuildingAnim,
     entry: &crate::sprites::IndustryGfxSprite,
 ) {
-    let Some(frame) = industry_building_frame(&anim, entry) else {
+    let Some((frame, visible)) = industry_building_frame_or_sample(&anim, entry) else {
         return;
     };
     let Some(img) = assets.industries.get(&frame.sprite_id) else {
@@ -258,10 +269,31 @@ pub(crate) fn spawn_industry_anim_layer(
         anim,
         img.sprite(),
         Transform::from_translation(frame.translation),
-        Visibility::Visible,
+        if visible {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        },
     ));
     if let Some(parent) = frame.parent {
         entity.insert(parent);
+    }
+    if let Some(child) = frame.child {
+        entity.insert(child);
+    }
+}
+
+fn clear_industry_frame_ordering(
+    commands: &mut Commands,
+    entity: Entity,
+    has_parent: bool,
+    has_child: bool,
+) {
+    if has_parent {
+        commands.entity(entity).remove::<ViewportSortableParent>();
+    }
+    if has_child {
+        commands.entity(entity).remove::<ViewportSortableChild>();
     }
 }
 
@@ -276,12 +308,22 @@ pub(crate) fn animate_industry_building_layers(
         &mut Transform,
         &mut Visibility,
         Option<&mut ViewportSortableParent>,
+        Option<&mut ViewportSortableChild>,
     )>,
 ) {
     let Some(assets) = assets else {
         return;
     };
-    for (entity, anim, mut sprite, mut transform, mut visibility, sortable_parent) in &mut q {
+    for (
+        entity,
+        anim,
+        mut sprite,
+        mut transform,
+        mut visibility,
+        sortable_parent,
+        sortable_child,
+    ) in &mut q
+    {
         let coord = TileCoord::new(anim.ctx.tx, anim.ctx.ty);
         let (gfx, m1, m3hi) = sim
             .state
@@ -292,31 +334,41 @@ pub(crate) fn animate_industry_building_layers(
         let m4 = industry_effective_m4_for_draw(gfx, m1, m3hi, 0.0, 0);
         let Some(entry) = industry_gfx_entry_for_tile(gfx, m1, m4) else {
             visibility.set_if_neq(Visibility::Hidden);
-            if sortable_parent.is_some() {
-                commands.entity(entity).remove::<ViewportSortableParent>();
-            }
+            clear_industry_frame_ordering(
+                &mut commands,
+                entity,
+                sortable_parent.is_some(),
+                sortable_child.is_some(),
+            );
             continue;
         };
         let Some(frame) = industry_building_frame(anim, entry) else {
             visibility.set_if_neq(Visibility::Hidden);
-            if sortable_parent.is_some() {
-                commands.entity(entity).remove::<ViewportSortableParent>();
-            }
+            clear_industry_frame_ordering(
+                &mut commands,
+                entity,
+                sortable_parent.is_some(),
+                sortable_child.is_some(),
+            );
             continue;
         };
         let Some(img) = assets.industries.get(&frame.sprite_id) else {
             visibility.set_if_neq(Visibility::Hidden);
-            if sortable_parent.is_some() {
-                commands.entity(entity).remove::<ViewportSortableParent>();
-            }
+            clear_industry_frame_ordering(
+                &mut commands,
+                entity,
+                sortable_parent.is_some(),
+                sortable_child.is_some(),
+            );
             continue;
         };
         visibility.set_if_neq(Visibility::Visible);
         if !img.matches(&sprite) {
             img.apply_to(&mut sprite);
         }
-        let preserves_sorted_depth = sortable_parent.is_some() && frame.parent.is_some();
-        set_industry_building_translation_if_changed(
+        let preserves_sorted_depth = (sortable_parent.is_some() && frame.parent.is_some())
+            || (sortable_child.is_some() && frame.child.is_some());
+        set_industry_layer_translation_if_changed(
             &mut transform,
             frame.translation,
             preserves_sorted_depth,
@@ -327,6 +379,18 @@ pub(crate) fn animate_industry_building_layers(
             }
             (Some(_), None) => {
                 commands.entity(entity).remove::<ViewportSortableParent>();
+            }
+            (None, Some(next)) => {
+                commands.entity(entity).insert(next);
+            }
+            (None, None) => {}
+        }
+        match (sortable_child, frame.child) {
+            (Some(mut current), Some(next)) => {
+                current.set_if_neq(next);
+            }
+            (Some(_), None) => {
+                commands.entity(entity).remove::<ViewportSortableChild>();
             }
             (None, Some(next)) => {
                 commands.entity(entity).insert(next);
@@ -358,13 +422,12 @@ mod tests {
             ground,
             IndustryOverlayContext {
                 iso_pos: Vec2::ZERO,
-                base_z: 1,
                 overlay_z: 1,
-                leveled: false,
                 tx: 186,
                 ty: 1,
             },
             256,
+            None,
         )
     }
 
@@ -397,7 +460,7 @@ mod tests {
     }
 
     #[test]
-    fn animated_building_updates_its_parent_and_leaves_non_parent_layers_local() {
+    fn animated_building_updates_its_parent_and_attaches_sloped_ground() {
         let anim = flat_anim(1, false);
         let first = industry_building_frame(
             &anim,
@@ -425,15 +488,84 @@ mod tests {
                 .is_none(),
             "DrawGroundSprite no entra en parent_sprites_to_draw"
         );
-
-        let mut leveled = flat_anim(1, false);
-        leveled.ctx.leveled = true;
         assert!(
-            industry_building_frame(&leveled, entry)
-                .expect("edificio sobre cimiento visible")
-                .parent
+            industry_building_frame(&ground, entry)
+                .expect("suelo plano visible")
+                .child
                 .is_none(),
-            "un cimiento legacy requiere su bloque parent/children propio"
+            "sin fundación, el suelo plano conserva su draw local"
+        );
+
+        let mut sloped_building = flat_anim(1, false);
+        // `DrawFoundation` de una pendiente empinada deja la superficie dos
+        // niveles arriba; el prisma M() debe partir de esa Z efectiva.
+        sloped_building.ctx.overlay_z = 3;
+        let sloped_parent = industry_building_frame(&sloped_building, entry)
+            .expect("edificio sobre cimiento visible")
+            .parent
+            .expect("el edificio sobre cimiento sigue siendo parent sortable");
+        assert_eq!(
+            sloped_parent.bounds.zmin,
+            24 + entry.sort_oz,
+            "el parent usa ti->z después de DrawFoundation"
+        );
+
+        let mut sloped_ground = flat_anim(1, true);
+        sloped_ground.ctx.overlay_z = 3;
+        sloped_ground.foundation_parent = Some(Entity::PLACEHOLDER);
+        let sloped_ground_frame =
+            industry_building_frame(&sloped_ground, entry).expect("suelo inclinado visible");
+        assert!(sloped_ground_frame.parent.is_none());
+        assert_eq!(
+            sloped_ground_frame
+                .child
+                .expect("el suelo inclinado debe ser child")
+                .parent,
+            Entity::PLACEHOLDER
+        );
+        assert_eq!(
+            sloped_ground_frame.translation.z,
+            sloped_ground_frame
+                .child
+                .expect("child de fundación")
+                .source_depth
+        );
+    }
+
+    #[test]
+    fn missing_animated_building_gets_a_hidden_sample() {
+        // La tabla vanilla actual no omite edificios en los seis gfx
+        // animados, pero una extensión o una fila futura puede hacerlo. El
+        // producer debe mantener el slot ECS listo para el siguiente frame.
+        let anim = flat_anim(1, false);
+        let hidden = crate::sprites::IndustryGfxSprite {
+            sprite_id: 0,
+            ground_sprite_id: 0,
+            w: 0.0,
+            h: 0.0,
+            xrel: 0.0,
+            yrel: 0.0,
+            ground_w: 0.0,
+            ground_h: 0.0,
+            ground_xrel: 0.0,
+            ground_yrel: 0.0,
+            sort_ox: 0,
+            sort_oy: 0,
+            sort_oz: 0,
+            sort_ex: 0,
+            sort_ey: 0,
+            sort_ez: 0,
+        };
+        let visible = industry_gfx_entry_for_tile(1, 0x80, 0).expect("muestra vanilla");
+        assert!(industry_building_frame(&anim, &hidden).is_none());
+
+        let (sample, is_visible) =
+            industry_building_frame_or_sample(&anim, &hidden).expect("muestra para slot oculto");
+        assert!(!is_visible, "el producer debe ocultar la muestra inicial");
+        assert_eq!(sample.sprite_id, visible.sprite_id);
+        assert!(
+            sample.parent.is_some(),
+            "un frame posterior visible conserva su parent sortable listo"
         );
     }
 
@@ -482,7 +614,7 @@ mod tests {
         let mut transform = world
             .get_mut::<Transform>(building)
             .expect("transform para siguiente frame");
-        set_industry_building_translation_if_changed(&mut transform, frame.translation, true);
+        set_industry_layer_translation_if_changed(&mut transform, frame.translation, true);
         assert_eq!(
             transform.translation.z, sorted_depth,
             "la animación no puede restaurar source_depth entre dos sorts"

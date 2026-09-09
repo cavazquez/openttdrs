@@ -1117,6 +1117,7 @@ fn trigger_initial_newgrf_house_construction_stage_changed(state: &mut GameState
             state.random.next(),
             1,
         );
+        let _ = crate::play_newgrf_tile_animation_sound(state, def.grfid, result, coord);
         if crate::map::house_lift::apply_newgrf_house_animation_callback_result(
             &mut state.map,
             &mut state.active_house_animations,
@@ -1301,6 +1302,9 @@ mod tests {
                 param: None,
                 adjust: crate::newgrf_sprites::Action2VarAdjust {
                     and_mask: u32::from(u8::MAX),
+                    // Mantiene `param2` como frame y añade un sample local
+                    // en los bits 8..14 de `AnimationBase`.
+                    add_val: Some(0x2200),
                     ..Default::default()
                 },
             },
@@ -1351,6 +1355,16 @@ mod tests {
             make_def(id, 0, crate::house_spec::BUILDING_FLAG_SIZE_2X1),
             make_def(id + 1, 1, 0),
         ]);
+        state.sound_effect_catalog.push(crate::SoundEffectDef {
+            local_id: 0x22,
+            grfid: 1,
+            volume: 128,
+            priority: 7,
+            override_old: None,
+            has_sample: true,
+            sample_pcm: vec![0x80],
+            from_newgrf: true,
+        });
         state.random = Randomizer::new(42);
         let mut expected_random = state.random;
         let _north_callback_random = expected_random.next();
@@ -1364,6 +1378,10 @@ mod tests {
         assert_eq!(state.active_house_animations, vec![base, east]);
         assert!(state.runtime.landscape_tile_dirty.contains(&base));
         assert!(state.runtime.landscape_tile_dirty.contains(&east));
+        assert_eq!(state.runtime.pending_newgrf_sounds.len(), 2);
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].local_id, 0x22);
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].at, Some(base));
+        assert_eq!(state.runtime.pending_newgrf_sounds[1].at, Some(east));
     }
 
     #[test]

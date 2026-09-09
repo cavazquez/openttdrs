@@ -287,6 +287,7 @@ pub fn apply_newgrf_house_animation_callback_result(
 struct NewgrfHouseAnimationStep {
     changed: bool,
     delete: bool,
+    sound: Option<crate::NewgrfTileSound>,
 }
 
 struct NewgrfHouseAnimationContext<'a> {
@@ -299,8 +300,8 @@ struct NewgrfHouseAnimationContext<'a> {
 ///
 /// CB20 se consulta antes del gate de cadencia, mientras que CB1A sólo toma
 /// `Random()` cuando el flag correspondiente está presente y el tick llega a
-/// la potencia de dos resultante. Los sonidos del byte alto del callback aún
-/// se delegan deliberadamente al subsistema de audio.
+/// la potencia de dos resultante. Los bits 8..14 de CB1A se devuelven como
+/// una solicitud de sonido ambiental para el subsistema de audio.
 fn step_newgrf_house_animation(
     map: &mut Map,
     context: &mut NewgrfHouseAnimationContext<'_>,
@@ -341,6 +342,7 @@ fn step_newgrf_house_animation(
     let mut frame = tile.m7;
     let mut frame_set_by_callback = false;
     let mut delete = false;
+    let mut sound = None;
     if def.has_animation_next_frame_callback() {
         let random_bits = if def.animation_next_frame_uses_random_bits() {
             rng.next()
@@ -359,6 +361,7 @@ fn step_newgrf_house_animation(
             0,
         );
         if result != CALLBACK_FAILED {
+            sound = crate::newgrf_tile_animation_sound_from_callback(def.grfid, result, coord);
             frame_set_by_callback = true;
             match result & 0xFF {
                 0xFF => delete = true,
@@ -384,7 +387,11 @@ fn step_newgrf_house_animation(
         updated.m7 = frame;
         let _ = map.set_tile(coord, updated);
     }
-    NewgrfHouseAnimationStep { changed, delete }
+    NewgrfHouseAnimationStep {
+        changed,
+        delete,
+        sound,
+    }
 }
 
 /// Ejecuta el recorrido compartido de `AnimateAnimatedTiles`.
@@ -396,6 +403,7 @@ fn step_house_animations_with_newgrf_stepper<F>(
     tick: u64,
     rng: &mut Randomizer,
     active: &mut Vec<TileCoord>,
+    sound_events: &mut Vec<crate::NewgrfTileSound>,
     mut step_newgrf: F,
 ) -> Vec<TileCoord>
 where
@@ -430,6 +438,9 @@ where
             let step = step_newgrf(map, coord, tile, tick, rng);
             if step.changed {
                 dirty.push(coord);
+            }
+            if let Some(sound) = step.sound {
+                sound_events.push(sound);
             }
             if step.delete
                 && let Some(current) = map.get(coord)
@@ -486,9 +497,15 @@ pub fn step_house_animations(
     rng: &mut Randomizer,
     active: &mut Vec<TileCoord>,
 ) -> Vec<TileCoord> {
-    step_house_animations_with_newgrf_stepper(map, tick, rng, active, |_, _, _, _, _| {
-        NewgrfHouseAnimationStep::default()
-    })
+    let mut ignored_sounds = Vec::new();
+    step_house_animations_with_newgrf_stepper(
+        map,
+        tick,
+        rng,
+        active,
+        &mut ignored_sounds,
+        |_, _, _, _, _| NewgrfHouseAnimationStep::default(),
+    )
 }
 
 /// Ejecuta la porción urbana de `AnimateAnimatedTiles` con CB1A/CB20 NewGRF.
@@ -504,6 +521,35 @@ pub fn step_house_animations_with_newgrf(
     house_catalog: &[HouseSpecDef],
     climate: Climate,
 ) -> Vec<TileCoord> {
+    let mut ignored_sounds = Vec::new();
+    step_house_animations_with_newgrf_and_sounds(
+        map,
+        tick,
+        rng,
+        active,
+        towns,
+        house_catalog,
+        climate,
+        &mut ignored_sounds,
+    )
+}
+
+/// Variante que devuelve los sonidos ambientales solicitados por CB1A.
+///
+/// El caller de `GameState` valida cada sample contra el catálogo antes de
+/// encolarlo; conservar la solicitud separada mantiene este módulo libre de
+/// estado global y de dependencias de Bevy.
+#[allow(clippy::too_many_arguments)]
+pub fn step_house_animations_with_newgrf_and_sounds(
+    map: &mut Map,
+    tick: u64,
+    rng: &mut Randomizer,
+    active: &mut Vec<TileCoord>,
+    towns: &mut [Town],
+    house_catalog: &[HouseSpecDef],
+    climate: Climate,
+    sound_events: &mut Vec<crate::NewgrfTileSound>,
+) -> Vec<TileCoord> {
     let mut context = NewgrfHouseAnimationContext {
         towns,
         house_catalog,
@@ -514,6 +560,7 @@ pub fn step_house_animations_with_newgrf(
         tick,
         rng,
         active,
+        sound_events,
         |map, coord, tile, tick, rng| {
             step_newgrf_house_animation(map, &mut context, coord, tile, tick, rng)
         },
@@ -861,6 +908,73 @@ mod tests {
         assert_eq!(dirty, vec![coord]);
         assert_eq!(map.get(coord).expect("house after CB1A").m7, expected_frame);
         assert_eq!(active, vec![coord]);
+    }
+
+    #[test]
+    fn newgrf_cb1a_emits_its_ambient_tile_sound() {
+        let id = NEW_HOUSE_OFFSET;
+        let coord = TileCoord::new(2, 2);
+        let mut map = Map::new_flat(8, 8, 0);
+        map.set_completed_house(coord, id, 0)
+            .expect("NewGRF house inside map");
+        let mut active = Vec::new();
+        assert!(activate_newgrf_house_animation(
+            &mut map,
+            &mut active,
+            coord
+        ));
+
+        let mut runtime = cb20_and_cb1a_runtime();
+        runtime
+            .action2_var
+            .get_mut(&2)
+            .expect("CB1A callback set")
+            .first
+            .adjust
+            .add_val = Some(0x3100);
+        let mut def = newgrf_animation_house(id, runtime);
+        def.animation_frames = 8;
+        def.animation_status = 1;
+        def.animation_speed = 16;
+        def.extra_flags = crate::house_spec::HOUSE_EXTRA_FLAG_CALLBACK_1A_RANDOM_BITS;
+        def.callback_mask = crate::house_spec::HOUSE_CALLBACK_ANIMATION_NEXT_FRAME_MASK
+            | crate::house_spec::HOUSE_CALLBACK_ANIMATION_SPEED_MASK;
+        let catalog = vec![def];
+        let mut towns = Vec::new();
+        let mut rng = Randomizer::new(42);
+        let mut sounds = Vec::new();
+
+        let _ = step_house_animations_with_newgrf_and_sounds(
+            &mut map,
+            1,
+            &mut rng,
+            &mut active,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+            &mut sounds,
+        );
+        assert!(sounds.is_empty(), "CB20 no reproduce sonido de animación");
+
+        let _ = step_house_animations_with_newgrf_and_sounds(
+            &mut map,
+            4,
+            &mut rng,
+            &mut active,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+            &mut sounds,
+        );
+
+        assert_eq!(
+            sounds,
+            vec![crate::NewgrfTileSound {
+                grfid: 1,
+                local_id: 0x31,
+                at: coord,
+            }]
+        );
     }
 
     #[test]

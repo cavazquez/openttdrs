@@ -781,9 +781,11 @@ pub use sim_events::{
 };
 pub use sim_step::{TickPhaseTimings, step_profiled};
 pub use sound_effect::{
-    CollectedSoundSamples, PendingNewgrfSound, SoundEffectDef, SoundPlayError, clamp_sound_volume,
-    collect_sound_samples_from_grf, effective_volume, empty_sound_effect_catalog,
-    play_newgrf_sound, play_sound_or_override, sound_effect_def,
+    CollectedSoundSamples, NewgrfTileSound, PendingNewgrfSound, SoundEffectDef, SoundPlayError,
+    clamp_sound_volume, collect_sound_samples_from_grf, effective_volume,
+    empty_sound_effect_catalog, newgrf_tile_animation_sound_from_callback, play_newgrf_sound,
+    play_newgrf_tile_animation_sound, play_newgrf_tile_sound, play_sound_or_override,
+    sound_effect_def,
 };
 pub use sound_id::SoundId;
 pub use station::{

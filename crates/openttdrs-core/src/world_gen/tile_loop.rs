@@ -613,6 +613,7 @@ fn trigger_newgrf_house_tile_loop_animation(
         random_bits,
         0,
     );
+    let _ = crate::play_newgrf_tile_animation_sound(state, def.grfid, result, coord);
     if crate::map::house_lift::apply_newgrf_house_animation_callback_result(
         &mut state.map,
         &mut state.active_house_animations,
@@ -656,6 +657,7 @@ fn trigger_newgrf_house_construction_stage_changed_animation(
         rng.next(),
         0,
     );
+    let _ = crate::play_newgrf_tile_animation_sound(state, def.grfid, result, coord);
     if crate::map::house_lift::apply_newgrf_house_animation_callback_result(
         &mut state.map,
         &mut state.active_house_animations,
@@ -2070,16 +2072,25 @@ mod tests {
             });
         // `var 0C` expone el ID de callback: el frame observable confirma que
         // la llamada es CB1C, no CB20 ni un trigger de tile loop.
-        runtime.action2_var.insert(
-            0,
-            house_animation_callback_entry(0x0C, 0, u32::from(u8::MAX)),
-        );
+        let mut callback = house_animation_callback_entry(0x0C, 0, u32::from(u8::MAX));
+        callback.first.adjust.add_val = Some(0x2B00);
+        runtime.action2_var.insert(0, callback);
         let mut def =
             newgrf_runtime_house(id, 0, crate::house_spec::BUILDING_FLAG_SIZE_1X1, 0, runtime);
         def.callback_mask =
             crate::house_spec::HOUSE_CALLBACK_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED_MASK;
         let mut state = GameState::from_map(map);
         state.house_spec_catalog.push(def);
+        state.sound_effect_catalog.push(crate::SoundEffectDef {
+            local_id: 0x2B,
+            grfid: 1,
+            volume: 128,
+            priority: 7,
+            override_old: None,
+            has_sample: true,
+            sample_pcm: vec![0x80],
+            from_newgrf: true,
+        });
 
         let mut actual = Randomizer::new(42);
         let mut expected = actual;
@@ -2111,6 +2122,9 @@ mod tests {
             3,
             "timer, stage rollover, and animation frame each invalidate the tile"
         );
+        assert_eq!(state.runtime.pending_newgrf_sounds.len(), 1);
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].local_id, 0x2B);
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].at, Some(coord));
     }
 
     #[test]
@@ -2142,14 +2156,24 @@ mod tests {
                 local_id: 0,
                 set_id: 0,
             });
-        runtime
-            .action2_var
-            .insert(0, house_animation_callback_entry(0x1A, 0, 7));
+        let mut callback = house_animation_callback_entry(0x1A, 0, 7);
+        callback.first.adjust.add_val = Some(0x2A00);
+        runtime.action2_var.insert(0, callback);
         let mut def =
             newgrf_runtime_house(id, 0, crate::house_spec::BUILDING_FLAG_SIZE_1X1, 5, runtime);
         def.callback_mask = crate::house_spec::HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK;
         let mut state = GameState::from_map(map);
         state.house_spec_catalog.push(def);
+        state.sound_effect_catalog.push(crate::SoundEffectDef {
+            local_id: 0x2A,
+            grfid: 1,
+            volume: 128,
+            priority: 7,
+            override_old: None,
+            has_sample: true,
+            sample_pcm: vec![0x80],
+            from_newgrf: true,
+        });
 
         let mut actual = Randomizer::new(42);
         let mut expected = actual;
@@ -2166,6 +2190,9 @@ mod tests {
         assert_eq!(updated.m7, 7);
         assert_eq!(updated.m6, (5 << 2) | 0x03);
         assert_eq!(state.active_house_animations, vec![coord]);
+        assert_eq!(state.runtime.pending_newgrf_sounds.len(), 1);
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].local_id, 0x2A);
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].at, Some(coord));
     }
 
     #[test]

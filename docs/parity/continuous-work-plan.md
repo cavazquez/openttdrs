@@ -149,9 +149,13 @@ borra la huella completa, retirando ANIT de inmediato y actualizando población,
 contador/radio e iglesia/estadio del pueblo. La llamada inaugural de
 `BuildTownHouse` también recorre la huella ya materializada: cada subtesela
 cuya máscara publica CB1C toma su propia palabra RNG global y recibe
-`param2 = 1`, antes de entrar en la cola ANIT/dirty. #527 permanece abierto
-por sonidos de animación NewGRF y evidencia extendida; no amplía el cierre de
-#512.
+`param2 = 1`, antes de entrar en la cola ANIT/dirty. Los resultados de CB1A,
+CB1B y CB1C separan además los bits `8..14`: un ID local no nulo de Action11/
+Action0 se encola con la tesela de origen, mientras `CALLBACK_FAILED` queda
+silencioso. El cliente respeta `sound.ambient` y aplica la atenuación espacial
+de `SndPlayTileFx`; las regresiones cubren ANIT, TileLoop, rollover e inicio de
+obra. #527 permanece abierto por evidencia runtime extendida; no amplía el
+cierre de #512.
 La evidencia canónica vive sólo en
 [random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
 

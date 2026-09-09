@@ -6,8 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::GameState;
 use crate::sound_id::{SOUND_COUNT, SoundId};
+use crate::{GameState, TileCoord};
 
 /// Spec de efecto de sonido definido por Action11 + Action0 `0x0C`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,6 +34,41 @@ pub struct PendingNewgrfSound {
     pub local_id: u8,
     pub volume: f32,
     pub priority: u8,
+    /// Origen espacial de un callback de tesela. `None` conserva el camino
+    /// global de vehículos y de overrides de baseset.
+    pub at: Option<TileCoord>,
+}
+
+/// Solicitud de sonido producida por un callback de animación de tesela.
+///
+/// El `SoundID` de `NewGRF` ocupa los bits 8..14 del resultado; los siete
+/// bits evitan confundir `CALLBACK_FAILED` con el sample local 127.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NewgrfTileSound {
+    pub grfid: u32,
+    pub local_id: u8,
+    pub at: TileCoord,
+}
+
+/// Extrae el sonido opcional codificado por `AnimationBase` en un callback.
+#[must_use]
+pub const fn newgrf_tile_animation_sound_from_callback(
+    grfid: u32,
+    result: u16,
+    at: TileCoord,
+) -> Option<NewgrfTileSound> {
+    if result == u16::MAX {
+        return None;
+    }
+    let local_id = ((result >> 8) & 0x7F) as u8;
+    if local_id == 0 {
+        return None;
+    }
+    Some(NewgrfTileSound {
+        grfid,
+        local_id,
+        at,
+    })
 }
 
 /// Error al encolar reproducción de un sonido `NewGRF`.
@@ -118,10 +153,11 @@ pub fn collect_sound_samples_from_grf(data: &[u8]) -> CollectedSoundSamples {
 /// # Errors
 ///
 /// `NotFound` si no hay def; `InvalidSample` si no hay PCM.
-pub fn play_newgrf_sound(
+fn enqueue_newgrf_sound(
     state: &mut GameState,
     grfid: u32,
     local_id: u8,
+    at: Option<TileCoord>,
 ) -> Result<(), SoundPlayError> {
     let Some(def) = sound_effect_def(&state.sound_effect_catalog, grfid, local_id) else {
         return Err(SoundPlayError::NotFound);
@@ -134,9 +170,62 @@ pub fn play_newgrf_sound(
         local_id: def.local_id,
         volume: effective_volume(def),
         priority: def.priority,
+        at,
     };
     state.runtime.pending_newgrf_sounds.push(pending);
     Ok(())
+}
+
+/// Encola reproducción global de un sonido `NewGRF` (p. ej. vehículo).
+///
+/// # Errors
+///
+/// `NotFound` si no hay def; `InvalidSample` si no hay PCM.
+pub fn play_newgrf_sound(
+    state: &mut GameState,
+    grfid: u32,
+    local_id: u8,
+) -> Result<(), SoundPlayError> {
+    enqueue_newgrf_sound(state, grfid, local_id, None)
+}
+
+/// Encola un sonido ambiental `NewGRF` en una tesela concreta.
+///
+/// El cliente lo filtra con `sound.ambient` y conserva la coordenada para
+/// aplicar la misma atenuación espacial que el resto de SFX de mundo.
+///
+/// # Errors
+///
+/// `NotFound` si no hay def; `InvalidSample` si no hay PCM.
+pub fn play_newgrf_tile_sound(
+    state: &mut GameState,
+    grfid: u32,
+    local_id: u8,
+    at: TileCoord,
+) -> Result<(), SoundPlayError> {
+    enqueue_newgrf_sound(state, grfid, local_id, Some(at))
+}
+
+/// Encola el sonido ambiental que `AnimationBase` codifica en un callback.
+///
+/// Un resultado fallido o un identificador local cero es silencioso, tal como
+/// `PlayTileSound` en `OpenTTD`; un sample inexistente se devuelve al caller
+/// para que las rutas de simulación puedan conservar un fallback silencioso.
+///
+/// # Errors
+///
+/// `NotFound` si el callback pidió un sample ausente; `InvalidSample` si el
+/// sample existe pero no tiene PCM utilizable.
+pub fn play_newgrf_tile_animation_sound(
+    state: &mut GameState,
+    grfid: u32,
+    result: u16,
+    at: TileCoord,
+) -> Result<(), SoundPlayError> {
+    let Some(sound) = newgrf_tile_animation_sound_from_callback(grfid, result, at) else {
+        return Ok(());
+    };
+    play_newgrf_tile_sound(state, sound.grfid, sound.local_id, sound.at)
 }
 
 /// Reproduce un SFX baseset, o el `NewGRF` que lo overridea si existe mapping.
@@ -153,4 +242,30 @@ pub fn play_sound_or_override(state: &mut GameState, sound: SoundId) -> Result<(
     }
     // Baseset: no hay cola NewGRF; éxito silencioso (cliente usa SoundId).
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn animation_callback_sound_masks_bit_15_and_rejects_failed_or_zero() {
+        let at = TileCoord::new(4, 9);
+        assert_eq!(
+            newgrf_tile_animation_sound_from_callback(0x1234_5678, 0xF301, at),
+            Some(NewgrfTileSound {
+                grfid: 0x1234_5678,
+                local_id: 0x73,
+                at,
+            })
+        );
+        assert_eq!(
+            newgrf_tile_animation_sound_from_callback(1, u16::MAX, at),
+            None
+        );
+        assert_eq!(
+            newgrf_tile_animation_sound_from_callback(1, 0x00FE, at),
+            None
+        );
+    }
 }

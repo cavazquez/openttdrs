@@ -1,8 +1,8 @@
 //! SFX espaciales del mundo (OpenSFX completo) con mixer de 8 canales.
 //!
-//! NewGRF (#254): la cola `GameState.runtime.pending_newgrf_sounds` se valida en
-//! core (`play_newgrf_sound`). Un drenado futuro a `AudioSource` PCM puede
-//! engancharse aquí sin cambiar el catálogo.
+//! NewGRF (#254): la cola `GameState.runtime.pending_newgrf_sounds` se valida
+//! en core y se materializa aquí desde PCM Action11. Los callbacks de tesela
+//! conservan su origen para respetar Ambiente y la atenuación espacial.
 
 use std::sync::Arc;
 
@@ -223,12 +223,15 @@ fn play_world_sfx(
 
     // `play_newgrf_sound` ya valida catálogo, sample y volumen en el core.
     // Convertir el PCM raw de Action11 a WAV aquí permite que Bevy/rodio lo
-    // decodifique sin escribir archivos temporales. No conocemos una tesela
-    // para todos los callbacks de vehículo, por eso estos efectos son globales
-    // (sin atenuación espacial), igual que `SndPlayFx` de OpenTTD.
+    // decodifique sin escribir archivos temporales. Los callbacks de vehículo
+    // no tienen tesela y permanecen globales; los de animación usan el mismo
+    // camino espacial que `SndPlayTileFx` y obedecen `sound.ambient`.
     if !sim.state.runtime.pending_newgrf_sounds.is_empty() {
         let pending_newgrf = std::mem::take(&mut sim.state.runtime.pending_newgrf_sounds);
         for pending in pending_newgrf {
+            if pending.at.is_some() && !hud.sound_ambient {
+                continue;
+            }
             let Some(def) = sim
                 .state
                 .sound_effect_catalog
@@ -246,7 +249,11 @@ fn play_world_sfx(
                 &def.sample_pcm,
                 &mut assets,
             );
-            let vol = (base * pending.volume.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+            let spatial = pending
+                .at
+                .map(|at| spatial_volume_factor(at, bounds, cam))
+                .unwrap_or(1.0);
+            let vol = (base * pending.volume.clamp(0.0, 1.0) * spatial).clamp(0.0, 1.0);
             if vol < 0.02 {
                 continue;
             }
@@ -469,6 +476,7 @@ mod tests {
                 local_id: 7,
                 volume: 1.0,
                 priority: 42,
+                at: Some(TileCoord::new(1, 1)),
             });
         let mut app = sfx_test_app(SimWorld {
             state,
@@ -505,6 +513,58 @@ mod tests {
                 .count(),
             1,
             "un segundo frame no vuelve a reproducir la cola ya drenada"
+        );
+    }
+
+    #[test]
+    fn ambient_newgrf_tile_sound_obeys_ambient_setting() {
+        let mut state = GameState::new(4, 4);
+        state.sound_effect_catalog.push(SoundEffectDef {
+            local_id: 3,
+            grfid: 0x5346_0002,
+            volume: 128,
+            priority: 42,
+            override_old: None,
+            has_sample: true,
+            sample_pcm: vec![0x80],
+            from_newgrf: true,
+        });
+        state
+            .runtime
+            .pending_newgrf_sounds
+            .push(PendingNewgrfSound {
+                grfid: 0x5346_0002,
+                local_id: 3,
+                volume: 1.0,
+                priority: 42,
+                at: Some(TileCoord::new(2, 2)),
+            });
+        let mut app = sfx_test_app(SimWorld {
+            state,
+            ..Default::default()
+        });
+        app.world_mut()
+            .resource_mut::<SimHudControls>()
+            .sound_ambient = false;
+
+        app.update();
+
+        assert!(
+            app.world()
+                .resource::<SimWorld>()
+                .state
+                .runtime
+                .pending_newgrf_sounds
+                .is_empty(),
+            "el mensaje se descarta en el cliente cuando Ambiente está desactivado"
+        );
+        assert!(
+            app.world()
+                .resource::<SfxMixer>()
+                .slots
+                .iter()
+                .all(Option::is_none),
+            "no reserva un canal para un sonido ambiental silenciado"
         );
     }
 }

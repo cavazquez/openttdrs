@@ -430,7 +430,8 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         .filter(|(_, tile)| tile.kind == crate::TileKind::Industry)
         .map(|(coord, _)| *coord)
         .collect();
-    let house_animation_dirty = crate::map::step_house_animations_with_newgrf(
+    let mut house_animation_sounds = Vec::new();
+    let house_animation_dirty = crate::map::step_house_animations_with_newgrf_and_sounds(
         &mut state.map,
         t,
         &mut state.random,
@@ -438,11 +439,15 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         &mut state.towns,
         &state.house_spec_catalog,
         state.climate,
+        &mut house_animation_sounds,
     );
     state
         .runtime
         .landscape_tile_dirty
         .extend(house_animation_dirty);
+    for sound in house_animation_sounds {
+        let _ = crate::play_newgrf_tile_sound(state, sound.grfid, sound.local_id, sound.at);
+    }
     let animation_coords: Vec<_> = state
         .industries
         .iter()

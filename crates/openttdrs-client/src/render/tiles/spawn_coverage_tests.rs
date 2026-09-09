@@ -6069,6 +6069,236 @@ fn sloped_newgrf_station_overlay_follows_foundation_parent() {
 }
 
 #[test]
+fn flat_newgrf_station_tile_layout_keeps_ground_in_ground_pass() {
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5: 0,
+            m6: 0,
+            ..tile_template()
+        },
+    )
+    .expect("station TileLayout tile");
+
+    let ground = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: [240, 10, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let parent = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -3,
+        y_offs: -4,
+        rgba: [10, 240, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let child = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -5,
+        y_offs: -6,
+        rgba: [10, 10, 240, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![
+            vec![ground.clone()],
+            vec![parent.clone()],
+            vec![child.clone()],
+        ],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 0,
+            set_id: 9,
+        }],
+        ..Default::default()
+    };
+    runtime.tile_layouts.insert(
+        9,
+        TileLayout {
+            ground: TileLayoutSpriteRef {
+                action1_set: Some(0),
+                ..Default::default()
+            },
+            sequence: vec![
+                TileLayoutSpriteRef {
+                    action1_set: Some(1),
+                    origin: [1, 2, 3],
+                    extent: [4, 5, 6],
+                    ..Default::default()
+                },
+                TileLayoutSpriteRef {
+                    action1_set: Some(2),
+                    origin: [7, -4, i8::MIN],
+                    ..Default::default()
+                },
+            ],
+        },
+    );
+    let station_spec = StationSpecDef {
+        id: StationSpecId::from_u16(1),
+        class: StationClassId::DEFAULT,
+        label: "TileLayout rail".into(),
+        short_label: "TLR".into(),
+        disallowed_platforms: 0,
+        disallowed_lengths: 0,
+        callback_mask: 0,
+        flags: 0,
+        animation_status: 0,
+        animation_frames: 0,
+        animation_speed: 2,
+        animation_triggers: 0,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: Some(Box::new(runtime)),
+        newgrf_grfid: 0x5354_4E47,
+        newgrf_grf_version: 8,
+        newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
+        custom_layouts: std::collections::HashMap::new(),
+    };
+    let mut station = Station::new_with_kind(coord, StopKind::RailStation);
+    station.station_spec = StationSpecId::from_u16(1);
+
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfStationSpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: ResMut<crate::render::NewGrfStationSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    std::slice::from_ref(&station),
+                    4.0,
+                    true,
+                    std::slice::from_ref(&station_spec),
+                    &[],
+                    Some(&mut cache),
+                    Some(&mut images),
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("station TileLayout spawn");
+
+    let sprite_handles: Vec<_> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .map(|sprite| sprite.image.clone())
+        .collect();
+    let parent_sprites: Vec<_> = world
+        .query::<(Entity, &ViewportSortableParent, &Sprite)>()
+        .iter(&world)
+        .map(|(entity, parent_component, sprite)| (entity, *parent_component, sprite.image.clone()))
+        .collect();
+    let child_sprites: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Sprite)>()
+        .iter(&world)
+        .map(|(child_component, sprite)| (*child_component, sprite.image.clone()))
+        .collect();
+    let (ground_handles, parent_component, child_matches) = {
+        let images = world.resource::<Assets<Image>>();
+        let has_rgba = |handle: &Handle<Image>, rgba: &[u8]| {
+            images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba)
+        };
+        let mut ground_handles = Vec::new();
+        for handle in &sprite_handles {
+            if has_rgba(handle, ground.rgba.as_slice()) && !ground_handles.contains(handle) {
+                ground_handles.push(handle.clone());
+            }
+        }
+        let (parent_entity, parent_component) = parent_sprites
+            .iter()
+            .find_map(|(entity, parent_component, handle)| {
+                has_rgba(handle, parent.rgba.as_slice()).then_some((*entity, *parent_component))
+            })
+            .expect("parent TileSeq de estación");
+        let child_matches = child_sprites.iter().any(|(child_component, handle)| {
+            child_component.parent == parent_entity && has_rgba(handle, child.rgba.as_slice())
+        });
+        (ground_handles, parent_component, child_matches)
+    };
+    assert_eq!(
+        ground_handles.len(),
+        1,
+        "el ground custom debe reemplazar la vía vanilla"
+    );
+    let expected_ground_position = overlay_pos(
+        crate::iso::iso(coord.x, coord.y),
+        f32::from(ground.x_offs),
+        f32::from(ground.y_offs),
+        f32::from(ground.width),
+        f32::from(ground.height),
+        0,
+        0.025,
+        coord.x,
+        coord.y,
+    );
+    let ground_depths: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .filter_map(|(sprite, transform)| {
+            (ground_handles.contains(&sprite.image)
+                && transform.translation.truncate() == expected_ground_position.truncate())
+            .then_some(transform.translation.z)
+        })
+        .collect();
+    assert_eq!(
+        ground_depths,
+        vec![ground_draw_z(coord.x, coord.y, 0.025)],
+        "DrawStationTile debe dejar el ground TileLayout en DrawGroundSprite"
+    );
+    assert_eq!(
+        parent_component.bounds,
+        ParentSpriteBounds::new(17, 18, 3, 20, 22, 8),
+        "el parent conserva el prisma TILE_SEQ_LINE inclusivo"
+    );
+    assert_eq!(
+        parent_component.insertion_key,
+        viewport_insertion_key(1, 1, 2),
+        "el BUILD entra con su ordinal estable en el compositor"
+    );
+    assert!(
+        child_matches,
+        "el child TileSeq debe permanecer unido al parent anterior"
+    );
+}
+
+#[test]
 fn spawn_industry_on_slope_spawns_foundation_layer() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);

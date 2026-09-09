@@ -2819,7 +2819,7 @@ fn spawn_newgrf_station_layout_ground(
         return true;
     };
     let handle = cache.handle_for_layout(def, 0, owner_colour, runtime_fp, &ground.sprite, images);
-    let position = overlay_pos(
+    let mut position = overlay_pos(
         ctx.iso_pos,
         f32::from(ground.sprite.x_offs),
         f32::from(ground.sprite.y_offs),
@@ -2838,6 +2838,10 @@ fn spawn_newgrf_station_layout_ground(
     if let Some(parent) = foundation_child_parent {
         spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
     } else {
+        // `DrawStationTile` materializa el ground de TileLayout con
+        // `DrawGroundSprite`; sólo la secuencia BUILD entra al compositor
+        // global. En pendiente la fundación ya conserva el anclaje como child.
+        position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.025);
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),

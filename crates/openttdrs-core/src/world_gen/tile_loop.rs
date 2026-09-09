@@ -355,12 +355,12 @@ fn tile_loop_house(
     else {
         return;
     };
-    // `NewHouseTileLoop` se ejecuta antes de la construcción. Sus callbacks
-    // todavía necesitan un contexto runtime con estado, pero su temporizador
-    // inicial no: mientras `processing_time` sea positivo OpenTTD sólo lo
-    // decrementa, marca la tesela dirty y retorna sin consumir RNG. Portar
-    // esta rama aislada evita congelar esas casas sin inventar el consumo de
-    // aleatorización, animación o CB21 que sigue pendiente.
+    // `NewHouseTileLoop` se ejecuta antes de la construcción. Mientras
+    // `processing_time` sea positivo OpenTTD sólo lo decrementa, marca la
+    // tesela dirty y retorna sin consumir RNG. Al agotarse ejecutaría la
+    // aleatorización/callbacks y vuelve a programar el período; el rearme no
+    // depende de esos callbacks y preserva la cadencia aunque esas rutas aún
+    // estén pendientes.
     if house_id >= crate::house_spec::NEW_HOUSE_OFFSET {
         let processing_time = tile.m6 >> 2;
         if processing_time != 0 {
@@ -369,6 +369,17 @@ fn tile_loop_house(
             // MAPE. Los dos bajos son `AnimatedTileState`, por lo que deben
             // sobrevivir al decremento tal como en el mapa nativo.
             updated.m6 = (tile.m6 & 0x03) | ((processing_time - 1) << 2);
+            if state.map.set_tile(coord, updated).is_ok() {
+                state.runtime.landscape_tile_dirty.push(coord);
+            }
+        } else {
+            let next_processing_time =
+                crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id)
+                    .map_or(0, |def| def.processing_time.min(0x3F));
+            let mut updated = tile;
+            updated.m6 = (tile.m6 & 0x03) | (next_processing_time << 2);
+            // `NewHouseTileLoop` termina con `MarkTileDirtyByTile`, incluso
+            // cuando la propiedad es cero o la randomización no cambió MAP1.
             if state.map.set_tile(coord, updated).is_ok() {
                 state.runtime.landscape_tile_dirty.push(coord);
             }
@@ -1238,6 +1249,75 @@ mod tests {
         assert_eq!(updated.m6, 0x0B, "3 → 2 preserving AnimatedTileState");
         assert_eq!(actual, Randomizer::new(42));
         assert!(state.runtime.landscape_tile_dirty.contains(&coord));
+    }
+
+    #[test]
+    fn newgrf_house_processing_timer_rearms_when_period_elapses_without_callbacks() {
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let coord = TileCoord::new(1, 0);
+        let mut map = Map::new_flat(2, 2, 0);
+        let mut tile = crate::map::Tile::town_house(
+            crate::map::TownHouseSpec {
+                house_id: id,
+                town_id: 0,
+                random_bits: 0,
+                construction_counter: 0,
+                construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                is_protected: false,
+                processing_time: 0,
+            },
+            0,
+            0,
+        );
+        tile.m6 |= 0x03;
+        map.set_tile(coord, tile).expect("NewGRF house inside map");
+        let mut state = GameState::from_map(map);
+        state
+            .house_spec_catalog
+            .push(crate::house_spec::HouseSpecDef {
+                id,
+                local_id: 0,
+                subst_id: 0,
+                building_flags: crate::house_spec::BUILDING_FLAG_SIZE_1X1,
+                min_year: 0,
+                max_year: crate::house_spec::HOUSE_YEAR_MAX,
+                population: 0,
+                mail_generation: 0,
+                availability: crate::house_spec::DEFAULT_HOUSE_AVAILABILITY,
+                probability: crate::house_spec::DEFAULT_HOUSE_PROBABILITY,
+                processing_time: 3,
+                extra_flags: 0,
+                override_id: None,
+                callback_mask: 0,
+                name: "periodic-timer".into(),
+                from_newgrf: true,
+                grfid: 1,
+                newgrf_views: Vec::new(),
+                newgrf_local_id: 0,
+                newgrf_runtime: None,
+            });
+        let mut actual = Randomizer::new(42);
+
+        for expected_m6 in [0x0F, 0x0B, 0x07, 0x03] {
+            let current = state.map.get(coord).expect("NewGRF house");
+            let mut generation_rng = Some(&mut actual);
+            tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
+            assert_eq!(
+                state.map.get(coord).expect("NewGRF house after loop").m6,
+                expected_m6
+            );
+        }
+
+        assert_eq!(actual, Randomizer::new(42));
+        assert_eq!(
+            state
+                .runtime
+                .landscape_tile_dirty
+                .iter()
+                .filter(|&&dirty| dirty == coord)
+                .count(),
+            4
+        );
     }
 
     #[test]

@@ -393,6 +393,17 @@ struct FloatingWindowChromeState {
     unshaded_height: Option<Val>,
 }
 
+/// Recuerda la última visibilidad para detectar una apertura real.
+///
+/// Muchas ventanas sincronizan `Visibility::Visible` cada frame mientras
+/// están abiertas. `Changed<Visibility>` por sí solo volvería a colocarlas y
+/// anularía un drag del usuario; la transición `Hidden → visible` es el único
+/// momento en que debe ejecutarse el autoplacement.
+#[derive(Component, Default)]
+struct FloatingWindowPlacementState {
+    was_visible: bool,
+}
+
 #[derive(Component)]
 struct FloatingWindowShadeButton;
 
@@ -589,6 +600,8 @@ impl Plugin for FloatingWindowPlugin {
                     update_window_chrome_button_style,
                     update_window_chrome_buttons,
                     apply_saved_floating_window_positions,
+                    place_newly_visible_floating_windows
+                        .after(apply_saved_floating_window_positions),
                 )
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),
@@ -603,6 +616,7 @@ impl Plugin for FloatingWindowPlugin {
                     close_window_buttons,
                     update_window_chrome_button_style,
                     update_window_chrome_buttons,
+                    place_newly_visible_floating_windows,
                 )
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::MainMenu)),
@@ -677,6 +691,288 @@ pub(crate) fn clamp_window_position(pos: Vec2, size: Vec2, viewport: Vec2) -> Ve
     Vec2::new(pos.x.clamp(0.0, max_x), pos.y.clamp(min_y, max_y))
 }
 
+/// Rectángulo de una ventana que participa en el buscador de huecos.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct WindowPlacementRect {
+    pos: Vec2,
+    size: Vec2,
+}
+
+impl WindowPlacementRect {
+    #[must_use]
+    fn right(self) -> f32 {
+        self.pos.x + self.size.x
+    }
+
+    #[must_use]
+    fn bottom(self) -> f32 {
+        self.pos.y + self.size.y
+    }
+
+    #[must_use]
+    fn overlaps(self, other: Self) -> bool {
+        self.right() > other.pos.x
+            && other.right() > self.pos.x
+            && self.bottom() > other.pos.y
+            && other.bottom() > self.pos.y
+    }
+}
+
+/// Tamaño disponible antes de que Bevy haya resuelto un `height: Auto`.
+#[must_use]
+fn resolved_window_node_size(computed: Option<&ComputedNode>) -> Option<Vec2> {
+    if let Some(computed) = computed {
+        let size = computed.size();
+        if size.x.is_finite() && size.y.is_finite() && size.x > 0.0 && size.y > 0.0 {
+            return Some(size);
+        }
+    }
+    None
+}
+
+/// Tamaño disponible antes de que Bevy haya resuelto un `height: Auto`.
+#[must_use]
+fn window_node_size(node: &Node, computed: Option<&ComputedNode>) -> Vec2 {
+    if let Some(size) = resolved_window_node_size(computed) {
+        return size;
+    }
+    let width = match node.width {
+        Val::Px(width) => width,
+        _ => MIN_WINDOW_WIDTH,
+    };
+    let height = match node.height {
+        Val::Px(height) => height,
+        _ => MIN_WINDOW_HEIGHT,
+    };
+    Vec2::new(width, height)
+}
+
+/// Las ventanas con altura automática esperan un frame de layout antes de
+/// decidir un hueco. De otro modo su mínimo de caption podría permitir un
+/// solape que aparece recién cuando Bevy calcula el contenido real.
+#[must_use]
+fn window_node_size_is_ready(node: &Node, computed: Option<&ComputedNode>) -> bool {
+    resolved_window_node_size(computed).is_some()
+        || matches!(
+            (node.width, node.height),
+            (Val::Px(width), Val::Px(height)) if width > 0.0 && height > 0.0
+        )
+}
+
+#[must_use]
+fn window_node_position(node: &Node) -> Vec2 {
+    Vec2::new(
+        match node.left {
+            Val::Px(left) => left,
+            _ => 0.0,
+        },
+        match node.top {
+            Val::Px(top) => top,
+            _ => TOOLBAR_AVOID,
+        },
+    )
+}
+
+/// `WDP_AUTO` de OpenTTD se resuelve al abrir la ventana; el resto de
+/// placements conserva la semántica explícita de su descriptor.
+#[must_use]
+fn uses_automatic_window_placement(id: FloatingWindowId) -> bool {
+    reference_geometry_primary(id)
+        .is_none_or(|geometry| geometry.placement == ReferencePlacement::Auto)
+}
+
+#[must_use]
+fn has_saved_floating_window_layout(
+    prefs: Option<&ClientPreferences>,
+    id: FloatingWindowId,
+) -> bool {
+    prefs.is_some_and(|prefs| prefs.window_layout_by_key(id.storage_key()).is_some())
+}
+
+#[must_use]
+fn auto_place_candidate_fits(
+    candidate: WindowPlacementRect,
+    viewport: Vec2,
+    occupied: &[WindowPlacementRect],
+    allow_partial: bool,
+) -> bool {
+    let viewport_bottom = (viewport.y - STATUSBAR_AVOID).max(TOOLBAR_AVOID);
+    let on_screen = if allow_partial {
+        // Equivalente LTR de `IsGoodAutoPlace2`: conserva al menos la mitad
+        // horizontal y tres cuartos verticales cuando ya no hay huecos libres.
+        candidate.pos.x >= -(candidate.size.x * 0.25)
+            && candidate.pos.x <= viewport.x - candidate.size.x * 0.5
+            && candidate.pos.y >= TOOLBAR_AVOID
+            && candidate.pos.y <= viewport_bottom - candidate.size.y * 0.25
+    } else {
+        candidate.pos.x >= 0.0
+            && candidate.pos.y >= TOOLBAR_AVOID
+            && candidate.right() <= viewport.x
+            && candidate.bottom() <= viewport_bottom
+    };
+    on_screen && !occupied.iter().any(|other| candidate.overlaps(*other))
+}
+
+#[must_use]
+fn first_fitting_auto_place_candidate(
+    candidates: impl IntoIterator<Item = Vec2>,
+    size: Vec2,
+    viewport: Vec2,
+    occupied: &[WindowPlacementRect],
+    allow_partial: bool,
+) -> Option<Vec2> {
+    candidates.into_iter().find(|&position| {
+        auto_place_candidate_fits(
+            WindowPlacementRect {
+                pos: position,
+                size,
+            },
+            viewport,
+            occupied,
+            allow_partial,
+        )
+    })
+}
+
+/// Busca el mismo tipo de hueco que `GetAutoPlacePosition` de OpenTTD:
+/// primero arriba a la izquierda, luego junto a las ventanas abiertas, y por
+/// último una cascada legible si el escritorio está lleno.
+#[must_use]
+fn auto_place_window(size: Vec2, viewport: Vec2, occupied: &[WindowPlacementRect]) -> Vec2 {
+    let top_left = Vec2::new(0.0, TOOLBAR_AVOID);
+    let candidate = WindowPlacementRect {
+        pos: top_left,
+        size,
+    };
+    if auto_place_candidate_fits(candidate, viewport, occupied, false) {
+        return top_left;
+    }
+
+    for existing in occupied {
+        if let Some(position) = first_fitting_auto_place_candidate(
+            [
+                Vec2::new(existing.right(), existing.pos.y),
+                Vec2::new(existing.pos.x - size.x, existing.pos.y),
+                Vec2::new(existing.pos.x, existing.bottom()),
+                Vec2::new(existing.pos.x, existing.pos.y - size.y),
+                Vec2::new(existing.right(), existing.bottom() - size.y),
+                Vec2::new(existing.pos.x - size.x, existing.bottom() - size.y),
+                Vec2::new(existing.right() - size.x, existing.bottom()),
+                Vec2::new(existing.right() - size.x, existing.pos.y - size.y),
+            ],
+            size,
+            viewport,
+            occupied,
+            false,
+        ) {
+            return position;
+        }
+    }
+
+    for existing in occupied {
+        if let Some(position) = first_fitting_auto_place_candidate(
+            [
+                Vec2::new(existing.right(), existing.pos.y),
+                Vec2::new(existing.pos.x - size.x, existing.pos.y),
+                Vec2::new(existing.pos.x, existing.bottom()),
+                Vec2::new(existing.pos.x, existing.pos.y - size.y),
+            ],
+            size,
+            viewport,
+            occupied,
+            true,
+        ) {
+            return position;
+        }
+    }
+
+    let mut position = top_left;
+    while occupied.iter().any(|existing| {
+        (existing.pos.x - position.x).abs() < f32::EPSILON
+            && (existing.pos.y - position.y).abs() < f32::EPSILON
+    }) {
+        position += Vec2::new(CLOSEBOX_W, TITLE_BAR_H);
+    }
+    clamp_window_position(position, size, viewport)
+}
+
+/// Aplica `WDP_AUTO` al pasar de oculta a visible.
+///
+/// Las posiciones guardadas son una elección explícita del usuario y siempre
+/// tienen prioridad. Los cuadros de diálogo y settings `WDP_CENTER` tampoco
+/// se mueven: que aparezcan centrados es parte de su contrato modal.
+fn place_newly_visible_floating_windows(
+    primary: Query<&Window, With<PrimaryWindow>>,
+    prefs: Option<Res<ClientPreferences>>,
+    mut queries: ParamSet<(
+        Query<(
+            Entity,
+            &FloatingWindow,
+            &Visibility,
+            &mut Node,
+            Option<&ComputedNode>,
+            &mut FloatingWindowPlacementState,
+        )>,
+        Query<(Entity, &Visibility, &Node, Option<&ComputedNode>), With<FloatingWindow>>,
+    )>,
+) {
+    let viewport = primary.single().map_or(DEFAULT_LAYOUT_VIEWPORT, |window| {
+        Vec2::new(window.width(), window.height())
+    });
+    let mut occupied: Vec<_> = queries
+        .p1()
+        .iter()
+        .filter(|(_, visibility, _, _)| **visibility != Visibility::Hidden)
+        .map(|(entity, _, node, computed)| {
+            (
+                entity,
+                WindowPlacementRect {
+                    pos: window_node_position(node),
+                    size: window_node_size(node, computed),
+                },
+            )
+        })
+        .collect();
+
+    for (entity, window, visibility, mut node, computed, mut state) in &mut queries.p0() {
+        let visible = *visibility != Visibility::Hidden;
+        if !visible {
+            state.was_visible = false;
+            continue;
+        }
+        if state.was_visible {
+            continue;
+        }
+        if !uses_automatic_window_placement(window.id)
+            || has_saved_floating_window_layout(prefs.as_deref(), window.id)
+        {
+            state.was_visible = true;
+            continue;
+        }
+        if !window_node_size_is_ready(&node, computed) {
+            continue;
+        }
+
+        state.was_visible = true;
+        occupied.retain(|(other, _)| *other != entity);
+        let size = window_node_size(&node, computed);
+        let position = auto_place_window(
+            size,
+            viewport,
+            &occupied.iter().map(|(_, rect)| *rect).collect::<Vec<_>>(),
+        );
+        node.left = Val::Px(position.x);
+        node.top = Val::Px(position.y);
+        occupied.push((
+            entity,
+            WindowPlacementRect {
+                pos: position,
+                size,
+            },
+        ));
+    }
+}
+
 /// Crea el marco de una ventana flotante (oculta) y devuelve
 /// `(raíz, nodo de contenido)` para que el dueño la llene.
 ///
@@ -739,6 +1035,7 @@ pub(crate) fn spawn_floating_window_keyed(
         .spawn((
             FloatingWindow { id, key },
             FloatingWindowChromeState::default(),
+            FloatingWindowPlacementState::default(),
             root_node,
             BackgroundColor(WINDOW_BG),
             BorderColor::all(WINDOW_BORDER),
@@ -1464,6 +1761,139 @@ mod tests {
             Vec2::new(10.0, 10.0),
         );
         assert_eq!(auto.y, TOOLBAR_AVOID);
+    }
+
+    #[test]
+    fn auto_place_starts_at_toolbar_then_uses_a_free_neighbor() {
+        let viewport = Vec2::new(1_280.0, 720.0);
+        let size = Vec2::new(250.0, 134.0);
+        let first = auto_place_window(size, viewport, &[]);
+        assert_eq!(first, Vec2::new(0.0, TOOLBAR_AVOID));
+
+        let occupied = [WindowPlacementRect { pos: first, size }];
+        let second = auto_place_window(size, viewport, &occupied);
+        assert_eq!(second, Vec2::new(250.0, TOOLBAR_AVOID));
+        assert!(!WindowPlacementRect { pos: second, size }.overlaps(occupied[0]));
+    }
+
+    #[test]
+    fn auto_placement_keeps_centered_dialog_contracts() {
+        assert!(uses_automatic_window_placement(FloatingWindowId::Vehicle));
+        assert!(uses_automatic_window_placement(
+            FloatingWindowId::TownDirectory
+        ));
+        assert!(!uses_automatic_window_placement(FloatingWindowId::NewGrf));
+        assert!(!uses_automatic_window_placement(
+            FloatingWindowId::ErrorDialog
+        ));
+    }
+
+    #[test]
+    fn auto_placement_defers_to_saved_user_layout() {
+        let mut prefs = ClientPreferences::default();
+        prefs.set_window_layout_by_key(
+            FloatingWindowId::Vehicle.storage_key(),
+            Vec2::new(610.0, 310.0),
+            Some(Vec2::new(250.0, 134.0)),
+        );
+        assert!(has_saved_floating_window_layout(
+            Some(&prefs),
+            FloatingWindowId::Vehicle
+        ));
+        assert!(!has_saved_floating_window_layout(
+            Some(&prefs),
+            FloatingWindowId::TownDirectory
+        ));
+        assert!(!has_saved_floating_window_layout(
+            None,
+            FloatingWindowId::Vehicle
+        ));
+    }
+
+    #[test]
+    fn auto_placement_waits_for_auto_height_layout() {
+        let auto_height = Node {
+            width: Val::Px(250.0),
+            height: Val::Auto,
+            ..default()
+        };
+        assert!(!window_node_size_is_ready(&auto_height, None));
+        let fixed_size = Node {
+            width: Val::Px(250.0),
+            height: Val::Px(134.0),
+            ..default()
+        };
+        assert!(window_node_size_is_ready(&fixed_size, None));
+    }
+
+    #[test]
+    fn auto_placement_runs_once_per_opening_and_preserves_manual_drag() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(ClientPreferences::default())
+            .add_systems(Update, place_newly_visible_floating_windows);
+        app.world_mut().spawn((
+            Window {
+                resolution: (1_280, 720).into(),
+                ..default()
+            },
+            PrimaryWindow,
+        ));
+        app.world_mut().spawn((
+            FloatingWindow {
+                id: FloatingWindowId::TownDirectory,
+                key: WindowKey::singleton(FloatingWindowId::TownDirectory),
+            },
+            FloatingWindowPlacementState { was_visible: true },
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(TOOLBAR_AVOID),
+                width: Val::Px(250.0),
+                height: Val::Px(134.0),
+                ..default()
+            },
+            Visibility::Visible,
+        ));
+        let opening = app
+            .world_mut()
+            .spawn((
+                FloatingWindow {
+                    id: FloatingWindowId::Vehicle,
+                    key: WindowKey::singleton(FloatingWindowId::Vehicle),
+                },
+                FloatingWindowPlacementState::default(),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(600.0),
+                    top: Val::Px(300.0),
+                    width: Val::Px(200.0),
+                    height: Val::Px(100.0),
+                    ..default()
+                },
+                Visibility::Visible,
+            ))
+            .id();
+
+        app.update();
+        let node = app.world().get::<Node>(opening).expect("ventana abierta");
+        assert_eq!(node.left, Val::Px(250.0));
+        assert_eq!(node.top, Val::Px(TOOLBAR_AVOID));
+
+        let mut node = app
+            .world_mut()
+            .get_mut::<Node>(opening)
+            .expect("drag manual");
+        node.left = Val::Px(610.0);
+        node.top = Val::Px(310.0);
+        drop(node);
+        app.update();
+        let node = app
+            .world()
+            .get::<Node>(opening)
+            .expect("ventana arrastrada");
+        assert_eq!(node.left, Val::Px(610.0));
+        assert_eq!(node.top, Val::Px(310.0));
     }
 
     #[test]

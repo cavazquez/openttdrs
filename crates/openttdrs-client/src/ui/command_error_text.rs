@@ -108,6 +108,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::ObjectCannotBeRemoved => {
             "Este objeto no se puede demoler sin el bulldozer mágico."
         }
+        CommandError::ObjectInTheWay => "Hay un objeto que debe demolerse antes de construir aquí.",
         CommandError::ObjectLimitReached => "Ya hay un faro o transmisor de ese tipo en el mapa.",
         CommandError::IndustryNotAvailableInClimate => {
             "Esta industria no está disponible en el clima de este mapa."
@@ -241,6 +242,8 @@ mod tests {
             CommandError::LandAlreadyOwned,
             CommandError::CannotBuyLandHere,
             CommandError::CannotBuildObjectHere,
+            CommandError::ObjectCannotBeRemoved,
+            CommandError::ObjectInTheWay,
             CommandError::ObjectLimitReached,
             CommandError::IndustryNotAvailableInClimate,
             CommandError::IndustryTileOccupied,

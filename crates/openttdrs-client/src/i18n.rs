@@ -1096,6 +1096,12 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Solo se puede comprar hierba o bosque libre (sin objetos ni infra)." => {
             "Only clear grass or forest can be purchased (no objects or infrastructure)."
         }
+        "Este objeto no se puede demoler sin el bulldozer mágico." => {
+            "This object cannot be demolished without the magic bulldozer."
+        }
+        "Hay un objeto que debe demolerse antes de construir aquí." => {
+            "An object must be demolished before building here."
+        }
         "Solo se puede colocar el faro/transmisor en hierba o bosque libre." => {
             "The lighthouse/transmitter can only be placed on clear grass or forest."
         }
@@ -1580,6 +1586,20 @@ mod tests {
         assert_eq!(
             localized_text(Locale::En, "Un NewGRF denegó esta acción (callback)."),
             "A NewGRF denied this action (callback)."
+        );
+        assert_eq!(
+            localized_text(
+                Locale::En,
+                "Este objeto no se puede demoler sin el bulldozer mágico.",
+            ),
+            "This object cannot be demolished without the magic bulldozer."
+        );
+        assert_eq!(
+            localized_text(
+                Locale::En,
+                "Hay un objeto que debe demolerse antes de construir aquí."
+            ),
+            "An object must be demolished before building here."
         );
     }
 

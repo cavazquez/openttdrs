@@ -1,11 +1,12 @@
 use crate::company::OWNER_NONE_M1;
 use crate::economy::road_stop_clear_cost_factored;
 use crate::map::{
-    Map, OBJECT_TYPE_COMPANY_HEADQUARTERS, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_STATUE_COMPANY,
-    OBJECT_TYPE_TRANSMITTER, TileCoord, TileKind, WaterClass, is_map_object_tile, make_water_tile,
-    object_id_from_tile, object_type_from_tile, water_class_from_m1,
+    Map, OBJECT_TYPE_COMPANY_HEADQUARTERS, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
+    OBJECT_TYPE_STATUE_COMPANY, OBJECT_TYPE_TRANSMITTER, TileCoord, TileKind, WaterClass,
+    is_map_object_tile, make_water_tile, object_id_from_tile, object_type_from_tile,
+    water_class_from_m1,
 };
-use crate::object_spec::OBJECT_FLAG_CANNOT_REMOVE;
+use crate::object_spec::{OBJECT_FLAG_AUTOREMOVE, OBJECT_FLAG_CANNOT_REMOVE};
 use crate::{CLEAR_TILE_COST, GameState, StopKind};
 
 use super::super::{CommandError, in_bounds, require_tile_owned_by_active, tile_owner};
@@ -183,6 +184,36 @@ pub(in crate::command) fn check_object_can_be_cleared(
     } else {
         Ok(())
     }
+}
+
+/// Comprueba la limpieza implícita que hacen los comandos de construcción
+/// marcados con `DoCommandFlag::Auto`. A diferencia de una demolición manual,
+/// `OpenTTD` sólo deja pasar objetos con `Autoremove`.
+pub(in crate::command) fn check_object_can_be_auto_cleared(
+    state: &GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    let Some(tile) = state.map.get(c) else {
+        return Ok(());
+    };
+    if !is_map_object_tile(tile.mapt) {
+        return Ok(());
+    }
+    let Some(object_type) = state.map.object_type_at(c) else {
+        // Sin el tipo no se puede demostrar que el objeto sea autoremovible;
+        // conservarlo evita sobrescribir un `MP_OBJECT` importado.
+        return Err(CommandError::ObjectInTheWay);
+    };
+    let autoremove = object_type == u16::from(OBJECT_TYPE_OWNED_LAND)
+        || crate::object_spec::object_spec_def(&state.object_spec_catalog, object_type)
+            .is_some_and(|spec| spec.flags & OBJECT_FLAG_AUTOREMOVE != 0);
+    if !autoremove {
+        return Err(CommandError::ObjectInTheWay);
+    }
+    if tile.m1 != OWNER_NONE_M1 && tile.m1 != state.active_company.0 {
+        return Err(CommandError::TileNotOwned);
+    }
+    Ok(())
 }
 
 pub(in crate::command) fn transport_tile_is_buildable(kind: TileKind) -> bool {

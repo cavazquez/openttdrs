@@ -110,6 +110,8 @@ pub enum CommandError {
     CannotBuildObjectHere,
     /// El objeto existente tiene `ObjectFlag::CannotRemove`.
     ObjectCannotBeRemoved,
+    /// Un objeto no admite limpieza automática durante otra construcción.
+    ObjectInTheWay,
     /// Ya hay un faro o transmisor de ese tipo en el mapa (límite 1).
     ObjectLimitReached,
     /// Esta industria no está disponible en el clima actual del mapa.

@@ -2,7 +2,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use crate::command::{Command, CommandError, apply_command};
+use crate::command::{Command, CommandError, apply_command, command_would_fail};
 use crate::{GameState, LevelMode, RAIL_BUILD_COST, TileCoord, TileKind, tile_slope_and_z};
 
 use super::super::helpers::{
@@ -17,6 +17,32 @@ fn place_rail_mutates_tile_kind() {
     assert_eq!(s.map.get_kind(c), Some(TileKind::Grass));
     apply_command(&mut s, &Command::PlaceRail(c)).unwrap();
     assert_eq!(s.map.get_kind(c), Some(TileKind::Rail));
+}
+
+#[test]
+fn rail_cannot_overwrite_nonremovable_object() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(1, 3);
+    apply_command(
+        &mut s,
+        &Command::BuildObject {
+            pos: c,
+            object_type: crate::OBJECT_TYPE_LIGHTHOUSE,
+        },
+    )
+    .expect("build lighthouse");
+
+    assert_eq!(
+        command_would_fail(&s, &Command::PlaceRail(c)),
+        Some(CommandError::ObjectInTheWay)
+    );
+    assert_eq!(
+        apply_command(&mut s, &Command::PlaceRail(c)),
+        Err(CommandError::ObjectInTheWay)
+    );
+    assert!(crate::is_map_object_tile(
+        s.map.get(c).expect("lighthouse").mapt
+    ));
 }
 
 #[test]

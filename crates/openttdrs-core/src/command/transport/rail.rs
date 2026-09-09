@@ -12,6 +12,7 @@ use crate::{DEPOT_BUILD_COST, GameState};
 
 use super::super::terraform::{apply_autoslope_if_needed, check_autoslope_flat};
 use super::super::{CommandError, require_tile_owned_by_active};
+use super::shared::check_object_can_be_auto_cleared;
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
@@ -341,6 +342,7 @@ pub(in crate::command) fn place_rail_depot_dir(
 ) -> Result<(), CommandError> {
     let dir = dir & 0x03;
     check_rail_depot_placement(&state.map, c, dir)?;
+    check_object_can_be_auto_cleared(state, c)?;
     let connection = rail_depot_connection(&state.map, c, dir);
     if let Some((exit, before, after)) = connection
         && before != after
@@ -436,6 +438,7 @@ pub(in crate::command) fn place_rail_bits(
     bits: u8,
 ) -> Result<(), CommandError> {
     check_place_rail(&state.map, c)?;
+    check_object_can_be_auto_cleared(state, c)?;
     let add = bits & 0x3F;
     apply_autoslope_if_needed(state, c)?;
     let tb = merged_rail_trackbits_on_tile(&state.map, c, add);
@@ -456,6 +459,7 @@ pub(in crate::command) fn set_rail_bits(
     bits: u8,
 ) -> Result<(), CommandError> {
     check_place_rail(&state.map, c)?;
+    check_object_can_be_auto_cleared(state, c)?;
     apply_autoslope_if_needed(state, c)?;
     let tb = (bits & 0x3F).max(RAIL_TB_X);
     check_rail_trackbits_on_tile(&state.map, c, tb)?;
@@ -470,6 +474,7 @@ pub(in crate::command) fn place_rail(
     c: TileCoord,
 ) -> Result<(), CommandError> {
     check_place_rail(&state.map, c)?;
+    check_object_can_be_auto_cleared(state, c)?;
     apply_autoslope_if_needed(state, c)?;
     let tb = rail_trackbits_from_neighbors(&state.map, c);
     check_rail_trackbits_on_tile(&state.map, c, tb)?;

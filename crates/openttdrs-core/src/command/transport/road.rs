@@ -23,6 +23,7 @@ use crate::{DEPOT_BUILD_COST, GameState};
 
 use super::super::terraform::apply_autoslope_if_needed;
 use super::super::{CommandError, require_tile_owned_by_active, tile_owner};
+use super::shared::check_object_can_be_auto_cleared;
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{check_in_bounds, place_single_transport_tile};
@@ -88,6 +89,7 @@ pub(in crate::command) fn place_road_depot_dir(
 ) -> Result<(), CommandError> {
     let dir = dir & 0x03;
     check_road_depot_placement(&state.map, c, dir)?;
+    check_object_can_be_auto_cleared(state, c)?;
     place_single_transport_tile(
         state,
         c,
@@ -136,6 +138,7 @@ pub(in crate::command) fn place_road_bits(
     bits: u8,
 ) -> Result<(), CommandError> {
     check_place_road_bits(&state.map, c)?;
+    check_object_can_be_auto_cleared(state, c)?;
     apply_autoslope_if_needed(state, c)?;
     let force_axis = bits & ROAD_PLACE_FORCE_AXIS != 0;
     let requested = bits & 0x0F;
@@ -392,6 +395,7 @@ pub(in crate::command) fn set_road_bits(
     bits: u8,
 ) -> Result<(), CommandError> {
     check_place_road_bits(&state.map, c)?;
+    check_object_can_be_auto_cleared(state, c)?;
     let road_bits = (bits & 0x0F).max(0x01);
     write_normal_road_tile(state, c, road_bits)?;
     charge_road_build(state);
@@ -435,6 +439,7 @@ pub(in crate::command) fn place_tram_bits(
     bits: u8,
 ) -> Result<(), CommandError> {
     check_place_road_bits(&state.map, c)?;
+    check_object_can_be_auto_cleared(state, c)?;
     apply_autoslope_if_needed(state, c)?;
     let force_axis = bits & ROAD_PLACE_FORCE_AXIS != 0;
     let requested = bits & 0x0F;

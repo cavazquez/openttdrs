@@ -24,6 +24,61 @@ fn place_road_mutates_tile_kind() {
 }
 
 #[test]
+fn road_cannot_overwrite_nonremovable_object() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 4);
+    apply_command(
+        &mut s,
+        &Command::BuildObject {
+            pos: c,
+            object_type: crate::OBJECT_TYPE_LIGHTHOUSE,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        command_would_fail(&s, &Command::PlaceRoad(c)),
+        Some(CommandError::ObjectInTheWay)
+    );
+    assert_eq!(
+        apply_command(&mut s, &Command::PlaceRoad(c)),
+        Err(CommandError::ObjectInTheWay)
+    );
+    assert!(crate::is_map_object_tile(s.map.get(c).unwrap().mapt));
+}
+
+#[test]
+fn road_can_replace_own_purchased_land() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 4);
+    apply_command(&mut s, &Command::BuyLand(c)).unwrap();
+
+    assert_eq!(command_would_fail(&s, &Command::PlaceRoad(c)), None);
+    apply_command(&mut s, &Command::PlaceRoad(c)).unwrap();
+    assert_eq!(s.map.get_kind(c), Some(TileKind::Road));
+}
+
+#[test]
+fn road_cannot_replace_other_company_purchased_land() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 4);
+    s.ensure_rival_transcargo();
+    assert!(s.set_active_company(crate::CompanyId(1)));
+    apply_command(&mut s, &Command::BuyLand(c)).unwrap();
+    assert!(s.set_active_company(crate::CompanyId::PLAYER));
+
+    assert_eq!(
+        command_would_fail(&s, &Command::PlaceRoad(c)),
+        Some(CommandError::TileNotOwned)
+    );
+    assert_eq!(
+        apply_command(&mut s, &Command::PlaceRoad(c)),
+        Err(CommandError::TileNotOwned)
+    );
+    assert!(crate::is_owned_land_tile(&s.map.get(c).unwrap()));
+}
+
+#[test]
 fn road_drag_line_on_row_below_network() {
     let mut s = GameState::new(12, 12);
     for x in 3..=6 {

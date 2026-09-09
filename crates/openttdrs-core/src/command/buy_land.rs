@@ -66,7 +66,7 @@ pub(crate) fn buy_land_area(
             .map_err(|_| CommandError::OutOfBounds)?;
         state
             .map
-            .set_m1(c, 0)
+            .set_m1(c, state.active_company.0)
             .map_err(|_| CommandError::OutOfBounds)?;
     }
     state.economy.money -= total;
@@ -104,6 +104,36 @@ mod tests {
         let tile = state.map.get(c).expect("tile");
         assert!(is_owned_land_tile(&tile));
         assert!(state.economy.money < before);
+    }
+
+    #[test]
+    fn buy_land_records_active_company_as_owner() {
+        let mut state = GameState::new(8, 8);
+        let c = TileCoord::new(2, 2);
+        state.ensure_rival_transcargo();
+        assert!(state.set_active_company(crate::CompanyId(1)));
+
+        buy_land(&mut state, c).expect("buy land");
+
+        assert_eq!(state.map.get(c).expect("owned tile").m1, 1);
+    }
+
+    #[test]
+    fn clear_tile_rejects_other_company_owned_land() {
+        let mut state = GameState::new(8, 8);
+        let c = TileCoord::new(2, 2);
+        state.ensure_rival_transcargo();
+        assert!(state.set_active_company(crate::CompanyId(1)));
+        buy_land(&mut state, c).expect("rival buy land");
+        assert!(state.set_active_company(crate::CompanyId::PLAYER));
+
+        assert_eq!(
+            apply_command(&mut state, &Command::ClearTile(c)),
+            Err(CommandError::TileNotOwned)
+        );
+        assert!(is_owned_land_tile(
+            &state.map.get(c).expect("rival owned tile")
+        ));
     }
 
     #[test]

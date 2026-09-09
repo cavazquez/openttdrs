@@ -1,3 +1,4 @@
+use crate::company::OWNER_NONE_M1;
 use crate::economy::road_stop_clear_cost_factored;
 use crate::map::{
     Map, OBJECT_TYPE_COMPANY_HEADQUARTERS, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_STATUE_COMPANY,
@@ -160,6 +161,9 @@ pub(in crate::command) fn check_object_can_be_cleared(
     };
     if !is_map_object_tile(tile.mapt) {
         return Ok(());
+    }
+    if tile.m1 != OWNER_NONE_M1 && tile.m1 != state.active_company.0 {
+        return Err(CommandError::TileNotOwned);
     }
     let Some(object_type) = state.map.object_type_at(c) else {
         return Ok(());

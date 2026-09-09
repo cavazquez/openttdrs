@@ -404,18 +404,11 @@ pub fn action2_eval_ctx_for_house_tile_with_towns(
     // being generated. Runtime rendering and town expansion happen after the
     // generation pass, so the normal map context is zero.
     ctx.vars.insert(0x45, 0);
-    // `GetTerrainType` returns a small climate-dependent enum. The map
-    // representation has no separate terrain enum, but `m7` carries the
-    // snow/desert marker used by imported maps; keep temperate grass as zero.
-    let terrain = if climate.uses_desert_patches() && tile.m7 & 0x20 != 0 {
-        1
-    } else if climate.uses_snow_ground() || tile.m7 & 0x20 != 0 {
-        4
-    } else {
-        0
-    };
+    // `MAP7` is the house animation frame (`GetAnimationFrame`), not a
+    // terrain marker. Do not let an animated frame change `var 43`.
+    let terrain = if climate.uses_snow_ground() { 4 } else { 0 };
     ctx.vars.insert(0x43, terrain);
-    ctx.vars.insert(0x46, u32::from(tile.m3hi));
+    ctx.vars.insert(0x46, u32::from(tile.m7));
     ctx.vars.insert(
         0x47,
         (ty.cast_unsigned() << 16) | (tx.cast_unsigned() & 0xFFFF),
@@ -513,7 +506,7 @@ pub fn action2_eval_ctx_for_house_tile_with_counts(
                 } else {
                     map.get(nearby)
                         .filter(|candidate| candidate.kind == TileKind::House)
-                        .map_or(0, |candidate| u32::from(candidate.m3hi))
+                        .map_or(0, |candidate| u32::from(candidate.m7))
                 };
                 ctx.parameterized_vars.insert((variable, parameter), value);
             }
@@ -591,9 +584,12 @@ fn nearby_house_tile_information(map: &Map, coord: TileCoord, climate: Climate) 
         return 0;
     };
     let (tileh, z) = tile_slope_and_z(map, coord).unwrap_or((0, tile.height));
-    let terrain = if climate.uses_desert_patches() && tile.m7 & 0x20 != 0 {
+    // A house reuses MAP7 as its animation frame. Other tile kinds can still
+    // expose the imported snow/desert marker from this byte.
+    let terrain_marker = tile.kind != TileKind::House && tile.m7 & 0x20 != 0;
+    let terrain = if climate.uses_desert_patches() && terrain_marker {
         1
-    } else if climate.uses_snow_ground() || tile.m7 & 0x20 != 0 {
+    } else if climate.uses_snow_ground() || terrain_marker {
         4
     } else {
         0
@@ -1111,7 +1107,8 @@ mod tests {
         let mut tile = Tile::completed_house(7, 19, 0);
         tile.m1 = 0xAB; // GetHouseRandomBits
         tile.m3 = 0x95; // completed + waiting randomisation triggers
-        tile.m3hi = 4; // animation frame in the local map representation
+        tile.m7 = 4; // `GetAnimationFrame` / MAP7
+        tile.m3hi = 0xFE; // MAP4 must not leak into the animation frame
         let ctx = action2_eval_ctx_for_house_tile(tile, 5, 2, Climate::Temperate);
 
         // stage 3 + TileHash2Bit(5,2)=2 in bits 2..3.
@@ -1159,7 +1156,8 @@ mod tests {
         map.set_completed_house(second, 7, 0).unwrap();
         map.set_house_town_id(second, 3).unwrap();
         let mut animated = map.get(second).unwrap();
-        animated.m3hi = 9;
+        animated.m7 = 9;
+        animated.m3hi = 0xFE;
         map.set_tile(second, animated).unwrap();
         crate::map::make_water_tile(&mut map, TileCoord::new(3, 0), crate::map::WaterClass::Sea)
             .unwrap();

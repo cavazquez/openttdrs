@@ -196,11 +196,12 @@ fn spawn_road_stop_catenary(
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
-) {
+    global_parent_ordinal: Option<u8>,
+) -> Option<u8> {
     if road_bits == 0 {
-        return;
+        return global_parent_ordinal;
     }
-    let _ = spawn_road_catenary_for_type(
+    let mut global_parent_ordinal = spawn_road_catenary_for_type(
         commands,
         map,
         dims,
@@ -218,10 +219,10 @@ fn spawn_road_stop_catenary(
         newgrf_stack,
         catenary_newgrf,
         catenary_sprites.as_deref_mut(),
-        None,
+        global_parent_ordinal,
     );
     if let Some(tram_type) = tram_road_type_from_tile(&tile) {
-        let _ = spawn_road_catenary_for_type(
+        global_parent_ordinal = spawn_road_catenary_for_type(
             commands,
             map,
             dims,
@@ -239,9 +240,10 @@ fn spawn_road_stop_catenary(
             newgrf_stack,
             catenary_newgrf,
             catenary_sprites.as_deref_mut(),
-            None,
+            global_parent_ordinal,
         );
     }
+    global_parent_ordinal
 }
 
 /// `DrawTile_Station` llama a `DrawFoundation(Leveled)` para toda estación
@@ -716,10 +718,22 @@ fn road_stop_sorted_layer_centers(
     centers
 }
 
-/// `DrawRailTileSeq` de una parada vial ocurre después de la fundación y de
-/// la catenaria de carretera. Se reservan 0/1 para que una migración futura
-/// de esos productores pueda preceder las capas BUILD sin renumerarlas.
+/// Parents BUILD heredados de las paradas Bus/Truck.
+///
+/// El flujo nativo llama a `DrawRoadCatenary` antes de `DrawRailTileSeq`,
+/// pero la catenaria de estas paradas sigue temporalmente fuera del compositor
+/// global. Sus parents BUILD conservan el contrato ya publicado hasta que esa
+/// migración se haga como una etapa propia.
 const ROAD_STOP_BUILDING_PARENT_ORDINAL: u8 = 2;
+
+/// `DrawRoadTypeCatenary` puede publicar tres columnas y un frente por road
+/// type. El bloque 4..=11 deja 0..=3 a la foundation y cubre carretera más
+/// tranvía antes de los postes BUILD de un road waypoint vanilla.
+const ROAD_WAYPOINT_CATENARY_PARENT_ORDINAL: u8 = 4;
+
+/// `DrawRailTileSeq(TO_BUILDINGS)` sigue a la catenaria en un road waypoint.
+/// Se reservan dos slots después del máximo de ocho parents de cable/postes.
+const ROAD_WAYPOINT_BUILDING_PARENT_ORDINAL: u8 = 12;
 
 /// Emite una capa BUILD vanilla de parada vial como parent del compositor
 /// global. Las cajas siguen el `TILE_SEQ_LINE` publicado por OpenTTD y la
@@ -729,7 +743,7 @@ fn spawn_road_stop_building_parent(
     ctx: &TileRenderContext,
     base_z: u8,
     map_width: u32,
-    layer_index: usize,
+    parent_ordinal: u8,
     layer: &RoadStopLayerGfx,
     sprite: Sprite,
 ) {
@@ -752,12 +766,7 @@ fn spawn_road_stop_building_parent(
         ViewportSortableParent {
             sprite_id: layer.sprite_id,
             bounds: road_stop_parent_bounds(ctx.tx_i32(), ctx.ty_i32(), base_z, layer),
-            insertion_key: viewport_insertion_key(
-                ctx.tx,
-                ctx.ty,
-                ROAD_STOP_BUILDING_PARENT_ORDINAL
-                    .saturating_add(u8::try_from(layer_index).unwrap_or(u8::MAX)),
-            ),
+            insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, parent_ordinal),
             source_depth,
         },
     ));
@@ -2174,10 +2183,13 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 newgrf_stack,
                 world,
             );
-            // OpenTTD dibuja la catenaria después del suelo y del layout BUILD
-            // de la parada. La entrada de una bahía es un único brazo diagonal;
-            // una drive-through usa el eje completo. En pendientes la parada
-            // ya fue nivelada, por eso el selector recibe SLOPE_FLAT (0) y la
+            // Pendiente: `DrawTile_Station` nativo emite la catenaria entre
+            // el suelo y `DrawRailTileSeq(TO_BUILDINGS)`. En Bus/Truck la
+            // catenaria todavía queda fuera del compositor global y se migra
+            // por separado.
+            // La entrada de una bahía es un único brazo diagonal; una
+            // drive-through usa el eje completo. En pendientes la parada ya
+            // fue nivelada, por eso el selector recibe SLOPE_FLAT (0) y la
             // altura de la superficie resultante de `DrawFoundation`.
             if !road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord)
                 && let Some(tile) = ctx.tile
@@ -2198,6 +2210,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     newgrf_stack,
                     catenary_newgrf,
                     catenary_sprites.as_deref_mut(),
+                    None,
                 );
             }
         }
@@ -2441,6 +2454,12 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     image_store,
                 );
             }
+            // Un layout custom conserva por ahora sus propios ordinales
+            // BUILD; el waypoint vanilla sí puede reservar el stream global
+            // de catenaria sin colisionar con ellos.
+            let waypoint_catenary_parent_ordinal = waypoint_layout
+                .is_none()
+                .then_some(ROAD_WAYPOINT_CATENARY_PARENT_ORDINAL);
             if !road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord)
                 && let Some(tile) = ctx.tile
             {
@@ -2460,6 +2479,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     newgrf_stack,
                     catenary_newgrf,
                     catenary_sprites.as_deref_mut(),
+                    waypoint_catenary_parent_ordinal,
                 );
             }
             // OpenTTD emite los postes después de la catenaria mediante
@@ -2494,6 +2514,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     u8::from(waypoint_bits == 0x05),
                     dims.0,
                     foundation_child_parent,
+                    ROAD_WAYPOINT_BUILDING_PARENT_ORDINAL,
                 );
             }
         }
@@ -3403,7 +3424,8 @@ fn spawn_road_stop_buildings(
                 ctx,
                 base_z,
                 map.dimensions().0,
-                layer_i,
+                ROAD_STOP_BUILDING_PARENT_ORDINAL
+                    .saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
                 spec,
                 tint_building_sprite(sprite_from_atlas_or_company_white_colour(
                     company,
@@ -3445,7 +3467,8 @@ fn spawn_road_stop_buildings(
                 ctx,
                 base_z,
                 map.dimensions().0,
-                layer_i,
+                ROAD_STOP_BUILDING_PARENT_ORDINAL
+                    .saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
                 spec,
                 sprite,
             );
@@ -3457,7 +3480,8 @@ fn spawn_road_stop_buildings(
             ctx,
             base_z,
             map.dimensions().0,
-            layer_i,
+            ROAD_STOP_BUILDING_PARENT_ORDINAL
+                .saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
             spec,
             tint_building_sprite(sprite_from_atlas_or_company_white_colour(
                 company,
@@ -3549,6 +3573,7 @@ fn spawn_road_waypoint_buildings(
     axis: u8,
     map_width: u32,
     foundation_child_parent: Option<Entity>,
+    parent_ordinal: u8,
 ) {
     if buildings_hidden() {
         return;
@@ -3599,7 +3624,13 @@ fn spawn_road_waypoint_buildings(
             spawn_foundation_child_sprite_at(commands, sprite, ctx, center, map_width, parent);
         } else {
             spawn_road_stop_building_parent(
-                commands, ctx, base_z, map_width, layer_i, layer, sprite,
+                commands,
+                ctx,
+                base_z,
+                map_width,
+                parent_ordinal.saturating_add(u8::try_from(layer_i).unwrap_or(u8::MAX)),
+                layer,
+                sprite,
             );
         }
     }

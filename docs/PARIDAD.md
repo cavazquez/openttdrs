@@ -1240,6 +1240,23 @@ de catenaria reproducido para esta etapa, así que no se atribuye un cambio a la
 matriz raster. #326 sigue abierto por esas paradas/waypoints, producers
 restantes, clipping, pivotes, children globales y framebuffer.
 
+Actualización #326-ROAD-WAYPOINT-CATENARY-GLOBAL (2026-09-09):
+`DrawTile_Station` emite `DrawRoadCatenary` después del suelo de un road
+waypoint y antes de `DrawRailTileSeq(TO_BUILDINGS)`. El waypoint vanilla sin
+`TileLayout` custom publica por ello sus tres columnas traseras y su frente
+como parents globales, con los prismas literales de `road_cmd.cpp`, base
+efectiva, profundidad fuente y ancla NFO. Los ordinales 4–11 reservan el
+stream completo carretera → tranvía y los dos postes BUILD pasan a 12/13, sin
+colisionar con la foundation. En una pendiente la catenaria sigue siendo un
+parent con la altura nivelada; suelo y postes BUILD conservan su vínculo child
+con la foundation. Las regresiones ECS cubren el waypoint X plano y el
+inclinado, incluidos bounds, ordinales, profundidad fuente y altura efectiva.
+Los waypoints con layout NewGRF y las paradas Bus/Truck siguen locales hasta
+reconciliar sus contratos BUILD; no se les atribuye este arreglo. Kale no
+contiene un foco vial de waypoint/catenaria para medir raster, así que #326
+permanece abierto por esos productores, clipping, pivotes, children globales y
+framebuffer.
+
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
 `y_offs`). El renderer aplica además `SpriteBounds::origin` y

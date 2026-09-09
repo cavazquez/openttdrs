@@ -763,21 +763,19 @@ fn road_stop_vanilla_layers_join_global_sort() {
 }
 
 #[test]
-fn road_waypoint_vanilla_layers_join_global_sort() {
+fn road_waypoint_vanilla_catenary_and_layers_join_global_sort() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);
     let coord = TileCoord::new(1, 1);
-    map.set_tile(
-        coord,
-        Tile {
-            kind: TileKind::Station,
-            mapt: 0x50,
-            m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
-            m6: openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT << 3,
-            ..tile_template()
-        },
-    )
-    .expect("road waypoint X");
+    let mut tile = Tile {
+        kind: TileKind::Station,
+        mapt: 0x50,
+        m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+        m6: openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT << 3,
+        ..tile_template()
+    };
+    tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::TRAM));
+    map.set_tile(coord, tile).expect("road waypoint X");
     let grid = RenderGrid::from_map(&map, 4, 4);
     let mut world = World::new();
     world.insert_resource(TsMap(map));
@@ -817,7 +815,7 @@ fn road_waypoint_vanilla_layers_join_global_sort() {
         .query::<(&ViewportSortableParent, &Transform)>()
         .iter(&world)
         .filter_map(|(parent, transform)| {
-            [6143, 6144]
+            [6071, 6043, 6143, 6144]
                 .contains(&parent.sprite_id)
                 .then_some((*parent, transform.translation.z))
         })
@@ -830,17 +828,37 @@ fn road_waypoint_vanilla_layers_join_global_sort() {
             .collect::<Vec<_>>(),
         vec![
             (
+                6071,
+                ParentSpriteBounds::new(31, 16, 0, 31, 16, 1),
+                viewport_insertion_key(1, 1, 4),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(16, 16, 0, 16, 16, 1),
+                viewport_insertion_key(1, 1, 5),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(16, 31, 0, 16, 31, 1),
+                viewport_insertion_key(1, 1, 6),
+            ),
+            (
+                6043,
+                ParentSpriteBounds::new(16, 16, 2, 31, 31, 2),
+                viewport_insertion_key(1, 1, 7),
+            ),
+            (
                 6143,
                 ParentSpriteBounds::new(16, 16, 0, 31, 18, 15),
-                viewport_insertion_key(1, 1, 2),
+                viewport_insertion_key(1, 1, 12),
             ),
             (
                 6144,
                 ParentSpriteBounds::new(16, 29, 0, 31, 31, 15),
-                viewport_insertion_key(1, 1, 3),
+                viewport_insertion_key(1, 1, 13),
             ),
         ],
-        "cada poste TILE_SEQ_LINE del waypoint debe ser un parent global"
+        "catenaria y postes BUILD del waypoint vanilla comparten el compositor global"
     );
     assert!(
         parents
@@ -933,7 +951,7 @@ fn road_depot_vanilla_layers_join_global_sort() {
 }
 
 #[test]
-fn drive_through_tram_stop_draws_vanilla_catenary_after_stop_layers() {
+fn drive_through_tram_stop_draws_vanilla_catenary() {
     let assets = boot_assets_app();
     let expected_back = assets
         .rail
@@ -1561,22 +1579,21 @@ fn sloped_road_waypoint_levels_ground_and_attaches_surface_to_foundation() {
     ] {
         map.set_height(neighbour, 4).expect("neighbour height");
     }
-    map.set_tile(
-        coord,
-        Tile {
-            kind: TileKind::Station,
-            mapt: 0x50,
-            m3: 0x04, // Roadside::Grass.
-            m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
-            m6: openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT << 3,
-            ..tile_template()
-        },
-    )
-    .expect("sloped road waypoint");
+    let mut tile = Tile {
+        kind: TileKind::Station,
+        mapt: 0x50,
+        m3: 0x04, // Roadside::Grass.
+        m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+        m6: openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT << 3,
+        ..tile_template()
+    };
+    tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::TRAM));
+    map.set_tile(coord, tile).expect("sloped road waypoint");
 
     let grid = RenderGrid::from_map(&map, 3, 3);
     let ctx = TileRenderContext::new(&map, &grid, 1, 1);
     assert_ne!(ctx.info.tileh, 0, "the fixture must remain sloped");
+    let expected_surface_base_z = ctx.info.base_z.saturating_add(1);
     let expected_ground = assets
         .road_flat
         .get(crate::sprites::road_flat_sprite_index(0, 0x0A))
@@ -1633,6 +1650,52 @@ fn sloped_road_waypoint_levels_ground_and_attaches_surface_to_foundation() {
     assert!(
         !foundation_parents.is_empty(),
         "una pendiente de waypoint debe materializar DrawFoundation"
+    );
+    let catenary_z = i32::from(expected_surface_base_z) * 8;
+    let mut catenary: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter_map(|(parent, transform)| {
+            [6071, 6043]
+                .contains(&parent.sprite_id)
+                .then_some((*parent, transform.translation.z))
+        })
+        .collect();
+    catenary.sort_by_key(|(parent, _)| parent.insertion_key);
+    assert_eq!(
+        catenary
+            .iter()
+            .map(|(parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                6071,
+                ParentSpriteBounds::new(31, 16, catenary_z, 31, 16, catenary_z + 1),
+                viewport_insertion_key(1, 1, 4),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(16, 16, catenary_z, 16, 16, catenary_z + 1),
+                viewport_insertion_key(1, 1, 5),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(16, 31, catenary_z, 16, 31, catenary_z + 1),
+                viewport_insertion_key(1, 1, 6),
+            ),
+            (
+                6043,
+                ParentSpriteBounds::new(16, 16, catenary_z + 2, 31, 31, catenary_z + 2),
+                viewport_insertion_key(1, 1, 7),
+            ),
+        ],
+        "la catenaria del waypoint nivelado conserva la superficie efectiva como parent global"
+    );
+    assert!(
+        catenary
+            .iter()
+            .all(|(parent, depth)| parent.source_depth == *depth),
+        "la catenaria inclinada conserva su profundidad fuente antes del sort global"
     );
     let attached_ground = world
         .query::<(&ViewportSortableChild, &Sprite)>()

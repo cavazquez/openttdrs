@@ -15,6 +15,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use serde_json::json;
 
+use crate::iso::{HEIGHT_PX, ISO_HW, ISO_QH};
 use crate::render::viewport::{TileViewportBounds, ortho_visible_tile_bounds};
 #[cfg(test)]
 use crate::render::viewport_sort::depths_in_viewport_sort_order;
@@ -101,6 +102,25 @@ const fn viewport_parent_source_tile(insertion_key: u64) -> Option<(u32, u32)> {
     Some((tx, row - tx))
 }
 
+/// Límite vertical de un edificio que `ViewportAddLandscape` usa al decidir
+/// si una tesela situada debajo del framebuffer aún puede dibujar en él.
+const VIEWPORT_SORT_MAX_BUILDING_HEIGHT_PX: f32 = 200.0;
+
+/// `construction.max_bridge_height` por defecto de OpenTTD. El estado Rust
+/// todavía no expone esa preferencia de construcción, por lo que éste es el
+/// mismo límite conservador que ve un save normal al calcular el alcance del
+/// compositor.
+const VIEWPORT_SORT_MAX_BRIDGE_HEIGHT_LEVELS: f32 = 12.0;
+
+/// Dos columnas/filas adicionales que `ViewportAddLandscape` recorre antes
+/// de decidir la visibilidad concreta de la tesela.
+const VIEWPORT_SORT_EDGE_TILES: i64 = 2;
+
+/// Los bounds de `AddSortableSpriteToDraw` ya expresan el alcance 3D del
+/// parent. No sumar un margen arbitrario evita que el prefetch vuelva a
+/// cambiar los slots visibles.
+const VIEWPORT_SORT_PARENT_SCREEN_MARGIN_PX: i64 = 0;
+
 /// Margen de producers alrededor del rectángulo visual geométrico.
 ///
 /// `ViewportAddLandscape` llega a considerar edificios de hasta 200 px por
@@ -109,13 +129,136 @@ const fn viewport_parent_source_tile(insertion_key: u64) -> Option<(u32, u32)> {
 /// el rectángulo de prefetch de 18 teselas usado sólo para materializar chunks.
 const VIEWPORT_SORT_BUILDING_MARGIN_TILES: u32 = 11;
 
-/// Productores que OpenTTD puede entregar al sorter para la vista actual.
+/// El culling preciso se validó contra el raster nativo hasta `Normal`; al
+/// alejar la cámara se conserva el conjunto AABB ya existente.
+const VIEWPORT_SORT_PRECISE_MAX_ORTHO_SCALE: f32 = 1.0;
+
+#[must_use]
+fn precise_sort_scope_enabled(ortho_scale: f32) -> bool {
+    ortho_scale <= VIEWPORT_SORT_PRECISE_MAX_ORTHO_SCALE
+}
+
+/// Ventana de producers expresada en las coordenadas diagonales que usa
+/// `ViewportAddLandscape`: `row = x + y`, `column = y - x`.
 ///
-/// La representación Bevy mantiene un borde mayor para que el paneo no deje
-/// huecos. Ese borde no forma parte de `ViewportDoDraw`: si se ordena junto
-/// con la vista, un parent lejano puede desplazar el slot de otro que sí se
-/// rasteriza. Este scope recupera el rectángulo de dibujo y deja el margen
-/// suficiente para la altura máxima de edificio de OpenTTD.
+/// Un AABB de `(x, y)` contiene dos triángulos que no proyectan dentro de la
+/// pantalla. Ordenarlos junto con la banda visible modifica el resultado de
+/// `ViewportSortParentSprites`, aunque nunca puedan llegar al framebuffer.
+/// Mantener aquí el rectángulo en `(row, column)` reproduce el barrido del
+/// viewport nativo sin confundirlo con el AABB de prefetch de chunks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DiagonalViewportSortScope {
+    row_min: i64,
+    row_max: i64,
+    column_min: i64,
+    column_max: i64,
+    screen_left: i64,
+    screen_right: i64,
+    screen_bottom: i64,
+    screen_top: i64,
+}
+
+/// Alcances del último pase de sorter.
+///
+/// Se guardan juntos porque ambos describen una misma vista: el AABB conserva
+/// el contrato histórico y la banda diagonal sólo lo refina cuando aplica.
+/// Un único estado evita ejecutar el sort dos veces al cambiar cualquiera de
+/// los dos límites.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ViewportSortScopeState {
+    scope: Option<TileViewportBounds>,
+    precise_scope: Option<DiagonalViewportSortScope>,
+}
+
+impl DiagonalViewportSortScope {
+    fn from_camera(
+        camera_world: Vec2,
+        ortho_scale: f32,
+        window_width: f32,
+        window_height: f32,
+    ) -> Self {
+        let half_width = window_width * 0.5 * ortho_scale;
+        let half_height = window_height * 0.5 * ortho_scale;
+        let left = camera_world.x - half_width;
+        let right = camera_world.x + half_width;
+        // Bevy crece hacia arriba; `ViewportAddLandscape` crece hacia abajo.
+        let top = camera_world.y + half_height;
+        let bottom = camera_world.y - half_height;
+
+        // C++ divide enteros con truncamiento hacia cero. Usar `floor` aquí
+        // ampliaba silenciosamente la banda negativa de columnas y volvía a
+        // introducir producers de los triángulos externos del AABB.
+        let column_min = (left / ISO_HW).trunc() as i64 - VIEWPORT_SORT_EDGE_TILES;
+        let column_max = (right / ISO_HW).trunc() as i64 + VIEWPORT_SORT_EDGE_TILES;
+        let row_min = (-top / ISO_QH).trunc() as i64 - VIEWPORT_SORT_EDGE_TILES;
+
+        // `min_visible_height < MAX_TILE_EXTENT_TOP + bridge_height`: una
+        // tesela al sur de la pantalla puede aportar un edificio alto o la
+        // cubierta de un puente. El margen sólo crece en esa dirección; no
+        // debe ensanchar ambas coordenadas como hacía el antiguo AABB.
+        let lower_overhang = VIEWPORT_SORT_MAX_BUILDING_HEIGHT_PX
+            + VIEWPORT_SORT_MAX_BRIDGE_HEIGHT_LEVELS * HEIGHT_PX;
+        let row_max = ((-bottom + lower_overhang) / ISO_QH).ceil() as i64 - 1;
+
+        Self {
+            row_min,
+            row_max,
+            column_min,
+            column_max,
+            // Las cajas del sorter se expresan en píxeles enteros de mundo.
+            // Redondear hacia fuera evita descartar un parent por una fracción
+            // de pixel mientras la cámara se mueve.
+            screen_left: left.floor() as i64,
+            screen_right: right.ceil() as i64,
+            screen_bottom: bottom.floor() as i64,
+            screen_top: top.ceil() as i64,
+        }
+    }
+
+    #[must_use]
+    fn contains_source_tile(self, tx: u32, ty: u32) -> bool {
+        let tx = i64::from(tx);
+        let ty = i64::from(ty);
+        let row = tx + ty;
+        let column = ty - tx;
+        self.row_min <= row
+            && row <= self.row_max
+            && self.column_min <= column
+            && column <= self.column_max
+    }
+
+    /// El sort nativo sólo recibe un parent si el draw-proc de su tesela lo
+    /// entrega al viewport. La banda diagonal recupera ese recorrido, pero el
+    /// renderer retiene chunks de prefetch con producers cuya caja 3D ya no
+    /// puede alcanzar el framebuffer. Dejarlos en la lista reasigna slots de
+    /// profundidad a sprites visibles aunque OpenTTD nunca los rasterice.
+    ///
+    /// Las fórmulas son `RemapCoords` en la escala del cliente Rust:
+    /// `x = 2 * (y - x)`, `y = -x - y + z`. Los límites se normalizan porque
+    /// OpenTTD admite extents cero (`max < min`) en `ParentSpriteBounds`.
+    #[must_use]
+    fn parent_bounds_reach_viewport(self, bounds: ParentSpriteBounds) -> bool {
+        let xmin = i64::from(bounds.xmin.min(bounds.xmax));
+        let xmax = i64::from(bounds.xmin.max(bounds.xmax));
+        let ymin = i64::from(bounds.ymin.min(bounds.ymax));
+        let ymax = i64::from(bounds.ymin.max(bounds.ymax));
+        let zmin = i64::from(bounds.zmin.min(bounds.zmax));
+        let zmax = i64::from(bounds.zmin.max(bounds.zmax));
+
+        let projected_left = 2 * (ymin - xmax);
+        let projected_right = 2 * (ymax - xmin);
+        let projected_bottom = -xmax - ymax + zmin;
+        let projected_top = -xmin - ymin + zmax;
+        let margin = VIEWPORT_SORT_PARENT_SCREEN_MARGIN_PX;
+
+        projected_right >= self.screen_left - margin
+            && projected_left <= self.screen_right + margin
+            && projected_top >= self.screen_bottom - margin
+            && projected_bottom <= self.screen_top + margin
+    }
+}
+
+/// Productores que OpenTTD puede entregar al sorter para la vista actual.
 fn viewport_sort_scope(
     sim: Option<&SimWorld>,
     windows: &Query<&Window, With<PrimaryWindow>>,
@@ -128,6 +271,9 @@ fn viewport_sort_scope(
         ),
     >,
 ) -> Option<TileViewportBounds> {
+    // Sin mundo simulado el sorter puro conserva el stream completo. La
+    // existencia del recurso, no sus dimensiones, es el contrato del pase de
+    // mundo activo.
     let sim = sim?;
     let Ok((transform, projection)) = cameras.single() else {
         return None;
@@ -152,9 +298,47 @@ fn viewport_sort_scope(
     ))
 }
 
+/// Refina el AABB histórico sólo en los zooms donde el raster verificó el
+/// alcance diagonal de `ViewportAddLandscape`.
+fn viewport_precise_sort_scope(
+    sim: Option<&SimWorld>,
+    windows: &Query<&Window, With<PrimaryWindow>>,
+    cameras: &Query<
+        (&Transform, &Projection),
+        (
+            With<PrimaryGameCamera>,
+            Without<MapPreviewCamera>,
+            Without<ViewportSortableParent>,
+        ),
+    >,
+) -> Option<DiagonalViewportSortScope> {
+    sim?;
+    let Ok((transform, projection)) = cameras.single() else {
+        return None;
+    };
+    let Projection::Orthographic(orthographic) = projection else {
+        return None;
+    };
+    if !precise_sort_scope_enabled(orthographic.scale) {
+        return None;
+    }
+    let (width, height) = windows
+        .iter()
+        .next()
+        .map(|window| (window.width(), window.height()))
+        .unwrap_or((1280.0, 720.0));
+    Some(DiagonalViewportSortScope::from_camera(
+        transform.translation.truncate(),
+        orthographic.scale,
+        width,
+        height,
+    ))
+}
+
 fn parent_is_in_viewport_sort_scope(
     parent: &ViewportSortableParent,
     scope: Option<TileViewportBounds>,
+    precise_scope: Option<DiagonalViewportSortScope>,
 ) -> bool {
     let Some(scope) = scope else {
         // Las pruebas del sorter puro y los contextos sin cámara continúan
@@ -162,9 +346,18 @@ fn parent_is_in_viewport_sort_scope(
         // recibe explícitamente todos los producers.
         return true;
     };
-    viewport_parent_source_tile(parent.insertion_key).is_some_and(|(tx, ty)| {
-        scope.tx0 <= tx && tx < scope.tx1 && scope.ty0 <= ty && ty < scope.ty1
-    })
+    let Some((tx, ty)) = viewport_parent_source_tile(parent.insertion_key) else {
+        return false;
+    };
+    if !(scope.tx0 <= tx && tx < scope.tx1 && scope.ty0 <= ty && ty < scope.ty1) {
+        return false;
+    }
+    let Some(precise_scope) = precise_scope else {
+        return true;
+    };
+    precise_scope.contains_source_tile(tx, ty)
+        && (parent.sprite_id == EMPTY_BOUNDING_BOX_SPRITE_ID
+            || precise_scope.parent_bounds_reach_viewport(parent.bounds))
 }
 
 /// Micro-slot estable dentro de una fila diagonal.
@@ -194,6 +387,7 @@ fn export_viewport_sort_trace(
     order: &[usize],
     sorted_depths: &[f32],
     scope: Option<TileViewportBounds>,
+    precise_scope: Option<DiagonalViewportSortScope>,
 ) {
     let Some(path) = std::env::var_os("OPENTTDRS_VIEWPORT_SORT_TRACE_OUT") else {
         return;
@@ -233,6 +427,12 @@ fn export_viewport_sort_trace(
             "ty0": scope.ty0,
             "tx1": scope.tx1,
             "ty1": scope.ty1,
+        })),
+        "precise_scope": precise_scope.map(|scope| json!({
+            "row_min": scope.row_min,
+            "row_max": scope.row_max,
+            "column_min": scope.column_min,
+            "column_max": scope.column_max,
         })),
         "parents_before_sort": input.len(),
         "parents": parents,
@@ -274,11 +474,16 @@ pub(crate) fn sort_viewport_sortable_parents(
             Without<ViewportSortableParent>,
         ),
     >,
-    mut previous_scope: Local<Option<Option<TileViewportBounds>>>,
+    mut previous_scope: Local<Option<ViewportSortScopeState>>,
 ) {
     let scope = viewport_sort_scope(sim.as_deref(), &windows, &cameras);
-    let scope_changed = previous_scope.as_ref() != Some(&scope);
-    *previous_scope = Some(scope);
+    let precise_scope = viewport_precise_sort_scope(sim.as_deref(), &windows, &cameras);
+    let scope_state = ViewportSortScopeState {
+        scope,
+        precise_scope,
+    };
+    let scope_changed = previous_scope.as_ref() != Some(&scope_state);
+    *previous_scope = Some(scope_state);
 
     let mut needs_sort = scope_changed || removed.read().next().is_some();
     let mut input = Vec::new();
@@ -287,7 +492,7 @@ pub(crate) fn sort_viewport_sortable_parents(
             || parent.is_changed()
             || visibility.as_ref().is_some_and(DetectChanges::is_changed);
         if visibility.is_some_and(|visibility| *visibility == Visibility::Hidden)
-            || !parent_is_in_viewport_sort_scope(&parent, scope)
+            || !parent_is_in_viewport_sort_scope(&parent, scope, precise_scope)
         {
             continue;
         }
@@ -330,7 +535,7 @@ pub(crate) fn sort_viewport_sortable_parents(
         .collect();
     let order = viewport_sort_parent_sprites(&sprite_parents);
     let sorted_depths = depths_in_viewport_sort_order_from_order(&order, &source_depths);
-    export_viewport_sort_trace(&input, &order, &sorted_depths, scope);
+    export_viewport_sort_trace(&input, &order, &sorted_depths, scope, precise_scope);
 
     // En el stream final, cada parent reserva el espacio hasta el siguiente.
     // El último no tiene techo y conserva el delta histórico de sus children.
@@ -493,6 +698,59 @@ mod tests {
     }
 
     #[test]
+    fn viewport_scope_follows_the_native_diagonal_draw_band() {
+        assert!(precise_sort_scope_enabled(0.25));
+        assert!(precise_sort_scope_enabled(1.0));
+        assert!(
+            !precise_sort_scope_enabled(2.0),
+            "Out2x conserva el conjunto AABB validado"
+        );
+
+        // Centro de la captura Kale (189,126) sobre terreno plano, a 384×320
+        // y escala 1. El alcance no es el cuadrado x=181..197,
+        // y=118..134: OpenTTD recorre el rectángulo equivalente en
+        // row/column, dejando fuera sus dos triángulos.
+        let scope = DiagonalViewportSortScope::from_camera(
+            Vec2::new(-2_016.0, -5_040.0),
+            1.0,
+            384.0,
+            320.0,
+        );
+        assert_eq!(
+            scope,
+            DiagonalViewportSortScope {
+                row_min: 303,
+                row_max: 343,
+                column_min: -71,
+                column_max: -55,
+                screen_left: -2_208,
+                screen_right: -1_824,
+                screen_bottom: -5_200,
+                screen_top: -4_880,
+            }
+        );
+
+        assert!(scope.contains_source_tile(189, 126));
+        assert!(scope.contains_source_tile(200, 143)); // edificio/puente alto al borde sur.
+        assert!(
+            !scope.contains_source_tile(181, 134),
+            "la esquina del AABB no llega al framebuffer"
+        );
+        assert!(
+            !scope.contains_source_tile(201, 143),
+            "no ampliar indefinidamente la banda sur"
+        );
+
+        let visible = ParentSpriteBounds::new(3_024, 2_016, 8, 3_039, 2_031, 47);
+        assert!(scope.parent_bounds_reach_viewport(visible));
+        let distant_south = ParentSpriteBounds::new(3_360, 2_128, 8, 3_375, 2_143, 23);
+        assert!(
+            !scope.parent_bounds_reach_viewport(distant_south),
+            "un producer retenido bajo el viewport no debe alterar slots visibles"
+        );
+    }
+
+    #[test]
     #[allow(clippy::unwrap_used)] // Fixtures creados arriba dentro del mismo World.
     fn runtime_sort_moves_parent_and_screen_child_together() {
         let mut world = World::new();
@@ -584,7 +842,7 @@ mod tests {
             .spawn((
                 ViewportSortableParent {
                     sprite_id: 1422,
-                    bounds: ParentSpriteBounds::new(16, 16, 0, 30, 30, 60),
+                    bounds: ParentSpriteBounds::new(1_616, 1_616, 0, 1_630, 1_630, 60),
                     insertion_key: viewport_insertion_key(100, 100, 0),
                     source_depth: 2.0,
                 },
@@ -595,7 +853,7 @@ mod tests {
             .spawn((
                 ViewportSortableParent {
                     sprite_id: 1423,
-                    bounds: ParentSpriteBounds::new(0, 0, 0, 20, 20, 60),
+                    bounds: ParentSpriteBounds::new(1_616, 1_600, 0, 1_636, 1_620, 60),
                     insertion_key: viewport_insertion_key(101, 100, 0),
                     source_depth: 2.000_5,
                 },

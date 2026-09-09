@@ -1784,12 +1784,13 @@ pub(crate) fn spawn_industry_tile_with_world(
                 };
                 sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
                 let mut pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
-                // Esta ruta sólo ve buildings vanilla planos estáticos: los
-                // animados reconstruyen su parent por frame en
-                // `IndustryBuildingAnim`; fundaciones y layouts complejos
-                // continúan en su ruta local hasta tener parent/children.
-                let sortable_parent = if !leveled && !client_anim && !refinery_fire && !fizzy_drink
-                {
+                // Los frames de paleta sólo reemplazan píxeles del mismo PNG:
+                // conservan ancla y prisma `M(...)`, por lo que siguen siendo
+                // parents globales. Sólo `anim_state` puede cambiar de fila y
+                // reconstruye su parent en `IndustryBuildingAnim`; las
+                // fundaciones y layouts complejos continúan en su ruta local
+                // hasta tener parent/children completos.
+                let sortable_parent = if !leveled && !client_anim {
                     let source_depth = viewport_source_depth(pos3.z, ctx.tx, map_width);
                     pos3.z = source_depth;
                     Some(ViewportSortableParent {

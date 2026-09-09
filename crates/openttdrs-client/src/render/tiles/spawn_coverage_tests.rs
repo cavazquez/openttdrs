@@ -5351,6 +5351,82 @@ fn copper_mine_chimney_spawns_animated_smoke() {
 }
 
 #[test]
+fn palette_animated_refinery_building_joins_global_sorter() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let coord = TileCoord::new(2, 2);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Industry,
+            mapt: 0x80,
+            // GFX_OIL_REFINERY_TOWER: cambia la paleta de su llama, no su
+            // sprite lógico ni el prisma M() de DrawTile_Industry.
+            m5: 19,
+            m1: 0x80,
+            ..tile_template()
+        },
+    )
+    .expect("refinery tile");
+    let expected =
+        crate::sprites::industry_gfx_entry_for_tile(19, 0x80, 0).expect("refinery entry");
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands,
+             m: Res<TsMap>,
+             g: Res<TsGrid>,
+             a: Res<TsAssets>,
+             mut company: Local<CompanyColoredSprites>,
+             mut images: Local<Assets<Image>>| {
+                spawn_industry_tile(
+                    &mut commands,
+                    &a.0,
+                    &m.0,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                    &[],
+                    &mut company,
+                    &mut images,
+                    &[],
+                    &openttdrs_core::empty_industry_tile_overrides(),
+                    None,
+                    &[],
+                    None,
+                    &[],
+                );
+            },
+        )
+        .expect("refinery spawn");
+
+    let mut refinery = world
+        .query_filtered::<
+            (&crate::render::RefineryFireAnim, &ViewportSortableParent),
+            With<crate::render::RefineryFireAnim>,
+        >();
+    let (fire, parent) = refinery.single(&world).expect("torre de fuego");
+    assert_eq!(fire.sprite_id, expected.sprite_id);
+    assert_eq!(parent.sprite_id, expected.sprite_id);
+    assert_eq!(parent.insertion_key, viewport_insertion_key(2, 2, 2));
+    assert_eq!(
+        parent.bounds,
+        ParentSpriteBounds::new(
+            32 + expected.sort_ox,
+            32 + expected.sort_oy,
+            expected.sort_oz,
+            32 + expected.sort_ox + expected.sort_ex - 1,
+            32 + expected.sort_oy + expected.sort_ey - 1,
+            expected.sort_oz + expected.sort_ez - 1,
+        )
+    );
+}
+
+#[test]
 fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

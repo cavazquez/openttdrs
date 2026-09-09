@@ -74,6 +74,17 @@ fn tint_building_sprite(mut sprite: Sprite) -> Sprite {
     sprite
 }
 
+/// Equivalente visual de `PALETTE_TO_TRANSPARENT` para el vidrio de techo
+/// vanilla. OpenTTD transforma el destino mediante una tabla 8bpp; Bevy
+/// compone alpha lineal. El 0,50 se calibró contra la captura limpia OpenGFX
+/// 8bpp de Kale, donde el anterior 0,28 dejaba sistemáticamente el techo más
+/// claro que el oráculo.
+const RAIL_STATION_ROOF_GLASS_MASK_ALPHA: f32 = 0.50;
+
+fn rail_station_roof_glass_mask_color() -> Color {
+    Color::srgba(0.0, 0.0, 0.0, RAIL_STATION_ROOF_GLASS_MASK_ALPHA)
+}
+
 /// Dibuja una vista `RTSG_TUNNEL` como `DrawGroundSprite`, conservando el
 /// ancla NFO de la vista Action1/2 en lugar de imponer el rombo 64×31 del
 /// baseset. El portal vanilla sigue siendo la base hasta que el grupo
@@ -2013,7 +2024,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         // OpenTTD: `PALETTE_TO_TRANSPARENT` oscurece el destino (máscara),
                         // no pinta el blob CC amarillo del PNG como vidrio tintado.
                         use crate::sprites::with_to_alpha;
-                        let mut s = img.sprite_colored(Color::srgba(0.0, 0.0, 0.0, 0.28));
+                        let mut s = img.sprite_colored(rail_station_roof_glass_mask_color());
                         s.color = with_to_alpha(s.color, TransparencyOption::Buildings);
                         s
                     } else {
@@ -5756,15 +5767,15 @@ fn spawn_rail_depot_tile(
 
 #[cfg(test)]
 mod tests {
-    use bevy::prelude::Vec2;
+    use bevy::prelude::{Color, Vec2};
 
     use super::{
         airport_station_ground_layer_trace_offset, buoy_trace_bounds, dock_clear_land_sprite_id,
         dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
         rail_depot_build_parent_sprites, rail_depot_catenary_parent_sprite,
         rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
-        road_depot_foundation_child_offset, road_depot_parent_sprites,
-        road_stop_foundation_child_offset, road_stop_parent_sprites,
+        rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
+        road_depot_parent_sprites, road_stop_foundation_child_offset, road_stop_parent_sprites,
         station_catenary_pylon_parent_sprite, station_catenary_wire_parent_sprite,
         station_catenary_wire_trace_geometry, station_rail_child_offset,
         station_rail_foundation_world_z_delta, station_rail_layer_parent_sprite,
@@ -5778,6 +5789,14 @@ mod tests {
         airport_station_ground_layers_for_gfx, rail_depot_build_layers, rail_station_draw_layers,
         road_depot_build_layers, road_stop_drive_through_layers,
     };
+
+    #[test]
+    fn rail_station_roof_glass_mask_matches_palette_transparent_calibration() {
+        assert_eq!(
+            rail_station_roof_glass_mask_color(),
+            Color::srgba(0.0, 0.0, 0.0, 0.50)
+        );
+    }
 
     #[test]
     fn newgrf_road_stop_child_uses_signed_screen_offsets() {

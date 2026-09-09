@@ -31,7 +31,10 @@ use crate::render::{
     AirportStationAnim, CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid,
     TileRenderContext, ViewportSortableChild, ViewportSortableParent, viewport_insertion_key,
 };
-use crate::sprites::{RAIL_TB_X, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS};
+use crate::sprites::{
+    RAIL_TB_X, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, industry_building_needs_client_anim,
+    industry_gfx_entry_for_tile,
+};
 
 #[derive(Resource)]
 struct TsMap(Map);
@@ -4422,6 +4425,14 @@ fn spawn_industry_on_slope_spawns_foundation_layer() {
     let grid = RenderGrid::from_map(&map, 4, 4);
     let ctx = TileRenderContext::new(&map, &grid, 1, 1);
     assert_ne!(ctx.info.tileh, 0);
+    let entry = industry_gfx_entry_for_tile(11, 0x80, 0).expect("industria vanilla terminada");
+    assert!(
+        !industry_building_needs_client_anim(11, 0x80),
+        "la fixture verifica la ruta estática"
+    );
+    let plan =
+        openttdrs_core::foundation_draw_plan(ctx.info.tileh, openttdrs_core::FOUNDATION_LEVELED, 0);
+    let surface_z = ctx.info.base_z.saturating_add(plan.surface_z_delta);
 
     let mut world = World::new();
     world.insert_resource(TsMap(map));
@@ -4455,6 +4466,158 @@ fn spawn_industry_on_slope_spawns_foundation_layer() {
             },
         )
         .expect("industry slope");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    assert!(
+        !foundation_parents.is_empty(),
+        "DrawFoundation debe crear el parent del muro"
+    );
+    let (building_entity, building_parent) = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .find_map(|(entity, parent)| {
+            (parent.sprite_id == entry.sprite_id).then_some((entity, *parent))
+        })
+        .expect("el edificio debe entrar como parent sortable propio");
+    assert_eq!(
+        building_parent.bounds,
+        ParentSpriteBounds::new(
+            16 + entry.sort_ox,
+            16 + entry.sort_oy,
+            i32::from(surface_z) * 8 + entry.sort_oz,
+            16 + entry.sort_ox + entry.sort_ex - 1,
+            16 + entry.sort_oy + entry.sort_ey - 1,
+            i32::from(surface_z) * 8 + entry.sort_oz + entry.sort_ez - 1,
+        ),
+        "el prisma M() debe usar ti->z después de DrawFoundation"
+    );
+
+    let foundation_children: Vec<_> = world
+        .query::<&ViewportSortableChild>()
+        .iter(&world)
+        .filter(|child| foundation_parents.contains(&child.parent))
+        .collect();
+    assert_eq!(
+        foundation_children.len(),
+        1,
+        "el suelo vanilla debe colgar del último parent de la fundación"
+    );
+    assert!(
+        foundation_children
+            .iter()
+            .all(|child| child.parent != building_entity),
+        "el suelo no puede confundirse con los children del edificio"
+    );
+}
+
+#[test]
+fn sloped_industry_draw_proc_layers_follow_the_building_not_foundation() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    map.set_height(c(1, 1), 7).expect("h");
+    for (x, y) in [(0, 0), (2, 0), (0, 2), (2, 2)] {
+        map.set_height(c(x, y), 4).expect("h");
+    }
+    map.set_tile(
+        c(1, 1),
+        Tile {
+            kind: TileKind::Industry,
+            mapt: 0x80,
+            // Toy Factory: combina suelo propio, edificio sortable y los
+            // cuatro slots dinámicos de `IndustryDrawToyFactory`.
+            m5: 143,
+            m1: 0x80,
+            ..tile_template()
+        },
+    )
+    .expect("toy factory slope");
+    let building = industry_gfx_entry_for_tile(143, 0x80, 0).expect("toy factory entry");
+    let proc = crate::sprites::industry_draw_proc_for_tile(143, 0x80);
+    let expected_slots = usize::from(crate::sprites::industry_draw_proc_layer_slot_count(proc));
+    assert_eq!(proc, 4, "toy factory uses IndustryDrawToyFactory");
+    assert!(expected_slots > 0, "el draw proc debe materializar slots");
+
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands,
+             m: Res<TsMap>,
+             g: Res<TsGrid>,
+             a: Res<TsAssets>,
+             mut company: Local<CompanyColoredSprites>,
+             mut images: Local<Assets<Image>>| {
+                spawn_industry_tile(
+                    &mut commands,
+                    &a.0,
+                    &m.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    &[],
+                    &mut company,
+                    &mut images,
+                    &[],
+                    &openttdrs_core::empty_industry_tile_overrides(),
+                    None,
+                    &[],
+                    None,
+                    &[],
+                );
+            },
+        )
+        .expect("toy factory slope spawn");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    let building_parent = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .find_map(|(entity, parent)| (parent.sprite_id == building.sprite_id).then_some(entity))
+        .expect("toy factory building parent on slope");
+    assert!(
+        !foundation_parents.contains(&building_parent),
+        "el edificio debe ser un parent distinto del muro de fundación"
+    );
+
+    let children: Vec<_> = world
+        .query::<&ViewportSortableChild>()
+        .iter(&world)
+        .collect();
+    assert_eq!(
+        children
+            .iter()
+            .filter(|child| foundation_parents.contains(&child.parent))
+            .count(),
+        1,
+        "DrawGroundSprite queda bajo la fundación"
+    );
+    assert_eq!(
+        children
+            .iter()
+            .filter(|child| child.parent == building_parent)
+            .count(),
+        expected_slots,
+        "los AddChildSpriteScreen de draw_proc quedan bajo el edificio"
+    );
 }
 
 #[test]

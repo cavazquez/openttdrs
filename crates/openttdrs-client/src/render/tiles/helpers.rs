@@ -1071,19 +1071,21 @@ pub(crate) fn spawn_foundation_child_sprite_at(
     mut position: Vec3,
     map_width: u32,
     parent: Entity,
-) {
+) -> Entity {
     let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
     position.z = source_depth;
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        sprite,
-        Transform::from_translation(position),
-        ViewportSortableChild {
-            parent,
-            source_depth,
-        },
-    ));
+    commands
+        .spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+            ViewportSortableChild {
+                parent,
+                source_depth,
+            },
+        ))
+        .id()
 }
 
 pub(crate) fn push_water_sprite(

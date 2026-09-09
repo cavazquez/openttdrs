@@ -467,16 +467,17 @@ fn newgrf_house_parent_bounds(
 /// Bounds inclusivos del parent vanilla de `DrawTile_Industry`.
 ///
 /// La tabla generada preserva el `M(dx, dy, sx, sy, sz)` de
-/// `industry_land.h`. Sólo se usa en la ruta plana y estática: una industria
-/// inclinada todavía tiene un cimiento legacy sin parent común y los layouts
-/// NewGRF/animados necesitan actualizar su propia caja antes de participar.
+/// `industry_land.h`. `DrawFoundation` modifica `ti->z` antes de emitir el
+/// edificio, por lo que `surface_base_z` puede diferir de la altura cruda de
+/// la tesela en una pendiente.
 fn industry_building_parent_bounds(
     ctx: &TileRenderContext,
     spec: &crate::sprites::IndustryGfxSprite,
+    surface_base_z: u8,
 ) -> ParentSpriteBounds {
     let x = ctx.tx_i32() * 16 + spec.sort_ox;
     let y = ctx.ty_i32() * 16 + spec.sort_oy;
-    let z = i32::from(ctx.info.base_z) * 8 + spec.sort_oz;
+    let z = i32::from(surface_base_z) * 8 + spec.sort_oz;
     ParentSpriteBounds::new(
         x,
         y,
@@ -1673,9 +1674,10 @@ pub(crate) fn spawn_industry_tile_with_world(
         }
     }
     // Los `draw_proc` vanilla se agregan después del edificio mediante
-    // `AddChildSpriteScreen`. Sólo una base plana estática ya tiene aquí un
-    // parent global estable; la rama inclinada sigue siendo hija de su
-    // fundación y se integra en una etapa aparte.
+    // `AddChildSpriteScreen`. `DrawFoundation` mantiene el suelo como hijo
+    // de su último parent, pero el edificio posterior abre un parent sortable
+    // independiente a la altura de la superficie ya nivelada. Los draw procs
+    // cuelgan de ese edificio, no de la fundación.
     let mut draw_proc_parent = None;
     if let Some(s) = entry {
         // La tabla copia tanto las capas como la caja de `M()` de
@@ -1741,16 +1743,29 @@ pub(crate) fn spawn_industry_tile_with_world(
                 };
                 sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
                 let pos_g = overlay_at(s.ground_xrel, s.ground_yrel, s.ground_w, s.ground_h, 0.45);
-                let mut entity = commands.spawn((
-                    MapVisualLayer,
-                    chunk,
-                    sprite,
-                    Transform::from_translation(pos_g),
-                ));
+                let entity_id = if let Some(parent) = foundation.child_parent {
+                    // `DrawGroundSprite` ocurre después de `DrawFoundation`.
+                    // El viewport nativo lo suma como `AddChildSpriteScreen`
+                    // al último muro del cimiento, no como un parent nuevo.
+                    spawn_foundation_child_sprite_at(
+                        commands, sprite, ctx, pos_g, map_width, parent,
+                    )
+                } else {
+                    commands
+                        .spawn((
+                            MapVisualLayer,
+                            chunk,
+                            sprite,
+                            Transform::from_translation(pos_g),
+                        ))
+                        .id()
+                };
                 if ground_fire {
-                    entity.insert(crate::render::RefineryFireAnim {
-                        sprite_id: s.ground_sprite_id,
-                    });
+                    commands
+                        .entity(entity_id)
+                        .insert(crate::render::RefineryFireAnim {
+                            sprite_id: s.ground_sprite_id,
+                        });
                 }
             }
         }
@@ -1792,15 +1807,15 @@ pub(crate) fn spawn_industry_tile_with_world(
                 // Los frames de paleta sólo reemplazan píxeles del mismo PNG:
                 // conservan ancla y prisma `M(...)`, por lo que siguen siendo
                 // parents globales. Sólo `anim_state` puede cambiar de fila y
-                // reconstruye su parent en `IndustryBuildingAnim`; las
-                // fundaciones y layouts complejos continúan en su ruta local
-                // hasta tener parent/children completos.
-                let sortable_parent = if !leveled && !client_anim {
+                // reconstruye su parent en `IndustryBuildingAnim`. Una
+                // fundación ya ajustó `ti->z`, pero no reemplaza al parent
+                // propio que `AddSortableSpriteToDraw` crea para el edificio.
+                let sortable_parent = if !client_anim {
                     let source_depth = viewport_source_depth(pos3.z, ctx.tx, map_width);
                     pos3.z = source_depth;
                     Some(ViewportSortableParent {
                         sprite_id: s.sprite_id,
-                        bounds: industry_building_parent_bounds(ctx, s),
+                        bounds: industry_building_parent_bounds(ctx, s, foundation.surface_base_z),
                         insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 2),
                         source_depth,
                     })
@@ -3407,7 +3422,7 @@ mod tests {
             None => panic!("la tabla vanilla debe contener la fábrica 2119"),
         };
         assert_eq!(
-            industry_building_parent_bounds(&industry_ctx_at(186, 1, 1), spec),
+            industry_building_parent_bounds(&industry_ctx_at(186, 1, 1), spec, 1),
             ParentSpriteBounds::new(2976, 16, 8, 2991, 31, 27)
         );
     }

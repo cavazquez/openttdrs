@@ -773,12 +773,20 @@ fn window_node_position(node: &Node) -> Vec2 {
     )
 }
 
-/// `WDP_AUTO` de OpenTTD se resuelve al abrir la ventana; el resto de
-/// placements conserva la semántica explícita de su descriptor.
+/// Los paneles flotantes se colocan al abrirse en un hueco libre.
+///
+/// La geometría de referencia conserva `WDP_CENTER` para reproducir el
+/// descriptor upstream en las capturas, pero en la UI viva esos settings son
+/// paneles independientes y no deben apilarse todos en el centro. Sólo los
+/// diálogos que bloquean la interacción permanecen centrados.
 #[must_use]
 fn uses_automatic_window_placement(id: FloatingWindowId) -> bool {
-    reference_geometry_primary(id)
-        .is_none_or(|geometry| geometry.placement == ReferencePlacement::Auto)
+    !matches!(
+        id,
+        FloatingWindowId::QueryString
+            | FloatingWindowId::ErrorDialog
+            | FloatingWindowId::OnScreenKeyboard
+    )
 }
 
 #[must_use]
@@ -896,11 +904,10 @@ fn auto_place_window(size: Vec2, viewport: Vec2, occupied: &[WindowPlacementRect
     clamp_window_position(position, size, viewport)
 }
 
-/// Aplica `WDP_AUTO` al pasar de oculta a visible.
+/// Coloca todo panel no modal al pasar de oculto a visible.
 ///
 /// Las posiciones guardadas son una elección explícita del usuario y siempre
-/// tienen prioridad. Los cuadros de diálogo y settings `WDP_CENTER` tampoco
-/// se mueven: que aparezcan centrados es parte de su contrato modal.
+/// tienen prioridad. Los cuadros de diálogo modales permanecen centrados.
 fn place_newly_visible_floating_windows(
     primary: Query<&Window, With<PrimaryWindow>>,
     prefs: Option<Res<ClientPreferences>>,
@@ -1016,7 +1023,14 @@ pub(crate) fn spawn_floating_window_keyed(
         .and_then(|geometry| geometry.width)
         .map_or(width, f32::from);
     let height = geo.and_then(|geometry| geometry.height).map(f32::from);
-    let placement = geo.map_or(ReferencePlacement::Auto, |geometry| geometry.placement);
+    // Evita incluso un frame inicial superpuesto: los paneles no modales usan
+    // su posición de fallback hasta que el buscador de huecos los coloca al
+    // hacerse visibles. Los diálogos conservan `WDP_CENTER`.
+    let placement = if uses_automatic_window_placement(id) {
+        ReferencePlacement::Auto
+    } else {
+        geo.map_or(ReferencePlacement::Auto, |geometry| geometry.placement)
+    };
     let size_for_place = Vec2::new(width, height.unwrap_or(MIN_WINDOW_HEIGHT));
     let pos = place_window(placement, size_for_place, DEFAULT_LAYOUT_VIEWPORT, pos);
     let mut root_node = Node {
@@ -1777,14 +1791,31 @@ mod tests {
     }
 
     #[test]
-    fn auto_placement_keeps_centered_dialog_contracts() {
+    fn auto_placement_cascades_non_modal_center_referenced_panels() {
         assert!(uses_automatic_window_placement(FloatingWindowId::Vehicle));
         assert!(uses_automatic_window_placement(
             FloatingWindowId::TownDirectory
         ));
-        assert!(!uses_automatic_window_placement(FloatingWindowId::NewGrf));
+        for id in [
+            FloatingWindowId::NewGrf,
+            FloatingWindowId::NewsSettings,
+            FloatingWindowId::PathfindingSettings,
+            FloatingWindowId::CargoDistSettings,
+            FloatingWindowId::AiSettings,
+            FloatingWindowId::DisplayOptions,
+            FloatingWindowId::Help,
+            FloatingWindowId::GenLand,
+        ] {
+            assert!(uses_automatic_window_placement(id), "{id:?}");
+        }
+        assert!(!uses_automatic_window_placement(
+            FloatingWindowId::QueryString
+        ));
         assert!(!uses_automatic_window_placement(
             FloatingWindowId::ErrorDialog
+        ));
+        assert!(!uses_automatic_window_placement(
+            FloatingWindowId::OnScreenKeyboard
         ));
     }
 
@@ -1827,7 +1858,7 @@ mod tests {
     }
 
     #[test]
-    fn auto_placement_runs_once_per_opening_and_preserves_manual_drag() {
+    fn auto_placement_moves_center_referenced_panels_and_preserves_manual_drag() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             .insert_resource(ClientPreferences::default())
@@ -1859,14 +1890,16 @@ mod tests {
             .world_mut()
             .spawn((
                 FloatingWindow {
-                    id: FloatingWindowId::Vehicle,
-                    key: WindowKey::singleton(FloatingWindowId::Vehicle),
+                    // NewGRF has WDP_CENTER upstream, but is an independent
+                    // settings panel in the live UI and must not stack there.
+                    id: FloatingWindowId::NewGrf,
+                    key: WindowKey::singleton(FloatingWindowId::NewGrf),
                 },
                 FloatingWindowPlacementState::default(),
                 Node {
                     position_type: PositionType::Absolute,
-                    left: Val::Px(600.0),
-                    top: Val::Px(300.0),
+                    left: Val::Px(490.0),
+                    top: Val::Px(228.0),
                     width: Val::Px(200.0),
                     height: Val::Px(100.0),
                     ..default()

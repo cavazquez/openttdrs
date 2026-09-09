@@ -1002,10 +1002,19 @@ fn make_river_tile(map: &mut Map, coord: TileCoord, rng: &mut Randomizer) -> Res
     tile.m3hi = rng.next() as u8;
     map.set_tile(coord, tile)?;
 
-    // `MakeRiverAndModifyDesertZoneAround` removes desert directly around
-    // every river tile. This mutation is observable before the next spring
-    // search, so it must happen in the same helper rather than only when a
-    // lake or wetland is created.
+    clear_desert_zone_around_river(map, coord)
+}
+
+/// `MakeRiverAndModifyDesertZoneAround`: normaliza `TropicZone` en el
+/// espiral de diámetro cinco alrededor de un río sin reinterpretar el payload
+/// del tipo de tesela.
+///
+/// La mutación se comparte con el comando de río del editor: `OpenTTD` cambia
+/// los dos bits bajos de `MAPT`, aun en teselas que no son `MP_CLEAR`.
+pub(crate) fn clear_desert_zone_around_river(
+    map: &mut Map,
+    coord: TileCoord,
+) -> Result<(), MapError> {
     for nearby in spiral_tiles(coord, 5, map) {
         let Some(mut nearby_tile) = map.get(nearby) else {
             continue;

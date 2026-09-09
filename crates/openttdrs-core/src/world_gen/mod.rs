@@ -18,6 +18,7 @@ pub(crate) use landcover::desert_patch;
 mod objects;
 mod population;
 mod rivers;
+pub(crate) use rivers::clear_desert_zone_around_river;
 mod tgp;
 mod tile_loop;
 mod trees;

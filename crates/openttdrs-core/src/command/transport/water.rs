@@ -184,35 +184,10 @@ pub(in crate::command) fn place_river(
         return Ok(());
     }
     make_water_tile(&mut state.map, c, WaterClass::River).map_err(|_| CommandError::OutOfBounds)?;
-    // En subtropical, quitar desierto alrededor (como editor OpenTTD).
-    if state.climate.uses_desert_patches() {
-        clear_desert_around(&mut state.map, c);
-    }
+    crate::world_gen::clear_desert_zone_around_river(&mut state.map, c)
+        .map_err(|_| CommandError::OutOfBounds)?;
     state.economy.money -= station_build_cost(&state.global_economy) / 4;
     Ok(())
-}
-
-fn clear_desert_around(map: &mut Map, center: TileCoord) {
-    use crate::world_gen::{CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, clear_ground_m5};
-    const R: i32 = 2;
-    for dy in -R..=R {
-        for dx in -R..=R {
-            let c = TileCoord::new(center.x + dx, center.y + dy);
-            let Some(mut tile) = map.get(c) else {
-                continue;
-            };
-            if tile.kind != TileKind::Grass {
-                continue;
-            }
-            let ground = (tile.m5 >> 2) & 0x07;
-            if ground != CLEAR_GROUND_DESERT {
-                continue;
-            }
-            let density = tile.m5 & 0x03;
-            tile.m5 = clear_ground_m5(CLEAR_GROUND_GRASS, density);
-            let _ = map.set_tile(c, tile);
-        }
-    }
 }
 
 /// Boya: agua plana (no esclusa) sin estación previa.
@@ -430,5 +405,32 @@ pub(crate) fn check_place_dock_or_station(
         check_place_buoy(map, stations, c)
     } else {
         Err(CommandError::CannotPlaceStationOnOccupiedTile)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::world_gen::{CLEAR_GROUND_DESERT, clear_ground_m5};
+
+    #[test]
+    fn place_river_clears_desert_zone_without_mutating_raw_object_payload() {
+        let mut state = GameState::new(7, 7);
+        let center = TileCoord::new(3, 3);
+        let object_pos = TileCoord::new(2, 2);
+        let mut object = state.map.get(object_pos).unwrap();
+        object.mapt = 0xA1;
+        object.m1 = 0x70;
+        object.m2 = 9;
+        object.m3 = 63;
+        object.m5 = clear_ground_m5(CLEAR_GROUND_DESERT, 2);
+        state.map.set_tile(object_pos, object).unwrap();
+
+        place_river(&mut state, center).unwrap();
+
+        let mut expected = object;
+        expected.mapt = 0xA0;
+        assert_eq!(state.map.get(object_pos), Some(expected));
     }
 }

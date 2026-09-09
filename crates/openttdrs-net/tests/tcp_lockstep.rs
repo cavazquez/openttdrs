@@ -538,16 +538,16 @@ fn welcome_snapshot_preserves_active_house_lift_trajectory() {
     }
     assert!(activate_house_lift_animation(
         &mut host.map,
-        &mut host.active_house_lifts,
+        &mut host.active_house_animations,
         second,
     ));
     assert!(activate_house_lift_animation(
         &mut host.map,
-        &mut host.active_house_lifts,
+        &mut host.active_house_animations,
         first,
     ));
     host.step();
-    assert_eq!(host.active_house_lifts, vec![second, first]);
+    assert_eq!(host.active_house_animations, vec![second, first]);
 
     let welcome = SessionEvent::Welcome {
         snapshot_json: host.save_json().unwrap(),
@@ -556,14 +556,14 @@ fn welcome_snapshot_preserves_active_house_lift_trajectory() {
     };
     let mut remote = GameState::new(1, 1);
     apply_session_event(&mut remote, &welcome).unwrap();
-    assert_eq!(host.active_house_lifts, remote.active_house_lifts);
+    assert_eq!(host.active_house_animations, remote.active_house_animations);
     assert_eq!(host.random, remote.random);
     assert_eq!(host.canonical_hash(), remote.canonical_hash());
 
     for _ in 0..32 {
         host.step();
         remote.step();
-        assert_eq!(host.active_house_lifts, remote.active_house_lifts);
+        assert_eq!(host.active_house_animations, remote.active_house_animations);
         assert_eq!(host.random, remote.random);
         assert_eq!(host.canonical_hash(), remote.canonical_hash());
         for coord in [first, second] {

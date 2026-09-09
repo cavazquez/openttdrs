@@ -120,8 +120,14 @@ históricas y marca como protegida toda la huella de un spec protegido. Los
 flags de sincronización y aleatoriedad de callbacks quedan almacenados, no
 ejecutados. Action0 `0x1A`/`0x1B` conserva además frames, loop/no-loop y la
 velocidad limitada nativa `2..=16` (con defaults `NoAnimation`/`2`), junto
-con las máscaras CB1A/CB1B/CB1C; el scheduler y su integración `ANIT` aún no
-se ejecutan. Al vencer el timer, `NewHouseTileLoop` ya resuelve Action2 de
+con las máscaras CB1A/CB1B/CB1C; el scheduler y los call sites de esos
+callbacks aún no se ejecutan. La subsecuencia urbana de `ANIT` sí queda ya
+persistida e
+importada en un vector común: conserva el orden relativo de ascensores vanilla
+y casas NewGRF al regrabar un SAV y los snapshots que aún llaman al campo
+`active_house_lifts` se leen mediante alias. Hasta conectar CB1A, una entrada
+NewGRF activa conserva su slot sin extraer RNG ni alterar el recorrido de los
+ascensores. Al vencer el timer, `NewHouseTileLoop` ya resuelve Action2 de
 `TileLoop`/`TileLoopNorth`: conserva los triggers pendientes, aplica sólo la
 máscara de reseed y comparte el resultado norte en huellas multitile, con el
 consumo global por tesela nativo. Luego rearma el período, preserva

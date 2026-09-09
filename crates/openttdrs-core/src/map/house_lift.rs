@@ -1,7 +1,7 @@
 //! Ascensor de Large Office (`AnimateTile_Town` / `town_map.h`).
 
 use crate::cargodist::parity::Randomizer;
-use crate::house_spec::{BUILDING_FLAG_IS_ANIMATED, HouseSpec};
+use crate::house_spec::{BUILDING_FLAG_IS_ANIMATED, HouseSpec, NEW_HOUSE_OFFSET};
 
 use super::{Map, Tile, TileCoord, TileKind};
 
@@ -84,6 +84,22 @@ pub fn house_tile_has_lift(tile: Tile) -> bool {
         .is_some_and(|spec| spec.building_flags & BUILDING_FLAG_IS_ANIMATED != 0)
 }
 
+/// `true` si la entrada de `ANIT` pertenece a una casa `NewGRF`.
+///
+/// El catálogo puede no haberse rehidratado todavía al importar un SAV, por
+/// eso el identificador persistido de `MAP8` es la fuente de verdad aquí.
+#[must_use]
+pub fn house_tile_has_newgrf_animation(tile: Tile) -> bool {
+    tile.kind == TileKind::House && (tile.m8 & 0x0FFF) >= NEW_HOUSE_OFFSET
+}
+
+/// `true` si la tesela forma parte de la porción urbana que este runtime
+/// conserva en la cola global `ANIT`.
+#[must_use]
+pub fn house_tile_has_modeled_animation(tile: Tile) -> bool {
+    house_tile_has_lift(tile) || house_tile_has_newgrf_animation(tile)
+}
+
 /// Un paso de `AnimateTile_Town`; el destino ya debe estar asignado.
 pub fn advance_house_lift(tile: &mut Tile) -> LiftStep {
     if !house_tile_has_lift(*tile) || !lift_has_destination(*tile) {
@@ -115,16 +131,21 @@ fn choose_lift_destination(position: u8, rng: &mut Randomizer) -> u8 {
     }
 }
 
-/// Inserta una entrada de ascensor ya presente en `ANIT` sin alterar `MAPE`.
+/// Inserta una entrada de casa ya presente en `ANIT` sin alterar `MAPE`.
 ///
 /// La hidratación de un SAV debe conservar el estado de animación original:
 /// una entrada `Deleted` se elimina en el próximo pase, mientras una
-/// `Animated` puede consumir `RandomRange(7)`. La activación en runtime usa
-/// [`activate_house_lift_animation`], que sí replica `AddAnimatedTile`.
-pub fn add_house_lift_to_animation(active: &mut Vec<TileCoord>, coord: TileCoord) {
+/// `Animated` puede consumir `_random`. La activación en runtime usa una
+/// función especializada que sí replica `AddAnimatedTile`.
+pub fn add_house_animation_to_queue(active: &mut Vec<TileCoord>, coord: TileCoord) {
     if !active.contains(&coord) {
         active.push(coord);
     }
+}
+
+/// Alias de compatibilidad para importadores que sólo conocían ascensores.
+pub fn add_house_lift_to_animation(active: &mut Vec<TileCoord>, coord: TileCoord) {
+    add_house_animation_to_queue(active, coord);
 }
 
 /// Equivalente de `AddAnimatedTile` para un ascensor de casa vanilla.
@@ -149,21 +170,21 @@ pub fn activate_house_lift_animation(
         return false;
     }
 
-    if !active.contains(&coord) {
-        active.push(coord);
-    }
+    add_house_animation_to_queue(active, coord);
     tile = with_lift_animation_state(tile, LIFT_ANIMATION_STATE_ACTIVE);
     let _ = map.set_tile(coord, tile);
     true
 }
 
-/// Ejecuta el subconjunto de ascensores de `AnimateAnimatedTiles`.
+/// Ejecuta la porción urbana de `AnimateAnimatedTiles`.
 ///
 /// `TileLoop_Town` ya hizo el `Chance16(1, 2)` que añade un ascensor a la
 /// lista. Aquí no se vuelve a sortear esa decisión: una entrada activa que no
 /// tenga destino toma `RandomRange(7)` únicamente cuando el contador global es
-/// múltiplo de cuatro, igual que `AnimateTile_Town`.
-pub fn step_house_lifts(
+/// múltiplo de cuatro, igual que `AnimateTile_Town`. Las casas `NewGRF` se
+/// mantienen en la misma cola y conservan su posición hasta que su dispatcher
+/// CB1A esté conectado; en este corte no extraen RNG ni se descartan.
+pub fn step_house_animations(
     map: &mut Map,
     tick: u64,
     rng: &mut Randomizer,
@@ -188,6 +209,15 @@ pub fn step_house_lifts(
             tile = with_lift_animation_state(tile, LIFT_ANIMATION_STATE_NONE);
             let _ = map.set_tile(coord, tile);
             active.swap_remove(index);
+            continue;
+        }
+
+        // `AnimateTile_Town` delega las casas NewGRF antes de la cadencia de
+        // ascensores vanilla. Mientras el scheduler CB1A no esté conectado,
+        // dejarlas activas conserva el orden ANIT para la etapa siguiente sin
+        // inventar una extracción de RNG.
+        if house_tile_has_newgrf_animation(tile) {
+            index += 1;
             continue;
         }
 
@@ -223,6 +253,16 @@ pub fn step_house_lifts(
         index += 1;
     }
     dirty
+}
+
+/// Alias de compatibilidad para la antigua API exclusiva de ascensores.
+pub fn step_house_lifts(
+    map: &mut Map,
+    tick: u64,
+    rng: &mut Randomizer,
+    active: &mut Vec<TileCoord>,
+) -> Vec<TileCoord> {
+    step_house_animations(map, tick, rng, active)
 }
 
 #[cfg(test)]
@@ -376,9 +416,30 @@ mod tests {
         let first = TileCoord::new(3, 5);
         let second = TileCoord::new(1, 7);
         let mut active = vec![first];
-        add_house_lift_to_animation(&mut active, first);
-        add_house_lift_to_animation(&mut active, second);
+        add_house_animation_to_queue(&mut active, first);
+        add_house_animation_to_queue(&mut active, second);
         assert_eq!(active, vec![first, second]);
+    }
+
+    #[test]
+    fn newgrf_house_entry_keeps_its_shared_anit_slot_until_cb1a_is_connected() {
+        let coord = TileCoord::new(2, 2);
+        let mut map = Map::new_flat(8, 8, 0);
+        map.set_completed_house(coord, crate::house_spec::NEW_HOUSE_OFFSET, 0)
+            .expect("NewGRF house");
+        let mut tile = map.get(coord).expect("NewGRF house tile");
+        tile.m6 = (tile.m6 & !LIFT_ANIMATION_STATE_MASK) | LIFT_ANIMATION_STATE_ACTIVE;
+        map.set_tile(coord, tile).expect("active NewGRF house");
+        let mut active = vec![coord];
+        let mut rng = Randomizer::new(7);
+        let expected = rng;
+
+        let dirty = step_house_animations(&mut map, 4, &mut rng, &mut active);
+
+        assert!(dirty.is_empty());
+        assert_eq!(active, vec![coord]);
+        assert_eq!(rng, expected);
+        assert!(map.get(coord).is_some_and(house_tile_has_newgrf_animation));
     }
 
     fn lift_game(order: &[TileCoord]) -> GameState {
@@ -390,11 +451,11 @@ mod tests {
                 .expect("office inside map");
             assert!(activate_house_lift_animation(
                 &mut state.map,
-                &mut state.active_house_lifts,
+                &mut state.active_house_animations,
                 coord,
             ));
         }
-        assert_eq!(state.active_house_lifts, order);
+        assert_eq!(state.active_house_animations, order);
         state.random = Randomizer::new(1);
         state
     }
@@ -404,7 +465,10 @@ mod tests {
         resumed: &GameState,
         coords: &[TileCoord],
     ) {
-        assert_eq!(control.active_house_lifts, resumed.active_house_lifts);
+        assert_eq!(
+            control.active_house_animations,
+            resumed.active_house_animations
+        );
         assert_eq!(control.random, resumed.random);
         assert_eq!(control.canonical_hash(), resumed.canonical_hash());
         for &coord in coords {
@@ -436,7 +500,7 @@ mod tests {
 
         let saved = subject.save_json().expect("save JSON");
         let mut resumed = GameState::load_json(&saved).expect("load JSON");
-        assert_eq!(resumed.active_house_lifts, vec![second, first]);
+        assert_eq!(resumed.active_house_animations, vec![second, first]);
 
         for _ in 0..32 {
             control.step();
@@ -465,23 +529,44 @@ mod tests {
 
         let loaded =
             GameState::load_json(&reverse.save_json().expect("save JSON")).expect("load JSON");
-        assert_eq!(loaded.active_house_lifts, vec![second, first]);
+        assert_eq!(loaded.active_house_animations, vec![second, first]);
     }
 
     #[test]
-    fn legacy_json_without_lift_queue_keeps_rng_and_uses_an_empty_queue() {
+    fn legacy_json_without_house_animation_queue_keeps_rng_and_uses_an_empty_queue() {
         let state = lift_game(&[TileCoord::new(2, 2), TileCoord::new(5, 5)]);
         let random_before_load = state.random;
         let mut legacy = serde_json::to_value(&state).expect("serialize legacy fixture");
         legacy
             .as_object_mut()
             .expect("GameState serializes to an object")
-            .remove("active_house_lifts");
+            .remove("active_house_animations");
 
         let loaded =
             GameState::load_json(&serde_json::to_string(&legacy).expect("encode legacy fixture"))
                 .expect("load JSON without persistent queue");
-        assert!(loaded.active_house_lifts.is_empty());
+        assert!(loaded.active_house_animations.is_empty());
         assert_eq!(loaded.random, random_before_load);
+    }
+
+    #[test]
+    fn legacy_lift_queue_json_alias_preserves_order() {
+        let state = lift_game(&[TileCoord::new(2, 2), TileCoord::new(5, 5)]);
+        let mut legacy = serde_json::to_value(&state).expect("serialize legacy fixture");
+        let legacy_object = legacy
+            .as_object_mut()
+            .expect("GameState serializes to an object");
+        let queue = legacy_object
+            .remove("active_house_animations")
+            .expect("current queue field");
+        legacy_object.insert("active_house_lifts".to_owned(), queue);
+
+        let loaded =
+            GameState::load_json(&serde_json::to_string(&legacy).expect("encode legacy fixture"))
+                .expect("load JSON with former queue field");
+        assert_eq!(
+            loaded.active_house_animations,
+            state.active_house_animations
+        );
     }
 }

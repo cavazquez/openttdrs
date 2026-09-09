@@ -1211,9 +1211,9 @@ impl GameState {
     pub fn from_sav_game(mut sav: SavGame) -> Self {
         let clear_legacy_depot_reservations = sav.version < SLV_DEPOT_RESERVATION_PERSISTED;
         // `ANIT` sigue opaco para industrias/estaciones/objetos hasta que
-        // compartan un dispatcher común, pero la sublista de casas vanilla sí
-        // tiene semántica exacta y debe copiarse al GameState persistido antes
-        // del primer tick.
+        // compartan un dispatcher común, pero la sublista de casas conserva
+        // su orden antes del primer tick: ascensores vanilla y entradas
+        // NewGRF comparten el stream global.
         let animated_tile_indices =
             animated_tile_indices_from_opaque_chunks(&sav.opaque_chunks).unwrap_or_default();
         let linkgraph_jobs = std::mem::take(&mut sav.linkgraph_jobs);
@@ -1313,9 +1313,9 @@ impl GameState {
             if state
                 .map
                 .get(coord)
-                .is_some_and(crate::map::house_tile_has_lift)
+                .is_some_and(crate::map::house_tile_has_modeled_animation)
             {
-                crate::map::add_house_lift_to_animation(&mut state.active_house_lifts, coord);
+                crate::map::add_house_animation_to_queue(&mut state.active_house_animations, coord);
             }
         }
         if let Some(time) = sav.game_time {
@@ -2465,21 +2465,24 @@ mod tests {
     }
 
     #[test]
-    fn from_sav_game_copies_anit_house_lift_order_without_consuming_rng() {
+    fn from_sav_game_copies_anit_house_animation_order_without_consuming_rng() {
         let first = TileCoord::new(2, 2);
         let second = TileCoord::new(5, 5);
+        let newgrf = TileCoord::new(3, 4);
         let mut map = Map::new_flat(8, 8, 0);
         for coord in [first, second] {
             map.set_completed_house(coord, 4, 0)
                 .expect("large office inside map");
         }
+        map.set_completed_house(newgrf, crate::house_spec::NEW_HOUSE_OFFSET, 0)
+            .expect("NewGRF house inside map");
         let random_state = [0x1234_5678, 0x9abc_def0];
         let mut sav = empty_sav(358, map);
         sav.random_state = Some(random_state);
 
         let mut anit_record = Vec::new();
-        table::tests::write_gamma(2, &mut anit_record);
-        for coord in [second, first] {
+        table::tests::write_gamma(3, &mut anit_record);
+        for coord in [second, newgrf, first] {
             let tile_index = crate::map::coord_to_linear_index(coord, 8)
                 .expect("office has an OpenTTD tile index");
             anit_record.extend_from_slice(&tile_index.to_be_bytes());
@@ -2491,7 +2494,7 @@ mod tests {
         });
 
         let state = GameState::from_sav_game(sav);
-        assert_eq!(state.active_house_lifts, vec![second, first]);
+        assert_eq!(state.active_house_animations, vec![second, newgrf, first]);
         assert_eq!(state.random.state, random_state);
     }
 

@@ -1098,7 +1098,7 @@ pub(super) fn grow_towns(state: &mut GameState, tick: u64) {
         {
             crate::map::activate_house_lift_animation(
                 &mut state.map,
-                &mut state.active_house_lifts,
+                &mut state.active_house_animations,
                 coord,
             );
         }

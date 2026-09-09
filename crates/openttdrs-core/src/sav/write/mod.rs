@@ -261,13 +261,13 @@ fn wrap_container(
     Ok(out)
 }
 
-/// Índices `TileIndex` persistibles de la porción de `ANIT` que este runtime
-/// simula: los ascensores de casas. Se conserva el vector tal cual (incluidas
-/// entradas que serán retiradas en el próximo tick) porque el orden es parte
-/// de la secuencia RNG y de la semántica `swap_remove` de `OpenTTD`.
-fn active_house_lift_tile_indices(state: &GameState, map_w: u32, map_h: u32) -> Vec<u32> {
+/// Índices `TileIndex` persistibles de la porción urbana de `ANIT` que este
+/// runtime conserva. Se mantiene el vector tal cual (incluidas entradas que
+/// serán retiradas en el próximo tick) porque el orden es parte de la
+/// secuencia RNG y de la semántica `swap_remove` de `OpenTTD`.
+fn active_house_animation_tile_indices(state: &GameState, map_w: u32, map_h: u32) -> Vec<u32> {
     state
-        .active_house_lifts
+        .active_house_animations
         .iter()
         .filter_map(|&coord| {
             crate::map::coord_to_dense_index(coord, map_w, map_h)?;
@@ -276,14 +276,14 @@ fn active_house_lift_tile_indices(state: &GameState, map_w: u32, map_h: u32) -> 
         .collect()
 }
 
-/// `true` si una entrada nativa pertenece a la sublista de ascensores que el
-/// runtime puede reemitir. Las demás animaciones siguen siendo opacas: no se
-/// reordenan ni se descartan al actualizar la cola de ascensores.
-fn is_modeled_house_lift_index(state: &GameState, active_indices: &[u32], index: u32) -> bool {
+/// `true` si una entrada nativa pertenece a la sublista urbana que el runtime
+/// puede reemitir. Las demás animaciones siguen siendo opacas: no se reordenan
+/// ni se descartan al actualizar la cola de casas.
+fn is_modeled_house_animation_index(state: &GameState, active_indices: &[u32], index: u32) -> bool {
     active_indices.contains(&index)
         || crate::map::tile_index_to_coord(index, &state.map)
             .and_then(|coord| state.map.get(coord))
-            .is_some_and(crate::map::house_tile_has_lift)
+            .is_some_and(crate::map::house_tile_has_modeled_animation)
 }
 
 /// Codifica el único registro moderno de `ANIT` (`SLEG_VECTOR("tiles",
@@ -338,19 +338,19 @@ fn encode_animated_tiles_chunk(indices: &[u32]) -> Result<Vec<u8>, SavError> {
     Ok(out)
 }
 
-/// Reemplaza sólo la subsecuencia de ascensores del `ANIT` importado.
+/// Reemplaza sólo la subsecuencia urbana de casas del `ANIT` importado.
 ///
 /// Cuando la cola no cambió, el chunk nativo viaja byte a byte como opaque
 /// passthrough. Si cambió, se inserta la cola persistida en el primer lugar
-/// que ocupaba un ascensor y se conservan, en el mismo orden, las animaciones
-/// que este runtime todavía no ejecuta. Así un re-save no puede reintroducir
-/// una cola de ascensores obsoleta sin borrar las entradas ajenas conocidas.
+/// que ocupaba una casa y se conservan, en el mismo orden, las animaciones que
+/// este runtime todavía no ejecuta. Así un re-save no puede reintroducir una
+/// cola urbana obsoleta sin borrar las entradas ajenas conocidas.
 fn rebuilt_animated_tiles_chunk(
     state: &GameState,
     map_w: u32,
     map_h: u32,
 ) -> Result<Option<Vec<u8>>, SavError> {
-    let active_indices = active_house_lift_tile_indices(state, map_w, map_h);
+    let active_indices = active_house_animation_tile_indices(state, map_w, map_h);
     let Some(raw_indices) =
         super::animated_tile_indices_from_opaque_chunks(&state.sav_opaque_chunks)
     else {
@@ -361,33 +361,33 @@ fn rebuilt_animated_tiles_chunk(
         };
     };
 
-    let raw_lift_indices: Vec<_> = raw_indices
+    let raw_house_indices: Vec<_> = raw_indices
         .iter()
         .copied()
-        .filter(|&index| is_modeled_house_lift_index(state, &active_indices, index))
+        .filter(|&index| is_modeled_house_animation_index(state, &active_indices, index))
         .collect();
-    if raw_lift_indices == active_indices {
+    if raw_house_indices == active_indices {
         return Ok(None);
     }
 
     let mut merged = Vec::with_capacity(
         raw_indices
             .len()
-            .saturating_sub(raw_lift_indices.len())
+            .saturating_sub(raw_house_indices.len())
             .saturating_add(active_indices.len()),
     );
-    let mut inserted_lifts = false;
+    let mut inserted_houses = false;
     for index in raw_indices {
-        if is_modeled_house_lift_index(state, &active_indices, index) {
-            if !inserted_lifts {
+        if is_modeled_house_animation_index(state, &active_indices, index) {
+            if !inserted_houses {
                 merged.extend_from_slice(&active_indices);
-                inserted_lifts = true;
+                inserted_houses = true;
             }
         } else {
             merged.push(index);
         }
     }
-    if !inserted_lifts {
+    if !inserted_houses {
         merged.extend_from_slice(&active_indices);
     }
     encode_animated_tiles_chunk(&merged).map(Some)
@@ -895,12 +895,12 @@ mod tests {
         }
         assert!(crate::map::activate_house_lift_animation(
             &mut state.map,
-            &mut state.active_house_lifts,
+            &mut state.active_house_animations,
             first,
         ));
         assert!(crate::map::activate_house_lift_animation(
             &mut state.map,
-            &mut state.active_house_lifts,
+            &mut state.active_house_animations,
             second,
         ));
         let index =
@@ -920,9 +920,10 @@ mod tests {
     }
 
     #[test]
-    fn sav_resave_replaces_lift_entries_in_anit_and_preserves_unknown_order() {
+    fn sav_resave_replaces_house_entries_in_anit_and_preserves_unknown_order() {
         let first = TileCoord::new(2, 2);
         let second = TileCoord::new(5, 5);
+        let newgrf = TileCoord::new(3, 4);
         let unknown_before = TileCoord::new(0, 0);
         let unknown_after = TileCoord::new(7, 7);
         let mut state = GameState::new(8, 8);
@@ -932,14 +933,25 @@ mod tests {
                 .set_completed_house(coord, 4, 0)
                 .expect("large office inside map");
         }
+        state
+            .map
+            .set_completed_house(newgrf, crate::house_spec::NEW_HOUSE_OFFSET, 0)
+            .expect("NewGRF house inside map");
+        let mut newgrf_tile = state.map.get(newgrf).expect("NewGRF house tile");
+        newgrf_tile.m6 |= 0x03;
+        state
+            .map
+            .set_tile(newgrf, newgrf_tile)
+            .expect("active NewGRF house tile");
         assert!(crate::map::activate_house_lift_animation(
             &mut state.map,
-            &mut state.active_house_lifts,
+            &mut state.active_house_animations,
             second,
         ));
+        crate::map::add_house_animation_to_queue(&mut state.active_house_animations, newgrf);
         assert!(crate::map::activate_house_lift_animation(
             &mut state.map,
-            &mut state.active_house_lifts,
+            &mut state.active_house_animations,
             first,
         ));
         state.random = Randomizer::new(1);
@@ -952,6 +964,7 @@ mod tests {
         state.sav_opaque_chunks.push(anit_opaque(&[
             index(unknown_before),
             index(first),
+            index(newgrf),
             index(unknown_after),
             index(second),
         ]));
@@ -972,20 +985,24 @@ mod tests {
             vec![
                 index(unknown_before),
                 index(second),
+                index(newgrf),
                 index(first),
                 index(unknown_after),
             ]
         );
 
         let mut resumed = GameState::from_sav_game(sav_game);
-        assert_eq!(resumed.active_house_lifts, vec![second, first]);
+        assert_eq!(resumed.active_house_animations, vec![second, newgrf, first]);
         assert_eq!(resumed.random, control.random);
         for _ in 0..32 {
             control.step();
             resumed.step();
-            assert_eq!(control.active_house_lifts, resumed.active_house_lifts);
+            assert_eq!(
+                control.active_house_animations,
+                resumed.active_house_animations
+            );
             assert_eq!(control.random, resumed.random);
-            for coord in [first, second] {
+            for coord in [first, newgrf, second] {
                 let control_tile = control.map.get(coord).expect("control office");
                 let resumed_tile = resumed.map.get(coord).expect("resumed office");
                 assert_eq!(control_tile.m6, resumed_tile.m6, "MAP6 at {coord:?}");

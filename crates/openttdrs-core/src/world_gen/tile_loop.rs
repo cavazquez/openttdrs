@@ -429,7 +429,7 @@ fn tile_loop_house(
         if activated {
             crate::map::activate_house_lift_animation(
                 &mut state.map,
-                &mut state.active_house_lifts,
+                &mut state.active_house_animations,
                 coord,
             );
         }
@@ -1313,7 +1313,7 @@ mod tests {
         }
 
         assert_eq!(actual, expected);
-        assert_eq!(state.active_house_lifts, vec![coord]);
+        assert_eq!(state.active_house_animations, vec![coord]);
         assert_eq!(state.towns[0].time_until_rebuild, 1);
         assert_eq!(state.towns[0].population, u32::from(house.population));
         assert_eq!(state.towns[0].num_houses, 1);

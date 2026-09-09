@@ -430,11 +430,11 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         .filter(|(_, tile)| tile.kind == crate::TileKind::Industry)
         .map(|(coord, _)| *coord)
         .collect();
-    let _lift_dirty = crate::map::step_house_lifts(
+    let _house_animation_dirty = crate::map::step_house_animations(
         &mut state.map,
         t,
         &mut state.random,
-        &mut state.active_house_lifts,
+        &mut state.active_house_animations,
     );
     let animation_coords: Vec<_> = state
         .industries

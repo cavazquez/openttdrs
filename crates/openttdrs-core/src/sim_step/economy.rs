@@ -194,7 +194,16 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
 /// economía suave vanilla y luego procesa CB35 de las especies `NewGRF`.
 fn roll_and_change_monthly_industries(state: &mut GameState) {
     let economy_year = state.economy_timer.year;
-    for industry in &mut state.industries {
+    // `Industry::Iterate()` recorre el pool sparse por `IndustryID`, no por el
+    // orden físico en el que una importación dejó las entidades en memoria.
+    // Una industria borrada y recreada puede quedar al final del vector aunque
+    // conserve un ID intermedio; ese orden decide qué palabras RNG ve cada
+    // cambio mensual de producción.
+    let mut industry_indices: Vec<_> = (0..state.industries.len()).collect();
+    industry_indices.sort_unstable_by_key(|&index| (state.industries[index].instance_id, index));
+
+    for &index in &industry_indices {
+        let industry = &mut state.industries[index];
         // `UpdateIndustryStatistics` marca actividad del año a partir de la
         // producción del mes que acaba de terminar, antes de rotar el buffer.
         let produced_this_month = industry.produced_cargos().iter().any(|cargo| {
@@ -215,7 +224,8 @@ fn roll_and_change_monthly_industries(state: &mut GameState) {
     }
 
     let mut closing = Vec::new();
-    for industry in &mut state.industries {
+    for index in industry_indices {
+        let industry = &mut state.industries[index];
         // Las industrias con CB35 se resuelven en la pasada siguiente para
         // conservar su contrato específico. Sólo la economía ET_SMOOTH
         // ejecuta la rama vanilla mensual y consume una palabra por salida;
@@ -226,13 +236,13 @@ fn roll_and_change_monthly_industries(state: &mut GameState) {
         {
             continue;
         }
-        if crate::industry::change_industry_production_smooth(
+        let change = crate::industry::change_industry_production_smooth(
             industry,
             state.climate,
             economy_year,
             &mut state.random,
-        ) == crate::industry::IndustryProductionChange::Closing
-        {
+        );
+        if change == crate::industry::IndustryProductionChange::Closing {
             closing.push(industry.pos);
         }
     }
@@ -1440,6 +1450,54 @@ mod tests {
             state.random, before,
             "ET_SMOOTH toma una palabra por salida vanilla válida"
         );
+    }
+
+    #[test]
+    fn monthly_industry_loop_uses_sparse_pool_order_not_storage_order() {
+        fn industry(spec: IndustrySpec, instance_id: u16) -> Industry {
+            Industry::with_tiles_spec(TileCoord::new(0, 0), spec.kind(), spec, Vec::new(), 0)
+                .with_instance_id(instance_id)
+        }
+
+        fn rates_by_id(state: &GameState) -> Vec<(u16, Vec<u8>)> {
+            let mut rates: Vec<_> = state
+                .industries
+                .iter()
+                .map(|industry| {
+                    (
+                        industry.instance_id,
+                        (0..industry.produced_cargos().len())
+                            .map(|index| industry.production_rate_for_output(index))
+                            .collect(),
+                    )
+                })
+                .collect();
+            rates.sort_unstable_by_key(|(id, _)| *id);
+            rates
+        }
+
+        // El primer `Random()` de esta semilla provoca un cambio; por eso
+        // intercambiar cuál industria lo recibe expone inmediatamente un
+        // recorrido físico del Vec en vez del `IndustryID` del pool nativo.
+        let coal = industry(IndustrySpec::CoalMine, 0);
+        let rig = industry(IndustrySpec::OilRig, 1);
+        let mut native_order = GameState::new(16, 16);
+        native_order.industries = vec![coal.clone(), rig.clone()];
+        native_order.random = Randomizer { state: [8, 0] };
+
+        let mut shuffled_storage = GameState::new(16, 16);
+        shuffled_storage.industries = vec![rig, coal];
+        shuffled_storage.random = Randomizer { state: [8, 0] };
+
+        roll_and_change_monthly_industries(&mut native_order);
+        roll_and_change_monthly_industries(&mut shuffled_storage);
+
+        assert_eq!(
+            rates_by_id(&shuffled_storage),
+            rates_by_id(&native_order),
+            "el orden de almacenamiento no debe asignar palabras RNG distintas a cada IndustryID"
+        );
+        assert_eq!(shuffled_storage.random, native_order.random);
     }
 
     #[test]

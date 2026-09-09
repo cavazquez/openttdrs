@@ -51,11 +51,12 @@ python3 scripts/compare_industry_scheduler_traces.py \
   /tmp/openttd-rmap-172.jsonl /tmp/openttdrs-rmap-172.jsonl 240
 ```
 
-`initial` y `day[0]`…`day[232]` coinciden en reloj, ambas palabras RNG,
+`initial` y `day[0]`…`day[232]` coincidían en reloj, ambas palabras RNG,
 `ECMY`, las 240 filas `ITBL`, pool ordenado de industrias y acciones. La
-primera frontera posterior queda explícita en
-`day[233].random_state.state_0` (OpenTTD `570692795`, openttdrs
-`1684328366`); es un diagnóstico separado y no se atribuye a esta transición.
+frontera posterior de `day[233]` se atribuyó después al orden físico del pool
+industrial durante el cierre mensual y queda resuelta por
+[RMAP-173](runtime-monthly-industry-pool-order-rmap-173.md); no se atribuye a
+esta transición de estación.
 
 ## Límites
 

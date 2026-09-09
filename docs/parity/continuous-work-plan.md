@@ -61,8 +61,12 @@ pieza norte `GFX_OILRIG_1`; basta que exista su pareja sur de la misma
 industria, aunque siga en obra. Así la estación neutral participa en el
 `AcceptanceTick` del tick actual y conserva el stream global. Con el oracle
 OpenTTD 15.3 y `autosave0.sav`, `initial` y `day[0]`…`day[232]` son exactos;
-la frontera siguiente, separada, queda en `day[233]`. Evidencia y límites en
-[runtime-oil-rig-station-timing-rmap-172.md](runtime-oil-rig-station-timing-rmap-172.md).
+RMAP-173 resuelve la frontera siguiente: el cierre mensual ordena industrias
+por `IndustryID` sparse, igual que `Industry::Iterate()`, en vez de usar el
+orden físico de importación. La misma fixture alcanza `day[239]` sin
+diferencias. Evidencia y límites en
+[runtime-oil-rig-station-timing-rmap-172.md](runtime-oil-rig-station-timing-rmap-172.md)
+y [runtime-monthly-industry-pool-order-rmap-173.md](runtime-monthly-industry-pool-order-rmap-173.md).
 
 Incidencia de validación ajena al lote: al cerrarlo, #535 registraba que
 `test_parity_docs_portability.py` copiaba el baseline raster del 2026-09-05

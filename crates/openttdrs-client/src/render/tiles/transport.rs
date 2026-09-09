@@ -727,12 +727,16 @@ pub(crate) const fn catenary_local_z_delta(
     world_z_delta - (surface_base_z as i32 - raw_base_z as i32) * 8
 }
 
-/// Primeros slots locales reservados para los `AddSortableSpriteToDraw` de
-/// catenaria. `DrawTrackDetails` los precede y las señales los siguen; dejar
-/// un intervalo entre familias evita que una tesela con varias curvas pierda
-/// su orden de inserción al entrar al sorter global.
+/// Slots locales de los `AddSortableSpriteToDraw` de una vía normal.
+///
+/// `DrawTrackDetails` (cercas) precede a catenaria, y `DrawSignals` la sigue
+/// en `DrawTile_Track`. Cada familia conserva ocho slots: alcanza para los
+/// cuatro PPP, seis cables o las señales de una tesela sin reutilizar una
+/// clave de inserción al entrar al sorter global.
+const RAIL_TRACK_FENCE_PARENT_ORDINAL: u8 = 48;
 const RAIL_CATENARY_PYLON_PARENT_ORDINAL: u8 = 64;
 const RAIL_CATENARY_WIRE_PARENT_ORDINAL: u8 = 72;
+const RAIL_SIGNAL_PARENT_ORDINAL: u8 = 80;
 
 /// Caja global del poste PPP que OpenTTD entrega a
 /// `ViewportSortParentSprites`.
@@ -769,6 +773,57 @@ fn rail_catenary_wire_parent_bounds(
     let y = ty * 16 + oy;
     let z = i32::from(raw_base_z) * 8 + world_z_delta + oz;
     ParentSpriteBounds::new(x, y, z, x + ex - 1, y + ey - 1, z + ez - 1)
+}
+
+/// Caja global de una cerca de `DrawTrackDetails`.
+///
+/// `DrawTrackFence` pasa el origen de la tesela y su Z ya ajustada por la
+/// esquina de referencia. La caja conserva después el origen local de
+/// `_fence_offsets`, igual que `AddSortableSpriteToDraw`.
+fn rail_track_fence_parent_bounds(
+    tx: i32,
+    ty: i32,
+    raw_base_z: u8,
+    world_z_delta: i32,
+    bounds: TraceSpriteBounds,
+) -> ParentSpriteBounds {
+    let x = tx * 16 + bounds.ox;
+    let y = ty * 16 + bounds.oy;
+    let z = i32::from(raw_base_z) * 8 + world_z_delta + bounds.oz;
+    ParentSpriteBounds::new(
+        x,
+        y,
+        z,
+        x + bounds.ex - 1,
+        y + bounds.ey - 1,
+        z + bounds.ez - 1,
+    )
+}
+
+/// Caja global de una señal de `DrawSingleSignal`.
+///
+/// A diferencia de una cerca, `SignalPositions` ya entrega una coordenada
+/// sub-tesela absoluta. `GetSaveSlopeZ` aporta el delta vertical y el prisma
+/// 1×1×6 se mantiene inclusivo para el sorter nativo.
+fn rail_signal_parent_bounds(
+    tx: i32,
+    ty: i32,
+    raw_base_z: u8,
+    world_xy: (i32, i32),
+    world_z_delta: i32,
+    bounds: TraceSpriteBounds,
+) -> ParentSpriteBounds {
+    let x = tx * 16 + world_xy.0 + bounds.ox;
+    let y = ty * 16 + world_xy.1 + bounds.oy;
+    let z = i32::from(raw_base_z) * 8 + world_z_delta + bounds.oz;
+    ParentSpriteBounds::new(
+        x,
+        y,
+        z,
+        x + bounds.ex - 1,
+        y + bounds.ey - 1,
+        z + bounds.ez - 1,
+    )
 }
 
 /// Offset extra de las pistas de esquina PBS en `DrawTrackBits`, ya
@@ -2726,6 +2781,14 @@ pub(crate) fn spawn_rail_tile(
         {
             let sprite_id = 1301 + draw.sprite_index as u32;
             let corner_z = track_fence_height_px(draw, surface_tileh);
+            let fence_bounds = TraceSpriteBounds::new(
+                draw.bounds_origin.0,
+                draw.bounds_origin.1,
+                draw.bounds_origin.2,
+                draw.bounds_extent.0,
+                draw.bounds_extent.1,
+                draw.bounds_extent.2,
+            );
             let Some(meta) = track_fence_sprite_meta(draw.sprite_index) else {
                 WorldDrawTrace::record_sprite_with_palette_and_geometry(
                     "rail-track-fence",
@@ -2735,14 +2798,7 @@ pub(crate) fn spawn_rail_tile(
                     true,
                     (0, 0, 0),
                     base_z_delta + corner_z,
-                    Some(TraceSpriteBounds::new(
-                        draw.bounds_origin.0,
-                        draw.bounds_origin.1,
-                        draw.bounds_origin.2,
-                        draw.bounds_extent.0,
-                        draw.bounds_extent.1,
-                        draw.bounds_extent.2,
-                    )),
+                    Some(fence_bounds),
                 );
                 continue;
             };
@@ -2755,14 +2811,7 @@ pub(crate) fn spawn_rail_tile(
                     true,
                     (0, 0, 0),
                     base_z_delta + corner_z,
-                    Some(TraceSpriteBounds::new(
-                        draw.bounds_origin.0,
-                        draw.bounds_origin.1,
-                        draw.bounds_origin.2,
-                        draw.bounds_extent.0,
-                        draw.bounds_extent.1,
-                        draw.bounds_extent.2,
-                    )),
+                    Some(fence_bounds),
                 );
                 continue;
             };
@@ -2774,14 +2823,7 @@ pub(crate) fn spawn_rail_tile(
                 false,
                 (0, 0, 0),
                 base_z_delta + corner_z,
-                Some(TraceSpriteBounds::new(
-                    draw.bounds_origin.0,
-                    draw.bounds_origin.1,
-                    draw.bounds_origin.2,
-                    draw.bounds_extent.0,
-                    draw.bounds_extent.1,
-                    draw.bounds_extent.2,
-                )),
+                Some(fence_bounds),
             );
 
             let filename = format!("track_fence_{}.png", draw.sprite_index);
@@ -2801,11 +2843,29 @@ pub(crate) fn spawn_rail_tile(
             // cerca elevada quede detrás de la misma tesela en Bevy.
             pos3.y += corner_z as f32;
             pos3.z += corner_z as f32 * 0.0001;
+            let source_depth = viewport_source_depth(pos3.z, ctx.tx, map_dims.0);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 sprite_from_atlas_or_company_white_colour(company, owner_colour, img, &filename),
-                Transform::from_translation(pos3),
+                Transform::from_translation(Vec3::new(pos3.x, pos3.y, source_depth)),
+                ViewportSortableParent {
+                    sprite_id,
+                    bounds: rail_track_fence_parent_bounds(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        ctx.info.base_z,
+                        base_z_delta + corner_z,
+                        fence_bounds,
+                    ),
+                    insertion_key: viewport_insertion_key(
+                        ctx.tx,
+                        ctx.ty,
+                        RAIL_TRACK_FENCE_PARENT_ORDINAL
+                            .saturating_add(u8::try_from(index).unwrap_or(u8::MAX)),
+                    ),
+                    source_depth,
+                },
             ));
         }
     }
@@ -2950,11 +3010,30 @@ pub(crate) fn spawn_rail_tile(
             // Misma profundidad que el fantasma de colocación (`tile_pos_half`), no z≈0.
             let layer = 0.04 + si as f32 * 0.0015;
             let depth = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, layer, rail_half_h);
+            let source_depth = viewport_source_depth(depth.z, ctx.tx, map_dims.0);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 sprite,
-                Transform::from_translation(Vec3::new(signal_xy.x, signal_xy.y, depth.z)),
+                Transform::from_translation(Vec3::new(signal_xy.x, signal_xy.y, source_depth)),
+                ViewportSortableParent {
+                    sprite_id: draw.sprite_id,
+                    bounds: rail_signal_parent_bounds(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        ctx.info.base_z,
+                        world_xy,
+                        signal_z_delta,
+                        signal_bounds,
+                    ),
+                    insertion_key: viewport_insertion_key(
+                        ctx.tx,
+                        ctx.ty,
+                        RAIL_SIGNAL_PARENT_ORDINAL
+                            .saturating_add(u8::try_from(si).unwrap_or(u8::MAX)),
+                    ),
+                    source_depth,
+                },
             ));
         }
     }
@@ -2970,12 +3049,14 @@ mod tests {
         pbs_track_sprite_extra_y, rail_catenary_pylon_parent_bounds,
         rail_catenary_wire_parent_bounds, rail_custom_overlay_offsets,
         rail_custom_underlay_offsets, rail_foundation_after_pass, rail_ground_complete_offset,
-        rail_ground_sprite_id, rail_initial_ground_draw, rail_track_trace_mode,
-        rail_upper_halftile_ground_draw, road_detail_world_z_delta, road_foundation_child_offset,
+        rail_ground_sprite_id, rail_initial_ground_draw, rail_signal_parent_bounds,
+        rail_track_fence_parent_bounds, rail_track_trace_mode, rail_upper_halftile_ground_draw,
+        road_detail_world_z_delta, road_foundation_child_offset,
         roadside_streetlight_parent_sprites, roadside_streetlight_sorted_depths,
         signal_trace_geometry,
     };
     use crate::render::viewport_sort::ParentSpriteBounds;
+    use crate::render::world_draw_trace::TraceSpriteBounds;
     use crate::sprites::{
         CatenarySpriteDraw, CatenaryWireDraw, RAIL_GROUND_HALF_TILE_SNOW,
         RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER,
@@ -3330,6 +3411,37 @@ mod tests {
         assert_eq!(
             rail_catenary_wire_parent_bounds(170, 105, 2, 0, wire),
             ParentSpriteBounds::new(2728, 1680, 26, 2742, 1680, 26)
+        );
+    }
+
+    #[test]
+    fn rail_detail_parents_keep_the_upstream_sortable_prisms() {
+        // `DrawTrackFence` recibe el origen de la tesela y la caja de
+        // `_fence_offsets`; una cerca NW plana ocupa el borde Y=1 completo.
+        let fence = crate::sprites::track_fence_draws_for_tile(2, 0)
+            .into_iter()
+            .next()
+            .expect("fence NW");
+        let fence_bounds = TraceSpriteBounds::new(
+            fence.bounds_origin.0,
+            fence.bounds_origin.1,
+            fence.bounds_origin.2,
+            fence.bounds_extent.0,
+            fence.bounds_extent.1,
+            fence.bounds_extent.2,
+        );
+        assert_eq!(
+            rail_track_fence_parent_bounds(170, 105, 2, 0, fence_bounds),
+            ParentSpriteBounds::new(2720, 1681, 16, 2735, 1681, 19)
+        );
+
+        // `DrawSingleSignal` parte de SignalPositions y conserva su prisma
+        // 1×1×BB_HEIGHT_UNDER_BRIDGE. Este caso usa la pendiente segura que
+        // ya elevó la señal ocho píxeles sobre la base de la tesela.
+        let signal_bounds = TraceSpriteBounds::new(0, 0, 0, 1, 1, 6);
+        assert_eq!(
+            rail_signal_parent_bounds(170, 105, 2, (11, 13), 8, signal_bounds),
+            ParentSpriteBounds::new(2731, 1693, 24, 2731, 1693, 29)
         );
     }
 

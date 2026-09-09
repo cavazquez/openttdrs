@@ -26,11 +26,12 @@ use crate::render::tiles::{
     spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
     spawn_transport_object_tile, spawn_transport_object_tile_with_road_types,
 };
+use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid, TileRenderContext,
     ViewportSortableChild, ViewportSortableParent,
 };
-use crate::sprites::{RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS};
+use crate::sprites::{RAIL_TB_X, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS};
 
 #[derive(Resource)]
 struct TsMap(Map);
@@ -1372,6 +1373,106 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
             },
         )
         .expect("spawn batch");
+}
+
+#[test]
+fn rail_fence_and_signal_join_the_global_viewport_sorter() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let m5 = ((RAIL_TILE_NORMAL | RAIL_TILE_SIGNALS) << 6) | RAIL_TB_X;
+    // Señal X hacia SW (bit 3) y FenceNW en el nibble bajo de m3hi. Los
+    // estados de señal viven en el nibble alto, por lo que ambos contratos
+    // pueden coexistir en una única tesela plana.
+    let m3 = 1 << 7;
+    let m3hi = 2;
+    let signal_sprite_id = crate::sprites::collect_signal_sprite_draws(0, m3, m3hi, m5)
+        .into_iter()
+        .next()
+        .expect("signal X")
+        .sprite_id;
+    map.set_tile(
+        TileCoord::new(3, 2),
+        Tile {
+            kind: TileKind::Rail,
+            mapt: 0x10,
+            m2: 0,
+            m3,
+            m3hi,
+            m5,
+            ..tile_template()
+        },
+    )
+    .expect("rail detail tile");
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let mut rail_layers = Vec::new();
+                spawn_rail_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 2),
+                    4.0,
+                    &mut rail_layers,
+                    TEST_CLIMATE,
+                    false,
+                    true,
+                    false,
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &openttdrs_core::RailTypeRuntimeProps::defaults(),
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    0,
+                    &[],
+                );
+            },
+        )
+        .expect("rail detail spawn");
+
+    let parents: Vec<_> = world
+        .query::<&ViewportSortableParent>()
+        .iter(&world)
+        .copied()
+        .collect();
+    let fence = parents
+        .iter()
+        .find(|parent| parent.sprite_id == 1301)
+        .expect("fence parent");
+    let signal = parents
+        .iter()
+        .find(|parent| parent.sprite_id == signal_sprite_id)
+        .expect("signal parent");
+    assert_eq!(
+        fence.bounds,
+        ParentSpriteBounds::new(48, 33, 0, 63, 33, 3),
+        "FenceNW conserva la caja _fence_offsets de DrawTrackDetails"
+    );
+    assert_eq!(
+        signal.bounds,
+        ParentSpriteBounds::new(59, 35, 0, 59, 35, 5),
+        "la señal X usa SignalPositions[LEFT][8] y BB_HEIGHT_UNDER_BRIDGE"
+    );
+    assert!(
+        fence.insertion_key < signal.insertion_key,
+        "DrawTrackDetails debe conservarse antes de DrawSignals en la misma tesela"
+    );
 }
 
 #[test]

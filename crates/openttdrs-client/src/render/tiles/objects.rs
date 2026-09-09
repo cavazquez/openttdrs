@@ -4399,8 +4399,9 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             }
             let draw_tunnel_catenary = rail && !catenary_hidden() && rail_type.has_catenary();
             // El oráculo registra el cable antes del techo: es el padre del
-            // `SpriteCombine` que contiene ambos. La capa Bevy conserva su
-            // orden visual posterior, pero la traza modela el draw proc real.
+            // `SpriteCombine` que contiene ambos. Conservamos el ID local
+            // hasta crear el parent para que el atlas use su sprite extraído,
+            // mientras que el sorter recibe el ID global de referencia.
             let tunnel_catenary_sprite = if draw_tunnel_catenary {
                 let sid = catenary_tunnel_wire_sprite(dir);
                 let anchor = catenary_sprite_anchor(sid, catenary_newgrf);
@@ -4424,17 +4425,69 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                         ox, oy, oz, ex, ey, ez,
                     )),
                 );
-                sprite.zip(anchor)
+                sprite
+                    .zip(anchor)
+                    .map(|(sprite, anchor)| (sid, sprite, anchor))
             } else {
                 None
             };
             let (front_offset, (ox, oy, oz, ex, ey, ez)) =
                 crate::sprites::tunnel_front_trace_geometry(dir);
             let front_bounds = TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez);
+            // `DrawRailCatenaryOnTunnel` abre un `SpriteCombine`: el cable
+            // es el único parent sortable y el techo/portal se agregan como
+            // children. Crear primero su entidad mantiene esa relación aun
+            // cuando el orden global intercambie la boca con otra tesela.
+            let tunnel_catenary_parent = tunnel_catenary_sprite.map(|(sid, sprite, anchor)| {
+                let (offset, (ox, oy, oz, ex, ey, ez)) = tunnel_catenary_trace_geometry(dir);
+                let mut position = catenary_sprite_center(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    0.085,
+                    (offset.0 + ox) as f32,
+                    (offset.1 + oy) as f32,
+                    (offset.2 + oz) as f32,
+                    anchor,
+                );
+                let source_depth = viewport_source_depth(position.z, ctx.tx, dims.0);
+                position.z = source_depth;
+                let bounds = tile_seq_parent_sprite(
+                    0,
+                    catenary_reference_sprite_id(sid),
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    ox,
+                    oy,
+                    oz,
+                    ex,
+                    ey,
+                    ez,
+                )
+                .bounds;
+                commands
+                    .spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        sprite,
+                        Transform::from_translation(position),
+                        ViewportSortableParent {
+                            sprite_id: catenary_reference_sprite_id(sid),
+                            bounds,
+                            insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
+                            source_depth,
+                        },
+                    ))
+                    .id()
+            });
             let custom_front_translation = custom_tunnel_portal.as_ref().map(|resolved| {
                 custom_rail_tunnel_front_translation(ctx, resolved.center_offset, base_z, 0.081)
             });
-            let tunnel_parents = (!draw_tunnel_catenary).then(|| {
+            // Si un NewGRF declara catenaria pero no logra resolver su PNG,
+            // no existe parent de cable al que colgar el techo. En ese caso
+            // conservar el parent frontal es preferible a dejarlo directo.
+            let tunnel_parents = tunnel_catenary_parent.is_none().then(|| {
                 tunnel_sortable_parents(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
@@ -4484,20 +4537,24 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                     0.08,
                 )
             };
-            let front_sortable_parent = tunnel_parents.as_ref().map(|parents| {
-                let source_depth = viewport_source_depth(
-                    sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.08),
-                    ctx.tx,
-                    dims.0,
-                );
-                front_translation.z = source_depth;
-                ViewportSortableParent {
-                    sprite_id: front_sprite_id,
-                    bounds: parents[0].bounds,
-                    insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
-                    source_depth,
-                }
-            });
+            let front_source_depth = viewport_source_depth(
+                sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.08),
+                ctx.tx,
+                dims.0,
+            );
+            let front_sortable_parent =
+                tunnel_parents
+                    .as_ref()
+                    .map(|parents| ViewportSortableParent {
+                        sprite_id: front_sprite_id,
+                        bounds: parents[0].bounds,
+                        insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
+                        source_depth: front_source_depth,
+                    });
+            let front_has_sortable_parent = front_sortable_parent.is_some();
+            if front_has_sortable_parent || tunnel_catenary_parent.is_some() {
+                front_translation.z = front_source_depth;
+            }
             let mut front_entity = commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
@@ -4506,6 +4563,11 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             ));
             if let Some(parent) = front_sortable_parent {
                 front_entity.insert(parent);
+            } else if let Some(parent) = tunnel_catenary_parent {
+                front_entity.insert(ViewportSortableChild {
+                    parent,
+                    source_depth: front_source_depth,
+                });
             }
             let front_parent_entity = front_entity.id();
             if let Some(resolved) = custom_tunnel_portal {
@@ -4526,40 +4588,38 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                     0,
                     Some(front_bounds),
                 );
-                let overlay_translation = custom_front_translation.unwrap_or_else(|| {
+                let mut overlay_translation = custom_front_translation.unwrap_or_else(|| {
                     custom_rail_tunnel_front_translation(ctx, resolved.center_offset, base_z, 0.081)
                 });
+                let catenary_overlay_source_depth = tunnel_catenary_parent.map(|_| {
+                    viewport_source_depth(
+                        sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.081),
+                        ctx.tx,
+                        dims.0,
+                    )
+                });
+                if let Some(source_depth) = catenary_overlay_source_depth {
+                    overlay_translation.z = source_depth;
+                }
                 let mut overlay_entity = commands.spawn((
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
                     resolved.sprite,
                     Transform::from_translation(overlay_translation),
                 ));
-                if !draw_tunnel_catenary {
-                    overlay_entity.insert(crate::render::ViewportSortableChild {
+                if let (Some(parent), Some(source_depth)) =
+                    (tunnel_catenary_parent, catenary_overlay_source_depth)
+                {
+                    overlay_entity.insert(ViewportSortableChild {
+                        parent,
+                        source_depth,
+                    });
+                } else if front_has_sortable_parent {
+                    overlay_entity.insert(ViewportSortableChild {
                         parent: front_parent_entity,
                         source_depth: sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.081),
                     });
                 }
-            }
-            // Wire de portal (`DrawRailCatenaryOnTunnel`) si la vía es eléctrica.
-            if let Some((sprite, anchor)) = tunnel_catenary_sprite {
-                let (offset, (ox, oy, oz, ..)) = tunnel_catenary_trace_geometry(dir);
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    sprite,
-                    Transform::from_translation(catenary_sprite_center(
-                        ctx.tx_i32(),
-                        ctx.ty_i32(),
-                        base_z,
-                        0.085,
-                        (offset.0 + ox) as f32,
-                        (offset.1 + oy) as f32,
-                        (offset.2 + oz) as f32,
-                        anchor,
-                    )),
-                ));
             }
             // Después del techo (y de su bloque combinado de catenaria),
             // OpenTTD agrega dos cajas sin imagen que separan la boca de los

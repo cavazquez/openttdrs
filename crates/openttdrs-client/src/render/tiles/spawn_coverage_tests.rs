@@ -2864,6 +2864,7 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
             // usamos SW (2) con una pendiente NE para cubrir saves
             // importados cuya geometría y bytes no coinciden.
             m5: 2,
+            m8: RailType::Electric as u16,
             ..tile_template()
         },
     )
@@ -2890,25 +2891,35 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
         ..Default::default()
     };
     let make_spec = |sprite_type, graphics| openttdrs_core::RailSignalSpriteSpec {
-        rail_type: RailType::Rail,
+        rail_type: RailType::Electric,
         local_id: 0,
         sprite_type,
         grfid: 0x5455_4E4C,
         type_tables: None,
         graphics,
     };
-    let underlay_specs = vec![Some(make_spec(
-        openttdrs_core::RAIL_SPRITE_TYPE_UNDERLAY,
-        graphics(openttdrs_core::RAIL_SPRITE_TYPE_UNDERLAY),
-    ))];
-    let tunnel_specs = vec![Some(make_spec(
-        openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL,
-        graphics(openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL),
-    ))];
-    let portal_specs = vec![Some(make_spec(
-        openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL_PORTAL,
-        graphics(openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL_PORTAL),
-    ))];
+    // Los catálogos indexan por `RailType`: Electric ocupa el slot 1.
+    let underlay_specs = vec![
+        None,
+        Some(make_spec(
+            openttdrs_core::RAIL_SPRITE_TYPE_UNDERLAY,
+            graphics(openttdrs_core::RAIL_SPRITE_TYPE_UNDERLAY),
+        )),
+    ];
+    let tunnel_specs = vec![
+        None,
+        Some(make_spec(
+            openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL,
+            graphics(openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL),
+        )),
+    ];
+    let portal_specs = vec![
+        None,
+        Some(make_spec(
+            openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL_PORTAL,
+            graphics(openttdrs_core::RAIL_SPRITE_TYPE_TUNNEL_PORTAL),
+        )),
+    ];
     let grid = RenderGrid::from_map(&map, 8, 8);
     let mut world = World::new();
     world.insert_resource(TsMap(map));
@@ -2974,17 +2985,32 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
         custom_layers, 1,
         "RTSG_TUNNEL debe dibujar la superficie custom"
     );
+    let wire_id = crate::sprites::catenary_reference_sprite_id(
+        crate::sprites::catenary_tunnel_wire_sprite(2),
+    );
+    let wire_entity = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .find_map(|(entity, parent)| (parent.sprite_id == wire_id).then_some(entity))
+        .expect("el cable eléctrico debe ser el parent combinado");
+    assert_eq!(
+        world.query::<&ViewportSortableChild>().iter(&world).count(),
+        2,
+        "la base Action5 y RTSG_TUNNEL_PORTAL deben quedar combinados bajo el cable"
+    );
     assert!(
         world
+            .query::<&ViewportSortableChild>()
+            .iter(&world)
+            .all(|child| child.parent == wire_entity),
+        "las dos capas frontales deben acompañar el cable al reordenar"
+    );
+    assert!(
+        !world
             .query::<&ViewportSortableParent>()
             .iter(&world)
             .any(|parent| parent.sprite_id == 6128),
-        "la fachada base Action5 0x17 debe usar dir=SW de m5 (slot frontal 5)"
-    );
-    assert_eq!(
-        world.query::<&ViewportSortableChild>().iter(&world).count(),
-        1,
-        "RTSG_TUNNEL_PORTAL debe quedar combinado como child de la fachada base"
+        "la fachada base Action5 debe ser child, no un parent independiente"
     );
     let front_offset = crate::iso::remap_tile_offset(15.0, 15.0, 0.0) * 0.5;
     let front_iso = crate::iso::iso(2, 2);
@@ -2995,6 +3021,115 @@ fn newgrf_rail_tunnel_group_draws_custom_surface_when_portal_is_defined() {
                     < f32::EPSILON
         }),
         "RTSG_TUNNEL_PORTAL debe anclar la fachada custom al borde sortable"
+    );
+}
+
+#[test]
+fn electric_rail_tunnel_combines_front_with_catenary_parent() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(2, 2);
+    let mut map = fresh_map8();
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::RailTunnel,
+            mapt: 0x10,
+            // SW: usa la geometría de cable larga en X y la fachada 6128.
+            m5: 2,
+            m8: RailType::Electric as u16,
+            ..tile_template()
+        },
+    )
+    .expect("rail tunnel eléctrico");
+    map.set_height(TileCoord::new(2, 2), 1)
+        .expect("north height");
+    map.set_height(TileCoord::new(2, 3), 1)
+        .expect("east height");
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfSignalSpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut signal_sprites: ResMut<crate::render::NewGrfSignalSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    Some(&mut signal_sprites),
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    Some(&mut images),
+                    &[],
+                    &[],
+                );
+            },
+        )
+        .expect("electric rail tunnel spawn");
+
+    let wire_id = crate::sprites::catenary_reference_sprite_id(
+        crate::sprites::catenary_tunnel_wire_sprite(2),
+    );
+    let (wire_entity, wire_parent) = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .find(|(_, parent)| parent.sprite_id == wire_id)
+        .expect("el cable de boca debe participar como parent sortable");
+    assert_eq!(
+        wire_parent.bounds,
+        ParentSpriteBounds::new(32, 32, 7, 47, 46, 7),
+        "la caja del cable debe conservar `SpriteBounds` del túnel"
+    );
+    let children: Vec<_> = world
+        .query::<&ViewportSortableChild>()
+        .iter(&world)
+        .collect();
+    assert_eq!(
+        children.len(),
+        1,
+        "la fachada del túnel debe ser el único child del cable sin portal custom"
+    );
+    assert_eq!(
+        children[0].parent, wire_entity,
+        "el techo frontal debe moverse como bloque atómico con la catenaria"
+    );
+    assert!(
+        !world
+            .query::<&ViewportSortableParent>()
+            .iter(&world)
+            .any(|parent| parent.sprite_id == 6128),
+        "la fachada ya no debe competir como parent independiente"
     );
 }
 

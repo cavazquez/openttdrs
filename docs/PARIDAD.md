@@ -1071,11 +1071,12 @@ Ya existe un port puro y testeado de `ViewportSortParentSprites` en
 vanilla de paradas Bus/Truck, depósitos viales, árboles `MP_TREES` y sus copas
 combinadas,
 las seis mitades StationGfx de muelle, los seis layouts del depósito naval, los
-bundles de catenaria/fachada de depósitos ferroviarios, los faroles viales,
-casas vanilla y el subconjunto plano/estático de industrias vanilla ya aportan
-bounds al compositor. En particular, la secuencia vanilla de estación rail
-PPP/cable/plataforma ahora materializa sus prismas como parents globales, y el
-vidrio de techo queda como child de su techo precedente. Las demás familias
+bundles de catenaria/fachada de depósitos ferroviarios y las entradas eléctricas
+de túnel con sus fachadas combinadas, los faroles viales, casas vanilla y el
+subconjunto plano/estático de industrias vanilla ya aportan bounds al compositor.
+En particular, la secuencia vanilla de estación rail PPP/cable/plataforma ahora
+materializa sus prismas como parents globales, y el vidrio de techo queda como
+child de su techo precedente. Las demás familias
 todavía carecen de bounds, identidad de parent o vínculo de children completos;
 esa cobertura parcial no es evidencia de composición global aplicada.
 
@@ -1151,6 +1152,24 @@ matriz de píxeles distintos no empeora: `0,25×` 234.056→234.056, `0,5×`
 declaración de paridad ni de mejora general del framebuffer. #326 sigue
 abierto por catenaria/waypoints viales, producers restantes, composición por
 segmentos, clipping, pivotes y framebuffer.
+
+Actualización #326-TUNNEL-CATENARY-GLOBAL (2026-09-09):
+`DrawRailCatenaryOnTunnel` ya conserva su `SpriteCombine` en runtime. En una
+boca eléctrica el cable de entrada `5656`/`5658` es el parent global con el
+prisma `SpriteBounds` literal; la fachada frontal vanilla/Action5 y, cuando
+existe, `RTSG_TUNNEL_PORTAL`, quedan como children del mismo bloque atómico.
+Si el PNG de catenaria no se puede resolver, la fachada conserva su parent
+propio: el fallback no pierde ni el sprite ni su orden. En Kale `(189,117)`,
+`1280×720`, perfil limpio, la traza runtime contiene las cuatro cajas visibles
+de cable y el inventario `world-draw` no deja ninguna de esa familia sin
+contraparte. La traza scoped normalizada conserva tres de esas filas por su
+segmentación de viewport; aun así la intersección exacta sube de 1.389 a 1.392
+y no pierde tuplas nativas. La matriz de píxeles distintos es `0,25×`
+234.056→234.056, `0,5×` 388.170→388.158, `1×` 93.207→93.194, `2×`
+532.819→532.788, `4×` 750.086→750.081 y `8×` 705.906→705.905; el delta medio
+normal baja de 3,674402 a 3,668558. Es una corrección local de composición,
+no paridad global: familias restantes, clipping, pivotes y framebuffer siguen
+abiertos en #326, y el contrato global completo de children sigue en #561.
 
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,

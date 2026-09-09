@@ -51,9 +51,18 @@ jornadas vuelve a ser exacta; los límites del corte están en
 RMAP-171 corrige la siguiente frontera: una industria incompleta debe ejecutar
 `MakeIndustryTileBigger` durante su propia visita LFSR y tomar el `Random()`
 incondicional del cambio de etapa antes de árboles y pueblos posteriores. La
-fixture `autosave0.sav` queda exacta durante 181 jornadas; el siguiente corte
-medido es `day[210]`. La evidencia y límites están en
+fixture `autosave0.sav` queda exacta durante 181 jornadas; su frontera
+histórica de `day[210]` queda resuelta por RMAP-172. La evidencia y límites
+están en
 [runtime-industry-construction-tile-loop-rmap-171.md](runtime-industry-construction-tile-loop-rmap-171.md).
+
+RMAP-172 materializa `BuildOilRig` en la misma visita LFSR que completa la
+pieza norte `GFX_OILRIG_1`; basta que exista su pareja sur de la misma
+industria, aunque siga en obra. Así la estación neutral participa en el
+`AcceptanceTick` del tick actual y conserva el stream global. Con el oracle
+OpenTTD 15.3 y `autosave0.sav`, `initial` y `day[0]`…`day[232]` son exactos;
+la frontera siguiente, separada, queda en `day[233]`. Evidencia y límites en
+[runtime-oil-rig-station-timing-rmap-172.md](runtime-oil-rig-station-timing-rmap-172.md).
 
 Incidencia de validación ajena al lote: al cerrarlo, #535 registraba que
 `test_parity_docs_portability.py` copiaba el baseline raster del 2026-09-05
@@ -191,7 +200,9 @@ industriales. La configuración, timeout, hashes y límites quedan sólo en
 RMAP-158 / #499 porta la plataforma Oil Rig que faltaba del ciclo de runtime:
 tipo nativo 5, layout 2×3, agua por tesela, producción, estación neutral
 `Oilrig` (helipuerto y muelle), cierre y round-trip SAV interno. La construcción
-terminada conserva la entidad y los bytes vinculados, y la cohorte Temperate
+terminada conserva la entidad y los bytes vinculados; RMAP-172 precisa que la
+estación nace al terminar la pieza norte `GFX_OILRIG_1` si existe la sur, no al
+esperar que ambas terminen. La cohorte Temperate
 512²/seed `1330935382` sigue exacta en `industries` por teselas, bloques 4×4,
 RNG e intentos. No se cierra #499: la fundación vanilla posterior a 1960 está
 cubierta por RMAP-161/#502, pero faltan catálogos/callbacks NewGRF, settings

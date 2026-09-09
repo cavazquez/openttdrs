@@ -491,10 +491,11 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             &state.cargo_spec_catalog,
         ),
     );
-    // `MakeIndustryTileBigger` llama a `BuildOilRig` cuando las dos piezas
-    // superiores `GFX_OILRIG_1` terminan. La plataforma no sustituye a la
-    // industria: sólo la tesela norte pasa a estación neutral con helipuerto
-    // y muelle; las cinco piezas restantes siguen perteneciendo al INDY.
+    // Respaldo para rigs rehidratados: `BuildOilRig` se dispara al terminar la
+    // pieza norte `GFX_OILRIG_1` si existe su gemela sur. En la ruta regular,
+    // `phase_tile_loop` lo materializa en esa misma visita. La plataforma no
+    // sustituye a la industria: sólo la tesela norte pasa a estación neutral
+    // con helipuerto y muelle; las cinco piezas restantes siguen en el INDY.
     let oil_rig_dirty = materialize_completed_oil_rigs(state);
     state.runtime.industry_tile_dirty.extend(oil_rig_dirty);
     state
@@ -578,10 +579,11 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
 
 /// Materializa la estación neutral que `OpenTTD` crea al terminar un Oil Rig.
 ///
-/// En `industry_cmd.cpp`, `BuildOilRig` se activa al ver dos piezas verticales
-/// `GFX_OILRIG_1` terminadas. Conservamos esa guarda, en vez de transformar
-/// cualquier industria con agua, para que la transición sea idempotente y no
-/// altere Oil Wells ni plataformas importadas ya materializadas.
+/// En `industry_cmd.cpp`, `BuildOilRig` se activa cuando termina la pieza
+/// norte `GFX_OILRIG_1` y encuentra debajo su gemela, aunque ésta continúe
+/// en construcción. Conservamos esa guarda, en vez de transformar cualquier
+/// industria con agua, para que la transición sea idempotente y no altere Oil
+/// Wells ni plataformas importadas ya materializadas.
 fn materialize_completed_oil_rigs(state: &mut GameState) -> Vec<crate::TileCoord> {
     let rigs: Vec<_> = state
         .industries
@@ -664,13 +666,15 @@ fn oil_rig_station_tile(state: &GameState, industry: &crate::Industry) -> Option
         let Some(south_tile) = state.map.get(south) else {
             return false;
         };
+        // `BuildOilRig` se alcanza desde `MakeIndustryTileBigger` cuando esta
+        // pieza norte acaba de completarse; sólo exige que la sur exista, no
+        // que ésta ya esté terminada.
         tile.kind == crate::TileKind::Industry
             && south_tile.kind == crate::TileKind::Industry
             && crate::map::industry_gfx(&tile) == crate::map::industry_terrain::GFX_OILRIG_FIRST
             && crate::map::industry_gfx(&south_tile)
                 == crate::map::industry_terrain::GFX_OILRIG_FIRST
             && crate::map::is_industry_completed(tile.m1)
-            && crate::map::is_industry_completed(south_tile.m1)
             && crate::map::industry_instance_id(&tile) == industry.instance_id
             && crate::map::industry_instance_id(&south_tile) == industry.instance_id
             && industry.contains_tile(south)
@@ -762,6 +766,18 @@ fn phase_tile_loop(state: &mut GameState, t: u64) {
                         let _construction_stage_changed_random = global_rng.next();
                         industry_dirty
                             .extend(trigger_industry_construction_stage_changed(state, t, coord));
+                    }
+                    let completed_now = state
+                        .map
+                        .get(coord)
+                        .is_some_and(|tile| crate::map::is_industry_completed(tile.m1));
+                    if completed_now {
+                        // `MakeIndustryTileBigger` llama `BuildOilRig` en la
+                        // misma visita que completa la pieza norte GFX 24.
+                        // No diferir esta transición a AnimateAnimatedTiles:
+                        // ese tick puede incluir el AcceptanceTick de la
+                        // nueva estación y por tanto consumir RNG global.
+                        industry_dirty.extend(materialize_completed_oil_rigs(state));
                     }
                     continue;
                 }
@@ -1580,8 +1596,9 @@ mod tests {
     fn completed_oil_rig_creates_one_neutral_airport_and_dock() {
         let origin = TileCoord::new(4, 4);
         let mut state = GameState::new(16, 16);
-        // Layout nativo: (0,0)/(0,1) son las dos piezas GFX_OILRIG_1 que
-        // disparan BuildOilRig; cada tesela conserva su WaterClass propia.
+        // Layout nativo: (0,0)/(0,1) son las dos piezas GFX_OILRIG_1. Basta
+        // que termine la norte: `BuildOilRig` sólo comprueba que exista su
+        // pareja sur del mismo IndustryID.
         for y in 0..16 {
             for x in 0..16 {
                 crate::map::make_water_tile(
@@ -1613,6 +1630,13 @@ mod tests {
             tile.m1 |= 0x80;
             state.map.set_tile(coord, tile).expect("complete tile");
         }
+        let south_top = TileCoord::new(origin.x, origin.y + 1);
+        let mut south_top_tile = state.map.get(south_top).expect("south GFX 24 tile");
+        south_top_tile.m1 &= !0x80;
+        state
+            .map
+            .set_tile(south_top, south_top_tile)
+            .expect("leave south GFX 24 under construction");
 
         assert_eq!(materialize_completed_oil_rigs(&mut state), vec![origin]);
         assert_eq!(state.stations.len(), 1);
@@ -1658,6 +1682,62 @@ mod tests {
         assert_eq!(loaded.stations[0].stop_kind, crate::StopKind::OilRig);
         assert_eq!(loaded.stations[0].neutral_industry_id, Some(0));
         assert_eq!(loaded.map.get_kind(origin), Some(crate::TileKind::Station));
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn oil_rig_station_materializes_in_the_north_tile_completion_visit() {
+        let origin = TileCoord::new(4, 4);
+        let south_top = TileCoord::new(4, 5);
+        let mut state = GameState::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                crate::map::make_water_tile(
+                    &mut state.map,
+                    TileCoord::new(x, y),
+                    crate::WaterClass::Sea,
+                )
+                .expect("sea map");
+            }
+        }
+        apply_command(
+            &mut state,
+            &Command::PlaceIndustrySpecLayout(origin, crate::IndustrySpec::OilRig, 0),
+        )
+        .expect("place oil rig");
+
+        let mut north_tile = state.map.get(origin).expect("north GFX 24 tile");
+        // etapa 2 + contador 3: esta visita completa exactamente la pieza
+        // norte. La gemela sur sigue en obra y debe bastar para BuildOilRig.
+        north_tile.m1 = (north_tile.m1 & 0x60) | 0x0E;
+        state
+            .map
+            .set_tile(origin, north_tile)
+            .expect("arm north completion");
+
+        // En un mapa 64×64 el TileIndex OpenTTD de (4,4) es 4 + 4*64.
+        // `phase_tile_loop` debe materializar la estación en esta misma
+        // visita, antes de OnTick_Station del tick actual.
+        state.cur_tileloop_tile = 4 + 4 * 64;
+        phase_tile_loop(&mut state, 1);
+
+        assert_eq!(state.stations.len(), 1);
+        assert_eq!(state.stations[0].ottd_station_id, Some(0));
+        assert_eq!(state.map.get_kind(origin), Some(crate::TileKind::Station));
+        assert_eq!(
+            state.map.get_kind(south_top),
+            Some(crate::TileKind::Industry)
+        );
+        assert!(
+            !crate::map::is_industry_completed(
+                state
+                    .map
+                    .get(south_top)
+                    .expect("south GFX 24 after visit")
+                    .m1
+            ),
+            "la pieza sur no necesita terminar para crear la estación"
+        );
     }
 
     #[test]

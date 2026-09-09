@@ -50,9 +50,11 @@ python3 scripts/compare_industry_scheduler_traces.py \
 
 El comparador dio `OK: scheduler industrial exacto · 181 días`: reloj, RNG,
 `ECMY`, las 240 filas `ITBL`, pool ordenado de industrias y acciones. Al
-ampliar la misma corrida a 240 jornadas, la primera frontera posterior queda
-en `day[210].random_state.state_0` (OpenTTD `3556375678`, openttdrs
-`4162363639`); queda como diagnóstico separado, no atribuido a esta regla.
+ampliar entonces la corrida, la frontera posterior fue
+`day[210].random_state.state_0`; RMAP-172 la atribuyó a la materialización
+demorada de la estación neutral de una Oil Rig, no a esta regla de construcción
+genérica. Su corrección y la ventana posterior están en
+[runtime-oil-rig-station-timing-rmap-172.md](runtime-oil-rig-station-timing-rmap-172.md).
 
 ## Límites
 

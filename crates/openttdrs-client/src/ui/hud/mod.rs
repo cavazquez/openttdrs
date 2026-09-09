@@ -13,7 +13,7 @@ pub(crate) use feedback::{
 };
 
 pub(crate) use display::{setup_tile_info_ui, update_tile_info_text};
-pub(crate) use income_popup::{animate_income_popups, spawn_income_popups};
+pub(crate) use income_popup::{IncomePopupText, animate_income_popups, spawn_income_popups};
 pub(crate) use input::{
     cycle_json_save_path_hotkey, handle_hud_toggle, handle_pause_toggle, handle_tool_hotkeys,
 };

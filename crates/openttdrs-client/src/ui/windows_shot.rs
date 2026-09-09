@@ -1462,11 +1462,20 @@ fn hide_map_shot_ui(world: &mut World) {
     for mut visibility in status_bar_layers.iter_mut(world) {
         *visibility = Visibility::Hidden;
     }
+    hide_clean_map_shot_dynamic_layers(world);
+}
+
+/// Oculta entidades efímeras del mundo que pueden aparecer después de que los
+/// sistemas de HUD procesen un frame. Se mantiene separado del guard de entorno
+/// para poder ejercer el contrato de la captura limpia sin mutar el entorno de
+/// proceso desde una prueba concurrente.
+fn hide_clean_map_shot_dynamic_layers(world: &mut World) {
     let mut dynamic_layers = world.query_filtered::<&mut Visibility, Or<(
         With<VehicleCargoLabel>,
         With<TownLabel>,
         With<StationLabel>,
         With<SignLabel>,
+        With<crate::ui::hud::IncomePopupText>,
         With<VehicleSprite>,
         With<ConsistUnitSprite>,
         With<AircraftShadowSprite>,
@@ -2019,6 +2028,8 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use openttdrs_core::IncomePopup;
     use std::path::PathBuf;
 
     #[test]
@@ -2148,6 +2159,42 @@ mod tests {
         assert!(guard.restore(&mut prefs));
         assert_eq!(prefs, original);
         assert!(!guard.restore(&mut prefs));
+    }
+
+    #[test]
+    fn clean_map_shot_hides_materialized_income_popups() {
+        let mut world = World::new();
+        let mut sim = SimWorld {
+            state: GameState::new(4, 4),
+            ..Default::default()
+        };
+        sim.state.runtime.pending_income_popups.push(IncomePopup {
+            amount: 0,
+            at: TileCoord::new(1, 1),
+        });
+        world.insert_resource(sim);
+        world.insert_resource(crate::ui::font::HudUiFont(Handle::default()));
+
+        world
+            .run_system_once(crate::ui::hud::spawn_income_popups)
+            .unwrap();
+        let mut popup_visibility =
+            world.query_filtered::<&Visibility, With<crate::ui::hud::IncomePopupText>>();
+        assert!(
+            popup_visibility
+                .iter(&world)
+                .all(|visibility| matches!(*visibility, Visibility::Visible)),
+            "la sesión normal conserva el popup hasta que el perfil clean lo oculte"
+        );
+
+        hide_clean_map_shot_dynamic_layers(&mut world);
+
+        assert!(
+            popup_visibility
+                .iter(&world)
+                .all(|visibility| matches!(*visibility, Visibility::Hidden)),
+            "la captura clean no puede contaminar el raster estático con +$N"
+        );
     }
 
     #[test]

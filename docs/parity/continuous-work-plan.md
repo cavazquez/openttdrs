@@ -138,9 +138,13 @@ ya resuelve Action2 de
 `TileLoop`/`TileLoopNorth`: conserva los triggers pendientes, aplica sólo la
 máscara de reseed y comparte el resultado norte en huellas multitile, con el
 consumo global por tesela nativo. Luego rearma el período, preserva
-`AnimatedTileState` y marca dirty. #527 permanece abierto para el trigger de
-cambio de obra, CB21 de destrucción y sonidos de animación NewGRF; no amplía
-el cierre de #512.
+`AnimatedTileState` y marca dirty. Incluso cuando ese timer sólo se decrementa,
+`TileLoop_Town` continúa una casa NewGRF en obra: cada rollover de etapa marca
+la subtesela y, si publicó su máscara, CB1C toma una palabra RNG nueva,
+recibe `param2 = 0` y aplica la misma semántica `ChangeAnimationFrame` sobre
+ANIT. La llamada inaugural de `BuildTownHouse` (`param2 = 1`) sigue pendiente.
+#527 permanece abierto para esa llamada inicial, CB21 de destrucción y sonidos
+de animación NewGRF; no amplía el cierre de #512.
 La evidencia canónica vive sólo en
 [random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
 

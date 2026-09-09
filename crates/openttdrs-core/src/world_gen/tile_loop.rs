@@ -356,12 +356,13 @@ fn tile_loop_house(
         return;
     };
     // `NewHouseTileLoop` se ejecuta antes de la construcción. Mientras
-    // `processing_time` sea positivo OpenTTD sólo lo decrementa, marca la
-    // tesela dirty y retorna sin consumir RNG. Al agotarse ejecutaría la
-    // aleatorización/callbacks y vuelve a programar el período; el rearme no
-    // depende de esos callbacks y preserva la cadencia aunque esas rutas aún
-    // estén pendientes.
+    // `processing_time` sea positivo sólo lo decrementa y marca la tesela
+    // dirty: ese timer no consume RNG y `TileLoop_Town` continúa con la obra.
+    // Al agotarse ejecuta la aleatorización/callbacks y vuelve a programar el
+    // período; el rearme no depende de esos callbacks y preserva la cadencia.
     if house_id >= crate::house_spec::NEW_HOUSE_OFFSET {
+        let building_flags = crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id)
+            .map_or(0, |def| def.building_flags);
         let processing_time = tile.m6 >> 2;
         if processing_time != 0 {
             let mut updated = tile;
@@ -373,9 +374,6 @@ fn tile_loop_house(
                 state.runtime.landscape_tile_dirty.push(coord);
             }
         } else {
-            let building_flags =
-                crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id)
-                    .map_or(0, |def| def.building_flags);
             if let Some(rng) = generation_rng.as_deref_mut() {
                 advance_newgrf_house_tile_loop_randomisation(state, coord, building_flags, rng);
                 trigger_newgrf_house_tile_loop_animations(state, coord, building_flags, rng);
@@ -389,6 +387,33 @@ fn tile_loop_house(
             // cuando la propiedad es cero o la randomización no cambió MAP1.
             if state.map.set_tile(coord, updated).is_ok() {
                 state.runtime.landscape_tile_dirty.push(coord);
+            }
+        }
+
+        // `NewHouseTileLoop` retorna al caller antes de que
+        // `TileLoop_Town` decida si la casa ya terminó. Las partes secundarias
+        // no llevan flags de huella, así que sólo la tesela norte avanza el
+        // conjunto completo.
+        let Some(live_tile) = state.map.get(coord) else {
+            return;
+        };
+        if live_tile.m3 & 0x80 == 0 {
+            if building_flags == 0 {
+                return;
+            }
+            for (dx, dy) in crate::house_spec::house_footprint_offsets(building_flags) {
+                let part = TileCoord::new(coord.x + dx, coord.y + dy);
+                if !advance_house_construction_tile(&mut state.map, part) {
+                    continue;
+                }
+                // `AdvanceSingleHouseConstruction` marca la etapa, aun sin
+                // callback. CB1C toma una palabra nueva sólo si su bit de
+                // máscara está publicado y usa `param2 = 0` para un rollover
+                // normal (la llamada inicial de `BuildTownHouse` es otra ruta).
+                state.runtime.landscape_tile_dirty.push(part);
+                if let Some(rng) = generation_rng.as_deref_mut() {
+                    trigger_newgrf_house_construction_stage_changed_animation(state, part, rng);
+                }
             }
         }
         return;
@@ -581,6 +606,49 @@ fn trigger_newgrf_house_tile_loop_animation(
         coord,
         crate::newgrf_sprites::CBID_HOUSE_ANIMATION_TRIGGER_TILE_LOOP,
         random_bits,
+        0,
+    );
+    if crate::map::house_lift::apply_newgrf_house_animation_callback_result(
+        &mut state.map,
+        &mut state.active_house_animations,
+        coord,
+        result,
+    ) {
+        state.runtime.landscape_tile_dirty.push(coord);
+    }
+}
+
+/// Ejecuta CB1C al terminar una etapa de obra de una casa `NewGRF`.
+///
+/// La palabra aleatoria de `TriggerHouseAnimation_ConstructionStageChanged`
+/// sólo se consume después de verificar la máscara. La vía de tile loop
+/// siempre representa un rollover, por lo que `param2` es cero; la llamada
+/// inicial de `BuildTownHouse` usa uno y se conecta desde su propio call site.
+fn trigger_newgrf_house_construction_stage_changed_animation(
+    state: &mut GameState,
+    coord: TileCoord,
+    rng: &mut Randomizer,
+) {
+    let Some(tile) = state.map.get(coord) else {
+        return;
+    };
+    let house_id = tile.m8 & 0x0FFF;
+    let Some(def) = crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id) else {
+        return;
+    };
+    if !def.has_animation_construction_stage_changed_callback() {
+        return;
+    }
+
+    let result = crate::newgrf_callback::resolve_house_animation_callback_with_world(
+        def,
+        &state.map,
+        &mut state.towns,
+        &state.house_spec_catalog,
+        state.climate,
+        coord,
+        crate::newgrf_sprites::CBID_HOUSE_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED,
+        rng.next(),
         0,
     );
     if crate::map::house_lift::apply_newgrf_house_animation_callback_result(
@@ -913,21 +981,26 @@ pub(crate) fn advance_town_tile_loop_from_visit_with_rng(
     tile_loop_house(state, tick, coord, tile, &mut shared_rng);
 }
 
-fn advance_house_construction_tile(map: &mut crate::map::Map, coord: TileCoord) {
+/// Avanza una tesela de obra y devuelve si acabó una etapa.
+///
+/// `GetHouseConstructionTick` ocupa los tres bits bajos de `MAP5`; sólo el
+/// wrap a cero dispara `TriggerHouseAnimation_ConstructionStageChanged`.
+fn advance_house_construction_tile(map: &mut crate::map::Map, coord: TileCoord) -> bool {
     let Some(mut tile) = map.get(coord) else {
-        return;
+        return false;
     };
     if tile.kind != TileKind::House || tile.m3 & 0x80 != 0 {
-        return;
+        return false;
     }
 
     let next = (tile.m5 & 0x1F).wrapping_add(1) & 0x1F;
+    let stage_changed = next.is_multiple_of(8);
     tile.m5 = (tile.m5 & !0x1F) | next;
     if (tile.m5 >> 3) & 0x03 == 3 {
         tile.m3 |= 0x80;
         tile.m5 = 0;
     }
-    let _ = map.set_tile(coord, tile);
+    map.set_tile(coord, tile).is_ok() && stage_changed
 }
 
 /// Ejecuta la parte de `TileLoop_Road` que es observable durante la creación
@@ -1672,6 +1745,81 @@ mod tests {
             ranges: Vec::new(),
             default: 0,
         }
+    }
+
+    #[test]
+    fn newgrf_house_construction_rollover_runs_cb1c_after_its_timer() {
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let coord = TileCoord::new(1, 0);
+        let mut map = Map::new_flat(2, 2, 0);
+        map.set_tile(
+            coord,
+            crate::map::Tile::town_house(
+                crate::map::TownHouseSpec {
+                    house_id: id,
+                    town_id: 0,
+                    random_bits: 0,
+                    construction_counter: 7,
+                    construction_stage: 0,
+                    is_protected: false,
+                    processing_time: 1,
+                },
+                0,
+                0,
+            ),
+        )
+        .expect("NewGRF house inside map");
+
+        let mut runtime = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        runtime
+            .assigns
+            .push(crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            });
+        // `var 0C` expone el ID de callback: el frame observable confirma que
+        // la llamada es CB1C, no CB20 ni un trigger de tile loop.
+        runtime.action2_var.insert(
+            0,
+            house_animation_callback_entry(0x0C, 0, u32::from(u8::MAX)),
+        );
+        let mut def =
+            newgrf_runtime_house(id, 0, crate::house_spec::BUILDING_FLAG_SIZE_1X1, 0, runtime);
+        def.callback_mask =
+            crate::house_spec::HOUSE_CALLBACK_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED_MASK;
+        let mut state = GameState::from_map(map);
+        state.house_spec_catalog.push(def);
+
+        let mut actual = Randomizer::new(42);
+        let mut expected = actual;
+        let _cb1c_random = expected.next();
+        let current = state.map.get(coord).expect("NewGRF house");
+        let mut generation_rng = Some(&mut actual);
+        tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
+
+        let updated = state.map.get(coord).expect("NewGRF house after loop");
+        assert_eq!(actual, expected, "CB1C takes exactly its fresh Random()");
+        assert_eq!(updated.m5, 0x08, "counter rollover enters stage 1");
+        assert_eq!(updated.m3 & 0x80, 0, "stage 1 is still under construction");
+        assert_eq!(updated.m6 >> 2, 0, "timer decremented before construction");
+        assert_eq!(
+            updated.m7,
+            u8::try_from(
+                crate::newgrf_sprites::CBID_HOUSE_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED
+            )
+            .expect("CB1C frame")
+        );
+        assert_eq!(state.active_house_animations, vec![coord]);
+        assert_eq!(
+            state
+                .runtime
+                .landscape_tile_dirty
+                .iter()
+                .filter(|&&dirty| dirty == coord)
+                .count(),
+            3,
+            "timer, stage rollover, and animation frame each invalidate the tile"
+        );
     }
 
     #[test]

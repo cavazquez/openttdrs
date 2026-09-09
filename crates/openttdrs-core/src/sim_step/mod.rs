@@ -1437,10 +1437,9 @@ mod tests {
         let coord = TileCoord::new(2, 2);
         let house_id = crate::house_spec::NEW_HOUSE_OFFSET;
         let mut state = GameState::new(8, 8);
-        state
-            .map
-            .set_completed_house(coord, house_id, 0)
-            .expect("NewGRF house inside map");
+        let Ok(()) = state.map.set_completed_house(coord, house_id, 0) else {
+            panic!("NewGRF house inside map");
+        };
         assert!(crate::map::house_lift::activate_newgrf_house_animation(
             &mut state.map,
             &mut state.active_house_animations,
@@ -1476,7 +1475,10 @@ mod tests {
 
         phase_tile_animation(&mut state, 0);
 
-        assert_eq!(state.map.get(coord).expect("animated house").m7, 1);
+        let Some(animated_house) = state.map.get(coord) else {
+            panic!("animated house");
+        };
+        assert_eq!(animated_house.m7, 1);
         assert!(state.runtime.landscape_tile_dirty.contains(&coord));
     }
 

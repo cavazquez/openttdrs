@@ -1207,6 +1207,9 @@ pub const CBID_HOUSE_ALLOW_CONSTRUCTION: u16 = 0x17;
 pub const CBID_HOUSE_ANIMATION_NEXT_FRAME: u16 = 0x1A;
 /// Callback casas: reaccionar al tile loop (`CBID_HOUSE_ANIMATION_TRIGGER_TILE_LOOP`).
 pub const CBID_HOUSE_ANIMATION_TRIGGER_TILE_LOOP: u16 = 0x1B;
+/// Callback casas: reaccionar a un cambio de etapa de obra
+/// (`CBID_HOUSE_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED`).
+pub const CBID_HOUSE_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED: u16 = 0x1C;
 /// Callback casas: elegir la velocidad de animación (`CBID_HOUSE_ANIMATION_SPEED`).
 pub const CBID_HOUSE_ANIMATION_SPEED: u16 = 0x20;
 /// Callback casas: decidir si se dibuja la fundación (`CBID_HOUSE_DRAW_FOUNDATIONS`).

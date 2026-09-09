@@ -58,6 +58,9 @@ pub const HOUSE_CALLBACK_ANIMATION_NEXT_FRAME_MASK: u16 = 1 << 1;
 /// Bit `HouseCallbackMask::AnimationTriggerTileLoop`: consulta CB `0x1B` al
 /// expirar el procesamiento periódico de una casa.
 pub const HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK: u16 = 1 << 2;
+/// Bit `HouseCallbackMask::AnimationTriggerConstructionStageChanged`: consulta
+/// CB `0x1C` cuando una etapa de obra termina.
+pub const HOUSE_CALLBACK_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED_MASK: u16 = 1 << 3;
 /// Bit `HouseCallbackMask::AnimationSpeed`: consulta CB `0x20` para elegir
 /// la cadencia de la animación.
 pub const HOUSE_CALLBACK_ANIMATION_SPEED_MASK: u16 = 1 << 6;
@@ -280,6 +283,12 @@ impl HouseSpecDef {
     #[must_use]
     pub const fn has_animation_tile_loop_callback(&self) -> bool {
         self.callback_mask & HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK != 0
+    }
+
+    /// El callback CB1C se dispara cuando cambia la etapa de construcción.
+    #[must_use]
+    pub const fn has_animation_construction_stage_changed_callback(&self) -> bool {
+        self.callback_mask & HOUSE_CALLBACK_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED_MASK != 0
     }
 
     /// El callback CB20 decide la cadencia de la animación.
@@ -1181,10 +1190,12 @@ mod tests {
             HOUSE_EXTRA_FLAG_CALLBACK_1A_RANDOM_BITS | HOUSE_EXTRA_FLAG_SYNCHRONIZED_CALLBACK_1B;
         def.callback_mask = HOUSE_CALLBACK_ANIMATION_NEXT_FRAME_MASK
             | HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK
+            | HOUSE_CALLBACK_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED_MASK
             | HOUSE_CALLBACK_ANIMATION_SPEED_MASK;
         assert!(def.has_animation());
         assert!(def.has_animation_next_frame_callback());
         assert!(def.has_animation_tile_loop_callback());
+        assert!(def.has_animation_construction_stage_changed_callback());
         assert!(def.has_animation_speed_callback());
         assert!(def.animation_next_frame_uses_random_bits());
         assert!(def.animation_tile_loop_is_synchronized());

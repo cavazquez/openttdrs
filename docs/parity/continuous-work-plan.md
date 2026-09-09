@@ -109,9 +109,11 @@ RMAP-164 / #525 elimina el gate duplicado de estación/financiación de
 `MAPE` (`None → Animated → Deleted → None`) preservan el slot si un
 `TileLoop_Town` reactiva el ascensor antes del siguiente pase; obra runtime no
 toma RNG extra y la renovación reutiliza la misma palabra `r`. La corrida
-integrada posterior alcanza **360 jornadas** (RMAP-175). #527 permanece abierto
-para ampliar la ventana y cubrir huellas/protección/NewGRF; no amplía el
-cierre de #512. La evidencia canónica vive sólo en
+integrada posterior alcanzó **360 jornadas** en RMAP-175 y la extensión
+dedicated de #527 sobre la misma fixture verifica **400** (`initial` +
+`day[0]`…`day[399]`). #527 permanece abierto para fixtures específicos de
+huellas multitile/protegidas y callbacks de casas NewGRF; no amplía el cierre
+de #512. La evidencia canónica vive sólo en
 [random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
 
 RMAP-167 / #528 restaura `PATS.economy.type` y evita ejecutar la rama diaria
@@ -269,8 +271,9 @@ canónica se mantiene en
 RMAP-163/#524 extiende esa frontera a 23 jornadas y concentra su evidencia
 actualizada en la fila canónica de RMAP-163; RMAP-164/#525 la lleva a 25 y
 RMAP-166/#527 a 35 mediante el tile loop urbano. RMAP-168/#529 y los cortes
-posteriores extienden la misma fixture hasta 360 jornadas en RMAP-175; #527
-conserva su cobertura residual.
+posteriores extienden la misma fixture hasta 360 jornadas en RMAP-175; la
+extensión dedicated de #527 la verifica hasta 400 jornadas y conserva su
+cobertura residual.
 #510 impide que una ejecución dedicated sin socket se acepte como oracle aunque
 produzca JSONL válida. RMAP-162 cierra instrumentación y regresiones, no afirma
 todavía paridad temporal ni reduce los pendientes de #499, RMAP-056 o #338.
@@ -288,8 +291,9 @@ la cadencia de fábrica con diez `IndustryTick` y #523 corrige el fallback
 permanece abierto por cobertura runtime pendiente; RMAP-163/#524 ya alineó el
 cierre mensual, RMAP-164/#525 el primer walker posterior y RMAP-166/#527
 alineó el corte inicial de ascensores/obra/renovación; RMAP-168/#529 y los
-cortes posteriores llevan la fixture integrada a 360 jornadas, pero conserva
-abierta la ventana larga y las variantes urbanas no cubiertas.
+cortes posteriores llevaron la fixture integrada a 360 jornadas, y la
+extensión dedicated de #527 la verifica a 400. Siguen abiertas las variantes
+urbanas multitile/protegidas y callbacks no cubiertos.
 Los
 gates continúan siendo obligatorios y ningún issue padre se considera cerrado
 por esta cobertura.

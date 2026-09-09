@@ -1480,11 +1480,11 @@ pub(crate) fn spawn_industry_tile_with_world(
     let industries_hidden = is_hidden(TransparencyOption::Industries);
     // Chimenea de la central terminada: penacho de humo animado encima.
     if !industries_hidden && gfx == crate::render::GFX_POWERPLANT_CHIMNEY && m1 & 0x80 != 0 {
-        crate::render::spawn_chimney_smoke(commands, assets, ctx);
+        crate::render::spawn_chimney_smoke(commands, assets, map.dimensions().0, ctx);
     }
     // Chimenea mina de cobre terminada: humo `EV_COPPER_MINE_SMOKE`.
     if !industries_hidden && gfx == crate::render::GFX_COPPER_MINE_CHIMNEY && m1 & 0x80 != 0 {
-        crate::render::spawn_copper_mine_smoke(commands, assets, ctx);
+        crate::render::spawn_copper_mine_smoke(commands, assets, map.dimensions().0, ctx);
     }
     let ground_sid = entry.map(|e| e.ground_sprite_id).unwrap_or(0);
     let use_water = industry_uses_water_ground(map, ctx.coord, gfx, ground_sid);

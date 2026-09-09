@@ -5121,6 +5121,14 @@ fn power_plant_chimney_spawns_animated_smoke() {
     };
     assert_eq!(spawn_at(&mut world, 2), 1, "terminada: penacho de humo");
     assert_eq!(spawn_at(&mut world, 3), 1, "en obra: sin humo nuevo");
+    assert_eq!(
+        world
+            .query_filtered::<&ViewportSortableParent, With<crate::render::smoke::ChimneySmoke>>()
+            .iter(&world)
+            .count(),
+        1,
+        "el penacho terminado debe entrar como parent al compositor global"
+    );
 }
 
 #[test]
@@ -5179,6 +5187,15 @@ fn copper_mine_chimney_spawns_animated_smoke() {
     };
     assert_eq!(spawn_at(&mut world, 2), 1, "terminada: humo mina cobre");
     assert_eq!(spawn_at(&mut world, 3), 1, "en obra: sin humo nuevo");
+    assert_eq!(
+        world
+            .query_filtered::<&ViewportSortableParent, With<crate::render::smoke::CopperMineSmoke>>(
+            )
+            .iter(&world)
+            .count(),
+        1,
+        "el humo de cobre terminado debe entrar como parent al compositor global"
+    );
 }
 
 #[test]

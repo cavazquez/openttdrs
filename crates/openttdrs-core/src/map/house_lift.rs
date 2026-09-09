@@ -14,10 +14,10 @@ const LIFT_STEPS_PER_FLOOR: u8 = 6;
 /// el mismo pase: queda `Deleted` hasta el siguiente `AnimateAnimatedTiles`.
 /// Si `TileLoop_Town` la reactiva entre ambos pases, `AddAnimatedTile` vuelve
 /// a marcar el mismo slot como `Animated`, sin moverlo al final del vector.
-const LIFT_ANIMATION_STATE_MASK: u8 = 0x03;
-const LIFT_ANIMATION_STATE_NONE: u8 = 0;
-const LIFT_ANIMATION_STATE_DELETED: u8 = 1;
-const LIFT_ANIMATION_STATE_ACTIVE: u8 = 3;
+const HOUSE_ANIMATION_STATE_MASK: u8 = 0x03;
+const HOUSE_ANIMATION_STATE_NONE: u8 = 0;
+const HOUSE_ANIMATION_STATE_DELETED: u8 = 1;
+const HOUSE_ANIMATION_STATE_ACTIVE: u8 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LiftStep {
@@ -42,13 +42,13 @@ pub const fn lift_position(tile: Tile) -> u8 {
 }
 
 #[must_use]
-const fn lift_animation_state(tile: Tile) -> u8 {
-    tile.m6 & LIFT_ANIMATION_STATE_MASK
+const fn house_animation_state(tile: Tile) -> u8 {
+    tile.m6 & HOUSE_ANIMATION_STATE_MASK
 }
 
 #[must_use]
-const fn with_lift_animation_state(mut tile: Tile, state: u8) -> Tile {
-    tile.m6 = (tile.m6 & !LIFT_ANIMATION_STATE_MASK) | (state & LIFT_ANIMATION_STATE_MASK);
+const fn with_house_animation_state(mut tile: Tile, state: u8) -> Tile {
+    tile.m6 = (tile.m6 & !HOUSE_ANIMATION_STATE_MASK) | (state & HOUSE_ANIMATION_STATE_MASK);
     tile
 }
 
@@ -166,14 +166,88 @@ pub fn activate_house_lift_animation(
     if !house_tile_has_lift(tile) {
         return false;
     }
-    if lift_animation_state(tile) == LIFT_ANIMATION_STATE_ACTIVE {
+    if house_animation_state(tile) == HOUSE_ANIMATION_STATE_ACTIVE {
         return false;
     }
 
     add_house_animation_to_queue(active, coord);
-    tile = with_lift_animation_state(tile, LIFT_ANIMATION_STATE_ACTIVE);
+    tile = with_house_animation_state(tile, HOUSE_ANIMATION_STATE_ACTIVE);
     let _ = map.set_tile(coord, tile);
     true
+}
+
+/// Equivalente de `AddAnimatedTile` para una casa `NewGRF`.
+///
+/// Una entrada `Deleted` ya conserva su slot dentro de `ANIT`; reactivarla no
+/// debe moverla al final de la cola. El retorno sólo indica si el estado pasó
+/// a `Animated`; no implica que haya cambiado el frame visible.
+pub fn activate_newgrf_house_animation(
+    map: &mut Map,
+    active: &mut Vec<TileCoord>,
+    coord: TileCoord,
+) -> bool {
+    let Some(mut tile) = map.get(coord) else {
+        return false;
+    };
+    if !house_tile_has_newgrf_animation(tile)
+        || house_animation_state(tile) == HOUSE_ANIMATION_STATE_ACTIVE
+    {
+        return false;
+    }
+
+    add_house_animation_to_queue(active, coord);
+    tile = with_house_animation_state(tile, HOUSE_ANIMATION_STATE_ACTIVE);
+    let _ = map.set_tile(coord, tile);
+    true
+}
+
+/// Aplica el resultado de un callback de animación `NewGRF` de casa.
+///
+/// Modela `AnimationBase::ChangeAnimationFrame`: `0xFD` no cambia nada,
+/// `0xFE` añade la tesela a `ANIT`, `0xFF` la marca para borrar en el próximo
+/// pase y cualquier otro byte fija `MAP7` y la activa. Devuelve `true` sólo
+/// si el frame cambió y por tanto el caller debe marcar la tesela dirty.
+pub fn apply_newgrf_house_animation_callback_result(
+    map: &mut Map,
+    active: &mut Vec<TileCoord>,
+    coord: TileCoord,
+    result: u16,
+) -> bool {
+    // `CALLBACK_FAILED` comparte el byte bajo con la orden de borrar, pero no
+    // debe tocar el estado de animación.
+    if result == u16::MAX {
+        return false;
+    }
+    let Some(mut tile) = map.get(coord) else {
+        return false;
+    };
+    if !house_tile_has_newgrf_animation(tile) {
+        return false;
+    }
+
+    match (result & 0xFF) as u8 {
+        0xFD => false,
+        0xFE => {
+            let _ = activate_newgrf_house_animation(map, active, coord);
+            false
+        }
+        0xFF => {
+            if house_animation_state(tile) == HOUSE_ANIMATION_STATE_ACTIVE {
+                tile = with_house_animation_state(tile, HOUSE_ANIMATION_STATE_DELETED);
+                let _ = map.set_tile(coord, tile);
+            }
+            false
+        }
+        frame => {
+            let changed = tile.m7 != frame;
+            if changed {
+                tile.m7 = frame;
+                let _ = map.set_tile(coord, tile);
+            }
+            let _ = activate_newgrf_house_animation(map, active, coord);
+            changed
+        }
+    }
 }
 
 /// Ejecuta la porción urbana de `AnimateAnimatedTiles`.
@@ -205,8 +279,8 @@ pub fn step_house_animations(
         // proc, incluso en ticks donde `AnimateTile_Town` retorna por la
         // cadencia de cuatro. Reemplaza el slot con el último elemento igual
         // que el vector C++ y procesa ese reemplazo en esta misma pasada.
-        if lift_animation_state(tile) != LIFT_ANIMATION_STATE_ACTIVE {
-            tile = with_lift_animation_state(tile, LIFT_ANIMATION_STATE_NONE);
+        if house_animation_state(tile) != HOUSE_ANIMATION_STATE_ACTIVE {
+            tile = with_house_animation_state(tile, HOUSE_ANIMATION_STATE_NONE);
             let _ = map.set_tile(coord, tile);
             active.swap_remove(index);
             continue;
@@ -230,7 +304,7 @@ pub fn step_house_animations(
             continue;
         }
         if !house_tile_has_lift(tile) {
-            tile = with_lift_animation_state(tile, LIFT_ANIMATION_STATE_DELETED);
+            tile = with_house_animation_state(tile, HOUSE_ANIMATION_STATE_DELETED);
             let _ = map.set_tile(coord, tile);
             index += 1;
             continue;
@@ -247,7 +321,7 @@ pub fn step_house_animations(
             // `DeleteAnimatedTile` marca `Deleted`; no hace `swap_remove`
             // hasta el siguiente `AnimateAnimatedTiles`. Así un TileLoop del
             // mismo tick puede reactivar el slot sin reordenar `ANIT`.
-            tile = with_lift_animation_state(tile, LIFT_ANIMATION_STATE_DELETED);
+            tile = with_house_animation_state(tile, HOUSE_ANIMATION_STATE_DELETED);
             let _ = map.set_tile(coord, tile);
         }
         index += 1;
@@ -344,14 +418,14 @@ mod tests {
         assert_eq!(active, vec![first, second]);
         let first_after = map.get(first).expect("first after arrival");
         assert_eq!(
-            lift_animation_state(first_after),
-            LIFT_ANIMATION_STATE_DELETED
+            house_animation_state(first_after),
+            HOUSE_ANIMATION_STATE_DELETED
         );
         assert!(!lift_has_destination(first_after));
         assert_eq!(lift_position(first_after), 6);
         assert_eq!(
-            lift_animation_state(map.get(second).expect("second still active")),
-            LIFT_ANIMATION_STATE_ACTIVE
+            house_animation_state(map.get(second).expect("second still active")),
+            HOUSE_ANIMATION_STATE_ACTIVE
         );
 
         // `AnimateAnimatedTiles` limpia `Deleted` aun cuando
@@ -360,8 +434,8 @@ mod tests {
         assert!(dirty.is_empty());
         assert_eq!(active, vec![second]);
         assert_eq!(
-            lift_animation_state(map.get(first).expect("first cleanup")),
-            LIFT_ANIMATION_STATE_NONE
+            house_animation_state(map.get(first).expect("first cleanup")),
+            HOUSE_ANIMATION_STATE_NONE
         );
     }
 
@@ -377,14 +451,14 @@ mod tests {
         assert!(activate_house_lift_animation(&mut map, &mut active, second));
 
         let mut first_tile = map.get(first).expect("first active");
-        first_tile = with_lift_animation_state(first_tile, LIFT_ANIMATION_STATE_DELETED);
+        first_tile = with_house_animation_state(first_tile, HOUSE_ANIMATION_STATE_DELETED);
         map.set_tile(first, first_tile).expect("mark first deleted");
 
         assert!(activate_house_lift_animation(&mut map, &mut active, first));
         assert_eq!(active, vec![first, second]);
         assert_eq!(
-            lift_animation_state(map.get(first).expect("first reactivated")),
-            LIFT_ANIMATION_STATE_ACTIVE
+            house_animation_state(map.get(first).expect("first reactivated")),
+            HOUSE_ANIMATION_STATE_ACTIVE
         );
         assert!(
             !activate_house_lift_animation(&mut map, &mut active, first),
@@ -428,7 +502,7 @@ mod tests {
         map.set_completed_house(coord, crate::house_spec::NEW_HOUSE_OFFSET, 0)
             .expect("NewGRF house");
         let mut tile = map.get(coord).expect("NewGRF house tile");
-        tile.m6 = (tile.m6 & !LIFT_ANIMATION_STATE_MASK) | LIFT_ANIMATION_STATE_ACTIVE;
+        tile.m6 = (tile.m6 & !HOUSE_ANIMATION_STATE_MASK) | HOUSE_ANIMATION_STATE_ACTIVE;
         map.set_tile(coord, tile).expect("active NewGRF house");
         let mut active = vec![coord];
         let mut rng = Randomizer::new(7);
@@ -440,6 +514,66 @@ mod tests {
         assert_eq!(active, vec![coord]);
         assert_eq!(rng, expected);
         assert!(map.get(coord).is_some_and(house_tile_has_newgrf_animation));
+    }
+
+    #[test]
+    fn newgrf_callback_result_uses_add_and_delete_animated_tile_semantics() {
+        let coord = TileCoord::new(2, 2);
+        let mut map = Map::new_flat(8, 8, 0);
+        map.set_completed_house(coord, crate::house_spec::NEW_HOUSE_OFFSET, 0)
+            .expect("NewGRF house");
+        let mut active = Vec::new();
+
+        assert!(apply_newgrf_house_animation_callback_result(
+            &mut map,
+            &mut active,
+            coord,
+            4,
+        ));
+        assert_eq!(active, vec![coord]);
+        assert_eq!(map.get(coord).expect("active house").m7, 4);
+        assert_eq!(
+            house_animation_state(map.get(coord).expect("active house")),
+            HOUSE_ANIMATION_STATE_ACTIVE
+        );
+
+        assert!(!apply_newgrf_house_animation_callback_result(
+            &mut map,
+            &mut active,
+            coord,
+            0xFF,
+        ));
+        assert_eq!(active, vec![coord], "DeleteAnimatedTile waits one pass");
+        assert_eq!(
+            house_animation_state(map.get(coord).expect("deleted house")),
+            HOUSE_ANIMATION_STATE_DELETED
+        );
+
+        assert!(!apply_newgrf_house_animation_callback_result(
+            &mut map,
+            &mut active,
+            coord,
+            0xFE,
+        ));
+        assert_eq!(active, vec![coord], "reactivation preserves the ANIT slot");
+        assert_eq!(
+            house_animation_state(map.get(coord).expect("reactivated house")),
+            HOUSE_ANIMATION_STATE_ACTIVE
+        );
+        assert!(!apply_newgrf_house_animation_callback_result(
+            &mut map,
+            &mut active,
+            coord,
+            0xFD,
+        ));
+        assert!(!apply_newgrf_house_animation_callback_result(
+            &mut map,
+            &mut active,
+            coord,
+            u16::MAX,
+        ));
+        assert_eq!(map.get(coord).expect("unchanged house").m7, 4);
+        assert_eq!(active, vec![coord]);
     }
 
     fn lift_game(order: &[TileCoord]) -> GameState {

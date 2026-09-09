@@ -1203,6 +1203,12 @@ pub const CBID_INDUSTRY_PROD_CHANGE_BUILD: u16 = 0x15F;
 pub const CBID_INDUSTRY_REFUSE_CARGO: u16 = 0x3D;
 /// Callback casas: permitir construcción (`CBID_HOUSE_ALLOW_CONSTRUCTION`).
 pub const CBID_HOUSE_ALLOW_CONSTRUCTION: u16 = 0x17;
+/// Callback casas: elegir el siguiente frame de animación (`CBID_HOUSE_ANIMATION_NEXT_FRAME`).
+pub const CBID_HOUSE_ANIMATION_NEXT_FRAME: u16 = 0x1A;
+/// Callback casas: reaccionar al tile loop (`CBID_HOUSE_ANIMATION_TRIGGER_TILE_LOOP`).
+pub const CBID_HOUSE_ANIMATION_TRIGGER_TILE_LOOP: u16 = 0x1B;
+/// Callback casas: elegir la velocidad de animación (`CBID_HOUSE_ANIMATION_SPEED`).
+pub const CBID_HOUSE_ANIMATION_SPEED: u16 = 0x20;
 /// Callback casas: decidir si se dibuja la fundación (`CBID_HOUSE_DRAW_FOUNDATIONS`).
 pub const CBID_HOUSE_DRAW_FOUNDATIONS: u16 = 0x150;
 /// Callback teselas de industria: decidir si se dibuja la fundación

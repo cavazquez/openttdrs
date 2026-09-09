@@ -378,6 +378,7 @@ fn tile_loop_house(
                     .map_or(0, |def| def.building_flags);
             if let Some(rng) = generation_rng.as_deref_mut() {
                 advance_newgrf_house_tile_loop_randomisation(state, coord, building_flags, rng);
+                trigger_newgrf_house_tile_loop_animations(state, coord, building_flags, rng);
             }
             let next_processing_time =
                 crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id)
@@ -505,6 +506,90 @@ fn advance_newgrf_house_tile_loop_randomisation(
             true,
             rng,
         );
+    }
+}
+
+/// Ejecuta los triggers CB1B que siguen a la randomización de `NewHouseTileLoop`.
+///
+/// La llamada sin sincronizar sólo toma una palabra cuando la máscara y el
+/// flag del spec coinciden. En cambio, toda huella válida toma primero una
+/// palabra compartida para la rama sincronizada, aun si ninguna parte publica
+/// CB1B; las llamadas que sí coinciden toman una palabra baja propia y reciben
+/// la compartida en los 16 bits altos de `param1`.
+fn trigger_newgrf_house_tile_loop_animations(
+    state: &mut GameState,
+    coord: TileCoord,
+    building_flags: u8,
+    rng: &mut Randomizer,
+) {
+    trigger_newgrf_house_tile_loop_animation(state, coord, false, 0, rng);
+
+    if building_flags & HOUSE_FOOTPRINT_FLAGS == 0 {
+        return;
+    }
+    let shared_random_bits = u16::try_from(rng.next() & u32::from(u16::MAX)).unwrap_or(0);
+    trigger_newgrf_house_tile_loop_animation(state, coord, true, shared_random_bits, rng);
+    for &(dx, dy) in crate::house_spec::house_footprint_offsets(building_flags)
+        .iter()
+        .skip(1)
+    {
+        trigger_newgrf_house_tile_loop_animation(
+            state,
+            TileCoord::new(coord.x + dx, coord.y + dy),
+            true,
+            shared_random_bits,
+            rng,
+        );
+    }
+}
+
+/// Ejecuta un CB1B de una sola tesela y aplica `ChangeAnimationFrame`.
+fn trigger_newgrf_house_tile_loop_animation(
+    state: &mut GameState,
+    coord: TileCoord,
+    sync: bool,
+    shared_random_bits: u16,
+    rng: &mut Randomizer,
+) {
+    let Some(tile) = state.map.get(coord) else {
+        return;
+    };
+    let house_id = tile.m8 & 0x0FFF;
+    let matches_trigger = crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id)
+        .is_some_and(|def| {
+            def.has_animation_tile_loop_callback()
+                && def.animation_tile_loop_is_synchronized() == sync
+        });
+    if !matches_trigger {
+        return;
+    }
+
+    let random_bits = if sync {
+        (rng.next() & u32::from(u16::MAX)) | (u32::from(shared_random_bits) << 16)
+    } else {
+        rng.next()
+    };
+    let Some(def) = crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id) else {
+        return;
+    };
+    let result = crate::newgrf_callback::resolve_house_animation_callback_with_world(
+        def,
+        &state.map,
+        &mut state.towns,
+        &state.house_spec_catalog,
+        state.climate,
+        coord,
+        crate::newgrf_sprites::CBID_HOUSE_ANIMATION_TRIGGER_TILE_LOOP,
+        random_bits,
+        0,
+    );
+    if crate::map::house_lift::apply_newgrf_house_animation_callback_result(
+        &mut state.map,
+        &mut state.active_house_animations,
+        coord,
+        result,
+    ) {
+        state.runtime.landscape_tile_dirty.push(coord);
     }
 }
 
@@ -1435,7 +1520,7 @@ mod tests {
     }
 
     #[test]
-    fn newgrf_house_processing_timer_rearms_when_period_elapses_without_callbacks() {
+    fn newgrf_house_processing_timer_rearms_and_consumes_shared_cb1b_word() {
         let id = crate::house_spec::NEW_HOUSE_OFFSET;
         let coord = TileCoord::new(1, 0);
         let mut map = Map::new_flat(2, 2, 0);
@@ -1494,7 +1579,9 @@ mod tests {
             );
         }
 
-        assert_eq!(actual, Randomizer::new(42));
+        let mut expected = Randomizer::new(42);
+        let _shared_synchronised_cb1b_random = expected.next();
+        assert_eq!(actual, expected);
         assert_eq!(
             state
                 .runtime
@@ -1566,6 +1653,164 @@ mod tests {
         }
     }
 
+    fn house_animation_callback_entry(
+        variable: u8,
+        shift: u8,
+        and_mask: u32,
+    ) -> crate::newgrf_sprites::Action2VarEntry {
+        crate::newgrf_sprites::Action2VarEntry {
+            first: crate::newgrf_sprites::Action2VarTerm {
+                variable,
+                param: None,
+                adjust: crate::newgrf_sprites::Action2VarAdjust {
+                    shift,
+                    and_mask,
+                    ..Default::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        }
+    }
+
+    #[test]
+    fn newgrf_house_tile_loop_runs_unsynchronised_cb1b_and_adds_anit() {
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let coord = TileCoord::new(1, 0);
+        let mut map = Map::new_flat(2, 2, 0);
+        map.set_tile(
+            coord,
+            crate::map::Tile::town_house(
+                crate::map::TownHouseSpec {
+                    house_id: id,
+                    town_id: 0,
+                    random_bits: 0,
+                    construction_counter: 0,
+                    construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                    is_protected: false,
+                    processing_time: 0,
+                },
+                0,
+                0,
+            ),
+        )
+        .expect("NewGRF house inside map");
+        let mut runtime = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        runtime
+            .assigns
+            .push(crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            });
+        runtime
+            .action2_var
+            .insert(0, house_animation_callback_entry(0x1A, 0, 7));
+        let mut def =
+            newgrf_runtime_house(id, 0, crate::house_spec::BUILDING_FLAG_SIZE_1X1, 5, runtime);
+        def.callback_mask = crate::house_spec::HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK;
+        let mut state = GameState::from_map(map);
+        state.house_spec_catalog.push(def);
+
+        let mut actual = Randomizer::new(42);
+        let mut expected = actual;
+        let _tile_loop_random = expected.next();
+        let _tile_loop_north_random = expected.next();
+        let _unsynchronised_cb1b_random = expected.next();
+        let _shared_synchronised_cb1b_random = expected.next();
+        let current = state.map.get(coord).expect("NewGRF house");
+        let mut generation_rng = Some(&mut actual);
+        tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
+
+        let updated = state.map.get(coord).expect("NewGRF house after loop");
+        assert_eq!(actual, expected);
+        assert_eq!(updated.m7, 7);
+        assert_eq!(updated.m6, (5 << 2) | 0x03);
+        assert_eq!(state.active_house_animations, vec![coord]);
+    }
+
+    #[test]
+    fn synchronised_cb1b_shares_high_random_word_across_house_footprint() {
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let north = TileCoord::new(1, 1);
+        let east = TileCoord::new(2, 1);
+        let mut map = Map::new_flat(4, 3, 0);
+        for (coord, house_id) in [(north, id), (east, id + 1)] {
+            map.set_tile(
+                coord,
+                crate::map::Tile::town_house(
+                    crate::map::TownHouseSpec {
+                        house_id,
+                        town_id: 0,
+                        random_bits: 0,
+                        construction_counter: 0,
+                        construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                        is_protected: false,
+                        processing_time: 0,
+                    },
+                    0,
+                    0,
+                ),
+            )
+            .expect("NewGRF house inside map");
+        }
+        let mut runtime = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        runtime.assigns.extend([
+            crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            },
+            crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 1,
+                set_id: 1,
+            },
+        ]);
+        // CB1B recibe la palabra compartida en los bits 16--31. Devolver su
+        // byte bajo hace visible que ambas partes ven la misma mitad alta.
+        let callback = house_animation_callback_entry(0x10, 16, 0xFF);
+        runtime.action2_var.insert(0, callback.clone());
+        runtime.action2_var.insert(1, callback);
+        let mut north_def = newgrf_runtime_house(
+            id,
+            0,
+            crate::house_spec::BUILDING_FLAG_SIZE_2X1,
+            0,
+            runtime.clone(),
+        );
+        north_def.callback_mask =
+            crate::house_spec::HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK;
+        north_def.extra_flags = crate::house_spec::HOUSE_EXTRA_FLAG_SYNCHRONIZED_CALLBACK_1B;
+        let mut east_def = newgrf_runtime_house(id + 1, 1, 0, 0, runtime);
+        east_def.callback_mask = crate::house_spec::HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK;
+        east_def.extra_flags = crate::house_spec::HOUSE_EXTRA_FLAG_SYNCHRONIZED_CALLBACK_1B;
+        let mut state = GameState::from_map(map);
+        state.house_spec_catalog.extend([north_def, east_def]);
+
+        let mut actual = Randomizer::new(42);
+        let mut expected = actual;
+        let _north_tile_loop_random = expected.next();
+        let _north_tile_loop_north_random = expected.next();
+        let _east_tile_loop_north_random = expected.next();
+        let shared_random = expected.next();
+        let _north_cb1b_low_random = expected.next();
+        let _east_cb1b_low_random = expected.next();
+        let current = state.map.get(north).expect("north NewGRF house");
+        let mut generation_rng = Some(&mut actual);
+        tile_loop_house(&mut state, 0, north, current, &mut generation_rng);
+
+        let expected_frame = u8::try_from(shared_random & 0xFF).unwrap_or(0);
+        assert_eq!(actual, expected);
+        assert_eq!(
+            state.map.get(north).expect("north after loop").m7,
+            expected_frame
+        );
+        assert_eq!(
+            state.map.get(east).expect("east after loop").m7,
+            expected_frame
+        );
+        assert_eq!(state.active_house_animations, vec![north, east]);
+    }
+
     #[test]
     fn newgrf_house_tile_loop_rerandomises_action2_bits_and_keeps_unmatched_trigger() {
         let id = crate::house_spec::NEW_HOUSE_OFFSET;
@@ -1599,6 +1844,7 @@ mod tests {
         let mut expected = actual;
         let tile_loop_random = expected.next();
         let _tile_loop_north_random = expected.next();
+        let _shared_synchronised_cb1b_random = expected.next();
         let current = state.map.get(coord).expect("NewGRF house");
         let mut generation_rng = Some(&mut actual);
         tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
@@ -1690,7 +1936,7 @@ mod tests {
     }
 
     #[test]
-    fn newgrf_house_without_action3_group_rearms_without_consuming_rng() {
+    fn newgrf_house_without_action3_group_rearms_after_shared_cb1b_word() {
         let id = crate::house_spec::NEW_HOUSE_OFFSET;
         let coord = TileCoord::new(1, 0);
         let mut map = Map::new_flat(2, 2, 0);
@@ -1728,7 +1974,9 @@ mod tests {
         tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
 
         let updated = state.map.get(coord).expect("NewGRF house after loop");
-        assert_eq!(actual, Randomizer::new(42));
+        let mut expected = Randomizer::new(42);
+        let _shared_synchronised_cb1b_random = expected.next();
+        assert_eq!(actual, expected);
         assert_eq!(updated.m1, 0xA4);
         assert_eq!(updated.m3 & 0x1F, 0);
         assert_eq!(updated.m6, 2 << 2);
@@ -1789,6 +2037,7 @@ mod tests {
         let _tile_loop_random = expected.next();
         let shared_random = expected.next();
         let _part_random = expected.next();
+        let _shared_synchronised_cb1b_random = expected.next();
         let current = state.map.get(north).expect("north house");
         let mut generation_rng = Some(&mut actual);
         tile_loop_house(&mut state, 0, north, current, &mut generation_rng);

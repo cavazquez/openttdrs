@@ -10,7 +10,10 @@ use crate::cargo_spec::{CargoSpecDef, cargo_type_from_label_with_catalog};
 use crate::cargodist::parity::Randomizer;
 use crate::company::CompanyId;
 use crate::engine::EngineDef;
-use crate::house_spec::{HouseSpecDef, action2_eval_ctx_for_house_tile_with_towns};
+use crate::house_spec::{
+    HouseScopeCounts, HouseSpecDef, action2_eval_ctx_for_house_tile_with_counts,
+    action2_eval_ctx_for_house_tile_with_towns,
+};
 use crate::industry::{Industry, IndustryProcessingInput, IndustryProductionAction};
 use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::{IndustryTileSpecDef, industry_tile_slope_refused};
@@ -19,7 +22,7 @@ use crate::map::industry_action2::{
     action2_eval_ctx_for_industry_tile_with_world_and_parent_and_cargo_catalog,
 };
 use crate::map::object::action2_eval_ctx_for_object_tile_with_towns;
-use crate::map::{Map, TileCoord, has_tile_water_ground};
+use crate::map::{Map, TileCoord, TileKind, has_tile_water_ground};
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_ACCEPT_CARGO,
@@ -2838,6 +2841,74 @@ pub fn apply_house_construction_callback_for_build(
     );
     writeback_town_persistent_registers(town, def.grfid, &ctx);
     callback_allows_8bit_boolean(result)
+}
+
+/// Resuelve un callback de animación de casa con el scope runtime completo.
+///
+/// El `HouseResolverObject` ve la tesela viva, sus vecinos y los conteos del
+/// mapa, mientras el pueblo asociado aporta el parent scope `7C`. El writeback
+/// del PSA ocurre incluso para callbacks que finalmente ordenan no hacer nada,
+/// igual que las demás rutas de callback de casas.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_house_animation_callback_with_world(
+    def: &HouseSpecDef,
+    map: &Map,
+    towns: &mut [Town],
+    house_catalog: &[HouseSpecDef],
+    climate: crate::Climate,
+    coord: TileCoord,
+    callback: u16,
+    param1: u32,
+    param2: u32,
+) -> u16 {
+    let Some(tile) = map.get(coord) else {
+        return CALLBACK_FAILED;
+    };
+    if tile.kind != TileKind::House || (tile.m8 & 0x0FFF) != def.id {
+        return CALLBACK_FAILED;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return CALLBACK_FAILED;
+    };
+
+    let mut neighbor_params = Vec::new();
+    for entry in runtime.action2_var.values() {
+        for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+            if (0x60..=0x63).contains(&term.variable)
+                && let Some(parameter) = term.param
+                && !neighbor_params.contains(&(term.variable, parameter))
+            {
+                neighbor_params.push((term.variable, parameter));
+            }
+        }
+    }
+    neighbor_params.sort_unstable();
+
+    let counts = HouseScopeCounts::from_map(map, towns);
+    let mut ctx = action2_eval_ctx_for_house_tile_with_counts(
+        map,
+        tile,
+        coord.x,
+        coord.y,
+        climate,
+        towns,
+        house_catalog,
+        &counts,
+        &neighbor_params,
+    );
+    let result =
+        runtime.resolve_callback_ctx(def.newgrf_local_id, callback, param1, param2, &mut ctx);
+
+    let persisted_town_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
+    let town_index = towns
+        .iter()
+        .position(|town| town.id == persisted_town_id)
+        .or_else(|| crate::town::nearest_town_index(&*towns, coord).map(|(index, _)| index));
+    if let Some(town_index) = town_index {
+        writeback_town_persistent_registers(&mut towns[town_index], def.grfid, &ctx);
+    }
+    result
 }
 
 /// Convierte un resultado callback de 15 bits al entero con signo de `OpenTTD`.

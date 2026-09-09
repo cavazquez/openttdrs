@@ -58,7 +58,7 @@ pub const HOUSE_CALLBACK_ANIMATION_NEXT_FRAME_MASK: u16 = 1 << 1;
 /// Bit `HouseCallbackMask::AnimationTriggerTileLoop`: consulta CB `0x1B` al
 /// expirar el procesamiento periódico de una casa.
 pub const HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK: u16 = 1 << 2;
-/// Bit `HouseCallbackMask::AnimationSpeed`: consulta CB `0x1C` para elegir
+/// Bit `HouseCallbackMask::AnimationSpeed`: consulta CB `0x20` para elegir
 /// la cadencia de la animación.
 pub const HOUSE_CALLBACK_ANIMATION_SPEED_MASK: u16 = 1 << 6;
 /// Bit `HouseCallbackMask::DrawFoundations`: consulta CB `0x150` al dibujar
@@ -282,7 +282,7 @@ impl HouseSpecDef {
         self.callback_mask & HOUSE_CALLBACK_ANIMATION_TRIGGER_TILE_LOOP_MASK != 0
     }
 
-    /// El callback CB1C decide la cadencia de la animación.
+    /// El callback CB20 decide la cadencia de la animación.
     #[must_use]
     pub const fn has_animation_speed_callback(&self) -> bool {
         self.callback_mask & HOUSE_CALLBACK_ANIMATION_SPEED_MASK != 0

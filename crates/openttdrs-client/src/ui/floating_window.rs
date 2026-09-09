@@ -50,8 +50,10 @@ const CHROME_ICON_SIZE: f32 = 8.0;
 const RESIZE_HANDLE_SIZE: f32 = 16.0;
 const MIN_WINDOW_WIDTH: f32 = 160.0;
 const MIN_WINDOW_HEIGHT: f32 = TITLE_BAR_H + 48.0;
-/// Evitar solaparse con la toolbar superior al colocar (#243).
-const TOOLBAR_AVOID: f32 = 40.0;
+/// Evitar solaparse con la toolbar superior al colocar (#243). La barra se
+/// ancla a `y=10` y sus botones miden hasta 48 px; 80 deja además un pequeño
+/// respiro visual bajo su borde.
+const TOOLBAR_AVOID: f32 = 80.0;
 /// Evitar solaparse con la statusbar inferior al colocar (#243).
 const STATUSBAR_AVOID: f32 = 28.0;
 /// Viewport por defecto al spawnear (setup aún no tiene PrimaryWindow).
@@ -718,6 +720,19 @@ impl WindowPlacementRect {
     }
 }
 
+/// Una ventana que acaba de pasar de oculta a visible y necesita decidir su
+/// posición. Mantener esta decisión fuera del query ECS permite resolver un
+/// lote de aperturas de forma estable: una posición guardada gana si está
+/// libre; si no, la ventana se incorpora a la cascada automática.
+#[derive(Clone, Copy, Debug)]
+struct WindowPlacementCandidate {
+    entity: Entity,
+    id: FloatingWindowId,
+    key: WindowKey,
+    rect: WindowPlacementRect,
+    has_saved_layout: bool,
+}
+
 /// Tamaño disponible antes de que Bevy haya resuelto un `height: Auto`.
 #[must_use]
 fn resolved_window_node_size(computed: Option<&ComputedNode>) -> Option<Vec2> {
@@ -904,10 +919,57 @@ fn auto_place_window(size: Vec2, viewport: Vec2, occupied: &[WindowPlacementRect
     clamp_window_position(position, size, viewport)
 }
 
+/// Resuelve una tanda de aperturas sin esconder una ventana detrás de otra.
+///
+/// Una posición persistida es una preferencia explícita y se conserva cuando
+/// está libre. Si una configuración heredada (o dos instancias de la misma
+/// clase) intenta reutilizar ese rectángulo, sólo la primera lo conserva; las
+/// demás entran al buscador de huecos. El orden por clave hace reproducible el
+/// resultado aunque ECS itere las entidades en un orden distinto.
+#[must_use]
+fn resolve_window_placement_candidates(
+    viewport: Vec2,
+    occupied: &mut Vec<WindowPlacementRect>,
+    candidates: &mut [WindowPlacementCandidate],
+) -> Vec<(Entity, Vec2)> {
+    candidates.sort_by(|left, right| {
+        right
+            .has_saved_layout
+            .cmp(&left.has_saved_layout)
+            .then_with(|| left.id.storage_key().cmp(right.id.storage_key()))
+            .then_with(|| left.key.instance.cmp(&right.key.instance))
+            .then_with(|| left.entity.to_bits().cmp(&right.entity.to_bits()))
+    });
+
+    let mut placements = Vec::with_capacity(candidates.len());
+    for candidate in candidates {
+        let saved_position =
+            clamp_window_position(candidate.rect.pos, candidate.rect.size, viewport);
+        let saved_rect = WindowPlacementRect {
+            pos: saved_position,
+            size: candidate.rect.size,
+        };
+        let position = if candidate.has_saved_layout
+            && !occupied.iter().any(|other| saved_rect.overlaps(*other))
+        {
+            saved_position
+        } else {
+            auto_place_window(candidate.rect.size, viewport, occupied)
+        };
+        occupied.push(WindowPlacementRect {
+            pos: position,
+            size: candidate.rect.size,
+        });
+        placements.push((candidate.entity, position));
+    }
+    placements
+}
+
 /// Coloca todo panel no modal al pasar de oculto a visible.
 ///
-/// Las posiciones guardadas son una elección explícita del usuario y siempre
-/// tienen prioridad. Los cuadros de diálogo modales permanecen centrados.
+/// Las posiciones guardadas son una elección explícita del usuario mientras
+/// no oculten otra ventana visible. Si colisionan, la apertura nueva entra en
+/// la cascada automática. Los cuadros de diálogo modales permanecen centrados.
 fn place_newly_visible_floating_windows(
     primary: Query<&Window, With<PrimaryWindow>>,
     prefs: Option<Res<ClientPreferences>>,
@@ -920,63 +982,80 @@ fn place_newly_visible_floating_windows(
             Option<&ComputedNode>,
             &mut FloatingWindowPlacementState,
         )>,
-        Query<(Entity, &Visibility, &Node, Option<&ComputedNode>), With<FloatingWindow>>,
+        Query<
+            (
+                Entity,
+                &Visibility,
+                &Node,
+                Option<&ComputedNode>,
+                &FloatingWindowPlacementState,
+            ),
+            With<FloatingWindow>,
+        >,
     )>,
 ) {
     let viewport = primary.single().map_or(DEFAULT_LAYOUT_VIEWPORT, |window| {
         Vec2::new(window.width(), window.height())
     });
+    // Las ventanas ya abiertas sí ocupan lugar. Las que están abriendo en
+    // este mismo frame se resuelven abajo como un lote, no desde sus fallbacks
+    // superpuestos.
     let mut occupied: Vec<_> = queries
         .p1()
         .iter()
-        .filter(|(_, visibility, _, _)| **visibility != Visibility::Hidden)
-        .map(|(entity, _, node, computed)| {
-            (
-                entity,
-                WindowPlacementRect {
-                    pos: window_node_position(node),
-                    size: window_node_size(node, computed),
-                },
-            )
+        .filter(|(_, visibility, _, _, state)| {
+            **visibility != Visibility::Hidden && state.was_visible
+        })
+        .map(|(_, _, node, computed, _)| WindowPlacementRect {
+            pos: window_node_position(node),
+            size: window_node_size(node, computed),
         })
         .collect();
+    let mut candidates = Vec::new();
 
-    for (entity, window, visibility, mut node, computed, mut state) in &mut queries.p0() {
-        let visible = *visibility != Visibility::Hidden;
-        if !visible {
-            state.was_visible = false;
-            continue;
-        }
-        if state.was_visible {
-            continue;
-        }
-        if !uses_automatic_window_placement(window.id)
-            || has_saved_floating_window_layout(prefs.as_deref(), window.id)
-        {
-            state.was_visible = true;
-            continue;
-        }
-        if !window_node_size_is_ready(&node, computed) {
-            continue;
-        }
+    {
+        let mut windows = queries.p0();
+        for (entity, window, visibility, node, computed, mut state) in &mut windows {
+            let visible = *visibility != Visibility::Hidden;
+            if !visible {
+                state.was_visible = false;
+                continue;
+            }
+            if state.was_visible || !window_node_size_is_ready(&node, computed) {
+                continue;
+            }
 
-        state.was_visible = true;
-        occupied.retain(|(other, _)| *other != entity);
-        let size = window_node_size(&node, computed);
-        let position = auto_place_window(
-            size,
-            viewport,
-            &occupied.iter().map(|(_, rect)| *rect).collect::<Vec<_>>(),
-        );
+            let rect = WindowPlacementRect {
+                pos: window_node_position(&node),
+                size: window_node_size(&node, computed),
+            };
+            if !uses_automatic_window_placement(window.id) {
+                // Los modales mantienen su geometría centrada, pero cuentan
+                // como ocupados si otra ventana se abre en el mismo frame.
+                state.was_visible = true;
+                occupied.push(rect);
+                continue;
+            }
+
+            candidates.push(WindowPlacementCandidate {
+                entity,
+                id: window.id,
+                key: window.key,
+                rect,
+                has_saved_layout: has_saved_floating_window_layout(prefs.as_deref(), window.id),
+            });
+        }
+    }
+
+    let placements = resolve_window_placement_candidates(viewport, &mut occupied, &mut candidates);
+    let mut windows = queries.p0();
+    for (entity, position) in placements {
+        let Ok((_, _, _, mut node, _, mut state)) = windows.get_mut(entity) else {
+            continue;
+        };
         node.left = Val::Px(position.x);
         node.top = Val::Px(position.y);
-        occupied.push((
-            entity,
-            WindowPlacementRect {
-                pos: position,
-                size,
-            },
-        ));
+        state.was_visible = true;
     }
 }
 
@@ -1839,6 +1918,93 @@ mod tests {
             None,
             FloatingWindowId::Vehicle
         ));
+    }
+
+    #[test]
+    fn colliding_saved_layouts_keep_one_window_and_cascade_the_next() {
+        let saved_pos = Vec2::new(610.0, 310.0);
+        let size = Vec2::new(250.0, 134.0);
+        let mut prefs = ClientPreferences::default();
+        prefs.set_window_layout_by_key(
+            FloatingWindowId::Vehicle.storage_key(),
+            saved_pos,
+            Some(size),
+        );
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(prefs)
+            .add_systems(Update, place_newly_visible_floating_windows);
+        app.world_mut().spawn((
+            Window {
+                resolution: (1_280, 720).into(),
+                ..default()
+            },
+            PrimaryWindow,
+        ));
+        let first = app
+            .world_mut()
+            .spawn((
+                FloatingWindow {
+                    id: FloatingWindowId::Vehicle,
+                    key: WindowKey {
+                        class: FloatingWindowId::Vehicle,
+                        instance: 10,
+                    },
+                },
+                FloatingWindowPlacementState::default(),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(saved_pos.x),
+                    top: Val::Px(saved_pos.y),
+                    width: Val::Px(size.x),
+                    height: Val::Px(size.y),
+                    ..default()
+                },
+                Visibility::Visible,
+            ))
+            .id();
+        let second = app
+            .world_mut()
+            .spawn((
+                FloatingWindow {
+                    id: FloatingWindowId::Vehicle,
+                    key: WindowKey {
+                        class: FloatingWindowId::Vehicle,
+                        instance: 20,
+                    },
+                },
+                FloatingWindowPlacementState::default(),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(saved_pos.x),
+                    top: Val::Px(saved_pos.y),
+                    width: Val::Px(size.x),
+                    height: Val::Px(size.y),
+                    ..default()
+                },
+                Visibility::Visible,
+            ))
+            .id();
+
+        app.update();
+
+        let first_node = app.world().get::<Node>(first).expect("primera ventana");
+        assert_eq!(first_node.left, Val::Px(saved_pos.x));
+        assert_eq!(first_node.top, Val::Px(saved_pos.y));
+        let second_node = app.world().get::<Node>(second).expect("segunda ventana");
+        assert_eq!(second_node.left, Val::Px(0.0));
+        assert_eq!(second_node.top, Val::Px(TOOLBAR_AVOID));
+        assert!(
+            !WindowPlacementRect {
+                pos: Vec2::new(0.0, TOOLBAR_AVOID),
+                size,
+            }
+            .overlaps(WindowPlacementRect {
+                pos: saved_pos,
+                size,
+            })
+        );
     }
 
     #[test]

@@ -14,7 +14,10 @@ exacta: una entrada por cada ID, sin faltantes ni duplicados.
 resize y política `auto`/`center` de `WindowDesc`. `spawn_floating_window`
 aplica la variante primaria al crear el marco (#243): width/height conocidos,
 centrado cuando corresponde, y clamp que evita toolbar/statusbar a 1280×720.
-Las preferencias pueden persistir `Id=x,y` o `Id=x,y,w,h`.
+Las preferencias pueden persistir `Id=x,y` o `Id=x,y,w,h`. Al reabrir, una
+posición guardada se conserva si está libre; si colisiona con otra ventana ya
+visible (incluidas instancias de la misma clase), la apertura nueva entra en la
+cascada automática para que no quede oculta detrás de ella.
 
 La matriz completa puede exportarse como JSON para tooling/CI:
 

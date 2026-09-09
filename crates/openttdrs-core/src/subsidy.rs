@@ -213,6 +213,23 @@ fn random_town_pool_index(state: &mut GameState) -> Option<usize> {
     pool_indices.get(ordinal).copied()
 }
 
+/// Devuelve el índice de almacenamiento elegido por `Industry::GetRandom`.
+///
+/// Igual que los pueblos, el `IndustryPool` nativo es sparse y se recorre por
+/// ID ascendente, no por el orden físico que conserve el `Vec` importado.
+fn random_industry_pool_index(state: &mut GameState) -> Option<usize> {
+    let count = u32::try_from(state.industries.len()).ok()?;
+    if count == 0 {
+        return None;
+    }
+    let ordinal = usize::try_from(state.random.random_range(count)).ok()?;
+    let mut pool_indices: Vec<_> = (0..state.industries.len()).collect();
+    // El índice de almacenamiento resuelve de forma determinista fixtures
+    // legacy con IDs de industria repetidos.
+    pool_indices.sort_unstable_by_key(|&index| (state.industries[index].instance_id, index));
+    pool_indices.get(ordinal).copied()
+}
+
 fn try_create_passenger_subsidy(state: &mut GameState) -> bool {
     if state.towns.is_empty() {
         return false;
@@ -304,10 +321,9 @@ fn try_create_town_cargo_subsidy(state: &mut GameState) -> bool {
 }
 
 fn try_create_industry_subsidy(state: &mut GameState) -> bool {
-    if state.industries.is_empty() {
+    let Some(idx) = random_industry_pool_index(state) else {
         return false;
-    }
-    let idx = (state.random.next() as usize) % state.industries.len();
+    };
     let industry = &state.industries[idx];
     let cargo = industry.output_cargo();
     if cargo.is_town_cargo() {
@@ -693,6 +709,25 @@ mod tests {
 
         assert_eq!(state.random, expected);
         assert!(state.subsidies.is_empty());
+    }
+
+    #[test]
+    fn industry_pool_selector_uses_id_not_storage_order() {
+        let mut state = GameState::new(32, 32);
+        state.industries = [(2, 2), (0, 6), (1, 10)]
+            .into_iter()
+            .map(|(id, x)| {
+                Industry::new(TileCoord::new(x, 2), IndustryKind::CoalMine).with_instance_id(id)
+            })
+            .collect();
+        state.random = crate::linkgraph_parity::Randomizer::new(1);
+        let mut expected = state.random;
+        assert_eq!(expected.random_range(3), 0, "ordinal del IndustryPool");
+
+        let selected = random_industry_pool_index(&mut state).expect("industria del pool");
+
+        assert_eq!(state.industries[selected].instance_id, 0);
+        assert_eq!(state.random, expected);
     }
 
     #[test]

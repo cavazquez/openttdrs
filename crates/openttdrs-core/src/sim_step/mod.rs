@@ -430,12 +430,19 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         .filter(|(_, tile)| tile.kind == crate::TileKind::Industry)
         .map(|(coord, _)| *coord)
         .collect();
-    let _house_animation_dirty = crate::map::step_house_animations(
+    let house_animation_dirty = crate::map::step_house_animations_with_newgrf(
         &mut state.map,
         t,
         &mut state.random,
         &mut state.active_house_animations,
+        &mut state.towns,
+        &state.house_spec_catalog,
+        state.climate,
     );
+    state
+        .runtime
+        .landscape_tile_dirty
+        .extend(house_animation_dirty);
     let animation_coords: Vec<_> = state
         .industries
         .iter()
@@ -1423,6 +1430,54 @@ mod tests {
             4,
             "la fase de animación no reaplica MakeIndustryTileBigger"
         );
+    }
+
+    #[test]
+    fn newgrf_house_animation_phase_marks_changed_frame_dirty() {
+        let coord = TileCoord::new(2, 2);
+        let house_id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let mut state = GameState::new(8, 8);
+        state
+            .map
+            .set_completed_house(coord, house_id, 0)
+            .expect("NewGRF house inside map");
+        assert!(crate::map::house_lift::activate_newgrf_house_animation(
+            &mut state.map,
+            &mut state.active_house_animations,
+            coord,
+        ));
+        state
+            .house_spec_catalog
+            .push(crate::house_spec::HouseSpecDef {
+                id: house_id,
+                local_id: 0,
+                subst_id: 0,
+                building_flags: crate::house_spec::BUILDING_FLAG_SIZE_1X1,
+                min_year: 0,
+                max_year: crate::house_spec::HOUSE_YEAR_MAX,
+                population: 0,
+                mail_generation: 0,
+                availability: crate::house_spec::DEFAULT_HOUSE_AVAILABILITY,
+                probability: crate::house_spec::DEFAULT_HOUSE_PROBABILITY,
+                processing_time: 0,
+                extra_flags: 0,
+                animation_frames: 1,
+                animation_status: 1,
+                animation_speed: 0,
+                override_id: None,
+                callback_mask: 0,
+                name: "animation-phase".into(),
+                from_newgrf: true,
+                grfid: 1,
+                newgrf_views: Vec::new(),
+                newgrf_local_id: 0,
+                newgrf_runtime: None,
+            });
+
+        phase_tile_animation(&mut state, 0);
+
+        assert_eq!(state.map.get(coord).expect("animated house").m7, 1);
+        assert!(state.runtime.landscape_tile_dirty.contains(&coord));
     }
 
     #[test]

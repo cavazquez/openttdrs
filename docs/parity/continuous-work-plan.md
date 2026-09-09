@@ -124,20 +124,23 @@ por huella y pasa sus 16 bits altos a cada callback, cuyos 16 bits bajos son
 propios. `0xFD`/`0xFE`/`0xFF`/frame aplican la semántica nativa de ANIT. Action0
 `0x1A`/`0x1B` conserva además frames, loop/no-loop y la velocidad limitada
 nativa `2..=16` (con defaults `NoAnimation`/`2`), junto con las máscaras
-CB1A/CB1B/CB20; CB1A, CB20 y su scheduler aún no se ejecutan. La subsecuencia
-urbana de `ANIT` sí queda ya
-persistida e
-importada en un vector común: conserva el orden relativo de ascensores vanilla
-y casas NewGRF al regrabar un SAV y los snapshots que aún llaman al campo
-`active_house_lifts` se leen mediante alias. Hasta conectar CB1A, una entrada
-NewGRF activa conserva su slot sin extraer RNG durante el recorrido ANIT ni
-alterar el recorrido de los ascensores. Al vencer el timer, `NewHouseTileLoop`
+CB1A/CB1B/CB20. En la pasada urbana compartida `ANIT`, CB20 se evalúa antes
+del gate de cadencia y limita su resultado a `0..=16`; al vencer `2^speed`,
+CB1A toma una palabra RNG sólo con el flag declarado y aplica su frame,
+fallback loop/no-loop o `DeleteAnimatedTile` con limpieza diferida. La
+subsecuencia urbana de `ANIT` queda persistida e importada en un vector común:
+conserva el orden relativo de ascensores vanilla y casas NewGRF al regrabar un
+SAV y los snapshots que aún llaman al campo `active_house_lifts` se leen
+mediante alias. El frame NewGRF cambiado entra además en la lista dirty del
+cliente sin alterar la secuencia de los ascensores. Al vencer el timer,
+`NewHouseTileLoop`
 ya resuelve Action2 de
 `TileLoop`/`TileLoopNorth`: conserva los triggers pendientes, aplica sólo la
 máscara de reseed y comparte el resultado norte en huellas multitile, con el
 consumo global por tesela nativo. Luego rearma el período, preserva
-`AnimatedTileState` y marca dirty. #527 permanece abierto para triggers de
-animación y CB21 de destrucción de casas NewGRF; no amplía el cierre de #512.
+`AnimatedTileState` y marca dirty. #527 permanece abierto para el trigger de
+cambio de obra, CB21 de destrucción y sonidos de animación NewGRF; no amplía
+el cierre de #512.
 La evidencia canónica vive sólo en
 [random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
 

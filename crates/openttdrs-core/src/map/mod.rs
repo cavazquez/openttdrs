@@ -31,8 +31,8 @@ pub use house_lift::{
     LIFT_MAX_POSITION, LiftStep, activate_house_lift_animation, add_house_animation_to_queue,
     add_house_lift_to_animation, advance_house_lift, halt_lift, house_tile_has_lift,
     house_tile_has_modeled_animation, house_tile_has_newgrf_animation, lift_destination,
-    lift_has_destination, lift_position, step_house_animations, step_house_lifts,
-    with_lift_destination, with_lift_position,
+    lift_has_destination, lift_position, step_house_animations, step_house_animations_with_newgrf,
+    step_house_lifts, with_lift_destination, with_lift_position,
 };
 pub use index::{
     coord_from_linear_index, coord_to_dense_index, coord_to_linear_index,

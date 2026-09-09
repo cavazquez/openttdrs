@@ -1,7 +1,13 @@
 //! Ascensor de Large Office (`AnimateTile_Town` / `town_map.h`).
 
+use crate::Climate;
 use crate::cargodist::parity::Randomizer;
-use crate::house_spec::{BUILDING_FLAG_IS_ANIMATED, HouseSpec, NEW_HOUSE_OFFSET};
+use crate::house_spec::{BUILDING_FLAG_IS_ANIMATED, HouseSpec, HouseSpecDef, NEW_HOUSE_OFFSET};
+use crate::newgrf_callback::resolve_house_animation_callback_with_world;
+use crate::newgrf_sprites::{
+    CALLBACK_FAILED, CBID_HOUSE_ANIMATION_NEXT_FRAME, CBID_HOUSE_ANIMATION_SPEED,
+};
+use crate::town::Town;
 
 use super::{Map, Tile, TileCoord, TileKind};
 
@@ -250,20 +256,124 @@ pub fn apply_newgrf_house_animation_callback_result(
     }
 }
 
-/// Ejecuta la porción urbana de `AnimateAnimatedTiles`.
+#[derive(Debug, Default)]
+struct NewgrfHouseAnimationStep {
+    changed: bool,
+    delete: bool,
+}
+
+struct NewgrfHouseAnimationContext<'a> {
+    towns: &'a mut [Town],
+    house_catalog: &'a [HouseSpecDef],
+    climate: Climate,
+}
+
+/// Ejecuta `AnimationBase::AnimateTile` para una entrada urbana `NewGRF`.
 ///
-/// `TileLoop_Town` ya hizo el `Chance16(1, 2)` que añade un ascensor a la
-/// lista. Aquí no se vuelve a sortear esa decisión: una entrada activa que no
-/// tenga destino toma `RandomRange(7)` únicamente cuando el contador global es
-/// múltiplo de cuatro, igual que `AnimateTile_Town`. Las casas `NewGRF` se
-/// mantienen en la misma cola y conservan su posición hasta que su dispatcher
-/// CB1A esté conectado; en este corte no extraen RNG ni se descartan.
-pub fn step_house_animations(
+/// CB20 se consulta antes del gate de cadencia, mientras que CB1A sólo toma
+/// `Random()` cuando el flag correspondiente está presente y el tick llega a
+/// la potencia de dos resultante. Los sonidos del byte alto del callback aún
+/// se delegan deliberadamente al subsistema de audio.
+fn step_newgrf_house_animation(
+    map: &mut Map,
+    context: &mut NewgrfHouseAnimationContext<'_>,
+    coord: TileCoord,
+    tile: Tile,
+    tick: u64,
+    rng: &mut Randomizer,
+) -> NewgrfHouseAnimationStep {
+    let house_id = tile.m8 & 0x0FFF;
+    let Some(def) = crate::house_spec::house_spec_def(context.house_catalog, house_id) else {
+        // Al importar una partida puede existir ANIT antes de rehidratar el
+        // catálogo NewGRF. Igual que `AnimateNewHouseTile`, no se elimina la
+        // entrada si no existe una spec viva para despacharla.
+        return NewgrfHouseAnimationStep::default();
+    };
+
+    let mut speed = def.animation_speed.min(16);
+    if def.has_animation_speed_callback() {
+        let result = resolve_house_animation_callback_with_world(
+            def,
+            map,
+            context.towns,
+            context.house_catalog,
+            context.climate,
+            coord,
+            CBID_HOUSE_ANIMATION_SPEED,
+            0,
+            0,
+        );
+        if result != CALLBACK_FAILED {
+            speed = u8::try_from(result & 0xFF).unwrap_or(0).min(16);
+        }
+    }
+    if !tick.is_multiple_of(1_u64 << u32::from(speed)) {
+        return NewgrfHouseAnimationStep::default();
+    }
+
+    let mut frame = tile.m7;
+    let mut frame_set_by_callback = false;
+    let mut delete = false;
+    if def.has_animation_next_frame_callback() {
+        let random_bits = if def.animation_next_frame_uses_random_bits() {
+            rng.next()
+        } else {
+            0
+        };
+        let result = resolve_house_animation_callback_with_world(
+            def,
+            map,
+            context.towns,
+            context.house_catalog,
+            context.climate,
+            coord,
+            CBID_HOUSE_ANIMATION_NEXT_FRAME,
+            random_bits,
+            0,
+        );
+        if result != CALLBACK_FAILED {
+            frame_set_by_callback = true;
+            match result & 0xFF {
+                0xFF => delete = true,
+                0xFE => frame_set_by_callback = false,
+                next_frame => frame = u8::try_from(next_frame).unwrap_or(0),
+            }
+        }
+    }
+
+    if !frame_set_by_callback {
+        if frame < def.animation_frames {
+            frame = frame.saturating_add(1);
+        } else if frame == def.animation_frames && def.animation_loops() {
+            frame = 0;
+        } else {
+            delete = true;
+        }
+    }
+
+    let changed = tile.m7 != frame;
+    if changed {
+        let mut updated = tile;
+        updated.m7 = frame;
+        let _ = map.set_tile(coord, updated);
+    }
+    NewgrfHouseAnimationStep { changed, delete }
+}
+
+/// Ejecuta el recorrido compartido de `AnimateAnimatedTiles`.
+///
+/// El callback parametrizado permite conservar la API histórica de ascensores
+/// para importadores sin catálogo NewGRF, sin inventar ahí consumos de RNG.
+fn step_house_animations_with_newgrf_stepper<F>(
     map: &mut Map,
     tick: u64,
     rng: &mut Randomizer,
     active: &mut Vec<TileCoord>,
-) -> Vec<TileCoord> {
+    mut step_newgrf: F,
+) -> Vec<TileCoord>
+where
+    F: FnMut(&mut Map, TileCoord, Tile, u64, &mut Randomizer) -> NewgrfHouseAnimationStep,
+{
     let mut dirty = Vec::new();
     let mut index = 0;
     while index < active.len() {
@@ -286,11 +396,20 @@ pub fn step_house_animations(
             continue;
         }
 
-        // `AnimateTile_Town` delega las casas NewGRF antes de la cadencia de
-        // ascensores vanilla. Mientras el scheduler CB1A no esté conectado,
-        // dejarlas activas conserva el orden ANIT para la etapa siguiente sin
-        // inventar una extracción de RNG.
+        // `AnimateTile_Town` delega NewGRF antes de la cadencia de ascensores
+        // vanilla. `DeleteAnimatedTile` mantiene el slot hasta la próxima
+        // pasada global, igual que la rama de ascensores más abajo.
         if house_tile_has_newgrf_animation(tile) {
+            let step = step_newgrf(map, coord, tile, tick, rng);
+            if step.changed {
+                dirty.push(coord);
+            }
+            if step.delete
+                && let Some(current) = map.get(coord)
+            {
+                let deleted = with_house_animation_state(current, HOUSE_ANIMATION_STATE_DELETED);
+                let _ = map.set_tile(coord, deleted);
+            }
             index += 1;
             continue;
         }
@@ -329,6 +448,51 @@ pub fn step_house_animations(
     dirty
 }
 
+/// Ejecuta la porción urbana de `AnimateAnimatedTiles` sin catálogo NewGRF.
+///
+/// Se conserva como API de compatibilidad para los importadores históricos:
+/// sus entradas NewGRF conservan ANIT y no consumen RNG hasta que usen la ruta
+/// con contexto completo.
+pub fn step_house_animations(
+    map: &mut Map,
+    tick: u64,
+    rng: &mut Randomizer,
+    active: &mut Vec<TileCoord>,
+) -> Vec<TileCoord> {
+    step_house_animations_with_newgrf_stepper(map, tick, rng, active, |_, _, _, _, _| {
+        NewgrfHouseAnimationStep::default()
+    })
+}
+
+/// Ejecuta la porción urbana de `AnimateAnimatedTiles` con CB1A/CB20 NewGRF.
+///
+/// Comparte el vector persistido `ANIT` con ascensores vanilla; los cambios de
+/// frame se devuelven para que el caller marque la tesela visualmente dirty.
+pub fn step_house_animations_with_newgrf(
+    map: &mut Map,
+    tick: u64,
+    rng: &mut Randomizer,
+    active: &mut Vec<TileCoord>,
+    towns: &mut [Town],
+    house_catalog: &[HouseSpecDef],
+    climate: Climate,
+) -> Vec<TileCoord> {
+    let mut context = NewgrfHouseAnimationContext {
+        towns,
+        house_catalog,
+        climate,
+    };
+    step_house_animations_with_newgrf_stepper(
+        map,
+        tick,
+        rng,
+        active,
+        |map, coord, tile, tick, rng| {
+            step_newgrf_house_animation(map, &mut context, coord, tile, tick, rng)
+        },
+    )
+}
+
 /// Alias de compatibilidad para la antigua API exclusiva de ascensores.
 pub fn step_house_lifts(
     map: &mut Map,
@@ -346,6 +510,104 @@ mod tests {
 
     fn large_office() -> Tile {
         Tile::completed_house(4, 0, 0)
+    }
+
+    fn newgrf_animation_callback_entry(
+        variable: u8,
+        shift: u8,
+        and_mask: u32,
+    ) -> crate::newgrf_sprites::Action2VarEntry {
+        crate::newgrf_sprites::Action2VarEntry {
+            first: crate::newgrf_sprites::Action2VarTerm {
+                variable,
+                param: None,
+                adjust: crate::newgrf_sprites::Action2VarAdjust {
+                    shift,
+                    and_mask,
+                    ..Default::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        }
+    }
+
+    fn newgrf_animation_house(
+        id: u16,
+        runtime: crate::newgrf_sprites::TrainSpriteGraphics,
+    ) -> HouseSpecDef {
+        HouseSpecDef {
+            id,
+            local_id: 0,
+            subst_id: 0,
+            building_flags: crate::house_spec::BUILDING_FLAG_SIZE_1X1,
+            min_year: 0,
+            max_year: crate::house_spec::HOUSE_YEAR_MAX,
+            population: 0,
+            mail_generation: 0,
+            availability: crate::house_spec::DEFAULT_HOUSE_AVAILABILITY,
+            probability: crate::house_spec::DEFAULT_HOUSE_PROBABILITY,
+            processing_time: 0,
+            extra_flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            override_id: None,
+            callback_mask: 0,
+            name: "animation-house".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(runtime)),
+        }
+    }
+
+    fn cb20_and_cb1a_runtime() -> crate::newgrf_sprites::TrainSpriteGraphics {
+        let mut runtime = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        runtime
+            .assigns
+            .push(crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            });
+        runtime.action2_var.insert(
+            0,
+            crate::newgrf_sprites::Action2VarEntry {
+                first: crate::newgrf_sprites::Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: crate::newgrf_sprites::Action2VarAdjust {
+                        and_mask: u32::from(u16::MAX),
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![
+                    (
+                        1,
+                        u32::from(CBID_HOUSE_ANIMATION_SPEED),
+                        u32::from(CBID_HOUSE_ANIMATION_SPEED),
+                    ),
+                    (
+                        2,
+                        u32::from(CBID_HOUSE_ANIMATION_NEXT_FRAME),
+                        u32::from(CBID_HOUSE_ANIMATION_NEXT_FRAME),
+                    ),
+                ],
+                default: 0,
+            },
+        );
+        // CB20 devuelve 2, por lo que CB1A sólo llega cada cuatro ticks.
+        runtime
+            .action2_var
+            .insert(1, newgrf_animation_callback_entry(0x0C, 4, 0xFF));
+        // CB1A devuelve el byte bajo de `param1`, suministrado por Random().
+        runtime
+            .action2_var
+            .insert(2, newgrf_animation_callback_entry(0x10, 0, 0xFF));
+        runtime
     }
 
     #[test]
@@ -514,6 +776,129 @@ mod tests {
         assert_eq!(active, vec![coord]);
         assert_eq!(rng, expected);
         assert!(map.get(coord).is_some_and(house_tile_has_newgrf_animation));
+    }
+
+    #[test]
+    fn newgrf_cb20_gates_cb1a_and_passes_declared_random_bits() {
+        let id = NEW_HOUSE_OFFSET;
+        let coord = TileCoord::new(2, 2);
+        let mut map = Map::new_flat(8, 8, 0);
+        map.set_completed_house(coord, id, 0)
+            .expect("NewGRF house inside map");
+        let mut active = Vec::new();
+        assert!(activate_newgrf_house_animation(
+            &mut map,
+            &mut active,
+            coord
+        ));
+
+        let mut def = newgrf_animation_house(id, cb20_and_cb1a_runtime());
+        def.animation_frames = 8;
+        def.animation_status = 1;
+        // Si CB20 no se evaluara, este valor impediría CB1A hasta el tick 2^16.
+        def.animation_speed = 16;
+        def.extra_flags = crate::house_spec::HOUSE_EXTRA_FLAG_CALLBACK_1A_RANDOM_BITS;
+        def.callback_mask = crate::house_spec::HOUSE_CALLBACK_ANIMATION_NEXT_FRAME_MASK
+            | crate::house_spec::HOUSE_CALLBACK_ANIMATION_SPEED_MASK;
+        let catalog = vec![def];
+        let mut towns = Vec::new();
+        let mut rng = Randomizer::new(42);
+
+        let before_cb1a = rng;
+        let dirty = step_house_animations_with_newgrf(
+            &mut map,
+            1,
+            &mut rng,
+            &mut active,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+        );
+        assert!(dirty.is_empty(), "CB20 corre pero la cadencia aún no vence");
+        assert_eq!(rng, before_cb1a, "CB20 nunca consume Random()");
+        assert_eq!(map.get(coord).expect("house after tick 1").m7, 0);
+
+        let mut expected = rng;
+        let expected_frame = u8::try_from(expected.next() & 0xFF).unwrap_or(0);
+        assert_ne!(expected_frame, 0, "seed de regresión hace visible CB1A");
+        let dirty = step_house_animations_with_newgrf(
+            &mut map,
+            4,
+            &mut rng,
+            &mut active,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+        );
+        assert_eq!(rng, expected, "CB1A toma exactamente una palabra RNG");
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(map.get(coord).expect("house after CB1A").m7, expected_frame);
+        assert_eq!(active, vec![coord]);
+    }
+
+    #[test]
+    fn newgrf_default_non_loop_animation_marks_deleted_on_the_next_pass() {
+        let id = NEW_HOUSE_OFFSET;
+        let coord = TileCoord::new(2, 2);
+        let mut map = Map::new_flat(8, 8, 0);
+        map.set_completed_house(coord, id, 0)
+            .expect("NewGRF house inside map");
+        let mut tile = map.get(coord).expect("NewGRF house");
+        tile.m7 = 1;
+        map.set_tile(coord, tile).expect("set final frame");
+        let mut active = Vec::new();
+        assert!(activate_newgrf_house_animation(
+            &mut map,
+            &mut active,
+            coord
+        ));
+
+        let mut def =
+            newgrf_animation_house(id, crate::newgrf_sprites::TrainSpriteGraphics::default());
+        def.animation_frames = 1;
+        def.animation_status = 0;
+        def.animation_speed = 0;
+        let catalog = vec![def];
+        let mut towns = Vec::new();
+        let mut rng = Randomizer::new(7);
+        let expected = rng;
+
+        let dirty = step_house_animations_with_newgrf(
+            &mut map,
+            0,
+            &mut rng,
+            &mut active,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+        );
+        assert!(dirty.is_empty());
+        assert_eq!(rng, expected);
+        assert_eq!(
+            active,
+            vec![coord],
+            "DeleteAnimatedTile no hace swap_remove"
+        );
+        assert_eq!(
+            house_animation_state(map.get(coord).expect("deleted house")),
+            HOUSE_ANIMATION_STATE_DELETED
+        );
+
+        let dirty = step_house_animations_with_newgrf(
+            &mut map,
+            1,
+            &mut rng,
+            &mut active,
+            &mut towns,
+            &catalog,
+            Climate::Temperate,
+        );
+        assert!(dirty.is_empty());
+        assert!(active.is_empty());
+        assert_eq!(
+            house_animation_state(map.get(coord).expect("cleaned house")),
+            HOUSE_ANIMATION_STATE_NONE
+        );
     }
 
     #[test]

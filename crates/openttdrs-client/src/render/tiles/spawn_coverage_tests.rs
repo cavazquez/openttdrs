@@ -763,6 +763,94 @@ fn road_stop_vanilla_layers_join_global_sort() {
 }
 
 #[test]
+fn road_waypoint_vanilla_layers_join_global_sort() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let coord = TileCoord::new(1, 1);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+            m6: openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT << 3,
+            ..tile_template()
+        },
+    )
+    .expect("road waypoint X");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &[],
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("road waypoint X spawn");
+
+    let mut parents: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter_map(|(parent, transform)| {
+            [6143, 6144]
+                .contains(&parent.sprite_id)
+                .then_some((*parent, transform.translation.z))
+        })
+        .collect();
+    parents.sort_by_key(|(parent, _)| parent.insertion_key);
+    assert_eq!(
+        parents
+            .iter()
+            .map(|(parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                6143,
+                ParentSpriteBounds::new(16, 16, 0, 31, 18, 15),
+                viewport_insertion_key(1, 1, 2),
+            ),
+            (
+                6144,
+                ParentSpriteBounds::new(16, 29, 0, 31, 31, 15),
+                viewport_insertion_key(1, 1, 3),
+            ),
+        ],
+        "cada poste TILE_SEQ_LINE del waypoint debe ser un parent global"
+    );
+    assert!(
+        parents
+            .iter()
+            .all(|(parent, depth)| parent.source_depth == *depth),
+        "los parents preservan la profundidad fuente antes del sort global"
+    );
+}
+
+#[test]
 fn road_depot_vanilla_layers_join_global_sort() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);

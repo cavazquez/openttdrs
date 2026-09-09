@@ -680,6 +680,40 @@ fn road_stop_parent_sprites(
         .collect()
 }
 
+/// Conserva el orden local de las capas BUILD cuando una fundación las vuelve
+/// children del mismo parent. En plano los waypoints se publican como parents
+/// independientes y pasan directamente por el sorter global.
+fn road_stop_sorted_layer_centers(
+    ctx: &TileRenderContext,
+    base_z: u8,
+    layers: &[RoadStopLayerGfx],
+) -> Vec<Vec3> {
+    let mut centers: Vec<_> = layers
+        .iter()
+        .map(|layer| {
+            road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                layer.z,
+                road_stop_seq_gfx(layer),
+                layer.w,
+                layer.h,
+            )
+        })
+        .collect();
+    let parents = road_stop_parent_sprites(ctx.tx_i32(), ctx.ty_i32(), base_z, layers);
+    let depths: Vec<_> = centers.iter().map(|center| center.z).collect();
+    for (center, depth) in centers
+        .iter_mut()
+        .zip(depths_in_viewport_sort_order(&parents, &depths))
+    {
+        center.z = depth;
+    }
+    centers
+}
+
 /// `DrawRailTileSeq` de una parada vial ocurre después de la fundación y de
 /// la catenaria de carretera. Se reservan 0/1 para que una migración futura
 /// de esos productores pueda preceder las capas BUILD sin renumerarlas.
@@ -725,44 +759,6 @@ fn spawn_road_stop_building_parent(
             source_depth,
         },
     ));
-}
-
-/// Centros de las capas BUILD con los mismos slots locales de Z, pero asignados
-/// en el orden final de `ViewportSortParentSprites`. Sólo lo usan aún los
-/// waypoints viales: sus parents/fundaciones se migran en un corte separado.
-///
-/// No cambia su ancla ni expande la banda de profundidad de la tesela: sólo
-/// corrige las inversiones como `5982 → 5983` de Kale, donde el C++ devuelve
-/// `5983 → 5982` después de comparar sus bounds.
-fn road_stop_sorted_layer_centers(
-    ctx: &TileRenderContext,
-    base_z: u8,
-    layers: &[RoadStopLayerGfx],
-) -> Vec<Vec3> {
-    let mut centers: Vec<_> = layers
-        .iter()
-        .map(|layer| {
-            road_stop_build_sprite_center(
-                ctx.iso_pos,
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                layer.z,
-                road_stop_seq_gfx(layer),
-                layer.w,
-                layer.h,
-            )
-        })
-        .collect();
-    let parents = road_stop_parent_sprites(ctx.tx_i32(), ctx.ty_i32(), base_z, layers);
-    let depths: Vec<_> = centers.iter().map(|center| center.z).collect();
-    for (center, depth) in centers
-        .iter_mut()
-        .zip(depths_in_viewport_sort_order(&parents, &depths))
-    {
-        center.z = depth;
-    }
-    centers
 }
 
 /// PNG del suelo `PALETTE_MODIFIER_COLOUR` de las cuatro orientaciones
@@ -3537,9 +3533,9 @@ fn spawn_waypoint_surface_sprite(
 ///
 /// `station_land.h` no reutiliza las capas de una parada: los postes ocupan
 /// sólo 3×16 o 16×3 unidades y se eligen por el eje de `m5`. Las cajas y los
-/// offsets NFO se conservan en `road_waypoint_gfx_data_generated.rs`; al igual
-/// que `AddChildSpriteScreen`, una fundación nivelada recibe ambas capas como
-/// children para que sigan el parent cuando el terreno es inclinado.
+/// offsets NFO se conservan en `road_waypoint_gfx_data_generated.rs`. En plano
+/// cada `TILE_SEQ_LINE` entra al compositor global; con fundación nivelada
+/// ambas capas permanecen children de esa fundación, como `AddChildSpriteScreen`.
 #[allow(clippy::too_many_arguments)]
 fn spawn_road_waypoint_buildings(
     commands: &mut Commands,
@@ -3566,8 +3562,9 @@ fn spawn_road_waypoint_buildings(
             world_z_delta,
         );
     }
-    let centers = road_stop_sorted_layer_centers(ctx, base_z, layers);
-    for (layer, center) in layers.iter().zip(centers) {
+    let foundation_layer_centers =
+        foundation_child_parent.map(|_| road_stop_sorted_layer_centers(ctx, base_z, layers));
+    for (layer_i, layer) in layers.iter().enumerate() {
         let Some(asset_index) = road_waypoint_sprite_index(layer.sprite_id) else {
             continue;
         };
@@ -3581,14 +3578,27 @@ fn spawn_road_waypoint_buildings(
             layer.path,
         ));
         if let Some(parent) = foundation_child_parent {
+            let center = foundation_layer_centers
+                .as_ref()
+                .and_then(|centers| centers.get(layer_i))
+                .copied()
+                .unwrap_or_else(|| {
+                    road_stop_build_sprite_center(
+                        ctx.iso_pos,
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        base_z,
+                        layer.z,
+                        road_stop_seq_gfx(layer),
+                        layer.w,
+                        layer.h,
+                    )
+                });
             spawn_foundation_child_sprite_at(commands, sprite, ctx, center, map_width, parent);
         } else {
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(center),
-            ));
+            spawn_road_stop_building_parent(
+                commands, ctx, base_z, map_width, layer_i, layer, sprite,
+            );
         }
     }
 }
@@ -5872,25 +5882,26 @@ mod tests {
     use bevy::prelude::{Color, Vec2};
 
     use super::{
-        airport_station_ground_layer_trace_offset, buoy_trace_bounds, dock_clear_land_sprite_id,
-        dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
+        TileRenderContext, airport_station_ground_layer_trace_offset, buoy_trace_bounds,
+        dock_clear_land_sprite_id, dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
         rail_depot_build_parent_sprites, rail_depot_catenary_parent_sprite,
         rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
         rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
         road_depot_parent_sprites, road_stop_foundation_child_offset, road_stop_parent_sprites,
-        station_catenary_pylon_parent_bounds, station_catenary_wire_parent_bounds,
-        station_catenary_wire_trace_geometry, station_rail_child_offset,
-        station_rail_foundation_world_z_delta, station_rail_layer_parent_bounds,
-        tunnel_catenary_trace_geometry, tunnel_sortable_parents,
+        road_stop_sorted_layer_centers, station_catenary_pylon_parent_bounds,
+        station_catenary_wire_parent_bounds, station_catenary_wire_trace_geometry,
+        station_rail_child_offset, station_rail_foundation_world_z_delta,
+        station_rail_layer_parent_bounds, tunnel_catenary_trace_geometry, tunnel_sortable_parents,
     };
     use openttdrs_core::{Map, TileCoord, TileKind, WaterClass, set_water_class_m1};
 
+    use crate::render::RenderGrid;
     use crate::render::viewport_sort::{ParentSprite, ParentSpriteBounds};
     use crate::render::world_draw_trace::TraceSpriteBounds;
     use crate::sprites::{
         CatenarySpriteDraw, CatenaryWireDraw, PYLON_SPRITE_BASE, StationTileClass,
         airport_station_ground_layers_for_gfx, rail_depot_build_layers, rail_station_draw_layers,
-        road_depot_build_layers, road_stop_drive_through_layers,
+        road_depot_build_layers, road_stop_drive_through_layers, road_waypoint_build_layers,
     };
 
     #[test]
@@ -6050,6 +6061,42 @@ mod tests {
             crate::render::viewport_sort::viewport_sort_parent_sprites(&parents),
             vec![1, 0]
         );
+    }
+
+    #[test]
+    fn road_waypoint_parents_preserve_station_land_bounds_on_both_axes() {
+        // `station_land.h` publica dos TILE_SEQ_LINE por eje. Esta conversión
+        // a coordenadas absolutas es el contrato que recibe el sorter global;
+        // cubre los prismas 16x3x16 del eje X y 3x16x16 del eje Y.
+        let x = road_stop_parent_sprites(1, 1, 0, road_waypoint_build_layers(0));
+        assert_eq!(
+            x,
+            vec![
+                ParentSprite::sprite(0, 6143, ParentSpriteBounds::new(16, 16, 0, 31, 18, 15)),
+                ParentSprite::sprite(1, 6144, ParentSpriteBounds::new(16, 29, 0, 31, 31, 15)),
+            ]
+        );
+
+        let y = road_stop_parent_sprites(1, 1, 0, road_waypoint_build_layers(1));
+        assert_eq!(
+            y,
+            vec![
+                ParentSprite::sprite(0, 6141, ParentSpriteBounds::new(29, 16, 0, 31, 31, 15)),
+                ParentSprite::sprite(1, 6142, ParentSpriteBounds::new(16, 16, 0, 18, 31, 15)),
+            ]
+        );
+    }
+
+    #[test]
+    fn road_waypoint_y_children_keep_parent_order_under_foundation() {
+        // El eje Y se invierte en ViewportSortParentSprites: aunque 6141 se
+        // emite primero, 6142 debe conservar el slot de profundidad menor al
+        // quedar ambos como children de una foundation.
+        let map = Map::new_flat(4, 4, 0);
+        let grid = RenderGrid::from_map(&map, 4, 4);
+        let ctx = TileRenderContext::new(&map, &grid, 1, 1);
+        let centers = road_stop_sorted_layer_centers(&ctx, 0, road_waypoint_build_layers(1));
+        assert!(centers[0].z > centers[1].z);
     }
 
     #[test]

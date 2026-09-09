@@ -233,7 +233,11 @@ obtener ese número, porque representa deliberadamente la inserción previa a
 `ViewportSortParentSprites`; el runtime sí entrega esas constraints al sorter.
 Los buildings vanilla y los sprites directos de esas fundaciones ya se etiquetan
 como parents comunes, reciben su clave diagonal/ordinal de inserción y se
-reubican con el mismo sorter. El mismo puente incorpora además los edificios
+reubican con el mismo sorter. En plano, los cuatro postes vanilla de road
+waypoint usan igualmente parents independientes con los prismas `16×3×16` o
+`3×16×16` de `station_land.h`; sobre una fundación nivelada permanecen children
+de ese parent y conservan su orden local, para no separar la superficie de su
+elevación. El mismo puente incorpora además los edificios
 industriales vanilla planos sin animación: para el ejemplo de Kale `(186,1)`,
 el sprite `2119` usa exactamente el prisma `(2976,16,8)..(2991,31,27)` de
 `industry_land.h`. Es un subconjunto deliberado: la industria inclinada,

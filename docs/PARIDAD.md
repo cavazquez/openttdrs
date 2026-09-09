@@ -737,7 +737,8 @@ encuentra esa primera inversión, aun cuando `world-draw` por tesela coincide.
 
 Eso prueba la brecha de composición de forma acotada; no declara paridad
 raster. El puente runtime ya aplica el vector final a las capas BUILD de
-paradas viales y depósitos viales, al bundle local de depósito ferroviario
+paradas viales, depósitos viales y a los postes `TILE_SEQ_LINE` vanilla de
+waypoints viales planos, al bundle local de depósito ferroviario
 eléctrico (cable de entrada + fachadas BUILD), a los faroles viales, a la
 subsecuencia vanilla de estación ferroviaria eléctrica (postes, cable y capas
 BUILD) y a los parents de edificios de casas vanilla visibles. En Kale las
@@ -764,8 +765,9 @@ suelo orientado por `m5`, decoración `Roadside` de `m3`, overlay de tranvía
 cuando el tile declara ese tipo y fundación nivelada con todos esos sprites como
 children en pendientes. La catenaria conserva la altura efectiva de esa
 superficie. El layout vanilla de los dos postes (`SPR_ROAD_WAYPOINT_*`, cuatro
-recortes oficiales y cajas `3×16`/`16×3`) también se materializa por eje y queda
-como child de la fundación cuando corresponde. Los layouts `TileSeq` de
+recortes oficiales y cajas `3×16`/`16×3`) también se materializa por eje: en
+plano cada `TILE_SEQ_LINE` publica su parent global con caja literal y ordinal
+2/3; con fundación queda como child cuando corresponde. Los layouts `TileSeq` de
 `NewGRF` para road stops, waypoints y estaciones rail ya se parsean desde
 Action2, resuelven Action3/2→Action1 y materializan suelo, parents con cajas
 `M(...)` y children relativos. El procesador runtime aplica `DODRAW`, offsets de
@@ -1068,8 +1070,8 @@ captura debe servir para localizar y medir, no para certificar paridad.
 
 Ya existe un port puro y testeado de `ViewportSortParentSprites` en
 `render/viewport_sort.rs`, incluidos parents vacíos y children. Las capas BUILD
-vanilla de paradas Bus/Truck, depósitos viales, árboles `MP_TREES` y sus copas
-combinadas,
+vanilla de paradas Bus/Truck, depósitos viales, postes de waypoints viales,
+árboles `MP_TREES` y sus copas combinadas,
 las seis mitades StationGfx de muelle, los seis layouts del depósito naval, los
 bundles de catenaria/fachada de depósitos ferroviarios y las entradas eléctricas
 de túnel con sus fachadas combinadas, los faroles viales, casas vanilla y el
@@ -1098,8 +1100,8 @@ Actualización #326-RAIL-STATION-GLOBAL (2026-09-09): `DrawRailCatenary` y
 `DrawRailTileSeq` de estaciones rail vanilla dejan de reordenarse en un vector
 local. Cada PPP, cable y capa `TILE_SEQ_LINE` conocida entra como parent del
 compositor global antes de `DrawBridgeMiddle`; `1083`–`1086` conserva su
-semántica de máscara como child del techo inmediatamente anterior. Waypoints y
-layouts NewGRF quedan deliberadamente fuera: aún no publican el contrato de
+semántica de máscara como child del techo inmediatamente anterior. Waypoints
+rail y layouts NewGRF quedan deliberadamente fuera: aún no publican el contrato de
 parents/children completo. En la traza scoped de Kale `(189,117)`, al
 normalizar el flag nativo de transparencia, las tuplas parent exactas comunes
 con OpenTTD pasan de 1.136 a 1.330: se añaden 195 sin perder ninguna. La
@@ -1204,6 +1206,21 @@ levemente de 3,888860 a 3,888904. La matriz vigente mide 352.960 / 396.048 /
 `0,25×`/`0,5×`/`1×`/`2×`/`4×`/`8×`. Es una corrección del contrato de culling,
 no paridad de framebuffer: los 11 parents nativos residuales, 100 candidatos
 adicionales y las diferencias raster amplias mantienen #326 y #561 abiertos.
+
+Actualización #326-ROAD-WAYPOINT-GLOBAL (2026-09-09): los cuatro postes
+vanilla `TILE_SEQ_LINE` de road waypoint (`6143`/`6144` en eje X y
+`6141`/`6142` en eje Y) pasan del orden local a parents del compositor global
+en terreno plano. Conservan los prismas literales de `station_land.h`
+`16×3×16`/`3×16×16`, la profundidad fuente y los ordinales 2/3, después de
+reservar los lugares de fundación y catenaria. En pendiente no se fuerza esa
+independencia: cada poste sigue como child de la foundation nivelada. La
+regresión ECS comprueba el enlace plano X y la profundidad fuente; otra prueba
+convierte ambos ejes a las cajas absolutas exactas, y la regresión inclinada
+preserva el vínculo y el orden local con la foundation. Kale no contiene un
+waypoint vial focal,
+por lo que esta etapa no atribuye cambio alguno a la matriz raster. #326 sigue
+abierto por catenaria vial, layouts custom/NewGRF, waypoints rail, producers
+restantes, clipping, pivotes, children globales y framebuffer.
 
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,

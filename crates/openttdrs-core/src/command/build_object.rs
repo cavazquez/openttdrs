@@ -535,7 +535,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_tile_removes_built_object() {
+    fn clear_tile_rejects_nonremovable_lighthouse() {
         let mut state = GameState::new(6, 6);
         let c = TileCoord::new(2, 2);
         apply_command(
@@ -546,10 +546,16 @@ mod tests {
             },
         )
         .unwrap();
-        apply_command(&mut state, &Command::ClearTile(c)).unwrap();
-        let tile = state.map.get(c).unwrap();
-        assert!(!is_map_object_tile(tile.mapt));
-        assert_eq!(tile.kind, TileKind::Grass);
+        let before = state.map.get(c).unwrap();
+        assert_eq!(
+            apply_command(&mut state, &Command::ClearTile(c)),
+            Err(CommandError::ObjectCannotBeRemoved)
+        );
+        assert_eq!(
+            command_would_fail(&state, &Command::ClearTile(c)),
+            Some(CommandError::ObjectCannotBeRemoved)
+        );
+        assert_eq!(state.map.get(c), Some(before));
     }
 
     #[test]

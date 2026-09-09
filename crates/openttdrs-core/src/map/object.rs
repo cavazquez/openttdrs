@@ -27,6 +27,8 @@ pub const OBJECT_TYPE_LIGHTHOUSE: u8 = 1;
 /// Estatua de compañía construida por la autoridad local (`SPR_STATUE_COMPANY`).
 pub const OBJECT_TYPE_STATUE_COMPANY: u8 = 2;
 pub const OBJECT_TYPE_OWNED_LAND: u8 = 3;
+/// Sede de una compañía (`OBJECT_HQ` en `object_type.h`).
+pub const OBJECT_TYPE_COMPANY_HEADQUARTERS: u8 = 4;
 
 /// Triggers de animación de objetos (`ObjectAnimationTrigger` upstream).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

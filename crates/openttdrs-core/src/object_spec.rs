@@ -32,6 +32,8 @@ pub const OBJECT_CALLBACK_FUND_MORE_TEXT_MASK: u16 = 1 << 4;
 /// Bit `Autoslope` de la máscara de callbacks Action0 `0x15`.
 pub const OBJECT_CALLBACK_AUTOSLOPE_MASK: u16 = 1 << 5;
 
+/// Bit `CannotRemove` de `ObjectFlag` (Action0 `0x10`).
+pub const OBJECT_FLAG_CANNOT_REMOVE: u16 = 1 << 1;
 /// Bits de `ObjectFlag` que afectan al runtime de animación.
 pub const OBJECT_FLAG_ANIMATION: u16 = 1 << 6;
 pub const OBJECT_FLAG_ANIM_RANDOM_BITS: u16 = 1 << 12;

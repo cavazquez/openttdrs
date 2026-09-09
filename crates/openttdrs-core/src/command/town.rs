@@ -648,6 +648,12 @@ mod tests {
             action: TownAction::BuildStatue,
         };
         apply_command(&mut s, &cmd).unwrap();
+        assert_eq!(
+            apply_command(&mut s, &Command::ClearTile(TileCoord::new(10, 10))),
+            Err(CommandError::ObjectCannotBeRemoved)
+        );
+        s.cheats.enabled = true;
+        s.cheats.magic_bulldozer = true;
         apply_command(&mut s, &Command::ClearTile(TileCoord::new(10, 10))).unwrap();
 
         assert!(!s.towns[0].has_statue(CompanyId::PLAYER));

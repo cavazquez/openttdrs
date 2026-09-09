@@ -1,8 +1,10 @@
 use crate::economy::road_stop_clear_cost_factored;
 use crate::map::{
-    Map, OBJECT_TYPE_STATUE_COMPANY, TileCoord, TileKind, WaterClass, make_water_tile,
+    Map, OBJECT_TYPE_COMPANY_HEADQUARTERS, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_STATUE_COMPANY,
+    OBJECT_TYPE_TRANSMITTER, TileCoord, TileKind, WaterClass, is_map_object_tile, make_water_tile,
     object_id_from_tile, object_type_from_tile, water_class_from_m1,
 };
+use crate::object_spec::OBJECT_FLAG_CANNOT_REMOVE;
 use crate::{CLEAR_TILE_COST, GameState, StopKind};
 
 use super::super::{CommandError, in_bounds, require_tile_owned_by_active, tile_owner};
@@ -144,6 +146,41 @@ pub(crate) fn check_clear_tile(map: &Map, c: TileCoord) -> Result<(), CommandErr
     }
 }
 
+/// Replica el rechazo de `ClearTile_Object` para objetos que declaran
+/// `CannotRemove`. El bulldozer mágico es la excepción nativa.
+pub(in crate::command) fn check_object_can_be_cleared(
+    state: &GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    if state.cheats.magic_bulldozer_active() {
+        return Ok(());
+    }
+    let Some(tile) = state.map.get(c) else {
+        return Ok(());
+    };
+    if !is_map_object_tile(tile.mapt) {
+        return Ok(());
+    }
+    let Some(object_type) = state.map.object_type_at(c) else {
+        return Ok(());
+    };
+    let vanilla_cannot_remove = matches!(
+        object_type,
+        ty if ty == u16::from(OBJECT_TYPE_TRANSMITTER)
+            || ty == u16::from(OBJECT_TYPE_LIGHTHOUSE)
+            || ty == u16::from(OBJECT_TYPE_STATUE_COMPANY)
+            || ty == u16::from(OBJECT_TYPE_COMPANY_HEADQUARTERS)
+    );
+    let newgrf_cannot_remove =
+        crate::object_spec::object_spec_def(&state.object_spec_catalog, object_type)
+            .is_some_and(|spec| spec.flags & OBJECT_FLAG_CANNOT_REMOVE != 0);
+    if vanilla_cannot_remove || newgrf_cannot_remove {
+        Err(CommandError::ObjectCannotBeRemoved)
+    } else {
+        Ok(())
+    }
+}
+
 pub(in crate::command) fn transport_tile_is_buildable(kind: TileKind) -> bool {
     !matches!(kind, TileKind::Water | TileKind::Void)
 }
@@ -256,6 +293,7 @@ pub(in crate::command) fn clear_tile(
     if !state.cheats.magic_bulldozer_active() {
         require_tile_owned_by_active(state, c)?;
     }
+    check_object_can_be_cleared(state, c)?;
     if let Some(industry_idx) = state.industries.iter().position(|i| i.contains_tile(c)) {
         let industry_tiles = state.industries[industry_idx].tiles.clone();
         for tile in industry_tiles {

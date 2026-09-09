@@ -105,6 +105,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::CannotBuildObjectHere => {
             "Solo se puede colocar el faro/transmisor en hierba o bosque libre."
         }
+        CommandError::ObjectCannotBeRemoved => {
+            "Este objeto no se puede demoler sin el bulldozer mágico."
+        }
         CommandError::ObjectLimitReached => "Ya hay un faro o transmisor de ese tipo en el mapa.",
         CommandError::IndustryNotAvailableInClimate => {
             "Esta industria no está disponible en el clima de este mapa."

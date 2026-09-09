@@ -108,6 +108,8 @@ pub enum CommandError {
     CannotBuyLandHere,
     /// Solo hierba/bosque libre admite faro o transmisor.
     CannotBuildObjectHere,
+    /// El objeto existente tiene `ObjectFlag::CannotRemove`.
+    ObjectCannotBeRemoved,
     /// Ya hay un faro o transmisor de ese tipo en el mapa (límite 1).
     ObjectLimitReached,
     /// Esta industria no está disponible en el clima actual del mapa.

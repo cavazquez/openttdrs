@@ -144,8 +144,6 @@ pub(crate) struct WorldAssets {
     pub(crate) airport_taxiway: AtlasSprite,
     pub(crate) airport_tower: AtlasSprite,
     pub(crate) airport_stand: AtlasSprite,
-    /// Radar vanilla: `airport_radar_00` … `_11`.
-    pub(crate) airport_radar: [AtlasSprite; 12],
     /// Todos los sprites que usa el `StationGfx` airport vanilla, indexados
     /// por el ID lógico de OpenTTD. Incluye Action5 (helipads) y los frames
     /// de radar/bandera, para que un save no vuelva al icono genérico.
@@ -470,8 +468,6 @@ impl WorldAssets {
         let airport_taxiway = atlas.get("airport_taxiway_0.png");
         let airport_tower = atlas.get("airport_tower.png");
         let airport_stand = atlas.get("airport_stand.png");
-        let airport_radar: [AtlasSprite; 12] =
-            std::array::from_fn(|i| atlas.get(&format!("airport_radar_{i:02}.png")));
         let airport_station_sprites = AIRPORT_STATION_SPRITES
             .iter()
             .filter_map(|spec| {
@@ -827,7 +823,6 @@ impl WorldAssets {
             airport_taxiway,
             airport_tower,
             airport_stand,
-            airport_radar,
             airport_station_sprites,
             water_lock,
             road_tunnels,

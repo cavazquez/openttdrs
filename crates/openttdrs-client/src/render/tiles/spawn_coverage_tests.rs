@@ -28,8 +28,8 @@ use crate::render::tiles::{
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
-    CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid, TileRenderContext,
-    ViewportSortableChild, ViewportSortableParent,
+    AirportRadarAnim, CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid,
+    TileRenderContext, ViewportSortableChild, ViewportSortableParent,
 };
 use crate::sprites::{RAIL_TB_X, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS};
 
@@ -3099,6 +3099,80 @@ fn imported_airport_uses_full_station_gfx_not_airport_piece_fallbacks() {
             "falta capa StationGfx con sprite {sprite_id}"
         );
     }
+}
+
+#[test]
+fn imported_airport_radar_keeps_its_rotating_parent_and_frame_anchor() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let coord = TileCoord::new(3, 3);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Airport,
+            mapt: 0x50,
+            m2: 23,
+            // APT_RADAR_GRASS_FENCE_SW: el frame tres tiene un PNG y ancla
+            // distintos del frame cero, pero conserva su prisma TILE_SEQ.
+            m5: 31,
+            m7: 3,
+            ..tile_template()
+        },
+    )
+    .expect("radar airport tile");
+    let mut station = Station::new_with_kind(coord, StopKind::Airport);
+    station.ottd_station_id = Some(23);
+    station.airport_tiles.push(coord);
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets.clone()));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_transport_object_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[station.clone()],
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("radar airport spawn");
+
+    let mut radars = world.query::<(
+        &AirportRadarAnim,
+        &ViewportSortableParent,
+        &Transform,
+        &Sprite,
+    )>();
+    let (anim, parent, transform, sprite) = radars.single(&world).expect("radar animado");
+    let expected = anim.frame_for_m7(3, 31).expect("frame radar tres");
+    assert_eq!(parent.sprite_id, 2_683);
+    assert_eq!(parent.bounds, ParentSpriteBounds::new(55, 55, 0, 56, 56, 7));
+    assert_eq!(*parent, expected.parent);
+    assert_eq!(transform.translation, expected.translation);
+    assert!(
+        assets
+            .airport_station_sprite(2_683)
+            .expect("sprite radar tres")
+            .matches(sprite),
+        "el spawn debe comenzar en el frame m7 vivo, no en el frame cero"
+    );
 }
 
 #[test]

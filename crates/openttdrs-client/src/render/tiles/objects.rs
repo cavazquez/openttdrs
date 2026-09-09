@@ -808,25 +808,24 @@ fn spawn_airport_radar_overlay(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     base_z: u8,
-    half_h: f32,
+    map_width: u32,
 ) {
     let m7 = ctx.tile.map(|t| t.m7).unwrap_or(0);
-    let frame = usize::from(openttdrs_core::airport_radar_frame(m7));
-    let Some(radar) = assets.airport_radar.get(frame) else {
+    let anim = AirportRadarAnim::legacy_tower(ctx, base_z, map_width);
+    let Some(frame) = anim.frame_for_m7(m7, 0) else {
+        return;
+    };
+    let Some(radar) = assets.airport_station_sprite(frame.sprite_id) else {
         return;
     };
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
-        AirportRadarAnim { pos: ctx.coord },
+        anim,
         tint_building_sprite(radar.sprite()),
-        Transform::from_translation(tile_pos_half(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            0.055,
-            half_h,
-        )),
+        Transform::from_translation(frame.translation),
+        Visibility::Visible,
+        frame.parent,
     ));
 }
 
@@ -969,7 +968,17 @@ fn spawn_airport_station_overlays(
         } else {
             image.sprite()
         };
-        commands.spawn((
+        let radar_anim = (openttdrs_core::is_airport_radar_station_gfx(gfx)
+            && layer.sprite_id == 2_680)
+            .then(|| {
+                AirportRadarAnim::station_gfx(
+                    ctx,
+                    base_z,
+                    map_width,
+                    u8::try_from(layer_index).unwrap_or(u8::MAX),
+                )
+            });
+        let mut entity = commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             tint_building_sprite(sprite),
@@ -988,6 +997,9 @@ fn spawn_airport_station_overlays(
                 source_depth,
             },
         ));
+        if let Some(anim) = radar_anim {
+            entity.insert(anim);
+        }
     }
 }
 
@@ -4835,7 +4847,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                 );
             }
             if !imported_station_gfx && piece == openttdrs_core::AirportPiece::Tower {
-                spawn_airport_radar_overlay(commands, assets, ctx, base_z, half_h);
+                spawn_airport_radar_overlay(commands, assets, ctx, base_z, dims.0);
             }
         }
         TileKind::RoadBridge | TileKind::RailBridge => {

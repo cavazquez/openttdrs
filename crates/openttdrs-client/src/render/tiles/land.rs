@@ -407,6 +407,21 @@ fn house_building_trace_geometry(
     )
 }
 
+/// Punto de referencia de `AddSortableSpriteToDraw` para una casa vanilla.
+///
+/// `DrawTile_Town` pasa el `DrawBuildingsTileStruct` completo: el `origin`
+/// de `M(...)` desplaza tanto el prisma como el píxel de referencia antes de
+/// aplicar los offsets NFO del sprite. `iso()` ya está a media escala del
+/// `RemapCoords` nativo, por lo que el delta local usa `remap × 0.5`.
+fn house_building_origin(tile_origin: Vec2, spec: &HouseDrawSpec) -> Vec2 {
+    tile_origin
+        + remap_tile_offset(
+            spec.sort_ox as f32,
+            spec.sort_oy as f32,
+            spec.sort_oz as f32,
+        ) * 0.5
+}
+
 /// Bounds inclusivos del parent que OpenTTD construye a partir de `M(...)`.
 fn house_building_parent_bounds(
     ctx: &TileRenderContext,
@@ -618,10 +633,10 @@ pub(crate) fn spawn_house_tile(
     });
     let foundation_surface_base_z =
         forced_foundation.map_or(base_z, |foundation| foundation.surface_base_z);
-    let house_pos = |xrel: f32, yrel: f32, w: f32, h: f32, layer: f32| {
+    let house_pos = |ref_pos: Vec2, xrel: f32, yrel: f32, w: f32, h: f32, layer: f32| {
         if leveled {
             foundation_surface_overlay_pos(
-                ctx.iso_pos,
+                ref_pos,
                 xrel,
                 yrel,
                 w,
@@ -633,7 +648,7 @@ pub(crate) fn spawn_house_tile(
             )
         } else {
             overlay_pos(
-                ctx.iso_pos,
+                ref_pos,
                 xrel,
                 yrel,
                 w,
@@ -687,7 +702,14 @@ pub(crate) fn spawn_house_tile(
                 fallback,
                 (0, -32, 0),
             );
-            let mut position = house_pos(spec.s1_xrel, spec.s1_yrel, spec.s1_w, spec.s1_h, 0.4);
+            let mut position = house_pos(
+                ctx.iso_pos,
+                spec.s1_xrel,
+                spec.s1_yrel,
+                spec.s1_w,
+                spec.s1_h,
+                0.4,
+            );
             if let Some(parent) = forced_foundation.and_then(|foundation| foundation.child_parent) {
                 // `DrawFoundation` deja el último parent activo; el ground
                 // posterior usa `AddChildSpriteScreen`; los offsets NFO de
@@ -730,7 +752,14 @@ pub(crate) fn spawn_house_tile(
             // por debajo de su propio patio transparente (los huecos negros
             // visibles al ampliar Kale). Conservamos la posición NFO, pero
             // reservamos la profundidad exclusiva del pase ground.
-            let mut position = house_pos(spec.s1_xrel, spec.s1_yrel, spec.s1_w, spec.s1_h, 0.4);
+            let mut position = house_pos(
+                ctx.iso_pos,
+                spec.s1_xrel,
+                spec.s1_yrel,
+                spec.s1_w,
+                spec.s1_h,
+                0.4,
+            );
             position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.4);
             commands.spawn((
                 MapVisualLayer,
@@ -806,6 +835,7 @@ pub(crate) fn spawn_house_tile(
         } && let Some(handle) = cache.handle_for_runtime(def, building_stage, &mut a2, images)
         {
             let pos3 = house_pos(
+                ctx.iso_pos,
                 f32::from(view.x_offs),
                 f32::from(view.y_offs),
                 f32::from(view.width),
@@ -895,7 +925,17 @@ pub(crate) fn spawn_house_tile(
             img.sprite()
         };
         sprite.color = tint;
-        let mut pos3 = house_pos(spec.s2_xrel, spec.s2_yrel, spec.s2_w, spec.s2_h, 0.5);
+        // `s2` es la capa que `DrawTile_Town` pasa a AddSortable: su
+        // `M(...).origin` mueve el raster y el prisma. `s1` continúa en el
+        // origen de tesela porque DrawGroundSprite no recibe ese struct.
+        let mut pos3 = house_pos(
+            house_building_origin(ctx.iso_pos, spec),
+            spec.s2_xrel,
+            spec.s2_yrel,
+            spec.s2_w,
+            spec.s2_h,
+            0.5,
+        );
         let source_depth = viewport_source_depth(pos3.z, ctx.tx, resources.map_dims.0);
         pos3.z = source_depth;
         let entity = commands
@@ -950,6 +990,7 @@ pub(crate) fn spawn_house_tile(
             house_lift_screen_offset(lift_position),
         );
         let lift_base = house_pos(
+            house_building_origin(ctx.iso_pos, spec),
             spec.s2_xrel + crate::render::HOUSE_LIFT_SCREEN_X,
             spec.s2_yrel + crate::render::HOUSE_LIFT_SCREEN_Y,
             lift_w,
@@ -3084,11 +3125,12 @@ mod tests {
 
     use super::{
         TreeGround, clear_ground_sprite_id, field_fence_draws, field_ground_sprite_id,
-        field_slope_max_pixel_z, field_slope_pixel_z_in_corner, house_building_trace_geometry,
-        house_lift_screen_offset, industry_building_parent_bounds, industry_building_trace_palette,
-        openttd_tile_hash, rough_flat_variant, sort_tree_layers_like_openttd,
-        tree_density_from_tile, tree_ground_from_tile, tree_ground_sprite_id, tree_parent_bounds,
-        tree_shore_sprite_id, tree_slope_z_offset, void_ground_sprite_and_palette,
+        field_slope_max_pixel_z, field_slope_pixel_z_in_corner, house_building_origin,
+        house_building_trace_geometry, house_lift_screen_offset, industry_building_parent_bounds,
+        industry_building_trace_palette, openttd_tile_hash, rough_flat_variant,
+        sort_tree_layers_like_openttd, tree_density_from_tile, tree_ground_from_tile,
+        tree_ground_sprite_id, tree_parent_bounds, tree_shore_sprite_id, tree_slope_z_offset,
+        void_ground_sprite_and_palette,
     };
 
     fn industry_ctx_at(tx: u32, ty: u32, base_z: u8) -> TileRenderContext {
@@ -3333,6 +3375,26 @@ mod tests {
                 sloped_bounds.ez,
             ),
             (0, 0, 0, 14, 14, 60)
+        );
+    }
+
+    #[test]
+    fn house_building_origin_moves_the_raster_with_the_macro_origin() {
+        // Kale (190,122): `s2=1472`, PAL_BLUE. El trace nativo pasa
+        // `M(..., 2, 0, 13, 16, 110, ...)` a AddSortableSpriteToDraw.
+        // El origen se remapea antes del xrel/yrel del NFO: -4 px en X y
+        // -2 px en Y-up, no sólo en el prisma del sorter.
+        let spec = match HOUSE_DRAW_DATA.iter().find(|spec| {
+            spec.s2 == 1472
+                && spec.s2_palette == 783
+                && (spec.sort_ox, spec.sort_oy, spec.sort_oz) == (2, 0, 0)
+        }) {
+            Some(spec) => spec,
+            None => panic!("la fila vanilla de la torre azul debe conservar M(2, 0, 0)"),
+        };
+        assert_eq!(
+            house_building_origin(Vec2::new(12.0, 20.0), spec),
+            Vec2::new(8.0, 18.0)
         );
     }
 

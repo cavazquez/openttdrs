@@ -2,7 +2,7 @@
 
 use crate::GameState;
 use crate::map::tree_tile_loop::clear_ground_type;
-use crate::map::{TileCoord, TileKind, tile_slope_and_z};
+use crate::map::{Tile, TileCoord, TileKind, tile_slope_and_z};
 use crate::town::{
     Town, cap_grow_counter_after_fund, update_town_growth_state_with_setting, update_town_radius,
 };
@@ -20,6 +20,12 @@ pub const FOUND_TOWN_COST: i64 = 12_500;
 pub const FOUND_TOWN_MIN_DISTANCE: i32 = 14;
 /// Casas iniciales al fundar.
 const FOUND_TOWN_HOUSE_COUNT: usize = 5;
+/// `MP_CLEAR`: el fallback visual `Grass` no basta para fundar ni edificar.
+const OTTD_TILETYPE_CLEAR: u8 = 0;
+
+fn is_raw_clear_tile(tile: Tile) -> bool {
+    tile.kind == TileKind::Grass && tile.ottd_type_nibble() == OTTD_TILETYPE_CLEAR
+}
 
 /// Compat: publicidad mediana.
 pub(crate) fn town_advertise(state: &mut GameState, town_id: u32) -> Result<(), CommandError> {
@@ -177,7 +183,7 @@ pub(crate) fn found_town(state: &mut GameState, center: TileCoord) -> Result<(),
         if placed >= FOUND_TOWN_HOUSE_COUNT {
             break;
         }
-        if state.map.get_kind(c) != Some(TileKind::Grass) {
+        if !state.map.get(c).is_some_and(is_raw_clear_tile) {
             continue;
         }
         if state.map.set_completed_house(c, 1, 20).is_ok()
@@ -232,7 +238,7 @@ pub(crate) fn check_found_town(state: &GameState, center: TileCoord) -> Result<(
 /// terreno rugoso sigue siendo césped válido.
 fn is_suitable_town_ground(state: &GameState, pos: TileCoord) -> bool {
     state.map.get(pos).is_some_and(|tile| {
-        tile.kind == TileKind::Grass
+        is_raw_clear_tile(tile)
             && clear_ground_type(tile.m5) != CLEAR_GROUND_ROUGH
             && tile_slope_and_z(&state.map, pos).is_some_and(|(slope, _)| slope == 0)
     })
@@ -272,6 +278,46 @@ mod tests {
                 || s.map.get_kind(TileCoord::new(16, 17)) == Some(TileKind::House)
         );
         assert!(s.economy.money < 100_000);
+    }
+
+    #[test]
+    fn found_town_rejects_raw_object_ground() {
+        let mut s = GameState::new(32, 32);
+        s.economy.money = 100_000;
+        let center = TileCoord::new(16, 16);
+        let mut object = s.map.get(center).unwrap();
+        // El importador lo representa como Grass, pero TownCanBePlacedHere
+        // nativo exige MP_CLEAR o MP_TREES en el centro.
+        object.mapt = 0xA1;
+        object.m1 = 0x70;
+        object.m2 = 9;
+        object.m3 = 63;
+        s.map.set_tile(center, object).unwrap();
+
+        assert_eq!(
+            apply_command(&mut s, &Command::FoundTown(center)),
+            Err(CommandError::CannotFoundTownHere)
+        );
+        assert_eq!(s.map.get(center), Some(object));
+        assert!(s.towns.is_empty());
+    }
+
+    #[test]
+    fn found_town_does_not_turn_raw_object_fallback_into_house() {
+        let mut s = GameState::new(32, 32);
+        s.economy.money = 100_000;
+        let object_pos = TileCoord::new(14, 15);
+        let mut object = s.map.get(object_pos).unwrap();
+        object.mapt = 0xA0;
+        object.m1 = 0x70;
+        object.m2 = 9;
+        object.m3 = 63;
+        s.map.set_tile(object_pos, object).unwrap();
+
+        apply_command(&mut s, &Command::FoundTown(TileCoord::new(16, 16))).unwrap();
+
+        assert_eq!(s.map.get(object_pos), Some(object));
+        assert_eq!(s.towns[0].num_houses, 5);
     }
 
     #[test]

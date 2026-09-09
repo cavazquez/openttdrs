@@ -1,7 +1,7 @@
 //! Acciones de autoridad local (`TownAction` / `CmdDoTownAction`).
 
 use crate::company::CompanyId;
-use crate::map::{MP_OBJECT_MAPT, Map, OBJECT_TYPE_STATUE_COMPANY, TileCoord, TileKind};
+use crate::map::{MP_OBJECT_MAPT, Map, OBJECT_TYPE_STATUE_COMPANY, Tile, TileCoord, TileKind};
 use crate::station::{Station, modify_station_rating_around};
 use crate::town::{
     FUND_BUILDINGS_RATING_BOOST, MAX_TOWN_AUTHORITY_COMPANIES, Town, apply_fund_buildings_boost,
@@ -83,6 +83,15 @@ pub const RATING_BRIBE_DOWN_TO: i16 = -50;
 /// Paso / tope de soborno exitoso.
 pub const RATING_BRIBE_UP_STEP: i16 = 200;
 pub const RATING_BRIBE_MAXIMUM: i16 = 800;
+const OTTD_TILETYPE_CLEAR: u8 = 0;
+const OTTD_TILETYPE_TREES: u8 = 4;
+
+fn statue_tile_is_raw_clearable(tile: Tile) -> bool {
+    matches!(
+        (tile.kind, tile.ottd_type_nibble()),
+        (TileKind::Grass, OTTD_TILETYPE_CLEAR) | (TileKind::Forest, OTTD_TILETYPE_TREES)
+    )
+}
 
 /// Ajustes de economía que habilitan acciones (defaults vanilla: todo ON).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -275,7 +284,7 @@ fn place_company_statue(map: &mut Map, pos: TileCoord, company: CompanyId) -> bo
     let Some(mut tile) = map.get(pos) else {
         return false;
     };
-    if !statue_tile_is_clear(Some(tile.kind)) {
+    if !statue_tile_is_raw_clearable(tile) {
         return false;
     }
     tile.kind = TileKind::Grass;
@@ -317,7 +326,7 @@ fn zero_company_station_ratings(stations: &mut [Station], town: &Town, company: 
     }
 }
 
-/// Búsqueda espiral 9×9 simplificada: primera hierba/bosque libre.
+/// Búsqueda espiral 9×9 simplificada: primer `MP_CLEAR`/`MP_TREES` libre.
 fn find_statue_tile(map: &Map, center: TileCoord) -> Option<TileCoord> {
     let (map_w, map_h) = map.dimensions();
     let map_w = i32::try_from(map_w).unwrap_or(0);
@@ -334,7 +343,7 @@ fn find_statue_tile(map: &Map, center: TileCoord) -> Option<TileCoord> {
                     continue;
                 }
                 let candidate = TileCoord::new(x, y);
-                if statue_tile_is_clear(map.get_kind(candidate)) {
+                if map.get(candidate).is_some_and(statue_tile_is_raw_clearable) {
                     return Some(TileCoord::new(x, y));
                 }
             }
@@ -377,4 +386,26 @@ pub fn town_exclusivity_owner(town: &Town) -> Option<CompanyId> {
 #[must_use]
 pub fn statue_tile_is_clear(kind: Option<TileKind>) -> bool {
     matches!(kind, Some(TileKind::Grass | TileKind::Forest))
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn statue_placement_skips_raw_object_fallback() {
+        let mut map = Map::new_flat(1, 1, 0);
+        let c = TileCoord::new(0, 0);
+        let mut object = map.get(c).unwrap();
+        object.mapt = 0xA0;
+        object.m1 = 0x70;
+        object.m2 = 9;
+        object.m3 = 63;
+        map.set_tile(c, object).unwrap();
+
+        assert_eq!(find_statue_tile(&map, c), None);
+        assert!(!place_company_statue(&mut map, c, CompanyId::PLAYER));
+        assert_eq!(map.get(c), Some(object));
+    }
 }

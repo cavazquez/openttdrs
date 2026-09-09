@@ -7,7 +7,7 @@ use crate::house_spec::{
     pick_town_house_id_with_catalog, vanilla_or_newgrf_house,
 };
 use crate::map::{
-    Map, SLOPE_STEEP, TileCoord, TileKind, diag_dir_offset, effective_road_bits,
+    Map, SLOPE_STEEP, Tile, TileCoord, TileKind, diag_dir_offset, effective_road_bits,
     has_tile_water_ground, tile_slope_and_z,
 };
 use crate::newgrf_callback::apply_house_construction_callback_for_build;
@@ -27,9 +27,22 @@ const ROAD_SE: u8 = 0x04;
 const ROAD_NE: u8 = 0x08;
 const ROAD_AXIS_X: u8 = ROAD_NE | ROAD_SW; // 0x0A
 const ROAD_AXIS_Y: u8 = ROAD_NW | ROAD_SE; // 0x05
+const OTTD_TILETYPE_CLEAR: u8 = 0;
+const OTTD_TILETYPE_TREES: u8 = 4;
 /// LCG clásico para caminar el grafo de calles (mismo estilo que `rand()`).
 const LCG_MUL: u32 = 1_103_515_245;
 const LCG_ADD: u32 = 12_345;
+
+fn is_raw_clear_tile(tile: Tile) -> bool {
+    tile.kind == TileKind::Grass && tile.ottd_type_nibble() == OTTD_TILETYPE_CLEAR
+}
+
+fn is_raw_clear_or_tree_tile(tile: Tile) -> bool {
+    matches!(
+        (tile.kind, tile.ottd_type_nibble()),
+        (TileKind::Grass, OTTD_TILETYPE_CLEAR) | (TileKind::Forest, OTTD_TILETYPE_TREES)
+    )
+}
 
 /// Offsets de búsqueda de carretera desde el centro (`_town_coord_mod`).
 const TOWN_COORD_MOD: [(i32, i32); 13] = [
@@ -672,7 +685,7 @@ fn collect_road_tiles_near(map: &Map, center: TileCoord, radius: i32) -> Vec<Til
 /// restricción de pendiente que consumen `TryBuildTownHouse`.
 pub(crate) fn can_build_house(map: &Map, pos: TileCoord, noslope: bool) -> bool {
     let clearable = map.get(pos).is_some_and(|tile| {
-        matches!(tile.kind, TileKind::Grass | TileKind::Forest)
+        is_raw_clear_or_tree_tile(tile)
             // `ClearTile_Road` succeeds under `Auto` only for a single road
             // piece without a tram overlay.  Towns can therefore replace a
             // one-bit road with a house, but not a straight/crossing road.
@@ -692,7 +705,7 @@ pub(crate) fn can_build_house(map: &Map, pos: TileCoord, noslope: bool) -> bool 
 }
 
 fn can_build_town_road(map: &Map, pos: TileCoord) -> bool {
-    if map.get_kind(pos) != Some(TileKind::Grass) {
+    if !map.get(pos).is_some_and(is_raw_clear_tile) {
         return false;
     }
     is_flat_tile(map, pos)
@@ -706,6 +719,9 @@ fn place_town_road(map: &mut Map, pos: TileCoord, road_bits: u8) -> bool {
     let Some(mut tile) = map.get(pos) else {
         return false;
     };
+    if !is_raw_clear_tile(tile) {
+        return false;
+    }
     let bits = (road_bits & 0x0F).max(0x01);
     tile.kind = TileKind::Road;
     tile.mapt = 0x20;
@@ -843,6 +859,25 @@ mod tests {
 
         assert!(can_build_house(&map, coast, false));
         assert!(!can_build_house(&map, water, false));
+    }
+
+    #[test]
+    fn town_growth_does_not_clear_raw_object_fallback() {
+        let mut map = Map::new_flat(5, 5, 0);
+        let c = TileCoord::new(2, 2);
+        let mut object = map.get(c).unwrap();
+        // MP_OBJECT se importa visualmente como Grass, pero ClearTile_Object
+        // rechaza cualquier limpieza automática solicitada por OWNER_TOWN.
+        object.mapt = 0xA0;
+        object.m1 = 0x70;
+        object.m2 = 9;
+        object.m3 = 63;
+        map.set_tile(c, object).unwrap();
+
+        assert!(!can_build_house(&map, c, false));
+        assert!(!can_build_town_road(&map, c));
+        assert!(!place_town_road(&mut map, c, ROAD_AXIS_X));
+        assert_eq!(map.get(c), Some(object));
     }
 
     #[test]

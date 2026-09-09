@@ -249,13 +249,13 @@ pub use economy::{
     STATION_ACCEPTANCE_TICKS, STATION_RATING_TICKS, TICKS_PER_DAY, TICKS_PER_MONTH, TICKS_PER_YEAR,
     build_object_cost, build_object_cost_factored, buy_land_cost, cargo_current_payment,
     cargo_time_factor, check_bankruptcy, decrease_loan, increase_loan, inflation_income_factor,
-    inflation_prices_factor, manhattan_distance, monthly_loan_interest, rail_build_cost_factored,
-    road_build_cost_factored, road_stop_build_cost_factored, road_stop_clear_cost_factored,
-    terraform_cost_per_corner, ticks_to_transit_periods, transported_goods_income,
-    transported_goods_income_for_climate, transported_goods_income_with_spec,
-    vehicle_asset_value_with_catalog, vehicle_purchase_cost, vehicle_purchase_cost_with_callbacks,
-    vehicle_refit_cost_with_callbacks, vehicle_running_cost_per_tick, vehicle_sell_refund,
-    vehicle_sell_refund_with_catalog,
+    inflation_prices_factor, manhattan_distance, monthly_loan_interest, object_clear_cost_factored,
+    rail_build_cost_factored, road_build_cost_factored, road_stop_build_cost_factored,
+    road_stop_clear_cost_factored, terraform_cost_per_corner, ticks_to_transit_periods,
+    transported_goods_income, transported_goods_income_for_climate,
+    transported_goods_income_with_spec, vehicle_asset_value_with_catalog, vehicle_purchase_cost,
+    vehicle_purchase_cost_with_callbacks, vehicle_refit_cost_with_callbacks,
+    vehicle_running_cost_per_tick, vehicle_sell_refund, vehicle_sell_refund_with_catalog,
 };
 pub use economy_quarterly::{
     ECONOMY_HISTORY_QUARTERS, QuarterlyEconomyEntry, QuarterlyEconomyHistory,
@@ -632,14 +632,14 @@ pub use news::{
     tick_for_calendar_year, vehicle_kind_label,
 };
 pub use object_spec::{
-    DEFAULT_OBJECT_BUILD_COST_FACTOR, DEFAULT_OBJECT_CLIMATE_MASK, NEW_OBJECT_OFFSET,
-    OBJECT_CALLBACK_ANIMATION_NEXT_FRAME_MASK, OBJECT_CALLBACK_ANIMATION_SPEED_MASK,
-    OBJECT_CALLBACK_AUTOSLOPE_MASK, OBJECT_CALLBACK_COLOUR_MASK,
-    OBJECT_CALLBACK_FUND_MORE_TEXT_MASK, OBJECT_CALLBACK_SLOPE_CHECK_MASK,
-    OBJECT_FLAG_ANIM_RANDOM_BITS, OBJECT_FLAG_ANIMATION, OBJECT_FLAG_CANNOT_REMOVE,
-    OBJECT_SIZE_1X1, ObjectSpecDef, empty_object_spec_catalog, is_selectable_object_spec,
-    list_1x1_object_specs, list_buildable_object_specs, next_free_object_spec_id,
-    object_size_is_1x1, object_spec_def,
+    DEFAULT_OBJECT_BUILD_COST_FACTOR, DEFAULT_OBJECT_CLEAR_COST_FACTOR,
+    DEFAULT_OBJECT_CLIMATE_MASK, NEW_OBJECT_OFFSET, OBJECT_CALLBACK_ANIMATION_NEXT_FRAME_MASK,
+    OBJECT_CALLBACK_ANIMATION_SPEED_MASK, OBJECT_CALLBACK_AUTOSLOPE_MASK,
+    OBJECT_CALLBACK_COLOUR_MASK, OBJECT_CALLBACK_FUND_MORE_TEXT_MASK,
+    OBJECT_CALLBACK_SLOPE_CHECK_MASK, OBJECT_FLAG_ANIM_RANDOM_BITS, OBJECT_FLAG_ANIMATION,
+    OBJECT_FLAG_CANNOT_REMOVE, OBJECT_FLAG_CLEAR_INCOME, OBJECT_SIZE_1X1, OWNED_LAND_COST_FACTOR,
+    ObjectSpecDef, empty_object_spec_catalog, is_selectable_object_spec, list_1x1_object_specs,
+    list_buildable_object_specs, next_free_object_spec_id, object_size_is_1x1, object_spec_def,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{

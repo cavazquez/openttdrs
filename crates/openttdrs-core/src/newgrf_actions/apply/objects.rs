@@ -68,6 +68,7 @@ pub fn apply_newgrf_objects(state: &mut GameState, search_dirs: &[&Path]) {
                 newgrf_grf_version: entry.grf_version,
                 climate_mask: meta.climate_mask,
                 build_cost_factor: meta.build_cost_factor,
+                clear_cost_factor: meta.clear_cost_factor,
                 flags: meta.flags,
                 animation_frames: meta.animation_frames,
                 animation_status: meta.animation_status,

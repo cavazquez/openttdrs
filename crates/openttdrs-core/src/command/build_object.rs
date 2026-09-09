@@ -377,7 +377,7 @@ pub(crate) fn build_object_quote(state: &GameState, cmd: &super::types::Command)
 mod tests {
     use super::*;
     use crate::command::{Command, apply_command, command_would_fail};
-    use crate::economy::build_object_cost;
+    use crate::economy::{build_object_cost, object_clear_cost_factored};
     use crate::map::object_type_from_tile;
     use crate::newgrf_actions::{
         ACTION0_FEATURE_OBJECTS, apply_newgrf_objects, build_action0_object_payload,
@@ -407,6 +407,7 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask,
             build_cost_factor: cost_factor,
+            clear_cost_factor: cost_factor,
             flags: 0,
             animation_frames: 0,
             animation_status: 0xFF,
@@ -830,6 +831,33 @@ mod tests {
     }
 
     #[test]
+    fn clear_newgrf_object_uses_clear_cost_factor_and_income() {
+        let mut state = GameState::new(8, 8);
+        let object_type = push_spec(&mut state, 0x12, 1, DEFAULT_OBJECT_CLIMATE_MASK);
+        let spec = state.object_spec_catalog.first_mut().expect("object spec");
+        spec.clear_cost_factor = 7;
+        spec.flags = crate::OBJECT_FLAG_CLEAR_INCOME;
+        let origin = TileCoord::new(2, 2);
+        apply_command(
+            &mut state,
+            &Command::BuildObject {
+                pos: origin,
+                object_type,
+            },
+        )
+        .expect("build 2x1 object");
+
+        let before_clear = state.economy.money;
+        let refund = object_clear_cost_factored(&state.global_economy, 7, 2);
+        apply_command(&mut state, &Command::ClearTile(origin)).expect("clear 2x1 object");
+        assert_eq!(state.economy.money, before_clear + refund);
+        assert!(!is_map_object_tile(state.map.get(origin).unwrap().mapt));
+        assert!(!is_map_object_tile(
+            state.map.get(TileCoord::new(3, 2)).unwrap().mapt
+        ));
+    }
+
+    #[test]
     fn build_newgrf_object_uses_cost_factor() {
         let mut state = GameState::new(8, 8);
         let factor = 4u8;
@@ -913,6 +941,7 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: 1,
+            clear_cost_factor: 1,
             flags: 0,
             animation_frames: 0,
             animation_status: 0xFF,
@@ -938,6 +967,7 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: 1,
+            clear_cost_factor: 1,
             flags: 0,
             animation_frames: 0,
             animation_status: 0xFF,
@@ -968,6 +998,7 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: 0x05,
             build_cost_factor: 5,
+            clear_cost_factor: 6,
             flags: crate::object_spec::OBJECT_FLAG_ANIMATION,
             animation_frames: 3,
             animation_status: 1,
@@ -982,12 +1013,14 @@ mod tests {
         assert!(json.contains("\"local_id\":3"));
         assert!(json.contains("\"grfid\":"));
         assert!(json.contains("\"build_cost_factor\":5"));
+        assert!(json.contains("\"clear_cost_factor\":6"));
         assert!(json.contains("\"callback_mask\":1"));
         let loaded: ObjectSpecDef = serde_json::from_str(&json).expect("de");
         assert_eq!(loaded.local_id, 3);
         assert_eq!(loaded.grfid, 0x4F_42_00_02);
         assert_eq!(loaded.size, 0x12);
         assert_eq!(loaded.build_cost_factor, 5);
+        assert_eq!(loaded.clear_cost_factor, 6);
         assert_eq!(loaded.climate_mask, 0x05);
         assert_eq!(loaded.callback_mask, OBJECT_CALLBACK_SLOPE_CHECK_MASK);
         assert_eq!(loaded.flags, crate::object_spec::OBJECT_FLAG_ANIMATION);
@@ -1003,10 +1036,12 @@ mod tests {
             "class_label": "OLD ",
             "name": "Old",
             "size": 0x11,
-            "from_newgrf": true
+            "from_newgrf": true,
+            "build_cost_factor": 5
         }))
         .expect("legacy spec");
         assert_eq!(legacy.animation_status, 0xFF);
+        assert_eq!(legacy.clear_cost_factor, legacy.build_cost_factor);
         assert_eq!(legacy.animation_speed, 2);
         assert_eq!(legacy.animation_frames, 0);
         assert_eq!(legacy.animation_triggers, 0);

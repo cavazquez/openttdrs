@@ -221,6 +221,7 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: 0x0f,
             build_cost_factor: 1,
+            clear_cost_factor: 1,
             flags: 0,
             animation_frames: 0,
             animation_status: 0xFF,

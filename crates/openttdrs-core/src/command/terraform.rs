@@ -819,6 +819,7 @@ mod tests {
             newgrf_grf_version: 8,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: 1,
+            clear_cost_factor: 1,
             flags: 0,
             animation_frames: 0,
             animation_status: 0xFF,

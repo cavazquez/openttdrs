@@ -121,6 +121,8 @@ const PROP_OBJECT_CLIMATE: u8 = 0x0B;
 const PROP_OBJECT_SIZE: u8 = 0x0C;
 /// Objects: build cost multiplier BYTE (`OpenTTD` `0x0D`).
 const PROP_OBJECT_BUILD_COST: u8 = 0x0D;
+/// Objects: clear cost multiplier BYTE (`OpenTTD` `0x14`).
+const PROP_OBJECT_CLEAR_COST: u8 = 0x14;
 /// Objects: behaviour flags WORD (`OpenTTD` `0x10`).
 const PROP_OBJECT_FLAGS: u8 = 0x10;
 /// Objects: animation frame count and status (`OpenTTD` `0x11`).
@@ -798,6 +800,8 @@ pub struct ParsedObjectMeta {
     pub climate_mask: u8,
     /// Multiplicador de coste de construcción (`prop 0x0D`).
     pub build_cost_factor: u8,
+    /// Multiplicador de retirada (`prop 0x14`; inicialmente hereda `0x0D`).
+    pub clear_cost_factor: u8,
     /// Flags de comportamiento (`prop 0x10`), incluido `Animation` y
     /// `AnimRandomBits`.
     pub flags: u16,
@@ -3089,6 +3093,7 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
     let mut size = crate::object_spec::OBJECT_SIZE_1X1;
     let mut climate_mask = crate::object_spec::DEFAULT_OBJECT_CLIMATE_MASK;
     let mut build_cost_factor = crate::object_spec::DEFAULT_OBJECT_BUILD_COST_FACTOR;
+    let mut clear_cost_factor = crate::object_spec::DEFAULT_OBJECT_CLEAR_COST_FACTOR;
     let mut flags = 0u16;
     let mut animation_frames = 0u8;
     let mut animation_status = 0xFFu8;
@@ -3134,6 +3139,14 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
                     break;
                 }
                 build_cost_factor = payload[i];
+                clear_cost_factor = build_cost_factor;
+                i += 1;
+            }
+            PROP_OBJECT_CLEAR_COST => {
+                if i >= payload.len() {
+                    break;
+                }
+                clear_cost_factor = payload[i];
                 i += 1;
             }
             PROP_OBJECT_FLAGS => {
@@ -3205,6 +3218,7 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
         size,
         climate_mask,
         build_cost_factor,
+        clear_cost_factor,
         flags,
         animation_frames,
         animation_status,

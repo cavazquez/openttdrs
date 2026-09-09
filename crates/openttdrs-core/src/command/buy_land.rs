@@ -107,6 +107,30 @@ mod tests {
     }
 
     #[test]
+    fn buy_land_and_clear_use_vanilla_object_prices() {
+        let mut state = GameState::new(8, 8);
+        let c = TileCoord::new(2, 2);
+        let before_purchase = state.economy.money;
+        let purchase_cost = buy_land_cost(&state.global_economy);
+
+        apply_command(&mut state, &Command::BuyLand(c)).expect("buy land");
+        assert_eq!(state.economy.money, before_purchase - purchase_cost);
+
+        let before_clear = state.economy.money;
+        let refund = crate::economy::object_clear_cost_factored(
+            &state.global_economy,
+            crate::OWNED_LAND_COST_FACTOR,
+            1,
+        );
+        apply_command(&mut state, &Command::ClearTile(c)).expect("clear owned land");
+        assert_eq!(state.economy.money, before_clear + refund);
+        assert_eq!(
+            state.economy.money,
+            before_purchase - purchase_cost + refund
+        );
+    }
+
+    #[test]
     fn buy_land_records_active_company_as_owner() {
         let mut state = GameState::new(8, 8);
         let c = TileCoord::new(2, 2);

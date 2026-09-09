@@ -1345,6 +1345,7 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: 0x0F,
             build_cost_factor: 1,
+            clear_cost_factor: 1,
             flags: crate::object_spec::OBJECT_FLAG_ANIMATION,
             animation_frames: 2,
             animation_status: 1,
@@ -1723,8 +1724,7 @@ mod tests {
             height: 0,
             kind: TileKind::Grass,
             mapt: MP_OBJECT_MAPT,
-            // Native saves store ObjectID in MAP2/MAP5. Both footprint tiles
-            // therefore carry the same id instead of the legacy offset.
+            // Native saves share ObjectID across footprint tiles; legacy maps store an offset.
             m5: 0,
             m1: 3,
             m6: 0,
@@ -1735,11 +1735,9 @@ mod tests {
             m7: 0,
             m3hi: 9,
         };
-        map.set_tile(TileCoord::new(0, 0), tile)
-            .expect("object origin");
-        map.set_tile(TileCoord::new(1, 0), tile)
-            .expect("object footprint");
-
+        for coord in [TileCoord::new(0, 0), TileCoord::new(1, 0)] {
+            map.set_tile(coord, tile).expect("object footprint");
+        }
         let objects = vec![SavObject {
             object_id: 7,
             tile: TileCoord::new(0, 0),
@@ -1762,6 +1760,7 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: 0x0F,
             build_cost_factor: 1,
+            clear_cost_factor: 1,
             flags: 0,
             animation_frames: 0,
             animation_status: 0xFF,

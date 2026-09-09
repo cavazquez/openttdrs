@@ -92,6 +92,7 @@ fn station_demolishes_entire_removable_object_footprint() {
         newgrf_grf_version: 0,
         climate_mask: crate::DEFAULT_OBJECT_CLIMATE_MASK,
         build_cost_factor: 1,
+        clear_cost_factor: 1,
         flags: 0,
         animation_frames: 0,
         animation_status: 0xFF,

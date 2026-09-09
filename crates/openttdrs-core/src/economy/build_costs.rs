@@ -3,6 +3,7 @@
 use super::global::GlobalEconomy;
 use super::pricebase::{PriceIndex, get_price};
 use crate::StopKind;
+use crate::object_spec::OWNED_LAND_COST_FACTOR;
 
 /// Coste de terraform por esquina modificada (`Price::Terraform`).
 #[must_use]
@@ -10,10 +11,10 @@ pub fn terraform_cost_per_corner(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::Terraform, 1, 0)
 }
 
-/// Coste por tesela de terreno comprado (`Price::BuildObject`).
+/// Coste por tesela de terreno comprado (`Price::BuildObject`, factor vanilla 10).
 #[must_use]
 pub fn buy_land_cost(ge: &GlobalEconomy) -> i64 {
-    get_price(ge, PriceIndex::BuildObject, 1, 0)
+    build_object_cost_factored(ge, OWNED_LAND_COST_FACTOR, 1)
 }
 
 /// Coste de colocar faro o transmisor (`Price::BuildObject`, factor 1, 1 tesela).
@@ -27,6 +28,18 @@ pub fn build_object_cost(ge: &GlobalEconomy) -> i64 {
 pub fn build_object_cost_factored(ge: &GlobalEconomy, cost_factor: u8, tile_count: u32) -> i64 {
     let per_tile = get_price(ge, PriceIndex::BuildObject, i64::from(cost_factor), 0);
     per_tile.saturating_mul(i64::from(tile_count.max(1)))
+}
+
+/// Coste de retirar un objeto (`ObjectSpec::GetClearCost`).
+///
+/// `ClearTile_Object` aplica el precio `PR_CLEAR_OBJECT` a la huella completa
+/// y luego divide el total entre cinco. El signo de un objeto con
+/// `ObjectFlag::ClearIncome` se gestiona en el comando, no aquí.
+#[must_use]
+pub fn object_clear_cost_factored(ge: &GlobalEconomy, cost_factor: u8, tile_count: u32) -> i64 {
+    let total = get_price(ge, PriceIndex::ClearObject, i64::from(cost_factor), 0)
+        .saturating_mul(i64::from(tile_count.max(1)));
+    total / 5
 }
 
 /// Coste por tesela de vía (`Price::BuildRail`).
@@ -166,6 +179,19 @@ mod tests {
         assert_eq!(
             road_stop_clear_cost_factored(&ge, StopKind::TruckStop, 0),
             0
+        );
+    }
+
+    #[test]
+    fn object_clear_cost_uses_clear_price_and_footprint_divisor() {
+        let ge = GlobalEconomy::new();
+        assert_eq!(
+            object_clear_cost_factored(&ge, 10, 1),
+            medium_default_price(PriceIndex::ClearObject) * 10 / 5
+        );
+        assert_eq!(
+            object_clear_cost_factored(&ge, 7, 2),
+            medium_default_price(PriceIndex::ClearObject) * 7 * 2 / 5
         );
     }
 }

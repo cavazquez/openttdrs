@@ -15,6 +15,10 @@ pub const NEW_OBJECT_OFFSET: u16 = 5;
 
 /// Factor de coste de construcción por defecto (1× precio base).
 pub const DEFAULT_OBJECT_BUILD_COST_FACTOR: u8 = 1;
+/// El coste de retirada inicial hereda el multiplicador de construcción.
+pub const DEFAULT_OBJECT_CLEAR_COST_FACTOR: u8 = DEFAULT_OBJECT_BUILD_COST_FACTOR;
+/// Multiplicador de compra y reventa del terreno comprado vanilla.
+pub const OWNED_LAND_COST_FACTOR: u8 = 10;
 
 /// Máscara de climas por defecto (todos).
 pub const DEFAULT_OBJECT_CLIMATE_MASK: u8 = 0x0F;
@@ -36,12 +40,14 @@ pub const OBJECT_CALLBACK_AUTOSLOPE_MASK: u16 = 1 << 5;
 pub const OBJECT_FLAG_CANNOT_REMOVE: u16 = 1 << 1;
 /// Bit `Autoremove` de `ObjectFlag` (Action0 `0x10`).
 pub const OBJECT_FLAG_AUTOREMOVE: u16 = 1 << 2;
+/// Bit `ClearIncome` de `ObjectFlag` (Action0 `0x10`).
+pub const OBJECT_FLAG_CLEAR_INCOME: u16 = 1 << 4;
 /// Bits de `ObjectFlag` que afectan al runtime de animación.
 pub const OBJECT_FLAG_ANIMATION: u16 = 1 << 6;
 pub const OBJECT_FLAG_ANIM_RANDOM_BITS: u16 = 1 << 12;
 
 /// Spec de objeto definido por Action0.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ObjectSpecDef {
     pub id: u16,
     pub class_label: String,
@@ -64,6 +70,8 @@ pub struct ObjectSpecDef {
     /// Multiplicador de coste Action0 `0x0D` (`build_cost_multiplier`).
     #[serde(default = "default_object_build_cost_factor")]
     pub build_cost_factor: u8,
+    /// Multiplicador de retirada Action0 `0x14` (`clear_cost_multiplier`).
+    pub clear_cost_factor: u8,
     /// Flags de comportamiento Action0 `0x10` (`ObjectFlag`).
     #[serde(default)]
     pub flags: u16,
@@ -106,6 +114,75 @@ const fn default_object_animation_status() -> u8 {
 
 const fn default_object_animation_speed() -> u8 {
     2
+}
+
+/// Forma de lectura que conserva la ausencia de `clear_cost_factor` en saves
+/// anteriores. El campo se introdujo después de `build_cost_factor`, cuyo valor
+/// era también el clear multiplier inicial en `newgrf_act0_objects.cpp`.
+#[derive(Deserialize)]
+struct ObjectSpecDefWire {
+    id: u16,
+    class_label: String,
+    name: String,
+    size: u8,
+    from_newgrf: bool,
+    #[serde(default)]
+    local_id: u8,
+    #[serde(default)]
+    grfid: u32,
+    #[serde(default)]
+    newgrf_grf_version: u8,
+    #[serde(default = "default_object_climate_mask")]
+    climate_mask: u8,
+    #[serde(default = "default_object_build_cost_factor")]
+    build_cost_factor: u8,
+    #[serde(default)]
+    clear_cost_factor: Option<u8>,
+    #[serde(default)]
+    flags: u16,
+    #[serde(default)]
+    animation_frames: u8,
+    #[serde(default = "default_object_animation_status")]
+    animation_status: u8,
+    #[serde(default = "default_object_animation_speed")]
+    animation_speed: u8,
+    #[serde(default)]
+    animation_triggers: u16,
+    #[serde(default)]
+    callback_mask: u16,
+    #[serde(default)]
+    associated_badges: Vec<u16>,
+}
+
+impl<'de> Deserialize<'de> for ObjectSpecDef {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = ObjectSpecDefWire::deserialize(deserializer)?;
+        Ok(Self {
+            id: wire.id,
+            class_label: wire.class_label,
+            name: wire.name,
+            size: wire.size,
+            from_newgrf: wire.from_newgrf,
+            local_id: wire.local_id,
+            grfid: wire.grfid,
+            newgrf_grf_version: wire.newgrf_grf_version,
+            climate_mask: wire.climate_mask,
+            build_cost_factor: wire.build_cost_factor,
+            clear_cost_factor: wire.clear_cost_factor.unwrap_or(wire.build_cost_factor),
+            flags: wire.flags,
+            animation_frames: wire.animation_frames,
+            animation_status: wire.animation_status,
+            animation_speed: wire.animation_speed,
+            animation_triggers: wire.animation_triggers,
+            callback_mask: wire.callback_mask,
+            views: Vec::new(),
+            newgrf_runtime: None,
+            associated_badges: wire.associated_badges,
+        })
+    }
 }
 
 impl ObjectSpecDef {
@@ -369,6 +446,7 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            clear_cost_factor: DEFAULT_OBJECT_CLEAR_COST_FACTOR,
             flags: 0,
             animation_frames: 0,
             animation_status: 0xFF,
@@ -427,6 +505,7 @@ mod tests {
             newgrf_grf_version: 0,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            clear_cost_factor: DEFAULT_OBJECT_CLEAR_COST_FACTOR,
             flags: 0,
             animation_frames: 0,
             animation_status: 0xFF,

@@ -3701,6 +3701,7 @@ mod tests {
         assert_eq!(meta.size, 0x12);
         assert_eq!(meta.climate_mask, 0x05);
         assert_eq!(meta.build_cost_factor, 7);
+        assert_eq!(meta.clear_cost_factor, 7);
         assert_eq!(
             meta.flags,
             crate::OBJECT_FLAG_ANIMATION | crate::OBJECT_FLAG_ANIM_RANDOM_BITS
@@ -3729,6 +3730,7 @@ mod tests {
         assert_eq!(def.size, 0x12);
         assert_eq!(def.climate_mask, 0x05);
         assert_eq!(def.build_cost_factor, 7);
+        assert_eq!(def.clear_cost_factor, 7);
         assert_eq!(
             def.flags,
             crate::OBJECT_FLAG_ANIMATION | crate::OBJECT_FLAG_ANIM_RANDOM_BITS
@@ -3775,6 +3777,34 @@ mod tests {
         assert_eq!(legacy_meta.animation_status, 0xFF);
         assert_eq!(legacy_meta.animation_speed, 2);
         assert_eq!(legacy_meta.animation_triggers, 0);
+        assert_eq!(legacy_meta.clear_cost_factor, 1);
+    }
+
+    #[test]
+    fn parse_object_meta_uses_explicit_clear_cost() {
+        let explicit_clear = vec![
+            0x00,
+            ACTION0_FEATURE_OBJECTS,
+            0x04,
+            0x01,
+            0,
+            0x08,
+            b'C',
+            b'L',
+            b'R',
+            b' ',
+            0x0D,
+            7,
+            0x14,
+            13,
+            0xFE,
+            b'C',
+            0,
+        ];
+        let explicit_meta = parse_action0_object_meta(&explicit_clear).expect("clear cost");
+        assert_eq!(explicit_meta.build_cost_factor, 7);
+        assert_eq!(explicit_meta.clear_cost_factor, 13);
+        assert_eq!(explicit_meta.name, "C");
     }
 
     #[test]

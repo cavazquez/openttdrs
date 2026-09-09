@@ -2799,6 +2799,260 @@ fn newgrf_house_building_uses_runtime_action2_view() {
 }
 
 #[test]
+fn complete_newgrf_house_tile_layout_keeps_ground_in_ground_pass_and_build_in_global_sort() {
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    let assets = boot_assets_app();
+    let first = TileCoord::new(1, 1);
+    let second = TileCoord::new(2, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    for coord in [first, second] {
+        map.set_tile(
+            coord,
+            Tile {
+                kind: TileKind::House,
+                m8: 110,
+                m3: 0x80,
+                m5: 2,
+                ..tile_template()
+            },
+        )
+        .expect("newgrf house TileLayout tile");
+    }
+
+    let ground_rgba = [240, 10, 10, 255].repeat(4);
+    let parent_rgba = [10, 240, 10, 255].repeat(4);
+    let child_rgba = [10, 10, 240, 255].repeat(4);
+    let ground = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: ground_rgba.clone(),
+        mask: Vec::new(),
+    };
+    let parent = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -3,
+        y_offs: -4,
+        rgba: parent_rgba.clone(),
+        mask: Vec::new(),
+    };
+    let child = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -5,
+        y_offs: -6,
+        rgba: child_rgba.clone(),
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![vec![ground], vec![parent], vec![child]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 3,
+            set_id: 9,
+        }],
+        ..Default::default()
+    };
+    runtime.tile_layouts.insert(
+        9,
+        TileLayout {
+            ground: TileLayoutSpriteRef {
+                action1_set: Some(0),
+                ..Default::default()
+            },
+            sequence: vec![
+                TileLayoutSpriteRef {
+                    action1_set: Some(1),
+                    origin: [1, 2, 3],
+                    extent: [4, 5, 6],
+                    ..Default::default()
+                },
+                TileLayoutSpriteRef {
+                    action1_set: Some(2),
+                    origin: [7, -4, i8::MIN],
+                    ..Default::default()
+                },
+            ],
+        },
+    );
+    let house_def = HouseSpecDef {
+        id: 110,
+        local_id: 3,
+        subst_id: 0,
+        building_flags: openttdrs_core::house_spec::BUILDING_FLAG_SIZE_1X1,
+        min_year: 0,
+        max_year: 5000,
+        population: 1,
+        mail_generation: 1,
+        availability: openttdrs_core::DEFAULT_HOUSE_AVAILABILITY,
+        probability: openttdrs_core::DEFAULT_HOUSE_PROBABILITY,
+        processing_time: 0,
+        extra_flags: 0,
+        animation_frames: 0,
+        animation_status: 0xFF,
+        animation_speed: 2,
+        override_id: None,
+        callback_mask: 0,
+        name: "TileLayout house".into(),
+        from_newgrf: true,
+        grfid: 0x484F_5553,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 3,
+        newgrf_runtime: Some(Box::new(runtime)),
+    };
+
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfHouseSpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world.init_resource::<ViewportSortableChildDepthWindows>();
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: ResMut<crate::render::NewGrfHouseSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                for coord in [first, second] {
+                    spawn_house_tile(
+                        &mut commands,
+                        &a.0,
+                        &TileRenderContext::new(
+                            &m.0,
+                            &g.0,
+                            u32::try_from(coord.x).expect("house x"),
+                            u32::try_from(coord.y).expect("house y"),
+                        ),
+                        HouseSpawnResources {
+                            map: &m.0,
+                            map_dims: m.0.dimensions(),
+                            house_catalog: std::slice::from_ref(&house_def),
+                            house_counts: None,
+                            towns: &[],
+                            climate: TEST_CLIMATE,
+                            newgrf_stack: &[],
+                            foundation_newgrf: &[],
+                            house_sprites: Some(&mut cache),
+                            action5_sprites: None,
+                            images: Some(&mut images),
+                        },
+                    );
+                }
+            },
+        )
+        .expect("newgrf house TileLayout spawn");
+
+    let sprite_handles: Vec<_> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .map(|sprite| sprite.image.clone())
+        .collect();
+    let (ground_handles, child_handles) = {
+        let images = world.resource::<Assets<Image>>();
+        let handles_for = |rgba: &[u8]| {
+            sprite_handles
+                .iter()
+                .filter(|handle| {
+                    images.get(*handle).and_then(|image| image.data.as_deref()) == Some(rgba)
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        (handles_for(&ground_rgba), handles_for(&child_rgba))
+    };
+    assert_eq!(ground_handles.len(), 2, "un ground por tesela TileLayout");
+    assert_eq!(child_handles.len(), 2, "un child por tesela TileLayout");
+    let mut ground_depths: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .filter_map(|(sprite, transform)| {
+            ground_handles
+                .contains(&sprite.image)
+                .then_some(transform.translation.z)
+        })
+        .collect();
+    ground_depths.sort_by(f32::total_cmp);
+    let mut expected_ground_depths = vec![
+        ground_draw_z(first.x, first.y, 0.4),
+        ground_draw_z(second.x, second.y, 0.4),
+    ];
+    expected_ground_depths.sort_by(f32::total_cmp);
+    assert_eq!(
+        ground_depths, expected_ground_depths,
+        "TileLayout ground usa DrawGroundSprite y no puede entrar al pase sortable"
+    );
+
+    let mut parents: Vec<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter(|(_, parent)| parent.sprite_id == u32::MAX)
+        .map(|(entity, parent)| (entity, *parent))
+        .collect();
+    parents.sort_by_key(|(_, parent)| parent.insertion_key);
+    assert_eq!(parents.len(), 2, "cada BUILD debe emitir su parent");
+    assert_eq!(
+        parents[0].1.bounds,
+        ParentSpriteBounds::new(17, 18, 3, 20, 22, 8),
+        "el primer BUILD conserva el prisma TILE_SEQ_LINE inclusivo"
+    );
+    assert_eq!(
+        parents[0].1.insertion_key,
+        viewport_insertion_key(1, 1, 2),
+        "el BUILD entra con su ordinal estable en el stream global"
+    );
+    assert!(
+        world
+            .query::<(&ViewportSortableChild, &Sprite)>()
+            .iter(&world)
+            .any(|(child_component, sprite)| {
+                parents
+                    .iter()
+                    .any(|(entity, _)| child_component.parent == *entity)
+                    && child_handles.contains(&sprite.image)
+            }),
+        "el child TileSeq debe continuar unido a su BUILD anterior"
+    );
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(
+        (
+            sort_viewport_sortable_parents,
+            sync_viewport_sortable_children,
+        )
+            .chain(),
+    );
+    schedule.run(&mut world);
+
+    let mut sorted_parents: Vec<_> = world
+        .query::<(Entity, &Transform)>()
+        .iter(&world)
+        .filter(|(entity, _)| parents.iter().any(|(parent, _)| parent == entity))
+        .map(|(entity, transform)| (entity, transform.translation.z))
+        .collect();
+    sorted_parents.sort_by(|left, right| left.1.total_cmp(&right.1));
+    let (first_parent, first_parent_depth) = sorted_parents[0];
+    let (_, next_parent_depth) = sorted_parents[1];
+    let child_depth = world
+        .query::<(&ViewportSortableChild, &Sprite, &Transform)>()
+        .iter(&world)
+        .find_map(|(child_component, sprite, transform)| {
+            (child_component.parent == first_parent && child_handles.contains(&sprite.image))
+                .then_some(transform.translation.z)
+        })
+        .expect("child del primer parent global");
+    assert!(
+        first_parent_depth < child_depth && child_depth < next_parent_depth,
+        "el child TileSeq debe quedar dentro de la ventana de su parent: parent={first_parent_depth}, child={child_depth}, next={next_parent_depth}"
+    );
+}
+
+#[test]
 fn newgrf_house_draw_foundations_callback_can_suppress_default() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(3, 3, 0);

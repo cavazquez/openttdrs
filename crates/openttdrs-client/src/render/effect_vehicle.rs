@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 
+#[cfg(test)]
 use crate::iso::overlay_pos;
 use crate::render::AtlasSprite;
 use crate::sprites::{
@@ -121,6 +122,7 @@ pub(crate) fn effect_lifetime_secs(set: &EffectSpriteSet<'_>) -> f32 {
 
 /// Posición en mundo para un frame de efecto anclado a `anchor` (p. ej. locomotora).
 #[must_use]
+#[cfg(test)]
 pub(crate) fn effect_overlay_pos(
     anchor: Vec2,
     frame: usize,

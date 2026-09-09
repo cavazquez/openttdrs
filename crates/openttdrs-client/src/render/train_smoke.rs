@@ -8,18 +8,18 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     EngineDef, Vehicle, VehicleAdvancedVisualEffectSpawn, VehicleOrder, VehicleVisualEffectKind,
-    extrapolate_vehicle_pose, resolve_vehicle_spawn_visual_effect_callback, train_smoke_kind,
-    vehicle_visual_effect_spec,
+    extrapolate_vehicle_pose, resolve_vehicle_spawn_visual_effect_callback, slope_dz_at_subtile,
+    train_smoke_kind, vehicle_subtile_at_with_map, vehicle_visual_effect_spec,
 };
 
 use crate::audio::{PlayWorldSfx, play_vehicle_event_sound_with_default};
 use crate::bevy_app::UpdateSet;
-use crate::iso::{road_vehicle_tile_anchor, wang_hash};
-use crate::render::effect_vehicle::{
-    EffectSpriteSet, EffectVehicleFrames, apply_effect_frame, effect_overlay_pos,
-};
+use crate::iso::{road_vehicle_tile_anchor, tile_slope_and_min_z, wang_hash};
+use crate::render::effect_vehicle::{EffectSpriteSet, EffectVehicleFrames, apply_effect_frame};
+use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
-    MapVisualLayer, palette_animations_should_run, vehicles::vehicle_draw_anchor_from_pose,
+    MapVisualLayer, ViewportSortableParent, palette_animations_should_run,
+    vehicles::vehicle_draw_anchor_from_pose, viewport_insertion_key, viewport_source_depth,
 };
 use crate::settings::ClientPreferences;
 use crate::simulation::SimClock;
@@ -27,19 +27,24 @@ use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
 
 const MAX_TRAIN_SMOKE_EFFECTS: usize = 48;
+const TRAIN_EFFECT_PARENT_ORDINAL_BASE: u8 = 0x80;
+const TRAIN_EFFECT_SORT_SPRITE_ID_BASE: u32 = 0xFFFE_0010;
+const TILE_SIZE_PX: i32 = 16;
 
 pub(crate) struct TrainSmokePlugin;
 
 impl Plugin for TrainSmokePlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<TrainSmokeSpawnClock>().add_systems(
-            Update,
-            (spawn_train_smoke, animate_train_smoke)
-                .chain()
-                .in_set(UpdateSet::Visuals)
-                .run_if(in_state(ClientScreen::InGame))
-                .run_if(palette_animations_should_run),
-        );
+        app.init_resource::<TrainSmokeSpawnClock>()
+            .init_resource::<TrainSmokeSortSequence>()
+            .add_systems(
+                Update,
+                (spawn_train_smoke, animate_train_smoke)
+                    .chain()
+                    .in_set(UpdateSet::Visuals)
+                    .run_if(in_state(ClientScreen::InGame))
+                    .run_if(palette_animations_should_run),
+            );
     }
 }
 
@@ -49,15 +54,30 @@ struct TrainSmokeSpawnClock {
     last_tick: Option<u64>,
 }
 
+/// Desempate estable para `EffectVehicle`s creados en el mismo pase visual.
+/// El límite simultáneo de efectos es menor que los 128 ordinales disponibles,
+/// por lo que el wrap no puede volver a empatar dos penachos vivos.
+#[derive(Resource, Default)]
+struct TrainSmokeSortSequence(u8);
+
 #[derive(Component)]
 pub(crate) struct TrainSmokeEffect {
     started_tick: u64,
-    anchor: Vec2,
-    base_z: u8,
-    tile: (i32, i32),
+    origin: TrainSmokeWorldPosition,
     set: TrainSmokeSet,
-    /// Offset de emisión CB10/CB160, conservado durante toda la animación.
-    emission_offset: Vec3,
+    sort_ordinal: u8,
+}
+
+/// Posición de mundo del `EffectVehicle` que OpenTTD crea con
+/// `CreateEffectVehicleRel`. La traslación puede conservar fracciones de la
+/// interpolación de render; el prisma del compositor se redondea al píxel de
+/// mundo que usa el vehículo nativo.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct TrainSmokeWorldPosition {
+    x: f32,
+    y: f32,
+    z: f32,
+    source_tile: TileCoord,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -268,12 +288,12 @@ fn advanced_effect_set(effect_type: u8) -> Option<TrainSmokeSet> {
 /// Proyecta `SpawnAdvancedVisualEffect`: rotación signed de 8 bits y centro
 /// dependiente del tipo de vehículo y del bit 13 del callback.
 #[must_use]
-fn advanced_effect_offset(
+fn advanced_effect_world_offset(
     vehicle: &Vehicle,
     spawn: VehicleAdvancedVisualEffectSpawn,
     auto_center: bool,
     auto_rotate: bool,
-) -> Vec3 {
+) -> IVec3 {
     let mut x = i32::from(spawn.x);
     let mut y = i32::from(spawn.y);
     let direction = if vehicle.kind == VehicleKind::Train && vehicle.train_flags & (1 << 4) != 0 {
@@ -311,17 +331,33 @@ fn advanced_effect_offset(
         x += SMOKE_POS[usize::from(direction)] * longitudinal;
         y += SMOKE_POS[transverse] * longitudinal;
     }
-    vehicle_effect_overlay_offset(x, y, i32::from(spawn.z))
+    IVec3::new(x, y, i32::from(spawn.z))
 }
 
-/// Convierte la posición relativa de `CreateEffectVehicleRel` a la escala del
-/// viewport. OpenTTD entrega `x/y/z` en píxeles de mundo; el renderer usa la
-/// proyección isométrica del cliente y reserva el tercer componente de `Vec3`
-/// para el orden sortable, no para la altura visual del efecto.
+/// Convierte un offset relativo de `CreateEffectVehicleRel` a pantalla. Se
+/// conserva para las comprobaciones de CB160; el spawn real usa las mismas
+/// coordenadas de mundo para construir el prisma sortable.
 #[must_use]
-fn vehicle_effect_overlay_offset(x: i32, y: i32, z: i32) -> Vec3 {
-    let screen = road_vehicle_tile_anchor(0, 0, x as f32, y as f32, z as f32);
+#[cfg(test)]
+fn vehicle_effect_overlay_offset(offset: IVec3) -> Vec3 {
+    let screen = road_vehicle_tile_anchor(0, 0, offset.x as f32, offset.y as f32, offset.z as f32);
     Vec3::new(screen.x, screen.y, 0.0)
+}
+
+#[must_use]
+#[cfg(test)]
+fn advanced_effect_offset(
+    vehicle: &Vehicle,
+    spawn: VehicleAdvancedVisualEffectSpawn,
+    auto_center: bool,
+    auto_rotate: bool,
+) -> Vec3 {
+    vehicle_effect_overlay_offset(advanced_effect_world_offset(
+        vehicle,
+        spawn,
+        auto_center,
+        auto_rotate,
+    ))
 }
 
 /// Replica la decisión de `Vehicle::ShowVisualEffect` que precede a CB160.
@@ -402,7 +438,7 @@ fn advanced_effect_should_emit(
 /// `offset=8` es el centro de una unidad estándar; OpenTTD corrige las
 /// unidades ferroviarias acortadas y respeta la inversión visual de trenes.
 #[must_use]
-fn standard_effect_offset(vehicle: &Vehicle, offset: u8) -> Vec3 {
+fn standard_effect_world_offset(vehicle: &Vehicle, offset: u8) -> IVec3 {
     let direction = if vehicle.kind == VehicleKind::Train && vehicle.train_flags & (1 << 4) != 0 {
         vehicle.direction.wrapping_add(4) & 7
     } else {
@@ -417,11 +453,196 @@ fn standard_effect_offset(vehicle: &Vehicle, offset: u8) -> Vec3 {
     }
     const SMOKE_POS: [i32; 8] = [1, 1, 1, 0, -1, -1, -1, 0];
     let transverse = (usize::from(direction) + 2) & 7;
-    vehicle_effect_overlay_offset(
+    IVec3::new(
         SMOKE_POS[usize::from(direction)] * longitudinal,
         SMOKE_POS[transverse] * longitudinal,
         10,
     )
+}
+
+#[must_use]
+#[cfg(test)]
+fn standard_effect_offset(vehicle: &Vehicle, offset: u8) -> Vec3 {
+    vehicle_effect_overlay_offset(standard_effect_world_offset(vehicle, offset))
+}
+
+/// Tesela segura que referencia un `EffectVehicle` aun si CB160 lo desplazó
+/// fuera del borde del mapa. OpenTTD conserva las coordenadas del efecto, pero
+/// sus consultas de mapa se limitan al borde más próximo.
+fn train_smoke_source_tile(map: &Map, x: f32, y: f32) -> TileCoord {
+    let (width, height) = map.dimensions();
+    let max_x = i32::try_from(width.saturating_sub(1))
+        .unwrap_or(i32::MAX)
+        .saturating_mul(TILE_SIZE_PX);
+    let max_y = i32::try_from(height.saturating_sub(1))
+        .unwrap_or(i32::MAX)
+        .saturating_mul(TILE_SIZE_PX);
+    let x = x.round() as i32;
+    let y = y.round() as i32;
+    TileCoord::new(
+        x.clamp(0, max_x).div_euclid(TILE_SIZE_PX),
+        y.clamp(0, max_y).div_euclid(TILE_SIZE_PX),
+    )
+}
+
+/// Convierte la ancla de dibujo de un vehículo al punto de mundo que usa
+/// `CreateEffectVehicleRel`. Resolver a partir de la proyección conserva el
+/// cruce continuo de rampas de puentes que ya modela
+/// `vehicle_draw_anchor_from_pose`, a la vez que recupera una caja de mundo
+/// para el compositor global.
+fn train_smoke_world_position(
+    vehicle: &Vehicle,
+    map: &Map,
+    pose: openttdrs_core::VehiclePose,
+    offset: IVec3,
+) -> TrainSmokeWorldPosition {
+    let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(vehicle, map, pose);
+    let (sub_x, sub_y) = vehicle_subtile_at_with_map(vehicle, pose, Some(map));
+    let (tileh, _) = tile_slope_and_min_z(
+        map,
+        u32::try_from(tx).unwrap_or(0),
+        u32::try_from(ty).unwrap_or(0),
+    );
+    let height_px = f32::from(openttdrs_core::TILE_PIXEL_HEIGHT);
+    let terrain_z = f32::from(base_z) * height_px + slope_dz_at_subtile(sub_x, sub_y, tileh);
+    // `road_vehicle_tile_anchor(0, 0, x, y, z)` cumple:
+    //   screen.x = 2 · (y - x), screen.y = -(x + y - z).
+    // La ancla histórica ya incluye la pendiente; el desplazamiento por
+    // `base_z` lo aplicaba `effect_overlay_pos`. Invertir esa proyección
+    // mantiene exactamente el mismo X/Y visual y también en los puentes.
+    let projected_y = anchor.y + f32::from(base_z) * height_px;
+    let world_sum = terrain_z - projected_y;
+    let world_delta = anchor.x * 0.5;
+    let x = (world_sum - world_delta) * 0.5 + offset.x as f32;
+    let y = (world_sum + world_delta) * 0.5 + offset.y as f32;
+    TrainSmokeWorldPosition {
+        x,
+        y,
+        z: terrain_z + offset.z as f32,
+        source_tile: train_smoke_source_tile(map, x, y),
+    }
+}
+
+fn train_smoke_source_depth(position: TrainSmokeWorldPosition, map_width: u32) -> f32 {
+    let diagonal_depth = (position.source_tile.x + position.source_tile.y) as f32 * 0.01;
+    let height_depth = position.z / f32::from(openttdrs_core::TILE_PIXEL_HEIGHT) * 0.0001;
+    viewport_source_depth(
+        diagonal_depth + height_depth + 0.001,
+        u32::try_from(position.source_tile.x).unwrap_or(0),
+        map_width,
+    )
+}
+
+fn train_smoke_sort_sprite_id(set: TrainSmokeSet) -> u32 {
+    TRAIN_EFFECT_SORT_SPRITE_ID_BASE
+        + match set {
+            TrainSmokeSet::Steam => 0,
+            TrainSmokeSet::Diesel => 1,
+            TrainSmokeSet::Electric => 2,
+            TrainSmokeSet::Breakdown => 3,
+        }
+}
+
+/// `EffectVehicle::UpdateDeltaXY` fija `{ {}, {1, 1, 1}, {} }`; la caja
+/// inclusiva del compositor es por tanto exactamente un píxel cúbico.
+fn train_smoke_parent(
+    position: TrainSmokeWorldPosition,
+    set: TrainSmokeSet,
+    sort_ordinal: u8,
+    map_width: u32,
+) -> ViewportSortableParent {
+    let x = position.x.round() as i32;
+    let y = position.y.round() as i32;
+    let z = position.z.round() as i32;
+    let source_x = u32::try_from(position.source_tile.x).unwrap_or(0);
+    let source_y = u32::try_from(position.source_tile.y).unwrap_or(0);
+    ViewportSortableParent {
+        sprite_id: train_smoke_sort_sprite_id(set),
+        bounds: ParentSpriteBounds::new(x, y, z, x, y, z),
+        insertion_key: viewport_insertion_key(
+            source_x,
+            source_y,
+            TRAIN_EFFECT_PARENT_ORDINAL_BASE | (sort_ordinal & 0x7F),
+        ),
+        source_depth: train_smoke_source_depth(position, map_width),
+    }
+}
+
+fn train_smoke_translation(
+    position: TrainSmokeWorldPosition,
+    frame: usize,
+    set: &EffectSpriteSet<'_>,
+    source_depth: f32,
+) -> Vec3 {
+    let idx = frame.min(set.meta.len().saturating_sub(1));
+    let (w, h, xrel, yrel) = set.meta[idx];
+    let anchor = road_vehicle_tile_anchor(0, 0, position.x, position.y, position.z);
+    Vec3::new(
+        anchor.x + xrel + w * 0.5,
+        anchor.y - (yrel + h * 0.5),
+        source_depth,
+    )
+}
+
+/// El sorter escribe la Z efectiva del parent. La animación puede cambiar
+/// sprite y altura física, pero no debe restaurar la profundidad fuente en un
+/// frame estable.
+fn set_train_smoke_translation_if_changed(
+    transform: &mut Mut<Transform>,
+    source_translation: Vec3,
+    preserves_sorted_depth: bool,
+) {
+    let translation = if preserves_sorted_depth {
+        Vec3::new(
+            source_translation.x,
+            source_translation.y,
+            transform.translation.z,
+        )
+    } else {
+        source_translation
+    };
+    if transform.translation != translation {
+        transform.translation = translation;
+    }
+}
+
+fn spawn_train_smoke_effect(
+    commands: &mut Commands,
+    frames: &EffectVehicleFrames,
+    tick: u64,
+    set: TrainSmokeSet,
+    origin: TrainSmokeWorldPosition,
+    sort_ordinal: u8,
+    map_width: u32,
+) -> bool {
+    let effect_set = sprite_set(frames, set);
+    let Some(atlas) = effect_set.frames.first() else {
+        return false;
+    };
+    let parent = train_smoke_parent(origin, set, sort_ordinal, map_width);
+    let mut sprite = atlas.sprite();
+    if matches!(set, TrainSmokeSet::Electric) {
+        sprite.color = Color::srgb(0.85, 0.92, 1.0);
+    }
+    commands.spawn((
+        MapVisualLayer,
+        TrainSmokeEffect {
+            started_tick: tick,
+            origin,
+            set,
+            sort_ordinal,
+        },
+        sprite,
+        Transform::from_translation(train_smoke_translation(
+            origin,
+            0,
+            &effect_set,
+            parent.source_depth,
+        )),
+        Visibility::Visible,
+        parent,
+    ));
+    true
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -432,6 +653,7 @@ fn spawn_train_smoke(
     hud: Res<SimHudControls>,
     frames: Res<EffectVehicleFrames>,
     mut spawn_clock: ResMut<TrainSmokeSpawnClock>,
+    mut sort_sequence: ResMut<TrainSmokeSortSequence>,
     mut commands: Commands,
     existing: Query<(), With<TrainSmokeEffect>>,
     mut sfx: MessageWriter<PlayWorldSfx>,
@@ -448,6 +670,7 @@ fn spawn_train_smoke(
     let mut active_count = existing.iter().count();
     let state = &mut sim.state;
     let map = &state.map;
+    let map_width = map.dimensions().0;
     let engine_catalog = &state.engine_catalog;
     let mut visual_sound_events = Vec::new();
     for vehicle in &mut state.vehicles {
@@ -489,7 +712,6 @@ fn spawn_train_smoke(
                 continue;
             };
             let pose = extrapolate_vehicle_pose(vehicle, sim_clock.tick_alpha);
-            let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(vehicle, map, pose);
             let mut emitted = false;
             for spawn in advanced.spawns.iter().take(usize::from(advanced.count)) {
                 let Some(set_kind) = advanced_effect_set(spawn.effect_type) else {
@@ -498,38 +720,27 @@ fn spawn_train_smoke(
                 if active_count >= MAX_TRAIN_SMOKE_EFFECTS {
                     break;
                 }
-                let effect_set = sprite_set(&frames, set_kind);
-                let Some(atlas) = effect_set.frames.first() else {
-                    continue;
-                };
-                let advanced_offset = advanced_effect_offset(
+                let offset = advanced_effect_world_offset(
                     vehicle,
                     *spawn,
                     advanced.auto_center,
                     advanced.auto_rotate,
                 );
-                let mut sprite = atlas.sprite();
-                if matches!(set_kind, TrainSmokeSet::Electric) {
-                    sprite.color = Color::srgb(0.85, 0.92, 1.0);
+                let origin = train_smoke_world_position(vehicle, map, pose, offset);
+                let sort_ordinal = sort_sequence.0;
+                if spawn_train_smoke_effect(
+                    &mut commands,
+                    &frames,
+                    tick,
+                    set_kind,
+                    origin,
+                    sort_ordinal,
+                    map_width,
+                ) {
+                    sort_sequence.0 = sort_sequence.0.wrapping_add(1);
+                    emitted = true;
+                    active_count += 1;
                 }
-                let pos = effect_overlay_pos(anchor, 0, &effect_set, base_z, (tx, ty), 0.38, 0.0)
-                    + advanced_offset;
-                commands.spawn((
-                    MapVisualLayer,
-                    TrainSmokeEffect {
-                        started_tick: tick,
-                        anchor,
-                        base_z,
-                        tile: (tx, ty),
-                        set: set_kind,
-                        emission_offset: advanced_offset,
-                    },
-                    sprite,
-                    Transform::from_translation(pos),
-                    Visibility::Visible,
-                ));
-                emitted = true;
-                active_count += 1;
             }
             if emitted && hud.sound_vehicle && vehicle.is_consist_head() {
                 visual_sound_events.push((vehicle.id, vehicle.pos));
@@ -565,33 +776,26 @@ fn spawn_train_smoke(
         let Some(set_kind) = set_kind else {
             continue;
         };
-        let effect_set = sprite_set(&frames, set_kind);
-        let Some(atlas) = effect_set.frames.first() else {
-            continue;
-        };
         let pose = extrapolate_vehicle_pose(vehicle, sim_clock.tick_alpha);
-        let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(vehicle, map, pose);
-        let mut sprite = atlas.sprite();
-        if matches!(set_kind, TrainSmokeSet::Electric) {
-            sprite.color = Color::srgb(0.85, 0.92, 1.0);
+        let origin = train_smoke_world_position(
+            vehicle,
+            map,
+            pose,
+            standard_effect_world_offset(vehicle, visual_spec.offset),
+        );
+        let sort_ordinal = sort_sequence.0;
+        if !spawn_train_smoke_effect(
+            &mut commands,
+            &frames,
+            tick,
+            set_kind,
+            origin,
+            sort_ordinal,
+            map_width,
+        ) {
+            continue;
         }
-        let emission_offset = standard_effect_offset(vehicle, visual_spec.offset);
-        let pos = effect_overlay_pos(anchor, 0, &effect_set, base_z, (tx, ty), 0.38, 0.0)
-            + emission_offset;
-        commands.spawn((
-            MapVisualLayer,
-            TrainSmokeEffect {
-                started_tick: tick,
-                anchor,
-                base_z,
-                tile: (tx, ty),
-                set: set_kind,
-                emission_offset,
-            },
-            sprite,
-            Transform::from_translation(pos),
-            Visibility::Visible,
-        ));
+        sort_sequence.0 = sort_sequence.0.wrapping_add(1);
         // `ShowVisualEffect` llama a `PlayVehicleSound(VSE_VISUAL_EFFECT)`
         // una vez por vehículo primario cuando al menos un humo/chispa fue
         // creado. Los efectos de los vagones se siguen dibujando, pero no
@@ -618,14 +822,21 @@ fn spawn_train_smoke(
 fn animate_train_smoke(
     sim: Res<SimWorld>,
     frames: Res<EffectVehicleFrames>,
-    mut q: Query<(Entity, &mut Transform, &TrainSmokeEffect, &mut Sprite)>,
+    mut q: Query<(
+        Entity,
+        &mut Transform,
+        &TrainSmokeEffect,
+        &mut Sprite,
+        Option<&mut ViewportSortableParent>,
+    )>,
     mut commands: Commands,
 ) {
     if !frames.is_loaded() {
         return;
     }
     let tick = sim.state.tick.get();
-    for (entity, mut transform, smoke, mut sprite) in &mut q {
+    let map_width = sim.state.map.dimensions().0;
+    for (entity, mut transform, smoke, mut sprite, parent) in &mut q {
         let age = tick.saturating_sub(smoke.started_tick);
         let Some(state) = effect_tick_state(smoke.set, age) else {
             commands.entity(entity).despawn();
@@ -642,17 +853,21 @@ fn animate_train_smoke(
                 sprite.color = Color::srgb(0.85, 0.92, 1.0);
             }
         }
-        let pos = effect_overlay_pos(
-            smoke.anchor,
-            state.frame,
-            &effect_set,
-            smoke.base_z,
-            smoke.tile,
-            0.38,
-            f32::from(state.rise),
-        ) + smoke.emission_offset;
-        if transform.translation != pos {
-            transform.translation = pos;
+        let position = TrainSmokeWorldPosition {
+            z: smoke.origin.z + f32::from(state.rise),
+            ..smoke.origin
+        };
+        let next_parent = train_smoke_parent(position, smoke.set, smoke.sort_ordinal, map_width);
+        let translation =
+            train_smoke_translation(position, state.frame, &effect_set, next_parent.source_depth);
+        let preserves_sorted_depth = parent.is_some();
+        set_train_smoke_translation_if_changed(&mut transform, translation, preserves_sorted_depth);
+        if let Some(mut parent) = parent {
+            if *parent != next_parent {
+                *parent = next_parent;
+            }
+        } else {
+            commands.entity(entity).insert(next_parent);
         }
     }
 }
@@ -666,6 +881,8 @@ mod tests {
     };
 
     use super::*;
+    use crate::render::effect_vehicle::effect_overlay_pos;
+    use crate::render::{ViewportSortableChildDepthWindows, sort_viewport_sortable_parents};
 
     fn running_train(engine_id: u16) -> Vehicle {
         let pos = TileCoord::new(1, 1);
@@ -852,6 +1069,46 @@ mod tests {
 
     #[test]
     #[allow(clippy::unwrap_used)]
+    fn train_effect_world_position_preserves_legacy_projection_on_a_slope() {
+        let mut map = Map::new_flat(4, 4, 4);
+        map.set_height(TileCoord::new(1, 1), 5)
+            .expect("slope corner");
+        let mut vehicle = running_train(ENGINE_TRAIN_KIRBY);
+        vehicle.direction = 0;
+        vehicle.unit_length = 4;
+        let pose = openttdrs_core::VehiclePose::from_vehicle(&vehicle);
+        let offset = standard_effect_world_offset(&vehicle, 8);
+        let origin = train_smoke_world_position(&vehicle, &map, pose, offset);
+        let (anchor, base_z, _, _) = vehicle_draw_anchor_from_pose(&vehicle, &map, pose);
+        let legacy_offset = vehicle_effect_overlay_offset(offset);
+        let legacy = Vec2::new(
+            anchor.x + legacy_offset.x,
+            anchor.y
+                + legacy_offset.y
+                + f32::from(base_z) * f32::from(openttdrs_core::TILE_PIXEL_HEIGHT),
+        );
+        assert_eq!(
+            road_vehicle_tile_anchor(0, 0, origin.x, origin.y, origin.z),
+            legacy,
+            "la posición de mundo reproduce el ancla local previa incluso sobre una pendiente"
+        );
+        let parent = train_smoke_parent(origin, TrainSmokeSet::Steam, 9, map.dimensions().0);
+        assert_eq!(
+            parent.bounds,
+            ParentSpriteBounds::new(
+                origin.x.round() as i32,
+                origin.y.round() as i32,
+                origin.z.round() as i32,
+                origin.x.round() as i32,
+                origin.y.round() as i32,
+                origin.z.round() as i32,
+            ),
+            "EffectVehicle::UpdateDeltaXY usa un prisma inclusivo de 1×1×1"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
     fn cb160_positions_match_native_oracle_at_every_zoom() {
         use bevy::camera::CameraProjection;
 
@@ -910,7 +1167,7 @@ mod tests {
 
     #[test]
     #[allow(clippy::unwrap_used)]
-    fn standard_smoke_keeps_spawn_offset_through_animation() {
+    fn standard_smoke_keeps_its_world_prism_and_resolved_depth_through_animation() {
         use crate::render::AtlasSprite;
 
         let mut state = GameState::from_map(Map::new_flat(4, 4, 0));
@@ -934,10 +1191,13 @@ mod tests {
             explosion_large: Vec::new(),
             breakdown: Vec::new(),
         };
-        let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(
+        let pose = openttdrs_core::VehiclePose::from_vehicle(&vehicle);
+        let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(&vehicle, &state.map, pose);
+        let origin = train_smoke_world_position(
             &vehicle,
             &state.map,
-            openttdrs_core::VehiclePose::from_vehicle(&vehicle),
+            pose,
+            standard_effect_world_offset(&vehicle, 8),
         );
         let mut app = App::new();
         app.insert_resource(SimWorld {
@@ -953,40 +1213,126 @@ mod tests {
         .init_resource::<ClientPreferences>()
         .init_resource::<SimClock>()
         .init_resource::<TrainSmokeSpawnClock>()
+        .init_resource::<TrainSmokeSortSequence>()
         .add_message::<PlayWorldSfx>()
         .add_systems(Update, (spawn_train_smoke, animate_train_smoke).chain());
         app.update();
-        let mut query = app
-            .world_mut()
-            .query::<(Entity, &Transform, &TrainSmokeEffect)>();
-        let (entity, transform, smoke) = query.single(app.world()).unwrap();
+        let mut query = app.world_mut().query::<(
+            Entity,
+            &Transform,
+            &TrainSmokeEffect,
+            &ViewportSortableParent,
+        )>();
+        let (entity, transform, smoke, parent) = query.single(app.world()).unwrap();
         let emission_offset = standard_effect_offset(&vehicle, 8);
-        assert_eq!(smoke.emission_offset, emission_offset);
+        assert_eq!(smoke.origin, origin);
         assert_eq!(
-            transform.translation,
-            effect_overlay_pos(anchor, 0, &frames.steam_set(), base_z, (tx, ty), 0.38, 0.0)
-                + emission_offset
+            parent,
+            &train_smoke_parent(origin, TrainSmokeSet::Steam, 0, 4),
+            "el efecto estándar entra como un prisma EffectVehicle real"
         );
+        assert_eq!(
+            transform.translation.truncate(),
+            (effect_overlay_pos(anchor, 0, &frames.steam_set(), base_z, (tx, ty), 0.38, 0.0)
+                + emission_offset)
+                .truncate(),
+            "la transición a coordenadas de mundo no cambia la proyección histórica"
+        );
+        let sorted_depth = 9.75;
+        app.world_mut()
+            .get_mut::<Transform>(entity)
+            .unwrap()
+            .translation
+            .z = sorted_depth;
 
         // Stop further emissions; the existing effect continues to rise and
-        // change atlas frames from its original world position.
+        // change atlas frames from its original world position without
+        // replacing the Z previously resolved by the global sorter.
         app.world_mut().resource_mut::<SimWorld>().state.vehicles[0].running = false;
-        for (tick, frame, rise) in [(1, 0, 0.0), (4, 0, 1.0), (8, 1, 1.0)] {
+        for (tick, frame, rise) in [(1, 0, 0_u8), (4, 0, 1), (8, 1, 1)] {
             app.world_mut().resource_mut::<SimWorld>().state.tick = GameTick::new(tick);
             app.update();
+            let position = TrainSmokeWorldPosition {
+                z: origin.z + f32::from(rise),
+                ..origin
+            };
+            let expected_parent = train_smoke_parent(position, TrainSmokeSet::Steam, 0, 4);
+            let transform = app.world().get::<Transform>(entity).unwrap();
             assert_eq!(
-                app.world().get::<Transform>(entity).unwrap().translation,
-                effect_overlay_pos(
+                transform.translation.truncate(),
+                (effect_overlay_pos(
                     anchor,
                     frame,
                     &frames.steam_set(),
                     base_z,
                     (tx, ty),
                     0.38,
-                    rise
-                ) + emission_offset
+                    f32::from(rise)
+                ) + emission_offset)
+                    .truncate()
+            );
+            assert_eq!(transform.translation.z, sorted_depth);
+            assert_eq!(
+                app.world().get::<ViewportSortableParent>(entity),
+                Some(&expected_parent),
+                "la elevación de SmokeTick actualiza el prisma sin perder su identidad"
             );
         }
+    }
+
+    #[test]
+    fn train_smoke_parent_enters_the_global_viewport_sorter() {
+        let position = TrainSmokeWorldPosition {
+            x: 32.0,
+            y: 48.0,
+            z: 72.0,
+            source_tile: TileCoord::new(2, 3),
+        };
+        let parent = train_smoke_parent(position, TrainSmokeSet::Steam, 5, 8);
+        let mut world = World::new();
+        world.init_resource::<ViewportSortableChildDepthWindows>();
+        let smoke = world
+            .spawn((
+                parent,
+                Transform::from_translation(train_smoke_translation(
+                    position,
+                    0,
+                    &EffectVehicleFrames {
+                        steam: Vec::new(),
+                        diesel: Vec::new(),
+                        electric_spark: Vec::new(),
+                        explosion_large: Vec::new(),
+                        breakdown: Vec::new(),
+                    }
+                    .steam_set(),
+                    parent.source_depth,
+                )),
+            ))
+            .id();
+        world.spawn((
+            ViewportSortableParent {
+                sprite_id: 9_998,
+                bounds: ParentSpriteBounds::new(31, 48, 72, 32, 48, 72),
+                insertion_key: parent.insertion_key + 1,
+                source_depth: parent.source_depth + 0.000_5,
+            },
+            Transform::from_xyz(0.0, 0.0, parent.source_depth + 0.000_5),
+        ));
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sort_viewport_sortable_parents);
+        schedule.run(&mut world);
+
+        let sorted_depth = world
+            .entity(smoke)
+            .get::<Transform>()
+            .expect("train smoke transform")
+            .translation
+            .z;
+        assert!(
+            sorted_depth > parent.source_depth,
+            "el humo de vehículo debe recibir la profundidad resuelta por el compositor global"
+        );
     }
 
     #[test]

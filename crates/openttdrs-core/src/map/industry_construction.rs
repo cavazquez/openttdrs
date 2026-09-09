@@ -244,8 +244,8 @@ pub fn step_industry_tiles_with_seed_and_catalog_and_world_and_cargo_catalog(
     )
 }
 
-/// Variante para el runtime que deja `TileLoop_Industry` al dispatcher que
-/// posee el RNG global y la visita LFSR actual.
+/// Variante para el runtime que deja `TileLoop_Industry` y la obra incompleta
+/// al dispatcher que posee el RNG global y la visita LFSR actual.
 ///
 /// Las fases de construcción, frames y randomización NewGRF todavía comparten
 /// el mismo pipeline; sólo se omite el fallback determinista de la animación
@@ -293,7 +293,11 @@ fn step_industry_tiles_with_seed_and_catalog_and_world_and_cargo_catalog_inner(
     cargo_spec_catalog: &[crate::cargo_spec::CargoSpecDef],
     include_tile_loop_events: bool,
 ) -> Vec<TileCoord> {
-    let mut dirty = advance_industry_construction_from_visits(map, visits, industries);
+    // `MakeIndustryTileBigger` pertenece a `RunTileLoop`: avanzar aquí las
+    // visitas del tick anterior aplaza un rollover y pierde el `Random()` de
+    // `ConstructionStageChanged` frente a los árboles/casas posteriores.
+    // `phase_tile_loop` lo despacha ahora en la visita LFSR viva.
+    let mut dirty = Vec::new();
     if include_tile_loop_events {
         dirty.extend(
             super::industry_tile_anim::advance_industry_tile_loop_events_from_visits(

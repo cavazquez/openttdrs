@@ -447,15 +447,6 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             }
         })
         .collect();
-    let construction_stage_before: Vec<_> = animation_coords
-        .iter()
-        .filter_map(|&coord| {
-            state
-                .map
-                .get(coord)
-                .map(|tile| (coord, crate::map::industry_construction_stage(tile.m1)))
-        })
-        .collect();
     state.runtime.industry_tile_dirty =
         crate::map::industry_construction::step_industry_tiles_without_tile_loop_events_with_seed_and_catalog_and_world_and_cargo_catalog(
             &mut state.map,
@@ -469,32 +460,6 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             state.climate,
             &state.cargo_spec_catalog,
         );
-    let construction_stage_changed: Vec<_> = construction_stage_before
-        .into_iter()
-        .filter_map(|(coord, before)| {
-            state
-                .map
-                .get(coord)
-                .filter(|tile| crate::map::industry_construction_stage(tile.m1) != before)
-                .map(|_| coord)
-        })
-        .collect();
-    state.runtime.industry_tile_dirty.extend(
-        crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
-            &mut state.map,
-            t,
-            &construction_stage_changed,
-            &mut state.industries,
-            &state.towns,
-            &state.industry_tile_spec_catalog,
-            &state.industry_spec_catalog,
-            state.climate,
-            state.world_seed,
-            &mut state.newgrf_animated_industry_tiles,
-            crate::map::IndustryAnimationTrigger::ConstructionStageChanged,
-            &state.cargo_spec_catalog,
-        ),
-    );
     state.runtime.industry_tile_dirty.extend(
         crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
             &mut state.map,
@@ -713,6 +678,27 @@ fn oil_rig_station_tile(state: &GameState, industry: &crate::Industry) -> Option
 }
 
 /// `RunTileLoop`: LFSR de Galois.
+fn trigger_industry_construction_stage_changed(
+    state: &mut GameState,
+    t: u64,
+    coord: crate::TileCoord,
+) -> Vec<crate::TileCoord> {
+    crate::map::trigger_newgrf_industry_animation_with_world_and_cargo_catalog(
+        &mut state.map,
+        t,
+        &[coord],
+        &mut state.industries,
+        &state.towns,
+        &state.industry_tile_spec_catalog,
+        &state.industry_spec_catalog,
+        state.climate,
+        state.world_seed,
+        &mut state.newgrf_animated_industry_tiles,
+        crate::map::IndustryAnimationTrigger::ConstructionStageChanged,
+        &state.cargo_spec_catalog,
+    )
+}
+
 fn phase_tile_loop(state: &mut GameState, t: u64) {
     state.runtime.landscape_tile_dirty.clear();
     state.runtime.tile_loop_visited =
@@ -756,7 +742,29 @@ fn phase_tile_loop(state: &mut GameState, t: u64) {
             continue;
         }
         match snapshot.kind {
-            crate::TileKind::Industry if crate::map::is_industry_completed(snapshot.m1) => {
+            crate::TileKind::Industry => {
+                let Some(live_tile) = state.map.get(coord) else {
+                    continue;
+                };
+                if live_tile.kind != crate::TileKind::Industry {
+                    continue;
+                }
+                if !crate::map::is_industry_completed(live_tile.m1) {
+                    // El rollover 3 → 0 toma `Random()` antes de consultar
+                    // NewGRF; hacerlo aquí conserva el orden LFSR nativo.
+                    let stage_rollover =
+                        crate::map::industry_construction_counter(live_tile.m1) == 3;
+                    if crate::map::advance_industry_construction_tile_loop_at(&mut state.map, coord)
+                    {
+                        industry_dirty.push(coord);
+                    }
+                    if stage_rollover {
+                        let _construction_stage_changed_random = global_rng.next();
+                        industry_dirty
+                            .extend(trigger_industry_construction_stage_changed(state, t, coord));
+                    }
+                    continue;
+                }
                 // `TileLoop_Industry` no pertenece a
                 // `AnimateAnimatedTiles`: `TriggerIndustryTileAnimation`
                 // toma una palabra antes de decidir si la tesela tiene
@@ -1351,6 +1359,54 @@ mod tests {
         assert_eq!(state.random, expected_random);
         assert_eq!(state.map.get(coord).unwrap().m6 & 0x03, 0x03);
         assert!(state.runtime.industry_tile_dirty.contains(&coord));
+    }
+
+    #[test]
+    fn incomplete_industry_rollover_uses_current_visit_and_global_rng() {
+        // `MakeIndustryTileBigger` pasa contador 3 → 0 y cambia de etapa en
+        // la visita LFSR actual. OpenTTD llama entonces
+        // `TriggerIndustryTileAnimation_ConstructionStageChanged`, cuya
+        // extracción de `Random()` es incondicional aun sin callback NewGRF.
+        let coord = TileCoord::new(0, 0);
+        let mut state = GameState::new(64, 64);
+        let mut tile = state.map.get(coord).unwrap();
+        tile.kind = crate::TileKind::Industry;
+        tile.m1 = 0x0C; // etapa 0, contador de construcción 3.
+        state.map.set_tile(coord, tile).unwrap();
+        state.random = crate::linkgraph_parity::Randomizer {
+            state: [0x1122_3344, 0x5566_7788],
+        };
+        let mut expected_random = state.random;
+        let _construction_stage_changed_random = expected_random.next();
+
+        phase_tile_loop(&mut state, 0);
+
+        assert_eq!(state.random, expected_random);
+        assert_eq!(state.map.get(coord).unwrap().m1, 1);
+        assert!(state.runtime.industry_tile_dirty.contains(&coord));
+    }
+
+    #[test]
+    fn prior_animation_phase_does_not_repeat_incomplete_industry_construction() {
+        // La visita actual, no `AnimateAnimatedTiles` del tick siguiente,
+        // debe avanzar la obra. De lo contrario cada tesela incompleta suma
+        // dos contadores y un rollover posterior queda adelantado.
+        let coord = TileCoord::new(0, 0);
+        let mut state = GameState::new(64, 64);
+        let mut tile = state.map.get(coord).unwrap();
+        tile.kind = crate::TileKind::Industry;
+        tile.m1 = 0;
+        state.map.set_tile(coord, tile).unwrap();
+
+        phase_tile_loop(&mut state, 0);
+        assert_eq!(state.map.get(coord).unwrap().m1, 4);
+
+        phase_tile_animation(&mut state, 1);
+        assert_eq!(
+            state.map.get(coord).unwrap().m1,
+            4,
+            "la fase de animación no reaplica MakeIndustryTileBigger"
+        );
     }
 
     #[test]

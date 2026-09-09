@@ -48,6 +48,13 @@ teselas especiales de agua se validan sin materializarlas. La traza de 171
 jornadas vuelve a ser exacta; los límites del corte están en
 [runtime-oil-rig-placement-531.md](runtime-oil-rig-placement-531.md).
 
+RMAP-171 corrige la siguiente frontera: una industria incompleta debe ejecutar
+`MakeIndustryTileBigger` durante su propia visita LFSR y tomar el `Random()`
+incondicional del cambio de etapa antes de árboles y pueblos posteriores. La
+fixture `autosave0.sav` queda exacta durante 181 jornadas; el siguiente corte
+medido es `day[210]`. La evidencia y límites están en
+[runtime-industry-construction-tile-loop-rmap-171.md](runtime-industry-construction-tile-loop-rmap-171.md).
+
 Incidencia de validación ajena al lote: al cerrarlo, #535 registraba que
 `test_parity_docs_portability.py` copiaba el baseline raster del 2026-09-05
 mientras el checker exigía el del 2026-09-07 desde `021f023b`. La corrección

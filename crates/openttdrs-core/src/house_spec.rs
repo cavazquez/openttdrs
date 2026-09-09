@@ -133,6 +133,11 @@ pub struct HouseSpecDef {
     /// Zonas + climas (`prop 0x13`).
     pub availability: u16,
     pub probability: u8,
+    /// Multiplicador del refresco periódico (`prop 0x16`, máximo nativo 63).
+    ///
+    /// El default conserva saves/snapshots que preceden a esta propiedad.
+    #[serde(default)]
+    pub processing_time: u8,
     /// Override de casa vanilla (`prop 0x15`).
     pub override_id: Option<u8>,
     /// Callback mask (`0x14` lo + `0x1D` hi); CB17 se ejecuta al construir.
@@ -1027,6 +1032,7 @@ mod tests {
             mail_generation: 1,
             availability: DEFAULT_HOUSE_AVAILABILITY,
             probability: DEFAULT_HOUSE_PROBABILITY,
+            processing_time: 0,
             override_id: None,
             callback_mask: 0,
             name: "H".into(),
@@ -1053,6 +1059,7 @@ mod tests {
             mail_generation: 0,
             availability: DEFAULT_HOUSE_AVAILABILITY,
             probability: DEFAULT_HOUSE_PROBABILITY,
+            processing_time: 0,
             override_id: None,
             callback_mask: 0,
             name: "foundation-callback".into(),
@@ -1174,6 +1181,7 @@ mod tests {
             mail_generation: 0,
             availability: DEFAULT_HOUSE_AVAILABILITY,
             probability: DEFAULT_HOUSE_PROBABILITY,
+            processing_time: 0,
             override_id: None,
             callback_mask: 0,
             name: "town-psa".into(),
@@ -1242,6 +1250,7 @@ mod tests {
             mail_generation: 1,
             availability: DEFAULT_HOUSE_AVAILABILITY,
             probability: DEFAULT_HOUSE_PROBABILITY,
+            processing_time: 0,
             override_id: None,
             callback_mask: 0,
             name: "layout".into(),

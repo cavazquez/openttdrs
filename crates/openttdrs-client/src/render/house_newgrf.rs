@@ -145,6 +145,7 @@ mod tests {
             mail_generation: 1,
             availability: DEFAULT_HOUSE_AVAILABILITY,
             probability: DEFAULT_HOUSE_PROBABILITY,
+            processing_time: 0,
             override_id: None,
             callback_mask: 0,
             name: "runtime house".into(),

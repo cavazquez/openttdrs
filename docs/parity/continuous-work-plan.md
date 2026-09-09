@@ -112,9 +112,12 @@ toma RNG extra y la renovación reutiliza la misma palabra `r`. La corrida
 integrada posterior alcanzó **360 jornadas** en RMAP-175 y la extensión
 dedicated de #527 sobre la misma fixture verifica **400** (`initial` +
 `day[0]`…`day[399]`). Las regresiones cubren la renovación de una huella
-vanilla 2×2 y una Large Office protegida, además del decremento sin RNG de
-`processing_time` NewGRF. #527 permanece abierto para la aleatorización,
-animación y CB21 de destrucción de casas NewGRF; no amplía el cierre de #512.
+vanilla 2×2 y una Large Office protegida. Para NewGRF, Action0 `0x16` se
+parsea y limita a los seis bits nativos, persiste en el catálogo y la ruta
+runtime `TryBuildTownHouse` programa el temporizador de cada subtesela nueva;
+la rama segura lo decrementa sin RNG, preserva `AnimatedTileState` y marca
+dirty. #527 permanece abierto para la aleatorización, animación y CB21 de
+destrucción de casas NewGRF; no amplía el cierre de #512.
 La evidencia canónica vive sólo en
 [random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
 

@@ -56,6 +56,7 @@ pub fn apply_newgrf_houses(state: &mut GameState, search_dirs: &[&Path]) {
                 mail_generation: meta.mail_generation,
                 availability: meta.availability,
                 probability: meta.probability,
+                processing_time: meta.processing_time,
                 override_id: meta.override_id,
                 callback_mask: meta.callback_mask,
                 name: meta.name,

@@ -5481,6 +5481,63 @@ mod tests {
     }
 
     #[test]
+    fn houses_ac_processing_time_clamps_and_reaches_catalog() {
+        use crate::house_spec::BUILDING_FLAG_SIZE_1X1;
+
+        // Action0 0x16 es un byte, pero el campo nativo sólo tiene seis
+        // bits. El fixture fuerza el clamp y también ejercita parse → apply.
+        let action0 = vec![
+            0x00,
+            ACTION0_FEATURE_HOUSES,
+            0x04,
+            0x01,
+            0x00,
+            0x08,
+            0x00,
+            0x09,
+            BUILDING_FLAG_SIZE_1X1,
+            0x16,
+            0xFF,
+            0xFE,
+            b'T',
+            0x00,
+        ];
+        assert_eq!(
+            parse_action0_house_meta(&action0)
+                .expect("house Action0 metadata")
+                .processing_time,
+            63
+        );
+
+        let bytes =
+            build_grf_v2_with_action0_and_action8(&action0, [b'H', b'T', 0, 1], "house-timer", "");
+        let dir = tempfile_dir_with("house-timer.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("house-timer.grf", 0x4854_0001));
+        apply_newgrf_houses(&mut state, &[&dir]);
+        assert_eq!(state.house_spec_catalog[0].processing_time, 63);
+
+        let absent = build_action0_house_payload(
+            0,
+            0,
+            BUILDING_FLAG_SIZE_1X1,
+            0,
+            5000,
+            u16::MAX,
+            1,
+            "default timer",
+        );
+        assert_eq!(
+            parse_action0_house_meta(&absent)
+                .expect("house metadata without 0x16")
+                .processing_time,
+            0
+        );
+    }
+
+    #[test]
     fn houses_ac_subst_and_action3_views() {
         use crate::house_spec::{BUILDING_FLAG_SIZE_1X1, resolve_house_draw_id};
         let a0 =

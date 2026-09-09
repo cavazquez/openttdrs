@@ -2464,12 +2464,22 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     image_store,
                 );
             }
-            // Un layout custom conserva por ahora sus propios ordinales
-            // BUILD; el waypoint vanilla sí puede reservar el stream global
-            // de catenaria sin colisionar con ellos.
-            let waypoint_catenary_parent_ordinal = waypoint_layout
-                .is_none()
-                .then_some(ROAD_STOP_CATENARY_PARENT_ORDINAL);
+            // Un TileLayout completo puede publicar sus propios parents y
+            // children después de la catenaria, igual que el waypoint
+            // vanilla. Los layouts incompletos conservan la catenaria directa
+            // y su fallback existente: todavía pueden requerir sprites base
+            // no materializables.
+            let waypoint_layout_joins_global_sort = match waypoint_layout.as_ref() {
+                None => true,
+                Some((_, layout, _, _)) => road_stop_layout_is_static(layout),
+            };
+            let waypoint_catenary_parent_ordinal =
+                waypoint_layout_joins_global_sort.then_some(ROAD_STOP_CATENARY_PARENT_ORDINAL);
+            let waypoint_building_parent_ordinal = if waypoint_catenary_parent_ordinal.is_some() {
+                ROAD_VANILLA_BUILDING_PARENT_ORDINAL
+            } else {
+                ROAD_STOP_LEGACY_BUILDING_PARENT_ORDINAL
+            };
             if !road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord)
                 && let Some(tile) = ctx.tile
             {
@@ -2493,9 +2503,10 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 );
             }
             // OpenTTD emite los postes después de la catenaria mediante
-            // `DrawRailTileSeq(TO_BUILDINGS, ...)`. Un layout custom conserva
-            // sus parents/children y sólo si no se pudo materializar entero
-            // se usa el layout vanilla de dos postes por eje.
+            // `DrawRailTileSeq(TO_BUILDINGS, ...)`. Un layout completo entra
+            // detrás de la catenaria en el stream global; sólo si no se pudo
+            // materializar entero se usa el layout vanilla de dos postes por
+            // eje.
             let mut used_newgrf_waypoint_layout = false;
             if let Some((spec_id, layout, runtime_fp, _draw_mode)) = waypoint_layout.as_ref()
                 && let (Some(cache), Some(image_store)) =
@@ -2506,7 +2517,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     ctx,
                     waypoint_base_z,
                     dims.0,
-                    ROAD_STOP_LEGACY_BUILDING_PARENT_ORDINAL,
+                    waypoint_building_parent_ordinal,
                     *spec_id,
                     *runtime_fp,
                     layout,

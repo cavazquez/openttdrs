@@ -1282,6 +1282,15 @@ waypoints con layout NewGRF siguen pendientes. No hay foco Kale vial para
 atribuir una variación raster; #326 y #561 continúan abiertos por composición,
 clipping, pivotes, children globales y framebuffer.
 
+Actualización #326-ROAD-WAYPOINT-STATIC-TILELAYOUT-GLOBAL (2026-09-09): los
+road waypoints con `TileLayout` NewGRF completo y materializable ya respetan
+el mismo orden suelo `WaypGround` → `DrawRoadCatenary` → BUILD: los cables
+road/tram ocupan 4–11 y los parents `TILE_SEQ_LINE` arrancan en 12. El helper
+ECS común cubre paradas Bus/Truck y un RoadWaypoint, preservando bounds,
+profundidad fuente, texturas Action1 y el vínculo child/parent. Los layouts
+incompletos conservan deliberadamente la catenaria directa y el fallback
+existente; no se reclama raster nuevo ni se cierra #326 o #561.
+
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
 `y_offs`). El renderer aplica además `SpriteBounds::origin` y

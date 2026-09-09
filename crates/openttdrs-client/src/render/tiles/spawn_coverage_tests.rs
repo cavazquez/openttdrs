@@ -1093,8 +1093,11 @@ fn drive_through_tram_stop_draws_vanilla_catenary() {
     );
 }
 
-#[test]
-fn static_newgrf_road_stop_layout_joins_global_catenary_sort() {
+fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
+    stop_kind: StopKind,
+    station_type: u8,
+    draw_mode: u8,
+) {
     use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
 
     let assets = boot_assets_app();
@@ -1104,7 +1107,7 @@ fn static_newgrf_road_stop_layout_joins_global_catenary_sort() {
         kind: TileKind::Station,
         mapt: 0x50,
         m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
-        m6: 3 << 3, // StationType::Bus.
+        m6: station_type << 3,
         ..tile_template()
     };
     tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::TRAM));
@@ -1173,12 +1176,12 @@ fn static_newgrf_road_stop_layout_joins_global_catenary_sort() {
         class: 0,
         label: "TileLayout estático".into(),
         short_label: "TLS".into(),
-        stop_type: openttdrs_core::ROADSTOP_TYPE_BUS,
+        stop_type: openttdrs_core::ROADSTOP_TYPE_ALL,
         from_newgrf: true,
         grfid: 0x5449_4C45,
         newgrf_local_id: 0,
         newgrf_grf_version: 8,
-        draw_mode: openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        draw_mode,
         random_cargo_triggers: 0,
         flags: 0,
         build_cost_multiplier: 16,
@@ -1196,7 +1199,7 @@ fn static_newgrf_road_stop_layout_joins_global_catenary_sort() {
         associated_badges: Vec::new(),
         newgrf_badge_translation: Vec::new(),
     };
-    let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+    let mut station = Station::new_with_kind(coord, stop_kind);
     station.road_stop_spec = Some(spec.id);
 
     let grid = RenderGrid::from_map(&map, 8, 8);
@@ -1330,6 +1333,33 @@ fn static_newgrf_road_stop_layout_joins_global_catenary_sort() {
             child_component.parent == *parent_entity && has_rgba(handle, child_rgba.as_slice())
         }),
         "el child TileSeq debe seguir unido al parent NewGRF"
+    );
+}
+
+#[test]
+fn static_newgrf_road_stop_layout_joins_global_catenary_sort() {
+    assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
+        StopKind::BusStop,
+        3,
+        openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+    );
+}
+
+#[test]
+fn static_newgrf_truck_stop_layout_joins_global_catenary_sort() {
+    assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
+        StopKind::TruckStop,
+        2,
+        openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+    );
+}
+
+#[test]
+fn static_newgrf_road_waypoint_layout_joins_global_catenary_sort() {
+    assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
+        StopKind::RoadWaypoint,
+        openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT,
+        openttdrs_core::ROADSTOP_DRAW_MODE_WAYP_GROUND,
     );
 }
 

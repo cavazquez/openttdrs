@@ -1020,6 +1020,260 @@ fn drive_through_tram_stop_draws_vanilla_catenary_after_stop_layers() {
 }
 
 #[test]
+fn normal_road_catenary_layers_join_global_sort() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = fresh_map8();
+    let mut tile = Tile {
+        kind: TileKind::Road,
+        mapt: 0x20,
+        m5: 0x0A, // ROAD_X
+        ..tile_template()
+    };
+    tile = openttdrs_core::set_tram_track_bits_on_tile(tile, 0x0A);
+    tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::TRAM));
+    map.set_tile(coord, tile)
+        .expect("calle X con carretera y tranvía electrificados");
+
+    // El catálogo vanilla sólo marca el tranvía; habilitar también el road
+    // conserva la secuencia nativa completa carretera → tranvía y prueba que
+    // los ocho `AddSortableSpriteToDraw` no comparten un ordinal.
+    let mut road_catalog = vanilla_road_type_catalog();
+    road_catalog
+        .iter_mut()
+        .find(|def| def.id == RoadType::ROAD)
+        .expect("road type vanilla")
+        .flags = 1;
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_road_tile(
+                    &mut commands,
+                    &m.0,
+                    8,
+                    8,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    TEST_CLIMATE,
+                    false,
+                    false,
+                    &road_catalog,
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("catenaria vial global");
+
+    let mut parents: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter_map(|(parent, transform)| {
+            [6071, 6043]
+                .contains(&parent.sprite_id)
+                .then_some((*parent, transform.translation.z))
+        })
+        .collect();
+    parents.sort_by_key(|(parent, _)| parent.insertion_key);
+    let west = ParentSpriteBounds::new(31, 16, 0, 31, 16, 1);
+    let north = ParentSpriteBounds::new(16, 16, 0, 16, 16, 1);
+    let east = ParentSpriteBounds::new(16, 31, 0, 16, 31, 1);
+    let front = ParentSpriteBounds::new(16, 16, 2, 31, 31, 2);
+    assert_eq!(
+        parents
+            .iter()
+            .map(|(parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (6071, west, viewport_insertion_key(1, 1, 4)),
+            (6071, north, viewport_insertion_key(1, 1, 5)),
+            (6071, east, viewport_insertion_key(1, 1, 6)),
+            (6043, front, viewport_insertion_key(1, 1, 7)),
+            (6071, west, viewport_insertion_key(1, 1, 8)),
+            (6071, north, viewport_insertion_key(1, 1, 9)),
+            (6071, east, viewport_insertion_key(1, 1, 10)),
+            (6043, front, viewport_insertion_key(1, 1, 11)),
+        ],
+        "cada recorte de road/tram debe entrar al compositor global en orden C++"
+    );
+    assert!(
+        parents
+            .iter()
+            .all(|(parent, depth)| parent.source_depth == *depth),
+        "cada parent conserva su profundidad fuente antes de reordenarse"
+    );
+}
+
+#[test]
+fn normal_road_newgrf_catenary_layers_join_global_sort() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = fresh_map8();
+    let mut tile = Tile {
+        kind: TileKind::Road,
+        mapt: 0x20,
+        m5: 0x0A, // ROAD_X
+        ..tile_template()
+    };
+    tile = openttdrs_core::set_road_type_on_tile(tile, RoadType::from_u8(2));
+    map.set_tile(coord, tile)
+        .expect("calle NewGRF electrificada");
+
+    // Un ancho de 64 y `x_offs=-32` deja píxeles en los tres recortes de
+    // `DrawRoadTypeCatenary`, a diferencia de un icono pequeño que podría
+    // desaparecer completamente de uno de los sub-sprites.
+    let back = DecodedSprite {
+        width: 64,
+        height: 16,
+        x_offs: -32,
+        y_offs: -8,
+        rgba: [0, 255, 0, 255].repeat(64 * 16),
+        mask: Vec::new(),
+    };
+    let front = DecodedSprite {
+        width: 64,
+        height: 16,
+        x_offs: -32,
+        y_offs: -8,
+        rgba: [255, 0, 0, 255].repeat(64 * 16),
+        mask: Vec::new(),
+    };
+    let mut graphics = TrainSpriteGraphics {
+        sets: vec![vec![back], vec![front]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 0,
+            set_id: 0,
+        }],
+        ..TrainSpriteGraphics::default()
+    };
+    graphics.specific_assigns.insert((0, 5), 0); // ROTSG_CATENARY_BACK
+    graphics.specific_assigns.insert((0, 4), 1); // ROTSG_CATENARY_FRONT
+    let road_catalog = vec![RoadTypeDef {
+        id: RoadType::from_u8(2),
+        class: RoadTramType::Road,
+        label: "Catenaria NewGRF".into(),
+        short_label: "NCAT".into(),
+        intro_year: 0,
+        max_speed: 0,
+        cost_multiplier: 0,
+        maintenance_multiplier: 0,
+        flags: 1,
+        powered_mask: 0,
+        badges: Vec::new(),
+        from_tramtypes_feature: false,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: Some(Box::new(graphics)),
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+    }];
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: Local<crate::render::NewGrfRoadSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_road_tile(
+                    &mut commands,
+                    &m.0,
+                    8,
+                    8,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    TEST_CLIMATE,
+                    false,
+                    false,
+                    &road_catalog,
+                    Some(&mut cache),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("catenaria NewGRF global");
+
+    let catenary: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Sprite, &Transform)>()
+        .iter(&world)
+        .filter_map(|(parent, sprite, transform)| {
+            [6071, 6043].contains(&parent.sprite_id).then_some((
+                *parent,
+                sprite.image.clone(),
+                transform.translation.z,
+            ))
+        })
+        .collect();
+    assert_eq!(
+        catenary.len(),
+        4,
+        "tres recortes traseros y un frente custom"
+    );
+    assert!(
+        catenary
+            .iter()
+            .all(|(parent, _, depth)| parent.source_depth == *depth),
+        "los grupos custom conservan la profundidad fuente del parent"
+    );
+    let colours: Vec<_> = catenary
+        .iter()
+        .filter_map(|(parent, image, _)| {
+            let rgba = world
+                .resource::<Assets<Image>>()
+                .get(image)?
+                .data
+                .as_deref()?;
+            Some((parent.sprite_id, rgba.get(0..4)?.to_vec()))
+        })
+        .collect();
+    assert_eq!(
+        colours
+            .iter()
+            .filter(|(_, rgba)| rgba.as_slice() == [0, 255, 0, 255])
+            .count(),
+        3,
+        "los tres parents traseros deben conservar el grupo NewGRF"
+    );
+    assert_eq!(
+        colours
+            .iter()
+            .filter(|(_, rgba)| rgba.as_slice() == [255, 0, 0, 255])
+            .count(),
+        1,
+        "el parent frontal debe conservar su grupo NewGRF distinto"
+    );
+}
+
+#[test]
 fn road_stop_no_catenary_flag_suppresses_road_and_tram_wires() {
     let assets = boot_assets_app();
     let expected_back = assets.rail.get(&6071).expect("catenaria trasera").clone();

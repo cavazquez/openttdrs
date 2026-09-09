@@ -1222,6 +1222,24 @@ por lo que esta etapa no atribuye cambio alguno a la matriz raster. #326 sigue
 abierto por catenaria vial, layouts custom/NewGRF, waypoints rail, producers
 restantes, clipping, pivotes, children globales y framebuffer.
 
+Actualización #326-ROAD-CATENARY-GLOBAL (2026-09-09): cada llamada de
+`DrawRoadTypeCatenary` de una tesela `MP_ROAD` normal publica ahora sus
+`AddSortableSpriteToDraw` como parents del compositor global. El recorte
+trasero conserva tres columnas literales —oeste `(15,0,z)×(1,1,z_wires)`,
+norte `(0,0,z)×(1,1,z_wires)` y este `(0,15,z)×(1,1,z_wires)`— y el frente
+conserva la losa `(0,0,z_wires)×(16,16,1)` de `road_cmd.cpp`; la base efectiva
+posterior a `DrawFoundation`, la profundidad fuente y la ancla NFO viajan con
+cada parent. Los ordinales 4–11 preservan el stream carretera → tranvía y no
+colisionan con fundaciones ni roadside. El mismo contrato se aplica a un grupo
+`ROTSG_CATENARY_*` NewGRF cuando se resuelve; no se fuerza un sprite ausente.
+La regresión ECS comprueba los ocho recortes de una calle road+tram y sus
+prismas/ordinales exactos; otra cubre la columna inclinada. Las paradas y
+waypoints viales siguen usando su ruta local en este corte, porque sus layouts
+BUILD ya ocupan un contrato de ordinales distinto. Kale no tiene un foco vial
+de catenaria reproducido para esta etapa, así que no se atribuye un cambio a la
+matriz raster. #326 sigue abierto por esas paradas/waypoints, producers
+restantes, clipping, pivotes, children globales y framebuffer.
+
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
 `y_offs`). El renderer aplica además `SpriteBounds::origin` y

@@ -200,7 +200,7 @@ fn spawn_road_stop_catenary(
     if road_bits == 0 {
         return;
     }
-    spawn_road_catenary_for_type(
+    let _ = spawn_road_catenary_for_type(
         commands,
         map,
         dims,
@@ -218,9 +218,10 @@ fn spawn_road_stop_catenary(
         newgrf_stack,
         catenary_newgrf,
         catenary_sprites.as_deref_mut(),
+        None,
     );
     if let Some(tram_type) = tram_road_type_from_tile(&tile) {
-        spawn_road_catenary_for_type(
+        let _ = spawn_road_catenary_for_type(
             commands,
             map,
             dims,
@@ -238,6 +239,7 @@ fn spawn_road_stop_catenary(
             newgrf_stack,
             catenary_newgrf,
             catenary_sprites.as_deref_mut(),
+            None,
         );
     }
 }

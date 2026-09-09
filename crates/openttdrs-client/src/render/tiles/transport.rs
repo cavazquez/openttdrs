@@ -652,6 +652,13 @@ const ROADSIDE_DETAIL_SLOT_STEP: f32 = 0.02;
 /// de fundación y el bloque 32..= para las piezas de puente posteriores.
 const ROADSIDE_DETAIL_PARENT_ORDINAL: u8 = 16;
 
+/// Primer ordinal de los parents de `DrawRoadCatenary` sobre una carretera
+/// normal. OpenTTD emite primero la carretera y después el tranvía; cada tipo
+/// puede aportar los tres recortes traseros y el frente. El bloque 4..=11 deja
+/// intactos los cuatro sprites que puede dejar `DrawFoundation` y termina
+/// antes de los detalles de roadside.
+const ROAD_CATENARY_PARENT_ORDINAL: u8 = 4;
+
 /// Prisma inclusivo que `DrawRoadDetail` entrega a
 /// `ViewportSortParentSprites`.
 ///
@@ -671,6 +678,32 @@ fn roadside_detail_parent_bounds(
     let ymin = ty * 16 + dy as i32;
     let zmin = i32::from(surface_base_z) * 8 + i32::from(partial_pixel_z(dx, dy, surface_tileh));
     ParentSpriteBounds::new(xmin, ymin, zmin, xmin + 1, ymin + 1, zmin + 15)
+}
+
+/// Prisma inclusivo que `DrawRoadTypeCatenary` entrega a
+/// `ViewportSortParentSprites`.
+///
+/// Los cuatro `AddSortableSpriteToDraw` conservan el origen/extent literal de
+/// `road_cmd.cpp`. La superficie ya incluye el efecto de `DrawFoundation`,
+/// igual que el `TileInfo::z` que recibe la función C++; los offsets de Z de
+/// cada esquina y del cable se mantienen en `bounds`.
+fn road_catenary_parent_bounds(
+    tx: i32,
+    ty: i32,
+    surface_base_z: u8,
+    bounds: TraceSpriteBounds,
+) -> ParentSpriteBounds {
+    let x = tx * 16 + bounds.ox;
+    let y = ty * 16 + bounds.oy;
+    let z = i32::from(surface_base_z) * 8 + bounds.oz;
+    ParentSpriteBounds::new(
+        x,
+        y,
+        z,
+        x + bounds.ex - 1,
+        y + bounds.ey - 1,
+        z + bounds.ez - 1,
+    )
 }
 
 /// Convierte el ancla Z absoluta que informa `AddSortableSpriteToDraw` en el
@@ -1237,7 +1270,8 @@ pub(crate) fn spawn_road_tile(
     if !is_level_crossing && let Some(tile) = ctx.tile.filter(|tile| tile.kind == TileKind::Road) {
         let road_bits = rb;
         let road_type = openttdrs_core::road_type_from_tile(&tile);
-        spawn_road_catenary_for_type(
+        let mut catenary_parent_ordinal = Some(ROAD_CATENARY_PARENT_ORDINAL);
+        catenary_parent_ordinal = spawn_road_catenary_for_type(
             commands,
             map,
             (mw, mh),
@@ -1255,12 +1289,13 @@ pub(crate) fn spawn_road_tile(
             newgrf_stack,
             catenary_newgrf,
             catenary_sprites.as_deref_mut(),
+            catenary_parent_ordinal,
         );
         let tram_type = openttdrs_core::tram_road_type_from_tile(&tile).or_else(|| {
             (openttdrs_core::tram_track_bits(&tile) != 0).then_some(openttdrs_core::RoadType::TRAM)
         });
         if let Some(tram_type) = tram_type {
-            spawn_road_catenary_for_type(
+            let _ = spawn_road_catenary_for_type(
                 commands,
                 map,
                 (mw, mh),
@@ -1278,6 +1313,7 @@ pub(crate) fn spawn_road_tile(
                 newgrf_stack,
                 catenary_newgrf,
                 catenary_sprites.as_deref_mut(),
+                catenary_parent_ordinal,
             );
         }
     }
@@ -1622,19 +1658,20 @@ pub(crate) fn spawn_road_catenary_for_type(
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
-) {
+    mut global_parent_ordinal: Option<u8>,
+) -> Option<u8> {
     if catenary_hidden() {
-        return;
+        return global_parent_ordinal;
     }
     let Some(def) = openttdrs_core::road_type_def(road_catalog, road_type) else {
-        return;
+        return global_parent_ordinal;
     };
     if !def.has_catenary() {
-        return;
+        return global_parent_ordinal;
     }
     let road_bits = road_catenary_bits_for_render(map, ctx.coord, dims, road_bits, road_catalog);
     let Some((fallback_back, fallback_front)) = road_catenary_sprite_ids(tileh, road_bits) else {
-        return;
+        return global_parent_ordinal;
     };
     let view_idx = road_newgrf_view_index(tileh, road_bits);
     let tint = catenary_sprite_color();
@@ -1763,12 +1800,34 @@ pub(crate) fn spawn_road_catenary_for_type(
                 anchor,
             );
             position.x += x_shift;
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(position),
-            ));
+            if let Some(ordinal) = global_parent_ordinal {
+                global_parent_ordinal = Some(ordinal.saturating_add(1));
+                let source_depth = viewport_source_depth(position.z, ctx.tx, dims.0);
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                    ViewportSortableParent {
+                        sprite_id: catenary_reference_sprite_id(fallback_back),
+                        bounds: road_catenary_parent_bounds(
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            surface_base_z,
+                            bounds,
+                        ),
+                        insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, ordinal),
+                        source_depth,
+                    },
+                ));
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(position),
+                ));
+            }
         }
     }
     if let Some((sprite, anchor)) = front_resolved {
@@ -1793,13 +1852,36 @@ pub(crate) fn spawn_road_catenary_for_type(
             0.0,
             anchor,
         );
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            sprite,
-            Transform::from_translation(position),
-        ));
+        if let Some(ordinal) = global_parent_ordinal {
+            global_parent_ordinal = Some(ordinal.saturating_add(1));
+            let source_depth = viewport_source_depth(position.z, ctx.tx, dims.0);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                ViewportSortableParent {
+                    sprite_id: catenary_reference_sprite_id(fallback_front),
+                    bounds: road_catenary_parent_bounds(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        surface_base_z,
+                        TraceSpriteBounds::new(0, 0, z_wires, 16, 16, 1),
+                    ),
+                    insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, ordinal),
+                    source_depth,
+                },
+            ));
+        } else {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(position),
+            ));
+        }
     }
+    global_parent_ordinal
 }
 
 /// Emite la catenaria ferroviaria común de `DrawRailCatenaryRailway`.
@@ -3036,8 +3118,8 @@ mod tests {
         rail_custom_underlay_offsets, rail_foundation_after_pass, rail_ground_complete_offset,
         rail_ground_sprite_id, rail_initial_ground_draw, rail_signal_parent_bounds,
         rail_track_fence_parent_bounds, rail_track_trace_mode, rail_upper_halftile_ground_draw,
-        road_detail_world_z_delta, road_foundation_child_offset, roadside_detail_parent_bounds,
-        signal_trace_geometry,
+        road_catenary_parent_bounds, road_detail_world_z_delta, road_foundation_child_offset,
+        roadside_detail_parent_bounds, signal_trace_geometry,
     };
     use crate::render::viewport_sort::{ParentSprite, ParentSpriteBounds};
     use crate::render::world_draw_trace::TraceSpriteBounds;
@@ -3401,6 +3483,29 @@ mod tests {
         assert_eq!(
             rail_catenary_wire_parent_bounds(170, 105, 2, 0, wire),
             ParentSpriteBounds::new(2728, 1680, 26, 2742, 1680, 26)
+        );
+    }
+
+    #[test]
+    fn road_catenary_parents_keep_the_upstream_sortable_prisms() {
+        // `DrawRoadTypeCatenary` da a cada recorte trasero una columna
+        // 1×1×z_wires y al frente la losa 16×16×1. Sobre una superficie
+        // nivelada con base Z=2 los bounds mantienen el `TileInfo::z`
+        // efectivo, sin volver a sumar la fundación.
+        assert_eq!(
+            road_catenary_parent_bounds(170, 105, 2, TraceSpriteBounds::new(15, 0, 0, 1, 1, 2)),
+            ParentSpriteBounds::new(2735, 1680, 16, 2735, 1680, 17)
+        );
+        assert_eq!(
+            road_catenary_parent_bounds(170, 105, 2, TraceSpriteBounds::new(0, 0, 2, 16, 16, 1)),
+            ParentSpriteBounds::new(2720, 1680, 18, 2735, 1695, 18)
+        );
+
+        // En pendiente el origen de esquina y el alto `TILE_HEIGHT + 2`
+        // permanecen dentro del mismo prisma global que usa el sorter C++.
+        assert_eq!(
+            road_catenary_parent_bounds(170, 105, 3, TraceSpriteBounds::new(0, 15, 8, 1, 1, 10)),
+            ParentSpriteBounds::new(2720, 1695, 32, 2720, 1695, 41)
         );
     }
 

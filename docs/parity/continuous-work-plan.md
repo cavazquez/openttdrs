@@ -115,9 +115,13 @@ dedicated de #527 sobre la misma fixture verifica **400** (`initial` +
 vanilla 2×2 y una Large Office protegida. Para NewGRF, Action0 `0x16` se
 parsea y limita a los seis bits nativos, persiste en el catálogo y la ruta
 runtime `TryBuildTownHouse` programa el temporizador de cada subtesela nueva;
-la rama segura lo decrementa sin RNG, preserva `AnimatedTileState` y marca
-dirty. #527 permanece abierto para la aleatorización, animación y CB21 de
-destrucción de casas NewGRF; no amplía el cierre de #512.
+Action0 `0x19` también se conserva: el crecimiento runtime omite casas
+históricas y marca como protegida toda la huella de un spec protegido. Los
+flags de sincronización y aleatoriedad de callbacks quedan almacenados, no
+ejecutados. La rama segura decrementa el temporizador sin RNG, preserva
+`AnimatedTileState` y marca dirty. #527 permanece abierto para la
+aleatorización, animación y CB21 de destrucción de casas NewGRF; no amplía el
+cierre de #512.
 La evidencia canónica vive sólo en
 [random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
 

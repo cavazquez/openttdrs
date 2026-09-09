@@ -1216,6 +1216,7 @@ mod tests {
                 availability: crate::house_spec::DEFAULT_HOUSE_AVAILABILITY,
                 probability: crate::house_spec::DEFAULT_HOUSE_PROBABILITY,
                 processing_time: 0,
+                extra_flags: 0,
                 override_id: None,
                 callback_mask: 0,
                 name: "processing-timer".into(),

@@ -40,6 +40,15 @@ pub const BUILDING_FLAG_IS_ANIMATED: u8 = 1 << 5;
 pub const BUILDING_FLAG_IS_CHURCH: u8 = 1 << 6;
 pub const BUILDING_FLAG_IS_STADIUM: u8 = 1 << 7;
 
+/// `HouseExtraFlag::BuildingIsHistorical` de Action0 `0x19`.
+pub const HOUSE_EXTRA_FLAG_HISTORICAL: u8 = 1 << 0;
+/// `HouseExtraFlag::BuildingIsProtected` de Action0 `0x19`.
+pub const HOUSE_EXTRA_FLAG_PROTECTED: u8 = 1 << 1;
+/// `HouseExtraFlag::SynchronisedCallback1B` de Action0 `0x19`.
+pub const HOUSE_EXTRA_FLAG_SYNCHRONIZED_CALLBACK_1B: u8 = 1 << 2;
+/// `HouseExtraFlag::Callback1ARandomBits` de Action0 `0x19`.
+pub const HOUSE_EXTRA_FLAG_CALLBACK_1A_RANDOM_BITS: u8 = 1 << 3;
+
 /// Umbral de aceptación de estación en octavos (`amt >= 8`).
 pub const STATION_ACCEPTANCE_THRESHOLD: u32 = 8;
 /// Bit `HouseCallbackMask::AllowConstruction`: consulta CB `0x17` al crecer.
@@ -138,6 +147,10 @@ pub struct HouseSpecDef {
     /// El default conserva saves/snapshots que preceden a esta propiedad.
     #[serde(default)]
     pub processing_time: u8,
+    /// Flags extra (`prop 0x19`): histórico, protegido y contratos de
+    /// callbacks de animación.
+    #[serde(default)]
+    pub extra_flags: u8,
     /// Override de casa vanilla (`prop 0x15`).
     pub override_id: Option<u8>,
     /// Callback mask (`0x14` lo + `0x1D` hi); CB17 se ejecuta al construir.
@@ -230,6 +243,20 @@ impl HouseSpecDef {
     #[must_use]
     pub const fn has_draw_foundations_callback(&self) -> bool {
         self.callback_mask & HOUSE_CALLBACK_DRAW_FOUNDATIONS_MASK != 0
+    }
+
+    /// Las casas históricas sólo aparecen durante la generación del mundo,
+    /// nunca durante el crecimiento normal de una partida.
+    #[must_use]
+    pub const fn is_historical(&self) -> bool {
+        self.extra_flags & HOUSE_EXTRA_FLAG_HISTORICAL != 0
+    }
+
+    /// La colocación automática debe marcar la casa contra reemplazos de
+    /// pueblo/IA (`MAP3` bit 5) desde el spec `NewGRF`.
+    #[must_use]
+    pub const fn starts_protected(&self) -> bool {
+        self.extra_flags & HOUSE_EXTRA_FLAG_PROTECTED != 0
     }
 
     #[must_use]
@@ -863,6 +890,9 @@ pub fn pick_town_house_id_with_catalog(
         if !def.from_newgrf {
             continue;
         }
+        if def.is_historical() {
+            continue;
+        }
         // Pool: 1×1 o tesela norte multitile (tiles adicionales no llevan flag de tamaño).
         if !def.is_size_1x1() && !def.is_multitile_north() {
             continue;
@@ -1033,6 +1063,7 @@ mod tests {
             availability: DEFAULT_HOUSE_AVAILABILITY,
             probability: DEFAULT_HOUSE_PROBABILITY,
             processing_time: 0,
+            extra_flags: 0,
             override_id: None,
             callback_mask: 0,
             name: "H".into(),
@@ -1060,6 +1091,7 @@ mod tests {
             availability: DEFAULT_HOUSE_AVAILABILITY,
             probability: DEFAULT_HOUSE_PROBABILITY,
             processing_time: 0,
+            extra_flags: 0,
             override_id: None,
             callback_mask: 0,
             name: "foundation-callback".into(),
@@ -1182,6 +1214,7 @@ mod tests {
             availability: DEFAULT_HOUSE_AVAILABILITY,
             probability: DEFAULT_HOUSE_PROBABILITY,
             processing_time: 0,
+            extra_flags: 0,
             override_id: None,
             callback_mask: 0,
             name: "town-psa".into(),
@@ -1251,6 +1284,7 @@ mod tests {
             availability: DEFAULT_HOUSE_AVAILABILITY,
             probability: DEFAULT_HOUSE_PROBABILITY,
             processing_time: 0,
+            extra_flags: 0,
             override_id: None,
             callback_mask: 0,
             name: "layout".into(),

@@ -585,6 +585,8 @@ pub struct ParsedHouseMeta {
     pub probability: u8,
     /// `prop 0x16`: multiplicador del refresco periódico (`0..=63`).
     pub processing_time: u8,
+    /// `prop 0x19`: histórico/protegido y contratos de callback de animación.
+    pub extra_flags: u8,
     pub override_id: Option<u8>,
     /// `0x14` lo + `0x1D` hi; almacenado sin ejecutar callbacks.
     pub callback_mask: u16,
@@ -2142,6 +2144,7 @@ pub fn parse_action0_house_meta(payload: &[u8]) -> Option<ParsedHouseMeta> {
     let mut availability = crate::house_spec::DEFAULT_HOUSE_AVAILABILITY;
     let mut probability = crate::house_spec::DEFAULT_HOUSE_PROBABILITY;
     let mut processing_time = 0u8;
+    let mut extra_flags = 0u8;
     let mut override_id: Option<u8> = None;
     let mut callback_mask = 0u16;
     let mut name = String::new();
@@ -2207,7 +2210,7 @@ pub fn parse_action0_house_meta(payload: &[u8]) -> Option<ParsedHouseMeta> {
                 mail_generation = u16::from(payload[i]);
                 i += 1;
             }
-            0x0D | 0x0E | 0x0F | 0x11 | 0x18 | 0x19 | 0x1A | 0x1B | 0x1C | 0x1F => {
+            0x0D | 0x0E | 0x0F | 0x11 | 0x18 | 0x1A | 0x1B | 0x1C | 0x1F => {
                 if i >= payload.len() {
                     break;
                 }
@@ -2223,6 +2226,13 @@ pub fn parse_action0_house_meta(payload: &[u8]) -> Option<ParsedHouseMeta> {
                 // `HouseSpec::processing_time` nativo ocupa seis bits en
                 // MAPE; Action0 acepta un byte pero OpenTTD lo limita a 63.
                 processing_time = payload[i].min(0x3F);
+                i += 1;
+            }
+            0x19 => {
+                if i >= payload.len() {
+                    break;
+                }
+                extra_flags = payload[i];
                 i += 1;
             }
             0x14 => {
@@ -2336,6 +2346,7 @@ pub fn parse_action0_house_meta(payload: &[u8]) -> Option<ParsedHouseMeta> {
         availability,
         probability,
         processing_time,
+        extra_flags,
         override_id,
         callback_mask,
         name,

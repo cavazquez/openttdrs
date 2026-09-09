@@ -5481,15 +5481,16 @@ mod tests {
     }
 
     #[test]
-    fn houses_ac_processing_time_clamps_and_reaches_catalog() {
+    fn houses_ac_periodic_and_extra_flags_reach_catalog() {
         use crate::house_spec::BUILDING_FLAG_SIZE_1X1;
 
         // Action0 0x16 es un byte, pero el campo nativo sólo tiene seis
-        // bits. El fixture fuerza el clamp y también ejercita parse → apply.
+        // bits. El fixture fuerza el clamp y también ejercita parse → apply,
+        // junto con los flags históricos/protegidos de 0x19.
         let action0 = vec![
             0x00,
             ACTION0_FEATURE_HOUSES,
-            0x04,
+            0x05,
             0x01,
             0x00,
             0x08,
@@ -5498,16 +5499,15 @@ mod tests {
             BUILDING_FLAG_SIZE_1X1,
             0x16,
             0xFF,
+            0x19,
+            0x0B,
             0xFE,
             b'T',
             0x00,
         ];
-        assert_eq!(
-            parse_action0_house_meta(&action0)
-                .expect("house Action0 metadata")
-                .processing_time,
-            63
-        );
+        let meta = parse_action0_house_meta(&action0).expect("house Action0 metadata");
+        assert_eq!(meta.processing_time, 63);
+        assert_eq!(meta.extra_flags, 0x0B);
 
         let bytes =
             build_grf_v2_with_action0_and_action8(&action0, [b'H', b'T', 0, 1], "house-timer", "");
@@ -5518,6 +5518,7 @@ mod tests {
             .push(crate::NewGrfEntry::new("house-timer.grf", 0x4854_0001));
         apply_newgrf_houses(&mut state, &[&dir]);
         assert_eq!(state.house_spec_catalog[0].processing_time, 63);
+        assert_eq!(state.house_spec_catalog[0].extra_flags, 0x0B);
 
         let absent = build_action0_house_payload(
             0,
@@ -5529,12 +5530,9 @@ mod tests {
             1,
             "default timer",
         );
-        assert_eq!(
-            parse_action0_house_meta(&absent)
-                .expect("house metadata without 0x16")
-                .processing_time,
-            0
-        );
+        let absent = parse_action0_house_meta(&absent).expect("house metadata without 0x16/0x19");
+        assert_eq!(absent.processing_time, 0);
+        assert_eq!(absent.extra_flags, 0);
     }
 
     #[test]

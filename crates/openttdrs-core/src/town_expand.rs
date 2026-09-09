@@ -370,7 +370,7 @@ fn try_build_town_house(
     if !place_house_footprint_for_town(map, base, house_id, flags, Some(town.id)) {
         return None;
     }
-    initialize_newgrf_house_processing_times(map, base, house_id, flags, ctx.house_catalog);
+    initialize_newgrf_house_runtime_state(map, base, house_id, flags, ctx.house_catalog);
     let tiles = u16::try_from(house_footprint_offsets(flags).len()).unwrap_or(1);
     if let Some(lookup) = vanilla_or_newgrf_house(ctx.house_catalog, house_id) {
         if lookup.is_church() {
@@ -427,10 +427,11 @@ fn place_house_footprint_for_town(
     true
 }
 
-/// Programa el primer `NewHouseTileLoop` de cada parte materializada de una
-/// casa `NewGRF`. `processing_time` comparte MAPE con `AnimatedTileState`,
-/// por lo que sólo se reemplazan sus seis bits altos.
-fn initialize_newgrf_house_processing_times(
+/// Inicializa la parte persistida de un spec `NewGRF` al materializar cada
+/// tesela. `processing_time` comparte MAPE con `AnimatedTileState`; la
+/// protección comparte MAP3 con obra/triggers, así que sólo se sustituyen sus
+/// bits propios.
+fn initialize_newgrf_house_runtime_state(
     map: &mut Map,
     north: TileCoord,
     base_id: u16,
@@ -440,16 +441,11 @@ fn initialize_newgrf_house_processing_times(
     if base_id < crate::house_spec::NEW_HOUSE_OFFSET {
         return;
     }
+    let starts_protected =
+        house_spec_def(catalog, base_id).is_some_and(HouseSpecDef::starts_protected);
 
     for (index, &(dx, dy)) in house_footprint_offsets(building_flags).iter().enumerate() {
         let id = base_id.saturating_add(u16::try_from(index).unwrap_or(0));
-        let Some(def) = house_spec_def(catalog, id) else {
-            continue;
-        };
-        let processing_time = def.processing_time.min(0x3F);
-        if processing_time == 0 {
-            continue;
-        }
         let pos = TileCoord::new(north.x + dx, north.y + dy);
         let Some(mut tile) = map.get(pos) else {
             continue;
@@ -457,8 +453,24 @@ fn initialize_newgrf_house_processing_times(
         if tile.kind != TileKind::House || tile.m8 & 0x0FFF != id {
             continue;
         }
-        tile.m6 = (tile.m6 & 0x03) | (processing_time << 2);
-        let _ = map.set_tile(pos, tile);
+        let mut changed = false;
+        let protection = if starts_protected { 0x20 } else { 0 };
+        let updated_m3 = (tile.m3 & !0x20) | protection;
+        if tile.m3 != updated_m3 {
+            tile.m3 = updated_m3;
+            changed = true;
+        }
+        if let Some(def) = house_spec_def(catalog, id) {
+            let processing_time = def.processing_time.min(0x3F);
+            let updated_m6 = (tile.m6 & 0x03) | (processing_time << 2);
+            if tile.m6 != updated_m6 {
+                tile.m6 = updated_m6;
+                changed = true;
+            }
+        }
+        if changed {
+            let _ = map.set_tile(pos, tile);
+        }
     }
 }
 
@@ -1181,6 +1193,7 @@ mod tests {
             availability: crate::house_spec::DEFAULT_HOUSE_AVAILABILITY,
             probability: 1,
             processing_time: 0,
+            extra_flags: 0,
             override_id: None,
             callback_mask: 0,
             name: "multitile-test".into(),
@@ -1223,9 +1236,10 @@ mod tests {
     }
 
     #[test]
-    fn runtime_town_build_sets_newgrf_processing_time_for_each_part() {
+    fn runtime_town_build_initializes_newgrf_runtime_state_for_each_part() {
         let mut north = test_multitile_house(crate::house_spec::BUILDING_FLAG_SIZE_2X1);
         north.processing_time = 9;
+        north.extra_flags = crate::house_spec::HOUSE_EXTRA_FLAG_PROTECTED;
         let mut east = test_multitile_house(0);
         east.id = crate::house_spec::NEW_HOUSE_OFFSET + 1;
         east.local_id = 1;
@@ -1253,5 +1267,34 @@ mod tests {
         );
         assert_eq!(map.get(TileCoord::new(3, 4)).unwrap().m6, 9 << 2);
         assert_eq!(map.get(TileCoord::new(4, 4)).unwrap().m6, 17 << 2);
+        assert_ne!(map.get(TileCoord::new(3, 4)).unwrap().m3 & 0x20, 0);
+        assert_ne!(map.get(TileCoord::new(4, 4)).unwrap().m3 & 0x20, 0);
+    }
+
+    #[test]
+    fn runtime_town_build_skips_historical_newgrf_house() {
+        let mut historical = test_multitile_house(crate::house_spec::BUILDING_FLAG_SIZE_1X1);
+        historical.extra_flags = crate::house_spec::HOUSE_EXTRA_FLAG_HISTORICAL;
+        let catalog = [historical];
+        let overrides = [0_u16; crate::house_spec::NUM_HOUSES_VANILLA];
+        let mut map = Map::new_flat(8, 8, 1);
+        let pos = TileCoord::new(4, 4);
+        let mut town = Town {
+            id: 7,
+            pos,
+            ..Default::default()
+        };
+        let ctx = TownExpandContext {
+            climate: Climate::Temperate,
+            calendar_year: 1980,
+            house_catalog: &catalog,
+            house_overrides: &overrides,
+        };
+
+        assert_eq!(
+            place_house_with_spec(&mut map, &mut town, pos, ctx, 0),
+            None
+        );
+        assert_eq!(map.get_kind(pos), Some(TileKind::Grass));
     }
 }

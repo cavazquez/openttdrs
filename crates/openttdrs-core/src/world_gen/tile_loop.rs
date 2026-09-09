@@ -373,11 +373,17 @@ fn tile_loop_house(
                 state.runtime.landscape_tile_dirty.push(coord);
             }
         } else {
+            let building_flags =
+                crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id)
+                    .map_or(0, |def| def.building_flags);
+            if let Some(rng) = generation_rng.as_deref_mut() {
+                advance_newgrf_house_tile_loop_randomisation(state, coord, building_flags, rng);
+            }
             let next_processing_time =
                 crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id)
                     .map_or(0, |def| def.processing_time.min(0x3F));
-            let mut updated = tile;
-            updated.m6 = (tile.m6 & 0x03) | (next_processing_time << 2);
+            let mut updated = state.map.get(coord).unwrap_or(tile);
+            updated.m6 = (updated.m6 & 0x03) | (next_processing_time << 2);
             // `NewHouseTileLoop` termina con `MarkTileDirtyByTile`, incluso
             // cuando la propiedad es cero o la randomización no cambió MAP1.
             if state.map.set_tile(coord, updated).is_ok() {
@@ -448,12 +454,186 @@ fn tile_loop_house(
     maybe_rebuild_vanilla_town_house(state, coord, tile, house, house_random, rng);
 }
 
+/// Bits de `HouseRandomTrigger`: `TileLoop` y `TileLoopNorth`.
+const HOUSE_RANDOM_TRIGGER_TILE_LOOP: u8 = 1 << 0;
+const HOUSE_RANDOM_TRIGGER_TILE_LOOP_NORTH: u8 = 1 << 1;
+
+/// Ejecuta la parte Action2 de `NewHouseTileLoop` que no depende de callbacks.
+///
+/// Cada visita vencida dispara primero la tesela actual y después el trigger
+/// compartido de la parte norte. Este último propaga sus bits resultantes a
+/// las otras partes de una huella multitile, aunque cada parte consume su
+/// propia palabra de `Random()` como el `DoTriggerHouseRandomisation` nativo.
+fn advance_newgrf_house_tile_loop_randomisation(
+    state: &mut GameState,
+    coord: TileCoord,
+    building_flags: u8,
+    rng: &mut Randomizer,
+) {
+    let _ = trigger_newgrf_house_randomisation(
+        state,
+        coord,
+        HOUSE_RANDOM_TRIGGER_TILE_LOOP,
+        None,
+        false,
+        rng,
+    );
+
+    if building_flags & HOUSE_FOOTPRINT_FLAGS == 0 {
+        return;
+    }
+    let Some(shared_random_bits) = trigger_newgrf_house_randomisation(
+        state,
+        coord,
+        HOUSE_RANDOM_TRIGGER_TILE_LOOP_NORTH,
+        None,
+        false,
+        rng,
+    ) else {
+        return;
+    };
+
+    for &(dx, dy) in crate::house_spec::house_footprint_offsets(building_flags)
+        .iter()
+        .skip(1)
+    {
+        let _ = trigger_newgrf_house_randomisation(
+            state,
+            TileCoord::new(coord.x + dx, coord.y + dy),
+            HOUSE_RANDOM_TRIGGER_TILE_LOOP_NORTH,
+            Some(shared_random_bits),
+            true,
+            rng,
+        );
+    }
+}
+
+/// Port de una llamada a `DoTriggerHouseRandomisation` para una sola tesela.
+///
+/// `shared_random_bits` sólo se usa al propagar `TileLoopNorth`: la palabra
+/// global todavía se consume, pero la máscara de reseed recibe los bits que
+/// resolvió la parte norte. Los scopes Action2 se construyen después de dejar
+/// el trigger pendiente en `MAP3`, para que `var 5F` vea el mismo estado que
+/// el resolver nativo.
+fn trigger_newgrf_house_randomisation(
+    state: &mut GameState,
+    coord: TileCoord,
+    trigger: u8,
+    shared_random_bits: Option<u8>,
+    mark_dirty: bool,
+    rng: &mut Randomizer,
+) -> Option<u8> {
+    let snapshot = state.map.get(coord)?;
+    if snapshot.kind != TileKind::House {
+        return None;
+    }
+    let house_id = snapshot.m8 & 0x0FFF;
+    let def = crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id)?;
+    let grfid = def.grfid;
+    let local_id = def.newgrf_local_id;
+    let runtime = def.newgrf_runtime.clone();
+    // `HasSpriteGroups` nativo exige un grupo default asignado por Action3;
+    // un grafo variational perteneciente a otra casa del mismo GRF no debe
+    // introducir `Random()` en esta tesela. Para sprites planos no retenemos
+    // el grafo, de modo que la vista ya decodificada es la evidencia del grupo.
+    let has_sprite_group = runtime
+        .as_deref()
+        .map_or(!def.newgrf_views.is_empty(), |gfx| {
+            gfx.assigns.iter().any(|assign| assign.local_id == local_id)
+                || gfx
+                    .extended_assigns
+                    .iter()
+                    .any(|(assigned_id, _)| *assigned_id == u16::from(local_id))
+        });
+    if !has_sprite_group {
+        return None;
+    }
+
+    let waiting = (snapshot.m3 & 0x1F) | trigger;
+    let mut pending = snapshot;
+    pending.m3 = (pending.m3 & !0x1F) | waiting;
+    state.map.set_tile(coord, pending).ok()?;
+
+    let (reseed, used) = if let Some(runtime) = runtime.as_deref() {
+        let neighbor_params = requested_newgrf_house_scope_vars(runtime);
+        let counts = crate::house_spec::HouseScopeCounts::from_map(&state.map, &state.towns);
+        let mut ctx = crate::house_spec::action2_eval_ctx_for_house_tile_with_counts(
+            &state.map,
+            pending,
+            coord.x,
+            coord.y,
+            state.climate,
+            &state.towns,
+            &state.house_spec_catalog,
+            &counts,
+            &neighbor_params,
+        );
+        let result = runtime.rerandomisation_for_local_id(local_id, &mut ctx, waiting);
+        if let Some(town_index) = newgrf_house_town_index(state, coord, pending) {
+            crate::newgrf_callback::writeback_town_persistent_registers(
+                &mut state.towns[town_index],
+                grfid,
+                &ctx,
+            );
+        }
+        result
+    } else {
+        (0, 0)
+    };
+
+    // El C++ asigna `Random()` a `uint8_t` incluso cuando la máscara resuelta
+    // vale cero y aun cuando TileLoopNorth recibe los bits compartidos.
+    let generated_random_bits = u8::try_from(rng.next() & u32::from(u8::MAX)).unwrap_or(0);
+    let random_bits = shared_random_bits.unwrap_or(generated_random_bits);
+    let mut updated = state.map.get(coord)?;
+    updated.m3 = (updated.m3 & !0x1F) | (waiting & !used);
+    let reseed_mask = u8::try_from(reseed & u32::from(u8::MAX)).unwrap_or(0);
+    updated.m1 = (updated.m1 & !reseed_mask) | (random_bits & reseed_mask);
+    state.map.set_tile(coord, updated).ok()?;
+    if mark_dirty {
+        state.runtime.landscape_tile_dirty.push(coord);
+    }
+    Some(updated.m1)
+}
+
+/// Variables parametrizadas de `HouseScopeResolver` que el grafo Action2
+/// puede requerir mientras decide la máscara de reseed.
+fn requested_newgrf_house_scope_vars(
+    runtime: &crate::newgrf_sprites::TrainSpriteGraphics,
+) -> Vec<(u8, u8)> {
+    let mut requested = Vec::new();
+    for entry in runtime.action2_var.values() {
+        for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+            if (0x60..=0x63).contains(&term.variable)
+                && let Some(parameter) = term.param
+                && !requested.contains(&(term.variable, parameter))
+            {
+                requested.push((term.variable, parameter));
+            }
+        }
+    }
+    requested.sort_unstable();
+    requested
+}
+
+/// Devuelve el town scope que seleccionó el constructor del contexto de casa:
+/// primero `MAP2`, y ante una referencia legacy inexistente, el más cercano.
+fn newgrf_house_town_index(state: &GameState, coord: TileCoord, tile: Tile) -> Option<usize> {
+    let persisted = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
+    state
+        .towns
+        .iter()
+        .position(|town| town.id == persisted)
+        .or_else(|| crate::town::nearest_town_index(&state.towns, coord).map(|(index, _)| index))
+}
+
 /// Máscara `BUILDING_HAS_1_TILE` de `OpenTTD`. Los bits no representan una
 /// cuenta: `Size1x1` es el bit cero y los otros tamaños ocupan bits 2--4.
-const VANILLA_HOUSE_FOOTPRINT_FLAGS: u8 = BUILDING_FLAG_SIZE_1X1
+const HOUSE_FOOTPRINT_FLAGS: u8 = BUILDING_FLAG_SIZE_1X1
     | BUILDING_FLAG_SIZE_2X1
     | BUILDING_FLAG_SIZE_1X2
     | BUILDING_FLAG_SIZE_2X2;
+const VANILLA_HOUSE_FOOTPRINT_FLAGS: u8 = HOUSE_FOOTPRINT_FLAGS;
 const VANILLA_HOUSE_MULTI_TILE_FLAGS: u8 =
     BUILDING_FLAG_SIZE_2X1 | BUILDING_FLAG_SIZE_1X2 | BUILDING_FLAG_SIZE_2X2;
 
@@ -1318,6 +1498,302 @@ mod tests {
                 .count(),
             4
         );
+    }
+
+    fn house_random_runtime(
+        local_ids: &[u8],
+        triggers: u8,
+    ) -> crate::newgrf_sprites::TrainSpriteGraphics {
+        let mut runtime = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        for &local_id in local_ids {
+            runtime
+                .assigns
+                .push(crate::newgrf_sprites::TrainSpriteAssign {
+                    local_id,
+                    set_id: 1,
+                });
+        }
+        runtime.action2_random.insert(
+            1,
+            crate::newgrf_sprites::Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                triggers,
+                randbit: 0,
+                sets: vec![0, 0],
+            },
+        );
+        runtime
+    }
+
+    fn newgrf_runtime_house(
+        id: u16,
+        local_id: u8,
+        building_flags: u8,
+        processing_time: u8,
+        runtime: crate::newgrf_sprites::TrainSpriteGraphics,
+    ) -> crate::house_spec::HouseSpecDef {
+        crate::house_spec::HouseSpecDef {
+            id,
+            local_id,
+            subst_id: 0,
+            building_flags,
+            min_year: 0,
+            max_year: crate::house_spec::HOUSE_YEAR_MAX,
+            population: 0,
+            mail_generation: 0,
+            availability: crate::house_spec::DEFAULT_HOUSE_AVAILABILITY,
+            probability: crate::house_spec::DEFAULT_HOUSE_PROBABILITY,
+            processing_time,
+            extra_flags: 0,
+            override_id: None,
+            callback_mask: 0,
+            name: "random-house".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: local_id,
+            newgrf_runtime: Some(Box::new(runtime)),
+        }
+    }
+
+    #[test]
+    fn newgrf_house_tile_loop_rerandomises_action2_bits_and_keeps_unmatched_trigger() {
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let coord = TileCoord::new(1, 0);
+        let mut map = Map::new_flat(2, 2, 0);
+        let mut tile = crate::map::Tile::town_house(
+            crate::map::TownHouseSpec {
+                house_id: id,
+                town_id: 0,
+                random_bits: 0xA4,
+                construction_counter: 0,
+                construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                is_protected: false,
+                processing_time: 0,
+            },
+            0,
+            0,
+        );
+        tile.m6 |= 0x03;
+        map.set_tile(coord, tile).expect("NewGRF house inside map");
+        let mut state = GameState::from_map(map);
+        state.house_spec_catalog.push(newgrf_runtime_house(
+            id,
+            0,
+            crate::house_spec::BUILDING_FLAG_SIZE_1X1,
+            5,
+            house_random_runtime(&[0], HOUSE_RANDOM_TRIGGER_TILE_LOOP),
+        ));
+
+        let mut actual = Randomizer::new(42);
+        let mut expected = actual;
+        let tile_loop_random = expected.next();
+        let _tile_loop_north_random = expected.next();
+        let current = state.map.get(coord).expect("NewGRF house");
+        let mut generation_rng = Some(&mut actual);
+        tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
+
+        let updated = state.map.get(coord).expect("NewGRF house after loop");
+        assert_eq!(actual, expected);
+        assert_eq!(
+            updated.m1,
+            (0xA4 & !1) | (u8::try_from(tile_loop_random & 1).unwrap_or(0))
+        );
+        assert_eq!(updated.m3 & 0x1F, HOUSE_RANDOM_TRIGGER_TILE_LOOP_NORTH);
+        assert_eq!(updated.m6, 0x17, "timer 5 + AnimatedTileState 3");
+        assert!(state.runtime.landscape_tile_dirty.contains(&coord));
+    }
+
+    #[test]
+    fn newgrf_house_tile_loop_randomisation_writes_town_parent_persistent_storage() {
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let coord = TileCoord::new(1, 0);
+        let mut map = Map::new_flat(2, 2, 0);
+        map.set_tile(
+            coord,
+            crate::map::Tile::town_house(
+                crate::map::TownHouseSpec {
+                    house_id: id,
+                    town_id: 7,
+                    random_bits: 0,
+                    construction_counter: 0,
+                    construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                    is_protected: false,
+                    processing_time: 0,
+                },
+                0,
+                0,
+            ),
+        )
+        .expect("NewGRF house inside map");
+        let mut state = GameState::from_map(map);
+        state.towns.push(crate::town::Town {
+            id: 7,
+            pos: coord,
+            ..Default::default()
+        });
+
+        // Bit alto de `shift`: selector interno de scope parent Action2.
+        let parent_scope = 0x80;
+        let parent_literal = |value: u32| crate::newgrf_sprites::Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: crate::newgrf_sprites::Action2VarAdjust {
+                shift: parent_scope,
+                and_mask: value,
+                ..Default::default()
+            },
+        };
+        let mut runtime = house_random_runtime(&[0], HOUSE_RANDOM_TRIGGER_TILE_LOOP);
+        runtime.action2_var.insert(
+            0,
+            crate::newgrf_sprites::Action2VarEntry {
+                first: parent_literal(42),
+                ops: vec![crate::newgrf_sprites::Action2VarOp {
+                    operator: 0x10, // `\\2psto`
+                    rhs: parent_literal(5),
+                }],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        state.house_spec_catalog.push(newgrf_runtime_house(
+            id,
+            0,
+            crate::house_spec::BUILDING_FLAG_SIZE_1X1,
+            1,
+            runtime,
+        ));
+
+        let mut rng = Randomizer::new(42);
+        let current = state.map.get(coord).expect("NewGRF house");
+        let mut generation_rng = Some(&mut rng);
+        tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
+
+        assert_eq!(
+            state.towns[0]
+                .newgrf_persistent_regs
+                .get(&1)
+                .and_then(|registers| registers.get(&5)),
+            Some(&42)
+        );
+    }
+
+    #[test]
+    fn newgrf_house_without_action3_group_rearms_without_consuming_rng() {
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let coord = TileCoord::new(1, 0);
+        let mut map = Map::new_flat(2, 2, 0);
+        map.set_tile(
+            coord,
+            crate::map::Tile::town_house(
+                crate::map::TownHouseSpec {
+                    house_id: id,
+                    town_id: 0,
+                    random_bits: 0xA4,
+                    construction_counter: 0,
+                    construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                    is_protected: false,
+                    processing_time: 0,
+                },
+                0,
+                0,
+            ),
+        )
+        .expect("NewGRF house inside map");
+        let mut state = GameState::from_map(map);
+        let mut runtime = house_random_runtime(&[0], HOUSE_RANDOM_TRIGGER_TILE_LOOP);
+        runtime.assigns.clear();
+        state.house_spec_catalog.push(newgrf_runtime_house(
+            id,
+            0,
+            crate::house_spec::BUILDING_FLAG_SIZE_1X1,
+            2,
+            runtime,
+        ));
+
+        let mut actual = Randomizer::new(42);
+        let current = state.map.get(coord).expect("NewGRF house");
+        let mut generation_rng = Some(&mut actual);
+        tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
+
+        let updated = state.map.get(coord).expect("NewGRF house after loop");
+        assert_eq!(actual, Randomizer::new(42));
+        assert_eq!(updated.m1, 0xA4);
+        assert_eq!(updated.m3 & 0x1F, 0);
+        assert_eq!(updated.m6, 2 << 2);
+        assert!(state.runtime.landscape_tile_dirty.contains(&coord));
+    }
+
+    #[test]
+    fn newgrf_house_tile_loop_north_propagates_shared_random_bits_to_multitile_parts() {
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let north = TileCoord::new(1, 1);
+        let east = TileCoord::new(2, 1);
+        let mut map = Map::new_flat(4, 3, 0);
+        let north_tile = crate::map::Tile::town_house(
+            crate::map::TownHouseSpec {
+                house_id: id,
+                town_id: 0,
+                random_bits: 0xA4,
+                construction_counter: 0,
+                construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                is_protected: false,
+                processing_time: 0,
+            },
+            0,
+            0,
+        );
+        let east_tile = crate::map::Tile::town_house(
+            crate::map::TownHouseSpec {
+                house_id: id + 1,
+                town_id: 0,
+                random_bits: 0x52,
+                construction_counter: 0,
+                construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                is_protected: false,
+                processing_time: 0,
+            },
+            0,
+            0,
+        );
+        map.set_tile(north, north_tile)
+            .expect("north house inside map");
+        map.set_tile(east, east_tile)
+            .expect("east house inside map");
+        let mut state = GameState::from_map(map);
+        let runtime = house_random_runtime(&[0, 1], HOUSE_RANDOM_TRIGGER_TILE_LOOP_NORTH);
+        state.house_spec_catalog.extend([
+            newgrf_runtime_house(
+                id,
+                0,
+                crate::house_spec::BUILDING_FLAG_SIZE_2X1,
+                0,
+                runtime.clone(),
+            ),
+            newgrf_runtime_house(id + 1, 1, 0, 0, runtime),
+        ]);
+
+        let mut actual = Randomizer::new(42);
+        let mut expected = actual;
+        let _tile_loop_random = expected.next();
+        let shared_random = expected.next();
+        let _part_random = expected.next();
+        let current = state.map.get(north).expect("north house");
+        let mut generation_rng = Some(&mut actual);
+        tile_loop_house(&mut state, 0, north, current, &mut generation_rng);
+
+        let north_updated = state.map.get(north).expect("north house after loop");
+        let east_updated = state.map.get(east).expect("east house after loop");
+        let shared_bit = u8::try_from(shared_random & 1).unwrap_or(0);
+        assert_eq!(actual, expected);
+        assert_eq!(north_updated.m1 & 1, shared_bit);
+        assert_eq!(east_updated.m1 & 1, shared_bit);
+        assert_eq!(north_updated.m3 & 0x1F, HOUSE_RANDOM_TRIGGER_TILE_LOOP);
+        assert_eq!(east_updated.m3 & 0x1F, 0);
+        assert!(state.runtime.landscape_tile_dirty.contains(&north));
+        assert!(state.runtime.landscape_tile_dirty.contains(&east));
     }
 
     #[test]

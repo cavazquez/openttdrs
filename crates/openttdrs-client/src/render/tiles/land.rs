@@ -1704,7 +1704,7 @@ pub(crate) fn spawn_industry_tile_with_world(
             );
         }
         let anim_base = |ground: bool| {
-            crate::render::IndustryBuildingAnim::new(gfx, m1, phase, ground, overlay_ctx)
+            crate::render::IndustryBuildingAnim::new(gfx, m1, phase, ground, overlay_ctx, map_width)
         };
         if s.ground_sprite_id != 0 && s.ground_w > 0.0 && s.ground_h > 0.0 {
             if client_anim && industry_anim_layer_used_in_any_frame(gfx, true) {
@@ -1713,12 +1713,7 @@ pub(crate) fn spawn_industry_tile_with_world(
                     assets,
                     chunk,
                     anim_base(true),
-                    s.ground_sprite_id,
-                    s.ground_xrel,
-                    s.ground_yrel,
-                    s.ground_w,
-                    s.ground_h,
-                    0.45,
+                    s,
                 );
             } else if let Some(img) = assets.industries.get(&s.ground_sprite_id) {
                 // Acería: metal fundido está en la capa ground (ciclo `oil_refinery`).
@@ -1761,12 +1756,7 @@ pub(crate) fn spawn_industry_tile_with_world(
                     assets,
                     chunk,
                     anim_base(false),
-                    s.sprite_id,
-                    s.xrel,
-                    s.yrel,
-                    s.w,
-                    s.h,
-                    0.5,
+                    s,
                 );
             } else if let Some(img) = assets.industries.get(&s.sprite_id) {
                 let refinery_fire = industry_gfx_uses_refinery_fire_anim(gfx, m1)
@@ -1794,9 +1784,10 @@ pub(crate) fn spawn_industry_tile_with_world(
                 };
                 sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
                 let mut pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
-                // Sólo los buildings vanilla planos que no cambian de frame
-                // conservan una caja C++ inmutable. Los demás siguen en su
-                // ruta local hasta que tengan parent/children completos.
+                // Esta ruta sólo ve buildings vanilla planos estáticos: los
+                // animados reconstruyen su parent por frame en
+                // `IndustryBuildingAnim`; fundaciones y layouts complejos
+                // continúan en su ruta local hasta tener parent/children.
                 let sortable_parent = if !leveled && !client_anim && !refinery_fire && !fizzy_drink
                 {
                     let source_depth = viewport_source_depth(pos3.z, ctx.tx, map_width);

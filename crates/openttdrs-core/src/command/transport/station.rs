@@ -545,10 +545,10 @@ pub(in crate::command::transport) fn clear_station_site_tile(
     Ok(())
 }
 
-/// Limpia el sustrato de una estación antes de sobrescribirlo. Los objetos no
+/// Limpia el sustrato de una instalación de estación antes de sobrescribirlo. Los objetos no
 /// se pueden tratar como simple césped: pueden abarcar varias teselas y tener
 /// metadata en `OBJS`, por lo que usan la demolición normal.
-fn prepare_station_site_for_placement(
+pub(in crate::command::transport) fn prepare_station_site_for_placement(
     state: &mut GameState,
     c: TileCoord,
     kind: TileKind,

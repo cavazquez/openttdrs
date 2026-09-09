@@ -7,13 +7,13 @@ use crate::airport::{
 use crate::airport_class::{AirportSpecId, NewgrfAirportSpecDef, newgrf_airport_spec_def};
 use crate::economy::station_build_cost;
 use crate::map::{Map, TileCoord, TileKind};
-use crate::pathfinder::{station_site_tile_allows_build, station_site_tile_needs_clear};
+use crate::pathfinder::station_site_tile_allows_build;
 use crate::town::authority_allows_new_station;
 use crate::{DEPOT_BUILD_COST, GameState, Station, StopKind};
 
 use super::super::CommandError;
-use super::shared::check_in_bounds;
-use super::station::clear_station_site_tile;
+use super::shared::{check_in_bounds, check_object_can_be_cleared};
+use super::station::prepare_station_site_for_placement;
 
 /// Spec clonado y selector `(índice Action0, rotación)` de una construcción.
 type SelectedNewgrfAirportLayout = (NewgrfAirportSpecDef, (u8, u8));
@@ -84,6 +84,7 @@ fn check_airport_tiles(
     for c in tiles {
         saw_tile = true;
         check_airport_placement(&state.map, &state.stations, c)?;
+        check_object_can_be_cleared(state, c)?;
         let height = state.map.get(c).map_or(0, |tile| tile.height);
         if let Some(expected) = flat_height {
             if height != expected {
@@ -282,9 +283,8 @@ fn place_airport_area_with_layout(
     let tile_count = placed.len();
     let mut tiles = Vec::with_capacity(tile_count);
     for (c, piece) in placed {
-        if station_site_tile_needs_clear(state.map.get_kind(c).unwrap_or(TileKind::Grass)) {
-            clear_station_site_tile(state, c)?;
-        }
+        let kind = state.map.get_kind(c).unwrap_or(TileKind::Grass);
+        prepare_station_site_for_placement(state, c, kind)?;
         write_airport_tile(state, c, piece)?;
         tiles.push(c);
     }

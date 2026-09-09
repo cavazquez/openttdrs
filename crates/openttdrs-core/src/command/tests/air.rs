@@ -2,9 +2,10 @@
 
 use crate::economy::station_build_cost;
 use crate::{
-    AircraftPhase, Command, DEPOT_BUILD_COST, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_TRICARIO,
-    ENGINE_SHIP_FERRY, GameState, StopKind, TileCoord, TileKind, VehicleKind,
-    airport_tile_is_hangar, airport_tile_is_heliport, apply_command,
+    AircraftPhase, Command, CommandError, DEPOT_BUILD_COST, ENGINE_AIRCRAFT_DAKOTA,
+    ENGINE_AIRCRAFT_TRICARIO, ENGINE_SHIP_FERRY, GameState, StopKind, TileCoord, TileKind,
+    VehicleKind, airport_tile_is_hangar, airport_tile_is_heliport, apply_command,
+    command_would_fail,
 };
 use crate::{AirportClassId, AirportLayoutTile, AirportTileLayout, NewgrfAirportSpecDef};
 
@@ -39,6 +40,30 @@ fn place_heliport_and_buy_helicopter() {
             .iter()
             .any(|v| v.kind == VehicleKind::Aircraft && v.pos == c)
     );
+}
+
+#[test]
+fn airport_cannot_overwrite_nonremovable_object() {
+    let mut s = GameState::new(12, 12);
+    let c = TileCoord::new(4, 4);
+    apply_command(
+        &mut s,
+        &Command::BuildObject {
+            pos: c,
+            object_type: crate::OBJECT_TYPE_LIGHTHOUSE,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        command_would_fail(&s, &Command::PlaceAirport(c)),
+        Some(CommandError::ObjectCannotBeRemoved)
+    );
+    assert_eq!(
+        apply_command(&mut s, &Command::PlaceAirport(c)),
+        Err(CommandError::ObjectCannotBeRemoved)
+    );
+    assert!(crate::is_map_object_tile(s.map.get(c).unwrap().mapt));
 }
 
 #[test]

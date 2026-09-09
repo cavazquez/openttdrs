@@ -112,12 +112,17 @@ pub fn resolve_signal_track(trackbits: u8, fract_x: u8, fract_y: u8) -> Option<S
     SignalTrack::from_track_bit(selected)
 }
 
-/// Coste de colocación de una señal de bloque (`Price::BuildSignal` aprox.).
-pub const SIGNAL_BUILD_COST: i64 = 40;
+/// Valor legacy en dificultad media sin inflación.
+///
+/// Los comandos usan [`crate::economy::signal_build_cost`] para respetar
+/// dificultad e inflación.
+pub const SIGNAL_BUILD_COST: i64 = 65;
 /// Reembolso parcial al quitar vía (`Price::ClearRail` aprox.).
 pub const RAIL_REMOVE_REFUND: i64 = 10;
-/// Reembolso al quitar una señal (mitad del coste de colocación).
-pub const SIGNAL_REMOVE_REFUND: i64 = 20;
+/// Delta legacy al retirar una señal (negativo = coste, no reembolso).
+///
+/// Los comandos usan [`crate::economy::signal_clear_cost`].
+pub const SIGNAL_REMOVE_REFUND: i64 = -10;
 
 pub const SIGTYPE_BLOCK: u8 = 0;
 pub const SIGTYPE_ENTRY: u8 = 1;

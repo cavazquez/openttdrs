@@ -79,6 +79,18 @@ pub fn road_build_cost_factored(ge: &GlobalEconomy, cost_multiplier: u16) -> i64
     base.saturating_mul(i64::from(factor)) / 8
 }
 
+/// Coste de construir una señal ferroviaria (`PR_BUILD_SIGNALS`).
+#[must_use]
+pub fn signal_build_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::BuildSignals, 1, 0)
+}
+
+/// Coste de retirar una señal ferroviaria (`PR_CLEAR_SIGNALS`).
+#[must_use]
+pub fn signal_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearSignals, 1, 0)
+}
+
 /// Coste del depósito ferroviario (`PR_BUILD_DEPOT_TRAIN`) y su tramo de vía.
 ///
 /// `CmdBuildTrainDepot` suma ambos conceptos incluso cuando la boca ya toca una
@@ -193,6 +205,14 @@ mod tests {
         assert_eq!(
             ship_depot_build_cost(&ge),
             medium_default_price(PriceIndex::BuildDepotShip)
+        );
+        assert_eq!(
+            signal_build_cost(&ge),
+            medium_default_price(PriceIndex::BuildSignals)
+        );
+        assert_eq!(
+            signal_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearSignals)
         );
     }
 

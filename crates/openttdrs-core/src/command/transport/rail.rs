@@ -1,13 +1,15 @@
 use crate::GameState;
-use crate::economy::{rail_build_cost_factored, train_depot_build_cost};
+use crate::economy::{
+    rail_build_cost_factored, signal_build_cost, signal_clear_cost, train_depot_build_cost,
+};
 use crate::map::{
     Map, TileCoord, TileKind, opposite_diag_dir, rail_bit_for_sides, rail_bits_touching_side,
     rail_trackbits_valid_on_slope, tile_slope_and_z,
 };
 use crate::pathfinder::{station_entrance_faces_rail, station_site_tile_allows_build};
 use crate::rail_signals::{
-    RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST,
-    SIGNAL_REMOVE_REFUND, rail_signal_present_mask, rail_signal_state_mask, rail_tile_is_signals,
+    RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, rail_signal_present_mask,
+    rail_signal_state_mask, rail_tile_is_signals,
 };
 
 use super::super::terraform::{apply_autoslope_if_needed, check_autoslope_flat};
@@ -723,7 +725,7 @@ pub(in crate::command) fn place_rail_signal(
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
     crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, c);
-    state.economy.money -= SIGNAL_BUILD_COST;
+    state.economy.money -= signal_build_cost(&state.global_economy);
     Ok(())
 }
 
@@ -893,6 +895,6 @@ pub(in crate::command) fn remove_rail_signal(
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
     crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, c);
-    state.economy.money += SIGNAL_REMOVE_REFUND;
+    state.economy.money -= signal_clear_cost(&state.global_economy);
     Ok(())
 }

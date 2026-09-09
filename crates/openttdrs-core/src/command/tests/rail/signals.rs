@@ -3,6 +3,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::command::{Command, apply_command};
+use crate::economy::{signal_build_cost, signal_clear_cost};
 use crate::{GameState, TileCoord, TileKind};
 
 #[test]
@@ -20,7 +21,7 @@ fn place_rail_signal_on_straight_track() {
     assert!(crate::rail_signals::rail_tile_is_signals(tile.m5));
     assert_eq!(
         s.economy.money,
-        money - crate::rail_signals::SIGNAL_BUILD_COST
+        money - signal_build_cost(&s.global_economy)
     );
 }
 
@@ -219,7 +220,10 @@ fn remove_rail_signal_keeps_track() {
     assert_eq!(tile.kind, TileKind::Rail);
     assert!(!crate::rail_signals::rail_tile_is_signals(tile.m5));
     assert_eq!(tile.m5 & 0x3F, 0x01);
-    assert!(s.economy.money > money_before);
+    assert_eq!(
+        s.economy.money,
+        money_before - signal_clear_cost(&s.global_economy)
+    );
 }
 
 #[test]

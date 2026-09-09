@@ -195,26 +195,59 @@ fn retry_subsidy_route(state: &mut GameState, route: fn(&mut GameState) -> bool)
     false
 }
 
+/// Devuelve el índice de almacenamiento elegido por `Town::GetRandom`.
+///
+/// El ordinal de `RandomRange` se aplica sobre el pool sparse por `TownID`, no
+/// sobre el orden físico del `Vec`: una importación o una recreación puede
+/// dejar ambos órdenes distintos.
+fn random_town_pool_index(state: &mut GameState) -> Option<usize> {
+    let count = u32::try_from(state.towns.len()).ok()?;
+    if count == 0 {
+        return None;
+    }
+    let ordinal = usize::try_from(state.random.random_range(count)).ok()?;
+    let mut pool_indices: Vec<_> = (0..state.towns.len()).collect();
+    // El segundo componente mantiene el orden total en fixtures legacy que
+    // todavía repiten el ID cero.
+    pool_indices.sort_unstable_by_key(|&index| (state.towns[index].id, index));
+    pool_indices.get(ordinal).copied()
+}
+
 fn try_create_passenger_subsidy(state: &mut GameState) -> bool {
-    if state.towns.len() < 2 {
+    if state.towns.is_empty() {
         return false;
     }
-    let src_idx = (state.random.next() as usize) % state.towns.len();
-    let dst_idx = if state.towns.len() == 1 {
+
+    // `FindSubsidyPassengerRoute` siempre llama `RandomRange` para elegir el
+    // cargo TPE_PASSENGERS, aun cuando la partida vanilla sólo tenga PASS.
+    // Consumirla antes de elegir el pueblo mantiene el stream global alineado.
+    let _ = state.random.random_range(1);
+    let Some(src_idx) = random_town_pool_index(state) else {
         return false;
-    } else {
-        (src_idx + 1 + (state.random.next() as usize) % (state.towns.len() - 1)) % state.towns.len()
     };
-    let src = &state.towns[src_idx];
-    let dst = &state.towns[dst_idx];
-    if src.population < SUBSIDY_PAX_MIN_POPULATION || dst.population < SUBSIDY_PAX_MIN_POPULATION {
-        return false;
-    }
     let cargo = CargoType::Passengers;
-    if town_percent_transported(src, cargo) > SUBSIDY_MAX_PCT_TRANSPORTED {
+    let (src_pos, src_population, src_percent_transported) = {
+        let src = &state.towns[src_idx];
+        (
+            src.pos,
+            src.population,
+            town_percent_transported(src, cargo),
+        )
+    };
+    if src_population < SUBSIDY_PAX_MIN_POPULATION
+        || src_percent_transported > SUBSIDY_MAX_PCT_TRANSPORTED
+    {
         return false;
     }
-    if manhattan_distance(src.pos, dst.pos) > SUBSIDY_MAX_DISTANCE {
+
+    let Some(dst_idx) = random_town_pool_index(state) else {
+        return false;
+    };
+    let dst = &state.towns[dst_idx];
+    if dst.population < SUBSIDY_PAX_MIN_POPULATION || src_idx == dst_idx {
+        return false;
+    }
+    if manhattan_distance(src_pos, dst.pos) > SUBSIDY_MAX_DISTANCE {
         return false;
     }
     push_subsidy(
@@ -222,7 +255,7 @@ fn try_create_passenger_subsidy(state: &mut GameState) -> bool {
         cargo,
         TileCoord::new(0, 0),
         TileCoord::new(0, 0),
-        Some(src.pos),
+        Some(src_pos),
         Some(dst.pos),
     )
 }
@@ -578,10 +611,55 @@ mod tests {
             population: 500,
             ..crate::town::Town::default()
         });
+        // Tras el selector TPE, esta semilla elige B como origen y A como
+        // destino; así la fixture prueba distancia sin depender del orden
+        // antiguo que elegía ambos pueblos antes de validar el origen.
+        state.random = crate::linkgraph_parity::Randomizer::new(1);
         assert!(!try_create_passenger_subsidy(&mut state));
         state.towns[1].pos = TileCoord::new(10, 2);
+        state.random = crate::linkgraph_parity::Randomizer::new(1);
         assert!(try_create_passenger_subsidy(&mut state));
         assert_eq!(state.subsidies[0].cargo, CargoType::Passengers);
+    }
+
+    #[test]
+    fn passenger_subsidy_draws_cargo_before_sparse_pool_source_and_destination() {
+        let mut state = GameState::new(32, 32);
+        // El orden físico se invierte respecto del `TownPool`: el sorteo
+        // nativo recorre IDs válidos crecientes, no posiciones del `Vec`.
+        for (id, x) in [(2, 10), (0, 2), (1, 6)] {
+            state.towns.push(crate::town::Town {
+                id,
+                pos: TileCoord::new(x, 2),
+                name: format!("T{id}"),
+                population: SUBSIDY_PAX_MIN_POPULATION,
+                ..crate::town::Town::default()
+            });
+        }
+        state.random = crate::linkgraph_parity::Randomizer::new(1);
+        let mut expected = state.random;
+        assert_eq!(expected.random_range(1), 0, "selector TPE_PASSENGERS");
+        let source_ordinal =
+            usize::try_from(expected.random_range(3)).expect("ordinal de pueblo origen");
+        let destination_ordinal =
+            usize::try_from(expected.random_range(3)).expect("ordinal de pueblo destino");
+        assert_ne!(source_ordinal, destination_ordinal, "semilla de la fixture");
+        let mut town_pool: Vec<_> = (0..state.towns.len()).collect();
+        town_pool.sort_unstable_by_key(|&index| (state.towns[index].id, index));
+        let source = town_pool[source_ordinal];
+        let destination = town_pool[destination_ordinal];
+
+        assert!(try_create_passenger_subsidy(&mut state));
+
+        assert_eq!(state.random, expected);
+        assert_eq!(
+            state.subsidies[0].source_town_pos,
+            Some(state.towns[source].pos)
+        );
+        assert_eq!(
+            state.subsidies[0].dest_town_pos,
+            Some(state.towns[destination].pos)
+        );
     }
 
     #[test]

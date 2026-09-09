@@ -68,6 +68,17 @@ diferencias. Evidencia y límites en
 [runtime-oil-rig-station-timing-rmap-172.md](runtime-oil-rig-station-timing-rmap-172.md)
 y [runtime-monthly-industry-pool-order-rmap-173.md](runtime-monthly-industry-pool-order-rmap-173.md).
 
+RMAP-174 descarta en la propagación runtime de árboles las teselas cuyo
+fallback semántico sea `Grass` pero cuyo nibble `MAPT` no sea `MP_CLEAR`: el
+objeto de `(121,171)` de `autosave0.sav` ya no se convierte en bosque ni
+desplaza `day[332]`. RMAP-175 completa la siguiente frontera mensual:
+`FindSubsidyPassengerRoute` consume el selector TPE, valida el pueblo origen
+antes de sortear destino y usa `RandomRange` sobre el pool, no módulo. El
+oracle y Rust alcanzan ahora `initial` + `day[0]`…`day[359]` exactos en reloj,
+RNG, `ECMY`, `ITBL`, pool y acciones. La evidencia y límites están en
+[runtime-tree-object-fallback-rmap-174.md](runtime-tree-object-fallback-rmap-174.md)
+y [runtime-passenger-subsidy-rng-rmap-175.md](runtime-passenger-subsidy-rng-rmap-175.md).
+
 Incidencia de validación ajena al lote: al cerrarlo, #535 registraba que
 `test_parity_docs_portability.py` copiaba el baseline raster del 2026-09-05
 mientras el checker exigía el del 2026-09-07 desde `021f023b`. La corrección

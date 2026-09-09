@@ -45,6 +45,14 @@ const TREE_GROUND_ROUGH: u8 = 1;
 const TREE_GROUND_SNOW_DESERT: u8 = 2;
 const TREE_GROUND_ROUGH_SNOW: u8 = 4;
 
+/// `TileType` crudos que `CanPlantTreesOnTile` admite para propagación.
+///
+/// `TileKind::Grass` es un fallback de render para varios tipos sin handler
+/// propio (entre ellos `MP_OBJECT`), así que no basta para autorizar una
+/// sobrescritura durante `TileLoop_Trees`.
+const OTTD_TILETYPE_CLEAR: u8 = 0;
+const OTTD_TILETYPE_WATER: u8 = 6;
+
 const GROWTH_MASK: u8 = 0x07;
 const TREE_COUNT_SHIFT: u8 = 6;
 
@@ -757,10 +765,10 @@ fn try_spread_generation_neighbor(map: &mut Map, c: TileCoord, tree_type: u8, di
 }
 
 fn generation_tree_plantable(map: &Map, c: TileCoord, tile: Tile) -> bool {
-    match tile.kind {
-        TileKind::Water => tile_slope_and_z(map, c)
+    match (tile.kind, tile.ottd_type_nibble()) {
+        (TileKind::Water, OTTD_TILETYPE_WATER) => tile_slope_and_z(map, c)
             .is_some_and(|(slope, _)| is_coast_tile(tile) && !is_slope_one_corner_raised(slope)),
-        TileKind::Grass => !matches!(
+        (TileKind::Grass, OTTD_TILETYPE_CLEAR) => !matches!(
             clear_ground_type(tile.m5),
             CLEAR_GROUND_FIELDS | CLEAR_GROUND_ROCKY | CLEAR_GROUND_DESERT
         ),
@@ -1591,6 +1599,32 @@ mod tests {
         assert_eq!(planted.kind, TileKind::Forest);
         assert_eq!(planted.m3, 0);
         assert_eq!(planted.m5, TREE_GROWTH_GROWING1);
+    }
+
+    #[test]
+    fn generation_tree_spread_does_not_overwrite_raw_object_fallback() {
+        let mut map = Map::new_flat(32, 32, 0);
+        let source = TileCoord::new(13, 16);
+        force_forest(
+            &mut map,
+            source,
+            with_tree_or_field_stage(0, TREE_GROWTH_GROWN),
+        );
+        let (dx, dy) = DIR_OFFSETS[0];
+        let object = TileCoord::new(source.x + dx, source.y + dy);
+        let mut original = map.get(object).unwrap();
+        // El importador visualiza MP_OBJECT como Grass, pero OpenTTD sólo
+        // permite plantar sobre MP_CLEAR o costas MP_WATER.
+        original.mapt = 0xA0;
+        original.m1 = 0x70;
+        original.m2 = 9;
+        original.m3 = 63;
+        map.set_tile(object, original).unwrap();
+
+        assert!(!generation_tree_plantable(&map, object, original));
+        try_spread_generation_neighbor(&mut map, source, 5, 0);
+
+        assert_eq!(map.get(object), Some(original));
     }
 
     #[test]

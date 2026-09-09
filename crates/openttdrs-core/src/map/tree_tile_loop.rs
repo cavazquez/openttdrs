@@ -45,12 +45,13 @@ const TREE_GROUND_ROUGH: u8 = 1;
 const TREE_GROUND_SNOW_DESERT: u8 = 2;
 const TREE_GROUND_ROUGH_SNOW: u8 = 4;
 
-/// `TileType` crudos que `CanPlantTreesOnTile` admite para propagación.
+/// `TileType` crudos usados por las guardas de árbol.
 ///
 /// `TileKind::Grass` es un fallback de render para varios tipos sin handler
 /// propio (entre ellos `MP_OBJECT`), así que no basta para autorizar una
 /// sobrescritura durante `TileLoop_Trees`.
 const OTTD_TILETYPE_CLEAR: u8 = 0;
+const OTTD_TILETYPE_TREES: u8 = 4;
 const OTTD_TILETYPE_WATER: u8 = 6;
 
 const GROWTH_MASK: u8 = 0x07;
@@ -303,8 +304,8 @@ fn can_plant_trees_on_tile(map: &Map, c: TileCoord) -> bool {
     let Some(tile) = map.get(c) else {
         return false;
     };
-    match tile.kind {
-        TileKind::Grass => {
+    match (tile.kind, tile.ottd_type_nibble()) {
+        (TileKind::Grass, OTTD_TILETYPE_CLEAR) => {
             let ground = clear_ground_type(tile.m5);
             !matches!(ground, CLEAR_GROUND_ROCKY | CLEAR_GROUND_DESERT)
         }
@@ -316,7 +317,7 @@ fn plant_trees_on_clear(map: &mut Map, c: TileCoord, growth: u8, tree_type: u8) 
     let Some(tile) = map.get(c) else {
         return;
     };
-    if tile.kind != TileKind::Grass {
+    if tile.kind != TileKind::Grass || tile.ottd_type_nibble() != OTTD_TILETYPE_CLEAR {
         return;
     }
     let ground = clear_ground_type(tile.m5);
@@ -1056,8 +1057,8 @@ pub fn plant_tree(
     use crate::command::{CommandError, in_bounds};
     in_bounds(&game_state.map, c)?;
     let tile = game_state.map.get(c).ok_or(CommandError::OutOfBounds)?;
-    match tile.kind {
-        TileKind::Grass => {
+    match (tile.kind, tile.ottd_type_nibble()) {
+        (TileKind::Grass, OTTD_TILETYPE_CLEAR) => {
             let density = if clear_ground_type(tile.m5) == CLEAR_GROUND_ROUGH {
                 3
             } else {
@@ -1082,7 +1083,7 @@ pub fn plant_tree(
                 .set_m2(c, make_tree_m2(tree_ground, density))
                 .map_err(|_| CommandError::OutOfBounds)?;
         }
-        TileKind::Forest => {
+        (TileKind::Forest, OTTD_TILETYPE_TREES) => {
             let count = tree_count(tile.m5);
             if count >= 4 {
                 return Err(CommandError::CannotPlantTreeHere);
@@ -1694,6 +1695,27 @@ mod tests {
         assert_eq!(tree_count(state.map.get(c).unwrap().m5), 1);
         clear_tree(&mut state, c).unwrap();
         assert_eq!(state.map.get_kind(c), Some(TileKind::Grass));
+    }
+
+    #[test]
+    fn manual_tree_planting_rejects_raw_object_fallback() {
+        let mut state = GameState::new(4, 4);
+        let c = TileCoord::new(2, 2);
+        let mut object = state.map.get(c).unwrap();
+        // El modelo visual conserva Grass para este tipo aún no materializado,
+        // pero `CmdPlantTree` nativo sólo acepta MP_CLEAR/MP_WATER/MP_TREES.
+        object.mapt = 0xA0;
+        object.m1 = 0x70;
+        object.m2 = 9;
+        object.m3 = 63;
+        state.map.set_tile(c, object).unwrap();
+
+        assert!(!can_plant_trees_on_tile(&state.map, c));
+        assert_eq!(
+            plant_tree(&mut state, c),
+            Err(crate::command::CommandError::CannotPlantTreeHere)
+        );
+        assert_eq!(state.map.get(c), Some(object));
     }
 
     #[test]

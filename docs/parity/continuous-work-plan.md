@@ -147,8 +147,11 @@ ANIT. CB21 se evalúa después de la randomización/CB1B sin tomar RNG propio:
 resultado no nulo puede llegar desde una subtesela, resuelve la parte norte y
 borra la huella completa, retirando ANIT de inmediato y actualizando población,
 contador/radio e iglesia/estadio del pueblo. La llamada inaugural de
-`BuildTownHouse` (`param2 = 1`) sigue pendiente. #527 permanece abierto para
-esa llamada inicial y sonidos de animación NewGRF; no amplía el cierre de #512.
+`BuildTownHouse` también recorre la huella ya materializada: cada subtesela
+cuya máscara publica CB1C toma su propia palabra RNG global y recibe
+`param2 = 1`, antes de entrar en la cola ANIT/dirty. #527 permanece abierto
+por sonidos de animación NewGRF y evidencia extendida; no amplía el cierre de
+#512.
 La evidencia canónica vive sólo en
 [random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
 

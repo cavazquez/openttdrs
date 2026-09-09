@@ -1075,7 +1075,61 @@ pub(super) fn produce_town_demand(state: &mut GameState, tick: u64) {
     state.stats.town_mail_generated += mail;
 }
 
+/// Dispara CB1C al terminar `BuildTownHouse` para una huella `NewGRF` recién
+/// creada. El primer callback de cada subtesela recibe su propia palabra RNG
+/// global y `param2 = 1`, a diferencia de los rollovers del tile loop
+/// (`param2 = 0`).
+fn trigger_initial_newgrf_house_construction_stage_changed(state: &mut GameState, base: TileCoord) {
+    let Some(base_tile) = state.map.get(base) else {
+        return;
+    };
+    let base_id = base_tile.m8 & 0x0FFF;
+    let Some(base_def) = crate::house_spec::house_spec_def(&state.house_spec_catalog, base_id)
+    else {
+        return;
+    };
+    if !base_def.from_newgrf {
+        return;
+    }
+
+    for (dx, dy) in crate::house_spec::house_footprint_offsets(base_def.building_flags) {
+        let coord = TileCoord::new(base.x + dx, base.y + dy);
+        let Some(tile) = state.map.get(coord) else {
+            continue;
+        };
+        let house_id = tile.m8 & 0x0FFF;
+        let Some(def) = crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id)
+        else {
+            continue;
+        };
+        if !def.has_animation_construction_stage_changed_callback() {
+            continue;
+        }
+
+        let result = crate::newgrf_callback::resolve_house_callback_with_world(
+            def,
+            &state.map,
+            &mut state.towns,
+            &state.house_spec_catalog,
+            state.climate,
+            coord,
+            crate::newgrf_sprites::CBID_HOUSE_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED,
+            state.random.next(),
+            1,
+        );
+        if crate::map::house_lift::apply_newgrf_house_animation_callback_result(
+            &mut state.map,
+            &mut state.active_house_animations,
+            coord,
+            result,
+        ) {
+            state.runtime.landscape_tile_dirty.push(coord);
+        }
+    }
+}
+
 pub(super) fn grow_towns(state: &mut GameState, tick: u64) {
+    let mut initial_newgrf_house_bases = Vec::new();
     let dirty = town::grow_town_if_served_with_runtime_ctx(
         &mut state.map,
         &state.industries,
@@ -1089,7 +1143,11 @@ pub(super) fn grow_towns(state: &mut GameState, tick: u64) {
         &state.house_overrides,
         &state.bridge_spec_catalog,
         &mut state.random,
+        &mut initial_newgrf_house_bases,
     );
+    for base in initial_newgrf_house_bases {
+        trigger_initial_newgrf_house_construction_stage_changed(state, base);
+    }
     for &coord in &dirty {
         if state
             .map
@@ -1211,6 +1269,101 @@ mod tests {
             0,
         )
         .with_instance_id(instance_id)
+    }
+
+    #[test]
+    fn newgrf_house_initial_cb1c_uses_first_call_per_footprint_tile() {
+        let base = TileCoord::new(2, 2);
+        let east = TileCoord::new(3, 2);
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let mut state = GameState::new(6, 5);
+        for (coord, house_id) in [(base, id), (east, id + 1)] {
+            state
+                .map
+                .set_completed_house(coord, house_id, 0)
+                .expect("NewGRF footprint inside map");
+            state
+                .map
+                .set_house_town_id(coord, 7)
+                .expect("town id on NewGRF footprint");
+        }
+        state.towns.push(crate::town::Town {
+            id: 7,
+            pos: base,
+            ..Default::default()
+        });
+
+        let callback = crate::newgrf_sprites::Action2VarEntry {
+            first: crate::newgrf_sprites::Action2VarTerm {
+                // `param2` se publica como variable 18: el primer callback
+                // debe devolver el frame 1, no el 0 de un rollover normal.
+                variable: 0x18,
+                param: None,
+                adjust: crate::newgrf_sprites::Action2VarAdjust {
+                    and_mask: u32::from(u8::MAX),
+                    ..Default::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        };
+        let mut runtime = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        runtime.assigns.extend([
+            crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            },
+            crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 1,
+                set_id: 1,
+            },
+        ]);
+        runtime.action2_var.insert(0, callback.clone());
+        runtime.action2_var.insert(1, callback);
+        let make_def = |house_id, local_id, building_flags| crate::house_spec::HouseSpecDef {
+            id: house_id,
+            local_id,
+            subst_id: 0,
+            building_flags,
+            min_year: 0,
+            max_year: crate::house_spec::HOUSE_YEAR_MAX,
+            population: 0,
+            mail_generation: 0,
+            availability: crate::house_spec::DEFAULT_HOUSE_AVAILABILITY,
+            probability: crate::house_spec::DEFAULT_HOUSE_PROBABILITY,
+            processing_time: 0,
+            extra_flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            override_id: None,
+            callback_mask:
+                crate::house_spec::HOUSE_CALLBACK_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED_MASK,
+            name: "initial-cb1c".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: local_id,
+            newgrf_runtime: Some(Box::new(runtime.clone())),
+        };
+        state.house_spec_catalog.extend([
+            make_def(id, 0, crate::house_spec::BUILDING_FLAG_SIZE_2X1),
+            make_def(id + 1, 1, 0),
+        ]);
+        state.random = Randomizer::new(42);
+        let mut expected_random = state.random;
+        let _north_callback_random = expected_random.next();
+        let _east_callback_random = expected_random.next();
+
+        trigger_initial_newgrf_house_construction_stage_changed(&mut state, base);
+
+        assert_eq!(state.random, expected_random);
+        assert_eq!(state.map.get(base).expect("north house").m7, 1);
+        assert_eq!(state.map.get(east).expect("east house").m7, 1);
+        assert_eq!(state.active_house_animations, vec![base, east]);
+        assert!(state.runtime.landscape_tile_dirty.contains(&base));
+        assert!(state.runtime.landscape_tile_dirty.contains(&east));
     }
 
     #[test]

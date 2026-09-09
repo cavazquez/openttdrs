@@ -1520,9 +1520,9 @@ pub fn grow_town_if_served_with_ctx(
     )
 }
 
-/// Variante de runtime que conecta el walker vanilla con el RNG global de la
-/// partida. El contexto `NewGRF` sigue por la ruta existente hasta que sus
-/// callbacks de construcción participen en el mismo stream nativo.
+/// Variante de runtime que conecta el walker con el RNG global de la partida.
+/// Las bases de casas `NewGRF` recién materializadas se devuelven por separado
+/// para que el tick dispare CB1C inicial en el mismo stream global.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn grow_town_if_served_with_runtime_ctx(
     map: &mut Map,
@@ -1537,11 +1537,13 @@ pub(crate) fn grow_town_if_served_with_runtime_ctx(
     house_overrides: &[u16],
     bridge_spec_catalog: &[crate::bridge_spec::BridgeSpecDef],
     rng: &mut Randomizer,
+    initial_newgrf_house_bases: &mut Vec<TileCoord>,
 ) -> Vec<TileCoord> {
     let mut runtime = TownGrowthRuntimeContext {
         snow_line_height,
         bridge_spec_catalog,
         rng,
+        initial_newgrf_house_bases,
     };
     grow_town_if_served_with_ctx_inner(
         map,
@@ -1561,6 +1563,7 @@ struct TownGrowthRuntimeContext<'a> {
     snow_line_height: u8,
     bridge_spec_catalog: &'a [crate::bridge_spec::BridgeSpecDef],
     rng: &'a mut Randomizer,
+    initial_newgrf_house_bases: &'a mut Vec<TileCoord>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1697,7 +1700,7 @@ fn try_expand_growing_town_with_ctx_inner(
     calendar_year: u32,
     house_catalog: &[crate::house_spec::HouseSpecDef],
     house_overrides: &[u16],
-    runtime: Option<&mut TownGrowthRuntimeContext<'_>>,
+    mut runtime: Option<&mut TownGrowthRuntimeContext<'_>>,
     dirty: &mut Vec<TileCoord>,
 ) -> bool {
     let before_houses = town.num_houses;
@@ -1716,7 +1719,7 @@ fn try_expand_growing_town_with_ctx_inner(
             crate::town_expand::expand_town_physically_with_ctx(map, town, tick, ctx),
             false,
         )
-    } else if let Some(runtime) = runtime {
+    } else if let Some(runtime) = runtime.as_deref_mut() {
         (
             crate::world_gen::grow_vanilla_town_once_with_rng(
                 map,
@@ -1743,6 +1746,14 @@ fn try_expand_growing_town_with_ctx_inner(
             false,
         )
     };
+    if has_newgrf_houses && let Some(runtime) = runtime {
+        collect_initial_newgrf_house_bases(
+            map,
+            house_catalog,
+            &placed,
+            runtime.initial_newgrf_house_bases,
+        );
+    }
     if placed.is_empty() {
         return false;
     }
@@ -1755,6 +1766,27 @@ fn try_expand_growing_town_with_ctx_inner(
     }
     dirty.extend(placed);
     true
+}
+
+/// Conserva las bases recién materializadas para disparar CB1C inicial en el
+/// tick que todavía posee el RNG global y la cola `ANIT` de la partida.
+fn collect_initial_newgrf_house_bases(
+    map: &Map,
+    house_catalog: &[crate::house_spec::HouseSpecDef],
+    placed: &[TileCoord],
+    output: &mut Vec<TileCoord>,
+) {
+    for &coord in placed {
+        let Some(tile) = map.get(coord) else {
+            continue;
+        };
+        let house_id = tile.m8 & 0x0FFF;
+        if crate::house_spec::house_spec_def(house_catalog, house_id)
+            .is_some_and(|def| def.from_newgrf)
+        {
+            output.push(coord);
+        }
+    }
 }
 
 /// Incrementa la edad de todas las casas completadas (`IncrementHouseAge` anual).
@@ -2267,6 +2299,7 @@ mod tests {
             state: [3_488_465_418, 1_441_958_355],
         };
         let before = rng.state;
+        let mut initial_newgrf_house_bases = Vec::new();
 
         let dirty = grow_town_if_served_with_runtime_ctx(
             &mut map,
@@ -2281,6 +2314,7 @@ mod tests {
             &[],
             &crate::bridge_spec::vanilla_bridge_spec_catalog(),
             &mut rng,
+            &mut initial_newgrf_house_bases,
         );
 
         assert_eq!(dirty, vec![town_pos]);
@@ -2289,6 +2323,49 @@ mod tests {
         assert_eq!(towns[0].population, 100, "una calle no añade población");
         assert_eq!(towns[0].num_houses, 22);
         assert_eq!(towns[0].grow_counter, 70);
+        assert!(initial_newgrf_house_bases.is_empty());
+    }
+
+    #[test]
+    fn newgrf_house_base_is_reported_for_initial_cb1c() {
+        let vanilla = TileCoord::new(1, 1);
+        let newgrf = TileCoord::new(2, 1);
+        let house_id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let mut map = Map::new_flat(4, 3, 0);
+        map.set_completed_house(vanilla, 0, 0)
+            .expect("vanilla house inside map");
+        map.set_completed_house(newgrf, house_id, 0)
+            .expect("NewGRF house inside map");
+        let catalog = [crate::house_spec::HouseSpecDef {
+            id: house_id,
+            local_id: 0,
+            subst_id: 0,
+            building_flags: crate::house_spec::BUILDING_FLAG_SIZE_1X1,
+            min_year: 0,
+            max_year: crate::house_spec::HOUSE_YEAR_MAX,
+            population: 1,
+            mail_generation: 0,
+            availability: crate::house_spec::DEFAULT_HOUSE_AVAILABILITY,
+            probability: 1,
+            processing_time: 0,
+            extra_flags: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            override_id: None,
+            callback_mask: 0,
+            name: "runtime-newgrf-growth".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        }];
+        let mut reported = Vec::new();
+
+        collect_initial_newgrf_house_bases(&map, &catalog, &[vanilla, newgrf], &mut reported);
+
+        assert_eq!(reported, vec![newgrf]);
     }
 
     #[test]

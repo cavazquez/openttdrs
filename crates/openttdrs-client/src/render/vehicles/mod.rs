@@ -1392,7 +1392,7 @@ mod tests {
             .image
             .clone();
         assert_ne!(head_image, trailer_image);
-        for child in head_children {
+        for &child in &head_children {
             assert_eq!(
                 *world.entity(child).get::<Visibility>().expect("head child"),
                 Visibility::Visible
@@ -1437,6 +1437,17 @@ mod tests {
             "el child del trailer debe usar la misma pose discreta que su parent"
         );
 
+        world.clear_trackers();
+        let stable_parent_sprite_change = world
+            .entity(head_parent)
+            .get_ref::<Sprite>()
+            .expect("head sprite")
+            .last_changed();
+        let stable_stack_sprite_change = world
+            .entity(head_children[0])
+            .get_ref::<Sprite>()
+            .expect("head stack sprite")
+            .last_changed();
         world.run_system_once(update_vehicles).unwrap();
         assert_eq!(
             world
@@ -1444,6 +1455,24 @@ mod tests {
                 .resolution_count(),
             4,
             "la compartición es temporal: una vez por parent en cada frame"
+        );
+        assert_eq!(
+            world
+                .entity(head_parent)
+                .get_ref::<Sprite>()
+                .expect("head sprite estable")
+                .last_changed(),
+            stable_parent_sprite_change,
+            "un parent estable no debe volver a invalidar su Sprite"
+        );
+        assert_eq!(
+            world
+                .entity(head_children[0])
+                .get_ref::<Sprite>()
+                .expect("head stack sprite estable")
+                .last_changed(),
+            stable_stack_sprite_change,
+            "un child SpriteStack estable no debe volver a invalidar el renderer"
         );
     }
 

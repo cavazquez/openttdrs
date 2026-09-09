@@ -120,6 +120,22 @@ fn set_vehicle_translation_if_changed(
     }
 }
 
+/// Evita propagar un cambio de sprite al renderer cuando la resolución de la
+/// capa ya produjo exactamente el mismo asset y tint. Esto importa también
+/// para children: aunque no sean parents del sorter, Bevy los extrae de nuevo
+/// cuando un `Sprite` queda marcado como cambiado.
+fn set_sprite_image_if_changed(sprite: &mut Mut<Sprite>, image: Handle<Image>) {
+    if sprite.image != image {
+        sprite.image = image;
+    }
+}
+
+fn set_sprite_color_if_changed(sprite: &mut Mut<Sprite>, color: Color) {
+    if sprite.color != color {
+        sprite.color = color;
+    }
+}
+
 #[must_use]
 fn aircraft_rotor_frame(v: &Vehicle, tick: u64) -> usize {
     if !v.running || v.awaiting_load_window || v.cur_speed == 0 {
@@ -292,13 +308,8 @@ pub(crate) fn update_vehicles(
             .unwrap_or_else(|| {
                 trucks.for_vehicle(v, pose, Some(&company), Some(vehicle_owner_colour(&sim, v)))
             });
-        if sprite.image != image {
-            sprite.image = image;
-        }
-        let tint = vehicle_tint(v);
-        if sprite.color != tint {
-            sprite.color = tint;
-        }
+        set_sprite_image_if_changed(&mut sprite, image);
+        set_sprite_color_if_changed(&mut sprite, vehicle_tint(v));
         if super::vehicle_uses_newgrf_stack(&sim, v) {
             stack_layers_by_parent.insert(
                 entity,
@@ -390,13 +401,8 @@ pub(crate) fn update_vehicles(
                     Some(vehicle_owner_colour(&sim, unit)),
                 )
             });
-        if sprite.image != image {
-            sprite.image = image;
-        }
-        let tint = vehicle_tint(unit);
-        if sprite.color != tint {
-            sprite.color = tint;
-        }
+        set_sprite_image_if_changed(&mut sprite, image);
+        set_sprite_color_if_changed(&mut sprite, vehicle_tint(unit));
         if super::vehicle_uses_newgrf_stack(&sim, unit) {
             stack_layers_by_parent.insert(
                 entity,
@@ -447,8 +453,8 @@ pub(crate) fn update_vehicles(
         let source_depth = vehicle_source_depth(v, &sim.state.map, pose, pos3);
         pos3.z = source_depth;
         set_vehicle_translation_if_changed(&mut transform, pos3, true);
-        sprite.image = layer_data.handle.clone();
-        sprite.color = vehicle_tint(v);
+        set_sprite_image_if_changed(&mut sprite, layer_data.handle.clone());
+        set_sprite_color_if_changed(&mut sprite, vehicle_tint(v));
         child.set_if_neq(ViewportSortableChild {
             parent: child.parent,
             source_depth,
@@ -484,7 +490,7 @@ pub(crate) fn update_vehicles(
                 source_depth,
             });
         }
-        sprite.image = trucks.for_vehicle(v, pose, None, None);
+        set_sprite_image_if_changed(&mut sprite, trucks.for_vehicle(v, pose, None, None));
     }
 
     for (rotor, mut transform, mut sprite, mut visibility, child) in &mut rotors {
@@ -515,7 +521,7 @@ pub(crate) fn update_vehicles(
                 source_depth,
             });
         }
-        sprite.image = trucks.aircraft_rotor(frame);
+        set_sprite_image_if_changed(&mut sprite, trucks.aircraft_rotor(frame));
     }
 
     for (label, mut transform, mut text, mut color, mut visibility) in &mut labels {
@@ -533,8 +539,14 @@ pub(crate) fn update_vehicles(
         visibility.set_if_neq(Visibility::Visible);
         let pos3 = vehicle_sprite_pos(v, &sim.state.map, sim_clock.tick_alpha);
         set_vehicle_translation_if_changed(&mut transform, vehicle_cargo_label_pos(pos3), false);
-        **text = vehicle_cargo_label(v);
-        color.0 = vehicle_cargo_color(v);
+        let cargo_label = vehicle_cargo_label(v);
+        if text.as_str() != cargo_label {
+            **text = cargo_label;
+        }
+        let cargo_color = vehicle_cargo_color(v);
+        if color.0 != cargo_color {
+            color.0 = cargo_color;
+        }
     }
 }
 

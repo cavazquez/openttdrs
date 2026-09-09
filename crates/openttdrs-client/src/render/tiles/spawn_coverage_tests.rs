@@ -29,7 +29,9 @@ use crate::render::tiles::{
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
     AirportStationAnim, CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid,
-    TileRenderContext, ViewportSortableChild, ViewportSortableParent, viewport_insertion_key,
+    TileRenderContext, ViewportSortableChild, ViewportSortableChildDepthWindows,
+    ViewportSortableParent, sort_viewport_sortable_parents, sync_viewport_sortable_children,
+    viewport_insertion_key,
 };
 use crate::sprites::{
     RAIL_TB_X, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, industry_building_needs_client_anim,
@@ -5494,6 +5496,132 @@ fn rail_station_platform_parents_and_roof_glass_join_global_sort() {
         .expect("roof glass child");
     assert_eq!(glass.0.parent, roof_parent);
     assert_eq!(glass.0.source_depth, glass.2.translation.z);
+}
+
+#[test]
+fn rail_station_roof_glass_stays_between_its_roof_and_next_global_parent() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let roof_tile = TileCoord::new(1, 1);
+    let following_tile = TileCoord::new(2, 1);
+    for coord in [roof_tile, following_tile] {
+        map.set_tile(
+            coord,
+            Tile {
+                kind: TileKind::Station,
+                mapt: 0x50,
+                // Gfx 4: plataforma, borde frontal, techo y vidrio child.
+                m5: 4,
+                m6: 0,
+                ..tile_template()
+            },
+        )
+        .expect("station roof glass");
+    }
+    let expected_glass = assets.rail.get(&1083).expect("roof glass").clone();
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.init_resource::<ViewportSortableChildDepthWindows>();
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                for coord in [roof_tile, following_tile] {
+                    spawn_station_tile(
+                        &mut commands,
+                        &m.0,
+                        m.0.dimensions(),
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(
+                            &m.0,
+                            &g.0,
+                            u32::try_from(coord.x).expect("station x"),
+                            u32::try_from(coord.y).expect("station y"),
+                        ),
+                        &[],
+                        4.0,
+                        true,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                        &[],
+                        None,
+                        &[],
+                        None,
+                        &[],
+                        TEST_CLIMATE,
+                        &[],
+                    );
+                }
+            },
+        )
+        .expect("station roof glass spawn");
+
+    let roof_parent = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .find_map(|(entity, parent)| {
+            (parent.sprite_id == 1079 && parent.insertion_key == viewport_insertion_key(1, 1, 18))
+                .then_some(entity)
+        })
+        .expect("first station roof parent");
+    let glass = world
+        .query::<(Entity, &ViewportSortableChild, &Sprite)>()
+        .iter(&world)
+        .find_map(|(entity, child, sprite)| {
+            (child.parent == roof_parent && expected_glass.matches(sprite)).then_some(entity)
+        })
+        .expect("first station roof glass child");
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(
+        (
+            sort_viewport_sortable_parents,
+            sync_viewport_sortable_children,
+        )
+            .chain(),
+    );
+    schedule.run(&mut world);
+
+    let mut sorted_parents: Vec<_> = world
+        .query::<(Entity, &ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .map(|(entity, parent, transform)| (entity, parent.sprite_id, transform.translation.z))
+        .collect();
+    sorted_parents.sort_by(|left, right| left.2.total_cmp(&right.2));
+    let roof_index = sorted_parents
+        .iter()
+        .position(|(entity, _, _)| *entity == roof_parent)
+        .expect("sorted roof parent");
+    let (_, next_sprite, next_depth) = sorted_parents
+        .get(roof_index + 1)
+        .copied()
+        .expect("a following global parent after the roof");
+    let roof_depth = sorted_parents[roof_index].2;
+    let glass_depth = world
+        .entity(glass)
+        .get::<Transform>()
+        .expect("roof glass transform")
+        .translation
+        .z;
+    assert!(
+        roof_depth < glass_depth && glass_depth < next_depth,
+        "el vidrio 1083 debe quedar entre su techo 1079 y el siguiente parent global {next_sprite}; got {roof_depth}, {glass_depth}, {next_depth}"
+    );
+    assert!(
+        expected_glass.matches(
+            world
+                .entity(glass)
+                .get::<Sprite>()
+                .expect("roof glass sprite"),
+        ),
+        "el sorter sólo puede mover profundidad; no debe sustituir el sprite de vidrio"
+    );
 }
 
 #[test]

@@ -355,11 +355,24 @@ fn tile_loop_house(
     else {
         return;
     };
-    // `NewHouseTileLoop` (CB21/CB22) may remove or replace a NewGRF house
-    // before construction. Until that callback has a stateful generation
-    // context, leaving the tile untouched is safer than consuming RNG or
-    // marking it completed with vanilla semantics.
+    // `NewHouseTileLoop` se ejecuta antes de la construcción. Sus callbacks
+    // todavía necesitan un contexto runtime con estado, pero su temporizador
+    // inicial no: mientras `processing_time` sea positivo OpenTTD sólo lo
+    // decrementa, marca la tesela dirty y retorna sin consumir RNG. Portar
+    // esta rama aislada evita congelar esas casas sin inventar el consumo de
+    // aleatorización, animación o CB21 que sigue pendiente.
     if house_id >= crate::house_spec::NEW_HOUSE_OFFSET {
+        let processing_time = tile.m6 >> 2;
+        if processing_time != 0 {
+            let mut updated = tile;
+            // `Get/SetHouseProcessingTime` ocupa los seis bits altos de
+            // MAPE. Los dos bajos son `AnimatedTileState`, por lo que deben
+            // sobrevivir al decremento tal como en el mapa nativo.
+            updated.m6 = (tile.m6 & 0x03) | ((processing_time - 1) << 2);
+            if state.map.set_tile(coord, updated).is_ok() {
+                state.runtime.landscape_tile_dirty.push(coord);
+            }
+        }
         return;
     }
 
@@ -1071,6 +1084,158 @@ mod tests {
         tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn protected_animated_house_still_uses_lift_rng_but_skips_rebuild() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let coord = TileCoord::new(1, 0);
+        let house = HouseSpec::get(4).expect("Large Office vanilla");
+        map.set_completed_house(coord, house.id, u8::MAX)
+            .expect("office inside map");
+        map.set_house_town_id(coord, 7)
+            .expect("office town attribution");
+        let mut protected = map.get(coord).expect("office tile");
+        protected.m3 |= 0x20;
+        map.set_tile(coord, protected).expect("protect office");
+
+        let mut state = GameState::from_map(map);
+        state.towns.push(crate::town::Town {
+            id: 7,
+            pos: coord,
+            population: u32::from(house.population),
+            num_houses: 1,
+            is_growing: true,
+            time_until_rebuild: 1,
+            ..Default::default()
+        });
+        // La primera palabra es cero: Chance16(1, 2) activa el ascensor.
+        let mut actual = Randomizer { state: [8, 0] };
+        let mut expected = actual;
+        assert!(expected.chance16(1, 2));
+        let _ = expected.next(); // `r = Random()`; tile 1 no entra en cargo en tick 0.
+        let current = state.map.get(coord).expect("protected office");
+
+        {
+            let mut generation_rng = Some(&mut actual);
+            tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
+        }
+
+        assert_eq!(actual, expected);
+        assert_eq!(state.active_house_lifts, vec![coord]);
+        assert_eq!(state.towns[0].time_until_rebuild, 1);
+        assert_eq!(state.towns[0].population, u32::from(house.population));
+        assert_eq!(state.towns[0].num_houses, 1);
+        let after = state.map.get(coord).expect("protected office after loop");
+        assert_eq!(after.kind, TileKind::House);
+        assert_ne!(after.m3 & 0x20, 0, "protection survives the lift path");
+    }
+
+    #[test]
+    fn completed_multitile_house_consumes_rng_per_part_but_rebuilds_once() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let base = TileCoord::new(1, 1);
+        let parts = [
+            (base, 20),
+            (TileCoord::new(1, 2), 21),
+            (TileCoord::new(2, 1), 22),
+            (TileCoord::new(2, 2), 23),
+        ];
+        for &(coord, house_id) in &parts {
+            map.set_completed_house(coord, house_id, u8::MAX)
+                .expect("stadium part inside map");
+        }
+        let stadium = HouseSpec::get(20).expect("stadium north tile");
+        let mut state = GameState::from_map(map);
+        state.towns.push(crate::town::Town {
+            id: 0,
+            pos: base,
+            population: u32::from(stadium.population),
+            num_houses: 1,
+            is_growing: true,
+            time_until_rebuild: 5,
+            ..Default::default()
+        });
+        let mut actual = Randomizer::new(42);
+        let mut expected = actual;
+        // Tick 256 coincide con las piezas de índices 5 y 9: ambas toman
+        // `r` + pasajeros + correo. Las otras dos toman sólo `r`.
+        for _ in 0..8 {
+            let _ = expected.next();
+        }
+
+        for &(coord, _) in &parts {
+            let current = state.map.get(coord).expect("completed stadium part");
+            let mut generation_rng = Some(&mut actual);
+            tile_loop_house(&mut state, 256, coord, current, &mut generation_rng);
+        }
+
+        assert_eq!(actual, expected);
+        assert_eq!(state.towns[0].time_until_rebuild, 4);
+        assert_eq!(state.towns[0].num_houses, 1);
+        for &(coord, _) in &parts {
+            assert_eq!(
+                state.map.get(coord).expect("stadium remains").kind,
+                TileKind::House
+            );
+        }
+    }
+
+    #[test]
+    fn newgrf_house_processing_timer_advances_without_rng_or_vanilla_fallback() {
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let coord = TileCoord::new(1, 0);
+        let mut map = Map::new_flat(2, 2, 0);
+        let mut tile = crate::map::Tile::town_house(
+            crate::map::TownHouseSpec {
+                house_id: id,
+                town_id: 0,
+                random_bits: 0,
+                construction_counter: 0,
+                construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                is_protected: false,
+                processing_time: 3,
+            },
+            0,
+            0,
+        );
+        tile.m6 |= 0x03;
+        map.set_tile(coord, tile).expect("NewGRF house inside map");
+        let mut state = GameState::from_map(map);
+        state
+            .house_spec_catalog
+            .push(crate::house_spec::HouseSpecDef {
+                id,
+                local_id: 0,
+                subst_id: 0,
+                building_flags: crate::house_spec::BUILDING_FLAG_SIZE_1X1,
+                min_year: 0,
+                max_year: crate::house_spec::HOUSE_YEAR_MAX,
+                population: 0,
+                mail_generation: 0,
+                availability: crate::house_spec::DEFAULT_HOUSE_AVAILABILITY,
+                probability: crate::house_spec::DEFAULT_HOUSE_PROBABILITY,
+                override_id: None,
+                callback_mask: 0,
+                name: "processing-timer".into(),
+                from_newgrf: true,
+                grfid: 1,
+                newgrf_views: Vec::new(),
+                newgrf_local_id: 0,
+                newgrf_runtime: None,
+            });
+        let mut actual = Randomizer::new(42);
+        let current = state.map.get(coord).expect("NewGRF house");
+
+        {
+            let mut generation_rng = Some(&mut actual);
+            tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
+        }
+
+        let updated = state.map.get(coord).expect("NewGRF house after timer");
+        assert_eq!(updated.m6, 0x0B, "3 → 2 preserving AnimatedTileState");
+        assert_eq!(actual, Randomizer::new(42));
+        assert!(state.runtime.landscape_tile_dirty.contains(&coord));
     }
 
     #[test]

@@ -1,8 +1,5 @@
 use crate::company::OWNER_NONE_M1;
-use crate::house_spec::{
-    BUILDING_FLAG_SIZE_1X2, BUILDING_FLAG_SIZE_2X1, BUILDING_FLAG_SIZE_2X2,
-    house_footprint_offsets, vanilla_or_newgrf_house,
-};
+use crate::house_spec::{house_footprint_offsets, house_north_part, vanilla_or_newgrf_house};
 use crate::industry_spec::{
     INDUSTRY_BEHAVIOUR_PLANT_ON_BUILD_MASK, IndustrySpecDef, industry_spec_def,
 };
@@ -570,54 +567,6 @@ fn clear_town_house_for_industry(
         }
         update_town_radius(town);
     }
-}
-
-/// Devuelve la tesela norte/base y el `HouseID` de una casa multitile.
-fn house_north_part(
-    map: &crate::map::Map,
-    tile: TileCoord,
-    house_id: u16,
-    catalog: &[crate::house_spec::HouseSpecDef],
-) -> (TileCoord, u16) {
-    if house_id >= 3 {
-        if vanilla_or_newgrf_house(catalog, house_id - 1)
-            .is_some_and(|house| house.building_flags() & BUILDING_FLAG_SIZE_2X1 != 0)
-        {
-            let base = TileCoord::new(tile.x - 1, tile.y);
-            if map.get_kind(base) == Some(TileKind::House) {
-                return (base, house_id - 1);
-            }
-        }
-        if vanilla_or_newgrf_house(catalog, house_id - 1).is_some_and(|house| {
-            house.building_flags() & (BUILDING_FLAG_SIZE_1X2 | BUILDING_FLAG_SIZE_2X2) != 0
-        }) {
-            let base = TileCoord::new(tile.x, tile.y - 1);
-            if map.get_kind(base) == Some(TileKind::House) {
-                return (base, house_id - 1);
-            }
-        }
-        if house_id >= 2
-            && vanilla_or_newgrf_house(catalog, house_id - 2)
-                .is_some_and(|house| house.building_flags() & BUILDING_FLAG_SIZE_2X2 != 0)
-        {
-            let base = TileCoord::new(tile.x - 1, tile.y);
-            if map.get_kind(base) == Some(TileKind::House) {
-                return (base, house_id - 2);
-            }
-        }
-        if house_id >= 3
-            && vanilla_or_newgrf_house(catalog, house_id - 3)
-                .is_some_and(|house| house.building_flags() & BUILDING_FLAG_SIZE_2X2 != 0)
-        {
-            let base = TileCoord::new(tile.x - 1, tile.y - 1);
-            if map.get_kind(base) == Some(TileKind::House) {
-                return (base, house_id - 3);
-            }
-        }
-    }
-    // The current tile is the north/base part for a 1×1 house (or when a
-    // malformed legacy map has an orphaned sub-ID).
-    (tile, house_id)
 }
 
 fn clear_town_house_tile(

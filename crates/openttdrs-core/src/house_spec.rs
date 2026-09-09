@@ -64,6 +64,9 @@ pub const HOUSE_CALLBACK_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED_MASK: u16 
 /// Bit `HouseCallbackMask::AnimationSpeed`: consulta CB `0x20` para elegir
 /// la cadencia de la animación.
 pub const HOUSE_CALLBACK_ANIMATION_SPEED_MASK: u16 = 1 << 6;
+/// Bit `HouseCallbackMask::Destruction`: consulta CB `0x21` periódicamente
+/// para que el GRF pueda retirar una casa municipal.
+pub const HOUSE_CALLBACK_DESTRUCTION_MASK: u16 = 1 << 7;
 /// Bit `HouseCallbackMask::DrawFoundations`: consulta CB `0x150` al dibujar
 /// una casa sobre una pendiente.
 pub const HOUSE_CALLBACK_DRAW_FOUNDATIONS_MASK: u16 = 1 << 11;
@@ -295,6 +298,12 @@ impl HouseSpecDef {
     #[must_use]
     pub const fn has_animation_speed_callback(&self) -> bool {
         self.callback_mask & HOUSE_CALLBACK_ANIMATION_SPEED_MASK != 0
+    }
+
+    /// El callback CB21 decide si el tile loop debe destruir la casa.
+    #[must_use]
+    pub const fn has_destruction_callback(&self) -> bool {
+        self.callback_mask & HOUSE_CALLBACK_DESTRUCTION_MASK != 0
     }
 
     /// CB1A recibe random bits cuando lo declara Action0 `0x19`.
@@ -791,6 +800,58 @@ pub fn house_footprint_offsets(building_flags: u8) -> Vec<(i32, i32)> {
     vec![(0, 0)]
 }
 
+/// Devuelve la tesela norte/base y el `HouseID` de una casa multitile.
+///
+/// `OpenTTD` no guarda un vínculo de huella por tesela: deduce la parte base
+/// inspeccionando los tres IDs inmediatamente anteriores. La comprobación del
+/// mapa evita que un subtile huérfano de una importación parcial apunte fuera
+/// de su casa efectiva.
+#[must_use]
+pub fn house_north_part(
+    map: &Map,
+    tile: TileCoord,
+    house_id: u16,
+    catalog: &[HouseSpecDef],
+) -> (TileCoord, u16) {
+    if house_id >= 3 {
+        if vanilla_or_newgrf_house(catalog, house_id - 1)
+            .is_some_and(|house| house.building_flags() & BUILDING_FLAG_SIZE_2X1 != 0)
+        {
+            let base = TileCoord::new(tile.x - 1, tile.y);
+            if map.get_kind(base) == Some(TileKind::House) {
+                return (base, house_id - 1);
+            }
+        }
+        if vanilla_or_newgrf_house(catalog, house_id - 1).is_some_and(|house| {
+            house.building_flags() & (BUILDING_FLAG_SIZE_1X2 | BUILDING_FLAG_SIZE_2X2) != 0
+        }) {
+            let base = TileCoord::new(tile.x, tile.y - 1);
+            if map.get_kind(base) == Some(TileKind::House) {
+                return (base, house_id - 1);
+            }
+        }
+        if house_id >= 2
+            && vanilla_or_newgrf_house(catalog, house_id - 2)
+                .is_some_and(|house| house.building_flags() & BUILDING_FLAG_SIZE_2X2 != 0)
+        {
+            let base = TileCoord::new(tile.x - 1, tile.y);
+            if map.get_kind(base) == Some(TileKind::House) {
+                return (base, house_id - 2);
+            }
+        }
+        if house_id >= 3
+            && vanilla_or_newgrf_house(catalog, house_id - 3)
+                .is_some_and(|house| house.building_flags() & BUILDING_FLAG_SIZE_2X2 != 0)
+        {
+            let base = TileCoord::new(tile.x - 1, tile.y - 1);
+            if map.get_kind(base) == Some(TileKind::House) {
+                return (base, house_id - 3);
+            }
+        }
+    }
+    (tile, house_id)
+}
+
 /// Id de dibujo vanilla: vistas `NewGRF` → el propio id; si no, `subst_id`; si no, `% 110`.
 #[must_use]
 pub fn resolve_house_draw_id(house_id: u16, catalog: &[HouseSpecDef]) -> u16 {
@@ -1197,6 +1258,9 @@ mod tests {
         assert!(def.has_animation_tile_loop_callback());
         assert!(def.has_animation_construction_stage_changed_callback());
         assert!(def.has_animation_speed_callback());
+        assert!(!def.has_destruction_callback());
+        def.callback_mask |= HOUSE_CALLBACK_DESTRUCTION_MASK;
+        assert!(def.has_destruction_callback());
         assert!(def.animation_next_frame_uses_random_bits());
         assert!(def.animation_tile_loop_is_synchronized());
         assert!(def.animation_loops());

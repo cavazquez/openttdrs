@@ -1212,6 +1212,8 @@ pub const CBID_HOUSE_ANIMATION_TRIGGER_TILE_LOOP: u16 = 0x1B;
 pub const CBID_HOUSE_ANIMATION_TRIGGER_CONSTRUCTION_STAGE_CHANGED: u16 = 0x1C;
 /// Callback casas: elegir la velocidad de animación (`CBID_HOUSE_ANIMATION_SPEED`).
 pub const CBID_HOUSE_ANIMATION_SPEED: u16 = 0x20;
+/// Callback casas: decidir si el tile loop debe destruir la casa (`CBID_HOUSE_DESTRUCTION`).
+pub const CBID_HOUSE_DESTRUCTION: u16 = 0x21;
 /// Callback casas: decidir si se dibuja la fundación (`CBID_HOUSE_DRAW_FOUNDATIONS`).
 pub const CBID_HOUSE_DRAW_FOUNDATIONS: u16 = 0x150;
 /// Callback teselas de industria: decidir si se dibuja la fundación

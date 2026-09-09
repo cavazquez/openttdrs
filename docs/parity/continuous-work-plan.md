@@ -142,9 +142,13 @@ consumo global por tesela nativo. Luego rearma el período, preserva
 `TileLoop_Town` continúa una casa NewGRF en obra: cada rollover de etapa marca
 la subtesela y, si publicó su máscara, CB1C toma una palabra RNG nueva,
 recibe `param2 = 0` y aplica la misma semántica `ChangeAnimationFrame` sobre
-ANIT. La llamada inaugural de `BuildTownHouse` (`param2 = 1`) sigue pendiente.
-#527 permanece abierto para esa llamada inicial, CB21 de destrucción y sonidos
-de animación NewGRF; no amplía el cierre de #512.
+ANIT. CB21 se evalúa después de la randomización/CB1B sin tomar RNG propio:
+`CALLBACK_FAILED` o un byte bajo igual a cero conserva y rearma la casa, mientras un
+resultado no nulo puede llegar desde una subtesela, resuelve la parte norte y
+borra la huella completa, retirando ANIT de inmediato y actualizando población,
+contador/radio e iglesia/estadio del pueblo. La llamada inaugural de
+`BuildTownHouse` (`param2 = 1`) sigue pendiente. #527 permanece abierto para
+esa llamada inicial y sonidos de animación NewGRF; no amplía el cierre de #512.
 La evidencia canónica vive sólo en
 [random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
 

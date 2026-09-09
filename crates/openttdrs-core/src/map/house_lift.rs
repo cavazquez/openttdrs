@@ -154,6 +154,33 @@ pub fn add_house_lift_to_animation(active: &mut Vec<TileCoord>, coord: TileCoord
     add_house_animation_to_queue(active, coord);
 }
 
+/// Equivalente inmediato de `DeleteAnimatedTile(tile, true)` para una casa.
+///
+/// `DoClearSquare` lo invoca antes de sustituir una tesela animable. Quitar
+/// con `swap_remove` replica la compactación sin orden estable de `ANIT`, que
+/// decide qué ascensor/casa recibe cada palabra posterior del RNG global.
+pub fn remove_house_animation_immediately(
+    map: &mut Map,
+    active: &mut Vec<TileCoord>,
+    coord: TileCoord,
+) -> bool {
+    let Some(tile) = map.get(coord) else {
+        return false;
+    };
+    if house_animation_state(tile) == HOUSE_ANIMATION_STATE_NONE {
+        return false;
+    }
+
+    let _ = map.set_tile(
+        coord,
+        with_house_animation_state(tile, HOUSE_ANIMATION_STATE_NONE),
+    );
+    if let Some(index) = active.iter().position(|&entry| entry == coord) {
+        active.swap_remove(index);
+    }
+    true
+}
+
 /// Equivalente de `AddAnimatedTile` para un ascensor de casa vanilla.
 ///
 /// Mantiene la posición del vector si el tile estaba `Deleted`: OpenTTD sabe

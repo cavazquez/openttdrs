@@ -2843,7 +2843,7 @@ pub fn apply_house_construction_callback_for_build(
     callback_allows_8bit_boolean(result)
 }
 
-/// Resuelve un callback de animación de casa con el scope runtime completo.
+/// Resuelve un callback de casa con el scope runtime completo.
 ///
 /// El `HouseResolverObject` ve la tesela viva, sus vecinos y los conteos del
 /// mapa, mientras el pueblo asociado aporta el parent scope `7C`. El writeback
@@ -2851,7 +2851,7 @@ pub fn apply_house_construction_callback_for_build(
 /// igual que las demás rutas de callback de casas.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
-pub fn resolve_house_animation_callback_with_world(
+pub fn resolve_house_callback_with_world(
     def: &HouseSpecDef,
     map: &Map,
     towns: &mut [Town],
@@ -2909,6 +2909,37 @@ pub fn resolve_house_animation_callback_with_world(
         writeback_town_persistent_registers(&mut towns[town_index], def.grfid, &ctx);
     }
     result
+}
+
+/// Alias de compatibilidad para los callbacks de animación de casas.
+///
+/// Los parámetros ya eran genéricos desde la primera versión de la API; el
+/// resolver también se usa ahora para CB21 de destrucción, cuyo scope es el
+/// mismo. Se conserva este nombre público para no romper consumidores.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_house_animation_callback_with_world(
+    def: &HouseSpecDef,
+    map: &Map,
+    towns: &mut [Town],
+    house_catalog: &[HouseSpecDef],
+    climate: crate::Climate,
+    coord: TileCoord,
+    callback: u16,
+    param1: u32,
+    param2: u32,
+) -> u16 {
+    resolve_house_callback_with_world(
+        def,
+        map,
+        towns,
+        house_catalog,
+        climate,
+        coord,
+        callback,
+        param1,
+        param2,
+    )
 }
 
 /// Convierte un resultado callback de 15 bits al entero con signo de `OpenTTD`.

@@ -358,8 +358,8 @@ fn tile_loop_house(
     // `NewHouseTileLoop` se ejecuta antes de la construcción. Mientras
     // `processing_time` sea positivo sólo lo decrementa y marca la tesela
     // dirty: ese timer no consume RNG y `TileLoop_Town` continúa con la obra.
-    // Al agotarse ejecuta la aleatorización/callbacks y vuelve a programar el
-    // período; el rearme no depende de esos callbacks y preserva la cadencia.
+    // Al agotarse ejecuta la aleatorización/callbacks. CB21 puede borrar la
+    // casa antes del rearme; de otro modo se vuelve a programar el período.
     if house_id >= crate::house_spec::NEW_HOUSE_OFFSET {
         let building_flags = crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id)
             .map_or(0, |def| def.building_flags);
@@ -377,6 +377,11 @@ fn tile_loop_house(
             if let Some(rng) = generation_rng.as_deref_mut() {
                 advance_newgrf_house_tile_loop_randomisation(state, coord, building_flags, rng);
                 trigger_newgrf_house_tile_loop_animations(state, coord, building_flags, rng);
+            }
+            if destroy_newgrf_house_if_requested(state, coord, house_id) {
+                // `NewHouseTileLoop` devuelve false después de `ClearTownHouse`:
+                // no rearma el timer ni deja que `TileLoop_Town` avance obra.
+                return;
             }
             let next_processing_time =
                 crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id)
@@ -659,6 +664,131 @@ fn trigger_newgrf_house_construction_stage_changed_animation(
     ) {
         state.runtime.landscape_tile_dirty.push(coord);
     }
+}
+
+/// Ejecuta CB21 después de la randomización/CB1B de `NewHouseTileLoop`.
+///
+/// A diferencia de los callbacks de animación, esta decisión no toma una
+/// palabra RNG. `CALLBACK_FAILED` y el cero bajo conservan la casa; un byte
+/// bajo no nulo delega el borrado atómico a `ClearTownHouse`.
+fn destroy_newgrf_house_if_requested(
+    state: &mut GameState,
+    coord: TileCoord,
+    house_id: u16,
+) -> bool {
+    let Some(def) = crate::house_spec::house_spec_def(&state.house_spec_catalog, house_id) else {
+        return false;
+    };
+    if !def.has_destruction_callback() {
+        return false;
+    }
+
+    let result = crate::newgrf_callback::resolve_house_callback_with_world(
+        def,
+        &state.map,
+        &mut state.towns,
+        &state.house_spec_catalog,
+        state.climate,
+        coord,
+        crate::newgrf_sprites::CBID_HOUSE_DESTRUCTION,
+        0,
+        0,
+    );
+    if result == crate::newgrf_sprites::CALLBACK_FAILED || result.to_le_bytes()[0] == 0 {
+        return false;
+    }
+
+    clear_newgrf_house_for_destruction(state, coord)
+}
+
+/// Port de `ClearTownHouse` para la ruta CB21.
+///
+/// El callback puede dispararse desde cualquier subtile; `GetHouseNorthPart`
+/// encuentra la parte base con los IDs consecutivos antes de borrar la huella
+/// completa. La validación previa mantiene la operación atómica para SAVs
+/// parciales. Cada `DoClearSquare` retira su entrada ANIT con `swap_remove`
+/// antes de sustituir la tesela, igual que el runtime nativo.
+fn clear_newgrf_house_for_destruction(state: &mut GameState, source: TileCoord) -> bool {
+    let Some(source_tile) = state.map.get(source) else {
+        return false;
+    };
+    if source_tile.kind != TileKind::House {
+        return false;
+    }
+
+    let source_id = source_tile.m8 & 0x0FFF;
+    let (base, base_id) = crate::house_spec::house_north_part(
+        &state.map,
+        source,
+        source_id,
+        &state.house_spec_catalog,
+    );
+    let Some(base_tile) = state
+        .map
+        .get(base)
+        .filter(|tile| tile.kind == TileKind::House)
+    else {
+        return false;
+    };
+    let Some(base_def) = crate::house_spec::house_spec_def(&state.house_spec_catalog, base_id)
+    else {
+        return false;
+    };
+    let building_flags = base_def.building_flags;
+    let population = base_def.population;
+    let parts: Vec<_> = crate::house_spec::house_footprint_offsets(building_flags)
+        .into_iter()
+        .map(|(dx, dy)| TileCoord::new(base.x + dx, base.y + dy))
+        .collect();
+    if parts.is_empty()
+        || parts.iter().enumerate().any(|(offset, &part)| {
+            let expected_id = base_id.wrapping_add(u16::try_from(offset).unwrap_or(0));
+            !matches!(state.map.get(part), Some(tile) if tile.kind == TileKind::House && (tile.m8 & 0x0FFF) == expected_id)
+        })
+    {
+        return false;
+    }
+    let town_index = newgrf_house_town_index(state, source, source_tile);
+
+    for &part in &parts {
+        let _ = crate::map::remove_house_animation_immediately(
+            &mut state.map,
+            &mut state.active_house_animations,
+            part,
+        );
+        let Some(mut clear) = state.map.get(part) else {
+            return false;
+        };
+        crate::map::clear_neighbour_non_flooding_states(&mut state.map, part);
+        clear.kind = TileKind::Grass;
+        clear.mapt &= 0x0F;
+        clear.m1 = crate::company::OWNER_NONE_M1;
+        clear.m2 = 0;
+        clear.m2_hi = 0;
+        clear.m3 = 0;
+        clear.m3hi = 0;
+        clear.m5 = crate::world_gen::clear_ground_m5(crate::world_gen::CLEAR_GROUND_GRASS, 3);
+        clear.m6 = 0;
+        clear.m7 = 0;
+        clear.m8 = 0;
+        let _ = state.map.set_tile(part, clear);
+    }
+
+    if let Some(index) = town_index {
+        let town = &mut state.towns[index];
+        if base_tile.m3 & 0x80 != 0 {
+            town.population = town.population.saturating_sub(u32::from(population));
+        }
+        town.num_houses = town.num_houses.saturating_sub(1);
+        if building_flags & BUILDING_FLAG_IS_CHURCH != 0 {
+            town.has_church = false;
+        } else if building_flags & BUILDING_FLAG_IS_STADIUM != 0 {
+            town.has_stadium = false;
+        }
+        crate::town::update_town_radius(town);
+    }
+    state.runtime.landscape_tile_dirty.extend(parts);
+    true
 }
 
 /// Port de una llamada a `DoTriggerHouseRandomisation` para una sola tesela.
@@ -1744,6 +1874,167 @@ mod tests {
             ops: Vec::new(),
             ranges: Vec::new(),
             default: 0,
+        }
+    }
+
+    #[test]
+    fn newgrf_house_destruction_callback_from_subtile_clears_footprint_and_anit() {
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let north = TileCoord::new(1, 1);
+        let east = TileCoord::new(2, 1);
+        let survivor = TileCoord::new(4, 1);
+        let mut map = Map::new_flat(6, 3, 0);
+        for (coord, house_id, processing_time) in [(north, id, 9), (east, id + 1, 0)] {
+            map.set_tile(
+                coord,
+                crate::map::Tile::town_house(
+                    crate::map::TownHouseSpec {
+                        house_id,
+                        town_id: 7,
+                        random_bits: 0,
+                        construction_counter: 0,
+                        construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                        is_protected: false,
+                        processing_time,
+                    },
+                    0,
+                    0,
+                ),
+            )
+            .expect("NewGRF footprint inside map");
+        }
+        map.set_completed_house(survivor, id + 2, 0)
+            .expect("independent animated house inside map");
+
+        let base_flags =
+            crate::house_spec::BUILDING_FLAG_SIZE_2X1 | crate::house_spec::BUILDING_FLAG_IS_CHURCH;
+        let mut north_def = newgrf_runtime_house(
+            id,
+            0,
+            base_flags,
+            9,
+            crate::newgrf_sprites::TrainSpriteGraphics::default(),
+        );
+        north_def.population = 23;
+        let mut callback_runtime = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        callback_runtime
+            .assigns
+            .push(crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 1,
+                set_id: 1,
+            });
+        // `var 0C` expone el ID: el resultado no nulo sólo puede provenir de
+        // CB21 en esta visita y no toma una palabra RNG adicional.
+        callback_runtime.action2_var.insert(
+            1,
+            house_animation_callback_entry(0x0C, 0, u32::from(u8::MAX)),
+        );
+        let mut east_def = newgrf_runtime_house(id + 1, 1, 0, 6, callback_runtime);
+        east_def.callback_mask = crate::house_spec::HOUSE_CALLBACK_DESTRUCTION_MASK;
+
+        let mut state = GameState::from_map(map);
+        state.house_spec_catalog.extend([north_def, east_def]);
+        state.towns.push(crate::town::Town {
+            id: 7,
+            pos: north,
+            population: 23,
+            num_houses: 1,
+            has_church: true,
+            ..Default::default()
+        });
+        for coord in [north, east, survivor] {
+            assert!(crate::map::house_lift::activate_newgrf_house_animation(
+                &mut state.map,
+                &mut state.active_house_animations,
+                coord,
+            ));
+        }
+
+        let mut actual = Randomizer::new(42);
+        let mut expected = actual;
+        let _child_tile_loop_random = expected.next();
+        let current = state.map.get(east).expect("callback subtile");
+        let mut generation_rng = Some(&mut actual);
+        tile_loop_house(&mut state, 0, east, current, &mut generation_rng);
+
+        assert_eq!(actual, expected, "CB21 itself does not consume RNG");
+        for part in [north, east] {
+            let cleared = state.map.get(part).expect("cleared footprint tile");
+            assert_eq!(cleared.kind, TileKind::Grass);
+            assert_eq!(cleared.m6, 0, "no timer is rearmed after destruction");
+            assert!(state.runtime.landscape_tile_dirty.contains(&part));
+        }
+        assert_eq!(state.active_house_animations, vec![survivor]);
+        assert_eq!(state.towns[0].population, 0);
+        assert_eq!(state.towns[0].num_houses, 0);
+        assert!(!state.towns[0].has_church);
+    }
+
+    #[test]
+    fn newgrf_house_failed_or_zero_destruction_callback_rearms_without_destroying() {
+        let id = crate::house_spec::NEW_HOUSE_OFFSET;
+        let coord = TileCoord::new(1, 0);
+        let mut failed_runtime = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        failed_runtime
+            .assigns
+            .push(crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            });
+        let mut zero_runtime = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        zero_runtime
+            .assigns
+            .push(crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            });
+        zero_runtime
+            .action2_var
+            .insert(0, house_animation_callback_entry(0x0C, 0, 0));
+
+        for (description, runtime) in [
+            ("callback fallido", failed_runtime),
+            ("resultado cero", zero_runtime),
+        ] {
+            let mut map = Map::new_flat(2, 2, 0);
+            map.set_tile(
+                coord,
+                crate::map::Tile::town_house(
+                    crate::map::TownHouseSpec {
+                        house_id: id,
+                        town_id: 0,
+                        random_bits: 0,
+                        construction_counter: 0,
+                        construction_stage: crate::map::TOWN_HOUSE_COMPLETED,
+                        is_protected: false,
+                        processing_time: 0,
+                    },
+                    0,
+                    0,
+                ),
+            )
+            .expect("NewGRF house inside map");
+            let mut def =
+                newgrf_runtime_house(id, 0, crate::house_spec::BUILDING_FLAG_SIZE_1X1, 4, runtime);
+            def.callback_mask = crate::house_spec::HOUSE_CALLBACK_DESTRUCTION_MASK;
+            let mut state = GameState::from_map(map);
+            state.house_spec_catalog.push(def);
+
+            let mut actual = Randomizer::new(42);
+            let current = state.map.get(coord).expect("NewGRF house");
+            let mut generation_rng = Some(&mut actual);
+            tile_loop_house(&mut state, 0, coord, current, &mut generation_rng);
+
+            let updated = state
+                .map
+                .get(coord)
+                .expect("NewGRF house after non-destructive CB21");
+            assert_eq!(
+                updated.kind,
+                TileKind::House,
+                "{description} conserva la casa"
+            );
+            assert_eq!(updated.m6 >> 2, 4, "{description} rearma el timer");
         }
     }
 

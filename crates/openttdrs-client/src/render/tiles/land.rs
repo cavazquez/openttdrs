@@ -1672,6 +1672,11 @@ pub(crate) fn spawn_industry_tile_with_world(
             }
         }
     }
+    // Los `draw_proc` vanilla se agregan después del edificio mediante
+    // `AddChildSpriteScreen`. Sólo una base plana estática ya tiene aquí un
+    // parent global estable; la rama inclinada sigue siendo hija de su
+    // fundación y se integra en una etapa aparte.
+    let mut draw_proc_parent = None;
     if let Some(s) = entry {
         // La tabla copia tanto las capas como la caja de `M()` de
         // `industry_land.h`. Registrar el contrato antes de convertirlo a
@@ -1808,8 +1813,10 @@ pub(crate) fn spawn_industry_tile_with_world(
                     sprite,
                     Transform::from_translation(pos3),
                 ));
+                let entity_id = entity.id();
                 if let Some(parent) = sortable_parent {
                     entity.insert(parent);
+                    draw_proc_parent = Some(entity_id);
                 }
                 if refinery_fire {
                     entity.insert(crate::render::RefineryFireAnim {
@@ -1826,12 +1833,13 @@ pub(crate) fn spawn_industry_tile_with_world(
     crate::render::spawn_industry_draw_proc_overlays(
         commands,
         assets,
-        ctx,
+        map_width,
         gfx,
         m1,
         m3hi,
         overlay_ctx,
         chunk,
+        draw_proc_parent,
     );
 }
 

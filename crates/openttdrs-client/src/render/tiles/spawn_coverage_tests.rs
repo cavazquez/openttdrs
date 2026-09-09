@@ -5427,6 +5427,157 @@ fn palette_animated_refinery_building_joins_global_sorter() {
 }
 
 #[test]
+fn flat_industry_draw_proc_layers_follow_building_parent() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let coord = TileCoord::new(2, 2);
+    // GFX_TOY_FACTORY: su `draw_proc` emite varios children de pantalla que
+    // cambian con m3hi, mientras el edificio base conserva su prisma M().
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Industry,
+            mapt: 0x80,
+            m5: 143,
+            m1: 0x80,
+            ..tile_template()
+        },
+    )
+    .expect("toy factory tile");
+    let building =
+        crate::sprites::industry_gfx_entry_for_tile(143, 0x80, 0).expect("toy factory entry");
+    let proc = crate::sprites::industry_draw_proc_for_tile(143, 0x80);
+    assert_eq!(proc, 4, "toy factory uses IndustryDrawToyFactory");
+    let expected_layers = crate::sprites::industry_draw_proc_dynamic_layers(proc, 0x80, 0);
+    let expected_slots = usize::from(crate::sprites::industry_draw_proc_layer_slot_count(proc));
+    let (later_frame, later_layers) = (0..=u8::MAX)
+        .map(|frame| {
+            (
+                frame,
+                crate::sprites::industry_draw_proc_dynamic_layers(proc, 0x80, frame),
+            )
+        })
+        .find(|(_, layers)| layers.len() > expected_layers.len())
+        .expect("un frame posterior debe revelar una capa opcional");
+    assert!(
+        !expected_layers.is_empty(),
+        "el frame inicial de fábrica de juguetes debe tener children draw-proc"
+    );
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets.clone()));
+    world.insert_resource(assets);
+    let mut sim_state = GameState::new(8, 8);
+    sim_state
+        .map
+        .set_tile(
+            coord,
+            Tile {
+                kind: TileKind::Industry,
+                mapt: 0x80,
+                m5: 143,
+                m1: 0x80,
+                ..tile_template()
+            },
+        )
+        .expect("toy factory simulation tile");
+    world.insert_resource(crate::state::SimWorld {
+        state: sim_state,
+        loaded_file: false,
+        ottdmap_extras: None,
+    });
+    world
+        .run_system_once(
+            |mut commands: Commands,
+             m: Res<TsMap>,
+             g: Res<TsGrid>,
+             a: Res<TsAssets>,
+             mut company: Local<CompanyColoredSprites>,
+             mut images: Local<Assets<Image>>| {
+                spawn_industry_tile(
+                    &mut commands,
+                    &a.0,
+                    &m.0,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                    &[],
+                    &mut company,
+                    &mut images,
+                    &[],
+                    &openttdrs_core::empty_industry_tile_overrides(),
+                    None,
+                    &[],
+                    None,
+                    &[],
+                );
+            },
+        )
+        .expect("toy factory spawn");
+
+    let mut parents = world.query::<(Entity, &ViewportSortableParent)>();
+    let (parent_entity, parent) = parents
+        .iter(&world)
+        .find(|(_, parent)| parent.sprite_id == building.sprite_id)
+        .expect("toy factory building parent");
+    assert_eq!(parent.insertion_key, viewport_insertion_key(2, 2, 2));
+
+    let initial_visible = {
+        let mut children = world.query::<(&ViewportSortableChild, &Transform, &Visibility)>();
+        let attached: Vec<_> = children.iter(&world).collect();
+        assert_eq!(
+            attached.len(),
+            expected_slots,
+            "cada slot posible de AddChildSpriteScreen debe quedar materializado"
+        );
+        let mut visible = 0;
+        for (child, transform, visibility) in attached {
+            assert_eq!(child.parent, parent_entity);
+            assert_eq!(child.source_depth, transform.translation.z);
+            if *visibility == Visibility::Visible {
+                visible += 1;
+            }
+        }
+        visible
+    };
+    assert_eq!(
+        initial_visible,
+        expected_layers.len(),
+        "los slots ausentes del frame inicial deben quedar ocultos, no omitidos"
+    );
+
+    let mut animated_tile = tile_template();
+    animated_tile.kind = TileKind::Industry;
+    animated_tile.mapt = 0x80;
+    animated_tile.m5 = 143;
+    animated_tile.m1 = 0x80;
+    animated_tile.m3hi = later_frame;
+    world
+        .resource_mut::<crate::state::SimWorld>()
+        .state
+        .map
+        .set_tile(coord, animated_tile)
+        .expect("toy factory later frame");
+    world
+        .run_system_once(crate::render::industry_draw_proc::animate_industry_draw_proc_layers)
+        .expect("draw-proc animation update");
+    let visible_later = world
+        .query::<(&ViewportSortableChild, &Visibility)>()
+        .iter(&world)
+        .filter(|(child, visibility)| {
+            child.parent == parent_entity && **visibility == Visibility::Visible
+        })
+        .count();
+    assert_eq!(
+        visible_later,
+        later_layers.len(),
+        "un slot oculto debe activarse al entrar su capa en el frame vivo"
+    );
+}
+
+#[test]
 fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

@@ -145,7 +145,8 @@ pub use industry::{
 pub use industry_draw_proc::{
     DrawProcLayer, INDUSTRY_DRAW_PROC_SPRITE_IDS, industry_draw_proc,
     industry_draw_proc_anim_frame, industry_draw_proc_dynamic_layers, industry_draw_proc_extended,
-    industry_draw_proc_for_tile,
+    industry_draw_proc_for_tile, industry_draw_proc_layer_for_slot,
+    industry_draw_proc_layer_sample_for_slot, industry_draw_proc_layer_slot_count,
 };
 #[allow(unused_imports)]
 pub use rail::{

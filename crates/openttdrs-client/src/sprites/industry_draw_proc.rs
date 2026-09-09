@@ -49,9 +49,15 @@ pub fn industry_draw_proc_anim_frame(m3hi: u8) -> u8 {
     m3hi
 }
 
-/// Capas extra a dibujar para un `draw_proc` y frame dados.
+/// Capa extra a dibujar para un `draw_proc` y frame dados.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DrawProcLayer {
+    /// Slot semántico estable dentro del `AddChildSpriteScreen` nativo.
+    ///
+    /// Algunas capas aparecen o desaparecen entre frames. Conservar este slot
+    /// evita que, por ejemplo, el sello de la fábrica de juguetes pase a
+    /// ocupar la entidad de arcilla cuando ésta se vuelve visible.
+    pub slot: u8,
     pub sprite_id: u32,
     pub dx: i32,
     pub dy: i32,
@@ -76,17 +82,61 @@ pub fn industry_draw_proc_dynamic_layers(proc: u8, m1: u8, frame: u8) -> Vec<Dra
     }
 }
 
+/// Cantidad máxima de children de pantalla para un `draw_proc`.
+///
+/// Es constante para una tesela aunque el frame actual oculte algunos. El
+/// renderer puede reservar las entidades ocultas y activarlas sin reconstruir
+/// el chunk cuando el procedimiento las vuelva a emitir.
+#[must_use]
+pub const fn industry_draw_proc_layer_slot_count(proc: u8) -> u8 {
+    match proc {
+        1 => 3, // sieve, clouds, pile
+        2 => 2, // shovel, toffee
+        3 => 2, // bubble, spring
+        4 => 4, // clay, robot, stamp, holder
+        5 => 1, // electrical sparks
+        _ => 0,
+    }
+}
+
+/// Capa vigente en un slot semántico del frame actual.
+#[must_use]
+pub fn industry_draw_proc_layer_for_slot(
+    proc: u8,
+    m1: u8,
+    frame: u8,
+    slot: u8,
+) -> Option<DrawProcLayer> {
+    industry_draw_proc_dynamic_layers(proc, m1, frame)
+        .into_iter()
+        .find(|layer| layer.slot == slot)
+}
+
+/// Una muestra del slot para materializarlo oculto si el primer frame no lo
+/// emite. Todos los frames de los cinco procedimientos usan sprites vanilla
+/// precargados, por lo que la muestra conserva atlas y animación de paleta.
+#[must_use]
+pub fn industry_draw_proc_layer_sample_for_slot(
+    proc: u8,
+    m1: u8,
+    slot: u8,
+) -> Option<DrawProcLayer> {
+    (0..=u8::MAX).find_map(|frame| industry_draw_proc_layer_for_slot(proc, m1, frame, slot))
+}
+
 fn sugar_mine_layers(frame: u8) -> Vec<DrawProcLayer> {
     let Some(d) = DRAW_INDUSTRY_SPEC1.get(frame as usize) else {
         return Vec::new();
     };
     let mut out = vec![DrawProcLayer {
+        slot: 0,
         sprite_id: SPR_IT_SUGAR_MINE_SIEVE + u32::from(d.image_1),
         dx: d.x,
         dy: 0,
     }];
     if d.image_2 != 0 {
         out.push(DrawProcLayer {
+            slot: 1,
             sprite_id: SPR_IT_SUGAR_MINE_CLOUDS + u32::from(d.image_2) - 1,
             dx: 8,
             dy: 41,
@@ -96,6 +146,7 @@ fn sugar_mine_layers(frame: u8) -> Vec<DrawProcLayer> {
         let idx = (d.image_3 - 1) as usize;
         if let Some(c) = DRAW_TILE_PROC1.get(idx) {
             out.push(DrawProcLayer {
+                slot: 2,
                 sprite_id: SPR_IT_SUGAR_MINE_PILE + u32::from(d.image_3) - 1,
                 dx: i32::from(c.x),
                 dy: i32::from(c.y),
@@ -118,11 +169,13 @@ fn toffee_quarry_layers(completed: bool, frame: u8) -> Vec<DrawProcLayer> {
     }
     vec![
         DrawProcLayer {
+            slot: 0,
             sprite_id: SPR_IT_TOFFEE_QUARRY_SHOVEL,
             dx: 22 - x_off,
             dy: 24 + x_off,
         },
         DrawProcLayer {
+            slot: 1,
             sprite_id: SPR_IT_TOFFEE_QUARRY_TOFFEE,
             dx: 6,
             dy: 14,
@@ -138,12 +191,14 @@ fn bubble_generator_layers(completed: bool, frame: u8) -> Vec<DrawProcLayer> {
             .copied()
             .unwrap_or(68);
         out.push(DrawProcLayer {
+            slot: 0,
             sprite_id: SPR_IT_BUBBLE_GENERATOR_BUBBLE,
             dx: 5,
             dy: i32::from(dy),
         });
     }
     out.push(DrawProcLayer {
+        slot: 1,
         sprite_id: SPR_IT_BUBBLE_GENERATOR_SPRING,
         dx: 3,
         dy: 67,
@@ -158,6 +213,7 @@ fn toy_factory_layers(frame: u8) -> Vec<DrawProcLayer> {
     let mut out = Vec::with_capacity(4);
     if d.image_1 != TOFFEE_INVALID {
         out.push(DrawProcLayer {
+            slot: 0,
             sprite_id: SPR_IT_TOY_FACTORY_CLAY,
             dx: d.x,
             dy: 96 + i32::from(d.image_1),
@@ -165,17 +221,20 @@ fn toy_factory_layers(frame: u8) -> Vec<DrawProcLayer> {
     }
     if d.image_2 != TOFFEE_INVALID {
         out.push(DrawProcLayer {
+            slot: 1,
             sprite_id: SPR_IT_TOY_FACTORY_ROBOT,
             dx: 16 - i32::from(d.image_2) * 2,
             dy: 100 + i32::from(d.image_2),
         });
     }
     out.push(DrawProcLayer {
+        slot: 2,
         sprite_id: SPR_IT_TOY_FACTORY_STAMP,
         dx: 7,
         dy: i32::from(d.image_3),
     });
     out.push(DrawProcLayer {
+        slot: 3,
         sprite_id: SPR_IT_TOY_FACTORY_STAMP_HOLDER,
         dx: 0,
         dy: 42,
@@ -192,6 +251,7 @@ fn coal_plant_sparks_layers(frame: u8) -> Vec<DrawProcLayer> {
         return Vec::new();
     };
     vec![DrawProcLayer {
+        slot: 0,
         sprite_id: SPR_IT_POWER_PLANT_TRANSFORMERS + u32::from(frame),
         dx: i32::from(c.x),
         dy: i32::from(c.y),
@@ -213,12 +273,38 @@ mod tests {
     fn sparks_only_when_frame_nonzero() {
         assert!(coal_plant_sparks_layers(0).is_empty());
         assert_eq!(coal_plant_sparks_layers(3).len(), 1);
+        assert_eq!(industry_draw_proc_layer_slot_count(5), 1);
+        assert!(industry_draw_proc_layer_for_slot(5, 0x80, 0, 0).is_none());
+        assert!(industry_draw_proc_layer_sample_for_slot(5, 0x80, 0).is_some());
     }
 
     #[test]
     fn bubble_spring_always_present() {
         let layers = bubble_generator_layers(false, 0);
         assert_eq!(layers.len(), 1);
+        assert_eq!(layers[0].slot, 1);
         assert_eq!(layers[0].sprite_id, SPR_IT_BUBBLE_GENERATOR_SPRING);
+    }
+
+    #[test]
+    fn toy_factory_optional_layers_keep_stable_slots() {
+        let proc = 4;
+        assert_eq!(industry_draw_proc_layer_slot_count(proc), 4);
+        let mut seen = [false; 4];
+        for frame in 0..=u8::MAX {
+            for layer in industry_draw_proc_dynamic_layers(proc, 0x80, frame) {
+                let slot = usize::from(layer.slot);
+                assert!(slot < seen.len());
+                assert_eq!(
+                    industry_draw_proc_layer_for_slot(proc, 0x80, frame, layer.slot),
+                    Some(layer)
+                );
+                seen[slot] = true;
+            }
+        }
+        assert_eq!(seen, [true; 4]);
+        for slot in 0..industry_draw_proc_layer_slot_count(proc) {
+            assert!(industry_draw_proc_layer_sample_for_slot(proc, 0x80, slot).is_some());
+        }
     }
 }

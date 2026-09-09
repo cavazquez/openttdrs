@@ -763,6 +763,88 @@ fn road_stop_vanilla_layers_join_global_sort() {
 }
 
 #[test]
+fn road_depot_vanilla_layers_join_global_sort() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let coord = TileCoord::new(1, 1);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::RoadDepot,
+            mapt: 0x20,
+            m5: 1, // Dirección SE: dos capas TILE_SEQ_LINE (1408/1409).
+            ..tile_template()
+        },
+    )
+    .expect("road depot SE");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_transport_object_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("road depot SE spawn");
+
+    let mut parents: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter_map(|(parent, transform)| {
+            [1408, 1409]
+                .contains(&parent.sprite_id)
+                .then_some((*parent, transform.translation.z))
+        })
+        .collect();
+    parents.sort_by_key(|(parent, _)| parent.insertion_key);
+    assert_eq!(
+        parents
+            .iter()
+            .map(|(parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                1408,
+                ParentSpriteBounds::new(16, 16, 0, 16, 31, 19),
+                viewport_insertion_key(1, 1, 1),
+            ),
+            (
+                1409,
+                ParentSpriteBounds::new(31, 16, 0, 31, 31, 19),
+                viewport_insertion_key(1, 1, 2),
+            ),
+        ],
+        "cada fachada TILE_SEQ_LINE del depósito debe ser un parent global"
+    );
+    assert!(
+        parents
+            .iter()
+            .all(|(parent, depth)| parent.source_depth == *depth),
+        "los parents preservan la profundidad fuente antes del sort global"
+    );
+}
+
+#[test]
 fn drive_through_tram_stop_draws_vanilla_catenary_after_stop_layers() {
     let assets = boot_assets_app();
     let expected_back = assets

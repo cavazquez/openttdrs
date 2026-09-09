@@ -5053,9 +5053,32 @@ fn ship_depot_parent_bounds(
     .bounds
 }
 
-/// Padres BUILD del depósito vial. Aunque las cuatro variantes vanilla de
-/// Kale conservan su inserción local, pasan por el mismo sorter que OpenTTD
-/// para que los bounds —no el índice del PNG— sigan siendo el contrato.
+/// Caja literal que `DrawRailTileSeq` entrega a `AddSortableSpriteToDraw`
+/// para una capa BUILD de depósito vial.
+fn road_depot_parent_bounds(
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layer: &RoadDepotLayerGfx,
+) -> ParentSpriteBounds {
+    tile_seq_parent_sprite(
+        0,
+        0,
+        tx,
+        ty,
+        base_z,
+        layer.dx as i32,
+        layer.dy as i32,
+        layer.dz as i32,
+        layer.sx,
+        layer.sy,
+        20,
+    )
+    .bounds
+}
+
+/// Modelo puro del bloque vanilla para las regresiones de bounds/orden.
+#[cfg(test)]
 fn road_depot_parent_sprites(
     tx: i32,
     ty: i32,
@@ -5066,52 +5089,59 @@ fn road_depot_parent_sprites(
         .iter()
         .enumerate()
         .map(|(index, layer)| {
-            tile_seq_parent_sprite(
+            ParentSprite::sprite(
                 index as u64,
                 layer.sprite_id,
-                tx,
-                ty,
-                base_z,
-                layer.dx as i32,
-                layer.dy as i32,
-                layer.dz as i32,
-                layer.sx,
-                layer.sy,
-                20,
+                road_depot_parent_bounds(tx, ty, base_z, layer),
             )
         })
         .collect()
 }
 
-fn road_depot_sorted_layer_centers(
+/// `DrawFoundation` deja su parent antes de `DrawRailTileSeq`; el suelo y los
+/// overlays intermedios no son parents. El primer ordinal BUILD es por tanto
+/// 1 y conserva libre el de foundation cuando la tesela está inclinada.
+const ROAD_DEPOT_BUILDING_PARENT_ORDINAL: u8 = 1;
+
+/// Emite una capa BUILD vanilla de depósito vial como parent global, usando
+/// tanto la geometría TILE_SEQ como el ancla NFO que ya consume el renderer.
+fn spawn_road_depot_building_parent(
+    commands: &mut Commands,
     ctx: &TileRenderContext,
     base_z: u8,
-    layers: &[RoadDepotLayerGfx],
-) -> Vec<Vec3> {
-    let mut centers: Vec<_> = layers
-        .iter()
-        .map(|layer| {
-            road_depot_build_sprite_center(
-                ctx.iso_pos,
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                layer.z,
-                road_depot_seq_gfx(layer),
-                layer.w,
-                layer.h,
-            )
-        })
-        .collect();
-    let parents = road_depot_parent_sprites(ctx.tx_i32(), ctx.ty_i32(), base_z, layers);
-    let depths: Vec<_> = centers.iter().map(|center| center.z).collect();
-    for (center, depth) in centers
-        .iter_mut()
-        .zip(depths_in_viewport_sort_order(&parents, &depths))
-    {
-        center.z = depth;
-    }
-    centers
+    map_width: u32,
+    layer_index: usize,
+    layer: &RoadDepotLayerGfx,
+    sprite: Sprite,
+) {
+    let position = road_depot_build_sprite_center(
+        ctx.iso_pos,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        base_z,
+        layer.z,
+        road_depot_seq_gfx(layer),
+        layer.w,
+        layer.h,
+    );
+    let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        sprite,
+        Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+        ViewportSortableParent {
+            sprite_id: layer.sprite_id,
+            bounds: road_depot_parent_bounds(ctx.tx_i32(), ctx.ty_i32(), base_z, layer),
+            insertion_key: viewport_insertion_key(
+                ctx.tx,
+                ctx.ty,
+                ROAD_DEPOT_BUILDING_PARENT_ORDINAL
+                    .saturating_add(u8::try_from(layer_index).unwrap_or(u8::MAX)),
+            ),
+            source_depth,
+        },
+    ));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -5153,7 +5183,6 @@ fn spawn_road_depot_tile(
     // Dibujarlo siempre agregaba una vía que el oráculo no emite.
     let foundation_z_delta = (i32::from(base_z) - i32::from(ctx.info.base_z)) * 8;
     let build_layers = road_depot_build_layers(dir);
-    let build_centers = road_depot_sorted_layer_centers(ctx, base_z, build_layers);
     for (layer_i, spec) in build_layers.iter().enumerate() {
         if buildings_hidden() {
             break;
@@ -5180,18 +5209,20 @@ fn spawn_road_depot_tile(
         let Some(image) = image else {
             continue;
         };
-        let center = build_centers[layer_i];
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
+        spawn_road_depot_building_parent(
+            commands,
+            ctx,
+            base_z,
+            map_width,
+            layer_i,
+            spec,
             tint_building_sprite(sprite_from_atlas_or_company_white_colour(
                 company,
                 owner_colour,
                 image,
                 spec.path,
             )),
-            Transform::from_translation(center),
-        ));
+        );
     }
 }
 

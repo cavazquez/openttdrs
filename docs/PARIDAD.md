@@ -1135,6 +1135,23 @@ las otras escalas empeoran levemente. Esta etapa corrige el productor y hace
 visible su contrato al compositor, no declara mejora raster ni paridad global;
 #326 permanece abierto.
 
+Actualización #326-ROAD-DEPOT-GLOBAL (2026-09-09): las fachadas BUILD vanilla
+de depósitos viales (`1408`–`1413`) pasan del orden local a parents reales del
+compositor global. Cada `TILE_SEQ_LINE` conserva su prisma `sx×sy×20`, ancla
+NFO y profundidad fuente; el ordinal 1 deja el 0 a la foundation en una
+pendiente. El suelo sigue siendo child de esa foundation y los overlays
+custom/tranvía no se incorporan a este corte. En Kale `(189,117)`, la traza
+añade dos parents `1408` y dos `1409`, no elimina ninguna tupla candidata y la
+intersección parent exacta normalizada con OpenTTD pasa de 1.385 a 1.389; no
+queda una tupla única nativa de esas fachadas sin contraparte candidata. La
+matriz de píxeles distintos no empeora: `0,25×` 234.056→234.056, `0,5×`
+388.170→388.170, `1×` 93.226→93.207, `2×` 532.855→532.819, `4×`
+750.092→750.086 y `8×` 705.908→705.906. En normal el delta medio varía de
+3,674282 a 3,674402, por lo que la reducción de 19 píxeles no es una
+declaración de paridad ni de mejora general del framebuffer. #326 sigue
+abierto por catenaria/waypoints viales, producers restantes, composición por
+segmentos, clipping, pivotes y framebuffer.
+
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
 `y_offs`). El renderer aplica además `SpriteBounds::origin` y

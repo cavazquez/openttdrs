@@ -261,29 +261,34 @@ fn try_create_passenger_subsidy(state: &mut GameState) -> bool {
 }
 
 fn try_create_town_cargo_subsidy(state: &mut GameState) -> bool {
-    if state.towns.is_empty() {
+    let Some(src_idx) = random_town_pool_index(state) else {
         return false;
-    }
-    let src_idx = (state.random.next() as usize) % state.towns.len();
-    let src = &state.towns[src_idx];
-    if src.population < SUBSIDY_CARGO_MIN_POPULATION {
-        return false;
-    }
+    };
     let cargo = CargoType::Mail;
-    if town_percent_transported(src, cargo) > SUBSIDY_MAX_PCT_TRANSPORTED {
+    let (src_pos, src_population, src_percent_transported) = {
+        let src = &state.towns[src_idx];
+        (
+            src.pos,
+            src.population,
+            town_percent_transported(src, cargo),
+        )
+    };
+    if src_population < SUBSIDY_CARGO_MIN_POPULATION {
+        return false;
+    }
+    if src_percent_transported > SUBSIDY_MAX_PCT_TRANSPORTED {
         return false;
     }
     let dest_is_town = state.random.next() & 1 == 0;
     if dest_is_town {
-        if state.towns.len() < 2 {
+        let Some(dst_idx) = random_town_pool_index(state) else {
             return false;
-        }
-        let dst_idx = (state.random.next() as usize) % state.towns.len();
+        };
         let dst = &state.towns[dst_idx];
-        if dst.pos == src.pos || dst.population < SUBSIDY_CARGO_MIN_POPULATION {
+        if src_idx == dst_idx || dst.population < SUBSIDY_CARGO_MIN_POPULATION {
             return false;
         }
-        if manhattan_distance(src.pos, dst.pos) > SUBSIDY_MAX_DISTANCE {
+        if manhattan_distance(src_pos, dst.pos) > SUBSIDY_MAX_DISTANCE {
             return false;
         }
         return push_subsidy(
@@ -291,11 +296,11 @@ fn try_create_town_cargo_subsidy(state: &mut GameState) -> bool {
             cargo,
             TileCoord::new(0, 0),
             TileCoord::new(0, 0),
-            Some(src.pos),
+            Some(src_pos),
             Some(dst.pos),
         );
     }
-    find_industry_destination_for_cargo(state, cargo, src.pos, Some(src.pos))
+    find_industry_destination_for_cargo(state, cargo, src_pos, Some(src_pos))
 }
 
 fn try_create_industry_subsidy(state: &mut GameState) -> bool {
@@ -324,10 +329,9 @@ fn find_industry_destination_for_cargo(
 ) -> bool {
     let dest_is_town = state.random.next() & 1 == 0;
     if dest_is_town {
-        if state.towns.is_empty() {
+        let Some(dst_idx) = random_town_pool_index(state) else {
             return false;
-        }
-        let dst_idx = (state.random.next() as usize) % state.towns.len();
+        };
         let dst = &state.towns[dst_idx];
         if dst.population < SUBSIDY_CARGO_MIN_POPULATION {
             return false;
@@ -660,6 +664,35 @@ mod tests {
             state.subsidies[0].dest_town_pos,
             Some(state.towns[destination].pos)
         );
+    }
+
+    #[test]
+    fn town_cargo_subsidy_uses_sparse_pool_for_source() {
+        let mut state = GameState::new(32, 32);
+        // El primer `RandomRange(3)` de esta semilla da ordinal cero. La
+        // ciudad 0 está primero en el pool, pero no es la segunda entrada
+        // física que habría elegido el antiguo operador módulo.
+        for (id, x, population) in [
+            (0, 2, SUBSIDY_CARGO_MIN_POPULATION.saturating_sub(1)),
+            (2, 6, SUBSIDY_CARGO_MIN_POPULATION),
+            (1, 10, SUBSIDY_CARGO_MIN_POPULATION),
+        ] {
+            state.towns.push(crate::town::Town {
+                id,
+                pos: TileCoord::new(x, 2),
+                name: format!("T{id}"),
+                population,
+                ..crate::town::Town::default()
+            });
+        }
+        state.random = crate::linkgraph_parity::Randomizer::new(1);
+        let mut expected = state.random;
+        assert_eq!(expected.random_range(3), 0, "ordinal del TownPool");
+
+        assert!(!try_create_town_cargo_subsidy(&mut state));
+
+        assert_eq!(state.random, expected);
+        assert!(state.subsidies.is_empty());
     }
 
     #[test]

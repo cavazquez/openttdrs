@@ -8,6 +8,16 @@ use super::{Map, Tile, TileCoord, TileKind};
 pub const LIFT_MAX_POSITION: u8 = 36;
 const LIFT_DESTINATION_FLOORS: u8 = 7;
 const LIFT_STEPS_PER_FLOOR: u8 = 6;
+/// Bits bajos de `MAPE`/`m6` compartidos con `AnimatedTileState` de OpenTTD.
+///
+/// Una entrada que acaba de llegar a destino no se quita del vector `ANIT` en
+/// el mismo pase: queda `Deleted` hasta el siguiente `AnimateAnimatedTiles`.
+/// Si `TileLoop_Town` la reactiva entre ambos pases, `AddAnimatedTile` vuelve
+/// a marcar el mismo slot como `Animated`, sin moverlo al final del vector.
+const LIFT_ANIMATION_STATE_MASK: u8 = 0x03;
+const LIFT_ANIMATION_STATE_NONE: u8 = 0;
+const LIFT_ANIMATION_STATE_DELETED: u8 = 1;
+const LIFT_ANIMATION_STATE_ACTIVE: u8 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LiftStep {
@@ -29,6 +39,17 @@ pub const fn lift_destination(tile: Tile) -> u8 {
 #[must_use]
 pub const fn lift_position(tile: Tile) -> u8 {
     (tile.m6 >> 2) & 0x3F
+}
+
+#[must_use]
+const fn lift_animation_state(tile: Tile) -> u8 {
+    tile.m6 & LIFT_ANIMATION_STATE_MASK
+}
+
+#[must_use]
+const fn with_lift_animation_state(mut tile: Tile, state: u8) -> Tile {
+    tile.m6 = (tile.m6 & !LIFT_ANIMATION_STATE_MASK) | (state & LIFT_ANIMATION_STATE_MASK);
+    tile
 }
 
 #[must_use]
@@ -94,15 +115,46 @@ fn choose_lift_destination(position: u8, rng: &mut Randomizer) -> u8 {
     }
 }
 
-/// Equivalente urbano de `AddAnimatedTile`.
+/// Inserta una entrada de ascensor ya presente en `ANIT` sin alterar `MAPE`.
 ///
-/// La lista conserva el orden de inserción de OpenTTD. No usar un `HashSet`:
-/// cuando dos ascensores toman destinos en la misma pasada, intercambiarlos
-/// puede alterar qué posición recibe cada palabra del stream global.
+/// La hidratación de un SAV debe conservar el estado de animación original:
+/// una entrada `Deleted` se elimina en el próximo pase, mientras una
+/// `Animated` puede consumir `RandomRange(7)`. La activación en runtime usa
+/// [`activate_house_lift_animation`], que sí replica `AddAnimatedTile`.
 pub fn add_house_lift_to_animation(active: &mut Vec<TileCoord>, coord: TileCoord) {
     if !active.contains(&coord) {
         active.push(coord);
     }
+}
+
+/// Equivalente de `AddAnimatedTile` para un ascensor de casa vanilla.
+///
+/// Mantiene la posición del vector si el tile estaba `Deleted`: OpenTTD sabe
+/// que esa entrada todavía vive en `ANIT` y sólo cambia sus dos bits bajos de
+/// `MAPE` a `Animated`. En un estado válido, `None` no tiene entrada y
+/// `Deleted` sí la tiene; las comprobaciones del vector sólo protegen la
+/// recuperación de un SAV corrupto sin alterar ese contrato normal.
+pub fn activate_house_lift_animation(
+    map: &mut Map,
+    active: &mut Vec<TileCoord>,
+    coord: TileCoord,
+) -> bool {
+    let Some(mut tile) = map.get(coord) else {
+        return false;
+    };
+    if !house_tile_has_lift(tile) {
+        return false;
+    }
+    if lift_animation_state(tile) == LIFT_ANIMATION_STATE_ACTIVE {
+        return false;
+    }
+
+    if !active.contains(&coord) {
+        active.push(coord);
+    }
+    tile = with_lift_animation_state(tile, LIFT_ANIMATION_STATE_ACTIVE);
+    let _ = map.set_tile(coord, tile);
+    true
 }
 
 /// Ejecuta el subconjunto de ascensores de `AnimateAnimatedTiles`.
@@ -118,13 +170,6 @@ pub fn step_house_lifts(
     active: &mut Vec<TileCoord>,
 ) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
-    // `AnimateTile_Town` retorna antes de validar el tipo en tres de cada
-    // cuatro ticks, por lo que una entrada vieja sobrevive hasta la próxima
-    // pasada divisible por cuatro.
-    if tick & 3 != 0 {
-        return dirty;
-    }
-
     let mut index = 0;
     while index < active.len() {
         let coord = active[index];
@@ -134,8 +179,30 @@ pub fn step_house_lifts(
             active.swap_remove(index);
             continue;
         };
-        if !house_tile_has_lift(tile) {
+
+        // `AnimateAnimatedTiles` limpia `Deleted` antes de llamar al draw
+        // proc, incluso en ticks donde `AnimateTile_Town` retorna por la
+        // cadencia de cuatro. Reemplaza el slot con el último elemento igual
+        // que el vector C++ y procesa ese reemplazo en esta misma pasada.
+        if lift_animation_state(tile) != LIFT_ANIMATION_STATE_ACTIVE {
+            tile = with_lift_animation_state(tile, LIFT_ANIMATION_STATE_NONE);
+            let _ = map.set_tile(coord, tile);
             active.swap_remove(index);
+            continue;
+        }
+
+        // El draw proc de una casa sólo valida la spec después de este return.
+        // Una entrada vieja de un tile ya reemplazado queda viva hasta el
+        // próximo tick divisible por cuatro, pero una `Deleted` sí se limpió
+        // arriba en cualquier tick.
+        if tick & 3 != 0 {
+            index += 1;
+            continue;
+        }
+        if !house_tile_has_lift(tile) {
+            tile = with_lift_animation_state(tile, LIFT_ANIMATION_STATE_DELETED);
+            let _ = map.set_tile(coord, tile);
+            index += 1;
             continue;
         }
 
@@ -147,14 +214,13 @@ pub fn step_house_lifts(
         let _ = map.set_tile(coord, tile);
         dirty.push(coord);
         if step == LiftStep::Arrived {
-            // El original marca la entrada para borrar; quitarla ahora evita
-            // una segunda animación local y conserva la semántica observable
-            // de MAP6/MAP7. Una reactivación posterior vuelve a agregarla al
-            // final mediante `AddAnimatedTile`.
-            active.swap_remove(index);
-        } else {
-            index += 1;
+            // `DeleteAnimatedTile` marca `Deleted`; no hace `swap_remove`
+            // hasta el siguiente `AnimateAnimatedTiles`. Así un TileLoop del
+            // mismo tick puede reactivar el slot sin reordenar `ANIT`.
+            tile = with_lift_animation_state(tile, LIFT_ANIMATION_STATE_DELETED);
+            let _ = map.set_tile(coord, tile);
         }
+        index += 1;
     }
     dirty
 }
@@ -199,7 +265,8 @@ mod tests {
         let coord = TileCoord::new(2, 2);
         let mut map = Map::new_flat(8, 8, 0);
         map.set_tile(coord, large_office()).expect("office");
-        let mut active = vec![coord];
+        let mut active = Vec::new();
+        assert!(activate_house_lift_animation(&mut map, &mut active, coord));
         let mut rng = Randomizer::new(1);
         let mut expected = rng;
         // El primer resultado es piso 0, inválido porque ya está allí; el
@@ -218,6 +285,93 @@ mod tests {
     }
 
     #[test]
+    fn arrived_lift_stays_deleted_until_the_next_animation_pass() {
+        let first = TileCoord::new(2, 2);
+        let second = TileCoord::new(5, 5);
+        let mut map = Map::new_flat(8, 8, 0);
+        let first_tile = with_lift_destination(with_lift_position(large_office(), 5), 1);
+        let second_tile = with_lift_destination(with_lift_position(large_office(), 0), 2);
+        map.set_tile(first, first_tile).expect("first office");
+        map.set_tile(second, second_tile).expect("second office");
+        let mut active = Vec::new();
+        assert!(activate_house_lift_animation(&mut map, &mut active, first));
+        assert!(activate_house_lift_animation(&mut map, &mut active, second));
+        let mut rng = Randomizer::new(7);
+
+        let dirty = step_house_lifts(&mut map, 4, &mut rng, &mut active);
+
+        assert_eq!(dirty, vec![first, second]);
+        assert_eq!(active, vec![first, second]);
+        let first_after = map.get(first).expect("first after arrival");
+        assert_eq!(
+            lift_animation_state(first_after),
+            LIFT_ANIMATION_STATE_DELETED
+        );
+        assert!(!lift_has_destination(first_after));
+        assert_eq!(lift_position(first_after), 6);
+        assert_eq!(
+            lift_animation_state(map.get(second).expect("second still active")),
+            LIFT_ANIMATION_STATE_ACTIVE
+        );
+
+        // `AnimateAnimatedTiles` limpia `Deleted` aun cuando
+        // `AnimateTile_Town` retorna por `counter & 3`.
+        let dirty = step_house_lifts(&mut map, 5, &mut rng, &mut active);
+        assert!(dirty.is_empty());
+        assert_eq!(active, vec![second]);
+        assert_eq!(
+            lift_animation_state(map.get(first).expect("first cleanup")),
+            LIFT_ANIMATION_STATE_NONE
+        );
+    }
+
+    #[test]
+    fn reactivating_deleted_lift_preserves_its_anit_slot() {
+        let first = TileCoord::new(2, 2);
+        let second = TileCoord::new(5, 5);
+        let mut map = Map::new_flat(8, 8, 0);
+        map.set_tile(first, large_office()).expect("first office");
+        map.set_tile(second, large_office()).expect("second office");
+        let mut active = Vec::new();
+        assert!(activate_house_lift_animation(&mut map, &mut active, first));
+        assert!(activate_house_lift_animation(&mut map, &mut active, second));
+
+        let mut first_tile = map.get(first).expect("first active");
+        first_tile = with_lift_animation_state(first_tile, LIFT_ANIMATION_STATE_DELETED);
+        map.set_tile(first, first_tile).expect("mark first deleted");
+
+        assert!(activate_house_lift_animation(&mut map, &mut active, first));
+        assert_eq!(active, vec![first, second]);
+        assert_eq!(
+            lift_animation_state(map.get(first).expect("first reactivated")),
+            LIFT_ANIMATION_STATE_ACTIVE
+        );
+        assert!(
+            !activate_house_lift_animation(&mut map, &mut active, first),
+            "AddAnimatedTile no duplica una entrada ya Animated"
+        );
+        assert_eq!(active, vec![first, second]);
+
+        // La próxima pasada debe asignar la primera palabra RNG al slot que
+        // llegó antes, no al que quedaría primero tras un `swap_remove`
+        // prematuro seguido de `push`.
+        let mut rng = Randomizer::new(1);
+        let mut expected = rng;
+        let expected_first = choose_lift_destination(0, &mut expected);
+        let expected_second = choose_lift_destination(0, &mut expected);
+        step_house_lifts(&mut map, 4, &mut rng, &mut active);
+        assert_eq!(
+            lift_destination(map.get(first).expect("first after animate")),
+            expected_first
+        );
+        assert_eq!(
+            lift_destination(map.get(second).expect("second after animate")),
+            expected_second
+        );
+        assert_eq!(rng, expected);
+    }
+
+    #[test]
     fn adding_lift_animation_is_stable_and_deduplicated() {
         let first = TileCoord::new(3, 5);
         let second = TileCoord::new(1, 7);
@@ -227,15 +381,20 @@ mod tests {
         assert_eq!(active, vec![first, second]);
     }
 
-    fn lift_game(order: Vec<TileCoord>) -> GameState {
+    fn lift_game(order: &[TileCoord]) -> GameState {
         let mut state = GameState::new(8, 8);
-        for &coord in &order {
+        for &coord in order {
             state
                 .map
                 .set_tile(coord, large_office())
                 .expect("office inside map");
+            assert!(activate_house_lift_animation(
+                &mut state.map,
+                &mut state.active_house_lifts,
+                coord,
+            ));
         }
-        state.active_house_lifts = order;
+        assert_eq!(state.active_house_lifts, order);
         state.random = Randomizer::new(1);
         state
     }
@@ -260,8 +419,8 @@ mod tests {
         let first = TileCoord::new(2, 2);
         let second = TileCoord::new(5, 5);
         let coords = [first, second];
-        let mut control = lift_game(vec![second, first]);
-        let mut subject = lift_game(vec![second, first]);
+        let mut control = lift_game(&[second, first]);
+        let mut subject = lift_game(&[second, first]);
 
         if save_after_destination_assignment {
             control.step();
@@ -300,8 +459,8 @@ mod tests {
     fn inverse_house_lift_queue_order_is_persisted_and_changes_the_hash() {
         let first = TileCoord::new(2, 2);
         let second = TileCoord::new(5, 5);
-        let forward = lift_game(vec![first, second]);
-        let reverse = lift_game(vec![second, first]);
+        let forward = lift_game(&[first, second]);
+        let reverse = lift_game(&[second, first]);
         assert_ne!(forward.canonical_hash(), reverse.canonical_hash());
 
         let loaded =
@@ -311,7 +470,7 @@ mod tests {
 
     #[test]
     fn legacy_json_without_lift_queue_keeps_rng_and_uses_an_empty_queue() {
-        let state = lift_game(vec![TileCoord::new(2, 2), TileCoord::new(5, 5)]);
+        let state = lift_game(&[TileCoord::new(2, 2), TileCoord::new(5, 5)]);
         let random_before_load = state.random;
         let mut legacy = serde_json::to_value(&state).expect("serialize legacy fixture");
         legacy

@@ -383,7 +383,7 @@ pub use map::{
     action2_eval_ctx_for_industry_tile_with_world_and_cargo_catalog,
     action2_eval_ctx_for_industry_tile_with_world_and_parent,
     action2_eval_ctx_for_industry_tile_with_world_and_parent_and_cargo_catalog,
-    advance_industry_animated_tiles, advance_industry_construction,
+    activate_house_lift_animation, advance_industry_animated_tiles, advance_industry_construction,
     advance_industry_construction_tile_loop_at, advance_industry_tile_animations,
     advance_industry_tile_loop_events, advance_industry_tile_loop_events_from_visits_with_rng,
     advance_industry_tile_randomisation_from_visits_with_catalog,

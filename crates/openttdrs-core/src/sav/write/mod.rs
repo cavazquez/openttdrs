@@ -893,7 +893,16 @@ mod tests {
                 .set_completed_house(coord, 4, 0)
                 .expect("large office inside map");
         }
-        state.active_house_lifts = vec![first, second];
+        assert!(crate::map::activate_house_lift_animation(
+            &mut state.map,
+            &mut state.active_house_lifts,
+            first,
+        ));
+        assert!(crate::map::activate_house_lift_animation(
+            &mut state.map,
+            &mut state.active_house_lifts,
+            second,
+        ));
         let index =
             |coord| crate::map::coord_to_linear_index(coord, 8).expect("coordinate in 8×8 map");
         let original = anit_opaque(&[index(TileCoord::new(0, 0)), index(first), index(second)]);
@@ -923,7 +932,16 @@ mod tests {
                 .set_completed_house(coord, 4, 0)
                 .expect("large office inside map");
         }
-        state.active_house_lifts = vec![second, first];
+        assert!(crate::map::activate_house_lift_animation(
+            &mut state.map,
+            &mut state.active_house_lifts,
+            second,
+        ));
+        assert!(crate::map::activate_house_lift_animation(
+            &mut state.map,
+            &mut state.active_house_lifts,
+            first,
+        ));
         state.random = Randomizer::new(1);
 
         let index =

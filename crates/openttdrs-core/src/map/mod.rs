@@ -28,9 +28,9 @@ pub mod water_flood;
 use binary::{OTTDMAP_FLAG_HAS_M2_HI, OTTDMAP_FORMAT_VERSION_CURRENT};
 pub(crate) use binary::{OTTDMAP_HEADER_LEN_VERSIONED, OTTDMAP_MAGIC_VERSIONED};
 pub use house_lift::{
-    LIFT_MAX_POSITION, LiftStep, add_house_lift_to_animation, advance_house_lift, halt_lift,
-    house_tile_has_lift, lift_destination, lift_has_destination, lift_position, step_house_lifts,
-    with_lift_destination, with_lift_position,
+    LIFT_MAX_POSITION, LiftStep, activate_house_lift_animation, add_house_lift_to_animation,
+    advance_house_lift, halt_lift, house_tile_has_lift, lift_destination, lift_has_destination,
+    lift_position, step_house_lifts, with_lift_destination, with_lift_position,
 };
 pub use index::{
     coord_from_linear_index, coord_to_dense_index, coord_to_linear_index,

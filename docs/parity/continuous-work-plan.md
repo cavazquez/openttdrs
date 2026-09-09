@@ -105,11 +105,13 @@ de `MP_HOUSE` y aplica la cadencia de `larger_town`: con una corrida nativa
 dedicated válida, ciudad 22 alcanza su intento en `1474722` en ambos lados.
 RMAP-164 / #525 elimina el gate duplicado de estación/financiación de
 `TownTickHandler` y conecta el walker vanilla con el RNG global. RMAP-166 /
-#527 elimina la frontera posterior: lista ordenada de ascensores, obra runtime
-sin RNG extra y renovación dentro de `TileLoop_Town` con la misma palabra
-`r`. La corrida dedicated limpia coincide ahora durante **35 jornadas**. #527
-permanece abierto para ampliar la ventana y cubrir huellas/protección/NewGRF;
-no amplía el cierre de #512. La evidencia canónica vive sólo en
+#527 elimina la frontera posterior: la cola ordenada `ANIT` y el ciclo bajo de
+`MAPE` (`None → Animated → Deleted → None`) preservan el slot si un
+`TileLoop_Town` reactiva el ascensor antes del siguiente pase; obra runtime no
+toma RNG extra y la renovación reutiliza la misma palabra `r`. La corrida
+integrada posterior alcanza **360 jornadas** (RMAP-175). #527 permanece abierto
+para ampliar la ventana y cubrir huellas/protección/NewGRF; no amplía el
+cierre de #512. La evidencia canónica vive sólo en
 [random-map-issues.md](random-map-issues.md#rmap-164--atribuir-la-divergencia-de-expansión-urbana-posterior-al-cierre-mensual).
 
 RMAP-167 / #528 restaura `PATS.economy.type` y evita ejecutar la rama diaria
@@ -266,14 +268,14 @@ canónica se mantiene en
 [`random-map-issues.md`](random-map-issues.md#rmap-162--comparar-el-scheduler-industrial-rust-contra-la-traza-diaria-openttd).
 RMAP-163/#524 extiende esa frontera a 23 jornadas y concentra su evidencia
 actualizada en la fila canónica de RMAP-163; RMAP-164/#525 la lleva a 25 y
-RMAP-166/#527 a 35 mediante el tile loop urbano y RMAP-168/#529 extiende la
-misma fixture al alinear el setting de crecimiento persistido; #527 conserva
-su cobertura residual.
+RMAP-166/#527 a 35 mediante el tile loop urbano. RMAP-168/#529 y los cortes
+posteriores extienden la misma fixture hasta 360 jornadas en RMAP-175; #527
+conserva su cobertura residual.
 #510 impide que una ejecución dedicated sin socket se acepte como oracle aunque
 produzca JSONL válida. RMAP-162 cierra instrumentación y regresiones, no afirma
 todavía paridad temporal ni reduce los pendientes de #499, RMAP-056 o #338.
 
-Actualizado el 2026-09-07: RMAP-159/#500, RMAP-160/#501, RMAP-161/#502 y
+Actualizado el 2026-09-09: RMAP-159/#500, RMAP-160/#501, RMAP-161/#502 y
 RMAP-162/#506 son sub-issues cerrados de estado/selección, observación nativa,
 ejecución vanilla e instrumentación diferencial. #507/#515 conservan la carga
 `DATE` incluida la posición LFSR, #510 valida la calidad de la corrida native,
@@ -285,9 +287,9 @@ la cadencia de fábrica con diez `IndustryTick` y #523 corrige el fallback
 `PlantFields` para que `Chance16` no se sustituya por `RandomRange`. #512
 permanece abierto por cobertura runtime pendiente; RMAP-163/#524 ya alineó el
 cierre mensual, RMAP-164/#525 el primer walker posterior y RMAP-166/#527
-alinea 35 jornadas de ascensores/obra/renovación; RMAP-168/#529 elimina la
-siguiente recadencia mensual, pero conserva abierta la ventana larga y las
-variantes urbanas no cubiertas.
+alineó el corte inicial de ascensores/obra/renovación; RMAP-168/#529 y los
+cortes posteriores llevan la fixture integrada a 360 jornadas, pero conserva
+abierta la ventana larga y las variantes urbanas no cubiertas.
 Los
 gates continúan siendo obligatorios y ningún issue padre se considera cerrado
 por esta cobertura.

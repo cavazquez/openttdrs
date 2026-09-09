@@ -9,7 +9,10 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use openttdrs_core::{Command, CompanyId, GameState, MAX_COMPANIES, TileCoord, apply_command};
+use openttdrs_core::{
+    Command, CompanyId, GameState, MAX_COMPANIES, TileCoord, activate_house_lift_animation,
+    apply_command,
+};
 use openttdrs_net::{
     ClientSession, ListenServer, NetError, NetMessage, PROTOCOL_VERSION, SessionEvent,
     SessionTimeouts, apply_session_event, read_message, write_message,
@@ -533,7 +536,16 @@ fn welcome_snapshot_preserves_active_house_lift_trajectory() {
             .set_completed_house(coord, 4, 0)
             .expect("large office inside map");
     }
-    host.active_house_lifts = vec![second, first];
+    assert!(activate_house_lift_animation(
+        &mut host.map,
+        &mut host.active_house_lifts,
+        second,
+    ));
+    assert!(activate_house_lift_animation(
+        &mut host.map,
+        &mut host.active_house_lifts,
+        first,
+    ));
     host.step();
     assert_eq!(host.active_house_lifts, vec![second, first]);
 

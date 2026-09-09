@@ -5016,20 +5016,62 @@ fn newgrf_airport_tile_layout_emits_ground_sortable_parent_and_child() {
         .iter(&world)
         .map(|(child, sprite)| (*child, sprite.image.clone()))
         .collect();
-    let images = world.resource::<Assets<Image>>();
-    let has_rgba = |handle: &Handle<Image>, rgba: &[u8]| {
-        images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba)
-    };
-    assert!(
-        sprites
+    let (ground_handles, parent_component, child_matches) = {
+        let images = world.resource::<Assets<Image>>();
+        let has_rgba = |handle: &Handle<Image>, rgba: &[u8]| {
+            images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba)
+        };
+        let mut ground_handles = Vec::new();
+        for handle in &sprites {
+            if has_rgba(handle, ground.rgba.as_slice()) && !ground_handles.contains(handle) {
+                ground_handles.push(handle.clone());
+            }
+        }
+        let (parent_entity, parent_component) = parent_sprites
             .iter()
-            .any(|handle| has_rgba(handle, [240, 10, 10, 255].repeat(4).as_slice())),
-        "el ground del TileLayout debe reemplazar el fallback"
+            .find_map(|(entity, parent_component, handle)| {
+                (images.get(handle).and_then(|image| image.data.as_deref())
+                    == Some(parent.rgba.as_slice()))
+                .then_some((*entity, *parent_component))
+            })
+            .expect("parent TileSeq custom");
+        let child_matches = child_sprites.iter().any(|(child_component, handle)| {
+            child_component.parent == parent_entity
+                && images.get(handle).and_then(|image| image.data.as_deref())
+                    == Some(child.rgba.as_slice())
+        });
+        (ground_handles, parent_component, child_matches)
+    };
+    assert_eq!(
+        ground_handles.len(),
+        1,
+        "el ground debe reemplazar el fallback"
     );
-    let (parent_entity, parent_component, _) = parent_sprites
-        .iter()
-        .find(|(_, _, handle)| has_rgba(handle, [10, 240, 10, 255].repeat(4).as_slice()))
-        .expect("parent TileSeq custom");
+    let expected_ground_position = overlay_pos(
+        crate::iso::iso(coord.x, coord.y),
+        f32::from(ground.x_offs),
+        f32::from(ground.y_offs),
+        f32::from(ground.width),
+        f32::from(ground.height),
+        0,
+        0.025,
+        coord.x,
+        coord.y,
+    );
+    let ground_depths: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .filter_map(|(sprite, transform)| {
+            (ground_handles.contains(&sprite.image)
+                && transform.translation.truncate() == expected_ground_position.truncate())
+            .then_some(transform.translation.z)
+        })
+        .collect();
+    assert_eq!(
+        ground_depths,
+        vec![ground_draw_z(coord.x, coord.y, 0.025)],
+        "AirportDrawTileLayout debe dejar el ground en DrawGroundSprite"
+    );
     assert_eq!(
         parent_component.bounds,
         crate::render::viewport_sort::ParentSpriteBounds::new(33, 34, 3, 36, 38, 8),
@@ -5041,10 +5083,7 @@ fn newgrf_airport_tile_layout_emits_ground_sortable_parent_and_child() {
         "el parent entra en el mismo ordinal BUILD del compositor"
     );
     assert!(
-        child_sprites.iter().any(|(child_component, handle)| {
-            child_component.parent == *parent_entity
-                && has_rgba(handle, [10, 10, 240, 255].repeat(4).as_slice())
-        }),
+        child_matches,
         "el child TileSeq debe permanecer unido al parent anterior"
     );
 }

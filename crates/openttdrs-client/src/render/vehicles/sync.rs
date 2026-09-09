@@ -286,13 +286,19 @@ pub(crate) fn update_vehicles(
                 source_depth,
             });
         }
-        sprite.image = layers
+        let image = layers
             .first()
             .map(|layer| layer.handle.clone())
             .unwrap_or_else(|| {
                 trucks.for_vehicle(v, pose, Some(&company), Some(vehicle_owner_colour(&sim, v)))
             });
-        sprite.color = vehicle_tint(v);
+        if sprite.image != image {
+            sprite.image = image;
+        }
+        let tint = vehicle_tint(v);
+        if sprite.color != tint {
+            sprite.color = tint;
+        }
         if super::vehicle_uses_newgrf_stack(&sim, v) {
             stack_layers_by_parent.insert(
                 entity,
@@ -373,7 +379,7 @@ pub(crate) fn update_vehicles(
                 source_depth,
             });
         }
-        sprite.image = layers
+        let image = layers
             .first()
             .map(|layer| layer.handle.clone())
             .unwrap_or_else(|| {
@@ -384,7 +390,13 @@ pub(crate) fn update_vehicles(
                     Some(vehicle_owner_colour(&sim, unit)),
                 )
             });
-        sprite.color = vehicle_tint(unit);
+        if sprite.image != image {
+            sprite.image = image;
+        }
+        let tint = vehicle_tint(unit);
+        if sprite.color != tint {
+            sprite.color = tint;
+        }
         if super::vehicle_uses_newgrf_stack(&sim, unit) {
             stack_layers_by_parent.insert(
                 entity,

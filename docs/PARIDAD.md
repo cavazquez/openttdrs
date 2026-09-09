@@ -1186,6 +1186,25 @@ La matriz del mismo SAV mejora en cinco escalas: `0,25×` 234.056→233.848,
 registrada: este corte hace reproducible el instante del SAV, no declara una
 mejora general del framebuffer ni cierra #326 o #561.
 
+Actualización #326-PAINT-RECT-CULLING (2026-09-09): el filtro preciso previo
+al sorter ya no decide la visibilidad de un parent no vacío por su prisma 3D.
+`AddSortableSpriteToDraw` lo hace por el rectángulo semiabierto del PNG antes
+de encolarlo; el cliente reproduce ese contrato con la geometría que Bevy
+compone (`custom_size`, recorte/atlas, `Anchor`, escala y rotación). Las cajas
+vacías mantienen su prueba 3D y un asset aún no resuelto usa el fallback
+geométrico anterior. En Kale `(189,126)`, `1280×720`, perfil `clean-static` y
+Normal, el inventario normalizado exacto contra el mismo frame nativo pasa de
+1.552 a 1.570 tuples comunes: los faltantes nativos bajan de 29 a 11 y los
+candidatos sin contraparte de 116 a 100. Así entran, entre otros, los parents
+Maglev `1235`, `1241`, `1244` y `1246` del borde izquierdo sin abrir un margen
+global de prefetch. El PNG Normal es determinista entre dos capturas y cambia
+de 100.182 a 100.151 píxeles distintos; el delta medio por canal varía
+levemente de 3,888860 a 3,888904. La matriz vigente mide 352.960 / 396.048 /
+100.151 / 524.417 / 750.195 / 692.486 píxeles distintos en
+`0,25×`/`0,5×`/`1×`/`2×`/`4×`/`8×`. Es una corrección del contrato de culling,
+no paridad de framebuffer: los 11 parents nativos residuales, 100 candidatos
+adicionales y las diferencias raster amplias mantienen #326 y #561 abiertos.
+
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
 `y_offs`). El renderer aplica además `SpriteBounds::origin` y

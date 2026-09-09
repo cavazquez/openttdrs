@@ -11,7 +11,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use bevy::ecs::change_detection::DetectChanges;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use bevy::sprite::Anchor;
 use bevy::window::PrimaryWindow;
 use serde_json::json;
 
@@ -116,11 +118,6 @@ const VIEWPORT_SORT_MAX_BRIDGE_HEIGHT_LEVELS: f32 = 12.0;
 /// de decidir la visibilidad concreta de la tesela.
 const VIEWPORT_SORT_EDGE_TILES: i64 = 2;
 
-/// Los bounds de `AddSortableSpriteToDraw` ya expresan el alcance 3D del
-/// parent. No sumar un margen arbitrario evita que el prefetch vuelva a
-/// cambiar los slots visibles.
-const VIEWPORT_SORT_PARENT_SCREEN_MARGIN_PX: i64 = 0;
-
 /// Margen de producers alrededor del rectángulo visual geométrico.
 ///
 /// `ViewportAddLandscape` llega a considerar edificios de hasta 200 px por
@@ -168,6 +165,112 @@ pub(crate) struct DiagonalViewportSortScope {
 pub(crate) struct ViewportSortScopeState {
     scope: Option<TileViewportBounds>,
     precise_scope: Option<DiagonalViewportSortScope>,
+}
+
+/// Entradas ECS que describen una única vista de mundo para el sorter.
+///
+/// Mantener cámara, ventana y simulación juntas evita que el sistema de sort
+/// mezcle dos vistas distintas y conserva su firma como un sistema pequeño.
+#[derive(SystemParam)]
+pub(crate) struct ViewportSortScopeInputs<'w, 's> {
+    sim: Option<Res<'w, SimWorld>>,
+    windows: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
+    cameras: Query<
+        'w,
+        's,
+        (&'static Transform, &'static Projection),
+        (
+            With<PrimaryGameCamera>,
+            Without<MapPreviewCamera>,
+            Without<ViewportSortableParent>,
+        ),
+    >,
+}
+
+/// Rectángulo de píxeles que Bevy compone para un parent no vacío.
+///
+/// `AddSortableSpriteToDraw` decide si entrega un parent al sorter con el
+/// rectángulo del PNG (`x_offs`, `y_offs`, ancho y alto), no con su prisma 3D.
+/// Mantener la misma representación aquí evita convertir un desajuste del
+/// ancla del sprite en un margen arbitrario de viewport.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SpriteScreenBounds {
+    left: f32,
+    right: f32,
+    bottom: f32,
+    top: f32,
+}
+
+/// Tamaño compuesto de un [`Sprite`] antes de aplicar su `Transform`.
+///
+/// Coincide con el tamaño que usa el renderer de Bevy: `custom_size` tiene
+/// prioridad, un recorte usa su rectángulo y un atlas usa la entrada resuelta.
+/// Cuando el asset aún no está disponible se devuelve `None` para conservar el
+/// fallback geométrico de bounds; un sprite sin tamaño aún no puede aportar
+/// píxeles al framebuffer.
+fn sprite_render_size(
+    sprite: &Sprite,
+    images: Option<&Assets<Image>>,
+    texture_atlases: Option<&Assets<TextureAtlasLayout>>,
+) -> Option<Vec2> {
+    if let Some(size) = sprite.custom_size {
+        return Some(size);
+    }
+    if let Some(rect) = sprite.rect {
+        return Some(rect.size());
+    }
+    if let Some(atlas) = sprite.texture_atlas.as_ref() {
+        return texture_atlases
+            .and_then(|layouts| atlas.texture_rect(layouts))
+            .map(|rect| rect.as_rect().size());
+    }
+    images
+        .and_then(|images| images.get(&sprite.image))
+        .map(|image| image.size().as_vec2())
+}
+
+/// AABB de la geometría que Bevy va a rasterizar para un sprite.
+///
+/// Los parents del mapa son normalmente ejes-alineados, pero transformar los
+/// cuatro vértices conserva la semántica correcta si una familia añade escala
+/// o rotación. El `Anchor` forma parte de la malla real de Bevy y no se puede
+/// suponer que siempre sea el centro.
+fn sprite_screen_bounds(
+    sprite: &Sprite,
+    anchor: &Anchor,
+    transform: &Transform,
+    images: Option<&Assets<Image>>,
+    texture_atlases: Option<&Assets<TextureAtlasLayout>>,
+) -> Option<SpriteScreenBounds> {
+    let size = sprite_render_size(sprite, images, texture_atlases)?;
+    if !size.is_finite() || size.x <= 0.0 || size.y <= 0.0 {
+        return None;
+    }
+
+    let center = -anchor.as_vec() * size;
+    let half = size * 0.5;
+    let mut left = f32::INFINITY;
+    let mut right = f32::NEG_INFINITY;
+    let mut bottom = f32::INFINITY;
+    let mut top = f32::NEG_INFINITY;
+    for local in [
+        Vec2::new(center.x - half.x, center.y - half.y),
+        Vec2::new(center.x - half.x, center.y + half.y),
+        Vec2::new(center.x + half.x, center.y - half.y),
+        Vec2::new(center.x + half.x, center.y + half.y),
+    ] {
+        let point = transform.transform_point(local.extend(0.0));
+        left = left.min(point.x);
+        right = right.max(point.x);
+        bottom = bottom.min(point.y);
+        top = top.max(point.y);
+    }
+    Some(SpriteScreenBounds {
+        left,
+        right,
+        bottom,
+        top,
+    })
 }
 
 impl DiagonalViewportSortScope {
@@ -249,12 +352,21 @@ impl DiagonalViewportSortScope {
         let projected_right = 2 * (ymax - xmin);
         let projected_bottom = -xmax - ymax + zmin;
         let projected_top = -xmin - ymin + zmax;
-        let margin = VIEWPORT_SORT_PARENT_SCREEN_MARGIN_PX;
+        projected_right >= self.screen_left
+            && projected_left <= self.screen_right
+            && projected_top >= self.screen_bottom
+            && projected_bottom <= self.screen_top
+    }
 
-        projected_right >= self.screen_left - margin
-            && projected_left <= self.screen_right + margin
-            && projected_top >= self.screen_bottom - margin
-            && projected_bottom <= self.screen_top + margin
+    /// Reproduce el test de clipping de `AddSortableSpriteToDraw` para un PNG
+    /// real. Sus rectángulos son semiabiertos: si sólo tocan el borde no se
+    /// agrega ningún parent al sorter nativo.
+    #[must_use]
+    fn sprite_reaches_viewport(self, sprite: SpriteScreenBounds) -> bool {
+        sprite.left < self.screen_right as f32
+            && sprite.right > self.screen_left as f32
+            && sprite.bottom < self.screen_top as f32
+            && sprite.top > self.screen_bottom as f32
     }
 }
 
@@ -337,6 +449,7 @@ fn viewport_precise_sort_scope(
 
 fn parent_is_in_viewport_sort_scope(
     parent: &ViewportSortableParent,
+    sprite_bounds: Option<SpriteScreenBounds>,
     scope: Option<TileViewportBounds>,
     precise_scope: Option<DiagonalViewportSortScope>,
 ) -> bool {
@@ -356,8 +469,14 @@ fn parent_is_in_viewport_sort_scope(
         return true;
     };
     precise_scope.contains_source_tile(tx, ty)
-        && (parent.sprite_id == EMPTY_BOUNDING_BOX_SPRITE_ID
-            || precise_scope.parent_bounds_reach_viewport(parent.bounds))
+        && if parent.sprite_id == EMPTY_BOUNDING_BOX_SPRITE_ID {
+            precise_scope.parent_bounds_reach_viewport(parent.bounds)
+        } else {
+            sprite_bounds.map_or_else(
+                || precise_scope.parent_bounds_reach_viewport(parent.bounds),
+                |sprite| precise_scope.sprite_reaches_viewport(sprite),
+            )
+        }
 }
 
 /// Micro-slot estable dentro de una fila diagonal.
@@ -461,23 +580,25 @@ pub(crate) fn sort_viewport_sortable_parents(
         Ref<ViewportSortableParent>,
         Option<Ref<Visibility>>,
         &mut Transform,
+        Option<(Ref<Sprite>, Ref<Anchor>)>,
     )>,
     mut removed: RemovedComponents<ViewportSortableParent>,
     mut child_depth_windows: ResMut<ViewportSortableChildDepthWindows>,
-    sim: Option<Res<SimWorld>>,
-    windows: Query<&Window, With<PrimaryWindow>>,
-    cameras: Query<
-        (&Transform, &Projection),
-        (
-            With<PrimaryGameCamera>,
-            Without<MapPreviewCamera>,
-            Without<ViewportSortableParent>,
-        ),
-    >,
+    viewport: ViewportSortScopeInputs,
+    images: Option<Res<Assets<Image>>>,
+    texture_atlases: Option<Res<Assets<TextureAtlasLayout>>>,
     mut previous_scope: Local<Option<ViewportSortScopeState>>,
 ) {
-    let scope = viewport_sort_scope(sim.as_deref(), &windows, &cameras);
-    let precise_scope = viewport_precise_sort_scope(sim.as_deref(), &windows, &cameras);
+    let scope = viewport_sort_scope(
+        viewport.sim.as_deref(),
+        &viewport.windows,
+        &viewport.cameras,
+    );
+    let precise_scope = viewport_precise_sort_scope(
+        viewport.sim.as_deref(),
+        &viewport.windows,
+        &viewport.cameras,
+    );
     let scope_state = ViewportSortScopeState {
         scope,
         precise_scope,
@@ -486,20 +607,37 @@ pub(crate) fn sort_viewport_sortable_parents(
     *previous_scope = Some(scope_state);
 
     let mut needs_sort = scope_changed || removed.read().next().is_some();
-    let mut input = Vec::new();
-    for (entity, parent, visibility, transform) in &mut parents {
+    for (_, parent, visibility, _, sprite) in &mut parents {
         needs_sort |= parent.is_added()
             || parent.is_changed()
-            || visibility.as_ref().is_some_and(DetectChanges::is_changed);
+            || visibility.as_ref().is_some_and(DetectChanges::is_changed)
+            || sprite
+                .as_ref()
+                .is_some_and(|(sprite, anchor)| sprite.is_changed() || anchor.is_changed());
+    }
+    if !needs_sort {
+        return;
+    }
+
+    let mut input = Vec::new();
+    for (entity, parent, visibility, transform, sprite) in &mut parents {
+        let sprite_bounds = precise_scope.and_then(|_| {
+            sprite.and_then(|(sprite, anchor)| {
+                sprite_screen_bounds(
+                    &sprite,
+                    &anchor,
+                    &transform,
+                    images.as_deref(),
+                    texture_atlases.as_deref(),
+                )
+            })
+        });
         if visibility.is_some_and(|visibility| *visibility == Visibility::Hidden)
-            || !parent_is_in_viewport_sort_scope(&parent, scope, precise_scope)
+            || !parent_is_in_viewport_sort_scope(&parent, sprite_bounds, scope, precise_scope)
         {
             continue;
         }
         input.push((entity, *parent, transform.translation.z));
-    }
-    if !needs_sort {
-        return;
     }
 
     #[cfg(test)]
@@ -549,7 +687,7 @@ pub(crate) fn sort_viewport_sortable_parents(
 
     for ((entity, _, current_depth), sorted_depth) in input.into_iter().zip(sorted_depths) {
         if (current_depth - sorted_depth).abs() > f32::EPSILON
-            && let Ok((_, _, _, mut transform)) = parents.get_mut(entity)
+            && let Ok((_, _, _, mut transform, _)) = parents.get_mut(entity)
         {
             transform.translation.z = sorted_depth;
         }
@@ -747,6 +885,97 @@ mod tests {
         assert!(
             !scope.parent_bounds_reach_viewport(distant_south),
             "un producer retenido bajo el viewport no debe alterar slots visibles"
+        );
+
+        // `AddSortableSpriteToDraw` recorta contra el rectángulo del PNG, no
+        // contra el prisma del parent. Un píxel dentro del borde izquierdo se
+        // conserva aunque su caja 3D ya no alcance la vista; el ejemplo es la
+        // capa Maglev 1241 de Kale (204,120).
+        let native_left_edge = SpriteScreenBounds {
+            left: -2_211.0,
+            right: -2_207.0,
+            bottom: -5_000.0,
+            top: -4_984.0,
+        };
+        assert!(
+            scope.sprite_reaches_viewport(native_left_edge),
+            "un PNG que entra un píxel debe reservar un slot nativo"
+        );
+        let outside_native_edge = SpriteScreenBounds {
+            left: -2_212.0,
+            right: -2_208.0,
+            bottom: -5_000.0,
+            top: -4_984.0,
+        };
+        assert!(
+            !scope.sprite_reaches_viewport(outside_native_edge),
+            "un PNG que sólo toca el borde no debe reservar un slot"
+        );
+    }
+
+    #[test]
+    fn sprite_screen_bounds_follow_the_bevy_anchor_and_scale() {
+        let sprite = Sprite::sized(Vec2::new(8.0, 4.0));
+        let mut transform = Transform::from_xyz(10.0, 20.0, 0.0);
+        transform.scale = Vec3::new(2.0, 3.0, 1.0);
+
+        let bounds = sprite_screen_bounds(&sprite, &Anchor::TOP_LEFT, &transform, None, None)
+            .expect("un Sprite con custom_size siempre tiene un rectángulo de pantalla");
+        assert_eq!(
+            bounds,
+            SpriteScreenBounds {
+                left: 10.0,
+                right: 26.0,
+                bottom: 8.0,
+                top: 20.0,
+            }
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)] // Fixture creada dentro del mismo World.
+    fn changing_parent_sprite_geometry_requests_a_new_sort() {
+        let mut world = World::new();
+        world.init_resource::<ViewportSortableChildDepthWindows>();
+        let parent = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: 1422,
+                    bounds: ParentSpriteBounds::new(0, 0, 0, 15, 15, 15),
+                    insertion_key: 0,
+                    source_depth: 1.0,
+                },
+                Transform::from_xyz(0.0, 0.0, 1.0),
+                Sprite::sized(Vec2::new(16.0, 16.0)),
+                Anchor::CENTER,
+            ))
+            .id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sort_viewport_sortable_parents);
+        schedule.run(&mut world);
+        schedule.run(&mut world);
+        assert_eq!(
+            world
+                .resource::<ViewportSortableChildDepthWindows>()
+                .sort_runs,
+            1,
+            "un parent sin cambios visuales no debe reordenarse"
+        );
+
+        world
+            .entity_mut(parent)
+            .get_mut::<Sprite>()
+            .unwrap()
+            .custom_size = Some(Vec2::new(32.0, 16.0));
+        schedule.run(&mut world);
+
+        assert_eq!(
+            world
+                .resource::<ViewportSortableChildDepthWindows>()
+                .sort_runs,
+            2,
+            "un cambio en la geometría pintada debe reevaluar el scope"
         );
     }
 

@@ -3317,3 +3317,11 @@ original. La regresión cubre Upper y Lower, junto con las 59 pruebas focales
 de agua y Clippy estricto. Aún quedan callbacks/variables Action2 restantes,
 la matriz completa del depósito naval, clipping, orden global y framebuffer;
 #567 y #326 permanecen abiertos.
+
+Actualización #326/#567-SHIP-DEPOT-TRACE-OFFSETS (2026-09-10, `ccd8cd2d`): la
+traza `world-draw` del depósito naval conserva ahora en cada draw los `dx/dy`
+literales de `TILE_SEQ`, además de sus bounds, paleta y ordinal de inserción.
+La prueba focal del depósito continúa en 6/6 y Clippy estricto pasa; esto
+mejora la evidencia reproducible de posición y orden, pero no equivale aún a
+un diff de framebuffer. La matriz completa de costa/eje/parte, callbacks,
+clipping, orden global y framebuffer mantiene abiertos #567 y #326.

@@ -1084,8 +1084,27 @@ fn newgrf_road_depot_group_replaces_relocated_building_layers() {
         rgba: building_rgba.clone(),
         mask: vec![199; 8 * 9],
     };
+    let suppressed_overlay = DecodedSprite {
+        width: 5,
+        height: 6,
+        x_offs: -13,
+        y_offs: -17,
+        rgba: [60, 230, 140, 255].repeat(5 * 6),
+        mask: vec![202; 5 * 6],
+    };
     let mut graphics = TrainSpriteGraphics {
-        sets: vec![vec![mouth.clone(), building.clone()]],
+        sets: vec![
+            vec![mouth.clone(), building.clone()],
+            vec![DecodedSprite {
+                width: 1,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: vec![1, 2, 3, 255],
+                mask: Vec::new(),
+            }],
+            vec![suppressed_overlay.clone()],
+        ],
         assigns: vec![TrainSpriteAssign {
             local_id: 0,
             set_id: 0,
@@ -1094,6 +1113,10 @@ fn newgrf_road_depot_group_replaces_relocated_building_layers() {
     };
     // `RoadTypeSpriteGroup::ROTSG_DEPOT` en `road.h`.
     graphics.specific_assigns.insert((0, 8), 0);
+    // Aunque el tipo use GROUND/OVERLAY, un `ROTSG_DEPOT` resuelto cambia
+    // `default_gfx` a falso y OpenTTD no dibuja esta capa de vía aparte.
+    graphics.specific_assigns.insert((0, 2), 1);
+    graphics.specific_assigns.insert((0, 1), 2);
     let road_catalog = vec![RoadTypeDef {
         id: RoadType::from_u8(2),
         class: RoadTramType::Road,
@@ -1236,20 +1259,233 @@ fn newgrf_road_depot_group_replaces_relocated_building_layers() {
         openttdrs_core::bake_sprite_company_palette(&mouth, company_colour.as_u8());
     let expected_building =
         openttdrs_core::bake_sprite_company_palette(&building, company_colour.as_u8());
+    {
+        let images = world.resource::<Assets<Image>>();
+        assert_eq!(
+            images
+                .get(&layers[0].1.image)
+                .and_then(|image| image.data.as_deref()),
+            Some(expected_mouth.as_slice()),
+            "SE_1 debe usar el primer sprite y la paleta del propietario"
+        );
+        assert_eq!(
+            images
+                .get(&layers[1].1.image)
+                .and_then(|image| image.data.as_deref()),
+            Some(expected_building.as_slice()),
+            "SE_2 debe usar el segundo sprite y la paleta del propietario"
+        );
+    }
+    let expected_overlay_position = {
+        let map = &world.resource::<TsMap>().0;
+        let grid = &world.resource::<TsGrid>().0;
+        let ctx = TileRenderContext::new(map, grid, 2, 2);
+        overlay_pos(
+            ctx.iso_pos,
+            f32::from(suppressed_overlay.x_offs),
+            f32::from(suppressed_overlay.y_offs),
+            f32::from(suppressed_overlay.width),
+            f32::from(suppressed_overlay.height),
+            ctx.info.base_z,
+            crate::render::tiles::TRAM_OVERLAY_LAYER_FRAC,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        )
+    };
+    let sprites: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(sprite, transform)| (sprite.clone(), transform.translation))
+        .collect();
     let images = world.resource::<Assets<Image>>();
-    assert_eq!(
-        images
-            .get(&layers[0].1.image)
-            .and_then(|image| image.data.as_deref()),
-        Some(expected_mouth.as_slice()),
-        "SE_1 debe usar el primer sprite y la paleta del propietario"
+    assert!(
+        !sprites.iter().any(|(sprite, position)| {
+            *position == expected_overlay_position
+                && images
+                    .get(&sprite.image)
+                    .and_then(|image| image.data.as_deref())
+                    == Some(suppressed_overlay.rgba.as_slice())
+        }),
+        "ROTSG_DEPOT gana sobre ROTSG_OVERLAY en el depósito"
     );
+}
+
+#[test]
+fn newgrf_road_depot_overlay_uses_ground_contract_and_nfo_anchor() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(2, 2);
+    let mut map = fresh_map8();
+    let mut depot = Tile {
+        kind: TileKind::RoadDepot,
+        mapt: 0x20,
+        // SE: `DiagDirToRoadBits` = 0x04 y por tanto el índice de overlay
+        // debe ser el mismo que `GetRoadSpriteOffset(SLOPE_FLAT, 0x04)`.
+        m5: 1,
+        ..tile_template()
+    };
+    depot = openttdrs_core::set_road_type_on_tile(depot, RoadType::from_u8(2));
+    map.set_tile(coord, depot)
+        .expect("road depot overlay NewGRF");
+
+    let ground = DecodedSprite {
+        width: 1,
+        height: 1,
+        x_offs: 0,
+        y_offs: 0,
+        rgba: vec![1, 2, 3, 255],
+        mask: Vec::new(),
+    };
+    let overlay = DecodedSprite {
+        width: 7,
+        height: 9,
+        x_offs: -5,
+        y_offs: -11,
+        rgba: [17, 190, 230, 255].repeat(7 * 9),
+        mask: vec![201; 7 * 9],
+    };
+    let mut graphics = TrainSpriteGraphics {
+        sets: vec![vec![ground], vec![overlay.clone()]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 0,
+            set_id: 0,
+        }],
+        ..TrainSpriteGraphics::default()
+    };
+    // `UsesOverlay()` depende de GROUND (2), no de que exista el overlay
+    // opcional (1). El set de overlay tiene una sola vista y debe reutilizarse
+    // para el offset SE solicitado por el draw-proc.
+    graphics.specific_assigns.insert((0, 2), 0);
+    graphics.specific_assigns.insert((0, 1), 1);
+    let road_catalog = vec![RoadTypeDef {
+        id: RoadType::from_u8(2),
+        class: RoadTramType::Road,
+        label: "Overlay depot NewGRF".into(),
+        short_label: "NGOV".into(),
+        intro_year: 0,
+        max_speed: 0,
+        cost_multiplier: 0,
+        maintenance_multiplier: 0,
+        flags: 0,
+        powered_mask: 0,
+        badges: Vec::new(),
+        from_tramtypes_feature: false,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: Some(Box::new(graphics)),
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+    }];
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut road_sprites: Local<crate::render::NewGrfRoadSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &road_catalog,
+                    Some(&mut road_sprites),
+                    &[],
+                    None,
+                    Some(&mut images),
+                    &[],
+                    &[],
+                );
+            },
+        )
+        .expect("road depot NewGRF overlay spawn");
+
+    let sprite_entities: Vec<_> = world
+        .query::<(Entity, &Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(entity, sprite, transform)| (entity, sprite.clone(), transform.translation))
+        .collect();
+    let expected_position = {
+        let map = &world.resource::<TsMap>().0;
+        let grid = &world.resource::<TsGrid>().0;
+        let ctx = TileRenderContext::new(map, grid, 2, 2);
+        overlay_pos(
+            ctx.iso_pos,
+            f32::from(overlay.x_offs),
+            f32::from(overlay.y_offs),
+            f32::from(overlay.width),
+            f32::from(overlay.height),
+            ctx.info.base_z,
+            crate::render::tiles::TRAM_OVERLAY_LAYER_FRAC,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        )
+    };
+    let expected_rgba = overlay.rgba.clone();
+    let overlays: Vec<_> = {
+        let images = world.resource::<Assets<Image>>();
+        sprite_entities
+            .into_iter()
+            .filter(|(_, sprite, position)| {
+                *position == expected_position
+                    && images
+                        .get(&sprite.image)
+                        .and_then(|image| image.data.as_deref())
+                        == Some(expected_rgba.as_slice())
+            })
+            .collect()
+    };
     assert_eq!(
-        images
-            .get(&layers[1].1.image)
-            .and_then(|image| image.data.as_deref()),
-        Some(expected_building.as_slice()),
-        "SE_2 debe usar el segundo sprite y la paleta del propietario"
+        overlays.len(),
+        1,
+        "el depósito debe materializar ROTSG_OVERLAY"
+    );
+    let (entity, _, position) = overlays[0];
+    assert_eq!(
+        position, expected_position,
+        "la ancla NFO debe llegar sin recorte"
+    );
+    assert!(
+        world
+            .entity(entity)
+            .get::<ViewportSortableParent>()
+            .is_none(),
+        "DrawGroundSprite de ROTSG_OVERLAY no crea otra fachada sortable"
+    );
+    assert!(
+        world
+            .entity(entity)
+            .get::<ViewportSortableChild>()
+            .is_none(),
+        "en plano no existe foundation a la que adjuntar el overlay"
     );
 }
 

@@ -1196,6 +1196,20 @@ regresiones cubren precedencia de stack, paletas de dos propietarios y el SE
 `ROTSG_OVERLAY`, la composición de tramtypes custom y clipping/pivotes/
 framebuffer siguen fuera, por lo que #326 continúa abierto.
 
+Actualización #326-ROAD-DEPOT-ROTSG-OVERLAY (2026-09-10): el depósito vial
+consulta ahora el roadtype NewGRF con la misma prioridad road→tram de
+`DrawTile_Road` antes de decidir sus capas. `ROTSG_GROUND` (selector 2) es el
+contrato de `UsesOverlay()`: si no ganó `ROTSG_DEPOT`, `ROTSG_OVERLAY`
+(selector 1) se resuelve con
+`GetRoadSpriteOffset(SLOPE_FLAT, DiagDirToRoadBits(dir))`, conserva su ancla
+NFO y queda como `DrawGroundSprite` —child de `FOUNDATION_LEVELED` en una
+pendiente—. Si el overlay falta o resuelve vacío no reaparece el riel vanilla;
+si gana `ROTSG_DEPOT`, tampoco se dibuja la capa separada. Las regresiones ECS
+fijan la selección GROUND/OVERLAY, la ancla SE y la prioridad sobre
+`ROTSG_DEPOT`. No hay foco Kale ni métrica raster nueva: el fallback Action5
+para tramtypes custom, clipping, pivotes y framebuffer continúan abiertos en
+#326.
+
 Actualización #326-TUNNEL-CATENARY-GLOBAL (2026-09-09):
 `DrawRailCatenaryOnTunnel` ya conserva su `SpriteCombine` en runtime. En una
 boca eléctrica el cable de entrada `5656`/`5658` es el parent global con el

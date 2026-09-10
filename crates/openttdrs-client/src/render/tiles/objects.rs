@@ -5503,8 +5503,32 @@ const TRAMWAY_OVERLAY_SPRITE_BASE: u32 = crate::sprites::TRAMWAY_SPRITE_BASE + 4
 /// `INVALID_ROADTYPE` en el mapa de OpenTTD; un depósito de tranvía puro lo
 /// conserva en `m4()` y escribe el tipo real en `m8()[6..12]`.
 const INVALID_ROAD_TYPE_ID: u8 = 63;
+/// `RoadTypeSpriteGroup::ROTSG_OVERLAY` en `road.h`.
+const ROTSG_OVERLAY: u8 = 1;
+/// `RoadTypeSpriteGroup::ROTSG_GROUND` en `road.h`.
+///
+/// OpenTTD denomina `UsesOverlay()` a la presencia de este grupo, aunque el
+/// sprite que se dibuja sobre un depósito venga del selector `ROTSG_OVERLAY`.
+const ROTSG_GROUND: u8 = 2;
 /// `RoadTypeSpriteGroup::ROTSG_DEPOT` en `road.h`.
 const ROTSG_DEPOT: u8 = 8;
+
+/// Roadtype NewGRF que `DrawTile_Road` consulta para un depósito.
+///
+/// La prioridad no depende de qué grupos haya publicado el GRF: un roadtype
+/// válido gana siempre, y sólo `INVALID_ROADTYPE` permite usar el tramtype.
+/// Conservar esta selección antes de filtrar `ROTSG_DEPOT` permite aplicar la
+/// misma semántica a `UsesOverlay()`.
+fn road_depot_newgrf_type_def_for_tile(
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    tile: Tile,
+) -> Option<&openttdrs_core::RoadTypeDef> {
+    if road_type_from_tile(&tile).as_u8() == INVALID_ROAD_TYPE_ID {
+        newgrf_tram_def_for_tile(road_catalog, tile)
+    } else {
+        newgrf_road_def_for_tile(road_catalog, tile)
+    }
+}
 
 /// El depósito consulta primero el roadtype si existe; sólo cuando el byte
 /// road es `INVALID_ROADTYPE` delega al tramtype. Es la misma prioridad que
@@ -5514,12 +5538,18 @@ fn road_depot_newgrf_def_for_tile(
     road_catalog: &[openttdrs_core::RoadTypeDef],
     tile: Tile,
 ) -> Option<&openttdrs_core::RoadTypeDef> {
-    let def = if road_type_from_tile(&tile).as_u8() == INVALID_ROAD_TYPE_ID {
-        newgrf_tram_def_for_tile(road_catalog, tile)
-    } else {
-        newgrf_road_def_for_tile(road_catalog, tile)
-    };
-    def.filter(|def| def.has_newgrf_specific_group(ROTSG_DEPOT))
+    road_depot_newgrf_type_def_for_tile(road_catalog, tile)
+        .filter(|def| def.has_newgrf_specific_group(ROTSG_DEPOT))
+}
+
+/// Equivalente de `RoadTypeInfo::UsesOverlay()` para la ruta NewGRF.
+///
+/// En OpenTTD el grupo `ROTSG_GROUND`, no la existencia del overlay opcional,
+/// cambia el contrato de dibujo: un depósito con este grupo no debe volver al
+/// riel vanilla si el grupo `ROTSG_OVERLAY` falta o resuelve vacío.
+#[must_use]
+fn road_depot_uses_overlay(def: &openttdrs_core::RoadTypeDef) -> bool {
+    def.has_newgrf_specific_group(ROTSG_GROUND)
 }
 
 /// Índice dentro del bloque relocatable `SPR_ROAD_DEPOT` que consume
@@ -5695,6 +5725,8 @@ fn spawn_road_depot_tile(
 ) {
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
     let depot_tile = ctx.tile;
+    let depot_type_def =
+        depot_tile.and_then(|tile| road_depot_newgrf_type_def_for_tile(road_catalog, tile));
     let custom_depot_def =
         depot_tile.and_then(|tile| road_depot_newgrf_def_for_tile(road_catalog, tile));
     record_road_depot_ground_trace(tileh);
@@ -5725,7 +5757,46 @@ fn spawn_road_depot_tile(
         .is_none()
         .then(|| road_depot_vanilla_tram_replacement(ctx, tramway_depot_action5.replacement))
         .flatten();
-    if tram_depot_replacement == Some(TramwayDepotReplacement::NoTrack) {
+    let uses_overlay = depot_type_def.is_some_and(road_depot_uses_overlay);
+    if custom_depot_def.is_none() && uses_overlay {
+        // `DrawTile_Road` deja el suelo de depósito y, con `UsesOverlay()`,
+        // consulta solamente `ROTSG_OVERLAY`. Una ausencia o un resultado
+        // vacío no puede caer al riel vanilla: el grupo GROUND ya declaró que
+        // la infraestructura suministra sus propias capas.
+        if let Some((sprite, view)) = depot_tile.and_then(|tile| {
+            depot_type_def
+                .filter(|def| def.has_newgrf_specific_group(ROTSG_OVERLAY))
+                .and_then(|def| {
+                    specific_sprite_for_tile(
+                        def,
+                        map,
+                        ROTSG_OVERLAY,
+                        crate::sprites::road_flat_sprite_index(
+                            0,
+                            road_depot_direction_road_bits(dir),
+                        ),
+                        ctx.coord,
+                        tile,
+                        climate,
+                        road_catalog,
+                        newgrf_stack,
+                        None,
+                        &mut road_sprites,
+                        &mut images,
+                    )
+                })
+        }) {
+            spawn_road_depot_newgrf_overlay(
+                commands,
+                ctx,
+                base_z,
+                map_width,
+                foundation_child_parent,
+                sprite,
+                &view,
+            );
+        }
+    } else if tram_depot_replacement == Some(TramwayDepotReplacement::NoTrack) {
         spawn_road_depot_vanilla_tram_overlay(
             commands,
             assets,
@@ -5977,6 +6048,44 @@ fn spawn_road_depot_vanilla_tram_overlay(
             MapVisualLayer,
             ctx.map_tile_chunk(),
             image.sprite(),
+            Transform::from_translation(position),
+        ));
+    }
+}
+
+/// Materializa el `DrawGroundSprite` de `ROTSG_OVERLAY` para un depósito.
+///
+/// Los offsets de una vista Action1/2 son coordenadas de pantalla como en la
+/// superficie normal de una carretera. Tras `FOUNDATION_LEVELED` el draw-proc
+/// conserva esa ancla pero lo inserta como child del último parent de la
+/// fundación, en lugar de crear otra pieza sortable independiente.
+fn spawn_road_depot_newgrf_overlay(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
+    sprite: Sprite,
+    view: &openttdrs_core::DecodedSprite,
+) {
+    let position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(view.x_offs),
+        f32::from(view.y_offs),
+        f32::from(view.width),
+        f32::from(view.height),
+        base_z,
+        TRAM_OVERLAY_LAYER_FRAC,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
             Transform::from_translation(position),
         ));
     }

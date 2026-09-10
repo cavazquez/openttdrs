@@ -11799,6 +11799,152 @@ fn newgrf_object_draw_water_uses_persisted_canal_ground_and_edges() {
 }
 
 #[test]
+fn newgrf_object_draw_water_matches_sea_canal_and_river_ground() {
+    use openttdrs_core::map::MP_OBJECT_MAPT;
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    let object_type = openttdrs_core::NEW_OBJECT_OFFSET;
+    let ground = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: [250, 10, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![vec![ground.clone()]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 4,
+            set_id: 9,
+        }],
+        ..Default::default()
+    };
+    runtime.tile_layouts.insert(
+        9,
+        TileLayout {
+            ground: TileLayoutSpriteRef {
+                action1_set: Some(0),
+                ..Default::default()
+            },
+            sequence: Vec::new(),
+        },
+    );
+    let object_def = ObjectSpecDef {
+        id: object_type,
+        class_label: "TEST".into(),
+        name: "Water matrix object".into(),
+        size: openttdrs_core::OBJECT_SIZE_1X1,
+        from_newgrf: true,
+        local_id: 4,
+        grfid: 0x4F42_4A54,
+        newgrf_grf_version: 8,
+        climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
+        build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+        clear_cost_factor: openttdrs_core::DEFAULT_OBJECT_CLEAR_COST_FACTOR,
+        flags: OBJECT_FLAG_DRAW_WATER,
+        animation_frames: 0,
+        animation_status: 0xFF,
+        animation_speed: 2,
+        animation_triggers: 0,
+        callback_mask: 0,
+        views: vec![ground.clone()],
+        newgrf_runtime: Some(Box::new(runtime)),
+        associated_badges: Vec::new(),
+    };
+
+    for (water_class, expected_dikes) in [
+        (WaterClass::Sea, 0),
+        (WaterClass::Canal, 8),
+        (WaterClass::River, 0),
+    ] {
+        let assets = boot_assets_app();
+        let dike_assets = assets.canal_dikes.clone();
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(3, 3, 0);
+        let mut object_tile = tile_template();
+        object_tile.mapt = MP_OBJECT_MAPT;
+        object_tile.m5 = u8::try_from(object_type).expect("NewGRF object type byte");
+        object_tile.m1 = set_water_class_m1(object_tile.m1, water_class);
+        map.set_tile(coord, object_tile)
+            .expect("object on water class");
+
+        let grid = RenderGrid::from_map(&map, 3, 3);
+        let mut world = World::new();
+        world.insert_resource(TsMap(map));
+        world.insert_resource(TsGrid(grid));
+        world.insert_resource(TsAssets(assets));
+        world.insert_resource(crate::render::NewGrfObjectSpriteCache::default());
+        world.insert_resource(crate::render::NewGrfAction5SpriteCache::default());
+        world.insert_resource(Assets::<Image>::default());
+        let object_def = object_def.clone();
+        world
+            .run_system_once(
+                move |mut commands: Commands,
+                      m: Res<TsMap>,
+                      g: Res<TsGrid>,
+                      a: Res<TsAssets>,
+                      mut object_cache: ResMut<crate::render::NewGrfObjectSpriteCache>,
+                      mut action5_cache: ResMut<crate::render::NewGrfAction5SpriteCache>,
+                      mut images: ResMut<Assets<Image>>| {
+                    let mut batches = MapSpriteBatches::default();
+                    spawn_generic_land_tile_with_objects_and_water(
+                        &mut commands,
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(&m.0, &g.0, coord.x as u32, coord.y as u32),
+                        &m.0,
+                        4.0,
+                        TEST_CLIMATE,
+                        TEST_WORLD_SEED,
+                        3,
+                        std::slice::from_ref(&object_def),
+                        &[],
+                        &[],
+                        None,
+                        Some(&mut object_cache),
+                        Some(&mut images),
+                        &[],
+                        &[],
+                        Some(&mut action5_cache),
+                        &mut batches,
+                    );
+                    flush_map_batches(&mut commands, batches);
+                },
+            )
+            .expect("object water class spawn");
+
+        assert_eq!(
+            world.query::<&WaterTile>().iter(&world).count(),
+            1,
+            "{water_class:?} conserva una superficie"
+        );
+        let sprites: Vec<_> = world.query::<&Sprite>().iter(&world).collect();
+        let dikes = dike_assets
+            .iter()
+            .filter(|asset| sprites.iter().any(|sprite| asset.matches(sprite)))
+            .count();
+        assert_eq!(
+            dikes, expected_dikes,
+            "diques del objeto sobre {water_class:?}"
+        );
+        assert_eq!(
+            world.query::<&MapVisualLayer>().iter(&world).count(),
+            expected_dikes + 1,
+            "ground y bordes del objeto sobre {water_class:?}"
+        );
+        assert!(
+            world
+                .resource::<Assets<Image>>()
+                .iter()
+                .all(|(_, image)| image.data.as_deref() != Some(ground.rgba.as_slice())),
+            "el ground custom no reemplaza DrawWaterClassGround en {water_class:?}"
+        );
+    }
+}
+
+#[test]
 fn newgrf_industry_draw_foundations_callback_can_suppress_default() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);

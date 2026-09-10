@@ -3757,3 +3757,14 @@ sort global. El bloque focal de depósito naval queda en 16 pruebas y la suite
 cliente en 1362 pasadas y 2 ignoradas, con Clippy estricto, formato y
 `diff --check` verdes. #567 sigue abierta por aceptación visual/framebuffer,
 vecinos y callbacks/variables restantes; #326 permanece abierta.
+
+Actualización #326/#566-EMPTY-PARENT-CLIPPING (2026-09-10, `9857025a`): el
+alcance preciso del viewport reconstruye los extremos exclusivos de los
+prismas inclusivos antes de proyectarlos, igual que `AddSortableSpriteToDraw`
+para `SPR_EMPTY_BOUNDING_BOX`. La regresión cubre una caja 1×1×1 que cruza el
+borde y otra que sólo lo toca; también conserva el caso de extent cero y el
+fallback 3D antes de materializar un asset. La suite cliente queda en 1362
+pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
+#566 sigue abierta por pivotes, clipping por familias y framebuffer; #567
+continúa abierta por la aceptación visual del depósito naval y #326 por la
+composición global completa.

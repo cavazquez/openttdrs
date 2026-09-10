@@ -3865,8 +3865,9 @@ fn pure_tram_overlay_groups_replace_default_surface() {
     let mut tile = Tile {
         kind: TileKind::Road,
         mapt: 0x20,
-        m5: 0,    // tranvía puro: no hay roadbits
-        m3: 0x0A, // ROAD_X como trazado de tranvía
+        m3hi: 0x3F, // INVALID_ROADTYPE: sólo queda la capa de tranvía.
+        m5: 0,      // tranvía puro: no hay roadbits
+        m3: 0x0A,   // ROAD_X como trazado de tranvía
         ..tile_template()
     };
     tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::from_u8(2)));
@@ -3970,6 +3971,94 @@ fn pure_tram_overlay_groups_replace_default_surface() {
         custom_colours,
         vec![vec![255, 0, 0, 255], vec![0, 0, 255, 255]],
         "el tranvía puro debe dibujar GROUND bajo OVERLAY y no la carretera vanilla"
+    );
+}
+
+#[test]
+fn pure_vanilla_tram_uses_grass_and_tram_underlay() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = fresh_map8();
+    let mut tile = Tile {
+        kind: TileKind::Road,
+        mapt: 0x20,
+        m3hi: 0x3F, // INVALID_ROADTYPE: sólo queda el tranvía.
+        m5: 0,
+        m3: 0x0A,   // ROAD_X en la capa tranvía.
+        m6: 1 << 3, // Roadside::Grass.
+        ..tile_template()
+    };
+    tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::TRAM));
+    map.set_tile(coord, tile)
+        .expect("tesela de tranvía vanilla puro");
+
+    let expected_grass = assets.grass.clone();
+    let expected_underlay = assets
+        .rail
+        .get(&(crate::sprites::TRAMWAY_SPRITE_BASE + 27 + 1))
+        .expect("SPR_TRAMWAY_TRAM + ROAD_X")
+        .clone();
+    let wrong_road = assets.road_flat[0].clone();
+    let wrong_overlay = assets.tram_flat[1].clone();
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let road_catalog = vanilla_road_type_catalog();
+                spawn_road_tile(
+                    &mut commands,
+                    &m.0,
+                    8,
+                    8,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    TEST_CLIMATE,
+                    false,
+                    false,
+                    &road_catalog,
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("tranvía vanilla puro");
+
+    let sprites: Vec<_> = world.query::<&Sprite>().iter(&world).collect();
+    assert_eq!(
+        sprites
+            .iter()
+            .filter(|sprite| expected_grass.matches(sprite))
+            .count(),
+        1,
+        "GetRoadGroundSprite debe usar césped cuando road_rti es inválido"
+    );
+    assert_eq!(
+        sprites
+            .iter()
+            .filter(|sprite| expected_underlay.matches(sprite))
+            .count(),
+        1,
+        "DrawRoadOverlays debe usar SPR_TRAMWAY_TRAM en tranvía puro"
+    );
+    assert!(
+        sprites.iter().all(|sprite| !wrong_road.matches(sprite)),
+        "el tranvía puro no debe pintar el suelo road_flat"
+    );
+    assert!(
+        sprites.iter().all(|sprite| !wrong_overlay.matches(sprite)),
+        "SPR_TRAMWAY_OVERLAY sólo corresponde a carretera + tranvía"
     );
 }
 

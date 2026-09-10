@@ -37,7 +37,7 @@ use crate::sprites::{
     RAIL_GROUND_HALF_TILE_SNOW, RAIL_GROUND_HALF_TILE_WATER, RAIL_GROUND_SNOW_OR_DESERT,
     RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
     RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE, catenary_hidden,
+    ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE, TRAMWAY_SPRITE_BASE, catenary_hidden,
     catenary_pylon_world_z_delta, catenary_reference_sprite_id, catenary_sprite_color,
     catenary_transparent, catenary_tunnel_exterior_pcp, catenary_wire_world_z_delta,
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
@@ -52,7 +52,7 @@ use crate::sprites::{
     signal_safe_slope_position_for_side, signal_screen_anchor_for_side,
     signal_screen_position_for_side, signal_sprite_center_offset, signal_world_position_for_side,
     track_fence_draws_for_tile, track_fence_height_px, track_fence_sprite_meta,
-    tram_flat_sprite_index,
+    tram_flat_sprite_index, tramway_sprite_gfx,
 };
 
 /// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
@@ -91,6 +91,8 @@ const ROTSG_GROUND: u8 = 2;
 const ROAD_OVERLAY_GROUND_LAYER_FRAC: f32 = 0.02;
 const ROAD_OVERLAY_LAYER_FRAC: f32 = 0.025;
 const ROAD_WORKS_LAYER_FRAC: f32 = 0.03;
+const INVALID_ROAD_TYPE_ID: u8 = 63;
+const TRAMWAY_TRAM_SPRITE_OFFSET: u32 = 27;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RailGroundKind {
@@ -630,6 +632,75 @@ fn road_ground_pass_pos(mut position: Vec3, ctx: &TileRenderContext, layer: f32)
     position
 }
 
+/// Dibuja el underlay vanilla que `DrawRoadOverlays` usa cuando la tesela
+/// tiene tranvía pero no tiene un `road_rti` válido.
+///
+/// `tram_flat_*` representa `SPR_TRAMWAY_OVERLAY` y sólo corresponde a una
+/// carretera que ya ganó la precedencia del suelo. El caso tranvía puro usa
+/// `SPR_TRAMWAY_TRAM` (`+27`) sobre césped desnudo; ambos bloques comparten el
+/// mismo índice de `GetRoadSpriteOffset`, pero tienen anclas NFO distintas.
+#[allow(clippy::too_many_arguments)]
+fn spawn_vanilla_tram_underlay(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    tram_offset: usize,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
+    foundation: u8,
+) {
+    let Some(offset) = u32::try_from(tram_offset).ok() else {
+        return;
+    };
+    let Some(sprite_id) = TRAMWAY_SPRITE_BASE
+        .checked_add(TRAMWAY_TRAM_SPRITE_OFFSET)
+        .and_then(|base| base.checked_add(offset))
+    else {
+        return;
+    };
+    let Some(image) = assets.rail.get(&sprite_id) else {
+        return;
+    };
+    let Some(gfx) = tramway_sprite_gfx(sprite_id) else {
+        return;
+    };
+
+    record_road_ground_trace("tram-ground", sprite_id, foundation);
+    let position = overlay_pos(
+        ctx.iso_pos,
+        gfx.x_offs,
+        gfx.y_offs,
+        gfx.width,
+        gfx.height,
+        base_z,
+        ROAD_OVERLAY_GROUND_LAYER_FRAC,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(
+            commands,
+            image.sprite(),
+            ctx,
+            position,
+            map_width,
+            parent,
+        );
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            image.sprite(),
+            Transform::from_translation(road_ground_pass_pos(
+                position,
+                ctx,
+                ROAD_OVERLAY_GROUND_LAYER_FRAC,
+            )),
+        ));
+    }
+}
+
 /// Emite una vista `ROTSG_*` manteniendo juntas la textura y su metadata NFO.
 ///
 /// Las superficies específicas de roadtypes llegan por `DrawGroundSprite` en
@@ -1065,6 +1136,40 @@ pub(crate) fn spawn_road_tile(
     let raw_tileh = ctx.info.tileh;
     let raw_base_z = ctx.info.base_z;
     let rb = road_bits_for_render(map, ctx.coord, mw, mh);
+    // `road_bits_for_render` necesita un fallback geométrico para celdas
+    // incompletas. En una tesela real, sin embargo, cero en `m5` es un valor
+    // válido: significa que sólo existe la capa de tranvía en `m3`. Recuperar
+    // el byte original conserva la distinción que hace `GetRoadBits` entre
+    // road y tram, y permite calcular también `GetRoadFoundation(road | tram)`.
+    let road_bits_on_tile = ctx.tile.and_then(|tile| {
+        ((tile.mapt >> 4) & 0x0F == openttdrs_core::OTTD_MP_ROAD).then(|| {
+            openttdrs_core::effective_road_bits(
+                tile.mapt,
+                tile.m5,
+                tile.kind,
+                openttdrs_core::OTTD_MP_ROAD,
+                openttdrs_core::OTTD_MP_TUNNELBRIDGE,
+            )
+            .unwrap_or(tile.m5 & 0x0F)
+        })
+    });
+    let road_bits = road_bits_on_tile.unwrap_or(rb) & 0x0F;
+    let tram_bits = ctx.tile.map_or(0, |tile| tile.m3 & 0x0F);
+    let transport_bits = if road_bits_on_tile.is_some() {
+        road_bits | tram_bits
+    } else {
+        rb & 0x0F
+    };
+    // OpenTTD chooses the road sprite offset from tram bits only when there
+    // is no road layer. A zero/zero malformed context keeps the historical
+    // fallback so an empty render context remains drawable.
+    let ground_bits = if road_bits == 0 && tram_bits != 0 {
+        tram_bits
+    } else if road_bits != 0 {
+        road_bits
+    } else {
+        rb
+    };
     let is_level_crossing = ctx
         .tile
         .is_some_and(|tile| is_road_level_crossing(tile.mapt, tile.m5, ctx.kind));
@@ -1116,7 +1221,7 @@ pub(crate) fn spawn_road_tile(
             assets,
             ctx,
             raw_tileh,
-            rb,
+            transport_bits,
             foundation_newgrf,
             action5_sprites.as_deref_mut(),
             images.as_deref_mut(),
@@ -1128,7 +1233,7 @@ pub(crate) fn spawn_road_tile(
             road_surface.child_parent,
         )
     };
-    let fi = road_flat_sprite_index(tileh, rb);
+    let fi = road_flat_sprite_index(tileh, ground_bits);
     let road_half_h = if tileh == 0 {
         ROAD_FLAT_HALF_H[fi]
     } else {
@@ -1150,24 +1255,30 @@ pub(crate) fn spawn_road_tile(
         .is_some_and(|t| road_tile_snow_or_desert(t.mapt, ctx.kind, t.m7))
         || climate.uses_snow_ground();
     let paved = roadside.is_some_and(roadside_is_paved) && !snow_or_desert;
+    let road_present = ctx.tile.is_some_and(|tile| {
+        tile.kind == TileKind::Road
+            && ((tile.mapt >> 4) & 0x0F) == openttdrs_core::OTTD_MP_ROAD
+            && openttdrs_core::road_type_from_tile(&tile).as_u8() != INVALID_ROAD_TYPE_ID
+    });
     let tram_def = ctx
         .tile
         .and_then(|tile| newgrf_tram_def_for_tile(road_catalog, tile));
     let tram_view_idx = ctx
         .tile
-        .and_then(|tile| tram_flat_sprite_index(tileh, tile.m3));
+        .and_then(|_| tram_flat_sprite_index(tileh, tram_bits));
     // En una tesela de tranvía puro, `m5` no contiene roadbits. OpenTTD pinta
     // entonces el suelo base desnudo y deja que el tramtype aporte GROUND;
     // `road_bits_for_render` conserva 0x05 como índice geométrico de fallback,
     // por lo que no sirve para decidir esta precedencia.
-    let tram_only_uses_overlay = ctx.tile.is_some_and(|tile| tile.m5 & 0x0F == 0)
+    let tram_only_uses_overlay = !road_present
+        && tram_bits != 0
         && tram_def.is_some_and(|def| def.has_newgrf_specific_group(ROTSG_GROUND));
 
     // NewGRF: una vista normal sustituye el sprite de suelo road. Si el tipo
     // publica `ROTSG_GROUND`, OpenTTD cambia al sistema de underlay/overlay y
     // la vista normal deja de ser la fuente de la superficie.
     let mut used_newgrf = is_level_crossing;
-    let view_idx = road_newgrf_view_index(tileh, rb);
+    let view_idx = road_newgrf_view_index(tileh, road_bits);
     if !is_level_crossing && tram_only_uses_overlay && road_sprites.is_some() && images.is_some() {
         record_road_ground_trace(
             "tram-overlay-base",
@@ -1342,32 +1453,55 @@ pub(crate) fn spawn_road_tile(
     }
 
     if !used_newgrf {
-        let road_set = if paved {
-            &assets.road_paved
+        if !road_present {
+            // `GetRoadGroundSprite` cae a terreno desnudo cuando
+            // `road_rti == nullptr` (el caso de un tranvía puro). El riel
+            // vanilla se agrega más adelante como `SPR_TRAMWAY_TRAM`; no se
+            // debe pintar aquí `road_flat_*`, que pertenece a una carretera.
+            let ground_id = if snow_or_desert {
+                SPR_FLAT_SNOW_DESERT_TILE + u32::from(slope_sprite_offset(tileh))
+            } else {
+                SPR_FLAT_GRASS_TILE + u32::from(slope_sprite_offset(tileh))
+            };
+            record_road_ground_trace("tram-ground-base", ground_id, road_foundation);
+            spawn_road_overlay_base_ground(
+                commands,
+                assets,
+                ctx,
+                tileh,
+                snow_or_desert,
+                base_z,
+                mw,
+                foundation_child_parent,
+            );
         } else {
-            &assets.road_flat
-        };
-        // `DrawRoadGroundSprites` ocurre después de `DrawFoundation`; el
-        // contrato es hijo del cimiento cuando éste existe, no un nuevo suelo
-        // absoluto. La traza conserva esa relación para que el oráculo detecte
-        // tanto el sprite como la transición de pendiente.
-        record_road_ground_trace(
-            "road-ground",
-            road_ground_sprite_id(fi, paved, snow_or_desert),
-            road_foundation,
-        );
-        let sprite = road_set[fi].sprite_colored(road_paint);
-        let position =
-            full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, road_half_h);
-        if let Some(parent) = foundation_child_parent {
-            spawn_foundation_child_sprite_at(commands, sprite, ctx, position, mw, parent);
-        } else {
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(road_ground_pass_pos(position, ctx, 0.02)),
-            ));
+            let road_set = if paved {
+                &assets.road_paved
+            } else {
+                &assets.road_flat
+            };
+            // `DrawRoadGroundSprites` ocurre después de `DrawFoundation`; el
+            // contrato es hijo del cimiento cuando éste existe, no un nuevo
+            // suelo absoluto. La traza conserva esa relación para que el
+            // oráculo detecte tanto el sprite como la transición de pendiente.
+            record_road_ground_trace(
+                "road-ground",
+                road_ground_sprite_id(fi, paved, snow_or_desert),
+                road_foundation,
+            );
+            let sprite = road_set[fi].sprite_colored(road_paint);
+            let position =
+                full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, road_half_h);
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(commands, sprite, ctx, position, mw, parent);
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(road_ground_pass_pos(position, ctx, 0.02)),
+                ));
+            }
         }
     }
 
@@ -1375,7 +1509,7 @@ pub(crate) fn spawn_road_tile(
     // vive en `openttd.grf`; no depende de que la partida tenga NewGRFs.
     if !is_level_crossing && let Some(tile) = ctx.tile {
         let drd = openttdrs_core::disallowed_road_directions(tile.m5);
-        let road_x = (rb & 0x0F) == 0x0A;
+        let road_x = (road_bits & 0x0F) == 0x0A;
         if let Some(slot) = openttdrs_core::oneway_action5_slot(tileh, road_x, drd)
             && let Some(sprite_id) = oneway_road_sprite_id(slot)
         {
@@ -1431,7 +1565,9 @@ pub(crate) fn spawn_road_tile(
     }
 
     if !is_level_crossing
-        && let Some(tfi) = ctx.tile.and_then(|t| tram_flat_sprite_index(tileh, t.m3))
+        && let Some(tfi) = ctx
+            .tile
+            .and_then(|_| tram_flat_sprite_index(tileh, tram_bits))
     {
         let tram_half_h = if tileh == 0 {
             ROAD_FLAT_HALF_H[tfi]
@@ -1568,29 +1704,45 @@ pub(crate) fn spawn_road_tile(
             }
         }
         if !used_tram_newgrf {
-            let position = tile_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                TRAM_OVERLAY_LAYER_FRAC,
-                tram_half_h,
-            );
-            if let Some(parent) = foundation_child_parent {
-                spawn_foundation_child_sprite_at(
-                    commands,
-                    assets.tram_flat[tfi].sprite(),
-                    ctx,
-                    position,
-                    mw,
-                    parent,
+            if road_present {
+                let position = tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    TRAM_OVERLAY_LAYER_FRAC,
+                    tram_half_h,
                 );
+                if let Some(parent) = foundation_child_parent {
+                    spawn_foundation_child_sprite_at(
+                        commands,
+                        assets.tram_flat[tfi].sprite(),
+                        ctx,
+                        position,
+                        mw,
+                        parent,
+                    );
+                } else {
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        assets.tram_flat[tfi].sprite(),
+                        Transform::from_translation(position),
+                    ));
+                }
             } else {
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    assets.tram_flat[tfi].sprite(),
-                    Transform::from_translation(position),
-                ));
+                // En el caso puro la capa de tranvía no es un overlay sobre
+                // asfalto. Es el underlay completo `SPR_TRAMWAY_TRAM` que
+                // OpenTTD dibuja después del césped base.
+                spawn_vanilla_tram_underlay(
+                    commands,
+                    assets,
+                    ctx,
+                    base_z,
+                    tfi,
+                    mw,
+                    foundation_child_parent,
+                    road_foundation,
+                );
             }
         }
     }
@@ -1600,10 +1752,10 @@ pub(crate) fn spawn_road_tile(
     // hay obras. Los sprites 1414/1415 conservan el ancla NFO `39x21/-18,5`
     // y, como cualquier `DrawGroundSprite`, siguen al parent de la foundation.
     if !is_level_crossing
-        && let Some(tile) = ctx.tile.filter(|tile| tile.kind == TileKind::Road)
+        && ctx.tile.is_some_and(|tile| tile.kind == TileKind::Road)
         && roadside.is_some_and(|roadside| roadside >= 6)
     {
-        let sprite_id = road_works_sprite_id(rb | (tile.m3 & 0x0F));
+        let sprite_id = road_works_sprite_id(transport_bits);
         record_road_ground_trace("road-works", sprite_id, road_foundation);
         if let Some(image) = assets.rail.get(&sprite_id) {
             let position = overlay_pos(
@@ -1648,7 +1800,6 @@ pub(crate) fn spawn_road_tile(
     // sólo los tenía en el atlas y por eso una calle electrificada quedaba sin
     // hilo/postes aunque el overlay de riel sí estuviera presente.
     if let Some(tile) = ctx.tile.filter(|tile| tile.kind == TileKind::Road) {
-        let road_bits = rb;
         let road_type = openttdrs_core::road_type_from_tile(&tile);
         let mut catenary_parent_ordinal = Some(ROAD_CATENARY_PARENT_ORDINAL);
         catenary_parent_ordinal = spawn_road_catenary_for_type(
@@ -1682,7 +1833,7 @@ pub(crate) fn spawn_road_tile(
                 assets,
                 ctx,
                 tram_type,
-                tile.m3 & 0x0F,
+                tram_bits,
                 tileh,
                 base_z,
                 climate,
@@ -1705,10 +1856,10 @@ pub(crate) fn spawn_road_tile(
     if !is_level_crossing
         && show_full_detail
         && roadside == Some(3)
-        && rb.count_ones() > 1
+        && road_bits.count_ones() > 1
         && roadside_detail_visible_under_bridge(map, ctx.coord, (mw, mh), false)
     {
-        let lamps = ROADSIDE_LAMPS[usize::from(rb & 0xF)];
+        let lamps = ROADSIDE_LAMPS[usize::from(road_bits & 0xF)];
         for (lamp_index, &(lamp, dx, dy)) in lamps.iter().enumerate() {
             let (w, h, xrel, yrel) = ROAD_STREETLIGHT_META[lamp];
             let detail_z = f32::from(partial_pixel_z(dx, dy, tileh));
@@ -1761,11 +1912,14 @@ pub(crate) fn spawn_road_tile(
     if !is_level_crossing
         && show_full_detail
         && roadside == Some(5)
-        && rb.count_ones() > 1
+        && road_bits.count_ones() > 1
         && roadside_detail_visible_under_bridge(map, ctx.coord, (mw, mh), true)
     {
         let (w, h, xrel, yrel) = ROADSIDE_TREE_META;
-        for (tree_index, &(dx, dy)) in ROADSIDE_TREES[usize::from(rb & 0xF)].iter().enumerate() {
+        for (tree_index, &(dx, dy)) in ROADSIDE_TREES[usize::from(road_bits & 0xF)]
+            .iter()
+            .enumerate()
+        {
             let detail_z = f32::from(partial_pixel_z(dx, dy, tileh));
             let bounds =
                 roadside_detail_parent_bounds(ctx.tx_i32(), ctx.ty_i32(), base_z, tileh, dx, dy);

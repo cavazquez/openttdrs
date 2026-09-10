@@ -3308,3 +3308,12 @@ los casos X existentes permanecen intactos. El conjunto focal queda en 4/4
 (Bus X/Y, Truck y RoadWaypoint), con formato y Clippy estricto verdes. #563
 continúa abierta por la matriz completa de partes/callbacks, catenaria directa,
 trace/compositor global, evidencia raster, vecinos, clipping y framebuffer.
+
+Actualización #326/#563-ROAD-STOP-FALLBACK-SORT (2026-09-10, `9f55510c`): la
+capacidad del bloque de caché se incorpora también al predicado que decide si
+un layout puede entrar al sorter global. Un overflow ya no puede dejar
+catenaria global junto con un BUILD vanilla local: el layout completo se
+considera no materializable desde el principio y conserva el fallback atómico
+coherente. La regresión de sortability y las 4 rutas focales de road stop
+permanecen verdes; #563 sigue abierta por la matriz de partes/callbacks,
+catenaria directa, trace, raster, vecinos, clipping y framebuffer.

@@ -3424,3 +3424,13 @@ frente a `6071/6043` del eje X. El filtro completo de road stop pasa 4/4
 cubre la bifurcación de orientación del productor, pero #563 sigue abierta por
 las partes/callbacks restantes, catenaria directa, trace y compositor global,
 evidencia raster, vecinos, clipping y framebuffer; #326 no se cierra.
+
+Actualización #326/#563-ROAD-STOP-FALLBACK-SORT (2026-09-10, `9f55510c`): la
+prueba de materialización y la decisión de reservar el stream global comparten
+ahora la misma validación de capacidad de slots. Si un ground `Action1` o la
+secuencia BUILD no cabe en el bloque `spec * 64`, el renderer no publica
+parents custom ni ordinales globales para ese layout: vuelve de forma
+coherente a las capas vanilla locales, evitando un fallback con catenaria
+duplicada o parcialmente ordenada. La regresión de capacidad pasa y el filtro
+road stop queda en 4/4, con formato y Clippy estricto verdes. #563 y #326
+siguen abiertas por los gaps de raster, trace, vecinos, clipping y framebuffer.

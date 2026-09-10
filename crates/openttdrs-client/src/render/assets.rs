@@ -72,6 +72,8 @@ pub(crate) struct WorldAssets {
     /// `SPR_FLAT_WATER_TILE + SlopeToSpriteOffset`, usado por los bordes
     /// `Void` cuando `construction.freeform_edges` está desactivado.
     pub(crate) water_slopes: [AtlasSprite; 19],
+    /// Dikes `SPR_CANAL_DIKES_BASE + 0..11` de `DrawWaterEdges`.
+    pub(crate) canal_dikes: [AtlasSprite; 12],
     /// Set completo `SPR_SHORE_BASE + 0..17` (`shore_full_{i:02}.png`).
     pub(crate) shore: Vec<AtlasSprite>,
     /// 5 fases dark × 15 glitter (`water_anim_d{d}_g{g}.png`).
@@ -475,7 +477,7 @@ impl WorldAssets {
                 atlas.try_get(name).map(|sprite| (spec.sprite_id, sprite))
             })
             .collect();
-        // Esclusas: `scripts/gen_water_lock_tiles.py` (Action5 canals SPR_LOCK_*).
+        // Esclusas y diques: `scripts/gen_water_lock_tiles.py` (Action5 canals).
         // Fallback a agua plana si faltan PNGs / atlas desactualizado.
         let water_lock_fallback = atlas
             .try_get("water_flat.png")
@@ -516,6 +518,24 @@ impl WorldAssets {
                 water_lock_sprite(lock_names[5]),
             ],
         ];
+        let dike_names: [String; 12] =
+            std::array::from_fn(|i| format!("water_canal_dike_{i:02}.png"));
+        let missing_dikes: Vec<&str> = dike_names
+            .iter()
+            .map(String::as_str)
+            .filter(|name| atlas.try_get(name).is_none())
+            .collect();
+        if !missing_dikes.is_empty() {
+            warn!(
+                "Sprites de dique de canal ausentes en atlas ({}): fallback a agua plana — corré scripts/gen_water_lock_tiles.py && gen_tile_atlas.py",
+                missing_dikes.len()
+            );
+        }
+        let canal_dikes = std::array::from_fn(|i| {
+            atlas
+                .try_get(&dike_names[i])
+                .unwrap_or_else(|| water_lock_fallback.clone())
+        });
         use crate::sprites::{
             rail_tunnel_front_atlas_name, rail_tunnel_rear_atlas_name, tunnel_front_atlas_name,
             tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name,
@@ -783,6 +803,7 @@ impl WorldAssets {
             snow_desert,
             water,
             water_slopes,
+            canal_dikes,
             shore,
             water_frames,
             shore_frames,

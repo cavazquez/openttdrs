@@ -44,4 +44,5 @@ pub(crate) use objects::{
     spawn_transport_object_tile, spawn_transport_object_tile_with_road_types,
 };
 pub(crate) use transport::{spawn_rail_tile, spawn_road_tile};
+pub(crate) use water::SPR_CANAL_DIKES_BASE;
 pub(crate) use water::push_water_tile;

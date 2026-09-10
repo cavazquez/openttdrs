@@ -1,6 +1,10 @@
 use bevy::prelude::*;
 use openttdrs_core::DecodedSprite;
+use openttdrs_core::map::{WaterClass, has_tile_water_ground, tile_slope_and_z, water_class};
 use openttdrs_core::prelude::*;
+use openttdrs_core::station::{
+    STATION_TYPE_BUOY, STATION_TYPE_DOCK, STATION_TYPE_OILRIG, station_type_from_m6,
+};
 
 use super::{SHORE_LAYER_FRAC, push_water_sprite, spawn_coast_debug_label};
 use crate::iso::{
@@ -13,11 +17,157 @@ use crate::render::{MapSpriteBatches, TileRenderContext, WorldAssets};
 
 /// `SPR_FLAT_WATER_TILE` de `table/sprites.h`.
 const SPR_FLAT_WATER_TILE: u32 = 4061;
+/// `SPR_CANAL_DIKES_BASE` de `table/sprites.h`.
+pub(crate) const SPR_CANAL_DIKES_BASE: u32 = 5380;
 /// `SPR_SHORE_BASE` resuelto por Action5 canals en OpenGFX/OpenGFX2.
 const SPR_SHORE_BASE: u32 = 5936;
 
 fn shore_sprite_id(tileh: u8) -> u32 {
     SPR_SHORE_BASE + shore_png_index(tileh) as u32
+}
+
+/// Direcciones que `IsWateredTile` recibe desde `DrawWaterEdges`.
+///
+/// No usamos `VehicleDirection` directamente porque aquí también aparecen los
+/// cuatro cardinales de las esquinas (`DIR_W/N/E/S`), y mantener la tabla
+/// explícita evita que una conversión de dirección oculte el eje del lock.
+#[derive(Clone, Copy)]
+enum WateredFrom {
+    Sw,
+    Nw,
+    Ne,
+    Se,
+    W,
+    N,
+    E,
+    S,
+}
+
+fn offset(coord: TileCoord, dx: i32, dy: i32) -> TileCoord {
+    TileCoord::new(coord.x + dx, coord.y + dy)
+}
+
+fn coast_is_watered(map: &Map, coord: TileCoord, from: WateredFrom) -> bool {
+    let Some((tileh, _)) = tile_slope_and_z(map, coord) else {
+        return false;
+    };
+    match tileh {
+        0x01 => matches!(from, WateredFrom::Se | WateredFrom::E | WateredFrom::Ne),
+        0x02 => matches!(from, WateredFrom::Ne | WateredFrom::N | WateredFrom::Nw),
+        0x04 => matches!(from, WateredFrom::Nw | WateredFrom::W | WateredFrom::Sw),
+        0x08 => matches!(from, WateredFrom::Sw | WateredFrom::S | WateredFrom::Se),
+        _ => false,
+    }
+}
+
+fn lock_is_watered(m5: u8, from: WateredFrom) -> bool {
+    // `place_lock` stores Axis::Y in bit 0. `DiagDirToAxis(DirToDiagDir())`
+    // maps SW/NE/N/S to Axis::X and NW/SE/E/W to Axis::Y.
+    let axis_y = m5 & 1 != 0;
+    if axis_y {
+        matches!(
+            from,
+            WateredFrom::Nw | WateredFrom::Se | WateredFrom::E | WateredFrom::W
+        )
+    } else {
+        matches!(
+            from,
+            WateredFrom::Sw | WateredFrom::Ne | WateredFrom::N | WateredFrom::S
+        )
+    }
+}
+
+/// Equivalente del `IsWateredTile` usado por `DrawWaterEdges`.
+///
+/// La representación importada no conserva todavía todos los pools que
+/// OpenTTD consulta para una estación petrolera o una industria compuesta;
+/// para esos tipos usamos la misma señal de suelo de agua que el resto del
+/// renderer. Las formas explícitas de MP_WATER (clear/coast/lock/depot) sí se
+/// resuelven con sus bytes y pendiente originales.
+fn is_watered_tile(map: &Map, coord: TileCoord, from: WateredFrom) -> bool {
+    let Some(tile) = map.get(coord) else {
+        // `MP_VOID` es agua a efectos de los bordes del mapa.
+        return true;
+    };
+
+    match tile.kind {
+        TileKind::Water => match (tile.m5 >> 4) & 0x0F {
+            0 | 3 => true, // Clear / Depot.
+            1 => coast_is_watered(map, coord, from),
+            2 => lock_is_watered(tile.m5, from),
+            _ => false,
+        },
+        TileKind::ShipDepot | TileKind::Void => true,
+        TileKind::Rail if tile.m3hi & 0x0F == 13 => coast_is_watered(map, coord, from),
+        TileKind::Station => match station_type_from_m6(tile.m6) {
+            STATION_TYPE_DOCK => tile_slope_and_z(map, coord).is_some_and(|(tileh, _)| tileh == 0),
+            STATION_TYPE_BUOY => true,
+            STATION_TYPE_OILRIG => has_tile_water_ground(tile),
+            _ => false,
+        },
+        TileKind::Industry | TileKind::Forest => has_tile_water_ground(tile),
+        _ => false,
+    }
+}
+
+/// Selecciona los slots `SPR_CANAL_DIKES_BASE + 0..11` de `DrawWaterEdges`.
+///
+/// El orden de los índices es el del C++: cuatro lados, cuatro esquinas
+/// completas y cuatro esquinas cóncavas sólo cuando el diagonal intermedio no
+/// está mojado. Una tesela que no sea Canal no emite diques.
+#[must_use]
+pub(crate) fn canal_dike_slots(map: &Map, coord: TileCoord) -> [bool; 12] {
+    let mut slots = [false; 12];
+    if map.get(coord).and_then(water_class) != Some(WaterClass::Canal) {
+        return slots;
+    }
+
+    let watered = [
+        is_watered_tile(map, offset(coord, -1, 0), WateredFrom::Sw),
+        is_watered_tile(map, offset(coord, 0, 1), WateredFrom::Nw),
+        is_watered_tile(map, offset(coord, 1, 0), WateredFrom::Ne),
+        is_watered_tile(map, offset(coord, 0, -1), WateredFrom::Se),
+    ];
+    slots[0] = !watered[0];
+    slots[1] = !watered[1];
+    slots[2] = !watered[2];
+    slots[3] = !watered[3];
+
+    if !watered[0] && !watered[1] {
+        slots[4] = true;
+    } else if watered[0]
+        && watered[1]
+        && !is_watered_tile(map, offset(coord, -1, 1), WateredFrom::W)
+    {
+        slots[8] = true;
+    }
+
+    if !watered[1] && !watered[2] {
+        slots[5] = true;
+    } else if watered[1] && watered[2] && !is_watered_tile(map, offset(coord, 1, 1), WateredFrom::N)
+    {
+        slots[9] = true;
+    }
+
+    if !watered[2] && !watered[3] {
+        slots[6] = true;
+    } else if watered[2]
+        && watered[3]
+        && !is_watered_tile(map, offset(coord, 1, -1), WateredFrom::E)
+    {
+        slots[10] = true;
+    }
+
+    if !watered[3] && !watered[0] {
+        slots[7] = true;
+    } else if watered[3]
+        && watered[0]
+        && !is_watered_tile(map, offset(coord, -1, -1), WateredFrom::S)
+    {
+        slots[11] = true;
+    }
+
+    slots
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -131,14 +281,70 @@ pub(crate) fn push_water_tile(
 
 #[cfg(test)]
 mod tests {
-    use super::{SPR_FLAT_WATER_TILE, shore_sprite_id};
+    use super::{SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, canal_dike_slots, shore_sprite_id};
+    use openttdrs_core::map::{
+        Map, Tile, TileCoord, TileKind, WaterClass, make_water_tile, set_water_class_m1,
+    };
+
+    fn canal_depot(map: &mut Map, coord: TileCoord) {
+        let mut tile = map.get(coord).expect("canal depot tile");
+        tile.kind = TileKind::ShipDepot;
+        tile.m5 = 0x30;
+        tile.m1 = set_water_class_m1(tile.m1, WaterClass::Canal);
+        map.set_tile(coord, tile).expect("set canal depot");
+    }
 
     #[test]
     fn water_trace_sprite_ids_follow_openttd_water_and_shore_tables() {
         assert_eq!(SPR_FLAT_WATER_TILE, 4061);
+        assert_eq!(SPR_CANAL_DIKES_BASE, 5380);
         assert_eq!(shore_sprite_id(1), 5937); // SLOPE_W.
         assert_eq!(shore_sprite_id(23), 5936); // SLOPE_STEEP_S -> slot 0.
         assert_eq!(shore_sprite_id(27), 5941); // SLOPE_STEEP_N -> slot 5.
         assert_eq!(shore_sprite_id(30), 5951); // SLOPE_STEEP_E -> slot 15.
+    }
+
+    #[test]
+    fn canal_dikes_emit_sides_and_outer_corners_around_isolated_depot() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let center = TileCoord::new(1, 1);
+        canal_depot(&mut map, center);
+
+        let slots = canal_dike_slots(&map, center);
+        assert_eq!(&slots[..8], &[true; 8]);
+        assert_eq!(&slots[8..], &[false; 4]);
+    }
+
+    #[test]
+    fn canal_dikes_use_inner_corner_when_cardinal_and_diagonal_water_differ() {
+        let mut map = Map::new_flat(3, 3, 0);
+        for x in 0..3 {
+            for y in 0..3 {
+                make_water_tile(&mut map, TileCoord::new(x, y), WaterClass::Sea)
+                    .expect("water neighbour");
+            }
+        }
+        let center = TileCoord::new(1, 1);
+        canal_depot(&mut map, center);
+        map.set_kind(TileCoord::new(0, 2), TileKind::Grass)
+            .expect("dry diagonal");
+
+        let slots = canal_dike_slots(&map, center);
+        assert!(slots[8], "right concave corner uses slot 8");
+        assert!(slots[8..].iter().skip(1).all(|slot| !slot));
+        assert!(slots[..8].iter().all(|slot| !slot));
+    }
+
+    #[test]
+    fn sea_depot_does_not_emit_canal_dikes() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let center = TileCoord::new(1, 1);
+        let mut tile: Tile = map.get(center).expect("sea depot tile");
+        tile.kind = TileKind::ShipDepot;
+        tile.m5 = 0x30;
+        tile.m1 = set_water_class_m1(tile.m1, WaterClass::Sea);
+        map.set_tile(center, tile).expect("set sea depot");
+
+        assert_eq!(canal_dike_slots(&map, center), [false; 12]);
     }
 }

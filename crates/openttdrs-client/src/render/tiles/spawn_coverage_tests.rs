@@ -35,8 +35,8 @@ use crate::render::{
     viewport_insertion_key,
 };
 use crate::sprites::{
-    RAIL_TB_X, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, industry_building_needs_client_anim,
-    industry_gfx_entry_for_tile,
+    RAIL_TB_X, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, WATER_CANAL_DIKE_SPRITE_META,
+    industry_building_needs_client_anim, industry_gfx_entry_for_tile,
 };
 
 #[derive(Resource)]
@@ -3494,6 +3494,88 @@ fn ship_depot_uses_water_and_all_vanilla_two_tile_parts() {
             (actual.x, actual.y),
             (expected.x, expected.y),
             "sprite {sprite_id} debe conservar su ancla y tamaño NFO"
+        );
+    }
+}
+
+#[test]
+fn canal_ship_depot_draws_dikes_with_active_nfo_anchors() {
+    let assets = boot_assets_app();
+    let dike_assets = assets.canal_dikes.clone();
+    let depot = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    let mut tile = tile_template();
+    tile.kind = TileKind::ShipDepot;
+    tile.mapt = 0x60;
+    tile.m5 = 0x30;
+    tile.m1 = set_water_class_m1(tile.m1, WaterClass::Canal);
+    map.set_tile(depot, tile).expect("canal ship depot");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_transport_object_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("canal ship depot spawn");
+
+    assert_eq!(
+        world.query::<&MapVisualLayer>().iter(&world).count(),
+        10,
+        "agua + ocho diques + la capa norte del depósito"
+    );
+    let rendered: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .collect();
+    for slot in 0..8 {
+        let (width, height, xrel, yrel) = WATER_CANAL_DIKE_SPRITE_META[slot];
+        let layer = 0.010 + slot as f32 * 0.0001;
+        let mut expected = crate::iso::overlay_pos(
+            crate::iso::iso(1, 1),
+            f32::from(xrel),
+            f32::from(yrel),
+            f32::from(width),
+            f32::from(height),
+            0,
+            layer,
+            1,
+            1,
+        );
+        expected.z = ground_draw_z(1, 1, layer);
+        let actual = rendered
+            .iter()
+            .find_map(|(sprite, transform)| {
+                dike_assets[slot]
+                    .matches(sprite)
+                    .then_some(transform.translation)
+            })
+            .unwrap_or_else(|| panic!("falta dique slot {slot}"));
+        assert_eq!(
+            actual, expected,
+            "dique slot {slot} debe conservar la ancla NFO y el pase ground"
         );
     }
 }

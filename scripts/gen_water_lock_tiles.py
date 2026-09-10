@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Extrae tiles in-world de esclusas (Action5 canals / SPR_LOCK_*).
+"""Extrae tiles in-world de agua especial (Action5 canals).
 
 Compone agua plana + piezas rear/front de OpenGFX (SPR_CANALS_BASE+4..27)
 en PNGs esperados por `WorldAssets::load`:
 
   water_lock_{ns,ew}_{lower,middle,upper}.png
+
+También recorta los doce diques `SPR_CANAL_DIKES_BASE+0..11` y genera sus
+anclas NFO para que `DrawWaterEdges` pueda emitirlos como `DrawGroundSprite`.
 
 Uso: python3 scripts/gen_water_lock_tiles.py
 Luego: python3 scripts/gen_tile_atlas.py
@@ -21,6 +24,7 @@ from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
+OUT_META = REPO / "crates/openttdrs-client/src/sprites/water_canal_dike_gfx_data_generated.rs"
 
 
 def active_sprite_sources() -> tuple[Path, Path]:
@@ -39,7 +43,7 @@ def active_sprite_sources() -> tuple[Path, Path]:
 SPRITES, EXTRA_NFO = active_sprite_sources()
 
 ROW_RE = re.compile(
-    r"^\s*(\d+)\s+(\S+?\.png)\s+(8bpp)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
+    r"^\s*(\d+)\s+(\S+?\.png)\s+(8bpp|32bpp)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
 )
 A5_CANALS_RE = re.compile(
     r"^\s*(\d+)\s+\*\s+\d+\s+05 (?:08|88) FF ([0-9A-F]{2}) 00(?: FF ([0-9A-F]{2}) 00)?"
@@ -55,6 +59,8 @@ LOCK_TILES = [
     ("water_lock_ew_middle.png", 6, 10),
     ("water_lock_ew_upper.png", 22, 26),
 ]
+
+DIKE_SLOTS = tuple(range(52, 64))
 
 CANVAS_W = 64
 CANVAS_H = 48
@@ -126,6 +132,19 @@ def compose_lock(
     return canvas
 
 
+def render_dike_metadata(metadata: list[tuple[int, int, int, int]]) -> str:
+    lines = [
+        "// GENERADO por scripts/gen_water_lock_tiles.py — NO EDITAR A MANO.\n",
+        "#![cfg_attr(rustfmt, rustfmt_skip)]\n\n",
+        "/// `(width, height, xrel, yrel)` para `SPR_CANAL_DIKES_BASE + 0..11`.\n",
+        "pub(crate) static WATER_CANAL_DIKE_SPRITE_META: &[(i16, i16, i16, i16)] = &[\n",
+    ]
+    for width, height, xrel, yrel in metadata:
+        lines.append(f"    ({width}, {height}, {xrel}, {yrel}),\n")
+    lines.append("];\n")
+    return "".join(lines)
+
+
 def main() -> None:
     if not EXTRA_NFO.is_file():
         raise SystemExit(
@@ -137,7 +156,7 @@ def main() -> None:
     water = Image.open(water_path).convert("RGBA")
 
     slots = canals_slot_map(EXTRA_NFO)
-    needed = {s for _, a, b in LOCK_TILES for s in (a, b)}
+    needed = {s for _, a, b in LOCK_TILES for s in (a, b)} | set(DIKE_SLOTS)
     missing = sorted(s for s in needed if s not in slots)
     if missing:
         raise SystemExit(f"slots canals ausentes: {missing}")
@@ -147,6 +166,16 @@ def main() -> None:
         out = compose_lock(water, slots, rear, front)
         out.save(TILES / name)
         print(f"  {name} <- canals[{rear}]+[{front}] ({out.width}x{out.height})")
+
+    dike_metadata = []
+    for index, slot in enumerate(DIKE_SLOTS):
+        image, xrel, yrel = crop_slot(slots, slot)
+        name = f"water_canal_dike_{index:02}.png"
+        image.save(TILES / name)
+        dike_metadata.append((image.width, image.height, xrel, yrel))
+        print(f"  {name} <- canals[{slot}] ({image.width}x{image.height})")
+    OUT_META.write_text(render_dike_metadata(dike_metadata), encoding="utf-8")
+    print(f"  {OUT_META.relative_to(REPO)} <- NFO anchors ({len(dike_metadata)} slots)")
 
 
 if __name__ == "__main__":

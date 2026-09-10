@@ -11,9 +11,9 @@ use openttdrs_core::{
     AirportTileGfxId, AirportTileSpecDef, BridgeType, Climate, DecodedSprite,
     FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef, IndustryTileGfxId, IndustryTileSpecDef,
     NewgrfAirportSpecDef, OBJECT_FLAG_DRAW_WATER, ObjectSpecDef, RailType, RoadStopSpecDef,
-    RoadTramType, RoadType, RoadTypeDef, StationClassId, StationSpecDef, StationSpecId,
-    TrainSpriteAssign, TrainSpriteGraphics, WaterClass, make_water_tile, set_water_class_m1,
-    vanilla_road_type_catalog,
+    RoadTramType, RoadType, RoadTypeDef, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, StationClassId,
+    StationSpecDef, StationSpecId, TrainSpriteAssign, TrainSpriteGraphics, WaterClass,
+    make_water_tile, set_water_class_m1, vanilla_road_type_catalog,
 };
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
@@ -5184,6 +5184,75 @@ fn canal_ship_depot_suppresses_shared_dike_edge_on_both_axes() {
 }
 
 #[test]
+fn ship_depot_water_class_matrix_matches_draw_water_class_ground() {
+    for (water_class, expected_dikes) in [
+        (WaterClass::Sea, 0),
+        (WaterClass::Canal, 8),
+        (WaterClass::River, 0),
+    ] {
+        let assets = boot_assets_app();
+        let dike_assets = assets.canal_dikes.clone();
+        let depot = TileCoord::new(2, 2);
+        let mut map = Map::new_flat(5, 5, 0);
+        let mut tile = tile_template();
+        tile.kind = TileKind::ShipDepot;
+        tile.mapt = 0x60;
+        tile.m5 = 0x30;
+        tile.m1 = set_water_class_m1(tile.m1, water_class);
+        map.set_tile(depot, tile).expect("ship depot water class");
+        let grid = RenderGrid::from_map(&map, 5, 5);
+        let mut world = World::new();
+        world.insert_resource(TsMap(map));
+        world.insert_resource(TsGrid(grid));
+        world.insert_resource(TsAssets(assets));
+
+        world
+            .run_system_once(
+                |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                    spawn_transport_object_tile(
+                        &mut commands,
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                        4.0,
+                        false,
+                        &m.0,
+                        m.0.dimensions(),
+                        &[],
+                        &[],
+                        None,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                    );
+                },
+            )
+            .expect("ship depot water class spawn");
+
+        let waters: Vec<_> = world.query::<&WaterTile>().iter(&world).copied().collect();
+        assert_eq!(waters.len(), 1, "{water_class:?} conserva un solo ground");
+        assert!(
+            waters[0].is_palette_animated(),
+            "{water_class:?} usa el ground plano animado vanilla"
+        );
+
+        let sprites: Vec<_> = world.query::<&Sprite>().iter(&world).collect();
+        let dikes = dike_assets
+            .iter()
+            .filter(|asset| sprites.iter().any(|sprite| asset.matches(sprite)))
+            .count();
+        assert_eq!(dikes, expected_dikes, "diques para {water_class:?}");
+        assert_eq!(
+            world.query::<&MapVisualLayer>().iter(&world).count(),
+            expected_dikes + 2,
+            "ground, diques y estructura para {water_class:?}"
+        );
+    }
+}
+
+#[test]
 fn canal_ship_depot_consumes_action5_dike_sprite_and_nfo_anchor() {
     let assets = boot_assets_app();
     let depot = TileCoord::new(1, 1);
@@ -5479,6 +5548,83 @@ fn river_ship_depot_uses_static_slope_ground_before_depot_layers() {
         river_asset.matches(sprite),
         "el depósito conserva X_DOWN de río"
     );
+}
+
+#[test]
+fn river_ship_depot_uses_all_four_static_slope_sprites() {
+    for (tileh, sprite_index) in [(SLOPE_SE, 0), (SLOPE_NE, 1), (SLOPE_SW, 2), (SLOPE_NW, 3)] {
+        let assets = boot_assets_app();
+        let river_asset = assets.river_slopes[sprite_index].clone();
+        let depot = TileCoord::new(2, 2);
+        let mut map = Map::new_flat(5, 5, 0);
+        let mut tile = tile_template();
+        tile.kind = TileKind::ShipDepot;
+        tile.mapt = 0x60;
+        tile.m5 = 0x30;
+        tile.m1 = set_water_class_m1(tile.m1, WaterClass::River);
+        map.set_tile(depot, tile).expect("river ship depot");
+
+        let elevated_corners = match tileh {
+            SLOPE_NE => [(2, 2), (2, 3)],
+            SLOPE_SE => [(2, 3), (3, 3)],
+            SLOPE_SW => [(3, 2), (3, 3)],
+            SLOPE_NW => [(2, 2), (3, 2)],
+            _ => unreachable!("slope fixture"),
+        };
+        for (x, y) in elevated_corners {
+            map.set_height(TileCoord::new(x, y), 1)
+                .expect("river slope corner");
+        }
+
+        let grid = RenderGrid::from_map(&map, 5, 5);
+        let mut world = World::new();
+        world.insert_resource(TsMap(map));
+        world.insert_resource(TsGrid(grid));
+        world.insert_resource(TsAssets(assets));
+
+        world
+            .run_system_once(
+                move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                    let ctx = TileRenderContext::new(&m.0, &g.0, 2, 2);
+                    assert_eq!(ctx.info.tileh, tileh, "se resolvió la pendiente {tileh}");
+                    spawn_transport_object_tile(
+                        &mut commands,
+                        &a.0,
+                        None,
+                        None,
+                        &ctx,
+                        4.0,
+                        false,
+                        &m.0,
+                        m.0.dimensions(),
+                        &[],
+                        &[],
+                        None,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                    );
+                },
+            )
+            .expect("river slope ship depot spawn");
+
+        let waters: Vec<_> = world
+            .query::<(&WaterTile, &Sprite)>()
+            .iter(&world)
+            .map(|(marker, sprite)| (*marker, sprite.clone()))
+            .collect();
+        assert_eq!(waters.len(), 1, "una superficie River por pendiente");
+        let (marker, sprite) = &waters[0];
+        assert!(
+            !marker.is_palette_animated(),
+            "la pendiente River es estática"
+        );
+        assert!(
+            river_asset.matches(sprite),
+            "River {tileh} conserva el sprite de pendiente {sprite_index}"
+        );
+    }
 }
 
 #[test]

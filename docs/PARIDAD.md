@@ -3790,3 +3790,14 @@ queda en 1364 pasadas y 2 ignoradas, con Clippy estricto, formato y
 `diff --check` verdes. #563 sigue abierta por trace/catenaria restante,
 vecinos, clipping, matriz de partes/callbacks, orden global completo y
 framebuffer; #326 permanece abierta.
+
+Actualización #326/#563-ROAD-CATENARY-MAY-HAVE-ROAD (2026-09-10,
+`aef62b1c`): la selección de vecinos de `DrawRoadTypeCatenary` sigue ahora la
+clasificación `MayHaveRoad` de OpenTTD: cuenta carreteras, depósitos, túneles y
+puentes viales, pero sólo estaciones de carretera (bus, camión o waypoint),
+en vez de tratar cualquier estación como brazo vial. La regresión de máscara
+combina un vecino normal y un puente vial electrificado y verifica que el
+cruce conserve exactamente esos dos brazos. La suite cliente queda en 1365
+pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
+#563 sigue abierta por trace/catenaria restante, callbacks, clipping, matriz
+de partes, orden global completo y framebuffer; #326 permanece abierta.

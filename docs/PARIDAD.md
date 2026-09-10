@@ -3455,3 +3455,13 @@ de decisión y las regresiones de catenaria/tram pasan (5/5 y 1/1 focal,
 respectivamente), junto con formato y Clippy estricto. #565 sigue abierto por
 la matriz completa de superficies/pendientes, anclas, depósitos, clipping y
 framebuffer.
+
+Actualización #326/#565-TRAM-RUNTIME-ONLY (2026-09-10, `910dddc2`): las
+superficies Action1/3 de road y tram ya no requieren una preview estática para
+entrar al renderer. La vista se resuelve una sola vez desde Action2 runtime,
+se conserva su ancla NFO y el caché usa el índice runtime solicitado; así dos
+orientaciones de un tipo sin `newgrf_views` no reutilizan la primera textura.
+Las regresiones nuevas de vista runtime y de superficie custom inclinada pasan
+1/1 cada una, con formato y Clippy estricto verdes. #565 sigue abierto por la
+matriz completa de superficies/pendientes, anclas, depósitos, clipping y
+framebuffer.

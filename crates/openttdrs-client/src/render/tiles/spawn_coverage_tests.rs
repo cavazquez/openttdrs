@@ -5910,6 +5910,139 @@ fn river_ship_depot_consumes_all_slope_specific_river_edge_blocks() {
 }
 
 #[test]
+fn river_ship_depot_applies_sprite_offset_callback_to_ground_and_edges() {
+    let assets = boot_assets_app();
+    let depot = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    let mut tile = tile_template();
+    tile.kind = TileKind::ShipDepot;
+    tile.mapt = 0x60;
+    tile.m5 = 0x30;
+    tile.m1 = set_water_class_m1(tile.m1, WaterClass::River);
+    map.set_tile(depot, tile).expect("river ship depot");
+    map.set_height(TileCoord::new(1, 1), 1)
+        .expect("north height");
+    map.set_height(TileCoord::new(1, 2), 1)
+        .expect("east height");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let marked_sprite = |marker: u8| DecodedSprite {
+        width: 3,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: vec![marker; 3 * 2 * 4],
+        mask: Vec::new(),
+    };
+    let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+    features[usize::from(openttdrs_core::CF_RIVER_SLOPE)] = openttdrs_core::CanalFeatureDef {
+        id: openttdrs_core::CF_RIVER_SLOPE,
+        callback_mask: 1,
+        flags: 0,
+        from_newgrf: true,
+        grfid: 0xCAFE,
+        newgrf_views: (0..6).map(|slot| marked_sprite(0x40 + slot)).collect(),
+        newgrf_runtime: Some(Box::new(callback_literal_runtime(
+            openttdrs_core::CF_RIVER_SLOPE,
+            2,
+        ))),
+    };
+    features[usize::from(openttdrs_core::CF_RIVER_EDGE)] = openttdrs_core::CanalFeatureDef {
+        id: openttdrs_core::CF_RIVER_EDGE,
+        callback_mask: 1,
+        flags: 0,
+        from_newgrf: true,
+        grfid: 0xCAFE,
+        newgrf_views: (0..40).map(|slot| marked_sprite(0x80 + slot)).collect(),
+        newgrf_runtime: Some(Box::new(callback_literal_runtime(
+            openttdrs_core::CF_RIVER_EDGE,
+            2,
+        ))),
+    };
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types_and_tramway_action5(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &[],
+                    None,
+                    &[],
+                    &features,
+                    &[],
+                    Some(&mut action5_sprites),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                    TramwayDepotAction5::default(),
+                );
+            },
+        )
+        .expect("river ship depot callback spawn");
+
+    let sprites: Vec<_> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .filter(|sprite| sprite.texture_atlas.is_none())
+        .filter_map(|sprite| {
+            world
+                .resource::<Assets<Image>>()
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                .and_then(|data| data.first().copied())
+        })
+        .collect();
+    assert_eq!(sprites.len(), 9, "ground River y ocho bordes con callback");
+    assert_eq!(sprites.iter().filter(|&&marker| marker == 0x43).count(), 1);
+    for slot in 26..34 {
+        let marker = 0x80 + slot as u8;
+        assert_eq!(
+            sprites.iter().filter(|&&value| value == marker).count(),
+            1,
+            "el callback River conserva el bloque y desplaza el slot {slot}"
+        );
+    }
+    assert_eq!(
+        world.query::<&MapVisualLayer>().iter(&world).count(),
+        10,
+        "el callback River no pierde la estructura del depósito"
+    );
+}
+
+#[test]
 fn river_ship_depot_consumes_flat_feature_ground_in_ground_pass() {
     let assets = boot_assets_app();
     let depot = TileCoord::new(1, 1);

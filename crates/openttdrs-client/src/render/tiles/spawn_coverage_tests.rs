@@ -2531,6 +2531,26 @@ fn assert_static_newgrf_road_stop_layout_with_options(
     incomplete_layout: bool,
     empty_sequence: bool,
 ) {
+    assert_static_newgrf_road_stop_layout_with_orientation(
+        stop_kind,
+        station_type,
+        draw_mode,
+        direct_base_ground,
+        incomplete_layout,
+        openttdrs_core::RSV_DRIVE_THROUGH_X,
+        empty_sequence,
+    );
+}
+
+fn assert_static_newgrf_road_stop_layout_with_orientation(
+    stop_kind: StopKind,
+    station_type: u8,
+    draw_mode: u8,
+    direct_base_ground: bool,
+    incomplete_layout: bool,
+    orientation: u8,
+    empty_sequence: bool,
+) {
     use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
 
     let assets = boot_assets_app();
@@ -2539,13 +2559,17 @@ fn assert_static_newgrf_road_stop_layout_with_options(
     let mut tile = Tile {
         kind: TileKind::Station,
         mapt: 0x50,
-        m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+        m5: orientation,
         m6: station_type << 3,
         ..tile_template()
     };
     tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::TRAM));
     map.set_tile(coord, tile)
         .expect("parada NewGRF drive-through con tranvía");
+    let (catenary_back_id, catenary_front_id) = match orientation {
+        openttdrs_core::RSV_DRIVE_THROUGH_Y => (6070, 6042),
+        _ => (6071, 6043),
+    };
 
     let ground_rgba = [240, 10, 10, 255].repeat(4);
     let parent_rgba = [10, 240, 10, 255].repeat(4);
@@ -2693,7 +2717,7 @@ fn assert_static_newgrf_road_stop_layout_with_options(
         .query::<(Entity, &ViewportSortableParent, &Sprite, &Transform)>()
         .iter(&world)
         .filter_map(|(entity, parent, sprite, transform)| {
-            [6071, 6043, u32::MAX]
+            [catenary_back_id, catenary_front_id, u32::MAX]
                 .contains(&parent.sprite_id)
                 .then_some((
                     entity,
@@ -2709,22 +2733,22 @@ fn assert_static_newgrf_road_stop_layout_with_options(
     } else if empty_sequence {
         vec![
             (
-                6071,
+                catenary_back_id,
                 ParentSpriteBounds::new(63, 48, 0, 63, 48, 1),
                 viewport_insertion_key(3, 3, 4),
             ),
             (
-                6071,
+                catenary_back_id,
                 ParentSpriteBounds::new(48, 48, 0, 48, 48, 1),
                 viewport_insertion_key(3, 3, 5),
             ),
             (
-                6071,
+                catenary_back_id,
                 ParentSpriteBounds::new(48, 63, 0, 48, 63, 1),
                 viewport_insertion_key(3, 3, 6),
             ),
             (
-                6043,
+                catenary_front_id,
                 ParentSpriteBounds::new(48, 48, 2, 63, 63, 2),
                 viewport_insertion_key(3, 3, 7),
             ),
@@ -2732,22 +2756,22 @@ fn assert_static_newgrf_road_stop_layout_with_options(
     } else {
         vec![
             (
-                6071,
+                catenary_back_id,
                 ParentSpriteBounds::new(63, 48, 0, 63, 48, 1),
                 viewport_insertion_key(3, 3, 4),
             ),
             (
-                6071,
+                catenary_back_id,
                 ParentSpriteBounds::new(48, 48, 0, 48, 48, 1),
                 viewport_insertion_key(3, 3, 5),
             ),
             (
-                6071,
+                catenary_back_id,
                 ParentSpriteBounds::new(48, 63, 0, 48, 63, 1),
                 viewport_insertion_key(3, 3, 6),
             ),
             (
-                6043,
+                catenary_front_id,
                 ParentSpriteBounds::new(48, 48, 2, 63, 63, 2),
                 viewport_insertion_key(3, 3, 7),
             ),
@@ -2972,6 +2996,19 @@ fn static_newgrf_road_stop_layout_joins_global_catenary_sort() {
         3,
         openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
         false,
+        false,
+    );
+}
+
+#[test]
+fn static_newgrf_road_stop_layout_y_axis_joins_global_catenary_sort() {
+    assert_static_newgrf_road_stop_layout_with_orientation(
+        StopKind::BusStop,
+        3,
+        openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        false,
+        false,
+        openttdrs_core::RSV_DRIVE_THROUGH_Y,
         false,
     );
 }

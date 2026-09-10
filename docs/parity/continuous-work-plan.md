@@ -3474,3 +3474,14 @@ naval pasan, la suite cliente queda en 1348 pasadas y 2 ignoradas, Clippy
 estricto, formato y `diff --check` verdes. Es una ampliación del oráculo de
 vecinos; #567 sigue abierta por la matriz completa Sea/Canal/River, callbacks,
 clipping, orden global y framebuffer, y #326 por la composición global.
+
+Actualización #326/#566-VIEWPORT-ASSET-LIFECYCLE (2026-09-10, `a9c15f24`):
+la regresión del sorter preciso cubre también la descarga de una `Image` ya
+usada por un parent. Tras `AssetEvent::Removed`, el sistema vuelve a ejecutar
+el sort y retira del stream al parent cuyo rectángulo dejó de estar
+materializado, evitando conservar una geometría precisa obsoleta. El bloque
+focal del sorter pasa 15/15, la suite cliente queda en 1348 pasadas y 2
+ignoradas, Clippy estricto, formato y `diff --check` verdes. Es cobertura del
+ciclo de vida de assets dentro de #566; la issue sigue abierta por la matriz
+completa de pivotes, clipping por familias y framebuffer, y #326 por la
+composición global.

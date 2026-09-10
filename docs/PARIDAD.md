@@ -1395,6 +1395,19 @@ profundidad fuente, texturas Action1 y el vínculo child/parent. Los layouts
 incompletos conservan deliberadamente la catenaria directa y el fallback
 existente; no se reclama raster nuevo ni se cierra #326 o #561.
 
+Actualización #326-ROAD-STOP-LAYOUT-FALLBACK (2026-09-10, `55d570f2`): el
+fallback de un `TileLayout` de parada vial incompleto queda fijado como
+atómico. La regresión construye una parada Bus con ground/parent `Action1`
+válidos y un child que requiere una paleta no materializable; el renderer
+descarta todo el layout custom parcial y conserva el asfalto vanilla
+`SPR_ROAD_PAVED_STRAIGHT_*`, las dos capas BUILD vanilla y la catenaria directa
+de la ruta local. La prueba además verifica que ninguna textura NewGRF ni
+parent custom sobreviva al fallback. El RoadWaypoint completo ya tiene su
+regresión paralela y su variante incompleta conserva el mismo contrato. Esto
+delimita #563, pero no habilita todavía el sort global de la catenaria directa
+ni aporta una comparación raster/oráculo específica; #326 y #561 siguen
+abiertos.
+
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
 `y_offs`). El renderer aplica además `SpriteBounds::origin` y

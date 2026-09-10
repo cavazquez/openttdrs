@@ -3109,3 +3109,11 @@ ground runtime correcto, el BUILD independiente y la foundation custom Action5
 slot 58 como parent del ground. Pasan las 28 pruebas aeroportuarias y Clippy;
 la matriz completa de foundations/rotaciones, paletas, sonidos y framebuffer
 continúa pendiente, por lo que #326, #329 y #564 no se cierran.
+
+Actualización #326/#565-TRAMTYPE-SURFACE-CATENARY (2026-09-10, `fe1c5913`):
+la regresión `sloped_newgrf_tram_overlay_attaches_to_its_foundation_parent`
+verifica superficie custom de tramtype como child de foundation inclinada y
+los grupos Action3 de catenaria trasero `5` y frontal `4`, incluyendo tres
+recortes traseros y uno frontal. Pasan las 50 pruebas de catenaria y Clippy;
+#565 permanece abierto por superficies/pendientes, anclas, clipping,
+depósitos y framebuffer fuera de este caso representativo.

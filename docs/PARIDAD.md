@@ -3219,3 +3219,12 @@ Action5 `0x06` (slot 58) cuando la foundation nivelada está activa. Las 28
 pruebas aeroportuarias y Clippy pasan. Esto cubre un camino representativo,
 no la matriz completa de foundations/rotaciones, paletas, sonidos ni el
 framebuffer; #326, #329 y #564 permanecen abiertos.
+
+Actualización #326/#565-TRAMTYPE-SURFACE-CATENARY (2026-09-10, `fe1c5913`):
+la regresión `sloped_newgrf_tram_overlay_attaches_to_its_foundation_parent`
+verifica que un tramtype NewGRF conserva su superficie custom como child de la
+foundation en una tesela inclinada y resuelve sus grupos Action3 de catenaria
+(selector trasero `5` y frontal `4`). El compositor mantiene tres recortes
+traseros y un frontal, con los parents lógicos `6070/6042` para esa máscara;
+las 50 pruebas de catenaria y Clippy pasan. #565 sigue abierto por la matriz
+completa de superficies/pendientes, anclas, clipping, depósitos y framebuffer.

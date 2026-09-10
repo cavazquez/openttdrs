@@ -41,6 +41,17 @@ fn ship_depot_entrance_faces_water(map: &Map, c: TileCoord, dir: u8) -> bool {
         .is_some_and(|exit| map.get_kind(exit) == Some(TileKind::Water))
 }
 
+/// Codifica la dirección local de la boca como `part/eje` nativos de `m5`.
+///
+/// `OpenTTD` obtiene la dirección con `XYNSToDiagDir(axis, part)`, por lo que
+/// los cuatro valores bajos válidos no coinciden con `dir` en orden numérico:
+/// `0 -> 0`, `1 -> 3`, `2 -> 1` y `3 -> 2`.
+#[must_use]
+const fn ship_depot_m5_for_dir(dir: u8) -> u8 {
+    const PART_AXIS_BY_DIR: [u8; 4] = [0, 3, 1, 2];
+    0x30 | PART_AXIS_BY_DIR[dir as usize & 0x03]
+}
+
 pub(crate) fn check_ship_depot_placement(
     map: &Map,
     c: TileCoord,
@@ -79,7 +90,7 @@ pub(in crate::command) fn place_ship_depot_dir(
     // convertía en agua normal.
     state
         .map
-        .set_mapt_m5(c, 0x60 | (original.mapt & 0x0F), 0x30 | dir)
+        .set_mapt_m5(c, 0x60 | (original.mapt & 0x0F), ship_depot_m5_for_dir(dir))
         .map_err(|_| CommandError::OutOfBounds)?;
     // `SetTileOwner` sólo toca los cinco bits bajos de m1. La clase de agua
     // vive en los bits 5..6 y debe sobrevivir tanto para Canal/River como para
@@ -429,6 +440,19 @@ pub(crate) fn check_place_dock_or_station(
 mod tests {
     use super::*;
     use crate::world_gen::{CLEAR_GROUND_DESERT, clear_ground_m5};
+
+    #[test]
+    fn ship_depot_direction_uses_native_part_and_axis_encoding() {
+        assert_eq!(ship_depot_m5_for_dir(0), 0x30);
+        assert_eq!(ship_depot_m5_for_dir(1), 0x33);
+        assert_eq!(ship_depot_m5_for_dir(2), 0x31);
+        assert_eq!(ship_depot_m5_for_dir(3), 0x32);
+        assert_eq!(
+            ship_depot_m5_for_dir(7),
+            0x32,
+            "dir se normaliza a cuatro valores"
+        );
+    }
 
     #[test]
     fn place_river_clears_desert_zone_without_mutating_raw_object_payload() {

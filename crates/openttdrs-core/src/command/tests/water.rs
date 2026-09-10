@@ -48,7 +48,7 @@ fn place_ship_depot_writes_current_raw_contract_and_active_owner() {
     let tile = s.map.get(depot).expect("depósito construido");
     assert_eq!(tile.kind, TileKind::ShipDepot);
     assert_eq!(tile.mapt, 0x62, "se conserva la zona climática de MAPT");
-    assert_eq!(tile.m5, 0x33, "tipo Depot + parte/eje de la orientación");
+    assert_eq!(tile.m5, 0x32, "tipo Depot + parte/eje de la orientación");
     assert_eq!(
         crate::map::water_class(tile),
         Some(WaterClass::Canal),

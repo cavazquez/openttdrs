@@ -22,6 +22,9 @@ use crate::sprites::WATER_RIVER_SLOPE_SPRITE_META;
 const SPR_FLAT_WATER_TILE: u32 = 4061;
 /// `SPR_CANAL_DIKES_BASE` de `table/sprites.h`.
 pub(crate) const SPR_CANAL_DIKES_BASE: u32 = 5380;
+/// Tipo Action5 y primer slot de los diques dentro de `0x08 Canals`.
+const ACTION5_CANALS_TYPE: u8 = openttdrs_core::ACTION5_TYPE_CANALS;
+const CANALS_ACTION5_DIKES_OFFSET: usize = 52;
 /// `SPR_CANALS_BASE` de `table/sprites.h`: las cuatro pendientes de río
 /// vanilla ocupan los slots 0..3 de la hoja Action5 de canales.
 pub(crate) const SPR_RIVER_SLOPE_BASE: u32 = 5328;
@@ -30,6 +33,25 @@ const SPR_SHORE_BASE: u32 = 5936;
 
 fn shore_sprite_id(tileh: u8) -> u32 {
     SPR_SHORE_BASE + shore_png_index(tileh) as u32
+}
+
+/// Materializa un reemplazo Action5 `Canals` y conserva su ancla NFO.
+///
+/// Los cuatro sprites de pendiente ocupan los slots 0..3 y los doce diques
+/// empiezan en el slot 52. Si el caller no tiene cache/`Assets<Image>` (por
+/// ejemplo, un preview mínimo), el caller puede usar el fallback vanilla.
+fn action5_canal_sprite(
+    slot: usize,
+    table: &[Option<DecodedSprite>],
+    cache: &mut Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+) -> Option<(Sprite, DecodedSprite)> {
+    let decoded = table.get(slot).and_then(Option::as_ref)?.clone();
+    let (Some(cache), Some(images)) = (cache.as_deref_mut(), images.as_deref_mut()) else {
+        return None;
+    };
+    let sprite = cache.sprite_colored(ACTION5_CANALS_TYPE, slot, table, Color::WHITE, images)?;
+    Some((sprite, decoded))
 }
 
 /// Índice de `SPR_CANALS_BASE + offset` que selecciona `DrawRiverWater` cuando
@@ -135,15 +157,39 @@ fn is_watered_tile(map: &Map, coord: TileCoord, from: WateredFrom) -> bool {
 /// ciclo de paleta animada: `DrawRiverWater` emite el sprite estático y sólo
 /// después consulta los bordes NewGRF. El atlas conserva el `xrel/yrel` real
 /// de cada fila Action5, incluidas las dos variantes de 39 px de alto.
-fn river_slope_draw(ctx: &TileRenderContext) -> Option<(usize, Vec3)> {
+fn river_slope_draw(
+    ctx: &TileRenderContext,
+    custom_sprite: Option<&DecodedSprite>,
+) -> Option<(usize, Vec3)> {
     let index = river_slope_sprite_index(ctx.info.tileh)?;
-    let &(width, height, xrel, yrel) = WATER_RIVER_SLOPE_SPRITE_META.get(index)?;
+    let (width, height, xrel, yrel) = custom_sprite.map_or_else(
+        || {
+            WATER_RIVER_SLOPE_SPRITE_META
+                .get(index)
+                .map(|&(width, height, xrel, yrel)| {
+                    (
+                        f32::from(width),
+                        f32::from(height),
+                        f32::from(xrel),
+                        f32::from(yrel),
+                    )
+                })
+        },
+        |sprite| {
+            Some((
+                f32::from(sprite.width),
+                f32::from(sprite.height),
+                f32::from(sprite.x_offs),
+                f32::from(sprite.y_offs),
+            ))
+        },
+    )?;
     let mut position = overlay_pos(
         ctx.iso_pos,
-        f32::from(xrel),
-        f32::from(yrel),
-        f32::from(width),
-        f32::from(height),
+        xrel,
+        yrel,
+        width,
+        height,
         ctx.info.base_z,
         0.0,
         ctx.tx_i32(),
@@ -159,8 +205,17 @@ fn push_river_slope_sprite(
     batch_water: &mut Vec<(crate::render::MapTileChunk, WaterTile, Sprite, Transform)>,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
+    canal_action5: &[Option<DecodedSprite>],
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
 ) -> bool {
-    let Some((index, position)) = river_slope_draw(ctx) else {
+    let index = match river_slope_sprite_index(ctx.info.tileh) {
+        Some(index) => index,
+        None => return false,
+    };
+    let custom = action5_canal_sprite(index, canal_action5, &mut action5_sprites, &mut images);
+    let Some((_, position)) = river_slope_draw(ctx, custom.as_ref().map(|(_, sprite)| sprite))
+    else {
         return false;
     };
 
@@ -169,20 +224,27 @@ fn push_river_slope_sprite(
     batch_water.push((
         ctx.map_tile_chunk(),
         WaterTile::STATIC,
-        assets.river_slopes[index].sprite(),
+        custom.map_or_else(|| assets.river_slopes[index].sprite(), |(sprite, _)| sprite),
         Transform::from_translation(position),
     ));
     true
 }
 
-/// Variante directa para `DrawWaterDepot`, que no usa el batch global de
-/// agua porque debe emitir el ground antes de sus capas `TILE_SEQ`.
-pub(crate) fn spawn_river_slope_ground(
+/// Emite el ground de `DrawWaterDepot` consumiendo Action5 `Canals`.
+pub(crate) fn spawn_river_slope_ground_with_action5(
     commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
+    canal_action5: &[Option<DecodedSprite>],
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
 ) -> bool {
-    let Some((index, position)) = river_slope_draw(ctx) else {
+    let Some(index) = river_slope_sprite_index(ctx.info.tileh) else {
+        return false;
+    };
+    let custom = action5_canal_sprite(index, canal_action5, &mut action5_sprites, &mut images);
+    let Some((_, position)) = river_slope_draw(ctx, custom.as_ref().map(|(_, sprite)| sprite))
+    else {
         return false;
     };
     let sprite_id = SPR_RIVER_SLOPE_BASE + index as u32;
@@ -191,7 +253,7 @@ pub(crate) fn spawn_river_slope_ground(
         MapVisualLayer,
         ctx.map_tile_chunk(),
         WaterTile::STATIC,
-        assets.river_slopes[index].sprite(),
+        custom.map_or_else(|| assets.river_slopes[index].sprite(), |(sprite, _)| sprite),
         Transform::from_translation(position),
     ));
     true
@@ -257,39 +319,62 @@ pub(crate) fn canal_dike_slots(map: &Map, coord: TileCoord) -> [bool; 12] {
     slots
 }
 
-/// Emite los diques vanilla seleccionados por `DrawWaterEdges(true, 0, tile)`.
-///
-/// Se usa tanto para el ground de un depósito como para una tesela Canal
-/// genérica. Los diques son `DrawGroundSprite`, por eso no reciben `WaterTile`
-/// ni parent sortable; la banda mínima conserva el orden 0..11 dentro de la
-/// misma tesela.
-pub(crate) fn spawn_canal_dikes(
+/// Emite `DrawWaterEdges(true, 0, tile)` consumiendo reemplazos Action5 `Canals`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_canal_dikes_with_action5(
     commands: &mut Commands,
     map: &Map,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     base_z: u8,
     role: &'static str,
+    canal_action5: &[Option<DecodedSprite>],
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
 ) {
     let slots = canal_dike_slots(map, ctx.coord);
     for (slot, selected) in slots.into_iter().enumerate() {
         if !selected {
             continue;
         }
-        let Some(&(width, height, xrel, yrel)) =
-            crate::sprites::WATER_CANAL_DIKE_SPRITE_META.get(slot)
-        else {
-            continue;
-        };
+        let custom = action5_canal_sprite(
+            CANALS_ACTION5_DIKES_OFFSET + slot,
+            canal_action5,
+            &mut action5_sprites,
+            &mut images,
+        );
+        let (sprite, width, height, xrel, yrel): (Sprite, f32, f32, f32, f32) =
+            if let Some((sprite, decoded)) = custom {
+                (
+                    sprite,
+                    f32::from(decoded.width),
+                    f32::from(decoded.height),
+                    f32::from(decoded.x_offs),
+                    f32::from(decoded.y_offs),
+                )
+            } else {
+                let Some(&(width, height, xrel, yrel)) =
+                    crate::sprites::WATER_CANAL_DIKE_SPRITE_META.get(slot)
+                else {
+                    continue;
+                };
+                (
+                    assets.canal_dikes[slot].sprite(),
+                    f32::from(width),
+                    f32::from(height),
+                    f32::from(xrel),
+                    f32::from(yrel),
+                )
+            };
         let sprite_id = SPR_CANAL_DIKES_BASE + slot as u32;
         WorldDrawTrace::record_sprite(role, "ground", sprite_id, false);
         let layer = 0.010 + slot as f32 * 0.0001;
         let mut position = overlay_pos(
             ctx.iso_pos,
-            f32::from(xrel),
-            f32::from(yrel),
-            f32::from(width),
-            f32::from(height),
+            xrel,
+            yrel,
+            width,
+            height,
             base_z,
             layer,
             ctx.tx_i32(),
@@ -299,12 +384,13 @@ pub(crate) fn spawn_canal_dikes(
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            assets.canal_dikes[slot].sprite(),
+            sprite,
             Transform::from_translation(position),
         ));
     }
 }
 
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn push_water_tile(
     commands: &mut Commands,
@@ -317,6 +403,37 @@ pub(crate) fn push_water_tile(
     shore_newgrf: &[Option<DecodedSprite>],
     shore_sprites: Option<&mut NewGrfShoreSpriteCache>,
     images: Option<&mut Assets<Image>>,
+) {
+    push_water_tile_with_action5(
+        commands,
+        map,
+        map_dims,
+        assets,
+        ctx,
+        debug_coast,
+        batches,
+        shore_newgrf,
+        shore_sprites,
+        images,
+        &[],
+        None,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn push_water_tile_with_action5(
+    commands: &mut Commands,
+    map: &Map,
+    map_dims: (u32, u32),
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    debug_coast: bool,
+    batches: &mut MapSpriteBatches,
+    shore_newgrf: &[Option<DecodedSprite>],
+    shore_sprites: Option<&mut NewGrfShoreSpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
+    canal_action5: &[Option<DecodedSprite>],
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
 ) {
     if ctx.info.use_shore {
         // `DrawShoreTile(tileh)` — igual que OpenTTD: pendiente real del 2×2
@@ -405,7 +522,14 @@ pub(crate) fn push_water_tile(
                 )),
             ));
         } else if ctx.tile.and_then(water_class) == Some(WaterClass::River)
-            && push_river_slope_sprite(&mut batches.water, assets, ctx)
+            && push_river_slope_sprite(
+                &mut batches.water,
+                assets,
+                ctx,
+                canal_action5,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            )
         {
             // `DrawRiverWater` already emitted the selected slope sprite.
         } else {
@@ -415,7 +539,17 @@ pub(crate) fn push_water_tile(
             WorldDrawTrace::record_sprite("water-ground", "ground", SPR_FLAT_WATER_TILE, false);
             push_water_sprite(&mut batches.water, &assets.water, ctx);
             if ctx.tile.and_then(water_class) == Some(WaterClass::Canal) {
-                spawn_canal_dikes(commands, map, assets, ctx, ctx.info.base_z, "water-canal");
+                spawn_canal_dikes_with_action5(
+                    commands,
+                    map,
+                    assets,
+                    ctx,
+                    ctx.info.base_z,
+                    "water-canal",
+                    canal_action5,
+                    action5_sprites,
+                    images,
+                );
             }
         }
     }
@@ -424,13 +558,14 @@ pub(crate) fn push_water_tile(
 #[cfg(test)]
 mod tests {
     use super::{
-        SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, canal_dike_slots, river_slope_sprite_index,
-        shore_sprite_id,
+        SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, action5_canal_sprite, canal_dike_slots,
+        river_slope_sprite_index, shore_sprite_id,
     };
+    use bevy::prelude::{Assets, Image};
     use openttdrs_core::map::{
         Map, Tile, TileCoord, TileKind, WaterClass, make_water_tile, set_water_class_m1,
     };
-    use openttdrs_core::{SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW};
+    use openttdrs_core::{DecodedSprite, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW};
 
     fn canal_depot(map: &mut Map, coord: TileCoord) {
         let mut tile = map.get(coord).expect("canal depot tile");
@@ -502,5 +637,41 @@ mod tests {
         map.set_tile(center, tile).expect("set sea depot");
 
         assert_eq!(canal_dike_slots(&map, center), [false; 12]);
+    }
+
+    #[test]
+    fn canal_action5_cache_materializes_slope_and_dike_slots_with_nfo_geometry() {
+        let slope = DecodedSprite {
+            width: 9,
+            height: 7,
+            x_offs: -4,
+            y_offs: -6,
+            rgba: vec![0xFF; 9 * 7 * 4],
+            mask: Vec::new(),
+        };
+        let dike = DecodedSprite {
+            width: 13,
+            height: 5,
+            x_offs: 8,
+            y_offs: -3,
+            rgba: vec![0x80; 13 * 5 * 4],
+            mask: Vec::new(),
+        };
+        let mut table = vec![None; 64];
+        table[0] = Some(slope.clone());
+        table[52] = Some(dike.clone());
+        let mut cache = crate::render::NewGrfAction5SpriteCache::default();
+        let mut images = Assets::<Image>::default();
+        let mut cache_ref = Some(&mut cache);
+        let mut images_ref = Some(&mut images);
+
+        let (_, selected_slope) = action5_canal_sprite(0, &table, &mut cache_ref, &mut images_ref)
+            .expect("pendiente Action5");
+        assert_eq!(selected_slope, slope);
+
+        let (_, selected_dike) = action5_canal_sprite(52, &table, &mut cache_ref, &mut images_ref)
+            .expect("dique Action5");
+        assert_eq!(selected_dike, dike);
+        assert_eq!(images.len(), 2, "cada slot conserva su textura cacheada");
     }
 }

@@ -23,9 +23,10 @@ use crate::iso::{ground_draw_z, overlay_pos};
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::tiles::{
     HouseSpawnResources, TramwayDepotAction5, flush_map_batches, push_forest_tree, push_water_tile,
-    spawn_bridge_middle, spawn_bridge_middle_with_road_types, spawn_generic_land_tile,
-    spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
-    spawn_transport_object_tile, spawn_transport_object_tile_with_road_types,
+    push_water_tile_with_action5, spawn_bridge_middle, spawn_bridge_middle_with_road_types,
+    spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
+    spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
+    spawn_transport_object_tile_with_road_types,
     spawn_transport_object_tile_with_road_types_and_tramway_action5,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
@@ -244,6 +245,79 @@ fn river_water_slope_uses_static_action5_sprite_and_nfo_anchor() {
         1,
         1,
     );
+    expected.z = ground_draw_z(1, 1, 0.0);
+    assert_eq!(*transform, Transform::from_translation(expected));
+}
+
+#[test]
+fn river_water_slope_consumes_canal_action5_sprite_and_nfo_anchor() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    make_water_tile(&mut map, coord, WaterClass::River).expect("river tile");
+    map.set_height(TileCoord::new(1, 1), 1)
+        .expect("north height");
+    map.set_height(TileCoord::new(1, 2), 1)
+        .expect("east height");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let custom = DecodedSprite {
+        width: 11,
+        height: 9,
+        x_offs: -6,
+        y_offs: -8,
+        rgba: vec![0xFF; 11 * 9 * 4],
+        mask: Vec::new(),
+    };
+    let mut canal_action5 = vec![None; 65];
+    canal_action5[1] = Some(custom);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                let mut batches = MapSpriteBatches::default();
+                push_water_tile_with_action5(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    false,
+                    &mut batches,
+                    &[],
+                    None,
+                    Some(&mut images),
+                    &canal_action5,
+                    Some(&mut action5_sprites),
+                );
+                assert_eq!(batches.water.len(), 1);
+                assert!(!batches.water[0].1.is_palette_animated());
+                flush_map_batches(&mut commands, batches);
+            },
+        )
+        .expect("river Action5 slope spawn");
+
+    let (sprite, transform) = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .find(|(sprite, _)| sprite.texture_atlas.is_none())
+        .expect("pendiente de río Action5 materializada");
+    assert!(
+        world
+            .resource::<Assets<Image>>()
+            .get(&sprite.image)
+            .is_some()
+    );
+    let mut expected = overlay_pos(crate::iso::iso(1, 1), -6.0, -8.0, 11.0, 9.0, 0, 0.0, 1, 1);
     expected.z = ground_draw_z(1, 1, 0.0);
     assert_eq!(*transform, Transform::from_translation(expected));
 }
@@ -1713,6 +1787,7 @@ fn action5_no_track_tram_depot_relocates_buildings_and_draws_the_overlay() {
                     &[],
                     None,
                     &[],
+                    &[],
                     Some(&mut action5_sprites),
                     Some(&mut images),
                     &[],
@@ -1915,6 +1990,7 @@ fn action5_catenary_depot_fallback_covers_custom_tram_and_road_types() {
                         0,
                         &road_catalog,
                         None,
+                        &[],
                         &[],
                         Some(&mut action5_sprites),
                         Some(&mut images),
@@ -3804,6 +3880,97 @@ fn canal_ship_depot_draws_dikes_with_active_nfo_anchors() {
             "dique slot {slot} debe conservar la ancla NFO y el pase ground"
         );
     }
+}
+
+#[test]
+fn canal_ship_depot_consumes_action5_dike_sprite_and_nfo_anchor() {
+    let assets = boot_assets_app();
+    let depot = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    let mut tile = tile_template();
+    tile.kind = TileKind::ShipDepot;
+    tile.mapt = 0x60;
+    tile.m5 = 0x30;
+    tile.m1 = set_water_class_m1(tile.m1, WaterClass::Canal);
+    map.set_tile(depot, tile).expect("canal ship depot");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let custom = DecodedSprite {
+        width: 13,
+        height: 5,
+        x_offs: 8,
+        y_offs: -3,
+        rgba: vec![0xFF; 13 * 5 * 4],
+        mask: Vec::new(),
+    };
+    let mut canal_action5 = vec![None; 65];
+    canal_action5[52] = Some(custom);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types_and_tramway_action5(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &[],
+                    None,
+                    &[],
+                    &canal_action5,
+                    Some(&mut action5_sprites),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                    TramwayDepotAction5::default(),
+                );
+            },
+        )
+        .expect("canal ship depot Action5 spawn");
+
+    let sprites: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(sprite, transform)| (sprite.clone(), transform.translation))
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let (_, actual) = sprites
+        .iter()
+        .find(|(sprite, _)| sprite.texture_atlas.is_none() && images.get(&sprite.image).is_some())
+        .expect("dique Action5 materializado");
+    let mut expected =
+        crate::iso::overlay_pos(crate::iso::iso(1, 1), 8.0, -3.0, 13.0, 5.0, 0, 0.010, 1, 1);
+    expected.z = ground_draw_z(1, 1, 0.010);
+    assert_eq!(*actual, expected, "el slot 52 conserva el ancla NFO");
 }
 
 #[test]

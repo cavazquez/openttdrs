@@ -13,7 +13,7 @@ use super::transport::{
     catenary_local_z_delta, record_road_ground_trace, resolve_custom_rail_group_sprite,
     spawn_rail_catenary_for_surface, spawn_road_catenary_for_type,
 };
-use super::water::{spawn_canal_dikes, spawn_river_slope_ground};
+use super::water::{spawn_canal_dikes_with_action5, spawn_river_slope_ground_with_action5};
 use super::{
     catenary_under_low_bridge,
     helpers::{
@@ -4404,6 +4404,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
         road_catalog,
         road_sprites,
         newgrf_stack,
+        &[],
         action5_sprites,
         images,
         road_stop_catalog,
@@ -4442,6 +4443,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
     road_catalog: &[openttdrs_core::RoadTypeDef],
     mut road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    canal_action5_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
     road_stop_catalog: &[RoadStopSpecDef],
@@ -4455,7 +4457,14 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
         // inclinado usa una de las cuatro imágenes `SPR_CANALS_BASE+0..3`,
         // mientras mar/canal y un río plano usan `SPR_FLAT_WATER_TILE`.
         let river_slope = ctx.tile.and_then(water_class) == Some(WaterClass::River)
-            && spawn_river_slope_ground(commands, assets, ctx);
+            && spawn_river_slope_ground_with_action5(
+                commands,
+                assets,
+                ctx,
+                canal_action5_newgrf,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
         if !river_slope {
             WorldDrawTrace::record_sprite("ship-depot-water", "ground", 4061, false);
             commands.spawn((
@@ -4471,7 +4480,17 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                 )),
             ));
         }
-        spawn_canal_dikes(commands, map, assets, ctx, base_z, "ship-depot-water");
+        spawn_canal_dikes_with_action5(
+            commands,
+            map,
+            assets,
+            ctx,
+            base_z,
+            "ship-depot-water",
+            canal_action5_newgrf,
+            action5_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        );
     } else if !matches!(
         ctx.kind,
         TileKind::RoadTunnel

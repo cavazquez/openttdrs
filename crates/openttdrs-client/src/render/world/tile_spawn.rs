@@ -14,7 +14,7 @@ use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{
     CompanyColoredSprites, HouseSpawnResources, MapLabelSpatialIndex, MapSpriteBatches, RenderGrid,
     TileAtlas, TileRenderContext, TileViewportBounds, TramwayDepotAction5, WorldAssets,
-    chunk_tile_bounds, flush_map_batches, push_forest_tree, push_water_tile,
+    chunk_tile_bounds, flush_map_batches, push_forest_tree, push_water_tile_with_action5,
     spawn_bridge_middle_with_road_types_and_stations, spawn_generic_land_tile_with_objects,
     spawn_house_tile, spawn_industry_tile_with_world, spawn_rail_tile, spawn_road_tile,
     spawn_station_tile_with_world_and_road_types,
@@ -287,6 +287,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     &sim.state.road_type_catalog,
                     Some(road_sprites),
                     &sim.state.newgrf_stack,
+                    &sim.state.runtime.canal_action5_newgrf_sprites,
                     Some(action5_sprites),
                     Some(images),
                     &sim.state.road_stop_spec_catalog,
@@ -301,7 +302,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                 defer_overlay_tiles.push((tx, ty));
             }
             TileKind::Water => {
-                push_water_tile(
+                push_water_tile_with_action5(
                     commands,
                     map,
                     (mw, mh),
@@ -312,6 +313,8 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     &sim.state.runtime.shore_newgrf_sprites,
                     Some(shore_sprites),
                     Some(images),
+                    &sim.state.runtime.canal_action5_newgrf_sprites,
+                    Some(action5_sprites),
                 );
             }
             TileKind::Void => {

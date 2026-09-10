@@ -1641,6 +1641,184 @@ fn action5_no_track_tram_depot_relocates_buildings_and_draws_the_overlay() {
 }
 
 #[test]
+fn action5_catenary_depot_fallback_covers_custom_tram_and_road_types() {
+    let assets = boot_assets_app();
+    let tram_coord = TileCoord::new(1, 1);
+    let road_coord = TileCoord::new(3, 1);
+    let mut map = Map::new_flat(6, 4, 0);
+    let mut custom_tram = Tile {
+        kind: TileKind::RoadDepot,
+        mapt: 0x20,
+        m5: 1, // SE
+        // Un depósito tram puro no tiene roadtype válido.
+        m3hi: 0x3F,
+        ..tile_template()
+    };
+    custom_tram =
+        openttdrs_core::set_tram_road_type_on_tile(custom_tram, Some(RoadType::from_u8(2)));
+    map.set_tile(tram_coord, custom_tram)
+        .expect("custom tram depot");
+
+    let road = openttdrs_core::set_road_type_on_tile(
+        Tile {
+            kind: TileKind::RoadDepot,
+            mapt: 0x20,
+            m5: 1, // SE
+            ..tile_template()
+        },
+        RoadType::from_u8(3),
+    );
+    map.set_tile(road_coord, road).expect("custom road depot");
+
+    let catenary_type = |id: u8, class: RoadTramType| RoadTypeDef {
+        id: RoadType::from_u8(id),
+        class,
+        label: format!("Catenary {id}"),
+        short_label: format!("C{id}"),
+        intro_year: 0,
+        max_speed: 0,
+        cost_multiplier: 0,
+        maintenance_multiplier: 0,
+        // RoadTypeFlag::Catenary.
+        flags: 1,
+        powered_mask: 0,
+        badges: Vec::new(),
+        from_tramtypes_feature: matches!(class, RoadTramType::Tram),
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        // No publican vistas ni grupos Action3: la decisión debe venir de
+        // Action0 y usar el fallback Action5, no de la caché de sprites.
+        newgrf_runtime: None,
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+    };
+    let road_catalog = vec![
+        catenary_type(2, RoadTramType::Tram),
+        catenary_type(3, RoadTramType::Road),
+    ];
+    let mut tramway = vec![None; openttdrs_core::TRAMWAY_ACTION5_SLOT_COUNT];
+    for (slot, rgba) in [
+        (
+            openttdrs_core::TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT,
+            [210, 60, 180, 255],
+        ),
+        (
+            openttdrs_core::TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT + 1,
+            [40, 160, 90, 255],
+        ),
+        (
+            openttdrs_core::TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT,
+            [230, 130, 30, 255],
+        ),
+        (
+            openttdrs_core::TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT + 1,
+            [40, 120, 220, 255],
+        ),
+    ] {
+        tramway[slot] = Some(DecodedSprite {
+            width: 4,
+            height: 5,
+            x_offs: -2,
+            y_offs: -4,
+            rgba: rgba.repeat(4 * 5),
+            mask: Vec::new(),
+        });
+    }
+
+    let grid = RenderGrid::from_map(&map, 6, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                for coord in [tram_coord, road_coord] {
+                    spawn_transport_object_tile_with_road_types_and_tramway_action5(
+                        &mut commands,
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(
+                            &m.0,
+                            &g.0,
+                            u32::try_from(coord.x).expect("x positiva"),
+                            u32::try_from(coord.y).expect("y positiva"),
+                        ),
+                        4.0,
+                        false,
+                        &m.0,
+                        m.0.dimensions(),
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        None,
+                        None,
+                        &[],
+                        &[],
+                        TEST_CLIMATE,
+                        0,
+                        &road_catalog,
+                        None,
+                        &[],
+                        Some(&mut action5_sprites),
+                        Some(&mut images),
+                        &[],
+                        &[],
+                        TramwayDepotAction5 {
+                            sprites: &tramway,
+                            replacement: openttdrs_core::TramwayDepotReplacement::WithTrack,
+                        },
+                    );
+                }
+            },
+        )
+        .expect("custom catenary depot spawn");
+
+    let parents: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .map(|(parent, transform)| (*parent, transform.translation))
+        .collect();
+    for sprite_id in [6035, 6036] {
+        assert!(
+            parents
+                .iter()
+                .any(|(parent, _)| parent.sprite_id == sprite_id),
+            "el tramtype eléctrico puro usa DEPOT_WITH_TRACK ({sprite_id})"
+        );
+    }
+    for sprite_id in [6099, 6100] {
+        assert!(
+            parents
+                .iter()
+                .any(|(parent, _)| parent.sprite_id == sprite_id),
+            "un roadtype eléctrico válido fuerza DEPOT_NO_TRACK ({sprite_id})"
+        );
+    }
+    assert!(
+        parents
+            .iter()
+            .all(|(parent, transform)| parent.source_depth == transform.z),
+        "ambas relocalizaciones conservan la profundidad fuente global"
+    );
+}
+
+#[test]
 fn drive_through_tram_stop_draws_vanilla_catenary() {
     let assets = boot_assets_app();
     let expected_back = assets

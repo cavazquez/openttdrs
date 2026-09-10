@@ -5513,6 +5513,24 @@ const ROTSG_GROUND: u8 = 2;
 /// `RoadTypeSpriteGroup::ROTSG_DEPOT` en `road.h`.
 const ROTSG_DEPOT: u8 = 8;
 
+/// Roadtype efectivo que `DrawTile_Road` usa para las decisiones semánticas
+/// del depósito (catenaria y `UsesOverlay`).
+///
+/// A diferencia de la variante `newgrf_*`, no exige que haya sprites
+/// disponibles: Action0 puede declarar un tipo eléctrico cuyo fallback visual
+/// todavía viene del bloque Action5 global.
+fn road_depot_type_def_for_tile(
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    tile: Tile,
+) -> Option<&openttdrs_core::RoadTypeDef> {
+    let road_type = if road_type_from_tile(&tile).as_u8() == INVALID_ROAD_TYPE_ID {
+        tram_road_type_from_tile(&tile)?
+    } else {
+        road_type_from_tile(&tile)
+    };
+    openttdrs_core::road_type_def(road_catalog, road_type)
+}
+
 /// Roadtype NewGRF que `DrawTile_Road` consulta para un depósito.
 ///
 /// La prioridad no depende de qué grupos haya publicado el GRF: un roadtype
@@ -5534,6 +5552,7 @@ fn road_depot_newgrf_type_def_for_tile(
 /// road es `INVALID_ROADTYPE` delega al tramtype. Es la misma prioridad que
 /// `DrawTile_Road`, por lo que un tram custom no sustituye la fachada de un
 /// depósito que también conserva una carretera válida.
+#[cfg(test)]
 fn road_depot_newgrf_def_for_tile(
     road_catalog: &[openttdrs_core::RoadTypeDef],
     tile: Tile,
@@ -5616,18 +5635,38 @@ fn road_depot_tram_no_track_layer(layer: RoadDepotLayerGfx) -> Option<RoadDepotL
     road_depot_tram_relocated_layer(layer, TRAM_DEPOT_NO_TRACK_SPRITE_BASE)
 }
 
-/// Modo Action5 de un depósito vanilla creado como tranvía. Un `ROTSG_DEPOT`
-/// custom ya resuelto omite esta ruta, como `default_gfx = false` en OpenTTD.
-fn road_depot_vanilla_tram_replacement(
+/// Relocalización Action5 que usa el fallback de un depósito eléctrico.
+///
+/// `DrawTile_Road` no limita este bloque a `ROADTYPE_TRAM`: cualquier
+/// roadtype/tramtype cuyo Action0 active `RoadTypeFlag::Catenary` puede usar
+/// el set global sin vía. Sólo el tranvía puro sin `UsesOverlay()` aprovecha
+/// el set con vía; un roadtype válido, o un tipo que gestiona su propio suelo,
+/// siempre elige `DEPOT_NO_TRACK`.
+///
+/// Un `ROTSG_DEPOT` custom ya resuelto omite esta ruta, como
+/// `default_gfx = false` en OpenTTD. El tranvía vanilla conserva el fallback
+/// explícito para callers de pruebas que no llevan el catálogo base completo.
+fn road_depot_action5_catenary_replacement(
     ctx: &TileRenderContext,
+    type_def: Option<&openttdrs_core::RoadTypeDef>,
+    uses_overlay: bool,
     replacement: TramwayDepotReplacement,
 ) -> Option<TramwayDepotReplacement> {
-    ctx.tile
-        .filter(|tile| {
-            road_type_from_tile(tile).as_u8() == INVALID_ROAD_TYPE_ID
-                && tram_road_type_from_tile(tile) == Some(openttdrs_core::RoadType::TRAM)
-        })
-        .map(|_| replacement)
+    let tile = ctx.tile?;
+    let road_is_invalid = road_type_from_tile(&tile).as_u8() == INVALID_ROAD_TYPE_ID;
+    let is_catenary = type_def.is_some_and(openttdrs_core::RoadTypeDef::has_catenary)
+        || (road_is_invalid
+            && tram_road_type_from_tile(&tile) == Some(openttdrs_core::RoadType::TRAM));
+    if !is_catenary {
+        return None;
+    }
+    Some(
+        if replacement == TramwayDepotReplacement::WithTrack && road_is_invalid && !uses_overlay {
+            TramwayDepotReplacement::WithTrack
+        } else {
+            TramwayDepotReplacement::NoTrack
+        },
+    )
 }
 
 /// Materializa una capa de depósito que una Action5 real reemplazó dentro del
@@ -5725,10 +5764,12 @@ fn spawn_road_depot_tile(
 ) {
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
     let depot_tile = ctx.tile;
-    let depot_type_def =
+    let depot_metadata_def =
+        depot_tile.and_then(|tile| road_depot_type_def_for_tile(road_catalog, tile));
+    let depot_newgrf_type_def =
         depot_tile.and_then(|tile| road_depot_newgrf_type_def_for_tile(road_catalog, tile));
     let custom_depot_def =
-        depot_tile.and_then(|tile| road_depot_newgrf_def_for_tile(road_catalog, tile));
+        depot_newgrf_type_def.filter(|def| def.has_newgrf_specific_group(ROTSG_DEPOT));
     record_road_depot_ground_trace(tileh);
     let position = full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, half_h);
     if let Some(parent) = foundation_child_parent {
@@ -5753,18 +5794,25 @@ fn spawn_road_depot_tile(
     // del sprite, mientras que `DEPOT_NO_TRACK` suma el overlay separado.
     let foundation_z_delta = (i32::from(base_z) - i32::from(ctx.info.base_z)) * 8;
     let build_layers = road_depot_build_layers(dir);
+    let uses_overlay = depot_newgrf_type_def.is_some_and(road_depot_uses_overlay);
     let tram_depot_replacement = custom_depot_def
         .is_none()
-        .then(|| road_depot_vanilla_tram_replacement(ctx, tramway_depot_action5.replacement))
+        .then(|| {
+            road_depot_action5_catenary_replacement(
+                ctx,
+                depot_metadata_def,
+                uses_overlay,
+                tramway_depot_action5.replacement,
+            )
+        })
         .flatten();
-    let uses_overlay = depot_type_def.is_some_and(road_depot_uses_overlay);
     if custom_depot_def.is_none() && uses_overlay {
         // `DrawTile_Road` deja el suelo de depósito y, con `UsesOverlay()`,
         // consulta solamente `ROTSG_OVERLAY`. Una ausencia o un resultado
         // vacío no puede caer al riel vanilla: el grupo GROUND ya declaró que
         // la infraestructura suministra sus propias capas.
         if let Some((sprite, view)) = depot_tile.and_then(|tile| {
-            depot_type_def
+            depot_newgrf_type_def
                 .filter(|def| def.has_newgrf_specific_group(ROTSG_OVERLAY))
                 .and_then(|def| {
                     specific_sprite_for_tile(

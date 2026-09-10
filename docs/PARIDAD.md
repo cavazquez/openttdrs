@@ -1210,6 +1210,19 @@ fijan la selección GROUND/OVERLAY, la ancla SE y la prioridad sobre
 para tramtypes custom, clipping, pivotes y framebuffer continúan abiertos en
 #326.
 
+Actualización #326-ROAD-DEPOT-CATENARY-ACTION5 (2026-09-10): la decisión del
+fallback de depósito ya lee los metadatos Action0 del roadtype efectivo por
+separado de sus vistas Action3. Cualquier tipo con `RoadTypeFlag::Catenary`
+entra al bloque Action5 global: un tramtype puro sin `UsesOverlay()` conserva
+`DEPOT_WITH_TRACK` cuando ese fue el último replacement activo; un roadtype
+válido o un tipo con ground propio fuerza `DEPOT_NO_TRACK`, como
+`DrawTile_Road`. Esto permite usar los sprites Action5 incluso cuando el tipo
+custom no publicó una vista visual propia. La ECS construye ambos tipos sin
+Action3 y fija `6035`/`6036` frente a `6099`/`6100`, incluidos los parents y
+profundidades. No se cierra #326: la composición completa de superficies,
+catenaria y layouts de tramtypes custom, además de clipping, pivotes y
+framebuffer, sigue pendiente.
+
 Actualización #326-TUNNEL-CATENARY-GLOBAL (2026-09-09):
 `DrawRailCatenaryOnTunnel` ya conserva su `SpriteCombine` en runtime. En una
 boca eléctrica el cable de entrada `5656`/`5658` es el parent global con el

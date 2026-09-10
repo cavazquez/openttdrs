@@ -2107,6 +2107,7 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
     station_type: u8,
     draw_mode: u8,
     direct_base_ground: bool,
+    incomplete_layout: bool,
 ) {
     use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
 
@@ -2183,6 +2184,7 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
                 TileLayoutSpriteRef {
                     action1_set: Some(2),
                     origin: [7, -4, i8::MIN],
+                    flags: if incomplete_layout { 0x04 } else { 0 },
                     ..Default::default()
                 },
             ],
@@ -2276,11 +2278,9 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
         })
         .collect();
     parents.sort_by_key(|(_, parent, _, _)| parent.insertion_key);
-    assert_eq!(
-        parents
-            .iter()
-            .map(|(_, parent, _, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
-            .collect::<Vec<_>>(),
+    let expected_parent_rows = if incomplete_layout {
+        Vec::new()
+    } else {
         vec![
             (
                 6071,
@@ -2307,8 +2307,15 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
                 ParentSpriteBounds::new(49, 50, 3, 52, 54, 8),
                 viewport_insertion_key(3, 3, 12),
             ),
-        ],
-        "la catenaria debe preceder el TileSeq estático NewGRF en el stream global"
+        ]
+    };
+    assert_eq!(
+        parents
+            .iter()
+            .map(|(_, parent, _, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        expected_parent_rows,
+        "la catenaria debe preceder el TileSeq o su fallback en el stream global"
     );
     assert!(
         parents
@@ -2327,6 +2334,69 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
         .iter(&world)
         .map(|sprite| sprite.image.clone())
         .collect();
+
+    if incomplete_layout {
+        let vanilla_building_ids: Vec<_> = world
+            .query::<&ViewportSortableParent>()
+            .iter(&world)
+            .filter_map(|parent| {
+                [5980, 5981]
+                    .contains(&parent.sprite_id)
+                    .then_some(parent.sprite_id)
+            })
+            .collect();
+        assert_eq!(
+            vanilla_building_ids,
+            vec![5980, 5981],
+            "un TileLayout incompleto debe usar las capas BUILD vanilla completas"
+        );
+        let custom_image_count = {
+            let images = world.resource::<Assets<Image>>();
+            sprite_handles
+                .iter()
+                .filter(|handle| {
+                    images
+                        .get(*handle)
+                        .and_then(|image| image.data.as_deref())
+                        .is_some_and(|rgba| {
+                            [
+                                ground_rgba.as_slice(),
+                                parent_rgba.as_slice(),
+                                child_rgba.as_slice(),
+                            ]
+                            .contains(&rgba)
+                        })
+                })
+                .count()
+        };
+        assert_eq!(
+            custom_image_count, 0,
+            "un layout incompleto no debe mezclar ninguna textura NewGRF"
+        );
+        let vanilla_ground_count = {
+            let vanilla_ground = {
+                let assets = &world.resource::<TsAssets>().0;
+                assets.road_paved[crate::sprites::road_flat_sprite_index(0, 0x0A)].clone()
+            };
+            world
+                .query::<&Sprite>()
+                .iter(&world)
+                .filter(|sprite| vanilla_ground.matches(sprite))
+                .count()
+        };
+        assert_eq!(
+            vanilla_ground_count, 1,
+            "el fallback atómico debe conservar el suelo vanilla"
+        );
+        assert!(
+            parents
+                .iter()
+                .all(|(_, parent, _, _)| parent.sprite_id != u32::MAX),
+            "un layout incompleto no debe publicar parents custom parciales"
+        );
+        return;
+    }
+
     let (parent_entity, _, parent_handle, _) = parents
         .iter()
         .find(|(_, parent, _, _)| parent.sprite_id == u32::MAX)
@@ -2426,6 +2496,7 @@ fn static_newgrf_road_stop_layout_joins_global_catenary_sort() {
         3,
         openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
         false,
+        false,
     );
 }
 
@@ -2435,6 +2506,7 @@ fn static_newgrf_truck_stop_layout_joins_global_catenary_sort() {
         StopKind::TruckStop,
         2,
         openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        false,
         false,
     );
 }
@@ -2446,6 +2518,18 @@ fn static_newgrf_road_waypoint_layout_joins_global_catenary_sort() {
         openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT,
         openttdrs_core::ROADSTOP_DRAW_MODE_WAYP_GROUND,
         false,
+        false,
+    );
+}
+
+#[test]
+fn incomplete_newgrf_road_stop_layout_falls_back_atomically() {
+    assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
+        StopKind::BusStop,
+        3,
+        openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        false,
+        true,
     );
 }
 
@@ -2473,6 +2557,7 @@ fn direct_base_ground_newgrf_road_layouts_join_global_catenary_sort() {
             station_type,
             draw_mode,
             true,
+            false,
         );
     }
 }

@@ -2253,7 +2253,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord);
             let custom_layout_joins_global_sort = match custom_layout.as_ref() {
                 None => true,
-                Some((_, layout, _, _)) => road_stop_layout_is_static(layout),
+                Some((spec_id, layout, _, _)) => road_stop_layout_is_static(*spec_id, layout),
             };
             let catenary_parent_ordinal = (!catenary_suppressed && custom_layout_joins_global_sort)
                 .then_some(ROAD_STOP_CATENARY_PARENT_ORDINAL);
@@ -2551,7 +2551,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             // no materializables.
             let waypoint_layout_joins_global_sort = match waypoint_layout.as_ref() {
                 None => true,
-                Some((_, layout, _, _)) => road_stop_layout_is_static(layout),
+                Some((spec_id, layout, _, _)) => road_stop_layout_is_static(*spec_id, layout),
             };
             let waypoint_catenary_parent_ordinal =
                 waypoint_layout_joins_global_sort.then_some(ROAD_STOP_CATENARY_PARENT_ORDINAL);
@@ -3188,8 +3188,16 @@ fn resolve_road_stop_layout_for_tile(
 /// El renderer compacto admite Action1 en toda la secuencia y, además, los
 /// tres suelos base planos auditados. Cualquier sprite base BUILD, paleta o
 /// selector no representable conserva el fallback atómico OpenGFX/Action5.
-fn road_stop_layout_is_static(layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout) -> bool {
+fn road_stop_layout_is_static(
+    spec_id: u16,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+) -> bool {
     tile_layout_is_renderable(layout)
+        && layout.ground.as_ref().is_none_or(|ground| {
+            ground.action1_sprite().is_none() || road_stop_layout_ground_slot(spec_id).is_some()
+        })
+        && (layout.sequence.is_empty()
+            || road_stop_layout_sequence_slot_range(spec_id, layout.sequence.len()).is_some())
 }
 
 /// Emite el suelo custom de un `TileLayout` de road stop. OpenTTD lo dibuja
@@ -3209,7 +3217,7 @@ fn spawn_newgrf_road_stop_layout_ground(
     cache: &mut crate::render::NewGrfAction5SpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !road_stop_layout_is_static(layout) {
+    if !road_stop_layout_is_static(spec_id, layout) {
         return false;
     }
     let Some(ground) = layout.ground.as_ref() else {
@@ -3319,7 +3327,7 @@ fn spawn_newgrf_road_stop_layout_sequence(
     cache: &mut crate::render::NewGrfAction5SpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !road_stop_layout_is_static(layout) {
+    if !road_stop_layout_is_static(spec_id, layout) {
         return false;
     }
     // A resolved TileLayout with no BUILD entries is still a complete result:
@@ -6894,7 +6902,7 @@ mod tests {
         rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
         road_depot_newgrf_def_for_tile, road_depot_parent_sprites,
         road_stop_foundation_child_offset, road_stop_layout_ground_slot,
-        road_stop_layout_sequence_slot_range, road_stop_parent_sprites,
+        road_stop_layout_is_static, road_stop_layout_sequence_slot_range, road_stop_parent_sprites,
         road_stop_sorted_layer_centers, station_catenary_pylon_parent_bounds,
         station_catenary_wire_parent_bounds, station_catenary_wire_trace_geometry,
         station_rail_child_offset, station_rail_foundation_world_z_delta,
@@ -7036,6 +7044,34 @@ mod tests {
         assert_eq!(
             road_stop_layout_sequence_slot_range(7, usize::from(u16::MAX) + 2),
             None
+        );
+    }
+
+    #[test]
+    fn road_stop_tile_layout_sortability_matches_cache_slot_capacity() {
+        let action1 = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+            sprite: Some(DecodedSprite {
+                width: 1,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: vec![255, 255, 255, 255],
+                mask: Vec::new(),
+            }),
+            base_sprite: None,
+            origin: [0, 0, 0],
+            extent: [1, 1, 1],
+        };
+        let layout = openttdrs_core::newgrf_sprites::ResolvedTileLayout {
+            ground: Some(action1.clone()),
+            sequence: vec![action1],
+            complete: true,
+        };
+
+        assert!(road_stop_layout_is_static(1023, &layout));
+        assert!(
+            !road_stop_layout_is_static(1024, &layout),
+            "el layout que no cabe en caché no puede reservar el sort global"
         );
     }
 

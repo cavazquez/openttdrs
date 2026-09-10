@@ -738,7 +738,7 @@ encuentra esa primera inversión, aun cuando `world-draw` por tesela coincide.
 Eso prueba la brecha de composición de forma acotada; no declara paridad
 raster. El puente runtime ya aplica el vector final a las capas BUILD de
 paradas viales, depósitos viales y a los postes `TILE_SEQ_LINE` vanilla de
-waypoints viales planos, al bundle local de depósito ferroviario
+waypoints viales planos, a los parents globales de depósito ferroviario
 eléctrico (cable de entrada + fachadas BUILD), a los faroles viales, a la
 subsecuencia vanilla de estación ferroviaria eléctrica (postes, cable y capas
 BUILD) y a los parents de edificios de casas vanilla visibles. En Kale las
@@ -1316,6 +1316,21 @@ absolutos, los cuatro vínculos y la ventana de profundidad; la unitaria fija
 la geometría y los slots del layout OpenGFX2. Kale no contiene un foco de
 waypoint ferroviario para atribuir un delta raster. #326 y #561 siguen abiertos
 por producers restantes, clipping, pivotes, children globales y framebuffer.
+
+Actualización #326-RAIL-DEPOT-GLOBAL (2026-09-09): el cable de entrada
+`DrawRailCatenary` y las fachadas `DrawRailTileSeq` de depósitos ferroviarios
+dejan de recibir sólo un orden local. El cable usa su prisma direccional de
+`_rail_catenary_sprite_data_depot` como parent global en el ordinal 1; las
+capas BUILD vanilla y `RTSG_DEPOT` usan los prismas `TILE_SEQ_LINE` de
+`_depot_gfx_table` desde el ordinal 2, o desde 1 si no hay catenaria. La
+fundación conserva como children sólo el suelo y la reserva PBS; incluso un
+sprite `RTSG_DEPOT` inclinado conserva su ancla NFO y pasa a ser parent con la
+superficie nivelada. La regresión ECS del depósito eléctrico SE comprueba
+`5659`/`1063`/`1064`, sus bounds y el orden final `1063 → 5659 → 1064`; otra
+cubre el grupo NewGRF inclinado. La evidencia estructural reutiliza Kale
+`(195,17)` y no atribuye una nueva métrica raster. #326 y #561 permanecen
+abiertos por producers restantes, clipping, pivotes, children globales y
+framebuffer.
 
 ## Backlog sucesor activo
 

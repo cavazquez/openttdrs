@@ -3898,6 +3898,128 @@ fn sloped_depot_grounds_and_reservation_attach_to_their_foundation_parent() {
             .iter()
             .all(|(child, _, transform)| child.source_depth == transform.translation.z)
     );
+
+    let mut rail_building_parents: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter(|(parent, _)| [1063, 1064].contains(&parent.sprite_id))
+        .collect();
+    rail_building_parents.sort_by_key(|(parent, _)| parent.insertion_key);
+    assert_eq!(rail_building_parents.len(), 2);
+    assert!(
+        rail_building_parents
+            .iter()
+            .all(|(parent, transform)| parent.bounds.zmin == 8
+                && parent.source_depth == transform.translation.z),
+        "las fachadas BUILD usan la superficie nivelada como parents globales"
+    );
+}
+
+#[test]
+fn electric_rail_depot_catenary_and_buildings_join_global_sort() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = fresh_map8();
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::RailDepot,
+            mapt: 0x10,
+            // SE: el oráculo inserta cable 5659 antes de las puertas
+            // 1063/1064 y el sorter final lo deja entre ambas.
+            m5: 1,
+            m8: RailType::Electric as u16,
+            ..tile_template()
+        },
+    )
+    .expect("depósito eléctrico");
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.init_resource::<ViewportSortableChildDepthWindows>();
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_transport_object_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    true,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("electric rail depot spawn");
+
+    let mut parents: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter(|(parent, _)| [5659, 1063, 1064].contains(&parent.sprite_id))
+        .map(|(parent, transform)| (*parent, transform.translation.z))
+        .collect();
+    parents.sort_by_key(|(parent, _)| parent.insertion_key);
+    assert_eq!(
+        parents
+            .iter()
+            .map(|(parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                5659,
+                ParentSpriteBounds::new(23, 16, 10, 23, 30, 10),
+                viewport_insertion_key(1, 1, 1),
+            ),
+            (
+                1063,
+                ParentSpriteBounds::new(18, 18, 0, 18, 30, 22),
+                viewport_insertion_key(1, 1, 2),
+            ),
+            (
+                1064,
+                ParentSpriteBounds::new(29, 18, 0, 29, 30, 22),
+                viewport_insertion_key(1, 1, 3),
+            ),
+        ],
+        "el cable y las puertas deben publicar sus prismas nativos antes del sort"
+    );
+    assert!(
+        parents
+            .iter()
+            .all(|(parent, depth)| parent.source_depth == *depth),
+        "cada parent conserva su profundidad fuente antes del sort global"
+    );
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(sort_viewport_sortable_parents);
+    schedule.run(&mut world);
+    let mut sorted: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter(|(parent, _)| [5659, 1063, 1064].contains(&parent.sprite_id))
+        .map(|(parent, transform)| (parent.sprite_id, transform.translation.z))
+        .collect();
+    sorted.sort_by(|left, right| left.1.total_cmp(&right.1));
+    assert_eq!(
+        sorted
+            .iter()
+            .map(|(sprite_id, _)| *sprite_id)
+            .collect::<Vec<_>>(),
+        vec![1063, 5659, 1064],
+        "el orden global debe conservar el resultado de ViewportSortParentSprites"
+    );
 }
 
 #[test]
@@ -3917,6 +4039,14 @@ fn newgrf_rail_depot_group_replaces_relocated_building_layers() {
         },
     )
     .expect("rail depot");
+    for corner in [
+        TileCoord::new(coord.x + 1, coord.y),
+        TileCoord::new(coord.x, coord.y + 1),
+        TileCoord::new(coord.x + 1, coord.y + 1),
+    ] {
+        map.set_height(corner, 1)
+            .expect("esquina elevada del depósito NewGRF");
+    }
     let custom_rgba = [230, 70, 210, 255].repeat(16);
     let view = DecodedSprite {
         width: 4,
@@ -3995,12 +4125,39 @@ fn newgrf_rail_depot_group_replaces_relocated_building_layers() {
         )
         .expect("custom rail depot spawn");
 
-    let images = world.resource::<Assets<Image>>();
-    let custom_layers = images
-        .iter()
-        .filter(|(_, image)| image.data.as_deref() == Some(custom_rgba.as_slice()))
-        .count();
-    assert_eq!(custom_layers, 2, "SE debe consumir SE_1 y SE_2 custom");
+    {
+        let images = world.resource::<Assets<Image>>();
+        let custom_layers = images
+            .iter()
+            .filter(|(_, image)| image.data.as_deref() == Some(custom_rgba.as_slice()))
+            .count();
+        assert_eq!(custom_layers, 2, "SE debe consumir SE_1 y SE_2 custom");
+    }
+
+    let mut parents: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter(|(parent, _)| [1063, 1064].contains(&parent.sprite_id))
+        .map(|(parent, transform)| (*parent, transform.translation.z))
+        .collect();
+    parents.sort_by_key(|(parent, _)| parent.insertion_key);
+    assert_eq!(
+        parents
+            .iter()
+            .map(|(parent, _)| (parent.sprite_id, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (1063, viewport_insertion_key(2, 2, 1)),
+            (1064, viewport_insertion_key(2, 2, 2)),
+        ],
+        "RTSG_DEPOT conserva los parents TileSeq relocalizados"
+    );
+    assert!(
+        parents
+            .iter()
+            .all(|(parent, depth)| parent.bounds.zmin == 8 && parent.source_depth == *depth),
+        "el sprite NewGRF entra al sorter con su ancla NFO y la superficie nivelada"
+    );
 }
 
 #[test]

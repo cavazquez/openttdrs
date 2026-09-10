@@ -5604,6 +5604,7 @@ fn rail_depot_catenary_parent_sprite(
     )
 }
 
+#[cfg(test)]
 fn rail_depot_build_parent_sprites(
     tx: i32,
     ty: i32,
@@ -5615,85 +5616,42 @@ fn rail_depot_build_parent_sprites(
         .iter()
         .enumerate()
         .map(|(index, layer)| {
-            tile_seq_parent_sprite(
+            ParentSprite::sprite(
                 first_id + index as u64,
                 layer.sprite_id,
-                tx,
-                ty,
-                base_z,
-                layer.dx as i32,
-                layer.dy as i32,
-                layer.dz as i32,
-                layer.sx,
-                layer.sy,
-                23,
+                rail_depot_build_parent_bounds(tx, ty, base_z, layer),
             )
         })
         .collect()
 }
 
-/// Reasigna sólo los slots locales de un depósito ferroviario según el orden
-/// final de OpenTTD. El cable de entrada participa como un parent más: en
-/// Kale `(195,17)` el sorter deja la puerta 1063 detrás/delante del cable
-/// según sus prismas, algo que no se puede reproducir ordenando sólo las dos
-/// fachadas BUILD.
-fn rail_depot_sorted_layer_centers(
-    ctx: &TileRenderContext,
+fn rail_depot_build_parent_bounds(
+    tx: i32,
+    ty: i32,
     base_z: u8,
-    half_h: f32,
-    rail_type: openttdrs_core::RailType,
-    dir: usize,
-    include_catenary: bool,
-) -> (Option<f32>, Vec<Vec3>) {
-    let layers = rail_depot_build_layers(rail_type, dir);
-    let mut centers: Vec<_> = layers
-        .iter()
-        .map(|layer| {
-            road_depot_build_sprite_center(
-                ctx.iso_pos,
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                layer.z,
-                rail_depot_seq_gfx(layer),
-                layer.w,
-                layer.h,
-            )
-        })
-        .collect();
-
-    let mut parents = Vec::with_capacity(layers.len() + usize::from(include_catenary));
-    let mut source_depths = Vec::with_capacity(layers.len() + usize::from(include_catenary));
-    if include_catenary {
-        parents.push(rail_depot_catenary_parent_sprite(
-            0,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            dir,
-        ));
-        source_depths.push(tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.035, half_h).z);
-    }
-    parents.extend(rail_depot_build_parent_sprites(
-        ctx.tx_i32(),
-        ctx.ty_i32(),
+    layer: &RailDepotLayerGfx,
+) -> ParentSpriteBounds {
+    tile_seq_parent_sprite(
+        0,
+        layer.sprite_id,
+        tx,
+        ty,
         base_z,
-        parents.len() as u64,
-        layers,
-    ));
-    source_depths.extend(centers.iter().map(|center| center.z));
-
-    let mut sorted_depths = depths_in_viewport_sort_order(&parents, &source_depths).into_iter();
-    let catenary_depth = include_catenary.then(|| sorted_depths.next()).flatten();
-    debug_assert!(
-        !include_catenary || catenary_depth.is_some(),
-        "el parent de catenaria debe tener un slot de profundidad"
-    );
-    for (center, depth) in centers.iter_mut().zip(sorted_depths) {
-        center.z = depth;
-    }
-    (catenary_depth, centers)
+        layer.dx as i32,
+        layer.dy as i32,
+        layer.dz as i32,
+        layer.sx,
+        layer.sy,
+        23,
+    )
+    .bounds
 }
+
+/// `DrawFoundation` precede al cable de entrada y a `DrawRailTileSeq`; el
+/// suelo/reserva intermedios son children o ground. Reservar 1 para el cable y
+/// arrancar BUILD en 2 conserva el stream nativo cuando hay catenaria.
+const RAIL_DEPOT_CATENARY_PARENT_ORDINAL: u8 = 1;
+const RAIL_DEPOT_BUILDING_PARENT_ORDINAL: u8 = 2;
 
 /// Índice de una fachada vanilla dentro del bloque relocatable de
 /// `RTSG_DEPOT`. OpenTTD calcula el desplazamiento desde `SE_1` (1063), por lo
@@ -5747,15 +5705,15 @@ fn resolve_custom_rail_depot_sprite(
 /// Cable de entrada del depósito eléctrico (`DrawRailCatenary` especial).
 ///
 /// Esta rama va después del suelo/reserva pero antes de las capas BUILD del
-/// depósito. Emitirla después de la fachada hacía que el cable apareciera
-/// visualmente por delante y rompía el orden del oráculo (Kale 195,17).
+/// depósito. Publicar su prisma antes que las fachadas permite al compositor
+/// global reproducir el orden del oráculo (Kale 195,17) también entre teselas.
 #[allow(clippy::too_many_arguments)] // Comparte el contexto de recursos del draw proc del depósito.
 fn spawn_rail_depot_catenary(
     commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     base_z: u8,
-    sorted_depth: Option<f32>,
+    map_width: u32,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: &mut Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     images: &mut Option<&mut Assets<Image>>,
@@ -5812,14 +5770,67 @@ fn spawn_rail_depot_catenary(
         local_z as f32,
         anchor,
     );
-    if let Some(depth) = sorted_depth {
-        position.z = depth;
-    }
+    let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+    position.z = source_depth;
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
         sprite,
         Transform::from_translation(position),
+        ViewportSortableParent {
+            sprite_id: catenary_reference_sprite_id(draw.sprite_id),
+            bounds: rail_depot_catenary_parent_sprite(
+                0,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                usize::from(tile.m5 & 0x03),
+            )
+            .bounds,
+            insertion_key: viewport_insertion_key(
+                ctx.tx,
+                ctx.ty,
+                RAIL_DEPOT_CATENARY_PARENT_ORDINAL,
+            ),
+            source_depth,
+        },
+    ));
+}
+
+/// Publica una fachada `DrawRailTileSeq` del depósito como parent global.
+///
+/// El asset puede venir de `RTSG_DEPOT`, pero su `TILE_SEQ_LINE` conserva el
+/// prisma vanilla relocalizado; sólo cambian tamaño/ancla de la textura.
+#[allow(clippy::too_many_arguments)]
+fn spawn_rail_depot_building_parent(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    map_width: u32,
+    layer_index: usize,
+    parent_ordinal: u8,
+    layer: &RailDepotLayerGfx,
+    sprite_id: u32,
+    sprite: Sprite,
+    mut position: Vec3,
+) {
+    let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+    position.z = source_depth;
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        sprite,
+        Transform::from_translation(position),
+        ViewportSortableParent {
+            sprite_id,
+            bounds: rail_depot_build_parent_bounds(ctx.tx_i32(), ctx.ty_i32(), base_z, layer),
+            insertion_key: viewport_insertion_key(
+                ctx.tx,
+                ctx.ty,
+                parent_ordinal.saturating_add(u8::try_from(layer_index).unwrap_or(u8::MAX)),
+            ),
+            source_depth,
+        },
     ));
 }
 
@@ -5936,19 +5947,21 @@ fn spawn_rail_depot_tile(
         }
     }
     let buildings_are_hidden = buildings_hidden();
-    let catenary_participates = rail_depot_catenary_visible(ctx) && !buildings_are_hidden;
-    let (catenary_depth, build_centers) =
-        rail_depot_sorted_layer_centers(ctx, base_z, half_h, rail_type, dir, catenary_participates);
-    spawn_rail_depot_catenary(
-        commands,
-        assets,
-        ctx,
-        base_z,
-        catenary_depth,
-        catenary_newgrf,
-        catenary_sprites,
-        images,
-    );
+    let building_parent_ordinal = if rail_depot_catenary_visible(ctx) {
+        spawn_rail_depot_catenary(
+            commands,
+            assets,
+            ctx,
+            base_z,
+            map_width,
+            catenary_newgrf,
+            catenary_sprites,
+            images,
+        );
+        RAIL_DEPOT_BUILDING_PARENT_ORDINAL
+    } else {
+        RAIL_DEPOT_CATENARY_PARENT_ORDINAL
+    };
     let depot_variant = rail_depot_visual_type_index(rail_type);
     let depot_builds = &assets.rail_depot_builds[depot_variant][dir];
     let custom_depot_spec = rail_type_depot_newgrf
@@ -5985,7 +5998,7 @@ fn spawn_rail_depot_tile(
             let mut seq = rail_depot_seq_gfx(spec);
             seq.x_offs = resolved.center_offset.x - resolved.size.x * 0.5;
             seq.y_offs = -resolved.center_offset.y - resolved.size.y * 0.5;
-            let mut center = road_depot_build_sprite_center(
+            let center = road_depot_build_sprite_center(
                 ctx.iso_pos,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
@@ -5995,12 +6008,6 @@ fn spawn_rail_depot_tile(
                 resolved.size.x,
                 resolved.size.y,
             );
-            // El orden de padres se calculó con los prismas TILE_SEQ vanilla;
-            // conservar su profundidad mantiene la relación con la catenaria
-            // y las otras fachadas aun cuando el GRF publique dimensiones HD.
-            if let Some(vanilla_center) = build_centers.get(layer_i) {
-                center.z = vanilla_center.z;
-            }
             WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
                 "rail-depot-building-newgrf",
                 "sortable",
@@ -6019,17 +6026,20 @@ fn spawn_rail_depot_tile(
                     23,
                 )),
             );
-            let sprite = tint_building_sprite(resolved.sprite);
-            if let Some(parent) = foundation_child_parent {
-                spawn_foundation_child_sprite_at(commands, sprite, ctx, center, map_width, parent);
-            } else {
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    sprite,
-                    Transform::from_translation(center),
-                ));
-            }
+            let sprite_id =
+                1063 + u32::from(rail_depot_custom_sprite_index(dir, layer_i).unwrap_or_default());
+            spawn_rail_depot_building_parent(
+                commands,
+                ctx,
+                base_z,
+                map_width,
+                layer_i,
+                building_parent_ordinal,
+                spec,
+                sprite_id,
+                tint_building_sprite(resolved.sprite),
+                center,
+            );
             continue;
         }
         let Some(image) = depot_builds.get(layer_i) else {
@@ -6071,18 +6081,33 @@ fn spawn_rail_depot_tile(
                 23,
             )),
         );
-        let center = build_centers[layer_i];
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
+        let center = road_depot_build_sprite_center(
+            ctx.iso_pos,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            base_z,
+            spec.z,
+            rail_depot_seq_gfx(spec),
+            spec.w,
+            spec.h,
+        );
+        spawn_rail_depot_building_parent(
+            commands,
+            ctx,
+            base_z,
+            map_width,
+            layer_i,
+            building_parent_ordinal,
+            spec,
+            spec.sprite_id,
             tint_building_sprite(sprite_from_atlas_or_company_white_colour(
                 company,
                 owner_colour,
                 image,
                 spec.path,
             )),
-            Transform::from_translation(center),
-        ));
+            center,
+        );
     }
 }
 

@@ -3684,3 +3684,14 @@ focal queda en 12 pruebas y la suite cliente continúa en 1353 pasadas y 2
 ignoradas, con Clippy estricto, formato y `diff --check` verdes. #567 sigue
 abierta por callbacks/scopes restantes, vecinos de toda la matriz, clipping,
 orden global y framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-RIVER-CALLBACK (2026-09-10, `993204cc`): la
+regresión ECS conecta `CBID_CANALS_SPRITE_OFFSET` a `CF_RIVER_SLOPE` y
+`CF_RIVER_EDGE` en un depósito River inclinado. El ground conserva el índice
+de pendiente más el delta del callback y los ocho bordes conservan el bloque
+River `24..31` antes de aplicar el mismo delta, sin perder las capas
+`TILE_SEQ`. El bloque focal queda en 14 pruebas y la suite cliente queda en
+1355 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check`
+verdes. #567 sigue abierta por variables/scopes y callbacks restantes,
+costas/túneles/puentes, vecinos de toda la matriz, clipping, orden global y
+framebuffer; #326 permanece abierta.

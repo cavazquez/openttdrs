@@ -3852,3 +3852,13 @@ depósito Canal y verifica que el dique exterior permanezca visible. La suite
 cliente queda en 1370 pasadas y 2 ignoradas, con formato y Clippy estricto
 verdes; #567 y #326 siguen abiertas por costa, túneles/puentes, callbacks y
 scopes restantes, clipping, orden global y framebuffer.
+
+Actualización #326/#567-CANAL-RANDOM-WATER-SCOPE (2026-09-10, `4f47956b`):
+`CanalScopeResolver` ya expone los bits aleatorios de `m4` sólo para las
+teselas cuyo tipo nativo es `MP_WATER`; `ShipDepot` conserva ese origen,
+mientras estaciones, industrias, objetos y bosques reciben cero en `0x83`.
+La regresión recorre ambos casos y evita que una rama Action2 de agua
+construida cambie por bytes residuales de otra familia. La suite cliente queda
+en 1371 pasadas y 2 ignoradas, con formato y Clippy estricto verdes; #567 y
+#326 siguen abiertas por variables/scopes y callbacks restantes, costa,
+vecinos, clipping, orden global y framebuffer.

@@ -82,7 +82,14 @@ fn canal_action2_context(
     let Some(tile) = tile else {
         return action2;
     };
-    let random = u32::from(tile.m3hi);
+    // `CanalScopeResolver::GetRandomBits` and var 0x83 expose m4 only for
+    // MP_WATER. Ship depots are represented as a separate semantic kind in
+    // this renderer, but still originate from MP_WATER; stations, industries,
+    // objects and trees must receive zero even when they retain m3hi bytes.
+    let random = match tile.kind {
+        TileKind::Water | TileKind::ShipDepot => u32::from(tile.m3hi),
+        _ => 0,
+    };
     let height = canal_scope_height(tile);
     let terrain = match climate {
         Climate::SubTropical => u32::from(tile.mapt & 0x03),
@@ -1506,6 +1513,46 @@ mod tests {
         map.set_tile(coord, tile).expect("set below snow line");
         let below_snow = canal_action2_context(map.get(coord), 0, Climate::SubArctic, 10);
         assert_eq!(below_snow.vars.get(&0x81), Some(&0));
+    }
+
+    #[test]
+    fn canal_context_exposes_random_only_for_mp_water() {
+        let mut map = Map::new_flat(1, 1, 0);
+        let coord = TileCoord::new(0, 0);
+        let mut tile = map.get(coord).expect("fixture tile");
+        tile.m3hi = 0xA5;
+
+        for kind in [TileKind::Water, TileKind::ShipDepot] {
+            tile.kind = kind;
+            map.set_tile(coord, tile).expect("set water semantic kind");
+            let context = canal_action2_context(
+                map.get(coord),
+                0,
+                Climate::Temperate,
+                openttdrs_core::DEF_SNOW_LINE_HEIGHT,
+            );
+            assert_eq!(context.random_bits, 0xA5, "{kind:?} is backed by MP_WATER");
+            assert_eq!(context.vars.get(&0x83), Some(&0xA5));
+        }
+
+        for kind in [
+            TileKind::Station,
+            TileKind::Industry,
+            TileKind::Forest,
+            TileKind::Unknown(10),
+        ] {
+            tile.kind = kind;
+            map.set_tile(coord, tile)
+                .expect("set non-water semantic kind");
+            let context = canal_action2_context(
+                map.get(coord),
+                0,
+                Climate::Temperate,
+                openttdrs_core::DEF_SNOW_LINE_HEIGHT,
+            );
+            assert_eq!(context.random_bits, 0, "{kind:?} is not MP_WATER");
+            assert_eq!(context.vars.get(&0x83), Some(&0));
+        }
     }
 
     #[test]

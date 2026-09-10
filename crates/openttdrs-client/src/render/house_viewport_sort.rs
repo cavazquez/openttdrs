@@ -339,8 +339,13 @@ impl DiagonalViewportSortScope {
     /// profundidad a sprites visibles aunque OpenTTD nunca los rasterice.
     ///
     /// Las fórmulas son `RemapCoords` en la escala del cliente Rust:
-    /// `x = 2 * (y - x)`, `y = -x - y + z`. Los límites se normalizan porque
-    /// OpenTTD admite extents cero (`max < min`) en `ParentSpriteBounds`.
+    /// `x = 2 * (y - x)`, `y = -x - y + z`. Los máximos de
+    /// [`ParentSpriteBounds`] son inclusivos, mientras que el clipping nativo
+    /// proyecta el extremo `origin + extent` y deja un píxel de margen en los
+    /// lados derecho/inferior. Los extremos se reconstruyen aquí para no
+    /// perder un `SPR_EMPTY_BOUNDING_BOX` justo en el borde. OpenTTD admite
+    /// extents cero (`max < min`), que conservamos como un extremo igual al
+    /// origen.
     #[must_use]
     fn parent_bounds_reach_viewport(self, bounds: ParentSpriteBounds) -> bool {
         let xmin = i64::from(bounds.xmin.min(bounds.xmax));
@@ -350,14 +355,30 @@ impl DiagonalViewportSortScope {
         let zmin = i64::from(bounds.zmin.min(bounds.zmax));
         let zmax = i64::from(bounds.zmin.max(bounds.zmax));
 
-        let projected_left = 2 * (ymin - xmax);
-        let projected_right = 2 * (ymax - xmin);
-        let projected_bottom = -xmax - ymax + zmin;
-        let projected_top = -xmin - ymin + zmax;
-        projected_right >= self.screen_left
-            && projected_left <= self.screen_right
-            && projected_top >= self.screen_bottom
-            && projected_bottom <= self.screen_top
+        let x_end = if bounds.xmax < bounds.xmin {
+            xmin
+        } else {
+            xmax + 1
+        };
+        let y_end = if bounds.ymax < bounds.ymin {
+            ymin
+        } else {
+            ymax + 1
+        };
+        let z_end = if bounds.zmax < bounds.zmin {
+            zmin
+        } else {
+            zmax + 1
+        };
+
+        let projected_left = 2 * (ymin - x_end);
+        let projected_right = 2 * (y_end - xmin) + 1;
+        let projected_bottom = -x_end - y_end + zmin - 1;
+        let projected_top = -xmin - ymin + z_end;
+        projected_right > self.screen_left
+            && projected_left < self.screen_right
+            && projected_top > self.screen_bottom
+            && projected_bottom < self.screen_top
     }
 
     /// Reproduce el test de clipping de `AddSortableSpriteToDraw` para un PNG
@@ -937,6 +958,32 @@ mod tests {
         assert!(
             !scope.parent_bounds_reach_viewport(distant_south),
             "un producer retenido bajo el viewport no debe alterar slots visibles"
+        );
+
+        // `SPR_EMPTY_BOUNDING_BOX` proyecta el extremo exclusivo de su caja
+        // (`origin + extent`), no sólo el máximo inclusivo almacenado en el
+        // parent. Con una caja 1×1×1, la cara derecha puede entrar en la
+        // primera columna visible aunque `2 * (ymax - xmin)` todavía quede
+        // fuera. El caso también cubre el fallback 3D antes de materializar
+        // un PNG de un parent.
+        let edge_scope = DiagonalViewportSortScope {
+            row_min: i64::MIN,
+            row_max: i64::MAX,
+            column_min: i64::MIN,
+            column_max: i64::MAX,
+            screen_left: 1,
+            screen_right: 3,
+            screen_bottom: 0,
+            screen_top: 3,
+        };
+        assert!(edge_scope.parent_bounds_reach_viewport(ParentSpriteBounds::new(0, 0, 0, 0, 0, 0)));
+
+        let touching_scope = DiagonalViewportSortScope {
+            screen_left: 3,
+            ..edge_scope
+        };
+        assert!(
+            !touching_scope.parent_bounds_reach_viewport(ParentSpriteBounds::new(0, 0, 0, 0, 0, 0))
         );
 
         // `AddSortableSpriteToDraw` recorta contra el rectángulo del PNG, no

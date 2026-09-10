@@ -3573,7 +3573,7 @@ regresión ECS conecta `CBID_CANALS_SPRITE_OFFSET` a `CF_RIVER_SLOPE` y
 de pendiente más el delta del callback y los ocho bordes conservan el bloque
 River `24..31` antes de aplicar el mismo delta, sin perder las capas
 `TILE_SEQ`. El bloque focal queda en 14 pruebas y la suite cliente queda en
-1355 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check`
+1356 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check`
 verdes. #567 sigue abierta por variables/scopes y callbacks restantes,
 costas/túneles/puentes, vecinos de toda la matriz, clipping, orden global y
 framebuffer; #326 permanece abierta.

@@ -3099,6 +3099,23 @@ fn spawn_newgrf_station_layout_sequence(
 
 /// Tipo sintético en la caché Action5 para vistas Action3 del catálogo `RoadStops`.
 const ROADSTOP_ACTION3_CACHE_TYPE: u8 = 0x14;
+/// Namespace separado para las entradas materializadas de `TileLayout`. Las
+/// vistas simples usan slots `spec * 6 + view`; compartir el type id con el
+/// bloque `spec * 64` del layout permitiría colisiones entre specs distintos.
+const ROADSTOP_TILE_LAYOUT_CACHE_TYPE: u8 = 0x15;
+const ROADSTOP_TILE_LAYOUT_SLOT_STRIDE: u16 = 64;
+
+#[must_use]
+fn road_stop_layout_ground_slot(spec_id: u16) -> Option<u16> {
+    spec_id.checked_mul(ROADSTOP_TILE_LAYOUT_SLOT_STRIDE)
+}
+
+#[must_use]
+fn road_stop_layout_sequence_slot_range(spec_id: u16, sequence_len: usize) -> Option<(u16, u16)> {
+    let first = road_stop_layout_ground_slot(spec_id)?.checked_add(1)?;
+    let last_offset = u16::try_from(sequence_len.checked_sub(1)?).ok()?;
+    Some((first, first.checked_add(last_offset)?))
+}
 
 /// Resuelve el grupo Action2 de una parada con el mismo contexto que usa el
 /// callback/render actual. El resultado conserva el fingerprint para que todas
@@ -3201,9 +3218,11 @@ fn spawn_newgrf_road_stop_layout_ground(
         return true;
     };
     let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
-        let slot = spec_id.saturating_mul(64);
+        let Some(slot) = road_stop_layout_ground_slot(spec_id) else {
+            return false;
+        };
         let handle = cache.handle_for_variant(
-            ROADSTOP_ACTION3_CACHE_TYPE,
+            ROADSTOP_TILE_LAYOUT_CACHE_TYPE,
             slot,
             runtime_fp,
             decoded,
@@ -3311,16 +3330,28 @@ fn spawn_newgrf_road_stop_layout_sequence(
         return true;
     }
 
-    let slot_base = spec_id.saturating_mul(64).saturating_add(1);
+    // Validate the complete range before emitting anything. A saturated slot
+    // would alias another spec and leave a partially spawned layout behind
+    // if a later sequence entry did not fit in the cache key.
+    let Some((slot_base, _slot_last)) =
+        road_stop_layout_sequence_slot_range(spec_id, layout.sequence.len())
+    else {
+        return false;
+    };
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut emitted = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
         let Some(decoded) = layer.action1_sprite() else {
             return false;
         };
-        let slot = slot_base.saturating_add(u16::try_from(index).unwrap_or(u16::MAX));
+        let Some(index) = u16::try_from(index).ok() else {
+            return false;
+        };
+        let Some(slot) = slot_base.checked_add(index) else {
+            return false;
+        };
         let handle = cache.handle_for_variant(
-            ROADSTOP_ACTION3_CACHE_TYPE,
+            ROADSTOP_TILE_LAYOUT_CACHE_TYPE,
             slot,
             runtime_fp,
             decoded,
@@ -3359,7 +3390,7 @@ fn spawn_newgrf_road_stop_layout_sequence(
                 height,
             );
             let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
-            let sprite_id = u32::MAX.saturating_sub(u32::try_from(index).unwrap_or(u32::MAX));
+            let sprite_id = u32::MAX.saturating_sub(u32::from(index));
             let bounds = tile_seq_parent_sprite(
                 index as u64,
                 sprite_id,
@@ -6862,7 +6893,8 @@ mod tests {
         rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
         rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
         road_depot_newgrf_def_for_tile, road_depot_parent_sprites,
-        road_stop_foundation_child_offset, road_stop_parent_sprites,
+        road_stop_foundation_child_offset, road_stop_layout_ground_slot,
+        road_stop_layout_sequence_slot_range, road_stop_parent_sprites,
         road_stop_sorted_layer_centers, station_catenary_pylon_parent_bounds,
         station_catenary_wire_parent_bounds, station_catenary_wire_trace_geometry,
         station_rail_child_offset, station_rail_foundation_world_z_delta,
@@ -6973,6 +7005,38 @@ mod tests {
         assert_eq!(center.x, 109.0);
         assert_eq!(center.y, 184.0);
         assert_eq!(center.z, crate::iso::sortable_draw_z(3, 4, 0, 0.05));
+    }
+
+    #[test]
+    fn road_stop_tile_layout_ground_slots_do_not_saturate() {
+        assert_eq!(road_stop_layout_ground_slot(0), Some(0));
+        assert_eq!(road_stop_layout_ground_slot(1023), Some(65_472));
+        assert_eq!(
+            road_stop_layout_ground_slot(1024),
+            None,
+            "un spec fuera del bloque u16 debe activar el fallback"
+        );
+        assert_eq!(road_stop_layout_ground_slot(u16::MAX), None);
+    }
+
+    #[test]
+    fn road_stop_tile_layout_sequence_range_is_checked_before_emission() {
+        assert_eq!(
+            road_stop_layout_sequence_slot_range(1023, 63),
+            Some((65_473, u16::MAX)),
+            "el último bloque válido puede utilizar el slot u16::MAX"
+        );
+        assert_eq!(
+            road_stop_layout_sequence_slot_range(1023, 64),
+            None,
+            "la secuencia que rebasa el bloque no debe saturar su último slot"
+        );
+        assert_eq!(road_stop_layout_sequence_slot_range(1024, 1), None);
+        assert_eq!(road_stop_layout_sequence_slot_range(7, 0), None);
+        assert_eq!(
+            road_stop_layout_sequence_slot_range(7, usize::from(u16::MAX) + 2),
+            None
+        );
     }
 
     #[test]

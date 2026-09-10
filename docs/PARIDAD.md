@@ -3253,3 +3253,15 @@ vista no existe, el fallback sigue siendo Action5 y luego OpenGFX vanilla. La
 regresión focal cubre materialización y no colisión de handles; `CF_WATERSLOPE`,
 `CF_RIVER_EDGE`, callbacks/offsets restantes y la matriz de framebuffer aún
 quedan pendientes, por lo que #567 y #326 permanecen abiertos.
+
+Actualización #326/#567-RIVER-EDGES-WATER-SLOPE (2026-09-10, `d75294cc`):
+`DrawWaterEdges` ya comparte la tabla de conectividad entre Canal y River. Las
+vistas `CF_RIVER_EDGE` se consumen en los bloques planos y de pendiente
+(`0/12/24/36/48`) y `CF_WATERSLOPE`/`CF_RIVER_SLOPE` pueden aportar el ground
+plano cuando declaran `CFF_HAS_FLAT_SPRITE`; todas las texturas raw mantienen
+su geometría NFO y se separan de Action5 en la caché. El mundo y
+`DrawWaterDepot` emiten el ground, bordes y diques en el orden correcto, con
+fallback atómico a Action5/OpenGFX. Las 55 pruebas focales de agua y Clippy
+pasan. Callbacks de offset, resolución Action2 completa, las combinaciones
+restantes de deposito/costa y la comparación de framebuffer siguen pendientes;
+#567 y #326 permanecen abiertos.

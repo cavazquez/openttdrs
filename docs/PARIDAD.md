@@ -3297,3 +3297,14 @@ resuelve, se mantiene el fallback sin bordes custom. La regresión runtime-only
 y las 57 pruebas focales de agua pasan junto con Clippy. El terreno `0x81`
 real, callbacks restantes, combinaciones de costa/eje/parte, clipping, orden
 global y framebuffer siguen pendientes; #567 y #326 permanecen abiertos.
+
+Actualización #326/#567-CANAL-TERRAIN-CONTEXT (2026-09-10, `c82d1de2`): el
+contexto de render por tesela conserva ahora el clima efectivo y la línea de
+nieve persistida del mundo. `CanalScopeResolver` recibe `TropicZone` desde el
+nibble bajo de `mapt` en subtropical y clasifica la altura contra la línea de
+nieve en subártico; temperate y Toyland mantienen su valor explícito mientras
+no exista una fuente equivalente importada. La regresión cubre ambos climas y
+el límite de nieve; las 58 pruebas focales de agua y Clippy estricto pasan.
+Quedan pendientes las demás variables/scopes Action2, nieve variable de
+NewGRF, combinaciones completas del depósito, clipping, orden global y
+framebuffer, por lo que #567 y #326 permanecen abiertos.

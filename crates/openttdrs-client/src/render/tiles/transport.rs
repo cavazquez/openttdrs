@@ -2024,6 +2024,15 @@ pub(crate) fn spawn_road_catenary_for_type(
     if catenary_under_low_bridge(map, ctx.coord, dims).hide_wires && !catenary_transparent() {
         return global_parent_ordinal;
     }
+    // `DrawRoadBits` retorna antes de `DrawRoadCatenary` mientras una
+    // carretera normal tiene obras (`HasRoadWorks`). Los cruces a nivel
+    // siguen su rama propia en OpenTTD y no usan esta guarda.
+    if tile.kind == TileKind::Road
+        && !is_road_level_crossing(tile.mapt, tile.m5, tile.kind)
+        && road_tile_roadside(tile.m5, tile.m6).is_some_and(|roadside| roadside >= 6)
+    {
+        return global_parent_ordinal;
+    }
     let Some(def) = openttdrs_core::road_type_def(road_catalog, road_type) else {
         return global_parent_ordinal;
     };

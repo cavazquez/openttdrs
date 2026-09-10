@@ -5476,7 +5476,11 @@ fn spawn_ship_depot_tile(
             sprite_id,
             company_palette,
             false,
-            (dx as i32, dy as i32, 0),
+            // El origen de `DrawTileSeqStruct` ya queda expresado en
+            // `SpriteBounds.origin` (`bounds.ox/oy`). OpenTTD no lo duplica
+            // en `extra_offs_*`: ese offset de pantalla sólo corresponde a
+            // ground/child draws explícitamente desplazados.
+            (0, 0, 0),
             0,
             Some(crate::render::world_draw_trace::TraceSpriteBounds::new(
                 dx as i32, dy as i32, 0, extent_x, extent_y, 20,

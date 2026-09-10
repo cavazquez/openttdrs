@@ -1121,6 +1121,24 @@ mod tests {
             windows.next_parent_depth.contains_key(&late_parent),
             "el parent antes omitido debe entrar al stream cuando su textura ya tiene tamaño"
         );
+
+        world
+            .resource_mut::<Assets<Image>>()
+            .remove(image_handle.id());
+        world.write_message(AssetEvent::Removed {
+            id: image_handle.id(),
+        });
+        schedule.run(&mut world);
+
+        let windows = world.resource::<ViewportSortableChildDepthWindows>();
+        assert_eq!(
+            windows.sort_runs, 3,
+            "la descarga del PNG debe invalidar el sort"
+        );
+        assert!(
+            !windows.next_parent_depth.contains_key(&late_parent),
+            "el parent debe volver al fallback cuando su textura fue descargada"
+        );
     }
 
     #[test]

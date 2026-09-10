@@ -243,4 +243,35 @@ mod tests {
             Vec3::new(1.0, -3.0, crate::iso::sortable_draw_z(0, 0, 0, 0.035))
         );
     }
+
+    #[test]
+    fn horizontal_crop_keeps_full_png_anchor_for_each_catenary_segment() {
+        let anchor = CatenarySpriteAnchor {
+            width: 64.0,
+            height: 16.0,
+            x_offs: -20.0,
+            y_offs: -5.0,
+        };
+        let sprite = Sprite::default();
+
+        let (west, west_shift) =
+            catenary_sprite_horizontal_crop(sprite.clone(), anchor, None, Some(-12.0))
+                .expect("tramo oeste");
+        assert_eq!(west.rect, Some(Rect::new(0.0, 0.0, 9.0, 16.0)));
+        assert_eq!(west_shift, -27.5);
+
+        let (north, north_shift) =
+            catenary_sprite_horizontal_crop(sprite.clone(), anchor, Some(-12.0), Some(12.0))
+                .expect("tramo norte");
+        assert_eq!(north.rect, Some(Rect::new(8.0, 0.0, 33.0, 16.0)));
+        assert_eq!(north_shift, -11.5);
+
+        let (east, east_shift) =
+            catenary_sprite_horizontal_crop(sprite.clone(), anchor, Some(12.0), None)
+                .expect("tramo este");
+        assert_eq!(east.rect, Some(Rect::new(32.0, 0.0, 64.0, 16.0)));
+        assert_eq!(east_shift, 16.0);
+
+        assert!(catenary_sprite_horizontal_crop(sprite, anchor, Some(40.0), Some(39.0)).is_none());
+    }
 }

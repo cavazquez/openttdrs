@@ -933,6 +933,28 @@ mod tests {
     }
 
     #[test]
+    fn sprite_screen_bounds_follow_rect_anchor_and_rotation() {
+        let sprite = Sprite {
+            rect: Some(Rect::new(0.0, 0.0, 8.0, 4.0)),
+            ..default()
+        };
+        let mut transform = Transform::from_xyz(10.0, 20.0, 0.0);
+        transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
+
+        let bounds = sprite_screen_bounds(&sprite, &Anchor::CENTER, &transform, None, None)
+            .expect("un rect custom aporta bounds aunque no haya Assets<Image>");
+        assert_eq!(
+            bounds,
+            SpriteScreenBounds {
+                left: 8.0,
+                right: 12.0,
+                bottom: 16.0,
+                top: 24.0,
+            }
+        );
+    }
+
+    #[test]
     #[allow(clippy::unwrap_used)] // Fixture creada dentro del mismo World.
     fn changing_parent_sprite_geometry_requests_a_new_sort() {
         let mut world = World::new();

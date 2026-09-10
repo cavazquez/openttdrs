@@ -68,6 +68,55 @@ pub const TWOCC_ACTION5_SLOT_COUNT: usize = 256;
 pub const TWOCC_PALETTE_BASE: u16 = 5680;
 /// `TRAMWAY_SPRITE_COUNT` (Action5 tipo `0x0B`).
 pub const TRAMWAY_ACTION5_SLOT_COUNT: usize = 119;
+/// Slot de `SPR_TRAMWAY_DEPOT_WITH_TRACK` dentro de Action5 tramway.
+///
+/// `newgrf_act5.cpp` lo usa para recordar que la última sustitución de
+/// depósitos de tranvía trae la vía incorporada.
+pub const TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT: usize = 49;
+/// Slot de `SPR_TRAMWAY_DEPOT_NO_TRACK` dentro de Action5 tramway.
+///
+/// Esta variante deja que `DrawTile_Road` componga la vía/overlay por separado.
+pub const TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT: usize = 113;
+
+/// Estado efectivo de los sprites de depósito del bloque Action5 tramway.
+///
+/// El cliente parte del bloque `openttd.grf` que ya aporta la variante con
+/// vía. Cada Action5 activo que cubre el slot 49 o 113 reemplaza este estado
+/// en el mismo orden en que `OpenTTD` actualiza `_loaded_newgrf_features.tram`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TramwayDepotReplacement {
+    /// `SPR_TRAMWAY_DEPOT_WITH_TRACK`: las capas BUILD incluyen la vía.
+    #[default]
+    WithTrack,
+    /// `SPR_TRAMWAY_DEPOT_NO_TRACK`: la vía se dibuja como overlay separado.
+    NoTrack,
+}
+
+/// Aplica a `current` la semántica de detección de depósitos de
+/// `newgrf_act5.cpp` para un bloque Action5 ya activo.
+///
+/// Un bloque que cubre ambos slots termina en [`TramwayDepotReplacement::NoTrack`],
+/// igual que las dos asignaciones consecutivas del oráculo. Los bloques de
+/// otros tipos no afectan el estado.
+#[must_use]
+pub fn tramway_depot_replacement_after_action5_block(
+    mut current: TramwayDepotReplacement,
+    block: &Action5Block,
+) -> TramwayDepotReplacement {
+    if block.type_id != ACTION5_TYPE_TRAMWAY {
+        return current;
+    }
+    let start = usize::from(block.offset);
+    let end = start.saturating_add(usize::from(block.num_sprites));
+    if start <= TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT && end > TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT
+    {
+        current = TramwayDepotReplacement::WithTrack;
+    }
+    if start <= TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT && end > TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT {
+        current = TramwayDepotReplacement::NoTrack;
+    }
+    current
+}
 
 /// Base `OpenTTD` de wires (`SPR_WIRE_*` / `rail_1039`).
 pub const CATENARY_WIRE_SPRITE_BASE: u32 = 1039;
@@ -1063,6 +1112,62 @@ mod slot_helper_tests {
         };
         merge_tramway_action5_block(&mut tram_slots, &wrong);
         assert_eq!(tram_slots[0].as_ref().unwrap().rgba[0], 99);
+    }
+
+    #[test]
+    fn tramway_depot_replacement_keeps_action5_load_order() {
+        let with_track = Action5Block {
+            type_id: ACTION5_TYPE_TRAMWAY,
+            num_sprites: 1,
+            offset: TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT as u16,
+            first_preview: None,
+            sprites: Vec::new(),
+        };
+        let no_track = Action5Block {
+            type_id: ACTION5_TYPE_TRAMWAY,
+            num_sprites: 1,
+            offset: TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT as u16,
+            first_preview: None,
+            sprites: Vec::new(),
+        };
+        let other_type = Action5Block {
+            type_id: ACTION5_TYPE_SHORE,
+            num_sprites: 1,
+            offset: TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT as u16,
+            first_preview: None,
+            sprites: Vec::new(),
+        };
+
+        let first = tramway_depot_replacement_after_action5_block(
+            TramwayDepotReplacement::NoTrack,
+            &with_track,
+        );
+        assert_eq!(first, TramwayDepotReplacement::WithTrack);
+        let second = tramway_depot_replacement_after_action5_block(first, &no_track);
+        assert_eq!(second, TramwayDepotReplacement::NoTrack);
+        assert_eq!(
+            tramway_depot_replacement_after_action5_block(second, &other_type),
+            TramwayDepotReplacement::NoTrack
+        );
+
+        let covers_both = Action5Block {
+            type_id: ACTION5_TYPE_TRAMWAY,
+            num_sprites: u8::try_from(
+                TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT - TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT + 1,
+            )
+            .unwrap(),
+            offset: TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT as u16,
+            first_preview: None,
+            sprites: Vec::new(),
+        };
+        assert_eq!(
+            tramway_depot_replacement_after_action5_block(
+                TramwayDepotReplacement::WithTrack,
+                &covers_both,
+            ),
+            TramwayDepotReplacement::NoTrack,
+            "el oráculo asigna con-track y luego no-track dentro del mismo Action5"
+        );
     }
 
     #[test]

@@ -60,7 +60,8 @@ pub use apply::{
         apply_newgrf_action5_openttd_gui_default_dirs, apply_newgrf_action5_roadstops,
         apply_newgrf_action5_roadstops_default_dirs, apply_newgrf_action5_shore,
         apply_newgrf_action5_shore_default_dirs, apply_newgrf_action5_signals,
-        apply_newgrf_action5_signals_default_dirs,
+        apply_newgrf_action5_signals_default_dirs, apply_newgrf_action5_tramway,
+        apply_newgrf_action5_tramway_default_dirs,
     },
     airport::{
         apply_newgrf_airport_tiles, apply_newgrf_airport_tiles_default_dirs, apply_newgrf_airports,
@@ -1688,6 +1689,67 @@ mod tests {
         assert!(state.runtime.catenary_newgrf_sprites[0].is_some());
         assert_eq!(crate::catenary_action5_local_slot(1039), Some(0));
         assert_eq!(crate::catenary_action5_local_slot(910_067), Some(28));
+    }
+
+    #[test]
+    fn apply_action5_tramway_keeps_the_last_depot_replacement() {
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 1..7 {
+            for x in 1..7 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let no_track = crate::newgrf_sprites::build_grf_v2_action5_with_sprite(
+            crate::ACTION5_TYPE_TRAMWAY,
+            crate::TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT as u16,
+            8,
+            8,
+            &indices,
+            [b'T', b'N', 0, 1],
+            "tram_no",
+        );
+        let with_track = crate::newgrf_sprites::build_grf_v2_action5_with_sprite(
+            crate::ACTION5_TYPE_TRAMWAY,
+            crate::TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT as u16,
+            8,
+            8,
+            &indices,
+            [b'T', b'W', 0, 1],
+            "tram_with",
+        );
+        let dir = tempfile_dir_with("tram_no.grf", &no_track);
+        std::fs::write(dir.join("tram_with.grf"), with_track).unwrap();
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("tram_no.grf", 1));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("tram_with.grf", 2));
+
+        apply_newgrf_action5_tramway(&mut state, &[&dir]);
+        assert_eq!(
+            state.runtime.tramway_depot_replacement,
+            crate::TramwayDepotReplacement::WithTrack
+        );
+        assert!(
+            state.runtime.tramway_action5_newgrf_sprites
+                [crate::TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT]
+                .is_some()
+        );
+        assert!(
+            state.runtime.tramway_action5_newgrf_sprites
+                [crate::TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT]
+                .is_some()
+        );
+
+        state.newgrf_stack.reverse();
+        apply_newgrf_action5_tramway(&mut state, &[&dir]);
+        assert_eq!(
+            state.runtime.tramway_depot_replacement,
+            crate::TramwayDepotReplacement::NoTrack,
+            "el último GRF que cubre los slots de depósito gana"
+        );
     }
 
     #[test]

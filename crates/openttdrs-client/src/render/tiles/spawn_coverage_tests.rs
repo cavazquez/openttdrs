@@ -21,10 +21,11 @@ const TEST_WORLD_SEED: u64 = 0;
 use crate::iso::{ground_draw_z, overlay_pos};
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::tiles::{
-    HouseSpawnResources, flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle,
-    spawn_bridge_middle_with_road_types, spawn_generic_land_tile, spawn_house_tile,
-    spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
+    HouseSpawnResources, TramwayDepotAction5, flush_map_batches, push_forest_tree, push_water_tile,
+    spawn_bridge_middle, spawn_bridge_middle_with_road_types, spawn_generic_land_tile,
+    spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
     spawn_transport_object_tile, spawn_transport_object_tile_with_road_types,
+    spawn_transport_object_tile_with_road_types_and_tramway_action5,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
@@ -1249,6 +1250,157 @@ fn newgrf_road_depot_group_replaces_relocated_building_layers() {
             .and_then(|image| image.data.as_deref()),
         Some(expected_building.as_slice()),
         "SE_2 debe usar el segundo sprite y la paleta del propietario"
+    );
+}
+
+#[test]
+fn action5_no_track_tram_depot_relocates_buildings_and_draws_the_overlay() {
+    let assets = boot_assets_app();
+    let overlay_index = crate::sprites::road_flat_sprite_index(0, 0x04); // SE
+    let expected_overlay = assets.tram_flat[overlay_index].clone();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::RoadDepot,
+            mapt: 0x20,
+            // SE; el depósito tram puro guarda el tipo road inválido y el
+            // tram vanilla en m8[6..12].
+            m5: 1,
+            m3hi: 0x3F,
+            m8: 0x0040,
+            ..tile_template()
+        },
+    )
+    .expect("tram depot SE");
+    let mouth = DecodedSprite {
+        width: 6,
+        height: 7,
+        x_offs: -3,
+        y_offs: -5,
+        rgba: [215, 70, 190, 255].repeat(6 * 7),
+        mask: vec![198; 6 * 7],
+    };
+    let building = DecodedSprite {
+        width: 8,
+        height: 9,
+        x_offs: 4,
+        y_offs: -11,
+        rgba: [20, 170, 90, 255].repeat(8 * 9),
+        mask: vec![199; 8 * 9],
+    };
+    let mut tramway = vec![None; openttdrs_core::TRAMWAY_ACTION5_SLOT_COUNT];
+    tramway[openttdrs_core::TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT] = Some(mouth.clone());
+    tramway[openttdrs_core::TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT + 1] = Some(building.clone());
+
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types_and_tramway_action5(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    Some(crate::sprites::CompanyColour::Red),
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &[],
+                    None,
+                    &[],
+                    Some(&mut action5_sprites),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                    TramwayDepotAction5 {
+                        sprites: &tramway,
+                        replacement: openttdrs_core::TramwayDepotReplacement::NoTrack,
+                    },
+                );
+            },
+        )
+        .expect("tram depot Action5 no-track spawn");
+
+    let mut layers: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Sprite, &Transform)>()
+        .iter(&world)
+        .filter(|(parent, _, _)| [6099, 6100].contains(&parent.sprite_id))
+        .map(|(parent, sprite, transform)| (*parent, sprite.clone(), transform.translation))
+        .collect();
+    layers.sort_by_key(|(parent, _, _)| parent.insertion_key);
+    assert_eq!(
+        layers
+            .iter()
+            .map(|(parent, _, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                6099,
+                ParentSpriteBounds::new(16, 16, 0, 16, 31, 19),
+                viewport_insertion_key(1, 1, 1),
+            ),
+            (
+                6100,
+                ParentSpriteBounds::new(31, 16, 0, 31, 31, 19),
+                viewport_insertion_key(1, 1, 2),
+            ),
+        ],
+        "DEPOT_NO_TRACK conserva los prismas de la secuencia ROAD_DEPOT"
+    );
+    let colour = crate::sprites::CompanyColour::Red;
+    let expected_mouth = openttdrs_core::bake_sprite_company_palette(&mouth, colour.as_u8());
+    let expected_building = openttdrs_core::bake_sprite_company_palette(&building, colour.as_u8());
+    {
+        let images = world.resource::<Assets<Image>>();
+        assert_eq!(
+            images
+                .get(&layers[0].1.image)
+                .and_then(|image| image.data.as_deref()),
+            Some(expected_mouth.as_slice())
+        );
+        assert_eq!(
+            images
+                .get(&layers[1].1.image)
+                .and_then(|image| image.data.as_deref()),
+            Some(expected_building.as_slice())
+        );
+    }
+    assert_eq!(
+        world
+            .query::<&Sprite>()
+            .iter(&world)
+            .filter(|sprite| expected_overlay.matches(sprite))
+            .count(),
+        1,
+        "DEPOT_NO_TRACK agrega el SPR_TRAMWAY_OVERLAY que no viene dentro de la fachada"
     );
 }
 

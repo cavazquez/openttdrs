@@ -222,13 +222,63 @@ define_action5_apply!(
     crate::newgrf_sprites::TWOCC_ACTION5_SLOT_COUNT,
     crate::newgrf_sprites::merge_twocc_action5_block
 );
-define_action5_apply!(
-    apply_newgrf_action5_tramway,
-    apply_newgrf_action5_tramway_default_dirs,
-    tramway_action5_newgrf_sprites,
-    crate::newgrf_sprites::TRAMWAY_ACTION5_SLOT_COUNT,
-    crate::newgrf_sprites::merge_tramway_action5_block
-);
+
+/// Aplica Action5 tramway y conserva el último modo de depósito que tocó sus
+/// slots relocatables. La tabla y el modo se reconstruyen juntos porque la
+/// presencia final de un sprite no preserva el orden de carga entre GRFs.
+fn apply_tramway_action5_table(
+    state: &GameState,
+    search_dirs: &[&Path],
+) -> (
+    Vec<Option<DecodedSprite>>,
+    crate::newgrf_sprites::TramwayDepotReplacement,
+) {
+    let mut slots = vec![None; crate::newgrf_sprites::TRAMWAY_ACTION5_SLOT_COUNT];
+    let mut replacement = crate::newgrf_sprites::TramwayDepotReplacement::default();
+    let stack = state.newgrf_stack.clone();
+    for entry in &stack {
+        if !entry.enabled {
+            continue;
+        }
+        let Some(path) = search_dirs
+            .iter()
+            .map(|dir| dir.join(&entry.filename))
+            .find(|path| path.is_file())
+        else {
+            continue;
+        };
+        let Ok(data) = std::fs::read(&path) else {
+            continue;
+        };
+        let context = Action5LoadContext::new(state.climate.newgrf_landscape_id())
+            .with_parameters(entry.params.clone());
+        let Ok(blocks) = collect_active_action5_blocks(&data, &context) else {
+            continue;
+        };
+        for block in &blocks {
+            crate::newgrf_sprites::merge_tramway_action5_block(&mut slots, block);
+            replacement = crate::newgrf_sprites::tramway_depot_replacement_after_action5_block(
+                replacement,
+                block,
+            );
+        }
+    }
+    (slots, replacement)
+}
+
+/// Aplica los replacements Action5 `0x0B` y su estado de depósito asociado.
+pub fn apply_newgrf_action5_tramway(state: &mut GameState, search_dirs: &[&Path]) {
+    let (slots, replacement) = apply_tramway_action5_table(state, search_dirs);
+    state.runtime.tramway_action5_newgrf_sprites = slots;
+    state.runtime.tramway_depot_replacement = replacement;
+}
+
+/// Variante que busca los GRFs activos en las rutas habituales del cliente.
+pub fn apply_newgrf_action5_tramway_default_dirs(state: &mut GameState) {
+    let owned = super::default_newgrf_search_dirs();
+    let refs: Vec<&Path> = owned.iter().map(AsRef::as_ref).collect();
+    apply_newgrf_action5_tramway(state, &refs);
+}
 
 /// Aplica todos los tipos Action5 runtime soportados.
 pub fn apply_newgrf_action5_all_default_dirs(state: &mut GameState) {

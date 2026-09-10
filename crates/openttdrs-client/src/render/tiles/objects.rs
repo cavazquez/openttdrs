@@ -2,9 +2,9 @@ use bevy::prelude::*;
 use openttdrs_core::Climate;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    RoadStopSpecDef, StationSpecDef, inclined_slope_direction, is_tunnel_entrance_slope,
-    rail_type_from_tile, road_stop_spec_def, road_type_from_tile, station_at_tile,
-    tram_road_type_from_tile,
+    RoadStopSpecDef, StationSpecDef, TramwayDepotReplacement, inclined_slope_direction,
+    is_tunnel_entrance_slope, rail_type_from_tile, road_stop_spec_def, road_type_from_tile,
+    station_at_tile, tram_road_type_from_tile,
 };
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck_with_road_types};
@@ -15,7 +15,7 @@ use super::transport::{
 use super::{
     catenary_under_low_bridge,
     helpers::{
-        FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, spawn_empty_bounding_box,
+        FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC, spawn_empty_bounding_box,
         spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_sprite_at,
     },
     sloped_or_flat_image, spawn_ground_sprite,
@@ -4314,11 +4314,105 @@ fn airport_tile_draws_default_foundation(
     openttdrs_core::callback_draws_default_foundation(result)
 }
 
+/// Reemplazos Action5 `0x0B` que afectan el depósito de tranvía actual.
+///
+/// La tabla conserva los sprites de la partida y `replacement` el último
+/// bloque que cubrió los slots 49/113. Son datos separados: el merge final de
+/// slots no retiene el orden con que se cargaron los GRFs.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TramwayDepotAction5<'a> {
+    pub(crate) sprites: &'a [Option<openttdrs_core::DecodedSprite>],
+    pub(crate) replacement: TramwayDepotReplacement,
+}
+
+impl Default for TramwayDepotAction5<'_> {
+    fn default() -> Self {
+        Self {
+            sprites: &[],
+            replacement: TramwayDepotReplacement::WithTrack,
+        }
+    }
+}
+
 /// Variante de [`spawn_transport_object_tile`] que conserva el estado de
 /// roadtypes/NewGRF necesario para que los puentes dibujados desde el camino
 /// de objetos resuelvan `ROTSG_BRIDGE` y `ROTSG_OVERLAY` igual que el mundo.
+///
+/// Conserva el fallback con el bloque base de tranvía para los callers que no
+/// tienen un `GameState` completo (previews y pruebas unitarias).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_transport_object_tile_with_road_types(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
+    ctx: &TileRenderContext,
+    slope_half_ground: f32,
+    show_pbs_reservations: bool,
+    map: &Map,
+    dims: (u32, u32),
+    stations: &[Station],
+    towns: &[openttdrs_core::Town],
+    airport_tile_catalog: &[openttdrs_core::AirportTileSpecDef],
+    airport_catalog: &[openttdrs_core::NewgrfAirportSpecDef],
+    rail_type_depot_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_underlay_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_tunnel_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_tunnel_portal_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    signal_sprites: Option<&mut crate::render::NewGrfSignalSpriteCache>,
+    bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    climate: Climate,
+    calendar_date: u32,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+    road_stop_catalog: &[RoadStopSpecDef],
+    bridge_spec_catalog: &[openttdrs_core::BridgeSpecDef],
+) {
+    spawn_transport_object_tile_with_road_types_and_tramway_action5(
+        commands,
+        assets,
+        company,
+        owner_colour,
+        ctx,
+        slope_half_ground,
+        show_pbs_reservations,
+        map,
+        dims,
+        stations,
+        towns,
+        airport_tile_catalog,
+        airport_catalog,
+        rail_type_depot_newgrf,
+        rail_type_underlay_newgrf,
+        rail_type_tunnel_newgrf,
+        rail_type_tunnel_portal_newgrf,
+        catenary_newgrf,
+        catenary_sprites,
+        signal_sprites,
+        bridge_decks_newgrf,
+        foundation_newgrf,
+        climate,
+        calendar_date,
+        road_catalog,
+        road_sprites,
+        newgrf_stack,
+        action5_sprites,
+        images,
+        road_stop_catalog,
+        bridge_spec_catalog,
+        TramwayDepotAction5::default(),
+    );
+}
+
+/// Variante que recibe además el estado Action5 tramway de la partida.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
     commands: &mut Commands,
     assets: &WorldAssets,
     company: Option<&CompanyColoredSprites>,
@@ -4350,6 +4444,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
     mut images: Option<&mut Assets<Image>>,
     road_stop_catalog: &[RoadStopSpecDef],
     bridge_spec_catalog: &[openttdrs_core::BridgeSpecDef],
+    tramway_depot_action5: TramwayDepotAction5<'_>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -4897,6 +4992,8 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                 road_catalog,
                 road_sprites.as_deref_mut(),
                 newgrf_stack,
+                tramway_depot_action5,
+                action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
             );
         }
@@ -5399,6 +5496,10 @@ const ROAD_DEPOT_BUILDING_PARENT_ORDINAL: u8 = 1;
 const ROAD_DEPOT_SEQUENCE_SPRITE_BASE: u32 = 1408;
 /// `SPR_TRAMWAY_DEPOT_WITH_TRACK` del Action5 vanilla `0x0B`.
 const TRAM_DEPOT_WITH_TRACK_SPRITE_BASE: u32 = crate::sprites::TRAMWAY_SPRITE_BASE + 49;
+/// `SPR_TRAMWAY_DEPOT_NO_TRACK` del Action5 `0x0B`.
+const TRAM_DEPOT_NO_TRACK_SPRITE_BASE: u32 = crate::sprites::TRAMWAY_SPRITE_BASE + 113;
+/// `SPR_TRAMWAY_OVERLAY` del bloque vanilla Action5 `0x0B`.
+const TRAMWAY_OVERLAY_SPRITE_BASE: u32 = crate::sprites::TRAMWAY_SPRITE_BASE + 4;
 /// `INVALID_ROADTYPE` en el mapa de OpenTTD; un depósito de tranvía puro lo
 /// conserva en `m4()` y escribe el tipo real en `m8()[6..12]`.
 const INVALID_ROAD_TYPE_ID: u8 = 63;
@@ -5455,11 +5556,14 @@ fn road_depot_newgrf_layer(
 /// La caja de ordenación pertenece a la secuencia original, pero la ancla y
 /// el tamaño sí pertenecen al sprite relocalizado de `openttd.grf`; conservar
 /// ambos contratos evita que la fachada se desplace aunque el ID sea correcto.
-fn road_depot_tram_with_track_layer(layer: RoadDepotLayerGfx) -> Option<RoadDepotLayerGfx> {
+fn road_depot_tram_relocated_layer(
+    layer: RoadDepotLayerGfx,
+    relocation_base: u32,
+) -> Option<RoadDepotLayerGfx> {
     let offset = layer
         .sprite_id
         .checked_sub(ROAD_DEPOT_SEQUENCE_SPRITE_BASE)?;
-    let sprite_id = TRAM_DEPOT_WITH_TRACK_SPRITE_BASE.checked_add(offset)?;
+    let sprite_id = relocation_base.checked_add(offset)?;
     let gfx = crate::sprites::tramway_sprite_gfx(sprite_id)?;
     Some(RoadDepotLayerGfx {
         sprite_id,
@@ -5471,15 +5575,60 @@ fn road_depot_tram_with_track_layer(layer: RoadDepotLayerGfx) -> Option<RoadDepo
     })
 }
 
-/// Caso baseline de `MakeRoadDepot(..., ROADTYPE_TRAM)`: no hay carretera y
-/// el Action5 vanilla ya provee el set de depósito con rieles. Los tramtypes
-/// NewGRF y los reemplazos `DEPOT_NO_TRACK` conservan su propio paso porque
-/// dependen de `ROTSG_DEPOT`/Action5 cargados por la partida.
-fn road_depot_uses_vanilla_tram_track_sequence(ctx: &TileRenderContext) -> bool {
-    ctx.tile.is_some_and(|tile| {
-        road_type_from_tile(&tile).as_u8() == INVALID_ROAD_TYPE_ID
-            && tram_road_type_from_tile(&tile) == Some(openttdrs_core::RoadType::TRAM)
-    })
+/// Devuelve la capa equivalente del set Action5 con vía incorporada.
+fn road_depot_tram_with_track_layer(layer: RoadDepotLayerGfx) -> Option<RoadDepotLayerGfx> {
+    road_depot_tram_relocated_layer(layer, TRAM_DEPOT_WITH_TRACK_SPRITE_BASE)
+}
+
+/// Devuelve la capa equivalente del set Action5 sin vía. OpenTTD conserva la
+/// caja TILE_SEQ original y agrega `SPR_TRAMWAY_OVERLAY` después del suelo.
+fn road_depot_tram_no_track_layer(layer: RoadDepotLayerGfx) -> Option<RoadDepotLayerGfx> {
+    road_depot_tram_relocated_layer(layer, TRAM_DEPOT_NO_TRACK_SPRITE_BASE)
+}
+
+/// Modo Action5 de un depósito vanilla creado como tranvía. Un `ROTSG_DEPOT`
+/// custom ya resuelto omite esta ruta, como `default_gfx = false` en OpenTTD.
+fn road_depot_vanilla_tram_replacement(
+    ctx: &TileRenderContext,
+    replacement: TramwayDepotReplacement,
+) -> Option<TramwayDepotReplacement> {
+    ctx.tile
+        .filter(|tile| {
+            road_type_from_tile(tile).as_u8() == INVALID_ROAD_TYPE_ID
+                && tram_road_type_from_tile(tile) == Some(openttdrs_core::RoadType::TRAM)
+        })
+        .map(|_| replacement)
+}
+
+/// Materializa una capa de depósito que una Action5 real reemplazó dentro del
+/// bloque tramway. La geometría del NFO reemplaza ancla/tamaño, mientras el
+/// prisma sortable permanece el de la línea vial canónica.
+fn road_depot_tramway_action5_sprite(
+    layer: RoadDepotLayerGfx,
+    replacement: TramwayDepotReplacement,
+    sprites: &[Option<openttdrs_core::DecodedSprite>],
+    cache: &mut Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+    colour: CompanyColour,
+) -> Option<(RoadDepotLayerGfx, Sprite)> {
+    let relocation_slot = match replacement {
+        TramwayDepotReplacement::WithTrack => openttdrs_core::TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT,
+        TramwayDepotReplacement::NoTrack => openttdrs_core::TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT,
+    };
+    let slot = relocation_slot.checked_add(road_depot_custom_sprite_index(layer)?)?;
+    let view = sprites.get(slot)?.as_ref()?;
+    let sprite_id = crate::sprites::TRAMWAY_SPRITE_BASE.checked_add(u32::try_from(slot).ok()?)?;
+    let cache = cache.as_deref_mut()?;
+    let images = images.as_deref_mut()?;
+    let sprite = cache.sprite_company_palette(
+        openttdrs_core::ACTION5_TYPE_TRAMWAY,
+        slot,
+        view,
+        colour,
+        images,
+    )?;
+    let spec = road_depot_newgrf_layer(RoadDepotLayerGfx { sprite_id, ..layer }, view);
+    Some((spec, sprite))
 }
 
 /// Emite una capa BUILD vanilla de depósito vial como parent global, usando
@@ -5540,6 +5689,8 @@ fn spawn_road_depot_tile(
     road_catalog: &[openttdrs_core::RoadTypeDef],
     mut road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    tramway_depot_action5: TramwayDepotAction5<'_>,
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
 ) {
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
@@ -5565,15 +5716,28 @@ fn spawn_road_depot_tile(
             Transform::from_translation(position),
         ));
     }
-    // En OpenTTD, el depósito vial vanilla dibuja la losa `SPR_AIRPORT_APRON`
-    // y las capas BUILD; no añade un `road_flat` normal. Ese overlay sólo
-    // aparece para ciertos tipos custom. Un depósito vanilla de tranvía no
-    // agrega ese overlay: relocaliza toda la secuencia BUILD al bloque Action5
-    // `SPR_TRAMWAY_DEPOT_WITH_TRACK`, que ya contiene la vía.
+    // Un depósito vial común deja sólo la losa y las capas BUILD. El tranvía
+    // puro relocaliza esas capas al bloque Action5: con vía el riel está dentro
+    // del sprite, mientras que `DEPOT_NO_TRACK` suma el overlay separado.
     let foundation_z_delta = (i32::from(base_z) - i32::from(ctx.info.base_z)) * 8;
     let build_layers = road_depot_build_layers(dir);
-    let use_vanilla_tram_track_sequence =
-        custom_depot_def.is_none() && road_depot_uses_vanilla_tram_track_sequence(ctx);
+    let tram_depot_replacement = custom_depot_def
+        .is_none()
+        .then(|| road_depot_vanilla_tram_replacement(ctx, tramway_depot_action5.replacement))
+        .flatten();
+    if tram_depot_replacement == Some(TramwayDepotReplacement::NoTrack) {
+        spawn_road_depot_vanilla_tram_overlay(
+            commands,
+            assets,
+            ctx,
+            base_z,
+            half_h,
+            tileh,
+            map_width,
+            foundation_child_parent,
+            dir,
+        );
+    }
     for (layer_i, spec) in build_layers.iter().enumerate() {
         if buildings_hidden() {
             break;
@@ -5629,13 +5793,58 @@ fn spawn_road_depot_tile(
             );
             continue;
         }
-        let (spec, image) = if use_vanilla_tram_track_sequence {
-            road_depot_tram_with_track_layer(*spec).map_or_else(
-                || (*spec, assets.road_depot_builds[dir].get(layer_i)),
-                |tram_spec| (tram_spec, assets.rail.get(&tram_spec.sprite_id)),
+        let action5 = tram_depot_replacement.and_then(|replacement| {
+            road_depot_tramway_action5_sprite(
+                *spec,
+                replacement,
+                tramway_depot_action5.sprites,
+                &mut action5_sprites,
+                &mut images,
+                owner_colour.unwrap_or_default(),
             )
-        } else {
-            (*spec, assets.road_depot_builds[dir].get(layer_i))
+        });
+        if let Some((spec, sprite)) = action5 {
+            WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                "road-depot-building-action5",
+                "sortable",
+                spec.sprite_id,
+                station_company_palette(owner_colour),
+                false,
+                (0, 0),
+                foundation_z_delta,
+                (0, 0, 0),
+                Some(TraceSpriteBounds::new(
+                    spec.dx as i32,
+                    spec.dy as i32,
+                    spec.dz as i32,
+                    spec.sx,
+                    spec.sy,
+                    20,
+                )),
+            );
+            spawn_road_depot_building_parent(
+                commands,
+                ctx,
+                base_z,
+                map_width,
+                layer_i,
+                &spec,
+                tint_building_sprite(sprite),
+            );
+            continue;
+        }
+        let (spec, image) = match tram_depot_replacement {
+            Some(TramwayDepotReplacement::WithTrack) => road_depot_tram_with_track_layer(*spec)
+                .map_or_else(
+                    || (*spec, assets.road_depot_builds[dir].get(layer_i)),
+                    |tram_spec| (tram_spec, assets.rail.get(&tram_spec.sprite_id)),
+                ),
+            Some(TramwayDepotReplacement::NoTrack) => road_depot_tram_no_track_layer(*spec)
+                .map_or_else(
+                    || (*spec, assets.road_depot_builds[dir].get(layer_i)),
+                    |tram_spec| (tram_spec, assets.rail.get(&tram_spec.sprite_id)),
+                ),
+            None => (*spec, assets.road_depot_builds[dir].get(layer_i)),
         };
         WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
             "road-depot-building",
@@ -5697,6 +5906,79 @@ fn record_road_depot_ground_trace(tileh: u8) {
             ROAD_DEPOT_GROUND_SPRITE_ID,
             false,
         );
+    }
+}
+
+/// `DiagDirToRoadBits(dir)` para las cuatro direcciones almacenadas por
+/// `GetRoadDepotDirection`: NE, SE, SW, NW.
+#[must_use]
+const fn road_depot_direction_road_bits(dir: usize) -> u8 {
+    match dir {
+        0 => 0x08,
+        1 => 0x04,
+        2 => 0x02,
+        _ => 0x01,
+    }
+}
+
+fn record_road_depot_tram_overlay_trace(tileh: u8, sprite_id: u32) {
+    if let Some(offset) = road_depot_foundation_child_offset(tileh) {
+        WorldDrawTrace::record_foundation_child_sprite(
+            "road-depot-tram-overlay",
+            sprite_id,
+            false,
+            offset,
+        );
+    } else {
+        WorldDrawTrace::record_sprite("road-depot-tram-overlay", "ground", sprite_id, false);
+    }
+}
+
+/// `DEPOT_NO_TRACK` conserva la fachada relocalizada pero deja el riel en un
+/// `DrawGroundSprite(SPR_TRAMWAY_OVERLAY + GetRoadSpriteOffset(...))`.
+#[allow(clippy::too_many_arguments)]
+fn spawn_road_depot_vanilla_tram_overlay(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    half_h: f32,
+    tileh: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
+    dir: usize,
+) {
+    let overlay_index =
+        crate::sprites::road_flat_sprite_index(0, road_depot_direction_road_bits(dir));
+    let Some(image) = assets.tram_flat.get(overlay_index) else {
+        return;
+    };
+    let sprite_id =
+        TRAMWAY_OVERLAY_SPRITE_BASE.saturating_add(u32::try_from(overlay_index).unwrap_or(0));
+    record_road_depot_tram_overlay_trace(tileh, sprite_id);
+    let position = full_tile_sprite_pos_half(
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        base_z,
+        TRAM_OVERLAY_LAYER_FRAC,
+        half_h,
+    );
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(
+            commands,
+            image.sprite(),
+            ctx,
+            position,
+            map_width,
+            parent,
+        );
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            image.sprite(),
+            Transform::from_translation(position),
+        ));
     }
 }
 

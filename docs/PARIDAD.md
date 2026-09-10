@@ -1181,6 +1181,21 @@ ECS de un SE sintético fija ambas texturas, la paleta, anchors, boxes e
 inserción global. No hay foco Kale ni métrica raster nueva; `ROTSG_OVERLAY` y
 Action5 `DEPOT_NO_TRACK` siguen pendientes, por lo que #326 continúa abierto.
 
+Actualización #326-ROAD-DEPOT-ACTION5-NO-TRACK (2026-09-09): el estado
+runtime de Action5 `0x0B` conserva ahora la última carga activa que cubrió los
+slots de depósito `49` (`WITH_TRACK`) o `113` (`NO_TRACK`), incluyendo el
+orden entre GRFs; el bloque base `openttd.grf` parte de `WITH_TRACK`. En un
+depósito vanilla de tranvía puro, `NO_TRACK` relocaliza las capas BUILD SE de
+`1408`/`1409` a `6099`/`6100` y dibuja aparte
+`SPR_TRAMWAY_OVERLAY + GetRoadSpriteOffset(SLOPE_FLAT, DiagDirToRoadBits)`.
+Cada slot Action5 real conserva su ancla/tamaño NFO, el prisma/ordinal
+`TILE_SEQ_LINE` canónico y hornea la paleta del propietario en una entrada de
+caché separada; los slots no reemplazados mantienen el atlas base. Las
+regresiones cubren precedencia de stack, paletas de dos propietarios y el SE
+`NO_TRACK` con overlay, bounds e imágenes Action5. No hay medición Kale nueva:
+`ROTSG_OVERLAY`, la composición de tramtypes custom y clipping/pivotes/
+framebuffer siguen fuera, por lo que #326 continúa abierto.
+
 Actualización #326-TUNNEL-CATENARY-GLOBAL (2026-09-09):
 `DrawRailCatenaryOnTunnel` ya conserva su `SpriteCombine` en runtime. En una
 boca eléctrica el cable de entrada `5656`/`5658` es el parent global con el

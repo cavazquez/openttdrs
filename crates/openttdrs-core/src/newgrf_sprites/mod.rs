@@ -75,15 +75,18 @@ pub use action5::{
     CATENARY_WIRE_SPRITE_BASE, FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT,
     OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT,
     SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE,
-    TRAMWAY_ACTION5_SLOT_COUNT, TWOCC_ACTION5_SLOT_COUNT, TWOCC_PALETTE_BASE, action5_type_name,
-    airport_preview_action5_slot, bridge_decks_action5_base, bridge_decks_action5_slot,
-    catenary_action5_local_slot, collect_action5_blocks, collect_active_action5_blocks,
-    disallowed_road_directions, foundation_action5_slot_for_sprite_id, merge_action5_offset_block,
+    TRAMWAY_ACTION5_SLOT_COUNT, TRAMWAY_DEPOT_NO_TRACK_ACTION5_SLOT,
+    TRAMWAY_DEPOT_WITH_TRACK_ACTION5_SLOT, TWOCC_ACTION5_SLOT_COUNT, TWOCC_PALETTE_BASE,
+    TramwayDepotReplacement, action5_type_name, airport_preview_action5_slot,
+    bridge_decks_action5_base, bridge_decks_action5_slot, catenary_action5_local_slot,
+    collect_action5_blocks, collect_active_action5_blocks, disallowed_road_directions,
+    foundation_action5_slot_for_sprite_id, merge_action5_offset_block,
     merge_airport_preview_action5_block, merge_bridge_decks_action5_block,
     merge_canals_action5_block, merge_catenary_action5_block, merge_foundation_action5_block,
     merge_oneway_action5_block, merge_openttd_gui_action5_block, merge_roadstop_action5_block,
     merge_shore_action5_block, merge_signals_action5_block, merge_tramway_action5_block,
     merge_twocc_action5_block, oneway_action5_slot, roadstop_action5_slot, signal_action5_slot,
+    tramway_depot_replacement_after_action5_block,
 };
 
 // Re-exportar builders sintéticos desde fixture (para compatibilidad temporal)

@@ -35,10 +35,13 @@ pub(crate) use land::{
 };
 #[cfg(test)]
 pub(crate) use objects::spawn_station_tile;
-#[cfg(test)]
-pub(crate) use objects::spawn_transport_object_tile;
 pub(crate) use objects::{
-    spawn_station_tile_with_world_and_road_types, spawn_transport_object_tile_with_road_types,
+    TramwayDepotAction5, spawn_station_tile_with_world_and_road_types,
+    spawn_transport_object_tile_with_road_types_and_tramway_action5,
+};
+#[cfg(test)]
+pub(crate) use objects::{
+    spawn_transport_object_tile, spawn_transport_object_tile_with_road_types,
 };
 pub(crate) use transport::{spawn_rail_tile, spawn_road_tile};
 pub(crate) use water::push_water_tile;

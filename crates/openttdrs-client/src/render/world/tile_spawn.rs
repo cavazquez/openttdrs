@@ -13,12 +13,12 @@ use crate::iso::{
 use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{
     CompanyColoredSprites, HouseSpawnResources, MapLabelSpatialIndex, MapSpriteBatches, RenderGrid,
-    TileAtlas, TileRenderContext, TileViewportBounds, WorldAssets, chunk_tile_bounds,
-    flush_map_batches, push_forest_tree, push_water_tile,
+    TileAtlas, TileRenderContext, TileViewportBounds, TramwayDepotAction5, WorldAssets,
+    chunk_tile_bounds, flush_map_batches, push_forest_tree, push_water_tile,
     spawn_bridge_middle_with_road_types_and_stations, spawn_generic_land_tile_with_objects,
     spawn_house_tile, spawn_industry_tile_with_world, spawn_rail_tile, spawn_road_tile,
-    spawn_station_tile_with_world_and_road_types, spawn_transport_object_tile_with_road_types,
-    spawn_void_tile,
+    spawn_station_tile_with_world_and_road_types,
+    spawn_transport_object_tile_with_road_types_and_tramway_action5, spawn_void_tile,
 };
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
@@ -259,7 +259,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
             | TileKind::RailTunnel
             | TileKind::RoadBridge
             | TileKind::RailBridge => {
-                spawn_transport_object_tile_with_road_types(
+                spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     commands,
                     assets,
                     Some(company),
@@ -291,6 +291,10 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     Some(images),
                     &sim.state.road_stop_spec_catalog,
                     &sim.state.bridge_spec_catalog,
+                    TramwayDepotAction5 {
+                        sprites: &sim.state.runtime.tramway_action5_newgrf_sprites,
+                        replacement: sim.state.runtime.tramway_depot_replacement,
+                    },
                 );
             }
             TileKind::Industry => {

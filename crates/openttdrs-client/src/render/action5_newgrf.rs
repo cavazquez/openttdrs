@@ -6,15 +6,18 @@ use bevy::prelude::*;
 use openttdrs_core::DecodedSprite;
 
 use crate::render::newgrf_cache::{DecodedSpriteImagePolicy, decoded_sprite_image};
+use crate::sprites::CompanyColour;
 
-/// Clave `(type_id, slot, runtime_fp)` → textura RGBA.
+type Action5CacheKey = (u8, u16, u32, Option<CompanyColour>);
+
+/// Clave `(type_id, slot, runtime_fp, company_colour)` → textura RGBA.
 ///
 /// Action5 usa siempre `runtime_fp=0`; los RoadStops Action3 reutilizan la
 /// caché con el fingerprint de su contexto Action2 para no congelar la primera
 /// variante random que se haya renderizado.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfAction5SpriteCache {
-    handles: HashMap<(u8, u16, u32), Handle<Image>>,
+    handles: HashMap<Action5CacheKey, Handle<Image>>,
 }
 
 impl NewGrfAction5SpriteCache {
@@ -41,12 +44,50 @@ impl NewGrfAction5SpriteCache {
         sprite: &DecodedSprite,
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
+        self.handle_for_policy(
+            (type_id, slot, runtime_fp, None),
+            sprite,
+            DecodedSpriteImagePolicy::Raw,
+            images,
+        )
+    }
+
+    fn handle_for_policy(
+        &mut self,
+        key: Action5CacheKey,
+        sprite: &DecodedSprite,
+        policy: DecodedSpriteImagePolicy,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
         self.handles
-            .entry((type_id, slot, runtime_fp))
-            .or_insert_with(|| {
-                images.add(decoded_sprite_image(sprite, DecodedSpriteImagePolicy::Raw))
-            })
+            .entry(key)
+            .or_insert_with(|| images.add(decoded_sprite_image(sprite, policy)))
             .clone()
+    }
+
+    /// Materializa un Action5 que `DrawRailTileSeq` pinta con una paleta de
+    /// compañía. La clave conserva el color para que dos depósitos de dueños
+    /// distintos no reutilicen la primera textura horneada.
+    pub(crate) fn sprite_company_palette(
+        &mut self,
+        type_id: u8,
+        slot: usize,
+        sprite: &DecodedSprite,
+        colour: CompanyColour,
+        images: &mut Assets<Image>,
+    ) -> Option<Sprite> {
+        let slot = u16::try_from(slot).ok()?;
+        let handle = self.handle_for_policy(
+            (type_id, slot, 0, Some(colour)),
+            sprite,
+            DecodedSpriteImagePolicy::CompanyPalette { colour },
+            images,
+        );
+        Some(Sprite {
+            image: handle,
+            color: Color::WHITE,
+            ..default()
+        })
     }
 
     pub(crate) fn sprite_colored(
@@ -127,6 +168,40 @@ mod tests {
         let changed = cache.handle_for_variant(0x14, 6, 11, &blue, &mut images);
         assert_eq!(first, repeated);
         assert_ne!(first, changed);
+        assert_eq!(images.len(), 2);
+    }
+
+    #[test]
+    fn company_palette_variants_do_not_reuse_another_depot_owner() {
+        let depot = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![198, 198, 198, 255],
+            mask: vec![198],
+        };
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfAction5SpriteCache::default();
+        let red = cache
+            .sprite_company_palette(
+                openttdrs_core::ACTION5_TYPE_TRAMWAY,
+                113,
+                &depot,
+                CompanyColour::Red,
+                &mut images,
+            )
+            .expect("red depot");
+        let green = cache
+            .sprite_company_palette(
+                openttdrs_core::ACTION5_TYPE_TRAMWAY,
+                113,
+                &depot,
+                CompanyColour::Green,
+                &mut images,
+            )
+            .expect("green depot");
+        assert_ne!(red.image, green.image);
         assert_eq!(images.len(), 2);
     }
 }

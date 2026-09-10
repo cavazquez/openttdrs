@@ -3368,3 +3368,14 @@ y verifica que ambas texturas llegan al waypoint. Las 8 pruebas focales de
 waypoint, formato y Clippy estricto pasan. #563 y #565 continúan abiertas por
 la matriz completa de partes/pendientes, callbacks, anclas restantes, clipping,
 orden global, vecinos y framebuffer; #326 tampoco se cierra.
+
+Actualización #326/#563/#565-SPECIFIC-VIEW-CACHE (2026-09-10, `5a5b9790`):
+puentes, depósitos y otros draw-procs que consumen `ROTSG_*` ya reutilizan la
+vista Action2 específica que resolvió el compositor para generar la textura.
+Antes `specific_sprite_for_tile` volvía a evaluar el grupo al llenar la caché;
+ahora geometría NFO y bytes RGBA parten de la misma selección, preservando
+anclas frente a random/vars de tesela. Las regresiones de grupos específicos,
+waypoint y depósito naval pasan junto con Clippy estricto, formato y
+`diff --check`. Esto elimina una divergencia de caché, pero #563, #565 y #326
+siguen abiertas por la matriz completa de superficies, vecinos, callbacks,
+clipping, orden global y framebuffer.

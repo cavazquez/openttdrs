@@ -1213,6 +1213,92 @@ mod tests {
     }
 
     #[test]
+    fn tile_layout_dodraw_parent_skips_children_until_next_parent() {
+        let sprite = |red| DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![red, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![
+                vec![sprite(10)],
+                vec![sprite(20)],
+                vec![sprite(30)],
+                vec![sprite(40)],
+            ],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 1,
+                set_id: 4,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            4,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: vec![
+                    TileLayoutSpriteRef {
+                        action1_set: Some(1),
+                        flags: 0x01,
+                        registers: TileLayoutRegisterRefs {
+                            dodraw: Some(6),
+                            ..TileLayoutRegisterRefs::default()
+                        },
+                        origin: [1, 2, 0],
+                        extent: [1, 1, 1],
+                        ..TileLayoutSpriteRef::default()
+                    },
+                    TileLayoutSpriteRef {
+                        action1_set: Some(2),
+                        origin: [3, 4, i8::MIN],
+                        ..TileLayoutSpriteRef::default()
+                    },
+                    TileLayoutSpriteRef {
+                        action1_set: Some(3),
+                        origin: [5, 6, 0],
+                        extent: [1, 1, 1],
+                        ..TileLayoutSpriteRef::default()
+                    },
+                    TileLayoutSpriteRef {
+                        action1_set: Some(0),
+                        origin: [7, 8, i8::MIN],
+                        ..TileLayoutSpriteRef::default()
+                    },
+                ],
+            },
+        );
+        let mut ctx = Action2EvalCtx::default();
+        ctx.temp_registers.insert(6, 0);
+
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(1, 0, &mut ctx)
+            .expect("DODRAW TileLayout");
+        assert!(layout.complete);
+        assert_eq!(layout.sequence.len(), 2);
+        assert_eq!(
+            layout.sequence[0]
+                .action1_sprite()
+                .map(|sprite| sprite.rgba[0]),
+            Some(40),
+            "el parent siguiente reanuda la secuencia"
+        );
+        assert_eq!(
+            layout.sequence[1]
+                .action1_sprite()
+                .map(|sprite| sprite.rgba[0]),
+            Some(10),
+            "el child del parent visible conserva su relación"
+        );
+        assert!(layout.sequence[1].origin[2] == i8::MIN);
+    }
+
+    #[test]
     fn tile_layout_keeps_static_direct_base_ground_for_the_client() {
         let overlay = DecodedSprite {
             width: 1,

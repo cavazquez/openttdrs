@@ -2513,6 +2513,24 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
     direct_base_ground: bool,
     incomplete_layout: bool,
 ) {
+    assert_static_newgrf_road_stop_layout_with_options(
+        stop_kind,
+        station_type,
+        draw_mode,
+        direct_base_ground,
+        incomplete_layout,
+        false,
+    );
+}
+
+fn assert_static_newgrf_road_stop_layout_with_options(
+    stop_kind: StopKind,
+    station_type: u8,
+    draw_mode: u8,
+    direct_base_ground: bool,
+    incomplete_layout: bool,
+    empty_sequence: bool,
+) {
     use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
 
     let assets = boot_assets_app();
@@ -2578,20 +2596,24 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
                     ..Default::default()
                 }
             },
-            sequence: vec![
-                TileLayoutSpriteRef {
-                    action1_set: Some(1),
-                    origin: [1, 2, 3],
-                    extent: [4, 5, 6],
-                    ..Default::default()
-                },
-                TileLayoutSpriteRef {
-                    action1_set: Some(2),
-                    origin: [7, -4, i8::MIN],
-                    flags: if incomplete_layout { 0x04 } else { 0 },
-                    ..Default::default()
-                },
-            ],
+            sequence: if empty_sequence {
+                Vec::new()
+            } else {
+                vec![
+                    TileLayoutSpriteRef {
+                        action1_set: Some(1),
+                        origin: [1, 2, 3],
+                        extent: [4, 5, 6],
+                        ..Default::default()
+                    },
+                    TileLayoutSpriteRef {
+                        action1_set: Some(2),
+                        origin: [7, -4, i8::MIN],
+                        flags: if incomplete_layout { 0x04 } else { 0 },
+                        ..Default::default()
+                    },
+                ]
+            },
         },
     );
     let spec = RoadStopSpecDef {
@@ -2684,6 +2706,29 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
     parents.sort_by_key(|(_, parent, _, _)| parent.insertion_key);
     let expected_parent_rows = if incomplete_layout {
         Vec::new()
+    } else if empty_sequence {
+        vec![
+            (
+                6071,
+                ParentSpriteBounds::new(63, 48, 0, 63, 48, 1),
+                viewport_insertion_key(3, 3, 4),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(48, 48, 0, 48, 48, 1),
+                viewport_insertion_key(3, 3, 5),
+            ),
+            (
+                6071,
+                ParentSpriteBounds::new(48, 63, 0, 48, 63, 1),
+                viewport_insertion_key(3, 3, 6),
+            ),
+            (
+                6043,
+                ParentSpriteBounds::new(48, 48, 2, 63, 63, 2),
+                viewport_insertion_key(3, 3, 7),
+            ),
+        ]
     } else {
         vec![
             (
@@ -2797,6 +2842,33 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
                 .iter()
                 .all(|(_, parent, _, _)| parent.sprite_id != u32::MAX),
             "un layout incompleto no debe publicar parents custom parciales"
+        );
+        return;
+    }
+
+    if empty_sequence {
+        let vanilla_building_ids: Vec<_> = world
+            .query::<&ViewportSortableParent>()
+            .iter(&world)
+            .filter_map(|parent| {
+                [5980, 5981]
+                    .contains(&parent.sprite_id)
+                    .then_some(parent.sprite_id)
+            })
+            .collect();
+        assert!(
+            vanilla_building_ids.is_empty(),
+            "un TileLayout vacío no debe reintroducir BUILD vanilla"
+        );
+        assert!(
+            parents
+                .iter()
+                .all(|(_, parent, _, _)| parent.sprite_id != u32::MAX),
+            "un TileLayout vacío no debe publicar un parent custom ficticio"
+        );
+        assert!(
+            children.is_empty(),
+            "un TileLayout vacío no debe crear children"
         );
         return;
     }
@@ -2932,6 +3004,18 @@ fn incomplete_newgrf_road_stop_layout_falls_back_atomically() {
         StopKind::BusStop,
         3,
         openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        false,
+        true,
+    );
+}
+
+#[test]
+fn empty_newgrf_road_stop_layout_does_not_fallback_to_vanilla_buildings() {
+    assert_static_newgrf_road_stop_layout_with_options(
+        StopKind::BusStop,
+        3,
+        openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        false,
         false,
         true,
     );

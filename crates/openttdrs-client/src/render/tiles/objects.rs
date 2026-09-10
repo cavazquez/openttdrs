@@ -3300,8 +3300,15 @@ fn spawn_newgrf_road_stop_layout_sequence(
     cache: &mut crate::render::NewGrfAction5SpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !road_stop_layout_is_static(layout) || layout.sequence.is_empty() {
+    if !road_stop_layout_is_static(layout) {
         return false;
+    }
+    // A resolved TileLayout with no BUILD entries is still a complete result:
+    // all entries may have been removed by `DODRAW=0`. Returning true tells
+    // the caller that the custom group was consumed and prevents it from
+    // replacing the valid empty sequence with vanilla buildings.
+    if layout.sequence.is_empty() {
+        return true;
     }
 
     let slot_base = spec_id.saturating_mul(64).saturating_add(1);

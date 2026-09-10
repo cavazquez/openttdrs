@@ -139,11 +139,25 @@ impl TileLayout {
     ) -> ResolvedTileLayout {
         let mut complete = true;
         let ground = resolve_layout_sprite(&self.ground, true, graphics, ctx, view, &mut complete);
+        // `DrawCommonTileSeq` sets `skip_childs` when a parent resolves to
+        // sprite zero (including `DODRAW=0`) and resumes at the next parent.
+        // Do that while resolving instead of dropping the parent and then
+        // letting the client mistake its children for orphan ground sprites.
+        let mut skip_children = false;
         let sequence = self
             .sequence
             .iter()
             .filter_map(|reference| {
-                resolve_layout_sprite(reference, false, graphics, ctx, view, &mut complete)
+                let is_parent = reference.is_parent();
+                if skip_children && !is_parent {
+                    return None;
+                }
+                let resolved =
+                    resolve_layout_sprite(reference, false, graphics, ctx, view, &mut complete);
+                if is_parent {
+                    skip_children = resolved.is_none();
+                }
+                resolved
             })
             .collect();
         ResolvedTileLayout {

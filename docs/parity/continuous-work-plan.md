@@ -3237,3 +3237,13 @@ orientaciones; pasan 62 pruebas de agua, 6 de depósito naval y Clippy estricto.
 Quedan pendientes la matriz completa de partes/ejes, interacción con costa y
 barcos vecinos, clipping, orden global y comparación de framebuffer; #567 y
 #326 permanecen abiertos.
+
+Actualización #326/#567-SHIP-DEPOT-GROUND-TRACE (2026-09-10, `c4aa738f`): las
+vistas planas custom de `CF_WATERSLOPE`/`CF_RIVER_SLOPE` que usa un depósito
+naval se colocan ahora en la banda de `DrawGroundSprite`, igual que el ground
+que precede a `DrawWaterTileStruct`, sin cambiar el sesgo de costa del agua
+normal. La traza conserva el slot local resuelto (`SPR_CANALS_BASE + slot`) en
+vez de informar siempre `SPR_FLAT_WATER_TILE`; la regresión de Canal verifica
+la profundidad y siguen pasando 62 pruebas de agua, 6 de depósito naval y
+Clippy estricto. Faltan la traza completa por Sea/Canal/River, la matriz de
+vecinos/ejes/partes, clipping y framebuffer; #567 y #326 permanecen abiertos.

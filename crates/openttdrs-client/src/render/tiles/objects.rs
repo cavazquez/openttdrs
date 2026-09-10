@@ -3099,11 +3099,20 @@ fn spawn_newgrf_station_layout_sequence(
 
 /// Tipo sintético en la caché Action5 para vistas Action3 del catálogo `RoadStops`.
 const ROADSTOP_ACTION3_CACHE_TYPE: u8 = 0x14;
+const ROADSTOP_SIMPLE_VIEW_SLOT_STRIDE: u16 = 6;
 /// Namespace separado para las entradas materializadas de `TileLayout`. Las
 /// vistas simples usan slots `spec * 6 + view`; compartir el type id con el
 /// bloque `spec * 64` del layout permitiría colisiones entre specs distintos.
 const ROADSTOP_TILE_LAYOUT_CACHE_TYPE: u8 = 0x15;
 const ROADSTOP_TILE_LAYOUT_SLOT_STRIDE: u16 = 64;
+
+#[must_use]
+fn road_stop_simple_view_slot(spec_id: u16, dir: usize) -> Option<u16> {
+    let view = u16::try_from(dir.min(5)).ok()?;
+    spec_id
+        .checked_mul(ROADSTOP_SIMPLE_VIEW_SLOT_STRIDE)?
+        .checked_add(view)
+}
 
 #[must_use]
 fn road_stop_layout_ground_slot(spec_id: u16) -> Option<u16> {
@@ -3570,10 +3579,9 @@ fn spawn_road_stop_buildings(
         let view = def
             .newgrf_view_runtime(dir, &mut a2)
             .or_else(|| def.newgrf_view(dir).cloned());
-        if let Some(view) = view {
-            let slot = spec_id
-                .saturating_mul(6)
-                .saturating_add(u16::try_from(dir.min(5)).unwrap_or(0));
+        if let Some(view) = view
+            && let Some(slot) = road_stop_simple_view_slot(spec_id, dir)
+        {
             let handle = cache.handle_for_variant(
                 ROADSTOP_ACTION3_CACHE_TYPE,
                 slot,
@@ -3604,6 +3612,8 @@ fn spawn_road_stop_buildings(
             ));
             return;
         }
+        // El índice sintético no puede saturarse sin aliasar otro spec.
+        // Dejar continuar el flujo conserva la capa vanilla completa.
     }
     let orientation = u8::try_from(dir).unwrap_or_default();
     let drive_through = road_stop_drive_through_layers(class, orientation);
@@ -6903,10 +6913,11 @@ mod tests {
         road_depot_newgrf_def_for_tile, road_depot_parent_sprites,
         road_stop_foundation_child_offset, road_stop_layout_ground_slot,
         road_stop_layout_is_static, road_stop_layout_sequence_slot_range, road_stop_parent_sprites,
-        road_stop_sorted_layer_centers, station_catenary_pylon_parent_bounds,
-        station_catenary_wire_parent_bounds, station_catenary_wire_trace_geometry,
-        station_rail_child_offset, station_rail_foundation_world_z_delta,
-        station_rail_layer_parent_bounds, tunnel_catenary_trace_geometry, tunnel_sortable_parents,
+        road_stop_simple_view_slot, road_stop_sorted_layer_centers,
+        station_catenary_pylon_parent_bounds, station_catenary_wire_parent_bounds,
+        station_catenary_wire_trace_geometry, station_rail_child_offset,
+        station_rail_foundation_world_z_delta, station_rail_layer_parent_bounds,
+        tunnel_catenary_trace_geometry, tunnel_sortable_parents,
     };
     use openttdrs_core::{
         DecodedSprite, Map, RoadTramType, RoadType, RoadTypeDef, TileCoord, TileKind,
@@ -7025,6 +7036,23 @@ mod tests {
             "un spec fuera del bloque u16 debe activar el fallback"
         );
         assert_eq!(road_stop_layout_ground_slot(u16::MAX), None);
+    }
+
+    #[test]
+    fn road_stop_simple_view_slots_do_not_saturate() {
+        assert_eq!(road_stop_simple_view_slot(0, 0), Some(0));
+        assert_eq!(road_stop_simple_view_slot(7, 5), Some(47));
+        assert_eq!(
+            road_stop_simple_view_slot(10_922, 3),
+            Some(u16::MAX),
+            "el último slot representable debe conservarse"
+        );
+        assert_eq!(
+            road_stop_simple_view_slot(10_922, 4),
+            None,
+            "una vista que rebasa el bloque no debe saturarse"
+        );
+        assert_eq!(road_stop_simple_view_slot(10_923, 0), None);
     }
 
     #[test]

@@ -248,6 +248,75 @@ fn river_water_slope_uses_static_action5_sprite_and_nfo_anchor() {
     assert_eq!(*transform, Transform::from_translation(expected));
 }
 
+#[test]
+fn canal_water_tile_draws_dikes_after_generic_water_ground() {
+    let assets = boot_assets_app();
+    let dike_assets = assets.canal_dikes.clone();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    make_water_tile(&mut map, coord, WaterClass::Canal).expect("canal tile");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let mut batches = MapSpriteBatches::default();
+                push_water_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    false,
+                    &mut batches,
+                    &[],
+                    None,
+                    None,
+                );
+                assert_eq!(batches.water.len(), 1);
+                assert!(batches.water[0].1.is_palette_animated());
+                flush_map_batches(&mut commands, batches);
+            },
+        )
+        .expect("generic canal spawn");
+
+    assert_eq!(world.query::<&MapVisualLayer>().iter(&world).count(), 9);
+    assert_eq!(world.query::<&WaterTile>().iter(&world).count(), 1);
+    let rendered: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .collect();
+    for slot in 0..8 {
+        let (width, height, xrel, yrel) = WATER_CANAL_DIKE_SPRITE_META[slot];
+        let layer = 0.010 + slot as f32 * 0.0001;
+        let mut expected = overlay_pos(
+            crate::iso::iso(1, 1),
+            f32::from(xrel),
+            f32::from(yrel),
+            f32::from(width),
+            f32::from(height),
+            0,
+            layer,
+            1,
+            1,
+        );
+        expected.z = ground_draw_z(1, 1, layer);
+        let actual = rendered
+            .iter()
+            .find_map(|(sprite, transform)| {
+                dike_assets[slot]
+                    .matches(sprite)
+                    .then_some(transform.translation)
+            })
+            .unwrap_or_else(|| panic!("falta dique genérico slot {slot}"));
+        assert_eq!(actual, expected, "dique genérico slot {slot}");
+    }
+}
+
 /// `DrawGroundSprite` y `DrawShoreTile` usan `xrel=-31` para un PNG de 64 px
 /// de ancho. El centro de Bevy debe quedar en `+1`, no en el centro geométrico
 /// que desplazaría ambos fondos un píxel hacia la izquierda.

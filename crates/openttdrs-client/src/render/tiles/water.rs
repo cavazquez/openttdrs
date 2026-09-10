@@ -257,6 +257,54 @@ pub(crate) fn canal_dike_slots(map: &Map, coord: TileCoord) -> [bool; 12] {
     slots
 }
 
+/// Emite los diques vanilla seleccionados por `DrawWaterEdges(true, 0, tile)`.
+///
+/// Se usa tanto para el ground de un depósito como para una tesela Canal
+/// genérica. Los diques son `DrawGroundSprite`, por eso no reciben `WaterTile`
+/// ni parent sortable; la banda mínima conserva el orden 0..11 dentro de la
+/// misma tesela.
+pub(crate) fn spawn_canal_dikes(
+    commands: &mut Commands,
+    map: &Map,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    role: &'static str,
+) {
+    let slots = canal_dike_slots(map, ctx.coord);
+    for (slot, selected) in slots.into_iter().enumerate() {
+        if !selected {
+            continue;
+        }
+        let Some(&(width, height, xrel, yrel)) =
+            crate::sprites::WATER_CANAL_DIKE_SPRITE_META.get(slot)
+        else {
+            continue;
+        };
+        let sprite_id = SPR_CANAL_DIKES_BASE + slot as u32;
+        WorldDrawTrace::record_sprite(role, "ground", sprite_id, false);
+        let layer = 0.010 + slot as f32 * 0.0001;
+        let mut position = overlay_pos(
+            ctx.iso_pos,
+            f32::from(xrel),
+            f32::from(yrel),
+            f32::from(width),
+            f32::from(height),
+            base_z,
+            layer,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        );
+        position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), layer);
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            assets.canal_dikes[slot].sprite(),
+            Transform::from_translation(position),
+        ));
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn push_water_tile(
     commands: &mut Commands,
@@ -366,6 +414,9 @@ pub(crate) fn push_water_tile(
             // tienen sprites vanilla específicos.
             WorldDrawTrace::record_sprite("water-ground", "ground", SPR_FLAT_WATER_TILE, false);
             push_water_sprite(&mut batches.water, &assets.water, ctx);
+            if ctx.tile.and_then(water_class) == Some(WaterClass::Canal) {
+                spawn_canal_dikes(commands, map, assets, ctx, ctx.info.base_z, "water-canal");
+            }
         }
     }
 }

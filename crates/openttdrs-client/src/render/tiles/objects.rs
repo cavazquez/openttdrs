@@ -13,7 +13,7 @@ use super::transport::{
     catenary_local_z_delta, record_road_ground_trace, resolve_custom_rail_group_sprite,
     spawn_rail_catenary_for_surface, spawn_road_catenary_for_type,
 };
-use super::water::{canal_dike_slots, spawn_river_slope_ground};
+use super::water::{spawn_canal_dikes, spawn_river_slope_ground};
 use super::{
     catenary_under_low_bridge,
     helpers::{
@@ -53,15 +53,14 @@ use crate::render::{
 use crate::sprites::{
     CatenarySpriteDraw, CatenaryWireDraw, CompanyColour, DockTileLayer,
     ROAD_DEPOT_GROUND_SPRITE_ID, RailDepotLayerGfx, RailStationLayer, RoadDepotLayerGfx,
-    RoadStopLayerGfx, StationTileClass, TransparencyOption, WATER_CANAL_DIKE_SPRITE_META,
-    airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
-    airport_station_layers_for_gfx, airport_station_overlay_rel_for_sprite,
-    airport_station_sprite_for_id, catenary_depot_wire_draw, catenary_hidden,
-    catenary_pylon_world_z_delta, catenary_reference_sprite_id, catenary_sprite_color,
-    catenary_tunnel_wire_sprite, catenary_wire_world_z_delta,
-    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
-    dock_tile_gfx, dock_tile_is_water_part, dock_tile_layer, is_hidden,
-    log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
+    RoadStopLayerGfx, StationTileClass, TransparencyOption, airport_station_base_for_gfx,
+    airport_station_ground_layers_for_gfx, airport_station_layers_for_gfx,
+    airport_station_overlay_rel_for_sprite, airport_station_sprite_for_id,
+    catenary_depot_wire_draw, catenary_hidden, catenary_pylon_world_z_delta,
+    catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_wire_sprite,
+    catenary_wire_world_z_delta, collect_catenary_pylons_from_map_with_pcp_override,
+    collect_catenary_wire_draws_from_map, dock_tile_gfx, dock_tile_is_water_part, dock_tile_layer,
+    is_hidden, log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
     rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
     rail_station_draw_layers, rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
@@ -4472,7 +4471,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                 )),
             ));
         }
-        spawn_ship_depot_canal_dikes(commands, map, assets, ctx, base_z);
+        spawn_canal_dikes(commands, map, assets, ctx, base_z, "ship-depot-water");
     } else if !matches!(
         ctx.kind,
         TileKind::RoadTunnel
@@ -5414,52 +5413,6 @@ fn spawn_ship_depot_tile(
                 ),
                 source_depth,
             },
-        ));
-    }
-}
-
-/// Dibuja el `DrawWaterEdges(true, 0, tile)` que precede a
-/// `DrawWaterTileStruct` en `DrawWaterDepot`.
-///
-/// Los diques son `DrawGroundSprite`, no superficies animadas ni parents
-/// sortables. Su orden local se expresa con una banda mínima dentro del pase
-/// ground, conservando la secuencia 0..11 del C++ cuando dos esquinas se
-/// superponen.
-fn spawn_ship_depot_canal_dikes(
-    commands: &mut Commands,
-    map: &Map,
-    assets: &WorldAssets,
-    ctx: &TileRenderContext,
-    base_z: u8,
-) {
-    let slots = canal_dike_slots(map, ctx.coord);
-    for (slot, selected) in slots.into_iter().enumerate() {
-        if !selected {
-            continue;
-        }
-        let Some(&(width, height, xrel, yrel)) = WATER_CANAL_DIKE_SPRITE_META.get(slot) else {
-            continue;
-        };
-        let sprite_id = super::SPR_CANAL_DIKES_BASE + slot as u32;
-        WorldDrawTrace::record_sprite("ship-depot-water", "ground", sprite_id, false);
-        let layer = 0.010 + slot as f32 * 0.0001;
-        let mut position = overlay_pos(
-            ctx.iso_pos,
-            f32::from(xrel),
-            f32::from(yrel),
-            f32::from(width),
-            f32::from(height),
-            base_z,
-            layer,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-        );
-        position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), layer);
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            assets.canal_dikes[slot].sprite(),
-            Transform::from_translation(position),
         ));
     }
 }

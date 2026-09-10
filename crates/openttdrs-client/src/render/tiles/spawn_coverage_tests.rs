@@ -13,7 +13,8 @@ use openttdrs_core::{
     NewgrfAirportSpecDef, OBJECT_FLAG_DRAW_WATER, ObjectSpecDef, RailType, RoadStopSpecDef,
     RoadTramType, RoadType, RoadTypeDef, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, StationClassId,
     StationSpecDef, StationSpecId, TrainSpriteAssign, TrainSpriteGraphics, WaterClass,
-    make_water_tile, set_water_class_m1, vanilla_road_type_catalog,
+    make_water_tile, set_bridge_middle_mapt, set_bridge_type_m6, set_water_class_m1,
+    vanilla_road_type_catalog,
 };
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
@@ -3358,6 +3359,84 @@ fn normal_road_catenary_layers_join_global_sort() {
             .iter()
             .all(|(parent, depth)| parent.source_depth == *depth),
         "cada parent conserva su profundidad fuente antes de reordenarse"
+    );
+}
+
+#[test]
+fn road_catenary_is_hidden_under_a_low_road_bridge() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+
+    // Puente vial X en (1,3)..(4,3), con dos teselas de carretera
+    // electrificada debajo del vano. `DrawRoadTypeCatenary` debe descartar
+    // los cuatro recortes del hilo cuando el tablero queda a z=1.
+    let mut ramp = tile_template();
+    ramp.kind = TileKind::RoadBridge;
+    ramp.mapt = 0x90;
+    ramp.m6 = set_bridge_type_m6(0, BridgeType::Wooden);
+    ramp.m5 = 0x86; // rampa SW
+    map.set_tile(c(1, 3), ramp).expect("rampa oeste");
+    ramp.m5 = 0x84; // rampa NE
+    map.set_tile(c(4, 3), ramp).expect("rampa este");
+
+    for x in 2..=3 {
+        let mut lower = tile_template();
+        lower.kind = TileKind::Road;
+        lower.mapt = set_bridge_middle_mapt(0x20, false);
+        lower.m5 = 0x0A; // ROAD_X
+        map.set_tile(c(x, 3), lower)
+            .expect("carretera bajo el puente");
+    }
+
+    let mut road_catalog = vanilla_road_type_catalog();
+    road_catalog
+        .iter_mut()
+        .find(|def| def.id == RoadType::ROAD)
+        .expect("road type vanilla")
+        .flags = 1; // RoadTypeFlag::Catenary.
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_road_tile(
+                    &mut commands,
+                    &m.0,
+                    8,
+                    8,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 3),
+                    4.0,
+                    TEST_CLIMATE,
+                    false,
+                    false,
+                    &road_catalog,
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("carretera electrificada bajo puente bajo");
+
+    let lower_catenary_parents = world
+        .query::<&ViewportSortableParent>()
+        .iter(&world)
+        .filter(|parent| [6071, 6043].contains(&parent.sprite_id))
+        .count();
+    assert_eq!(
+        lower_catenary_parents, 0,
+        "la catenaria vial inferior no debe atravesar el tablero bajo"
     );
 }
 

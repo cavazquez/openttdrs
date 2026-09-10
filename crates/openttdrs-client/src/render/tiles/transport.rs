@@ -39,7 +39,7 @@ use crate::sprites::{
     RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
     ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE, catenary_hidden,
     catenary_pylon_world_z_delta, catenary_reference_sprite_id, catenary_sprite_color,
-    catenary_tunnel_exterior_pcp, catenary_wire_world_z_delta,
+    catenary_transparent, catenary_tunnel_exterior_pcp, catenary_wire_world_z_delta,
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
     collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
     collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
@@ -2003,6 +2003,14 @@ pub(crate) fn spawn_road_catenary_for_type(
     mut global_parent_ordinal: Option<u8>,
 ) -> Option<u8> {
     if catenary_hidden() {
+        return global_parent_ordinal;
+    }
+    // `DrawRoadTypeCatenary` omite la catenaria bajo un puente bajo, salvo
+    // cuando el modo de transparencia está activo. La misma guarda debe
+    // aplicarse a carreteras normales y a las paradas/waypoints que llaman
+    // este helper; de lo contrario los cables inferiores atraviesan el tablero
+    // aunque el renderer de referencia los descarte.
+    if catenary_under_low_bridge(map, ctx.coord, dims).hide_wires && !catenary_transparent() {
         return global_parent_ordinal;
     }
     let Some(def) = openttdrs_core::road_type_def(road_catalog, road_type) else {

@@ -965,15 +965,17 @@ respectivamente `6035`/`6036` y `6099`/`6100`. Esto cubre el fallback, no la
 composición entera de tramtypes custom ni clipping/pivotes/framebuffer; #326
 permanece abierto.
 
-Actualización #326-SHIP-DEPOT-NFO (2026-09-10): la comparación con
-`water_land.h` detectó un faltante específico del depósito naval. `ShipDepot`
-ya conserva la `WaterClass` original en el modelo y las fachadas 4070..4075
-usan los anclajes/tamaños NFO del baseset, además de conservar las secuencias
-`TILE_SEQ` de eje/parte y sus bounds globales. El test ECS fija las seis capas
-y los cuatro `m5` válidos. Todavía falta que el ground equivalente a
-`DrawWaterClassGround` emita dikes de canal y pendientes/bordes de río; la
-implementación actual usa 4061 como fallback visual. Se crearon los subissues
-[#563](https://github.com/cavazquez/openttdrs/issues/563)–[#567](https://github.com/cavazquez/openttdrs/issues/567) para separar #326, sin cerrarlo.
+Actualización #326-SHIP-DEPOT-WATER-GROUND (2026-09-10, `ca239842`): la
+comparación con `water_land.h` detectó un faltante específico del depósito
+naval. `ShipDepot` conserva la `WaterClass` original en el modelo y las
+fachadas 4070..4075 usan los anclajes/tamaños NFO del baseset, además de
+conservar las secuencias `TILE_SEQ` de eje/parte y sus bounds globales. El
+ground de Canal reproduce ahora `DrawWaterEdges(true, 0, tile)`: 4061 más los
+slots 5380..5391, con recortes del perfil activo, anclas generadas y pruebas
+ECS de selección/posición. Mar no emite diques, y todavía faltan los sprites y
+bordes de Río en pendiente; por eso #326 y #567 permanecen abiertos. Los
+subissues [#563](https://github.com/cavazquez/openttdrs/issues/563)–[#567](https://github.com/cavazquez/openttdrs/issues/567)
+siguen separando el backlog sin convertir este bloque en paridad global.
 
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|

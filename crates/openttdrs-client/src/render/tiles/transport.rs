@@ -48,10 +48,11 @@ use crate::sprites::{
     rail_tile_is_signals, rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render,
     road_catenary_sprite_ids, road_flat_sprite_color, road_flat_sprite_index,
     road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
-    road_tile_snow_or_desert, roadside_is_paved, signal_safe_slope_position_for_side,
-    signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
-    signal_world_position_for_side, track_fence_draws_for_tile, track_fence_height_px,
-    track_fence_sprite_meta, tram_flat_sprite_index,
+    road_tile_snow_or_desert, road_works_sprite_id, roadside_is_paved,
+    signal_safe_slope_position_for_side, signal_screen_anchor_for_side,
+    signal_screen_position_for_side, signal_sprite_center_offset, signal_world_position_for_side,
+    track_fence_draws_for_tile, track_fence_height_px, track_fence_sprite_meta,
+    tram_flat_sprite_index,
 };
 
 /// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
@@ -89,6 +90,7 @@ const ROTSG_OVERLAY: u8 = 1;
 const ROTSG_GROUND: u8 = 2;
 const ROAD_OVERLAY_GROUND_LAYER_FRAC: f32 = 0.02;
 const ROAD_OVERLAY_LAYER_FRAC: f32 = 0.025;
+const ROAD_WORKS_LAYER_FRAC: f32 = 0.03;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RailGroundKind {
@@ -1591,6 +1593,53 @@ pub(crate) fn spawn_road_tile(
                 ));
             }
         }
+    }
+
+    // `DrawRoadBits` dibuja la excavación después de los overlays y retorna
+    // antes de `DrawRoadTypeCatenary` y de los detalles de roadside cuando
+    // hay obras. Los sprites 1414/1415 conservan el ancla NFO `39x21/-18,5`
+    // y, como cualquier `DrawGroundSprite`, siguen al parent de la foundation.
+    if !is_level_crossing
+        && let Some(tile) = ctx.tile.filter(|tile| tile.kind == TileKind::Road)
+        && roadside.is_some_and(|roadside| roadside >= 6)
+    {
+        let sprite_id = road_works_sprite_id(rb | (tile.m3 & 0x0F));
+        record_road_ground_trace("road-works", sprite_id, road_foundation);
+        if let Some(image) = assets.rail.get(&sprite_id) {
+            let position = overlay_pos(
+                ctx.iso_pos,
+                -18.0,
+                5.0,
+                39.0,
+                21.0,
+                base_z,
+                ROAD_WORKS_LAYER_FRAC,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            );
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(
+                    commands,
+                    image.sprite(),
+                    ctx,
+                    position,
+                    mw,
+                    parent,
+                );
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    image.sprite(),
+                    Transform::from_translation(road_ground_pass_pos(
+                        position,
+                        ctx,
+                        ROAD_WORKS_LAYER_FRAC,
+                    )),
+                ));
+            }
+        }
+        return;
     }
 
     // `DrawRoadCatenary` se ejecuta para las carreteras normales antes de los

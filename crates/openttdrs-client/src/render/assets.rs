@@ -5,12 +5,13 @@ use bevy::prelude::*;
 use crate::render::atlas::{AtlasSprite, TileAtlas};
 use crate::sprites::{
     AIRPORT_STATION_SPRITES, BridgePaletteSprites, HOUSE_DRAW_DATA, HousePaletteSprites,
-    INDUSTRY_GFX_DATA, RAIL_DEPOT_VISUAL_TYPE_COUNT, ROAD_DEPOT_GROUND_PATH, StationTileClass,
-    airport_station_base_for_gfx, house_sprite_asset_filename, level_crossing_sprite_atlas_key,
-    rail_depot_build_layers, rail_pbs_sprite_ids_for_preload, rail_sprite_ids_for_preload,
-    rail_station_draw_layers, rail_station_ground_track_sprite_for_type,
-    rail_station_layer_for_type, rail_waypoint_draw_layers, road_depot_build_layers,
-    road_stop_build_layers, road_stop_drive_through_layers, signal_sprite_texture_id,
+    INDUSTRY_GFX_DATA, RAIL_DEPOT_VISUAL_TYPE_COUNT, ROAD_DEPOT_GROUND_PATH, SPR_EXCAVATION_X,
+    SPR_EXCAVATION_Y, StationTileClass, airport_station_base_for_gfx, house_sprite_asset_filename,
+    level_crossing_sprite_atlas_key, rail_depot_build_layers, rail_pbs_sprite_ids_for_preload,
+    rail_sprite_ids_for_preload, rail_station_draw_layers,
+    rail_station_ground_track_sprite_for_type, rail_station_layer_for_type,
+    rail_waypoint_draw_layers, road_depot_build_layers, road_stop_build_layers,
+    road_stop_drive_through_layers, signal_sprite_texture_id,
 };
 
 /// Geometría opaca de respaldo para los bloques agregados de `Out4x`/`Out8x`.
@@ -382,6 +383,10 @@ impl WorldAssets {
                 rail_ids.insert(layer.sprite_id);
             }
         }
+        // `DrawRoadBits` comparte el mapa de sprites de vías para resolver las
+        // excavaciones de roadworks; no forman parte de la tabla ferroviaria
+        // porque sus IDs 1414/1415 no son señales ni piezas de rail.
+        rail_ids.extend([SPR_EXCAVATION_X, SPR_EXCAVATION_Y]);
         let mut rail = std::collections::HashMap::new();
         for id in rail_ids {
             let tex_id = signal_sprite_texture_id(id);
@@ -1070,8 +1075,8 @@ mod world_assets_tests {
     use bevy::prelude::*;
 
     use super::{
-        TileAtlas, WorldAssets, industry_sprite_atlas_name, rocky_terrain_atlas_name,
-        stub_opengfx_tiles_for_tests,
+        SPR_EXCAVATION_X, SPR_EXCAVATION_Y, TileAtlas, WorldAssets, industry_sprite_atlas_name,
+        rocky_terrain_atlas_name, stub_opengfx_tiles_for_tests,
     };
     use openttdrs_core::RailType;
 
@@ -1129,6 +1134,8 @@ mod world_assets_tests {
             assets.rail.get(&1376),
             "el suelo de cruce 1376 no puede reutilizar la señal Action5 homónima"
         );
+        assert!(assets.rail.contains_key(&SPR_EXCAVATION_X));
+        assert!(assets.rail.contains_key(&SPR_EXCAVATION_Y));
         // Torres terminadas (2083/2086/2089) deben tener ciclo oil_refinery.
         for id in [2083u32, 2086, 2089, 2120] {
             let frames = assets

@@ -12,6 +12,10 @@ pub const SPR_ROAD_GROUND_BASE: u32 = 1332;
 pub const SPR_ROAD_PAVED_GROUND_BASE: u32 = 1313;
 /// `SPR_ROAD_Y_SNOW`: primer sprite de carretera sobre nieve/desierto.
 pub const SPR_ROAD_SNOW_GROUND_BASE: u32 = 1351;
+/// `SPR_EXCAVATION_X`: excavación de obras viales sobre el eje X.
+pub const SPR_EXCAVATION_X: u32 = 1414;
+/// `SPR_EXCAVATION_Y`: excavación de obras viales sobre el eje Y.
+pub const SPR_EXCAVATION_Y: u32 = 1415;
 /// `SPR_ROAD_PAVED_STRAIGHT_Y` / `X`: faroles de `_roadside_lamps`.
 pub const SPR_ROAD_STREETLIGHT_BASE: u32 = 1406;
 /// `0x1212`: árbol usado por `_roadside_trees`.
@@ -90,6 +94,19 @@ pub const fn road_ground_sprite_id(offset: usize, paved: bool, snow_or_desert: b
 #[must_use]
 pub const fn road_streetlight_sprite_id(lamp: usize) -> u32 {
     SPR_ROAD_STREETLIGHT_BASE + if lamp == 0 { 0 } else { 1 }
+}
+
+/// Selecciona el sprite de excavación que usa `DrawRoadBits` durante obras.
+///
+/// OpenTTD consulta `(road_bits | tram_bits) & ROAD_X`: el llamador debe
+/// pasar la unión de ambos conjuntos de bits, no sólo la carretera principal.
+#[must_use]
+pub const fn road_works_sprite_id(road_and_tram_bits: u8) -> u32 {
+    if road_and_tram_bits & 0x0A != 0 {
+        SPR_EXCAVATION_X
+    } else {
+        SPR_EXCAVATION_Y
+    }
 }
 
 #[path = "road_depot_gfx_data_generated.rs"]
@@ -344,6 +361,13 @@ mod tests {
         assert_eq!(road_streetlight_sprite_id(0), 1406);
         assert_eq!(road_streetlight_sprite_id(1), 1407);
         assert_eq!(SPR_ROADSIDE_TREE, 4626);
+    }
+
+    #[test]
+    fn roadworks_sprite_selection_matches_road_x_axis() {
+        assert_eq!(road_works_sprite_id(0x0A), SPR_EXCAVATION_X);
+        assert_eq!(road_works_sprite_id(0x05), SPR_EXCAVATION_Y);
+        assert_eq!(road_works_sprite_id(0x0F), SPR_EXCAVATION_X);
     }
 
     #[test]

@@ -3491,6 +3491,21 @@ fn road_catenary_is_hidden_during_roadworks() {
         catenary_parents, 0,
         "HasRoadWorks debe cortar la catenaria vial antes de dibujarla"
     );
+
+    let excavation = world
+        .resource::<TsAssets>()
+        .0
+        .rail
+        .get(&1414)
+        .expect("sprite de excavación X cargado")
+        .clone();
+    assert!(
+        world
+            .query::<&Sprite>()
+            .iter(&world)
+            .any(|sprite| excavation.matches(sprite)),
+        "DrawRoadBits debe publicar la excavación X durante roadworks"
+    );
 }
 
 #[test]

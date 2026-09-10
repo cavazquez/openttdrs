@@ -3357,3 +3357,14 @@ las tres capas `TILE_SEQ` de las fachadas. Es una cobertura de vecinos adicional
 no una declaración de paridad: la matriz Sea/Canal/River, costa, callbacks,
 clipping, orden global y framebuffer sigue pendiente; #567 y #326 continúan
 abiertos.
+
+Actualización #326/#563/#565-ROAD-WAYPOINT-RUNTIME-ONLY (2026-09-10,
+`39499b9c`): `RoadWaypoint` ya no exige `newgrf_views` o una preview estática
+para sustituir el suelo de carretera y el overlay de tranvía. Cada grupo
+Action2 se resuelve una sola vez con el contexto de la tesela; la misma vista
+resuelta alimenta la geometría NFO y la caché, incluyendo tipos runtime-only.
+La regresión integrada publica roadtype y tramtype custom sin vistas estáticas
+y verifica que ambas texturas llegan al waypoint. Las 8 pruebas focales de
+waypoint, formato y Clippy estricto pasan. #563 y #565 continúan abiertas por
+la matriz completa de partes/pendientes, callbacks, anclas restantes, clipping,
+orden global, vecinos y framebuffer; #326 tampoco se cierra.

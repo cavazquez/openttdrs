@@ -4803,22 +4803,54 @@ fn sloped_newgrf_tram_overlay_attaches_to_its_foundation_parent() {
         .expect("tipo tranvía vanilla");
     tram.id = RoadType::from_u8(2);
     tram.class = RoadTramType::Tram;
+    tram.flags |= 1; // RoadTypeFlag::Catenary.
     tram.from_newgrf = true;
     tram.from_tramtypes_feature = true;
-    tram.newgrf_views = vec![openttdrs_core::DecodedSprite {
+    let surface = openttdrs_core::DecodedSprite {
         width: 8,
         height: 8,
         x_offs: 0,
         y_offs: 0,
-        rgba: vec![255; 8 * 8 * 4],
+        rgba: [255, 255, 0, 255].repeat(8 * 8),
         mask: Vec::new(),
-    }];
+    };
+    let catenary_back = openttdrs_core::DecodedSprite {
+        width: 64,
+        height: 16,
+        x_offs: -32,
+        y_offs: -8,
+        rgba: [0, 255, 255, 255].repeat(64 * 16),
+        mask: Vec::new(),
+    };
+    let catenary_front = openttdrs_core::DecodedSprite {
+        width: 64,
+        height: 16,
+        x_offs: -32,
+        y_offs: -8,
+        rgba: [255, 0, 255, 255].repeat(64 * 16),
+        mask: Vec::new(),
+    };
+    tram.newgrf_views = vec![surface.clone()];
+    tram.newgrf_runtime = Some(Box::new(TrainSpriteGraphics {
+        sets: vec![
+            vec![surface.clone()],
+            vec![catenary_back.clone()],
+            vec![catenary_front.clone()],
+        ],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 0,
+            set_id: 0,
+        }],
+        specific_assigns: [((0, 5), 1), ((0, 4), 2)].into_iter().collect(),
+        ..Default::default()
+    }));
     let road_catalog = vec![tram];
     let grid = RenderGrid::from_map(&map, 8, 8);
     let mut world = World::new();
     world.insert_resource(TsMap(map));
     world.insert_resource(TsGrid(grid));
     world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
     world
         .run_system_once(
             move |mut commands: Commands,
@@ -4826,7 +4858,7 @@ fn sloped_newgrf_tram_overlay_attaches_to_its_foundation_parent() {
                   g: Res<TsGrid>,
                   a: Res<TsAssets>,
                   mut cache: Local<crate::render::NewGrfRoadSpriteCache>,
-                  mut images: Local<Assets<Image>>| {
+                  mut images: ResMut<Assets<Image>>| {
                 spawn_road_tile(
                     &mut commands,
                     &m.0,
@@ -4871,6 +4903,58 @@ fn sloped_newgrf_tram_overlay_attaches_to_its_foundation_parent() {
         attached.len(),
         2,
         "asfalto y overlay NewGRF de tranvía deben seguir al cimiento"
+    );
+
+    let attached_handles: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Sprite)>()
+        .iter(&world)
+        .filter(|(child, _)| foundation_parents.contains(&child.parent))
+        .map(|(_, sprite)| sprite.image.clone())
+        .collect();
+    {
+        let images = world.resource::<Assets<Image>>();
+        assert!(
+            attached_handles.iter().any(|handle| {
+                images.get(handle).and_then(|image| image.data.as_deref())
+                    == Some(surface.rgba.as_slice())
+            }),
+            "la superficie custom del tramtype debe conservar su texture sobre foundation"
+        );
+    }
+
+    let catenary_handles: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Sprite)>()
+        .iter(&world)
+        .filter(|(parent, _)| [6070, 6042].contains(&parent.sprite_id))
+        .map(|(_, sprite)| sprite.image.clone())
+        .collect();
+    assert_eq!(
+        catenary_handles.len(),
+        4,
+        "el tramtype custom debe conservar tres recortes traseros y un frente"
+    );
+    let images = world.resource::<Assets<Image>>();
+    assert_eq!(
+        catenary_handles
+            .iter()
+            .filter(|handle| {
+                images.get(*handle).and_then(|image| image.data.as_deref())
+                    == Some(catenary_back.rgba.as_slice())
+            })
+            .count(),
+        3,
+        "los recortes traseros deben usar el grupo custom del tramtype"
+    );
+    assert_eq!(
+        catenary_handles
+            .iter()
+            .filter(|handle| {
+                images.get(*handle).and_then(|image| image.data.as_deref())
+                    == Some(catenary_front.rgba.as_slice())
+            })
+            .count(),
+        1,
+        "el frente debe usar su grupo custom separado"
     );
 }
 

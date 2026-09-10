@@ -5494,6 +5494,153 @@ fn canal_ship_depot_consumes_feature_ground_and_dike_views() {
 }
 
 #[test]
+fn canal_ship_depot_applies_sprite_offset_callback_to_ground_and_dikes() {
+    let assets = boot_assets_app();
+    let depot = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    let mut tile = tile_template();
+    tile.kind = TileKind::ShipDepot;
+    tile.mapt = 0x60;
+    tile.m5 = 0x30;
+    tile.m1 = set_water_class_m1(tile.m1, WaterClass::Canal);
+    map.set_tile(depot, tile).expect("canal ship depot");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+
+    let callback_runtime = || {
+        let mut runtime = TrainSpriteGraphics {
+            sets: vec![Vec::new()],
+            ..TrainSpriteGraphics::default()
+        };
+        runtime.action2_var.insert(
+            0,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: 2,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        runtime
+    };
+    let marked_sprite = |marker: u8| DecodedSprite {
+        width: 3,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: vec![marker; 3 * 2 * 4],
+        mask: Vec::new(),
+    };
+    let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+    features[usize::from(openttdrs_core::CF_WATERSLOPE)] = openttdrs_core::CanalFeatureDef {
+        id: openttdrs_core::CF_WATERSLOPE,
+        callback_mask: 1,
+        flags: openttdrs_core::CFF_HAS_FLAT_SPRITE,
+        from_newgrf: true,
+        grfid: 0xCAFE,
+        newgrf_views: (0..3).map(|slot| marked_sprite(0x40 + slot)).collect(),
+        newgrf_runtime: Some(Box::new(callback_runtime())),
+    };
+    features[usize::from(openttdrs_core::CF_DIKES)] = openttdrs_core::CanalFeatureDef {
+        id: openttdrs_core::CF_DIKES,
+        callback_mask: 1,
+        flags: 0,
+        from_newgrf: true,
+        grfid: 0xCAFE,
+        newgrf_views: (0..14).map(|slot| marked_sprite(0x80 + slot)).collect(),
+        newgrf_runtime: Some(Box::new(callback_runtime())),
+    };
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types_and_tramway_action5(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &[],
+                    None,
+                    &[],
+                    &features,
+                    &[],
+                    Some(&mut action5_sprites),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                    TramwayDepotAction5::default(),
+                );
+            },
+        )
+        .expect("canal ship depot callback spawn");
+
+    let sprites: Vec<_> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .filter_map(|sprite| {
+            world
+                .resource::<Assets<Image>>()
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                .and_then(|data| data.first().copied())
+        })
+        .collect();
+    assert!(
+        sprites.contains(&0x42),
+        "el ground usa el slot 0 + delta del callback: {sprites:?}"
+    );
+    for marker in 0x82..=0x89 {
+        assert_eq!(
+            sprites.iter().filter(|&&value| value == marker).count(),
+            1,
+            "el dique conserva su slot y el delta del callback: {marker:#04x}"
+        );
+    }
+    assert_eq!(
+        world.query::<&MapVisualLayer>().iter(&world).count(),
+        10,
+        "callback del canal no pierde ground, ocho diques ni estructura"
+    );
+}
+
+#[test]
 fn river_ship_depot_uses_static_slope_ground_before_depot_layers() {
     let assets = boot_assets_app();
     let river_asset = assets.river_slopes[1].clone(); // SPR_WATER_SLOPE_X_DOWN.

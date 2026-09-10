@@ -3444,3 +3444,14 @@ overflows; el filtro de road stops queda en 32/32, core en 13/13, formato y
 Clippy estricto verdes. Esto cierra otro riesgo de identidad de caché, pero
 #563 y #326 permanecen abiertos por la matriz de partes/callbacks, trace,
 evidencia raster, vecinos, clipping y framebuffer.
+
+Actualización #326/#565-TRAM-CATENARY-FALLBACK (2026-09-10, `431b0991`): la
+selección de catenaria de road/tram ya resuelve primero los grupos Action3
+`CATENARY_BACK` y `CATENARY_FRONT`. Igual que `GetCustomRoadSprite`, sólo
+abandona ambos sprites vanilla cuando al menos un grupo devuelve un sprite
+custom; si los grupos están declarados pero no producen una vista resoluble,
+se recuperan ambos sprites vanilla sin dejar la calle sin cables. La prueba
+de decisión y las regresiones de catenaria/tram pasan (5/5 y 1/1 focal,
+respectivamente), junto con formato y Clippy estricto. #565 sigue abierto por
+la matriz completa de superficies/pendientes, anclas, depósitos, clipping y
+framebuffer.

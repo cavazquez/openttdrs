@@ -3440,3 +3440,16 @@ las 17 pruebas focales de agua pasan y la suite completa del cliente queda en
 verdes. #567 sigue abierta por la matriz completa Sea/Canal/River, piezas y
 callbacks del depósito, clipping, orden global y framebuffer; #326 permanece
 abierta por la matriz global.
+
+Actualización #326/#566-VIEWPORT-ASSET-EVENTS (2026-09-10, `8fe04466`): el
+sorter preciso de Bevy consume `AssetEvent<Image>` y
+`AssetEvent<TextureAtlasLayout>` filtrados por los handles usados por cada
+parent. Si una textura o layout llega después del spawn, el parent se
+reevalúa con el rectángulo real del PNG; los cambios de `Assets<T>` no
+relacionados con caches no fuerzan sorts repetidos. La regresión cubre la
+carga tardía de un parent fuera del bounds 3D, el filtro focal de viewport
+pasa 14/14, la suite cliente queda en 1346 pasadas y 2 ignoradas, Clippy
+estricto, formato y `diff --check` verdes. Esto corrige una subetapa de
+clipping/culling, pero #566 sigue abierta por la matriz completa de pivotes,
+clipping por familias y framebuffer; #567 permanece abierta por
+Sea/Canal/River, vecinos, callbacks, orden global y framebuffer.

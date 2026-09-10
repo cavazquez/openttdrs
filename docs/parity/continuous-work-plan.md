@@ -3755,3 +3755,12 @@ Las regresiones cubren construcción con rival, Canal y zona climática, y la
 suite core queda en 2388 pasadas y 1 ignorada. #567 sigue abierta por la
 huella de dos teselas completa, vecinos/callbacks, clipping, orden global y
 framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-DIRECTION-ENCODING (2026-09-10, `d45899ef`):
+la orientación de la boca ya se traduce al contrato `part/eje` de OpenTTD
+mediante la tabla inversa de `XYNSToDiagDir`: `dir 0..3` escribe `m5` bajo
+`0, 3, 1, 2`, respectivamente, manteniendo `WaterTileType::Depot` en
+`0x30`. La regresión cubre los cuatro valores y la normalización de entradas
+fuera de rango; la suite core queda en 2389 pasadas y 1 ignorada, con Clippy
+estricto y formato verdes. #567 sigue abierta por la huella 2×1/1×2 completa,
+vecinos/callbacks, clipping, orden global y framebuffer; #326 permanece abierta.

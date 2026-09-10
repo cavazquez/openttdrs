@@ -3693,3 +3693,13 @@ La suite cliente queda en 1366 pasadas y 2 ignoradas, con Clippy estricto,
 formato y `diff --check` verdes. #563 sigue abierta por trace/catenaria
 restante, callbacks, clipping, matriz de partes, orden global completo y
 framebuffer; #326 permanece abierta.
+
+Actualización #326/#563-ROAD-CATENARY-ROADWORKS (2026-09-10, `0637e32f`):
+la carretera normal con `Roadside::GrassRoadWorks` o
+`Roadside::PavedRoadWorks` ya corta la catenaria antes de emitirla, igual que
+el retorno temprano de `DrawRoadBits` en OpenTTD. La regresión ECS verifica que
+una carretera `ROAD_X` en obras no publique los parents `6071/6043`; el cruce
+a nivel conserva su rama independiente. La suite cliente queda en 1367
+pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
+La textura de excavación `1414/1415` y su evidencia raster quedan como corte
+separado; #563 y #326 permanecen abiertas.

@@ -4514,7 +4514,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                 ctx,
                 base_z,
                 "ship-depot-water",
-                river_edge_sprite_offset(ctx.info.tileh, canal_features),
+                river_edge_sprite_offset(map, ctx, canal_features),
                 canal_features,
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),

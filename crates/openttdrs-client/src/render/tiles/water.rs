@@ -527,10 +527,11 @@ pub(crate) fn river_edge_slots(map: &Map, coord: TileCoord) -> [bool; 12] {
 /// reemplazo Action5 de `SPR_CANALS_BASE` conserva el bloque plano de bordes.
 #[must_use]
 pub(crate) fn river_edge_sprite_offset(
-    tileh: u8,
+    map: &Map,
+    ctx: &TileRenderContext,
     canal_features: &[openttdrs_core::CanalFeatureDef],
 ) -> usize {
-    let Some(index) = river_slope_sprite_index(tileh) else {
+    let Some(_) = river_slope_sprite_index(ctx.info.tileh) else {
         return 0;
     };
     let Some(feature) =
@@ -538,11 +539,20 @@ pub(crate) fn river_edge_sprite_offset(
     else {
         return 0;
     };
-    let flat_offset = usize::from(feature.flags & openttdrs_core::CFF_HAS_FLAT_SPRITE != 0);
-    if feature.newgrf_views.get(flat_offset + index).is_none() {
+    // `DrawRiverWater` advances the edge block when `GetCanalSprite` finds a
+    // custom base, not only when the preview table happens to contain the
+    // selected slope. Runtime Action2 can expose that base only for the
+    // current tile, so evaluate slot zero with the same Canal scope used by
+    // the ground pass.
+    let mut action2 = canal_action2_context_for_tile(map, ctx);
+    let custom_base = feature
+        .newgrf_view_runtime(0, &mut action2)
+        .or_else(|| feature.newgrf_views.first().cloned())
+        .is_some();
+    if !custom_base {
         return 0;
     }
-    match tileh {
+    match ctx.info.tileh {
         SLOPE_SE => 12,
         SLOPE_NE => 24,
         SLOPE_SW => 36,
@@ -891,7 +901,7 @@ pub(crate) fn push_water_tile_with_action5(
                 ctx,
                 ctx.info.base_z,
                 "water-river-edge",
-                river_edge_sprite_offset(ctx.info.tileh, canal_features),
+                river_edge_sprite_offset(map, ctx, canal_features),
                 canal_features,
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
@@ -1006,12 +1016,56 @@ mod tests {
         };
         let mut features = openttdrs_core::vanilla_canal_feature_catalog();
         features[usize::from(openttdrs_core::CF_RIVER_SLOPE)].newgrf_views = vec![sprite; 4];
+        let map = Map::new_flat(3, 3, 0);
+        let grid = crate::render::RenderGrid::from_map(&map, 3, 3);
+        let mut ctx = crate::render::TileRenderContext::new(&map, &grid, 1, 1);
 
-        assert_eq!(river_edge_sprite_offset(SLOPE_SE, &features), 12);
-        assert_eq!(river_edge_sprite_offset(SLOPE_NE, &features), 24);
-        assert_eq!(river_edge_sprite_offset(SLOPE_SW, &features), 36);
-        assert_eq!(river_edge_sprite_offset(SLOPE_NW, &features), 48);
-        assert_eq!(river_edge_sprite_offset(SLOPE_SE, &[]), 0);
+        ctx.info.tileh = SLOPE_SE;
+        assert_eq!(river_edge_sprite_offset(&map, &ctx, &features), 12);
+        ctx.info.tileh = SLOPE_NE;
+        assert_eq!(river_edge_sprite_offset(&map, &ctx, &features), 24);
+        ctx.info.tileh = SLOPE_SW;
+        assert_eq!(river_edge_sprite_offset(&map, &ctx, &features), 36);
+        ctx.info.tileh = SLOPE_NW;
+        assert_eq!(river_edge_sprite_offset(&map, &ctx, &features), 48);
+        ctx.info.tileh = SLOPE_SE;
+        assert_eq!(river_edge_sprite_offset(&map, &ctx, &[]), 0);
+    }
+
+    #[test]
+    fn river_edge_offset_accepts_runtime_only_slope_base() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![0xFF; 4],
+            mask: Vec::new(),
+        };
+        let runtime = TrainSpriteGraphics {
+            sets: vec![vec![sprite]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: openttdrs_core::CF_RIVER_SLOPE,
+                set_id: 0,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+        features[usize::from(openttdrs_core::CF_RIVER_SLOPE)] = CanalFeatureDef {
+            id: openttdrs_core::CF_RIVER_SLOPE,
+            callback_mask: 0,
+            flags: 0,
+            from_newgrf: true,
+            grfid: 0xCAFE,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+        let map = Map::new_flat(3, 3, 0);
+        let grid = crate::render::RenderGrid::from_map(&map, 3, 3);
+        let mut ctx = crate::render::TileRenderContext::new(&map, &grid, 1, 1);
+        ctx.info.tileh = SLOPE_SE;
+
+        assert_eq!(river_edge_sprite_offset(&map, &ctx, &features), 12);
     }
 
     #[test]

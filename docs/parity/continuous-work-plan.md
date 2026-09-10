@@ -3521,3 +3521,15 @@ ignoradas; Clippy estricto, formato y `diff --check` pasan. #567 sigue abierta
 por la matriz completa de objetos en Sea/Canal/River, layouts directos y
 pendientes, callbacks, clipping, orden global y framebuffer; #326 permanece
 abierta.
+
+Actualización #326/#567-SHIP-DEPOT-WATER-MATRIX (2026-09-10, `56ae6016`): la
+regresión ECS del depósito naval ejerce explícitamente `DrawWaterClassGround`
+para Sea, Canal y River plano: Sea no emite diques, Canal emite los ocho
+bordes exteriores y River conserva el ground plano sin diques. Otra regresión
+con alturas reales del mapa cubre las cuatro pendientes River (`SE`, `NE`, `SW`,
+`NW`) y verifica que cada una selecciona su sprite estático correcto antes de
+las capas `TILE_SEQ` del depósito. El bloque focal queda en 11 pruebas, la
+suite cliente en 1353 pasadas y 2 ignoradas; Clippy estricto, formato y
+`diff --check` pasan. La evidencia de callbacks/Action2 completos, vecinos
+para toda la matriz, clipping, orden global y framebuffer sigue pendiente;
+#567 y #326 permanecen abiertos.

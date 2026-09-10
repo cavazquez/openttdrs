@@ -3882,3 +3882,14 @@ mediante la tabla inversa de `XYNSToDiagDir`: `dir 0..3` escribe `m5` bajo
 fuera de rango; la suite core queda en 2389 pasadas y 1 ignorada, con Clippy
 estricto y formato verdes. #567 sigue abierta por la huella 2×1/1×2 completa,
 vecinos/callbacks, clipping, orden global y framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-FOOTPRINT (2026-09-10, `604f671c`): la
+construcción de `CmdBuildShipDepot` ya materializa las dos partes contiguas de
+la huella 2×1/1×2. La validación comprueba base, parte opuesta y boca antes de
+mutar; cada tesela conserva su nibble climático y `WaterClass`, recibe el
+`owner` activo y normaliza `m2/m3/m4/m6/m7/m8` como `MakeShipDepot`. Las
+regresiones cubren los cuatro ejes, payload residual y rechazo atómico de una
+segunda tesela ocupada. La suite core queda en 2391 pasadas y 1 ignorada, con
+Clippy estricto, formato y `diff --check` verdes. #567 sigue abierta por
+demolición de ambas partes, pool `DepotID`, vecinos/callbacks, preview,
+clipping, orden global y framebuffer; #326 permanece abierta.

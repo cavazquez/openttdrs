@@ -39,6 +39,16 @@ const SPR_SHORE_BASE: u32 = 5936;
 ///
 /// El mapa conserva `m3hi` como `m4()` (random del agua), el nibble bajo de
 /// `mapt` como `TropicZone` y la altura de la tesela para el clima ártico.
+fn canal_scope_height(tile: Tile) -> u8 {
+    // `CanalScopeResolver::GetVariable(0x80)` mantiene la continuidad de una
+    // esclusa: la parte superior usa la cota de la cámara inferior (`z - 1`).
+    // El ajuste sólo aplica a MP_WATER/LockPart::Upper; un depósito naval con
+    // bits parecidos no debe recibirlo.
+    let is_upper_lock =
+        tile.kind == TileKind::Water && (tile.m5 >> 4) & 0x0F == 2 && (tile.m5 >> 2) & 0x03 == 2;
+    tile.height.saturating_sub(u8::from(is_upper_lock))
+}
+
 fn canal_action2_context(
     tile: Option<Tile>,
     connectivity: u8,
@@ -50,13 +60,14 @@ fn canal_action2_context(
         return action2;
     };
     let random = u32::from(tile.m3hi);
+    let height = canal_scope_height(tile);
     let terrain = match climate {
         Climate::SubTropical => u32::from(tile.mapt & 0x03),
         Climate::SubArctic => u32::from(tile.height > snow_line_height) * 4,
         Climate::Temperate | Climate::Toyland => 0,
     };
     action2.random_bits = random;
-    action2.vars.insert(0x80, u32::from(tile.height));
+    action2.vars.insert(0x80, u32::from(height));
     action2.vars.insert(0x81, terrain);
     action2.vars.insert(0x82, u32::from(connectivity));
     action2.vars.insert(0x83, random);
@@ -1012,6 +1023,24 @@ mod tests {
         map.set_tile(coord, tile).expect("set below snow line");
         let below_snow = canal_action2_context(map.get(coord), 0, Climate::SubArctic, 10);
         assert_eq!(below_snow.vars.get(&0x81), Some(&0));
+    }
+
+    #[test]
+    fn canal_context_lowers_only_upper_lock_height() {
+        let mut map = Map::new_flat(1, 1, 12);
+        let coord = TileCoord::new(0, 0);
+        let mut tile = map.get(coord).expect("fixture tile");
+        tile.kind = TileKind::Water;
+        tile.m5 = 0x28; // WaterTileType::Lock + LockPart::Upper.
+        map.set_tile(coord, tile).expect("set upper lock");
+
+        let upper = canal_action2_context(map.get(coord), 0, Climate::Temperate, 12);
+        assert_eq!(upper.vars.get(&0x80), Some(&11));
+
+        tile.m5 = 0x24; // WaterTileType::Lock + LockPart::Lower.
+        map.set_tile(coord, tile).expect("set lower lock");
+        let lower = canal_action2_context(map.get(coord), 0, Climate::Temperate, 12);
+        assert_eq!(lower.vars.get(&0x80), Some(&12));
     }
 
     #[test]

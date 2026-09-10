@@ -3363,6 +3363,72 @@ fn normal_road_catenary_layers_join_global_sort() {
 }
 
 #[test]
+fn level_crossing_draws_road_catenary() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(3, 3);
+    let mut map = fresh_map8();
+    let crossing = Tile {
+        kind: TileKind::Road,
+        mapt: 0x20,
+        // `RoadTileType::Crossing`, road axis X → ROAD_X (0x0A).
+        m5: 0x40,
+        ..tile_template()
+    };
+    map.set_tile(coord, crossing)
+        .expect("cruce vial electrificado");
+
+    let mut road_catalog = vanilla_road_type_catalog();
+    road_catalog
+        .iter_mut()
+        .find(|def| def.id == RoadType::ROAD)
+        .expect("road type vanilla")
+        .flags = 1; // RoadTypeFlag::Catenary.
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_road_tile(
+                    &mut commands,
+                    &m.0,
+                    8,
+                    8,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    4.0,
+                    TEST_CLIMATE,
+                    false,
+                    false,
+                    &road_catalog,
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("cruce vial con catenaria");
+
+    let catenary_parents = world
+        .query::<&ViewportSortableParent>()
+        .iter(&world)
+        .filter(|parent| [6071, 6043].contains(&parent.sprite_id))
+        .count();
+    assert_eq!(
+        catenary_parents, 4,
+        "DrawRoadCatenary también debe ejecutarse en cruces a nivel"
+    );
+}
+
+#[test]
 fn road_catenary_is_hidden_under_a_low_road_bridge() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

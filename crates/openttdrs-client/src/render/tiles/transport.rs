@@ -1598,7 +1598,7 @@ pub(crate) fn spawn_road_tile(
     // sprites planos como los cuatro pares inclinados; hasta ahora el cliente
     // sólo los tenía en el atlas y por eso una calle electrificada quedaba sin
     // hilo/postes aunque el overlay de riel sí estuviera presente.
-    if !is_level_crossing && let Some(tile) = ctx.tile.filter(|tile| tile.kind == TileKind::Road) {
+    if let Some(tile) = ctx.tile.filter(|tile| tile.kind == TileKind::Road) {
         let road_bits = rb;
         let road_type = openttdrs_core::road_type_from_tile(&tile);
         let mut catenary_parent_ordinal = Some(ROAD_CATENARY_PARENT_ORDINAL);

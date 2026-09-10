@@ -3508,3 +3508,16 @@ suelo base selecciona además la variante nieve/desierto. #565 continúa abierta
 por el caso de tranvía puro, paradas/depósitos, pendientes completas, clipping
 y framebuffer;
 #326 permanece abierto por la matriz global.
+
+Actualización #326/#565-TRAM-OVERLAY-GROUP (2026-09-10, `78f04bd7`): el caso
+de tranvía puro reconoce `RoadTypeInfo::UsesOverlay()` cuando el tramtype
+publica `ROTSG_GROUND`. La pasada de suelo deja el terreno base desnudo,
+aplica el `GROUND` específico y la pasada de overlay aplica el `OVERLAY`,
+evitando que el fallback de carretera vanilla tape la representación custom.
+Con carretera presente se conserva la precedencia del roadtype y en
+pendientes las capas siguen al parent de foundation. La regresión ECS usa un
+tramtype runtime-only sin vistas default y verifica las dos capas custom;
+también pasan las regresiones relacionadas de carretera, catenaria, pendientes,
+waypoint y depósito naval. #565 continúa abierta por la matriz completa de
+superficies, paradas/depósitos, pendientes, anclas, clipping y framebuffer;
+#326 permanece abierta por la matriz global.

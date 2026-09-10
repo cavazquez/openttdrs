@@ -990,6 +990,15 @@ Canal genérico fuera de depósitos y la comparación framebuffer siguen abierto
 Las regresiones del cliente pasan 1305 tests (2 ignorados); #326 y #567 siguen
 abiertos.
 
+Actualización #326/#567-CANAL-WATER-EDGES (2026-09-10, `ff65f7a2`): el
+selector de `DrawWaterEdges(true, 0, tile)` y la materialización de los slots
+5380..5391 se comparten ahora entre `ShipDepot` y las teselas Canal genéricas.
+Esto corrige también las esquinas/diques del agua de canal fuera de una
+estructura, sin convertirlos en `WaterTile` animados ni en parents sortables.
+La cobertura queda probada con el caso aislado de ocho piezas y con los
+depósitos; #326 y #567 siguen abiertos sólo por los callbacks River/Canal
+custom de NewGRF, la composición global y el framebuffer.
+
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. El sorter incorpora `TileLayoutSpriteGroup` de AirportTile; parents globales para PPP/cables/capas `TILE_SEQ_LINE` rail vanilla, waypoint ferroviario OpenGFX2, depósitos ferroviarios/road NewGRF con `RTSG_DEPOT`, paradas Bus/Truck y road waypoints vanilla o con `TileLayout` NewGRF materializable, depósitos viales —incluidos los baselines tram `DEPOT_WITH_TRACK`/`DEPOT_NO_TRACK` y el `ROTSG_OVERLAY` de default gfx—, cable de entrada de túnel eléctrico y catenaria road/tram de calles normales. El vidrio rail, los toldos del waypoint, ground/reserva de depósito inclinado y los postes en pendiente conservan su relación child con el parent correspondiente. `VisualCaptureFreeze` evita falsos positivos animados y el culling usa el rectángulo real de Bevy, pero ninguno equivale a paridad raster. Kale aporta orden estructural para el depósito y no contiene un foco raster reproducible de waypoint/catenaria de estación, así que esas migraciones siguen sin métrica visual propia. Foundations/rotaciones aeroportuarias, layouts incompletos de road stop/waypoint, otros layouts ferroviarios custom, la composición completa de superficies/catenaria de tramtypes custom, sprite-stack, clipping, pivotes y framebuffer siguen sin equivalencia global; el contrato global completo de children queda separado en [#561](https://github.com/cavazquez/openttdrs/issues/561). | Delimitar y reproducir el fallback de `TileLayout` incompleto en road stops/waypoints antes de globalizarlo; repetir seis zooms si se altera viewport, culling u overview. |

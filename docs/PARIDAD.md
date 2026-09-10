@@ -1250,6 +1250,15 @@ Canal genérico fuera de depósitos y la comparación framebuffer siguen abierto
 Las regresiones del cliente pasan 1305 tests (2 ignorados); #326 y #567 siguen
 abiertos.
 
+Actualización #326/#567-CANAL-WATER-EDGES (2026-09-10, `ff65f7a2`): el
+selector de `DrawWaterEdges(true, 0, tile)` y la materialización de los slots
+5380..5391 se comparten ahora entre `ShipDepot` y las teselas Canal genéricas.
+Esto corrige también las esquinas/diques del agua de canal fuera de una
+estructura, sin convertirlos en `WaterTile` animados ni en parents sortables.
+La cobertura queda probada con el caso aislado de ocho piezas y con los
+depósitos; #326 y #567 siguen abiertos sólo por los callbacks River/Canal
+custom de NewGRF, la composición global y el framebuffer.
+
 Actualización #326-TUNNEL-CATENARY-GLOBAL (2026-09-09):
 `DrawRailCatenaryOnTunnel` ya conserva su `SpriteCombine` en runtime. En una
 boca eléctrica el cable de entrada `5656`/`5658` es el parent global con el

@@ -4807,6 +4807,128 @@ fn rail_fence_and_signal_join_the_global_viewport_sorter() {
 }
 
 #[test]
+fn ship_depot_vanilla_layers_join_global_sort_for_both_axes_and_parts() {
+    let cases = [
+        (
+            0x30,
+            vec![(
+                4072,
+                ParentSpriteBounds::new(16, 31, 0, 31, 31, 19),
+                viewport_insertion_key(1, 1, 1),
+            )],
+        ),
+        (
+            0x31,
+            vec![
+                (
+                    4074,
+                    ParentSpriteBounds::new(16, 16, 0, 31, 16, 19),
+                    viewport_insertion_key(1, 1, 1),
+                ),
+                (
+                    4070,
+                    ParentSpriteBounds::new(16, 31, 0, 31, 31, 19),
+                    viewport_insertion_key(1, 1, 2),
+                ),
+            ],
+        ),
+        (
+            0x32,
+            vec![(
+                4073,
+                ParentSpriteBounds::new(31, 16, 0, 31, 31, 19),
+                viewport_insertion_key(1, 1, 1),
+            )],
+        ),
+        (
+            0x33,
+            vec![
+                (
+                    4075,
+                    ParentSpriteBounds::new(16, 16, 0, 16, 31, 19),
+                    viewport_insertion_key(1, 1, 1),
+                ),
+                (
+                    4071,
+                    ParentSpriteBounds::new(31, 16, 0, 31, 31, 19),
+                    viewport_insertion_key(1, 1, 2),
+                ),
+            ],
+        ),
+    ];
+
+    for (m5, expected) in cases {
+        let assets = boot_assets_app();
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        map.set_tile(
+            coord,
+            Tile {
+                kind: TileKind::ShipDepot,
+                mapt: 0x60,
+                m5,
+                ..tile_template()
+            },
+        )
+        .expect("ship depot tile");
+        let grid = RenderGrid::from_map(&map, 4, 4);
+        let mut world = World::new();
+        world.insert_resource(TsMap(map));
+        world.insert_resource(TsGrid(grid));
+        world.insert_resource(TsAssets(assets));
+        world
+            .run_system_once(
+                move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                    spawn_transport_object_tile(
+                        &mut commands,
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(&m.0, &g.0, coord.x as u32, coord.y as u32),
+                        4.0,
+                        false,
+                        &m.0,
+                        m.0.dimensions(),
+                        &[],
+                        &[],
+                        None,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                    );
+                },
+            )
+            .expect("ship depot global sort spawn");
+
+        let mut parents: Vec<_> = world
+            .query::<(&ViewportSortableParent, &Transform)>()
+            .iter(&world)
+            .filter_map(|(parent, transform)| {
+                (4070..=4075)
+                    .contains(&parent.sprite_id)
+                    .then_some((*parent, transform.translation.z))
+            })
+            .collect();
+        parents.sort_by_key(|(parent, _)| parent.insertion_key);
+        assert_eq!(
+            parents
+                .iter()
+                .map(|(parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+                .collect::<Vec<_>>(),
+            expected,
+            "TILE_SEQ_LINE del depósito {m5:#04x} debe conservar bounds y orden"
+        );
+        assert!(
+            parents
+                .iter()
+                .all(|(parent, depth)| parent.source_depth == *depth),
+            "las capas del depósito {m5:#04x} conservan la profundidad fuente"
+        );
+    }
+}
+
+#[test]
 fn ship_depot_uses_water_and_all_vanilla_two_tile_parts() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);

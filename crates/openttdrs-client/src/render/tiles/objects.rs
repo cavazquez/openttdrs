@@ -5463,7 +5463,7 @@ fn spawn_ship_depot_tile(
             sprite_id,
             company_palette,
             false,
-            (0, 0, 0),
+            (dx as i32, dy as i32, 0),
             0,
             Some(crate::render::world_draw_trace::TraceSpriteBounds::new(
                 dx as i32, dy as i32, 0, extent_x, extent_y, 20,

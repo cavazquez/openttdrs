@@ -3862,3 +3862,14 @@ construida cambie por bytes residuales de otra familia. La suite cliente queda
 en 1371 pasadas y 2 ignoradas, con formato y Clippy estricto verdes; #567 y
 #326 siguen abiertas por variables/scopes y callbacks restantes, costa,
 vecinos, clipping, orden global y framebuffer.
+
+Actualización #326/#567-SHIP-DEPOT-RAW-CONTRACT (2026-09-10, `4a18ae25`):
+la construcción de depósitos navales escribe ahora el contrato vigente de
+OpenTTD: `MP_WATER` conserva el nibble climático de `MAPT`, `m5[4..=7]` queda
+en `WaterTileType::Depot` (`0x30`) y los bits bajos mantienen la orientación.
+El propietario activo se escribe en los cinco bits bajos de `m1` sin destruir
+`WaterClass`; el resolver común de ownership también ignora esos bits altos.
+Las regresiones cubren construcción con rival, Canal y zona climática, y la
+suite core queda en 2388 pasadas y 1 ignorada. #567 sigue abierta por la
+huella de dos teselas completa, vecinos/callbacks, clipping, orden global y
+framebuffer; #326 permanece abierta.

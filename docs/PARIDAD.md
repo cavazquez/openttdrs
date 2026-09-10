@@ -3779,3 +3779,14 @@ separa el suelo de carretera del suelo de una parada. La suite cliente queda
 en 1363 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check`
 verdes. #563 sigue abierta por catenaria/trace, vecinos, clipping, matriz de
 partes/callbacks, orden global completo y framebuffer; #326 permanece abierta.
+
+Actualización #326/#563-ROAD-CATENARY-LOW-BRIDGE (2026-09-10, `caa95f0c`):
+`DrawRoadTypeCatenary` ya descarta los cuatro recortes de catenaria vial bajo
+un puente bajo cuando `deck_z <= GetTileMaxZ + 1`, incluyendo carreteras
+normales, paradas y waypoints; el modo transparente conserva la excepción del
+renderer C++. La regresión ECS usa una carretera electrificada bajo un puente
+vial X y verifica que no se publiquen los parents `6071/6043`. La suite cliente
+queda en 1364 pasadas y 2 ignoradas, con Clippy estricto, formato y
+`diff --check` verdes. #563 sigue abierta por trace/catenaria restante,
+vecinos, clipping, matriz de partes/callbacks, orden global completo y
+framebuffer; #326 permanece abierta.

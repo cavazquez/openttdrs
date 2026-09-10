@@ -105,8 +105,9 @@ pub(crate) use station_newgrf::NewGrfStationSpriteCache;
 pub(crate) use tiles::{
     HouseSpawnResources, TramwayDepotAction5, flush_map_batches, leveled_foundation_overlay_pos,
     push_forest_tree, push_water_tile_with_action5,
-    spawn_bridge_middle_with_road_types_and_stations, spawn_generic_land_tile_with_objects,
-    spawn_house_tile, spawn_industry_tile_with_world, spawn_rail_tile, spawn_road_tile,
+    spawn_bridge_middle_with_road_types_and_stations,
+    spawn_generic_land_tile_with_objects_and_water, spawn_house_tile,
+    spawn_industry_tile_with_world, spawn_rail_tile, spawn_road_tile,
     spawn_station_tile_with_world_and_road_types,
     spawn_transport_object_tile_with_road_types_and_tramway_action5, spawn_void_tile,
 };

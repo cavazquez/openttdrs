@@ -3,6 +3,7 @@
 mod fingerprint;
 mod image_factory;
 
+use openttdrs_core::map::SPR_FLAT_WATER_TILE;
 use openttdrs_core::newgrf_sprites::{ResolvedTileLayout, ResolvedTileLayoutSprite};
 
 use crate::render::{AtlasSprite, WorldAssets};
@@ -15,7 +16,7 @@ pub(crate) use image_factory::{
 /// Baseset sprites that are safe to use as a `TileLayout` ground without
 /// guessing a palette, an animation, or NFO geometry. They all share the
 /// flat 64×31 tile geometry and `xrel=-31, yrel=0`.
-const DIRECT_FLAT_GROUND_SPRITES: [u16; 3] = [3924, 3981, 4000];
+const DIRECT_FLAT_GROUND_SPRITES: [u16; 4] = [3924, 3981, 4000, SPR_FLAT_WATER_TILE as u16];
 
 /// Base-sprite data that a TileLayout renderer needs in addition to the atlas
 /// rect. `AtlasSprite` deliberately has no NFO offset, so keeping this small
@@ -68,6 +69,7 @@ pub(crate) fn direct_tile_layout_ground(
         3924 => assets.industries.get(&3924)?.clone(), // SPR_FLAT_BARE_LAND
         3981 => assets.grass.clone(),                  // SPR_FLAT_GRASS_TILE
         4000 => assets.rough_flat[0].clone(),          // SPR_FLAT_ROUGH_LAND
+        id if id == SPR_FLAT_WATER_TILE as u16 => assets.water.clone(),
         _ => return None,
     };
     Some(DirectTileLayoutGround {
@@ -155,10 +157,7 @@ mod tests {
             .as_mut()
             .expect("ground")
             .base_sprite = Some(4061);
-        assert!(
-            !tile_layout_is_renderable(&unsupported_ground),
-            "water needs its own animation path"
-        );
+        assert!(tile_layout_is_renderable(&unsupported_ground));
 
         let mut direct_build = layout;
         direct_build.sequence[0].sprite = None;

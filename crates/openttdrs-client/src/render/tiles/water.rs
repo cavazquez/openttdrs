@@ -1410,6 +1410,49 @@ pub(crate) fn push_water_tile_with_action5(
     }
 }
 
+/// Emite `DrawWaterClassGround` para el ground de un objeto NewGRF construido
+/// sobre agua.
+///
+/// `MP_OBJECT` no entra por el dispatcher normal de `MP_WATER`, pero conserva
+/// la clase en `M1`. Reutilizar esta ruta mantiene la superficie, los doce
+/// slots de borde y los reemplazos Action2/Action5 alineados con el agua que
+/// OpenTTD dibuja para una industria, estación o depósito naval.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn push_object_water_ground_with_action5(
+    commands: &mut Commands,
+    map: &Map,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    batches: &mut MapSpriteBatches,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    canal_action5: &[Option<DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) -> bool {
+    let Some(tile) = ctx.tile else {
+        return false;
+    };
+    if !has_tile_water_ground(tile) {
+        return false;
+    }
+    push_water_tile_with_action5(
+        commands,
+        map,
+        map.dimensions(),
+        assets,
+        ctx,
+        false,
+        batches,
+        &[],
+        None,
+        images,
+        canal_features,
+        canal_action5,
+        action5_sprites,
+    );
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

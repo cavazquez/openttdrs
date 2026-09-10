@@ -15,8 +15,9 @@ use crate::render::{
     CompanyColoredSprites, HouseSpawnResources, MapLabelSpatialIndex, MapSpriteBatches, RenderGrid,
     TileAtlas, TileRenderContext, TileViewportBounds, TramwayDepotAction5, WorldAssets,
     chunk_tile_bounds, flush_map_batches, push_forest_tree, push_water_tile_with_action5,
-    spawn_bridge_middle_with_road_types_and_stations, spawn_generic_land_tile_with_objects,
-    spawn_house_tile, spawn_industry_tile_with_world, spawn_rail_tile, spawn_road_tile,
+    spawn_bridge_middle_with_road_types_and_stations,
+    spawn_generic_land_tile_with_objects_and_water, spawn_house_tile,
+    spawn_industry_tile_with_world, spawn_rail_tile, spawn_road_tile,
     spawn_station_tile_with_world_and_road_types,
     spawn_transport_object_tile_with_road_types_and_tramway_action5, spawn_void_tile,
 };
@@ -336,7 +337,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                 );
             }
             TileKind::Grass | TileKind::Forest | TileKind::CoalField | TileKind::Unknown(_) => {
-                spawn_generic_land_tile_with_objects(
+                spawn_generic_land_tile_with_objects_and_water(
                     commands,
                     assets,
                     Some(company),
@@ -353,6 +354,10 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     Some(&object_counts),
                     Some(object_sprites),
                     Some(images),
+                    &sim.state.canal_feature_catalog,
+                    &sim.state.runtime.canal_action5_newgrf_sprites,
+                    Some(&mut *action5_sprites),
+                    &mut batches,
                 );
             }
         }

@@ -42,6 +42,9 @@ pub const OBJECT_FLAG_CANNOT_REMOVE: u16 = 1 << 1;
 pub const OBJECT_FLAG_AUTOREMOVE: u16 = 1 << 2;
 /// Bit `ClearIncome` de `ObjectFlag` (Action0 `0x10`).
 pub const OBJECT_FLAG_CLEAR_INCOME: u16 = 1 << 4;
+/// Bit `DrawWater` de `ObjectFlag` (Action0 `0x10`). El ground del objeto
+/// debe delegar en `DrawWaterClassGround` cuando la tesela conserva agua.
+pub const OBJECT_FLAG_DRAW_WATER: u16 = 1 << 10;
 /// Bits de `ObjectFlag` que afectan al runtime de animación.
 pub const OBJECT_FLAG_ANIMATION: u16 = 1 << 6;
 pub const OBJECT_FLAG_ANIM_RANDOM_BITS: u16 = 1 << 12;

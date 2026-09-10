@@ -1,10 +1,11 @@
 use bevy::prelude::*;
+use openttdrs_core::map::has_tile_water_ground;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-    CLEAR_GROUND_SNOW, Climate, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
-    OBJECT_TYPE_STATUE_COMPANY, OBJECT_TYPE_TRANSMITTER, ObjectSpecDef, effective_clear_ground,
-    industry_uses_water_ground, is_newgrf_object_type_id,
+    CLEAR_GROUND_SNOW, Climate, OBJECT_FLAG_DRAW_WATER, OBJECT_TYPE_LIGHTHOUSE,
+    OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_STATUE_COMPANY, OBJECT_TYPE_TRANSMITTER, ObjectSpecDef,
+    effective_clear_ground, industry_uses_water_ground, is_newgrf_object_type_id,
 };
 
 use super::{
@@ -12,7 +13,7 @@ use super::{
         FLAT_WATER_LAYER_FRAC, foundation_surface_overlay_pos,
         spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_sprite_at,
     },
-    sloped_or_flat_image, spawn_ground_sprite,
+    push_object_water_ground_with_action5, sloped_or_flat_image, spawn_ground_sprite,
 };
 use crate::iso::{
     RoadStopSeqGfx, full_tile_sprite_pos, ground_draw_z, overlay_pos, remap_tile_offset,
@@ -25,9 +26,10 @@ use crate::render::newgrf_cache::{
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    CompanyColoredSprites, MapVisualLayer, TileRenderContext, ViewportSortableChild,
-    ViewportSortableParent, WaterTile, WorldAssets, sprite_from_atlas_or_company_colour,
-    sprite_from_atlas_or_industry_palette, viewport_insertion_key, viewport_source_depth,
+    CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, TileRenderContext,
+    ViewportSortableChild, ViewportSortableParent, WaterTile, WorldAssets,
+    sprite_from_atlas_or_company_colour, sprite_from_atlas_or_industry_palette,
+    viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
     CompanyColour, FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE,
@@ -2297,6 +2299,21 @@ fn requested_object_neighbor_vars(
     requested
 }
 
+/// Decide si `DrawNewObjectTile` sustituye el ground del layout por
+/// `DrawWaterClassGround`.
+fn object_layout_ground_uses_water(
+    def: &ObjectSpecDef,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    tile: Tile,
+) -> bool {
+    let Some(ground) = layout.ground.as_ref() else {
+        return false;
+    };
+    let default_water = ground.base_sprite_id() == Some(SPR_FLAT_WATER_TILE as u16);
+    let requests_water = def.flags & OBJECT_FLAG_DRAW_WATER != 0;
+    (default_water || requests_water) && has_tile_water_ground(tile)
+}
+
 /// Emite el suelo de un layout de objeto. Un resultado completo sin `ground`
 /// representa `DODRAW=0` y suprime el suelo genérico de la tesela.
 #[allow(clippy::too_many_arguments)]
@@ -2547,8 +2564,57 @@ pub(crate) fn spawn_generic_land_tile_with_objects(
     towns: &[openttdrs_core::Town],
     objects: &[openttdrs_core::sav::SavObject],
     object_counts: Option<&openttdrs_core::ObjectScopeCounts>,
+    object_sprites: Option<&mut crate::render::NewGrfObjectSpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) {
+    let mut batches = MapSpriteBatches::default();
+    spawn_generic_land_tile_with_objects_and_water(
+        commands,
+        assets,
+        company,
+        owner_colour,
+        ctx,
+        map,
+        slope_half_ground,
+        climate,
+        world_seed,
+        map_width,
+        object_catalog,
+        towns,
+        objects,
+        object_counts,
+        object_sprites,
+        images,
+        &[],
+        &[],
+        None,
+        &mut batches,
+    );
+    super::flush_map_batches(commands, batches);
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
+    ctx: &TileRenderContext,
+    map: &Map,
+    slope_half_ground: f32,
+    climate: Climate,
+    world_seed: u64,
+    map_width: u32,
+    object_catalog: &[ObjectSpecDef],
+    towns: &[openttdrs_core::Town],
+    objects: &[openttdrs_core::sav::SavObject],
+    object_counts: Option<&openttdrs_core::ObjectScopeCounts>,
     mut object_sprites: Option<&mut crate::render::NewGrfObjectSpriteCache>,
     mut images: Option<&mut Assets<Image>>,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    canal_action5: &[Option<openttdrs_core::DecodedSprite>],
+    water_action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    batches: &mut MapSpriteBatches,
 ) {
     let tileh = ctx.info.tileh;
     let ottd_type = ctx.tile.map_or(0u8, |t| (t.mapt >> 4) & 0xF);
@@ -2735,19 +2801,34 @@ pub(crate) fn spawn_generic_land_tile_with_objects(
     };
     let mut used_newgrf_layout_ground = false;
     if let Some((def, layout, runtime_fp, _view_idx)) = object_layout.as_ref()
-        && let (Some(cache), Some(image_store)) = (object_sprites.as_mut(), images.as_mut())
+        && let Some(tile) = ctx.tile
     {
-        used_newgrf_layout_ground = spawn_newgrf_object_layout_ground(
-            commands,
-            assets,
-            ctx,
-            def,
-            *runtime_fp,
-            layout,
-            cache,
-            image_store,
-            color,
-        );
+        if object_layout_ground_uses_water(def, layout, tile) {
+            used_newgrf_layout_ground = push_object_water_ground_with_action5(
+                commands,
+                map,
+                assets,
+                ctx,
+                batches,
+                canal_features,
+                canal_action5,
+                water_action5_sprites,
+                images.as_deref_mut(),
+            );
+        } else if let (Some(cache), Some(image_store)) = (object_sprites.as_mut(), images.as_mut())
+        {
+            used_newgrf_layout_ground = spawn_newgrf_object_layout_ground(
+                commands,
+                assets,
+                ctx,
+                def,
+                *runtime_fp,
+                layout,
+                cache,
+                image_store,
+                color,
+            );
+        }
     }
     if !used_newgrf_layout_ground {
         spawn_ground_sprite(commands, &image, color, ctx, slope_half_ground);

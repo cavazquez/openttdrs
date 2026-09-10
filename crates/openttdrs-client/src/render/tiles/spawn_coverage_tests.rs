@@ -10,9 +10,9 @@ use openttdrs_core::{
     Action2VarAdjust, Action2VarEntry, Action2VarTerm, AirportClassId, AirportSpecId,
     AirportTileGfxId, AirportTileSpecDef, BridgeType, Climate, DecodedSprite,
     FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef, IndustryTileGfxId, IndustryTileSpecDef,
-    NewgrfAirportSpecDef, ObjectSpecDef, RailType, RoadStopSpecDef, RoadTramType, RoadType,
-    RoadTypeDef, StationClassId, StationSpecDef, StationSpecId, TrainSpriteAssign,
-    TrainSpriteGraphics, WaterClass, make_water_tile, set_water_class_m1,
+    NewgrfAirportSpecDef, OBJECT_FLAG_DRAW_WATER, ObjectSpecDef, RailType, RoadStopSpecDef,
+    RoadTramType, RoadType, RoadTypeDef, StationClassId, StationSpecDef, StationSpecId,
+    TrainSpriteAssign, TrainSpriteGraphics, WaterClass, make_water_tile, set_water_class_m1,
     vanilla_road_type_catalog,
 };
 
@@ -24,8 +24,9 @@ use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::tiles::{
     FLAT_WATER_LAYER_FRAC, HouseSpawnResources, TramwayDepotAction5, flush_map_batches,
     push_forest_tree, push_water_tile, push_water_tile_with_action5, spawn_bridge_middle,
-    spawn_bridge_middle_with_road_types, spawn_generic_land_tile, spawn_house_tile,
-    spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
+    spawn_bridge_middle_with_road_types, spawn_generic_land_tile,
+    spawn_generic_land_tile_with_objects_and_water, spawn_house_tile, spawn_industry_tile,
+    spawn_rail_tile, spawn_road_tile, spawn_station_tile,
     spawn_station_tile_with_world_and_road_types, spawn_transport_object_tile,
     spawn_transport_object_tile_with_road_types,
     spawn_transport_object_tile_with_road_types_and_tramway_action5,
@@ -10992,6 +10993,127 @@ fn flat_newgrf_object_tile_layout_keeps_ground_in_ground_pass() {
         ground_depths,
         vec![ground_draw_z(coord.x, coord.y, 0.55)],
         "DrawNewObjectTile debe dejar el ground TileLayout en DrawGroundSprite"
+    );
+}
+
+#[test]
+fn newgrf_object_draw_water_uses_persisted_canal_ground_and_edges() {
+    use openttdrs_core::map::MP_OBJECT_MAPT;
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let object_type = openttdrs_core::NEW_OBJECT_OFFSET;
+    let mut map = Map::new_flat(3, 3, 0);
+    let mut object_tile = tile_template();
+    object_tile.mapt = MP_OBJECT_MAPT;
+    object_tile.m5 = u8::try_from(object_type).expect("NewGRF object type byte");
+    object_tile.m1 = set_water_class_m1(object_tile.m1, WaterClass::Canal);
+    map.set_tile(coord, object_tile).expect("object on canal");
+
+    let ground = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: [250, 10, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![vec![ground.clone()]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 4,
+            set_id: 9,
+        }],
+        ..Default::default()
+    };
+    runtime.tile_layouts.insert(
+        9,
+        TileLayout {
+            ground: TileLayoutSpriteRef {
+                action1_set: Some(0),
+                ..Default::default()
+            },
+            sequence: Vec::new(),
+        },
+    );
+    let object_def = ObjectSpecDef {
+        id: object_type,
+        class_label: "TEST".into(),
+        name: "Water object".into(),
+        size: openttdrs_core::OBJECT_SIZE_1X1,
+        from_newgrf: true,
+        local_id: 4,
+        grfid: 0x4F42_4A54,
+        newgrf_grf_version: 8,
+        climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
+        build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+        clear_cost_factor: openttdrs_core::DEFAULT_OBJECT_CLEAR_COST_FACTOR,
+        flags: OBJECT_FLAG_DRAW_WATER,
+        animation_frames: 0,
+        animation_status: 0xFF,
+        animation_speed: 2,
+        animation_triggers: 0,
+        callback_mask: 0,
+        views: vec![ground],
+        newgrf_runtime: Some(Box::new(runtime)),
+        associated_badges: Vec::new(),
+    };
+
+    let grid = RenderGrid::from_map(&map, 3, 3);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfObjectSpriteCache::default());
+    world.insert_resource(crate::render::NewGrfAction5SpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut object_cache: ResMut<crate::render::NewGrfObjectSpriteCache>,
+                  mut action5_cache: ResMut<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                let mut batches = MapSpriteBatches::default();
+                spawn_generic_land_tile_with_objects_and_water(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, coord.x as u32, coord.y as u32),
+                    &m.0,
+                    4.0,
+                    TEST_CLIMATE,
+                    TEST_WORLD_SEED,
+                    3,
+                    std::slice::from_ref(&object_def),
+                    &[],
+                    &[],
+                    None,
+                    Some(&mut object_cache),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                    Some(&mut action5_cache),
+                    &mut batches,
+                );
+                flush_map_batches(&mut commands, batches);
+            },
+        )
+        .expect("object water TileLayout spawn");
+
+    let water_tiles = world.query::<&WaterTile>().iter(&world).count();
+    assert_eq!(
+        water_tiles, 1,
+        "DrawWater debe emitir una superficie acuática, no el ground rojo"
+    );
+    assert_eq!(
+        world.query::<&Sprite>().iter(&world).count(),
+        9,
+        "un objeto sobre Canal expone agua y los ocho diques exteriores"
     );
 }
 

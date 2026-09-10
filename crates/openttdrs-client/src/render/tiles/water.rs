@@ -614,6 +614,24 @@ fn lock_is_watered(m5: u8, from: WateredFrom) -> bool {
     }
 }
 
+const fn watered_from_diag_direction(from: WateredFrom) -> u8 {
+    // `DirToDiagDir` redondea cada cardinal hacia el siguiente eje horario:
+    // N/NE → NE, E/SE → SE, S/SW → SW y W/NW → NW.
+    match from {
+        WateredFrom::Ne | WateredFrom::N => 0,
+        WateredFrom::Se | WateredFrom::E => 1,
+        WateredFrom::Sw | WateredFrom::S => 2,
+        WateredFrom::Nw | WateredFrom::W => 3,
+    }
+}
+
+fn tunnel_bridge_is_watered(tile: Tile, from: WateredFrom) -> bool {
+    const TRANSPORT_WATER: u8 = 2;
+    let transport = (tile.m5 >> 2) & 0x03;
+    let direction = tile.m5 & 0x03;
+    transport == TRANSPORT_WATER && (direction ^ 0x02) == watered_from_diag_direction(from)
+}
+
 /// Equivalente del `IsWateredTile` usado por `DrawWaterEdges`.
 ///
 /// Las estaciones petroleras y las industrias suprimen los bordes internos de
@@ -631,6 +649,13 @@ fn is_watered_tile(map: &Map, coord: TileCoord, from: WateredFrom) -> bool {
     // debe leer de MAPT/M1 antes de entrar al match de TileKind.
     if is_map_object_tile(tile.mapt) {
         return water_class(tile).is_some_and(|class| class != WaterClass::Invalid);
+    }
+
+    // `MP_TUNNELBRIDGE` también representa las rampas de un acueducto. En
+    // OpenTTD sólo el lado opuesto a `GetTunnelBridgeDirection` se considera
+    // mojado, y únicamente cuando el transporte codificado es agua.
+    if tile.is_tunnel_bridge_tile() {
+        return tunnel_bridge_is_watered(tile, from);
     }
 
     match tile.kind {
@@ -1795,6 +1820,34 @@ mod tests {
         object.m1 = set_water_class_m1(object.m1, WaterClass::Invalid);
         map.set_tile(neighbour, object).expect("set dry object");
         assert!(canal_dike_slots(&map, center)[0]);
+    }
+
+    #[test]
+    fn aqueduct_ramp_is_watered_only_on_its_opposite_direction() {
+        let mut map = Map::new_flat(1, 1, 0);
+        let coord = TileCoord::new(0, 0);
+        let mut ramp = map.get(coord).expect("aqueduct ramp");
+        ramp.kind = TileKind::Water;
+        ramp.mapt = 0x90;
+        ramp.m5 = 0x8A; // bridge + water transport + direction SW.
+        map.set_tile(coord, ramp).expect("set aqueduct ramp");
+
+        for (from, expected) in [
+            (WateredFrom::Sw, false),
+            (WateredFrom::Nw, false),
+            (WateredFrom::Ne, true),
+            (WateredFrom::Se, false),
+            (WateredFrom::W, false),
+            (WateredFrom::N, true),
+            (WateredFrom::E, false),
+            (WateredFrom::S, false),
+        ] {
+            assert_eq!(is_watered_tile(&map, coord, from), expected, "{from:?}");
+        }
+
+        ramp.m5 = 0x86; // same direction, road transport.
+        map.set_tile(coord, ramp).expect("set road bridge ramp");
+        assert!(!is_watered_tile(&map, coord, WateredFrom::Ne));
     }
 
     #[test]

@@ -3571,3 +3571,14 @@ estricto, formato y `diff --check` verdes. Esto corrige una subetapa de
 clipping/culling, pero #566 sigue abierta por la matriz completa de pivotes,
 clipping por familias y framebuffer; #567 permanece abierta por
 Sea/Canal/River, vecinos, callbacks, orden global y framebuffer.
+
+Actualización #326/#566-ATLAS-LAYOUT-EVENT (2026-09-10, `ec7d3bff`): se añade
+regresión para un parent con `TextureAtlas` cuyo `TextureAtlasLayout` llega
+después del spawn. El caso empieza usando el fallback de bounds 3D y verifica
+que `AssetEvent<TextureAtlasLayout>` lo reincorpora al stream cuando se
+materializa el rectángulo del atlas; el bloque focal del sorter pasa 15/15,
+la suite cliente queda en 1347 pasadas y 2 ignoradas, Clippy estricto, formato
+y `diff --check` verdes. Es cobertura adicional de la subetapa de
+clipping/culling; #566 sigue abierta por pivotes, clipping por familias y
+framebuffer, y #567 por Sea/Canal/River, vecinos, callbacks, orden global y
+framebuffer.

@@ -10,7 +10,9 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use bevy::asset::{AssetEvent, AssetId};
 use bevy::ecs::change_detection::DetectChanges;
+use bevy::ecs::message::{MessageCursor, Messages};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
@@ -479,6 +481,31 @@ fn parent_is_in_viewport_sort_scope(
         }
 }
 
+/// IDs de assets cuyo tamaño o contenido cambió desde el último pase.
+///
+/// `Assets<T>` se marca como cambiado también cuando otro sistema toma un
+/// `ResMut` para actualizar su bookkeeping. El sorter sólo necesita
+/// invalidarse cuando el evento afecta a una textura o layout que realmente
+/// usa uno de sus parents.
+fn changed_asset_ids<A: bevy::asset::Asset>(
+    messages: Option<&Messages<AssetEvent<A>>>,
+    cursor: &mut MessageCursor<AssetEvent<A>>,
+) -> std::collections::HashSet<AssetId<A>> {
+    let Some(messages) = messages else {
+        return std::collections::HashSet::new();
+    };
+    cursor
+        .read(messages)
+        .map(|event| match event {
+            AssetEvent::Added { id }
+            | AssetEvent::Modified { id }
+            | AssetEvent::Removed { id }
+            | AssetEvent::Unused { id }
+            | AssetEvent::LoadedWithDependencies { id } => *id,
+        })
+        .collect()
+}
+
 /// Micro-slot estable dentro de una fila diagonal.
 ///
 /// Bevy necesita Z distintos para aplicar un intercambio de parents que
@@ -574,6 +601,7 @@ fn export_viewport_sort_trace(
 /// slots del pase visible. El coste se paga durante un remap, una modificación
 /// de parent, un cambio de visibilidad o un desplazamiento de viewport; nunca
 /// por frame estable.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn sort_viewport_sortable_parents(
     mut parents: Query<(
         Entity,
@@ -585,6 +613,10 @@ pub(crate) fn sort_viewport_sortable_parents(
     mut removed: RemovedComponents<ViewportSortableParent>,
     mut child_depth_windows: ResMut<ViewportSortableChildDepthWindows>,
     viewport: ViewportSortScopeInputs,
+    image_events: Option<Res<Messages<AssetEvent<Image>>>>,
+    atlas_events: Option<Res<Messages<AssetEvent<TextureAtlasLayout>>>>,
+    mut image_event_cursor: Local<MessageCursor<AssetEvent<Image>>>,
+    mut atlas_event_cursor: Local<MessageCursor<AssetEvent<TextureAtlasLayout>>>,
     images: Option<Res<Assets<Image>>>,
     texture_atlases: Option<Res<Assets<TextureAtlasLayout>>>,
     mut previous_scope: Local<Option<ViewportSortScopeState>>,
@@ -606,7 +638,27 @@ pub(crate) fn sort_viewport_sortable_parents(
     let scope_changed = previous_scope.as_ref() != Some(&scope_state);
     *previous_scope = Some(scope_state);
 
-    let mut needs_sort = scope_changed || removed.read().next().is_some();
+    // La geometría precisa depende de que Bevy haya materializado la imagen o
+    // el layout del atlas. Esa carga no modifica `Sprite` ni `Anchor`, pero sí
+    // puede convertir un fallback de bounds 3D en el rectángulo real del PNG;
+    // sin esta invalidación un parent grande podía quedarse fuera del viewport
+    // en el borde durante toda su vida. No usamos `Res::is_changed` aquí:
+    // otros sistemas toman `ResMut<Assets<Image>>` para actualizar caches sin
+    // cambiar el rectángulo que el sorter debe considerar.
+    let changed_image_ids = changed_asset_ids(image_events.as_deref(), &mut image_event_cursor);
+    let changed_atlas_ids = changed_asset_ids(atlas_events.as_deref(), &mut atlas_event_cursor);
+    let asset_geometry_changed = (!changed_image_ids.is_empty() || !changed_atlas_ids.is_empty())
+        && parents.iter_mut().any(|(_, _, _, _, sprite)| {
+            let Some((sprite, _)) = sprite else {
+                return false;
+            };
+            changed_image_ids.contains(&sprite.image.id())
+                || sprite
+                    .texture_atlas
+                    .as_ref()
+                    .is_some_and(|atlas| changed_atlas_ids.contains(&atlas.layout.id()))
+        });
+    let mut needs_sort = scope_changed || asset_geometry_changed || removed.read().next().is_some();
     for (_, parent, visibility, _, sprite) in &mut parents {
         needs_sort |= parent.is_added()
             || parent.is_changed()
@@ -998,6 +1050,76 @@ mod tests {
                 .sort_runs,
             2,
             "un cambio en la geometría pintada debe reevaluar el scope"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)] // Fixture creada dentro del mismo World.
+    fn loading_parent_texture_invalidates_precise_viewport_sort() {
+        let mut world = viewport_scope_test_world(128, 128);
+        world.insert_resource(Assets::<Image>::default());
+        world.init_resource::<Messages<AssetEvent<Image>>>();
+        let image_handle = world.resource::<Assets<Image>>().reserve_handle();
+
+        // El prisma TILE_SEQ está deliberadamente lejos de la cámara, pero el
+        // PNG se ubica dentro de ella. Antes de que llegue la textura, el
+        // parent debe usar el fallback 3D y quedar fuera; el parent estático
+        // mantiene una segunda entrada para observar que el primero vuelve al
+        // stream cuando el asset pasa a estar disponible.
+        let late_parent = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: 4072,
+                    bounds: ParentSpriteBounds::new(10_000, 10_000, 0, 10_000, 10_000, 19),
+                    insertion_key: viewport_insertion_key(5, 5, 0),
+                    source_depth: 1.0,
+                },
+                Transform::from_xyz(0.0, 0.0, 1.0),
+                Sprite::from_image(image_handle.clone()),
+                Anchor::CENTER,
+            ))
+            .id();
+        world.spawn((
+            ViewportSortableParent {
+                sprite_id: 4073,
+                bounds: ParentSpriteBounds::new(10_000, 10_000, 0, 10_000, 10_000, 19),
+                insertion_key: viewport_insertion_key(5, 5, 1),
+                source_depth: 1.000_5,
+            },
+            Transform::from_xyz(0.0, 0.0, 1.000_5),
+            Sprite::sized(Vec2::splat(1.0)),
+            Anchor::CENTER,
+        ));
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sort_viewport_sortable_parents);
+        schedule.run(&mut world);
+        schedule.run(&mut world);
+        assert_eq!(
+            world
+                .resource::<ViewportSortableChildDepthWindows>()
+                .sort_runs,
+            1,
+            "un asset sin cambios no debe repetir el sort"
+        );
+
+        world
+            .resource_mut::<Assets<Image>>()
+            .insert(image_handle.id(), Image::default_uninit())
+            .unwrap();
+        world.write_message(AssetEvent::Added {
+            id: image_handle.id(),
+        });
+        schedule.run(&mut world);
+
+        let windows = world.resource::<ViewportSortableChildDepthWindows>();
+        assert_eq!(
+            windows.sort_runs, 2,
+            "la carga del PNG debe invalidar el sort"
+        );
+        assert!(
+            windows.next_parent_depth.contains_key(&late_parent),
+            "el parent antes omitido debe entrar al stream cuando su textura ya tiene tamaño"
         );
     }
 

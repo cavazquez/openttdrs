@@ -3379,3 +3379,14 @@ waypoint y depósito naval pasan junto con Clippy estricto, formato y
 `diff --check`. Esto elimina una divergencia de caché, pero #563, #565 y #326
 siguen abiertas por la matriz completa de superficies, vecinos, callbacks,
 clipping, orden global y framebuffer.
+
+Actualización #326/#565-ROAD-OVERLAY-GROUP (2026-09-10, `7786f906`): la calle
+normal reconoce ahora `RoadTypeInfo::UsesOverlay()` mediante la presencia de
+`ROTSG_GROUND`. En ese contrato deja de usar la vista normal, pinta el suelo
+desnudo y aplica `ROTSG_GROUND` seguido de `ROTSG_OVERLAY`, conservando metadata
+NFO y relación con la foundation. La regresión ECS usa un roadtype
+runtime-only sin vista default y verifica ambas capas custom; el fallback del
+suelo base selecciona además la variante nieve/desierto. #565 continúa abierta
+por el caso de tranvía puro, paradas/depósitos, pendientes completas, clipping
+y framebuffer;
+#326 permanece abierto por la matriz global.

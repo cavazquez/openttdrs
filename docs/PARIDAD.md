@@ -3716,3 +3716,13 @@ suite cliente en 1358 pasadas y 2 ignoradas, con Clippy estricto, formato y
 `diff --check` verdes. #567 sigue abierta por layouts directos y pendientes,
 callbacks, vecinos, clipping, orden global y framebuffer; #326 permanece
 abierta.
+
+Actualización #326/#567-OBJECT-WATER-DIRECT-GROUND (2026-09-10, `5592e80c`):
+la regresión ECS cubre el segundo contrato de `DrawNewObjectTile`: un layout
+sin `ObjectFlag::DrawWater` cuyo ground directo es `SPR_FLAT_WATER_TILE`.
+Sobre Sea, Canal y River emite una superficie; sólo Canal conserva los ocho
+diques exteriores y el sprite de fallback rojo no se materializa. El bloque
+focal de objetos de agua queda en 3 pruebas y la suite cliente en 1359
+pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
+#567 sigue abierta por layouts complejos, callbacks/scopes, vecinos, clipping,
+orden global y framebuffer; #326 permanece abierta.

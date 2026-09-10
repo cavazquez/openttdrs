@@ -3832,3 +3832,14 @@ textura X junto con la ausencia de `6071/6043`; la suite cliente queda en 1368
 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
 #563 y #326 permanecen abiertas por la matriz completa, callbacks, trace,
 clipping, orden global y framebuffer.
+
+Actualización #326/#563/#565-PURE-TRAM-UNDERLAY (2026-09-10, `724ccabd`): la
+ruta `DrawRoadBits` distingue ahora el cero real de `GetRoadBits(RTT_ROAD)`
+del fallback geométrico y calcula la fundación con `road | tram`. Cuando la
+tesela conserva `INVALID_ROADTYPE`, el suelo base vuelve a césped y el trazado
+usa `SPR_TRAMWAY_TRAM + GetRoadSpriteOffset`; `tram_flat_*` queda reservado al
+overlay de carretera + tranvía. La regresión ECS cubre `ROAD_X`, anclas del
+underlay y ausencia de ambos sprites equivocados; la suite cliente queda en
+1369 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check`
+verdes. #563, #565 y #326 permanecen abiertas por pendientes completas,
+callbacks, vecinos, clipping, orden global y framebuffer.

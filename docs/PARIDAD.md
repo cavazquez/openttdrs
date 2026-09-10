@@ -3821,3 +3821,14 @@ a nivel conserva su rama independiente. La suite cliente queda en 1367
 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
 La textura de excavación `1414/1415` y su evidencia raster quedan como corte
 separado; #563 y #326 permanecen abiertas.
+
+Actualización #326/#563-ROAD-WORKS-EXCAVATION (2026-09-10, `a008c3d6`):
+la ruta normal de `DrawRoadBits` emite ahora `SPR_EXCAVATION_X/Y` (`1414/1415`)
+según la unión de roadbits y tram bits, después de los overlays y antes del
+retorno temprano que evita catenaria y detalles de roadside. La posición usa
+el metadato NFO `39×21, -18,5`, sigue al parent de la foundation y el atlas de
+runtime/test precarga explícitamente ambos IDs. La regresión ECS verifica la
+textura X junto con la ausencia de `6071/6043`; la suite cliente queda en 1368
+pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
+#563 y #326 permanecen abiertas por la matriz completa, callbacks, trace,
+clipping, orden global y framebuffer.

@@ -3401,3 +3401,16 @@ Las regresiones cubren 13 casos de `TileLayout` en core y 3 rutas de parada o
 waypoint en cliente; Clippy estricto pasa. El fallback de layouts no
 materializables, el eje completo, catenaria directa, comparación raster y
 framebuffer siguen pendientes, por lo que #563 y #326 permanecen abiertos.
+
+Actualización #326/#563-ROAD-STOP-CACHE-SLOTS (2026-09-10, `2537aeaa`): las
+texturas `Action1` de ground y BUILD de `TileLayout` vial dejan de compartir
+namespace con las vistas simples y ya no calculan slots mediante saturación.
+El renderer valida el bloque completo `spec * 64` y la longitud de la
+secuencia antes de emitir cualquier entidad; si el rango no cabe en `u16`,
+abandona el layout custom de forma atómica para activar el fallback sin
+reutilizar la textura de otro spec. Las regresiones cubren el último bloque
+válido, el primer overflow, secuencia vacía y longitudes fuera de rango; las
+3 regresiones de road stop, 13 de core, formato y Clippy estricto pasan. Esto
+corrige la identidad de caché, pero no aporta todavía evidencia raster ni
+completa eje/parte, catenaria directa, trace global, vecinos, clipping o
+framebuffer; #563 y #326 permanecen abiertos.

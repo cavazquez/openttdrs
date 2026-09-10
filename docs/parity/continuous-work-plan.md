@@ -3629,3 +3629,13 @@ cliente en 1361 pasadas y 2 ignoradas, con Clippy estricto, formato y
 `diff --check` verdes. #567 sigue abierta por variables/scopes adicionales,
 layouts complejos, vecinos, clipping, orden global y framebuffer; #326
 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-GLOBAL-SORT-MATRIX (2026-09-10, `96731e50`):
+la regresión ECS ejerce las cuatro combinaciones `Axis::X/Y` y parte
+norte/sur del depósito naval. Las piezas `4072`, `4074+4070`, `4073` y
+`4075+4071` conservan sus bounds `TILE_SEQ_LINE` (`16×1` o `1×16`),
+`insertion_key` consecutivo y `source_depth` igual al transform antes del
+sort global. El bloque focal de depósito naval queda en 16 pruebas y la suite
+cliente en 1362 pasadas y 2 ignoradas, con Clippy estricto, formato y
+`diff --check` verdes. #567 sigue abierta por aceptación visual/framebuffer,
+vecinos y callbacks/variables restantes; #326 permanece abierta.

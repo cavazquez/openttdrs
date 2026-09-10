@@ -19,7 +19,9 @@ use crate::iso::{
     road_stop_build_sprite_center, slope_sprite_offset, wang_hash,
 };
 use crate::render::atlas::AtlasSprite;
-use crate::render::newgrf_cache::{runtime_fingerprint, vars};
+use crate::render::newgrf_cache::{
+    direct_tile_layout_ground, runtime_fingerprint, tile_layout_is_renderable, vars,
+};
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
@@ -603,7 +605,7 @@ pub(crate) fn spawn_house_tile(
     };
     let custom_house_layout = house_layout
         .as_ref()
-        .is_some_and(|(_, layout, _)| layout.complete)
+        .is_some_and(|(_, layout, _)| tile_layout_is_renderable(layout))
         && resources.house_sprites.is_some()
         && resources.images.is_some();
 
@@ -668,6 +670,7 @@ pub(crate) fn spawn_house_tile(
     {
         let _ = spawn_newgrf_house_layout_ground(
             commands,
+            assets,
             ctx,
             resources.map_dims.0,
             foundation_surface_base_z,
@@ -1139,6 +1142,7 @@ fn requested_house_scope_vars(
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_house_layout_ground(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     map_width: u32,
     surface_base_z: u8,
@@ -1149,29 +1153,47 @@ fn spawn_newgrf_house_layout_ground(
     cache: &mut crate::render::NewGrfHouseSpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !layout.complete {
+    if !tile_layout_is_renderable(layout) {
         return false;
     }
     let Some(ground) = layout.ground.as_ref() else {
         return true;
     };
-    let handle = cache.handle_for_layout(def, 0, runtime_fp, &ground.sprite, images);
+    let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
+        let handle = cache.handle_for_layout(def, 0, runtime_fp, decoded, images);
+        (
+            Sprite {
+                image: handle,
+                color: Color::WHITE,
+                ..default()
+            },
+            f32::from(decoded.x_offs),
+            f32::from(decoded.y_offs),
+            f32::from(decoded.width),
+            f32::from(decoded.height),
+        )
+    } else if let Some(base) = direct_tile_layout_ground(ground, assets) {
+        (
+            base.atlas.sprite(),
+            base.x_offs,
+            base.y_offs,
+            base.width,
+            base.height,
+        )
+    } else {
+        return false;
+    };
     let mut position = overlay_pos(
         ctx.iso_pos,
-        f32::from(ground.sprite.x_offs),
-        f32::from(ground.sprite.y_offs),
-        f32::from(ground.sprite.width),
-        f32::from(ground.sprite.height),
+        x_offs,
+        y_offs,
+        width,
+        height,
         surface_base_z,
         0.4,
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
-    let sprite = Sprite {
-        image: handle,
-        color: Color::WHITE,
-        ..default()
-    };
     if let Some(parent) = foundation_child_parent {
         spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
     } else {
@@ -1205,15 +1227,18 @@ fn spawn_newgrf_house_layout_sequence(
     images: &mut Assets<Image>,
     tint: Color,
 ) -> bool {
-    if !layout.complete || layout.sequence.is_empty() {
+    if !tile_layout_is_renderable(layout) || layout.sequence.is_empty() {
         return false;
     }
     let mut last_parent: Option<(Entity, Vec2)> = None;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        let Some(decoded) = layer.action1_sprite() else {
+            return false;
+        };
         let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle = cache.handle_for_layout(def, slot, runtime_fp, &layer.sprite, images);
-        let width = f32::from(layer.sprite.width);
-        let height = f32::from(layer.sprite.height);
+        let handle = cache.handle_for_layout(def, slot, runtime_fp, decoded, images);
+        let width = f32::from(decoded.width);
+        let height = f32::from(decoded.height);
         let seq = RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -1222,8 +1247,8 @@ fn spawn_newgrf_house_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(layer.sprite.x_offs),
-            y_offs: f32::from(layer.sprite.y_offs),
+            x_offs: f32::from(decoded.x_offs),
+            y_offs: f32::from(decoded.y_offs),
             remap_x_adj: 0.0,
         };
         let layer_z = 0.5 + index as f32 * 0.0003;
@@ -1466,7 +1491,7 @@ pub(crate) fn spawn_industry_tile_with_world(
     };
     let custom_industry_layout = industry_layout
         .as_ref()
-        .is_some_and(|(_, layout, _)| layout.complete)
+        .is_some_and(|(_, layout, _)| tile_layout_is_renderable(layout))
         && industry_sprites.is_some();
     // Tabla vanilla: NewGRF usa subst_id si no hay sprites / como fallback.
     let gfx = if translated >= openttdrs_core::NEW_INDUSTRY_TILE_OFFSET {
@@ -1554,6 +1579,7 @@ pub(crate) fn spawn_industry_tile_with_world(
     {
         let _ = spawn_newgrf_industry_layout_ground(
             commands,
+            assets,
             ctx,
             map_width,
             foundation.surface_base_z,
@@ -1933,6 +1959,7 @@ fn requested_industry_scope_vars(
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_industry_layout_ground(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     map_width: u32,
     surface_base_z: u8,
@@ -1944,39 +1971,50 @@ fn spawn_newgrf_industry_layout_ground(
     cache: &mut crate::render::NewGrfIndustrySpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !layout.complete {
+    if !tile_layout_is_renderable(layout) {
         return false;
     }
     let Some(ground) = layout.ground.as_ref() else {
         return true;
     };
-    let handle = cache.handle_for_layout(
-        def,
-        0,
-        Some(palette_colour),
-        runtime_fp,
-        &ground.sprite,
-        images,
-    );
+    let tint =
+        crate::sprites::with_to_alpha(Color::WHITE, crate::sprites::TransparencyOption::Industries);
+    let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
+        let handle =
+            cache.handle_for_layout(def, 0, Some(palette_colour), runtime_fp, decoded, images);
+        (
+            Sprite {
+                image: handle,
+                color: tint,
+                ..default()
+            },
+            f32::from(decoded.x_offs),
+            f32::from(decoded.y_offs),
+            f32::from(decoded.width),
+            f32::from(decoded.height),
+        )
+    } else if let Some(base) = direct_tile_layout_ground(ground, assets) {
+        (
+            base.atlas.sprite_colored(tint),
+            base.x_offs,
+            base.y_offs,
+            base.width,
+            base.height,
+        )
+    } else {
+        return false;
+    };
     let mut position = overlay_pos(
         ctx.iso_pos,
-        f32::from(ground.sprite.x_offs),
-        f32::from(ground.sprite.y_offs),
-        f32::from(ground.sprite.width),
-        f32::from(ground.sprite.height),
+        x_offs,
+        y_offs,
+        width,
+        height,
         surface_base_z,
         0.45,
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
-    let sprite = Sprite {
-        image: handle,
-        color: crate::sprites::with_to_alpha(
-            Color::WHITE,
-            crate::sprites::TransparencyOption::Industries,
-        ),
-        ..default()
-    };
     if let Some(parent) = foundation_child_parent {
         spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
     } else {
@@ -2008,24 +2046,21 @@ fn spawn_newgrf_industry_layout_sequence(
     cache: &mut crate::render::NewGrfIndustrySpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !layout.complete || layout.sequence.is_empty() {
+    if !tile_layout_is_renderable(layout) || layout.sequence.is_empty() {
         return false;
     }
     let tint =
         crate::sprites::with_to_alpha(Color::WHITE, crate::sprites::TransparencyOption::Industries);
     let mut last_parent: Option<(Entity, Vec2)> = None;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        let Some(decoded) = layer.action1_sprite() else {
+            return false;
+        };
         let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle = cache.handle_for_layout(
-            def,
-            slot,
-            Some(palette_colour),
-            runtime_fp,
-            &layer.sprite,
-            images,
-        );
-        let width = f32::from(layer.sprite.width);
-        let height = f32::from(layer.sprite.height);
+        let handle =
+            cache.handle_for_layout(def, slot, Some(palette_colour), runtime_fp, decoded, images);
+        let width = f32::from(decoded.width);
+        let height = f32::from(decoded.height);
         let seq = RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -2034,8 +2069,8 @@ fn spawn_newgrf_industry_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(layer.sprite.x_offs),
-            y_offs: f32::from(layer.sprite.y_offs),
+            x_offs: f32::from(decoded.x_offs),
+            y_offs: f32::from(decoded.y_offs),
             remap_x_adj: 0.0,
         };
         let layer_z = 0.5 + index as f32 * 0.0003;
@@ -2267,6 +2302,7 @@ fn requested_object_neighbor_vars(
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_object_layout_ground(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     def: &ObjectSpecDef,
     runtime_fp: u32,
@@ -2275,19 +2311,42 @@ fn spawn_newgrf_object_layout_ground(
     images: &mut Assets<Image>,
     tint: Color,
 ) -> bool {
-    if !layout.complete {
+    if !tile_layout_is_renderable(layout) {
         return false;
     }
     let Some(ground) = layout.ground.as_ref() else {
         return true;
     };
-    let handle = cache.handle_for_layout(def, 0, runtime_fp, &ground.sprite, images);
+    let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
+        let handle = cache.handle_for_layout(def, 0, runtime_fp, decoded, images);
+        (
+            Sprite {
+                image: handle,
+                color: tint,
+                ..default()
+            },
+            f32::from(decoded.x_offs),
+            f32::from(decoded.y_offs),
+            f32::from(decoded.width),
+            f32::from(decoded.height),
+        )
+    } else if let Some(base) = direct_tile_layout_ground(ground, assets) {
+        (
+            base.atlas.sprite_colored(tint),
+            base.x_offs,
+            base.y_offs,
+            base.width,
+            base.height,
+        )
+    } else {
+        return false;
+    };
     let mut position = overlay_pos(
         ctx.iso_pos,
-        f32::from(ground.sprite.x_offs),
-        f32::from(ground.sprite.y_offs),
-        f32::from(ground.sprite.width),
-        f32::from(ground.sprite.height),
+        x_offs,
+        y_offs,
+        width,
+        height,
         ctx.info.base_z,
         0.55,
         ctx.tx_i32(),
@@ -2299,11 +2358,7 @@ fn spawn_newgrf_object_layout_ground(
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
-        Sprite {
-            image: handle,
-            color: tint,
-            ..default()
-        },
+        sprite,
         Transform::from_translation(position),
     ));
     true
@@ -2322,15 +2377,18 @@ fn spawn_newgrf_object_layout_sequence(
     images: &mut Assets<Image>,
     tint: Color,
 ) -> bool {
-    if !layout.complete || layout.sequence.is_empty() {
+    if !tile_layout_is_renderable(layout) || layout.sequence.is_empty() {
         return false;
     }
     let mut last_parent: Option<(Entity, Vec2)> = None;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        let Some(decoded) = layer.action1_sprite() else {
+            return false;
+        };
         let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle = cache.handle_for_layout(def, slot, runtime_fp, &layer.sprite, images);
-        let width = f32::from(layer.sprite.width);
-        let height = f32::from(layer.sprite.height);
+        let handle = cache.handle_for_layout(def, slot, runtime_fp, decoded, images);
+        let width = f32::from(decoded.width);
+        let height = f32::from(decoded.height);
         let seq = RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -2339,8 +2397,8 @@ fn spawn_newgrf_object_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(layer.sprite.x_offs),
-            y_offs: f32::from(layer.sprite.y_offs),
+            x_offs: f32::from(decoded.x_offs),
+            y_offs: f32::from(decoded.y_offs),
             remap_x_adj: 0.0,
         };
         let layer_z = 0.6 + index as f32 * 0.0003;
@@ -2681,6 +2739,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects(
     {
         used_newgrf_layout_ground = spawn_newgrf_object_layout_ground(
             commands,
+            assets,
             ctx,
             def,
             *runtime_fp,
@@ -2809,7 +2868,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects(
                 },
             );
             if let Some((layout_def, layout, runtime_fp, _layout_view_idx)) = object_layout.as_ref()
-                && layout.complete
+                && tile_layout_is_renderable(layout)
             {
                 if spawn_newgrf_object_layout_sequence(
                     commands,

@@ -350,9 +350,21 @@ mod tests {
             .newgrf_tile_layout_runtime(11, &mut ctx)
             .expect("AirportTile TileSeq");
         assert!(layout.complete);
-        assert_eq!(layout.ground.expect("ground").sprite.rgba[0], 1);
+        assert_eq!(
+            layout
+                .ground
+                .expect("ground")
+                .action1_sprite()
+                .map(|sprite| sprite.rgba[0]),
+            Some(1)
+        );
         assert_eq!(layout.sequence.len(), 1);
-        assert_eq!(layout.sequence[0].sprite.rgba[0], 3);
+        assert_eq!(
+            layout.sequence[0]
+                .action1_sprite()
+                .map(|sprite| sprite.rgba[0]),
+            Some(3)
+        );
         assert_eq!(layout.sequence[0].origin, [4, 5, 6]);
         assert_eq!(layout.sequence[0].extent, [7, 8, 9]);
     }

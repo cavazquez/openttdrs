@@ -29,7 +29,9 @@ use crate::iso::{
 use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
-use crate::render::newgrf_cache::{runtime_fingerprint, vars};
+use crate::render::newgrf_cache::{
+    direct_tile_layout_ground, runtime_fingerprint, tile_layout_is_renderable, vars,
+};
 use crate::render::road_newgrf::{newgrf_road_def_for_tile, road_newgrf_view_index};
 use crate::render::station_newgrf::{
     NewGrfStationSpriteCache, newgrf_station_def_for_tile, station_newgrf_view_index_for_tile,
@@ -1701,6 +1703,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             {
                 used_newgrf_layout_ground = spawn_newgrf_station_layout_ground(
                     commands,
+                    assets,
                     ctx,
                     rail_base_z,
                     dims.0,
@@ -1797,7 +1800,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             let mut newgrf_overlay = None;
             if !station_layout
                 .as_ref()
-                .is_some_and(|(_, layout, _, _)| layout.complete)
+                .is_some_and(|(_, layout, _, _)| tile_layout_is_renderable(layout))
                 && matches!(
                     class,
                     StationTileClass::Rail | StationTileClass::RailWaypoint
@@ -1867,11 +1870,11 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             // La secuencia custom se emite después de la catenaria, igual que
             // `TO_BUILDINGS` en OpenTTD. El booleano se calcula antes porque
             // decide si debemos omitir las capas vanilla al ordenar.
-            let has_newgrf_layout_sequence = station_layout
-                .as_ref()
-                .is_some_and(|(_, layout, _, _)| layout.complete && !layout.sequence.is_empty())
-                && station_sprites.is_some()
-                && images.is_some();
+            let has_newgrf_layout_sequence =
+                station_layout.as_ref().is_some_and(|(_, layout, _, _)| {
+                    tile_layout_is_renderable(layout) && !layout.sequence.is_empty()
+                }) && station_sprites.is_some()
+                    && images.is_some();
             let used_newgrf =
                 newgrf_overlay.is_some() || used_newgrf_layout_ground || has_newgrf_layout_sequence;
             let (station_pylons, station_wires) = ctx.tile.map_or_else(
@@ -2117,6 +2120,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             {
                 used_newgrf_ground = spawn_newgrf_road_stop_layout_ground(
                     commands,
+                    assets,
                     ctx,
                     road_stop_base_z,
                     dims.0,
@@ -2453,6 +2457,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             {
                 let _ = spawn_newgrf_road_stop_layout_ground(
                     commands,
+                    assets,
                     ctx,
                     waypoint_base_z,
                     dims.0,
@@ -2801,6 +2806,7 @@ fn resolve_station_layout_for_tile<'a>(
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_station_layout_ground(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     base_z: u8,
     map_width: u32,
@@ -2812,29 +2818,47 @@ fn spawn_newgrf_station_layout_ground(
     cache: &mut NewGrfStationSpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !layout.complete {
+    if !tile_layout_is_renderable(layout) {
         return false;
     }
     let Some(ground) = layout.ground.as_ref() else {
         return true;
     };
-    let handle = cache.handle_for_layout(def, 0, owner_colour, runtime_fp, &ground.sprite, images);
+    let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
+        let handle = cache.handle_for_layout(def, 0, owner_colour, runtime_fp, decoded, images);
+        (
+            tint_building_sprite(Sprite {
+                image: handle,
+                color: Color::WHITE,
+                ..default()
+            }),
+            f32::from(decoded.x_offs),
+            f32::from(decoded.y_offs),
+            f32::from(decoded.width),
+            f32::from(decoded.height),
+        )
+    } else if let Some(base) = direct_tile_layout_ground(ground, assets) {
+        (
+            tint_building_sprite(base.atlas.sprite()),
+            base.x_offs,
+            base.y_offs,
+            base.width,
+            base.height,
+        )
+    } else {
+        return false;
+    };
     let mut position = overlay_pos(
         ctx.iso_pos,
-        f32::from(ground.sprite.x_offs),
-        f32::from(ground.sprite.y_offs),
-        f32::from(ground.sprite.width),
-        f32::from(ground.sprite.height),
+        x_offs,
+        y_offs,
+        width,
+        height,
         base_z,
         0.025,
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
-    let sprite = tint_building_sprite(Sprite {
-        image: handle,
-        color: Color::WHITE,
-        ..default()
-    });
     if let Some(parent) = foundation_child_parent {
         spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
     } else {
@@ -2868,18 +2892,20 @@ fn spawn_newgrf_station_layout_sequence(
     cache: &mut NewGrfStationSpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !layout.complete || layout.sequence.is_empty() {
+    if !tile_layout_is_renderable(layout) || layout.sequence.is_empty() {
         return false;
     }
 
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut emitted = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        let Some(decoded) = layer.action1_sprite() else {
+            return false;
+        };
         let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle =
-            cache.handle_for_layout(def, slot, owner_colour, runtime_fp, &layer.sprite, images);
-        let width = f32::from(layer.sprite.width);
-        let height = f32::from(layer.sprite.height);
+        let handle = cache.handle_for_layout(def, slot, owner_colour, runtime_fp, decoded, images);
+        let width = f32::from(decoded.width);
+        let height = f32::from(decoded.height);
         let origin = crate::iso::RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -2888,8 +2914,8 @@ fn spawn_newgrf_station_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(layer.sprite.x_offs),
-            y_offs: f32::from(layer.sprite.y_offs),
+            x_offs: f32::from(decoded.x_offs),
+            y_offs: f32::from(decoded.y_offs),
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
@@ -3067,12 +3093,11 @@ fn resolve_road_stop_layout_for_tile(
     Some((spec_id, layout, runtime_fp, draw_mode))
 }
 
-/// El renderer compacto sólo puede materializar layouts compuestos cuando
-/// todos sus registros son constantes y cada entrada usa un set Action1
-/// decodificado. Un layout incompleto se deja entero en manos de OpenGFX/Action5
-/// para no mezclar offsets de sprites base con piezas custom.
+/// El renderer compacto admite Action1 en toda la secuencia y, además, los
+/// tres suelos base planos auditados. Cualquier sprite base BUILD, paleta o
+/// selector no representable conserva el fallback atómico OpenGFX/Action5.
 fn road_stop_layout_is_static(layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout) -> bool {
-    layout.complete
+    tile_layout_is_renderable(layout)
 }
 
 /// Emite el suelo custom de un `TileLayout` de road stop. OpenTTD lo dibuja
@@ -3081,6 +3106,7 @@ fn road_stop_layout_is_static(layout: &openttdrs_core::newgrf_sprites::ResolvedT
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_road_stop_layout_ground(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     base_z: u8,
     map_width: u32,
@@ -3099,30 +3125,48 @@ fn spawn_newgrf_road_stop_layout_ground(
         // the ground sprite instead of falling back to the vanilla road.
         return true;
     };
-    let slot = spec_id.saturating_mul(64);
-    let handle = cache.handle_for_variant(
-        ROADSTOP_ACTION3_CACHE_TYPE,
-        slot,
-        runtime_fp,
-        &ground.sprite,
-        images,
-    );
+    let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
+        let slot = spec_id.saturating_mul(64);
+        let handle = cache.handle_for_variant(
+            ROADSTOP_ACTION3_CACHE_TYPE,
+            slot,
+            runtime_fp,
+            decoded,
+            images,
+        );
+        (
+            Sprite {
+                image: handle,
+                color: Color::WHITE,
+                ..default()
+            },
+            f32::from(decoded.x_offs),
+            f32::from(decoded.y_offs),
+            f32::from(decoded.width),
+            f32::from(decoded.height),
+        )
+    } else if let Some(base) = direct_tile_layout_ground(ground, assets) {
+        (
+            base.atlas.sprite(),
+            base.x_offs,
+            base.y_offs,
+            base.width,
+            base.height,
+        )
+    } else {
+        return false;
+    };
     let mut position = overlay_pos(
         ctx.iso_pos,
-        f32::from(ground.sprite.x_offs),
-        f32::from(ground.sprite.y_offs),
-        f32::from(ground.sprite.width),
-        f32::from(ground.sprite.height),
+        x_offs,
+        y_offs,
+        width,
+        height,
         base_z,
         0.025,
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
-    let sprite = Sprite {
-        image: handle,
-        color: Color::WHITE,
-        ..default()
-    };
     if let Some(parent) = foundation_child_parent {
         spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
     } else {
@@ -3189,16 +3233,19 @@ fn spawn_newgrf_road_stop_layout_sequence(
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut emitted = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        let Some(decoded) = layer.action1_sprite() else {
+            return false;
+        };
         let slot = slot_base.saturating_add(u16::try_from(index).unwrap_or(u16::MAX));
         let handle = cache.handle_for_variant(
             ROADSTOP_ACTION3_CACHE_TYPE,
             slot,
             runtime_fp,
-            &layer.sprite,
+            decoded,
             images,
         );
-        let width = f32::from(layer.sprite.width);
-        let height = f32::from(layer.sprite.height);
+        let width = f32::from(decoded.width);
+        let height = f32::from(decoded.height);
         let origin = crate::iso::RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -3207,8 +3254,8 @@ fn spawn_newgrf_road_stop_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(layer.sprite.x_offs),
-            y_offs: f32::from(layer.sprite.y_offs),
+            x_offs: f32::from(decoded.x_offs),
+            y_offs: f32::from(decoded.y_offs),
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
@@ -3740,10 +3787,15 @@ fn airport_tile_layout_is_renderable(
     gfx: u16,
     layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
 ) -> bool {
-    if !layout.complete {
+    if !tile_layout_is_renderable(layout) {
         return false;
     }
-    if layout.ground.is_some() && airport_tile_layout_cache_slot(gfx, 0).is_none() {
+    if layout
+        .ground
+        .as_ref()
+        .is_some_and(|ground| ground.action1_sprite().is_some())
+        && airport_tile_layout_cache_slot(gfx, 0).is_none()
+    {
         return false;
     }
     layout
@@ -3802,6 +3854,7 @@ fn resolve_newgrf_airport_layout_for_tile(
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_airport_layout_ground(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     base_z: u8,
     map_width: u32,
@@ -3820,32 +3873,50 @@ fn spawn_newgrf_airport_layout_ground(
         // `subst_id`, igual que `AirportDrawTileLayout`.
         return true;
     };
-    let Some(slot) = airport_tile_layout_cache_slot(gfx, 0) else {
+    let (sprite, x_offs, y_offs, width, height) = if let Some(decoded) = ground.action1_sprite() {
+        let Some(slot) = airport_tile_layout_cache_slot(gfx, 0) else {
+            return false;
+        };
+        let image = cache.handle_for_variant(
+            AIRPORT_TILE_ACTION3_CACHE_TYPE,
+            slot,
+            runtime_fp,
+            decoded,
+            images,
+        );
+        (
+            tint_building_sprite(Sprite {
+                image,
+                color: Color::WHITE,
+                ..default()
+            }),
+            f32::from(decoded.x_offs),
+            f32::from(decoded.y_offs),
+            f32::from(decoded.width),
+            f32::from(decoded.height),
+        )
+    } else if let Some(base) = direct_tile_layout_ground(ground, assets) {
+        (
+            tint_building_sprite(base.atlas.sprite()),
+            base.x_offs,
+            base.y_offs,
+            base.width,
+            base.height,
+        )
+    } else {
         return false;
     };
-    let image = cache.handle_for_variant(
-        AIRPORT_TILE_ACTION3_CACHE_TYPE,
-        slot,
-        runtime_fp,
-        &ground.sprite,
-        images,
-    );
     let mut position = overlay_pos(
         ctx.iso_pos,
-        f32::from(ground.sprite.x_offs),
-        f32::from(ground.sprite.y_offs),
-        f32::from(ground.sprite.width),
-        f32::from(ground.sprite.height),
+        x_offs,
+        y_offs,
+        width,
+        height,
         base_z,
         0.025,
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
-    let sprite = tint_building_sprite(Sprite {
-        image,
-        color: Color::WHITE,
-        ..default()
-    });
     if let Some(parent) = foundation_child_parent {
         spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
     } else {
@@ -3886,6 +3957,9 @@ fn spawn_newgrf_airport_layout_sequence(
     let mut last_parent: Option<(Entity, Vec2)> = None;
     let mut emitted = false;
     for (index, layer) in layout.sequence.iter().enumerate() {
+        let Some(decoded) = layer.action1_sprite() else {
+            return false;
+        };
         let Some(slot) = airport_tile_layout_cache_slot(gfx, index.saturating_add(1)) else {
             return false;
         };
@@ -3893,11 +3967,11 @@ fn spawn_newgrf_airport_layout_sequence(
             AIRPORT_TILE_ACTION3_CACHE_TYPE,
             slot,
             runtime_fp,
-            &layer.sprite,
+            decoded,
             images,
         );
-        let width = f32::from(layer.sprite.width);
-        let height = f32::from(layer.sprite.height);
+        let width = f32::from(decoded.width);
+        let height = f32::from(decoded.height);
         let origin = crate::iso::RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -3906,8 +3980,8 @@ fn spawn_newgrf_airport_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(layer.sprite.x_offs),
-            y_offs: f32::from(layer.sprite.y_offs),
+            x_offs: f32::from(decoded.x_offs),
+            y_offs: f32::from(decoded.y_offs),
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
@@ -4868,6 +4942,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                 };
                 let ground_spawned = spawn_newgrf_airport_layout_ground(
                     commands,
+                    assets,
                     ctx,
                     custom_base_z,
                     dims.0,

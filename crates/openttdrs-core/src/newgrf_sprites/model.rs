@@ -86,15 +86,31 @@ pub struct TileLayout {
     pub sequence: Vec<TileLayoutSpriteRef>,
 }
 
-/// Sprite de un layout después de resolver su referencia Action1.
+/// Sprite de un layout después de resolver su referencia.
+///
+/// Las entradas Action1 traen sus píxeles desde el GRF y quedan en `sprite`.
+/// Una entrada base apunta al namespace global del baseset: el core conserva
+/// su identificador en `base_sprite` para que el cliente pueda resolverlo
+/// contra su atlas sin inventar una textura RGBA.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedTileLayoutSprite {
-    pub sprite: DecodedSprite,
+    pub sprite: Option<DecodedSprite>,
+    pub base_sprite: Option<u16>,
     pub origin: [i8; 3],
     pub extent: [u8; 3],
 }
 
 impl ResolvedTileLayoutSprite {
+    #[must_use]
+    pub const fn action1_sprite(&self) -> Option<&DecodedSprite> {
+        self.sprite.as_ref()
+    }
+
+    #[must_use]
+    pub const fn base_sprite_id(&self) -> Option<u16> {
+        self.base_sprite
+    }
+
     #[must_use]
     pub const fn is_parent(&self) -> bool {
         self.origin[2] != i8::MIN
@@ -102,15 +118,15 @@ impl ResolvedTileLayoutSprite {
 }
 
 /// Layout listo para que el cliente cree el suelo y la secuencia de parents /
-/// children. Las entradas directas que no pertenecen a un sprite Action1 no
-/// tienen una textura decodificada y se omiten del resultado.
+/// children. Las entradas directas conservan su `SpriteID` base; cada cliente
+/// decide si su atlas y sus metadatos NFO permiten materializarlo por completo.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ResolvedTileLayout {
     pub ground: Option<ResolvedTileLayoutSprite>,
     pub sequence: Vec<ResolvedTileLayoutSprite>,
-    /// `false` when an entry needs a base sprite or custom palette that the
-    /// decoded Action1 cache cannot materialize. Consumers must use the
-    /// vanilla path for incomplete layouts.
+    /// `false` cuando una entrada necesita una paleta o un selector runtime
+    /// que este resolver todavía no puede representar. La disponibilidad de
+    /// un `base_sprite` se valida después, contra los assets del cliente.
     pub complete: bool,
 }
 
@@ -170,46 +186,7 @@ fn resolve_layout_sprite(
         *complete = false;
         return None;
     }
-    if reference.action1_set.is_none() {
-        if reference.direct_sprite != 0 {
-            *complete = false;
-        }
-        return None;
-    }
-    let set = reference.action1_set?;
-    let Some(sprites) = graphics.sets.get(usize::from(set)) else {
-        *complete = false;
-        return None;
-    };
-    if sprites.is_empty() {
-        *complete = false;
-        return None;
-    }
-
-    // Road-stop layouts select orientation in the Action2 resolver. A plain
-    // layout keeps the first entry, while register-driven sprite offsets and
-    // var10 select a further entry in the decoded Action1 set.
-    let mut sprite_index = 0_i32;
-    if reference.flags & 0x40 != 0 {
-        let var10 = register_value(ctx, reference.registers.sprite_var10);
-        if var10 > 7 {
-            *complete = false;
-            return None;
-        }
-        sprite_index = i32::try_from(var10).unwrap_or(0);
-    }
-    if reference.flags & 0x02 != 0 {
-        sprite_index =
-            sprite_index.saturating_add(signed_register(ctx, reference.registers.sprite));
-    }
-    let Ok(sprite_index) = usize::try_from(sprite_index) else {
-        *complete = false;
-        return None;
-    };
-    let Some(sprite) = sprites.get(sprite_index).cloned() else {
-        *complete = false;
-        return None;
-    };
+    let (sprite, base_sprite) = resolve_layout_sprite_asset(reference, graphics, ctx, complete)?;
 
     let mut origin = reference.origin;
     if !is_ground {
@@ -247,9 +224,67 @@ fn resolve_layout_sprite(
     }
     Some(ResolvedTileLayoutSprite {
         sprite,
+        base_sprite,
         origin,
         extent: reference.extent,
     })
+}
+
+fn resolve_layout_sprite_asset(
+    reference: &TileLayoutSpriteRef,
+    graphics: &TrainSpriteGraphics,
+    ctx: &Action2EvalCtx,
+    complete: &mut bool,
+) -> Option<(Option<DecodedSprite>, Option<u16>)> {
+    if let Some(set) = reference.action1_set {
+        let Some(sprites) = graphics.sets.get(usize::from(set)) else {
+            *complete = false;
+            return None;
+        };
+        if sprites.is_empty() {
+            *complete = false;
+            return None;
+        }
+
+        // Road-stop layouts select orientation in the Action2 resolver.
+        // A plain layout keeps the first entry, while register-driven sprite
+        // offsets and var10 select a further entry in Action1.
+        let mut sprite_index = 0_i32;
+        if reference.flags & 0x40 != 0 {
+            let var10 = register_value(ctx, reference.registers.sprite_var10);
+            if var10 > 7 {
+                *complete = false;
+                return None;
+            }
+            sprite_index = i32::try_from(var10).unwrap_or(0);
+        }
+        if reference.flags & 0x02 != 0 {
+            sprite_index =
+                sprite_index.saturating_add(signed_register(ctx, reference.registers.sprite));
+        }
+        let Ok(sprite_index) = usize::try_from(sprite_index) else {
+            *complete = false;
+            return None;
+        };
+        let Some(sprite) = sprites.get(sprite_index).cloned() else {
+            *complete = false;
+            return None;
+        };
+        return Some((Some(sprite), None));
+    }
+
+    // Sprite zero means no ground/child in the original TTD layout.
+    if reference.direct_sprite == 0 {
+        return None;
+    }
+    // A direct baseset sprite can be materialized only while its identity stays
+    // constant and uses PAL_NONE. Keep the atomic fallback for register-selected
+    // or recoloured base sprites.
+    if reference.direct_palette != 0 || reference.flags & (0x02 | 0x40) != 0 {
+        *complete = false;
+        return None;
+    }
+    Some((None, Some(reference.direct_sprite)))
 }
 
 fn register_value(ctx: &Action2EvalCtx, index: Option<u8>) -> u32 {

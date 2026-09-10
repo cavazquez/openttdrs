@@ -1130,8 +1130,16 @@ mod tests {
         let Some(ground) = layout.ground else {
             panic!("ground");
         };
-        assert_eq!(ground.sprite.rgba[0], 2);
-        assert_eq!(layout.sequence[0].sprite.rgba[0], 1);
+        assert_eq!(
+            ground.action1_sprite().map(|sprite| sprite.rgba[0]),
+            Some(2)
+        );
+        assert_eq!(
+            layout.sequence[0]
+                .action1_sprite()
+                .map(|sprite| sprite.rgba[0]),
+            Some(1)
+        );
         assert_eq!(layout.sequence[0].origin, [4, 5, 6]);
         assert_eq!(layout.sequence[0].extent, [7, 8, 9]);
     }
@@ -1183,7 +1191,12 @@ mod tests {
             panic!("dynamic TileLayout");
         };
         assert!(layout.complete);
-        assert_eq!(layout.sequence[0].sprite.rgba[0], 2);
+        assert_eq!(
+            layout.sequence[0]
+                .action1_sprite()
+                .map(|sprite| sprite.rgba[0]),
+            Some(2)
+        );
         assert_eq!(layout.sequence[0].origin, [12, 19, 0]);
 
         let mut hidden = graphics.tile_layouts.get(&4).cloned().unwrap_or_default();
@@ -1195,6 +1208,77 @@ mod tests {
             panic!("hidden TileLayout");
         };
         assert!(layout.complete);
+        assert!(layout.ground.is_none());
+    }
+
+    #[test]
+    fn tile_layout_keeps_static_direct_base_ground_for_the_client() {
+        let overlay = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![1, 2, 3, 255],
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![overlay]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 7,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    // `SPR_FLAT_GRASS_TILE`, written without the custom
+                    // Action1 marker in a TileLayoutSpriteGroup.
+                    direct_sprite: 3981,
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: vec![TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    origin: [1, 2, 3],
+                    extent: [4, 5, 6],
+                    ..TileLayoutSpriteRef::default()
+                }],
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("direct-base TileLayout");
+        assert!(
+            layout.complete,
+            "PAL_NONE base sprite is a valid layout entry"
+        );
+        let ground = layout.ground.expect("direct ground");
+        assert_eq!(ground.base_sprite_id(), Some(3981));
+        assert!(ground.action1_sprite().is_none());
+        assert_eq!(
+            layout.sequence[0]
+                .action1_sprite()
+                .map(|sprite| sprite.rgba[0]),
+            Some(1)
+        );
+
+        let mut recoloured = graphics
+            .tile_layouts
+            .get(&9)
+            .cloned()
+            .expect("source layout");
+        recoloured.ground.direct_palette = 775;
+        graphics.tile_layouts.insert(9, recoloured);
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("palette layout");
+        assert!(
+            !layout.complete,
+            "a non-PAL_NONE direct base sprite must retain the atomic fallback"
+        );
         assert!(layout.ground.is_none());
     }
 

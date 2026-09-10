@@ -1288,6 +1288,14 @@ de GameScript, exclusividad/neutral stations y cargos custom.
 
 ## Orden recomendado
 
+Actualización #326-TILELAYOUT-DIRECT-BASE-GROUND (2026-09-09): los
+`TileLayout` NewGRF conservan un SpriteID base estático y materializan sólo
+como ground los IDs planos auditados `3924`/`3981`/`4000`
+(bare/grass/rough), con geometría NFO `64×31` y ancla `-31,0`. Esta precisión
+sustituye las menciones abreviadas posteriores a “sprites base” como fallback:
+agua `4061`, BUILD, otros base, paletas directas/custom y selectores dinámicos
+siguen usando el fallback atómico. No resuelve el compositor global de #326.
+
 | Orden | Bloque | Estado | Criterio de cierre |
 |---:|---|---|---|
 | 1 | Zoom y viewport | Completado | Seis niveles OpenTTD (`0,25×`…`0,125×`), culling/overview deterministas y smoke de render; la paridad raster global queda separada de la cobertura de zoom. |
@@ -1614,8 +1622,9 @@ secundarias fuera de ese contrato.
   comparten la huella de registros con la selección Action2. En plano, su
   ground custom conserva `DrawGroundSprite`; en pendiente sólo queda como
   child de la fundación, mientras el BUILD sigue en el compositor global.
-  Sprites base, paletas custom y layouts incompletos conservan fallback vanilla
-  atómico.
+  Los SpriteID base planos auditados `3924`/`3981`/`4000`
+  (bare/grass/rough) también pueden ocupar el ground; el resto de sprites base,
+  paletas custom y layouts incompletos conservan fallback vanilla atómico.
 - Waypoints viales: el suelo vanilla ya respeta `m5` (eje), `m3` (Roadside),
   tranvía y catenaria, y en pendientes usa `FOUNDATION_LEVELED` con sus capas
   como children. Los dos postes del layout vanilla y los layouts `TileSeq` de
@@ -1623,7 +1632,9 @@ secundarias fuera de ese contrato.
   en plano el ground custom conserva `DrawGroundSprite` y en pendiente queda
   child de la foundation. El procesador runtime aplica `DODRAW`, offsets de
   sprite/caja/child, `var10`, draw mode `0x100` y la caché invalida por
-  registros. Sprites base y paletas custom siguen en fallback atómico.
+  registros. Los tres ground base planos auditados `3924`/`3981`/`4000` se
+  materializan; los demás sprites base y paletas custom siguen en fallback
+  atómico.
 - Objetos NewGRF: el renderer ya reevalúa Action2 por tesela con random
   (`m3`), offset de footprint, pendiente/terreno, animación (`m3hi`), owner,
   fecha, color, vista y zona/distancias (`0x42`, `0x45`/`0x46`) del pueblo
@@ -1633,35 +1644,42 @@ secundarias fuera de ese contrato.
   instancias por tipo con la distancia mínima; los conteos se precalculan una
   vez por pase. Los layouts `TileSeq` completos reemplazan el suelo y emiten
   parents/children con cajas `M(...)`; en plano el ground custom conserva
-  `DrawGroundSprite`, mientras BUILD entra en el compositor global. Sprites
-  base, paletas custom y layouts incompletos mantienen fallback vanilla.
+  `DrawGroundSprite`, mientras BUILD entra en el compositor global. Los tres
+  ground base planos auditados `3924`/`3981`/`4000` se materializan; BUILD,
+  otros sprites base, paletas custom y layouts incompletos mantienen fallback
+  vanilla.
   Siguen pendientes callbacks de objeto adicionales, conteos por
   clase/catchment y layouts 16-bit completos.
 - Casas NewGRF: `DrawNewHouseTile` ya no cae automáticamente en
   `HOUSE_DRAW_DATA`: el sprite de edificio se resuelve desde Action1/2/3 con
   el contexto persistido de la tesela y la zona `0x42` del pueblo identificado
   por `MAP2` (fallback al más cercano en mapas legacy), y se registra como
-  parent sortable. Los `TileLayout` completos materializables por Action1
-  reemplazan también el suelo: en plano conservan el pase
+  parent sortable. Los `TileLayout` completos materializables por Action1, o
+  con ground base plano auditado `3924`/`3981`/`4000`, reemplazan también el
+  suelo: en plano conservan el pase
   `DrawGroundSprite`, y los BUILD/children se entregan al sorter con sus
   cajas `M(...)`; en pendiente el suelo sigue como child de la fundación.
   Las variables `0x44`, `0x60`/`0x61` (conteos por `HouseID`) y `0x62`/`0x63`
   (información/frame de teselas vecinas) usan ahora el mapa y una instantánea
-  de conteos por pase. Sprites base, paletas custom, callbacks de color y la
-  paleta `random_colour` siguen siendo residuales explícitos. El callback
-  `CBID_HOUSE_DRAW_FOUNDATIONS` (`0x150`) ya se evalúa en pendientes y permite
+  de conteos por pase. Los otros sprites base, paletas custom, callbacks de
+  color y la paleta `random_colour` siguen siendo residuales explícitos. El
+  callback `CBID_HOUSE_DRAW_FOUNDATIONS` (`0x150`) ya se evalúa en pendientes y permite
   que el layout custom suprima la fundación nivelada vanilla.
 - Industria NewGRF: la vista Action2 runtime usa también sus offsets resueltos
   y, cuando la tesela se nivela, el overlay se adjunta al último parent de
-  `DrawFoundation`. El callback `CBID_INDTILE_DRAW_FOUNDATIONS` (`0x30`) se
-  evalúa en pendientes y puede conservar el relieve original; siguen abiertos
-  los callbacks de sonido/slope y los layouts/children múltiples fuera del
-  subconjunto cubierto.
+  `DrawFoundation`. Su TileLayout admite Action1 y, sólo como ground, los base
+  planos auditados `3924`/`3981`/`4000`; agua `4061`, BUILD, paletas y otros
+  base quedan en fallback atómico. El callback
+  `CBID_INDTILE_DRAW_FOUNDATIONS` (`0x30`) se evalúa en pendientes y puede
+  conservar el relieve original; siguen abiertos los callbacks de sonido/slope
+  y los layouts/children múltiples fuera del subconjunto cubierto.
 - Aeropuertos NewGRF: los layouts `Airports` conservan el `gfx` global de cada
   `AirportTile` junto con el `subst` vanilla de `m5`; al construir, el cliente
   materializa el sprite Action1/3 por tesela mediante la caché de imágenes y
   reevalúa Action2 con posición relativa, frame, layout padre, random y
-  vecinos. Si falta el catálogo o la vista cae al `AirportPiece` vanilla.
+  vecinos. El ground de TileLayout también admite los base planos auditados
+  `3924`/`3981`/`4000`; otros base, agua, BUILD y paletas siguen en fallback.
+  Si falta el catálogo o la vista cae al `AirportPiece` vanilla.
   El importador SAV conserva tipo, layout, rotación y huella, y reatacha los
   `AirportTile` cuando el layout activo coincide exactamente. El picker expone
   el índice Action0 exacto de cada aeropuerto NewGRF, lo transporta con su id

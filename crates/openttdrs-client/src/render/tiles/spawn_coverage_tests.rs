@@ -6924,6 +6924,143 @@ fn flat_newgrf_industry_tile_layout_keeps_ground_in_ground_pass() {
     );
 }
 
+/// Los TileLayouts pueden referir el suelo del baseset directamente, sin un
+/// set Action1 propio. Para los tres rombos planos auditados, el renderer usa
+/// el atlas con su ancla NFO exacta y no degrada toda la tesela al fallback.
+#[test]
+fn flat_newgrf_industry_tile_layout_renders_audited_direct_base_ground() {
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    for direct_sprite in [3924_u16, 3981, 4000] {
+        let assets = boot_assets_app();
+        let expected = match direct_sprite {
+            3924 => assets
+                .industries
+                .get(&3924)
+                .expect("bare-land atlas sprite")
+                .clone(),
+            3981 => assets.grass.clone(),
+            4000 => assets.rough_flat[0].clone(),
+            _ => unreachable!(),
+        };
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        map.set_tile(
+            coord,
+            Tile {
+                kind: TileKind::Industry,
+                mapt: 0x80,
+                m5: 175,
+                m1: 0x80,
+                ..tile_template()
+            },
+        )
+        .expect("industry TileLayout tile");
+
+        let mut runtime = TrainSpriteGraphics {
+            assigns: vec![TrainSpriteAssign {
+                local_id: 3,
+                set_id: 9,
+            }],
+            ..Default::default()
+        };
+        runtime.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    direct_sprite,
+                    ..Default::default()
+                },
+                sequence: Vec::new(),
+            },
+        );
+        let industry_def = IndustryTileSpecDef {
+            gfx: IndustryTileGfxId(175),
+            subst_id: 0,
+            from_newgrf: true,
+            slopes_refused: 0,
+            accepts_cargo_indices: Vec::new(),
+            accepts_cargo_labels: Vec::new(),
+            acceptance: Vec::new(),
+            callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
+            newgrf_local_id: 3,
+            newgrf_grfid: 0x4449_5247,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+
+        let grid = RenderGrid::from_map(&map, 4, 4);
+        let mut world = World::new();
+        world.insert_resource(TsMap(map));
+        world.insert_resource(TsGrid(grid));
+        world.insert_resource(TsAssets(assets));
+        world.insert_resource(crate::render::NewGrfIndustrySpriteCache::default());
+        world.insert_resource(Assets::<Image>::default());
+        world
+            .run_system_once(
+                move |mut commands: Commands,
+                      m: Res<TsMap>,
+                      g: Res<TsGrid>,
+                      a: Res<TsAssets>,
+                      mut company: Local<CompanyColoredSprites>,
+                      mut cache: ResMut<crate::render::NewGrfIndustrySpriteCache>,
+                      mut images: ResMut<Assets<Image>>| {
+                    spawn_industry_tile(
+                        &mut commands,
+                        &a.0,
+                        &m.0,
+                        &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                        4.0,
+                        &[],
+                        &mut company,
+                        &mut images,
+                        std::slice::from_ref(&industry_def),
+                        &openttdrs_core::empty_industry_tile_overrides(),
+                        Some(&mut cache),
+                        &[],
+                        None,
+                        &[],
+                    );
+                },
+            )
+            .expect("direct-base industry TileLayout spawn");
+
+        let expected_position = overlay_pos(
+            crate::iso::iso(coord.x, coord.y),
+            -31.0,
+            0.0,
+            64.0,
+            31.0,
+            0,
+            0.45,
+            coord.x,
+            coord.y,
+        );
+        let depths: Vec<_> = world
+            .query::<(&Sprite, &Transform)>()
+            .iter(&world)
+            .filter_map(|(sprite, transform)| {
+                (expected.matches(sprite)
+                    && transform.translation.truncate() == expected_position.truncate())
+                .then_some(transform.translation.z)
+            })
+            .collect();
+        assert_eq!(
+            depths,
+            vec![ground_draw_z(coord.x, coord.y, 0.45)],
+            "SpriteID base {direct_sprite} debe conservar atlas, ancla y ground pass"
+        );
+    }
+}
+
 #[test]
 fn flat_newgrf_object_tile_layout_keeps_ground_in_ground_pass() {
     use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};

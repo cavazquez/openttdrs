@@ -79,6 +79,14 @@ en runtime: CB2C selecciona los tres slots locales y CB2B sus cantidades, y la
 tabla resultante alimenta la cobertura de estación y `unload_vehicles`. La API
 legacy sin mundo mantiene su fallback explícito.
 
+Precisión TileLayout base (2026-09-09): las referencias abreviadas de las
+filas de estaciones, road stops, casas, objetos, industrias y AirportTile a
+“sprites base” como fallback quedan acotadas. Los IDs base planos
+`3924`/`3981`/`4000` (bare/grass/rough) se conservan y materializan sólo como
+ground, con NFO `64×31` y ancla `-31,0`; agua `4061`, BUILD, los demás base,
+paletas directas/custom y selectores dinámicos siguen usando fallback atómico.
+Esto no completa el compositor global ni los contratos parent/child de #326.
+
 | Feature | CBID (ejemplos) | Estado | Notas |
 |---|---|---|---|
 | Stations (`04`) | `0x24` `CBID_STATION_BUILD_TILE_LAYOUT` | **soportado** | Call site: construcción `apply_station_build_tile_layout_callback` |

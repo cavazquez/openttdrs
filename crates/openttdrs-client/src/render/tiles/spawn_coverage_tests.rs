@@ -3852,6 +3852,197 @@ fn drive_through_pure_tram_overlay_groups_replace_station_surface() {
     assert_drive_through_stop_overlay_groups(true);
 }
 
+fn assert_bay_roadstop_group_replaces_station_surface(slope: bool) {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = fresh_map8();
+    let mut tile = Tile {
+        kind: TileKind::Station,
+        mapt: 0x50,
+        m5: 0, // bahía de bus, vista 0..3
+        m6: 3 << 3,
+        ..tile_template()
+    };
+    tile = openttdrs_core::set_road_type_on_tile(tile, RoadType::from_u8(2));
+    map.set_tile(coord, tile)
+        .expect("bahía con grupo ROTS G_ROADSTOP custom");
+    if slope {
+        for corner in [
+            TileCoord::new(2, 1),
+            TileCoord::new(1, 2),
+            TileCoord::new(2, 2),
+        ] {
+            map.set_height(corner, 1)
+                .expect("esquina elevada de la bahía");
+        }
+    }
+
+    // GROUND y ROADSTOP usan colores distintos: la prueba demuestra que la
+    // bahía consulta el selector 10 y no reutiliza accidentalmente el 2.
+    let ground = DecodedSprite {
+        width: 8,
+        height: 8,
+        x_offs: 0,
+        y_offs: 0,
+        rgba: [0, 255, 0, 255].repeat(8 * 8),
+        mask: Vec::new(),
+    };
+    let roadstop = DecodedSprite {
+        rgba: [255, 0, 0, 255].repeat(8 * 8),
+        ..ground.clone()
+    };
+    let road_catalog = vec![RoadTypeDef {
+        id: RoadType::from_u8(2),
+        class: RoadTramType::Road,
+        label: "Road stop bay".into(),
+        short_label: "RSBY".into(),
+        intro_year: 0,
+        max_speed: 0,
+        cost_multiplier: 0,
+        maintenance_multiplier: 0,
+        flags: 0,
+        powered_mask: 0,
+        badges: Vec::new(),
+        from_tramtypes_feature: false,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: Some(Box::new(TrainSpriteGraphics {
+            sets: vec![vec![ground.clone()], vec![roadstop.clone()]],
+            specific_assigns: [((0, 2), 0), ((0, 10), 1)].into_iter().collect(),
+            ..Default::default()
+        })),
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+    }];
+    let station = Station::new_with_kind(coord, StopKind::BusStop);
+    let stations = vec![station];
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: Local<crate::render::NewGrfRoadSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_station_tile_with_world_and_road_types(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &stations,
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    &road_catalog,
+                    Some(&mut cache),
+                    None,
+                    Some(&mut images),
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("road stop bay group spawn");
+
+    let custom_colours: Vec<Vec<u8>> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .filter_map(|sprite| {
+            if sprite.image.path().is_some() {
+                return None;
+            }
+            world
+                .resource::<Assets<Image>>()
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                .and_then(|rgba| rgba.get(0..4))
+                .filter(|rgba| **rgba == [0, 255, 0, 255] || **rgba == [255, 0, 0, 255])
+                .map(<[u8]>::to_vec)
+        })
+        .collect();
+    assert_eq!(
+        custom_colours,
+        vec![vec![255, 0, 0, 255]],
+        "una bahía debe usar R OTSG_ROADSTOP y sustituir el suelo vanilla"
+    );
+
+    if slope {
+        let foundation_parents: std::collections::HashSet<_> = world
+            .query::<(Entity, &ViewportSortableParent)>()
+            .iter(&world)
+            .filter_map(|(entity, parent)| {
+                (FOUNDATION_ORIGINAL_SPRITE_BASE
+                    ..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                    .contains(&parent.sprite_id)
+                    .then_some(entity)
+            })
+            .collect();
+        assert_eq!(
+            foundation_parents.len(),
+            1,
+            "la bahía inclinada debe tener una fundación nivelada"
+        );
+        assert!(
+            world
+                .query::<(&ViewportSortableChild, &Sprite)>()
+                .iter(&world)
+                .any(|(child, sprite)| {
+                    foundation_parents.contains(&child.parent)
+                        && sprite.image.path().is_none()
+                        && world
+                            .resource::<Assets<Image>>()
+                            .get(&sprite.image)
+                            .and_then(|image| image.data.as_deref())
+                            .is_some_and(|rgba| rgba.starts_with(&[255, 0, 0, 255]))
+                }),
+            "el ROADSTOP custom de una bahía inclinada debe ser child de la fundación"
+        );
+    } else {
+        assert!(
+            world
+                .query::<(&MapVisualLayer, &Sprite)>()
+                .iter(&world)
+                .any(|(_, sprite)| {
+                    sprite.image.path().is_none()
+                        && world
+                            .resource::<Assets<Image>>()
+                            .get(&sprite.image)
+                            .and_then(|image| image.data.as_deref())
+                            .is_some_and(|rgba| rgba.starts_with(&[255, 0, 0, 255]))
+                }),
+            "el ROADSTOP custom de una bahía plana debe entrar al mapa visual"
+        );
+    }
+}
+
+#[test]
+fn bay_roadstop_group_replaces_vanilla_station_surface() {
+    assert_bay_roadstop_group_replaces_station_surface(false);
+}
+
+#[test]
+fn sloped_bay_roadstop_group_attaches_to_foundation_parent() {
+    assert_bay_roadstop_group_replaces_station_surface(true);
+}
+
 #[test]
 fn road_stop_no_catenary_flag_suppresses_road_and_tram_wires() {
     let assets = boot_assets_app();

@@ -2198,6 +2198,37 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         .map(|spec| spec.draw_mode)
                 })
                 .unwrap_or(openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT);
+            let mut used_newgrf_ground = false;
+            if !is_drive_through
+                && road_stop_draw_mode & openttdrs_core::ROADSTOP_DRAW_MODE_ROAD != 0
+                && let Some(tile) = ctx.tile
+                && let Some(def) = newgrf_road_def_for_tile(road_catalog, tile)
+                && def.has_newgrf_specific_group(ROTSG_GROUND)
+                && road_sprites.is_some()
+                && images.is_some()
+            {
+                // `DrawTile_Station` usa `ROTSG_ROADSTOP` para la superficie
+                // de una bahía cuando el roadtype activa `UsesOverlay()`;
+                // `m5` es aquí el índice directo 0..3 de la orientación.
+                used_newgrf_ground = spawn_road_stop_specific_layer(
+                    commands,
+                    map,
+                    ctx,
+                    road_stop_base_z,
+                    dims.0,
+                    foundation_child_parent,
+                    def,
+                    ROTSG_ROADSTOP,
+                    usize::from(m5.min(3)),
+                    tile,
+                    climate,
+                    road_catalog,
+                    newgrf_stack,
+                    road_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
+                    ROAD_STOP_SPECIFIC_GROUND_LAYER_FRAC,
+                );
+            }
             // `DrawRoadOverlays` se ejecuta para una parada pasante después
             // del suelo de la estación y antes de la catenaria/BUILD. Un
             // roadtype con `ROTSG_GROUND` cambia el contrato a
@@ -2224,7 +2255,6 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     newgrf_stack,
                 );
             }
-            let mut used_newgrf_ground = false;
             if let Some((spec_id, layout, runtime_fp, _draw_mode)) = custom_layout.as_ref()
                 && let (Some(cache), Some(image_store)) =
                     (action5_sprites.as_mut(), images.as_mut())
@@ -6020,6 +6050,8 @@ const ROTSG_OVERLAY: u8 = 1;
 const ROTSG_GROUND: u8 = 2;
 /// `RoadTypeSpriteGroup::ROTSG_DEPOT` en `road.h`.
 const ROTSG_DEPOT: u8 = 8;
+/// `RoadTypeSpriteGroup::ROTSG_ROADSTOP` en `road.h`.
+const ROTSG_ROADSTOP: u8 = 10;
 
 /// Roadtype efectivo que `DrawTile_Road` usa para las decisiones semánticas
 /// del depósito (catenaria y `UsesOverlay`).

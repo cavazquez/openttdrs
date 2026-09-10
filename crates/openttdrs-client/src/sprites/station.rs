@@ -217,6 +217,41 @@ pub const fn rail_station_layer_bounds(sprite_id: u32) -> Option<(i32, i32, i32)
     }
 }
 
+/// Caja `TILE_SEQ` de los dos cuerpos parent del waypoint ferroviario OpenGFX2.
+///
+/// La propiedad `0x1A` de `ogfx2_stations` define los cuerpos 19/20 y 23/24
+/// como los dos `AddSortableSpriteToDraw` de cada eje. Los toldos CC 21/22 y
+/// 25/26 se emiten como children de esos cuerpos y por eso no tienen caja
+/// propia que publicar en el compositor global.
+#[must_use]
+pub const fn rail_waypoint_layer_bounds(sprite_id: u32) -> Option<(i32, i32, i32)> {
+    match sprite_id {
+        4974 | 4975 => Some((16, 3, 16)),
+        4976 | 4977 => Some((3, 16, 16)),
+        _ => None,
+    }
+}
+
+/// Slot del parent de un cuerpo de waypoint dentro de su eje.
+#[must_use]
+pub const fn rail_waypoint_parent_slot(sprite_id: u32) -> Option<usize> {
+    match sprite_id {
+        4974 | 4976 => Some(0),
+        4975 | 4977 => Some(1),
+        _ => None,
+    }
+}
+
+/// Slot del parent al que OpenGFX2 cuelga cada toldo CC del waypoint.
+#[must_use]
+pub const fn rail_waypoint_child_parent_slot(sprite_id: u32) -> Option<usize> {
+    match sprite_id {
+        4978 | 4980 => Some(0),
+        4979 | 4981 => Some(1),
+        _ => None,
+    }
+}
+
 #[must_use]
 pub fn station_type_from_m6(m6: u8) -> StationTileClass {
     match (m6 >> 3) & 0x0F {
@@ -868,6 +903,28 @@ mod tests {
         assert_eq!(rail_station_layer_bounds(1073), Some((16, 5, 15)));
         assert_eq!(rail_station_layer_bounds(1079), Some((16, 16, 10)));
         assert_eq!(rail_station_layer_bounds(1083), None);
+    }
+
+    #[test]
+    fn rail_waypoint_ogfx2_parent_boxes_and_child_slots_match_layout_contract() {
+        assert_eq!(rail_waypoint_layer_bounds(4974), Some((16, 3, 16)));
+        assert_eq!(rail_waypoint_layer_bounds(4975), Some((16, 3, 16)));
+        assert_eq!(rail_waypoint_layer_bounds(4976), Some((3, 16, 16)));
+        assert_eq!(rail_waypoint_layer_bounds(4977), Some((3, 16, 16)));
+        assert_eq!(rail_waypoint_layer_bounds(4978), None);
+        assert_eq!(rail_waypoint_layer_bounds(4981), None);
+
+        assert_eq!(rail_waypoint_parent_slot(4974), Some(0));
+        assert_eq!(rail_waypoint_parent_slot(4975), Some(1));
+        assert_eq!(rail_waypoint_parent_slot(4976), Some(0));
+        assert_eq!(rail_waypoint_parent_slot(4977), Some(1));
+        assert_eq!(rail_waypoint_parent_slot(4978), None);
+
+        assert_eq!(rail_waypoint_child_parent_slot(4978), Some(0));
+        assert_eq!(rail_waypoint_child_parent_slot(4979), Some(1));
+        assert_eq!(rail_waypoint_child_parent_slot(4980), Some(0));
+        assert_eq!(rail_waypoint_child_parent_slot(4981), Some(1));
+        assert_eq!(rail_waypoint_child_parent_slot(4974), None);
     }
 
     #[test]

@@ -1219,8 +1219,8 @@ convierte ambos ejes a las cajas absolutas exactas, y la regresión inclinada
 preserva el vínculo y el orden local con la foundation. Kale no contiene un
 waypoint vial focal,
 por lo que esta etapa no atribuye cambio alguno a la matriz raster. #326 sigue
-abierto por catenaria vial, layouts custom/NewGRF, waypoints rail, producers
-restantes, clipping, pivotes, children globales y framebuffer.
+abierto por catenaria vial, layouts custom/NewGRF, producers restantes,
+clipping, pivotes, children globales y framebuffer.
 
 Actualización #326-ROAD-CATENARY-GLOBAL (2026-09-09): cada llamada de
 `DrawRoadTypeCatenary` de una tesela `MP_ROAD` normal publica ahora sus
@@ -1303,6 +1303,19 @@ diverjan. El hito de catenaria `6fc43010`, foco `(32,162)`, `384×320`, OpenGFX
 Sus números previos a este corte se conservan con ese commit, no como una
 segunda lectura vigente; el orden global y otras familias de composición siguen
 pendientes en #326.
+
+Actualización #326-RAIL-WAYPOINT-GLOBAL (2026-09-09): el waypoint ferroviario
+OpenGFX2 deja de depender del orden local. Sus cuerpos X `4974`/`4975` y Y
+`4976`/`4977` entran como dos parents globales por tesela, con los prismas
+literales `16×3×16`/`3×16×16`, la profundidad fuente y los ordinales 16/17
+posteriores a la catenaria. Los toldos CC X `4978`/`4979` e Y `4980`/`4981`
+conservan su posición de pantalla y quedan como children del cuerpo
+correspondiente, por lo que el sorter los mantiene dentro de su bloque antes
+del parent global siguiente. La regresión ECS cubre ambos ejes, bounds
+absolutos, los cuatro vínculos y la ventana de profundidad; la unitaria fija
+la geometría y los slots del layout OpenGFX2. Kale no contiene un foco de
+waypoint ferroviario para atribuir un delta raster. #326 y #561 siguen abiertos
+por producers restantes, clipping, pivotes, children globales y framebuffer.
 
 ## Backlog sucesor activo
 

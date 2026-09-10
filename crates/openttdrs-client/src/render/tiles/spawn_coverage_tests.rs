@@ -5897,6 +5897,192 @@ fn rail_station_platform_parents_and_roof_glass_join_global_sort() {
 }
 
 #[test]
+fn rail_waypoint_parents_and_awning_children_join_global_sort() {
+    let assets = boot_assets_app();
+    let x_axis = TileCoord::new(1, 1);
+    let y_axis = TileCoord::new(2, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    for (coord, m5) in [(x_axis, 0), (y_axis, 1)] {
+        map.set_tile(
+            coord,
+            Tile {
+                kind: TileKind::Station,
+                mapt: 0x50,
+                m5,
+                m6: 7 << 3, // StationType::RailWaypoint
+                ..tile_template()
+            },
+        )
+        .expect("rail waypoint");
+    }
+    let awning_parent_pairs = [
+        (assets.rail.get(&4978).expect("X west awning").clone(), 4974),
+        (assets.rail.get(&4979).expect("X east awning").clone(), 4975),
+        (assets.rail.get(&4980).expect("Y west awning").clone(), 4976),
+        (assets.rail.get(&4981).expect("Y east awning").clone(), 4977),
+    ];
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.init_resource::<ViewportSortableChildDepthWindows>();
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                for coord in [x_axis, y_axis] {
+                    spawn_station_tile(
+                        &mut commands,
+                        &m.0,
+                        m.0.dimensions(),
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(
+                            &m.0,
+                            &g.0,
+                            u32::try_from(coord.x).expect("waypoint x"),
+                            u32::try_from(coord.y).expect("waypoint y"),
+                        ),
+                        &[],
+                        4.0,
+                        true,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                        &[],
+                        None,
+                        &[],
+                        None,
+                        &[],
+                        TEST_CLIMATE,
+                        &[],
+                    );
+                }
+            },
+        )
+        .expect("rail waypoint spawn");
+
+    let mut parents: Vec<_> = world
+        .query::<(Entity, &ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter_map(|(entity, parent, transform)| {
+            [4974, 4975, 4976, 4977]
+                .contains(&parent.sprite_id)
+                .then_some((entity, *parent, transform.translation.z))
+        })
+        .collect();
+    parents.sort_by_key(|(_, parent, _)| parent.insertion_key);
+    assert_eq!(
+        parents
+            .iter()
+            .map(|(_, parent, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                4974,
+                ParentSpriteBounds::new(16, 16, 0, 31, 18, 15),
+                viewport_insertion_key(1, 1, 16),
+            ),
+            (
+                4975,
+                ParentSpriteBounds::new(16, 29, 0, 31, 31, 15),
+                viewport_insertion_key(1, 1, 17),
+            ),
+            (
+                4976,
+                ParentSpriteBounds::new(32, 16, 0, 34, 31, 15),
+                viewport_insertion_key(2, 1, 16),
+            ),
+            (
+                4977,
+                ParentSpriteBounds::new(45, 16, 0, 47, 31, 15),
+                viewport_insertion_key(2, 1, 17),
+            ),
+        ],
+        "los cuerpos OpenGFX2 deben publicar exactamente los dos prismas Action1 por eje"
+    );
+    assert!(
+        parents
+            .iter()
+            .all(|(_, parent, depth)| parent.source_depth == *depth),
+        "cada parent conserva su profundidad fuente antes del sort global"
+    );
+
+    let mut awnings = Vec::new();
+    {
+        let mut children = world.query::<(Entity, &ViewportSortableChild, &Sprite, &Transform)>();
+        for (expected_awning, expected_parent_sprite) in awning_parent_pairs {
+            let expected_parent = parents
+                .iter()
+                .find_map(|(entity, parent, _)| {
+                    (parent.sprite_id == expected_parent_sprite).then_some(*entity)
+                })
+                .expect("waypoint body parent");
+            let (entity, child, _, transform) = children
+                .iter(&world)
+                .find(|(_, _, sprite, _)| expected_awning.matches(sprite))
+                .expect("waypoint awning child");
+            assert_eq!(child.parent, expected_parent);
+            assert_eq!(
+                child.source_depth, transform.translation.z,
+                "el child conserva su slot fuente hasta que corra el compositor"
+            );
+            awnings.push((entity, expected_parent));
+        }
+    }
+
+    let mut schedule = Schedule::default();
+    schedule.add_systems(
+        (
+            sort_viewport_sortable_parents,
+            sync_viewport_sortable_children,
+        )
+            .chain(),
+    );
+    schedule.run(&mut world);
+
+    let mut sorted_parents: Vec<_> = world
+        .query::<(Entity, &ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .filter_map(|(entity, parent, transform)| {
+            [4974, 4975, 4976, 4977]
+                .contains(&parent.sprite_id)
+                .then_some((entity, parent.sprite_id, transform.translation.z))
+        })
+        .collect();
+    sorted_parents.sort_by(|left, right| left.2.total_cmp(&right.2));
+    let mut checked_between_global_parents = 0;
+    for (awning, parent) in awnings {
+        let parent_index = sorted_parents
+            .iter()
+            .position(|(entity, _, _)| *entity == parent)
+            .expect("sorted waypoint parent");
+        let Some((_, next_sprite, next_depth)) = sorted_parents.get(parent_index + 1).copied()
+        else {
+            continue;
+        };
+        let parent_depth = sorted_parents[parent_index].2;
+        let awning_depth = world
+            .entity(awning)
+            .get::<Transform>()
+            .expect("waypoint awning transform")
+            .translation
+            .z;
+        assert!(
+            parent_depth < awning_depth && awning_depth < next_depth,
+            "el toldo debe quedar entre su parent y el siguiente parent global {next_sprite}; got {parent_depth}, {awning_depth}, {next_depth}"
+        );
+        checked_between_global_parents += 1;
+    }
+    assert_eq!(
+        checked_between_global_parents, 3,
+        "sólo el último parent del stream puede carecer de límite superior"
+    );
+}
+
+#[test]
 fn rail_station_roof_glass_stays_between_its_roof_and_next_global_parent() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);

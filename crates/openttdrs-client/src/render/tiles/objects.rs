@@ -59,7 +59,8 @@ use crate::sprites::{
     rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
     rail_station_draw_layers, rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
-    rail_waypoint_draw_layers, rail_waypoint_layer_meta, rail_waypoint_sprite_center,
+    rail_waypoint_child_parent_slot, rail_waypoint_draw_layers, rail_waypoint_layer_bounds,
+    rail_waypoint_layer_meta, rail_waypoint_parent_slot, rail_waypoint_sprite_center,
     remap_rail_sprite_id, road_depot_build_layers, road_depot_seq_gfx, road_flat_sprite_index,
     road_ground_sprite_id, road_stop_build_layers, road_stop_drive_through_layers,
     road_stop_ground_index, road_stop_ground_sprite_id, road_stop_seq_gfx,
@@ -1320,6 +1321,34 @@ fn station_rail_layer_parent_bounds(
     ))
 }
 
+/// Parent BUILD de uno de los dos cuerpos del waypoint ferroviario OpenGFX2.
+///
+/// El GRF publica los mismos prismas `TILE_SEQ` que consume OpenTTD antes de
+/// colgar los toldos CC como `AddChildSpriteScreen`. Igual que las plataformas
+/// rail, una fundación nivelada ya cambió la altura efectiva de la estación.
+fn rail_waypoint_layer_parent_bounds(
+    tx: i32,
+    ty: i32,
+    raw_base_z: u8,
+    rail_base_z: u8,
+    layer: RailStationLayer,
+) -> Option<ParentSpriteBounds> {
+    let (ex, ey, ez) = rail_waypoint_layer_bounds(layer.sprite_id)?;
+    let x = tx * 16 + layer.dx as i32;
+    let y = ty * 16 + layer.dy as i32;
+    let z = i32::from(raw_base_z) * 8
+        + station_rail_foundation_world_z_delta(raw_base_z, rail_base_z)
+        + layer.dz as i32;
+    Some(ParentSpriteBounds::new(
+        x,
+        y,
+        z,
+        x + ex - 1,
+        y + ey - 1,
+        z + ez - 1,
+    ))
+}
+
 /// Los cuatro PPP, hasta seis cables y las cuatro capas BUILD caben antes de
 /// `DrawBridgeMiddle` (que comienza en el ordinal 32). Los subrangos conservan
 /// la emisión nativa catenaria → estación y no colisionan con fundaciones.
@@ -1936,10 +1965,11 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 }
             }
             if !buildings_hidden() && !used_newgrf {
-                // Sólo la secuencia vanilla de estación conoce todos sus
-                // prismas `TILE_SEQ_LINE`; los waypoints y layouts NewGRF
-                // permanecen fuera hasta publicar sus parents/children.
+                // La estación vanilla y el waypoint OpenGFX2 publican sus
+                // prismas completos; los layouts NewGRF restantes conservan
+                // el fallback hasta publicar todos sus parents/children.
                 let mut previous_station_parent = None;
+                let mut waypoint_parent_by_slot = [None; 2];
                 for (layer_index, base_layer) in overlay_layers.iter().enumerate() {
                     // `DrawStationTile` deja los waypoints vanilla sin offset,
                     // pero suma el desplazamiento de railtype a cada capa de
@@ -2014,17 +2044,14 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         ))
                     };
                     let source_depth = viewport_source_depth(pos3.z, ctx.tx, dims.0);
-                    let sortable_parent = (class == StationTileClass::Rail)
-                        .then(|| {
-                            station_rail_layer_parent_bounds(
-                                ctx.tx_i32(),
-                                ctx.ty_i32(),
-                                ctx.info.base_z,
-                                rail_base_z,
-                                layer,
-                            )
-                        })
-                        .flatten()
+                    let sortable_parent = match class {
+                        StationTileClass::Rail => station_rail_layer_parent_bounds(
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            ctx.info.base_z,
+                            rail_base_z,
+                            layer,
+                        )
                         .map(|bounds| ViewportSortableParent {
                             sprite_id: layer.sprite_id,
                             bounds,
@@ -2035,8 +2062,35 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                                     .saturating_add(u8::try_from(layer_index).unwrap_or(u8::MAX)),
                             ),
                             source_depth,
-                        });
+                        }),
+                        StationTileClass::RailWaypoint => rail_waypoint_layer_parent_bounds(
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            ctx.info.base_z,
+                            rail_base_z,
+                            layer,
+                        )
+                        .map(|bounds| ViewportSortableParent {
+                            sprite_id: layer.sprite_id,
+                            bounds,
+                            insertion_key: viewport_insertion_key(
+                                ctx.tx,
+                                ctx.ty,
+                                STATION_RAIL_LAYER_PARENT_ORDINAL
+                                    .saturating_add(u8::try_from(layer_index).unwrap_or(u8::MAX)),
+                            ),
+                            source_depth,
+                        }),
+                        _ => None,
+                    };
+                    let waypoint_child_parent = (class == StationTileClass::RailWaypoint)
+                        .then(|| {
+                            rail_waypoint_child_parent_slot(layer.sprite_id)
+                                .and_then(|slot| waypoint_parent_by_slot[slot])
+                        })
+                        .flatten();
                     if sortable_parent.is_some()
+                        || waypoint_child_parent.is_some()
                         || (class == StationTileClass::Rail
                             && crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id)
                             && previous_station_parent.is_some())
@@ -2050,11 +2104,24 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         Transform::from_translation(pos3),
                     ));
                     if let Some(parent) = sortable_parent {
-                        previous_station_parent = Some(entity.id());
+                        if class == StationTileClass::Rail {
+                            previous_station_parent = Some(entity.id());
+                        } else if class == StationTileClass::RailWaypoint
+                            && let Some(slot) = rail_waypoint_parent_slot(layer.sprite_id)
+                        {
+                            waypoint_parent_by_slot[slot] = Some(entity.id());
+                        }
                         entity.insert(parent);
                     } else if class == StationTileClass::Rail
                         && crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id)
                         && let Some(parent) = previous_station_parent
+                    {
+                        entity.insert(ViewportSortableChild {
+                            parent,
+                            source_depth,
+                        });
+                    } else if class == StationTileClass::RailWaypoint
+                        && let Some(parent) = waypoint_child_parent
                     {
                         entity.insert(ViewportSortableChild {
                             parent,

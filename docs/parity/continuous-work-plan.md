@@ -3225,3 +3225,15 @@ el z del pase ground. La prueba de integración atraviesa
 queda en 61/61; Clippy estricto pasa. La matriz completa de partes/direcciones,
 estructuras `CF_LOCKS`, costa, clipping, orden global y framebuffer sigue
 pendiente, por lo que #567 y #326 permanecen abiertos.
+
+Actualización #326/#567-CANAL-LOCK-STRUCTURES (2026-09-10, `2df1e9b2`): cuando
+`CF_WATERSLOPE` reemplaza el ground compuesto de `DrawWaterLock`, el renderer
+emite aparte las dos líneas `TILE_SEQ` de estructuras. Se generaron los 48
+sprites vanilla Action5 de `SPR_CANALS_BASE + 4..51` con sus anclas NFO; la
+resolución intenta `CF_LOCKS`, luego Action5 y finalmente OpenGFX, conservando
+las cajas `M(...)`, el ordinal de inserción y el `zoffs +24` de Upper alto.
+La regresión verifica ground más dos capas `CF_LOCKS` y la tabla de las cuatro
+orientaciones; pasan 62 pruebas de agua, 6 de depósito naval y Clippy estricto.
+Quedan pendientes la matriz completa de partes/ejes, interacción con costa y
+barcos vecinos, clipping, orden global y comparación de framebuffer; #567 y
+#326 permanecen abiertos.

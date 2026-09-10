@@ -3287,3 +3287,13 @@ altura con texturas separadas; el lint estricto pasa. La importación de terreno
 todos los scopes/variables Action2, la matriz completa de callbacks, clipping,
 orden global y framebuffer siguen pendientes, por lo que #567 y #326 no se
 cierran.
+
+Actualización #326/#567-RIVER-EDGE-RUNTIME-OFFSET (2026-09-10, `bfda87fc`):
+la elección de los bloques River `0/12/24/36/48` ya consulta el slot base de
+`CF_RIVER_SLOPE` con el contexto de la tesela, en vez de depender sólo de la
+tabla de vistas precalculada. Así un grupo Action2 runtime conserva el bloque
+de bordes correspondiente aunque no tenga preview estático; si el grupo no
+resuelve, se mantiene el fallback sin bordes custom. La regresión runtime-only
+y las 57 pruebas focales de agua pasan junto con Clippy. El terreno `0x81`
+real, callbacks restantes, combinaciones de costa/eje/parte, clipping, orden
+global y framebuffer siguen pendientes; #567 y #326 permanecen abiertos.

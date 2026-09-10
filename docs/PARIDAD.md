@@ -834,7 +834,7 @@ El runtime aplica el sorter compartido a los sprites directos de fundación,
 buildings vanilla de casas, árboles `MP_TREES` con sus children combinados,
 mitades vanilla de muelle, el subconjunto plano/estático de industria vanilla y
 las seis capas `TILE_SEQ` del depósito naval y, desde este bloque, el ground de
-Canal con sus diques, además de las piezas
+Canal con sus diques y las pendientes vanilla de Río, además de las piezas
 estructurales de puentes (cabezas de rampa con caja explícita, barandillas de
 vano y pilares) cuando tienen sprite vanilla disponible. Esas entidades
 conservan `ViewportSortableParent`, la caja `M(...)` de `world-draw`, el orden
@@ -1073,7 +1073,7 @@ Ya existe un port puro y testeado de `ViewportSortParentSprites` en
 `render/viewport_sort.rs`, incluidos parents vacíos y children. Las capas BUILD
 vanilla de paradas Bus/Truck, depósitos viales, postes de waypoints viales,
 árboles `MP_TREES` y sus copas combinadas,
-las seis mitades StationGfx de muelle, el ground/dique de Canal, los seis layouts del depósito naval, los
+las seis mitades StationGfx de muelle, el ground/dique de Canal, las pendientes vanilla de Río, los seis layouts del depósito naval, los
 bundles de catenaria/fachada de depósitos ferroviarios y las entradas eléctricas
 de túnel con sus fachadas combinadas, los faroles viales, casas vanilla y el
 subconjunto plano/estático de industrias vanilla ya aportan bounds al compositor.
@@ -1236,6 +1236,19 @@ anclas extraídos del NFO activo y regresiones de selector, spawn y transforms.
 Mar sigue sin diques, como en OpenTTD, y los sprites/bordes de Río en pendiente
 continúan pendientes; por eso este avance no declara paridad ni cierra #326 ni
 #567. La división quedó registrada en [#563](https://github.com/cavazquez/openttdrs/issues/563)–[#567](https://github.com/cavazquez/openttdrs/issues/567).
+
+Actualización #326/#567-RIVER-WATER-GROUND (2026-09-10, `2dee9535`): la
+comparación con `DrawRiverWater` completa el ground vanilla que faltaba en el
+corte anterior. Las pendientes `SLOPE_SE`, `SLOPE_NE`, `SLOPE_SW` y `SLOPE_NW`
+seleccionan respectivamente `SPR_CANALS_BASE+0..3` (`5328..5331`), con los
+cuatro recortes y anchors NFO del perfil OpenGFX activo. La rejilla ya no aplana
+las alturas de una tesela `WaterClass::River`; el batch conserva el sprite como
+`WaterTile::STATIC`, y un `ShipDepot` fluvial importado lo emite antes de sus
+capas `TILE_SEQ`. El perfil vanilla no publica `CF_RIVER_EDGE`, por lo que no
+se inventan bordes fluviales: los callbacks/sprites River de NewGRF, el caso
+Canal genérico fuera de depósitos y la comparación framebuffer siguen abiertos.
+Las regresiones del cliente pasan 1305 tests (2 ignorados); #326 y #567 siguen
+abiertos.
 
 Actualización #326-TUNNEL-CATENARY-GLOBAL (2026-09-09):
 `DrawRailCatenaryOnTunnel` ya conserva su `SpriteCombine` en runtime. En una

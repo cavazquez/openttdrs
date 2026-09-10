@@ -65,7 +65,7 @@ impl CanalFeatureDef {
         if views.is_empty() {
             return None;
         }
-        Some(views[idx % views.len()].clone())
+        views.get(idx).cloned()
     }
 
     /// Ejecuta `CBID_CANALS_SPRITE_OFFSET` (`0x147`) si el feature lo habilitó.
@@ -206,5 +206,34 @@ mod tests {
         };
         let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
         assert_eq!(feature.newgrf_view_runtime(0, &mut ctx), Some(sprite));
+    }
+
+    #[test]
+    fn canal_runtime_view_does_not_wrap_missing_slot() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![0, 255, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut runtime = TrainSpriteGraphics::default();
+        runtime.sets = vec![vec![sprite.clone()]];
+        runtime.assigns.push(TrainSpriteAssign {
+            local_id: CF_RIVER_EDGE,
+            set_id: 0,
+        });
+        let feature = CanalFeatureDef {
+            id: CF_RIVER_EDGE,
+            callback_mask: 0,
+            flags: 0,
+            from_newgrf: true,
+            grfid: 0xBEEF,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        assert_eq!(feature.newgrf_view_runtime(1, &mut ctx), None);
     }
 }

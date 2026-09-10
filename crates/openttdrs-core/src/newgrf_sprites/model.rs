@@ -1194,6 +1194,8 @@ pub const CBID_VEHICLE_VISUAL_EFFECT: u16 = 0x10;
 pub const CBID_VEHICLE_SPAWN_VISUAL_EFFECT: u16 = 0x160;
 /// Callback estaciones: layout de tesela al construir (`CBID_STATION_BUILD_TILE_LAYOUT`).
 pub const CBID_STATION_BUILD_TILE_LAYOUT: u16 = 0x24;
+/// Callback canales: desplazar el sprite base según la tesela (`0x147`).
+pub const CBID_CANALS_SPRITE_OFFSET: u16 = 0x147;
 /// Callback vehículos: acortar la longitud visual (`CBID_VEHICLE_LENGTH`).
 pub const CBID_VEHICLE_LENGTH: u16 = 0x11;
 /// Callback vehículos: ajustar la cantidad cargada por tick (`CBID_VEHICLE_LOAD_AMOUNT`).

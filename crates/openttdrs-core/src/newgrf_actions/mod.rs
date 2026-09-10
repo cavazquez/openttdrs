@@ -5193,6 +5193,47 @@ mod tests {
         let _ = parse_action0_canal_meta(&[0x00, ACTION0_FEATURE_CANALS, 0x02, 0x01]);
     }
 
+    /// Los canales conservan el grafo Action2 para no congelar vistas y
+    /// callbacks al aplicar el catálogo.
+    #[test]
+    fn infra_ac_canal_keeps_action2_runtime_graph() {
+        let a0 = build_action0_canal_payload(crate::CF_WATERSLOPE, 1, crate::CFF_HAS_FLAT_SPRITE);
+        let action2 = crate::newgrf_sprites::build_action2_variational_default_payload(
+            ACTION0_FEATURE_CANALS,
+            7,
+            0,
+        );
+        let bytes = crate::newgrf_sprites::build_grf_v2_feature_with_action2_chain(
+            &a0,
+            ACTION0_FEATURE_CANALS,
+            crate::CF_WATERSLOPE,
+            7,
+            &action2,
+            2,
+            2,
+            &[1, 2, 3, 4],
+            [b'C', b'R', 0, 1],
+            "canal-runtime",
+        );
+        let dir = tempfile_dir_with("canal-runtime.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("canal-runtime.grf", 0x4352_0001));
+
+        apply_newgrf_canals(&mut state, &[&dir]);
+
+        let def = crate::canal_feature_def(&state.canal_feature_catalog, crate::CF_WATERSLOPE)
+            .expect("canal feature");
+        assert!(def.newgrf_runtime.is_some());
+        assert_eq!(def.newgrf_views.len(), 1);
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        assert_eq!(
+            def.newgrf_view_runtime(0, &mut ctx),
+            Some(def.newgrf_views[0].clone())
+        );
+    }
+
     /// #259: Canals — dos GRFs features distintos no se pisan; mismo id last-wins.
     #[test]
     fn infra_ac_canal_two_grf_isolate() {

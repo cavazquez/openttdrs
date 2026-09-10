@@ -738,6 +738,7 @@ fn supports_action2_chain(feature: u8) -> bool {
             | ACTION0_FEATURE_ROAD_VEHICLES
             | ACTION0_FEATURE_SHIPS
             | ACTION0_FEATURE_AIRCRAFT
+            | ACTION0_FEATURE_CANALS
             | ACTION0_FEATURE_STATIONS
             | ACTION0_FEATURE_OBJECTS
             | ACTION0_FEATURE_RAILTYPES

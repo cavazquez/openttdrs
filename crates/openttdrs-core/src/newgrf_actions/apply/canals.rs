@@ -35,6 +35,7 @@ pub fn apply_newgrf_canals(state: &mut GameState, search_dirs: &[&Path]) {
                 .views_for_local_id(meta.local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
+            let newgrf_runtime = gfx.needs_runtime_resolve().then(|| Box::new(gfx.clone()));
             catalog[idx] = CanalFeatureDef {
                 id: meta.local_id,
                 callback_mask: meta.callback_mask,
@@ -42,6 +43,7 @@ pub fn apply_newgrf_canals(state: &mut GameState, search_dirs: &[&Path]) {
                 from_newgrf: true,
                 grfid: entry.grfid,
                 newgrf_views: views,
+                newgrf_runtime,
             };
         }
     }

@@ -5104,6 +5104,85 @@ fn canal_ship_depot_parts_suppress_the_shared_dike_edge() {
 }
 
 #[test]
+fn canal_ship_depot_suppresses_shared_dike_edge_on_both_axes() {
+    // `GetOtherShipDepotTile` avanza en X para AXIS_X y en Y para AXIS_Y.
+    // Ejercer los dos ejes evita que la conectividad quede correcta sólo para
+    // la orientación que usa la captura de referencia.
+    let cases: [([(i32, i32, u8); 2], [usize; 12]); 2] = [
+        (
+            [(1, 1, 0x30), (2, 1, 0x31)],
+            [1, 2, 1, 2, 1, 1, 1, 1, 0, 0, 0, 0],
+        ),
+        (
+            [(1, 1, 0x32), (1, 2, 0x33)],
+            [2, 1, 2, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+        ),
+    ];
+
+    for (tiles, expected_dikes) in cases {
+        let assets = boot_assets_app();
+        let dike_assets = assets.canal_dikes.clone();
+        let mut map = Map::new_flat(5, 5, 0);
+        for (x, y, m5) in tiles {
+            let mut tile = tile_template();
+            tile.kind = TileKind::ShipDepot;
+            tile.mapt = 0x60;
+            tile.m5 = m5;
+            tile.m1 = set_water_class_m1(tile.m1, WaterClass::Canal);
+            map.set_tile(TileCoord::new(x, y), tile)
+                .expect("canal ship depot part");
+        }
+        let grid = RenderGrid::from_map(&map, 5, 5);
+        let mut world = World::new();
+        world.insert_resource(TsMap(map));
+        world.insert_resource(TsGrid(grid));
+        world.insert_resource(TsAssets(assets));
+
+        world
+            .run_system_once(
+                move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                    for (x, y, _) in tiles {
+                        spawn_transport_object_tile(
+                            &mut commands,
+                            &a.0,
+                            None,
+                            None,
+                            &TileRenderContext::new(&m.0, &g.0, x as u32, y as u32),
+                            4.0,
+                            false,
+                            &m.0,
+                            m.0.dimensions(),
+                            &[],
+                            &[],
+                            None,
+                            &[],
+                            &[],
+                            None,
+                            None,
+                        );
+                    }
+                },
+            )
+            .expect("two-axis canal ship depot spawn");
+
+        let sprites: Vec<_> = world.query::<&Sprite>().iter(&world).collect();
+        let dike_counts: Vec<_> = dike_assets
+            .iter()
+            .map(|asset| {
+                sprites
+                    .iter()
+                    .filter(|sprite| asset.matches(sprite))
+                    .count()
+            })
+            .collect();
+        assert_eq!(
+            dike_counts, expected_dikes,
+            "el contacto interno no debe dibujar un dique en ninguno de los dos ejes"
+        );
+    }
+}
+
+#[test]
 fn canal_ship_depot_consumes_action5_dike_sprite_and_nfo_anchor() {
     let assets = boot_assets_app();
     let depot = TileCoord::new(1, 1);

@@ -2368,9 +2368,9 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             let mut used_newgrf_ground = false;
             if let Some(tile) = ctx.tile
                 && let Some(def) = newgrf_road_def_for_tile(road_catalog, tile)
-                && let Some(view) = def.newgrf_view(road_newgrf_view_index(0, waypoint_bits))
                 && let (Some(cache), Some(image_store)) = (road_sprites.as_mut(), images.as_mut())
             {
+                let view_idx = road_newgrf_view_index(0, waypoint_bits);
                 let mut action2 = openttdrs_core::action2_eval_ctx_for_road_tile(
                     map,
                     tile,
@@ -2383,12 +2383,14 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     newgrf_stack,
                     def.newgrf_grfid,
                 ));
-                if let Some(handle) = cache.handle_for_runtime(
-                    def,
-                    road_newgrf_view_index(0, waypoint_bits),
-                    &mut action2,
-                    image_store,
-                ) {
+                let view = if def.newgrf_runtime.is_some() {
+                    def.newgrf_view_runtime(view_idx, &mut action2)
+                } else {
+                    def.newgrf_view(view_idx).cloned()
+                };
+                if let Some(view) = view {
+                    let handle =
+                        cache.handle_for_resolved_view(def, view_idx, &action2, &view, image_store);
                     let position = overlay_pos(
                         ctx.iso_pos,
                         f32::from(view.x_offs),
@@ -2459,7 +2461,6 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 let mut used_tram_newgrf = false;
                 if let Some(def) =
                     crate::render::road_newgrf::newgrf_tram_def_for_tile(road_catalog, tile)
-                    && let Some(view) = def.newgrf_view(tram_idx)
                     && let (Some(cache), Some(image_store)) =
                         (road_sprites.as_mut(), images.as_mut())
                 {
@@ -2475,9 +2476,19 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                         newgrf_stack,
                         def.newgrf_grfid,
                     ));
-                    if let Some(handle) =
-                        cache.handle_for_runtime(def, tram_idx, &mut action2, image_store)
-                    {
+                    let view = if def.newgrf_runtime.is_some() {
+                        def.newgrf_view_runtime(tram_idx, &mut action2)
+                    } else {
+                        def.newgrf_view(tram_idx).cloned()
+                    };
+                    if let Some(view) = view {
+                        let handle = cache.handle_for_resolved_view(
+                            def,
+                            tram_idx,
+                            &action2,
+                            &view,
+                            image_store,
+                        );
                         let position = overlay_pos(
                             ctx.iso_pos,
                             f32::from(view.x_offs),

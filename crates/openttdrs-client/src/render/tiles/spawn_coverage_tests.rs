@@ -26,7 +26,8 @@ use crate::render::tiles::{
     push_forest_tree, push_water_tile, push_water_tile_with_action5, spawn_bridge_middle,
     spawn_bridge_middle_with_road_types, spawn_generic_land_tile, spawn_house_tile,
     spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
-    spawn_transport_object_tile, spawn_transport_object_tile_with_road_types,
+    spawn_station_tile_with_world_and_road_types, spawn_transport_object_tile,
+    spawn_transport_object_tile_with_road_types,
     spawn_transport_object_tile_with_road_types_and_tramway_action5,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
@@ -1409,6 +1410,142 @@ fn road_waypoint_vanilla_catenary_and_layers_join_global_sort() {
             .iter()
             .all(|(parent, depth)| parent.source_depth == *depth),
         "los parents preservan la profundidad fuente antes del sort global"
+    );
+}
+
+#[test]
+fn runtime_only_road_waypoint_surfaces_keep_both_newgrf_views() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    let mut tile = Tile {
+        kind: TileKind::Station,
+        mapt: 0x50,
+        m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+        m6: openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT << 3,
+        ..tile_template()
+    };
+    tile = openttdrs_core::set_road_type_on_tile(tile, RoadType::from_u8(2));
+    tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::from_u8(3)));
+    map.set_tile(coord, tile)
+        .expect("road waypoint with custom road and tram types");
+
+    let road_rgba = [255, 40, 40, 255].repeat(8 * 8);
+    let tram_rgba = [40, 40, 255, 255].repeat(8 * 8);
+    let runtime_def =
+        |id: u8, class: RoadTramType, label: &'static str, rgba: Vec<u8>| RoadTypeDef {
+            id: RoadType::from_u8(id),
+            class,
+            label: label.into(),
+            short_label: label.into(),
+            intro_year: 0,
+            max_speed: 0,
+            cost_multiplier: 0,
+            maintenance_multiplier: 0,
+            flags: 0,
+            powered_mask: 0,
+            badges: Vec::new(),
+            from_tramtypes_feature: matches!(class, RoadTramType::Tram),
+            from_newgrf: true,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(TrainSpriteGraphics {
+                sets: vec![vec![DecodedSprite {
+                    width: 8,
+                    height: 8,
+                    x_offs: 0,
+                    y_offs: 0,
+                    rgba,
+                    mask: Vec::new(),
+                }]],
+                assigns: vec![TrainSpriteAssign {
+                    local_id: 0,
+                    set_id: 0,
+                }],
+                ..Default::default()
+            })),
+            newgrf_grfid: 0x5257_0000 | u32::from(id),
+            newgrf_type_tables: None,
+        };
+    let road_catalog = vec![
+        runtime_def(
+            2,
+            RoadTramType::Road,
+            "Runtime waypoint road",
+            road_rgba.clone(),
+        ),
+        runtime_def(
+            3,
+            RoadTramType::Tram,
+            "Runtime waypoint tram",
+            tram_rgba.clone(),
+        ),
+    ];
+    let station = Station::new_with_kind(coord, StopKind::RoadWaypoint);
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut road_sprites: Local<crate::render::NewGrfRoadSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_station_tile_with_world_and_road_types(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    std::slice::from_ref(&station),
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    &road_catalog,
+                    Some(&mut road_sprites),
+                    None,
+                    Some(&mut images),
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("runtime-only road waypoint surfaces");
+
+    let rendered_handles: Vec<_> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .map(|sprite| sprite.image.clone())
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let rendered_road = rendered_handles.iter().any(|handle| {
+        images.get(handle).and_then(|image| image.data.as_deref()) == Some(road_rgba.as_slice())
+    });
+    let rendered_tram = rendered_handles.iter().any(|handle| {
+        images.get(handle).and_then(|image| image.data.as_deref()) == Some(tram_rgba.as_slice())
+    });
+    assert!(
+        rendered_road,
+        "el suelo del waypoint debe resolver el roadtype runtime-only"
+    );
+    assert!(
+        rendered_tram,
+        "el overlay de tranvía del waypoint debe resolver el tramtype runtime-only"
     );
 }
 

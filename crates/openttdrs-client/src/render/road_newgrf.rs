@@ -25,6 +25,7 @@ impl NewGrfRoadSpriteCache {
     }
 
     /// Textura re-resolviendo Action2 con vars de tesela.
+    #[cfg(test)]
     pub(crate) fn handle_for_runtime(
         &mut self,
         def: &RoadTypeDef,

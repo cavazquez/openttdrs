@@ -12,14 +12,19 @@ fn place_ship_depot_on_water_with_water_entrance() {
     let mut s = GameState::new(12, 12);
     let depot = TileCoord::new(4, 4);
     let mouth = TileCoord::new(3, 4); // dir 0 → (-1,0)
-    s.map.set_kind(depot, TileKind::Water).unwrap();
-    s.map.set_kind(mouth, TileKind::Water).unwrap();
+    let other = TileCoord::new(5, 4); // segunda parte de la huella.
+    for coord in [depot, mouth, other] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
     let money = s.economy.money;
     apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
     let tile = s.map.get(depot).expect("depósito construido");
+    let other_tile = s.map.get(other).expect("segunda parte construida");
     assert_eq!(tile.kind, TileKind::ShipDepot);
     assert_eq!(tile.mapt, 0x60, "MP_WATER conserva el tipo alto canónico");
     assert_eq!(tile.m5, 0x30, "WaterTileType::Depot vigente");
+    assert_eq!(other_tile.kind, TileKind::ShipDepot);
+    assert_eq!(other_tile.m5, 0x31, "parte opuesta sobre el eje X");
     assert_eq!(
         s.economy.money,
         money - ship_depot_build_cost(&s.global_economy)
@@ -35,20 +40,42 @@ fn place_ship_depot_writes_current_raw_contract_and_active_owner() {
 
     let depot = TileCoord::new(4, 4);
     let mouth = TileCoord::new(4, 3); // dir 3 → norte en la grilla del mapa.
-    for coord in [depot, mouth] {
+    let other = TileCoord::new(4, 5);
+    for coord in [depot, mouth, other] {
         s.map.set_kind(coord, TileKind::Water).unwrap();
     }
     let mut original = s.map.get(depot).expect("agua del depósito");
     original.mapt = 0x60 | 0x02; // MP_WATER + zona climática persistida.
-    original.m1 = set_water_class_m1(original.m1, WaterClass::Canal);
+    original.m1 = set_water_class_m1(original.m1 | 0x80, WaterClass::Canal);
+    original.m2 = 0xFE;
+    original.m2_hi = 0xAA;
+    original.m3 = 0x81;
+    original.m3hi = 0x91;
+    original.m6 = 0xFC;
+    original.m7 = 0xAB;
+    original.m8 = 0xBEEF;
     s.map.set_tile(depot, original).unwrap();
+    let mut other_original = s.map.get(other).expect("agua de la parte opuesta");
+    other_original.mapt = 0x60 | 0x03;
+    other_original.m1 = set_water_class_m1(other_original.m1, WaterClass::River);
+    other_original.m6 = 0xFD;
+    s.map.set_tile(other, other_original).unwrap();
 
     apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 3)).unwrap();
 
     let tile = s.map.get(depot).expect("depósito construido");
+    let other_tile = s.map.get(other).expect("parte opuesta construida");
     assert_eq!(tile.kind, TileKind::ShipDepot);
     assert_eq!(tile.mapt, 0x62, "se conserva la zona climática de MAPT");
     assert_eq!(tile.m5, 0x32, "tipo Depot + parte/eje de la orientación");
+    assert_eq!(tile.m2, 0);
+    assert_eq!(tile.m2_hi, 0);
+    assert_eq!(tile.m3, 0);
+    assert_eq!(tile.m3hi, 0);
+    assert_eq!(tile.m6, 0, "MakeShipDepot limpia el contador alto");
+    assert_eq!(tile.m7, 0);
+    assert_eq!(tile.m8, 0);
+    assert_eq!(tile.m1 & 0x80, 0, "se limpia DockingTile");
     assert_eq!(
         crate::map::water_class(tile),
         Some(WaterClass::Canal),
@@ -58,6 +85,18 @@ fn place_ship_depot_writes_current_raw_contract_and_active_owner() {
         crate::CompanyId::from_tile_m1(tile.m1, s.companies.len()),
         rival,
         "el depósito queda a nombre de la compañía activa"
+    );
+    assert_eq!(other_tile.kind, TileKind::ShipDepot);
+    assert_eq!(
+        other_tile.mapt, 0x63,
+        "cada parte conserva su zona climática"
+    );
+    assert_eq!(other_tile.m5, 0x33, "parte opuesta del eje Y");
+    assert_eq!(crate::map::water_class(other_tile), Some(WaterClass::River));
+    assert_eq!(other_tile.m6, 1);
+    assert_eq!(
+        crate::CompanyId::from_tile_m1(other_tile.m1, s.companies.len()),
+        rival
     );
 }
 
@@ -70,6 +109,77 @@ fn place_ship_depot_rejects_land() {
         e,
         crate::CommandError::CannotPlaceStationOnOccupiedTile
     ));
+}
+
+#[test]
+fn place_ship_depot_writes_both_native_parts_for_each_direction() {
+    let cases = [
+        (
+            0,
+            TileCoord::new(5, 5),
+            TileCoord::new(4, 5),
+            TileCoord::new(6, 5),
+            0x30,
+            0x31,
+        ),
+        (
+            1,
+            TileCoord::new(5, 5),
+            TileCoord::new(5, 6),
+            TileCoord::new(5, 4),
+            0x33,
+            0x32,
+        ),
+        (
+            2,
+            TileCoord::new(5, 5),
+            TileCoord::new(6, 5),
+            TileCoord::new(4, 5),
+            0x31,
+            0x30,
+        ),
+        (
+            3,
+            TileCoord::new(5, 5),
+            TileCoord::new(5, 4),
+            TileCoord::new(5, 6),
+            0x32,
+            0x33,
+        ),
+    ];
+
+    for (dir, depot, mouth, other, depot_m5, other_m5) in cases {
+        let mut s = GameState::new(12, 12);
+        for coord in [depot, mouth, other] {
+            s.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+
+        apply_command(&mut s, &Command::PlaceShipDepotDir(depot, dir)).unwrap();
+
+        assert_eq!(s.map.get(depot).unwrap().kind, TileKind::ShipDepot);
+        assert_eq!(s.map.get(depot).unwrap().m5, depot_m5);
+        assert_eq!(s.map.get(other).unwrap().kind, TileKind::ShipDepot);
+        assert_eq!(s.map.get(other).unwrap().m5, other_m5);
+    }
+}
+
+#[test]
+fn place_ship_depot_rejects_second_part_without_mutating_first() {
+    let mut s = GameState::new(12, 12);
+    let depot = TileCoord::new(4, 4);
+    let mouth = TileCoord::new(3, 4);
+    let other = TileCoord::new(5, 4);
+    for coord in [depot, mouth] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    let money = s.economy.money;
+
+    let error = apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap_err();
+
+    assert_eq!(error, crate::CommandError::CannotPlaceStationOnOccupiedTile);
+    assert_eq!(s.map.get_kind(depot), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(other), Some(TileKind::Grass));
+    assert_eq!(s.economy.money, money);
 }
 
 #[test]
@@ -223,7 +333,7 @@ fn ship_buys_at_depot_and_paths_to_dock() {
     use crate::vehicle::VehicleOrder;
 
     let mut s = GameState::new(16, 10);
-    for x in 2..=10 {
+    for x in 1..=10 {
         s.map
             .set_kind(TileCoord::new(x, 4), TileKind::Water)
             .unwrap();

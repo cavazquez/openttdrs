@@ -5,8 +5,9 @@ use crate::bridge_spec::{
 };
 use crate::economy::{ship_depot_build_cost, station_build_cost};
 use crate::map::{
-    Map, TileCoord, TileKind, WaterClass, inclined_slope_direction, is_tunnel_entrance_slope,
-    make_water_tile, set_water_class_m1, tile_slope_and_z, water_class_from_m1,
+    Map, Tile, TileCoord, TileKind, WaterClass, has_tile_water_ground, inclined_slope_direction,
+    is_tunnel_entrance_slope, make_water_tile, set_water_class_m1, tile_slope_and_z,
+    water_class_from_m1,
 };
 use crate::{GameState, Station, StopKind};
 
@@ -16,23 +17,34 @@ use super::station::apply_station_m6;
 
 /// Offset de la boca del depósito según `dir` (0=NE..3=NW, misma convención road/rail).
 #[must_use]
+const fn ship_depot_dir_offset(dir: u8) -> (i32, i32) {
+    match dir & 0x03 {
+        0 => (-1, 0),
+        1 => (0, 1),
+        2 => (1, 0),
+        _ => (0, -1),
+    }
+}
+
+#[must_use]
 pub(in crate::command) fn ship_depot_exit_for_dir(
     map: &Map,
     depot_pos: TileCoord,
     dir: u8,
 ) -> Option<TileCoord> {
-    let (dx, dy) = match dir & 0x03 {
-        0 => (-1_i32, 0_i32),
-        1 => (0_i32, 1_i32),
-        2 => (1_i32, 0_i32),
-        _ => (0_i32, -1_i32),
-    };
+    let (dx, dy) = ship_depot_dir_offset(dir);
     let c = TileCoord::new(depot_pos.x + dx, depot_pos.y + dy);
     let (mw, mh) = map.dimensions();
     if c.x < 0 || c.y < 0 || c.x >= mw.cast_signed() || c.y >= mh.cast_signed() {
         return None;
     }
     Some(c)
+}
+
+#[must_use]
+fn ship_depot_other_tile_for_dir(depot_pos: TileCoord, dir: u8) -> TileCoord {
+    let (dx, dy) = ship_depot_dir_offset(dir);
+    TileCoord::new(depot_pos.x - dx, depot_pos.y - dy)
 }
 
 #[must_use]
@@ -52,23 +64,50 @@ const fn ship_depot_m5_for_dir(dir: u8) -> u8 {
     0x30 | PART_AXIS_BY_DIR[dir as usize & 0x03]
 }
 
+fn check_ship_depot_water_tile(map: &Map, c: TileCoord) -> Result<(), CommandError> {
+    check_in_bounds(map, c)?;
+    match map.get(c) {
+        Some(tile) if tile.kind == TileKind::Water && has_tile_water_ground(tile) => Ok(()),
+        Some(tile) if tile.kind == TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
+        _ => Err(CommandError::CannotPlaceStationOnOccupiedTile),
+    }
+}
+
 pub(crate) fn check_ship_depot_placement(
     map: &Map,
     c: TileCoord,
     dir: u8,
 ) -> Result<(), CommandError> {
-    check_in_bounds(map, c)?;
-    match map.get_kind(c).unwrap_or(TileKind::Grass) {
-        TileKind::Water => {
-            if ship_depot_entrance_faces_water(map, c, dir & 0x03) {
-                Ok(())
-            } else {
-                Err(CommandError::StationNotAdjacentToTransport)
-            }
-        }
-        TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
-        _ => Err(CommandError::CannotPlaceStationOnOccupiedTile),
+    let dir = dir & 0x03;
+    check_ship_depot_water_tile(map, c)?;
+    check_ship_depot_water_tile(map, ship_depot_other_tile_for_dir(c, dir))?;
+    if ship_depot_entrance_faces_water(map, c, dir) {
+        Ok(())
+    } else {
+        Err(CommandError::StationNotAdjacentToTransport)
     }
+}
+
+/// Materializa una de las dos partes que `MakeShipDepot` escribe en `MP_WATER`.
+///
+/// El índice de depósito todavía no tiene un pool persistente en el modelo local,
+/// por eso `m2` queda en cero; el resto de bytes se normaliza igual que el motor
+/// nativo para que save/reload no conserve payload de la tesela anterior.
+#[must_use]
+fn make_ship_depot_tile(original: Tile, owner: u8, dir: u8) -> Tile {
+    let mut tile = original;
+    tile.kind = TileKind::ShipDepot;
+    tile.mapt = 0x60 | (original.mapt & 0x0F);
+    tile.m1 = set_water_class_m1(owner & 0x1F, water_class_from_m1(original.m1));
+    tile.m2 = 0;
+    tile.m2_hi = 0;
+    tile.m3 = 0;
+    tile.m3hi = 0;
+    tile.m5 = ship_depot_m5_for_dir(dir);
+    tile.m6 &= 0x03;
+    tile.m7 = 0;
+    tile.m8 = 0;
+    tile
 }
 
 pub(in crate::command) fn place_ship_depot_dir(
@@ -78,29 +117,22 @@ pub(in crate::command) fn place_ship_depot_dir(
 ) -> Result<(), CommandError> {
     let dir = dir & 0x03;
     check_ship_depot_placement(&state.map, c, dir)?;
+    let other = ship_depot_other_tile_for_dir(c, dir);
     let original = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let other_original = state.map.get(other).ok_or(CommandError::OutOfBounds)?;
+    let owner = state.active_company.0;
+    let depot_tile = make_ship_depot_tile(original, owner, dir);
+    let other_tile = make_ship_depot_tile(other_original, owner, dir.wrapping_add(2));
+    // `MakeShipDepot` conserva la zona climática de cada parte, cambia el tipo
+    // alto a MP_WATER y guarda WaterTileType::Depot (`0x30`) más part/eje en m5.
+    // El segundo tile es la parte opuesta de la misma huella 2x1/1x2.
     state
         .map
-        .set_kind(c, TileKind::ShipDepot)
+        .set_tile(c, depot_tile)
         .map_err(|_| CommandError::OutOfBounds)?;
-    // `MakeShipDepot` primero conserva la zona climática de MAPT, cambia el
-    // tipo alto a MP_WATER y guarda WaterTileType::Depot (`0x30`) en m5.
-    // `0x80` era la codificación anterior a SLV_WATER_TILE_TYPE: el modelo
-    // semántico podía seguir mostrando un depósito, pero un save/reload lo
-    // convertía en agua normal.
     state
         .map
-        .set_mapt_m5(c, 0x60 | (original.mapt & 0x0F), ship_depot_m5_for_dir(dir))
-        .map_err(|_| CommandError::OutOfBounds)?;
-    // `SetTileOwner` sólo toca los cinco bits bajos de m1. La clase de agua
-    // vive en los bits 5..6 y debe sobrevivir tanto para Canal/River como para
-    // la evaluación de scopes de NewGRF.
-    state
-        .map
-        .set_m1(
-            c,
-            set_water_class_m1(state.active_company.0, water_class_from_m1(original.m1)),
-        )
+        .set_tile(other, other_tile)
         .map_err(|_| CommandError::OutOfBounds)?;
     state.economy.money -= ship_depot_build_cost(&state.global_economy);
     Ok(())

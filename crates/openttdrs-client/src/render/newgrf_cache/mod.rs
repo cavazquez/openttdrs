@@ -102,6 +102,10 @@ pub(crate) mod vars {
     /// posición, frame o estado de una tesela vecina. Las tablas
     /// `parameterized_vars` se incorporan además por `runtime_fingerprint`.
     pub const AIRPORT_TILE: &[u8] = &[0x41, 0x42, 0x43, 0x44, 0x5F, 0x60, 0x61, 0x62, 0x7A];
+    /// Variables `CanalScopeResolver` usadas por pendientes, bordes y
+    /// callbacks de `Canals`: altura, terreno, conectividad, random y
+    /// parámetros del callback actual.
+    pub const CANAL: &[u8] = &[0x0C, 0x10, 0x18, 0x80, 0x81, 0x82, 0x83];
     /// Dominio de vehículo conservado para las regresiones unitarias del
     /// fingerprint histórico; el renderer ya no usa un fingerprint de contexto
     /// como identidad del asset.

@@ -4466,6 +4466,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
         if water_class == Some(WaterClass::River) {
             let river_slope = spawn_river_slope_ground_with_action5(
                 commands,
+                map,
                 assets,
                 ctx,
                 canal_features,
@@ -4476,6 +4477,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
             if !river_slope {
                 if let Some((sprite, transform)) = canal_feature_surface(
                     ctx,
+                    map,
                     openttdrs_core::CF_RIVER_SLOPE,
                     canal_features,
                     action5_sprites.as_deref_mut(),
@@ -4521,6 +4523,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
             let canal_surface = if water_class == Some(WaterClass::Canal) {
                 canal_feature_surface(
                     ctx,
+                    map,
                     openttdrs_core::CF_WATERSLOPE,
                     canal_features,
                     action5_sprites.as_deref_mut(),

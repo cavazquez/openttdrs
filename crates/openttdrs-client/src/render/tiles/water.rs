@@ -165,6 +165,25 @@ fn canal_feature_sprite_with_context(
     images: &mut Option<&mut Assets<Image>>,
     action2: &mut Action2EvalCtx,
 ) -> Option<(Sprite, DecodedSprite)> {
+    canal_feature_sprite_with_context_and_slot(
+        canal_features,
+        feature_id,
+        slot,
+        cache,
+        images,
+        action2,
+    )
+    .map(|(sprite, decoded, _)| (sprite, decoded))
+}
+
+fn canal_feature_sprite_with_context_and_slot(
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    feature_id: u8,
+    slot: usize,
+    cache: &mut Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+    action2: &mut Action2EvalCtx,
+) -> Option<(Sprite, DecodedSprite, usize)> {
     let feature = openttdrs_core::canal_feature_def(canal_features, feature_id)?;
     let selected_slot = feature.newgrf_sprite_offset(slot, action2);
     let decoded = feature
@@ -192,6 +211,7 @@ fn canal_feature_sprite_with_context(
             ..default()
         },
         decoded,
+        selected_slot,
     ))
 }
 
@@ -204,13 +224,13 @@ pub(crate) fn canal_feature_surface(
     canal_features: &[openttdrs_core::CanalFeatureDef],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
-) -> Option<(Sprite, Transform)> {
+) -> Option<(Sprite, Transform, usize)> {
     let feature = openttdrs_core::canal_feature_def(canal_features, feature_id)?;
     if feature.flags & openttdrs_core::CFF_HAS_FLAT_SPRITE == 0 {
         return None;
     }
     let mut action2 = canal_action2_context_for_tile(map, ctx);
-    let (sprite, decoded) = canal_feature_sprite_with_context(
+    let (sprite, decoded, selected_slot) = canal_feature_sprite_with_context_and_slot(
         canal_features,
         feature_id,
         0,
@@ -229,7 +249,31 @@ pub(crate) fn canal_feature_surface(
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
-    Some((sprite, Transform::from_translation(position)))
+    Some((sprite, Transform::from_translation(position), selected_slot))
+}
+
+/// Igual que [`canal_feature_surface`], pero conserva la profundidad del
+/// `DrawGroundSprite` que usa `DrawWaterClassGround` antes del depósito naval.
+/// El agua normal mantiene su sesgo de costa; sólo el ground del depósito debe
+/// entrar en la banda común del pase de suelo.
+pub(crate) fn canal_feature_surface_ground(
+    ctx: &TileRenderContext,
+    map: &Map,
+    feature_id: u8,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) -> Option<(Sprite, Transform, usize)> {
+    let (sprite, mut transform, selected_slot) = canal_feature_surface(
+        ctx,
+        map,
+        feature_id,
+        canal_features,
+        action5_sprites,
+        images,
+    )?;
+    transform.translation.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.0);
+    Some((sprite, transform, selected_slot))
 }
 
 /// Resuelve el ground que `DrawWaterLock` obtiene de `CF_WATERSLOPE`.
@@ -1157,7 +1201,7 @@ pub(crate) fn push_water_tile_with_action5(
                 images.as_deref_mut(),
             );
             if !river_slope {
-                if let Some((sprite, transform)) = canal_feature_surface(
+                if let Some((sprite, transform, _)) = canal_feature_surface(
                     ctx,
                     map,
                     openttdrs_core::CF_RIVER_SLOPE,
@@ -1214,7 +1258,7 @@ pub(crate) fn push_water_tile_with_action5(
             } else {
                 None
             };
-            if let Some((sprite, transform)) = canal_surface {
+            if let Some((sprite, transform, _)) = canal_surface {
                 WorldDrawTrace::record_sprite("water-ground", "ground", SPR_FLAT_WATER_TILE, false);
                 batches
                     .water

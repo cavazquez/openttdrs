@@ -14,8 +14,8 @@ use super::transport::{
     spawn_rail_catenary_for_surface, spawn_road_catenary_for_type,
 };
 use super::water::{
-    canal_feature_surface, river_edge_sprite_offset, spawn_canal_dikes_with_action5,
-    spawn_river_edges, spawn_river_slope_ground_with_action5,
+    SPR_RIVER_SLOPE_BASE, canal_feature_surface_ground, river_edge_sprite_offset,
+    spawn_canal_dikes_with_action5, spawn_river_edges, spawn_river_slope_ground_with_action5,
 };
 use super::{
     catenary_under_low_bridge,
@@ -4475,7 +4475,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                 images.as_deref_mut(),
             );
             if !river_slope {
-                if let Some((sprite, transform)) = canal_feature_surface(
+                if let Some((sprite, transform, selected_slot)) = canal_feature_surface_ground(
                     ctx,
                     map,
                     openttdrs_core::CF_RIVER_SLOPE,
@@ -4483,7 +4483,12 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     action5_sprites.as_deref_mut(),
                     images.as_deref_mut(),
                 ) {
-                    WorldDrawTrace::record_sprite("ship-depot-water", "ground", 4061, false);
+                    WorldDrawTrace::record_sprite(
+                        "ship-depot-water",
+                        "ground",
+                        SPR_RIVER_SLOPE_BASE + u32::try_from(selected_slot).unwrap_or(u32::MAX),
+                        false,
+                    );
                     commands.spawn((
                         MapVisualLayer,
                         ctx.map_tile_chunk(),
@@ -4521,7 +4526,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
             );
         } else {
             let canal_surface = if water_class == Some(WaterClass::Canal) {
-                canal_feature_surface(
+                canal_feature_surface_ground(
                     ctx,
                     map,
                     openttdrs_core::CF_WATERSLOPE,
@@ -4532,8 +4537,13 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
             } else {
                 None
             };
-            if let Some((sprite, transform)) = canal_surface {
-                WorldDrawTrace::record_sprite("ship-depot-water", "ground", 4061, false);
+            if let Some((sprite, transform, selected_slot)) = canal_surface {
+                WorldDrawTrace::record_sprite(
+                    "ship-depot-water",
+                    "ground",
+                    SPR_RIVER_SLOPE_BASE + u32::try_from(selected_slot).unwrap_or(u32::MAX),
+                    false,
+                );
                 commands.spawn((
                     MapVisualLayer,
                     ctx.map_tile_chunk(),

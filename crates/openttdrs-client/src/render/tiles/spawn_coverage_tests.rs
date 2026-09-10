@@ -4410,7 +4410,7 @@ fn canal_ship_depot_consumes_feature_ground_and_dike_views() {
         })
         .expect("ground CF_WATERSLOPE del depósito");
     assert!(!marker.is_palette_animated());
-    let expected_surface = overlay_pos(
+    let mut expected_surface = overlay_pos(
         crate::iso::iso(1, 1),
         -3.0,
         -5.0,
@@ -4421,6 +4421,7 @@ fn canal_ship_depot_consumes_feature_ground_and_dike_views() {
         1,
         1,
     );
+    expected_surface.z = ground_draw_z(1, 1, 0.0);
     assert_eq!(
         *surface_transform,
         Transform::from_translation(expected_surface)

@@ -691,7 +691,6 @@ fn is_watered_tile(map: &Map, coord: TileCoord, from: WateredFrom) -> bool {
                         && industry_tiles_mergeable(&tile, &source, false))
             }) || has_tile_water_ground(tile)
         }
-        TileKind::Forest => has_tile_water_ground(tile),
         _ => false,
     }
 }
@@ -1863,6 +1862,31 @@ mod tests {
         object.m1 = set_water_class_m1(object.m1, WaterClass::Invalid);
         map.set_tile(neighbour, object).expect("set dry object");
         assert!(canal_dike_slots(&map, center)[0]);
+    }
+
+    #[test]
+    fn forest_water_class_does_not_suppress_canal_border() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let center = TileCoord::new(1, 1);
+        let neighbour = TileCoord::new(0, 1);
+        canal_depot(&mut map, center);
+
+        let mut forest = map.get(neighbour).expect("forest neighbour");
+        forest.kind = TileKind::Forest;
+        forest.mapt = 0x40; // MP_TREES.
+        for class in [WaterClass::Sea, WaterClass::Canal, WaterClass::River] {
+            forest.m1 = set_water_class_m1(forest.m1, class);
+            map.set_tile(neighbour, forest)
+                .expect("set water-class forest");
+            assert!(
+                !is_watered_tile(&map, neighbour, WateredFrom::Sw),
+                "MP_TREES with {class:?} must follow OpenTTD's default branch"
+            );
+            assert!(
+                canal_dike_slots(&map, center)[0],
+                "a water-class forest must not hide the depot's dike"
+            );
+        }
     }
 
     #[test]

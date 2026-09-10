@@ -3369,3 +3369,13 @@ la ruta real de `DrawWaterDepot`. El sprite custom conserva su ancla NFO y el
 queda en 62 pruebas de agua, 7 de depósito naval y Clippy estricto. Sigue
 pendiente la traza exportada completa por Sea/Canal/River, la matriz de
 vecinos/ejes/partes, clipping y framebuffer; #567 y #326 permanecen abiertos.
+
+Actualización #326/#567-WATER-TRACE-SLOTS (2026-09-10, `6106410e`): la traza
+`world-draw` deja de informar `SPR_FLAT_WATER_TILE` para una vista custom ya
+materializada. `CF_WATERSLOPE` y `CF_RIVER_SLOPE` conservan su slot local
+resuelto, `CF_RIVER_EDGE` conserva además el bloque `0/12/24/36/48`, y
+`CF_DIKES` usa la base `SPR_CANAL_DIKES_BASE`; los reemplazos Action5 siguen
+reportando el mismo ID lógico que su slot vanilla. Las rutas de agua y
+depósito naval siguen pasando 62 y 7 pruebas respectivamente, junto con
+Clippy estricto. La exportación sobre un SAV real, clipping y comparación de
+framebuffer siguen pendientes; #567 y #326 permanecen abiertos.

@@ -3485,3 +3485,15 @@ ignoradas, Clippy estricto, formato y `diff --check` verdes. Es cobertura del
 ciclo de vida de assets dentro de #566; la issue sigue abierta por la matriz
 completa de pivotes, clipping por familias y framebuffer, y #326 por la
 composición global.
+
+Actualización #326/#567-OBJECT-WATER-CLASS (2026-09-10, `4a0db637`): el
+contrato raw de `MP_OBJECT` ya conserva `HasTileWaterClass`/`GetWaterClass`
+desde `MAPT` y `M1`, aunque el modelo semántico use `TileKind::Unknown(10)`.
+`IsWateredTile` usa esa clase para objetos: Sea, Canal y River suprimen el lado
+compartido de un dique, mientras `Invalid` deja visible el borde. También se
+actualizaron las regresiones Action2 para el byte de terreno `0x21` que
+corresponde a un objeto de clase Sea. La nueva prueba focal, core completo
+(2386 pasadas, 1 ignorada), cliente completo (1349 pasadas, 2 ignoradas),
+Clippy estricto, formato y `diff --check` pasan. #567 sigue abierta por
+túnel/puente acuático, matriz completa Sea/Canal/River, callbacks, clipping,
+orden global y framebuffer; #326 permanece abierta.

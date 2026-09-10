@@ -3497,3 +3497,14 @@ corresponde a un objeto de clase Sea. La nueva prueba focal, core completo
 Clippy estricto, formato y `diff --check` pasan. #567 sigue abierta por
 túnel/puente acuático, matriz completa Sea/Canal/River, callbacks, clipping,
 orden global y framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-AQUEDUCT-RAMP-WATER (2026-09-10, `4bd0daba`):
+`IsWateredTile` reconoce los extremos de acueducto almacenados como
+`MP_TUNNELBRIDGE` y transporte agua. Sólo el lado opuesto a la dirección de
+la rampa se considera mojado, reproduciendo `ReverseDiagDir` + `DirToDiagDir`;
+los puentes de carretera/ferrocarril siguen secos. La regresión cubre los ocho
+valores direccionales y el filtro de transporte; cliente completo queda en
+1350 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check`
+verdes. #567 sigue abierta por la matriz completa Sea/Canal/River, costas,
+callbacks, piezas restantes, clipping, orden global y framebuffer; #326
+permanece abierta.

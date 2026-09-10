@@ -4176,6 +4176,154 @@ fn canal_ship_depot_consumes_action5_dike_sprite_and_nfo_anchor() {
 }
 
 #[test]
+fn canal_ship_depot_consumes_feature_ground_and_dike_views() {
+    let assets = boot_assets_app();
+    let depot = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    let mut tile = tile_template();
+    tile.kind = TileKind::ShipDepot;
+    tile.mapt = 0x60;
+    tile.m5 = 0x30;
+    tile.m1 = set_water_class_m1(tile.m1, WaterClass::Canal);
+    map.set_tile(depot, tile).expect("canal ship depot");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let surface = DecodedSprite {
+        width: 10,
+        height: 6,
+        x_offs: -3,
+        y_offs: -5,
+        rgba: vec![0x44; 10 * 6 * 4],
+        mask: Vec::new(),
+    };
+    let dike = DecodedSprite {
+        width: 13,
+        height: 5,
+        x_offs: 8,
+        y_offs: -3,
+        rgba: vec![0x55; 13 * 5 * 4],
+        mask: Vec::new(),
+    };
+    let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+    features[usize::from(openttdrs_core::CF_WATERSLOPE)].flags =
+        openttdrs_core::CFF_HAS_FLAT_SPRITE;
+    features[usize::from(openttdrs_core::CF_WATERSLOPE)].newgrf_views = vec![surface.clone()];
+    features[usize::from(openttdrs_core::CF_DIKES)].newgrf_views = vec![dike.clone(); 12];
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types_and_tramway_action5(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &[],
+                    None,
+                    &[],
+                    &features,
+                    &[],
+                    Some(&mut action5_sprites),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                    TramwayDepotAction5::default(),
+                );
+            },
+        )
+        .expect("canal ship depot feature spawn");
+
+    let water: Vec<_> = world
+        .query::<(&WaterTile, &Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(marker, sprite, transform)| (*marker, sprite.clone(), *transform))
+        .collect();
+    let sprites: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(sprite, transform)| (sprite.clone(), *transform))
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let (marker, _, surface_transform) = water
+        .iter()
+        .find(|(_, sprite, _)| {
+            images
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                == Some(surface.rgba.as_slice())
+        })
+        .expect("ground CF_WATERSLOPE del depósito");
+    assert!(!marker.is_palette_animated());
+    let expected_surface = overlay_pos(
+        crate::iso::iso(1, 1),
+        -3.0,
+        -5.0,
+        10.0,
+        6.0,
+        0,
+        FLAT_WATER_LAYER_FRAC,
+        1,
+        1,
+    );
+    assert_eq!(
+        *surface_transform,
+        Transform::from_translation(expected_surface)
+    );
+    let dike_sprites: Vec<_> = sprites
+        .iter()
+        .filter(|(sprite, _)| {
+            images
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                == Some(dike.rgba.as_slice())
+        })
+        .collect();
+    assert_eq!(
+        dike_sprites.len(),
+        8,
+        "el depósito aislado emite ocho diques"
+    );
+    let mut expected_dike =
+        overlay_pos(crate::iso::iso(1, 1), 8.0, -3.0, 13.0, 5.0, 0, 0.010, 1, 1);
+    expected_dike.z = ground_draw_z(1, 1, 0.010);
+    assert!(
+        dike_sprites
+            .iter()
+            .any(|(_, transform)| { *transform == Transform::from_translation(expected_dike) })
+    );
+    assert_eq!(images.len(), 9, "ground y ocho slots de dike custom");
+}
+
+#[test]
 fn river_ship_depot_uses_static_slope_ground_before_depot_layers() {
     let assets = boot_assets_app();
     let river_asset = assets.river_slopes[1].clone(); // SPR_WATER_SLOPE_X_DOWN.

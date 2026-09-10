@@ -3212,3 +3212,16 @@ La prueba focal del depósito continúa en 6/6 y Clippy estricto pasa; esto
 mejora la evidencia reproducible de posición y orden, pero no equivale aún a
 un diff de framebuffer. La matriz completa de costa/eje/parte, callbacks,
 clipping, orden global y framebuffer mantiene abiertos #567 y #326.
+
+Actualización #326/#567-CANAL-LOCK-WATERSLOPE (2026-09-10, `faebea12`): la
+ruta de `DrawWaterLock` consume ahora `CF_WATERSLOPE` para el ground de las
+esclusas. Se conserva el orden vanilla `NE/SE/SW/NW` del tramo Middle, se
+desplazan los cuatro slots cuando `CFF_HAS_FLAT_SPRITE` aporta el plano y las
+partes Lower/Upper usan ese slot plano; catálogos legacy sin plano vuelven al
+sprite vanilla sin dejar una textura parcial. La resolución reutiliza el
+contexto Action2 por tesela, el callback de offset `0x147`, las anclas NFO y
+el z del pase ground. La prueba de integración atraviesa
+`push_water_tile_with_action5`, cubre el slot NE y la regresión focal de agua
+queda en 61/61; Clippy estricto pasa. La matriz completa de partes/direcciones,
+estructuras `CF_LOCKS`, costa, clipping, orden global y framebuffer sigue
+pendiente, por lo que #567 y #326 permanecen abiertos.

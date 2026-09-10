@@ -3534,3 +3534,15 @@ la suite completa de 1341 tests del cliente, Clippy estricto, formato y
 `diff --check`. #563 y #565 siguen abiertas por bahías (`ROTSG_ROADSTOP`),
 matriz de partes/callbacks, anclas completas, clipping y framebuffer; #326
 permanece abierta por la matriz global.
+
+Actualización #326/#563-ROAD-STOP-BAY-GROUP (2026-09-10, `b6f0d461`): las
+bahías viales consultan ahora `ROTSG_ROADSTOP` cuando el roadtype publica
+`ROTSG_GROUND` (`UsesOverlay()`) y el modo de la parada permite dibujar la
+carretera. La vista específica conserva sus offsets NFO, sustituye el ground
+vanilla y, sobre una pendiente, queda como child de la fundación nivelada. Las
+regresiones separan deliberadamente `GROUND` de `ROADSTOP` para detectar una
+selección accidental del selector 2: pasan las variantes plana e inclinada,
+las 32 pruebas focales de road stop, la suite completa del cliente (1343
+pasadas, 2 ignoradas), Clippy estricto, formato y `diff --check`. #563 sigue
+abierta por matriz de partes/callbacks, catenaria/trace, vecinos, clipping y
+framebuffer; #326 permanece abierta por la matriz global.

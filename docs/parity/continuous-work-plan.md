@@ -3161,3 +3161,16 @@ perder las capas `TILE_SEQ` del depósito; los casos de Sea, River, Action5 y
 vanilla continúan cubiertos. Esto cierra la evidencia focal del depósito, no
 la matriz completa de eje/parte, costa, callbacks, clipping ni framebuffer;
 #567 y #326 permanecen abiertos.
+
+Actualización #326/#567-CANAL-ACTION2-TILE-CONTEXT (2026-09-10, `a61d0975`,
+`4855b8c3`): el runtime de `CanalFeatureDef` conserva los grupos Action2 y
+resuelve cada vista sin hacer wrap de índices inexistentes. El renderer de
+agua y de `DrawWaterDepot` alimenta ahora el contexto por tesela con altura
+`0x80`, terreno provisional `0x81=0`, conectividad `0x82`, random persistido
+`0x83` y los parámetros del callback `0x147`; el fingerprint de caché impide
+que la primera variante resuelta se filtre a otra tesela. Las 56 pruebas
+focales de agua cubren tres contratos del núcleo y dos vistas dependientes de
+altura con texturas separadas; el lint estricto pasa. La importación de terreno real,
+todos los scopes/variables Action2, la matriz completa de callbacks, clipping,
+orden global y framebuffer siguen pendientes, por lo que #567 y #326 no se
+cierran.

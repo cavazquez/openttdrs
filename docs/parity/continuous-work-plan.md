@@ -3498,6 +3498,16 @@ Clippy estricto, formato y `diff --check` pasan. #567 sigue abierta por
 túnel/puente acuático, matriz completa Sea/Canal/River, callbacks, clipping,
 orden global y framebuffer; #326 permanece abierta.
 
+Actualización #326/#567-SHIP-DEPOT-RIVER-EDGE-MATRIX (2026-09-10, `551e3a9a`):
+la regresión integrada del depósito naval River se amplía a las cuatro
+pendientes reales: `SE`, `NE`, `SW` y `NW`. Cada fixture verifica el sprite
+de superficie y el bloque correspondiente de `CF_RIVER_EDGE` (offsets
+12/24/36/48), con sus ocho bordes custom y las capas `TILE_SEQ` intactas. El
+bloque focal conserva 13 pruebas y la suite cliente queda en 1355 pasadas y
+2 ignoradas, con Clippy estricto, formato y `diff --check` verdes. #567 sigue
+abierta por callbacks y vecinos restantes, costas/túneles/puentes, clipping,
+orden global y framebuffer; #326 permanece abierta.
+
 Actualización #326/#567-SHIP-DEPOT-RIVER-EDGE-BLOCK (2026-09-10, `032146e5`):
 la regresión ECS de un depósito naval River inclinado verifica que el
 dispatcher selecciona el bloque de ocho bordes específico de la pendiente

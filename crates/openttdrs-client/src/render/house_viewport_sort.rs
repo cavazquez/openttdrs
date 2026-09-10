@@ -1124,6 +1124,87 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)] // Fixture creada dentro del mismo World.
+    fn loading_parent_atlas_layout_invalidates_precise_viewport_sort() {
+        let mut world = viewport_scope_test_world(128, 128);
+        world.insert_resource(Assets::<Image>::default());
+        world.insert_resource(Assets::<TextureAtlasLayout>::default());
+        world.init_resource::<Messages<AssetEvent<TextureAtlasLayout>>>();
+        let image_handle = world.resource::<Assets<Image>>().reserve_handle();
+        let layout_handle = world
+            .resource::<Assets<TextureAtlasLayout>>()
+            .reserve_handle();
+
+        // La entrada atlas todavía no tiene layout materializado. Su bounds
+        // 3D queda fuera de la banda visible y sólo debe entrar cuando Bevy
+        // conoce el rectángulo que realmente va a rasterizar.
+        let late_parent = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: 4072,
+                    bounds: ParentSpriteBounds::new(10_000, 10_000, 0, 10_000, 10_000, 19),
+                    insertion_key: viewport_insertion_key(5, 5, 0),
+                    source_depth: 1.0,
+                },
+                Transform::from_xyz(0.0, 0.0, 1.0),
+                Sprite {
+                    image: image_handle,
+                    texture_atlas: Some(TextureAtlas {
+                        layout: layout_handle.clone(),
+                        index: 0,
+                    }),
+                    ..default()
+                },
+                Anchor::CENTER,
+            ))
+            .id();
+        world.spawn((
+            ViewportSortableParent {
+                sprite_id: 4073,
+                bounds: ParentSpriteBounds::new(10_000, 10_000, 0, 10_000, 10_000, 19),
+                insertion_key: viewport_insertion_key(5, 5, 1),
+                source_depth: 1.000_5,
+            },
+            Transform::from_xyz(0.0, 0.0, 1.000_5),
+            Sprite::sized(Vec2::splat(1.0)),
+            Anchor::CENTER,
+        ));
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sort_viewport_sortable_parents);
+        schedule.run(&mut world);
+        schedule.run(&mut world);
+        assert_eq!(
+            world
+                .resource::<ViewportSortableChildDepthWindows>()
+                .sort_runs,
+            1,
+            "un layout ausente no debe repetir el sort"
+        );
+
+        let mut layout = TextureAtlasLayout::new_empty(UVec2::new(64, 32));
+        layout.add_texture(URect::new(0, 0, 32, 16));
+        world
+            .resource_mut::<Assets<TextureAtlasLayout>>()
+            .insert(layout_handle.id(), layout)
+            .unwrap();
+        world.write_message(AssetEvent::Added {
+            id: layout_handle.id(),
+        });
+        schedule.run(&mut world);
+
+        let windows = world.resource::<ViewportSortableChildDepthWindows>();
+        assert_eq!(
+            windows.sort_runs, 2,
+            "la carga del layout debe invalidar el sort"
+        );
+        assert!(
+            windows.next_parent_depth.contains_key(&late_parent),
+            "el parent atlas antes omitido debe entrar al stream al materializarse su layout"
+        );
+    }
+
+    #[test]
     #[allow(clippy::unwrap_used)] // Fixtures creados arriba dentro del mismo World.
     fn runtime_sort_moves_parent_and_screen_child_together() {
         let mut world = World::new();

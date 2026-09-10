@@ -1164,9 +1164,22 @@ direcciones), conservando los prismas `TILE_SEQ_LINE` y la profundidad global,
 pero sustituyendo tamaño/ancla por los NFO de los sprites `tramway_049+`.
 La regresión ECS fija IDs, assets, bounds, ordinales y centros de ambas capas;
 no dibuja un `SPR_TRAMWAY_OVERLAY` separado porque el set relocalizado ya
-contiene la vía. `ROTSG_DEPOT`/`ROTSG_OVERLAY` custom y Action5
-`DEPOT_NO_TRACK` siguen pendientes. No hay nuevo foco Kale ni métrica raster,
-y #326 permanece abierto.
+contiene la vía. `ROTSG_DEPOT` custom, `ROTSG_OVERLAY` y Action5
+`DEPOT_NO_TRACK` seguían pendientes en este corte base. No hay nuevo foco Kale
+ni métrica raster, y #326 permanece abierto.
+
+Actualización #326-ROAD-DEPOT-NEWGRF (2026-09-09): `ROTSG_DEPOT` (selector
+8) ya sustituye la secuencia BUILD de un depósito vial con el grupo Action3 del
+roadtype NewGRF activo. Si la tesela conserva roadtype, éste tiene prioridad;
+sólo `INVALID_ROADTYPE` deriva al tramtype, igual que `DrawTile_Road`. Las seis
+vistas relocatables conservan el ID lógico, prisma `TILE_SEQ_LINE`, ordinal y
+profundidad fuente vanilla, pero toman tamaño/ancla de la vista Action1/2 tras
+evaluar terreno, random, tablas de tipo y parámetros del GRF; además hornean
+la `GetCompanyPalette` del propietario y la incorporan a la clave de caché. La
+misma ruta de caché/evaluación ahora sirve a puentes y depósitos. La regresión
+ECS de un SE sintético fija ambas texturas, la paleta, anchors, boxes e
+inserción global. No hay foco Kale ni métrica raster nueva; `ROTSG_OVERLAY` y
+Action5 `DEPOT_NO_TRACK` siguen pendientes, por lo que #326 continúa abierto.
 
 Actualización #326-TUNNEL-CATENARY-GLOBAL (2026-09-09):
 `DrawRailCatenaryOnTunnel` ya conserva su `SpriteCombine` en runtime. En una

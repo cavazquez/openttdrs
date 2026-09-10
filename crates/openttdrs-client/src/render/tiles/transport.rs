@@ -1626,8 +1626,14 @@ fn custom_road_catenary_sprite(
         def.newgrf_grfid,
     ));
     let view = def.newgrf_specific_view_runtime(selector, view_idx, &mut action2)?;
-    let handle =
-        cache.handle_for_specific_runtime(def, selector, view_idx, &mut action2, image_store)?;
+    let handle = cache.handle_for_specific_runtime(
+        def,
+        selector,
+        view_idx,
+        None,
+        &mut action2,
+        image_store,
+    )?;
     let anchor = CatenarySpriteAnchor::from_decoded(&view);
     Some((
         Sprite {

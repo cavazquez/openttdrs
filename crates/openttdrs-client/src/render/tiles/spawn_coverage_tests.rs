@@ -1050,6 +1050,209 @@ fn pure_vanilla_tram_depot_relocates_the_full_build_sequence() {
 }
 
 #[test]
+fn newgrf_road_depot_group_replaces_relocated_building_layers() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(2, 2);
+    let mut map = fresh_map8();
+    let mut depot = Tile {
+        kind: TileKind::RoadDepot,
+        mapt: 0x20,
+        // SE consume las dos primeras vistas del bloque relocatable
+        // `SPR_ROAD_DEPOT`: SE_1/SE_2.
+        m5: 1,
+        ..tile_template()
+    };
+    depot = openttdrs_core::set_road_type_on_tile(depot, RoadType::from_u8(2));
+    map.set_tile(coord, depot).expect("road depot NewGRF");
+
+    let mouth_rgba = [230, 70, 210, 255].repeat(6 * 7);
+    let building_rgba = [20, 180, 90, 255].repeat(8 * 9);
+    let mouth = DecodedSprite {
+        width: 6,
+        height: 7,
+        x_offs: -3,
+        y_offs: -5,
+        rgba: mouth_rgba.clone(),
+        mask: vec![198; 6 * 7],
+    };
+    let building = DecodedSprite {
+        width: 8,
+        height: 9,
+        x_offs: 4,
+        y_offs: -11,
+        rgba: building_rgba.clone(),
+        mask: vec![199; 8 * 9],
+    };
+    let mut graphics = TrainSpriteGraphics {
+        sets: vec![vec![mouth.clone(), building.clone()]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 0,
+            set_id: 0,
+        }],
+        ..TrainSpriteGraphics::default()
+    };
+    // `RoadTypeSpriteGroup::ROTSG_DEPOT` en `road.h`.
+    graphics.specific_assigns.insert((0, 8), 0);
+    let road_catalog = vec![RoadTypeDef {
+        id: RoadType::from_u8(2),
+        class: RoadTramType::Road,
+        label: "Depot NewGRF".into(),
+        short_label: "NGDP".into(),
+        intro_year: 0,
+        max_speed: 0,
+        cost_multiplier: 0,
+        maintenance_multiplier: 0,
+        flags: 0,
+        powered_mask: 0,
+        badges: Vec::new(),
+        from_tramtypes_feature: false,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: Some(Box::new(graphics)),
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+    }];
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut road_sprites: Local<crate::render::NewGrfRoadSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    Some(crate::sprites::CompanyColour::Red),
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &road_catalog,
+                    Some(&mut road_sprites),
+                    &[],
+                    None,
+                    Some(&mut images),
+                    &[],
+                    &[],
+                );
+            },
+        )
+        .expect("road depot NewGRF spawn");
+
+    let mut layers: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Sprite, &Transform)>()
+        .iter(&world)
+        .filter(|(parent, _, _)| [1408, 1409].contains(&parent.sprite_id))
+        .map(|(parent, sprite, transform)| (*parent, sprite.clone(), transform.translation))
+        .collect();
+    layers.sort_by_key(|(parent, _, _)| parent.insertion_key);
+    assert_eq!(
+        layers
+            .iter()
+            .map(|(parent, _, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                1408,
+                ParentSpriteBounds::new(32, 32, 0, 32, 47, 19),
+                viewport_insertion_key(2, 2, 1),
+            ),
+            (
+                1409,
+                ParentSpriteBounds::new(47, 32, 0, 47, 47, 19),
+                viewport_insertion_key(2, 2, 2),
+            ),
+        ],
+        "ROTSG_DEPOT conserva los parents y prismas TILE_SEQ viales"
+    );
+    assert!(
+        layers
+            .iter()
+            .all(|(parent, _, translation)| parent.source_depth == translation.z),
+        "las fachadas NewGRF conservan profundidad fuente antes del sort global"
+    );
+
+    let expected_centers = {
+        let map = &world.resource::<TsMap>().0;
+        let grid = &world.resource::<TsGrid>().0;
+        let ctx = TileRenderContext::new(map, grid, 2, 2);
+        crate::sprites::road_depot_build_layers(1)
+            .iter()
+            .zip([&mouth, &building])
+            .map(|(layer, view)| {
+                let layer = crate::sprites::RoadDepotLayerGfx {
+                    w: f32::from(view.width),
+                    h: f32::from(view.height),
+                    x_offs: f32::from(view.x_offs),
+                    y_offs: f32::from(view.y_offs),
+                    ..*layer
+                };
+                crate::iso::road_depot_build_sprite_center(
+                    ctx.iso_pos,
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    ctx.info.base_z,
+                    layer.z,
+                    crate::sprites::road_depot_seq_gfx(&layer),
+                    layer.w,
+                    layer.h,
+                )
+                .xy()
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(layers[0].2.xy(), expected_centers[0]);
+    assert_eq!(layers[1].2.xy(), expected_centers[1]);
+
+    let company_colour = crate::sprites::CompanyColour::Red;
+    let expected_mouth =
+        openttdrs_core::bake_sprite_company_palette(&mouth, company_colour.as_u8());
+    let expected_building =
+        openttdrs_core::bake_sprite_company_palette(&building, company_colour.as_u8());
+    let images = world.resource::<Assets<Image>>();
+    assert_eq!(
+        images
+            .get(&layers[0].1.image)
+            .and_then(|image| image.data.as_deref()),
+        Some(expected_mouth.as_slice()),
+        "SE_1 debe usar el primer sprite y la paleta del propietario"
+    );
+    assert_eq!(
+        images
+            .get(&layers[1].1.image)
+            .and_then(|image| image.data.as_deref()),
+        Some(expected_building.as_slice()),
+        "SE_2 debe usar el segundo sprite y la paleta del propietario"
+    );
+}
+
+#[test]
 fn drive_through_tram_stop_draws_vanilla_catenary() {
     let assets = boot_assets_app();
     let expected_back = assets

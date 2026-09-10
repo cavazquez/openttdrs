@@ -17,6 +17,7 @@ use crate::iso::{
 use crate::render::catenary_newgrf::{
     CatenarySpriteAnchor, catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
+use crate::render::road_newgrf::specific_sprite_for_tile;
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
@@ -590,51 +591,6 @@ fn spawn_bridge_combined_child(
             source_depth,
         },
     ));
-}
-
-/// Resuelve una vista de `ROTSG_*` contra la rampa sur y la convierte en un
-/// sprite Bevy. `GetCustomRoadSprite` devuelve la primera vista del grupo y
-/// el draw-proc suma el offset del puente; aquí la vista se indexa con esa
-/// misma convención, mientras la caché conserva la evaluación Action2.
-#[allow(clippy::too_many_arguments)]
-fn bridge_specific_sprite(
-    def: &openttdrs_core::RoadTypeDef,
-    map: &Map,
-    selector: u8,
-    view_idx: usize,
-    source_coord: TileCoord,
-    source_tile: Tile,
-    climate: Climate,
-    road_catalog: &[openttdrs_core::RoadTypeDef],
-    newgrf_stack: &[openttdrs_core::NewGrfEntry],
-    road_sprites: &mut Option<&mut NewGrfRoadSpriteCache>,
-    images: &mut Option<&mut Assets<Image>>,
-) -> Option<(Sprite, openttdrs_core::DecodedSprite)> {
-    let cache = road_sprites.as_deref_mut()?;
-    let image_store = images.as_deref_mut()?;
-    let mut action2 = openttdrs_core::action2_eval_ctx_for_road_tile(
-        map,
-        source_tile,
-        source_coord,
-        climate,
-        def.newgrf_type_tables.as_ref(),
-        road_catalog,
-    );
-    action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
-        newgrf_stack,
-        def.newgrf_grfid,
-    ));
-    let view = def.newgrf_specific_view_runtime(selector, view_idx, &mut action2)?;
-    let handle =
-        cache.handle_for_specific_runtime(def, selector, view_idx, &mut action2, image_store)?;
-    Some((
-        Sprite {
-            image: handle,
-            color: Color::WHITE,
-            ..default()
-        },
-        view,
-    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2825,7 +2781,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
         if let Some(def) = road_def
             .filter(|def| def.has_newgrf_specific_group(ROTSG_BRIDGE))
             .or_else(|| tram_def.filter(|def| def.has_newgrf_specific_group(ROTSG_BRIDGE)))
-            && let Some((sprite, view)) = bridge_specific_sprite(
+            && let Some((sprite, view)) = specific_sprite_for_tile(
                 def,
                 map,
                 ROTSG_BRIDGE,
@@ -2835,6 +2791,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 climate,
                 road_catalog,
                 newgrf_stack,
+                None,
                 &mut road_sprites,
                 &mut images,
             )
@@ -2852,7 +2809,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             custom_bridge_surface = true;
         }
         if let Some(def) = road_def.filter(|def| def.has_newgrf_specific_group(ROTSG_OVERLAY))
-            && let Some((sprite, view)) = bridge_specific_sprite(
+            && let Some((sprite, view)) = specific_sprite_for_tile(
                 def,
                 map,
                 ROTSG_OVERLAY,
@@ -2868,6 +2825,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 climate,
                 road_catalog,
                 newgrf_stack,
+                None,
                 &mut road_sprites,
                 &mut images,
             )
@@ -2885,7 +2843,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
         }
         if (source_tile.m3 & 0x0F) != 0
             && let Some(def) = tram_def.filter(|def| def.has_newgrf_specific_group(ROTSG_OVERLAY))
-            && let Some((sprite, view)) = bridge_specific_sprite(
+            && let Some((sprite, view)) = specific_sprite_for_tile(
                 def,
                 map,
                 ROTSG_OVERLAY,
@@ -2901,6 +2859,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 climate,
                 road_catalog,
                 newgrf_stack,
+                None,
                 &mut road_sprites,
                 &mut images,
             )
@@ -2947,7 +2906,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 || def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT);
             if custom_any {
                 if def.has_newgrf_specific_group(ROTSG_CATENARY_BACK)
-                    && let Some((sprite, view)) = bridge_specific_sprite(
+                    && let Some((sprite, view)) = specific_sprite_for_tile(
                         def,
                         map,
                         ROTSG_CATENARY_BACK,
@@ -2957,6 +2916,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                         climate,
                         road_catalog,
                         newgrf_stack,
+                        None,
                         &mut road_sprites,
                         &mut images,
                     )
@@ -2973,7 +2933,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                     );
                 }
                 if def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT)
-                    && let Some((sprite, view)) = bridge_specific_sprite(
+                    && let Some((sprite, view)) = specific_sprite_for_tile(
                         def,
                         map,
                         ROTSG_CATENARY_FRONT,
@@ -2983,6 +2943,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                         climate,
                         road_catalog,
                         newgrf_stack,
+                        None,
                         &mut road_sprites,
                         &mut images,
                     )

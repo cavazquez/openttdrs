@@ -3,17 +3,19 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use openttdrs_core::RoadTypeDef;
+use openttdrs_core::map::{Map, Tile, TileCoord};
+use openttdrs_core::{Climate, NewGrfEntry, RoadTypeDef};
 
 use crate::render::newgrf_cache::{
     DecodedSpriteImagePolicy, decoded_sprite_image, runtime_fingerprint, vars,
 };
+use crate::sprites::CompanyColour;
 
 /// `(road_type_id, view_idx, runtime_fp)` → textura RGBA.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfRoadSpriteCache {
     handles: HashMap<(u8, u8, u32), Handle<Image>>,
-    specific_handles: HashMap<(u8, u8, u8, u32), Handle<Image>>,
+    specific_handles: HashMap<(u8, u8, u8, u8, u32), Handle<Image>>,
 }
 
 impl NewGrfRoadSpriteCache {
@@ -54,15 +56,19 @@ impl NewGrfRoadSpriteCache {
 
     /// Textura de un grupo Action3 específico (`ROTSG_*`) con vars de tesela.
     /// El selector forma parte de la clave: dos grupos del mismo roadtype
-    /// pueden resolver sets distintos para bridge/overlay/catenaria.
+    /// pueden resolver sets distintos para bridge/overlay/catenaria. Cuando
+    /// el draw-proc entrega una paleta de compañía, ésta también forma parte
+    /// de la identidad de la textura.
     pub(crate) fn handle_for_specific_runtime(
         &mut self,
         def: &RoadTypeDef,
         selector: u8,
         view_idx: usize,
+        colour: Option<CompanyColour>,
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
+        let colour_key = colour.map(CompanyColour::as_u8).unwrap_or(u8::MAX);
         let fp = if def.newgrf_runtime.is_some() {
             runtime_fingerprint(ctx, vars::ROAD, false)
         } else {
@@ -70,16 +76,74 @@ impl NewGrfRoadSpriteCache {
         };
         let view = def.newgrf_specific_view_runtime(selector, view_idx, ctx)?;
         let idx = u8::try_from(view_idx).unwrap_or(u8::MAX);
-        let key = (def.id.as_u8(), selector, idx, fp);
+        let key = (def.id.as_u8(), selector, idx, colour_key, fp);
         Some(
             self.specific_handles
                 .entry(key)
                 .or_insert_with(|| {
-                    images.add(decoded_sprite_image(&view, DecodedSpriteImagePolicy::Raw))
+                    let policy = colour.map_or(DecodedSpriteImagePolicy::Raw, |colour| {
+                        DecodedSpriteImagePolicy::CompanyPalette { colour }
+                    });
+                    images.add(decoded_sprite_image(&view, policy))
                 })
                 .clone(),
         )
     }
+}
+
+/// Resuelve una vista de un grupo Action3 específico (`ROTSG_*`) para una
+/// tesela y la materializa como sprite Bevy.
+///
+/// Puentes, depósitos y otros draw-procs comparten el mismo contexto Action2:
+/// terreno, random de la tesela, tablas de tipos y parámetros del GRF. Dejar
+/// esta ruta junto a la caché evita que dos consumidores del mismo grupo
+/// calculen fingerprints o anclas distintos.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn specific_sprite_for_tile(
+    def: &RoadTypeDef,
+    map: &Map,
+    selector: u8,
+    view_idx: usize,
+    source_coord: TileCoord,
+    source_tile: Tile,
+    climate: Climate,
+    road_catalog: &[RoadTypeDef],
+    newgrf_stack: &[NewGrfEntry],
+    colour: Option<CompanyColour>,
+    road_sprites: &mut Option<&mut NewGrfRoadSpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+) -> Option<(Sprite, openttdrs_core::DecodedSprite)> {
+    let cache = road_sprites.as_deref_mut()?;
+    let image_store = images.as_deref_mut()?;
+    let mut action2 = openttdrs_core::action2_eval_ctx_for_road_tile(
+        map,
+        source_tile,
+        source_coord,
+        climate,
+        def.newgrf_type_tables.as_ref(),
+        road_catalog,
+    );
+    action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+        newgrf_stack,
+        def.newgrf_grfid,
+    ));
+    let view = def.newgrf_specific_view_runtime(selector, view_idx, &mut action2)?;
+    let handle = cache.handle_for_specific_runtime(
+        def,
+        selector,
+        view_idx,
+        colour,
+        &mut action2,
+        image_store,
+    )?;
+    Some((
+        Sprite {
+            image: handle,
+            color: Color::WHITE,
+            ..default()
+        },
+        view,
+    ))
 }
 
 /// Si el tipo de carretera de la tesela trae vistas NewGRF, devuelve el def.
@@ -312,10 +376,10 @@ mod tests {
         let mut images = Assets::<Image>::default();
         let mut cache = NewGrfRoadSpriteCache::default();
         let first = cache
-            .handle_for_specific_runtime(&def, 6, 0, &mut ctx, &mut images)
+            .handle_for_specific_runtime(&def, 6, 0, None, &mut ctx, &mut images)
             .expect("bridge handle");
         let second = cache
-            .handle_for_specific_runtime(&def, 6, 0, &mut ctx, &mut images)
+            .handle_for_specific_runtime(&def, 6, 0, None, &mut ctx, &mut images)
             .expect("cached bridge handle");
         assert_eq!(first, second);
         // El selector es parte de la clave; un grupo distinto no debe
@@ -326,8 +390,30 @@ mod tests {
             .specific_assigns
             .insert((0, 1), 0);
         let overlay = cache
-            .handle_for_specific_runtime(&def, 1, 0, &mut ctx, &mut images)
+            .handle_for_specific_runtime(&def, 1, 0, None, &mut ctx, &mut images)
             .expect("overlay handle");
         assert_ne!(first, overlay);
+
+        let red = cache
+            .handle_for_specific_runtime(
+                &def,
+                6,
+                0,
+                Some(CompanyColour::Red),
+                &mut ctx,
+                &mut images,
+            )
+            .expect("paleta roja");
+        let green = cache
+            .handle_for_specific_runtime(
+                &def,
+                6,
+                0,
+                Some(CompanyColour::Green),
+                &mut ctx,
+                &mut images,
+            )
+            .expect("paleta verde");
+        assert_ne!(red, green, "la textura específica incluye la paleta");
     }
 }

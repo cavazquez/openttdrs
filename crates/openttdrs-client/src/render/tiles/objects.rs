@@ -32,7 +32,10 @@ use crate::render::catenary_newgrf::{
 use crate::render::newgrf_cache::{
     direct_tile_layout_ground, runtime_fingerprint, tile_layout_is_renderable, vars,
 };
-use crate::render::road_newgrf::{newgrf_road_def_for_tile, road_newgrf_view_index};
+use crate::render::road_newgrf::{
+    newgrf_road_def_for_tile, newgrf_tram_def_for_tile, road_newgrf_view_index,
+    specific_sprite_for_tile,
+};
 use crate::render::station_newgrf::{
     NewGrfStationSpriteCache, newgrf_station_def_for_tile, station_newgrf_view_index_for_tile,
 };
@@ -4341,7 +4344,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
     climate: Climate,
     calendar_date: u32,
     road_catalog: &[openttdrs_core::RoadTypeDef],
-    road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
+    mut road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
@@ -4881,6 +4884,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
             spawn_road_depot_tile(
                 commands,
                 assets,
+                map,
                 company,
                 owner_colour,
                 ctx,
@@ -4889,6 +4893,11 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                 tileh,
                 dims.0,
                 depot_foundation.child_parent,
+                climate,
+                road_catalog,
+                road_sprites.as_deref_mut(),
+                newgrf_stack,
+                images.as_deref_mut(),
             );
         }
         TileKind::RailDepot => {
@@ -5393,6 +5402,51 @@ const TRAM_DEPOT_WITH_TRACK_SPRITE_BASE: u32 = crate::sprites::TRAMWAY_SPRITE_BA
 /// `INVALID_ROADTYPE` en el mapa de OpenTTD; un depósito de tranvía puro lo
 /// conserva en `m4()` y escribe el tipo real en `m8()[6..12]`.
 const INVALID_ROAD_TYPE_ID: u8 = 63;
+/// `RoadTypeSpriteGroup::ROTSG_DEPOT` en `road.h`.
+const ROTSG_DEPOT: u8 = 8;
+
+/// El depósito consulta primero el roadtype si existe; sólo cuando el byte
+/// road es `INVALID_ROADTYPE` delega al tramtype. Es la misma prioridad que
+/// `DrawTile_Road`, por lo que un tram custom no sustituye la fachada de un
+/// depósito que también conserva una carretera válida.
+fn road_depot_newgrf_def_for_tile(
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    tile: Tile,
+) -> Option<&openttdrs_core::RoadTypeDef> {
+    let def = if road_type_from_tile(&tile).as_u8() == INVALID_ROAD_TYPE_ID {
+        newgrf_tram_def_for_tile(road_catalog, tile)
+    } else {
+        newgrf_road_def_for_tile(road_catalog, tile)
+    };
+    def.filter(|def| def.has_newgrf_specific_group(ROTSG_DEPOT))
+}
+
+/// Índice dentro del bloque relocatable `SPR_ROAD_DEPOT` que consume
+/// `ROTSG_DEPOT`: SE_1, SE_2, SW_1, SW_2, NE, NW.
+#[must_use]
+fn road_depot_custom_sprite_index(layer: RoadDepotLayerGfx) -> Option<usize> {
+    usize::try_from(
+        layer
+            .sprite_id
+            .checked_sub(ROAD_DEPOT_SEQUENCE_SPRITE_BASE)?,
+    )
+    .ok()
+}
+
+/// `DrawRailTileSeq` conserva el prisma de la línea vanilla, pero usa el
+/// tamaño y el ancla del sprite Action1/2 que resolvió el grupo NewGRF.
+fn road_depot_newgrf_layer(
+    layer: RoadDepotLayerGfx,
+    view: &openttdrs_core::DecodedSprite,
+) -> RoadDepotLayerGfx {
+    RoadDepotLayerGfx {
+        w: f32::from(view.width),
+        h: f32::from(view.height),
+        x_offs: f32::from(view.x_offs),
+        y_offs: f32::from(view.y_offs),
+        ..layer
+    }
+}
 
 /// Devuelve la capa equivalente del set vanilla de depósito de tranvía con
 /// vía. `DrawTile_Road` obtiene este resultado al sumar
@@ -5473,6 +5527,7 @@ fn spawn_road_depot_building_parent(
 fn spawn_road_depot_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
+    map: &Map,
     company: Option<&CompanyColoredSprites>,
     owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
@@ -5481,8 +5536,16 @@ fn spawn_road_depot_tile(
     tileh: u8,
     map_width: u32,
     foundation_child_parent: Option<Entity>,
+    climate: Climate,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    mut road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    mut images: Option<&mut Assets<Image>>,
 ) {
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
+    let depot_tile = ctx.tile;
+    let custom_depot_def =
+        depot_tile.and_then(|tile| road_depot_newgrf_def_for_tile(road_catalog, tile));
     record_road_depot_ground_trace(tileh);
     let position = full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, half_h);
     if let Some(parent) = foundation_child_parent {
@@ -5509,10 +5572,62 @@ fn spawn_road_depot_tile(
     // `SPR_TRAMWAY_DEPOT_WITH_TRACK`, que ya contiene la vía.
     let foundation_z_delta = (i32::from(base_z) - i32::from(ctx.info.base_z)) * 8;
     let build_layers = road_depot_build_layers(dir);
-    let use_vanilla_tram_track_sequence = road_depot_uses_vanilla_tram_track_sequence(ctx);
+    let use_vanilla_tram_track_sequence =
+        custom_depot_def.is_none() && road_depot_uses_vanilla_tram_track_sequence(ctx);
     for (layer_i, spec) in build_layers.iter().enumerate() {
         if buildings_hidden() {
             break;
+        }
+        let custom = depot_tile.and_then(|tile| {
+            custom_depot_def.and_then(|def| {
+                road_depot_custom_sprite_index(*spec).and_then(|view_idx| {
+                    specific_sprite_for_tile(
+                        def,
+                        map,
+                        ROTSG_DEPOT,
+                        view_idx,
+                        ctx.coord,
+                        tile,
+                        climate,
+                        road_catalog,
+                        newgrf_stack,
+                        Some(owner_colour.unwrap_or_default()),
+                        &mut road_sprites,
+                        &mut images,
+                    )
+                })
+            })
+        });
+        if let Some((sprite, view)) = custom {
+            let spec = road_depot_newgrf_layer(*spec, &view);
+            WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                "road-depot-building-newgrf",
+                "sortable",
+                spec.sprite_id,
+                station_company_palette(owner_colour),
+                false,
+                (0, 0),
+                foundation_z_delta,
+                (0, 0, 0),
+                Some(TraceSpriteBounds::new(
+                    spec.dx as i32,
+                    spec.dy as i32,
+                    spec.dz as i32,
+                    spec.sx,
+                    spec.sy,
+                    20,
+                )),
+            );
+            spawn_road_depot_building_parent(
+                commands,
+                ctx,
+                base_z,
+                map_width,
+                layer_i,
+                &spec,
+                tint_building_sprite(sprite),
+            );
+            continue;
         }
         let (spec, image) = if use_vanilla_tram_track_sequence {
             road_depot_tram_with_track_layer(*spec).map_or_else(
@@ -6171,18 +6286,24 @@ mod tests {
     use bevy::prelude::{Color, Vec2};
 
     use super::{
-        TileRenderContext, airport_station_ground_layer_trace_offset, buoy_trace_bounds,
-        dock_clear_land_sprite_id, dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
+        INVALID_ROAD_TYPE_ID, ROTSG_DEPOT, TileRenderContext,
+        airport_station_ground_layer_trace_offset, buoy_trace_bounds, dock_clear_land_sprite_id,
+        dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
         rail_depot_build_parent_sprites, rail_depot_catenary_parent_sprite,
         rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
         rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
-        road_depot_parent_sprites, road_stop_foundation_child_offset, road_stop_parent_sprites,
+        road_depot_newgrf_def_for_tile, road_depot_parent_sprites,
+        road_stop_foundation_child_offset, road_stop_parent_sprites,
         road_stop_sorted_layer_centers, station_catenary_pylon_parent_bounds,
         station_catenary_wire_parent_bounds, station_catenary_wire_trace_geometry,
         station_rail_child_offset, station_rail_foundation_world_z_delta,
         station_rail_layer_parent_bounds, tunnel_catenary_trace_geometry, tunnel_sortable_parents,
     };
-    use openttdrs_core::{Map, TileCoord, TileKind, WaterClass, set_water_class_m1};
+    use openttdrs_core::{
+        DecodedSprite, Map, RoadTramType, RoadType, RoadTypeDef, TileCoord, TileKind,
+        TrainSpriteGraphics, WaterClass, set_road_type_on_tile, set_tram_road_type_on_tile,
+        set_water_class_m1,
+    };
 
     use crate::render::RenderGrid;
     use crate::render::viewport_sort::{ParentSprite, ParentSpriteBounds};
@@ -6193,11 +6314,76 @@ mod tests {
         road_depot_build_layers, road_stop_drive_through_layers, road_waypoint_build_layers,
     };
 
+    fn roadtype_with_depot_group(id: u8, class: RoadTramType) -> RoadTypeDef {
+        let view = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![255, 255, 255, 255],
+            mask: Vec::new(),
+        };
+        let graphics = TrainSpriteGraphics {
+            sets: vec![vec![view]],
+            specific_assigns: std::collections::HashMap::from([((0, ROTSG_DEPOT), 0)]),
+            ..Default::default()
+        };
+        RoadTypeDef {
+            id: RoadType::from_u8(id),
+            class,
+            label: format!("Depot {id}"),
+            short_label: format!("D{id}"),
+            intro_year: 0,
+            max_speed: 0,
+            cost_multiplier: 0,
+            maintenance_multiplier: 0,
+            flags: 0,
+            powered_mask: 0,
+            badges: Vec::new(),
+            from_tramtypes_feature: matches!(class, RoadTramType::Tram),
+            from_newgrf: true,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(graphics)),
+            newgrf_grfid: 0,
+            newgrf_type_tables: None,
+        }
+    }
+
     #[test]
     fn rail_station_roof_glass_mask_matches_palette_transparent_calibration() {
         assert_eq!(
             rail_station_roof_glass_mask_color(),
             Color::srgba(0.0, 0.0, 0.0, 0.50)
+        );
+    }
+
+    #[test]
+    fn road_depot_newgrf_group_prefers_road_and_uses_tram_when_road_is_invalid() {
+        let catalog = vec![
+            roadtype_with_depot_group(2, RoadTramType::Road),
+            roadtype_with_depot_group(3, RoadTramType::Tram),
+        ];
+        let mut tile = Map::new_flat(2, 2, 0)
+            .get(TileCoord::new(0, 0))
+            .expect("tile plana");
+        tile.kind = TileKind::RoadDepot;
+        tile = set_road_type_on_tile(tile, RoadType::from_u8(2));
+        tile = set_tram_road_type_on_tile(tile, Some(RoadType::from_u8(3)));
+        assert_eq!(
+            road_depot_newgrf_def_for_tile(&catalog, tile).map(|def| def.id),
+            Some(RoadType::from_u8(2)),
+            "una carretera válida no puede caer al grupo de tranvía"
+        );
+
+        // `GetRoadTypeRoad` devuelve INVALID_ROADTYPE para el depósito de
+        // tranvía puro; sólo entonces `DrawTile_Road` consulta el tramtype.
+        tile.m3hi = INVALID_ROAD_TYPE_ID;
+        assert_eq!(
+            road_depot_newgrf_def_for_tile(&catalog, tile).map(|def| def.id),
+            Some(RoadType::from_u8(3)),
+            "el tranvía NewGRF conserva su propio RTSG_DEPOT"
         );
     }
 

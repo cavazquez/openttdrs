@@ -3533,3 +3533,14 @@ suite cliente en 1353 pasadas y 2 ignoradas; Clippy estricto, formato y
 `diff --check` pasan. La evidencia de callbacks/Action2 completos, vecinos
 para toda la matriz, clipping, orden global y framebuffer sigue pendiente;
 #567 y #326 permanecen abiertos.
+
+Actualización #326/#567-SHIP-DEPOT-CANAL-CALLBACK (2026-09-10, `bdfeb8bf`): la
+regresión ECS conecta un `CanalFeatureDef` runtime-only con
+`CBID_CANALS_SPRITE_OFFSET` y verifica que el delta se aplica al ground plano
+`CF_WATERSLOPE` y a cada uno de los ocho diques emitidos por un depósito Canal.
+Las vistas seleccionadas por callback conservan sus bytes RGBA y pasan por la
+caché compartida de imágenes, sin perder la estructura `TILE_SEQ`; el bloque
+focal queda en 12 pruebas y la suite cliente continúa en 1353 pasadas y 2
+ignoradas, con Clippy estricto, formato y `diff --check` verdes. #567 sigue
+abierta por callbacks/scopes restantes, vecinos de toda la matriz, clipping,
+orden global y framebuffer; #326 permanece abierta.

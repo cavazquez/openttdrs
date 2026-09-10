@@ -89,26 +89,47 @@ impl NewGrfRoadSpriteCache {
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
+        let view = def.newgrf_specific_view_runtime(selector, view_idx, ctx)?;
+        Some(
+            self.handle_for_resolved_specific_view(
+                def, selector, view_idx, colour, ctx, &view, images,
+            ),
+        )
+    }
+
+    /// Materializa una vista específica ya resuelta.
+    ///
+    /// El draw-proc necesita conservar la misma selección para generar la
+    /// textura y para aplicar sus anclas. Resolver aquí una segunda vez puede
+    /// cambiar el resultado cuando el Action2 consulta random/vars de tesela.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn handle_for_resolved_specific_view(
+        &mut self,
+        def: &RoadTypeDef,
+        selector: u8,
+        view_idx: usize,
+        colour: Option<CompanyColour>,
+        ctx: &openttdrs_core::Action2EvalCtx,
+        view: &openttdrs_core::DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
         let colour_key = colour.map(CompanyColour::as_u8).unwrap_or(u8::MAX);
         let fp = if def.newgrf_runtime.is_some() {
             runtime_fingerprint(ctx, vars::ROAD, false)
         } else {
             0
         };
-        let view = def.newgrf_specific_view_runtime(selector, view_idx, ctx)?;
         let idx = u8::try_from(view_idx).unwrap_or(u8::MAX);
         let key = (def.id.as_u8(), selector, idx, colour_key, fp);
-        Some(
-            self.specific_handles
-                .entry(key)
-                .or_insert_with(|| {
-                    let policy = colour.map_or(DecodedSpriteImagePolicy::Raw, |colour| {
-                        DecodedSpriteImagePolicy::CompanyPalette { colour }
-                    });
-                    images.add(decoded_sprite_image(&view, policy))
-                })
-                .clone(),
-        )
+        self.specific_handles
+            .entry(key)
+            .or_insert_with(|| {
+                let policy = colour.map_or(DecodedSpriteImagePolicy::Raw, |colour| {
+                    DecodedSpriteImagePolicy::CompanyPalette { colour }
+                });
+                images.add(decoded_sprite_image(view, policy))
+            })
+            .clone()
     }
 }
 
@@ -149,14 +170,15 @@ pub(crate) fn specific_sprite_for_tile(
         def.newgrf_grfid,
     ));
     let view = def.newgrf_specific_view_runtime(selector, view_idx, &mut action2)?;
-    let handle = cache.handle_for_specific_runtime(
+    let handle = cache.handle_for_resolved_specific_view(
         def,
         selector,
         view_idx,
         colour,
-        &mut action2,
+        &action2,
+        &view,
         image_store,
-    )?;
+    );
     Some((
         Sprite {
             image: handle,

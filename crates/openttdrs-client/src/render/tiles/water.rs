@@ -25,6 +25,8 @@ pub(crate) const SPR_CANAL_DIKES_BASE: u32 = 5380;
 /// Tipo Action5 y primer slot de los diques dentro de `0x08 Canals`.
 const ACTION5_CANALS_TYPE: u8 = openttdrs_core::ACTION5_TYPE_CANALS;
 const CANALS_ACTION5_DIKES_OFFSET: usize = 52;
+/// Namespace fuera del rango de tipos Action5 para vistas Action1/3 de canal.
+const CANAL_FEATURE_CACHE_TYPE_BASE: u8 = 0x80;
 /// `SPR_CANALS_BASE` de `table/sprites.h`: las cuatro pendientes de río
 /// vanilla ocupan los slots 0..3 de la hoja Action5 de canales.
 pub(crate) const SPR_RIVER_SLOPE_BASE: u32 = 5328;
@@ -52,6 +54,40 @@ fn action5_canal_sprite(
     };
     let sprite = cache.sprite_colored(ACTION5_CANALS_TYPE, slot, table, Color::WHITE, images)?;
     Some((sprite, decoded))
+}
+
+/// Materializa una vista Action1/3 de `CanalFeature` en el cache compartido.
+///
+/// Las vistas de features no tienen un tipo Action5 propio. Se usa un
+/// namespace reservado en la clave del cache para que una vista `CF_DIKES`
+/// no pueda reutilizar accidentalmente el handle de un slot `0x08 Canals`.
+fn canal_feature_sprite(
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    feature_id: u8,
+    slot: usize,
+    cache: &mut Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+) -> Option<(Sprite, DecodedSprite)> {
+    let feature = openttdrs_core::canal_feature_def(canal_features, feature_id)?;
+    let decoded = feature.newgrf_views.get(slot)?.clone();
+    let (Some(cache), Some(images)) = (cache.as_deref_mut(), images.as_deref_mut()) else {
+        return None;
+    };
+    let slot = u16::try_from(slot).ok()?;
+    let handle = cache.handle_for(
+        CANAL_FEATURE_CACHE_TYPE_BASE + feature_id,
+        slot,
+        &decoded,
+        images,
+    );
+    Some((
+        Sprite {
+            image: handle,
+            color: Color::WHITE,
+            ..default()
+        },
+        decoded,
+    ))
 }
 
 /// Índice de `SPR_CANALS_BASE + offset` que selecciona `DrawRiverWater` cuando
@@ -205,6 +241,7 @@ fn push_river_slope_sprite(
     batch_water: &mut Vec<(crate::render::MapTileChunk, WaterTile, Sprite, Transform)>,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
     canal_action5: &[Option<DecodedSprite>],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
@@ -213,7 +250,21 @@ fn push_river_slope_sprite(
         Some(index) => index,
         None => return false,
     };
-    let custom = action5_canal_sprite(index, canal_action5, &mut action5_sprites, &mut images);
+    let feature_custom =
+        openttdrs_core::canal_feature_def(canal_features, openttdrs_core::CF_RIVER_SLOPE).and_then(
+            |feature| {
+                let flat_offset = usize::from((feature.flags & 1) != 0);
+                canal_feature_sprite(
+                    canal_features,
+                    openttdrs_core::CF_RIVER_SLOPE,
+                    flat_offset + index,
+                    &mut action5_sprites,
+                    &mut images,
+                )
+            },
+        );
+    let custom = feature_custom
+        .or_else(|| action5_canal_sprite(index, canal_action5, &mut action5_sprites, &mut images));
     let Some((_, position)) = river_slope_draw(ctx, custom.as_ref().map(|(_, sprite)| sprite))
     else {
         return false;
@@ -235,6 +286,7 @@ pub(crate) fn spawn_river_slope_ground_with_action5(
     commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
     canal_action5: &[Option<DecodedSprite>],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
@@ -242,7 +294,21 @@ pub(crate) fn spawn_river_slope_ground_with_action5(
     let Some(index) = river_slope_sprite_index(ctx.info.tileh) else {
         return false;
     };
-    let custom = action5_canal_sprite(index, canal_action5, &mut action5_sprites, &mut images);
+    let feature_custom =
+        openttdrs_core::canal_feature_def(canal_features, openttdrs_core::CF_RIVER_SLOPE).and_then(
+            |feature| {
+                let flat_offset = usize::from((feature.flags & 1) != 0);
+                canal_feature_sprite(
+                    canal_features,
+                    openttdrs_core::CF_RIVER_SLOPE,
+                    flat_offset + index,
+                    &mut action5_sprites,
+                    &mut images,
+                )
+            },
+        );
+    let custom = feature_custom
+        .or_else(|| action5_canal_sprite(index, canal_action5, &mut action5_sprites, &mut images));
     let Some((_, position)) = river_slope_draw(ctx, custom.as_ref().map(|(_, sprite)| sprite))
     else {
         return false;
@@ -328,6 +394,7 @@ pub(crate) fn spawn_canal_dikes_with_action5(
     ctx: &TileRenderContext,
     base_z: u8,
     role: &'static str,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
     canal_action5: &[Option<DecodedSprite>],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
@@ -337,12 +404,21 @@ pub(crate) fn spawn_canal_dikes_with_action5(
         if !selected {
             continue;
         }
-        let custom = action5_canal_sprite(
-            CANALS_ACTION5_DIKES_OFFSET + slot,
-            canal_action5,
+        let feature_custom = canal_feature_sprite(
+            canal_features,
+            openttdrs_core::CF_DIKES,
+            slot,
             &mut action5_sprites,
             &mut images,
         );
+        let custom = feature_custom.or_else(|| {
+            action5_canal_sprite(
+                CANALS_ACTION5_DIKES_OFFSET + slot,
+                canal_action5,
+                &mut action5_sprites,
+                &mut images,
+            )
+        });
         let (sprite, width, height, xrel, yrel): (Sprite, f32, f32, f32, f32) =
             if let Some((sprite, decoded)) = custom {
                 (
@@ -416,6 +492,7 @@ pub(crate) fn push_water_tile(
         shore_sprites,
         images,
         &[],
+        &[],
         None,
     );
 }
@@ -432,6 +509,7 @@ pub(crate) fn push_water_tile_with_action5(
     shore_newgrf: &[Option<DecodedSprite>],
     shore_sprites: Option<&mut NewGrfShoreSpriteCache>,
     mut images: Option<&mut Assets<Image>>,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
     canal_action5: &[Option<DecodedSprite>],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
 ) {
@@ -526,6 +604,7 @@ pub(crate) fn push_water_tile_with_action5(
                 &mut batches.water,
                 assets,
                 ctx,
+                canal_features,
                 canal_action5,
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
@@ -546,6 +625,7 @@ pub(crate) fn push_water_tile_with_action5(
                     ctx,
                     ctx.info.base_z,
                     "water-canal",
+                    canal_features,
                     canal_action5,
                     action5_sprites,
                     images,
@@ -559,7 +639,7 @@ pub(crate) fn push_water_tile_with_action5(
 mod tests {
     use super::{
         SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, action5_canal_sprite, canal_dike_slots,
-        river_slope_sprite_index, shore_sprite_id,
+        canal_feature_sprite, river_slope_sprite_index, shore_sprite_id,
     };
     use bevy::prelude::{Assets, Image};
     use openttdrs_core::map::{
@@ -673,5 +753,43 @@ mod tests {
             .expect("dique Action5");
         assert_eq!(selected_dike, dike);
         assert_eq!(images.len(), 2, "cada slot conserva su textura cacheada");
+    }
+
+    #[test]
+    fn canal_action1_3_view_uses_separate_cache_namespace_and_nfo_geometry() {
+        let dike = DecodedSprite {
+            width: 13,
+            height: 5,
+            x_offs: 8,
+            y_offs: -3,
+            rgba: vec![0x80; 13 * 5 * 4],
+            mask: Vec::new(),
+        };
+        let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+        features[usize::from(openttdrs_core::CF_DIKES)]
+            .newgrf_views
+            .push(dike.clone());
+        let mut action5 = vec![None; 53];
+        action5[52] = Some(dike.clone());
+        let mut cache = crate::render::NewGrfAction5SpriteCache::default();
+        let mut images = Assets::<Image>::default();
+        let mut cache_ref = Some(&mut cache);
+        let mut images_ref = Some(&mut images);
+
+        let (_, selected_action5) =
+            action5_canal_sprite(52, &action5, &mut cache_ref, &mut images_ref)
+                .expect("dique Action5");
+        assert_eq!(selected_action5, dike);
+
+        let (_, selected_feature) = canal_feature_sprite(
+            &features,
+            openttdrs_core::CF_DIKES,
+            0,
+            &mut cache_ref,
+            &mut images_ref,
+        )
+        .expect("dique Action1/3");
+        assert_eq!(selected_feature, dike);
+        assert_eq!(images.len(), 2, "Action5 y Action1/3 no comparten handle");
     }
 }

@@ -287,6 +287,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     &sim.state.road_type_catalog,
                     Some(road_sprites),
                     &sim.state.newgrf_stack,
+                    &sim.state.canal_feature_catalog,
                     &sim.state.runtime.canal_action5_newgrf_sprites,
                     Some(action5_sprites),
                     Some(images),
@@ -313,6 +314,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     &sim.state.runtime.shore_newgrf_sprites,
                     Some(shore_sprites),
                     Some(images),
+                    &sim.state.canal_feature_catalog,
                     &sim.state.runtime.canal_action5_newgrf_sprites,
                     Some(action5_sprites),
                 );

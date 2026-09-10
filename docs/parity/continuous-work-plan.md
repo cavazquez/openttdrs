@@ -3247,3 +3247,12 @@ vez de informar siempre `SPR_FLAT_WATER_TILE`; la regresión de Canal verifica
 la profundidad y siguen pasando 62 pruebas de agua, 6 de depósito naval y
 Clippy estricto. Faltan la traza completa por Sea/Canal/River, la matriz de
 vecinos/ejes/partes, clipping y framebuffer; #567 y #326 permanecen abiertos.
+
+Actualización #326/#567-RIVER-FLAT-DEPOT-GROUND (2026-09-10, `c075a132`): la
+regresión `river_ship_depot_consumes_flat_feature_ground_in_ground_pass`
+comprueba la variante plana de `CF_RIVER_SLOPE` con `CFF_HAS_FLAT_SPRITE` en
+la ruta real de `DrawWaterDepot`. El sprite custom conserva su ancla NFO y el
+`ground_draw_z`, mientras River no agrega diques ni bordes; la cobertura
+queda en 62 pruebas de agua, 7 de depósito naval y Clippy estricto. Sigue
+pendiente la traza exportada completa por Sea/Canal/River, la matriz de
+vecinos/ejes/partes, clipping y framebuffer; #567 y #326 permanecen abiertos.

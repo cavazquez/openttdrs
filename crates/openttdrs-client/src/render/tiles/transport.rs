@@ -1148,13 +1148,71 @@ pub(crate) fn spawn_road_tile(
         .is_some_and(|t| road_tile_snow_or_desert(t.mapt, ctx.kind, t.m7))
         || climate.uses_snow_ground();
     let paved = roadside.is_some_and(roadside_is_paved) && !snow_or_desert;
+    let tram_def = ctx
+        .tile
+        .and_then(|tile| newgrf_tram_def_for_tile(road_catalog, tile));
+    let tram_view_idx = ctx
+        .tile
+        .and_then(|tile| tram_flat_sprite_index(tileh, tile.m3));
+    // En una tesela de tranvía puro, `m5` no contiene roadbits. OpenTTD pinta
+    // entonces el suelo base desnudo y deja que el tramtype aporte GROUND;
+    // `road_bits_for_render` conserva 0x05 como índice geométrico de fallback,
+    // por lo que no sirve para decidir esta precedencia.
+    let tram_only_uses_overlay = ctx.tile.is_some_and(|tile| tile.m5 & 0x0F == 0)
+        && tram_def.is_some_and(|def| def.has_newgrf_specific_group(ROTSG_GROUND));
 
     // NewGRF: una vista normal sustituye el sprite de suelo road. Si el tipo
     // publica `ROTSG_GROUND`, OpenTTD cambia al sistema de underlay/overlay y
     // la vista normal deja de ser la fuente de la superficie.
     let mut used_newgrf = is_level_crossing;
     let view_idx = road_newgrf_view_index(tileh, rb);
+    if !is_level_crossing && tram_only_uses_overlay && road_sprites.is_some() && images.is_some() {
+        record_road_ground_trace(
+            "tram-overlay-base",
+            if snow_or_desert {
+                SPR_FLAT_SNOW_DESERT_TILE + u32::from(slope_sprite_offset(tileh))
+            } else {
+                SPR_FLAT_GRASS_TILE + u32::from(slope_sprite_offset(tileh))
+            },
+            road_foundation,
+        );
+        spawn_road_overlay_base_ground(
+            commands,
+            assets,
+            ctx,
+            tileh,
+            snow_or_desert,
+            base_z,
+            mw,
+            foundation_child_parent,
+        );
+        if let (Some(def), Some(tram_view_idx), Some(tile)) = (tram_def, tram_view_idx, ctx.tile) {
+            let _ = spawn_road_specific_layer(
+                commands,
+                map,
+                mw,
+                ctx,
+                base_z,
+                tileh,
+                road_half_h,
+                def,
+                ROTSG_GROUND,
+                tram_view_idx,
+                tile,
+                climate,
+                road_catalog,
+                newgrf_stack,
+                &mut road_sprites,
+                &mut images,
+                foundation_child_parent,
+                ROAD_OVERLAY_GROUND_LAYER_FRAC,
+                true,
+            );
+        }
+        used_newgrf = true;
+    }
     if !is_level_crossing
+        && !tram_only_uses_overlay
         && let Some(tile) = ctx.tile
         && let Some(def) = newgrf_road_def_for_tile(road_catalog, tile)
     {
@@ -1379,69 +1437,132 @@ pub(crate) fn spawn_road_tile(
             slope_half_h(tileh)
         };
         let mut used_tram_newgrf = false;
-        if let Some(tile) = ctx.tile
-            && let Some(def) = newgrf_tram_def_for_tile(road_catalog, tile)
-            && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
+        if let Some(def) = tram_def
+            && let Some(tile) = ctx.tile
         {
-            let mut a2 = openttdrs_core::action2_eval_ctx_for_road_tile(
-                map,
-                tile,
-                ctx.coord,
-                climate,
-                def.newgrf_type_tables.as_ref(),
-                road_catalog,
-            );
-            a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
-                newgrf_stack,
-                def.newgrf_grfid,
-            ));
-            let view = if def.newgrf_runtime.is_some() {
-                def.newgrf_view_runtime(tfi, &mut a2)
-            } else {
-                def.newgrf_view(tfi).cloned()
-            };
-            if let Some(view) = view {
-                let handle = cache.handle_for_resolved_view(def, tfi, &a2, &view, images);
-                let pos3 = if tileh == 0 {
-                    overlay_pos(
-                        ctx.iso_pos,
-                        f32::from(view.x_offs),
-                        f32::from(view.y_offs),
-                        f32::from(view.width),
-                        f32::from(view.height),
-                        base_z,
-                        TRAM_OVERLAY_LAYER_FRAC,
-                        ctx.tx_i32(),
-                        ctx.ty_i32(),
+            if def.has_newgrf_specific_group(ROTSG_GROUND) {
+                // `ROTSG_GROUND` ya se dibujó en la pasada de suelo cuando el
+                // tramtype era puro. Con carretera presente, OpenTTD no pinta
+                // este underlay: el roadtype tiene prioridad.
+                if road_sprites.is_some()
+                    && images.is_some()
+                    && def.has_newgrf_specific_group(ROTSG_OVERLAY)
+                    && let Some((sprite, view)) = specific_sprite_for_tile(
+                        def,
+                        map,
+                        ROTSG_OVERLAY,
+                        tfi,
+                        ctx.coord,
+                        tile,
+                        climate,
+                        road_catalog,
+                        newgrf_stack,
+                        None,
+                        &mut road_sprites,
+                        &mut images,
                     )
-                } else {
-                    tile_pos_half(
-                        ctx.tx_i32(),
-                        ctx.ty_i32(),
-                        base_z,
-                        TRAM_OVERLAY_LAYER_FRAC,
-                        tram_half_h,
-                    )
-                };
-                let sprite = Sprite {
-                    image: handle,
-                    color: Color::WHITE,
-                    ..default()
-                };
-                if let Some(parent) = foundation_child_parent {
-                    // El overlay de tranvía sigue a `DrawFoundation` igual que
-                    // el asfalto: una vista NewGRF no puede quedar como parent
-                    // independiente en una pendiente.
-                    spawn_foundation_child_sprite_at(commands, sprite, ctx, pos3, mw, parent);
-                } else {
-                    commands.spawn((
-                        MapVisualLayer,
-                        ctx.map_tile_chunk(),
-                        sprite,
-                        Transform::from_translation(pos3),
-                    ));
+                {
+                    let pos3 = if tileh == 0 {
+                        overlay_pos(
+                            ctx.iso_pos,
+                            f32::from(view.x_offs),
+                            f32::from(view.y_offs),
+                            f32::from(view.width),
+                            f32::from(view.height),
+                            base_z,
+                            TRAM_OVERLAY_LAYER_FRAC,
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                        )
+                    } else {
+                        tile_pos_half(
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            base_z,
+                            TRAM_OVERLAY_LAYER_FRAC,
+                            tram_half_h,
+                        )
+                    };
+                    if let Some(parent) = foundation_child_parent {
+                        // El overlay de tranvía sigue a `DrawFoundation` igual
+                        // que el asfalto: una vista NewGRF no puede quedar como
+                        // parent independiente en una pendiente.
+                        spawn_foundation_child_sprite_at(commands, sprite, ctx, pos3, mw, parent);
+                    } else {
+                        commands.spawn((
+                            MapVisualLayer,
+                            ctx.map_tile_chunk(),
+                            sprite,
+                            Transform::from_translation(pos3),
+                        ));
+                    }
                 }
-                used_tram_newgrf = true;
+                // La presencia de GROUND activa UsesOverlay aun cuando el
+                // grupo OVERLAY sea opcional o no resuelva una vista.
+                if road_sprites.is_some() && images.is_some() {
+                    used_tram_newgrf = true;
+                }
+            } else if let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut()) {
+                let mut a2 = openttdrs_core::action2_eval_ctx_for_road_tile(
+                    map,
+                    tile,
+                    ctx.coord,
+                    climate,
+                    def.newgrf_type_tables.as_ref(),
+                    road_catalog,
+                );
+                a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+                    newgrf_stack,
+                    def.newgrf_grfid,
+                ));
+                let view = if def.newgrf_runtime.is_some() {
+                    def.newgrf_view_runtime(tfi, &mut a2)
+                } else {
+                    def.newgrf_view(tfi).cloned()
+                };
+                if let Some(view) = view {
+                    let handle = cache.handle_for_resolved_view(def, tfi, &a2, &view, images);
+                    let pos3 = if tileh == 0 {
+                        overlay_pos(
+                            ctx.iso_pos,
+                            f32::from(view.x_offs),
+                            f32::from(view.y_offs),
+                            f32::from(view.width),
+                            f32::from(view.height),
+                            base_z,
+                            TRAM_OVERLAY_LAYER_FRAC,
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                        )
+                    } else {
+                        tile_pos_half(
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            base_z,
+                            TRAM_OVERLAY_LAYER_FRAC,
+                            tram_half_h,
+                        )
+                    };
+                    let sprite = Sprite {
+                        image: handle,
+                        color: Color::WHITE,
+                        ..default()
+                    };
+                    if let Some(parent) = foundation_child_parent {
+                        // El overlay de tranvía sigue a `DrawFoundation` igual
+                        // que el asfalto: una vista NewGRF no puede quedar como
+                        // parent independiente en una pendiente.
+                        spawn_foundation_child_sprite_at(commands, sprite, ctx, pos3, mw, parent);
+                    } else {
+                        commands.spawn((
+                            MapVisualLayer,
+                            ctx.map_tile_chunk(),
+                            sprite,
+                            Transform::from_translation(pos3),
+                        ));
+                    }
+                    used_tram_newgrf = true;
+                }
             }
         }
         if !used_tram_newgrf {

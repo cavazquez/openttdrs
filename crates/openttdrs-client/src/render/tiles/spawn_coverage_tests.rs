@@ -3594,6 +3594,122 @@ fn normal_road_overlay_groups_replace_default_surface() {
 }
 
 #[test]
+fn pure_tram_overlay_groups_replace_default_surface() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = fresh_map8();
+    let mut tile = Tile {
+        kind: TileKind::Road,
+        mapt: 0x20,
+        m5: 0,    // tranvía puro: no hay roadbits
+        m3: 0x0A, // ROAD_X como trazado de tranvía
+        ..tile_template()
+    };
+    tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::from_u8(2)));
+    map.set_tile(coord, tile)
+        .expect("tesela de tranvía puro con grupos GROUND/OVERLAY");
+
+    let ground = DecodedSprite {
+        width: 8,
+        height: 8,
+        x_offs: 0,
+        y_offs: 0,
+        rgba: [255, 0, 0, 255].repeat(8 * 8),
+        mask: Vec::new(),
+    };
+    let overlay = DecodedSprite {
+        rgba: [0, 0, 255, 255].repeat(8 * 8),
+        ..ground.clone()
+    };
+    let road_catalog = vec![RoadTypeDef {
+        id: RoadType::from_u8(2),
+        class: RoadTramType::Tram,
+        label: "Overlay tram".into(),
+        short_label: "OVTR".into(),
+        intro_year: 0,
+        max_speed: 0,
+        cost_multiplier: 0,
+        maintenance_multiplier: 0,
+        flags: 0,
+        powered_mask: 0,
+        badges: Vec::new(),
+        from_tramtypes_feature: true,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: Some(Box::new(TrainSpriteGraphics {
+            sets: vec![vec![ground.clone()], vec![overlay.clone()]],
+            specific_assigns: [((0, 2), 0), ((0, 1), 1)].into_iter().collect(),
+            ..Default::default()
+        })),
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+    }];
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: Local<crate::render::NewGrfRoadSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_road_tile(
+                    &mut commands,
+                    &m.0,
+                    8,
+                    8,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    TEST_CLIMATE,
+                    false,
+                    false,
+                    &road_catalog,
+                    Some(&mut cache),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("pure tram overlay groups spawn");
+
+    let custom_colours: Vec<Vec<u8>> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .filter_map(|sprite| {
+            if sprite.image.path().is_some() {
+                return None;
+            }
+            world
+                .resource::<Assets<Image>>()
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                .and_then(|rgba| rgba.get(0..4))
+                .filter(|rgba| **rgba == [255, 0, 0, 255] || **rgba == [0, 0, 255, 255])
+                .map(<[u8]>::to_vec)
+        })
+        .collect();
+    assert_eq!(
+        custom_colours,
+        vec![vec![255, 0, 0, 255], vec![0, 0, 255, 255]],
+        "el tranvía puro debe dibujar GROUND bajo OVERLAY y no la carretera vanilla"
+    );
+}
+
+#[test]
 fn road_stop_no_catenary_flag_suppresses_road_and_tram_wires() {
     let assets = boot_assets_app();
     let expected_back = assets.rail.get(&6071).expect("catenaria trasera").clone();

@@ -3626,3 +3626,16 @@ valores direccionales y el filtro de transporte; cliente completo queda en
 verdes. #567 sigue abierta por la matriz completa Sea/Canal/River, costas,
 callbacks, piezas restantes, clipping, orden global y framebuffer; #326
 permanece abierta.
+
+Actualización #326/#567-OBJECT-WATER-GROUND (2026-09-10, `ad80376f`): el
+renderer de objetos NewGRF ya interpreta `ObjectFlag::DrawWater` (bit 10) y el
+ground directo `SPR_FLAT_WATER_TILE` como `DrawWaterClassGround` cuando
+`MP_OBJECT` conserva una clase Sea/Canal/River válida en `M1`. La emisión
+reutiliza la pasada acuática existente, incluidos superficie, diques/bordes y
+reemplazos Action2/Action5; en tierra conserva el ground del layout y los
+anclajes NFO. La regresión ECS de un objeto sobre Canal verifica una superficie
+y ocho diques exteriores, y la suite cliente queda en 1351 pasadas y 2
+ignoradas; Clippy estricto, formato y `diff --check` pasan. #567 sigue abierta
+por la matriz completa de objetos en Sea/Canal/River, layouts directos y
+pendientes, callbacks, clipping, orden global y framebuffer; #326 permanece
+abierta.

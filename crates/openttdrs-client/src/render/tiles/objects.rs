@@ -5311,8 +5311,9 @@ fn spawn_ship_depot_tile(
     }
 
     // `water_land.h::DrawShipDepotSprite`: WaterTileType::Depot usa dos
-    // teselas. m5 bit 0 = parte norte/sur, bit 1 = eje X/Y. Los offsets y
-    // metadatos vienen de los sprites vanilla 4070..4075 (OpenGFX NFO).
+    // teselas. m5 bit 0 = parte norte/sur, bit 1 = eje X/Y. Los offsets de
+    // secuencia vienen de water_land.h y los anclajes/tamaños de los sprites
+    // vanilla 4070..4075 (OpenGFX NFO).
     let m5 = ctx.tile.map_or(0, |tile| tile.m5);
     let part_south = m5 & 0x01 != 0;
     let axis_y = m5 & 0x02 != 0;
@@ -5321,19 +5322,19 @@ fn spawn_ship_depot_tile(
     // isométrica con la que OpenTTD compone ambas mitades del depósito.
     let (extent_x, extent_y) = if axis_y { (1, 16) } else { (16, 1) };
     let layers: &[(usize, f32, f32, f32, f32, f32, f32)] = match (axis_y, part_south) {
-        // Eje X, norte: 4072 / ship_depot_nw.
-        (false, false) => &[(2, 0.0, 15.0, -61.0, -30.0, 64.0, 47.0)],
-        // Eje X, sur: 4074 (parte trasera) + 4070 (frente SE).
+        // Eje X, norte: 4072 / ship_depot_nw (32x53, -29,-37).
+        (false, false) => &[(2, 0.0, 15.0, -29.0, -37.0, 32.0, 53.0)],
+        // Eje X, sur: 4074 (14x13, -31,2) + 4070 (64x64, -61,-48).
         (false, true) => &[
-            (4, 0.0, 0.0, -31.0, 5.0, 13.0, 12.0),
-            (0, 0.0, 15.0, -61.0, -31.0, 64.0, 48.0),
+            (4, 0.0, 0.0, -31.0, 2.0, 14.0, 13.0),
+            (0, 0.0, 15.0, -61.0, -48.0, 64.0, 64.0),
         ],
-        // Eje Y, norte: 4073 / ship_depot_ne.
-        (true, false) => &[(3, 15.0, 0.0, -1.0, -30.0, 64.0, 47.0)],
-        // Eje Y, sur: 4075 (parte trasera) + 4071 (frente SW).
+        // Eje Y, norte: 4073 / ship_depot_ne (32x53, -1,-36).
+        (true, false) => &[(3, 15.0, 0.0, -1.0, -36.0, 32.0, 53.0)],
+        // Eje Y, sur: 4075 (14x13, 19,3) + 4071 (64x64, -1,-47).
         (true, true) => &[
-            (5, 0.0, 0.0, 20.0, 5.0, 13.0, 12.0),
-            (1, 15.0, 0.0, -1.0, -31.0, 64.0, 48.0),
+            (5, 0.0, 0.0, 19.0, 3.0, 14.0, 13.0),
+            (1, 15.0, 0.0, -1.0, -47.0, 64.0, 64.0),
         ],
     };
 

@@ -3452,6 +3452,50 @@ fn ship_depot_uses_water_and_all_vanilla_two_tile_parts() {
         ],
         "las cuatro variantes conservan los bounds de OpenTTD"
     );
+
+    // Los bounds de TILE_SEQ no describen el rectángulo del PNG. El centro
+    // visual debe conservar los metadatos NFO de cada sprite, especialmente
+    // en las piezas de 32x53 y en las dos fachadas de 64x64.
+    let expected_nfo = [
+        (
+            4070, 2_i32, 1_i32, 0.0_f32, 15.0_f32, -61.0_f32, -48.0_f32, 64.0_f32, 64.0_f32,
+        ),
+        (4071, 2, 2, 15.0, 0.0, -1.0, -47.0, 64.0, 64.0),
+        (4072, 1, 1, 0.0, 15.0, -29.0, -37.0, 32.0, 53.0),
+        (4073, 1, 2, 15.0, 0.0, -1.0, -36.0, 32.0, 53.0),
+        (4074, 2, 1, 0.0, 0.0, -31.0, 2.0, 14.0, 13.0),
+        (4075, 2, 2, 0.0, 0.0, 19.0, 3.0, 14.0, 13.0),
+    ];
+    let mut parent_transforms = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .map(|(parent, transform)| (parent.sprite_id, transform.translation))
+        .collect::<Vec<_>>();
+    parent_transforms.sort_unstable_by_key(|(sprite_id, _)| *sprite_id);
+    for (sprite_id, tx, ty, dx, dy, xrel, yrel, width, height) in expected_nfo {
+        let local = crate::iso::remap_tile_offset(dx, dy, 0.0) * 0.5;
+        let mut expected = crate::iso::overlay_pos(
+            crate::iso::iso(tx, ty) + local,
+            xrel,
+            yrel,
+            width,
+            height,
+            0,
+            0.04,
+            tx,
+            ty,
+        );
+        expected.z = crate::render::viewport_source_depth(expected.z, tx as u32, 4);
+        let actual = parent_transforms
+            .iter()
+            .find_map(|(id, transform)| (*id == sprite_id).then_some(*transform))
+            .expect("sprite de depósito naval");
+        assert_eq!(
+            (actual.x, actual.y),
+            (expected.x, expected.y),
+            "sprite {sprite_id} debe conservar su ancla y tamaño NFO"
+        );
+    }
 }
 
 #[test]

@@ -29,12 +29,17 @@ impl WaterClass {
     }
 }
 
-/// `HasTileWaterClass`: Water / Station / Industry / Object / Forest(trees).
+/// `HasTileWaterClass`: Water / ShipDepot / Station / Industry / Object /
+/// Forest(trees).
 #[must_use]
 pub fn tile_has_water_class(kind: TileKind) -> bool {
     matches!(
         kind,
-        TileKind::Water | TileKind::Station | TileKind::Industry | TileKind::Forest
+        TileKind::Water
+            | TileKind::ShipDepot
+            | TileKind::Station
+            | TileKind::Industry
+            | TileKind::Forest
     )
 }
 
@@ -159,6 +164,28 @@ mod tests {
             WaterClass::River
         );
         assert_eq!(set_water_class_m1(0x9F, WaterClass::Sea) & 0x1F, 0x1F);
+    }
+
+    #[test]
+    fn ship_depot_preserves_original_water_class() {
+        let depot = Tile {
+            height: 0,
+            kind: TileKind::ShipDepot,
+            mapt: 0x60,
+            m5: 0x30,
+            m1: set_water_class_m1(0x11, WaterClass::Canal),
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        };
+
+        assert!(tile_has_water_class(depot.kind));
+        assert_eq!(water_class(depot), Some(WaterClass::Canal));
+        assert!(has_tile_water_ground(depot));
     }
 
     #[test]

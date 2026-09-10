@@ -3414,3 +3414,13 @@ válido, el primer overflow, secuencia vacía y longitudes fuera de rango; las
 corrige la identidad de caché, pero no aporta todavía evidencia raster ni
 completa eje/parte, catenaria directa, trace global, vecinos, clipping o
 framebuffer; #563 y #326 permanecen abiertos.
+
+Actualización #326/#563-ROAD-STOP-Y-AXIS (2026-09-10, `324f1aa9`): la
+regresión ECS de `TileLayout` vial se extiende al eje `RSV_DRIVE_THROUGH_Y`.
+Además de conservar bounds, profundidad, ordinales 4–11 de catenaria y
+parent/child BUILD desde 12, verifica la selección de sprites Y `6070/6042`
+frente a `6071/6043` del eje X. El filtro completo de road stop pasa 4/4
+(Bus X/Y, Truck y RoadWaypoint), junto con formato y Clippy estricto. Esto
+cubre la bifurcación de orientación del productor, pero #563 sigue abierta por
+las partes/callbacks restantes, catenaria directa, trace y compositor global,
+evidencia raster, vecinos, clipping y framebuffer; #326 no se cierra.

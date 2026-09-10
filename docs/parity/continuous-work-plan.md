@@ -3299,3 +3299,12 @@ las 3 rutas de road stop, los 13 casos core, formato y Clippy estricto. Esta
 etapa elimina una colisión de identidad de caché, pero #563 sigue abierta por
 el eje/parte completo, catenaria directa, trace y compositor global, evidencia
 raster, vecinos, clipping y framebuffer; #326 tampoco se cierra.
+
+Actualización #326/#563-ROAD-STOP-Y-AXIS (2026-09-10, `324f1aa9`): el fixture
+de `TileLayout` materializable se parametriza también con
+`RSV_DRIVE_THROUGH_Y`. La regresión comprueba los sprites de catenaria Y
+`6070/6042`, sus bounds/orden global y el mismo vínculo parent/child custom;
+los casos X existentes permanecen intactos. El conjunto focal queda en 4/4
+(Bus X/Y, Truck y RoadWaypoint), con formato y Clippy estricto verdes. #563
+continúa abierta por la matriz completa de partes/callbacks, catenaria directa,
+trace/compositor global, evidencia raster, vecinos, clipping y framebuffer.

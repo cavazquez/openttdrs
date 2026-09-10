@@ -1375,6 +1375,7 @@ contiene un foco vial de waypoint/catenaria para medir raster, así que #326
 permanece abierto por esos productores, clipping, pivotes, children globales y
 framebuffer.
 
+
 Actualización #326-ROAD-STOP-CATENARY-GLOBAL (2026-09-09): las paradas
 Bus/Truck vanilla sin `TileLayout` custom ya respetan el orden nativo
 suelo/overlay → `DrawRoadCatenary` → `DrawRailTileSeq(TO_BUILDINGS)`. Sus
@@ -3465,3 +3466,12 @@ Las regresiones nuevas de vista runtime y de superficie custom inclinada pasan
 1/1 cada una, con formato y Clippy estricto verdes. #565 sigue abierto por la
 matriz completa de superficies/pendientes, anclas, depósitos, clipping y
 framebuffer.
+
+Actualización #326/#567-SHIP-DEPOT-SHARED-EDGE (2026-09-10, `21d4c73a`): la
+regresión de integración cubre ahora las dos partes contiguas de un depósito
+naval sobre Canal (`m5=0x30/0x31`). La tabla de `DrawWaterEdges` conserva diez
+diques exteriores, suprime los dos lados de la unión interna y mantiene las
+tres capas `TILE_SEQ` de las fachadas. Esto confirma una interacción de vecinos
+que no estaba ejercida por el caso aislado; no agrega todavía la matriz completa
+Sea/Canal/River, costa, callbacks, clipping ni framebuffer, por lo que #567 y
+#326 permanecen abiertos.

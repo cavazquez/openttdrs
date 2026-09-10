@@ -3348,3 +3348,12 @@ Las regresiones nuevas de vista runtime y de superficie custom inclinada pasan
 1/1 cada una, con formato y Clippy estricto verdes. #565 sigue abierto por la
 matriz completa de superficies/pendientes, anclas, depósitos, clipping y
 framebuffer.
+
+Actualización #326/#567-SHIP-DEPOT-SHARED-EDGE (2026-09-10, `21d4c73a`): la
+regresión ECS ejerce por primera vez las dos partes contiguas de un depósito
+naval de Canal (`m5=0x30/0x31`). La conectividad compartida deja diez diques
+exteriores, no dibuja el borde interno en ninguno de los dos sentidos y conserva
+las tres capas `TILE_SEQ` de las fachadas. Es una cobertura de vecinos adicional,
+no una declaración de paridad: la matriz Sea/Canal/River, costa, callbacks,
+clipping, orden global y framebuffer sigue pendiente; #567 y #326 continúan
+abiertos.

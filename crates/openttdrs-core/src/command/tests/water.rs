@@ -3,8 +3,8 @@
 use crate::economy::{ship_depot_build_cost, station_build_cost};
 use crate::test_fixtures::SandboxMap;
 use crate::{
-    Command, GameState, StopKind, TileCoord, TileKind, VehicleKind, apply_command,
-    bridge_above_axis_from_mapt,
+    Command, GameState, StopKind, TileCoord, TileKind, VehicleKind, WaterClass, apply_command,
+    bridge_above_axis_from_mapt, set_water_class_m1,
 };
 
 #[test]
@@ -16,10 +16,48 @@ fn place_ship_depot_on_water_with_water_entrance() {
     s.map.set_kind(mouth, TileKind::Water).unwrap();
     let money = s.economy.money;
     apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
-    assert_eq!(s.map.get_kind(depot), Some(TileKind::ShipDepot));
+    let tile = s.map.get(depot).expect("depósito construido");
+    assert_eq!(tile.kind, TileKind::ShipDepot);
+    assert_eq!(tile.mapt, 0x60, "MP_WATER conserva el tipo alto canónico");
+    assert_eq!(tile.m5, 0x30, "WaterTileType::Depot vigente");
     assert_eq!(
         s.economy.money,
         money - ship_depot_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_ship_depot_writes_current_raw_contract_and_active_owner() {
+    let mut s = GameState::new(12, 12);
+    s.ensure_rival_transcargo();
+    let rival = crate::CompanyId(1);
+    assert!(s.set_active_company(rival));
+
+    let depot = TileCoord::new(4, 4);
+    let mouth = TileCoord::new(4, 3); // dir 3 → norte en la grilla del mapa.
+    for coord in [depot, mouth] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    let mut original = s.map.get(depot).expect("agua del depósito");
+    original.mapt = 0x60 | 0x02; // MP_WATER + zona climática persistida.
+    original.m1 = set_water_class_m1(original.m1, WaterClass::Canal);
+    s.map.set_tile(depot, original).unwrap();
+
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 3)).unwrap();
+
+    let tile = s.map.get(depot).expect("depósito construido");
+    assert_eq!(tile.kind, TileKind::ShipDepot);
+    assert_eq!(tile.mapt, 0x62, "se conserva la zona climática de MAPT");
+    assert_eq!(tile.m5, 0x33, "tipo Depot + parte/eje de la orientación");
+    assert_eq!(
+        crate::map::water_class(tile),
+        Some(WaterClass::Canal),
+        "SetTileOwner no debe destruir WaterClass"
+    );
+    assert_eq!(
+        crate::CompanyId::from_tile_m1(tile.m1, s.companies.len()),
+        rival,
+        "el depósito queda a nombre de la compañía activa"
     );
 }
 

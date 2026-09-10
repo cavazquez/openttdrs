@@ -47,13 +47,17 @@ impl CompanyId {
     }
 
     /// Owner de tesela desde byte `m1` (MAPO), acotado a compañías existentes.
+    ///
+    /// `OpenTTD` guarda el propietario en los cinco bits bajos de `m1`. Los
+    /// bits 5..6 pertenecen a `WaterClass` en las teselas de agua, por lo que
+    /// deben ignorarse al resolver ownership de depósitos/infraestructura.
     #[must_use]
     pub fn from_tile_m1(m1: u8, company_count: usize) -> Self {
-        let idx = usize::from(m1);
+        let idx = usize::from(m1 & 0x1F);
         if company_count == 0 || idx >= company_count {
             Self::PLAYER
         } else {
-            Self(m1)
+            Self(u8::try_from(idx).unwrap_or(0))
         }
     }
 }
@@ -1047,5 +1051,21 @@ mod tests {
 
         let colour = tile_owner_colour(&companies, &stations, &map, coord, TileKind::Rail, 3);
         assert_eq!(colour, Some(3)); // fallback
+    }
+
+    #[test]
+    fn tile_owner_m1_ignores_water_class_bits() {
+        let companies = vec![
+            Company::player(CompanyEconomy::default(), 5),
+            Company::rival_transcargo(CompanyEconomy::default(), 12),
+        ];
+        // Owner 1 + WaterClass::Canal (bit 5) es 0x21 en MAPO.
+        assert_eq!(
+            CompanyId::from_tile_m1(
+                crate::map::set_water_class_m1(CompanyId(1).0, crate::map::WaterClass::Canal),
+                companies.len(),
+            ),
+            CompanyId(1)
+        );
     }
 }

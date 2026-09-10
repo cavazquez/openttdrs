@@ -6,7 +6,7 @@ use crate::bridge_spec::{
 use crate::economy::{ship_depot_build_cost, station_build_cost};
 use crate::map::{
     Map, TileCoord, TileKind, WaterClass, inclined_slope_direction, is_tunnel_entrance_slope,
-    make_water_tile, tile_slope_and_z,
+    make_water_tile, set_water_class_m1, tile_slope_and_z, water_class_from_m1,
 };
 use crate::{GameState, Station, StopKind};
 
@@ -67,13 +67,29 @@ pub(in crate::command) fn place_ship_depot_dir(
 ) -> Result<(), CommandError> {
     let dir = dir & 0x03;
     check_ship_depot_placement(&state.map, c, dir)?;
+    let original = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     state
         .map
         .set_kind(c, TileKind::ShipDepot)
         .map_err(|_| CommandError::OutOfBounds)?;
+    // `MakeShipDepot` primero conserva la zona climática de MAPT, cambia el
+    // tipo alto a MP_WATER y guarda WaterTileType::Depot (`0x30`) en m5.
+    // `0x80` era la codificación anterior a SLV_WATER_TILE_TYPE: el modelo
+    // semántico podía seguir mostrando un depósito, pero un save/reload lo
+    // convertía en agua normal.
     state
         .map
-        .set_mapt_m5(c, 0x60, (2 << 6) | dir)
+        .set_mapt_m5(c, 0x60 | (original.mapt & 0x0F), 0x30 | dir)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    // `SetTileOwner` sólo toca los cinco bits bajos de m1. La clase de agua
+    // vive en los bits 5..6 y debe sobrevivir tanto para Canal/River como para
+    // la evaluación de scopes de NewGRF.
+    state
+        .map
+        .set_m1(
+            c,
+            set_water_class_m1(state.active_company.0, water_class_from_m1(original.m1)),
+        )
         .map_err(|_| CommandError::OutOfBounds)?;
     state.economy.money -= ship_depot_build_cost(&state.global_economy);
     Ok(())

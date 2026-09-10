@@ -23,7 +23,7 @@ use crate::render::catenary_newgrf::{
 };
 use crate::render::road_newgrf::{
     NewGrfRoadSpriteCache, newgrf_road_def_for_tile, newgrf_tram_def_for_tile,
-    road_newgrf_view_index,
+    road_newgrf_view_index, specific_sprite_for_tile,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -84,6 +84,11 @@ const SPR_FLAT_WATER_TILE: u32 = 4061;
 const SPR_FLAT_SNOW_DESERT_TILE: u32 = 4550;
 const SPR_SHORE_BASE: u32 = 5936;
 const RAIL_SLOPE_STEEP: u8 = 0x10;
+/// Selectores `RoadTypeSpriteGroup` de `road.h` para suelo y overlays.
+const ROTSG_OVERLAY: u8 = 1;
+const ROTSG_GROUND: u8 = 2;
+const ROAD_OVERLAY_GROUND_LAYER_FRAC: f32 = 0.02;
+const ROAD_OVERLAY_LAYER_FRAC: f32 = 0.025;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RailGroundKind {
@@ -623,6 +628,131 @@ fn road_ground_pass_pos(mut position: Vec3, ctx: &TileRenderContext, layer: f32)
     position
 }
 
+/// Emite una vista `ROTSG_*` manteniendo juntas la textura y su metadata NFO.
+///
+/// Las superficies específicas de roadtypes llegan por `DrawGroundSprite` en
+/// OpenTTD. En plano conservan la posición del sprite decodificado; sobre una
+/// fundación se convierten en hijos del mismo parent que el asfalto vanilla.
+#[allow(clippy::too_many_arguments)]
+fn spawn_road_specific_layer(
+    commands: &mut Commands,
+    map: &Map,
+    map_width: u32,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    tileh: u8,
+    half_h: f32,
+    def: &RoadTypeDef,
+    selector: u8,
+    view_idx: usize,
+    source_tile: Tile,
+    climate: Climate,
+    road_catalog: &[RoadTypeDef],
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    road_sprites: &mut Option<&mut NewGrfRoadSpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+    foundation_child_parent: Option<Entity>,
+    layer: f32,
+    ground_pass: bool,
+) -> bool {
+    let Some((sprite, view)) = specific_sprite_for_tile(
+        def,
+        map,
+        selector,
+        view_idx,
+        ctx.coord,
+        source_tile,
+        climate,
+        road_catalog,
+        newgrf_stack,
+        None,
+        road_sprites,
+        images,
+    ) else {
+        return false;
+    };
+    let position = if tileh == 0 {
+        overlay_pos(
+            ctx.iso_pos,
+            f32::from(view.x_offs),
+            f32::from(view.y_offs),
+            f32::from(view.width),
+            f32::from(view.height),
+            base_z,
+            layer,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        )
+    } else {
+        tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, layer, half_h)
+    };
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        let position = if ground_pass {
+            road_ground_pass_pos(position, ctx, layer)
+        } else {
+            position
+        };
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
+    true
+}
+
+/// `GetRoadGroundSprite` usa césped desnudo cuando el roadtype publica el
+/// grupo `ROTSG_GROUND`; el grupo específico se dibuja después como underlay.
+/// Esta capa también debe seguir a la última foundation cuando la calle está
+/// inclinada.
+#[allow(clippy::too_many_arguments)]
+fn spawn_road_overlay_base_ground(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    tileh: u8,
+    snow_or_desert: bool,
+    base_z: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
+) {
+    let image = if snow_or_desert {
+        assets.snow_desert[0][usize::from(slope_sprite_offset(tileh))].clone()
+    } else {
+        sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes)
+    };
+    let half_h = slope_half_h(tileh);
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_ground_sprite_at(
+            commands,
+            &image,
+            Color::WHITE,
+            ctx,
+            base_z,
+            ROAD_OVERLAY_GROUND_LAYER_FRAC - 0.001,
+            half_h,
+            map_width,
+            parent,
+        );
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            image.sprite(),
+            Transform::from_translation(ground_tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                ROAD_OVERLAY_GROUND_LAYER_FRAC - 0.001,
+                half_h,
+            )),
+        ));
+    }
+}
+
 /// Altura de mundo del `DrawRoadDetail` respecto de la base cruda de la
 /// tesela. Después de una fundación `ti->z` y `ti->tileh` ya son los
 /// efectivos, por lo que ambos componentes son necesarios.
@@ -1019,65 +1149,135 @@ pub(crate) fn spawn_road_tile(
         || climate.uses_snow_ground();
     let paved = roadside.is_some_and(roadside_is_paved) && !snow_or_desert;
 
-    // NewGRF: sustituir el sprite de suelo road por la vista OpenGFX
-    // (`road_flat_sprite_index`, incl. pendientes 11–14).
+    // NewGRF: una vista normal sustituye el sprite de suelo road. Si el tipo
+    // publica `ROTSG_GROUND`, OpenTTD cambia al sistema de underlay/overlay y
+    // la vista normal deja de ser la fuente de la superficie.
     let mut used_newgrf = is_level_crossing;
     let view_idx = road_newgrf_view_index(tileh, rb);
     if !is_level_crossing
         && let Some(tile) = ctx.tile
         && let Some(def) = newgrf_road_def_for_tile(road_catalog, tile)
-        && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
     {
-        let mut a2 = openttdrs_core::action2_eval_ctx_for_road_tile(
-            map,
-            tile,
-            ctx.coord,
-            climate,
-            def.newgrf_type_tables.as_ref(),
-            road_catalog,
-        );
-        a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
-            newgrf_stack,
-            def.newgrf_grfid,
-        ));
-        let view = if def.newgrf_runtime.is_some() {
-            def.newgrf_view_runtime(view_idx, &mut a2)
-        } else {
-            def.newgrf_view(view_idx).cloned()
-        };
-        if let Some(view) = view {
-            let handle = cache.handle_for_resolved_view(def, view_idx, &a2, &view, images);
-            let position = if tileh == 0 {
-                overlay_pos(
-                    ctx.iso_pos,
-                    f32::from(view.x_offs),
-                    f32::from(view.y_offs),
-                    f32::from(view.width),
-                    f32::from(view.height),
+        let uses_overlay = def.has_newgrf_specific_group(ROTSG_GROUND);
+        if uses_overlay && road_sprites.is_some() && images.is_some() {
+            record_road_ground_trace(
+                "road-overlay-base",
+                if snow_or_desert {
+                    SPR_FLAT_SNOW_DESERT_TILE + u32::from(slope_sprite_offset(tileh))
+                } else {
+                    SPR_FLAT_GRASS_TILE + u32::from(slope_sprite_offset(tileh))
+                },
+                road_foundation,
+            );
+            spawn_road_overlay_base_ground(
+                commands,
+                assets,
+                ctx,
+                tileh,
+                snow_or_desert,
+                base_z,
+                mw,
+                foundation_child_parent,
+            );
+            let _ = spawn_road_specific_layer(
+                commands,
+                map,
+                mw,
+                ctx,
+                base_z,
+                tileh,
+                road_half_h,
+                def,
+                ROTSG_GROUND,
+                view_idx,
+                tile,
+                climate,
+                road_catalog,
+                newgrf_stack,
+                &mut road_sprites,
+                &mut images,
+                foundation_child_parent,
+                ROAD_OVERLAY_GROUND_LAYER_FRAC,
+                true,
+            );
+            if def.has_newgrf_specific_group(ROTSG_OVERLAY) {
+                let _ = spawn_road_specific_layer(
+                    commands,
+                    map,
+                    mw,
+                    ctx,
                     base_z,
-                    0.02,
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                )
-            } else {
-                tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, road_half_h)
-            };
-            let sprite = Sprite {
-                image: handle,
-                color: Color::WHITE,
-                ..default()
-            };
-            if let Some(parent) = foundation_child_parent {
-                spawn_foundation_child_sprite_at(commands, sprite, ctx, position, mw, parent);
-            } else {
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    sprite,
-                    Transform::from_translation(road_ground_pass_pos(position, ctx, 0.02)),
-                ));
+                    tileh,
+                    road_half_h,
+                    def,
+                    ROTSG_OVERLAY,
+                    view_idx,
+                    tile,
+                    climate,
+                    road_catalog,
+                    newgrf_stack,
+                    &mut road_sprites,
+                    &mut images,
+                    foundation_child_parent,
+                    ROAD_OVERLAY_LAYER_FRAC,
+                    true,
+                );
             }
             used_newgrf = true;
+        } else if !uses_overlay
+            && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
+        {
+            let mut a2 = openttdrs_core::action2_eval_ctx_for_road_tile(
+                map,
+                tile,
+                ctx.coord,
+                climate,
+                def.newgrf_type_tables.as_ref(),
+                road_catalog,
+            );
+            a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+                newgrf_stack,
+                def.newgrf_grfid,
+            ));
+            let view = if def.newgrf_runtime.is_some() {
+                def.newgrf_view_runtime(view_idx, &mut a2)
+            } else {
+                def.newgrf_view(view_idx).cloned()
+            };
+            if let Some(view) = view {
+                let handle = cache.handle_for_resolved_view(def, view_idx, &a2, &view, images);
+                let position = if tileh == 0 {
+                    overlay_pos(
+                        ctx.iso_pos,
+                        f32::from(view.x_offs),
+                        f32::from(view.y_offs),
+                        f32::from(view.width),
+                        f32::from(view.height),
+                        base_z,
+                        0.02,
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                    )
+                } else {
+                    tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, road_half_h)
+                };
+                let sprite = Sprite {
+                    image: handle,
+                    color: Color::WHITE,
+                    ..default()
+                };
+                if let Some(parent) = foundation_child_parent {
+                    spawn_foundation_child_sprite_at(commands, sprite, ctx, position, mw, parent);
+                } else {
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        sprite,
+                        Transform::from_translation(road_ground_pass_pos(position, ctx, 0.02)),
+                    ));
+                }
+                used_newgrf = true;
+            }
         }
     }
 

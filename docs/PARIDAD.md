@@ -3242,3 +3242,14 @@ foundation en una tesela inclinada y resuelve sus grupos Action3 de catenaria
 traseros y un frontal, con los parents lógicos `6070/6042` para esa máscara;
 las 50 pruebas de catenaria y Clippy pasan. #565 sigue abierto por la matriz
 completa de superficies/pendientes, anclas, clipping, depósitos y framebuffer.
+
+Actualización #326/#567-CANAL-FEATURE-SPRITES (2026-09-10, `9b68c2b1`): el
+renderer consume ahora las vistas `CanalFeatureDef.newgrf_views` de Action1/3
+para `CF_RIVER_SLOPE` y `CF_DIKES`, respetando el offset de la vista plana
+cuando `CFF_HAS_FLAT_SPRITE` está activo. La ruta se usa tanto en agua del
+mundo como en `DrawWaterDepot`; cada textura conserva ancho, alto y anclas NFO
+y dispone de un namespace de caché separado de Action5 `0x08 Canals`. Si la
+vista no existe, el fallback sigue siendo Action5 y luego OpenGFX vanilla. La
+regresión focal cubre materialización y no colisión de handles; `CF_WATERSLOPE`,
+`CF_RIVER_EDGE`, callbacks/offsets restantes y la matriz de framebuffer aún
+quedan pendientes, por lo que #567 y #326 permanecen abiertos.

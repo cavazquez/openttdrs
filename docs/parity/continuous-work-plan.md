@@ -3129,3 +3129,14 @@ los grupos Action3 de catenaria trasero `5` y frontal `4`, incluyendo tres
 recortes traseros y uno frontal. Pasan las 50 pruebas de catenaria y Clippy;
 #565 permanece abierto por superficies/pendientes, anclas, clipping,
 depósitos y framebuffer fuera de este caso representativo.
+
+Actualización #326/#567-CANAL-FEATURE-SPRITES (2026-09-10, `9b68c2b1`): el
+renderer consume ahora las vistas `CanalFeatureDef.newgrf_views` de Action1/3
+para `CF_RIVER_SLOPE` y `CF_DIKES`, respetando el offset de la vista plana
+cuando `CFF_HAS_FLAT_SPRITE` está activo. La ruta se usa tanto en agua del
+mundo como en `DrawWaterDepot`; cada textura conserva ancho, alto y anclas NFO
+y dispone de un namespace de caché separado de Action5 `0x08 Canals`. Si la
+vista no existe, el fallback sigue siendo Action5 y luego OpenGFX vanilla. La
+regresión focal cubre materialización y no colisión de handles; `CF_WATERSLOPE`,
+`CF_RIVER_EDGE`, callbacks/offsets restantes y la matriz de framebuffer aún
+quedan pendientes, por lo que #567 y #326 permanecen abiertos.

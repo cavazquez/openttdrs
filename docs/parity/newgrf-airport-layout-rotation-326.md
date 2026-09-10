@@ -1,6 +1,6 @@
 # Selector, layout y rotación geométrica de aeropuertos NewGRF (#326 / #328)
 
-Actualizado el 2026-09-07.
+Actualizado el 2026-09-10.
 
 ## Divergencia corregida
 
@@ -67,10 +67,19 @@ el comando no depende de la selección actual. En cliente,
 `airport_command_keeps_the_explicit_newgrf_layout` fijan la elección y el
 transporte del índice al comando.
 
+La regresión cliente
+`rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation`
+añade el tramo que faltaba en el renderer: con `airport_layout=1` y
+`airport_rotation=2`, el grafo Action2 consulta `AirportScope 0x40` y luego
+`AirportTileScope 0x43` para la posición directa `(dx=1,dy=0)`. El ground
+seleccionado no se transpone, el BUILD conserva su parent `TILE_SEQ` y el
+ground se adjunta al cimiento Action5 cuando corresponde.
+
 ## Límites que continúan abiertos
 
-Esto resuelve la selección y geometría Action0 de construcción, no la
-presentación completa: permanecen foundations de compositor, rotación runtime
-de sprites/children, paletas, sonidos, callbacks de nombres/texto de layout y
-la FTA propia de aeropuertos NewGRF. Por eso #326, #328 y #329 siguen abiertos;
-esta nota no afirma paridad raster ni interoperabilidad SAV global.
+Esto resuelve la selección y geometría Action0 de construcción y cubre un
+camino runtime representativo de layout/posición, no la presentación completa:
+permanecen la matriz exhaustiva de rotaciones/foundations de compositor,
+paletas, sonidos, callbacks de nombres/texto de layout y la FTA propia de
+aeropuertos NewGRF. Por eso #326, #328 y #329 siguen abiertos; esta nota no
+afirma paridad raster ni interoperabilidad SAV global.

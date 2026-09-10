@@ -3208,3 +3208,14 @@ python3 scripts/compare_airport_fta_traces.py \
   crates/openttdrs-core/tests/fixtures/parity/helidepot_fta_cycle_15_3_openttd.jsonl \
   /tmp/helidepot-openttdrs.jsonl
 ```
+
+Actualización #326/#564-AIRPORT-ROTATION-FOUNDATION (2026-09-10, `1c5cc49a`):
+la regresión cliente `rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation`
+verifica un aeropuerto NewGRF con `airport_layout=1` y rotación E (`2`). El
+renderer conserva `AirportScope 0x40`, calcula la posición directa de
+`AirportTileScope 0x43` sin transponer `(x,y)`, selecciona el ground runtime,
+mantiene el BUILD como parent `TILE_SEQ` y adjunta el ground al cimiento custom
+Action5 `0x06` (slot 58) cuando la foundation nivelada está activa. Las 28
+pruebas aeroportuarias y Clippy pasan. Esto cubre un camino representativo,
+no la matriz completa de foundations/rotaciones, paletas, sonidos ni el
+framebuffer; #326, #329 y #564 permanecen abiertos.

@@ -1,6 +1,6 @@
 # AirportTile CB150: fundación dinámica (#447)
 
-Actualizado el 2026-09-07.
+Actualizado el 2026-09-10.
 
 ## Divergencia auditada
 
@@ -40,9 +40,17 @@ esta fixture sintética de `AirportTile` con `TileLayout`, por lo que esa
 observación descarta una regresión global de zoom, pero no sustituye las tres
 regresiones ECS ni afirma paridad raster del aeropuerto.
 
+La regresión cliente
+`rotated_newgrf_airport_layout_selects_relative_runtime_and_action5_foundation`
+verifica además una foundation `Action5 0x06` custom en un aeropuerto inclinado:
+el bloque `Leveled` sin paredes resuelve el slot 58, el ground custom queda como
+child de ese parent y las entradas BUILD mantienen un parent independiente. La
+misma fixture selecciona el layout y la posición E/O mediante `0x40` y `0x43`,
+por lo que evita probar foundation y rotación como caminos desconectados.
+
 ## Alcance que permanece abierto
 
-CB150 ya tiene el contrato booleano probado en el renderer, pero siguen fuera
-de este corte las foundations de compositor (`Action5` y rotaciones), las
-rotaciones runtime de AirportTile, los sonidos y los demás scopes avanzados.
-Esos puntos continúan en #329/#326.
+CB150 ya tiene el contrato booleano probado en el renderer y este corte cubre
+un caso combinado de foundation Action5 y selección runtime E/O. Sigue fuera
+la matriz completa de bloques/medias teselas y rotaciones de compositor, además
+de los sonidos y demás scopes avanzados. Esos puntos continúan en #329/#326.

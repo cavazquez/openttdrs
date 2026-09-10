@@ -3101,3 +3101,11 @@ coordenadas, velocidades, filtros de datos, orden, selección, sprites y
 comandos permanecen intactos.
 La ventana de grupos dedicada, acciones masivas, criterios avanzados y
 catálogos upstream restantes siguen abiertos en #331.
+
+Actualización #326/#564-AIRPORT-ROTATION-FOUNDATION (2026-09-10, `1c5cc49a`):
+se añadió una regresión de integración para un aeropuerto NewGRF E/O inclinado.
+La fixture exige el selector persistido `0x40`, la posición directa `0x43`, el
+ground runtime correcto, el BUILD independiente y la foundation custom Action5
+slot 58 como parent del ground. Pasan las 28 pruebas aeroportuarias y Clippy;
+la matriz completa de foundations/rotaciones, paletas, sonidos y framebuffer
+continúa pendiente, por lo que #326, #329 y #564 no se cierran.

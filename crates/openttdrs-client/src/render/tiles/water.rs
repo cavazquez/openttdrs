@@ -1491,28 +1491,35 @@ mod tests {
     }
 
     #[test]
-    fn canal_context_uses_persisted_climate_terrain() {
+    fn canal_context_uses_persisted_water_climate_terrain() {
         let mut map = Map::new_flat(1, 1, 12);
         let coord = TileCoord::new(0, 0);
         let mut tile = map.get(coord).expect("fixture tile");
-        tile.mapt = 2;
+        tile.mapt = 0x60 | 2; // MP_WATER + TROPICZONE_RAINFOREST.
+        tile.kind = TileKind::Water;
         map.set_tile(coord, tile).expect("set tropic zone");
 
-        let tropical = canal_action2_context(
-            map.get(coord),
-            0,
-            Climate::SubTropical,
-            openttdrs_core::DEF_SNOW_LINE_HEIGHT,
-        );
-        assert_eq!(tropical.vars.get(&0x81), Some(&2));
+        for kind in [TileKind::Water, TileKind::ShipDepot] {
+            tile.kind = kind;
+            tile.height = 12;
+            map.set_tile(coord, tile).expect("set water semantic kind");
 
-        let arctic = canal_action2_context(map.get(coord), 0, Climate::SubArctic, 10);
-        assert_eq!(arctic.vars.get(&0x81), Some(&4));
+            let tropical = canal_action2_context(
+                map.get(coord),
+                0,
+                Climate::SubTropical,
+                openttdrs_core::DEF_SNOW_LINE_HEIGHT,
+            );
+            assert_eq!(tropical.vars.get(&0x81), Some(&2), "{kind:?}");
 
-        tile.height = 10;
-        map.set_tile(coord, tile).expect("set below snow line");
-        let below_snow = canal_action2_context(map.get(coord), 0, Climate::SubArctic, 10);
-        assert_eq!(below_snow.vars.get(&0x81), Some(&0));
+            let arctic = canal_action2_context(map.get(coord), 0, Climate::SubArctic, 10);
+            assert_eq!(arctic.vars.get(&0x81), Some(&4), "{kind:?}");
+
+            tile.height = 10;
+            map.set_tile(coord, tile).expect("set below snow line");
+            let below_snow = canal_action2_context(map.get(coord), 0, Climate::SubArctic, 10);
+            assert_eq!(below_snow.vars.get(&0x81), Some(&0), "{kind:?}");
+        }
     }
 
     #[test]

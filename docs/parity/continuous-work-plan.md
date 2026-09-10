@@ -3464,3 +3464,13 @@ y `diff --check` verdes. Es cobertura adicional de la subetapa de
 clipping/culling; #566 sigue abierta por pivotes, clipping por familias y
 framebuffer, y #567 por Sea/Canal/River, vecinos, callbacks, orden global y
 framebuffer.
+
+Actualización #326/#567-SHIP-DEPOT-BOTH-AXES (2026-09-10, `0b808ace`): la
+regresión de `DrawWaterEdges` para depósitos navales ejerce ahora las dos
+orientaciones de `GetOtherShipDepotTile`: `AXIS_X` suprime los lados internos
+0/2 y `AXIS_Y` los lados internos 1/3, conservando los ocho diques exteriores
+por pareja y los conteos de ambos casos. Las 9 pruebas focales de depósito
+naval pasan, la suite cliente queda en 1348 pasadas y 2 ignoradas, Clippy
+estricto, formato y `diff --check` verdes. Es una ampliación del oráculo de
+vecinos; #567 sigue abierta por la matriz completa Sea/Canal/River, callbacks,
+clipping, orden global y framebuffer, y #326 por la composición global.

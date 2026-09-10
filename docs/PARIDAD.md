@@ -1223,6 +1223,17 @@ profundidades. No se cierra #326: la composición completa de superficies,
 catenaria y layouts de tramtypes custom, además de clipping, pivotes y
 framebuffer, sigue pendiente.
 
+Actualización #326-SHIP-DEPOT-NFO (2026-09-10): la auditoría de la captura
+naval confirmó un gap de raster que no estaba separado en el inventario. El
+modelo ahora conserva `WaterClass` también para `TileKind::ShipDepot`, y las
+seis piezas 4070..4075 se posicionan con sus tamaños/anclas NFO reales
+(`4070/4071` 64×64, `4072/4073` 32×53 y `4074/4075` 14×13), mientras los
+prismas `TILE_SEQ` de `water_land.h` mantienen los cuatro casos de eje/parte.
+La regresión cubre las seis fachadas, sus bounds globales y sus transforms.
+El branch todavía emite agua plana 4061 para todas las clases y no materializa
+los dikes de canal ni los sprites de río; por eso este avance no declara
+paridad ni cierra #326. La división quedó registrada en [#563](https://github.com/cavazquez/openttdrs/issues/563)–[#567](https://github.com/cavazquez/openttdrs/issues/567), y el depósito naval continúa abierto en #567.
+
 Actualización #326-TUNNEL-CATENARY-GLOBAL (2026-09-09):
 `DrawRailCatenaryOnTunnel` ya conserva su `SpriteCombine` en runtime. En una
 boca eléctrica el cable de entrada `5656`/`5658` es el parent global con el

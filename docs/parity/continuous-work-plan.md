@@ -965,6 +965,16 @@ respectivamente `6035`/`6036` y `6099`/`6100`. Esto cubre el fallback, no la
 composición entera de tramtypes custom ni clipping/pivotes/framebuffer; #326
 permanece abierto.
 
+Actualización #326-SHIP-DEPOT-NFO (2026-09-10): la comparación con
+`water_land.h` detectó un faltante específico del depósito naval. `ShipDepot`
+ya conserva la `WaterClass` original en el modelo y las fachadas 4070..4075
+usan los anclajes/tamaños NFO del baseset, además de conservar las secuencias
+`TILE_SEQ` de eje/parte y sus bounds globales. El test ECS fija las seis capas
+y los cuatro `m5` válidos. Todavía falta que el ground equivalente a
+`DrawWaterClassGround` emita dikes de canal y pendientes/bordes de río; la
+implementación actual usa 4061 como fallback visual. Se crearon los subissues
+[#563](https://github.com/cavazquez/openttdrs/issues/563)–[#567](https://github.com/cavazquez/openttdrs/issues/567) para separar #326, sin cerrarlo.
+
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. El sorter incorpora `TileLayoutSpriteGroup` de AirportTile; parents globales para PPP/cables/capas `TILE_SEQ_LINE` rail vanilla, waypoint ferroviario OpenGFX2, depósitos ferroviarios/road NewGRF con `RTSG_DEPOT`, paradas Bus/Truck y road waypoints vanilla o con `TileLayout` NewGRF materializable, depósitos viales —incluidos los baselines tram `DEPOT_WITH_TRACK`/`DEPOT_NO_TRACK` y el `ROTSG_OVERLAY` de default gfx—, cable de entrada de túnel eléctrico y catenaria road/tram de calles normales. El vidrio rail, los toldos del waypoint, ground/reserva de depósito inclinado y los postes en pendiente conservan su relación child con el parent correspondiente. `VisualCaptureFreeze` evita falsos positivos animados y el culling usa el rectángulo real de Bevy, pero ninguno equivale a paridad raster. Kale aporta orden estructural para el depósito y no contiene un foco raster reproducible de waypoint/catenaria de estación, así que esas migraciones siguen sin métrica visual propia. Foundations/rotaciones aeroportuarias, layouts incompletos de road stop/waypoint, otros layouts ferroviarios custom, la composición completa de superficies/catenaria de tramtypes custom, sprite-stack, clipping, pivotes y framebuffer siguen sin equivalencia global; el contrato global completo de children queda separado en [#561](https://github.com/cavazquez/openttdrs/issues/561). | Delimitar y reproducir el fallback de `TileLayout` incompleto en road stops/waypoints antes de globalizarlo; repetir seis zooms si se altera viewport, culling u overview. |

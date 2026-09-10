@@ -522,6 +522,88 @@ fn canal_water_feature_flat_sprite_keeps_nfo_anchor_before_dikes() {
 }
 
 #[test]
+fn lock_water_feature_middle_uses_shifted_water_slope_slot() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    make_water_tile(&mut map, coord, WaterClass::Canal).expect("lock water tile");
+    map.set_mapt_m5(coord, 0x60, 0x20).expect("middle NE lock");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let views: Vec<_> = (0..5)
+        .map(|slot| DecodedSprite {
+            width: 10,
+            height: 6,
+            x_offs: -3,
+            y_offs: -5,
+            rgba: vec![slot as u8; 10 * 6 * 4],
+            mask: Vec::new(),
+        })
+        .collect();
+    let selected = views[2].clone();
+    let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+    features[usize::from(openttdrs_core::CF_WATERSLOPE)].flags =
+        openttdrs_core::CFF_HAS_FLAT_SPRITE;
+    features[usize::from(openttdrs_core::CF_WATERSLOPE)].newgrf_views = views;
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                let mut batches = MapSpriteBatches::default();
+                push_water_tile_with_action5(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    false,
+                    &mut batches,
+                    &[],
+                    None,
+                    Some(&mut images),
+                    &features,
+                    &[],
+                    Some(&mut action5_sprites),
+                );
+                assert_eq!(batches.water.len(), 1);
+                assert!(!batches.water[0].1.is_palette_animated());
+                flush_map_batches(&mut commands, batches);
+            },
+        )
+        .expect("lock CF_WATERSLOPE spawn");
+
+    let rendered: Vec<_> = world
+        .query::<(&WaterTile, &Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(marker, sprite, transform)| (*marker, sprite.clone(), *transform))
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let (_, _, transform) = rendered
+        .iter()
+        .find(|(_, sprite, _)| {
+            images
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                == Some(selected.rgba.as_slice())
+        })
+        .expect("middle lock selects the NE CF_WATERSLOPE view after flat");
+    let mut expected = overlay_pos(crate::iso::iso(1, 1), -3.0, -5.0, 10.0, 6.0, 0, 0.02, 1, 1);
+    expected.z = ground_draw_z(1, 1, 0.02);
+    assert_eq!(*transform, Transform::from_translation(expected));
+    assert_eq!(images.len(), 1, "la esclusa materializa sólo su ground");
+}
+
+#[test]
 fn canal_water_tile_draws_dikes_after_generic_water_ground() {
     let assets = boot_assets_app();
     let dike_assets = assets.canal_dikes.clone();

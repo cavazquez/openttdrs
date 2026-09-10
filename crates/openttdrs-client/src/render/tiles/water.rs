@@ -32,6 +32,8 @@ const CANAL_FEATURE_CACHE_TYPE_BASE: u8 = 0x80;
 /// `SPR_CANALS_BASE` de `table/sprites.h`: las cuatro pendientes de río
 /// vanilla ocupan los slots 0..3 de la hoja Action5 de canales.
 pub(crate) const SPR_RIVER_SLOPE_BASE: u32 = 5328;
+/// Primer sprite de esclusa relativo a `SPR_CANALS_BASE`.
+const SPR_LOCK_WATER_BASE: u32 = SPR_RIVER_SLOPE_BASE + 4;
 /// `SPR_SHORE_BASE` resuelto por Action5 canals en OpenGFX/OpenGFX2.
 const SPR_SHORE_BASE: u32 = 5936;
 
@@ -224,6 +226,64 @@ pub(crate) fn canal_feature_surface(
         ctx.ty_i32(),
     );
     Some((sprite, Transform::from_translation(position)))
+}
+
+/// Resuelve el ground que `DrawWaterLock` obtiene de `CF_WATERSLOPE`.
+///
+/// El layout vanilla usa cuatro índices distintos para la tesela central de
+/// la esclusa (`NE, SE, SW, NW`) y `SPR_FLAT_WATER_TILE` para las partes
+/// inferior/superior. Cuando el feature declara `CFF_HAS_FLAT_SPRITE`, el
+/// sprite plano ocupa el slot 0 y desplaza los cuatro índices centrales una
+/// posición; sin esa bandera las partes no centrales siguen usando el agua
+/// vanilla, exactamente como en `water_cmd.cpp`.
+fn lock_water_ground_sprite(
+    map: &Map,
+    ctx: &TileRenderContext,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
+) -> Option<(Sprite, Transform, usize)> {
+    let tile = ctx.tile?;
+    if tile.kind != TileKind::Water || (tile.m5 >> 4) & 0x0F != 2 {
+        return None;
+    }
+    let feature = openttdrs_core::canal_feature_def(canal_features, openttdrs_core::CF_WATERSLOPE)?;
+    let has_flat_sprite = feature.flags & openttdrs_core::CFF_HAS_FLAT_SPRITE != 0;
+    let part = (tile.m5 >> 2) & 0x03;
+    let offset = match part {
+        0 => {
+            // `_lock_display_middle_*_seq` uses 1, 0, 2, 3 for NE, SE, SW,
+            // NW respectively. A flat custom sprite is prepended at zero.
+            let middle_offset = [1usize, 0, 2, 3][usize::from(tile.m5 & 0x03)];
+            middle_offset + usize::from(has_flat_sprite)
+        }
+        1 | 2 if has_flat_sprite => 0,
+        1 | 2 => return None,
+        _ => return None,
+    };
+    let mut action2 = canal_action2_context_for_tile(map, ctx);
+    let (sprite, decoded) = canal_feature_sprite_with_context(
+        canal_features,
+        openttdrs_core::CF_WATERSLOPE,
+        offset,
+        &mut action5_sprites,
+        &mut images,
+        &mut action2,
+    )?;
+    let mut position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(decoded.x_offs),
+        f32::from(decoded.y_offs),
+        f32::from(decoded.width),
+        f32::from(decoded.height),
+        ctx.info.base_z,
+        0.02,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    // Lock water is a DrawGroundSprite, not a sortable BUILD layer.
+    position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.02);
+    Some((sprite, Transform::from_translation(position), offset))
 }
 
 /// Índice de `SPR_CANALS_BASE + offset` que selecciona `DrawRiverWater` cuando
@@ -856,25 +916,46 @@ pub(crate) fn push_water_tile_with_action5(
         // Agua libre (Clear) o esclusa (m5 subtype Lock = 2).
         let m5 = ctx.tile.map(|t| t.m5).unwrap_or(0);
         if (m5 >> 4) & 0x0F == 2 {
-            let axis = usize::from(m5 & 1).min(1);
-            let level = openttdrs_core::lock_sprite_level(map, ctx.coord).min(2);
-            let half_h = if ctx.info.tileh == 0 {
-                TILE_HALF_H
+            if let Some((sprite, transform, offset)) = lock_water_ground_sprite(
+                map,
+                ctx,
+                canal_features,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            ) {
+                WorldDrawTrace::record_sprite(
+                    "water-lock-ground",
+                    "ground",
+                    SPR_LOCK_WATER_BASE + offset as u32,
+                    false,
+                );
+                batches.water.push((
+                    ctx.map_tile_chunk(),
+                    crate::render::WaterTile::STATIC,
+                    sprite,
+                    transform,
+                ));
             } else {
-                slope_half_h(ctx.info.tileh)
-            };
-            batches.water.push((
-                ctx.map_tile_chunk(),
-                crate::render::WaterTile::STATIC,
-                assets.water_lock[axis][level].sprite(),
-                Transform::from_translation(tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    ctx.info.base_z,
-                    0.02,
-                    half_h,
-                )),
-            ));
+                let axis = usize::from(m5 & 1).min(1);
+                let level = openttdrs_core::lock_sprite_level(map, ctx.coord).min(2);
+                let half_h = if ctx.info.tileh == 0 {
+                    TILE_HALF_H
+                } else {
+                    slope_half_h(ctx.info.tileh)
+                };
+                batches.water.push((
+                    ctx.map_tile_chunk(),
+                    crate::render::WaterTile::STATIC,
+                    assets.water_lock[axis][level].sprite(),
+                    Transform::from_translation(tile_pos_half(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        ctx.info.base_z,
+                        0.02,
+                        half_h,
+                    )),
+                ));
+            }
         } else if ctx.tile.and_then(water_class) == Some(WaterClass::River) {
             let river_slope = push_river_slope_sprite(
                 &mut batches.water,
@@ -978,7 +1059,8 @@ mod tests {
     use super::{
         SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, action5_canal_sprite, canal_action2_context,
         canal_dike_slots, canal_feature_sprite, canal_feature_sprite_with_context,
-        river_edge_slots, river_edge_sprite_offset, river_slope_sprite_index, shore_sprite_id,
+        lock_water_ground_sprite, river_edge_slots, river_edge_sprite_offset,
+        river_slope_sprite_index, shore_sprite_id,
     };
     use bevy::prelude::{Assets, Image};
     use openttdrs_core::map::{
@@ -1041,6 +1123,84 @@ mod tests {
         map.set_tile(coord, tile).expect("set lower lock");
         let lower = canal_action2_context(map.get(coord), 0, Climate::Temperate, 12);
         assert_eq!(lower.vars.get(&0x80), Some(&12));
+    }
+
+    #[test]
+    fn lock_ground_consumes_water_slope_slots_and_legacy_fallback() {
+        let mut map = Map::new_flat(1, 1, 12);
+        let coord = TileCoord::new(0, 0);
+        let mut tile = map.get(coord).expect("fixture lock tile");
+        tile.kind = TileKind::Water;
+        tile.m5 = 0x20; // middle, NE sequence.
+        map.set_tile(coord, tile).expect("set middle lock");
+        let grid = crate::render::RenderGrid::from_map(&map, 1, 1);
+
+        let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+        features[usize::from(openttdrs_core::CF_WATERSLOPE)].flags =
+            openttdrs_core::CFF_HAS_FLAT_SPRITE;
+        features[usize::from(openttdrs_core::CF_WATERSLOPE)].newgrf_views = (0..5)
+            .map(|slot| DecodedSprite {
+                width: 1,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: vec![slot as u8, 0, 0, 255],
+                mask: Vec::new(),
+            })
+            .collect();
+
+        let mut cache = crate::render::NewGrfAction5SpriteCache::default();
+        let mut images = Assets::<Image>::default();
+
+        let ctx = crate::render::TileRenderContext::new(&map, &grid, 0, 0);
+        let (sprite, transform, offset) =
+            lock_water_ground_sprite(&map, &ctx, &features, Some(&mut cache), Some(&mut images))
+                .expect("middle lock consumes CF_WATERSLOPE");
+        assert_eq!(offset, 2, "flat slot precedes the NE middle slot");
+        assert_eq!(
+            images
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref()),
+            Some(&[2, 0, 0, 255][..])
+        );
+        assert_eq!(
+            transform.translation.z,
+            crate::iso::ground_draw_z(0, 0, 0.02)
+        );
+
+        tile.m5 = 0x24; // lower, NE sequence.
+        map.set_tile(coord, tile).expect("set lower lock");
+        let ctx = crate::render::TileRenderContext::new(&map, &grid, 0, 0);
+        let (sprite, _, offset) =
+            lock_water_ground_sprite(&map, &ctx, &features, Some(&mut cache), Some(&mut images))
+                .expect("lower lock consumes the flat CF_WATERSLOPE slot");
+        assert_eq!(offset, 0);
+        assert_eq!(
+            images
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref()),
+            Some(&[0, 0, 0, 255][..])
+        );
+
+        features[usize::from(openttdrs_core::CF_WATERSLOPE)].flags = 0;
+        features[usize::from(openttdrs_core::CF_WATERSLOPE)]
+            .newgrf_views
+            .truncate(4);
+        tile.m5 = 0x20;
+        map.set_tile(coord, tile).expect("restore middle lock");
+        let ctx = crate::render::TileRenderContext::new(&map, &grid, 0, 0);
+        let (_, _, offset) =
+            lock_water_ground_sprite(&map, &ctx, &features, Some(&mut cache), Some(&mut images))
+                .expect("legacy middle lock consumes the four slope slots");
+        assert_eq!(offset, 1);
+
+        tile.m5 = 0x24;
+        map.set_tile(coord, tile).expect("set legacy lower lock");
+        let ctx = crate::render::TileRenderContext::new(&map, &grid, 0, 0);
+        assert!(
+            lock_water_ground_sprite(&map, &ctx, &features, Some(&mut cache), Some(&mut images),)
+                .is_none()
+        );
     }
 
     #[test]

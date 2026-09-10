@@ -4509,6 +4509,120 @@ fn river_ship_depot_uses_static_slope_ground_before_depot_layers() {
 }
 
 #[test]
+fn river_ship_depot_consumes_flat_feature_ground_in_ground_pass() {
+    let assets = boot_assets_app();
+    let depot = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    let mut tile = tile_template();
+    tile.kind = TileKind::ShipDepot;
+    tile.mapt = 0x60;
+    tile.m5 = 0x30;
+    tile.m1 = set_water_class_m1(tile.m1, WaterClass::River);
+    map.set_tile(depot, tile).expect("river ship depot");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let surface = DecodedSprite {
+        width: 10,
+        height: 6,
+        x_offs: -3,
+        y_offs: -5,
+        rgba: vec![0x66; 10 * 6 * 4],
+        mask: Vec::new(),
+    };
+    let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+    features[usize::from(openttdrs_core::CF_RIVER_SLOPE)].flags =
+        openttdrs_core::CFF_HAS_FLAT_SPRITE;
+    features[usize::from(openttdrs_core::CF_RIVER_SLOPE)].newgrf_views = vec![surface.clone()];
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types_and_tramway_action5(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &[],
+                    None,
+                    &[],
+                    &features,
+                    &[],
+                    Some(&mut action5_sprites),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                    TramwayDepotAction5::default(),
+                );
+            },
+        )
+        .expect("river ship depot feature spawn");
+
+    let water: Vec<_> = world
+        .query::<(&WaterTile, &Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(marker, sprite, transform)| (*marker, sprite.clone(), *transform))
+        .collect();
+    assert_eq!(water.len(), 1, "River plano no agrega bordes ni diques");
+    let images = world.resource::<Assets<Image>>();
+    let (_, _, surface_transform) = water
+        .iter()
+        .find(|(_, sprite, _)| {
+            images
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                == Some(surface.rgba.as_slice())
+        })
+        .expect("ground CF_RIVER_SLOPE plano del depósito");
+    let mut expected_surface = overlay_pos(
+        crate::iso::iso(1, 1),
+        -3.0,
+        -5.0,
+        10.0,
+        6.0,
+        0,
+        FLAT_WATER_LAYER_FRAC,
+        1,
+        1,
+    );
+    expected_surface.z = ground_draw_z(1, 1, 0.0);
+    assert_eq!(
+        *surface_transform,
+        Transform::from_translation(expected_surface),
+        "el ground River custom conserva el pase y el ancla NFO"
+    );
+    assert_eq!(images.len(), 1, "sólo se materializa el ground custom");
+}
+
+#[test]
 fn forest_combined_layers_attach_to_the_global_sort_parent() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);

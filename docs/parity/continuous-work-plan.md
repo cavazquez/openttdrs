@@ -3403,3 +3403,16 @@ también pasan las regresiones relacionadas de carretera, catenaria, pendientes,
 waypoint y depósito naval. #565 continúa abierta por la matriz completa de
 superficies, paradas/depósitos, pendientes, anclas, clipping y framebuffer;
 #326 permanece abierta por la matriz global.
+
+Actualización #326/#563/#565-ROAD-STOP-OVERLAY-GROUP (2026-09-10,
+`697bc00d`): las paradas viales pasantes ya ejercen el contrato de
+`DrawRoadOverlays`: un roadtype con `ROTSG_GROUND` aporta `GROUND` y el
+`OVERLAY` opcional, el tramtype sólo aporta el underlay cuando no existe una
+carretera válida, y en los demás casos se conserva el riel vanilla de Action5.
+La spec de `RoadStops` respeta `ROADSTOP_DRAW_MODE_OVERLAY`; las capas custom
+conservan metadata NFO, orden `GROUND → OVERLAY` y parent de foundation en
+pendiente. Las regresiones ECS cubren roadtype custom y tranvía puro, junto con
+la suite completa de 1341 tests del cliente, Clippy estricto, formato y
+`diff --check`. #563 y #565 siguen abiertas por bahías (`ROTSG_ROADSTOP`),
+matriz de partes/callbacks, anclas completas, clipping y framebuffer; #326
+permanece abierta por la matriz global.

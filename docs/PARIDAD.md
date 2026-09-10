@@ -3706,3 +3706,13 @@ pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
 #567 sigue abierta por variables/scopes y callbacks restantes,
 costas/túneles/puentes, vecinos de toda la matriz, clipping, orden global y
 framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-OBJECT-WATER-CLASS-MATRIX (2026-09-10, `63599f24`):
+la regresión ECS recorre un objeto NewGRF con `ObjectFlag::DrawWater` sobre
+Sea, Canal y River. Cada clase conserva una superficie acuática; sólo Canal
+emite los ocho diques exteriores y el ground rojo del layout no vuelve a
+materializarse. El bloque focal de objetos de agua queda en 2 pruebas y la
+suite cliente en 1358 pasadas y 2 ignoradas, con Clippy estricto, formato y
+`diff --check` verdes. #567 sigue abierta por layouts directos y pendientes,
+callbacks, vecinos, clipping, orden global y framebuffer; #326 permanece
+abierta.

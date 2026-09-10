@@ -3195,3 +3195,12 @@ el límite de nieve; las 58 pruebas focales de agua y Clippy estricto pasan.
 Quedan pendientes las demás variables/scopes Action2, nieve variable de
 NewGRF, combinaciones completas del depósito, clipping, orden global y
 framebuffer, por lo que #567 y #326 permanecen abiertos.
+
+Actualización #326/#567-CANAL-LOCK-HEIGHT (2026-09-10, `9c6111bc`): el
+resolver de agua replica ahora el ajuste de `CanalScopeResolver::GetVariable`
+para `LockPart::Upper`: `var 0x80` usa `tile_z - 1` sólo en esa parte de una
+esclusa; depósitos navales y las partes Middle/Lower conservan su altura
+original. La regresión cubre Upper y Lower, junto con las 59 pruebas focales
+de agua y Clippy estricto. Aún quedan callbacks/variables Action2 restantes,
+la matriz completa del depósito naval, clipping, orden global y framebuffer;
+#567 y #326 permanecen abiertos.

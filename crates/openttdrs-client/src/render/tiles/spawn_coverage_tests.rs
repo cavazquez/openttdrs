@@ -953,6 +953,103 @@ fn road_depot_vanilla_layers_join_global_sort() {
 }
 
 #[test]
+fn pure_vanilla_tram_depot_relocates_the_full_build_sequence() {
+    let assets = boot_assets_app();
+    let expected_track = assets
+        .rail
+        .get(&6035)
+        .expect("SPR_TRAMWAY_DEPOT_WITH_TRACK + 0")
+        .clone();
+    let expected_building = assets
+        .rail
+        .get(&6036)
+        .expect("SPR_TRAMWAY_DEPOT_WITH_TRACK + 1")
+        .clone();
+    let mut map = Map::new_flat(4, 4, 0);
+    let coord = TileCoord::new(1, 1);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::RoadDepot,
+            mapt: 0x20,
+            // Dirección SE: `_road_depot_SE` contiene 1408/1409. Un depósito
+            // creado como tram conserva `INVALID_ROADTYPE` en m4/m3hi y el
+            // tipo tram vanilla en m8[6..12].
+            m5: 1,
+            m3hi: 0x3F,
+            m8: 0x0040,
+            ..tile_template()
+        },
+    )
+    .expect("tram depot SE");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_transport_object_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("tram depot SE spawn");
+
+    let mut layers: Vec<_> = world
+        .query::<(&ViewportSortableParent, &Sprite, &Transform)>()
+        .iter(&world)
+        .filter(|(parent, _, _)| [6035, 6036].contains(&parent.sprite_id))
+        .collect();
+    layers.sort_by_key(|(parent, _, _)| parent.insertion_key);
+    assert_eq!(
+        layers
+            .iter()
+            .map(|(parent, _, _)| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                6035,
+                ParentSpriteBounds::new(16, 16, 0, 16, 31, 19),
+                viewport_insertion_key(1, 1, 1),
+            ),
+            (
+                6036,
+                ParentSpriteBounds::new(31, 16, 0, 31, 31, 19),
+                viewport_insertion_key(1, 1, 2),
+            ),
+        ],
+        "la relocalización mantiene las cajas TILE_SEQ de la tabla vial"
+    );
+    assert!(expected_track.matches(layers[0].1));
+    assert!(expected_building.matches(layers[1].1));
+    assert_eq!(layers[0].2.translation.xy(), Vec2::new(1.0, -47.5));
+    assert_eq!(layers[1].2.translation.xy(), Vec2::new(3.0, -30.0));
+    assert!(
+        layers
+            .iter()
+            .all(|(parent, _, transform)| parent.source_depth == transform.translation.z),
+        "los sprites relocalizados conservan la profundidad fuente global"
+    );
+}
+
+#[test]
 fn drive_through_tram_stop_draws_vanilla_catenary() {
     let assets = boot_assets_app();
     let expected_back = assets

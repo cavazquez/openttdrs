@@ -1143,7 +1143,7 @@ de depósitos viales (`1408`–`1413`) pasan del orden local a parents reales de
 compositor global. Cada `TILE_SEQ_LINE` conserva su prisma `sx×sy×20`, ancla
 NFO y profundidad fuente; el ordinal 1 deja el 0 a la foundation en una
 pendiente. El suelo sigue siendo child de esa foundation y los overlays
-custom/tranvía no se incorporan a este corte. En Kale `(189,117)`, la traza
+custom y las variantes tram `DEPOT_NO_TRACK` no se incorporan a este corte. En Kale `(189,117)`, la traza
 añade dos parents `1408` y dos `1409`, no elimina ninguna tupla candidata y la
 intersección parent exacta normalizada con OpenTTD pasa de 1.385 a 1.389; no
 queda una tupla única nativa de esas fachadas sin contraparte candidata. La
@@ -1154,6 +1154,19 @@ matriz de píxeles distintos no empeora: `0,25×` 234.056→234.056, `0,5×`
 declaración de paridad ni de mejora general del framebuffer. #326 sigue
 abierto por catenaria/waypoints viales, producers restantes, composición por
 segmentos, clipping, pivotes y framebuffer.
+
+Actualización #326-ROAD-DEPOT-TRAM-BASELINE (2026-09-09): un depósito de
+tranvía vanilla puro —`m4()`/`m3hi = INVALID_ROADTYPE (63)` y
+`m8()[6..12] = ROADTYPE_TRAM`— ya relocaliza toda la secuencia BUILD de
+`_road_depot` al bloque Action5 `SPR_TRAMWAY_DEPOT_WITH_TRACK`. Así, la boca y
+fachada SE pasan de `1408`/`1409` a `6035`/`6036` (y análogamente las otras
+direcciones), conservando los prismas `TILE_SEQ_LINE` y la profundidad global,
+pero sustituyendo tamaño/ancla por los NFO de los sprites `tramway_049+`.
+La regresión ECS fija IDs, assets, bounds, ordinales y centros de ambas capas;
+no dibuja un `SPR_TRAMWAY_OVERLAY` separado porque el set relocalizado ya
+contiene la vía. `ROTSG_DEPOT`/`ROTSG_OVERLAY` custom y Action5
+`DEPOT_NO_TRACK` siguen pendientes. No hay nuevo foco Kale ni métrica raster,
+y #326 permanece abierto.
 
 Actualización #326-TUNNEL-CATENARY-GLOBAL (2026-09-09):
 `DrawRailCatenaryOnTunnel` ya conserva su `SpriteCombine` en runtime. En una

@@ -5382,6 +5382,52 @@ fn road_depot_parent_sprites(
 /// 1 y conserva libre el de foundation cuando la tesela está inclinada.
 const ROAD_DEPOT_BUILDING_PARENT_ORDINAL: u8 = 1;
 
+/// `SPR_ROAD_DEPOT`, primera pieza de la secuencia `_road_depot`.
+///
+/// Las otras piezas de la tabla no son contiguas visualmente en pantalla, pero
+/// sí lo son en el bloque de sprites: OpenTTD expresa el set de tranvía como
+/// una relocalización respecto de este ID, no como un overlay independiente.
+const ROAD_DEPOT_SEQUENCE_SPRITE_BASE: u32 = 1408;
+/// `SPR_TRAMWAY_DEPOT_WITH_TRACK` del Action5 vanilla `0x0B`.
+const TRAM_DEPOT_WITH_TRACK_SPRITE_BASE: u32 = crate::sprites::TRAMWAY_SPRITE_BASE + 49;
+/// `INVALID_ROADTYPE` en el mapa de OpenTTD; un depósito de tranvía puro lo
+/// conserva en `m4()` y escribe el tipo real en `m8()[6..12]`.
+const INVALID_ROAD_TYPE_ID: u8 = 63;
+
+/// Devuelve la capa equivalente del set vanilla de depósito de tranvía con
+/// vía. `DrawTile_Road` obtiene este resultado al sumar
+/// `SPR_TRAMWAY_DEPOT_WITH_TRACK - SPR_ROAD_DEPOT` a cada `TILE_SEQ_LINE`.
+///
+/// La caja de ordenación pertenece a la secuencia original, pero la ancla y
+/// el tamaño sí pertenecen al sprite relocalizado de `openttd.grf`; conservar
+/// ambos contratos evita que la fachada se desplace aunque el ID sea correcto.
+fn road_depot_tram_with_track_layer(layer: RoadDepotLayerGfx) -> Option<RoadDepotLayerGfx> {
+    let offset = layer
+        .sprite_id
+        .checked_sub(ROAD_DEPOT_SEQUENCE_SPRITE_BASE)?;
+    let sprite_id = TRAM_DEPOT_WITH_TRACK_SPRITE_BASE.checked_add(offset)?;
+    let gfx = crate::sprites::tramway_sprite_gfx(sprite_id)?;
+    Some(RoadDepotLayerGfx {
+        sprite_id,
+        w: gfx.width,
+        h: gfx.height,
+        x_offs: gfx.x_offs,
+        y_offs: gfx.y_offs,
+        ..layer
+    })
+}
+
+/// Caso baseline de `MakeRoadDepot(..., ROADTYPE_TRAM)`: no hay carretera y
+/// el Action5 vanilla ya provee el set de depósito con rieles. Los tramtypes
+/// NewGRF y los reemplazos `DEPOT_NO_TRACK` conservan su propio paso porque
+/// dependen de `ROTSG_DEPOT`/Action5 cargados por la partida.
+fn road_depot_uses_vanilla_tram_track_sequence(ctx: &TileRenderContext) -> bool {
+    ctx.tile.is_some_and(|tile| {
+        road_type_from_tile(&tile).as_u8() == INVALID_ROAD_TYPE_ID
+            && tram_road_type_from_tile(&tile) == Some(openttdrs_core::RoadType::TRAM)
+    })
+}
+
 /// Emite una capa BUILD vanilla de depósito vial como parent global, usando
 /// tanto la geometría TILE_SEQ como el ancla NFO que ya consume el renderer.
 fn spawn_road_depot_building_parent(
@@ -5458,15 +5504,24 @@ fn spawn_road_depot_tile(
     }
     // En OpenTTD, el depósito vial vanilla dibuja la losa `SPR_AIRPORT_APRON`
     // y las capas BUILD; no añade un `road_flat` normal. Ese overlay sólo
-    // aparece para ciertos tipos custom/tranvías y no estaba resuelto aquí.
-    // Dibujarlo siempre agregaba una vía que el oráculo no emite.
+    // aparece para ciertos tipos custom. Un depósito vanilla de tranvía no
+    // agrega ese overlay: relocaliza toda la secuencia BUILD al bloque Action5
+    // `SPR_TRAMWAY_DEPOT_WITH_TRACK`, que ya contiene la vía.
     let foundation_z_delta = (i32::from(base_z) - i32::from(ctx.info.base_z)) * 8;
     let build_layers = road_depot_build_layers(dir);
+    let use_vanilla_tram_track_sequence = road_depot_uses_vanilla_tram_track_sequence(ctx);
     for (layer_i, spec) in build_layers.iter().enumerate() {
         if buildings_hidden() {
             break;
         }
-        let image = assets.road_depot_builds[dir].get(layer_i);
+        let (spec, image) = if use_vanilla_tram_track_sequence {
+            road_depot_tram_with_track_layer(*spec).map_or_else(
+                || (*spec, assets.road_depot_builds[dir].get(layer_i)),
+                |tram_spec| (tram_spec, assets.rail.get(&tram_spec.sprite_id)),
+            )
+        } else {
+            (*spec, assets.road_depot_builds[dir].get(layer_i))
+        };
         WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
             "road-depot-building",
             "sortable",
@@ -5494,7 +5549,7 @@ fn spawn_road_depot_tile(
             base_z,
             map_width,
             layer_i,
-            spec,
+            &spec,
             tint_building_sprite(sprite_from_atlas_or_company_white_colour(
                 company,
                 owner_colour,

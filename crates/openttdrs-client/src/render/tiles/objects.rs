@@ -2693,7 +2693,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     u8::from(waypoint_bits == 0x05),
                     dims.0,
                     foundation_child_parent,
-                    ROAD_VANILLA_BUILDING_PARENT_ORDINAL,
+                    waypoint_building_parent_ordinal,
                 );
             }
         }

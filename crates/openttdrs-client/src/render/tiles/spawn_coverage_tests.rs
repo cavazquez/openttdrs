@@ -2947,19 +2947,41 @@ fn assert_static_newgrf_road_stop_layout_with_orientation(
         .collect();
 
     if incomplete_layout {
+        let expected_vanilla_building_ids = if matches!(stop_kind, StopKind::RoadWaypoint) {
+            vec![6143, 6144]
+        } else {
+            vec![5980, 5981]
+        };
         let vanilla_building_ids: Vec<_> = world
             .query::<&ViewportSortableParent>()
             .iter(&world)
             .filter_map(|parent| {
-                [5980, 5981]
+                expected_vanilla_building_ids
                     .contains(&parent.sprite_id)
                     .then_some(parent.sprite_id)
             })
             .collect();
         assert_eq!(
-            vanilla_building_ids,
-            vec![5980, 5981],
+            vanilla_building_ids, expected_vanilla_building_ids,
             "un TileLayout incompleto debe usar las capas BUILD vanilla completas"
+        );
+        let mut vanilla_building_rows: Vec<_> = world
+            .query::<&ViewportSortableParent>()
+            .iter(&world)
+            .filter(|parent| expected_vanilla_building_ids.contains(&parent.sprite_id))
+            .map(|parent| (parent.sprite_id, parent.insertion_key))
+            .collect();
+        vanilla_building_rows.sort_by_key(|(_, insertion_key)| *insertion_key);
+        assert_eq!(
+            vanilla_building_rows
+                .iter()
+                .map(|(_, insertion_key)| *insertion_key)
+                .collect::<Vec<_>>(),
+            vec![
+                viewport_insertion_key(3, 3, 2),
+                viewport_insertion_key(3, 3, 3)
+            ],
+            "el fallback vanilla debe conservar los ordinales locales de BUILD"
         );
         let custom_image_count = {
             let images = world.resource::<Assets<Image>>();
@@ -2987,7 +3009,12 @@ fn assert_static_newgrf_road_stop_layout_with_orientation(
         let vanilla_ground_count = {
             let vanilla_ground = {
                 let assets = &world.resource::<TsAssets>().0;
-                assets.road_paved[crate::sprites::road_flat_sprite_index(0, 0x0A)].clone()
+                let flat_idx = crate::sprites::road_flat_sprite_index(0, 0x0A);
+                if matches!(stop_kind, StopKind::RoadWaypoint) {
+                    assets.road_flat[flat_idx].clone()
+                } else {
+                    assets.road_paved[flat_idx].clone()
+                }
             };
             world
                 .query::<&Sprite>()
@@ -3179,6 +3206,17 @@ fn incomplete_newgrf_road_stop_layout_falls_back_atomically() {
         StopKind::BusStop,
         3,
         openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        false,
+        true,
+    );
+}
+
+#[test]
+fn incomplete_newgrf_road_waypoint_layout_falls_back_with_vanilla_order() {
+    assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
+        StopKind::RoadWaypoint,
+        openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT,
+        openttdrs_core::ROADSTOP_DRAW_MODE_WAYP_GROUND,
         false,
         true,
     );

@@ -1259,6 +1259,20 @@ La cobertura queda probada con el caso aislado de ocho piezas y con los
 depósitos; #326 y #567 siguen abiertos sólo por los callbacks River/Canal
 custom de NewGRF, la composición global y el framebuffer.
 
+Actualización #326/#567-CANAL-ACTION5-GROUND (2026-09-10, `bdc72551`): las
+rutas reales de spawn del mundo ya reciben el estado runtime
+`canal_action5_newgrf_sprites`. Los slots 0..3 de `0x08 Canals` reemplazan las
+cuatro pendientes de Río y los slots 52..63 reemplazan los doce diques, tanto
+en teselas Canal como en el ground previo de `ShipDepot`. El
+`NewGrfAction5SpriteCache` materializa la textura RGBA sin perder
+`width/height/x_offs/y_offs` NFO; cuando falta cache, imagen o sprite la
+representación vanilla queda intacta. Las regresiones cubren un dique de
+depósito, una pendiente fluvial, el cache de ambos rangos y el fallback de
+agua; la suite focalizada de agua pasa 50 tests y Clippy estricto queda verde.
+Esto cierra esta subbrecha de reemplazos Action5, pero no #326 ni #567:
+siguen pendientes `CF_RIVER_EDGE`/callbacks y sprites River/Canal custom, la
+traza completa con bounds/paleta y la comparación de framebuffer.
+
 Actualización #326-TUNNEL-CATENARY-GLOBAL (2026-09-09):
 `DrawRailCatenaryOnTunnel` ya conserva su `SpriteCombine` en runtime. En una
 boca eléctrica el cable de entrada `5656`/`5658` es el parent global con el

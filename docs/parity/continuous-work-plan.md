@@ -1012,6 +1012,18 @@ La cobertura queda probada con el caso aislado de ocho piezas y con los
 depósitos; #326 y #567 siguen abiertos sólo por los callbacks River/Canal
 custom de NewGRF, la composición global y el framebuffer.
 
+Actualización #326/#567-CANAL-ACTION5-GROUND (2026-09-10, `bdc72551`): las
+rutas de spawn del mundo reciben ahora el estado runtime de `0x08 Canals`.
+Los slots 0..3 se consumen para las pendientes de Río y 52..63 para los
+diques, compartiendo `NewGrfAction5SpriteCache` entre teselas Canal y el
+ground de `ShipDepot`. La textura custom conserva el tamaño y ancla NFO del
+sprite decodificado; sin entrada resoluble se mantiene el fallback vanilla.
+La cobertura ECS añade una pendiente de Río y un dique de depósito custom,
+además del test directo del cache; `cargo test -p openttdrs-client water`
+queda en 50/50 y el lint estricto pasa. La subbrecha Action5 queda cubierta,
+pero #326/#567 siguen abiertos por `CF_RIVER_EDGE`, callbacks/sprites River y
+Canal restantes, traza global con bounds/paleta y framebuffer.
+
 | Issue | Situación real al dejar este corte | Próxima brecha acotada |
 |---|---|---|
 | [#326](https://github.com/cavazquez/openttdrs/issues/326) | La composición raster global sigue abierta. El sorter incorpora `TileLayoutSpriteGroup` de AirportTile; parents globales para PPP/cables/capas `TILE_SEQ_LINE` rail vanilla, waypoint ferroviario OpenGFX2, depósitos ferroviarios/road NewGRF con `RTSG_DEPOT`, paradas Bus/Truck y road waypoints vanilla o con `TileLayout` NewGRF materializable, depósitos viales —incluidos los baselines tram `DEPOT_WITH_TRACK`/`DEPOT_NO_TRACK` y el `ROTSG_OVERLAY` de default gfx—, cable de entrada de túnel eléctrico y catenaria road/tram de calles normales. El vidrio rail, los toldos del waypoint, ground/reserva de depósito inclinado y los postes en pendiente conservan su relación child con el parent correspondiente. `VisualCaptureFreeze` evita falsos positivos animados y el culling usa el rectángulo real de Bevy, pero ninguno equivale a paridad raster. Kale aporta orden estructural para el depósito y no contiene un foco raster reproducible de waypoint/catenaria de estación, así que esas migraciones siguen sin métrica visual propia. El fallback atómico de `TileLayout` incompleto en road stops/waypoints ya tiene reproducción ECS: descarta ground/BUILD custom parciales y conserva asfalto, BUILD vanilla y catenaria directa; no se globaliza esa ruta todavía. Foundations/rotaciones aeroportuarias, otros layouts ferroviarios custom, la composición completa de superficies/catenaria de tramtypes custom, sprite-stack, clipping, pivotes y framebuffer siguen sin equivalencia global; el contrato global completo de children queda separado en [#561](https://github.com/cavazquez/openttdrs/issues/561). | Reconciliar la catenaria directa y el fallback de #563 con el compositor global y obtener un foco raster/oráculo de road stop/waypoint; repetir seis zooms si se altera viewport, culling u overview. |

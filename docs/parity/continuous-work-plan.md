@@ -3608,3 +3608,13 @@ focal de objetos de agua queda en 3 pruebas y la suite cliente en 1359
 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
 #567 sigue abierta por layouts complejos, callbacks/scopes, vecinos, clipping,
 orden global y framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-OBJECT-WATER-CANAL-CALLBACK (2026-09-10, `f3cfca8e`):
+la regresión ECS conecta `CBID_CANALS_SPRITE_OFFSET` a un objeto NewGRF sobre
+Canal y verifica el delta en `CF_WATERSLOPE` y `CF_DIKES`. La superficie usa
+el slot seleccionado por callback, los ocho diques conservan sus slots, y el
+ground Action1 rojo del objeto no reemplaza `DrawWaterClassGround`. El bloque
+focal de objetos de agua queda en 4 pruebas y la suite cliente en 1360
+pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
+#567 sigue abierta por callbacks/scopes adicionales, layouts complejos,
+vecinos, clipping, orden global y framebuffer; #326 permanece abierta.

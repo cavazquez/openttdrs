@@ -5775,6 +5775,126 @@ fn river_ship_depot_uses_all_four_static_slope_sprites() {
 }
 
 #[test]
+fn river_ship_depot_consumes_the_slope_specific_river_edge_block() {
+    let assets = boot_assets_app();
+    let depot = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    let mut tile = tile_template();
+    tile.kind = TileKind::ShipDepot;
+    tile.mapt = 0x60;
+    tile.m5 = 0x30;
+    tile.m1 = set_water_class_m1(tile.m1, WaterClass::River);
+    map.set_tile(depot, tile).expect("river ship depot");
+    map.set_height(TileCoord::new(1, 1), 1)
+        .expect("north height");
+    map.set_height(TileCoord::new(1, 2), 1)
+        .expect("east height");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+
+    let marked_sprite = |marker: u8, width: u16, height: u16| DecodedSprite {
+        width,
+        height,
+        x_offs: -2,
+        y_offs: -3,
+        rgba: vec![marker; usize::from(width) * usize::from(height) * 4],
+        mask: Vec::new(),
+    };
+    let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+    features[usize::from(openttdrs_core::CF_RIVER_SLOPE)].newgrf_views = (0..4)
+        .map(|slot| marked_sprite(0x60 + slot, 5, 4))
+        .collect();
+    // SLOPE_NE uses the second 12-sprite edge block: offsets 24..31.
+    features[usize::from(openttdrs_core::CF_RIVER_EDGE)].newgrf_views = (0..36)
+        .map(|slot| marked_sprite(0x80 + slot, 3, 2))
+        .collect();
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types_and_tramway_action5(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    0,
+                    &[],
+                    None,
+                    &[],
+                    &features,
+                    &[],
+                    Some(&mut action5_sprites),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                    TramwayDepotAction5::default(),
+                );
+            },
+        )
+        .expect("river ship depot edge block spawn");
+
+    let handles: Vec<_> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .filter(|sprite| sprite.texture_atlas.is_none())
+        .map(|sprite| sprite.image.clone())
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let markers: Vec<_> = handles
+        .iter()
+        .filter_map(|handle| {
+            images
+                .get(handle)
+                .and_then(|image| image.data.as_deref())
+                .and_then(|data| data.first().copied())
+        })
+        .collect();
+    assert_eq!(markers.len(), 9, "ground River y ocho bordes custom");
+    assert_eq!(markers.iter().filter(|&&marker| marker == 0x61).count(), 1);
+    for marker in 0x98..=0x9F {
+        assert_eq!(
+            markers.iter().filter(|&&value| value == marker).count(),
+            1,
+            "el borde River usa el slot inclinado {marker:#04x}"
+        );
+    }
+    assert_eq!(
+        world.query::<&MapVisualLayer>().iter(&world).count(),
+        10,
+        "el bloque de bordes no pierde la estructura del depósito"
+    );
+}
+
+#[test]
 fn river_ship_depot_consumes_flat_feature_ground_in_ground_pass() {
     let assets = boot_assets_app();
     let depot = TileCoord::new(1, 1);

@@ -3266,3 +3266,14 @@ reportando el mismo ID lógico que su slot vanilla. Las rutas de agua y
 depósito naval siguen pasando 62 y 7 pruebas respectivamente, junto con
 Clippy estricto. La exportación sobre un SAV real, clipping y comparación de
 framebuffer siguen pendientes; #567 y #326 permanecen abiertos.
+
+Actualización #326/#567-SHIP-DEPOT-TRACE-OFFSET-SEPARATION (2026-09-10,
+`85adbb1a`): la traza del depósito naval ya no duplica el origen `dx/dy` de
+`TILE_SEQ` en `offset`. Igual que `DrawCommonTileSeq` de OpenTTD, el origen
+queda expresado una sola vez en `bounds.ox/oy`; `offset` permanece reservado
+para un corrimiento de pantalla explícito. En la región real de Kale
+`138,7..140,10`, la comparación pasa 22/22 selecciones, 10/10 geometrías
+explícitas, 3/3 paletas y 22/22 órdenes; los 7 tests de depósito y Clippy
+estricto también pasan. Esto corrige la evidencia focal de posición y orden,
+pero no completa Sea/Canal/River, las cuatro combinaciones de eje/parte, los
+vecinos, clipping ni framebuffer; #567 y #326 permanecen abiertos.

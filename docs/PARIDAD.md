@@ -3843,3 +3843,12 @@ underlay y ausencia de ambos sprites equivocados; la suite cliente queda en
 1369 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check`
 verdes. #563, #565 y #326 permanecen abiertas por pendientes completas,
 callbacks, vecinos, clipping, orden global y framebuffer.
+
+Actualización #326/#567-WATERED-TREE-EDGE (2026-09-10, `799b2f82`):
+`IsWateredTile` ya conserva el `default` de OpenTTD para `MP_TREES`: una
+tesela de bosque con `WaterClass` válida no suprime el lado ni la esquina del
+`DrawWaterEdges` vecino. La regresión ejerce Sea/Canal/River junto a un
+depósito Canal y verifica que el dique exterior permanezca visible. La suite
+cliente queda en 1370 pasadas y 2 ignoradas, con formato y Clippy estricto
+verdes; #567 y #326 siguen abiertas por costa, túneles/puentes, callbacks y
+scopes restantes, clipping, orden global y framebuffer.

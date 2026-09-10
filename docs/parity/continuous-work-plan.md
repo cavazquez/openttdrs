@@ -3277,3 +3277,14 @@ explícitas, 3/3 paletas y 22/22 órdenes; los 7 tests de depósito y Clippy
 estricto también pasan. Esto corrige la evidencia focal de posición y orden,
 pero no completa Sea/Canal/River, las cuatro combinaciones de eje/parte, los
 vecinos, clipping ni framebuffer; #567 y #326 permanecen abiertos.
+
+Actualización #326/#563-ROAD-STOP-DODRAW-EMPTY (2026-09-10, `08fd2d93`): la
+resolución de `TileLayout` conserva la regla de `DrawCommonTileSeq` que salta
+los children de un parent con sprite cero, incluido `DODRAW=0`, hasta el
+siguiente parent. Un layout custom completo cuya secuencia BUILD queda vacía
+se considera igualmente consumido: no reintroduce postes/edificios vanilla ni
+crea children huérfanos; el ground `DODRAW=0` sigue suprimiendo sólo su capa.
+Las regresiones cubren 13 casos de `TileLayout` en core y 3 rutas de parada o
+waypoint en cliente; Clippy estricto pasa. El fallback de layouts no
+materializables, el eje completo, catenaria directa, comparación raster y
+framebuffer siguen pendientes, por lo que #563 y #326 permanecen abiertos.

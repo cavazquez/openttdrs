@@ -1,6 +1,8 @@
 //! Clase de agua OpenTTD (`WaterClass` en `water_map.h`: bits 5–6 de `m1`).
 
-use super::{Map, Tile, TileCoord, TileKind, inclined_slope_direction, tile_slope_and_z};
+use super::{
+    Map, Tile, TileCoord, TileKind, inclined_slope_direction, is_map_object_tile, tile_slope_and_z,
+};
 
 /// Clase de agua (`WaterClass` en OpenTTD).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -29,8 +31,12 @@ impl WaterClass {
     }
 }
 
-/// `HasTileWaterClass`: Water / ShipDepot / Station / Industry / Object /
-/// Forest(trees).
+/// `HasTileWaterClass` para los [`TileKind`] que modelan agua o conservan una
+/// clase de agua en `m1`.
+///
+/// Las teselas `MP_OBJECT` se identifican por `MAPT`, no por `TileKind`; por
+/// eso [`water_class`] las incluye aunque el modelo semántico las conserve
+/// como `TileKind::Unknown(10)`.
 #[must_use]
 pub fn tile_has_water_class(kind: TileKind) -> bool {
     matches!(
@@ -57,7 +63,7 @@ pub fn set_water_class_m1(m1: u8, wc: WaterClass) -> u8 {
 
 #[must_use]
 pub fn water_class(tile: Tile) -> Option<WaterClass> {
-    if !tile_has_water_class(tile.kind) {
+    if !tile_has_water_class(tile.kind) && !is_map_object_tile(tile.mapt) {
         return None;
     }
     Some(water_class_from_m1(tile.m1))
@@ -84,9 +90,7 @@ pub fn is_coast_tile(tile: Tile) -> bool {
 /// conservan el significado de agua bajo la tesela.
 #[must_use]
 pub fn has_tile_water_ground(tile: Tile) -> bool {
-    tile_has_water_class(tile.kind)
-        && water_class(tile).is_some_and(|class| class != WaterClass::Invalid)
-        && !is_coast_tile(tile)
+    water_class(tile).is_some_and(|class| class != WaterClass::Invalid) && !is_coast_tile(tile)
 }
 
 #[must_use]
@@ -186,6 +190,35 @@ mod tests {
         assert!(tile_has_water_class(depot.kind));
         assert_eq!(water_class(depot), Some(WaterClass::Canal));
         assert!(has_tile_water_ground(depot));
+    }
+
+    #[test]
+    fn map_object_water_class_comes_from_m1() {
+        let object = Tile {
+            height: 0,
+            kind: TileKind::Unknown(10),
+            mapt: crate::map::MP_OBJECT_MAPT,
+            m5: 0,
+            m1: set_water_class_m1(0, WaterClass::Canal),
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        };
+
+        assert!(!tile_has_water_class(object.kind));
+        assert_eq!(water_class(object), Some(WaterClass::Canal));
+        assert!(has_tile_water_ground(object));
+
+        let invalid = Tile {
+            m1: set_water_class_m1(object.m1, WaterClass::Invalid),
+            ..object
+        };
+        assert_eq!(water_class(invalid), Some(WaterClass::Invalid));
+        assert!(!has_tile_water_ground(invalid));
     }
 
     #[test]

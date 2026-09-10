@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 use openttdrs_core::DecodedSprite;
 use openttdrs_core::map::{
-    WaterClass, has_tile_water_ground, industry_tiles_mergeable, tile_slope_and_z, water_class,
+    WaterClass, has_tile_water_ground, industry_tiles_mergeable, is_map_object_tile,
+    tile_slope_and_z, water_class,
 };
 use openttdrs_core::newgrf_sprites::Action2EvalCtx;
 use openttdrs_core::prelude::*;
@@ -624,6 +625,13 @@ fn is_watered_tile(map: &Map, coord: TileCoord, from: WateredFrom) -> bool {
         // `MP_VOID` es agua a efectos de los bordes del mapa.
         return true;
     };
+
+    // `IsWateredTile(MP_OBJECT)` delega en `IsTileOnWater`. El tipo semántico
+    // local de un objeto puede ser `Unknown(10)`, así que la clase válida se
+    // debe leer de MAPT/M1 antes de entrar al match de TileKind.
+    if is_map_object_tile(tile.mapt) {
+        return water_class(tile).is_some_and(|class| class != WaterClass::Invalid);
+    }
 
     match tile.kind {
         TileKind::Water => match (tile.m5 >> 4) & 0x0F {
@@ -1388,7 +1396,8 @@ mod tests {
     };
     use bevy::prelude::{Assets, Image};
     use openttdrs_core::map::{
-        Map, Tile, TileCoord, TileKind, WaterClass, make_water_tile, set_water_class_m1,
+        MP_OBJECT_MAPT, Map, Tile, TileCoord, TileKind, WaterClass, make_water_tile,
+        set_water_class_m1,
     };
     use openttdrs_core::newgrf_sprites::{
         Action2EvalCtx, Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
@@ -1762,6 +1771,30 @@ mod tests {
         let slots = canal_dike_slots(&map, center);
         assert_eq!(&slots[..8], &[true; 8]);
         assert_eq!(&slots[8..], &[false; 4]);
+    }
+
+    #[test]
+    fn object_water_class_suppresses_canal_border_like_openttd() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let center = TileCoord::new(1, 1);
+        let neighbour = TileCoord::new(0, 1);
+        canal_depot(&mut map, center);
+
+        let mut object = map.get(neighbour).expect("object neighbour");
+        object.kind = TileKind::Unknown(10);
+        object.mapt = MP_OBJECT_MAPT;
+        for class in [WaterClass::Sea, WaterClass::Canal, WaterClass::River] {
+            object.m1 = set_water_class_m1(object.m1, class);
+            map.set_tile(neighbour, object).expect("set water object");
+            assert!(
+                !canal_dike_slots(&map, center)[0],
+                "valid object water class {class:?} keeps the shared side internal"
+            );
+        }
+
+        object.m1 = set_water_class_m1(object.m1, WaterClass::Invalid);
+        map.set_tile(neighbour, object).expect("set dry object");
+        assert!(canal_dike_slots(&map, center)[0]);
     }
 
     #[test]

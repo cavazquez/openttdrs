@@ -1712,7 +1712,7 @@ mod tests {
 
         assert_eq!(
             ctx.parameterized_vars.get(&(0x62, 0x01)),
-            Some(&0x0A00_0100)
+            Some(&0x0A00_2100)
         );
         assert_eq!(ctx.parameterized_vars.get(&(0x63, 0x01)), Some(&7));
     }
@@ -1817,7 +1817,7 @@ mod tests {
         assert_eq!(ctx.parameterized_vars.get(&(0x61, 0x0F)), Some(&0x12));
         assert_eq!(
             ctx.parameterized_vars.get(&(0x62, 0x0F)),
-            Some(&0x0A00_0100)
+            Some(&0x0A00_2100)
         );
         assert_eq!(ctx.parameterized_vars.get(&(0x63, 0x0F)), Some(&9));
         assert_eq!(ctx.parameterized_vars.get(&(0x64, 5)), Some(&0x0001_FFFF));

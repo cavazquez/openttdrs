@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use openttdrs_core::DecodedSprite;
-use openttdrs_core::map::{WaterClass, has_tile_water_ground, tile_slope_and_z, water_class};
+use openttdrs_core::map::{
+    WaterClass, has_tile_water_ground, industry_tiles_mergeable, tile_slope_and_z, water_class,
+};
 use openttdrs_core::newgrf_sprites::Action2EvalCtx;
 use openttdrs_core::prelude::*;
 use openttdrs_core::station::{
@@ -540,7 +542,7 @@ pub(crate) const fn river_slope_sprite_index(tileh: u8) -> Option<usize> {
 /// No usamos `VehicleDirection` directamente porque aquí también aparecen los
 /// cuatro cardinales de las esquinas (`DIR_W/N/E/S`), y mantener la tabla
 /// explícita evita que una conversión de dirección oculte el eje del lock.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum WateredFrom {
     Sw,
     Nw,
@@ -552,8 +554,33 @@ enum WateredFrom {
     S,
 }
 
+/// Offset de `TileOffsByDir(from)` en el plano de coordenadas del mapa.
+///
+/// `DrawWaterEdges` consulta una tesela vecina y le pasa la dirección que
+/// apunta hacia el lado opuesto. Para `MP_STATION`/`MP_INDUSTRY`,
+/// `IsWateredTile` vuelve a avanzar con este offset para saber si está dentro
+/// de la misma estructura. Mantener la tabla aquí evita confundir las
+/// direcciones de la vista con los ejes X/Y del mapa.
+const fn watered_source_offset(from: WateredFrom) -> (i32, i32) {
+    match from {
+        WateredFrom::Sw => (1, 0),  // DIR_SW
+        WateredFrom::Nw => (0, -1), // DIR_NW
+        WateredFrom::Ne => (-1, 0), // DIR_NE
+        WateredFrom::Se => (0, 1),  // DIR_SE
+        WateredFrom::W => (1, -1),  // DIR_W
+        WateredFrom::N => (-1, -1), // DIR_N
+        WateredFrom::E => (-1, 1),  // DIR_E
+        WateredFrom::S => (1, 1),   // DIR_S
+    }
+}
+
 fn offset(coord: TileCoord, dx: i32, dy: i32) -> TileCoord {
     TileCoord::new(coord.x + dx, coord.y + dy)
+}
+
+fn watered_source_tile(map: &Map, coord: TileCoord, from: WateredFrom) -> Option<Tile> {
+    let (dx, dy) = watered_source_offset(from);
+    map.get(offset(coord, dx, dy))
 }
 
 fn coast_is_watered(map: &Map, coord: TileCoord, from: WateredFrom) -> bool {
@@ -588,11 +615,10 @@ fn lock_is_watered(m5: u8, from: WateredFrom) -> bool {
 
 /// Equivalente del `IsWateredTile` usado por `DrawWaterEdges`.
 ///
-/// La representación importada no conserva todavía todos los pools que
-/// OpenTTD consulta para una estación petrolera o una industria compuesta;
-/// para esos tipos usamos la misma señal de suelo de agua que el resto del
-/// renderer. Las formas explícitas de MP_WATER (clear/coast/lock/depot) sí se
-/// resuelven con sus bytes y pendiente originales.
+/// Las estaciones petroleras y las industrias suprimen los bordes internos de
+/// una estructura compuesta, igual que `IsWateredTile` en OpenTTD. El mapa
+/// conserva el `IndustryID` en MAP2 y el vínculo legacy de MAP1, por lo que
+/// podemos mantener esa separación sin hacer flood-fill durante el render.
 fn is_watered_tile(map: &Map, coord: TileCoord, from: WateredFrom) -> bool {
     let Some(tile) = map.get(coord) else {
         // `MP_VOID` es agua a efectos de los bordes del mapa.
@@ -611,10 +637,28 @@ fn is_watered_tile(map: &Map, coord: TileCoord, from: WateredFrom) -> bool {
         TileKind::Station => match station_type_from_m6(tile.m6) {
             STATION_TYPE_DOCK => tile_slope_and_z(map, coord).is_some_and(|(tileh, _)| tileh == 0),
             STATION_TYPE_BUOY => true,
-            STATION_TYPE_OILRIG => has_tile_water_ground(tile),
+            STATION_TYPE_OILRIG => {
+                // Oil rigs are represented as stations after construction, but
+                // their outer tiles still border an industry or another rig.
+                watered_source_tile(map, coord, from).is_some_and(|source| {
+                    (source.kind == TileKind::Station
+                        && station_type_from_m6(source.m6) == STATION_TYPE_OILRIG)
+                        || source.kind == TileKind::Industry
+                }) || has_tile_water_ground(tile)
+            }
             _ => false,
         },
-        TileKind::Industry | TileKind::Forest => has_tile_water_ground(tile),
+        TileKind::Industry => {
+            // An industry tile is water-facing unless the source tile in this
+            // direction belongs to the same industry or to its oil-rig station.
+            watered_source_tile(map, coord, from).is_some_and(|source| {
+                (source.kind == TileKind::Station
+                    && station_type_from_m6(source.m6) == STATION_TYPE_OILRIG)
+                    || (source.kind == TileKind::Industry
+                        && industry_tiles_mergeable(&tile, &source, false))
+            }) || has_tile_water_ground(tile)
+        }
+        TileKind::Forest => has_tile_water_ground(tile),
         _ => false,
     }
 }
@@ -1336,10 +1380,11 @@ pub(crate) fn push_water_tile_with_action5(
 #[cfg(test)]
 mod tests {
     use super::{
-        SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, action5_canal_sprite, canal_action2_context,
-        canal_dike_slots, canal_feature_sprite, canal_feature_sprite_with_context,
-        canal_feature_trace_sprite_id, lock_structure_layer, lock_water_ground_sprite,
-        river_edge_slots, river_edge_sprite_offset, river_slope_sprite_index, shore_sprite_id,
+        SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, WateredFrom, action5_canal_sprite,
+        canal_action2_context, canal_dike_slots, canal_feature_sprite,
+        canal_feature_sprite_with_context, canal_feature_trace_sprite_id, is_watered_tile,
+        lock_structure_layer, lock_water_ground_sprite, river_edge_slots, river_edge_sprite_offset,
+        river_slope_sprite_index, shore_sprite_id,
     };
     use bevy::prelude::{Assets, Image};
     use openttdrs_core::map::{
@@ -1349,6 +1394,7 @@ mod tests {
         Action2EvalCtx, Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
         TrainSpriteGraphics,
     };
+    use openttdrs_core::station::STATION_TYPE_OILRIG;
     use openttdrs_core::{
         CanalFeatureDef, Climate, DecodedSprite, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW,
     };
@@ -1561,6 +1607,86 @@ mod tests {
         let slots = river_edge_slots(&map, center);
         assert_eq!(&slots[..8], &[true; 8]);
         assert_eq!(&slots[8..], &[false; 4]);
+    }
+
+    #[test]
+    fn watered_industry_source_offsets_match_openttd_directions() {
+        let directions = [
+            (WateredFrom::Sw, (1, 0)),
+            (WateredFrom::Nw, (0, -1)),
+            (WateredFrom::Ne, (-1, 0)),
+            (WateredFrom::Se, (0, 1)),
+            (WateredFrom::W, (1, -1)),
+            (WateredFrom::N, (-1, -1)),
+            (WateredFrom::E, (-1, 1)),
+            (WateredFrom::S, (1, 1)),
+        ];
+        let target = TileCoord::new(2, 2);
+
+        for (from, (dx, dy)) in directions {
+            let mut map = Map::new_flat(5, 5, 0);
+            let mut target_tile = map.get(target).expect("industry target");
+            target_tile.kind = TileKind::Industry;
+            target_tile.m1 = set_water_class_m1(target_tile.m1, WaterClass::Invalid);
+            target_tile.m2 = 7;
+            map.set_tile(target, target_tile)
+                .expect("set industry target");
+
+            let source_coord = TileCoord::new(target.x + dx, target.y + dy);
+            let mut source_tile = map.get(source_coord).expect("industry source");
+            source_tile.kind = TileKind::Industry;
+            source_tile.m1 = set_water_class_m1(source_tile.m1, WaterClass::Invalid);
+            source_tile.m2 = 7;
+            map.set_tile(source_coord, source_tile)
+                .expect("set industry source");
+
+            assert!(
+                is_watered_tile(&map, target, from),
+                "same-industry source was not found for {from:?}"
+            );
+
+            source_tile.m2 = 8;
+            map.set_tile(source_coord, source_tile)
+                .expect("set unrelated industry source");
+            assert!(
+                !is_watered_tile(&map, target, from),
+                "unrelated industry suppressed the border for {from:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn watered_industry_and_oilrig_sources_hide_internal_borders() {
+        let target = TileCoord::new(2, 2);
+        let from = WateredFrom::Sw;
+        let source_coord = TileCoord::new(3, 2);
+        let mut map = Map::new_flat(5, 5, 0);
+
+        let mut target_tile = map.get(target).expect("industry target");
+        target_tile.kind = TileKind::Industry;
+        target_tile.m1 = set_water_class_m1(target_tile.m1, WaterClass::Invalid);
+        map.set_tile(target, target_tile)
+            .expect("set industry target");
+
+        let mut oilrig = map.get(source_coord).expect("oil-rig source");
+        oilrig.kind = TileKind::Station;
+        oilrig.m1 = set_water_class_m1(oilrig.m1, WaterClass::Invalid);
+        oilrig.m6 = STATION_TYPE_OILRIG << 3;
+        map.set_tile(source_coord, oilrig)
+            .expect("set oil-rig source");
+
+        assert!(is_watered_tile(&map, target, from));
+
+        target_tile.kind = TileKind::Station;
+        target_tile.m6 = STATION_TYPE_OILRIG << 3;
+        map.set_tile(target, target_tile)
+            .expect("set oil-rig target");
+        oilrig.kind = TileKind::Industry;
+        oilrig.m1 = set_water_class_m1(oilrig.m1, WaterClass::Invalid);
+        map.set_tile(source_coord, oilrig)
+            .expect("set industry source");
+
+        assert!(is_watered_tile(&map, target, from));
     }
 
     #[test]

@@ -14,7 +14,7 @@ use super::transport::{
     spawn_rail_catenary_for_surface, spawn_road_catenary_for_type,
 };
 use super::water::{
-    SPR_RIVER_SLOPE_BASE, canal_feature_surface_ground, river_edge_sprite_offset,
+    canal_feature_surface_ground, canal_feature_trace_sprite_id, river_edge_sprite_offset,
     spawn_canal_dikes_with_action5, spawn_river_edges, spawn_river_slope_ground_with_action5,
 };
 use super::{
@@ -4486,7 +4486,10 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                     WorldDrawTrace::record_sprite(
                         "ship-depot-water",
                         "ground",
-                        SPR_RIVER_SLOPE_BASE + u32::try_from(selected_slot).unwrap_or(u32::MAX),
+                        canal_feature_trace_sprite_id(
+                            openttdrs_core::CF_RIVER_SLOPE,
+                            selected_slot,
+                        ),
                         false,
                     );
                     commands.spawn((
@@ -4541,7 +4544,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                 WorldDrawTrace::record_sprite(
                     "ship-depot-water",
                     "ground",
-                    SPR_RIVER_SLOPE_BASE + u32::try_from(selected_slot).unwrap_or(u32::MAX),
+                    canal_feature_trace_sprite_id(openttdrs_core::CF_WATERSLOPE, selected_slot),
                     false,
                 );
                 commands.spawn((

@@ -41,6 +41,20 @@ const SPR_LOCK_WATER_BASE: u32 = SPR_RIVER_SLOPE_BASE + 4;
 /// `SPR_SHORE_BASE` resuelto por Action5 canals en OpenGFX/OpenGFX2.
 const SPR_SHORE_BASE: u32 = 5936;
 
+/// Convierte el slot local de una vista de agua en el ID lógico que usa la
+/// traza `world-draw`. Las vistas Action1/3 no tienen un ID OpenGFX propio en
+/// el atlas candidato; se comparan en el mismo namespace de `SPR_CANALS_BASE`
+/// que usa `GetCanalSprite` en OpenTTD.
+#[must_use]
+pub(crate) fn canal_feature_trace_sprite_id(feature_id: u8, slot: usize) -> u32 {
+    let base = if feature_id == openttdrs_core::CF_DIKES {
+        SPR_CANAL_DIKES_BASE
+    } else {
+        SPR_RIVER_SLOPE_BASE
+    };
+    base.saturating_add(u32::try_from(slot).unwrap_or(u32::MAX))
+}
+
 /// Variables de `CanalScopeResolver` disponibles para un sprite de agua.
 ///
 /// El mapa conserva `m3hi` como `m4()` (random del agua), el nibble bajo de
@@ -677,7 +691,7 @@ fn push_river_slope_sprite(
     .and_then(|feature| {
         let flat_offset = usize::from(feature.flags & openttdrs_core::CFF_HAS_FLAT_SPRITE != 0);
         let mut action2 = canal_action2_context_for_tile(map, ctx);
-        canal_feature_sprite_with_context(
+        canal_feature_sprite_with_context_and_slot(
             canal_features,
             openttdrs_core::CF_RIVER_SLOPE,
             flat_offset + index,
@@ -686,19 +700,29 @@ fn push_river_slope_sprite(
             &mut action2,
         )
     });
-    let custom = feature_custom
-        .or_else(|| action5_canal_sprite(index, canal_action5, &mut action5_sprites, &mut images));
-    let Some((_, position)) = river_slope_draw(ctx, custom.as_ref().map(|(_, sprite)| sprite))
+    let custom = feature_custom.or_else(|| {
+        action5_canal_sprite(index, canal_action5, &mut action5_sprites, &mut images)
+            .map(|(sprite, decoded)| (sprite, decoded, index))
+    });
+    let Some((_, position)) = river_slope_draw(ctx, custom.as_ref().map(|(_, sprite, _)| sprite))
     else {
         return false;
     };
 
-    let sprite_id = SPR_RIVER_SLOPE_BASE + index as u32;
+    let sprite_id = custom.as_ref().map_or_else(
+        || canal_feature_trace_sprite_id(openttdrs_core::CF_RIVER_SLOPE, index),
+        |(_, _, selected_slot)| {
+            canal_feature_trace_sprite_id(openttdrs_core::CF_RIVER_SLOPE, *selected_slot)
+        },
+    );
     WorldDrawTrace::record_sprite("water-river-slope", "ground", sprite_id, false);
     batch_water.push((
         ctx.map_tile_chunk(),
         WaterTile::STATIC,
-        custom.map_or_else(|| assets.river_slopes[index].sprite(), |(sprite, _)| sprite),
+        custom.map_or_else(
+            || assets.river_slopes[index].sprite(),
+            |(sprite, _, _)| sprite,
+        ),
         Transform::from_translation(position),
     ));
     true
@@ -726,7 +750,7 @@ pub(crate) fn spawn_river_slope_ground_with_action5(
     .and_then(|feature| {
         let flat_offset = usize::from(feature.flags & openttdrs_core::CFF_HAS_FLAT_SPRITE != 0);
         let mut action2 = canal_action2_context_for_tile(map, ctx);
-        canal_feature_sprite_with_context(
+        canal_feature_sprite_with_context_and_slot(
             canal_features,
             openttdrs_core::CF_RIVER_SLOPE,
             flat_offset + index,
@@ -735,19 +759,29 @@ pub(crate) fn spawn_river_slope_ground_with_action5(
             &mut action2,
         )
     });
-    let custom = feature_custom
-        .or_else(|| action5_canal_sprite(index, canal_action5, &mut action5_sprites, &mut images));
-    let Some((_, position)) = river_slope_draw(ctx, custom.as_ref().map(|(_, sprite)| sprite))
+    let custom = feature_custom.or_else(|| {
+        action5_canal_sprite(index, canal_action5, &mut action5_sprites, &mut images)
+            .map(|(sprite, decoded)| (sprite, decoded, index))
+    });
+    let Some((_, position)) = river_slope_draw(ctx, custom.as_ref().map(|(_, sprite, _)| sprite))
     else {
         return false;
     };
-    let sprite_id = SPR_RIVER_SLOPE_BASE + index as u32;
+    let sprite_id = custom.as_ref().map_or_else(
+        || canal_feature_trace_sprite_id(openttdrs_core::CF_RIVER_SLOPE, index),
+        |(_, _, selected_slot)| {
+            canal_feature_trace_sprite_id(openttdrs_core::CF_RIVER_SLOPE, *selected_slot)
+        },
+    );
     WorldDrawTrace::record_sprite("ship-depot-water", "ground", sprite_id, false);
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
         WaterTile::STATIC,
-        custom.map_or_else(|| assets.river_slopes[index].sprite(), |(sprite, _)| sprite),
+        custom.map_or_else(
+            || assets.river_slopes[index].sprite(),
+            |(sprite, _, _)| sprite,
+        ),
         Transform::from_translation(position),
     ));
     true
@@ -892,7 +926,7 @@ fn spawn_water_edges_with_action5(
             continue;
         }
         let mut action2 = canal_action2_context_for_tile(map, ctx);
-        let feature_custom = canal_feature_sprite_with_context(
+        let feature_custom = canal_feature_sprite_with_context_and_slot(
             canal_features,
             feature_id,
             feature_offset + slot,
@@ -908,10 +942,15 @@ fn spawn_water_edges_with_action5(
                     &mut action5_sprites,
                     &mut images,
                 )
+                .map(|(sprite, decoded)| (sprite, decoded, feature_offset + slot))
             })
         });
+        let trace_sprite_id = custom.as_ref().map_or_else(
+            || canal_feature_trace_sprite_id(feature_id, feature_offset + slot),
+            |(_, _, selected_slot)| canal_feature_trace_sprite_id(feature_id, *selected_slot),
+        );
         let (sprite, width, height, xrel, yrel): (Sprite, f32, f32, f32, f32) =
-            if let Some((sprite, decoded)) = custom {
+            if let Some((sprite, decoded, _)) = custom {
                 (
                     sprite,
                     f32::from(decoded.width),
@@ -935,8 +974,7 @@ fn spawn_water_edges_with_action5(
             } else {
                 continue;
             };
-        let sprite_id = SPR_CANAL_DIKES_BASE + (feature_offset + slot) as u32;
-        WorldDrawTrace::record_sprite(role, "ground", sprite_id, false);
+        WorldDrawTrace::record_sprite(role, "ground", trace_sprite_id, false);
         let layer = 0.010 + slot as f32 * 0.0001;
         let mut position = overlay_pos(
             ctx.iso_pos,
@@ -1201,7 +1239,7 @@ pub(crate) fn push_water_tile_with_action5(
                 images.as_deref_mut(),
             );
             if !river_slope {
-                if let Some((sprite, transform, _)) = canal_feature_surface(
+                if let Some((sprite, transform, selected_slot)) = canal_feature_surface(
                     ctx,
                     map,
                     openttdrs_core::CF_RIVER_SLOPE,
@@ -1212,7 +1250,10 @@ pub(crate) fn push_water_tile_with_action5(
                     WorldDrawTrace::record_sprite(
                         "water-ground",
                         "ground",
-                        SPR_FLAT_WATER_TILE,
+                        canal_feature_trace_sprite_id(
+                            openttdrs_core::CF_RIVER_SLOPE,
+                            selected_slot,
+                        ),
                         false,
                     );
                     batches.water.push((
@@ -1258,8 +1299,13 @@ pub(crate) fn push_water_tile_with_action5(
             } else {
                 None
             };
-            if let Some((sprite, transform, _)) = canal_surface {
-                WorldDrawTrace::record_sprite("water-ground", "ground", SPR_FLAT_WATER_TILE, false);
+            if let Some((sprite, transform, selected_slot)) = canal_surface {
+                WorldDrawTrace::record_sprite(
+                    "water-ground",
+                    "ground",
+                    canal_feature_trace_sprite_id(openttdrs_core::CF_WATERSLOPE, selected_slot),
+                    false,
+                );
                 batches
                     .water
                     .push((ctx.map_tile_chunk(), WaterTile::STATIC, sprite, transform));
@@ -1292,8 +1338,8 @@ mod tests {
     use super::{
         SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, action5_canal_sprite, canal_action2_context,
         canal_dike_slots, canal_feature_sprite, canal_feature_sprite_with_context,
-        lock_structure_layer, lock_water_ground_sprite, river_edge_slots, river_edge_sprite_offset,
-        river_slope_sprite_index, shore_sprite_id,
+        canal_feature_trace_sprite_id, lock_structure_layer, lock_water_ground_sprite,
+        river_edge_slots, river_edge_sprite_offset, river_slope_sprite_index, shore_sprite_id,
     };
     use bevy::prelude::{Assets, Image};
     use openttdrs_core::map::{
@@ -1478,6 +1524,18 @@ mod tests {
     fn water_trace_sprite_ids_follow_openttd_water_and_shore_tables() {
         assert_eq!(SPR_FLAT_WATER_TILE, 4061);
         assert_eq!(SPR_CANAL_DIKES_BASE, 5380);
+        assert_eq!(
+            canal_feature_trace_sprite_id(openttdrs_core::CF_RIVER_SLOPE, 3),
+            5331
+        );
+        assert_eq!(
+            canal_feature_trace_sprite_id(openttdrs_core::CF_RIVER_EDGE, 24),
+            5352
+        );
+        assert_eq!(
+            canal_feature_trace_sprite_id(openttdrs_core::CF_DIKES, 7),
+            5387
+        );
         assert_eq!(shore_sprite_id(1), 5937); // SLOPE_W.
         assert_eq!(shore_sprite_id(23), 5936); // SLOPE_STEEP_S -> slot 0.
         assert_eq!(shore_sprite_id(27), 5941); // SLOPE_STEEP_N -> slot 5.

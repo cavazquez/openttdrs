@@ -859,12 +859,15 @@ Actualización #326-ROAD-STOP-STATIC-TILELAYOUT-GLOBAL (2026-09-09): una
 parada Bus/Truck con `TileLayout` NewGRF completo y materializable ya comparte
 el mismo contrato: `DrawRoadCatenary` ocupa 4–11 y su secuencia BUILD empieza
 en 12, manteniendo el prisma `TILE_SEQ_LINE`, profundidad fuente y el vínculo
-del child con su parent NewGRF. Los layouts incompletos —sprites base o paletas
-que el cliente no puede materializar atómicamente— conservan la ruta local y
-su fallback previo; los road waypoints con layout NewGRF no forman parte de
+del child con su parent NewGRF. Los ground base planos auditados
+`3924`/`3981`/`4000` conservan también ese contrato; los layouts incompletos
+—agua, BUILD, otros base, paletas o selectores que el cliente no puede
+materializar atómicamente— conservan la ruta local y su fallback previo; los
+road waypoints con layout NewGRF no forman parte de
 este corte. La regresión ECS comprueba el cable road/tram, los bounds exactos,
-el ordinal 12 y las tres texturas Action1 ground/parent/child. Kale sigue sin
-un foco vial reproducible, por lo que no se atribuye una métrica raster ni se
+el ordinal 12 y las tres texturas Action1 ground/parent/child; además cubre
+ground directo `3981` en BusStop, TruckStop y RoadWaypoint. Kale sigue sin un
+foco vial reproducible, por lo que no se atribuye una métrica raster ni se
 cierra #326.
 
 Actualización #326-ROAD-WAYPOINT-STATIC-TILELAYOUT-GLOBAL (2026-09-09): el

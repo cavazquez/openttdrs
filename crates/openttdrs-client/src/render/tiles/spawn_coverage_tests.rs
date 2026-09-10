@@ -1099,6 +1099,7 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
     stop_kind: StopKind,
     station_type: u8,
     draw_mode: u8,
+    direct_base_ground: bool,
 ) {
     use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
 
@@ -1154,9 +1155,16 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
     runtime.tile_layouts.insert(
         9,
         TileLayout {
-            ground: TileLayoutSpriteRef {
-                action1_set: Some(0),
-                ..Default::default()
+            ground: if direct_base_ground {
+                TileLayoutSpriteRef {
+                    direct_sprite: 3981,
+                    ..Default::default()
+                }
+            } else {
+                TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    ..Default::default()
+                }
             },
             sequence: vec![
                 TileLayoutSpriteRef {
@@ -1316,48 +1324,79 @@ fn assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
         .iter()
         .find(|(_, parent, _, _)| parent.sprite_id == u32::MAX)
         .expect("parent TileSeq estático");
-    let (ground_handles, parent_matches, child_matches) = {
+    let (parent_matches, child_matches) = {
         let images = world.resource::<Assets<Image>>();
         let has_rgba = |handle: &Handle<Image>, rgba: &[u8]| {
             images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba)
         };
-        let mut ground_handles = Vec::new();
-        for handle in &sprite_handles {
-            if has_rgba(handle, ground_rgba.as_slice()) && !ground_handles.contains(handle) {
-                ground_handles.push(handle.clone());
-            }
-        }
         let parent_matches = has_rgba(parent_handle, parent_rgba.as_slice());
         let child_matches = children.iter().any(|(child_component, handle)| {
             child_component.parent == *parent_entity && has_rgba(handle, child_rgba.as_slice())
         });
-        (ground_handles, parent_matches, child_matches)
+        (parent_matches, child_matches)
     };
-    assert_eq!(
-        ground_handles.len(),
-        1,
-        "el ground debe materializarse una vez"
-    );
+    let (ground_x_offs, ground_y_offs, ground_width, ground_height) = if direct_base_ground {
+        (-31.0, 0.0, 64.0, 31.0)
+    } else {
+        (-1.0, -2.0, 2.0, 2.0)
+    };
     let expected_ground_position = overlay_pos(
         crate::iso::iso(coord.x, coord.y),
-        -1.0,
-        -2.0,
-        2.0,
-        2.0,
+        ground_x_offs,
+        ground_y_offs,
+        ground_width,
+        ground_height,
         0,
         0.025,
         coord.x,
         coord.y,
     );
-    let ground_depths: Vec<_> = world
-        .query::<(&Sprite, &Transform)>()
-        .iter(&world)
-        .filter_map(|(sprite, transform)| {
-            (ground_handles.contains(&sprite.image)
-                && transform.translation.truncate() == expected_ground_position.truncate())
-            .then_some(transform.translation.z)
-        })
-        .collect();
+    let ground_depths: Vec<_> = if direct_base_ground {
+        let expected_ground = world.resource::<TsAssets>().0.grass.clone();
+        let matches: Vec<_> = world
+            .query::<(&Sprite, &Transform)>()
+            .iter(&world)
+            .filter_map(|(sprite, transform)| {
+                expected_ground
+                    .matches(sprite)
+                    .then_some(transform.translation.z)
+            })
+            .collect();
+        assert_eq!(
+            matches.len(),
+            1,
+            "el ground base directo debe materializarse una sola vez"
+        );
+        matches
+    } else {
+        let ground_handles = {
+            let images = world.resource::<Assets<Image>>();
+            let has_rgba = |handle: &Handle<Image>, rgba: &[u8]| {
+                images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba)
+            };
+            let mut handles = Vec::new();
+            for handle in &sprite_handles {
+                if has_rgba(handle, ground_rgba.as_slice()) && !handles.contains(handle) {
+                    handles.push(handle.clone());
+                }
+            }
+            handles
+        };
+        assert_eq!(
+            ground_handles.len(),
+            1,
+            "el ground debe materializarse una vez"
+        );
+        world
+            .query::<(&Sprite, &Transform)>()
+            .iter(&world)
+            .filter_map(|(sprite, transform)| {
+                (ground_handles.contains(&sprite.image)
+                    && transform.translation.truncate() == expected_ground_position.truncate())
+                .then_some(transform.translation.z)
+            })
+            .collect()
+    };
     assert_eq!(
         ground_depths,
         vec![ground_draw_z(coord.x, coord.y, 0.025)],
@@ -1379,6 +1418,7 @@ fn static_newgrf_road_stop_layout_joins_global_catenary_sort() {
         StopKind::BusStop,
         3,
         openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        false,
     );
 }
 
@@ -1388,6 +1428,7 @@ fn static_newgrf_truck_stop_layout_joins_global_catenary_sort() {
         StopKind::TruckStop,
         2,
         openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        false,
     );
 }
 
@@ -1397,7 +1438,36 @@ fn static_newgrf_road_waypoint_layout_joins_global_catenary_sort() {
         StopKind::RoadWaypoint,
         openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT,
         openttdrs_core::ROADSTOP_DRAW_MODE_WAYP_GROUND,
+        false,
     );
+}
+
+#[test]
+fn direct_base_ground_newgrf_road_layouts_join_global_catenary_sort() {
+    for (stop_kind, station_type, draw_mode) in [
+        (
+            StopKind::BusStop,
+            3,
+            openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        ),
+        (
+            StopKind::TruckStop,
+            2,
+            openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        ),
+        (
+            StopKind::RoadWaypoint,
+            openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT,
+            openttdrs_core::ROADSTOP_DRAW_MODE_WAYP_GROUND,
+        ),
+    ] {
+        assert_static_newgrf_road_stop_layout_joins_global_catenary_sort(
+            stop_kind,
+            station_type,
+            draw_mode,
+            true,
+        );
+    }
 }
 
 #[test]

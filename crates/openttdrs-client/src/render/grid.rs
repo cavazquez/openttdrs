@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use openttdrs_core::Climate;
 use openttdrs_core::prelude::*;
 
 use crate::iso::{iso, tile_slope_and_min_z};
@@ -161,10 +162,33 @@ pub(crate) struct TileRenderContext {
     pub(crate) kind: TileKind,
     pub(crate) info: TileRenderInfo,
     pub(crate) iso_pos: Vec2,
+    /// Clima efectivo usado por los scopes Action2 de la tesela.
+    pub(crate) climate: Climate,
+    /// Línea de nieve persistida del mundo, usada por `GetTerrainType` ártico.
+    pub(crate) snow_line_height: u8,
 }
 
 impl TileRenderContext {
+    #[cfg(test)]
     pub(crate) fn new(map: &Map, grid: &RenderGrid, tx: u32, ty: u32) -> Self {
+        Self::new_with_climate(
+            map,
+            grid,
+            tx,
+            ty,
+            Climate::default(),
+            openttdrs_core::DEF_SNOW_LINE_HEIGHT,
+        )
+    }
+
+    pub(crate) fn new_with_climate(
+        map: &Map,
+        grid: &RenderGrid,
+        tx: u32,
+        ty: u32,
+        climate: Climate,
+        snow_line_height: u8,
+    ) -> Self {
         let coord = TileCoord::new(tx as i32, ty as i32);
         let tile = map.get(coord);
         let object_type = map.object_type_at(coord);
@@ -178,6 +202,8 @@ impl TileRenderContext {
             kind,
             info: grid.get(tx, ty),
             iso_pos: iso(tx as i32, ty as i32),
+            climate,
+            snow_line_height,
         }
     }
 

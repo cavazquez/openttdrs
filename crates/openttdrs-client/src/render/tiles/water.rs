@@ -6,7 +6,7 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::station::{
     STATION_TYPE_BUOY, STATION_TYPE_DOCK, STATION_TYPE_OILRIG, station_type_from_m6,
 };
-use openttdrs_core::{SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW};
+use openttdrs_core::{Climate, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW};
 
 use super::{FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, push_water_sprite, spawn_coast_debug_label};
 use crate::iso::{
@@ -37,18 +37,27 @@ const SPR_SHORE_BASE: u32 = 5936;
 
 /// Variables de `CanalScopeResolver` disponibles para un sprite de agua.
 ///
-/// El mapa conserva `m3hi` como `m4()` (random del agua). La consulta de
-/// terreno todavía no tiene un plano separado en el modelo, por lo que se
-/// mantiene en temperate/grass (`0`) hasta que ese dato se importe.
-fn canal_action2_context(tile: Option<Tile>, connectivity: u8) -> Action2EvalCtx {
+/// El mapa conserva `m3hi` como `m4()` (random del agua), el nibble bajo de
+/// `mapt` como `TropicZone` y la altura de la tesela para el clima ártico.
+fn canal_action2_context(
+    tile: Option<Tile>,
+    connectivity: u8,
+    climate: Climate,
+    snow_line_height: u8,
+) -> Action2EvalCtx {
     let mut action2 = Action2EvalCtx::default();
     let Some(tile) = tile else {
         return action2;
     };
     let random = u32::from(tile.m3hi);
+    let terrain = match climate {
+        Climate::SubTropical => u32::from(tile.mapt & 0x03),
+        Climate::SubArctic => u32::from(tile.height > snow_line_height) * 4,
+        Climate::Temperate | Climate::Toyland => 0,
+    };
     action2.random_bits = random;
     action2.vars.insert(0x80, u32::from(tile.height));
-    action2.vars.insert(0x81, 0);
+    action2.vars.insert(0x81, terrain);
     action2.vars.insert(0x82, u32::from(connectivity));
     action2.vars.insert(0x83, random);
     action2
@@ -76,7 +85,12 @@ fn canal_connectivity_mask(map: &Map, coord: TileCoord) -> u8 {
 }
 
 fn canal_action2_context_for_tile(map: &Map, ctx: &TileRenderContext) -> Action2EvalCtx {
-    canal_action2_context(ctx.tile, canal_connectivity_mask(map, ctx.coord))
+    canal_action2_context(
+        ctx.tile,
+        canal_connectivity_mask(map, ctx.coord),
+        ctx.climate,
+        ctx.snow_line_height,
+    )
 }
 
 fn shore_sprite_id(tileh: u8) -> u32 {
@@ -951,9 +965,9 @@ pub(crate) fn push_water_tile_with_action5(
 #[cfg(test)]
 mod tests {
     use super::{
-        SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, action5_canal_sprite, canal_dike_slots,
-        canal_feature_sprite, canal_feature_sprite_with_context, river_edge_slots,
-        river_edge_sprite_offset, river_slope_sprite_index, shore_sprite_id,
+        SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, action5_canal_sprite, canal_action2_context,
+        canal_dike_slots, canal_feature_sprite, canal_feature_sprite_with_context,
+        river_edge_slots, river_edge_sprite_offset, river_slope_sprite_index, shore_sprite_id,
     };
     use bevy::prelude::{Assets, Image};
     use openttdrs_core::map::{
@@ -963,7 +977,9 @@ mod tests {
         Action2EvalCtx, Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
         TrainSpriteGraphics,
     };
-    use openttdrs_core::{CanalFeatureDef, DecodedSprite, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW};
+    use openttdrs_core::{
+        CanalFeatureDef, Climate, DecodedSprite, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW,
+    };
 
     fn canal_depot(map: &mut Map, coord: TileCoord) {
         let mut tile = map.get(coord).expect("canal depot tile");
@@ -971,6 +987,31 @@ mod tests {
         tile.m5 = 0x30;
         tile.m1 = set_water_class_m1(tile.m1, WaterClass::Canal);
         map.set_tile(coord, tile).expect("set canal depot");
+    }
+
+    #[test]
+    fn canal_context_uses_persisted_climate_terrain() {
+        let mut map = Map::new_flat(1, 1, 12);
+        let coord = TileCoord::new(0, 0);
+        let mut tile = map.get(coord).expect("fixture tile");
+        tile.mapt = 2;
+        map.set_tile(coord, tile).expect("set tropic zone");
+
+        let tropical = canal_action2_context(
+            map.get(coord),
+            0,
+            Climate::SubTropical,
+            openttdrs_core::DEF_SNOW_LINE_HEIGHT,
+        );
+        assert_eq!(tropical.vars.get(&0x81), Some(&2));
+
+        let arctic = canal_action2_context(map.get(coord), 0, Climate::SubArctic, 10);
+        assert_eq!(arctic.vars.get(&0x81), Some(&4));
+
+        tile.height = 10;
+        map.set_tile(coord, tile).expect("set below snow line");
+        let below_snow = canal_action2_context(map.get(coord), 0, Climate::SubArctic, 10);
+        assert_eq!(below_snow.vars.get(&0x81), Some(&0));
     }
 
     #[test]

@@ -146,7 +146,14 @@ pub(crate) fn spawn_map_tiles_in_bounds(
     let mut rail_layers: Vec<u32> = Vec::with_capacity(8);
     let mut defer_overlay_tiles: Vec<(u32, u32)> = Vec::new();
     for (tx, ty) in spawn_bounds.iter_coords() {
-        let mut ctx = TileRenderContext::new(map, &render_grid, tx, ty);
+        let mut ctx = TileRenderContext::new_with_climate(
+            map,
+            &render_grid,
+            tx,
+            ty,
+            climate,
+            sim.state.snow_line_height,
+        );
         // Los mapas generados conservan el mismo layout nativo que un save
         // (`m2/m5` = ObjectID), pero todavía no tienen un footer `OBTY` en el
         // `Map`. Resolver el tipo desde el pool vivo evita que un faro recién
@@ -382,7 +389,14 @@ pub(crate) fn spawn_map_tiles_in_bounds(
 
     flush_map_batches(commands, batches);
     for (tx, ty) in defer_overlay_tiles {
-        let ctx = TileRenderContext::new(map, &render_grid, tx, ty);
+        let ctx = TileRenderContext::new_with_climate(
+            map,
+            &render_grid,
+            tx,
+            ty,
+            climate,
+            sim.state.snow_line_height,
+        );
         let slope_half_ground = slope_half_h(ctx.info.tileh);
         if let Some(trace) = &world_draw_trace {
             trace.begin_tile(&ctx);

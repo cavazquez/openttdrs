@@ -355,6 +355,8 @@ mod tests {
                 use_shore: false,
             },
             iso_pos: Vec2::ZERO,
+            climate: openttdrs_core::Climate::Temperate,
+            snow_line_height: openttdrs_core::DEF_SNOW_LINE_HEIGHT,
         }
     }
 

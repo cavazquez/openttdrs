@@ -3618,3 +3618,14 @@ focal de objetos de agua queda en 4 pruebas y la suite cliente en 1360
 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
 #567 sigue abierta por callbacks/scopes adicionales, layouts complejos,
 vecinos, clipping, orden global y framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-OBJECT-WATER-RIVER-EDGE-CALLBACK (2026-09-10, `82cc74da`):
+la regresión ECS conecta `CBID_CANALS_SPRITE_OFFSET` a un objeto NewGRF sobre
+River plano y verifica `CF_RIVER_SLOPE` junto con `CF_RIVER_EDGE`. La superficie
+custom conserva el delta del callback y los ocho bordes exteriores consumen
+los slots River desplazados, sin materializar el ground Action1 rojo del
+objeto. El bloque focal de objetos de agua queda en 5 pruebas y la suite
+cliente en 1361 pasadas y 2 ignoradas, con Clippy estricto, formato y
+`diff --check` verdes. #567 sigue abierta por variables/scopes adicionales,
+layouts complejos, vecinos, clipping, orden global y framebuffer; #326
+permanece abierta.

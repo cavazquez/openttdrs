@@ -3709,6 +3709,149 @@ fn pure_tram_overlay_groups_replace_default_surface() {
     );
 }
 
+fn assert_drive_through_stop_overlay_groups(pure_tram: bool) {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = fresh_map8();
+    let mut tile = Tile {
+        kind: TileKind::Station,
+        mapt: 0x50,
+        m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+        m6: 3 << 3, // parada de bus pasante X
+        ..tile_template()
+    };
+    if pure_tram {
+        // `INVALID_ROADTYPE`: sólo el tramtype tiene precedencia en el
+        // underlay de una parada pasante.
+        tile.m3hi = 0x3F;
+    } else {
+        tile = openttdrs_core::set_road_type_on_tile(tile, RoadType::from_u8(2));
+    }
+    tile =
+        openttdrs_core::set_tram_road_type_on_tile(tile, pure_tram.then_some(RoadType::from_u8(2)));
+    map.set_tile(coord, tile)
+        .expect("parada pasante con grupo de overlay custom");
+
+    let ground = DecodedSprite {
+        width: 8,
+        height: 8,
+        x_offs: 0,
+        y_offs: 0,
+        rgba: [255, 0, 0, 255].repeat(8 * 8),
+        mask: Vec::new(),
+    };
+    let overlay = DecodedSprite {
+        rgba: [0, 0, 255, 255].repeat(8 * 8),
+        ..ground.clone()
+    };
+    let road_catalog = vec![RoadTypeDef {
+        id: RoadType::from_u8(2),
+        class: if pure_tram {
+            RoadTramType::Tram
+        } else {
+            RoadTramType::Road
+        },
+        label: "Stop overlay".into(),
+        short_label: "STOV".into(),
+        intro_year: 0,
+        max_speed: 0,
+        cost_multiplier: 0,
+        maintenance_multiplier: 0,
+        flags: 0,
+        powered_mask: 0,
+        badges: Vec::new(),
+        from_tramtypes_feature: pure_tram,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: Some(Box::new(TrainSpriteGraphics {
+            sets: vec![vec![ground.clone()], vec![overlay.clone()]],
+            specific_assigns: [((0, 2), 0), ((0, 1), 1)].into_iter().collect(),
+            ..Default::default()
+        })),
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+    }];
+    let station = Station::new_with_kind(coord, StopKind::BusStop);
+    let stations = vec![station];
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: Local<crate::render::NewGrfRoadSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_station_tile_with_world_and_road_types(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &stations,
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    &road_catalog,
+                    Some(&mut cache),
+                    None,
+                    Some(&mut images),
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("road stop overlay groups spawn");
+
+    let custom_colours: Vec<Vec<u8>> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .filter_map(|sprite| {
+            if sprite.image.path().is_some() {
+                return None;
+            }
+            world
+                .resource::<Assets<Image>>()
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                .and_then(|rgba| rgba.get(0..4))
+                .filter(|rgba| **rgba == [255, 0, 0, 255] || **rgba == [0, 0, 255, 255])
+                .map(<[u8]>::to_vec)
+        })
+        .collect();
+    assert_eq!(
+        custom_colours,
+        vec![vec![255, 0, 0, 255], vec![0, 0, 255, 255]],
+        "una parada pasante debe conservar GROUND y OVERLAY del tipo activo"
+    );
+}
+
+#[test]
+fn drive_through_roadtype_overlay_groups_replace_station_surface() {
+    assert_drive_through_stop_overlay_groups(false);
+}
+
+#[test]
+fn drive_through_pure_tram_overlay_groups_replace_station_surface() {
+    assert_drive_through_stop_overlay_groups(true);
+}
+
 #[test]
 fn road_stop_no_catenary_flag_suppresses_road_and_tram_wires() {
     let assets = boot_assets_app();
@@ -6285,6 +6428,11 @@ fn sloped_road_stop_grounds_attach_to_their_foundation_parent() {
     let bay_ground = assets.bus_stop_grounds[0].clone();
     let drive_through_ground =
         assets.road_paved[crate::sprites::road_flat_sprite_index(0, 0x0A)].clone();
+    let drive_through_tram_overlay = assets
+        .rail
+        .get(&(crate::sprites::TRAMWAY_SPRITE_BASE + 5))
+        .expect("overlay vanilla del tranvía en eje X")
+        .clone();
     let mut map = fresh_map8();
     let c = |x: i32, y: i32| TileCoord::new(x, y);
     let bay = c(1, 1);
@@ -6430,8 +6578,8 @@ fn sloped_road_stop_grounds_attach_to_their_foundation_parent() {
         .collect();
     assert_eq!(
         attached.len(),
-        2,
-        "cada suelo vial debe ser child del cimiento"
+        3,
+        "cada suelo vial y el overlay vanilla del tranvía deben ser child del cimiento"
     );
     assert!(
         attached
@@ -6442,6 +6590,11 @@ fn sloped_road_stop_grounds_attach_to_their_foundation_parent() {
         attached
             .iter()
             .any(|(_, sprite, _)| drive_through_ground.matches(sprite))
+    );
+    assert!(
+        attached
+            .iter()
+            .any(|(_, sprite, _)| drive_through_tram_overlay.matches(sprite))
     );
     assert!(
         attached

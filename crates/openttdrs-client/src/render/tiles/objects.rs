@@ -2188,6 +2188,42 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 newgrf_stack,
                 world,
             );
+            let road_stop_draw_mode = custom_layout
+                .as_ref()
+                .map(|(_, _, _, draw_mode)| *draw_mode)
+                .or_else(|| {
+                    station_at_tile(map, stations, ctx.coord)
+                        .and_then(|station| station.road_stop_spec_at(ctx.coord))
+                        .and_then(|spec_id| road_stop_spec_def(road_stop_catalog, spec_id))
+                        .map(|spec| spec.draw_mode)
+                })
+                .unwrap_or(openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT);
+            // `DrawRoadOverlays` se ejecuta para una parada pasante después
+            // del suelo de la estación y antes de la catenaria/BUILD. Un
+            // roadtype con `ROTSG_GROUND` cambia el contrato a
+            // underlay/overlay; el modo de dibujo de la spec puede suprimir
+            // ambas capas como en `newgrf_roadstop.cpp`.
+            if is_drive_through
+                && road_stop_draw_mode & openttdrs_core::ROADSTOP_DRAW_MODE_OVERLAY != 0
+                && let Some(tile) = ctx.tile
+            {
+                spawn_road_stop_overlay_layers(
+                    commands,
+                    assets,
+                    map,
+                    ctx,
+                    road_stop_base_z,
+                    dims.0,
+                    foundation_child_parent,
+                    tile,
+                    m5,
+                    road_catalog,
+                    road_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
+                    climate,
+                    newgrf_stack,
+                );
+            }
             let mut used_newgrf_ground = false;
             if let Some((spec_id, layout, runtime_fp, _draw_mode)) = custom_layout.as_ref()
                 && let (Some(cache), Some(image_store)) =
@@ -2775,6 +2811,288 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     },
                 )),
             ));
+        }
+    }
+}
+
+/// Capa local del underlay específico de una parada pasante. El suelo de la
+/// secuencia vanilla ocupa `0.025`; dejar el grupo `ROTSG_GROUND` apenas por
+/// encima permite que sustituya visualmente la calzada sin entrar al stream de
+/// parents de la parada.
+const ROAD_STOP_SPECIFIC_GROUND_LAYER_FRAC: f32 = 0.026;
+/// Capa de los overlays de roadtype/tramtype de una parada pasante.
+const ROAD_STOP_SPECIFIC_OVERLAY_LAYER_FRAC: f32 = 0.028;
+
+/// Emite una vista `ROTSG_*` sobre una parada pasante. La textura y los
+/// offsets provienen de la misma evaluación Action2; en una pendiente la
+/// fundación de la parada recibe el sprite como child.
+#[allow(clippy::too_many_arguments)]
+fn spawn_road_stop_specific_layer(
+    commands: &mut Commands,
+    map: &Map,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
+    def: &openttdrs_core::RoadTypeDef,
+    selector: u8,
+    view_idx: usize,
+    tile: Tile,
+    climate: Climate,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    mut road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
+    layer: f32,
+) -> bool {
+    let Some((sprite, view)) = specific_sprite_for_tile(
+        def,
+        map,
+        selector,
+        view_idx,
+        ctx.coord,
+        tile,
+        climate,
+        road_catalog,
+        newgrf_stack,
+        None,
+        &mut road_sprites,
+        &mut images,
+    ) else {
+        return false;
+    };
+    let position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(view.x_offs),
+        f32::from(view.y_offs),
+        f32::from(view.width),
+        f32::from(view.height),
+        base_z,
+        layer,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
+    true
+}
+
+/// Emite el underlay/overlay vanilla del bloque Action5 de tranvías con la
+/// metadata NFO real (`SPR_TRAMWAY_TRAM` o `SPR_TRAMWAY_OVERLAY`).
+#[allow(clippy::too_many_arguments)]
+fn spawn_road_stop_vanilla_tram_layer(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
+    sprite_offset: usize,
+    sprite_base_offset: u32,
+    layer: f32,
+) {
+    let Some(sprite_offset) = u32::try_from(sprite_offset).ok() else {
+        return;
+    };
+    let Some(sprite_id) = crate::sprites::TRAMWAY_SPRITE_BASE
+        .checked_add(sprite_base_offset)
+        .and_then(|base| base.checked_add(sprite_offset))
+    else {
+        return;
+    };
+    let Some(image) = assets.rail.get(&sprite_id) else {
+        return;
+    };
+    let Some(gfx) = crate::sprites::tramway_sprite_gfx(sprite_id) else {
+        return;
+    };
+    let position = overlay_pos(
+        ctx.iso_pos,
+        gfx.x_offs,
+        gfx.y_offs,
+        gfx.width,
+        gfx.height,
+        base_z,
+        layer,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    let sprite = image.sprite();
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
+}
+
+/// Equivalente de `DrawRoadOverlays` para una parada pasante. El roadtype
+/// tiene precedencia sobre el tramtype en el underlay; el overlay del tranvía
+/// se conserva cuando corresponde, incluyendo el fallback Action5 vanilla
+/// cuando hay carretera pero el tramtype no usa `ROTSG_GROUND`.
+#[allow(clippy::too_many_arguments)]
+fn spawn_road_stop_overlay_layers(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    map: &Map,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
+    tile: Tile,
+    view: u8,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    mut road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
+    climate: Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+) {
+    let road_present = road_type_from_tile(&tile).as_u8() != INVALID_ROAD_TYPE_ID;
+    let tram_present = tram_road_type_from_tile(&tile).is_some();
+    let road_def = newgrf_road_def_for_tile(road_catalog, tile);
+    let tram_def = newgrf_tram_def_for_tile(road_catalog, tile);
+    let road_uses_overlay = road_def.is_some_and(|def| def.has_newgrf_specific_group(ROTSG_GROUND));
+    let tram_uses_overlay = tram_def.is_some_and(|def| def.has_newgrf_specific_group(ROTSG_GROUND));
+    // `DrawRoadOverlays` usa 1 para X y 0 para Y, mientras que `m5` 4/5 es
+    // el identificador de orientación de la estación.
+    let sprite_offset = usize::from(view == openttdrs_core::RSV_DRIVE_THROUGH_X);
+    let view_idx = if sprite_offset == 1 { 1 } else { 0 };
+
+    if road_present {
+        if road_uses_overlay && let Some(def) = road_def {
+            let _ = spawn_road_stop_specific_layer(
+                commands,
+                map,
+                ctx,
+                base_z,
+                map_width,
+                foundation_child_parent,
+                def,
+                ROTSG_GROUND,
+                view_idx,
+                tile,
+                climate,
+                road_catalog,
+                newgrf_stack,
+                road_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+                ROAD_STOP_SPECIFIC_GROUND_LAYER_FRAC,
+            );
+        }
+    } else if tram_present {
+        if tram_uses_overlay {
+            if let Some(def) = tram_def {
+                let _ = spawn_road_stop_specific_layer(
+                    commands,
+                    map,
+                    ctx,
+                    base_z,
+                    map_width,
+                    foundation_child_parent,
+                    def,
+                    ROTSG_GROUND,
+                    view_idx,
+                    tile,
+                    climate,
+                    road_catalog,
+                    newgrf_stack,
+                    road_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
+                    ROAD_STOP_SPECIFIC_GROUND_LAYER_FRAC,
+                );
+            }
+        } else {
+            // `SPR_TRAMWAY_TRAM` es el underlay que upstream usa sólo cuando
+            // no existe un roadtype válido para tomar la precedencia.
+            spawn_road_stop_vanilla_tram_layer(
+                commands,
+                assets,
+                ctx,
+                base_z,
+                map_width,
+                foundation_child_parent,
+                sprite_offset,
+                27,
+                ROAD_STOP_SPECIFIC_GROUND_LAYER_FRAC,
+            );
+        }
+    }
+
+    if road_present
+        && road_uses_overlay
+        && let Some(def) = road_def
+        && def.has_newgrf_specific_group(ROTSG_OVERLAY)
+    {
+        let _ = spawn_road_stop_specific_layer(
+            commands,
+            map,
+            ctx,
+            base_z,
+            map_width,
+            foundation_child_parent,
+            def,
+            ROTSG_OVERLAY,
+            view_idx,
+            tile,
+            climate,
+            road_catalog,
+            newgrf_stack,
+            road_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+            ROAD_STOP_SPECIFIC_OVERLAY_LAYER_FRAC,
+        );
+    }
+
+    if tram_present {
+        if tram_uses_overlay {
+            if let Some(def) = tram_def
+                && def.has_newgrf_specific_group(ROTSG_OVERLAY)
+            {
+                let _ = spawn_road_stop_specific_layer(
+                    commands,
+                    map,
+                    ctx,
+                    base_z,
+                    map_width,
+                    foundation_child_parent,
+                    def,
+                    ROTSG_OVERLAY,
+                    view_idx,
+                    tile,
+                    climate,
+                    road_catalog,
+                    newgrf_stack,
+                    road_sprites,
+                    images,
+                    ROAD_STOP_SPECIFIC_OVERLAY_LAYER_FRAC,
+                );
+            }
+        } else if road_present {
+            // Con carretera presente, OpenTTD conserva el riel vanilla como
+            // overlay cuando el tramtype no publica su propio sistema.
+            spawn_road_stop_vanilla_tram_layer(
+                commands,
+                assets,
+                ctx,
+                base_z,
+                map_width,
+                foundation_child_parent,
+                sprite_offset,
+                4,
+                ROAD_STOP_SPECIFIC_OVERLAY_LAYER_FRAC,
+            );
         }
     }
 }

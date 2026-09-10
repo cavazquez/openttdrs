@@ -22,11 +22,11 @@ const TEST_WORLD_SEED: u64 = 0;
 use crate::iso::{ground_draw_z, overlay_pos};
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::tiles::{
-    HouseSpawnResources, TramwayDepotAction5, flush_map_batches, push_forest_tree, push_water_tile,
-    push_water_tile_with_action5, spawn_bridge_middle, spawn_bridge_middle_with_road_types,
-    spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
-    spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
-    spawn_transport_object_tile_with_road_types,
+    FLAT_WATER_LAYER_FRAC, HouseSpawnResources, TramwayDepotAction5, flush_map_batches,
+    push_forest_tree, push_water_tile, push_water_tile_with_action5, spawn_bridge_middle,
+    spawn_bridge_middle_with_road_types, spawn_generic_land_tile, spawn_house_tile,
+    spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
+    spawn_transport_object_tile, spawn_transport_object_tile_with_road_types,
     spawn_transport_object_tile_with_road_types_and_tramway_action5,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
@@ -321,6 +321,204 @@ fn river_water_slope_consumes_canal_action5_sprite_and_nfo_anchor() {
     let mut expected = overlay_pos(crate::iso::iso(1, 1), -6.0, -8.0, 11.0, 9.0, 0, 0.0, 1, 1);
     expected.z = ground_draw_z(1, 1, 0.0);
     assert_eq!(*transform, Transform::from_translation(expected));
+}
+
+#[test]
+fn river_water_feature_slope_consumes_matching_river_edge_block() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    make_water_tile(&mut map, coord, WaterClass::River).expect("river tile");
+    map.set_height(TileCoord::new(1, 1), 1)
+        .expect("north height");
+    map.set_height(TileCoord::new(1, 2), 1)
+        .expect("east height");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let slope = DecodedSprite {
+        width: 11,
+        height: 9,
+        x_offs: -6,
+        y_offs: -8,
+        rgba: vec![0x11; 11 * 9 * 4],
+        mask: Vec::new(),
+    };
+    let edge = DecodedSprite {
+        width: 7,
+        height: 4,
+        x_offs: 3,
+        y_offs: -2,
+        rgba: vec![0x22; 7 * 4 * 4],
+        mask: Vec::new(),
+    };
+    let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+    features[usize::from(openttdrs_core::CF_RIVER_SLOPE)].newgrf_views = vec![slope.clone(); 4];
+    // SLOPE_NE selects the second 12-sprite river-edge block (offset 24).
+    features[usize::from(openttdrs_core::CF_RIVER_EDGE)].newgrf_views = vec![edge.clone(); 36];
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                let mut batches = MapSpriteBatches::default();
+                push_water_tile_with_action5(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    false,
+                    &mut batches,
+                    &[],
+                    None,
+                    Some(&mut images),
+                    &features,
+                    &[],
+                    Some(&mut action5_sprites),
+                );
+                assert_eq!(batches.water.len(), 1);
+                assert!(!batches.water[0].1.is_palette_animated());
+                flush_map_batches(&mut commands, batches);
+            },
+        )
+        .expect("river feature slope and edges spawn");
+
+    let rendered: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(sprite, transform)| (sprite.clone(), *transform))
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let (slope_sprite, slope_transform) = rendered
+        .iter()
+        .find(|(sprite, _)| {
+            images
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                == Some(slope.rgba.as_slice())
+        })
+        .expect("pendiente CF_RIVER_SLOPE materializada");
+    let mut expected_slope =
+        overlay_pos(crate::iso::iso(1, 1), -6.0, -8.0, 11.0, 9.0, 0, 0.0, 1, 1);
+    expected_slope.z = ground_draw_z(1, 1, 0.0);
+    assert_eq!(
+        *slope_transform,
+        Transform::from_translation(expected_slope)
+    );
+    assert_eq!(
+        rendered
+            .iter()
+            .filter(|(sprite, _)| {
+                images
+                    .get(&sprite.image)
+                    .and_then(|image| image.data.as_deref())
+                    == Some(edge.rgba.as_slice())
+            })
+            .count(),
+        8,
+        "un río aislado emite ocho bordes del bloque inclinado"
+    );
+    assert!(slope_sprite.texture_atlas.is_none());
+    assert_eq!(images.len(), 9, "pendiente más ocho slots de borde");
+}
+
+#[test]
+fn canal_water_feature_flat_sprite_keeps_nfo_anchor_before_dikes() {
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    make_water_tile(&mut map, coord, WaterClass::Canal).expect("canal tile");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let surface = DecodedSprite {
+        width: 10,
+        height: 6,
+        x_offs: -3,
+        y_offs: -5,
+        rgba: vec![0x33; 10 * 6 * 4],
+        mask: Vec::new(),
+    };
+    let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+    features[usize::from(openttdrs_core::CF_WATERSLOPE)].flags =
+        openttdrs_core::CFF_HAS_FLAT_SPRITE;
+    features[usize::from(openttdrs_core::CF_WATERSLOPE)].newgrf_views = vec![surface.clone()];
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut action5_sprites: Local<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                let mut batches = MapSpriteBatches::default();
+                push_water_tile_with_action5(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    false,
+                    &mut batches,
+                    &[],
+                    None,
+                    Some(&mut images),
+                    &features,
+                    &[],
+                    Some(&mut action5_sprites),
+                );
+                assert_eq!(batches.water.len(), 1);
+                assert!(!batches.water[0].1.is_palette_animated());
+                flush_map_batches(&mut commands, batches);
+            },
+        )
+        .expect("canal feature flat spawn");
+
+    let rendered: Vec<_> = world
+        .query::<(&WaterTile, &Sprite, &Transform)>()
+        .iter(&world)
+        .map(|(marker, sprite, transform)| (*marker, sprite.clone(), *transform))
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    let (marker, _, transform) = rendered
+        .iter()
+        .find(|(_, sprite, _)| {
+            images
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                == Some(surface.rgba.as_slice())
+        })
+        .expect("ground CF_WATERSLOPE materializado");
+    assert!(!marker.is_palette_animated());
+    let expected = overlay_pos(
+        crate::iso::iso(1, 1),
+        -3.0,
+        -5.0,
+        10.0,
+        6.0,
+        0,
+        FLAT_WATER_LAYER_FRAC,
+        1,
+        1,
+    );
+    assert_eq!(*transform, Transform::from_translation(expected));
+    assert_eq!(
+        world.query::<&MapVisualLayer>().iter(&world).count(),
+        9,
+        "el ground custom no elimina los ocho diques"
+    );
 }
 
 #[test]

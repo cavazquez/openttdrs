@@ -28,6 +28,9 @@ pub const CF_RIVER_GUI: u8 = 7;
 /// `CF_BUOY`.
 pub const CF_BUOY: u8 = 8;
 
+/// `CFF_HAS_FLAT_SPRITE`: el primer sprite del feature es el ground plano.
+pub const CFF_HAS_FLAT_SPRITE: u8 = 1 << 0;
+
 /// Spec de un feature de canal (Action0 `0x05` + vistas Action3 opcionales).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanalFeatureDef {

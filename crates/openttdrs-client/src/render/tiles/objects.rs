@@ -13,7 +13,10 @@ use super::transport::{
     catenary_local_z_delta, record_road_ground_trace, resolve_custom_rail_group_sprite,
     spawn_rail_catenary_for_surface, spawn_road_catenary_for_type,
 };
-use super::water::{spawn_canal_dikes_with_action5, spawn_river_slope_ground_with_action5};
+use super::water::{
+    canal_feature_surface, river_edge_sprite_offset, spawn_canal_dikes_with_action5,
+    spawn_river_edges, spawn_river_slope_ground_with_action5,
+};
 use super::{
     catenary_under_low_bridge,
     helpers::{
@@ -4455,11 +4458,13 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
     if ctx.kind == TileKind::ShipDepot {
-        // `DrawWaterDepot` delega primero en `DrawWaterClassGround`: un río
-        // inclinado usa una de las cuatro imágenes `SPR_CANALS_BASE+0..3`,
-        // mientras mar/canal y un río plano usan `SPR_FLAT_WATER_TILE`.
-        let river_slope = ctx.tile.and_then(water_class) == Some(WaterClass::River)
-            && spawn_river_slope_ground_with_action5(
+        // `DrawWaterDepot` delega primero en `DrawWaterClassGround`: las
+        // pendientes de río y los bordes de río se dibujan antes de las seis
+        // piezas `TILE_SEQ` del depósito; canal/agua plana conserva el mismo
+        // ground y sus diques.
+        let water_class = ctx.tile.and_then(water_class);
+        if water_class == Some(WaterClass::River) {
+            let river_slope = spawn_river_slope_ground_with_action5(
                 commands,
                 assets,
                 ctx,
@@ -4468,33 +4473,99 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
             );
-        if !river_slope {
-            WorldDrawTrace::record_sprite("ship-depot-water", "ground", 4061, false);
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                WaterTile::ANIMATED,
-                assets.water.sprite(),
-                Transform::from_translation(full_tile_sprite_pos(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    FLAT_WATER_LAYER_FRAC,
-                )),
-            ));
+            if !river_slope {
+                if let Some((sprite, transform)) = canal_feature_surface(
+                    ctx,
+                    openttdrs_core::CF_RIVER_SLOPE,
+                    canal_features,
+                    action5_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
+                ) {
+                    WorldDrawTrace::record_sprite("ship-depot-water", "ground", 4061, false);
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        WaterTile::STATIC,
+                        sprite,
+                        transform,
+                    ));
+                } else {
+                    WorldDrawTrace::record_sprite("ship-depot-water", "ground", 4061, false);
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        WaterTile::ANIMATED,
+                        assets.water.sprite(),
+                        Transform::from_translation(full_tile_sprite_pos(
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            base_z,
+                            FLAT_WATER_LAYER_FRAC,
+                        )),
+                    ));
+                }
+            }
+            spawn_river_edges(
+                commands,
+                map,
+                assets,
+                ctx,
+                base_z,
+                "ship-depot-water",
+                river_edge_sprite_offset(ctx.info.tileh, canal_features),
+                canal_features,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
+        } else {
+            let canal_surface = if water_class == Some(WaterClass::Canal) {
+                canal_feature_surface(
+                    ctx,
+                    openttdrs_core::CF_WATERSLOPE,
+                    canal_features,
+                    action5_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
+                )
+            } else {
+                None
+            };
+            if let Some((sprite, transform)) = canal_surface {
+                WorldDrawTrace::record_sprite("ship-depot-water", "ground", 4061, false);
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    WaterTile::STATIC,
+                    sprite,
+                    transform,
+                ));
+            } else {
+                WorldDrawTrace::record_sprite("ship-depot-water", "ground", 4061, false);
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    WaterTile::ANIMATED,
+                    assets.water.sprite(),
+                    Transform::from_translation(full_tile_sprite_pos(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        base_z,
+                        FLAT_WATER_LAYER_FRAC,
+                    )),
+                ));
+            }
+            spawn_canal_dikes_with_action5(
+                commands,
+                map,
+                assets,
+                ctx,
+                base_z,
+                "ship-depot-water",
+                canal_features,
+                canal_action5_newgrf,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
         }
-        spawn_canal_dikes_with_action5(
-            commands,
-            map,
-            assets,
-            ctx,
-            base_z,
-            "ship-depot-water",
-            canal_features,
-            canal_action5_newgrf,
-            action5_sprites.as_deref_mut(),
-            images.as_deref_mut(),
-        );
     } else if !matches!(
         ctx.kind,
         TileKind::RoadTunnel

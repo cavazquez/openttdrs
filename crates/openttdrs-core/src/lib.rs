@@ -171,8 +171,8 @@ pub use bridge_spec::{
 };
 pub use canal_spec::{
     CANAL_FEATURE_COUNT, CF_BUOY, CF_DIKES, CF_DOCKS, CF_ICON, CF_LOCKS, CF_RIVER_EDGE,
-    CF_RIVER_GUI, CF_RIVER_SLOPE, CF_WATERSLOPE, CanalFeatureDef, canal_feature_def,
-    vanilla_canal_feature_catalog,
+    CF_RIVER_GUI, CF_RIVER_SLOPE, CF_WATERSLOPE, CFF_HAS_FLAT_SPRITE, CanalFeatureDef,
+    canal_feature_def, vanilla_canal_feature_catalog,
 };
 pub use cargo::{
     ALL_CARGO_TYPES, ARCTIC_CARGO_TYPES, CARGO_CLASS_ARMOURED, CARGO_CLASS_BULK,

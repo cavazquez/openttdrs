@@ -1872,6 +1872,17 @@ pub(crate) fn spawn_road_tile(
 /// de dos brazos sólo se conserva el extremo cuyo vecino también tiene algún
 /// tipo de carretera/tranvía electrificado. Si quedan menos de dos extremos,
 /// OpenTTD mantiene la máscara original para no borrar una catenaria corta.
+fn road_tile_may_have_road(tile: Tile) -> bool {
+    matches!(
+        tile.kind,
+        TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge
+    ) || (tile.kind == TileKind::Station
+        && matches!(
+            openttdrs_core::station_type_from_m6(tile.m6),
+            2 | 3 | openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT
+        ))
+}
+
 fn road_catenary_bits_for_render(
     map: &Map,
     coord: TileCoord,
@@ -1903,7 +1914,7 @@ fn road_catenary_bits_for_render(
         let Some(tile) = map.get(neighbour) else {
             continue;
         };
-        if !matches!(tile.kind, TileKind::Road | TileKind::Station) {
+        if !road_tile_may_have_road(tile) {
             continue;
         }
         let road_electric =
@@ -3478,9 +3489,9 @@ mod tests {
         rail_custom_underlay_offsets, rail_foundation_after_pass, rail_ground_complete_offset,
         rail_ground_sprite_id, rail_initial_ground_draw, rail_signal_parent_bounds,
         rail_track_fence_parent_bounds, rail_track_trace_mode, rail_upper_halftile_ground_draw,
-        road_catenary_custom_groups_are_active, road_catenary_parent_bounds,
-        road_detail_world_z_delta, road_foundation_child_offset, roadside_detail_parent_bounds,
-        signal_trace_geometry,
+        road_catenary_bits_for_render, road_catenary_custom_groups_are_active,
+        road_catenary_parent_bounds, road_detail_world_z_delta, road_foundation_child_offset,
+        road_tile_may_have_road, roadside_detail_parent_bounds, signal_trace_geometry,
     };
     use crate::render::viewport_sort::{ParentSprite, ParentSpriteBounds};
     use crate::render::world_draw_trace::TraceSpriteBounds;
@@ -3489,7 +3500,9 @@ mod tests {
         RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER,
         RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, ROADSIDE_LAMPS,
     };
-    use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_LEVELED};
+    use openttdrs_core::{
+        FOUNDATION_INCLINED_X, FOUNDATION_LEVELED, Map, Tile, TileCoord, TileKind,
+    };
 
     #[test]
     fn road_catenary_fallback_requires_both_custom_groups_to_be_unresolved() {
@@ -3500,6 +3513,53 @@ mod tests {
         assert!(road_catenary_custom_groups_are_active(true, false));
         assert!(road_catenary_custom_groups_are_active(false, true));
         assert!(road_catenary_custom_groups_are_active(true, true));
+    }
+
+    #[test]
+    fn road_catenary_junction_counts_electrified_bridge_neighbors() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let center = TileCoord::new(3, 3);
+        let mut junction = Tile {
+            height: 0,
+            kind: TileKind::Road,
+            mapt: 0x20,
+            m5: 0x0F,
+            m1: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        };
+        map.set_tile(center, junction).expect("cruce vial");
+
+        // Un vecino normal y un brazo de puente son los dos únicos vecinos
+        // electrificados. `MayHaveRoad` de OpenTTD cuenta ambos; la máscara
+        // resultante debe descartar los otros dos brazos del cruce.
+        junction.m5 = 0x01;
+        map.set_tile(TileCoord::new(3, 2), junction)
+            .expect("vecino vial");
+        junction.kind = TileKind::RoadBridge;
+        junction.mapt = 0x90;
+        junction.m5 = 0x82;
+        map.set_tile(TileCoord::new(4, 3), junction)
+            .expect("vecino puente vial");
+
+        let mut road_catalog = openttdrs_core::vanilla_road_type_catalog();
+        road_catalog
+            .iter_mut()
+            .find(|def| def.id == openttdrs_core::RoadType::ROAD)
+            .expect("road type vanilla")
+            .flags = 1;
+
+        assert!(road_tile_may_have_road(junction));
+        assert_eq!(
+            road_catenary_bits_for_render(&map, center, (8, 8), 0x0F, &road_catalog),
+            0x03,
+            "un puente vial electrificado debe contar como vecino de MayHaveRoad"
+        );
     }
 
     #[test]

@@ -32,26 +32,46 @@ impl NewGrfRoadSpriteCache {
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
+        let view = if def.newgrf_runtime.is_some() {
+            def.newgrf_view_runtime(view_idx, ctx)
+        } else {
+            def.newgrf_view(view_idx).cloned()
+        }?;
+        Some(self.handle_for_resolved_view(def, view_idx, ctx, &view, images))
+    }
+
+    /// Materializa una vista ya resuelta. Separar la resolución evita evaluar
+    /// dos veces un Action2 con STO/regs y permite que los tipos runtime-only
+    /// conserven el ancla de la vista que realmente fue seleccionada.
+    pub(crate) fn handle_for_resolved_view(
+        &mut self,
+        def: &RoadTypeDef,
+        view_idx: usize,
+        ctx: &openttdrs_core::Action2EvalCtx,
+        view: &openttdrs_core::DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
         let fp = if def.newgrf_runtime.is_some() {
             runtime_fingerprint(ctx, vars::ROAD, false)
         } else {
             0
         };
-        let view = if def.newgrf_runtime.is_some() {
-            def.newgrf_view_runtime(view_idx, ctx)?
+        // Las vistas estáticas pueden repetir la última imagen cuando el GRF
+        // publica menos entradas. Las vistas runtime deben conservar el
+        // índice solicitado: si no hay preview, todos los índices colisionaban
+        // en el slot 0 y se filtraba la primera orientación.
+        let idx = if def.newgrf_runtime.is_some() {
+            u8::try_from(view_idx).unwrap_or(u8::MAX)
         } else {
-            def.newgrf_view(view_idx)?.clone()
+            u8::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0)
         };
-        let idx = u8::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
         let key = (def.id.as_u8(), idx, fp);
-        Some(
-            self.handles
-                .entry(key)
-                .or_insert_with(|| {
-                    images.add(decoded_sprite_image(&view, DecodedSpriteImagePolicy::Raw))
-                })
-                .clone(),
-        )
+        self.handles
+            .entry(key)
+            .or_insert_with(|| {
+                images.add(decoded_sprite_image(view, DecodedSpriteImagePolicy::Raw))
+            })
+            .clone()
     }
 
     /// Textura de un grupo Action3 específico (`ROTSG_*`) con vars de tesela.
@@ -192,6 +212,7 @@ pub(crate) fn road_newgrf_view_index(tileh: u8, road_bits: u8) -> usize {
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use openttdrs_core::DecodedSprite;
     use openttdrs_core::apply_newgrf_road_types;
     use openttdrs_core::map::TileKind;
     use openttdrs_core::newgrf_actions::build_action0_roadtype_payload;
@@ -255,6 +276,77 @@ mod tests {
             .handle_for_runtime(def, slope, &mut ctx, &mut images)
             .expect("slope");
         assert_eq!(handle, h_slope);
+    }
+
+    #[test]
+    fn runtime_only_road_views_keep_requested_index_in_cache() {
+        use openttdrs_core::{RoadTramType, RoadType, TrainSpriteAssign, TrainSpriteGraphics};
+
+        let first = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![255, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let second = DecodedSprite {
+            rgba: vec![0, 0, 255, 255],
+            ..first.clone()
+        };
+        let def = RoadTypeDef {
+            id: RoadType::from_u8(2),
+            class: RoadTramType::Road,
+            label: "Runtime road".into(),
+            short_label: "RTMR".into(),
+            intro_year: 0,
+            max_speed: 0,
+            cost_multiplier: 0,
+            maintenance_multiplier: 0,
+            flags: 0,
+            powered_mask: 0,
+            badges: Vec::new(),
+            from_tramtypes_feature: false,
+            from_newgrf: true,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(TrainSpriteGraphics {
+                sets: vec![vec![first.clone(), second.clone()]],
+                assigns: vec![TrainSpriteAssign {
+                    local_id: 0,
+                    set_id: 0,
+                }],
+                ..Default::default()
+            })),
+            newgrf_grfid: 0,
+            newgrf_type_tables: None,
+        };
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfRoadSpriteCache::default();
+        let mut first_ctx = openttdrs_core::Action2EvalCtx::default();
+        let mut second_ctx = first_ctx.clone();
+        let first_handle = cache
+            .handle_for_runtime(&def, 0, &mut first_ctx, &mut images)
+            .expect("vista runtime 0");
+        let second_handle = cache
+            .handle_for_runtime(&def, 1, &mut second_ctx, &mut images)
+            .expect("vista runtime 1");
+
+        assert_ne!(first_handle, second_handle);
+        assert_eq!(images.len(), 2);
+        assert_eq!(
+            images
+                .get(&first_handle)
+                .and_then(|image| image.data.as_deref()),
+            Some(first.rgba.as_slice())
+        );
+        assert_eq!(
+            images
+                .get(&second_handle)
+                .and_then(|image| image.data.as_deref()),
+            Some(second.rgba.as_slice())
+        );
     }
 
     #[test]

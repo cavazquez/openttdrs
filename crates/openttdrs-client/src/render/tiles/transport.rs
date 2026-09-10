@@ -1026,7 +1026,6 @@ pub(crate) fn spawn_road_tile(
     if !is_level_crossing
         && let Some(tile) = ctx.tile
         && let Some(def) = newgrf_road_def_for_tile(road_catalog, tile)
-        && let Some(view) = def.newgrf_view(view_idx)
         && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
     {
         let mut a2 = openttdrs_core::action2_eval_ctx_for_road_tile(
@@ -1041,7 +1040,13 @@ pub(crate) fn spawn_road_tile(
             newgrf_stack,
             def.newgrf_grfid,
         ));
-        if let Some(handle) = cache.handle_for_runtime(def, view_idx, &mut a2, images) {
+        let view = if def.newgrf_runtime.is_some() {
+            def.newgrf_view_runtime(view_idx, &mut a2)
+        } else {
+            def.newgrf_view(view_idx).cloned()
+        };
+        if let Some(view) = view {
+            let handle = cache.handle_for_resolved_view(def, view_idx, &a2, &view, images);
             let position = if tileh == 0 {
                 overlay_pos(
                     ctx.iso_pos,
@@ -1176,7 +1181,6 @@ pub(crate) fn spawn_road_tile(
         let mut used_tram_newgrf = false;
         if let Some(tile) = ctx.tile
             && let Some(def) = newgrf_tram_def_for_tile(road_catalog, tile)
-            && let Some(view) = def.newgrf_view(tfi)
             && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
         {
             let mut a2 = openttdrs_core::action2_eval_ctx_for_road_tile(
@@ -1191,7 +1195,13 @@ pub(crate) fn spawn_road_tile(
                 newgrf_stack,
                 def.newgrf_grfid,
             ));
-            if let Some(handle) = cache.handle_for_runtime(def, tfi, &mut a2, images) {
+            let view = if def.newgrf_runtime.is_some() {
+                def.newgrf_view_runtime(tfi, &mut a2)
+            } else {
+                def.newgrf_view(tfi).cloned()
+            };
+            if let Some(view) = view {
+                let handle = cache.handle_for_resolved_view(def, tfi, &a2, &view, images);
                 let pos3 = if tileh == 0 {
                     overlay_pos(
                         ctx.iso_pos,

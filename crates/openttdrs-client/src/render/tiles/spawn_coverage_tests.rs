@@ -5710,7 +5710,10 @@ fn sloped_newgrf_tram_overlay_attaches_to_its_foundation_parent() {
         rgba: [255, 0, 255, 255].repeat(64 * 16),
         mask: Vec::new(),
     };
-    tram.newgrf_views = vec![surface.clone()];
+    // El tipo publica sólo Action2 runtime; no hay preview estático del que
+    // el renderer pueda depender para seleccionar la superficie inclinada.
+    tram.newgrf_preview = None;
+    tram.newgrf_views = Vec::new();
     tram.newgrf_runtime = Some(Box::new(TrainSpriteGraphics {
         sets: vec![
             vec![surface.clone()],

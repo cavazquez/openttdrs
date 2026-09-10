@@ -12269,6 +12269,185 @@ fn newgrf_object_draw_water_applies_canal_feature_callback() {
 }
 
 #[test]
+fn newgrf_object_draw_water_applies_river_edge_feature_callback() {
+    use openttdrs_core::map::MP_OBJECT_MAPT;
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    let object_type = openttdrs_core::NEW_OBJECT_OFFSET;
+    let object_ground = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: [250, 10, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let mut object_runtime = TrainSpriteGraphics {
+        sets: vec![vec![object_ground.clone()]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 4,
+            set_id: 9,
+        }],
+        ..Default::default()
+    };
+    object_runtime.tile_layouts.insert(
+        9,
+        TileLayout {
+            ground: TileLayoutSpriteRef {
+                action1_set: Some(0),
+                ..Default::default()
+            },
+            sequence: Vec::new(),
+        },
+    );
+    let object_def = ObjectSpecDef {
+        id: object_type,
+        class_label: "TEST".into(),
+        name: "River edge object".into(),
+        size: openttdrs_core::OBJECT_SIZE_1X1,
+        from_newgrf: true,
+        local_id: 4,
+        grfid: 0x4F42_4A54,
+        newgrf_grf_version: 8,
+        climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
+        build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+        clear_cost_factor: openttdrs_core::DEFAULT_OBJECT_CLEAR_COST_FACTOR,
+        flags: OBJECT_FLAG_DRAW_WATER,
+        animation_frames: 0,
+        animation_status: 0xFF,
+        animation_speed: 2,
+        animation_triggers: 0,
+        callback_mask: 0,
+        views: vec![object_ground.clone()],
+        newgrf_runtime: Some(Box::new(object_runtime)),
+        associated_badges: Vec::new(),
+    };
+    let marked_sprite = |marker: u8| DecodedSprite {
+        width: 3,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: vec![marker; 3 * 2 * 4],
+        mask: Vec::new(),
+    };
+    let mut features = openttdrs_core::vanilla_canal_feature_catalog();
+    features[usize::from(openttdrs_core::CF_RIVER_SLOPE)] = openttdrs_core::CanalFeatureDef {
+        id: openttdrs_core::CF_RIVER_SLOPE,
+        callback_mask: 1,
+        flags: openttdrs_core::CFF_HAS_FLAT_SPRITE,
+        from_newgrf: true,
+        grfid: 0xCAFE,
+        newgrf_views: (0..3).map(|slot| marked_sprite(0x40 + slot)).collect(),
+        newgrf_runtime: Some(Box::new(callback_literal_runtime(
+            openttdrs_core::CF_RIVER_SLOPE,
+            2,
+        ))),
+    };
+    features[usize::from(openttdrs_core::CF_RIVER_EDGE)] = openttdrs_core::CanalFeatureDef {
+        id: openttdrs_core::CF_RIVER_EDGE,
+        callback_mask: 1,
+        flags: 0,
+        from_newgrf: true,
+        grfid: 0xCAFE,
+        newgrf_views: (0..12).map(|slot| marked_sprite(0x80 + slot)).collect(),
+        newgrf_runtime: Some(Box::new(callback_literal_runtime(
+            openttdrs_core::CF_RIVER_EDGE,
+            2,
+        ))),
+    };
+
+    let assets = boot_assets_app();
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(3, 3, 0);
+    let mut object_tile = tile_template();
+    object_tile.mapt = MP_OBJECT_MAPT;
+    object_tile.m5 = u8::try_from(object_type).expect("NewGRF object type byte");
+    object_tile.m1 = set_water_class_m1(object_tile.m1, WaterClass::River);
+    map.set_tile(coord, object_tile)
+        .expect("object on callback river");
+    let grid = RenderGrid::from_map(&map, 3, 3);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfObjectSpriteCache::default());
+    world.insert_resource(crate::render::NewGrfAction5SpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut object_cache: ResMut<crate::render::NewGrfObjectSpriteCache>,
+                  mut action5_cache: ResMut<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                let mut batches = MapSpriteBatches::default();
+                spawn_generic_land_tile_with_objects_and_water(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, coord.x as u32, coord.y as u32),
+                    &m.0,
+                    4.0,
+                    TEST_CLIMATE,
+                    TEST_WORLD_SEED,
+                    3,
+                    std::slice::from_ref(&object_def),
+                    &[],
+                    &[],
+                    None,
+                    Some(&mut object_cache),
+                    Some(&mut images),
+                    &features,
+                    &[],
+                    Some(&mut action5_cache),
+                    &mut batches,
+                );
+                flush_map_batches(&mut commands, batches);
+            },
+        )
+        .expect("object river callback spawn");
+
+    assert_eq!(world.query::<&WaterTile>().iter(&world).count(), 1);
+    let markers: Vec<_> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .filter_map(|sprite| {
+            world
+                .resource::<Assets<Image>>()
+                .get(&sprite.image)
+                .and_then(|image| image.data.as_deref())
+                .and_then(|data| data.first().copied())
+        })
+        .collect();
+    assert!(
+        markers.contains(&0x42),
+        "el ground River del objeto usa slot 0 + delta: {markers:?}"
+    );
+    for marker in 0x82..=0x89 {
+        assert_eq!(
+            markers.iter().filter(|&&value| value == marker).count(),
+            1,
+            "el borde River del objeto conserva slot y delta: {marker:#04x}"
+        );
+    }
+    assert_eq!(
+        world.query::<&MapVisualLayer>().iter(&world).count(),
+        9,
+        "callback River del objeto no pierde ground ni ocho bordes"
+    );
+    assert!(
+        world
+            .resource::<Assets<Image>>()
+            .iter()
+            .all(|(_, image)| image.data.as_deref() != Some(object_ground.rgba.as_slice())),
+        "el ground Action1 rojo no reemplaza la superficie River"
+    );
+}
+
+#[test]
 fn newgrf_industry_draw_foundations_callback_can_suppress_default() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);

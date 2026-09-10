@@ -3768,3 +3768,14 @@ pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
 #566 sigue abierta por pivotes, clipping por familias y framebuffer; #567
 continúa abierta por la aceptación visual del depósito naval y #326 por la
 composición global completa.
+
+Actualización #326/#563-ROAD-WAYPOINT-FALLBACK-ORDER (2026-09-10,
+`5e183635`): cuando un `TileLayout` de waypoint vial no es materializable, la
+ruta vanilla conserva ahora los ordinales locales `2/3` de sus dos líneas
+`TILE_SEQ`, en vez de reutilizar `12/13`, que sólo corresponden al layout
+custom unido al stream global después de la catenaria. La regresión ECS ejerce
+el fallback con los sprites `6143/6144`, comprueba ambas `insertion_key` y
+separa el suelo de carretera del suelo de una parada. La suite cliente queda
+en 1363 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check`
+verdes. #563 sigue abierta por catenaria/trace, vecinos, clipping, matriz de
+partes/callbacks, orden global completo y framebuffer; #326 permanece abierta.

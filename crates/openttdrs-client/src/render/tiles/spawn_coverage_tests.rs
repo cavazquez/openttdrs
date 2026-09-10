@@ -4332,6 +4332,76 @@ fn canal_ship_depot_draws_dikes_with_active_nfo_anchors() {
 }
 
 #[test]
+fn canal_ship_depot_parts_suppress_the_shared_dike_edge() {
+    let assets = boot_assets_app();
+    let dike_assets = assets.canal_dikes.clone();
+    let mut map = Map::new_flat(4, 4, 0);
+    for (coord, m5) in [
+        (TileCoord::new(1, 1), 0x30), // eje X, parte norte
+        (TileCoord::new(2, 1), 0x31), // eje X, parte sur
+    ] {
+        let mut tile = tile_template();
+        tile.kind = TileKind::ShipDepot;
+        tile.mapt = 0x60;
+        tile.m5 = m5;
+        tile.m1 = set_water_class_m1(tile.m1, WaterClass::Canal);
+        map.set_tile(coord, tile).expect("canal ship depot part");
+    }
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                for (x, y) in [(1, 1), (2, 1)] {
+                    spawn_transport_object_tile(
+                        &mut commands,
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(&m.0, &g.0, x, y),
+                        4.0,
+                        false,
+                        &m.0,
+                        m.0.dimensions(),
+                        &[],
+                        &[],
+                        None,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                    );
+                }
+            },
+        )
+        .expect("two-part canal ship depot spawn");
+
+    let sprites: Vec<_> = world.query::<&Sprite>().iter(&world).collect();
+    let dike_counts: Vec<_> = dike_assets
+        .iter()
+        .map(|asset| {
+            sprites
+                .iter()
+                .filter(|sprite| asset.matches(sprite))
+                .count()
+        })
+        .collect();
+
+    // Parte norte: slots 0,1,3,4,7. Parte sur: slots 1,2,3,5,6.
+    // Los slots 2/0 son los dos lados del contacto y no se dibujan.
+    assert_eq!(dike_counts, vec![1, 2, 1, 2, 1, 1, 1, 1, 0, 0, 0, 0]);
+    assert_eq!(
+        world.query::<&MapVisualLayer>().iter(&world).count(),
+        15,
+        "dos aguas, diez diques exteriores y tres capas del depósito"
+    );
+}
+
+#[test]
 fn canal_ship_depot_consumes_action5_dike_sprite_and_nfo_anchor() {
     let assets = boot_assets_app();
     let depot = TileCoord::new(1, 1);

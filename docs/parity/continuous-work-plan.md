@@ -3317,3 +3317,13 @@ considera no materializable desde el principio y conserva el fallback atómico
 coherente. La regresión de sortability y las 4 rutas focales de road stop
 permanecen verdes; #563 sigue abierta por la matriz de partes/callbacks,
 catenaria directa, trace, raster, vecinos, clipping y framebuffer.
+
+Actualización #326/#563-ROAD-STOP-SIMPLE-CACHE (2026-09-10, `2c4c7521`): las
+vistas Action3 simples de road stops dejan de calcular `spec * 6 + view` con
+saturación. El renderer valida ambas operaciones y, si la clave no cabe en
+`u16`, deja continuar el fallback vanilla en vez de aliasar la textura del
+último spec. La regresión cubre el último slot representable y los dos
+overflows; el filtro de road stops queda en 32/32, core en 13/13, formato y
+Clippy estricto verdes. Esto cierra otro riesgo de identidad de caché, pero
+#563 y #326 permanecen abiertos por la matriz de partes/callbacks, trace,
+evidencia raster, vecinos, clipping y framebuffer.

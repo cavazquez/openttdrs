@@ -3683,3 +3683,13 @@ cruce conserve exactamente esos dos brazos. La suite cliente queda en 1365
 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
 #563 sigue abierta por trace/catenaria restante, callbacks, clipping, matriz
 de partes, orden global completo y framebuffer; #326 permanece abierta.
+
+Actualización #326/#563-ROAD-CATENARY-LEVEL-CROSSING (2026-09-10,
+`7778e4a7`): la ruta vial vuelve a ejecutar `DrawRoadCatenary` para
+`RoadTileType::Crossing`, después de que la fundación nivelada haya elegido el
+suelo del cruce. La regresión ECS usa un cruce `ROAD_X` con roadtype
+electrificado y verifica sus tres recortes traseros más el frente (`6071/6043`).
+La suite cliente queda en 1366 pasadas y 2 ignoradas, con Clippy estricto,
+formato y `diff --check` verdes. #563 sigue abierta por trace/catenaria
+restante, callbacks, clipping, matriz de partes, orden global completo y
+framebuffer; #326 permanece abierta.

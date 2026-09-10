@@ -59,6 +59,8 @@ mod tree_draw_data_generated;
 mod tunnel;
 #[path = "sprites/water_canal_dike_gfx_data_generated.rs"]
 mod water_canal_dike_gfx_data_generated;
+#[path = "sprites/water_lock_gfx_data_generated.rs"]
+mod water_lock_gfx_data_generated;
 #[path = "sprites/water_palette_generated.rs"]
 mod water_palette_generated;
 #[path = "sprites/water_river_gfx_data_generated.rs"]
@@ -73,6 +75,7 @@ pub(crate) use tile_atlas_generated::{
     TILE_ATLAS_RECTS,
 };
 pub(crate) use water_canal_dike_gfx_data_generated::WATER_CANAL_DIKE_SPRITE_META;
+pub(crate) use water_lock_gfx_data_generated::WATER_LOCK_SPRITE_META;
 pub(crate) use water_palette_generated::{
     DARK_WATER_FRAME_COUNT, GLITTER_WATER_FRAME_COUNT, WATER_PALETTE_FRAME_COUNT,
 };

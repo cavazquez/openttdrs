@@ -544,6 +544,15 @@ fn lock_water_feature_middle_uses_shifted_water_slope_slot() {
     features[usize::from(openttdrs_core::CF_WATERSLOPE)].flags =
         openttdrs_core::CFF_HAS_FLAT_SPRITE;
     features[usize::from(openttdrs_core::CF_WATERSLOPE)].newgrf_views = views;
+    let structure = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: vec![0x99; 2 * 2 * 4],
+        mask: Vec::new(),
+    };
+    features[usize::from(openttdrs_core::CF_LOCKS)].newgrf_views = vec![structure.clone(); 24];
 
     let mut world = World::new();
     world.insert_resource(TsMap(map));
@@ -600,7 +609,43 @@ fn lock_water_feature_middle_uses_shifted_water_slope_slot() {
     let mut expected = overlay_pos(crate::iso::iso(1, 1), -3.0, -5.0, 10.0, 6.0, 0, 0.02, 1, 1);
     expected.z = ground_draw_z(1, 1, 0.02);
     assert_eq!(*transform, Transform::from_translation(expected));
-    assert_eq!(images.len(), 1, "la esclusa materializa sólo su ground");
+    assert_eq!(
+        images
+            .iter()
+            .filter(|(_, image)| image.data.as_deref() == Some(structure.rgba.as_slice()))
+            .count(),
+        2,
+        "CF_LOCKS custom no se mezcla con la textura del ground"
+    );
+    assert_eq!(images.len(), 3, "ground más las dos capas CF_LOCKS");
+
+    let mut parents: Vec<_> = world
+        .query::<&ViewportSortableParent>()
+        .iter(&world)
+        .filter(|parent| [5333, 5337].contains(&parent.sprite_id))
+        .copied()
+        .collect();
+    parents.sort_by_key(|parent| parent.insertion_key);
+    assert_eq!(parents.len(), 2);
+    assert_eq!(
+        parents
+            .iter()
+            .map(|parent| (parent.sprite_id, parent.bounds, parent.insertion_key))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                5333,
+                ParentSpriteBounds::new(16, 16, 0, 31, 16, 5),
+                viewport_insertion_key(1, 1, 1),
+            ),
+            (
+                5337,
+                ParentSpriteBounds::new(16, 31, 0, 31, 31, 9),
+                viewport_insertion_key(1, 1, 2),
+            ),
+        ],
+        "las dos capas CF_LOCKS conservan bounds e inserción TILE_SEQ"
+    );
 }
 
 #[test]

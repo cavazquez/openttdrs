@@ -155,6 +155,9 @@ pub(crate) struct WorldAssets {
     airport_station_sprites: HashMap<u32, AtlasSprite>,
     /// Esclusa: [NS, EW] × [lower, middle, upper].
     pub(crate) water_lock: [[AtlasSprite; 3]; 2],
+    /// Estructuras vanilla de esclusa, indexadas por `SPR_CANALS_BASE + 4..51`.
+    /// Se dibujan separadas cuando `CF_WATERSLOPE` reemplaza el ground.
+    pub(crate) water_lock_structures: [AtlasSprite; 48],
     /// Capas traseras de túnel por dirección diagonal (0=NE … 3=NW): suelo.
     pub(crate) road_tunnels: [AtlasSprite; 4],
     pub(crate) rail_tunnels: [AtlasSprite; 4],
@@ -543,6 +546,9 @@ impl WorldAssets {
                 water_lock_sprite(lock_names[5]),
             ],
         ];
+        let water_lock_structures = std::array::from_fn(|index| {
+            atlas.get(&format!("water_lock_structure_{:02}.png", index + 4))
+        });
         let dike_names: [String; 12] =
             std::array::from_fn(|i| format!("water_canal_dike_{i:02}.png"));
         let missing_dikes: Vec<&str> = dike_names
@@ -872,6 +878,7 @@ impl WorldAssets {
             airport_stand,
             airport_station_sprites,
             water_lock,
+            water_lock_structures,
             road_tunnels,
             rail_tunnels,
             monorail_tunnels,

@@ -28,6 +28,7 @@ REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
 OUT_META = REPO / "crates/openttdrs-client/src/sprites/water_canal_dike_gfx_data_generated.rs"
 OUT_RIVER_META = REPO / "crates/openttdrs-client/src/sprites/water_river_gfx_data_generated.rs"
+OUT_LOCK_META = REPO / "crates/openttdrs-client/src/sprites/water_lock_gfx_data_generated.rs"
 
 
 def active_sprite_sources() -> tuple[Path, Path]:
@@ -70,6 +71,10 @@ RIVER_SLOPE_TILES = [
     ("water_river_slope_x_up.png", 2),
     ("water_river_slope_y_down.png", 3),
 ]
+# Sprites de estructura de esclusa, `SPR_CANALS_BASE + 4..51`. Los slots
+# 28..43 no los usa el layout vanilla actual en todos los niveles, pero se
+# conservan para que la tabla Action5 no pierda ninguna variante disponible.
+LOCK_STRUCTURE_SLOTS = tuple(range(4, 52))
 
 CANVAS_W = 64
 CANVAS_H = 48
@@ -141,6 +146,19 @@ def compose_lock(
     return canvas
 
 
+def render_lock_metadata(metadata: list[tuple[int, int, int, int]]) -> str:
+    lines = [
+        "// GENERADO por scripts/gen_water_lock_tiles.py — NO EDITAR A MANO.\n",
+        "#![cfg_attr(rustfmt, rustfmt_skip)]\n\n",
+        "/// `(width, height, xrel, yrel)` para `SPR_CANALS_BASE + 4..51`.\n",
+        "pub(crate) static WATER_LOCK_SPRITE_META: &[(i16, i16, i16, i16)] = &[\n",
+    ]
+    for width, height, xrel, yrel in metadata:
+        lines.append(f"    ({width}, {height}, {xrel}, {yrel}),\n")
+    lines.append("];\n")
+    return "".join(lines)
+
+
 def render_dike_metadata(metadata: list[tuple[int, int, int, int]]) -> str:
     lines = [
         "// GENERADO por scripts/gen_water_lock_tiles.py — NO EDITAR A MANO.\n",
@@ -180,6 +198,7 @@ def main() -> None:
     slots = canals_slot_map(EXTRA_NFO)
     needed = (
         {s for _, a, b in LOCK_TILES for s in (a, b)}
+        | set(LOCK_STRUCTURE_SLOTS)
         | set(DIKE_SLOTS)
         | {slot for _, slot in RIVER_SLOPE_TILES}
     )
@@ -192,6 +211,15 @@ def main() -> None:
         out = compose_lock(water, slots, rear, front)
         out.save(TILES / name)
         print(f"  {name} <- canals[{rear}]+[{front}] ({out.width}x{out.height})")
+
+    lock_metadata = []
+    for slot in LOCK_STRUCTURE_SLOTS:
+        image, xrel, yrel = crop_slot(slots, slot)
+        name = f"water_lock_structure_{slot:02}.png"
+        image.save(TILES / name)
+        lock_metadata.append((image.width, image.height, xrel, yrel))
+    OUT_LOCK_META.write_text(render_lock_metadata(lock_metadata), encoding="utf-8")
+    print(f"  {OUT_LOCK_META.relative_to(REPO)} <- NFO anchors ({len(lock_metadata)} slots)")
 
     river_metadata = []
     for name, slot in RIVER_SLOPE_TILES:

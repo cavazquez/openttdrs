@@ -16,9 +16,13 @@ use crate::iso::{
 };
 use crate::render::newgrf_cache::{runtime_fingerprint, vars};
 use crate::render::shore_newgrf::{NEWGRF_SHORE_TILE_FLAG, NewGrfShoreSpriteCache};
+use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::WorldDrawTrace;
-use crate::render::{MapSpriteBatches, MapVisualLayer, TileRenderContext, WaterTile, WorldAssets};
-use crate::sprites::WATER_RIVER_SLOPE_SPRITE_META;
+use crate::render::{
+    MapSpriteBatches, MapVisualLayer, TileRenderContext, ViewportSortableParent, WaterTile,
+    WorldAssets, viewport_insertion_key, viewport_source_depth,
+};
+use crate::sprites::{WATER_LOCK_SPRITE_META, WATER_RIVER_SLOPE_SPRITE_META};
 
 /// `SPR_FLAT_WATER_TILE` de `table/sprites.h`.
 const SPR_FLAT_WATER_TILE: u32 = 4061;
@@ -284,6 +288,180 @@ fn lock_water_ground_sprite(
     // Lock water is a DrawGroundSprite, not a sortable BUILD layer.
     position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.02);
     Some((sprite, Transform::from_translation(position), offset))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LockStructureLayer {
+    dx: i32,
+    dy: i32,
+    image_offset: usize,
+    extent_x: i32,
+    extent_y: i32,
+    extent_z: i32,
+}
+
+/// Devuelve las dos líneas `TILE_SEQ` de una esclusa vanilla.
+fn lock_structure_layer(part: u8, direction: usize, layer: usize) -> Option<LockStructureLayer> {
+    let (dx, dy, extent_x, extent_y) = match (direction, layer) {
+        (0, 0) | (2, 0) => (0, 0, 16, 1),
+        (0, 1) | (2, 1) => (0, 15, 16, 1),
+        (1, 0) | (3, 0) => (0, 0, 1, 16),
+        (1, 1) => (15, 0, 1, 16),
+        (3, 1) => (15, 0, 1, 16),
+        _ => return None,
+    };
+    let direction = direction.min(3);
+    let image_offset = match part {
+        0 => [[1, 5], [0, 4], [2, 6], [3, 7]][direction][layer],
+        1 => [[9, 13], [8, 12], [10, 14], [11, 15]][direction][layer],
+        2 => [[17, 21], [16, 20], [18, 22], [19, 23]][direction][layer],
+        _ => return None,
+    };
+    let extent_z = if part == 2 || layer == 0 { 6 } else { 10 };
+    Some(LockStructureLayer {
+        dx,
+        dy,
+        image_offset,
+        extent_x,
+        extent_y,
+        extent_z,
+    })
+}
+
+/// Emite las estructuras de `DrawWaterLock` cuando el ground `CF_WATERSLOPE`
+/// reemplazó el sprite compuesto vanilla.
+#[allow(clippy::too_many_arguments)]
+fn spawn_lock_structures(
+    commands: &mut Commands,
+    map: &Map,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    map_width: u32,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    canal_action5: &[Option<DecodedSprite>],
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
+) {
+    let Some(tile) = ctx.tile else {
+        return;
+    };
+    let part = (tile.m5 >> 2) & 0x03;
+    let direction = usize::from(tile.m5 & 0x03);
+    let z_offset = usize::from(part == 2 && ctx.info.base_z > 8) * 24;
+
+    for layer_index in 0..2 {
+        let Some(layer) = lock_structure_layer(part, direction, layer_index) else {
+            continue;
+        };
+        let action5_slot = layer.image_offset + 4 + z_offset;
+        let mut action2 = canal_action2_context_for_tile(map, ctx);
+        let custom = canal_feature_sprite_with_context(
+            canal_features,
+            openttdrs_core::CF_LOCKS,
+            layer.image_offset,
+            &mut action5_sprites,
+            &mut images,
+            &mut action2,
+        );
+        let action5 = custom.is_none().then(|| {
+            action5_canal_sprite(
+                action5_slot,
+                canal_action5,
+                &mut action5_sprites,
+                &mut images,
+            )
+        });
+        let (sprite, width, height, xrel, yrel, fallback, logical_offset) =
+            if let Some((sprite, decoded)) = custom {
+                (
+                    sprite,
+                    f32::from(decoded.width),
+                    f32::from(decoded.height),
+                    f32::from(decoded.x_offs),
+                    f32::from(decoded.y_offs),
+                    false,
+                    layer.image_offset,
+                )
+            } else if let Some(Some((sprite, decoded))) = action5 {
+                (
+                    sprite,
+                    f32::from(decoded.width),
+                    f32::from(decoded.height),
+                    f32::from(decoded.x_offs),
+                    f32::from(decoded.y_offs),
+                    false,
+                    layer.image_offset + z_offset,
+                )
+            } else {
+                let Some(meta) = WATER_LOCK_SPRITE_META.get(action5_slot.saturating_sub(4)) else {
+                    continue;
+                };
+                (
+                    assets.water_lock_structures[action5_slot.saturating_sub(4)].sprite(),
+                    f32::from(meta.0),
+                    f32::from(meta.1),
+                    f32::from(meta.2),
+                    f32::from(meta.3),
+                    true,
+                    layer.image_offset + z_offset,
+                )
+            };
+        let sprite_id = SPR_LOCK_WATER_BASE + logical_offset as u32;
+        let bounds = ParentSpriteBounds::new(
+            ctx.tx_i32() * 16 + layer.dx,
+            ctx.ty_i32() * 16 + layer.dy,
+            i32::from(ctx.info.base_z) * 8,
+            ctx.tx_i32() * 16 + layer.dx + layer.extent_x - 1,
+            ctx.ty_i32() * 16 + layer.dy + layer.extent_y - 1,
+            i32::from(ctx.info.base_z) * 8 + layer.extent_z - 1,
+        );
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
+            "water-lock-structure",
+            "sortable",
+            sprite_id,
+            0,
+            fallback,
+            (layer.dx, layer.dy, 0),
+            0,
+            Some(crate::render::world_draw_trace::TraceSpriteBounds::new(
+                layer.dx,
+                layer.dy,
+                0,
+                layer.extent_x,
+                layer.extent_y,
+                layer.extent_z,
+            )),
+        );
+        let mut position = overlay_pos(
+            ctx.iso_pos,
+            xrel,
+            yrel,
+            width,
+            height,
+            ctx.info.base_z,
+            0.04 + layer_index as f32 * 0.0005,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        );
+        let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+        position.z = source_depth;
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+            ViewportSortableParent {
+                sprite_id,
+                bounds,
+                insertion_key: viewport_insertion_key(
+                    ctx.tx,
+                    ctx.ty,
+                    u8::try_from(layer_index + 1).unwrap_or(u8::MAX),
+                ),
+                source_depth,
+            },
+        ));
+    }
 }
 
 /// Índice de `SPR_CANALS_BASE + offset` que selecciona `DrawRiverWater` cuando
@@ -935,6 +1113,17 @@ pub(crate) fn push_water_tile_with_action5(
                     sprite,
                     transform,
                 ));
+                spawn_lock_structures(
+                    commands,
+                    map,
+                    assets,
+                    ctx,
+                    map_dims.0,
+                    canal_features,
+                    canal_action5,
+                    action5_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
+                );
             } else {
                 let axis = usize::from(m5 & 1).min(1);
                 let level = openttdrs_core::lock_sprite_level(map, ctx.coord).min(2);
@@ -1059,7 +1248,7 @@ mod tests {
     use super::{
         SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, action5_canal_sprite, canal_action2_context,
         canal_dike_slots, canal_feature_sprite, canal_feature_sprite_with_context,
-        lock_water_ground_sprite, river_edge_slots, river_edge_sprite_offset,
+        lock_structure_layer, lock_water_ground_sprite, river_edge_slots, river_edge_sprite_offset,
         river_slope_sprite_index, shore_sprite_id,
     };
     use bevy::prelude::{Assets, Image};
@@ -1200,6 +1389,44 @@ mod tests {
         assert!(
             lock_water_ground_sprite(&map, &ctx, &features, Some(&mut cache), Some(&mut images),)
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn lock_structure_layers_match_water_land_sequences() {
+        let expected = [
+            [(0, 0, 1, 16, 1, 6), (0, 15, 5, 16, 1, 10)],
+            [(0, 0, 0, 1, 16, 6), (15, 0, 4, 1, 16, 10)],
+            [(0, 0, 2, 16, 1, 6), (0, 15, 6, 16, 1, 10)],
+            [(0, 0, 3, 1, 16, 6), (15, 0, 7, 1, 16, 10)],
+        ];
+        for (direction, expected_layers) in expected.into_iter().enumerate() {
+            for (layer, expected) in expected_layers.into_iter().enumerate() {
+                let actual = lock_structure_layer(0, direction, layer).expect("middle layer");
+                assert_eq!(
+                    (
+                        actual.dx,
+                        actual.dy,
+                        actual.image_offset,
+                        actual.extent_x,
+                        actual.extent_y,
+                        actual.extent_z,
+                    ),
+                    expected
+                );
+            }
+        }
+        assert_eq!(
+            lock_structure_layer(1, 0, 0)
+                .expect("lower NE layer")
+                .image_offset,
+            9
+        );
+        assert_eq!(
+            lock_structure_layer(2, 3, 1)
+                .expect("upper NW layer")
+                .image_offset,
+            23
         );
     }
 

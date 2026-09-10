@@ -3577,3 +3577,14 @@ River `24..31` antes de aplicar el mismo delta, sin perder las capas
 verdes. #567 sigue abierta por variables/scopes y callbacks restantes,
 costas/túneles/puentes, vecinos de toda la matriz, clipping, orden global y
 framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-RIVER-CONCAVE-EDGES (2026-09-10, `f1e5bb38`):
+la regresión ECS agrega vecinos River a dos lados del depósito y una esquina
+diagonal seca. Verifica que `DrawWaterEdges` suprime los lados compartidos,
+conserva los slots exteriores y emite la esquina cóncava, aplicando el
+callback de offset a cada slot sin alterar el ground ni la estructura
+`TILE_SEQ`. El bloque focal queda en 15 pruebas y la suite cliente en 1357
+pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check` verdes.
+#567 sigue abierta por variables/scopes y callbacks restantes,
+costas/túneles/puentes, vecinos de toda la matriz, clipping, orden global y
+framebuffer; #326 permanece abierta.

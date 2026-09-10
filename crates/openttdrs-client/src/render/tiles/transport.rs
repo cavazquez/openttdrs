@@ -1645,6 +1645,11 @@ fn custom_road_catenary_sprite(
     ))
 }
 
+#[must_use]
+fn road_catenary_custom_groups_are_active(back_resolved: bool, front_resolved: bool) -> bool {
+    back_resolved || front_resolved
+}
+
 #[allow(clippy::needless_option_as_deref, clippy::too_many_arguments)]
 pub(crate) fn spawn_road_catenary_for_type(
     commands: &mut Commands,
@@ -1683,9 +1688,8 @@ pub(crate) fn spawn_road_catenary_for_type(
     let tint = catenary_sprite_color();
     let custom_back = def.has_newgrf_specific_group(5);
     let custom_front = def.has_newgrf_specific_group(4);
-    let custom_any = custom_back || custom_front;
-    let (back_resolved, back_fallback) = if custom_any {
-        let resolved = custom_back.then(|| {
+    let custom_back_resolved = custom_back
+        .then(|| {
             custom_road_catenary_sprite(
                 def,
                 5,
@@ -1700,8 +1704,35 @@ pub(crate) fn spawn_road_catenary_for_type(
                 &mut images,
                 tint,
             )
-        });
-        (resolved.flatten(), false)
+        })
+        .flatten();
+    let custom_front_resolved = custom_front
+        .then(|| {
+            custom_road_catenary_sprite(
+                def,
+                4,
+                view_idx,
+                map,
+                ctx.coord,
+                tile,
+                climate,
+                road_catalog,
+                newgrf_stack,
+                &mut road_sprites,
+                &mut images,
+                tint,
+            )
+        })
+        .flatten();
+    // OpenTTD sólo abandona ambos sprites vanilla cuando al menos uno de los
+    // dos grupos custom devuelve una imagen. Un grupo declarado pero sin una
+    // vista resoluble no debe ocultar la catenaria completa.
+    let custom_any = road_catenary_custom_groups_are_active(
+        custom_back_resolved.is_some(),
+        custom_front_resolved.is_some(),
+    );
+    let (back_resolved, back_fallback) = if custom_any {
+        (custom_back_resolved, false)
     } else {
         (
             catenary_sprite_colored(
@@ -1717,23 +1748,7 @@ pub(crate) fn spawn_road_catenary_for_type(
         )
     };
     let (front_resolved, front_fallback) = if custom_any {
-        let resolved = custom_front.then(|| {
-            custom_road_catenary_sprite(
-                def,
-                4,
-                view_idx,
-                map,
-                ctx.coord,
-                tile,
-                climate,
-                road_catalog,
-                newgrf_stack,
-                &mut road_sprites,
-                &mut images,
-                tint,
-            )
-        });
-        (resolved.flatten(), false)
+        (custom_front_resolved, false)
     } else {
         (
             catenary_sprite_colored(
@@ -3124,8 +3139,9 @@ mod tests {
         rail_custom_underlay_offsets, rail_foundation_after_pass, rail_ground_complete_offset,
         rail_ground_sprite_id, rail_initial_ground_draw, rail_signal_parent_bounds,
         rail_track_fence_parent_bounds, rail_track_trace_mode, rail_upper_halftile_ground_draw,
-        road_catenary_parent_bounds, road_detail_world_z_delta, road_foundation_child_offset,
-        roadside_detail_parent_bounds, signal_trace_geometry,
+        road_catenary_custom_groups_are_active, road_catenary_parent_bounds,
+        road_detail_world_z_delta, road_foundation_child_offset, roadside_detail_parent_bounds,
+        signal_trace_geometry,
     };
     use crate::render::viewport_sort::{ParentSprite, ParentSpriteBounds};
     use crate::render::world_draw_trace::TraceSpriteBounds;
@@ -3135,6 +3151,17 @@ mod tests {
         RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, ROADSIDE_LAMPS,
     };
     use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_LEVELED};
+
+    #[test]
+    fn road_catenary_fallback_requires_both_custom_groups_to_be_unresolved() {
+        assert!(
+            !road_catenary_custom_groups_are_active(false, false),
+            "dos grupos custom sin sprite deben reactivar ambos sprites vanilla"
+        );
+        assert!(road_catenary_custom_groups_are_active(true, false));
+        assert!(road_catenary_custom_groups_are_active(false, true));
+        assert!(road_catenary_custom_groups_are_active(true, true));
+    }
 
     #[test]
     fn rail_track_trace_mode_matches_draw_ground_sprite_foundation_context() {

@@ -3152,3 +3152,12 @@ fallback atómico a Action5/OpenGFX. Las 55 pruebas focales de agua y Clippy
 pasan. Callbacks de offset, resolución Action2 completa, las combinaciones
 restantes de depósito/costa y la comparación de framebuffer siguen pendientes;
 #567 y #326 permanecen abiertos.
+
+Actualización #326/#567-SHIP-DEPOT-FEATURE-GROUND (2026-09-10, `058b5758`):
+la regresión `canal_ship_depot_consumes_feature_ground_and_dike_views` ejerce
+la ruta real de `DrawWaterDepot` con `CF_WATERSLOPE` y `CF_DIKES` Action1/3.
+Verifica el ground plano estático, sus anclas NFO y los ocho diques custom sin
+perder las capas `TILE_SEQ` del depósito; los casos de Sea, River, Action5 y
+vanilla continúan cubiertos. Esto cierra la evidencia focal del depósito, no
+la matriz completa de eje/parte, costa, callbacks, clipping ni framebuffer;
+#567 y #326 permanecen abiertos.

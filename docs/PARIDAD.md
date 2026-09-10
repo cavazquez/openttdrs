@@ -3616,6 +3616,18 @@ Clippy estricto, formato y `diff --check` pasan. #567 sigue abierta por
 túnel/puente acuático, matriz completa Sea/Canal/River, callbacks, clipping,
 orden global y framebuffer; #326 permanece abierta.
 
+Actualización #326/#567-SHIP-DEPOT-RIVER-EDGE-BLOCK (2026-09-10, `032146e5`):
+la regresión ECS de un depósito naval River inclinado verifica que el
+dispatcher selecciona el bloque de ocho bordes específico de la pendiente
+(`SLOPE_NE`, offsets 24..31), además del ground River y de las capas de
+estructura `TILE_SEQ`. Los ocho sprites reciben identificadores distintos y
+se comprueba que ninguno se pierde por la emisión del depósito; el bloque
+focal queda en 13 pruebas y la suite cliente en 1355 pasadas y 2 ignoradas,
+con Clippy estricto, formato y `diff --check` verdes. Esta cobertura confirma
+un bloque de selección de River, pero #567 sigue abierta por las otras
+pendientes con emisión integrada, callbacks y vecinos restantes, clipping,
+orden global y framebuffer; #326 permanece abierta.
+
 Actualización #326/#567-AQUEDUCT-RAMP-WATER (2026-09-10, `4bd0daba`):
 `IsWateredTile` reconoce los extremos de acueducto almacenados como
 `MP_TUNNELBRIDGE` y transporte agua. Sólo el lado opuesto a la dirección de

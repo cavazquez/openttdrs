@@ -3428,3 +3428,15 @@ las 32 pruebas focales de road stop, la suite completa del cliente (1343
 pasadas, 2 ignoradas), Clippy estricto, formato y `diff --check`. #563 sigue
 abierta por matriz de partes/callbacks, catenaria/trace, vecinos, clipping y
 framebuffer; #326 permanece abierta por la matriz global.
+
+Actualización #326/#567-INDUSTRY-WATER-BORDERS (2026-09-10, `62032575`):
+`IsWateredTile` ya consulta el offset exacto de `TileOffsByDir(from)` para
+suprimir bordes internos de industrias con el mismo `IndustryID` y de la
+transición industria↔Oil Rig. La tabla conserva las ocho direcciones del mapa,
+incluidos los cuatro lados y las cuatro esquinas; IDs distintos vuelven a
+exponer el borde. Las 8 direcciones y ambos sentidos Oil Rig tienen regresión,
+las 17 pruebas focales de agua pasan y la suite completa del cliente queda en
+1345 pasadas y 2 ignoradas, con Clippy estricto, formato y `diff --check`
+verdes. #567 sigue abierta por la matriz completa Sea/Canal/River, piezas y
+callbacks del depósito, clipping, orden global y framebuffer; #326 permanece
+abierta por la matriz global.

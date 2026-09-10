@@ -8,6 +8,8 @@ en PNGs esperados por `WorldAssets::load`:
 
 También recorta los doce diques `SPR_CANAL_DIKES_BASE+0..11` y genera sus
 anclas NFO para que `DrawWaterEdges` pueda emitirlos como `DrawGroundSprite`.
+Por último recorta las cuatro pendientes fluviales por defecto
+`SPR_CANALS_BASE+0..3`, usadas por `DrawRiverWater`.
 
 Uso: python3 scripts/gen_water_lock_tiles.py
 Luego: python3 scripts/gen_tile_atlas.py
@@ -25,6 +27,7 @@ from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
 OUT_META = REPO / "crates/openttdrs-client/src/sprites/water_canal_dike_gfx_data_generated.rs"
+OUT_RIVER_META = REPO / "crates/openttdrs-client/src/sprites/water_river_gfx_data_generated.rs"
 
 
 def active_sprite_sources() -> tuple[Path, Path]:
@@ -61,6 +64,12 @@ LOCK_TILES = [
 ]
 
 DIKE_SLOTS = tuple(range(52, 64))
+RIVER_SLOPE_TILES = [
+    ("water_river_slope_y_up.png", 0),
+    ("water_river_slope_x_down.png", 1),
+    ("water_river_slope_x_up.png", 2),
+    ("water_river_slope_y_down.png", 3),
+]
 
 CANVAS_W = 64
 CANVAS_H = 48
@@ -145,6 +154,19 @@ def render_dike_metadata(metadata: list[tuple[int, int, int, int]]) -> str:
     return "".join(lines)
 
 
+def render_river_metadata(metadata: list[tuple[int, int, int, int]]) -> str:
+    lines = [
+        "// GENERADO por scripts/gen_water_lock_tiles.py — NO EDITAR A MANO.\n",
+        "#![cfg_attr(rustfmt, rustfmt_skip)]\n\n",
+        "/// `(width, height, xrel, yrel)` para `SPR_CANALS_BASE + 0..3`.\n",
+        "pub(crate) static WATER_RIVER_SLOPE_SPRITE_META: &[(i16, i16, i16, i16)] = &[\n",
+    ]
+    for width, height, xrel, yrel in metadata:
+        lines.append(f"    ({width}, {height}, {xrel}, {yrel}),\n")
+    lines.append("];\n")
+    return "".join(lines)
+
+
 def main() -> None:
     if not EXTRA_NFO.is_file():
         raise SystemExit(
@@ -156,7 +178,11 @@ def main() -> None:
     water = Image.open(water_path).convert("RGBA")
 
     slots = canals_slot_map(EXTRA_NFO)
-    needed = {s for _, a, b in LOCK_TILES for s in (a, b)} | set(DIKE_SLOTS)
+    needed = (
+        {s for _, a, b in LOCK_TILES for s in (a, b)}
+        | set(DIKE_SLOTS)
+        | {slot for _, slot in RIVER_SLOPE_TILES}
+    )
     missing = sorted(s for s in needed if s not in slots)
     if missing:
         raise SystemExit(f"slots canals ausentes: {missing}")
@@ -166,6 +192,15 @@ def main() -> None:
         out = compose_lock(water, slots, rear, front)
         out.save(TILES / name)
         print(f"  {name} <- canals[{rear}]+[{front}] ({out.width}x{out.height})")
+
+    river_metadata = []
+    for name, slot in RIVER_SLOPE_TILES:
+        image, xrel, yrel = crop_slot(slots, slot)
+        image.save(TILES / name)
+        river_metadata.append((image.width, image.height, xrel, yrel))
+        print(f"  {name} <- canals[{slot}] ({image.width}x{image.height})")
+    OUT_RIVER_META.write_text(render_river_metadata(river_metadata), encoding="utf-8")
+    print(f"  {OUT_RIVER_META.relative_to(REPO)} <- NFO anchors ({len(river_metadata)} slots)")
 
     dike_metadata = []
     for index, slot in enumerate(DIKE_SLOTS):

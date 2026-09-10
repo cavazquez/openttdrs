@@ -5,25 +5,44 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::station::{
     STATION_TYPE_BUOY, STATION_TYPE_DOCK, STATION_TYPE_OILRIG, station_type_from_m6,
 };
+use openttdrs_core::{SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW};
 
 use super::{SHORE_LAYER_FRAC, push_water_sprite, spawn_coast_debug_label};
 use crate::iso::{
-    GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, shore_png_index, shore_sprite_half_h,
-    shore_tileh_for_draw_shore, slope_half_h, tile_pos_half, tile_slope_bits_from_heights,
+    GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, ground_draw_z, overlay_pos, shore_png_index,
+    shore_sprite_half_h, shore_tileh_for_draw_shore, slope_half_h, tile_pos_half,
+    tile_slope_bits_from_heights,
 };
 use crate::render::shore_newgrf::{NEWGRF_SHORE_TILE_FLAG, NewGrfShoreSpriteCache};
 use crate::render::world_draw_trace::WorldDrawTrace;
-use crate::render::{MapSpriteBatches, TileRenderContext, WorldAssets};
+use crate::render::{MapSpriteBatches, MapVisualLayer, TileRenderContext, WaterTile, WorldAssets};
+use crate::sprites::WATER_RIVER_SLOPE_SPRITE_META;
 
 /// `SPR_FLAT_WATER_TILE` de `table/sprites.h`.
 const SPR_FLAT_WATER_TILE: u32 = 4061;
 /// `SPR_CANAL_DIKES_BASE` de `table/sprites.h`.
 pub(crate) const SPR_CANAL_DIKES_BASE: u32 = 5380;
+/// `SPR_CANALS_BASE` de `table/sprites.h`: las cuatro pendientes de río
+/// vanilla ocupan los slots 0..3 de la hoja Action5 de canales.
+pub(crate) const SPR_RIVER_SLOPE_BASE: u32 = 5328;
 /// `SPR_SHORE_BASE` resuelto por Action5 canals en OpenGFX/OpenGFX2.
 const SPR_SHORE_BASE: u32 = 5936;
 
 fn shore_sprite_id(tileh: u8) -> u32 {
     SPR_SHORE_BASE + shore_png_index(tileh) as u32
+}
+
+/// Índice de `SPR_CANALS_BASE + offset` que selecciona `DrawRiverWater` cuando
+/// no hay un callback NewGRF que reemplace la pendiente.
+#[must_use]
+pub(crate) const fn river_slope_sprite_index(tileh: u8) -> Option<usize> {
+    match tileh {
+        SLOPE_SE => Some(0), // SPR_WATER_SLOPE_Y_UP
+        SLOPE_NE => Some(1), // SPR_WATER_SLOPE_X_DOWN
+        SLOPE_SW => Some(2), // SPR_WATER_SLOPE_X_UP
+        SLOPE_NW => Some(3), // SPR_WATER_SLOPE_Y_DOWN
+        _ => None,
+    }
 }
 
 /// Direcciones que `IsWateredTile` recibe desde `DrawWaterEdges`.
@@ -108,6 +127,74 @@ fn is_watered_tile(map: &Map, coord: TileCoord, from: WateredFrom) -> bool {
         TileKind::Industry | TileKind::Forest => has_tile_water_ground(tile),
         _ => false,
     }
+}
+
+/// Agrega la pendiente fluvial vanilla como `DrawGroundSprite`.
+///
+/// A diferencia del agua plana, estas cuatro imágenes no forman parte del
+/// ciclo de paleta animada: `DrawRiverWater` emite el sprite estático y sólo
+/// después consulta los bordes NewGRF. El atlas conserva el `xrel/yrel` real
+/// de cada fila Action5, incluidas las dos variantes de 39 px de alto.
+fn river_slope_draw(ctx: &TileRenderContext) -> Option<(usize, Vec3)> {
+    let index = river_slope_sprite_index(ctx.info.tileh)?;
+    let &(width, height, xrel, yrel) = WATER_RIVER_SLOPE_SPRITE_META.get(index)?;
+    let mut position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(xrel),
+        f32::from(yrel),
+        f32::from(width),
+        f32::from(height),
+        ctx.info.base_z,
+        0.0,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    // OpenTTD emits this through DrawGroundSprite: elevation changes the
+    // screen position, but not the diagonal ground-pass ordering.
+    position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.0);
+    Some((index, position))
+}
+
+fn push_river_slope_sprite(
+    batch_water: &mut Vec<(crate::render::MapTileChunk, WaterTile, Sprite, Transform)>,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+) -> bool {
+    let Some((index, position)) = river_slope_draw(ctx) else {
+        return false;
+    };
+
+    let sprite_id = SPR_RIVER_SLOPE_BASE + index as u32;
+    WorldDrawTrace::record_sprite("water-river-slope", "ground", sprite_id, false);
+    batch_water.push((
+        ctx.map_tile_chunk(),
+        WaterTile::STATIC,
+        assets.river_slopes[index].sprite(),
+        Transform::from_translation(position),
+    ));
+    true
+}
+
+/// Variante directa para `DrawWaterDepot`, que no usa el batch global de
+/// agua porque debe emitir el ground antes de sus capas `TILE_SEQ`.
+pub(crate) fn spawn_river_slope_ground(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+) -> bool {
+    let Some((index, position)) = river_slope_draw(ctx) else {
+        return false;
+    };
+    let sprite_id = SPR_RIVER_SLOPE_BASE + index as u32;
+    WorldDrawTrace::record_sprite("ship-depot-water", "ground", sprite_id, false);
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        WaterTile::STATIC,
+        assets.river_slopes[index].sprite(),
+        Transform::from_translation(position),
+    ));
+    true
 }
 
 /// Selecciona los slots `SPR_CANAL_DIKES_BASE + 0..11` de `DrawWaterEdges`.
@@ -269,10 +356,14 @@ pub(crate) fn push_water_tile(
                     half_h,
                 )),
             ));
+        } else if ctx.tile.and_then(water_class) == Some(WaterClass::River)
+            && push_river_slope_sprite(&mut batches.water, assets, ctx)
+        {
+            // `DrawRiverWater` already emitted the selected slope sprite.
         } else {
-            // `DrawSeaWater` usa directamente `SPR_FLAT_WATER_TILE`. Las
-            // clases canal/río entran por aquí en el renderer actual: la
-            // auditoría dirá si su selección C++ requiere una rama propia.
+            // `DrawSeaWater` usa directamente `SPR_FLAT_WATER_TILE`. Un río
+            // plano también cae aquí; sólo sus cuatro pendientes cardinales
+            // tienen sprites vanilla específicos.
             WorldDrawTrace::record_sprite("water-ground", "ground", SPR_FLAT_WATER_TILE, false);
             push_water_sprite(&mut batches.water, &assets.water, ctx);
         }
@@ -281,10 +372,14 @@ pub(crate) fn push_water_tile(
 
 #[cfg(test)]
 mod tests {
-    use super::{SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, canal_dike_slots, shore_sprite_id};
+    use super::{
+        SPR_CANAL_DIKES_BASE, SPR_FLAT_WATER_TILE, canal_dike_slots, river_slope_sprite_index,
+        shore_sprite_id,
+    };
     use openttdrs_core::map::{
         Map, Tile, TileCoord, TileKind, WaterClass, make_water_tile, set_water_class_m1,
     };
+    use openttdrs_core::{SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW};
 
     fn canal_depot(map: &mut Map, coord: TileCoord) {
         let mut tile = map.get(coord).expect("canal depot tile");
@@ -302,6 +397,16 @@ mod tests {
         assert_eq!(shore_sprite_id(23), 5936); // SLOPE_STEEP_S -> slot 0.
         assert_eq!(shore_sprite_id(27), 5941); // SLOPE_STEEP_N -> slot 5.
         assert_eq!(shore_sprite_id(30), 5951); // SLOPE_STEEP_E -> slot 15.
+    }
+
+    #[test]
+    fn river_slopes_follow_draw_river_water_sprite_order() {
+        assert_eq!(river_slope_sprite_index(SLOPE_SE), Some(0)); // Y_UP.
+        assert_eq!(river_slope_sprite_index(SLOPE_NE), Some(1)); // X_DOWN.
+        assert_eq!(river_slope_sprite_index(SLOPE_SW), Some(2)); // X_UP.
+        assert_eq!(river_slope_sprite_index(SLOPE_NW), Some(3)); // Y_DOWN.
+        assert_eq!(river_slope_sprite_index(0), None);
+        assert_eq!(river_slope_sprite_index(0x0F), None);
     }
 
     #[test]

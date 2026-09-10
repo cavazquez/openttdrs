@@ -72,6 +72,9 @@ pub(crate) struct WorldAssets {
     /// `SPR_FLAT_WATER_TILE + SlopeToSpriteOffset`, usado por los bordes
     /// `Void` cuando `construction.freeform_edges` está desactivado.
     pub(crate) water_slopes: [AtlasSprite; 19],
+    /// Pendientes fluviales por defecto `SPR_CANALS_BASE + 0..3`, en el orden
+    /// Y_UP, X_DOWN, X_UP, Y_DOWN de `DrawRiverWater`.
+    pub(crate) river_slopes: [AtlasSprite; 4],
     /// Dikes `SPR_CANAL_DIKES_BASE + 0..11` de `DrawWaterEdges`.
     pub(crate) canal_dikes: [AtlasSprite; 12],
     /// Set completo `SPR_SHORE_BASE + 0..17` (`shore_full_{i:02}.png`).
@@ -274,6 +277,28 @@ impl WorldAssets {
         let water = atlas.get("water.png");
         let water_slopes =
             std::array::from_fn(|offset| atlas.get(&format!("terrain_water_{offset:02}.png")));
+        let river_slope_names = [
+            "water_river_slope_y_up.png",
+            "water_river_slope_x_down.png",
+            "water_river_slope_x_up.png",
+            "water_river_slope_y_down.png",
+        ];
+        let missing_river_slopes: Vec<&str> = river_slope_names
+            .iter()
+            .copied()
+            .filter(|name| atlas.try_get(name).is_none())
+            .collect();
+        if !missing_river_slopes.is_empty() {
+            warn!(
+                "Sprites de pendiente fluvial ausentes en atlas ({}): fallback a agua plana — corré scripts/gen_water_lock_tiles.py && gen_tile_atlas.py",
+                missing_river_slopes.len()
+            );
+        }
+        let river_slopes = std::array::from_fn(|i| {
+            atlas
+                .try_get(river_slope_names[i])
+                .unwrap_or_else(|| water.clone())
+        });
         let shore: Vec<AtlasSprite> = (0..crate::sprites::SHORE_SPRITE_COUNT)
             .map(|i| atlas.get(&format!("shore_full_{i:02}.png")))
             .collect();
@@ -803,6 +828,7 @@ impl WorldAssets {
             snow_desert,
             water,
             water_slopes,
+            river_slopes,
             canal_dikes,
             shore,
             water_frames,

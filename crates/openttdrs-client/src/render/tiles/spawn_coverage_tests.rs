@@ -12,7 +12,8 @@ use openttdrs_core::{
     FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef, IndustryTileGfxId, IndustryTileSpecDef,
     NewgrfAirportSpecDef, ObjectSpecDef, RailType, RoadStopSpecDef, RoadTramType, RoadType,
     RoadTypeDef, StationClassId, StationSpecDef, StationSpecId, TrainSpriteAssign,
-    TrainSpriteGraphics, WaterClass, set_water_class_m1, vanilla_road_type_catalog,
+    TrainSpriteGraphics, WaterClass, make_water_tile, set_water_class_m1,
+    vanilla_road_type_catalog,
 };
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
@@ -31,12 +32,13 @@ use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{
     AirportStationAnim, CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid,
     TileRenderContext, ViewportSortableChild, ViewportSortableChildDepthWindows,
-    ViewportSortableParent, sort_viewport_sortable_parents, sync_viewport_sortable_children,
-    viewport_insertion_key,
+    ViewportSortableParent, WaterTile, sort_viewport_sortable_parents,
+    sync_viewport_sortable_children, viewport_insertion_key,
 };
 use crate::sprites::{
     RAIL_TB_X, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, WATER_CANAL_DIKE_SPRITE_META,
-    industry_building_needs_client_anim, industry_gfx_entry_for_tile,
+    WATER_RIVER_SLOPE_SPRITE_META, industry_building_needs_client_anim,
+    industry_gfx_entry_for_tile,
 };
 
 #[derive(Resource)]
@@ -174,6 +176,76 @@ fn water_surface_markers_cover_flat_locks_and_industry_water() {
             }),
         "la industria sobre agua debe conservar el xrel=-31 de SPR_FLAT_WATER_TILE"
     );
+}
+
+#[test]
+fn river_water_slope_uses_static_action5_sprite_and_nfo_anchor() {
+    let assets = boot_assets_app();
+    let river_asset = assets.river_slopes[1].clone(); // SPR_WATER_SLOPE_X_DOWN.
+    let coord = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    make_water_tile(&mut map, coord, WaterClass::River).expect("river tile");
+    // `tile_slope_and_z` reads N, W, E, S at (tx,ty), (tx+1,ty),
+    // (tx,ty+1), (tx+1,ty+1). N+E gives SLOPE_NE (12).
+    map.set_height(TileCoord::new(1, 1), 1)
+        .expect("north height");
+    map.set_height(TileCoord::new(1, 2), 1)
+        .expect("east height");
+
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let ctx = TileRenderContext::new(&map, &grid, 1, 1);
+    assert_eq!(ctx.info.tileh, openttdrs_core::SLOPE_NE);
+    assert!(!ctx.info.use_shore, "un río claro no es una costa");
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let mut batches = MapSpriteBatches::default();
+                push_water_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    false,
+                    &mut batches,
+                    &[],
+                    None,
+                    None,
+                );
+                assert_eq!(batches.water.len(), 1);
+                assert!(!batches.water[0].1.is_palette_animated());
+                flush_map_batches(&mut commands, batches);
+            },
+        )
+        .expect("river slope spawn");
+
+    let (marker, sprite, transform) = world
+        .query::<(&WaterTile, &Sprite, &Transform)>()
+        .iter(&world)
+        .next()
+        .expect("river slope water sprite");
+    assert!(!marker.is_palette_animated());
+    assert!(river_asset.matches(sprite), "se usa el slot X_DOWN activo");
+
+    let (width, height, xrel, yrel) = WATER_RIVER_SLOPE_SPRITE_META[1];
+    let mut expected = overlay_pos(
+        crate::iso::iso(1, 1),
+        f32::from(xrel),
+        f32::from(yrel),
+        f32::from(width),
+        f32::from(height),
+        0,
+        0.0,
+        1,
+        1,
+    );
+    expected.z = ground_draw_z(1, 1, 0.0);
+    assert_eq!(*transform, Transform::from_translation(expected));
 }
 
 /// `DrawGroundSprite` y `DrawShoreTile` usan `xrel=-31` para un PNG de 64 px
@@ -3578,6 +3650,63 @@ fn canal_ship_depot_draws_dikes_with_active_nfo_anchors() {
             "dique slot {slot} debe conservar la ancla NFO y el pase ground"
         );
     }
+}
+
+#[test]
+fn river_ship_depot_uses_static_slope_ground_before_depot_layers() {
+    let assets = boot_assets_app();
+    let river_asset = assets.river_slopes[1].clone(); // SPR_WATER_SLOPE_X_DOWN.
+    let depot = TileCoord::new(1, 1);
+    let mut map = Map::new_flat(4, 4, 0);
+    let mut tile = tile_template();
+    tile.kind = TileKind::ShipDepot;
+    tile.mapt = 0x60;
+    tile.m5 = 0x30;
+    tile.m1 = set_water_class_m1(tile.m1, WaterClass::River);
+    map.set_tile(depot, tile).expect("river ship depot");
+    map.set_height(TileCoord::new(1, 1), 1)
+        .expect("north height");
+    map.set_height(TileCoord::new(1, 2), 1)
+        .expect("east height");
+
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_transport_object_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("river ship depot spawn");
+
+    let mut waters = world.query::<(&WaterTile, &Sprite)>();
+    let (marker, sprite) = waters.iter(&world).next().expect("river depot ground");
+    assert!(!marker.is_palette_animated());
+    assert!(
+        river_asset.matches(sprite),
+        "el depósito conserva X_DOWN de río"
+    );
 }
 
 #[test]

@@ -1,6 +1,7 @@
 use bevy::prelude::*;
-use openttdrs_core::Climate;
+use openttdrs_core::map::water_class;
 use openttdrs_core::prelude::*;
+use openttdrs_core::{Climate, WaterClass};
 use openttdrs_core::{
     RoadStopSpecDef, StationSpecDef, TramwayDepotReplacement, inclined_slope_direction,
     is_tunnel_entrance_slope, rail_type_from_tile, road_stop_spec_def, road_type_from_tile,
@@ -12,7 +13,7 @@ use super::transport::{
     catenary_local_z_delta, record_road_ground_trace, resolve_custom_rail_group_sprite,
     spawn_rail_catenary_for_surface, spawn_road_catenary_for_type,
 };
-use super::water::canal_dike_slots;
+use super::water::{canal_dike_slots, spawn_river_slope_ground};
 use super::{
     catenary_under_low_bridge,
     helpers::{
@@ -4451,21 +4452,26 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
     if ctx.kind == TileKind::ShipDepot {
-        // `DrawShipDepotSprite` siempre parte de `SPR_WATER_TILE`: aunque el
-        // depósito tenga un TileKind propio, en el save sigue siendo MP_WATER.
-        WorldDrawTrace::record_sprite("ship-depot-water", "ground", 4061, false);
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            WaterTile::ANIMATED,
-            assets.water.sprite(),
-            Transform::from_translation(full_tile_sprite_pos(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                FLAT_WATER_LAYER_FRAC,
-            )),
-        ));
+        // `DrawWaterDepot` delega primero en `DrawWaterClassGround`: un río
+        // inclinado usa una de las cuatro imágenes `SPR_CANALS_BASE+0..3`,
+        // mientras mar/canal y un río plano usan `SPR_FLAT_WATER_TILE`.
+        let river_slope = ctx.tile.and_then(water_class) == Some(WaterClass::River)
+            && spawn_river_slope_ground(commands, assets, ctx);
+        if !river_slope {
+            WorldDrawTrace::record_sprite("ship-depot-water", "ground", 4061, false);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                WaterTile::ANIMATED,
+                assets.water.sprite(),
+                Transform::from_translation(full_tile_sprite_pos(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    FLAT_WATER_LAYER_FRAC,
+                )),
+            ));
+        }
         spawn_ship_depot_canal_dikes(commands, map, assets, ctx, base_z);
     } else if !matches!(
         ctx.kind,

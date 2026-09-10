@@ -61,6 +61,8 @@ mod tunnel;
 mod water_canal_dike_gfx_data_generated;
 #[path = "sprites/water_palette_generated.rs"]
 mod water_palette_generated;
+#[path = "sprites/water_river_gfx_data_generated.rs"]
+mod water_river_gfx_data_generated;
 
 pub(crate) use rail_tunnel_base_sprites_generated::{
     RAIL_TUNNEL_BASE_CLIMATE_COUNT, RAIL_TUNNEL_BASE_SPRITE_COUNT, RAIL_TUNNEL_BASE_SPRITE_META,
@@ -74,6 +76,7 @@ pub(crate) use water_canal_dike_gfx_data_generated::WATER_CANAL_DIKE_SPRITE_META
 pub(crate) use water_palette_generated::{
     DARK_WATER_FRAME_COUNT, GLITTER_WATER_FRAME_COUNT, WATER_PALETTE_FRAME_COUNT,
 };
+pub(crate) use water_river_gfx_data_generated::WATER_RIVER_SLOPE_SPRITE_META;
 
 // ── Constantes de renderizado de carreteras y vías ───────────────────────────
 

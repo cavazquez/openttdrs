@@ -1,3 +1,4 @@
+use openttdrs_core::map::{WaterClass, water_class};
 use openttdrs_core::prelude::*;
 
 // ── Pendientes (slopes) ───────────────────────────────────────────────────────
@@ -126,15 +127,20 @@ pub fn tile_slope_and_min_z(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
     let hsouth = get_h(tx as i32 + 1, ty as i32 + 1);
     let (tileh_computed, min_h) = slope_bits_from_corner_vals(hnorth, hwest, heast, hsouth);
     let center = map.get(TileCoord::new(tx as i32, ty as i32));
-    let is_water = center.is_some_and(|t| t.kind == TileKind::Water);
-    // MP_WATER se dibuja como superficie plana (Clear / costa); `tileh`≠0 aquí solo
-    // confunde UI y el grid de costa — las pendientes vienen de `DrawShoreTile` en el
-    // agua o del terreno en MP_CLEAR, no de “pendiente de rombo” sobre el mar.
+    let is_non_river_water = center
+        .is_some_and(|t| t.kind == TileKind::Water && water_class(t) != Some(WaterClass::River));
+    // `DrawSeaWater` y `DrawShoreTile` usan superficies planas o sus propios
+    // índices de costa. El río es la excepción: `DrawRiverWater` selecciona
+    // cuatro sprites Action5 según la pendiente real del 2×2.
     //
     // `min_z` debe ser siempre `min_h` (= [`GetTileZ`]) también en agua: si usamos otra
     // métrica (p. ej. mediana), la costa y la hierba lindera quedan desfasadas en Y y
     // aparece la “sierra” / escalones entre rombos.
-    let tileh_out = if is_water { 0 } else { tileh_computed };
+    let tileh_out = if is_non_river_water {
+        0
+    } else {
+        tileh_computed
+    };
     (tileh_out, min_h)
 }
 

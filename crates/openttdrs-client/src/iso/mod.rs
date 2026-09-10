@@ -161,6 +161,7 @@ mod water_coast_height_tests {
         TILE_HALF_H, shore_sprite_half_h, shore_tileh_for_draw_shore, tile_slope_and_min_z,
         water_void_effective_height_for_slope,
     };
+    use openttdrs_core::map::{SLOPE_NE, WaterClass, make_water_tile};
     use openttdrs_core::prelude::*;
 
     #[test]
@@ -218,6 +219,18 @@ mod water_coast_height_tests {
         }
         m.set_legacy_zero_water_height_repair(true);
         assert_eq!(compute_tileh(&m, 1, 1), 0);
+    }
+
+    #[test]
+    fn river_water_exposes_inclined_slope_to_draw_river_water() {
+        let mut m = Map::new_flat(2, 2, 0);
+        let c = TileCoord::new(0, 0);
+        make_water_tile(&mut m, c, WaterClass::River).unwrap();
+        // N+E elevated: the four corners of (0,0) encode SLOPE_NE.
+        m.set_height(TileCoord::new(0, 0), 1).unwrap();
+        m.set_height(TileCoord::new(0, 1), 1).unwrap();
+
+        assert_eq!(tile_slope_and_min_z(&m, 0, 0), (SLOPE_NE, 0));
     }
 
     #[test]

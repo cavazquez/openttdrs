@@ -1457,7 +1457,8 @@ python3 "$(dirname "$0")/gen_toolbar_rail_icons.py"
 python3 "$(dirname "$0")/gen_toolbar_water_icons.py"
 # Los controles Action5 de ventana se resuelven desde el NFO activo por
 # crop_ui_terraform_icons.py. No descargar una hoja 32bpp ajena al perfil 8bpp.
-# Tiles in-world de agua especial: esclusas y diques (Action5 canals) antes del atlas.
+# Tiles in-world de agua especial: esclusas, pendientes fluviales y diques
+# (Action5 canals) antes del atlas.
 python3 "$(dirname "$0")/gen_water_lock_tiles.py"
 python3 "$(dirname "$0")/crop_ui_terraform_icons.py"
 
@@ -1557,6 +1558,7 @@ if command -v rustfmt >/dev/null 2>&1; then
     "${ROOT}/crates/openttdrs-client/src/sprites/road_waypoint_gfx_data_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/rail_tunnel_base_sprites_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/water_canal_dike_gfx_data_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/water_river_gfx_data_generated.rs"
   )
   rustfmt --edition 2024 "${GENERATED_RUST[@]}"
 else

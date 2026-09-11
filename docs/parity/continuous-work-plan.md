@@ -4833,3 +4833,13 @@ siguen pendientes el stream RNG global, la propagación completa por consist y
 el compositor/raster global, por lo que #329/#567 continúan abiertas. Cliente
 queda en `1403 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y
 `diff --check` validados para esta etapa.
+
+Actualización #329-VEHICLE-VISUAL-EFFECT-WAGON-CB10 (2026-09-11): el renderer
+ya no descarta por clase los efectos estándar de vagones. Como en
+`Vehicle::ShowVisualEffect`, el efecto por defecto del vagón sigue desactivado,
+pero un CB10 explícito puede seleccionar vapor, diésel o chispa para esa
+unidad; el filtro de potencia ferroviaria se mantiene. La regresión cubre el
+opt-in NewGRF y el fallback vanilla. Siguen pendientes la propagación completa
+del consist, el stream RNG global y el compositor/raster global; #329/#567
+continúan abiertas. Cliente queda en `1404 passed; 0 failed; 2 ignored`, con
+Clippy estricto, formato y `diff --check` validados para esta etapa.

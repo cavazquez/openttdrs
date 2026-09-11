@@ -231,7 +231,6 @@ fn train_smoke_to_emit_with_engine(
     let amount = smoke_amount.min(2);
     if amount == 0
         || vehicle.kind != VehicleKind::Train
-        || !engine.is_train_engine()
         || !vehicle_has_power_on_current_rail(map, vehicle, engine)
         || !vehicle.running
         || vehicle.crashed
@@ -254,7 +253,10 @@ fn train_smoke_to_emit_with_engine(
         VehicleVisualEffectKind::Steam => openttdrs_core::TrainSmokeKind::Steam,
         VehicleVisualEffectKind::Diesel => openttdrs_core::TrainSmokeKind::Diesel,
         VehicleVisualEffectKind::Electric => openttdrs_core::TrainSmokeKind::Electric,
-        VehicleVisualEffectKind::Default => train_smoke_kind(engine.id),
+        VehicleVisualEffectKind::Default if engine.is_train_engine() => train_smoke_kind(engine.id),
+        // OpenTTD disables the default effect for wagons; only an explicit
+        // CB10 result may opt a wagon into a standard effect.
+        VehicleVisualEffectKind::Default => return None,
     };
     let tick_counter = vehicle.newgrf_tick_counter;
     match smoke_kind {
@@ -1492,5 +1494,27 @@ mod tests {
             set_rail_type_on_tile(map.get(pos).expect("normal rail tile"), RailType::Electric);
         map.set_tile(pos, electric).expect("electric rail");
         assert!(vehicle_has_power_on_current_rail(&map, &vehicle, engine));
+    }
+
+    #[test]
+    fn explicit_cb10_can_enable_standard_effect_on_a_wagon() {
+        let map = Map::new_flat(4, 4, 0);
+        let mut vehicle = running_train(openttdrs_core::ENGINE_WAGON_COAL);
+        let mut engine = openttdrs_core::engine::engine_by_id(openttdrs_core::ENGINE_WAGON_COAL)
+            .expect("vagón vanilla")
+            .clone();
+        engine.newgrf_grfid = 0x5649_5355;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1;
+        // CB10 type=steam; a default wagon remains disabled below.
+        engine.newgrf_runtime = Some(Box::new(callback_literal(0x10)));
+
+        assert_eq!(
+            train_smoke_to_emit_with_engine(&map, &mut vehicle, &engine, 2),
+            Some(TrainSmokeSet::Steam)
+        );
+
+        engine.newgrf_runtime = None;
+        assert!(train_smoke_to_emit_with_engine(&map, &mut vehicle, &engine, 2).is_none());
     }
 }

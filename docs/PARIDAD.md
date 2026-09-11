@@ -4390,3 +4390,16 @@ de boca. Core queda en `2448 passed; 0 failed; 1 ignored` y cliente en
 librería/binario y diff limpios. #567 sigue abierta por callbacks y
 pathfinding navales restantes y aceptación visual manual bajo Weston; #326
 permanece abierta.
+
+Actualización #567-SHIP-REVERSE-BLOCKED-TRACK (2026-09-11, `4a8c36dd`): el
+controlador naval replica el fallback de `ReverseShip` cuando la ruta deja de
+ser navegable por una modificación del mapa, una conexión de agua inválida,
+una ruta desfasada o una combinación de track sin subcoordenada válida. Invierte
+el rumbo físico, detiene el barco, conserva `ship_rotation` para animar el
+giro sobre el lugar y limpia la ruta para que el planificador la reconstruya.
+Se agregó una regresión que transforma en tierra la siguiente tesela durante
+el avance. Core queda en `2449 passed; 0 failed; 1 ignored` y cliente en
+`1388 passed; 0 failed; 2 ignored`, con formato, Clippy estricto de
+librería/binario y diff limpios. #567 sigue abierta por callbacks y
+pathfinding navales restantes y aceptación visual manual bajo Weston; #326
+permanece abierta.

@@ -173,6 +173,46 @@ fn place_ship_depot_writes_both_native_parts_for_each_direction() {
 }
 
 #[test]
+fn place_ship_depot_rejects_every_map_edge_atomically() {
+    // Cada origen está dentro de un mapa 4×4, pero la segunda sección cae
+    // fuera en uno de los cuatro bordes. El comando y su preview deben
+    // rechazar la huella completa antes de escribir la primera sección.
+    let cases = [
+        (0u8, TileCoord::new(3, 1), TileCoord::new(2, 1)), // este
+        (1, TileCoord::new(1, 0), TileCoord::new(1, 1)),   // norte
+        (2, TileCoord::new(0, 1), TileCoord::new(1, 1)),   // oeste
+        (3, TileCoord::new(1, 3), TileCoord::new(1, 2)),   // sur
+    ];
+
+    for (dir, depot, mouth) in cases {
+        let mut s = GameState::new(4, 4);
+        for coord in [depot, mouth] {
+            s.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+        let [origin, other] = crate::ship_depot_footprint(depot, dir);
+        assert!(s.map.get(origin).is_some());
+        assert!(s.map.get(other).is_none());
+        let money = s.economy.money;
+        let command = Command::PlaceShipDepotDir(depot, dir);
+
+        assert_eq!(
+            command_would_fail(&s, &command),
+            Some(crate::CommandError::OutOfBounds),
+            "preview dir={dir} debe rechazar la segunda sección fuera del mapa"
+        );
+        assert_eq!(
+            apply_command(&mut s, &command),
+            Err(crate::CommandError::OutOfBounds),
+            "ejecución dir={dir} debe ser atómica en el borde"
+        );
+        assert_eq!(s.map.get_kind(origin), Some(TileKind::Water));
+        assert!(s.map.get(other).is_none());
+        assert!(s.depots.is_empty());
+        assert_eq!(s.economy.money, money);
+    }
+}
+
+#[test]
 fn depot_builders_share_native_pool_ids() {
     let mut s = GameState::new(16, 16);
     let road = TileCoord::new(2, 2);

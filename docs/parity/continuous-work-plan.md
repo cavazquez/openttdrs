@@ -3891,3 +3891,13 @@ clipping local. Core queda en 2405 pasadas y 1 ignorada; cliente en 1381
 pasadas y 2 ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta
 por callbacks/vecinos, clipping de viewport, orden global y framebuffer;
 #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-PREVIEW-SORT (2026-09-11, `ad1d6b38`):
+las capas del fantasma naval ahora entran en `ViewportSortableParent` con los
+prismas `TILE_SEQ_LINE`, `viewport_insertion_key` y `viewport_source_depth`
+del compositor global. Esto conserva el cruce correcto con edificios,
+puentes y vías cercanas durante la construcción; la geometría de bounds se
+regresiona contra las cuatro orientaciones y el runtime. La suite cliente
+queda en 1382 pasadas y 2 ignoradas, con Clippy estricto y formato verdes.
+#567 sigue abierta por callbacks/vecinos, clipping de viewport y framebuffer;
+#326 permanece abierta.

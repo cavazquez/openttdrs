@@ -3998,6 +3998,17 @@ failed; 2 ignored`, con formato, `git diff --check` y Clippy estricto limpios.
 #329/#567 siguen abiertas por callbacks y propiedades navales restantes, y por
 aceptación visual manual bajo Weston; #326 permanece abierta.
 
+Actualización #329/#567-SHIP-RETIRE-EARLY (2026-09-11, `4c18b55d`): Action0
+naval `0x16` ya conserva los años de retiro anticipado. `engine_available_in_year`
+los descuenta de la vida del modelo para la compra y el autoreemplazo, con
+`0` como fallback compatible para saves/catálogos anteriores. La regresión
+combina vida de modelo de 10 años con retiro de 3 y verifica el límite de
+disponibilidad. Core queda en `2457 passed; 0 failed; 1 ignored`; cliente
+mantiene `1388 passed; 0 failed; 2 ignored`, con formato, `git diff --check` y
+Clippy estricto limpios. #329/#567 siguen abiertas por callbacks y
+propiedades navales restantes, y por aceptación visual manual bajo Weston;
+#326 permanece abierta.
+
 Actualización #326/#567-SHIP-DEPOT-DEPT-PERSISTENCE (2026-09-11, `e5a44e76`):
 las filas de `SavDepot` ya se cargan y escriben en la tabla nativa `DEPT`,
 conservando el índice denso `DepotID`, `Depot::xy`, `REF_TOWN` moderno y

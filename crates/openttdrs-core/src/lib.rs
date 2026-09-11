@@ -718,7 +718,7 @@ pub use refit::{
     refittable_cargo_types_for_engine_with_catalog_and_climate,
     refittable_cargo_types_with_catalog, refittable_cargo_types_with_catalog_and_climate,
     vehicle_hidden_from_view, vehicle_hidden_in_tunnel, vehicle_hidden_on_map, vehicle_in_depot,
-    vehicle_is_in_depot,
+    vehicle_is_in_depot, vehicle_is_stopped_in_depot,
 };
 pub use road_action2::action2_eval_ctx_for_road_tile;
 pub use road_movement::{

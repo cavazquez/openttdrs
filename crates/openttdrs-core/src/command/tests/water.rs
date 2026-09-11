@@ -652,6 +652,20 @@ fn refit_ship_requires_native_depot_state() {
     );
 
     s.vehicles[0].ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+    s.vehicles[0].running = true;
+    assert_eq!(
+        apply_command(
+            &mut s,
+            &Command::RefitVehicle {
+                vehicle_id: id,
+                cargo: CargoType::Oil,
+                unit_ids: Vec::new(),
+            },
+        ),
+        Err(crate::CommandError::RefitNotAllowed)
+    );
+
+    s.vehicles[0].running = false;
     apply_command(
         &mut s,
         &Command::RefitVehicle {

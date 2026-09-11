@@ -4993,3 +4993,13 @@ footprint. La regresión cubre ambos estados; el bloqueo de efectos visuales por
 `IsDepotTile` se mantiene separado porque es el contrato nativo de
 `Vehicle::ShowVisualEffect`. #567 continúa abierta por callbacks, pathfinding
 completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-STOPPED-STATE (2026-09-11): el refit manual y la
+ventana de refit exigen ahora el equivalente local de
+`Vehicle::IsStoppedInDepot`, que combina el estado físico de depósito con una
+unidad detenida y velocidad cero. Esto separa la autorización de refit de
+`IsInDepot`: una nave o vehículo que todavía conserva el estado de depósito
+pero ya está en movimiento no se ofrece ni acepta como refit manual. Los
+barridos de autoreplace y el refit automático de órdenes conservan sus
+predicados propios (`IsChainInDepot`/estado de llegada). #567 continúa abierta
+por callbacks, pathfinding completo y aceptación visual/framebuffer.

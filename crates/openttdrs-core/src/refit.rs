@@ -371,6 +371,18 @@ pub fn vehicle_is_in_depot(map: &Map, vehicle: &Vehicle) -> bool {
     }
 }
 
+/// Estado equivalente a `Vehicle::IsStoppedInDepot` de `OpenTTD`.
+///
+/// `IsInDepot` no alcanza para las operaciones manuales: una unidad puede
+/// conservar el estado de depósito mientras está en movimiento o iniciando
+/// la salida. El modelo local usa `running` como equivalente de
+/// `VehState::Stopped` y `cur_speed` para conservar la precondición física de
+/// una unidad completamente detenida.
+#[must_use]
+pub fn vehicle_is_stopped_in_depot(map: &Map, vehicle: &Vehicle) -> bool {
+    vehicle_is_in_depot(map, vehicle) && !vehicle.running && vehicle.cur_speed == 0
+}
+
 /// Progreso mínimo en tesela de depósito para dibujar un tren saliendo por la boca
 /// (`_fractcoords_behind` → `_fractcoords_enter` en `OpenTTD`).
 const TRAIN_DEPOT_EXIT_VISIBILITY_PROGRESS: u8 = 192;
@@ -493,7 +505,7 @@ pub fn next_refit_cargo(vehicle: &Vehicle) -> Option<CargoType> {
 #[must_use]
 pub fn refit_allowed(vehicle: &Vehicle, map: &Map) -> bool {
     vehicle.cargo == 0
-        && vehicle_is_in_depot(map, vehicle)
+        && vehicle_is_stopped_in_depot(map, vehicle)
         && refittable_cargo_types(vehicle).len() > 1
 }
 
@@ -525,7 +537,7 @@ pub fn refit_allowed_with_catalog_and_climate(
     cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
     climate: Climate,
 ) -> bool {
-    if vehicle.cargo != 0 || !vehicle_is_in_depot(map, vehicle) {
+    if vehicle.cargo != 0 || !vehicle_is_stopped_in_depot(map, vehicle) {
         return false;
     }
     refittable_cargo_types_with_catalog_and_climate(vehicle, engine_catalog, cargo_catalog, climate)
@@ -654,10 +666,40 @@ mod tests {
         map.set_kind(depot, TileKind::ShipDepot).unwrap();
         let mut ship = Vehicle::new(1, VehicleKind::Ship, depot, depot);
         ship.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+        assert!(!refit_allowed(&ship, &map));
+
+        ship.running = false;
         assert!(refit_allowed(&ship, &map));
+
+        ship.running = true;
+        assert!(!refit_allowed(&ship, &map));
 
         ship.ship_state = crate::ship_movement::SHIP_STATE_TRACK_X;
         assert!(!refit_allowed(&ship, &map));
+    }
+
+    #[test]
+    fn vehicle_is_stopped_in_depot_requires_stationary_native_state() {
+        let mut map = crate::map::Map::new_flat(16, 16, 0);
+        let road = TileCoord::new(3, 3);
+        let ship_tile = TileCoord::new(7, 3);
+        map.set_kind(road, TileKind::RoadDepot).unwrap();
+        map.set_kind(ship_tile, TileKind::ShipDepot).unwrap();
+
+        let mut bus = Vehicle::new(1, VehicleKind::Bus, road, road);
+        bus.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
+        assert!(!vehicle_is_stopped_in_depot(&map, &bus));
+        bus.running = false;
+        assert!(vehicle_is_stopped_in_depot(&map, &bus));
+        bus.cur_speed = 1;
+        assert!(!vehicle_is_stopped_in_depot(&map, &bus));
+
+        let mut ship = Vehicle::new(2, VehicleKind::Ship, ship_tile, ship_tile);
+        ship.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+        ship.running = false;
+        assert!(vehicle_is_stopped_in_depot(&map, &ship));
+        ship.ship_state = crate::ship_movement::SHIP_STATE_TRACK_X;
+        assert!(!vehicle_is_stopped_in_depot(&map, &ship));
     }
 
     #[test]

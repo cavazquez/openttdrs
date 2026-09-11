@@ -647,6 +647,7 @@ mod tests {
         let mut vehicle = Vehicle::new(9, VehicleKind::Truck, depot, depot);
         vehicle.cargo = 0;
         vehicle.cargo_type = Some(CargoType::Mail);
+        vehicle.running = false;
         vehicle.road_depot_phase = openttdrs_core::vehicle::RoadDepotPhase::InDepot;
         state.vehicles.push(vehicle);
         world.insert_resource(sim_with(state));

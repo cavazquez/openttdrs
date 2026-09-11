@@ -1142,7 +1142,7 @@ pub(super) fn refit_vehicle(
         if vehicle.cargo > 0 {
             return Err(CommandError::RefitNotAllowed);
         }
-        if !crate::refit::vehicle_is_in_depot(&state.map, vehicle) {
+        if !crate::refit::vehicle_is_stopped_in_depot(&state.map, vehicle) {
             return Err(CommandError::RefitNotAllowed);
         }
         let allowed = vehicle

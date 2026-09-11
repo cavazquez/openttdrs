@@ -220,6 +220,7 @@ pub(super) fn depot_mass_autoreplace(
     depot_pos: crate::TileCoord,
 ) -> Result<(), CommandError> {
     in_bounds(&state.map, depot_pos)?;
+    let depot_pos = crate::depot::canonical_depot_command_tile(&state.map, depot_pos);
     let kind = state.map.get_kind(depot_pos);
     if !matches!(
         kind,
@@ -344,6 +345,7 @@ pub(super) fn depot_reorder_vehicle_slot(
     to_slot: usize,
 ) -> Result<(), CommandError> {
     in_bounds(&state.map, depot_pos)?;
+    let depot_pos = crate::depot::canonical_depot_command_tile(&state.map, depot_pos);
     // Misma lista que la UI del depósito: solo cabezas de consist propias, ordenadas
     // por `depot_display_slot` (y `id` como desempate).
     let owner = state.active_company;

@@ -154,6 +154,22 @@ pub fn canonical_depot_tile_for_vehicle(map: &Map, pos: TileCoord, kind: Vehicle
     }
 }
 
+/// Normaliza la posición que recibe un comando dirigido a un depósito.
+///
+/// Los comandos de flota no siempre conocen el tipo de vehículo antes de
+/// resolver la tesela. Para un depósito naval deben aceptar cualquiera de
+/// las dos secciones, pero continuar usando la sección norte como ancla del
+/// `DepotID`, igual que los comandos nativos que llaman a
+/// `GetShipDepotNorthTile`.
+#[must_use]
+pub fn canonical_depot_command_tile(map: &Map, pos: TileCoord) -> TileCoord {
+    if map.get_kind(pos) == Some(TileKind::ShipDepot) {
+        ship_depot_north_tile(map, pos).unwrap_or(pos)
+    } else {
+        pos
+    }
+}
+
 #[must_use]
 fn is_depot_candidate(map: &Map, pos: TileCoord, kind: VehicleKind) -> bool {
     let target = depot_tile_kind_for_vehicle(kind);
@@ -598,6 +614,8 @@ mod tests {
             south,
             "la normalización es específica de barcos"
         );
+        assert_eq!(canonical_depot_command_tile(&s.map, south), north);
+        assert_eq!(canonical_depot_command_tile(&s.map, north), north);
     }
 
     #[test]

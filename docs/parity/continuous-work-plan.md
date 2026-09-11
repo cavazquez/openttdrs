@@ -5019,3 +5019,12 @@ ruta navegable hasta la sección norte. El resto de vehículos conserva la
 selección indexada existente. La regresión evita elegir un depósito rival más
 cercano sobre la misma lámina de agua; #567 continúa abierta por callbacks,
 pathfinding completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-COMMAND-ANCHOR (2026-09-11): los comandos de
+flota que reciben una coordenada de depósito aceptan ahora también la sección
+sur de una huella naval 2×1 y la convierten a la sección norte antes de
+resolver el conjunto de vehículos. El contrato cubre clonado, venta masiva,
+arranque/parada, autoreemplazo masivo y reordenamiento; la regresión ejecuta
+las cinco operaciones desde la sección sur y verifica que todos los barcos
+siguen anclados al mismo depósito. #567 continúa abierta por callbacks,
+pathfinding completo y aceptación visual/framebuffer.

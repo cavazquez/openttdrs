@@ -335,11 +335,7 @@ pub(in crate::command) fn rename_depot(
         .get(depot_pos)
         .ok_or(CommandError::DepotNotFound)?;
     let depot_id = crate::depot::depot_id_from_tile(tile).ok_or(CommandError::DepotNotFound)?;
-    let canonical_tile = if tile.kind == TileKind::ShipDepot {
-        crate::depot::ship_depot_north_tile(&state.map, depot_pos).unwrap_or(depot_pos)
-    } else {
-        depot_pos
-    };
+    let canonical_tile = crate::depot::canonical_depot_command_tile(&state.map, depot_pos);
 
     // Saves JSON antiguos no tenían DEPT en el estado de juego. La creación
     // perezosa conserva la capacidad de renombrar esos depósitos y permite

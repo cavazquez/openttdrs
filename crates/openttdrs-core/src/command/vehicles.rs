@@ -1074,11 +1074,13 @@ pub(super) fn clone_vehicle_at_depot(
     depot_pos: TileCoord,
 ) -> Result<(), CommandError> {
     require_vehicle_owned_by_active(state, source_vehicle_id)?;
-    let (engine_id, orders) = {
+    let (engine_id, orders, canonical_depot_pos) = {
         let Some(source) = state.vehicles.iter().find(|v| v.id == source_vehicle_id) else {
             return Err(CommandError::VehicleNotFound);
         };
-        if source.pos != depot_pos {
+        let canonical_depot_pos =
+            crate::depot::canonical_depot_tile_for_vehicle(&state.map, depot_pos, source.kind);
+        if source.pos != canonical_depot_pos {
             return Err(CommandError::VehicleNotInDepot);
         }
         (
@@ -1086,9 +1088,10 @@ pub(super) fn clone_vehicle_at_depot(
                 .engine_id
                 .unwrap_or_else(|| crate::engine::default_engine_id(source.kind)),
             source.orders.clone(),
+            canonical_depot_pos,
         )
     };
-    build_vehicle_at_depot(state, depot_pos, engine_id)?;
+    build_vehicle_at_depot(state, canonical_depot_pos, engine_id)?;
     let Some(new_vehicle) = state.vehicles.last_mut() else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -1101,6 +1104,7 @@ pub(super) fn sell_all_vehicles_at_depot(
     state: &mut GameState,
     depot_pos: TileCoord,
 ) -> Result<(), CommandError> {
+    let depot_pos = crate::depot::canonical_depot_command_tile(&state.map, depot_pos);
     let owner = state.active_company;
     let ids: Vec<u32> = state
         .vehicles
@@ -1501,6 +1505,7 @@ pub(super) fn set_depot_vehicles_running(
     running: bool,
 ) -> Result<(), CommandError> {
     in_bounds(&state.map, depot_pos)?;
+    let depot_pos = crate::depot::canonical_depot_command_tile(&state.map, depot_pos);
     let kind = state.map.get_kind(depot_pos);
     if !matches!(
         kind,

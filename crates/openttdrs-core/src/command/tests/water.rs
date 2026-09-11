@@ -1632,6 +1632,81 @@ fn ship_depot_order_from_south_section_is_stored_at_north_anchor() {
 }
 
 #[test]
+fn ship_depot_commands_from_south_section_use_north_anchor() {
+    use crate::engine::ENGINE_SHIP_MPS;
+
+    let mut s = GameState::new(16, 10);
+    let origin = TileCoord::new(5, 4);
+    let [first, second] = crate::ship_depot_footprint(origin, 0);
+    for tile in [first, second] {
+        s.map.set_kind(tile, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceShipDepotDir(origin, 0)).unwrap();
+    let north = crate::ship_depot_north_tile(&s.map, origin).unwrap();
+    let south = crate::ship_depot_other_tile(&s.map, north).unwrap();
+
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(north, ENGINE_SHIP_MPS),
+    )
+    .unwrap();
+    let source_id = s.vehicles[0].id;
+
+    apply_command(
+        &mut s,
+        &Command::CloneVehicleAtDepot {
+            source_vehicle_id: source_id,
+            depot_pos: south,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.vehicles.len(), 2);
+    assert!(s.vehicles.iter().all(|vehicle| vehicle.pos == north));
+
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(south, ENGINE_SHIP_MPS),
+    )
+    .unwrap();
+    assert_eq!(s.vehicles.len(), 3);
+    for vehicle in &mut s.vehicles {
+        vehicle.running = true;
+        vehicle.autoreplace_attempted_this_stop = true;
+    }
+
+    apply_command(
+        &mut s,
+        &Command::SetDepotVehiclesRunning {
+            depot_pos: south,
+            running: false,
+        },
+    )
+    .unwrap();
+    assert!(s.vehicles.iter().all(|vehicle| !vehicle.running));
+
+    apply_command(
+        &mut s,
+        &Command::DepotReorderVehicleSlot {
+            depot_pos: south,
+            from_slot: 0,
+            to_slot: 2,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[0].depot_display_slot, Some(2));
+
+    apply_command(&mut s, &Command::DepotMassAutoreplace { depot_pos: south }).unwrap();
+    assert!(
+        s.vehicles
+            .iter()
+            .all(|vehicle| !vehicle.autoreplace_attempted_this_stop)
+    );
+
+    apply_command(&mut s, &Command::SellAllVehiclesAtDepot(south)).unwrap();
+    assert!(s.vehicles.is_empty());
+}
+
+#[test]
 fn ship_paths_via_buoy() {
     use crate::pathfinder::{PathNetwork, find_path};
 

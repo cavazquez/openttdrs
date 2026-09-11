@@ -726,6 +726,7 @@ fn service_at_depot_restores_reliability() {
     v.needs_servicing = true;
     v.breakdown_ctr = 50;
     v.breakdown_delay = 10;
+    v.breakdown_chance = 200;
     v.breakdowns_since_last_service = 4;
     v.last_service_newgrf_day = -1;
     v.sim_tick = u64::from(crate::economy::TICKS_PER_DAY) * 7;
@@ -734,6 +735,7 @@ fn service_at_depot_restores_reliability() {
     assert!(!v.needs_servicing);
     assert_eq!(v.breakdown_ctr, 0);
     assert_eq!(v.breakdown_delay, 0);
+    assert_eq!(v.breakdown_chance, 50);
     assert_eq!(v.breakdowns_since_last_service, 0);
     assert_eq!(v.last_service_day, 7);
     assert_eq!(v.last_service_newgrf_day, 7);

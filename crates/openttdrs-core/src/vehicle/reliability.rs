@@ -131,7 +131,7 @@ impl super::model::Vehicle {
         self.needs_servicing = false;
         self.breakdown_ctr = 0;
         self.breakdown_delay = 0;
-        self.breakdown_chance = 0;
+        self.breakdown_chance /= 4;
         self.breakdowns_since_last_service = 0;
         let service_day =
             crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
@@ -161,7 +161,7 @@ impl super::model::Vehicle {
         self.needs_servicing = false;
         self.breakdown_ctr = 0;
         self.breakdown_delay = 0;
-        self.breakdown_chance = 0;
+        self.breakdown_chance /= 4;
         self.breakdowns_since_last_service = 0;
         let service_day =
             crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
@@ -764,6 +764,7 @@ mod tests {
         vehicle.engine_id = Some(child.id);
         vehicle.reliability = 1_000;
         vehicle.needs_servicing = true;
+        vehicle.breakdown_chance = 200;
         vehicle.breakdowns_since_last_service = 9;
         vehicle.last_service_newgrf_day = -7;
         vehicle.sim_tick = u64::from(crate::economy::TICKS_PER_DAY) * 11;
@@ -773,6 +774,7 @@ mod tests {
         assert_eq!(vehicle.reliability_spd_dec, 44);
         assert_eq!(vehicle.max_age_days, 17 * DAYS_PER_VEHICLE_YEAR);
         assert!(!vehicle.needs_servicing);
+        assert_eq!(vehicle.breakdown_chance, 50);
         assert_eq!(vehicle.breakdowns_since_last_service, 0);
         assert_eq!(vehicle.last_service_day, 11);
         assert_eq!(vehicle.last_service_newgrf_day, 11);

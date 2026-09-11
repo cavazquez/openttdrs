@@ -5126,3 +5126,11 @@ suelo, equivalente a `HandleAircraftSmoke` al aterrizar. La limpieza se aplica
 tanto al flujo normal como al FTA de aeropuertos, y una regresión cubre el
 estado de taxi lento; #329/#567 continúan abiertas por la semántica restante
 de vehículos, callbacks y aceptación visual/framebuffer.
+
+Actualización #329/#567-SERVICE-BREAKDOWN-CHANCE (2026-09-11): el servicio en
+depósito conserva ahora una cuarta parte de `breakdown_chance`, como
+`VehicleServiceInDepot`, en lugar de borrar por completo el acumulador. Esto
+mantiene la protección nativa contra una avería inmediata y las regresiones
+cubren tanto el método vanilla como el catálogo runtime; queda pendiente
+propagar el modificador específico de averías reducidas a todos los puntos de
+servicio. #329/#567 continúan abiertas.

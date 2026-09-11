@@ -24,6 +24,7 @@
 
 mod chunks;
 pub(crate) mod codec;
+mod depots;
 mod entities;
 mod fleet;
 mod industry_builder;
@@ -103,6 +104,7 @@ pub fn save_to_bytes_with(state: &GameState, container: SavContainer) -> Result<
 pub(crate) struct SavSemanticTableRecords {
     pub(crate) ordl: Vec<Vec<u8>>,
     pub(crate) vehs: Vec<Vec<u8>>,
+    pub(crate) dept: Vec<Vec<u8>>,
     pub(crate) stnn: Vec<Vec<u8>>,
     pub(crate) city: Vec<Vec<u8>>,
     pub(crate) indy: Vec<Vec<u8>>,
@@ -125,6 +127,7 @@ pub(crate) fn semantic_table_records(
 ) -> Result<SavSemanticTableRecords, SavError> {
     let (map_w, _) = state.map.dimensions();
     let cargo_export = entities::cargo_packet_export(state, map_w);
+    let dept = depots::dept_records(state, map_w)?;
     let capa = entities::capa_records(&cargo_export);
     let (ordl, vehs) = vehicles::ordl_and_vehs_records_with_cargo(state, map_w, &cargo_export)?;
     let stnn = entities::stnn_records_with_cargo(state, map_w, &cargo_export)?;
@@ -142,6 +145,7 @@ pub(crate) fn semantic_table_records(
     Ok(SavSemanticTableRecords {
         ordl,
         vehs,
+        dept,
         stnn,
         city,
         indy,
@@ -215,10 +219,10 @@ fn scan_chunk_names(payload: &[u8]) -> Vec<String> {
     // Tras CH_TABLE el tamaño del header no basta: completar con búsqueda de fourcc.
     for &want in REQUIRED_EXPORT_CHUNKS.iter().chain(
         [
-            "STNN", "CITY", "INDY", "IBLD", "ITBL", "ORDL", "VEHS", "CAPA", "LGRP", "LGRJ", "LGRS",
-            "PATS", "ECMY", "CAPY", "GRPS", "ERNW", "ENGN", "ENGS", "EIDS", "GSET", "NGRF", "OBJS",
-            "OBID", "SRND", "PSAC", "ANIT", "IIDS", "TIDS", "APID", "ATID", "RAIL", "ROTT", "GLOG",
-            "GOAL", "STPE", "STPA", "SIGN",
+            "STNN", "CITY", "INDY", "IBLD", "ITBL", "ORDL", "VEHS", "CAPA", "DEPT", "LGRP", "LGRJ",
+            "LGRS", "PATS", "ECMY", "CAPY", "GRPS", "ERNW", "ENGN", "ENGS", "EIDS", "GSET", "NGRF",
+            "OBJS", "OBID", "SRND", "PSAC", "ANIT", "IIDS", "TIDS", "APID", "ATID", "RAIL", "ROTT",
+            "GLOG", "GOAL", "STPE", "STPA", "SIGN",
         ]
         .iter(),
     ) {
@@ -441,6 +445,23 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     data.extend_from_slice(&chunks::riff_chunk(*b"MAP8", &planes.map8));
 
     let raw_tables = state.sav_table_passthrough.as_ref();
+    let dept = depots::dept_records(state, w)?;
+    let raw_dept = raw_tables.and_then(|passthrough| {
+        passthrough.dept_chunk.as_ref().filter(|chunk| {
+            chunk.name == *b"DEPT"
+                && chunk.ch_type != super::chunks::CH_RIFF
+                && passthrough.dept_semantic_records == dept
+        })
+    });
+    if let Some(raw) = raw_dept {
+        data.extend_from_slice(&chunks::raw_chunk(raw.name, raw.ch_type, &raw.body));
+    } else if let Some(canonical) = depots::dept_chunk(&dept)? {
+        data.extend_from_slice(&chunks::table_chunk_with_passthrough_from_snapshot(
+            raw_tables.and_then(|tables| tables.dept_chunk.as_ref()),
+            canonical,
+            raw_tables.map(|tables| tables.dept_semantic_records.as_slice()),
+        )?);
+    }
     let stnn = entities::stnn_records_with_cargo(state, w, &cargo_export)?;
     let raw_stnn = raw_tables.and_then(|passthrough| {
         passthrough.stnn_chunk.as_ref().filter(|chunk| {
@@ -2990,6 +3011,49 @@ mod tests {
         let sav_game = sav::load(&bytes).expect("load ottz");
         assert_eq!(sav_game.money, Some(777_000));
         assert_eq!(sav_game.map.dimensions(), (64, 64));
+    }
+
+    #[test]
+    fn dept_roundtrip_preserves_pool_metadata_and_map_id() {
+        use crate::depot::depot_id_from_tile;
+        use crate::sav::chunks::{CH_TABLE, find_chunk, parse_chunks};
+
+        let mut state = GameState::new(32, 32);
+        let depot_pos = TileCoord::new(7, 9);
+        let mut tile = state.map.get(depot_pos).expect("in bounds");
+        tile.kind = TileKind::RailDepot;
+        tile.mapt = 0x10;
+        tile.m5 = (3 << 6) | 3;
+        tile.m2 = 7;
+        tile.m2_hi = 0;
+        state.map.set_tile(depot_pos, tile).expect("set depot");
+        state.depots.push(sav::SavDepot {
+            depot_id: 7,
+            tile: depot_pos,
+            town_id: Some(3),
+            town_cn: 19,
+            name: "Depósito Norte".into(),
+            build_date: 702_345,
+        });
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let payload = &bytes[8..];
+        let chunks = parse_chunks(payload).expect("chunks");
+        let dept = find_chunk(&chunks, "DEPT").expect("DEPT");
+        assert_eq!(dept.ch_type, CH_TABLE);
+        let rows = crate::sav::table::parse_table_chunk(&dept.body, false).expect("DEPT table");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, 7);
+
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.depots.len(), 1);
+        assert_eq!(sav_game.depots[0], state.depots[0]);
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(loaded.depots, state.depots);
+        assert_eq!(
+            depot_id_from_tile(loaded.map.get(depot_pos).expect("loaded depot")),
+            Some(7)
+        );
     }
 
     #[test]

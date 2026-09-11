@@ -515,6 +515,73 @@ pub(crate) fn objects_from_chunks(chunks: &[RawChunk], map_w: u32, map_h: u32) -
         .collect()
 }
 
+/// Extrae las instancias del pool `Depot` (`DEPT`) de saves modernos y
+/// antiguos. El índice de la fila es el `DepotID` y no se reemplaza por la
+/// posición dentro del vector, porque `MAP2` lo referencia directamente.
+#[must_use]
+pub(crate) fn depots_from_chunks(chunks: &[RawChunk], map_w: u32, map_h: u32) -> Vec<SavDepot> {
+    let Some(dept) = find_chunk(chunks, "DEPT") else {
+        return Vec::new();
+    };
+    if !matches!(
+        dept.ch_type,
+        super::chunks::CH_TABLE | super::chunks::CH_SPARSE_TABLE
+    ) {
+        return Vec::new();
+    }
+    let sparse = dept.ch_type == super::chunks::CH_SPARSE_TABLE;
+    let Ok(rows) = super::table::parse_table_chunk(&dept.body, sparse) else {
+        return Vec::new();
+    };
+    rows.into_iter()
+        .filter_map(|(depot_id, record)| {
+            let linear = record_get(&record, "xy")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok())?;
+            let tile = coord_from_linear_index(u64::from(linear), map_w)?;
+            let in_bounds = tile.x >= 0
+                && tile.y >= 0
+                && u32::try_from(tile.x).ok()? < map_w
+                && u32::try_from(tile.y).ok()? < map_h;
+            if !in_bounds {
+                return None;
+            }
+            // Desde SLV_141 la referencia se guarda como TownID + 1. Los
+            // saves anteriores usan el nombre town_index y guardan el ID
+            // directo en el campo auxiliar global.
+            let town_id = record_get(&record, "town")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| value.checked_sub(1))
+                .and_then(|value| u32::try_from(value).ok())
+                .or_else(|| {
+                    record_get(&record, "town_index")
+                        .and_then(SlValue::as_u64)
+                        .and_then(|value| u32::try_from(value).ok())
+                });
+            let town_cn = record_get(&record, "town_cn")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0);
+            let name = record_get(&record, "name")
+                .and_then(SlValue::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            let build_date = record_get(&record, "build_date")
+                .and_then(SlValue::as_i64)
+                .and_then(|value| i32::try_from(value).ok())
+                .unwrap_or(0);
+            Some(SavDepot {
+                depot_id: u16::try_from(depot_id).ok()?,
+                tile,
+                town_id,
+                town_cn,
+                name,
+                build_date,
+            })
+        })
+        .collect()
+}
+
 /// Extrae el mapping `NewGRF` de objetos (`OBID`).
 #[must_use]
 pub(crate) fn object_mappings_from_chunks(chunks: &[RawChunk]) -> Vec<SavObjectMapping> {
@@ -3039,6 +3106,40 @@ mod tests {
     use super::super::table::tests::{build_table_body, write_gamma, write_str};
     use super::super::table::{SlValue, record_get};
     use super::*;
+
+    #[test]
+    fn decodes_dept_dense_row_and_native_metadata() {
+        let mut record = Vec::new();
+        record.extend_from_slice(&(5_u32 * 64 + 9).to_be_bytes());
+        record.extend_from_slice(&8_u32.to_be_bytes()); // TownID 7 + 1.
+        record.extend_from_slice(&12_u16.to_be_bytes());
+        write_str("Depósito Central", &mut record);
+        record.extend_from_slice(&(-42_i32).to_be_bytes());
+        let chunk = RawChunk {
+            name: *b"DEPT",
+            ch_type: CH_TABLE,
+            body: build_table_body(
+                &[
+                    (6, "xy"),
+                    (6, "town"),
+                    (4, "town_cn"),
+                    (0x1A, "name"),
+                    (5, "build_date"),
+                ],
+                &[Vec::new(), record],
+            ),
+        };
+
+        let depots = depots_from_chunks(&[chunk], 64, 64);
+
+        assert_eq!(depots.len(), 1);
+        assert_eq!(depots[0].depot_id, 1);
+        assert_eq!(depots[0].tile, TileCoord::new(9, 5));
+        assert_eq!(depots[0].town_id, Some(7));
+        assert_eq!(depots[0].town_cn, 12);
+        assert_eq!(depots[0].name, "Depósito Central");
+        assert_eq!(depots[0].build_date, -42);
+    }
 
     /// Smoke del fixture oráculo FTA Helidepot (2 pads + 1 Tricario A↔B).
     #[test]

@@ -125,6 +125,8 @@ pub struct SavOpaqueChunk {
 /// versiones futuras de `OpenTTD`.
 #[derive(Debug, Clone)]
 pub(crate) struct SavTablePassthrough {
+    pub(crate) dept_chunk: Option<SavOpaqueChunk>,
+    pub(crate) dept_semantic_records: Vec<Vec<u8>>,
     pub(crate) vehs_chunk: Option<SavOpaqueChunk>,
     pub(crate) vehs_semantic_records: Vec<Vec<u8>>,
     pub(crate) ordl_chunk: Option<SavOpaqueChunk>,
@@ -172,7 +174,7 @@ const REBUILT_CHUNKS: &[[u8; 4]] = &[
     *b"MAPS", *b"MAPT", *b"MAPH", *b"MAPO", *b"MAP2", *b"M3LO", *b"M3HI", *b"MAP5", *b"MAPE",
     *b"MAP7", *b"MAP8", *b"STNN", *b"CITY", *b"INDY", *b"IBLD", *b"ITBL", *b"ORDL", *b"ORDR",
     *b"VEHS", *b"LGRP", *b"LGRJ", *b"LGRS", *b"PATS", *b"ECMY", *b"CAPY", *b"GRPS", *b"ERNW",
-    *b"NGRF", *b"DATE", *b"PLYR",
+    *b"NGRF", *b"DATE", *b"DEPT", *b"PLYR",
 ];
 
 /// Conserva los chunks nativos cuyo contenido todavía no tiene un modelo de
@@ -299,6 +301,8 @@ pub struct SavGame {
     pub extras: OttdmapExtras,
     /// Estaciones del chunk `STNN` (saves con tablas, SLV ≥ 295).
     pub stations: Vec<SavStation>,
+    /// Instancias del pool `Depot` del chunk `DEPT`.
+    pub depots: Vec<SavDepot>,
     /// Ciudades del chunk `CITY`.
     pub towns: Vec<Town>,
     /// Referencias `CITY.psa_list` por índice de pueblo.
@@ -405,6 +409,8 @@ pub struct SavGame {
     /// escritor sólo lo reconstruye después de una mutación explícita, para
     /// que campos de versiones futuras sobrevivan a un round-trip sin cambios.
     pub objects: Vec<SavObject>,
+    /// Cuerpo original de `DEPT`, separado para conservar campos futuros.
+    pub(crate) dept_raw_chunk: Option<SavOpaqueChunk>,
     /// Mapeos `(GRFID, local ID) → ObjectType` del chunk `OBID`.
     pub object_mappings: Vec<SavObjectMapping>,
     /// Cuerpo original de `VEHS`, separado de `opaque_chunks` porque la tabla
@@ -511,7 +517,13 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     fleet::assign_autoreplace_owners(&mut autoreplace_rules, &companies);
     let newgrf_stack = newgrf::newgrf_stack_from_chunks(&chunk_list);
     let objects = entities::objects_from_chunks(&chunk_list, map_w, map_h);
+    let depots = entities::depots_from_chunks(&chunk_list, map_w, map_h);
     let object_mappings = entities::object_mappings_from_chunks(&chunk_list);
+    let dept_raw_chunk = chunks::find_chunk(&chunk_list, "DEPT").map(|chunk| SavOpaqueChunk {
+        name: chunk.name,
+        ch_type: chunk.ch_type,
+        body: chunk.body.clone(),
+    });
     let vehs_raw_chunk = chunks::find_chunk(&chunk_list, "VEHS").map(|chunk| SavOpaqueChunk {
         name: chunk.name,
         ch_type: chunk.ch_type,
@@ -608,6 +620,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         map,
         extras,
         stations,
+        depots,
         towns,
         town_persistent_storage_ids,
         industries,
@@ -653,6 +666,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         autoreplace_rules,
         newgrf_stack,
         objects,
+        dept_raw_chunk,
         object_mappings,
         vehs_raw_chunk,
         ordl_raw_chunk,
@@ -1218,6 +1232,7 @@ impl GameState {
             animated_tile_indices_from_opaque_chunks(&sav.opaque_chunks).unwrap_or_default();
         let linkgraph_jobs = std::mem::take(&mut sav.linkgraph_jobs);
         let linkgraph_schedule = std::mem::take(&mut sav.linkgraph_schedule);
+        let dept_raw_chunk = sav.dept_raw_chunk.take();
         let vehs_raw_chunk = sav.vehs_raw_chunk.take();
         let ordl_raw_chunk = sav.ordl_raw_chunk.take();
         let stnn_raw_chunk = sav.stnn_raw_chunk.take();
@@ -1298,6 +1313,7 @@ impl GameState {
             sav.newgrf_stack
         };
         state.objects = sav.objects;
+        state.depots = sav.depots;
         state.object_mappings = sav.object_mappings;
         state
             .sav_persistent_storages
@@ -2173,7 +2189,8 @@ impl GameState {
                 payment.front_vehicle_id = Some(front_ref);
             }
         }
-        if (vehs_raw_chunk.is_some()
+        if (dept_raw_chunk.is_some()
+            || vehs_raw_chunk.is_some()
             || ordl_raw_chunk.is_some()
             || stnn_raw_chunk.is_some()
             || city_raw_chunk.is_some()
@@ -2193,6 +2210,8 @@ impl GameState {
             && let Ok(records) = write::semantic_table_records(&state)
         {
             state.sav_table_passthrough = Some(SavTablePassthrough {
+                dept_chunk: dept_raw_chunk,
+                dept_semantic_records: records.dept,
                 vehs_chunk: vehs_raw_chunk,
                 vehs_semantic_records: records.vehs,
                 ordl_chunk: ordl_raw_chunk,
@@ -2397,6 +2416,7 @@ mod tests {
             map,
             extras: OttdmapExtras::default(),
             stations: Vec::new(),
+            depots: Vec::new(),
             towns: Vec::new(),
             town_persistent_storage_ids: HashMap::new(),
             industries: Vec::new(),
@@ -2442,6 +2462,7 @@ mod tests {
             autoreplace_rules: Vec::new(),
             newgrf_stack: Vec::new(),
             objects: Vec::new(),
+            dept_raw_chunk: None,
             object_mappings: Vec::new(),
             vehs_raw_chunk: None,
             ordl_raw_chunk: None,
@@ -3401,6 +3422,7 @@ mod tests {
                     cargo: Vec::new(),
                 },
             ],
+            depots: Vec::new(),
             towns: vec![Town {
                 id: 0,
                 pos: crate::TileCoord::new(10, 10),
@@ -3890,6 +3912,7 @@ mod tests {
             autoreplace_rules: Vec::new(),
             newgrf_stack: Vec::new(),
             objects: Vec::new(),
+            dept_raw_chunk: None,
             object_mappings: Vec::new(),
             vehs_raw_chunk: None,
             ordl_raw_chunk: None,

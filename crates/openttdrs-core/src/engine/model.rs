@@ -16,6 +16,8 @@ pub const VEHICLE_VISUAL_EFFECT_DEFAULT: u8 = 0xFF;
 /// Período de envejecimiento de carga de los motores vanilla
 /// (`Ticks::CARGO_AGING_TICKS`).
 pub const DEFAULT_CARGO_AGE_PERIOD: u16 = 185;
+/// Aceleración vanilla de los barcos (`ShipVehicleInfo::acceleration`).
+pub const DEFAULT_SHIP_ACCELERATION: u8 = 1;
 
 fn default_reliability_spd_dec() -> u16 {
     DEFAULT_RELIABILITY_SPD_DEC
@@ -31,6 +33,10 @@ const fn default_model_life_years() -> u8 {
 
 const fn default_cargo_age_period() -> u16 {
     DEFAULT_CARGO_AGE_PERIOD
+}
+
+const fn default_ship_acceleration() -> u8 {
+    DEFAULT_SHIP_ACCELERATION
 }
 
 /// Primer ID reservado para motores Action0 `NewGRF` (trains).
@@ -72,6 +78,11 @@ pub struct EngineDef {
     /// Cero desactiva el envejecimiento para ese motor.
     #[serde(default = "default_cargo_age_period")]
     pub cargo_age_period: u16,
+    /// Aceleración de barcos (`ShipVehicleInfo::acceleration`). Se ignora para
+    /// otros tipos de vehículo; cero conserva el fallback vanilla para datos
+    /// antiguos o motores que no declaran la propiedad.
+    #[serde(default = "default_ship_acceleration")]
+    pub ship_acceleration: u8,
     /// Unidades transferidas por tick (`EngineInfo::load_amount`). Cero usa el
     /// fallback por tipo de carga para saves y motores vanilla del port.
     #[serde(default)]

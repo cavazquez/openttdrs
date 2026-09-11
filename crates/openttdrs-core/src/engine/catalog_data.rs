@@ -6,8 +6,8 @@ use crate::cargo::CargoType;
 use crate::vehicle::VehicleKind;
 
 use super::model::{
-    DEFAULT_CARGO_AGE_PERIOD, DEFAULT_RELIABILITY_SPD_DEC, EngineDef, SHIP_RELIABILITY_SPD_DEC,
-    VEHICLE_VISUAL_EFFECT_DEFAULT,
+    DEFAULT_CARGO_AGE_PERIOD, DEFAULT_RELIABILITY_SPD_DEC, DEFAULT_SHIP_ACCELERATION, EngineDef,
+    SHIP_RELIABILITY_SPD_DEC, VEHICLE_VISUAL_EFFECT_DEFAULT,
 };
 
 pub const ENGINE_BUS_MPS: u16 = 0;
@@ -137,6 +137,7 @@ macro_rules! road {
             lifelength_years: $life,
             model_life_years: u8::MAX,
             cargo_age_period: DEFAULT_CARGO_AGE_PERIOD,
+            ship_acceleration: DEFAULT_SHIP_ACCELERATION,
             load_amount: 0,
             train_image_index: 0,
             dual_headed: false,
@@ -217,6 +218,7 @@ macro_rules! train {
             lifelength_years: $life,
             model_life_years: u8::MAX,
             cargo_age_period: DEFAULT_CARGO_AGE_PERIOD,
+            ship_acceleration: 0,
             load_amount: 0,
             train_image_index: $img,
             dual_headed: $dual,

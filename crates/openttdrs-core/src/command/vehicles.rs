@@ -219,6 +219,9 @@ pub(super) fn build_vehicle_at_depot(
     let mut vehicle = Vehicle::new(next_id, engine.kind, depot_pos, depot_pos);
     vehicle.running = false;
     vehicle.engine_id = Some(engine.id);
+    if vehicle.kind == VehicleKind::Ship {
+        vehicle.acceleration = engine.ship_acceleration.max(1);
+    }
     if vehicle.cargo_type.is_none() {
         vehicle.cargo_type = engine.cargo;
     }

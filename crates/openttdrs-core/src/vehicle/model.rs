@@ -746,7 +746,11 @@ impl Vehicle {
             native_sprite_num: 0,
             name: None,
             cur_speed: 0,
-            acceleration: 0,
+            acceleration: if kind == VehicleKind::Ship {
+                engine.ship_acceleration.max(1)
+            } else {
+                0
+            },
             refit_capacity: 0,
             z_pos: None,
             ship_x: 0,

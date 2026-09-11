@@ -393,13 +393,12 @@ fn ensure_ship_world_pos(v: &mut Vehicle, map: Option<&Map>) {
     }
 }
 
-/// `ShipAccelerate` (`ship_cmd.cpp` ~414–432): no usa accel road-like.
+/// `ShipAccelerate` (`ship_cmd.cpp` ~414–432): usa la aceleración persistida
+/// del barco, con `1` como fallback para saves antiguos.
 #[must_use]
 pub fn ship_accelerate(v: &mut Vehicle, max_speed: u16) -> u32 {
-    let mut speed = v
-        .cur_speed
-        .saturating_add(SHIP_ACCELERATION_DEFAULT)
-        .min(max_speed);
+    let acceleration = u16::from(v.acceleration.max(1));
+    let mut speed = v.cur_speed.saturating_add(acceleration).min(max_speed);
     if let Some(order) = v.current_order_ref() {
         let order_cap = order.max_speed_limit();
         if order_cap > 0 {
@@ -1716,6 +1715,20 @@ mod tests {
         assert_eq!(v.cur_speed, 96);
         // Road accel (256) habría saturado mucho antes con otro perfil; aquí +1/tick.
         assert!(v.cur_speed <= 96);
+    }
+
+    #[test]
+    fn ship_accelerate_uses_vehicle_acceleration() {
+        let mut v = Vehicle::new(
+            2,
+            VehicleKind::Ship,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.acceleration = 7;
+        v.direction = DIR_SW;
+        assert_eq!(ship_accelerate(&mut v, 96), 0);
+        assert_eq!(v.cur_speed, 7);
     }
 
     #[test]

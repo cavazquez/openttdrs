@@ -303,6 +303,8 @@ pub struct ParsedVehicleMeta {
     pub model_life_years: u8,
     /// Action0 ship `0x1D`: ticks antes de envejecer la carga; cero desactiva.
     pub cargo_age_period: u16,
+    /// Action0 ship `0x24`: aceleración por tick; cero usa el fallback vanilla.
+    pub ship_acceleration: u8,
     pub climate_mask: u8,
     pub load_amount: u8,
     pub reliability_spd_dec: u16,
@@ -399,6 +401,11 @@ impl ParsedVehicleMeta {
             lifelength_years: life,
             model_life_years: u8::MAX,
             cargo_age_period: crate::engine::DEFAULT_CARGO_AGE_PERIOD,
+            ship_acceleration: if feature == ACTION0_FEATURE_SHIPS {
+                crate::engine::DEFAULT_SHIP_ACCELERATION
+            } else {
+                0
+            },
             climate_mask: 0x0F,
             load_amount: 0,
             reliability_spd_dec: if feature == ACTION0_FEATURE_SHIPS {
@@ -3839,13 +3846,18 @@ fn parse_ship_property(
     metas: &mut [ParsedVehicleMeta],
 ) -> Option<()> {
     match prop {
-        0x08 | 0x09 | 0x16 | 0x1C | 0x24 => {
+        0x08 | 0x09 | 0x16 | 0x1C => {
             if prop == 0x1C {
                 for meta in metas {
                     meta.visual_effect = normalize_visual_effect(read_u8(payload, i)?);
                 }
             } else {
                 skip_bytes(payload, i, metas.len())?;
+            }
+        }
+        0x24 => {
+            for meta in metas {
+                meta.ship_acceleration = read_u8(payload, i)?.max(1);
             }
         }
         0x13 => {

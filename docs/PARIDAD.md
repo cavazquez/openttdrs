@@ -4336,3 +4336,16 @@ amarre cercano alcanzable pero bloqueado por un rodeo más largo. Core queda en
 ignored`, con Clippy estricto, formato y diff limpios. #567 sigue abierta por
 callbacks navales restantes y aceptación visual manual bajo Weston; #326
 permanece abierta.
+
+Actualización #567-SHIP-SERVICE-INTERVAL-DEFAULTS (2026-09-11, `64489b34`):
+los defaults nativos de mantenimiento quedan diferenciados por clase:
+trenes y carretera `150` días, aeronaves `100` y barcos `360`. Las compañías
+nuevas reciben esos valores, los saves sin las claves antiguas los recuperan
+mediante defaults de serde y un `0` explícito continúa desactivando el
+servicio automático. `Vehicle::new` también inicializa el intervalo según su
+tipo, evitando que aeronaves y barcos hereden siempre `150`. Se agregaron
+regresiones de compañía, compatibilidad de carga y constructor por clase.
+Core queda en `2441 passed; 0 failed; 1 ignored` y cliente en
+`1388 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y diff
+limpios. #567 sigue abierta por callbacks navales restantes y aceptación
+visual manual bajo Weston; #326 permanece abierta.

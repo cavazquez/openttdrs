@@ -2469,13 +2469,37 @@ mod tests {
     }
 
     #[test]
+    fn vehicle_action0_misc_flags_enable_no_default_cargo_multiplier() {
+        let train = [0x00, ACTION0_FEATURE_TRAINS, 0x01, 0x01, 0x00, 0x27, 0x20];
+        assert!(
+            parse_action0_train_meta(&train)
+                .unwrap()
+                .no_default_cargo_multiplier
+        );
+
+        for (feature, misc_prop) in [
+            (ACTION0_FEATURE_ROAD_VEHICLES, 0x1C),
+            (ACTION0_FEATURE_SHIPS, 0x17),
+            (ACTION0_FEATURE_AIRCRAFT, 0x17),
+        ] {
+            let action0 = [0x00, feature, 0x01, 0x01, 0x00, misc_prop, 0x20];
+            assert!(
+                parse_action0_vehicle_metas(&action0)
+                    .unwrap()
+                    .remove(0)
+                    .no_default_cargo_multiplier
+            );
+        }
+    }
+
+    #[test]
     fn apply_vehicle_misc_flags_propagates_2cc_to_engine_catalog() {
         for (feature, misc_prop, kind) in [
             (ACTION0_FEATURE_ROAD_VEHICLES, 0x1C, VehicleKind::Bus),
             (ACTION0_FEATURE_SHIPS, 0x17, VehicleKind::Ship),
             (ACTION0_FEATURE_AIRCRAFT, 0x17, VehicleKind::Aircraft),
         ] {
-            let action0 = [0x00, feature, 0x01, 0x01, 0x00, misc_prop, 0x02];
+            let action0 = [0x00, feature, 0x01, 0x01, 0x00, misc_prop, 0x22];
             let bytes = build_grf_v2_with_action0_and_action8(
                 &action0,
                 [b'2', b'C', feature, 1],
@@ -2494,7 +2518,31 @@ mod tests {
                 .find(|candidate| candidate.from_newgrf && candidate.kind == kind)
                 .expect("vehicle with misc flags should enter catalog");
             assert!(engine.uses_2cc, "{kind:?} should preserve Uses2CC");
+            assert!(
+                engine.no_default_cargo_multiplier,
+                "{kind:?} should preserve NoDefaultCargoMultiplier"
+            );
         }
+    }
+
+    #[test]
+    fn apply_train_misc_flag_propagates_no_default_cargo_multiplier() {
+        let action0 = [0x00, ACTION0_FEATURE_TRAINS, 0x01, 0x01, 0x00, 0x27, 0x20];
+        let bytes =
+            build_grf_v2_with_action0_and_action8(&action0, [b'N', b'D', 0, 1], "no_default", "");
+        let dir = tempfile_dir_with("no_default.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("no_default.grf", 0x4E44_0001));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|candidate| candidate.from_newgrf && candidate.kind == VehicleKind::Train)
+            .expect("train with misc flags should enter catalog");
+        assert!(engine.no_default_cargo_multiplier);
     }
 
     #[test]

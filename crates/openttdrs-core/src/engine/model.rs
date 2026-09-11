@@ -102,6 +102,10 @@ pub struct EngineDef {
     /// pendientes.
     #[serde(default)]
     pub extra_flags: u32,
+    /// `EngineMiscFlag::NoDefaultCargoMultiplier`: CB15 también se consulta
+    /// para el cargo por defecto y su resultado no recibe multiplicador.
+    #[serde(default)]
+    pub no_default_cargo_multiplier: bool,
     /// Ticks antes de envejecer la carga (`EngineInfo::cargo_age_period`).
     /// Cero desactiva el envejecimiento para ese motor.
     #[serde(default = "default_cargo_age_period")]

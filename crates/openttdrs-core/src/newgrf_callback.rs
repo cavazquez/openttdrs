@@ -1494,18 +1494,18 @@ pub fn resolve_vehicle_refit_capacity_callback(
 /// `CBID_VEHICLE_REFIT_CAPACITY` no se consulta para la configuración vanilla
 /// por defecto en la ruta antigua: sólo entra cuando el cargo actual difiere
 /// del cargo declarado por Action0 o cuando hay un subtipo de refit activo.
-/// Mantener esa frontera evita que un callback pensado para la conversión
-/// cambie también la capacidad de compra inicial. El flag nativo
-/// `NoDefaultCargoMultiplier` todavía no tiene un campo equivalente en
-/// `EngineDef`; los motores que lo necesiten siguen usando la ruta explícita
-/// de refit de los callers.
+/// `NoDefaultCargoMultiplier` levanta esa frontera y permite que el GRF
+/// controle también la capacidad del cargo por defecto.
 #[must_use]
 pub fn resolve_vehicle_current_refit_capacity(
     engine: &EngineDef,
     vehicle: &mut Vehicle,
 ) -> Option<u32> {
     let cargo = vehicle.cargo_type?;
-    if engine.cargo == Some(cargo) && vehicle.cargo_subtype == 0 {
+    if !engine.no_default_cargo_multiplier
+        && engine.cargo == Some(cargo)
+        && vehicle.cargo_subtype == 0
+    {
         return None;
     }
     resolve_vehicle_refit_capacity_callback(engine, vehicle, cargo)
@@ -6479,6 +6479,13 @@ mod tests {
             None,
             "el cargo por defecto no debe invocar CB15 en la ruta legacy"
         );
+        engine.no_default_cargo_multiplier = true;
+        assert_eq!(
+            resolve_vehicle_current_refit_capacity(&engine, &mut vehicle),
+            Some(42),
+            "NoDefaultCargoMultiplier debe activar CB15 también para el cargo por defecto"
+        );
+        engine.no_default_cargo_multiplier = false;
         vehicle.cargo_type = Some(CargoType::Coal);
         assert_eq!(
             resolve_vehicle_current_refit_capacity(&engine, &mut vehicle),

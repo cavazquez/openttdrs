@@ -238,6 +238,8 @@ pub struct ParsedTrainMeta {
     pub rail_is_mu: bool,
     /// Action0 misc flags bit 1: usa la segunda rampa de compañía (2CC).
     pub uses_2cc: bool,
+    /// Action0 misc flag bit 5: CB15 también se consulta para el cargo por defecto.
+    pub no_default_cargo_multiplier: bool,
     pub capacity: u32,
     pub cargo: Option<crate::cargo::CargoType>,
     /// Índice local de `0x15` antes de aplicar la CTT del GRF.
@@ -354,6 +356,8 @@ pub struct ParsedVehicleMeta {
     pub callback_mask: u16,
     /// Action0 misc flags bit 1: usa la segunda rampa de compañía (2CC).
     pub uses_2cc: bool,
+    /// Action0 misc flag bit 5: CB15 también se consulta para el cargo por defecto.
+    pub no_default_cargo_multiplier: bool,
     /// Action0 misc flag bit 7: `OpenTTD` draws a sequence of stacked sprites.
     pub sprite_stack: bool,
     /// Action0 vehicle badge list (`road 0x2A`, `ship 0x26`, `aircraft 0x24`).
@@ -455,6 +459,7 @@ impl ParsedVehicleMeta {
             ctt_exclude_cargo_indices: Vec::new(),
             callback_mask: 0,
             uses_2cc: false,
+            no_default_cargo_multiplier: false,
             sprite_stack: false,
             badge_local_ids: Vec::new(),
         })
@@ -3354,6 +3359,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut rail_engine_class = 0u8;
     let mut rail_is_mu = false;
     let mut uses_2cc = false;
+    let mut no_default_cargo_multiplier = false;
     let mut capacity = 0u32;
     let mut cargo = None;
     let mut default_cargo_local_id = None;
@@ -3509,11 +3515,13 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
             }
             0x27 => {
                 // `EngineMiscFlag`: RailTilts = bit 0, Uses2CC = bit 1,
-                // RailIsMU = bit 2 y SpriteStack = bit 7.
+                // RailIsMU = bit 2, NoDefaultCargoMultiplier = bit 5 y
+                // SpriteStack = bit 7.
                 let flags = read_u8(payload, &mut i)?;
                 rail_tilts = flags & 0x01 != 0;
                 uses_2cc = flags & 0x02 != 0;
                 rail_is_mu = flags & 0x04 != 0;
+                no_default_cargo_multiplier = flags & 0x20 != 0;
                 sprite_stack = flags & 0x80 != 0;
             }
             0x2E => {
@@ -3603,6 +3611,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         rail_engine_class,
         rail_is_mu,
         uses_2cc,
+        no_default_cargo_multiplier,
         capacity,
         cargo,
         default_cargo_local_id,
@@ -3757,6 +3766,7 @@ fn parse_road_vehicle_property(
             for meta in metas {
                 let flags = read_u8(payload, i)?;
                 meta.uses_2cc = flags & 0x02 != 0;
+                meta.no_default_cargo_multiplier = flags & 0x20 != 0;
                 meta.sprite_stack = flags & 0x80 != 0;
             }
         }
@@ -3920,6 +3930,7 @@ fn parse_ship_property(
             for meta in metas {
                 let flags = read_u8(payload, i)?;
                 meta.uses_2cc = flags & 0x02 != 0;
+                meta.no_default_cargo_multiplier = flags & 0x20 != 0;
                 meta.sprite_stack = flags & 0x80 != 0;
             }
         }
@@ -4082,6 +4093,7 @@ fn parse_aircraft_property(
             for meta in metas {
                 let flags = read_u8(payload, i)?;
                 meta.uses_2cc = flags & 0x02 != 0;
+                meta.no_default_cargo_multiplier = flags & 0x20 != 0;
                 meta.sprite_stack = flags & 0x80 != 0;
             }
         }

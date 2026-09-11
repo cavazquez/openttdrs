@@ -1061,6 +1061,12 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Túnel inválido: entrada en pendiente inclinada (NE/SE/SW/NW) y salida al mismo nivel." => {
             "Invalid tunnel: entrance on a sloped tile (NE/SE/SW/NW) and exit at the same level."
         }
+        "Hay un puente sobre el depósito; demolilo antes de construir aquí." => {
+            "There is a bridge over the depot; demolish it before building here."
+        }
+        "Sitio inadecuado: el depósito naval requiere dos teselas de agua planas." => {
+            "Unsuitable site: the ship depot requires two flat water tiles."
+        }
         "Este tipo de puente no está disponible (año, longitud o presupuesto)." => {
             "This bridge type is unavailable (year, length, or budget)."
         }

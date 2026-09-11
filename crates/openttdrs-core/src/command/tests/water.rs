@@ -152,6 +152,79 @@ fn place_ship_depot_rejects_land() {
 }
 
 #[test]
+fn place_ship_depot_rejects_bridge_above_both_parts() {
+    for dir in 0..4_u8 {
+        for part in 0..2_usize {
+            let mut s = GameState::new(8, 8);
+            let depot = TileCoord::new(3, 3);
+            let footprint = crate::ship_depot_footprint(depot, dir);
+            for coord in footprint {
+                s.map.set_kind(coord, TileKind::Water).unwrap();
+            }
+            let bridge_tile = footprint[part];
+            let mut bridge = s.map.get(bridge_tile).unwrap();
+            bridge.mapt = crate::bridge_spec::set_bridge_middle_mapt(bridge.mapt, dir & 1 != 0);
+            s.map.set_tile(bridge_tile, bridge).unwrap();
+            let money = s.economy.money;
+            let command = Command::PlaceShipDepotDir(depot, dir);
+
+            assert_eq!(
+                command_would_fail(&s, &command),
+                Some(crate::CommandError::MustDemolishBridgeFirst),
+                "preview dir={dir} part={part} debe ver el puente superior"
+            );
+            assert_eq!(
+                apply_command(&mut s, &command),
+                Err(crate::CommandError::MustDemolishBridgeFirst),
+                "ejecución dir={dir} part={part} debe rechazar el puente superior"
+            );
+            assert!(
+                footprint
+                    .into_iter()
+                    .all(|coord| s.map.get_kind(coord) == Some(TileKind::Water))
+            );
+            assert!(s.depots.is_empty());
+            assert_eq!(s.economy.money, money);
+        }
+    }
+}
+
+#[test]
+fn place_ship_depot_requires_flat_water_on_both_parts() {
+    for dir in 0..4_u8 {
+        let mut s = GameState::new(8, 8);
+        let depot = TileCoord::new(3, 3);
+        let footprint = crate::ship_depot_footprint(depot, dir);
+        for coord in footprint {
+            s.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+        let mut sloped = s.map.get(footprint[0]).unwrap();
+        sloped.height = 2;
+        s.map.set_tile(footprint[0], sloped).unwrap();
+        let money = s.economy.money;
+        let command = Command::PlaceShipDepotDir(depot, dir);
+
+        assert_eq!(
+            command_would_fail(&s, &command),
+            Some(crate::CommandError::SiteUnsuitable),
+            "preview dir={dir} debe rechazar la huella inclinada"
+        );
+        assert_eq!(
+            apply_command(&mut s, &command),
+            Err(crate::CommandError::SiteUnsuitable),
+            "ejecución dir={dir} debe rechazar la huella inclinada"
+        );
+        assert!(
+            footprint
+                .into_iter()
+                .all(|coord| s.map.get_kind(coord) == Some(TileKind::Water))
+        );
+        assert!(s.depots.is_empty());
+        assert_eq!(s.economy.money, money);
+    }
+}
+
+#[test]
 fn place_ship_depot_writes_both_native_parts_for_each_direction() {
     let cases = [
         (

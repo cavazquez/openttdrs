@@ -75,6 +75,10 @@ pub enum CommandError {
     TimetableWaitPending,
     /// Extremos de túnel inválidos (pendiente, salida, etc.).
     InvalidTunnelEndpoints,
+    /// Hay un puente sobre una de las teselas del depósito naval.
+    MustDemolishBridgeFirst,
+    /// El depósito naval sólo admite dos teselas de agua planas.
+    SiteUnsuitable,
     /// Puente sin hueco que salvar (agua o terreno más bajo bajo el tramo).
     BridgeTypeNotAvailable,
     InvalidBridgeSpan,

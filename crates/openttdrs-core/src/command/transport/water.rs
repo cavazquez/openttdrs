@@ -1,7 +1,8 @@
 //! Construcción acuática: depósito, muelle, canal, boya, acueducto y esclusa.
 
 use crate::bridge_spec::{
-    BridgeType, axis_line, bridge_build_cost_in, set_bridge_middle_mapt, set_bridge_type_m6,
+    BridgeType, axis_line, bridge_above_axis_from_mapt, bridge_build_cost_in,
+    set_bridge_middle_mapt, set_bridge_type_m6,
 };
 use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build_cost};
 use crate::map::{
@@ -46,8 +47,30 @@ pub(crate) fn check_ship_depot_placement(
     dir: u8,
 ) -> Result<(), CommandError> {
     let dir = dir & 0x03;
-    check_ship_depot_water_tile(map, c)?;
-    check_ship_depot_water_tile(map, ship_depot_other_tile_for_dir(c, dir))?;
+    let [origin, other] = crate::ship_depot_footprint(c, dir);
+    // `CmdBuildShipDepot` comprueba primero la clase de suelo de ambas
+    // teselas. Mantener esa fase separada conserva el error nativo cuando la
+    // segunda parte cae fuera del mapa o no es agua.
+    for tile in [origin, other] {
+        check_ship_depot_water_tile(map, tile)?;
+    }
+    // `IsBridgeAbove` mira los bits de MAPT aunque el suelo inferior sea agua.
+    // Un puente sobre cualquiera de las dos partes bloquea la construcción.
+    for tile in [origin, other] {
+        if map
+            .get(tile)
+            .is_some_and(|raw| bridge_above_axis_from_mapt(raw.mapt).is_some())
+        {
+            return Err(CommandError::MustDemolishBridgeFirst);
+        }
+    }
+    // `IsTileFlat` se evalúa sobre las dos teselas; esto también impide
+    // construir sobre rápidos o una pendiente de terreno importada.
+    for tile in [origin, other] {
+        if tile_slope_and_z(map, tile).is_none_or(|(tileh, _)| tileh != 0) {
+            return Err(CommandError::SiteUnsuitable);
+        }
+    }
     // `CmdBuildShipDepot` no consulta una tercera tesela delante de la boca:
     // su contrato sólo exige agua en las dos teselas que reemplaza. La
     // navegación podrá usar el mapa contiguo después de construir; imponer

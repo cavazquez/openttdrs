@@ -62,6 +62,12 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::InvalidTunnelEndpoints => {
             "Túnel inválido: entrada en pendiente inclinada (NE/SE/SW/NW) y salida al mismo nivel."
         }
+        CommandError::MustDemolishBridgeFirst => {
+            "Hay un puente sobre el depósito; demolilo antes de construir aquí."
+        }
+        CommandError::SiteUnsuitable => {
+            "Sitio inadecuado: el depósito naval requiere dos teselas de agua planas."
+        }
         CommandError::BridgeTypeNotAvailable => {
             "Este tipo de puente no está disponible (año, longitud o presupuesto)."
         }
@@ -229,6 +235,8 @@ mod tests {
             CommandError::SharedOrdersNotFound,
             CommandError::TimetableWaitPending,
             CommandError::InvalidTunnelEndpoints,
+            CommandError::MustDemolishBridgeFirst,
+            CommandError::SiteUnsuitable,
             CommandError::BridgeTypeNotAvailable,
             CommandError::InvalidBridgeSpan,
             CommandError::BridgeTooLowForRoadStop,

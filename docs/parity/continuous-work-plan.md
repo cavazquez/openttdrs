@@ -3819,3 +3819,15 @@ y 1 ignorada; la cliente en 1373 pasadas y 2 ignoradas, con Clippy estricto
 verde. #567 sigue abierta por el pool persistente/tabla `DEPT`, metadatos de
 depósito, vecinos/callbacks, preview visual, clipping, orden global y
 framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-STATE-METADATA (2026-09-11, `00cb3476`):
+el estado jugable ya conserva una instancia `SavDepot` por cada depósito de
+carretera, ferrocarril o barco. La construcción registra `DepotID`,
+`Depot::xy` y la fecha absoluta nativa; la demolición elimina la fila sólo
+después de limpiar con éxito, incluida la huella completa de dos teselas del
+depósito naval. El contrato JSON usa `#[serde(default)]` para migrar partidas
+propias anteriores. La suite core queda en 2398 pasadas y 1 ignorada; la
+cliente en 1373 pasadas y 2 ignoradas, con Clippy estricto verde. #567 sigue
+abierta hasta conectar estas filas con la tabla `DEPT` de SAV y completar
+nombre/pueblo/callbacks, preview visual, clipping, orden global y framebuffer;
+#326 permanece abierta.

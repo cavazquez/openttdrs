@@ -4349,3 +4349,17 @@ Core queda en `2441 passed; 0 failed; 1 ignored` y cliente en
 `1388 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y diff
 limpios. #567 sigue abierta por callbacks navales restantes y aceptación
 visual manual bajo Weston; #326 permanece abierta.
+
+Actualización #567-SHIP-PHYSICAL-GRAPHICAL-HEADING (2026-09-11, `637ef813`):
+la simulación naval separa el rumbo físico (`direction`) de la orientación
+gráfica persistida (`ship_rotation`) como `ShipController`: un giro amplio
+detiene el movimiento y avanza el sprite un paso de 45° cada 8 ticks. Las
+curvas de hasta 45° sincronizan ambas orientaciones. `CmdBuildShip` normaliza
+cualquier sección recibida a `GetShipDepotNorthTile`, inicializa rumbo,
+rotación, centro subtesela y track; el render y el prisma global de Bevy usan
+la rotación gráfica, evitando saltos de sprite durante el giro. Se agregaron
+regresiones para los cuatro ejes de depósito, giro sobre el lugar y render de
+orientación separada. Core queda en `2445 passed; 0 failed; 1 ignored` y
+cliente en `1388 passed; 0 failed; 2 ignored`, con formato, Clippy estricto
+de librería/binario y diff limpios. #567 sigue abierta por callbacks navales
+restantes y aceptación visual manual bajo Weston; #326 permanece abierta.

@@ -5044,3 +5044,12 @@ compartidas, cubriendo el caso en que el decodificador de órdenes sólo conocí
 el índice lineal y había recibido la sección sur. La regresión de carga verifica
 orden, destino y pool compartido; #567 continúa abierta por callbacks,
 pathfinding completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-PERSISTED-POS (2026-09-11): las operaciones de
+flota comparan ahora la posición persistida de cada unidad contra el ancla
+canónica del depósito. Así clonado, arranque/parada, reordenamiento,
+autoreemplazo masivo y venta masiva siguen encontrando un barco cuyo save
+legacy conserva la sección sur en `Vehicle::pos`; la consulta no altera la
+posición física hasta que el runtime la hidrate. La regresión ejecuta las cinco
+operaciones con esa posición legacy; #567 continúa abierta por callbacks,
+pathfinding completo y aceptación visual/framebuffer.

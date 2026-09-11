@@ -232,7 +232,10 @@ pub(super) fn depot_mass_autoreplace(
     let ids: Vec<u32> = state
         .vehicles
         .iter()
-        .filter(|v| v.pos == depot_pos && v.owner == owner)
+        .filter(|v| {
+            v.owner == owner
+                && crate::depot::vehicle_at_depot_command_tile(&state.map, v, depot_pos)
+        })
         .map(|v| v.id)
         .collect();
     for id in ids {
@@ -357,7 +360,11 @@ pub(super) fn depot_reorder_vehicle_slot(
     let mut heads: Vec<(u32, Option<u8>)> = state
         .vehicles
         .iter()
-        .filter(|v| v.pos == depot_pos && v.is_consist_head() && v.owner == owner)
+        .filter(|v| {
+            v.is_consist_head()
+                && v.owner == owner
+                && crate::depot::vehicle_at_depot_command_tile(&state.map, v, depot_pos)
+        })
         .map(|v| (v.id, v.depot_display_slot))
         .collect();
     heads.sort_by(|a, b| match (a.1, b.1) {

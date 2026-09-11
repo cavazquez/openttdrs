@@ -1063,7 +1063,7 @@ pub(super) fn clone_vehicle_at_depot(
         };
         let canonical_depot_pos =
             crate::depot::canonical_depot_tile_for_vehicle(&state.map, depot_pos, source.kind);
-        if source.pos != canonical_depot_pos {
+        if !crate::depot::vehicle_at_depot_command_tile(&state.map, source, canonical_depot_pos) {
             return Err(CommandError::VehicleNotInDepot);
         }
         (
@@ -1092,7 +1092,10 @@ pub(super) fn sell_all_vehicles_at_depot(
     let ids: Vec<u32> = state
         .vehicles
         .iter()
-        .filter(|v| v.pos == depot_pos && v.owner == owner)
+        .filter(|v| {
+            v.owner == owner
+                && crate::depot::vehicle_at_depot_command_tile(&state.map, v, depot_pos)
+        })
         .map(|v| v.id)
         .collect();
     for id in ids {
@@ -1500,7 +1503,10 @@ pub(super) fn set_depot_vehicles_running(
     let ids: Vec<u32> = state
         .vehicles
         .iter()
-        .filter(|v| v.pos == depot_pos && v.owner == owner)
+        .filter(|v| {
+            v.owner == owner
+                && crate::depot::vehicle_at_depot_command_tile(&state.map, v, depot_pos)
+        })
         .map(|v| v.id)
         .collect();
     for id in ids {

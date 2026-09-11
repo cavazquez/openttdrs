@@ -1652,6 +1652,10 @@ fn ship_depot_commands_from_south_section_use_north_anchor() {
     .unwrap();
     let source_id = s.vehicles[0].id;
 
+    // Un save legacy puede dejar la unidad en la sección sur aunque el
+    // depósito completo siga identificado por la sección norte.
+    s.vehicles[0].pos = south;
+
     apply_command(
         &mut s,
         &Command::CloneVehicleAtDepot {
@@ -1661,7 +1665,8 @@ fn ship_depot_commands_from_south_section_use_north_anchor() {
     )
     .unwrap();
     assert_eq!(s.vehicles.len(), 2);
-    assert!(s.vehicles.iter().all(|vehicle| vehicle.pos == north));
+    assert_eq!(s.vehicles[0].pos, south);
+    assert_eq!(s.vehicles[1].pos, north);
 
     apply_command(
         &mut s,

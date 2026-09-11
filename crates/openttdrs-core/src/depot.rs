@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use crate::map::{Map, TileCoord, TileKind};
-use crate::vehicle::VehicleKind;
+use crate::vehicle::{Vehicle, VehicleKind};
 
 const WATER_TILE_TYPE_DEPOT: u8 = 3;
 
@@ -168,6 +168,20 @@ pub fn canonical_depot_command_tile(map: &Map, pos: TileCoord) -> TileCoord {
     } else {
         pos
     }
+}
+
+/// Indica si la posición persistida de una unidad identifica el mismo
+/// depósito que una coordenada recibida por un comando.
+///
+/// Los saves legacy pueden conservar la sección sur de un depósito naval en
+/// `Vehicle::pos`, mientras que los comandos de flota reciben indistintamente
+/// cualquiera de las dos secciones desde la UI. Comparar las dos posiciones
+/// ya normalizadas mantiene el contrato nativo de `Depot::xy` sin alterar la
+/// posición física de la unidad durante una consulta.
+#[must_use]
+pub fn vehicle_at_depot_command_tile(map: &Map, vehicle: &Vehicle, depot: TileCoord) -> bool {
+    canonical_depot_tile_for_vehicle(map, vehicle.pos, vehicle.kind)
+        == canonical_depot_tile_for_vehicle(map, depot, vehicle.kind)
 }
 
 #[must_use]

@@ -961,7 +961,8 @@ pub(crate) fn setup(
     commands.insert_resource(LoadedMapTileChunks::from_spawn_bounds(spawn_bounds, mw, mh));
 }
 
-/// Capa visual del mapa para el fondo del menú (sin vehículos ni etiquetas).
+/// Capa visual del mapa para el fondo del menú, incluida la flota inicial pero
+/// sin etiquetas ni sistemas de simulación.
 pub(crate) fn spawn_intro_map_render(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -999,7 +1000,21 @@ pub(crate) fn spawn_intro_map_render(
     let company_colour = CompanyColour::from_u8(sim.state.company_colour);
     let mut company_sprites = CompanyColoredSprites::new(company_colour);
     company_sprites.build_all(images);
+    // El fondo del menú no instala un `SimWorld` como recurso ni ejecuta el
+    // reloj de la partida, por eso los vehículos se materializan una sola vez
+    // aquí. El tráfico decorativo de `main_menu_intro` aporta el movimiento.
+    let truck_handles = TruckHandles::load(asset_server);
+    let mut newgrf_train_sprites = NewGrfTrainSpriteCache::default();
+    spawn_initial_vehicles(
+        commands,
+        sim,
+        &truck_handles,
+        &mut company_sprites,
+        &mut newgrf_train_sprites,
+        images,
+    );
     commands.insert_resource(company_sprites.clone());
+    commands.insert_resource(truck_handles);
     let mut road_sprites = crate::render::NewGrfRoadSpriteCache::default();
     let mut station_sprites = crate::render::NewGrfStationSpriteCache::default();
     let mut shore_sprites = crate::render::NewGrfShoreSpriteCache::default();

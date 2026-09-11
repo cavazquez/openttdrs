@@ -1,4 +1,4 @@
-//! Fondo del menú: mapa procedural isométrico con paneo suave y tráfico decorativo.
+//! Fondo del menú: showcase isométrico determinista con paneo suave y tráfico.
 
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
@@ -33,9 +33,12 @@ const INTRO_SETTINGS: NewGameSettings = NewGameSettings {
     climate: openttdrs_core::Climate::Temperate,
     map_size: MapSizePreset::SMALL,
     start_year: 1950,
-    world_gen: true,
-    island: true,
-    preserve_demo: false,
+    // El menú necesita una composición legible y repetible, no el ruido visual
+    // de un mapa aleatorio. `preserve_demo` reutiliza el showcase 64×64 que ya
+    // contiene ciudad, industria, vías, puerto y aeropuertos.
+    world_gen: false,
+    island: false,
+    preserve_demo: true,
     seed: 0x4F54_4452, // "OTDR"
     town_density: PopulationDensity::Normal,
     industry_density: PopulationDensity::Normal,
@@ -46,16 +49,22 @@ const INTRO_SETTINGS: NewGameSettings = NewGameSettings {
     gamescript_demo: false,
 };
 
-const INTRO_PAN_AMPLITUDE_X: f32 = 48.0;
-const INTRO_PAN_AMPLITUDE_Y: f32 = 28.0;
+const INTRO_PAN_AMPLITUDE_X: f32 = 30.0;
+const INTRO_PAN_AMPLITUDE_Y: f32 = 18.0;
 const INTRO_PAN_PERIOD_SECS: f32 = 42.0;
+
+const INTRO_MAGLEV_X0: i32 = 30;
+const INTRO_MAGLEV_X1: i32 = 58;
+const INTRO_MAGLEV_Y: i32 = 53;
 
 #[derive(Clone, Copy)]
 enum IntroVehicleKind {
     Bus,
     Truck,
     Train,
+    Maglev,
     Ship,
+    Aircraft,
 }
 
 #[derive(Component, Clone, Copy)]
@@ -77,70 +86,102 @@ struct IntroTrafficRoute {
     start_progress: f32,
 }
 
-const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 8] = [
+const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 12] = [
     IntroTrafficRoute {
-        from: (16, 34),
-        to: (48, 34),
+        from: (14, 4),
+        to: (46, 4),
         speed: 0.11,
         direction: 4,
         kind: IntroVehicleKind::Bus,
         start_progress: 0.1,
     },
     IntroTrafficRoute {
-        from: (48, 28),
-        to: (18, 28),
+        from: (46, 4),
+        to: (14, 4),
         speed: 0.09,
         direction: 0,
         kind: IntroVehicleKind::Bus,
         start_progress: 0.55,
     },
     IntroTrafficRoute {
-        from: (20, 40),
-        to: (44, 40),
+        from: (15, 10),
+        to: (22, 10),
         speed: 0.1,
         direction: 4,
         kind: IntroVehicleKind::Truck,
         start_progress: 0.3,
     },
     IntroTrafficRoute {
-        from: (44, 20),
-        to: (22, 20),
+        from: (22, 12),
+        to: (15, 12),
         speed: 0.08,
         direction: 0,
         kind: IntroVehicleKind::Truck,
         start_progress: 0.8,
     },
     IntroTrafficRoute {
-        from: (26, 22),
-        to: (40, 38),
-        speed: 0.07,
-        direction: 6,
+        from: (14, 36),
+        to: (48, 36),
+        speed: 0.075,
+        direction: 4,
         kind: IntroVehicleKind::Train,
         start_progress: 0.25,
     },
     IntroTrafficRoute {
-        from: (40, 38),
-        to: (26, 22),
-        speed: 0.06,
-        direction: 2,
+        from: (48, 36),
+        to: (14, 36),
+        speed: 0.065,
+        direction: 0,
         kind: IntroVehicleKind::Train,
         start_progress: 0.7,
     },
     IntroTrafficRoute {
-        from: (12, 30),
-        to: (12, 44),
+        from: (INTRO_MAGLEV_X0, INTRO_MAGLEV_Y),
+        to: (INTRO_MAGLEV_X1, INTRO_MAGLEV_Y),
+        speed: 0.085,
+        direction: 4,
+        kind: IntroVehicleKind::Maglev,
+        start_progress: 0.42,
+    },
+    IntroTrafficRoute {
+        from: (INTRO_MAGLEV_X1, INTRO_MAGLEV_Y),
+        to: (INTRO_MAGLEV_X0, INTRO_MAGLEV_Y),
+        speed: 0.075,
+        direction: 0,
+        kind: IntroVehicleKind::Maglev,
+        start_progress: 0.82,
+    },
+    IntroTrafficRoute {
+        from: (12, 24),
+        to: (51, 26),
         speed: 0.05,
-        direction: 6,
+        direction: 4,
         kind: IntroVehicleKind::Ship,
         start_progress: 0.15,
     },
     IntroTrafficRoute {
-        from: (52, 44),
-        to: (52, 26),
+        from: (51, 26),
+        to: (12, 24),
         speed: 0.045,
-        direction: 2,
+        direction: 0,
         kind: IntroVehicleKind::Ship,
         start_progress: 0.65,
+    },
+    IntroTrafficRoute {
+        from: (9, 50),
+        to: (44, 50),
+        speed: 0.04,
+        direction: 4,
+        kind: IntroVehicleKind::Aircraft,
+        start_progress: 0.33,
+    },
+    IntroTrafficRoute {
+        from: (44, 50),
+        to: (9, 50),
+        speed: 0.035,
+        direction: 0,
+        kind: IntroVehicleKind::Aircraft,
+        start_progress: 0.76,
     },
 ];
 
@@ -172,7 +213,8 @@ pub(crate) fn setup_main_menu_intro(
         return;
     }
 
-    let intro_sim = SimWorld::from_new_game(&INTRO_SETTINGS);
+    let mut intro_sim = SimWorld::from_new_game(&INTRO_SETTINGS);
+    decorate_intro_maglev(&mut intro_sim.state);
     let (cam_pos, cam_scale) = initial_map_camera_pose(&intro_sim);
     let base_pos = cam_pos.truncate();
 
@@ -238,7 +280,29 @@ fn intro_sprite_handle(trucks: &TruckHandles, actor: &MainMenuIntroTrafficActor)
         IntroVehicleKind::Bus => trucks.intro_sprite(VehicleKind::Bus, actor.direction),
         IntroVehicleKind::Truck => trucks.intro_sprite(VehicleKind::Truck, actor.direction),
         IntroVehicleKind::Train => trucks.intro_sprite(VehicleKind::Train, actor.direction),
+        IntroVehicleKind::Maglev => trucks.intro_maglev_sprite(actor.direction),
         IntroVehicleKind::Ship => trucks.intro_sprite(VehicleKind::Ship, actor.direction),
+        IntroVehicleKind::Aircraft => trucks.intro_sprite(VehicleKind::Aircraft, actor.direction),
+    }
+}
+
+/// Agrega una vía maglev corta al showcase del menú.
+///
+/// El showcase jugable conserva su red ferroviaria normal para que sus
+/// servicios de carga sigan siendo válidos. Esta línea está aislada y sólo
+/// pertenece a la escena del título, donde permite identificar visualmente el
+/// transporte avanzado sin alterar ninguna partida.
+fn decorate_intro_maglev(state: &mut GameState) {
+    for x in INTRO_MAGLEV_X0..=INTRO_MAGLEV_X1 {
+        let coord = TileCoord::new(x, INTRO_MAGLEV_Y);
+        let Some(mut tile) = state.map.get(coord) else {
+            continue;
+        };
+        tile.kind = TileKind::Rail;
+        tile.mapt = 0x10;
+        tile.m5 = openttdrs_core::RAIL_TB_X;
+        tile = openttdrs_core::set_rail_type_on_tile(tile, openttdrs_core::RailType::Maglev);
+        let _ = state.map.set_tile(coord, tile);
     }
 }
 
@@ -254,9 +318,18 @@ fn actor_world_pos(map: &Map, actor: &MainMenuIntroTrafficActor) -> Vec3 {
     let sub_x = tx_f - tile_x as f32;
     let sub_y = ty_f - tile_y as f32;
     let height = tile_min_z(map, TileCoord::new(tile_x, tile_y));
-    let anchor = road_vehicle_tile_anchor(tile_x, tile_y, sub_x, sub_y, 0.0);
     let base = tile_pos(tile_x, tile_y, height, 1.0);
-    Vec3::new(anchor.x, anchor.y, base.z + 0.2)
+    let (x, y) = match actor.kind {
+        IntroVehicleKind::Ship | IntroVehicleKind::Aircraft => (base.x, base.y),
+        IntroVehicleKind::Bus
+        | IntroVehicleKind::Truck
+        | IntroVehicleKind::Train
+        | IntroVehicleKind::Maglev => {
+            let anchor = road_vehicle_tile_anchor(tile_x, tile_y, sub_x, sub_y, 0.0);
+            (anchor.x, anchor.y)
+        }
+    };
+    Vec3::new(x, y, base.z + 0.2)
 }
 
 pub(crate) fn animate_main_menu_intro_traffic(
@@ -326,15 +399,45 @@ pub(crate) fn cleanup_main_menu_on_exit(mut commands: Commands) {
 
 #[cfg(test)]
 mod tests {
+    use openttdrs_core::{GameState, TileCoord, TileKind};
+
     #[test]
     fn intro_traffic_covers_road_rail_and_water() {
         let kinds: Vec<_> = super::INTRO_TRAFFIC_ROUTES
             .iter()
             .map(|r| std::mem::discriminant(&r.kind))
             .collect();
-        assert_eq!(super::INTRO_TRAFFIC_ROUTES.len(), 8);
-        assert_eq!(kinds.len(), 8);
+        assert_eq!(super::INTRO_TRAFFIC_ROUTES.len(), 12);
+        assert_eq!(kinds.len(), 12);
         let unique: std::collections::HashSet<_> = kinds.into_iter().collect();
-        assert_eq!(unique.len(), 4, "bus, truck, train y ship");
+        assert_eq!(
+            unique.len(),
+            6,
+            "bus, truck, train, maglev, ship y aircraft"
+        );
+    }
+
+    #[test]
+    fn intro_uses_deterministic_showcase_settings() {
+        assert!(!super::INTRO_SETTINGS.world_gen);
+        assert!(super::INTRO_SETTINGS.preserve_demo);
+    }
+
+    #[test]
+    fn intro_maglev_line_is_typed_and_isolated() {
+        let mut state = GameState::new(64, 64);
+        super::decorate_intro_maglev(&mut state);
+        for x in super::INTRO_MAGLEV_X0..=super::INTRO_MAGLEV_X1 {
+            let tile = state
+                .map
+                .get(TileCoord::new(x, super::INTRO_MAGLEV_Y))
+                .expect("maglev dentro del mapa");
+            assert_eq!(tile.kind, TileKind::Rail);
+            assert_eq!(tile.m5, openttdrs_core::RAIL_TB_X);
+            assert_eq!(
+                openttdrs_core::rail_type_from_tile(tile),
+                openttdrs_core::RailType::Maglev
+            );
+        }
     }
 }

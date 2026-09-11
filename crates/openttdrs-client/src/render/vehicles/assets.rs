@@ -566,6 +566,15 @@ impl TruckHandles {
         }
     }
 
+    /// Sprite de la composición visual maglev del fondo del menú.
+    ///
+    /// OpenGFX no trae una capa vanilla separada para la locomotora Lev1 en
+    /// este atlas reducido; el conjunto eléctrico es su representación más
+    /// cercana y mantiene la silueta moderna a escala de mapa.
+    pub(crate) fn intro_maglev_sprite(&self, dir: usize) -> Handle<Image> {
+        self.train_groups[4][dir.min(7)].clone()
+    }
+
     pub(crate) fn intro_sprite_for_engine(
         &self,
         engine: &openttdrs_core::EngineDef,

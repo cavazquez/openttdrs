@@ -142,6 +142,26 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
         return;
     }
 
+    // `ConsistChanged` vuelve a evaluar la caché de longitud de cada unidad en
+    // OpenTTD. Las unidades importadas pueden empezar con el valor por defecto
+    // porque `cached_veh_length` no forma parte del registro que reconstruye
+    // este modelo; refrescar sólo motores NewGRF evita alterar fixtures vanilla
+    // que usan una longitud sintética para probar la geometría.
+    for &id in &ids {
+        let Some(vehicle) = vehicles.iter_mut().find(|vehicle| vehicle.id == id) else {
+            continue;
+        };
+        let Some(engine) = vehicle
+            .engine_id
+            .and_then(|engine_id| engine_for_id(engine_catalog, engine_id))
+        else {
+            continue;
+        };
+        if engine.newgrf_grfid != 0 || engine.from_newgrf {
+            vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(engine, vehicle);
+        }
+    }
+
     let head_eng = vehicles
         .iter()
         .find(|v| v.id == head_id)

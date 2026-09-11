@@ -1361,7 +1361,14 @@ pub fn resolve_vehicle_length_callback(engine: &EngineDef, vehicle: &mut Vehicle
 /// Longitud de una unidad de vehículo al crear/refrescar su caché.
 #[must_use]
 pub fn vehicle_unit_length(engine: &EngineDef, vehicle: &mut Vehicle) -> u8 {
-    let callback_shorten = (!matches!(engine.kind, VehicleKind::Ship | VehicleKind::Aircraft))
+    // OpenTTD cambió la fuente de la longitud en GRF v8: los GRF antiguos
+    // consultan CB11 y los modernos consultan la propiedad de acortamiento a
+    // través de CB36. La versión cero identifica motores creados por la API
+    // sin encabezado Action8; se trata como moderna para conservar el
+    // comportamiento de los fixtures y del catálogo runtime.
+    let uses_cb36 = engine.newgrf_grfid != 0
+        && (engine.newgrf_grf_version == 0 || engine.newgrf_grf_version >= 8);
+    let callback_shorten = uses_cb36
         .then(|| {
             let property = match engine.kind {
                 VehicleKind::Train => 0x21,
@@ -1373,7 +1380,9 @@ pub fn vehicle_unit_length(engine: &EngineDef, vehicle: &mut Vehicle) -> u8 {
                 .filter(|value| *value < 8)
         })
         .flatten();
-    resolve_vehicle_length_callback(engine, vehicle)
+    let callback_length = (!uses_cb36).then(|| resolve_vehicle_length_callback(engine, vehicle));
+    callback_length
+        .flatten()
         .or(callback_shorten.map(|shorten| 8_u8.saturating_sub(shorten)))
         .unwrap_or_else(|| 8_u8.saturating_sub(engine.shorten_factor.min(7)))
         .max(1)
@@ -4712,7 +4721,7 @@ mod tests {
         Action2RandomEntry, Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm,
         CBID_STATION_BUILD_TILE_LAYOUT, TrainSpriteAssign,
     };
-    use crate::{Station, TileCoord, VehicleKind};
+    use crate::{Station, TileCoord, Vehicle, VehicleKind};
 
     fn gfx_callback_literal(value: u8) -> TrainSpriteGraphics {
         let mut gfx = TrainSpriteGraphics::default();
@@ -4755,6 +4764,79 @@ mod tests {
                     adjust: Action2VarAdjust {
                         shift: 0,
                         and_mask: u32::from(value),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
+    /// Devuelve resultados distintos para CB11 y CB36 usando `0x0C`, la
+    /// variable de callback que `ResolverObject` expone al grupo Action2.
+    fn gfx_callback_length_by_callback(
+        legacy_length: u16,
+        property_length: u16,
+    ) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::from(u16::MAX),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![
+                    (
+                        3,
+                        u32::from(CBID_VEHICLE_LENGTH),
+                        u32::from(CBID_VEHICLE_LENGTH),
+                    ),
+                    (
+                        4,
+                        u32::from(CBID_VEHICLE_MODIFY_PROPERTY),
+                        u32::from(CBID_VEHICLE_MODIFY_PROPERTY),
+                    ),
+                ],
+                default: 0,
+            },
+        );
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::from(legacy_length),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx.action2_var.insert(
+            4,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::from(property_length),
                         ..Action2VarAdjust::default()
                     },
                 },
@@ -5950,6 +6032,75 @@ mod tests {
         engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(8)));
         assert_eq!(resolve_vehicle_length_callback(&engine, &mut vehicle), None);
         assert_eq!(vehicle_unit_length(&engine, &mut vehicle), 2);
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_length_selects_cb11_or_cb36_by_grf_version() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x4C45_4E56;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1 << 1;
+        engine.shorten_factor = 5;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_length_by_callback(2, 6)));
+        let mut vehicle = Vehicle::new(
+            45,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+
+        // GRF < 8 usa CB11: devuelve un acortamiento 2 y deja longitud 6.
+        engine.newgrf_grf_version = 7;
+        assert_eq!(vehicle_unit_length(&engine, &mut vehicle), 6);
+
+        // GRF >= 8 usa la propiedad 0x21 mediante CB36: acortamiento 6 y
+        // longitud 2; CB11 no debe actuar como fallback alternativo.
+        engine.newgrf_grf_version = 8;
+        assert_eq!(vehicle_unit_length(&engine, &mut vehicle), 2);
+
+        // Un resultado inválido de CB36 cae directamente en Action0, sin
+        // reutilizar el resultado válido que CB11 habría producido.
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_length_by_callback(1, 8)));
+        assert_eq!(vehicle_unit_length(&engine, &mut vehicle), 3);
+    }
+
+    #[test]
+    fn consist_changed_refreshes_imported_newgrf_unit_lengths() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.id = 60_045;
+        engine.from_newgrf = true;
+        engine.newgrf_grfid = 0x4C45_4E52;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_grf_version = 8;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(5)));
+
+        let mut vehicle = Vehicle::new(
+            90,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.engine_id = Some(engine.id);
+        // Una unidad importada arranca con el valor de serde/Vehicle::new;
+        // ConsistChanged debe reconstruirlo desde el catálogo NewGRF.
+        vehicle.unit_length = crate::train_consist::VEHICLE_LENGTH;
+        let mut vehicles = vec![vehicle];
+        let catalog = vec![engine];
+        crate::train_consist::consist_changed_with_map_and_catalog(
+            &mut vehicles,
+            90,
+            None,
+            &catalog,
+        );
+        assert_eq!(vehicles[0].unit_length, 3);
     }
 
     #[test]

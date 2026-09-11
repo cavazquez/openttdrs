@@ -1070,6 +1070,41 @@ fn hydrate_sav_station_cargo(
     station.cargo_packets.reserved = reserved.min(station.cargo_packets.total_count());
 }
 
+fn hydrate_sav_packet_list(
+    packets: &mut crate::cargo_packet::VehicleCargoList,
+    packet_ids: &[u32],
+    cargo: Option<crate::CargoType>,
+    vehicle_pos: TileCoord,
+    packets_by_id: &HashMap<u32, &entities::SavCargoPacket>,
+    station_positions: &HashMap<u32, TileCoord>,
+) {
+    let Some(cargo) = cargo else {
+        return;
+    };
+    for packet_id in packet_ids {
+        let Some(saved_packet) = packets_by_id.get(packet_id) else {
+            continue;
+        };
+        let mut packet = crate::CargoPacket::new(
+            cargo,
+            saved_packet.count,
+            saved_packet.source_xy.unwrap_or(vehicle_pos),
+        );
+        packet.source_xy = saved_packet.source_xy;
+        packet.periods_in_transit = saved_packet.periods_in_transit;
+        packet.feeder_share = saved_packet.feeder_share;
+        packet.travelled.x = saved_packet.travelled_x;
+        packet.travelled.y = saved_packet.travelled_y;
+        packet.first_station = saved_packet
+            .source_station_id
+            .and_then(|id| station_positions.get(&id).copied());
+        packet.next_hop = saved_packet
+            .next_hop_station_id
+            .and_then(|id| station_positions.get(&id).copied());
+        packets.push(packet);
+    }
+}
+
 fn hydrate_sav_vehicle_cargo(
     vehicle: &mut Vehicle,
     saved: &entities::SavVehicle,
@@ -1080,30 +1115,14 @@ fn hydrate_sav_vehicle_cargo(
 ) {
     let cargo = import::cargo_from_sav_slot(saved.cargo_type, climate, &[], save_version);
     vehicle.cargo_packets.action_counts = saved.cargo_action_counts;
-    if let Some(cargo) = cargo {
-        for packet_id in &saved.cargo_packet_ids {
-            let Some(saved_packet) = packets_by_id.get(packet_id) else {
-                continue;
-            };
-            let mut packet = crate::CargoPacket::new(
-                cargo,
-                saved_packet.count,
-                saved_packet.source_xy.unwrap_or(vehicle.pos),
-            );
-            packet.source_xy = saved_packet.source_xy;
-            packet.periods_in_transit = saved_packet.periods_in_transit;
-            packet.feeder_share = saved_packet.feeder_share;
-            packet.travelled.x = saved_packet.travelled_x;
-            packet.travelled.y = saved_packet.travelled_y;
-            packet.first_station = saved_packet
-                .source_station_id
-                .and_then(|id| station_positions.get(&id).copied());
-            packet.next_hop = saved_packet
-                .next_hop_station_id
-                .and_then(|id| station_positions.get(&id).copied());
-            vehicle.cargo_packets.push(packet);
-        }
-    }
+    hydrate_sav_packet_list(
+        &mut vehicle.cargo_packets,
+        &saved.cargo_packet_ids,
+        cargo,
+        vehicle.pos,
+        packets_by_id,
+        station_positions,
+    );
     if vehicle.cargo_packets.is_empty() {
         vehicle.cargo = u32::from(saved.cargo);
         vehicle.cargo_type = cargo;
@@ -1784,6 +1803,19 @@ impl GameState {
                 vehicle.acceleration = v.acceleration;
                 vehicle.aircraft_mail_capacity = Some(v.aircraft_mail_capacity);
                 vehicle.aircraft_mail_cargo = Some(v.aircraft_mail_cargo);
+                hydrate_sav_packet_list(
+                    &mut vehicle.aircraft_mail_packets,
+                    &v.aircraft_mail_packet_ids,
+                    Some(crate::CargoType::Mail),
+                    vehicle.pos,
+                    &cargo_packets_by_id,
+                    &station_positions,
+                );
+                if !vehicle.aircraft_mail_packets.is_empty() {
+                    vehicle.aircraft_mail_cargo = Some(
+                        u16::try_from(vehicle.aircraft_mail_packets.total()).unwrap_or(u16::MAX),
+                    );
+                }
                 vehicle.refit_capacity = v.refit_capacity;
                 vehicle.group_id = v.group_id;
                 vehicle.next_shared_vehicle_id = v.next_shared_sav_id;
@@ -3692,6 +3724,7 @@ mod tests {
                     cargo_capacity: 0,
                     aircraft_mail_capacity: 0,
                     aircraft_mail_cargo: 0,
+                    aircraft_mail_packet_ids: Vec::new(),
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
@@ -3802,6 +3835,7 @@ mod tests {
                     cargo_capacity: 0,
                     aircraft_mail_capacity: 0,
                     aircraft_mail_cargo: 0,
+                    aircraft_mail_packet_ids: Vec::new(),
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
@@ -3912,6 +3946,7 @@ mod tests {
                     cargo_capacity: 0,
                     aircraft_mail_capacity: 0,
                     aircraft_mail_cargo: 0,
+                    aircraft_mail_packet_ids: Vec::new(),
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
@@ -4022,6 +4057,7 @@ mod tests {
                     cargo_capacity: 0,
                     aircraft_mail_capacity: 0,
                     aircraft_mail_cargo: 0,
+                    aircraft_mail_packet_ids: Vec::new(),
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],

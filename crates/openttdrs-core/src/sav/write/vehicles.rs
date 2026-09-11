@@ -282,13 +282,15 @@ fn aircraft_mail_capacity_for(state: &GameState, v: &Vehicle) -> u16 {
     )
 }
 
-/// Cantidad escalar de correo que acompaña a la sombra SAV del avión.
+/// Cantidad de correo que acompaña a la sombra SAV del avión.
 ///
-/// El runtime Rust aún no mantiene una segunda `VehicleCargoList`; conservar
-/// este contador evita que un round-trip `OpenTTD` → Rust → `OpenTTD` lo convierta
-/// silenciosamente en cero.
+/// Cuando existe la lista de paquetes, su suma es la fuente autoritativa; el
+/// escalar cubre JSON antiguo o una sombra importada sin referencias `CAPA`.
 fn aircraft_mail_cargo_for(v: &Vehicle) -> u16 {
-    v.aircraft_mail_cargo.unwrap_or(0)
+    if v.aircraft_mail_packets.is_empty() {
+        return v.aircraft_mail_cargo.unwrap_or(0);
+    }
+    u16::try_from(v.aircraft_mail_packets.total()).unwrap_or(u16::MAX)
 }
 
 type SavRecordBytes = Vec<u8>;
@@ -895,6 +897,13 @@ fn cargo_packet_refs_for<'a>(export: &'a CargoPacketExport, v: &Vehicle) -> &'a 
         .map_or(&[][..], Vec::as_slice)
 }
 
+fn aircraft_mail_packet_refs_for<'a>(export: &'a CargoPacketExport, v: &Vehicle) -> &'a [u32] {
+    export
+        .aircraft_mail_refs
+        .get(&v.id)
+        .map_or(&[][..], Vec::as_slice)
+}
+
 fn sparse_vehicle_ref(sparse_by_vehicle_id: &HashMap<u32, u32>, id: Option<u32>) -> u32 {
     id.and_then(|vehicle_id| sparse_by_vehicle_id.get(&vehicle_id).copied())
         .map_or(0, |index| index.saturating_add(1))
@@ -1116,7 +1125,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     cargo_capacity: mail_capacity,
                     refit_capacity: 0,
                     cargo_count: mail_cargo,
-                    cargo_packet_refs: Vec::new(),
+                    cargo_packet_refs: aircraft_mail_packet_refs_for(cargo_export, v).to_vec(),
                     cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
                     age_days: 0,
@@ -1919,7 +1928,9 @@ mod tests {
         let mut helicopter = Vehicle::new(99, VehicleKind::Aircraft, air_pos, air_pos);
         helicopter.engine_id = Some(0x7F00);
         helicopter.capacity = 80;
-        helicopter.aircraft_mail_cargo = Some(5);
+        helicopter
+            .aircraft_mail_packets
+            .push(crate::CargoPacket::new(CargoType::Mail, 5, air_pos));
         state.vehicles = vec![helicopter];
 
         let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
@@ -1985,6 +1996,14 @@ mod tests {
             Some(5),
             "la sombra conserva la cantidad de correo separada del primario"
         );
+        assert_eq!(
+            record_get(shadow_common, "cargo.packets").and_then(|value| match value {
+                SlValue::List(refs) => Some(refs.len()),
+                _ => None,
+            }),
+            Some(1),
+            "la sombra conserva la referencia CAPA de su paquete"
+        );
         let imported = crate::sav::entities::vehicles_from_chunks(
             &chunks,
             64,
@@ -2003,6 +2022,11 @@ mod tests {
         assert_eq!(
             imported[0].aircraft_mail_cargo, 5,
             "la cantidad secundaria se recupera desde la fila AIR_SHADOW"
+        );
+        assert_eq!(
+            imported[0].aircraft_mail_packet_ids,
+            vec![0],
+            "la sombra conserva los ids CAPA sin confundirlos con el primario"
         );
     }
 

@@ -140,6 +140,12 @@ fn aircraft_purchase_keeps_secondary_mail_capacity_on_primary() {
         .find(|vehicle| vehicle.id == aircraft_id)
         .expect("avión comprado mutable")
         .aircraft_mail_cargo = Some(6);
+    s.vehicles
+        .iter_mut()
+        .find(|vehicle| vehicle.id == aircraft_id)
+        .expect("avión comprado con paquetes")
+        .aircraft_mail_packets
+        .push(crate::CargoPacket::new(crate::CargoType::Mail, 6, hangar));
 
     apply_command(
         &mut s,
@@ -158,6 +164,7 @@ fn aircraft_purchase_keeps_secondary_mail_capacity_on_primary() {
     assert_eq!(aircraft.cargo_type, Some(crate::CargoType::Mail));
     assert_eq!(aircraft.aircraft_mail_capacity, Some(0));
     assert_eq!(aircraft.aircraft_mail_cargo, Some(0));
+    assert!(aircraft.aircraft_mail_packets.is_empty());
     s.vehicles
         .iter_mut()
         .find(|vehicle| vehicle.id == aircraft_id)

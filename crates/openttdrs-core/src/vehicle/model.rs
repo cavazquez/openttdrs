@@ -212,6 +212,13 @@ pub struct Vehicle {
     /// o aeronaves creadas localmente sin estado SAV importado.
     #[serde(default)]
     pub aircraft_mail_cargo: Option<u16>,
+    /// Paquetes de correo de la sombra aérea nativa.
+    ///
+    /// Se mantienen asociados al primario hasta que el runtime pueda
+    /// materializar la entidad `AIR_SHADOW` completa sin duplicar la unidad
+    /// visible ni su ciclo FTA.
+    #[serde(default)]
+    pub aircraft_mail_packets: crate::cargo_packet::VehicleCargoList,
     #[serde(default = "default_running_true")]
     pub running: bool,
     /// Remanente físico de `DoUpdateSpeed` (`Vehicle::progress` de `OpenTTD`).
@@ -729,6 +736,7 @@ impl Vehicle {
             capacity: super::VEHICLE_CAPACITY,
             aircraft_mail_capacity: None,
             aircraft_mail_cargo: None,
+            aircraft_mail_packets: crate::cargo_packet::VehicleCargoList::default(),
             running: true,
             progress: 0,
             road_state: 0,
@@ -903,7 +911,21 @@ impl Vehicle {
         let Some(capacity) = self.aircraft_mail_capacity else {
             return;
         };
-        self.aircraft_mail_cargo = Some(self.aircraft_mail_cargo.unwrap_or(0).min(capacity));
+        let capacity = u32::from(capacity);
+        while self.aircraft_mail_packets.total() > capacity {
+            let excess = self.aircraft_mail_packets.total().saturating_sub(capacity);
+            if self.aircraft_mail_packets.take_amount(excess).is_empty() {
+                break;
+            }
+        }
+        let packet_total = self.aircraft_mail_packets.total();
+        let scalar_total = u32::from(self.aircraft_mail_cargo.unwrap_or(0)).min(capacity);
+        let total = if self.aircraft_mail_packets.is_empty() {
+            scalar_total
+        } else {
+            packet_total
+        };
+        self.aircraft_mail_cargo = Some(u16::try_from(total).unwrap_or(u16::MAX));
     }
 
     /// ¿Es la cabeza del consist (o un vehículo que no tiene cadena)?

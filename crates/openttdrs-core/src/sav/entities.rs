@@ -2281,6 +2281,8 @@ pub struct SavVehicle {
     /// vehículos nativos distintos aunque el importador exponga sólo el
     /// primario al runtime Rust.
     pub aircraft_mail_cargo: u16,
+    /// Referencias `CAPA` de la carga de la fila `AIR_SHADOW`.
+    pub aircraft_mail_packet_ids: Vec<u32>,
     /// Capacidad máxima de refit (`Vehicle::refit_cap`).
     pub refit_capacity: u16,
     /// Referencias físicas al pool `CAPA` (`Vehicle::cargo.packets`).
@@ -2468,6 +2470,33 @@ pub(crate) fn vehicles_from_chunks(
             Some((*sav_id, cargo))
         })
         .collect();
+    let aircraft_shadow_packet_ids: HashMap<u32, Vec<u32>> = rows
+        .iter()
+        .filter_map(|(sav_id, record)| {
+            let sub = nested_struct(record, "aircraft")?;
+            let common = nested_struct(sub, "common")?;
+            let subtype = record_get(common, "subtype").and_then(SlValue::as_u64)?;
+            if subtype != 4 {
+                return None;
+            }
+            let packet_ids = record_get(common, "cargo.packets")
+                .and_then(|value| match value {
+                    SlValue::List(refs) => Some(
+                        refs.iter()
+                            .filter_map(|reference| {
+                                reference
+                                    .as_u64()
+                                    .and_then(|value| value.checked_sub(1))
+                                    .and_then(|value| u32::try_from(value).ok())
+                            })
+                            .collect(),
+                    ),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            Some((*sav_id, packet_ids))
+        })
+        .collect();
     let mut out = Vec::new();
     for (sav_id, record) in rows {
         let Some(vtype) = record_get(&record, "type").and_then(SlValue::as_u64) else {
@@ -2506,6 +2535,13 @@ pub(crate) fn vehicles_from_chunks(
                 .unwrap_or(0)
         } else {
             0
+        };
+        let aircraft_mail_packet_ids = if kind == SavVehicleKind::Aircraft {
+            next_sav_id
+                .and_then(|shadow_id| aircraft_shadow_packet_ids.get(&shadow_id).cloned())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
         };
         let next_shared_sav_id = record_get(common, "next_shared")
             .and_then(SlValue::as_u64)
@@ -3121,6 +3157,7 @@ pub(crate) fn vehicles_from_chunks(
             cargo_capacity,
             aircraft_mail_capacity,
             aircraft_mail_cargo,
+            aircraft_mail_packet_ids,
             refit_capacity,
             cargo_packet_ids,
             cargo_action_counts,

@@ -86,6 +86,7 @@ pub(crate) struct CargoPacketExport {
     pub packets: Vec<CargoPacketWire>,
     pub station_refs: HashMap<u32, Vec<StationCargoWire>>,
     pub vehicle_refs: HashMap<u32, Vec<u32>>,
+    pub aircraft_mail_refs: HashMap<u32, Vec<u32>>,
 }
 
 /// Entrada que se escribe en `STNN.roadstoptiledata` y que también determina
@@ -265,6 +266,17 @@ pub(crate) fn cargo_packet_export(state: &GameState, map_w: u32) -> CargoPacketE
         }
         if !refs.is_empty() {
             export.vehicle_refs.insert(vehicle.id, refs);
+        }
+        if vehicle.kind == VehicleKind::Aircraft {
+            let mut mail_refs = Vec::new();
+            for packet in &vehicle.aircraft_mail_packets.packets {
+                if let Some(packet_id) = push_cargo_packet(&mut export, state, map_w, packet) {
+                    mail_refs.push(packet_id);
+                }
+            }
+            if !mail_refs.is_empty() {
+                export.aircraft_mail_refs.insert(vehicle.id, mail_refs);
+            }
         }
     }
     export

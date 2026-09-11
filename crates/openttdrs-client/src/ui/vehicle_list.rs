@@ -11,7 +11,7 @@ use openttdrs_core::prelude::*;
 use crate::i18n::{Locale, localized_text};
 use crate::render::{
     MapPreviewCamera, NewGrfTrainSpriteCache, PrimaryGameCamera, RemapMapVisualsPending,
-    TruckHandles, vehicle_world_position_with_catalog,
+    TruckHandles, vehicle_world_position_with_catalog, vehicle_world_position_with_newgrf,
 };
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
@@ -604,7 +604,6 @@ pub(crate) fn handle_vehicle_list_buttons(
     mut hud_feedback: ResMut<HudBuildFeedback>,
     prefs: Option<Res<ClientPreferences>>,
     time: Res<Time>,
-    mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
     for (interaction, button) in &kind_buttons {
         if *interaction == Interaction::Pressed {
@@ -734,19 +733,7 @@ pub(crate) fn handle_vehicle_list_buttons(
                     }
                 }
             }
-            VehicleListAction::CenterCamera => {
-                if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                    let world_pos = vehicle_world_position_with_catalog(
-                        vehicle,
-                        &sim.state.map,
-                        &sim.state.engine_catalog,
-                    );
-                    if let Ok(mut transform) = cam_q.single_mut() {
-                        transform.translation.x = world_pos.x;
-                        transform.translation.y = world_pos.y;
-                    }
-                }
-            }
+            VehicleListAction::CenterCamera => {}
             VehicleListAction::CycleGroup => {}
             VehicleListAction::CreateGroup => {}
             VehicleListAction::AssignToGroup => {
@@ -769,6 +756,55 @@ pub(crate) fn handle_vehicle_list_buttons(
             | VehicleListAction::ApplyGroupRename
             | VehicleListAction::CancelGroupRename => {}
             VehicleListAction::ClearStationFilter => {}
+        }
+    }
+}
+
+/// Centra la cámara del mapa usando la misma capa NewGRF que se dibuja para el
+/// vehículo seleccionado. Se mantiene separado del resto de acciones porque
+/// la resolución runtime necesita cache e imágenes, y la acción general ya
+/// está cerca del límite de parámetros ECS de Bevy.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn center_vehicle_list_camera(
+    state: Res<VehicleListState>,
+    vehicle_window: Res<VehicleWindowState>,
+    sim: Res<SimWorld>,
+    trucks: Option<Res<TruckHandles>>,
+    mut cache: Option<ResMut<NewGrfTrainSpriteCache>>,
+    mut images: Option<ResMut<Assets<Image>>>,
+    action_buttons: Query<
+        (&Interaction, &VehicleListActionButton),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
+) {
+    let Some(vehicle_id) = state.selected.or(vehicle_window.vehicle_id) else {
+        return;
+    };
+    for (interaction, action) in &action_buttons {
+        if *interaction != Interaction::Pressed || action.0 != VehicleListAction::CenterCamera {
+            continue;
+        }
+        let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
+            continue;
+        };
+        let world_pos = match (
+            trucks.as_deref(),
+            cache.as_deref_mut(),
+            images.as_deref_mut(),
+        ) {
+            (Some(trucks), Some(cache), Some(images)) => {
+                vehicle_world_position_with_newgrf(&sim, trucks, vehicle, cache, images)
+            }
+            _ => vehicle_world_position_with_catalog(
+                vehicle,
+                &sim.state.map,
+                &sim.state.engine_catalog,
+            ),
+        };
+        if let Ok(mut transform) = cam_q.single_mut() {
+            transform.translation.x = world_pos.x;
+            transform.translation.y = world_pos.y;
         }
     }
 }
@@ -1371,6 +1407,7 @@ mod tests {
             Interaction::Pressed,
         ));
         world.run_system_once(handle_vehicle_list_buttons).unwrap();
+        world.run_system_once(center_vehicle_list_camera).unwrap();
         let cam = world
             .query_filtered::<&Transform, With<PrimaryGameCamera>>()
             .single(&world)

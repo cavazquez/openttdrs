@@ -57,10 +57,10 @@ use crate::ui::vehicle_details_window::{
     sync_vehicle_details_window, vehicle_details_window_on_closed,
 };
 use crate::ui::vehicle_window::{
-    VehicleWindowState, handle_vehicle_rename_buttons, handle_vehicle_window_buttons,
-    setup_vehicle_window, sync_vehicle_window, sync_vehicle_window_camera,
-    sync_vehicle_window_consist, vehicle_window_on_closed, vehicle_window_rename_editable_keyboard,
-    vehicle_window_rename_keyboard,
+    VehicleWindowState, center_vehicle_window_camera, handle_vehicle_rename_buttons,
+    handle_vehicle_window_buttons, setup_vehicle_window, sync_vehicle_window,
+    sync_vehicle_window_camera, sync_vehicle_window_consist, vehicle_window_on_closed,
+    vehicle_window_rename_editable_keyboard, vehicle_window_rename_keyboard,
 };
 
 pub(crate) struct GameWindowsPlugin;
@@ -159,6 +159,7 @@ impl Plugin for GameWindowsPlugin {
                     handle_destination_picker_buttons,
                     destination_picker_on_closed,
                     handle_vehicle_window_buttons,
+                    center_vehicle_window_camera.after(handle_vehicle_window_buttons),
                     handle_vehicle_rename_buttons,
                     vehicle_window_rename_keyboard,
                     vehicle_window_rename_editable_keyboard,

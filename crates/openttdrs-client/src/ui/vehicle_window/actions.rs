@@ -7,8 +7,8 @@ use openttdrs_core::{Command, station::resolve_order_destination};
 use crate::camera::tile_camera_world_pos;
 use crate::i18n::Locale;
 use crate::render::{
-    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending,
-    vehicle_world_position_with_catalog,
+    MapPreviewCamera, NewGrfTrainSpriteCache, PrimaryGameCamera, RemapMapVisualsPending,
+    TruckHandles, vehicle_world_position_with_catalog, vehicle_world_position_with_newgrf,
 };
 use crate::settings::ClientPreferences;
 use crate::state::{OrderPickState, SimWorld};
@@ -120,19 +120,7 @@ pub(crate) fn handle_vehicle_window_buttons(
                     editable.editor_mut().set_text(seed);
                 }
             }
-            VehicleWindowButton::CenterCamera => {
-                if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                    let world_pos = vehicle_world_position_with_catalog(
-                        vehicle,
-                        &sim.state.map,
-                        &sim.state.engine_catalog,
-                    );
-                    if let Ok(mut transform) = cam_q.single_mut() {
-                        transform.translation.x = world_pos.x;
-                        transform.translation.y = world_pos.y;
-                    }
-                }
-            }
+            VehicleWindowButton::CenterCamera => {}
             VehicleWindowButton::TurnAround => {
                 match crate::network::apply_player_command(
                     &mut sim.state,
@@ -161,6 +149,54 @@ pub(crate) fn handle_vehicle_window_buttons(
             VehicleWindowButton::Details => {
                 details_state.open_for(&chain, vehicle_id);
             }
+        }
+    }
+}
+
+/// Centra la cámara del mapa usando la capa NewGRF efectiva del vehículo.
+///
+/// La acción vive en un sistema separado para poder consultar el cache de
+/// sprites sin sobrepasar el límite de parámetros ECS del manejador general de
+/// botones. Si la infraestructura visual aún no está instalada, mantiene el
+/// cálculo catalogado/vanilla.
+pub(crate) fn center_vehicle_window_camera(
+    window_state: Res<VehicleWindowState>,
+    sim: Res<SimWorld>,
+    trucks: Option<Res<TruckHandles>>,
+    mut cache: Option<ResMut<NewGrfTrainSpriteCache>>,
+    mut images: Option<ResMut<Assets<Image>>>,
+    buttons: Query<(&Interaction, &VehicleWindowButton), (Changed<Interaction>, With<Button>)>,
+    mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
+) {
+    let Some(vehicle_id) = window_state.vehicle_id else {
+        return;
+    };
+    for (interaction, button) in &buttons {
+        if *interaction != Interaction::Pressed
+            || !matches!(*button, VehicleWindowButton::CenterCamera)
+        {
+            continue;
+        }
+        let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
+            continue;
+        };
+        let world_pos = match (
+            trucks.as_deref(),
+            cache.as_deref_mut(),
+            images.as_deref_mut(),
+        ) {
+            (Some(trucks), Some(cache), Some(images)) => {
+                vehicle_world_position_with_newgrf(&sim, trucks, vehicle, cache, images)
+            }
+            _ => vehicle_world_position_with_catalog(
+                vehicle,
+                &sim.state.map,
+                &sim.state.engine_catalog,
+            ),
+        };
+        if let Ok(mut transform) = cam_q.single_mut() {
+            transform.translation.x = world_pos.x;
+            transform.translation.y = world_pos.y;
         }
     }
 }

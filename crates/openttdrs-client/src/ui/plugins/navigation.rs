@@ -43,10 +43,11 @@ use crate::ui::town_directory::{
     town_directory_search_keyboard,
 };
 use crate::ui::vehicle_list::{
-    VehicleListState, handle_vehicle_group_rename_buttons, handle_vehicle_list_buttons,
-    open_vehicle_list_from_routes, setup_vehicle_list, sync_vehicle_group_rename_row,
-    sync_vehicle_list, sync_vehicle_list_locale, sync_vehicle_list_sprites,
-    sync_vehicle_list_static_labels, vehicle_list_group_rename_keyboard, vehicle_list_on_closed,
+    VehicleListState, center_vehicle_list_camera, handle_vehicle_group_rename_buttons,
+    handle_vehicle_list_buttons, open_vehicle_list_from_routes, setup_vehicle_list,
+    sync_vehicle_group_rename_row, sync_vehicle_list, sync_vehicle_list_locale,
+    sync_vehicle_list_sprites, sync_vehicle_list_static_labels, vehicle_list_group_rename_keyboard,
+    vehicle_list_on_closed,
 };
 
 pub(crate) struct NavigationUiPlugin;
@@ -136,6 +137,10 @@ impl Plugin for NavigationUiPlugin {
                         .run_if(in_state(ClientScreen::InGame)),
                     handle_vehicle_list_buttons
                         .after(open_vehicle_list_from_routes)
+                        .in_set(UpdateSet::Ui)
+                        .run_if(in_state(ClientScreen::InGame)),
+                    center_vehicle_list_camera
+                        .after(handle_vehicle_list_buttons)
                         .in_set(UpdateSet::Ui)
                         .run_if(in_state(ClientScreen::InGame)),
                     vehicle_list_on_closed

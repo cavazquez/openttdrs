@@ -4777,3 +4777,15 @@ visual/runtime amplia siguen pendientes, por lo que #329/#567 continúan
 abiertas. Core queda en `2489 passed; 0 failed; 1 ignored` y cliente en `1401
 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check`
 limpios.
+
+Actualización #329/#567-VEHICLE-CAMERA-CENTER-ACTIONS (2026-09-11): los
+botones de centrado de la lista global y de `VehicleViewWindow` ya consultan
+la misma primera capa NewGRF que el mapa, incluyendo cuerpos runtime y
+`SpriteStack` estático; cuando el cache visual no está instalado conservan el
+fallback catalogado/vanilla. La resolución quedó en sistemas ECS separados
+para mantener pequeños los manejadores de acciones y se conservó el centrado
+de órdenes existente. La entidad FTA separada, sus scopes/estado propios y la
+validación visual/runtime amplia siguen pendientes, por lo que #329/#567
+continúan abiertas. Core queda en `2489 passed; 0 failed; 1 ignored` y cliente
+en `1401 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y
+`diff --check` limpios.

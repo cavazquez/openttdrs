@@ -24,7 +24,7 @@ use crate::ui::floating_window::FloatingWindowClosed;
 use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 
-pub(crate) use actions::handle_vehicle_window_buttons;
+pub(crate) use actions::{center_vehicle_window_camera, handle_vehicle_window_buttons};
 pub(crate) use rename::{
     handle_vehicle_rename_buttons, vehicle_window_rename_editable_keyboard,
     vehicle_window_rename_keyboard,

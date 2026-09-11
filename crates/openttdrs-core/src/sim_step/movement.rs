@@ -32,6 +32,22 @@ fn vehicle_is_in_depot(state: &GameState, index: usize) -> bool {
     crate::refit::vehicle_is_in_depot(&state.map, vehicle)
 }
 
+/// Registra el tick activo en la unidad que ejecuta el controlador nativo.
+///
+/// `OpenTTD` no incrementa este contador en vagones ni partes articuladas;
+/// los trenes cuentan además mientras conservan velocidad aunque estén
+/// marcados como detenidos.
+fn record_vehicle_running_tick(
+    vehicle: &mut crate::vehicle::Vehicle,
+    engine_catalog: &[crate::engine::EngineDef],
+) {
+    if vehicle.is_timetable_controller_unit(engine_catalog)
+        && crate::economy::vehicle_counts_running_tick(vehicle)
+    {
+        vehicle.running_ticks = vehicle.running_ticks.wrapping_add(1);
+    }
+}
+
 /// Dispara el evento común al cruzar desde fuera hacia el interior del depot.
 fn trigger_depot_on_entry(state: &mut GameState, index: usize, was_in_depot: bool) {
     if was_in_depot || !vehicle_is_in_depot(state, index) {
@@ -153,6 +169,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         if state.vehicles[i].is_wagon_unit() || state.vehicles[i].is_articulated_unit() {
             continue;
         }
+        record_vehicle_running_tick(&mut state.vehicles[i], &state.engine_catalog);
         // Espera ~37 ticks + reserva/PBS de boca (`CheckTrainStayInDepot`).
         if state.vehicles[i].kind == VehicleKind::Train
             && crate::depot_leave::tick_train_stay_in_depot_indexed(
@@ -898,8 +915,9 @@ fn reroute_head_on_to_alt_platform(state: &mut GameState, vehicle_idx: usize) {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::{
-        move_vehicles, sync_road_articulated_parts, tick_road_depot_movement,
-        trigger_depot_on_entry, update_vehicle_running_sounds, vehicle_entered_train_tunnel,
+        move_vehicles, record_vehicle_running_tick, sync_road_articulated_parts,
+        tick_road_depot_movement, trigger_depot_on_entry, update_vehicle_running_sounds,
+        vehicle_entered_train_tunnel,
     };
     use crate::engine::engines_table;
     use crate::newgrf_sprites::{Action2RandomEntry, TrainSpriteAssign, TrainSpriteGraphics};
@@ -983,6 +1001,40 @@ mod tests {
 
         assert_eq!(state.vehicles[0].newgrf_tick_counter, u8::MAX);
         assert_eq!(state.vehicles[1].newgrf_tick_counter, 0);
+    }
+
+    #[test]
+    fn movement_accumulates_running_ticks_only_on_native_controllers() {
+        let mut state = GameState::new(8, 8);
+        let pos = TileCoord::new(2, 2);
+        let mut head = Vehicle::new(1, VehicleKind::Train, pos, pos);
+        head.running = true;
+        let mut wagon = Vehicle::new(2, VehicleKind::Train, pos, pos);
+        wagon.running = true;
+        wagon.prev_unit = Some(head.id);
+        head.next_unit = Some(wagon.id);
+        state.vehicles.extend([head, wagon]);
+
+        move_vehicles(&mut state);
+
+        assert_eq!(state.vehicles[0].running_ticks, 1);
+        assert_eq!(state.vehicles[1].running_ticks, 0);
+    }
+
+    #[test]
+    fn running_tick_counter_counts_stopped_train_with_residual_speed() {
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        vehicle.running = false;
+        vehicle.cur_speed = 1;
+
+        record_vehicle_running_tick(&mut vehicle, &[]);
+
+        assert_eq!(vehicle.running_ticks, 1);
     }
 
     #[test]

@@ -5164,3 +5164,11 @@ controladora incrementa `current_order_time` aun cuando el timetable está
 desactivado, igual que los cuatro controladores nativos; el flag sólo decide
 si `UpdateVehicleTimetable` interpreta ese tiempo. La regresión cubre un barco
 sin timetable; #329/#567 continúan abiertas por otros criterios pendientes.
+
+Actualización #329/#567-RUNNING-TICKS (2026-09-11): `running_ticks` se
+incrementa una vez por tick en la unidad que ejecuta el controlador nativo y no
+en vagones o partes articuladas; los trenes también cuentan con velocidad
+residual aunque estén detenidos. El barrido económico reinicia el contador como
+`OnNewEconomyDay`; el cálculo local de costos fraccionales permanece separado.
+Las regresiones cubren acumulación, velocidad residual y reset; #329/#567
+continúan abiertas por otros criterios pendientes.

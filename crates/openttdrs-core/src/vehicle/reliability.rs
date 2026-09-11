@@ -532,6 +532,13 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
             // después de actualizar averías y antes del movimiento del tick.
             check_ship_needs_service(state, i);
         }
+        if state.vehicles[i].is_timetable_controller_unit(&state.engine_catalog) {
+            // El port cobra costos con acumulación fraccional por tick, pero
+            // conserva también el contador nativo para UI y saves. Como en
+            // `OnNewEconomyDay`, el período anterior termina después del
+            // callback de averías/servicio y antes del movimiento siguiente.
+            state.vehicles[i].running_ticks = 0;
+        }
         i = i.saturating_add(day_ticks);
     }
 }
@@ -1054,6 +1061,24 @@ mod tests {
             .map(|(i, _)| i)
             .collect();
         assert_eq!(changed, vec![3]);
+    }
+
+    #[test]
+    fn economy_day_resets_running_ticks_for_controller_units() {
+        let mut state = crate::GameState::new(8, 8);
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        vehicle.running_ticks = 37;
+        state.vehicles.push(vehicle);
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(state.vehicles[0].running_ticks, 0);
     }
 
     #[test]

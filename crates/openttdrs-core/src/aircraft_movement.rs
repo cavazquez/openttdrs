@@ -39,6 +39,15 @@ pub fn aircraft_requires_path(kind: VehicleKind) -> bool {
     kind == VehicleKind::Aircraft
 }
 
+fn clear_aircraft_breakdown_if_slow(v: &mut Vehicle) {
+    // `HandleAircraftSmoke` clears the active breakdown as soon as the plane
+    // is back below the landing-speed threshold. Aircraft never enter the
+    // ground-vehicle stopped state for this breakdown.
+    if v.breakdown_ctr == 1 && v.cur_speed < 10 {
+        v.breakdown_ctr = 0;
+    }
+}
+
 /// Estación aeropuerto que cubre `pos` (hangar o footprint).
 #[must_use]
 pub fn airport_station_at(stations: &[Station], pos: TileCoord) -> Option<&Station> {
@@ -88,9 +97,10 @@ pub fn tick_aircraft_phase_with_catalog_and_plane_speed(
         engine_catalog,
         plane_speed,
     ) {
+        clear_aircraft_breakdown_if_slow(v);
         return ev;
     }
-    match v.aircraft_phase {
+    let event = match v.aircraft_phase {
         AircraftPhase::InHangar => {
             if v.running && v.pos != v.dest && !v.orders.is_empty() {
                 // Salir a taxi hacia runway (o dest si helipuerto).
@@ -175,7 +185,9 @@ pub fn tick_aircraft_phase_with_catalog_and_plane_speed(
             }
             AircraftPhaseEvent::None
         }
-    }
+    };
+    clear_aircraft_breakdown_if_slow(v);
+    event
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -239,5 +251,24 @@ mod tests {
             }
         }
         assert_eq!(s.vehicles[0].pos, dest);
+    }
+
+    #[test]
+    fn slow_aircraft_clears_active_breakdown() {
+        let mut state = GameState::new(8, 8);
+        let mut aircraft = Vehicle::new(
+            1,
+            crate::vehicle::VehicleKind::Aircraft,
+            TileCoord::new(2, 2),
+            TileCoord::new(2, 2),
+        );
+        aircraft.aircraft_phase = AircraftPhase::Taxi;
+        aircraft.cur_speed = 9;
+        aircraft.breakdown_ctr = 1;
+        state.vehicles.push(aircraft);
+
+        tick_aircraft_phase(&mut state.vehicles[0], &state.map, &mut state.stations);
+
+        assert_eq!(state.vehicles[0].breakdown_ctr, 0);
     }
 }

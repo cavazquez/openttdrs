@@ -5119,3 +5119,10 @@ ticks para barcos y vehículos de carretera, y cada cuatro para trenes. La
 regresión naval verifica que un tick intermedio no acorte la avería. #329/#567
 continúan abiertas por la semántica restante de vehículos, callbacks y
 aceptación visual/framebuffer.
+
+Actualización #329/#567-AIRCRAFT-BREAKDOWN-LANDING (2026-09-11): el FSM de
+aeronaves limpia ahora `breakdown_ctr` cuando el avión vuelve a velocidad de
+suelo, equivalente a `HandleAircraftSmoke` al aterrizar. La limpieza se aplica
+tanto al flujo normal como al FTA de aeropuertos, y una regresión cubre el
+estado de taxi lento; #329/#567 continúan abiertas por la semántica restante
+de vehículos, callbacks y aceptación visual/framebuffer.

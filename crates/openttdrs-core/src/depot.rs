@@ -61,6 +61,18 @@ pub fn ship_depot_part(tile: crate::map::Tile) -> u8 {
     tile.m5 & 0x01
 }
 
+/// Dirección diagonal de salida del depósito naval (`GetShipDepotDirection`).
+///
+/// El depósito se identifica por su sección norte: `XYNSToDiagDir(axis, part)`
+/// codifica la diagonal y `DiagDirToDir` la convierte a una `Direction` de
+/// vehículo. El resultado es la orientación inicial física y gráfica de un
+/// barco recién construido.
+#[must_use]
+pub fn ship_depot_facing(tile: crate::map::Tile) -> crate::vehicle::VehicleDirection {
+    let diagdir = (ship_depot_axis(tile) * 3) ^ (ship_depot_part(tile) * 2);
+    diagdir * 2 + 1
+}
+
 /// Devuelve las dos teselas de la huella naval para una dirección de construcción.
 ///
 /// El primer elemento es la tesela que recibe `PlaceShipDepotDir`; el segundo
@@ -667,6 +679,22 @@ mod tests {
             ship_depot_footprint(origin, 7),
             ship_depot_footprint(origin, 3)
         );
+    }
+
+    #[test]
+    fn ship_depot_facing_matches_north_section_for_each_axis() {
+        let cases = [(0u8, 1u8), (1, 7), (2, 1), (3, 7)];
+        for (dir, expected) in cases {
+            let mut s = GameState::new(12, 12);
+            let depot = TileCoord::new(5, 5);
+            let [origin, other] = ship_depot_footprint(depot, dir);
+            s.map.set_kind(origin, TileKind::Water).unwrap();
+            s.map.set_kind(other, TileKind::Water).unwrap();
+            apply_command(&mut s, &Command::PlaceShipDepotDir(depot, dir)).unwrap();
+
+            let north = ship_depot_north_tile(&s.map, depot).unwrap();
+            assert_eq!(ship_depot_facing(s.map.get(north).unwrap()), expected);
+        }
     }
 
     #[test]

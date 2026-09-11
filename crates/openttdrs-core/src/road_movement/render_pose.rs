@@ -268,6 +268,11 @@ pub fn vehicle_render_direction_at_with_map(
     if v.kind == VehicleKind::Aircraft && v.airport_fta_active {
         return v.direction;
     }
+    if v.kind == VehicleKind::Ship {
+        // `ShipController` rota el sprite en `ship_rotation` mientras
+        // `direction` ya apunta al siguiente tramo navegable.
+        return v.ship_rotation & 7;
+    }
     if matches!(v.kind, VehicleKind::Train)
         && let Some(map) = map
         && vehicle_in_depot(map, pose.pos)

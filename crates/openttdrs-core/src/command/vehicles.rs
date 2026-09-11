@@ -130,6 +130,19 @@ pub(super) fn build_vehicle_at_depot(
     engine_id: u16,
 ) -> Result<(), CommandError> {
     in_bounds(&state.map, depot_pos)?;
+    // CmdBuildShip recibe cualquiera de las dos secciones desde la UI, pero
+    // OpenTTD normaliza el vehículo a GetShipDepotNorthTile antes de crearlo.
+    // Hacerlo aquí evita que un barco construido sobre la sección opuesta
+    // nazca una tesela desplazado y con la orientación incorrecta.
+    let depot_pos = if state
+        .map
+        .get(depot_pos)
+        .is_some_and(|tile| tile.kind == TileKind::ShipDepot)
+    {
+        crate::depot::ship_depot_north_tile(&state.map, depot_pos).unwrap_or(depot_pos)
+    } else {
+        depot_pos
+    };
     let Some(tile) = state.map.get(depot_pos) else {
         return Err(CommandError::OutOfBounds);
     };
@@ -256,6 +269,18 @@ pub(super) fn build_vehicle_at_depot(
         vehicle.direction = crate::train_movement::train_depot_facing(mouth);
         vehicle.progress = 0;
         vehicle.depot_leave_cleared = false;
+    }
+    if engine.kind == VehicleKind::Ship {
+        let facing = crate::depot::ship_depot_facing(tile);
+        vehicle.direction = facing;
+        vehicle.ship_rotation = facing;
+        vehicle.ship_x = depot_pos.x.saturating_mul(16).saturating_add(8);
+        vehicle.ship_y = depot_pos.y.saturating_mul(16).saturating_add(8);
+        vehicle.ship_pos_valid = true;
+        vehicle.ship_track = match facing {
+            crate::DIR_NE | crate::DIR_SW => crate::ship_movement::TRACK_X,
+            _ => crate::ship_movement::TRACK_Y,
+        };
     }
     maybe_init_country_airport_fta(state, depot_pos, &mut vehicle);
     state.vehicles.push(vehicle);

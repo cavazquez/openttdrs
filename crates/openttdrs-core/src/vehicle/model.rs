@@ -746,7 +746,7 @@ impl Vehicle {
             ship_pos_valid: false,
             ship_track: 0,
             ship_state: 0,
-            ship_rotation: 0,
+            ship_rotation: DIR_NE,
             ship_path: Vec::new(),
             ship_tick_counter: 0,
             motion_counter: 0,

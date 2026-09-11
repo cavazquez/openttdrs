@@ -101,6 +101,9 @@ impl super::model::Vehicle {
     /// Dirección de sprite para render (8 vías; cardinales en la mitad de giros).
     #[must_use]
     pub fn render_direction(&self) -> super::model::VehicleDirection {
+        if self.kind == super::model::VehicleKind::Ship {
+            return self.ship_rotation & 7;
+        }
         let Some(next) = self.movement_target() else {
             return self.direction;
         };

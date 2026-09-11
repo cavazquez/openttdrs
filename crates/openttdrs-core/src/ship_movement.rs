@@ -456,11 +456,23 @@ fn ship_max_speed(
     max_speed
 }
 
+/// Avanza un paso de 45° de la rotación gráfica hacia el rumbo físico.
+///
+/// Es la misma elección de desempate que `ShipController`: una diferencia de
+/// 180° (`DIRDIFF_REVERSE`) gira a la derecha, y las diferencias mayores giran
+/// a la izquierda. El controlador llama a esta función sólo cada ocho ticks.
+#[must_use]
+fn ship_rotation_step(current: VehicleDirection, target: VehicleDirection) -> VehicleDirection {
+    let diff = target.wrapping_sub(current) & 7;
+    current.wrapping_add(if diff > 4 { 7 } else { 1 }) & 7
+}
+
 fn apply_ship_direction_change(v: &mut Vehicle, new_dir: VehicleDirection) {
     let diff = new_dir.wrapping_sub(v.direction) & 7;
     match diff {
         0 | 1 | 7 => {
             v.direction = new_dir;
+            v.ship_rotation = new_dir;
         }
         _ => {
             v.cur_speed = 0;
@@ -698,6 +710,16 @@ pub fn ship_controller_tick_with_catalog(
     }
 
     face_path_target(v);
+
+    // OpenTTD separa el rumbo que gobierna la física (`direction`) de la
+    // orientación del sprite (`rotation`). En giros de más de 45° el barco
+    // queda detenido y rota sobre el lugar una vez cada ocho ticks.
+    if v.direction != v.ship_rotation {
+        if v.ship_tick_counter.trailing_zeros() >= 3 {
+            v.ship_rotation = ship_rotation_step(v.ship_rotation, v.direction);
+        }
+        return;
+    }
 
     if v.movement_target().is_none() {
         if ship_arrival_ready(v, map) || (v.pos == v.dest && v.orders.is_empty()) {
@@ -1009,6 +1031,33 @@ mod tests {
         v.set_cruise_speed();
         v.step();
         assert_eq!(v.pos, TileCoord::new(0, 0));
+    }
+
+    #[test]
+    fn ship_rotates_on_spot_every_eight_ticks_before_moving() {
+        let pos = TileCoord::new(2, 2);
+        let mut v = Vehicle::new(1, VehicleKind::Ship, pos, pos);
+        v.running = true;
+        v.ship_pos_valid = true;
+        v.ship_x = pos.x * 16 + 8;
+        v.ship_y = pos.y * 16 + 8;
+        v.direction = DIR_SE;
+        v.ship_rotation = DIR_NE;
+
+        for _ in 0..7 {
+            ship_controller_tick(&mut v, None);
+            assert_eq!(v.ship_rotation, DIR_NE);
+            assert_eq!((v.ship_x, v.ship_y), (pos.x * 16 + 8, pos.y * 16 + 8));
+        }
+        ship_controller_tick(&mut v, None);
+        assert_eq!(v.ship_rotation, DIR_E);
+        assert_eq!(v.pos, pos, "la rotación no debe avanzar físicamente");
+
+        for _ in 0..7 {
+            ship_controller_tick(&mut v, None);
+        }
+        ship_controller_tick(&mut v, None);
+        assert_eq!(v.ship_rotation, DIR_SE);
     }
 
     #[test]

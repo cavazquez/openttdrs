@@ -389,6 +389,24 @@ fn render_direction_uses_cardinal_in_turn_second_half() {
 }
 
 #[test]
+fn ship_render_direction_uses_graphical_rotation() {
+    let mut v = Vehicle::new(
+        0,
+        VehicleKind::Ship,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    v.direction = DIR_SW;
+    v.ship_rotation = DIR_NE;
+
+    assert_eq!(
+        v.render_direction(),
+        DIR_NE,
+        "un giro naval puede tener rumbo físico y sprite distintos"
+    );
+}
+
+#[test]
 fn road_vehicle_loses_quarter_speed_on_turn() {
     // OpenTTD AM_ORIGINAL: `v->cur_speed -= v->cur_speed >> 2` al cambiar
     // de dirección (roadveh_cmd.cpp:1481).

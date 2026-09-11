@@ -235,7 +235,8 @@ pub use depot::{
     clear_all_depot_reservations, depot_id_from_tile, depot_tile_kind_for_vehicle,
     has_depot_reservation, nearest_depot_tile, nearest_reachable_ship_depot_tile_indexed,
     next_free_depot_id, rail_depot_mouth_dir, set_depot_reservation, ship_depot_axis,
-    ship_depot_footprint, ship_depot_north_tile, ship_depot_other_tile, ship_depot_part,
+    ship_depot_facing, ship_depot_footprint, ship_depot_north_tile, ship_depot_other_tile,
+    ship_depot_part,
 };
 pub use depot_leave::{
     TRAIN_DEPOT_LEAVE_WAIT_TICKS, activate_depot_leave_units, tick_train_stay_in_depot,

@@ -589,6 +589,37 @@ fn place_ship_depot_writes_both_native_parts_for_each_direction() {
 }
 
 #[test]
+fn build_ship_uses_north_section_and_initial_depot_facing() {
+    use crate::engine::ENGINE_SHIP_MPS;
+
+    let cases = [(0u8, 1u8), (1, 7), (2, 1), (3, 7)];
+    for (dir, expected_facing) in cases {
+        let mut s = GameState::new(12, 12);
+        let depot = TileCoord::new(5, 5);
+        let [origin, other] = crate::ship_depot_footprint(depot, dir);
+        s.map.set_kind(origin, TileKind::Water).unwrap();
+        s.map.set_kind(other, TileKind::Water).unwrap();
+        apply_command(&mut s, &Command::PlaceShipDepotDir(depot, dir)).unwrap();
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(origin, ENGINE_SHIP_MPS),
+        )
+        .unwrap();
+
+        let north = crate::ship_depot_north_tile(&s.map, origin).unwrap();
+        let ship = s.vehicles.last().expect("barco recién construido");
+        assert_eq!(ship.pos, north, "dir={dir} debe usar la sección norte");
+        assert_eq!(ship.direction, expected_facing, "dir={dir} rumbo físico");
+        assert_eq!(
+            ship.ship_rotation, expected_facing,
+            "dir={dir} rumbo gráfico"
+        );
+        assert!(ship.ship_pos_valid, "dir={dir} debe nacer centrado");
+        assert_eq!((ship.ship_x & 0xF, ship.ship_y & 0xF), (8, 8));
+    }
+}
+
+#[test]
 fn place_ship_depot_rejects_every_map_edge_atomically() {
     // Cada origen está dentro de un mapa 4×4, pero la segunda sección cae
     // fuera en uno de los cuatro bordes. El comando y su preview deben

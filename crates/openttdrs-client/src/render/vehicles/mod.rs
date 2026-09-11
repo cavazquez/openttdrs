@@ -399,6 +399,7 @@ mod tests {
 
         let mut ship = Vehicle::new(3, VehicleKind::Ship, tile, tile);
         ship.direction = DIR_SE;
+        ship.ship_rotation = DIR_SE;
         let ship_bounds = vehicle_parent_bounds(
             &ship,
             &map,

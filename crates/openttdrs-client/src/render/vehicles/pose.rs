@@ -159,7 +159,7 @@ pub(crate) fn vehicle_parent_bounds(
         .saturating_add(i32::from(v.altitude));
 
     let (origin_x, origin_y, extent_x, extent_y, extent_z) = match v.kind {
-        VehicleKind::Ship => match v.direction {
+        VehicleKind::Ship => match v.ship_rotation & 7 {
             openttdrs_core::DIR_NE | openttdrs_core::DIR_SW => (-16, -3, 32, 6, 6),
             openttdrs_core::DIR_SE | openttdrs_core::DIR_NW => (-3, -16, 6, 32, 6),
             _ => (-3, -3, 6, 6, 6),

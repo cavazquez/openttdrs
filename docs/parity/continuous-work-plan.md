@@ -3831,3 +3831,16 @@ cliente en 1373 pasadas y 2 ignoradas, con Clippy estricto verde. #567 sigue
 abierta hasta conectar estas filas con la tabla `DEPT` de SAV y completar
 nombre/pueblo/callbacks, preview visual, clipping, orden global y framebuffer;
 #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-DEPT-PERSISTENCE (2026-09-11, `e5a44e76`):
+las filas de `SavDepot` ya se cargan y escriben en la tabla nativa `DEPT`,
+conservando el índice denso `DepotID`, `Depot::xy`, `REF_TOWN` moderno y
+`town_index` legado, `town_cn`, nombre y `build_date`. Un round-trip sin
+mutaciones reutiliza el chunk original para preservar columnas futuras; si el
+estado cambia, el escritor reconstruye sólo las columnas semánticas y mezcla
+las desconocidas. Estados JSON antiguos que sólo tienen `MAP2` obtienen filas
+mínimas derivadas del mapa, sin perder la identidad del pool ni la huella
+canónica del depósito naval. La suite core queda en 2401 pasadas y 1 ignorada;
+la cliente en 1373 pasadas y 2 ignoradas, con Clippy estricto verde. #567 sigue
+abierta por mutaciones/UI de nombre y pueblo generado, callbacks/vecinos,
+preview visual, clipping, orden global y framebuffer; #326 permanece abierta.

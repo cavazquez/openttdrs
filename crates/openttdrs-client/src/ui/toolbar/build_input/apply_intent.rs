@@ -182,6 +182,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
             depot_pos,
             vehicle_id,
         } => {
+            let depot_pos = selection::canonical_depot_panel_pos(&ctx.sim.state.map, depot_pos);
             selection::open_depot_panel(
                 &mut ctx.depot_state,
                 &mut ctx.order_state,

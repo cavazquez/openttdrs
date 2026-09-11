@@ -4920,3 +4920,12 @@ redefinida. Esto acota la paridad del gate visual, pero no declara completa la
 topología de consist ni los callbacks/sprites locales restantes; #329/#567
 continúan abiertas. El foco quedó en `24 passed; 0 failed`, core railtype en
 `7 passed; 0 failed`, con Clippy estricto, formato y `diff --check` limpios.
+
+Actualización #567-SHIP-DEPOT-NORTH-ANCHOR (2026-09-11): la apertura del
+panel de depósito normaliza un clic sobre cualquiera de las dos teselas de un
+depósito naval a `ship_depot_north_tile`, igual que `ClickTile_Water` y
+`ShowDepotWindow` nativos. Esto mantiene alineados el panel, la fila `DEPT`,
+la búsqueda de barcos, el centrado de cámara y las acciones de compra cuando
+el cursor cae en la sección sur. Las cuatro orientaciones y los depósitos no
+navales tienen regresiones separadas; #567 sigue abierta por callbacks,
+pathfinding completo y aceptación visual/framebuffer.

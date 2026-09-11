@@ -7,7 +7,22 @@ use crate::ui::toolbar::station_panel::StationCargoPanelState;
 use crate::ui::town_window::TownWindowState;
 use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::VehicleWindowState;
-use openttdrs_core::Vehicle;
+use openttdrs_core::{Map, TileCoord, TileKind, Vehicle};
+
+/// Coordenada que usa la ventana de depósito para una instalación completa.
+///
+/// `ClickTile_Water` de OpenTTD siempre pasa `GetShipDepotNorthTile` al
+/// `DepotWindow`, aunque el cursor haya caído sobre la sección sur. El estado
+/// de la UI debe conservar esa misma ancla: los barcos construidos y la fila
+/// `DEPT` se identifican por la sección norte.
+#[must_use]
+pub(crate) fn canonical_depot_panel_pos(map: &Map, pos: TileCoord) -> TileCoord {
+    if map.get_kind(pos) == Some(TileKind::ShipDepot) {
+        openttdrs_core::ship_depot_north_tile(map, pos).unwrap_or(pos)
+    } else {
+        pos
+    }
+}
 
 /// Clic en un vehículo del mapa: abre o enfoca su vista (#242).
 /// No limpia Órdenes de *otros* vehículos.
@@ -118,4 +133,45 @@ pub(crate) fn open_station_panel(
     industry_panel.open = false;
     town_window.town_id = None;
     vehicle_window.clear_with_chain(chain);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openttdrs_core::ship_depot_footprint;
+
+    #[test]
+    fn ship_depot_panel_anchor_is_north_for_every_orientation() {
+        let mut map = Map::new_flat(24, 24, 0);
+        let part_axis_by_dir = [0_u8, 3, 1, 2];
+
+        for (index, dir) in (0_u8..4).enumerate() {
+            let origin = TileCoord::new(4 + (index as i32) * 4, 8);
+            let [first, second] = ship_depot_footprint(origin, dir);
+            map.set_kind(first, TileKind::ShipDepot)
+                .expect("first depot tile");
+            map.set_mapt_m5(first, 0x60, 0x30 | part_axis_by_dir[usize::from(dir)])
+                .expect("first depot metadata");
+            map.set_kind(second, TileKind::ShipDepot)
+                .expect("second depot tile");
+            map.set_mapt_m5(
+                second,
+                0x60,
+                0x30 | part_axis_by_dir[usize::from((dir + 2) & 3)],
+            )
+            .expect("second depot metadata");
+
+            let north = openttdrs_core::ship_depot_north_tile(&map, first).expect("north section");
+            assert_eq!(canonical_depot_panel_pos(&map, first), north);
+            assert_eq!(canonical_depot_panel_pos(&map, second), north);
+        }
+    }
+
+    #[test]
+    fn non_ship_depot_panel_anchor_is_unchanged() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let pos = TileCoord::new(2, 2);
+        map.set_kind(pos, TileKind::RailDepot).expect("rail depot");
+        assert_eq!(canonical_depot_panel_pos(&map, pos), pos);
+    }
 }

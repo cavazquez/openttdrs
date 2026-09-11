@@ -3882,6 +3882,19 @@ abierta hasta conectar estas filas con la tabla `DEPT` de SAV y completar
 nombre/pueblo/callbacks, preview visual, clipping, orden global y framebuffer;
 #326 permanece abierta.
 
+Actualización #329/#567-VEHICLE-REFIT-CAPACITY (2026-09-11, `428c2ef9`):
+CB15 ya se trata como capacidad final cuando el cargo difiere del declarado por
+Action0 o existe un subtipo activo. Su resultado tiene prioridad sobre CB36 en
+`ConsistChanged`, autoreemplazo, piezas articuladas, refit manual y auto-refit
+de estación; después de un refit se recalcula la capacidad agregada de la
+cabeza del consist. `CALLBACK_FAILED` cae a Action0/CB36 y cero sigue siendo
+válido. Core queda en `2472 passed; 0 failed; 1 ignored` y cliente en `1392
+passed; 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check`
+limpios. Falta `NoDefaultCargoMultiplier`, selección completa de subtipos,
+capacidad secundaria de aeronaves, balanceo completo de consist, APIs legacy
+sin catálogo y aceptación visual manual bajo Weston; #329/#567 siguen abiertas
+y #326 permanece abierta.
+
 Actualización #329/#567-SHIP-LONG-INTRO (2026-09-11, `48bfc684`): Action0
 naval `0x1A` ya lee la fecha larga de introducción (`DWORD`, días desde la
 época NewGRF), la convierte al año del catálogo y la conserva al aplicar el

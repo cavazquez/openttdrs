@@ -1173,6 +1173,7 @@ pub(super) fn age_vehicle_cargo(state: &mut GameState) {
         vehicle.cached_cargo_age_period = period;
 
         vehicle.ensure_packets_from_legacy();
+        vehicle.ensure_aircraft_mail_packets_from_legacy();
         let has_cargo = vehicle.cargo > 0;
         if has_cargo {
             vehicle.cargo_transit_ticks = vehicle.cargo_transit_ticks.saturating_add(1);

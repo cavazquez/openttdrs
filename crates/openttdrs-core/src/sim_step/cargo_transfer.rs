@@ -59,7 +59,12 @@ fn purge_finished_runtime_payments(state: &mut GameState) {
         crate::consist_unit_ids(&state.vehicles, front_id)
             .into_iter()
             .filter_map(|id| state.vehicles.iter().find(|vehicle| vehicle.id == id))
-            .any(|vehicle| vehicle.cargo > 0 || vehicle.cargo_unloading || vehicle.cargo_loading)
+            .any(|vehicle| {
+                vehicle.cargo > 0
+                    || vehicle.cargo_unloading
+                    || vehicle.cargo_loading
+                    || !vehicle.aircraft_mail_packets.is_empty()
+            })
     });
 }
 
@@ -188,7 +193,9 @@ fn trigger_vehicle_empty_if_consist_empty(state: &mut GameState, vehicle_idx: us
                 .vehicles
                 .iter()
                 .find(|candidate| candidate.id == *id)
-                .is_some_and(|candidate| candidate.cargo == 0)
+                .is_some_and(|candidate| {
+                    candidate.cargo == 0 && candidate.aircraft_mail_packets.is_empty()
+                })
         })
     {
         return;
@@ -487,6 +494,416 @@ pub(super) fn trigger_pending_industry_deliveries(state: &mut GameState) {
     super::economy::trigger_delivered_industries(state, &pending);
 }
 
+fn aircraft_mail_load_unload_speed(state: &mut GameState, vehicle_idx: usize) -> u32 {
+    let base = vehicle_load_unload_speed(state, vehicle_idx, CargoType::Mail);
+    base.saturating_add(3).saturating_div(4).max(1)
+}
+
+fn aircraft_mail_should_unload_at_station(state: &GameState, vehicle_idx: usize) -> Option<usize> {
+    let vehicle = state.vehicles.get(vehicle_idx)?;
+    if vehicle.kind != VehicleKind::Aircraft || vehicle.aircraft_mail_packets.is_empty() {
+        return None;
+    }
+    let station_idx = station_index_at_vehicle(state, vehicle)?;
+    let station = state.stations.get(station_idx)?;
+    if !station.can_service_vehicle(VehicleKind::Aircraft)
+        || !station_matches_current_order(vehicle, station.pos)
+        || !station::vehicle_physically_at_station(&state.map, vehicle, station)
+    {
+        return None;
+    }
+    let unload_type = vehicle
+        .orders
+        .get(vehicle.current_order)
+        .map_or(OrderUnloadType::UnloadIfPossible, |order| {
+            order.unload_type()
+        });
+    if unload_type == OrderUnloadType::NoUnload {
+        return None;
+    }
+    // El correo es carga de pueblo: no se entrega en la misma parada donde se
+    // tomó. `first_station` conserva la misma protección por packet para los
+    // lotes que llegaron por un trasbordo.
+    if vehicle.last_pickup_station == Some(station.pos) {
+        return None;
+    }
+    Some(station_idx)
+}
+
+fn finish_vehicle_unloading_if_empty(state: &mut GameState, vehicle_idx: usize) -> bool {
+    let Some(vehicle) = state.vehicles.get(vehicle_idx) else {
+        return false;
+    };
+    if vehicle.cargo != 0 || !vehicle.aircraft_mail_packets.is_empty() {
+        return false;
+    }
+    state.vehicles[vehicle_idx].clear_cargo();
+    state.vehicles[vehicle_idx].last_pickup_station = None;
+    state.vehicles[vehicle_idx].last_depart_tick = None;
+    state.vehicles[vehicle_idx].advance_after_unloading();
+    state.vehicles[vehicle_idx].sync_order_destination_with_stations(&state.map, &state.stations);
+    trigger_vehicle_empty_if_consist_empty(state, vehicle_idx);
+    true
+}
+
+/// Descarga la lista asociada a `AIR_SHADOW` usando el mismo contrato de
+/// estación que el hold principal: `Stage` decide entrega/trasbordo, cada
+/// packet conserva su feeder y la liquidación se acumula en el `CargoPayment`
+/// de la cabeza visible.
+#[allow(clippy::too_many_lines)]
+fn try_unload_aircraft_mail_packets(
+    state: &mut GameState,
+    vehicle_idx: usize,
+    delivered_industries: &mut Vec<usize>,
+    link_graph_dirty: &mut bool,
+) -> bool {
+    state.vehicles[vehicle_idx].ensure_aircraft_mail_packets_from_legacy();
+    let Some(station_idx) = aircraft_mail_should_unload_at_station(state, vehicle_idx) else {
+        return false;
+    };
+    let station_pos = state.stations[station_idx].pos;
+    state.stations[station_idx].mark_vehicle_of_type(VehicleKind::Aircraft);
+    let unload_type = state.vehicles[vehicle_idx]
+        .orders
+        .get(state.vehicles[vehicle_idx].current_order)
+        .map_or(OrderUnloadType::UnloadIfPossible, |order| {
+            order.unload_type()
+        });
+    let mail_capacity = state.vehicles[vehicle_idx]
+        .aircraft_mail_capacity
+        .map_or_else(
+            || state.vehicles[vehicle_idx].aircraft_mail_packets.total(),
+            u32::from,
+        )
+        .max(1);
+    let mail_cargo = state.vehicles[vehicle_idx].aircraft_mail_packets.total();
+    let cargo_pct = u8::try_from((u64::from(mail_cargo) * 100 / u64::from(mail_capacity)).min(100))
+        .unwrap_or(100);
+    let next_stations = crate::VehicleOrder::get_next_stopping_station(
+        &state.vehicles[vehicle_idx].orders,
+        state.vehicles[vehicle_idx].cur_implicit_order_index,
+        station_pos,
+        Some(cargo_pct),
+    );
+    let accepted = crate::station::station_accepts_cargo_with_newgrf_and_cargo_catalog(
+        &state.map,
+        &mut state.industries,
+        &state.towns,
+        &state.industry_tile_spec_catalog,
+        &state.industry_spec_catalog,
+        state.climate,
+        &state.stations[station_idx],
+        CargoType::Mail,
+        &state.cargo_spec_catalog,
+    );
+    if !crate::cargo_packet::prepare_unload(
+        &mut state.vehicles[vehicle_idx].aircraft_mail_packets,
+        accepted,
+        station_pos,
+        &next_stations,
+        unload_type,
+    ) {
+        return false;
+    }
+
+    let payment_front_id =
+        crate::train_consist::consist_head_id(&state.vehicles, state.vehicles[vehicle_idx].id)
+            .unwrap_or(state.vehicles[vehicle_idx].id);
+    let payment_index = ensure_cargo_payment(state, payment_front_id);
+    let speed = aircraft_mail_load_unload_speed(state, vehicle_idx);
+    let unloadable = state.vehicles[vehicle_idx]
+        .aircraft_mail_packets
+        .staged_transfer
+        .saturating_add(
+            state.vehicles[vehicle_idx]
+                .aircraft_mail_packets
+                .staged_deliver,
+        );
+    let mut taken = state.vehicles[vehicle_idx]
+        .aircraft_mail_packets
+        .take_amount(speed.min(unloadable));
+    if taken.is_empty() {
+        return false;
+    }
+
+    let unload_units: u32 = taken.iter().map(|packet| u32::from(packet.count)).sum();
+    state.stations[station_idx].time_since_unload = 0;
+    let vehicle_owner = state.vehicles[vehicle_idx].owner;
+    if let Some(from) = state.vehicles[vehicle_idx].last_pickup_station {
+        let capacity = mail_capacity.max(unload_units);
+        let travel_time = state.vehicles[vehicle_idx]
+            .last_depart_tick
+            .map(|depart| state.tick.get().saturating_sub(depart))
+            .and_then(|ticks| u32::try_from(ticks).ok())
+            .unwrap_or(0);
+        state.link_graph.record_trip(
+            from,
+            station_pos,
+            CargoType::Mail,
+            unload_units,
+            capacity,
+            travel_time,
+        );
+        *link_graph_dirty = true;
+    }
+
+    let mut payment = 0_i64;
+    let mut feeder_total = 0_i64;
+    let mut feeder_income_by_owner: Vec<(crate::company::CompanyId, i64)> = Vec::new();
+    let mut transfer_mask = Vec::with_capacity(taken.len());
+    let mut delivered_units = 0_u32;
+    for packet in &mut taken {
+        let distance = packet.get_distance(station_pos);
+        let pay_spec = crate::cargo_spec::payment_spec_for_cargo_climate(
+            packet.cargo,
+            &state.cargo_spec_catalog,
+            state.climate,
+        );
+        let part = economy::transported_goods_income_with_spec(
+            u32::from(packet.count),
+            distance,
+            packet.periods_in_transit,
+            pay_spec,
+            state.global_economy.inflation_payment,
+        );
+        let current_payment =
+            economy::cargo_current_payment(pay_spec, state.global_economy.inflation_payment);
+        let part = crate::cargo_spec::cargo_spec_for_type(&state.cargo_spec_catalog, packet.cargo)
+            .and_then(|def| {
+                crate::newgrf_callback::resolve_cargo_profit_callback(
+                    def,
+                    u32::from(packet.count),
+                    distance,
+                    packet.periods_in_transit,
+                    current_payment,
+                )
+            })
+            .unwrap_or(part);
+        let _ = crate::subsidy::try_award_subsidy(
+            state,
+            station_pos,
+            packet.cargo,
+            packet.source,
+            vehicle_owner,
+        );
+        let part = part.saturating_mul(crate::subsidy::delivery_income_multiplier(
+            state,
+            station_pos,
+            packet.cargo,
+            packet.source,
+            vehicle_owner,
+        ));
+        let action = crate::cargo_packet::choose_cargo_action(
+            packet,
+            station_pos,
+            &next_stations,
+            unload_type,
+            accepted,
+        );
+        transfer_mask.push(action == crate::cargo_packet::CargoUnloadAction::Transfer);
+        match action {
+            crate::cargo_packet::CargoUnloadAction::Transfer => {
+                if !packet.feeder_paid
+                    && let Some(first) = packet.first_station
+                    && first != station_pos
+                {
+                    let share = crate::company::feeder_share_of(part);
+                    if share > 0 {
+                        packet.feeder_share = packet.feeder_share.saturating_add(share);
+                        if let Some(cargo_payment) = state.cargo_payments.get_mut(payment_index) {
+                            cargo_payment.visual_transfer =
+                                cargo_payment.visual_transfer.saturating_add(share);
+                        }
+                    }
+                }
+            }
+            crate::cargo_packet::CargoUnloadAction::Deliver => {
+                let (accepted_industry, destinations) = deliver_goods_to_industries(
+                    state,
+                    station_idx,
+                    packet.cargo,
+                    u32::from(packet.count),
+                    packet.source,
+                    vehicle_owner,
+                );
+                for industry_idx in destinations {
+                    if !delivered_industries.contains(&industry_idx) {
+                        delivered_industries.push(industry_idx);
+                    }
+                }
+                let accepted_industry = accepted_industry.min(u32::from(packet.count));
+                let station_town = town::nearest_town_index(&state.towns, station_pos)
+                    .filter(|(_, distance)| *distance <= town::TOWN_AUTHORITY_RADIUS)
+                    .and_then(|(index, _)| state.towns.get(index).map(|town| town.id));
+                let cargo_source = cargo_source_for_monitor(state, packet.cargo, packet.source);
+                state.runtime.cargo_monitor.add_cargo_delivery(
+                    packet.cargo,
+                    vehicle_owner,
+                    u32::from(packet.count).saturating_sub(accepted_industry),
+                    cargo_source,
+                    station_town,
+                    None,
+                );
+                delivered_units = delivered_units.saturating_add(u32::from(packet.count));
+                let gross_part = part;
+                let mut deliverer_part = part;
+                if !packet.feeder_paid
+                    && packet.feeder_share > 0
+                    && let Some(first) = packet.first_station
+                    && first != station_pos
+                    && let Some(feeder_st) = state.stations.iter().find(|st| st.pos == first)
+                {
+                    let feeder_owner = feeder_st.owner;
+                    let accumulated = packet.feeder_share;
+                    state.credit_company(feeder_owner, accumulated);
+                    feeder_total = feeder_total.saturating_add(accumulated);
+                    if let Some((_, acc)) = feeder_income_by_owner
+                        .iter_mut()
+                        .find(|(id, _)| *id == feeder_owner)
+                    {
+                        *acc = acc.saturating_add(accumulated);
+                    } else {
+                        feeder_income_by_owner.push((feeder_owner, accumulated));
+                    }
+                    packet.feeder_paid = true;
+                    deliverer_part = part.saturating_sub(accumulated);
+                }
+                payment = payment.saturating_add(deliverer_part);
+                if let Some(cargo_payment) = state.cargo_payments.get_mut(payment_index) {
+                    cargo_payment.route_profit =
+                        cargo_payment.route_profit.saturating_add(gross_part);
+                    cargo_payment.visual_profit =
+                        cargo_payment.visual_profit.saturating_add(deliverer_part);
+                }
+            }
+            crate::cargo_packet::CargoUnloadAction::Keep
+            | crate::cargo_packet::CargoUnloadAction::Load => {}
+        }
+    }
+
+    if delivered_units > 0 {
+        state.stations[station_idx]
+            .goods
+            .get_mut(CargoType::Mail)
+            .mark_final_delivery();
+        town::record_delivery_near_town(
+            &mut state.towns,
+            station_pos,
+            CargoType::Mail,
+            delivered_units,
+        );
+    }
+    let mut reinserted = Vec::new();
+    let mut reinserted_cargos = Vec::new();
+    for (mut packet, was_transfer) in taken.into_iter().zip(transfer_mask) {
+        if was_transfer {
+            packet.update_unloading_tile(station_pos);
+            packet.next_hop = None;
+            if !reinserted_cargos.contains(&packet.cargo) {
+                reinserted_cargos.push(packet.cargo);
+            }
+            reinserted.push(packet);
+        }
+    }
+    if !reinserted.is_empty() {
+        state.stations[station_idx].push_waiting_packets(reinserted);
+        for cargo in reinserted_cargos {
+            trigger_station_cargo_animation(
+                state,
+                station_pos,
+                crate::StationAnimationTrigger::NewCargo,
+                cargo,
+            );
+        }
+    }
+    trigger_station_vehicle_load_animation(state, station_pos, state.vehicles[vehicle_idx].pos);
+    state.stations[station_idx].income = state.stations[station_idx]
+        .income
+        .saturating_add(positive_money(payment));
+    state.credit_company(vehicle_owner, payment);
+    let shown = payment.saturating_add(feeder_total);
+    state.stats.cargo_income_earned = state
+        .stats
+        .cargo_income_earned
+        .saturating_add(positive_money(shown));
+    if let Some(company) = state.companies.get_mut(vehicle_owner.index()) {
+        company.cargo_income_earned = company
+            .cargo_income_earned
+            .saturating_add(positive_money(payment));
+    }
+    let profit_vehicle_id = state.vehicles[vehicle_idx].id;
+    let head_id =
+        crate::consist_head_id(&state.vehicles, profit_vehicle_id).unwrap_or(profit_vehicle_id);
+    if let Some(head) = state
+        .vehicles
+        .iter_mut()
+        .find(|vehicle| vehicle.id == head_id)
+    {
+        head.profit_this_year = head.profit_this_year.saturating_add(payment);
+    }
+    for (feeder_owner, share) in feeder_income_by_owner {
+        if let Some(company) = state.companies.get_mut(feeder_owner.index()) {
+            company.cargo_income_earned = company
+                .cargo_income_earned
+                .saturating_add(positive_money(share));
+        }
+    }
+    let vpos = state.vehicles[vehicle_idx].pos;
+    state
+        .runtime
+        .pending_income_popups
+        .push(crate::IncomePopup {
+            amount: payment,
+            at: vpos,
+        });
+    state
+        .runtime
+        .pending_sim_events
+        .push(crate::sim_events::SimEvent::Income {
+            amount: payment,
+            at: vpos,
+        });
+    if shown != 0 {
+        state
+            .runtime
+            .pending_sim_events
+            .push(crate::sim_events::SimEvent::VehicleLoadUnload {
+                vehicle_id: state.vehicles[vehicle_idx].id,
+                at: vpos,
+                kind: state.vehicles[vehicle_idx].kind,
+            });
+    }
+    let first_chunk = !state.vehicles[vehicle_idx].cargo_unloading;
+    let first_delivery = state.stats.cargo_deliveries == 0 && first_chunk;
+    if first_chunk && delivered_units > 0 {
+        crate::news::push_cargo_delivery_news(
+            state,
+            unload_units,
+            CargoType::Mail,
+            payment,
+            station_pos,
+            first_delivery,
+        );
+    }
+    if first_chunk {
+        state.stats.cargo_deliveries += 1;
+        if let Some(company) = state.companies.get_mut(vehicle_owner.index()) {
+            company.cargo_deliveries += 1;
+        }
+    }
+    state.stats.cargo_units_delivered += u64::from(unload_units);
+    state.vehicles[vehicle_idx].aircraft_mail_cargo = Some(
+        u16::try_from(
+            state.vehicles[vehicle_idx]
+                .aircraft_mail_packets
+                .total()
+                .min(u32::from(u16::MAX)),
+        )
+        .unwrap_or(u16::MAX),
+    );
+    true
+}
+
 #[allow(clippy::too_many_lines)]
 pub(super) fn unload_vehicles(
     state: &mut GameState,
@@ -504,8 +921,27 @@ pub(super) fn unload_vehicles(
         if *loaded_flag {
             continue;
         }
+        let mail_unloaded = state.vehicles[i].kind == VehicleKind::Aircraft
+            && try_unload_aircraft_mail_packets(
+                state,
+                i,
+                &mut delivered_industries,
+                &mut link_graph_dirty,
+            );
+        let mail_remaining = state.vehicles[i].kind == VehicleKind::Aircraft
+            && !state.vehicles[i].aircraft_mail_packets.is_empty();
+        if mail_unloaded {
+            unloaded_this_tick[i] = true;
+        }
         let vcargo = state.vehicles[i].cargo;
         if vcargo == 0 {
+            if mail_unloaded {
+                if mail_remaining {
+                    state.vehicles[i].cargo_unloading = true;
+                } else {
+                    let _ = finish_vehicle_unloading_if_empty(state, i);
+                }
+            }
             continue;
         }
         state.vehicles[i].ensure_packets_from_legacy();
@@ -885,18 +1321,17 @@ pub(super) fn unload_vehicles(
         unloaded_this_tick[i] = true;
 
         if state.vehicles[i].cargo == 0 {
-            state.vehicles[i].cargo_unloading = false;
-            state.vehicles[i].clear_cargo();
-            state.vehicles[i].last_pickup_station = None;
-            state.vehicles[i].last_depart_tick = None;
-            // Avanzar orden al terminar descarga (road stop o plataforma rail).
-            state.vehicles[i].advance_after_unloading();
-            state.vehicles[i].sync_order_destination_with_stations(&state.map, &state.stations);
+            if mail_remaining {
+                state.vehicles[i].clear_cargo();
+                state.vehicles[i].cargo_unloading = true;
+            } else {
+                let _ = finish_vehicle_unloading_if_empty(state, i);
+            }
         } else {
             state.vehicles[i].cargo_unloading = true;
         }
-        if state.vehicles[i].cargo == 0 {
-            trigger_vehicle_empty_if_consist_empty(state, i);
+        if mail_remaining {
+            state.vehicles[i].cargo_unloading = true;
         }
     }
 
@@ -1349,12 +1784,10 @@ fn try_load_aircraft_mail_from_station_waiting_cargo(
         company,
         CargoType::Mail,
     );
-    let base_speed = vehicle_load_unload_speed(state, vehicle_idx, CargoType::Mail);
-    // `GetLoadAmount` reduces the default load slice of an aircraft shadow to
-    // one quarter of the primary aircraft amount. Keep at least one unit so a
-    // valid mail hold cannot stall forever on a small callback result.
-    let speed = base_speed.saturating_add(3) / 4;
-    let speed = speed.max(1);
+    // `GetLoadAmount` reduce la tajada de un shadow a un cuarto del avión
+    // principal; mantener al menos una unidad evita un callback que bloquee
+    // para siempre un hold válido.
+    let speed = aircraft_mail_load_unload_speed(state, vehicle_idx);
     let mut load = station::load_amount_for_rating(available.min(room).min(speed), rating);
     if load == 0 && available > 0 && rating > 0 {
         load = 1.min(speed).min(room);
@@ -2126,6 +2559,77 @@ mod tests {
         assert_eq!(state.vehicles[0].aircraft_mail_cargo, Some(2));
         assert_eq!(state.vehicles[0].aircraft_mail_packets.total(), 2);
         assert_eq!(state.stations[0].cargo_stock.get(CargoType::Mail), 18);
+    }
+
+    #[test]
+    fn aircraft_shadow_mail_unloads_and_records_delivery() {
+        let pos = TileCoord::new(1, 1);
+        let source = TileCoord::new(3, 3);
+        let mut state = GameState::new(6, 6);
+        state.map.set_kind(pos, TileKind::Airport).unwrap();
+        state
+            .stations
+            .push(crate::Station::new_with_kind(pos, crate::StopKind::Airport));
+
+        let mut aircraft = crate::Vehicle::new(1, VehicleKind::Aircraft, pos, pos);
+        aircraft.aircraft_mail_capacity = Some(10);
+        aircraft.aircraft_mail_cargo = Some(2);
+        aircraft.last_pickup_station = Some(source);
+        aircraft.last_depart_tick = Some(0);
+        let packet = crate::CargoPacket::new(CargoType::Mail, 2, source)
+            .with_first_station(source)
+            .with_next_hop(None);
+        aircraft.aircraft_mail_packets.push(packet);
+        state.vehicles.push(aircraft);
+
+        let mut unloaded = vec![false];
+        unload_vehicles(&mut state, 1, &[false], &mut unloaded);
+
+        assert!(unloaded[0]);
+        assert!(state.vehicles[0].aircraft_mail_packets.is_empty());
+        assert_eq!(state.vehicles[0].aircraft_mail_cargo, Some(0));
+        assert_eq!(state.stats.cargo_units_delivered, 2);
+    }
+
+    #[test]
+    fn aircraft_shadow_mail_unload_keeps_station_window_until_last_slice() {
+        let pos = TileCoord::new(1, 1);
+        let source = TileCoord::new(3, 3);
+        let mut state = GameState::new(6, 6);
+        state.map.set_kind(pos, TileKind::Airport).unwrap();
+        state
+            .stations
+            .push(crate::Station::new_with_kind(pos, crate::StopKind::Airport));
+
+        let mut aircraft = crate::Vehicle::new(1, VehicleKind::Aircraft, pos, pos);
+        aircraft.aircraft_mail_capacity = Some(10);
+        aircraft.aircraft_mail_cargo = Some(5);
+        aircraft.last_pickup_station = Some(source);
+        aircraft.last_depart_tick = Some(0);
+        aircraft.aircraft_mail_packets.push(
+            crate::CargoPacket::new(CargoType::Mail, 5, source)
+                .with_first_station(source)
+                .with_next_hop(None),
+        );
+        state.vehicles.push(aircraft);
+
+        let mut unloaded = vec![false];
+        unload_vehicles(&mut state, 1, &[false], &mut unloaded);
+        assert_eq!(state.vehicles[0].aircraft_mail_packets.total(), 3);
+        assert!(state.vehicles[0].cargo_unloading);
+        assert_eq!(state.stats.cargo_deliveries, 1);
+
+        unloaded[0] = false;
+        unload_vehicles(&mut state, 2, &[false], &mut unloaded);
+        assert_eq!(state.vehicles[0].aircraft_mail_packets.total(), 1);
+        assert!(state.vehicles[0].cargo_unloading);
+        assert_eq!(state.stats.cargo_deliveries, 1);
+
+        unloaded[0] = false;
+        unload_vehicles(&mut state, 3, &[false], &mut unloaded);
+        assert!(state.vehicles[0].aircraft_mail_packets.is_empty());
+        assert!(!state.vehicles[0].cargo_unloading);
+        assert_eq!(state.stats.cargo_deliveries, 1);
     }
 
     #[test]

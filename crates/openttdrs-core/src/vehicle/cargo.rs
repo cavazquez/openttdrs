@@ -116,6 +116,25 @@ impl super::model::Vehicle {
         self.sync_cargo_from_packets();
     }
 
+    /// Hidrata la carga de correo de `AIR_SHADOW` desde el contador de saves
+    /// anteriores que todavía no tenían lista `CAPA` propia.
+    pub fn ensure_aircraft_mail_packets_from_legacy(&mut self) {
+        if self.kind != super::model::VehicleKind::Aircraft
+            || !self.aircraft_mail_packets.is_empty()
+            || self.aircraft_mail_cargo.unwrap_or(0) == 0
+        {
+            return;
+        }
+        let periods = crate::economy::ticks_to_transit_periods(self.cargo_transit_ticks);
+        self.aircraft_mail_packets = crate::cargo_packet::VehicleCargoList::from_legacy(
+            u32::from(self.aircraft_mail_cargo.unwrap_or(0)),
+            Some(CargoType::Mail),
+            self.cargo_source,
+            periods,
+            self.pos,
+        );
+    }
+
     /// ¿Hay transferencia gradual (carga o descarga) en curso?
     #[must_use]
     pub fn cargo_transfer_active(&self) -> bool {

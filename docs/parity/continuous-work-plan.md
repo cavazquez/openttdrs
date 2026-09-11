@@ -4595,3 +4595,15 @@ la descarga con pagos/trasbordos y la entidad FTA separada; #329/#567 continúan
 abiertas. Core queda en `2483 passed; 0 failed; 1 ignored` y cliente en `1394
 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check`
 limpios.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-STATION-UNLOAD (2026-09-11): la
+lista secundaria de correo ya participa en la descarga gradual de estación.
+Usa la aceptación y el `Stage` de correo, conserva next-hop, origen, edad y
+feeder, liquida `CargoPayment` y la participación feeder, actualiza monitor,
+ingresos y link graph, y reintroduce los paquetes transferidos en la cola de la
+estación. La ventana de descarga sólo termina cuando sale el último slice de
+`AIR_SHADOW`; la lista también participa en `Empty` y en la purga de pagos.
+La entidad FTA separada, sus reservas/reparto nativos y la validación visual y
+runtime restante siguen pendientes; #329/#567 continúan abiertas. Core queda
+en `2485 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2
+ignored`, con Clippy estricto, formato y `diff --check` limpios.

@@ -4377,3 +4377,16 @@ ignored` y cliente en `1388 passed; 0 failed; 2 ignored`, con formato,
 Clippy estricto de librería/binario y diff limpios. #567 sigue abierta por
 callbacks y pathfinding navales restantes y aceptación visual manual bajo
 Weston; #326 permanece abierta.
+
+Actualización #567-SHIP-DEPOT-MOUTH-OCCUPANCY (2026-09-11, `41fe30be`): la
+salida de depósitos navales ahora replica la espera de `CheckShipStayInDepot`:
+un barco que conserva `TRACK_BIT_DEPOT` no inicia su salida mientras otro
+barco ocupa la misma huella canónica y tiene `cur_speed != 0`. La comprobación
+acepta las dos secciones físicas del depósito, deja pasar barcos detenidos y
+se ejecuta antes del controlador de movimiento para que el orden de la flota
+sea determinista. Se agregó una regresión de espera, liberación y separación
+de boca. Core queda en `2448 passed; 0 failed; 1 ignored` y cliente en
+`1388 passed; 0 failed; 2 ignored`, con formato, Clippy estricto de
+librería/binario y diff limpios. #567 sigue abierta por callbacks y
+pathfinding navales restantes y aceptación visual manual bajo Weston; #326
+permanece abierta.

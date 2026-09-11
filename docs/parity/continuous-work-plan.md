@@ -4422,3 +4422,15 @@ no está modelado. Core queda en `2462 passed; 0 failed; 1 ignored` y cliente
 en `1389 passed; 0 failed; 2 ignored`, con formato, diff y Clippy estricto
 limpios. #329/#567 siguen abiertas por esa semántica restante, callbacks y
 aceptación visual manual bajo Weston; #326 permanece abierta.
+
+Actualización #329/#567-SHIP-SYNC-RELIABILITY (2026-09-11, `97b0e4d4`): el
+consumidor naval de `Action0 0x21` ya aplica `SyncReliability` al resolver la
+cadena `variant_parent_id`. La compra de barcos, sus piezas articuladas y el
+autoreemplazo inicializan fiabilidad, decaimiento y vida útil desde el motor
+padre, con fallback seguro para enlaces ausentes o cíclicos; los saves cargados
+siguen conservando los valores persistidos. Se agregaron regresiones para el
+padre sincronizado, enlace ausente y ciclo. Core queda en `2465 passed; 0
+failed; 1 ignored`; Clippy estricto, formato y `diff --check` están limpios.
+#329/#567 continúan abiertas por `NoNews`, `NoPreview`, `JoinPreview`, callbacks
+navales, propiedades restantes y aceptación visual manual bajo Weston; #326
+permanece abierta.

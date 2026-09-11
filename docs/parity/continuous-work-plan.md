@@ -4964,3 +4964,11 @@ silencioso, mientras que uno que ya pasó a `SHIP_STATE_TRACK_*` vuelve a emitir
 su evento espacial aunque `pos` todavía esté dentro del footprint del depósito.
 La regresión cubre ambos estados; #567 sigue abierta por callbacks, pathfinding
 completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-STATE-PREDICATE (2026-09-11): se centralizó el
+equivalente local de `Vehicle::IsInDepot` por clase (track/road phase, estado
+naval y hangar) y lo reutilizan audio, lista de depósito y detalle de vehículo.
+El helper histórico que sólo clasifica la tesela permanece separado para la
+geometría. Esto evita que una unidad naval saliendo conserve la marca
+«depósito» en un lector mientras ya fue liberada en otro; #567 sigue abierta
+por callbacks, pathfinding completo y aceptación visual/framebuffer.

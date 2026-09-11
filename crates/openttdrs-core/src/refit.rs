@@ -344,6 +344,33 @@ pub fn vehicle_in_depot(map: &Map, pos: crate::TileCoord) -> bool {
     )
 }
 
+/// Estado físico equivalente a `Vehicle::IsInDepot` de `OpenTTD`.
+///
+/// [`vehicle_in_depot`] sólo clasifica la tesela. Este predicado además
+/// consulta el estado de la clase de vehículo, de modo que una unidad que ya
+/// empezó a salir no siga considerándose dentro por conservar la coordenada
+/// del footprint durante la interpolación.
+#[must_use]
+pub fn vehicle_is_in_depot(map: &Map, vehicle: &Vehicle) -> bool {
+    match vehicle.kind {
+        VehicleKind::Train => {
+            map.get_kind(vehicle.pos) == Some(TileKind::RailDepot) && !vehicle.depot_leave_cleared
+        }
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => {
+            map.get_kind(vehicle.pos) == Some(TileKind::RoadDepot)
+                && vehicle.road_depot_phase == crate::vehicle::RoadDepotPhase::InDepot
+        }
+        VehicleKind::Ship => {
+            map.get_kind(vehicle.pos) == Some(TileKind::ShipDepot)
+                && vehicle.ship_state == crate::ship_movement::SHIP_STATE_DEPOT
+        }
+        VehicleKind::Aircraft => {
+            map.get_kind(vehicle.pos) == Some(TileKind::Airport)
+                && vehicle.aircraft_phase == crate::vehicle::AircraftPhase::InHangar
+        }
+    }
+}
+
 /// Progreso mínimo en tesela de depósito para dibujar un tren saliendo por la boca
 /// (`_fractcoords_behind` → `_fractcoords_enter` en `OpenTTD`).
 const TRAIN_DEPOT_EXIT_VISIBILITY_PROGRESS: u8 = 192;
@@ -422,7 +449,7 @@ fn vehicle_hidden_on_depot_tile(map: &Map, vehicle: &Vehicle) -> bool {
         // OpenTTD derives `VehState::Hidden` from `Ship::IsInDepot`, not from
         // the map tile alone.  A ship can still occupy the depot footprint
         // while its track state is already the first exit section.
-        return vehicle.ship_state == crate::ship_movement::SHIP_STATE_DEPOT;
+        return vehicle_is_in_depot(map, vehicle);
     }
     let Some(next) = vehicle.movement_target() else {
         return true;
@@ -578,6 +605,46 @@ mod tests {
         bus.running = true;
         bus.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
         assert!(vehicle_hidden_on_map(&map, &bus));
+    }
+
+    #[test]
+    fn vehicle_is_in_depot_uses_native_state_for_each_vehicle_class() {
+        let mut map = crate::map::Map::new_flat(16, 16, 0);
+        let rail = TileCoord::new(2, 2);
+        let road = TileCoord::new(5, 2);
+        let ship_tile = TileCoord::new(8, 2);
+        let airport = TileCoord::new(11, 2);
+        map.set_kind(rail, TileKind::RailDepot).unwrap();
+        map.set_kind(road, TileKind::RoadDepot).unwrap();
+        map.set_kind(ship_tile, TileKind::ShipDepot).unwrap();
+        map.set_kind(airport, TileKind::Airport).unwrap();
+
+        let mut train = Vehicle::new(1, VehicleKind::Train, rail, rail);
+        train.depot_leave_cleared = false;
+        assert!(vehicle_is_in_depot(&map, &train));
+        train.depot_leave_cleared = true;
+        assert!(!vehicle_is_in_depot(&map, &train));
+
+        let mut bus = Vehicle::new(2, VehicleKind::Bus, road, road);
+        bus.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
+        assert!(vehicle_is_in_depot(&map, &bus));
+        bus.road_depot_phase = crate::vehicle::RoadDepotPhase::Exiting {
+            direction: crate::DIR_NE,
+            progress: 0,
+        };
+        assert!(!vehicle_is_in_depot(&map, &bus));
+
+        let mut ship = Vehicle::new(3, VehicleKind::Ship, ship_tile, ship_tile);
+        ship.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+        assert!(vehicle_is_in_depot(&map, &ship));
+        ship.ship_state = crate::ship_movement::SHIP_STATE_TRACK_X;
+        assert!(!vehicle_is_in_depot(&map, &ship));
+
+        let mut aircraft = Vehicle::new(4, VehicleKind::Aircraft, airport, airport);
+        aircraft.aircraft_phase = crate::vehicle::AircraftPhase::InHangar;
+        assert!(vehicle_is_in_depot(&map, &aircraft));
+        aircraft.aircraft_phase = crate::vehicle::AircraftPhase::Taxi;
+        assert!(!vehicle_is_in_depot(&map, &aircraft));
     }
 
     #[test]

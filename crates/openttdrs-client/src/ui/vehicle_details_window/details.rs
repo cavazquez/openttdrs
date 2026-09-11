@@ -108,7 +108,7 @@ pub(crate) fn vehicle_details_unit_line(
             } else {
                 String::new()
             };
-            let depot_note = if openttdrs_core::vehicle_in_depot(&sim.state.map, unit.pos) {
+            let depot_note = if openttdrs_core::vehicle_is_in_depot(&sim.state.map, unit) {
                 format!(" · {}", localized_text(locale, "depósito"))
             } else {
                 String::new()
@@ -246,6 +246,35 @@ mod tests {
         assert!(cargo.contains("packets"));
         let totals = vehicle_details_body(Locale::Es, &vehicle, &sim, VehicleDetailsTab::Totals);
         assert!(totals.contains("Unidades:"));
+    }
+
+    #[test]
+    fn vehicle_details_depot_note_follows_ship_state() {
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(3, 3);
+        state.map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, depot, depot);
+        ship.ship_state = openttdrs_core::ship_movement::SHIP_STATE_DEPOT;
+        state.vehicles.push(ship.clone());
+        let inside = SimWorld {
+            state,
+            ..SimWorld::default()
+        };
+        let inside_line =
+            vehicle_details_unit_line(Locale::Es, &ship, &ship, &inside, VehicleDetailsTab::Info);
+        assert!(inside_line.contains("depósito"));
+
+        ship.ship_state = openttdrs_core::ship_movement::SHIP_STATE_TRACK_X;
+        let mut state = GameState::new(8, 8);
+        state.map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        state.vehicles.push(ship.clone());
+        let leaving = SimWorld {
+            state,
+            ..SimWorld::default()
+        };
+        let leaving_line =
+            vehicle_details_unit_line(Locale::Es, &ship, &ship, &leaving, VehicleDetailsTab::Info);
+        assert!(!leaving_line.contains("depósito"));
     }
 
     #[test]

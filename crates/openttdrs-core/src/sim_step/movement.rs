@@ -1,5 +1,5 @@
 use crate::GameState;
-use crate::vehicle::{AircraftPhase, RoadDepotPhase, VehicleKind, VehicleRandomTrigger};
+use crate::vehicle::{AircraftPhase, VehicleKind, VehicleRandomTrigger};
 
 /// Ejecuta `TriggerVehicleRandomisation(Depot)` con el catálogo activo.
 ///
@@ -29,14 +29,7 @@ fn vehicle_is_in_depot(state: &GameState, index: usize) -> bool {
     let Some(vehicle) = state.vehicles.get(index) else {
         return false;
     };
-    match vehicle.kind {
-        VehicleKind::Aircraft => vehicle.aircraft_phase == AircraftPhase::InHangar,
-        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => {
-            vehicle.road_depot_phase == RoadDepotPhase::InDepot
-        }
-        VehicleKind::Train => state.map.get_kind(vehicle.pos) == Some(crate::TileKind::RailDepot),
-        VehicleKind::Ship => vehicle.ship_state == crate::ship_movement::SHIP_STATE_DEPOT,
-    }
+    crate::refit::vehicle_is_in_depot(&state.map, vehicle)
 }
 
 /// Dispara el evento común al cruzar desde fuera hacia el interior del depot.

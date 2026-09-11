@@ -623,20 +623,7 @@ fn vehicle_is_in_depot_panel(
     depot_pos: TileCoord,
     vehicle: &openttdrs_core::Vehicle,
 ) -> bool {
-    if vehicle.pos != depot_pos {
-        return false;
-    }
-    match vehicle.kind {
-        VehicleKind::Train => !vehicle.depot_leave_cleared,
-        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => {
-            vehicle.road_depot_phase == openttdrs_core::vehicle::RoadDepotPhase::InDepot
-        }
-        VehicleKind::Ship => vehicle.ship_state == openttdrs_core::ship_movement::SHIP_STATE_DEPOT,
-        VehicleKind::Aircraft => {
-            vehicle.aircraft_phase == openttdrs_core::AircraftPhase::InHangar
-                && sim.state.map.get_kind(depot_pos) == Some(TileKind::Airport)
-        }
-    }
+    vehicle.pos == depot_pos && openttdrs_core::vehicle_is_in_depot(&sim.state.map, vehicle)
 }
 
 fn vehicles_at_depot(sim: &SimWorld, depot_pos: TileCoord) -> Vec<&openttdrs_core::Vehicle> {

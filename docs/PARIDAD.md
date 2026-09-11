@@ -4671,3 +4671,15 @@ el pool de carga. Continúan pendientes la unidad secundaria real, la carga y
 el balanceo durante refit/autoreplace. Core queda en `2479 passed; 0 failed; 1
 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`, con Clippy de
 producción, formato y `diff --check` limpios. #329/#567 siguen abiertas.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-REFIT (2026-09-11,
+`d34a0e0e`): la capacidad secundaria de correo ahora se recalcula al comprar,
+refitar en hangar o estación, aplicar un autorefit de orden y autoreemplazar.
+La regla sigue `Engine::DetermineCapacity`: sólo los cargos de clase pasajeros
+conservan la capacidad Action0 `0x11`; correo y las demás clases dejan la sombra
+en cero, mientras que un cargo `NewGRF` con clase pasajeros conserva el valor.
+También se consulta `CB36` para la propiedad `0x11` y el fallback SAV respeta el
+tipo de cargo. La sombra continúa siendo metadata/exportación, no una segunda
+`Vehicle` con pool de carga propio; #329/#567 siguen abiertas. Core queda en
+`2480 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2
+ignored`, con Clippy estricto, formato y `diff --check` limpios.

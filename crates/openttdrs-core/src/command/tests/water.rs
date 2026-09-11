@@ -1142,6 +1142,69 @@ fn dock_accepts_each_native_slope_direction() {
 }
 
 #[test]
+fn place_dock_auto_clears_autoremove_water_object_and_keeps_water() {
+    let mut s = GameState::new(12, 12);
+    let land = TileCoord::new(5, 4);
+    let water = crate::station::dock_water_tile(land, 1);
+    let approach = crate::station::dock_water_tile(water, 1);
+    s.map.set_kind(land, TileKind::Grass).unwrap();
+    let object_tiles = add_water_object(
+        &mut s,
+        water,
+        0x11,
+        crate::object_spec::OBJECT_FLAG_AUTOREMOVE,
+    );
+    s.map.set_kind(approach, TileKind::Water).unwrap();
+    set_dock_land_slope(&mut s.map, land, 1, 1);
+    let money = s.economy.money;
+    let clear_cost = crate::economy::object_clear_cost_factored(
+        &s.global_economy,
+        1,
+        u32::try_from(object_tiles.len()).unwrap(),
+    );
+    let command = Command::PlaceDock(land, 1);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command).expect("el muelle puede limpiar el objeto autoremove");
+
+    assert!(s.objects.is_empty(), "se quita la instancia completa");
+    assert_eq!(s.map.get_kind(water), Some(TileKind::Station));
+    assert_eq!(s.map.get_kind(approach), Some(TileKind::Water));
+    assert_eq!(
+        s.economy.money,
+        money - clear_cost - station_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_dock_rejects_non_autoremove_water_object_atomically() {
+    let mut s = GameState::new(12, 12);
+    let land = TileCoord::new(5, 4);
+    let water = crate::station::dock_water_tile(land, 1);
+    let approach = crate::station::dock_water_tile(water, 1);
+    s.map.set_kind(land, TileKind::Grass).unwrap();
+    add_water_object(&mut s, water, 0x11, 0);
+    s.map.set_kind(approach, TileKind::Water).unwrap();
+    set_dock_land_slope(&mut s.map, land, 1, 1);
+    let before = s.map.get(water).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceDock(land, 1);
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::ObjectInTheWay)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::ObjectInTheWay)
+    );
+    assert_eq!(s.map.get(water), Some(before));
+    assert_eq!(s.map.get_kind(approach), Some(TileKind::Water));
+    assert_eq!(s.objects.len(), 1);
+    assert_eq!(s.economy.money, money);
+}
+
+#[test]
 fn place_aqueduct_between_facing_slopes() {
     let mut s = SandboxMap::flat_rich(16, 12, 1);
     // Oeste → este: rampa SW en (3,5), rampa NE en (7,5).

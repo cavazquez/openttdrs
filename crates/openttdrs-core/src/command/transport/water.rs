@@ -36,7 +36,7 @@ const fn ship_depot_m5_for_dir(dir: u8) -> u8 {
     0x30 | PART_AXIS_BY_DIR[dir as usize & 0x03]
 }
 
-fn ship_depot_object_footprint(
+fn auto_clear_object_footprint(
     state: &GameState,
     c: TileCoord,
 ) -> Result<Vec<TileCoord>, CommandError> {
@@ -91,9 +91,9 @@ fn ship_depot_object_footprint(
 /// El motor marca una huella ya limpiada para que un objeto que ocupa las dos
 /// partes del depósito sólo se destruya una vez. La lista deduplicada conserva
 /// esa misma regla para que preview y ejecución sean atómicos.
-fn ship_depot_auto_clear_plan(
+fn auto_clear_object_plan(
     state: &GameState,
-    tiles: [TileCoord; 2],
+    tiles: impl IntoIterator<Item = TileCoord>,
 ) -> Result<Vec<Vec<TileCoord>>, CommandError> {
     let mut plan = Vec::new();
     for tile in tiles {
@@ -104,7 +104,7 @@ fn ship_depot_auto_clear_plan(
             continue;
         }
         check_object_can_be_auto_cleared(state, tile)?;
-        let object_tiles = ship_depot_object_footprint(state, tile)?;
+        let object_tiles = auto_clear_object_footprint(state, tile)?;
         if !plan.contains(&object_tiles) {
             plan.push(object_tiles);
         }
@@ -244,7 +244,7 @@ pub(crate) fn check_ship_depot_placement(
     // su contrato sólo exige agua en las dos teselas que reemplaza. La
     // navegación podrá usar el mapa contiguo después de construir; imponer
     // aquí una entrada adicional rechaza depósitos válidos junto a tierra.
-    let _ = ship_depot_auto_clear_plan(state, [origin, other])?;
+    let _ = auto_clear_object_plan(state, [origin, other])?;
     Ok(())
 }
 
@@ -281,7 +281,7 @@ pub(in crate::command) fn place_ship_depot_dir(
     let depot_id =
         crate::depot::next_free_depot_id(&state.map).ok_or(CommandError::DepotPoolFull)?;
     let other = ship_depot_other_tile_for_dir(c, dir);
-    let auto_clear_objects = ship_depot_auto_clear_plan(state, [c, other])?;
+    let auto_clear_objects = auto_clear_object_plan(state, [c, other])?;
     for object_tiles in auto_clear_objects {
         clear_object_footprint_keep_water(state, object_tiles[0], &object_tiles)?;
     }
@@ -404,8 +404,9 @@ pub(crate) fn check_dock_placement(
     let Some(water_tile) = map.get(water) else {
         return Err(CommandError::SiteUnsuitable);
     };
+    let water_is_object = is_map_object_tile(water_tile.mapt);
     if !has_tile_water_ground(water_tile)
-        || water_tile.kind != TileKind::Water
+        || (!water_is_object && water_tile.kind != TileKind::Water)
         || tile_slope_and_z(map, water).is_none_or(|(tileh, _)| tileh != 0)
     {
         return Err(CommandError::SiteUnsuitable);
@@ -418,6 +419,24 @@ pub(crate) fn check_dock_placement(
     {
         return Err(CommandError::SiteUnsuitable);
     }
+    Ok(())
+}
+
+/// Validación completa de `CmdBuildDock` para preview y ejecución.
+///
+/// `CmdBuildDock` delega la limpieza de cada pieza a
+/// `CmdLandscapeClear(... | Auto)`. La variante geométrica anterior no puede
+/// consultar el catálogo de objetos ni sus propietarios, por eso esta entrada
+/// agrega el mismo preflight de objetos autoremovibles sin mutar el estado.
+pub(in crate::command) fn check_dock_placement_with_state(
+    state: &GameState,
+    c: TileCoord,
+    dir: u8,
+) -> Result<(), CommandError> {
+    check_dock_placement(&state.map, &state.stations, c, dir)?;
+    let dir = dir & 0x03;
+    let water = crate::station::dock_water_tile(c, dir);
+    auto_clear_object_plan(state, [c, water])?;
     Ok(())
 }
 
@@ -449,9 +468,13 @@ pub(in crate::command) fn place_dock(
     c: TileCoord,
     dir: u8,
 ) -> Result<(), CommandError> {
-    check_dock_placement(&state.map, &state.stations, c, dir)?;
+    check_dock_placement_with_state(state, c, dir)?;
     let dir = dir & 0x03;
     let water = crate::station::dock_water_tile(c, dir);
+    let auto_clear_objects = auto_clear_object_plan(state, [c, water])?;
+    for object_tiles in auto_clear_objects {
+        clear_object_footprint_keep_water(state, object_tiles[0], &object_tiles)?;
+    }
     let station_id = next_station_id(state).ok_or(CommandError::StationPoolFull)?;
     let mut land_tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let mut water_tile = state.map.get(water).ok_or(CommandError::OutOfBounds)?;

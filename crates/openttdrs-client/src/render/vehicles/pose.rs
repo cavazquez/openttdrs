@@ -240,6 +240,36 @@ pub(super) fn aircraft_aux_sprite_pos_at(
     airborne: bool,
     layer_z: f32,
 ) -> Vec3 {
+    aircraft_aux_sprite_pos_at_offsets(
+        v,
+        map,
+        pose,
+        layer.x_offs,
+        layer.y_offs,
+        layer.w,
+        layer.h,
+        airborne,
+        layer_z,
+    )
+}
+
+/// Posición de una capa auxiliar con offsets entregados por un sprite NewGRF.
+///
+/// Los rotores custom no usan necesariamente las dimensiones del atlas
+/// OpenGFX, pero conservan el mismo ancla aérea y la misma profundidad que la
+/// capa vanilla.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn aircraft_aux_sprite_pos_at_offsets(
+    v: &Vehicle,
+    map: &Map,
+    pose: openttdrs_core::VehiclePose,
+    x_offs: f32,
+    y_offs: f32,
+    width: f32,
+    sprite_height: f32,
+    airborne: bool,
+    layer_z: f32,
+) -> Vec3 {
     let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(v, map, pose);
     let height = if airborne {
         base_z.saturating_add(v.altitude)
@@ -248,10 +278,10 @@ pub(super) fn aircraft_aux_sprite_pos_at(
     };
     overlay_pos(
         anchor,
-        layer.x_offs,
-        layer.y_offs,
-        layer.w,
-        layer.h,
+        x_offs,
+        y_offs,
+        width,
+        sprite_height,
         height,
         layer_z,
         tx,

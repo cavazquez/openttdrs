@@ -10,8 +10,9 @@ use crate::state::SimWorld;
 
 use super::assets::{NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles, vehicle_layers};
 use super::pose::{
-    aircraft_aux_sprite_pos_at, vehicle_insertion_key, vehicle_parent_bounds, vehicle_source_depth,
-    vehicle_sprite_pos_at_offsets, vehicle_sprite_pos_at_with_catalog,
+    aircraft_aux_sprite_pos_at, aircraft_aux_sprite_pos_at_offsets, vehicle_insertion_key,
+    vehicle_parent_bounds, vehicle_source_depth, vehicle_sprite_pos_at_offsets,
+    vehicle_sprite_pos_at_with_catalog,
 };
 use super::sync::{
     AircraftRotorSprite, AircraftShadowSprite, ConsistUnitSprite, VehicleCargoLabel, VehicleSprite,
@@ -246,9 +247,39 @@ pub(crate) fn spawn_initial_vehicles(
                 },
             ));
             if super::aircraft_is_helicopter_for(sim, vehicle) {
-                let rotor = &super::assets::AIRCRAFT_ROTOR_LAYERS[0];
-                let mut rotor_pos =
-                    aircraft_aux_sprite_pos_at(vehicle, &sim.state.map, pose, rotor, true, 1.1);
+                let custom_rotor = super::assets::custom_aircraft_rotor_layer(
+                    vehicle,
+                    0,
+                    sim,
+                    Some(vehicle_owner_colour(sim, vehicle)),
+                    cache,
+                    images,
+                );
+                let (x_offs, y_offs, width, height) = custom_rotor.as_ref().map_or_else(
+                    || {
+                        let layer = &super::assets::AIRCRAFT_ROTOR_LAYERS[0];
+                        (layer.x_offs, layer.y_offs, layer.w, layer.h)
+                    },
+                    |layer| {
+                        (
+                            f32::from(layer.x_offs),
+                            f32::from(layer.y_offs),
+                            f32::from(layer.width),
+                            f32::from(layer.height),
+                        )
+                    },
+                );
+                let mut rotor_pos = aircraft_aux_sprite_pos_at_offsets(
+                    vehicle,
+                    &sim.state.map,
+                    pose,
+                    x_offs,
+                    y_offs,
+                    width,
+                    height,
+                    true,
+                    1.1,
+                );
                 let rotor_source_depth = viewport_source_depth(
                     rotor_pos.z,
                     u32::try_from(pose.pos.x).unwrap_or(0),
@@ -259,7 +290,9 @@ pub(crate) fn spawn_initial_vehicles(
                     MapVisualLayer,
                     AircraftRotorSprite(vehicle.id),
                     Sprite {
-                        image: trucks.aircraft_rotor(0),
+                        image: custom_rotor
+                            .map(|layer| layer.handle)
+                            .unwrap_or_else(|| trucks.aircraft_rotor(0)),
                         ..default()
                     },
                     Transform::from_translation(rotor_pos),

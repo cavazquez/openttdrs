@@ -8,10 +8,13 @@ use crate::render::{CompanyColoredSprites, ViewportSortableChild, ViewportSortab
 use crate::simulation::SimClock;
 use crate::state::SimWorld;
 
-use super::assets::{NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles, vehicle_layers};
+use super::assets::{
+    NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles, custom_aircraft_rotor_layer,
+    vehicle_layers,
+};
 use super::pose::{
-    aircraft_aux_sprite_pos_at, vehicle_insertion_key, vehicle_parent_bounds,
-    vehicle_pose_for_construction, vehicle_source_depth, vehicle_sprite_pos,
+    aircraft_aux_sprite_pos_at, aircraft_aux_sprite_pos_at_offsets, vehicle_insertion_key,
+    vehicle_parent_bounds, vehicle_pose_for_construction, vehicle_source_depth, vehicle_sprite_pos,
     vehicle_sprite_pos_at_offsets, vehicle_sprite_pos_at_with_catalog,
 };
 use super::spawn::{vehicle_cargo_color, vehicle_cargo_label};
@@ -508,9 +511,40 @@ pub(crate) fn update_vehicles(
             continue;
         }
         let frame = aircraft_rotor_frame(v, sim.state.tick.get());
-        let layer = &super::assets::AIRCRAFT_ROTOR_LAYERS[frame];
+        let custom_rotor = custom_aircraft_rotor_layer(
+            v,
+            frame,
+            &sim,
+            Some(vehicle_owner_colour(&sim, v)),
+            &mut cache,
+            &mut images,
+        );
+        let (x_offs, y_offs, width, height) = custom_rotor.as_ref().map_or_else(
+            || {
+                let layer = &super::assets::AIRCRAFT_ROTOR_LAYERS[frame];
+                (layer.x_offs, layer.y_offs, layer.w, layer.h)
+            },
+            |layer| {
+                (
+                    f32::from(layer.x_offs),
+                    f32::from(layer.y_offs),
+                    f32::from(layer.width),
+                    f32::from(layer.height),
+                )
+            },
+        );
         visibility.set_if_neq(Visibility::Visible);
-        let mut rotor_pos = aircraft_aux_sprite_pos_at(v, &sim.state.map, pose, layer, true, 1.1);
+        let mut rotor_pos = aircraft_aux_sprite_pos_at_offsets(
+            v,
+            &sim.state.map,
+            pose,
+            x_offs,
+            y_offs,
+            width,
+            height,
+            true,
+            1.1,
+        );
         let source_depth = vehicle_source_depth(v, &sim.state.map, pose, rotor_pos);
         rotor_pos.z = source_depth;
         let preserves_sorted_depth = child.is_some();
@@ -521,7 +555,12 @@ pub(crate) fn update_vehicles(
                 source_depth,
             });
         }
-        set_sprite_image_if_changed(&mut sprite, trucks.aircraft_rotor(frame));
+        set_sprite_image_if_changed(
+            &mut sprite,
+            custom_rotor
+                .map(|layer| layer.handle)
+                .unwrap_or_else(|| trucks.aircraft_rotor(frame)),
+        );
     }
 
     for (label, mut transform, mut text, mut color, mut visibility) in &mut labels {

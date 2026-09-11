@@ -578,7 +578,11 @@ fn ship_should_reverse_on_depot_exit(v: &Vehicle, tile: crate::map::Tile) -> boo
 /// sección del depósito, cambia a la vía del eje y recién entonces el
 /// controlador puede acelerar. Sin destino, permanece detenido como el
 /// vehículo nativo.
-fn ship_stay_in_or_leave_depot(v: &mut Vehicle, map: &Map) -> bool {
+fn ship_stay_in_or_leave_depot(
+    v: &mut Vehicle,
+    map: &Map,
+    engine_catalog: &[crate::engine::EngineDef],
+) -> bool {
     if matches!(v.ship_state, 0 | SHIP_STATE_DEPOT) {
         let depot_pos =
             crate::depot::canonical_depot_tile_for_vehicle(map, v.pos, VehicleKind::Ship);
@@ -604,6 +608,23 @@ fn ship_stay_in_or_leave_depot(v: &mut Vehicle, map: &Map) -> bool {
     }
     if v.ship_state != SHIP_STATE_DEPOT {
         return false;
+    }
+
+    // `CheckShipStayInDepot` llama a `VehicleEnterDepot` cuando una orden de
+    // depósito vuelve a apuntar exactamente al depósito en el que ya está el
+    // barco. Sin esta rama, el par (destino igual + path vacío) de abajo lo
+    // deja corriendo para siempre dentro del depósito y nunca procesa halt,
+    // servicio ni el avance de una orden pass-through.
+    let same_depot_order = v.current_order_ref().is_some_and(|order| {
+        let VehicleOrder::Depot { depot, .. } = order else {
+            return false;
+        };
+        crate::depot::canonical_depot_tile_for_vehicle(map, *depot, VehicleKind::Ship) == v.pos
+    });
+    if same_depot_order {
+        mark_ship_depot_arrival(v, Some(map));
+        v.advance_destination_after_arrival_with_catalog(engine_catalog);
+        return true;
     }
 
     // La ruta puede llegar un tick después de la sincronización de órdenes,
@@ -1006,7 +1027,7 @@ pub fn ship_controller_tick_with_catalog(
     }
 
     if let Some(map) = map
-        && ship_stay_in_or_leave_depot(v, map)
+        && ship_stay_in_or_leave_depot(v, map, engine_catalog)
     {
         return;
     }
@@ -1488,6 +1509,60 @@ mod tests {
         assert_eq!(v.ship_state, SHIP_STATE_TRACK_X);
         assert_eq!(v.direction, DIR_SW);
         assert_eq!(v.ship_rotation, DIR_SW);
+    }
+
+    #[test]
+    fn ship_same_depot_order_reenters_and_halts_like_native() {
+        let mut map = crate::map::Map::new_flat(10, 10, 0);
+        let depot = TileCoord::new(4, 4);
+        map.set_kind(depot, TileKind::ShipDepot).unwrap();
+
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, depot, depot);
+        ship.running = true;
+        ship.ship_pos_valid = true;
+        ship.ship_x = depot.x * 16 + 8;
+        ship.ship_y = depot.y * 16 + 8;
+        ship.ship_state = SHIP_STATE_DEPOT;
+        ship.ship_track = TRACK_X;
+        ship.orders = vec![VehicleOrder::depot(depot)];
+        ship.current_order = 0;
+        ship.path.clear();
+
+        ship_controller_tick(&mut ship, Some(&map));
+
+        assert!(!ship.running, "halt debe dejar el barco detenido");
+        assert_eq!(ship.ship_state, SHIP_STATE_DEPOT);
+        assert_eq!(ship.cur_speed, 0);
+    }
+
+    #[test]
+    fn ship_same_depot_pass_through_advances_to_next_order() {
+        let mut map = crate::map::Map::new_flat(10, 10, 0);
+        let depot = TileCoord::new(4, 4);
+        let waypoint = TileCoord::new(6, 4);
+        map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        map.set_kind(waypoint, TileKind::Water).unwrap();
+
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, depot, depot);
+        ship.running = true;
+        ship.ship_pos_valid = true;
+        ship.ship_x = depot.x * 16 + 8;
+        ship.ship_y = depot.y * 16 + 8;
+        ship.ship_state = SHIP_STATE_DEPOT;
+        ship.ship_track = TRACK_X;
+        ship.orders = vec![
+            VehicleOrder::depot_pass_through(depot),
+            VehicleOrder::waypoint(waypoint),
+        ];
+        ship.current_order = 0;
+        ship.path.clear();
+
+        ship_controller_tick(&mut ship, Some(&map));
+
+        assert!(ship.running);
+        assert_eq!(ship.current_order, 1);
+        assert_eq!(ship.dest, waypoint);
+        assert_eq!(ship.ship_state, SHIP_STATE_DEPOT);
     }
 
     #[test]

@@ -5003,3 +5003,11 @@ pero ya está en movimiento no se ofrece ni acepta como refit manual. Los
 barridos de autoreplace y el refit automático de órdenes conservan sus
 predicados propios (`IsChainInDepot`/estado de llegada). #567 continúa abierta
 por callbacks, pathfinding completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-SAME-ORDER (2026-09-11): el controlador naval
+procesa ahora la orden que apunta al mismo depósito cuando el barco ya está en
+su centro, igual que `CheckShipStayInDepot` + `VehicleEnterDepot` nativos. Esto
+evita confundir una reentrada con ausencia de destino: una orden `halt` deja al
+barco detenido y una orden pass-through procesa servicio/refit y avanza a la
+siguiente orden. Las dos variantes tienen regresiones directas; #567 continúa
+abierta por callbacks, pathfinding completo y aceptación visual/framebuffer.

@@ -742,9 +742,7 @@ fn tick_road_depot_movement(state: &mut GameState, i: usize) -> bool {
 
 /// SFX de motor en marcha (`vehicle.cpp` `motion_counter` / `VSE_RUNNING*`).
 fn update_vehicle_running_sounds(state: &mut GameState, i: usize, tick: u64) {
-    use crate::map::TileKind;
     use crate::sim_events::VehicleRunningPhase;
-    use crate::vehicle::AircraftPhase;
 
     let vehicle = &state.vehicles[i];
     if vehicle.is_wagon_unit() {
@@ -753,14 +751,7 @@ fn update_vehicle_running_sounds(state: &mut GameState, i: usize, tick: u64) {
     if !vehicle.running && vehicle.cur_speed == 0 {
         return;
     }
-    let in_depot = match state.map.get(vehicle.pos).map(|t| t.kind) {
-        Some(TileKind::RailDepot | TileKind::RoadDepot | TileKind::ShipDepot) => true,
-        _ => {
-            vehicle.kind == VehicleKind::Aircraft
-                && matches!(vehicle.aircraft_phase, AircraftPhase::InHangar)
-        }
-    };
-    if in_depot {
+    if vehicle_is_in_depot(state, i) {
         return;
     }
 
@@ -875,7 +866,7 @@ fn reroute_head_on_to_alt_platform(state: &mut GameState, vehicle_idx: usize) {
 mod tests {
     use super::{
         move_vehicles, sync_road_articulated_parts, tick_road_depot_movement,
-        trigger_depot_on_entry, vehicle_entered_train_tunnel,
+        trigger_depot_on_entry, update_vehicle_running_sounds, vehicle_entered_train_tunnel,
     };
     use crate::engine::engines_table;
     use crate::newgrf_sprites::{Action2RandomEntry, TrainSpriteAssign, TrainSpriteGraphics};
@@ -913,6 +904,32 @@ mod tests {
 
         assert!(vehicle_entered_train_tunnel(&state, 0, outside));
         assert!(!vehicle_entered_train_tunnel(&state, 0, entrance));
+    }
+
+    #[test]
+    fn ship_running_sound_uses_depot_state_during_exit() {
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(3, 3);
+        state.map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, depot, depot);
+        ship.running = true;
+        ship.cur_speed = 64;
+        ship.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+        state.vehicles.push(ship);
+
+        update_vehicle_running_sounds(&mut state, 0, 16);
+        assert!(state.runtime.pending_sim_events.is_empty());
+
+        state.vehicles[0].ship_state = crate::ship_movement::SHIP_STATE_TRACK_X;
+        update_vehicle_running_sounds(&mut state, 0, 16);
+        assert_eq!(state.runtime.pending_sim_events.iter().count(), 1);
+        assert!(matches!(
+            state.runtime.pending_sim_events.iter().next(),
+            Some(crate::sim_events::SimEvent::VehicleRunning {
+                phase: crate::sim_events::VehicleRunningPhase::Running16,
+                ..
+            })
+        ));
     }
 
     #[test]

@@ -4956,3 +4956,11 @@ aunque `pos` todavía apunte al footprint naval; se conservan las reglas de
 hangar, depósito vial y `depot_leave_cleared` ferroviario. La regresión separa
 un barco dentro y otro saliendo; #567 sigue abierta por callbacks, pathfinding
 completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-SOUND-STATE (2026-09-11): el emisor de sonidos
+periódicos de vehículos consulta ahora el estado físico por clase, igual que la
+visibilidad y la lista del depósito. Un barco en `SHIP_STATE_DEPOT` permanece
+silencioso, mientras que uno que ya pasó a `SHIP_STATE_TRACK_*` vuelve a emitir
+su evento espacial aunque `pos` todavía esté dentro del footprint del depósito.
+La regresión cubre ambos estados; #567 sigue abierta por callbacks, pathfinding
+completo y aceptación visual/framebuffer.

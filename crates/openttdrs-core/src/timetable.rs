@@ -71,9 +71,11 @@ impl Vehicle {
 
     /// Avanza el cronómetro de la orden actual (`Vehicle::current_order_time`).
     pub(crate) fn tick_timetable_clock(&mut self) {
-        if self.timetable_active {
-            self.current_order_time = self.current_order_time.saturating_add(1);
-        }
+        // `Train::Tick`, `RoadVehController`, `ShipController` y
+        // `Aircraft::Tick` incrementan este campo siempre; el flag del
+        // timetable sólo cambia qué hace `UpdateVehicleTimetable` con el
+        // tiempo acumulado.
+        self.current_order_time = self.current_order_time.saturating_add(1);
     }
 
     /// Port reducido de `UpdateVehicleTimetable` (`timetable_cmd.cpp:466-572`).
@@ -197,6 +199,20 @@ mod tests {
         );
         v.timetable_active = true;
         v.tick_timetable_clock();
+        assert_eq!(v.current_order_time, 1);
+    }
+
+    #[test]
+    fn timetable_clock_advances_when_timetable_is_disabled() {
+        let mut v = Vehicle::new(
+            1,
+            crate::vehicle::VehicleKind::Ship,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+
+        v.tick_timetable_clock();
+
         assert_eq!(v.current_order_time, 1);
     }
 

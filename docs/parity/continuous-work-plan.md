@@ -5158,3 +5158,9 @@ normal. Los vagones y partes articuladas conservan sus contadores sin avanzar,
 igual que los vehículos que OpenTTD no considera `IsFrontEngine()`. La regresión
 comprueba una cadena ferroviaria; #329/#567 continúan abiertas por otros
 criterios pendientes.
+
+Actualización #329/#567-TIMETABLE-CLOCK-DISABLED (2026-09-11): la unidad
+controladora incrementa `current_order_time` aun cuando el timetable está
+desactivado, igual que los cuatro controladores nativos; el flag sólo decide
+si `UpdateVehicleTimetable` interpreta ese tiempo. La regresión cubre un barco
+sin timetable; #329/#567 continúan abiertas por otros criterios pendientes.

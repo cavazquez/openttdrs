@@ -423,6 +423,14 @@ mod tests {
         state.map.set_kind(origin, TileKind::Grass).unwrap();
         state.map.set_kind(water, TileKind::Water).unwrap();
         state.map.set_kind(approach, TileKind::Water).unwrap();
+        state
+            .map
+            .set_height(TileCoord::new(origin.x, origin.y), 2)
+            .unwrap();
+        state
+            .map
+            .set_height(TileCoord::new(origin.x + 1, origin.y), 2)
+            .unwrap();
         let mut station_state = StationBuildState::default();
         station_state.orientation = 1;
         let ctx = PreviewContext {

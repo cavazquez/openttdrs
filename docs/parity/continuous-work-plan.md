@@ -4823,3 +4823,13 @@ los bounds de tierra y los demás tipos no cambian. La regresión verifica el
 desplazamiento entre tierra y crucero. Siguen pendientes el stream RNG global,
 filtros/consist completos y el compositor/raster global; #329/#567 continúan
 abiertas.
+
+Actualización #329-VEHICLE-VISUAL-EFFECT-RAIL-POWER (2026-09-11): los efectos
+estándar y CB160 de tren ahora respetan el filtro `HasPowerOnRail` del upstream:
+una locomotora eléctrica sobre rail normal no genera humo ni chispas, mientras
+que la misma unidad sobre rail eléctrico vuelve a ser elegible. El resto de
+vehículos mantiene su camino anterior. La regresión cubre ambos railtypes;
+siguen pendientes el stream RNG global, la propagación completa por consist y
+el compositor/raster global, por lo que #329/#567 continúan abiertas. Cliente
+queda en `1403 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y
+`diff --check` validados para esta etapa.

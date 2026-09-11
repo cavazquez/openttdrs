@@ -181,6 +181,31 @@ fn train_is_stopping_at_station(map: &Map, vehicle: &Vehicle) -> bool {
             ))
 }
 
+/// Replica el filtro `HasPowerOnRail` de `Vehicle::ShowVisualEffect`.
+///
+/// La compatibilidad de una locomotora eléctrica con una vía normal no
+/// implica que tenga tracción allí: los efectos se suprimen cuando el
+/// railtype actual no pertenece a la máscara alimentada por el motor. Las
+/// demás clases de vehículo no pasan por este filtro nativo.
+#[must_use]
+fn vehicle_has_power_on_current_rail(map: &Map, vehicle: &Vehicle, engine: &EngineDef) -> bool {
+    if vehicle.kind != VehicleKind::Train {
+        return true;
+    }
+    let Some(tile) = map.get(vehicle.pos) else {
+        return true;
+    };
+    let rail_type = openttdrs_core::rail_type_from_tile(tile);
+    let required = engine.required_rail_type.map_or_else(
+        || openttdrs_core::required_rail_type_for_engine(engine.id),
+        openttdrs_core::RailType::from_u8,
+    );
+    openttdrs_core::railtypes_mask_contains(
+        openttdrs_core::powered_railtypes_mask(required),
+        rail_type,
+    )
+}
+
 /// Port de las reglas de `Vehicle::ShowVisualEffect` para trenes.
 #[must_use]
 #[cfg(test)]
@@ -207,6 +232,7 @@ fn train_smoke_to_emit_with_engine(
     if amount == 0
         || vehicle.kind != VehicleKind::Train
         || !engine.is_train_engine()
+        || !vehicle_has_power_on_current_rail(map, vehicle, engine)
         || !vehicle.running
         || vehicle.crashed
         || vehicle.cur_speed < 2
@@ -376,6 +402,7 @@ fn advanced_effect_should_emit(
         || !vehicle.running
         || vehicle.crashed
         || vehicle.cur_speed < 2
+        || !vehicle_has_power_on_current_rail(map, vehicle, engine)
         || openttdrs_core::vehicle_hidden_from_view(map, vehicle, vehicle.pos, vehicle.progress)
         || openttdrs_core::vehicle_in_depot(map, vehicle.pos)
         || map
@@ -1437,5 +1464,33 @@ mod tests {
         );
         vehicle.newgrf_tick_counter = 1;
         assert!(train_smoke_to_emit_with_engine(&map, &mut vehicle, engine, 2).is_none());
+    }
+
+    #[test]
+    fn visual_effects_skip_unpowered_electric_train_on_normal_rail() {
+        use openttdrs_core::{RailType, set_rail_type_on_tile};
+
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut vehicle = running_train(openttdrs_core::engine::ENGINE_TRAIN_SH_30);
+        let pos = vehicle.pos;
+        map.set_kind(pos, TileKind::Rail).expect("rail kind");
+        let rail = set_rail_type_on_tile(map.get(pos).expect("rail tile"), RailType::Rail);
+        map.set_tile(pos, rail).expect("normal rail");
+        let engine = vehicle.effective_engine();
+
+        assert!(!vehicle_has_power_on_current_rail(&map, &vehicle, engine));
+        assert!(train_smoke_to_emit_with_engine(&map, &mut vehicle, engine, 2).is_none());
+        assert!(!advanced_effect_should_emit(
+            &map,
+            &vehicle,
+            engine,
+            VehicleVisualEffectKind::Electric,
+            2,
+        ));
+
+        let electric =
+            set_rail_type_on_tile(map.get(pos).expect("normal rail tile"), RailType::Electric);
+        map.set_tile(pos, electric).expect("electric rail");
+        assert!(vehicle_has_power_on_current_rail(&map, &vehicle, engine));
     }
 }

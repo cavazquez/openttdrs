@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     ConstructionKind, SoundId, VehicleRunningPhase, VehicleSoundEvent, VehicleSoundOverride,
-    play_newgrf_sound, resolve_vehicle_sound_callback,
+    play_newgrf_vehicle_sound, resolve_vehicle_sound_callback,
 };
 
 use crate::audio::PlayWorldSfx;
@@ -224,7 +224,7 @@ pub(crate) fn play_vehicle_event_sound_with_default(
         VehicleSoundOverride::Newgrf { grfid, local_id } => {
             // El helper ya validó la entrada y su PCM; el mixer drena la cola
             // en el mismo frame que este puente procesa el evento.
-            let _ = play_newgrf_sound(&mut sim.state, grfid, local_id);
+            let _ = play_newgrf_vehicle_sound(&mut sim.state, grfid, local_id, at);
         }
         VehicleSoundOverride::Suppressed => {}
     }
@@ -638,6 +638,70 @@ mod tests {
             .expect("default ship engine should be in the catalog");
         engine.no_breakdown_smoke = true;
         assert!(!vehicle_breakdown_smoke_enabled(&sim, 17));
+    }
+
+    #[test]
+    fn vehicle_sound_callback_keeps_vehicle_origin_in_pending_queue() {
+        let grfid = 0x5645_4843;
+        let local_id = 2_u8;
+        let mut state = GameState::new(4, 4);
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train engine should exist")
+            .clone();
+        engine.id = 0x7F10;
+        engine.newgrf_grfid = grfid;
+        engine.sound_effect = u8::try_from(openttdrs_core::sound_id::SOUND_COUNT)
+            .unwrap_or(73)
+            .saturating_add(local_id);
+        let mut vehicle = Vehicle::new(
+            44,
+            VehicleKind::Train,
+            TileCoord::new(1, 2),
+            TileCoord::new(2, 2),
+        );
+        vehicle.engine_id = Some(engine.id);
+        state.engine_catalog.push(engine);
+        state
+            .sound_effect_catalog
+            .push(openttdrs_core::SoundEffectDef {
+                local_id,
+                grfid,
+                volume: 128,
+                priority: 9,
+                override_old: None,
+                has_sample: true,
+                sample_pcm: vec![0x80],
+                from_newgrf: true,
+            });
+        state.vehicles.push(vehicle);
+
+        let mut app = App::new();
+        app.add_message::<PlayWorldSfx>()
+            .insert_resource(PendingSimEvents(vec![SimEvent::VehicleDepart {
+                vehicle_id: 44,
+                at: TileCoord::new(2, 3),
+                kind: VehicleKind::Train,
+            }]))
+            .insert_resource(SimWorld {
+                state,
+                ..Default::default()
+            })
+            .insert_resource(SimHudControls::default())
+            .insert_resource(FxSpawnQueue::default())
+            .insert_resource(BubbleSpawnQueue::default())
+            .add_systems(Update, dispatch_sim_events);
+
+        app.update();
+
+        let pending = &app
+            .world()
+            .resource::<SimWorld>()
+            .state
+            .runtime
+            .pending_newgrf_sounds;
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].at, Some(TileCoord::new(2, 3)));
+        assert!(!pending[0].ambient);
     }
 
     #[test]

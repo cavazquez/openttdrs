@@ -794,8 +794,8 @@ pub use sound_effect::{
     CollectedSoundSamples, NewgrfTileSound, PendingNewgrfSound, SoundEffectDef, SoundPlayError,
     clamp_sound_volume, collect_sound_samples_from_grf, effective_volume,
     empty_sound_effect_catalog, newgrf_tile_animation_sound_from_callback, play_newgrf_sound,
-    play_newgrf_tile_animation_sound, play_newgrf_tile_sound, play_sound_or_override,
-    sound_effect_def,
+    play_newgrf_tile_animation_sound, play_newgrf_tile_sound, play_newgrf_vehicle_sound,
+    play_sound_or_override, sound_effect_def,
 };
 pub use sound_id::SoundId;
 pub use station::{

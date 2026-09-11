@@ -224,12 +224,13 @@ fn play_world_sfx(
     // `play_newgrf_sound` ya valida catálogo, sample y volumen en el core.
     // Convertir el PCM raw de Action11 a WAV aquí permite que Bevy/rodio lo
     // decodifique sin escribir archivos temporales. Los callbacks de vehículo
-    // no tienen tesela y permanecen globales; los de animación usan el mismo
-    // camino espacial que `SndPlayTileFx` y obedecen `sound.ambient`.
+    // y de animación conservan origen espacial; sólo los segundos obedecen
+    // `sound.ambient`, mientras los primeros llegan filtrados por
+    // `sound.vehicle` en el puente de eventos.
     if !sim.state.runtime.pending_newgrf_sounds.is_empty() {
         let pending_newgrf = std::mem::take(&mut sim.state.runtime.pending_newgrf_sounds);
         for pending in pending_newgrf {
-            if pending.at.is_some() && !hud.sound_ambient {
+            if pending.ambient && !hud.sound_ambient {
                 continue;
             }
             let Some(def) = sim
@@ -477,6 +478,7 @@ mod tests {
                 volume: 1.0,
                 priority: 42,
                 at: Some(TileCoord::new(1, 1)),
+                ambient: true,
             });
         let mut app = sfx_test_app(SimWorld {
             state,
@@ -538,6 +540,7 @@ mod tests {
                 volume: 1.0,
                 priority: 42,
                 at: Some(TileCoord::new(2, 2)),
+                ambient: true,
             });
         let mut app = sfx_test_app(SimWorld {
             state,
@@ -565,6 +568,52 @@ mod tests {
                 .iter()
                 .all(Option::is_none),
             "no reserva un canal para un sonido ambiental silenciado"
+        );
+    }
+
+    #[test]
+    fn spatial_vehicle_newgrf_sound_ignores_ambient_setting() {
+        let mut state = GameState::new(4, 4);
+        state.sound_effect_catalog.push(SoundEffectDef {
+            local_id: 6,
+            grfid: 0x5346_0003,
+            volume: 128,
+            priority: 42,
+            override_old: None,
+            has_sample: true,
+            sample_pcm: vec![0x80],
+            from_newgrf: true,
+        });
+        state
+            .runtime
+            .pending_newgrf_sounds
+            .push(PendingNewgrfSound {
+                grfid: 0x5346_0003,
+                local_id: 6,
+                volume: 1.0,
+                priority: 42,
+                at: Some(TileCoord::new(1, 2)),
+                ambient: false,
+            });
+        let mut app = sfx_test_app(SimWorld {
+            state,
+            ..Default::default()
+        });
+        app.world_mut()
+            .resource_mut::<SimHudControls>()
+            .sound_ambient = false;
+
+        app.update();
+
+        assert_eq!(
+            app.world()
+                .resource::<SfxMixer>()
+                .slots
+                .iter()
+                .flatten()
+                .count(),
+            1,
+            "un sonido de vehículo no se clasifica como ambiente"
         );
     }
 }

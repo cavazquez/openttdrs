@@ -34,9 +34,14 @@ pub struct PendingNewgrfSound {
     pub local_id: u8,
     pub volume: f32,
     pub priority: u8,
-    /// Origen espacial de un callback de tesela. `None` conserva el camino
-    /// global de vehículos y de overrides de baseset.
+    /// Origen espacial del sonido. Los callbacks de vehículo usan la tesela
+    /// de la unidad para igualar `SndPlayVehicleFx`; `None` conserva el camino
+    /// global de overrides de baseset.
     pub at: Option<TileCoord>,
+    /// `true` sólo para sonidos ambientales de tesela. Los sonidos de
+    /// vehículo pueden tener posición, pero no deben quedar silenciados por
+    /// `sound.ambient`.
+    pub ambient: bool,
 }
 
 /// Solicitud de sonido producida por un callback de animación de tesela.
@@ -158,6 +163,7 @@ fn enqueue_newgrf_sound(
     grfid: u32,
     local_id: u8,
     at: Option<TileCoord>,
+    ambient: bool,
 ) -> Result<(), SoundPlayError> {
     let Some(def) = sound_effect_def(&state.sound_effect_catalog, grfid, local_id) else {
         return Err(SoundPlayError::NotFound);
@@ -171,12 +177,14 @@ fn enqueue_newgrf_sound(
         volume: effective_volume(def),
         priority: def.priority,
         at,
+        ambient,
     };
     state.runtime.pending_newgrf_sounds.push(pending);
     Ok(())
 }
 
-/// Encola reproducción global de un sonido `NewGRF` (p. ej. vehículo).
+/// Encola reproducción global de un sonido `NewGRF` (por ejemplo, un override
+/// de baseset sin origen espacial).
 ///
 /// # Errors
 ///
@@ -186,7 +194,25 @@ pub fn play_newgrf_sound(
     grfid: u32,
     local_id: u8,
 ) -> Result<(), SoundPlayError> {
-    enqueue_newgrf_sound(state, grfid, local_id, None)
+    enqueue_newgrf_sound(state, grfid, local_id, None, false)
+}
+
+/// Encola un sonido `NewGRF` emitido por un vehículo.
+///
+/// Conserva la posición de la unidad para que el mixer aplique la atenuación
+/// espacial de `SndPlayVehicleFx`, pero no se clasifica como sonido ambiental:
+/// la decisión de `sound.vehicle` ya ocurrió en el caller.
+///
+/// # Errors
+///
+/// `NotFound` si no hay def; `InvalidSample` si no hay PCM.
+pub fn play_newgrf_vehicle_sound(
+    state: &mut GameState,
+    grfid: u32,
+    local_id: u8,
+    at: TileCoord,
+) -> Result<(), SoundPlayError> {
+    enqueue_newgrf_sound(state, grfid, local_id, Some(at), false)
 }
 
 /// Encola un sonido ambiental `NewGRF` en una tesela concreta.
@@ -203,7 +229,7 @@ pub fn play_newgrf_tile_sound(
     local_id: u8,
     at: TileCoord,
 ) -> Result<(), SoundPlayError> {
-    enqueue_newgrf_sound(state, grfid, local_id, Some(at))
+    enqueue_newgrf_sound(state, grfid, local_id, Some(at), true)
 }
 
 /// Encola el sonido ambiental que `AnimationBase` codifica en un callback.
@@ -248,6 +274,21 @@ pub fn play_sound_or_override(state: &mut GameState, sound: SoundId) -> Result<(
 mod tests {
     use super::*;
 
+    fn state_with_sound(grfid: u32, local_id: u8) -> GameState {
+        let mut state = GameState::new(4, 4);
+        state.sound_effect_catalog.push(SoundEffectDef {
+            local_id,
+            grfid,
+            volume: 128,
+            priority: 7,
+            override_old: None,
+            has_sample: true,
+            sample_pcm: vec![0x80],
+            from_newgrf: true,
+        });
+        state
+    }
+
     #[test]
     fn animation_callback_sound_masks_bit_15_and_rejects_failed_or_zero() {
         let at = TileCoord::new(4, 9);
@@ -267,5 +308,35 @@ mod tests {
             newgrf_tile_animation_sound_from_callback(1, 0x00FE, at),
             None
         );
+    }
+
+    #[test]
+    fn vehicle_newgrf_sound_keeps_position_without_being_ambient() {
+        let at = TileCoord::new(2, 3);
+        let mut state = state_with_sound(0x534F_554E, 4);
+
+        assert!(play_newgrf_vehicle_sound(&mut state, 0x534F_554E, 4, at).is_ok());
+
+        assert_eq!(
+            state.runtime.pending_newgrf_sounds,
+            vec![PendingNewgrfSound {
+                grfid: 0x534F_554E,
+                local_id: 4,
+                volume: 1.0,
+                priority: 7,
+                at: Some(at),
+                ambient: false,
+            }]
+        );
+    }
+
+    #[test]
+    fn tile_newgrf_sound_is_marked_ambient() {
+        let at = TileCoord::new(3, 1);
+        let mut state = state_with_sound(0x534F_554E, 5);
+
+        assert!(play_newgrf_tile_sound(&mut state, 0x534F_554E, 5, at).is_ok());
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].at, Some(at));
+        assert!(state.runtime.pending_newgrf_sounds[0].ambient);
     }
 }

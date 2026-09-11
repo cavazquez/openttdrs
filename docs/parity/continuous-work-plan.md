@@ -4896,3 +4896,16 @@ la propagación completa de consist visual NewGRF, livery/callbacks restantes y
 el compositor/raster global; #329/#567 continúan abiertas. Cliente queda en
 `1411 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y
 `diff --check` limpios.
+
+Actualización #329-VEHICLE-SOUND-SPATIAL-ORIGIN (2026-09-11): los samples
+locales devueltos por `CBID_VEHICLE_SOUND_EFFECT` se encolan ahora con la
+posición de la unidad y el mixer aplica la misma atenuación espacial que a
+`SndPlayVehicleFx`. La cola distingue ese origen de los sonidos ambientales
+de tesela, por lo que desactivar `sound.ambient` ya no silencia sonidos de
+vehículos; los callers siguen filtrando por `sound.vehicle`. Las regresiones
+cubren la coordenada, la clasificación y el drenado Bevy. El sonido conserva
+volumen/prioridad Action11 y el fallback vanilla; sprites locales, callbacks
+restantes, consist visual completo y compositor/raster siguen pendientes, por
+lo que #329/#567 continúan abiertas. Core queda en `2495 passed; 0 failed; 1
+ignored` y cliente en `1413 passed; 0 failed; 2 ignored`, con Clippy
+estricto, formato y `diff --check` limpios.

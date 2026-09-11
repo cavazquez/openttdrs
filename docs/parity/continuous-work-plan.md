@@ -4399,3 +4399,14 @@ el orden final. Core queda en `2460 passed; 0 failed; 1 ignored` y cliente en
 paridad y Clippy estricto limpios. #329/#567 siguen abiertas por callbacks,
 propiedades navales y aceptación visual manual bajo Weston; #326 permanece
 abierta.
+
+Actualización #329/#567-SHIP-EXTRA-FLAGS (2026-09-11, `e6ee4e0b`): Action0
+naval `0x21` ya lee y conserva el `DWord` nativo en `ParsedVehicleMeta` y
+`EngineDef.extra_flags`, incluyendo su propagación desde un GRF sintético
+hasta el catálogo. Los flags `NoNews`, `NoPreview`, `JoinPreview` y
+`SyncReliability` siguen sin consumidor local equivalente, por lo que esta
+etapa preserva el contrato de datos y no simula efectos. Core queda en
+`2461 passed; 0 failed; 1 ignored` y cliente en `1388 passed; 0 failed; 2
+ignored`, con formato, diff, checker de paridad y Clippy estricto limpios.
+#329/#567 continúan abiertas por la semántica runtime restante, callbacks y
+aceptación visual manual bajo Weston; #326 permanece abierta.

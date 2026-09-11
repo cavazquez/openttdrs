@@ -140,7 +140,7 @@ Fuente: `newgrf_act0_ships.cpp`.
 | `1B` purchase list order | **runtime** (reordena el catálogo después de cargar el stack) |
 | `1D` cargo aging period | **runtime** (`cargo_age_period`) |
 | `20` engine variant | **runtime parcial** (`variant_parent_id` y orden padre→variante en compra) |
-| `21` extra miscellaneous flags | consumida; flags de noticias/preview y fiabilidad de variantes pendientes |
+| `21` extra miscellaneous flags | **runtime parcial** (preserva el `DWord` en `EngineDef.extra_flags`; consumidores `NoNews`, `NoPreview`, `JoinPreview` y `SyncReliability` pendientes) |
 | `23` velocidad WORD | **runtime** (`max_speed`) |
 | `24` aceleración | **runtime** (`ship_acceleration`) |
 | `26` badge list | **runtime parcial** (traducción y catálogo; UI de jerarquía pendiente) |

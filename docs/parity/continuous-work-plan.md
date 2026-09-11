@@ -3807,3 +3807,15 @@ preview como en ejecución, sin mutar mapa ni dinero. Las pruebas focales y
 Clippy estricto del cliente pasan. #567 sigue abierta por el pool `DepotID`,
 vecinos/callbacks, preview visual, clipping, orden global y framebuffer; #326
 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-ID-POOL (2026-09-11, `d09d51da`): los
+depósitos de carretera, ferrocarril y barcos asignan ahora el primer `DepotID`
+libre del pool común nativo y lo escriben en los dos bytes de `MAP2`. Las dos
+secciones de un depósito naval comparten la misma ID; la consulta deduplica la
+huella y excluye correctamente los hangares de aeropuerto, que pertenecen a
+estaciones. El preview comparte la comprobación de capacidad y la UI informa
+el agotamiento del pool en ambos idiomas. La suite core queda en 2398 pasadas
+y 1 ignorada; la cliente en 1373 pasadas y 2 ignoradas, con Clippy estricto
+verde. #567 sigue abierta por el pool persistente/tabla `DEPT`, metadatos de
+depósito, vecinos/callbacks, preview visual, clipping, orden global y
+framebuffer; #326 permanece abierta.

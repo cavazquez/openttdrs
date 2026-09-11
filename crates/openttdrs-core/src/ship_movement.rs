@@ -537,6 +537,26 @@ fn mark_ship_depot_arrival(v: &mut Vehicle, map: Option<&Map>) {
     v.cur_speed = 0;
 }
 
+/// Decide si el primer tramo de la ruta naval usa la salida opuesta del
+/// depósito.
+///
+/// `YapfShip::CheckShipReverse` compara las dos `Trackdir` de la sección
+/// norte antes de que `CheckShipStayInDepot` libere el barco. El runtime local
+/// conserva la ruta como teselas, por lo que el primer vecino es la
+/// representación equivalente: si apunta exactamente contra la orientación
+/// de la boca, hay que invertir el rumbo físico antes de abandonar el centro.
+#[must_use]
+fn ship_should_reverse_on_depot_exit(v: &Vehicle, tile: crate::map::Tile) -> bool {
+    let Some(&next) = v.path.front() else {
+        return false;
+    };
+    if (next.x - v.pos.x).abs() + (next.y - v.pos.y).abs() != 1 {
+        return false;
+    }
+    let facing = crate::depot::ship_depot_facing(tile);
+    direction_from_tile_step(v.pos, next) == crate::vehicle::reverse_direction(facing)
+}
+
 /// Replica `CheckShipStayInDepot` para el estado que sí puede observar el port.
 ///
 /// Un barco detenido en el centro conserva `TRACK_BIT_DEPOT`. Al disponer de
@@ -569,7 +589,11 @@ fn ship_stay_in_or_leave_depot(v: &mut Vehicle, map: &Map) -> bool {
         return true;
     }
 
-    let facing = crate::depot::ship_depot_facing(tile);
+    let facing = if ship_should_reverse_on_depot_exit(v, tile) {
+        crate::vehicle::reverse_direction(crate::depot::ship_depot_facing(tile))
+    } else {
+        crate::depot::ship_depot_facing(tile)
+    };
     v.direction = facing;
     v.ship_rotation = facing;
     v.ship_track = ship_depot_track(tile);
@@ -1254,6 +1278,36 @@ mod tests {
             assert_eq!(v.ship_track, expected_track, "dir={dir}");
             assert_eq!(v.ship_state, expected_state, "dir={dir}");
         }
+    }
+
+    #[test]
+    fn ship_depot_leave_reverses_for_the_opposite_water_exit() {
+        let mut s = GameState::new(12, 8);
+        let depot = TileCoord::new(4, 3);
+        let opposite_section = TileCoord::new(5, 3);
+        let outside = TileCoord::new(6, 3);
+        for tile in [depot, opposite_section, outside] {
+            s.map.set_kind(tile, TileKind::Water).unwrap();
+        }
+        apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+
+        // La sección norte mira al oeste (DIR_NE), pero la ruta elegida por
+        // YAPF puede salir por el lado opuesto cuando ése es el único camino.
+        let mut v = Vehicle::new(1, VehicleKind::Ship, depot, outside);
+        v.running = true;
+        v.ship_pos_valid = true;
+        v.ship_x = depot.x * 16 + 8;
+        v.ship_y = depot.y * 16 + 8;
+        v.ship_state = SHIP_STATE_DEPOT;
+        v.ship_track = TRACK_X;
+        v.path = std::collections::VecDeque::from([opposite_section, outside]);
+
+        ship_controller_tick(&mut v, Some(&s.map));
+
+        assert_eq!(v.direction, DIR_SW);
+        assert_eq!(v.ship_rotation, DIR_SW);
+        assert_eq!(v.ship_track, TRACK_X);
+        assert_eq!(v.ship_state, SHIP_STATE_TRACK_X);
     }
 
     #[test]

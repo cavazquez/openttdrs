@@ -1679,7 +1679,11 @@ impl GameState {
                     }
                 }
             }
-            if stop_kind == StopKind::Dock {
+            // Una estación intermodal puede conservar muelles aunque su
+            // facilidad principal sea tren, bus o aeropuerto. Oil Rig es la
+            // excepción: FACIL_DOCK describe su servicio naval, pero sus
+            // piezas de mapa son `StationType::Oilrig`, no una huella Dock.
+            if st.facilities & FACIL_DOCK != 0 && stop_kind != StopKind::OilRig {
                 let mut physical_tiles = Vec::new();
                 for tile in imported_dock_tiles
                     .remove(&st.station_id)
@@ -3029,6 +3033,77 @@ mod tests {
         assert!(station.covers_tile(second_water));
         assert_eq!(state.map.get(first_land).map(|tile| tile.m2), Some(0x34));
         assert_eq!(state.map.get(first_land).map(|tile| tile.m2_hi), Some(0x12));
+    }
+
+    #[test]
+    fn from_sav_game_preserves_docks_on_intermodal_station() {
+        let anchor = TileCoord::new(1, 1);
+        let first_land = TileCoord::new(2, 3);
+        let first_water = crate::station::dock_water_tile(first_land, 1);
+        let second_land = TileCoord::new(6, 3);
+        let second_water = crate::station::dock_water_tile(second_land, 1);
+        let station_id = 0x2345_u16;
+        let mut map = Map::new_flat(10, 8, 0);
+
+        let mut rail_tile = map.get(anchor).expect("intermodal rail anchor");
+        rail_tile.kind = TileKind::Station;
+        rail_tile.m6 = 0;
+        map.set_tile(anchor, rail_tile).expect("set rail anchor");
+        map.set_m2_u16(anchor, station_id)
+            .expect("rail anchor station id");
+
+        for (land, water) in [(first_land, first_water), (second_land, second_water)] {
+            let mut land_tile = map.get(land).expect("dock land");
+            land_tile.kind = TileKind::Station;
+            land_tile.m5 = 1;
+            land_tile.m6 = crate::station::STATION_TYPE_DOCK << 3;
+            map.set_tile(land, land_tile).expect("set dock land");
+            map.set_m2_u16(land, station_id).expect("dock land id");
+
+            let mut water_tile = map.get(water).expect("dock water");
+            water_tile.kind = TileKind::Station;
+            water_tile.m5 = crate::station::DOCK_WATER_PART_GFX;
+            water_tile.m6 = crate::station::STATION_TYPE_DOCK << 3;
+            map.set_tile(water, water_tile).expect("set dock water");
+            map.set_m2_u16(water, station_id).expect("dock water id");
+        }
+
+        let mut sav = empty_sav(352, map);
+        sav.stations.push(SavStation {
+            station_id: u32::from(station_id),
+            pos: anchor,
+            owner: crate::company::CompanyId::PLAYER.0,
+            name: Some("Intermodal con muelles".into()),
+            facilities: FACIL_TRAIN | FACIL_DOCK,
+            string_id: None,
+            build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
+            town_id: None,
+            airport_type: 0,
+            airport_w: 0,
+            airport_h: 0,
+            airport_layout: 0,
+            airport_rotation: 0,
+            airport_blocks: 0,
+            had_vehicle_of_type: 0,
+            last_vehicle_type: 0xFF,
+            time_since_load: u8::MAX,
+            time_since_unload: u8::MAX,
+            airport_persistent_storage_id: None,
+            cargo: Vec::new(),
+        });
+
+        let state = GameState::from_sav_game(sav);
+        let station = state.stations.first().expect("intermodal station");
+        assert_eq!(station.stop_kind, StopKind::RailStation);
+        for tile in [first_land, first_water, second_land, second_water] {
+            assert!(station.covers_tile(tile), "missing dock tile {tile:?}");
+        }
+        let dock_tiles = crate::station::dock_station_tiles(&state.map, station);
+        assert_eq!(dock_tiles.len(), 4);
+        assert!(dock_tiles.contains(&first_land));
+        assert!(dock_tiles.contains(&first_water));
+        assert!(dock_tiles.contains(&second_land));
+        assert!(dock_tiles.contains(&second_water));
     }
 
     #[test]

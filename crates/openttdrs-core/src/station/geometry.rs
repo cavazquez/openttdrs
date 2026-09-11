@@ -93,12 +93,27 @@ pub fn station_tile_sets_adjacent(a: &[TileCoord], b: &[TileCoord]) -> bool {
 /// muelles legacy de una sola tesela conservan esa única coordenada.
 #[must_use]
 pub fn dock_station_tiles(map: &Map, station: &Station) -> Vec<TileCoord> {
-    if station.stop_kind != StopKind::Dock {
-        return Vec::new();
-    }
     let mut seeds = Vec::with_capacity(station.joined_tiles.len() + 1);
     seeds.push(station.pos);
     seeds.extend(station.joined_tiles.iter().copied());
+
+    // Una fila STNN puede exponer varias facilidades. En ese caso `stop_kind`
+    // conserva la facilidad principal (por ejemplo, `RailStation`), pero las
+    // piezas navales siguen siendo `StationType::Dock` en el mapa. No mezclar
+    // el ancla ferroviaria con la huella naval: sólo las piezas tipadas como
+    // muelle pueden iniciar una expansión de dos teselas.
+    if station.stop_kind != StopKind::Dock {
+        seeds.retain(|&seed| {
+            map.get(seed).is_some_and(|tile| {
+                tile.kind == crate::map::TileKind::Station
+                    && super::tile_encoding::stop_kind_from_m6(tile.m6) == StopKind::Dock
+            })
+        });
+    }
+    if seeds.is_empty() {
+        return Vec::new();
+    }
+
     let mut tiles = Vec::with_capacity(seeds.len().saturating_mul(2));
     for seed in seeds {
         if let Some(footprint) = dock_footprint_for_tile(map, seed) {

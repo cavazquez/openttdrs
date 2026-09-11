@@ -21,7 +21,7 @@ fn ship_docking_tile_for_station(
     from: TileCoord,
 ) -> Option<TileCoord> {
     let origins = if let Some(logical_station) = stations.iter().find(|candidate| {
-        candidate.stop_kind == super::StopKind::Dock && candidate.covers_tile(station)
+        candidate.covers_tile(station) && !dock_station_tiles(map, candidate).is_empty()
     }) {
         let mut origins = Vec::new();
         for physical_tile in dock_station_tiles(map, logical_station) {

@@ -130,7 +130,9 @@ pub struct EngineDef {
     /// Action0 train `0x05`: índice `RailType` 0..3 (`None` = lookup vanilla por id).
     #[serde(default)]
     pub required_rail_type: Option<u8>,
-    /// Action0 train `0x1D`: bitmask de cargos temperate (`0` = lista vanilla por kind).
+    /// Máscara global de refit resultante de Action0 train `0x1D` o ship
+    /// `0x11` (`0` = lista vanilla por kind). Las listas CTT se conservan
+    /// además en [`Self::ctt_include_cargos`] / [`Self::ctt_exclude_cargos`].
     #[serde(default)]
     pub refit_mask: u32,
     /// Action0 `refit_cost` (factor de coste de conversión; `0` permite

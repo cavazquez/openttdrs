@@ -317,6 +317,9 @@ pub struct ParsedVehicleMeta {
     pub visual_effect: u8,
     /// Action0 `refit_cost` (road `0x1A`, ship `0x13`, aircraft `0x15`).
     pub refit_cost: u8,
+    /// Máscara histórica de refit (`ship 0x11`) antes de traducir los índices
+    /// locales del GRF a `CargoType` global.
+    pub legacy_refit_mask: u32,
     /// Action0 ship `0x1E` CTT include → bitmask temperate (`0` = lista vanilla).
     pub refit_mask: u32,
     /// Action0 ship `0x1F` CTT exclude → bitmask temperate. Se resta de
@@ -419,6 +422,7 @@ impl ParsedVehicleMeta {
             canal_speed_frac: 0,
             sound_effect: 0,
             visual_effect: crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT,
+            legacy_refit_mask: 0,
             refit_mask: 0,
             refit_cost: 0,
             refit_exclude_mask: 0,
@@ -3909,7 +3913,12 @@ fn parse_ship_property(
                 meta.sound_effect = read_u8(payload, i)?;
             }
         }
-        0x11 | 0x1A | 0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        0x1A | 0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        0x11 => {
+            for meta in metas {
+                meta.legacy_refit_mask = read_u32(payload, i)?;
+            }
+        }
         0x14 => {
             for meta in metas {
                 meta.ocean_speed_frac = read_u8(payload, i)?;

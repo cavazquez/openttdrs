@@ -23,6 +23,39 @@ fn vehicle_price_bases(kind: VehicleKind) -> (i64, i64) {
     }
 }
 
+/// Traduce `EngineInfo::refit_mask` desde los slots locales del GRF al
+/// `CargoType` global, equivalente a `TranslateRefitMask` de `newgrf.cpp`.
+fn translate_legacy_refit_mask(
+    raw_mask: u32,
+    cargo_tables: &GrfTypeTranslationTables,
+    grf_version: u8,
+    climate: crate::world_gen::Climate,
+    cargo_catalog: &[CargoSpecDef],
+) -> u32 {
+    let mut translated = 0u32;
+    for bit in 0..u32::BITS {
+        if raw_mask & (1u32 << bit) == 0 {
+            continue;
+        }
+        let Some(local_id) = u8::try_from(bit).ok() else {
+            continue;
+        };
+        let Some(cargo) = cargo_from_local_id_with_catalog(
+            Some(cargo_tables),
+            grf_version,
+            local_id,
+            climate,
+            cargo_catalog,
+        ) else {
+            continue;
+        };
+        if u32::from(cargo.cargo_id()) < u32::BITS {
+            translated |= 1u32 << cargo.cargo_id();
+        }
+    }
+    translated
+}
+
 fn resolve_vehicle_badges(
     local_ids: &[u16],
     badge_labels: &[String],
@@ -155,6 +188,13 @@ fn push_feature_vehicles(
             None
         };
         let (price_base, running_base) = vehicle_price_bases(meta.kind);
+        let legacy_refit_mask = translate_legacy_refit_mask(
+            meta.legacy_refit_mask,
+            cargo_tables,
+            grf_version,
+            climate,
+            cargo_catalog,
+        );
         let (badges, newgrf_badge_translation, unresolved_badges) =
             resolve_vehicle_badges(&meta.badge_local_ids, badge_labels, badge_catalog, grfid);
         for label in unresolved_badges {
@@ -196,7 +236,7 @@ fn push_feature_vehicles(
             air_drag: 0,
             shorten_factor: 0,
             required_rail_type: None,
-            refit_mask: meta.refit_mask & !meta.refit_exclude_mask,
+            refit_mask: (legacy_refit_mask | meta.refit_mask) & !meta.refit_exclude_mask,
             refit_cost: meta.refit_cost,
             ctt_include_cargos,
             ctt_exclude_cargos,

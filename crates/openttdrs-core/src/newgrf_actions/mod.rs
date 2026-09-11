@@ -5326,6 +5326,46 @@ mod tests {
     }
 
     #[test]
+    fn vehicles_ac_ship_legacy_refit_mask_is_translated() {
+        let a0 = vec![
+            0x00,
+            ACTION0_FEATURE_SHIPS,
+            0x01,
+            0x01,
+            0x00,
+            0x11,
+            40, // Oil + Goods en la máscara local histórica.
+            0,
+            0,
+            0,
+        ];
+        let meta = parse_action0_vehicle_metas(&a0).unwrap().remove(0);
+        assert_eq!(meta.legacy_refit_mask, (1 << 3) | (1 << 5));
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'R', b'F', 0, 1], "shiprefit", "");
+        let dir = tempfile_dir_with("shiprefit.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("shiprefit.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|engine| engine.from_newgrf && engine.kind == VehicleKind::Ship)
+            .unwrap();
+        assert_eq!(
+            engine.refit_mask,
+            (1u32 << crate::CargoType::Oil.cargo_id())
+                | (1u32 << crate::CargoType::Goods.cargo_id())
+        );
+        assert_eq!(
+            crate::refit::refittable_cargo_types_for_engine(engine),
+            vec![crate::CargoType::Oil, crate::CargoType::Goods]
+        );
+    }
+
+    #[test]
     fn parse_and_apply_airports_registers_catalog_and_blocks_fta() {
         use crate::airport_class::{NEW_AIRPORT_OFFSET, newgrf_airport_spec_def};
         use crate::airport_tile_spec::NEW_AIRPORT_TILE_OFFSET;

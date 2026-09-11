@@ -4530,3 +4530,14 @@ autoreplace balanceados y su rehidratación al importar SAV. Core queda en
 `2478 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2
 ignored`, con Clippy de producción, formato, `diff --check` y
 `parity-docs` limpios. #329/#567 siguen abiertas.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-STATE (2026-09-11,
+`c76ef972`): `Vehicle` conserva ahora la capacidad secundaria como metadata
+opcional del primario. Compra y autoreemplazo la inicializan desde el motor;
+`vehicles_from_chunks` la recupera de la fila `AIR_SHADOW` enlazada por
+`next`, y el exportador la usa antes del fallback del catálogo. El alcance no
+simula una segunda unidad ni altera el pool de carga: siguen pendientes
+compra/refit/autoreplace con balanceo real, carga de correo y consumo de la
+capacidad en el runtime. Core queda en `2479 passed; 0 failed; 1 ignored` y
+cliente en `1394 passed; 0 failed; 2 ignored`, con Clippy de producción,
+formato, `diff --check` y `parity-docs` limpios. #329/#567 siguen abiertas.

@@ -4660,3 +4660,14 @@ refit/autoreplace y rehidratación de la sombra desde SAV. Core queda en `2478
 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`,
 con Clippy de producción, formato y `diff --check` limpios. #329/#567 siguen
 abiertas.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-STATE (2026-09-11,
+`c76ef972`): la capacidad secundaria ahora queda asociada al primario como
+metadata opcional compatible con JSON anterior. La compra y el autoreemplazo
+la inicializan desde el motor efectivo; el parser SAV sigue `next` hasta la
+fila `AIR_SHADOW` y la recupera, y el escritor la prioriza al reexportar. Esto
+conserva el dato sin inventar una segunda entidad que alteraría órdenes, FTA o
+el pool de carga. Continúan pendientes la unidad secundaria real, la carga y
+el balanceo durante refit/autoreplace. Core queda en `2479 passed; 0 failed; 1
+ignored` y cliente en `1394 passed; 0 failed; 2 ignored`, con Clippy de
+producción, formato y `diff --check` limpios. #329/#567 siguen abiertas.

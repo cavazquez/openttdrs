@@ -560,6 +560,18 @@ mod tests {
             ),
             (24, 24, 5)
         );
+        let aircraft_ground_z = aircraft_bounds.zmin;
+        aircraft.altitude = openttdrs_core::aircraft_movement::AIRCRAFT_CRUISE_ALTITUDE;
+        let airborne_bounds = vehicle_parent_bounds(
+            &aircraft,
+            &map,
+            openttdrs_core::VehiclePose::from_vehicle(&aircraft),
+        );
+        assert_eq!(
+            airborne_bounds.zmin - aircraft_ground_z,
+            i32::from(openttdrs_core::aircraft_movement::AIRCRAFT_CRUISE_ALTITUDE)
+                * i32::from(openttdrs_core::TILE_PIXEL_HEIGHT)
+        );
     }
 
     #[test]

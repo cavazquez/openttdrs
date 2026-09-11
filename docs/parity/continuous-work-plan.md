@@ -4814,3 +4814,12 @@ aire; trenes, carretera y barcos conservan su contrato de terreno. La
 regresión compara tierra y crucero y conserva X/Y y offsets relativos. El
 stream RNG global, filtros/consist completos, bounds del sorter de aeronaves y
 compositor/sorter global siguen pendientes; #329/#567 continúan abiertas.
+
+Actualización #329-VEHICLE-AIRCRAFT-SORT-ALTITUDE (2026-09-11): el prisma
+`Vehicle::bounds` del cliente ahora usa la misma escala de píxeles que el
+sprite y los efectos para la altitud de una aeronave. Un avión en crucero se
+desplaza `altitude × TILE_PIXEL_HEIGHT` en Z dentro del sorter, mientras que
+los bounds de tierra y los demás tipos no cambian. La regresión verifica el
+desplazamiento entre tierra y crucero. Siguen pendientes el stream RNG global,
+filtros/consist completos y el compositor/raster global; #329/#567 continúan
+abiertas.

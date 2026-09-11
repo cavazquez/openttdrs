@@ -164,7 +164,9 @@ pub(crate) fn vehicle_parent_bounds(
         .saturating_add(sub_y.round() as i32);
     let world_z = i32::from(tile_min_z(map, pose.pos))
         .saturating_mul(i32::from(openttdrs_core::TILE_PIXEL_HEIGHT))
-        .saturating_add(i32::from(v.altitude));
+        .saturating_add(
+            i32::from(v.altitude).saturating_mul(i32::from(openttdrs_core::TILE_PIXEL_HEIGHT)),
+        );
 
     let (origin_x, origin_y, extent_x, extent_y, extent_z) = match v.kind {
         VehicleKind::Ship => match v.ship_rotation & 7 {

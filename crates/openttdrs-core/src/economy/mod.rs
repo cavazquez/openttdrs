@@ -11,9 +11,9 @@ pub use build_costs::{
     build_object_cost, build_object_cost_factored, buy_land_cost, object_clear_cost_factored,
     rail_build_cost, rail_build_cost_factored, road_build_cost, road_build_cost_factored,
     road_depot_build_cost, road_stop_build_cost_factored, road_stop_clear_cost_factored,
-    ship_depot_build_cost, signal_build_cost, signal_clear_cost, station_build_cost,
-    terraform_cost_per_corner, terraform_cost_per_corner_inflated, train_depot_build_cost,
-    waypoint_build_cost,
+    ship_depot_build_cost, ship_depot_clear_cost, signal_build_cost, signal_clear_cost,
+    station_build_cost, terraform_cost_per_corner, terraform_cost_per_corner_inflated,
+    train_depot_build_cost, waypoint_build_cost,
 };
 pub use global::{
     DEFAULT_DIFFICULTY_MOD, DEFAULT_INTEREST_RATE, EconomyType, FluctuationEvent, GlobalEconomy,

@@ -542,7 +542,7 @@ pub fn find_closest_ship_depot(map: &Map, from: TileCoord) -> Option<TileCoord> 
     q.push_back(from);
     while let Some(cur) = q.pop_front() {
         if map.get_kind(cur) == Some(TileKind::ShipDepot) {
-            return Some(cur);
+            return crate::depot::ship_depot_north_tile(map, cur);
         }
         for (dx, dy) in [(-1_i32, 0), (1, 0), (0, -1), (0, 1)] {
             let n = TileCoord::new(cur.x + dx, cur.y + dy);

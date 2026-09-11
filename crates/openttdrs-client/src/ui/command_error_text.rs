@@ -31,6 +31,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::VehicleNotInDepot => {
             "Solo se puede vender un vehículo dentro de un depósito."
         }
+        CommandError::VehicleInTheWay => "No se puede demoler: hay un vehículo ocupando la tesela.",
         CommandError::InvalidDepotTile => "Ubicación de depósito inválida.",
         CommandError::VehicleKindNotAllowed => "Tipo de vehículo no permitido aquí.",
         CommandError::EngineNotFound => "Modelo de vehículo desconocido.",
@@ -202,6 +203,7 @@ mod tests {
             CommandError::VehicleNotOwned,
             CommandError::TileNotOwned,
             CommandError::VehicleNotInDepot,
+            CommandError::VehicleInTheWay,
             CommandError::InvalidDepotTile,
             CommandError::VehicleKindNotAllowed,
             CommandError::EngineNotFound,

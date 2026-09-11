@@ -405,6 +405,9 @@ pub(in crate::command) fn clear_tile(
     c: TileCoord,
 ) -> Result<(), CommandError> {
     check_clear_tile(&state.map, c)?;
+    if state.map.get_kind(c) == Some(TileKind::ShipDepot) {
+        return super::water::clear_ship_depot(state, c);
+    }
     if let Some(kind) = state.map.get_kind(c) {
         check_town_demolition_rating(state, c, kind)?;
     }

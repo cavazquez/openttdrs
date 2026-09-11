@@ -3,7 +3,7 @@
 use crate::bridge_spec::{
     BridgeType, axis_line, bridge_build_cost_in, set_bridge_middle_mapt, set_bridge_type_m6,
 };
-use crate::economy::{ship_depot_build_cost, station_build_cost};
+use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build_cost};
 use crate::map::{
     Map, Tile, TileCoord, TileKind, WaterClass, has_tile_water_ground, inclined_slope_direction,
     is_tunnel_entrance_slope, make_water_tile, set_water_class_m1, tile_slope_and_z,
@@ -135,6 +135,37 @@ pub(in crate::command) fn place_ship_depot_dir(
         .set_tile(other, other_tile)
         .map_err(|_| CommandError::OutOfBounds)?;
     state.economy.money -= ship_depot_build_cost(&state.global_economy);
+    Ok(())
+}
+
+/// Retira el depósito naval completo aunque el cursor apunte a cualquiera de
+/// sus dos secciones, como `RemoveShipDepot` en `water_cmd.cpp`.
+pub(in crate::command) fn clear_ship_depot(
+    state: &mut GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    let other =
+        crate::depot::ship_depot_other_tile(&state.map, c).ok_or(CommandError::InvalidDepotTile)?;
+    let tiles = [c, other];
+    for tile in tiles {
+        if !state.cheats.magic_bulldozer_active() {
+            crate::command::require_tile_owned_by_active(state, tile)?;
+        }
+        if state.vehicles.iter().any(|vehicle| vehicle.pos == tile) {
+            return Err(CommandError::VehicleInTheWay);
+        }
+    }
+    let water_classes = tiles.map(|tile| {
+        state
+            .map
+            .get(tile)
+            .map_or(WaterClass::Sea, |raw| water_class_from_m1(raw.m1))
+    });
+    for (tile, water_class) in tiles.into_iter().zip(water_classes) {
+        make_water_tile(&mut state.map, tile, water_class)
+            .map_err(|_| CommandError::OutOfBounds)?;
+    }
+    state.economy.money -= ship_depot_clear_cost(&state.global_economy);
     Ok(())
 }
 

@@ -113,6 +113,12 @@ pub fn ship_depot_build_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::BuildDepotShip, 1, 0)
 }
 
+/// Coste de retirar un depósito naval (`PR_CLEAR_DEPOT_SHIP`).
+#[must_use]
+pub fn ship_depot_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearDepotShip, 1, 0)
+}
+
 /// Coste base de estación jugable (`Price::BuildStationRail` y equivalentes road).
 #[must_use]
 pub fn station_build_cost(ge: &GlobalEconomy) -> i64 {
@@ -234,6 +240,15 @@ mod tests {
         assert_eq!(
             road_stop_clear_cost_factored(&ge, StopKind::TruckStop, 0),
             0
+        );
+    }
+
+    #[test]
+    fn ship_depot_clear_cost_matches_native_price_base() {
+        let ge = GlobalEconomy::new();
+        assert_eq!(
+            ship_depot_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearDepotShip)
         );
     }
 

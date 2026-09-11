@@ -1,10 +1,10 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
-use crate::economy::{ship_depot_build_cost, station_build_cost};
+use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build_cost};
 use crate::test_fixtures::SandboxMap;
 use crate::{
-    Command, GameState, StopKind, TileCoord, TileKind, VehicleKind, WaterClass, apply_command,
-    bridge_above_axis_from_mapt, set_water_class_m1,
+    Command, GameState, StopKind, TileCoord, TileKind, Vehicle, VehicleKind, WaterClass,
+    apply_command, bridge_above_axis_from_mapt, set_water_class_m1,
 };
 
 #[test]
@@ -179,6 +179,69 @@ fn place_ship_depot_rejects_second_part_without_mutating_first() {
     assert_eq!(error, crate::CommandError::CannotPlaceStationOnOccupiedTile);
     assert_eq!(s.map.get_kind(depot), Some(TileKind::Water));
     assert_eq!(s.map.get_kind(other), Some(TileKind::Grass));
+    assert_eq!(s.economy.money, money);
+}
+
+#[test]
+fn clear_ship_depot_from_either_section_restores_both_water_tiles() {
+    let mut s = GameState::new(12, 12);
+    let depot = TileCoord::new(5, 5);
+    let mouth = TileCoord::new(6, 5);
+    let other = TileCoord::new(4, 5);
+    for (coord, water_class) in [
+        (depot, WaterClass::Canal),
+        (mouth, WaterClass::Sea),
+        (other, WaterClass::River),
+    ] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+        let mut tile = s.map.get(coord).unwrap();
+        tile.m1 = set_water_class_m1(tile.m1, water_class);
+        s.map.set_tile(coord, tile).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 2)).unwrap();
+    let money = s.economy.money;
+
+    // `other` es la sección norte; se demuele desde el extremo opuesto al
+    // que recibió el comando de construcción para cubrir ambos accesos.
+    apply_command(&mut s, &Command::ClearTile(other)).unwrap();
+
+    assert_eq!(s.map.get_kind(depot), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(other), Some(TileKind::Water));
+    assert_eq!(
+        crate::map::water_class(s.map.get(depot).unwrap()),
+        Some(WaterClass::Canal)
+    );
+    assert_eq!(
+        crate::map::water_class(s.map.get(other).unwrap()),
+        Some(WaterClass::River)
+    );
+    assert_eq!(s.map.get(depot).unwrap().m5, 0);
+    assert_eq!(s.map.get(other).unwrap().m5, 0);
+    assert_eq!(
+        s.economy.money,
+        money - ship_depot_clear_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn clear_ship_depot_rejects_vehicle_on_the_other_section() {
+    let mut s = GameState::new(12, 12);
+    let depot = TileCoord::new(4, 4);
+    let other = TileCoord::new(5, 4);
+    for coord in [depot, TileCoord::new(3, 4), other] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Ship, other, other));
+    let money = s.economy.money;
+
+    assert_eq!(
+        apply_command(&mut s, &Command::ClearTile(depot)),
+        Err(crate::CommandError::VehicleInTheWay)
+    );
+    assert_eq!(s.map.get_kind(depot), Some(TileKind::ShipDepot));
+    assert_eq!(s.map.get_kind(other), Some(TileKind::ShipDepot));
     assert_eq!(s.economy.money, money);
 }
 

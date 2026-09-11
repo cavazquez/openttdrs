@@ -32,6 +32,8 @@ pub enum CommandError {
     TileNotOwned,
     /// Solo se puede vender un vehículo estacionado en un depósito.
     VehicleNotInDepot,
+    /// No se puede demoler una tesela que ocupa un vehículo.
+    VehicleInTheWay,
     InvalidDepotTile,
     VehicleKindNotAllowed,
     /// El motor pedido no existe en el catálogo.

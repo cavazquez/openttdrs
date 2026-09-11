@@ -1018,6 +1018,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Solo se puede vender un vehículo dentro de un depósito." => {
             "A vehicle can only be sold inside a depot."
         }
+        "No se puede demoler: hay un vehículo ocupando la tesela." => {
+            "Cannot demolish: a vehicle is occupying the tile."
+        }
         "Ubicación de depósito inválida." => "Invalid depot location.",
         "Tipo de vehículo no permitido aquí." => "Vehicle type is not allowed here.",
         "Modelo de vehículo desconocido." => "Unknown vehicle model.",

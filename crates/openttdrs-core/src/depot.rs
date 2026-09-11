@@ -5,6 +5,77 @@ use std::collections::BTreeSet;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::vehicle::VehicleKind;
 
+const WATER_TILE_TYPE_DEPOT: u8 = 3;
+
+/// Eje de una sección de depósito naval (`WBL_DEPOT_AXIS` en `m5`).
+#[must_use]
+pub fn ship_depot_axis(tile: crate::map::Tile) -> u8 {
+    (tile.m5 >> 1) & 0x01
+}
+
+/// Parte norte/sur de una sección de depósito naval (`WBL_DEPOT_PART`).
+#[must_use]
+pub fn ship_depot_part(tile: crate::map::Tile) -> u8 {
+    tile.m5 & 0x01
+}
+
+#[must_use]
+fn ship_depot_is_section(tile: crate::map::Tile) -> bool {
+    tile.kind == TileKind::ShipDepot && (tile.m5 >> 4) & 0x0F == WATER_TILE_TYPE_DEPOT
+}
+
+/// Devuelve la otra tesela de la huella 2×1/1×2 del depósito naval.
+///
+/// El cálculo sigue `GetOtherShipDepotTile`: la parte norte apunta hacia el
+/// incremento del eje y la parte sur hacia el decremento. Se exige que la
+/// sección vecina tenga el mismo eje y la parte opuesta para no enlazar por
+/// accidente dos depósitos contiguos importados.
+#[must_use]
+pub fn ship_depot_other_tile(map: &Map, pos: TileCoord) -> Option<TileCoord> {
+    let tile = map.get(pos).filter(|tile| ship_depot_is_section(*tile))?;
+    let delta = if ship_depot_axis(tile) == 0 {
+        (1, 0)
+    } else {
+        (0, 1)
+    };
+    let part = ship_depot_part(tile);
+    let other = if part == 0 {
+        TileCoord::new(pos.x + delta.0, pos.y + delta.1)
+    } else {
+        TileCoord::new(pos.x - delta.0, pos.y - delta.1)
+    };
+    map.get(other)
+        .is_some_and(|other_tile| {
+            ship_depot_is_section(other_tile)
+                && ship_depot_axis(other_tile) == ship_depot_axis(tile)
+                && ship_depot_part(other_tile) != part
+        })
+        .then_some(other)
+}
+
+/// Devuelve la sección norte que identifica al depósito completo.
+///
+/// Una sección aislada (por ejemplo, un save antiguo o un mapa sintético de
+/// prueba) se devuelve a sí misma para no desaparecer de las consultas.
+#[must_use]
+pub fn ship_depot_north_tile(map: &Map, pos: TileCoord) -> Option<TileCoord> {
+    let tile = map
+        .get(pos)
+        .filter(|tile| tile.kind == TileKind::ShipDepot)?;
+    if ship_depot_part(tile) == 0 {
+        return Some(pos);
+    }
+    Some(ship_depot_other_tile(map, pos).unwrap_or(pos))
+}
+
+#[must_use]
+fn is_depot_candidate(map: &Map, pos: TileCoord, kind: VehicleKind) -> bool {
+    let target = depot_tile_kind_for_vehicle(kind);
+    map.get_kind(pos) == Some(target)
+        && (kind != VehicleKind::Ship
+            || ship_depot_north_tile(map, pos).is_some_and(|north| north == pos))
+}
+
 /// Bit de reserva PBS en depósitos ferroviarios (`HasDepotReservation` / `m5` bit 4).
 ///
 /// Coincide con el bit de cruces a nivel; la interpretación depende de `TileKind`.
@@ -36,7 +107,7 @@ impl DepotSpatialIndex {
             for x in 0..width.cast_signed() {
                 let pos = TileCoord::new(x, y);
                 if let Some(kind) = map.get_kind(pos) {
-                    self.insert_kind(pos, kind);
+                    self.insert_kind(map, pos, kind);
                 }
             }
         }
@@ -44,7 +115,7 @@ impl DepotSpatialIndex {
         self.full_map_scans = self.full_map_scans.saturating_add(1);
     }
 
-    fn insert_kind(&mut self, pos: TileCoord, kind: TileKind) {
+    fn insert_kind(&mut self, map: &Map, pos: TileCoord, kind: TileKind) {
         match kind {
             TileKind::RoadDepot => {
                 self.road.insert(pos);
@@ -52,7 +123,7 @@ impl DepotSpatialIndex {
             TileKind::RailDepot => {
                 self.rail.insert(pos);
             }
-            TileKind::ShipDepot => {
+            TileKind::ShipDepot if ship_depot_north_tile(map, pos) == Some(pos) => {
                 self.ship.insert(pos);
             }
             TileKind::Airport => {
@@ -141,15 +212,14 @@ pub fn depot_tile_kind_for_vehicle(kind: VehicleKind) -> TileKind {
 /// Depósito más cercano en distancia Manhattan desde `from`.
 #[must_use]
 pub fn nearest_depot_tile(map: &Map, from: TileCoord, kind: VehicleKind) -> Option<TileCoord> {
-    let target = depot_tile_kind_for_vehicle(kind);
     let (mw, mh) = map.dimensions();
     let mut best: Option<(u32, TileCoord)> = None;
     for y in 0..mh {
         for x in 0..mw {
             let c = TileCoord::new(x.cast_signed(), y.cast_signed());
-            if map.get_kind(c) == Some(target) {
+            if is_depot_candidate(map, c, kind) {
                 let dist = from.x.abs_diff(c.x) + from.y.abs_diff(c.y);
-                if best.is_none_or(|(d, _)| dist < d) {
+                if best.is_none_or(|(d, best_c)| (dist, c.y, c.x) < (d, best_c.y, best_c.x)) {
                     best = Some((dist, c));
                 }
             }
@@ -351,6 +421,32 @@ mod tests {
             &mut index,
         );
         assert_eq!(index.full_map_scans(), 1);
+    }
+
+    #[test]
+    fn ship_depot_queries_keep_only_the_north_section() {
+        let mut s = GameState::new(12, 12);
+        let depot = TileCoord::new(5, 5);
+        let north = TileCoord::new(4, 5);
+        let mouth = TileCoord::new(6, 5);
+        for coord in [depot, north, mouth] {
+            s.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+        apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 2)).unwrap();
+
+        assert_eq!(ship_depot_north_tile(&s.map, depot), Some(north));
+        assert_eq!(ship_depot_north_tile(&s.map, north), Some(north));
+        assert_eq!(
+            nearest_depot_tile(&s.map, TileCoord::new(0, 5), VehicleKind::Ship),
+            Some(north)
+        );
+
+        let mut index = DepotSpatialIndex::default();
+        assert_eq!(index.len_for(&s.map, VehicleKind::Ship), 1);
+        assert_eq!(
+            nearest_depot_tile_indexed(&s.map, TileCoord::new(0, 5), VehicleKind::Ship, &mut index,),
+            Some(north)
+        );
     }
 
     #[test]

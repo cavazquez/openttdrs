@@ -14,6 +14,12 @@ const WATER_TILE_TYPE_DEPOT: u8 = 3;
 /// escriban el mismo `MAP2` al construir en una partida nueva.
 pub const DEPOT_POOL_SIZE: u16 = 64_000;
 
+/// Distancia máxima en teselas para el servicio automático de barcos.
+///
+/// Coincide con `MAX_SHIP_DEPOT_SEARCH_DISTANCE` de `ship_cmd.cpp`. La
+/// búsqueda real además exige una ruta navegable y el mismo propietario.
+pub const MAX_SHIP_DEPOT_SEARCH_DISTANCE: u32 = 80;
+
 /// Devuelve el `DepotID` almacenado en `MAP2` para un depósito de tierra o
 /// naval. Los hangares de aeropuerto son estaciones y no pertenecen a este
 /// pool nativo.
@@ -360,6 +366,48 @@ pub fn nearest_reachable_depot_tile_indexed(
     })
 }
 
+/// Depósito naval propio más cercano y alcanzable dentro de una distancia
+/// euclidiana máxima.
+///
+/// `FindClosestShipDepot` nativo primero restringe la búsqueda a regiones de
+/// agua alcanzables y después compara `DistanceSquare`, sin aceptar depósitos
+/// de otra compañía. El pathfinder local aún no conserva regiones de agua;
+/// probar la ruta completa contra los pocos depósitos indexados proporciona
+/// el mismo contrato observable y evita elegir un depósito de una cuenca
+/// aislada.
+#[must_use]
+pub fn nearest_reachable_ship_depot_tile_indexed(
+    map: &Map,
+    from: TileCoord,
+    owner: crate::company::CompanyId,
+    max_distance: u32,
+    index: &mut DepotSpatialIndex,
+) -> Option<TileCoord> {
+    use crate::pathfinder::{PathNetwork, find_path};
+
+    index.ensure_initialized(map);
+    let max_distance_squared = max_distance.saturating_mul(max_distance);
+    index
+        .candidates(VehicleKind::Ship)
+        .iter()
+        .filter_map(|&depot| {
+            let tile = map.get(depot)?;
+            if tile.m1 & 0x1F != owner.0 {
+                return None;
+            }
+            let dx = from.x.abs_diff(depot.x);
+            let dy = from.y.abs_diff(depot.y);
+            let distance_squared = dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy));
+            if distance_squared > max_distance_squared {
+                return None;
+            }
+            find_path(map, from, depot, PathNetwork::Water)?;
+            Some((distance_squared, depot.y, depot.x, depot))
+        })
+        .min_by_key(|(distance_squared, y, x, _)| (*distance_squared, *y, *x))
+        .map(|(_, _, _, depot)| depot)
+}
+
 /// Boca del depósito de vía (`m5 & 3`) si la tesela es un depósito ferroviario.
 #[must_use]
 pub fn rail_depot_mouth_dir(map: &Map, pos: TileCoord) -> Option<u8> {
@@ -499,6 +547,100 @@ mod tests {
         assert_eq!(
             nearest_depot_tile_indexed(&s.map, TileCoord::new(0, 5), VehicleKind::Ship, &mut index,),
             Some(north)
+        );
+    }
+
+    #[test]
+    fn reachable_ship_depot_filters_owner_and_distance() {
+        let mut s = GameState::new(24, 8);
+        for y in [2_i32, 3_i32] {
+            for x in 0..24_i32 {
+                crate::map::make_water_tile(
+                    &mut s.map,
+                    TileCoord::new(x, y),
+                    crate::WaterClass::Sea,
+                )
+                .unwrap();
+            }
+        }
+        let rival = TileCoord::new(5, 2);
+        let own = TileCoord::new(17, 2);
+        crate::apply_command(&mut s, &crate::Command::PlaceShipDepotDir(rival, 3)).unwrap();
+        crate::apply_command(&mut s, &crate::Command::PlaceShipDepotDir(own, 3)).unwrap();
+        for tile in crate::ship_depot_footprint(rival, 3) {
+            let mut raw = s.map.get(tile).unwrap();
+            raw.m1 = (raw.m1 & !0x1F) | crate::CompanyId(1).0;
+            s.map.set_tile(tile, raw).unwrap();
+        }
+
+        let from = TileCoord::new(7, 2);
+        let mut index = DepotSpatialIndex::default();
+        assert_eq!(
+            nearest_reachable_ship_depot_tile_indexed(
+                &s.map,
+                from,
+                crate::CompanyId::PLAYER,
+                MAX_SHIP_DEPOT_SEARCH_DISTANCE,
+                &mut index,
+            ),
+            Some(own)
+        );
+        assert_eq!(
+            nearest_reachable_ship_depot_tile_indexed(
+                &s.map,
+                from,
+                crate::CompanyId(1),
+                MAX_SHIP_DEPOT_SEARCH_DISTANCE,
+                &mut index,
+            ),
+            Some(rival)
+        );
+        assert_eq!(
+            nearest_reachable_ship_depot_tile_indexed(
+                &s.map,
+                from,
+                crate::CompanyId::PLAYER,
+                9,
+                &mut index,
+            ),
+            None,
+            "la distancia máxima usa DistanceSquare, no el largo de la ruta"
+        );
+    }
+
+    #[test]
+    fn reachable_ship_depot_ignores_closer_isolated_basin() {
+        let mut s = GameState::new(24, 12);
+        for x in 0..24_i32 {
+            for y in [2_i32, 3_i32] {
+                crate::map::make_water_tile(
+                    &mut s.map,
+                    TileCoord::new(x, y),
+                    crate::WaterClass::Sea,
+                )
+                .unwrap();
+            }
+        }
+        for y in [7_i32, 8_i32] {
+            crate::map::make_water_tile(&mut s.map, TileCoord::new(5, y), crate::WaterClass::Sea)
+                .unwrap();
+        }
+        let reachable = TileCoord::new(17, 2);
+        let isolated = TileCoord::new(5, 7);
+        crate::apply_command(&mut s, &crate::Command::PlaceShipDepotDir(reachable, 3)).unwrap();
+        crate::apply_command(&mut s, &crate::Command::PlaceShipDepotDir(isolated, 3)).unwrap();
+
+        let mut index = DepotSpatialIndex::default();
+        assert_eq!(
+            nearest_reachable_ship_depot_tile_indexed(
+                &s.map,
+                TileCoord::new(5, 2),
+                crate::CompanyId::PLAYER,
+                MAX_SHIP_DEPOT_SEARCH_DISTANCE,
+                &mut index,
+            ),
+            Some(reachable),
+            "una cuenca aislada no puede ganar sólo por distancia geométrica"
         );
     }
 

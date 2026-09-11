@@ -383,6 +383,9 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
             // Hacerlo aquí (y no para toda la flota al cambiar el día) mantiene
             // el barrido `index % DAY_TICKS`, como OpenTTD.
             check_road_vehicle_needs_service(state, i);
+            // El equivalente naval se ejecuta en el mismo callback económico,
+            // después de actualizar averías y antes del movimiento del tick.
+            check_ship_needs_service(state, i);
         }
         i = i.saturating_add(day_ticks);
     }
@@ -412,6 +415,65 @@ pub(crate) fn update_vehicle_servicing_flags(state: &mut crate::GameState) {
 
 /// Penalización máxima de desvío para depósito automático (simplificado de `roadveh_cmd.cpp`).
 const ROAD_SERVICE_MAX_PENALTY: u32 = 20;
+
+/// Inserta orden de depósito para un barco que necesita servicio.
+///
+/// `CheckIfShipNeedsService` sólo considera depósitos de la compañía,
+/// navegables desde la cuenca actual y dentro de `DistanceSquare <= 80²`.
+/// El estado local conserva la configuración `servint_ships` por compañía,
+/// por lo que un cero mantiene el servicio automático desactivado.
+fn check_ship_needs_service(state: &mut crate::GameState, idx: usize) {
+    use crate::depot::{MAX_SHIP_DEPOT_SEARCH_DISTANCE, nearest_reachable_ship_depot_tile_indexed};
+    use crate::vehicle::VehicleKind;
+    use crate::vehicle::order::VehicleOrder;
+
+    let Some(vehicle) = state.vehicles.get(idx) else {
+        return;
+    };
+    if vehicle.kind != VehicleKind::Ship
+        || !vehicle.running
+        || vehicle.prev_unit.is_some()
+        || vehicle
+            .orders
+            .iter()
+            .any(|order| matches!(order, VehicleOrder::Depot { .. }))
+        || state
+            .companies
+            .get(vehicle.owner.index())
+            .is_none_or(|company| company.servint_ships == 0)
+    {
+        return;
+    }
+
+    let needs = {
+        let state_ref: &crate::GameState = state;
+        state_ref.vehicles[idx].requires_service_with(state_ref)
+    };
+    if !needs {
+        return;
+    }
+    let (pos, owner) = {
+        let vehicle = &state.vehicles[idx];
+        (vehicle.pos, vehicle.owner)
+    };
+    let Some(depot) = nearest_reachable_ship_depot_tile_indexed(
+        &state.map,
+        pos,
+        owner,
+        MAX_SHIP_DEPOT_SEARCH_DISTANCE,
+        &mut state.runtime.depot_spatial_index,
+    ) else {
+        return;
+    };
+    let vehicle = &mut state.vehicles[idx];
+    vehicle.needs_servicing = true;
+    vehicle.orders.insert(
+        vehicle.current_order,
+        VehicleOrder::depot_pass_through(depot),
+    );
+    vehicle.path.clear();
+    vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
+}
 
 /// Inserta orden de depósito para el vehículo road de un slot de economía
 /// (`CheckIfRoadVehNeedsService`).
@@ -649,5 +711,56 @@ mod tests {
             state.vehicles[0].orders[0],
             VehicleOrder::Depot { stop: false, .. }
         ));
+    }
+
+    #[test]
+    fn ship_vehicle_service_check_uses_own_reachable_depot() {
+        use crate::vehicle::order::VehicleOrder;
+        use crate::{
+            Command, GameState, TileKind, VehicleKind, WaterClass, apply_command,
+            ship_depot_footprint,
+        };
+
+        let mut state = GameState::new(24, 8);
+        for y in [2_i32, 3_i32] {
+            for x in 0..24_i32 {
+                crate::map::make_water_tile(&mut state.map, TileCoord::new(x, y), WaterClass::Sea)
+                    .unwrap();
+            }
+        }
+        let rival_depot = TileCoord::new(5, 2);
+        let own_depot = TileCoord::new(17, 2);
+        apply_command(&mut state, &Command::PlaceShipDepotDir(rival_depot, 3)).unwrap();
+        apply_command(&mut state, &Command::PlaceShipDepotDir(own_depot, 3)).unwrap();
+        for tile in ship_depot_footprint(rival_depot, 3) {
+            let mut raw = state.map.get(tile).unwrap();
+            raw.m1 = (raw.m1 & !0x1F) | 1;
+            state.map.set_tile(tile, raw).unwrap();
+        }
+        state.companies[0].servint_ships = 360;
+
+        let from = TileCoord::new(7, 2);
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, from, from);
+        ship.running = true;
+        ship.service_interval_days = 1;
+        ship.last_service_day = 0;
+        ship.orders = vec![VehicleOrder::station(TileCoord::new(20, 2))];
+        state.vehicles.push(ship);
+        state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
+        state.sync_timers_from_tick();
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+
+        assert!(matches!(
+            state.vehicles[0].orders[0],
+            VehicleOrder::Depot {
+                depot,
+                stop: false,
+                ..
+            } if depot == own_depot
+        ));
+        assert_eq!(state.vehicles[0].dest, own_depot);
+        assert_eq!(state.map.get_kind(rival_depot), Some(TileKind::ShipDepot));
     }
 }

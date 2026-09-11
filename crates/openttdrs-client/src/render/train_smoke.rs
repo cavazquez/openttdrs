@@ -249,10 +249,17 @@ impl VisualEffectHeadState {
 ///
 /// La compatibilidad de una locomotora eléctrica con una vía normal no
 /// implica que tenga tracción allí: los efectos se suprimen cuando el
-/// railtype actual no pertenece a la máscara alimentada por el motor. Las
-/// demás clases de vehículo no pasan por este filtro nativo.
+/// railtype actual no pertenece a la máscara alimentada por el motor. La
+/// máscara puede venir de `RailTypeRuntimeProps` cuando un NewGRF redefine
+/// `powered_railtypes`; las demás clases de vehículo no pasan por este filtro
+/// nativo.
 #[must_use]
-fn vehicle_has_power_on_current_rail(map: &Map, vehicle: &Vehicle, engine: &EngineDef) -> bool {
+fn vehicle_has_power_on_current_rail(
+    map: &Map,
+    vehicle: &Vehicle,
+    engine: &EngineDef,
+    rail_type_props: &[openttdrs_core::RailTypeRuntimeProps; 4],
+) -> bool {
     if vehicle.kind != VehicleKind::Train {
         return true;
     }
@@ -265,7 +272,7 @@ fn vehicle_has_power_on_current_rail(map: &Map, vehicle: &Vehicle, engine: &Engi
         openttdrs_core::RailType::from_u8,
     );
     openttdrs_core::railtypes_mask_contains(
-        openttdrs_core::powered_railtypes_mask(required),
+        openttdrs_core::powered_railtypes_mask_with_props(required, rail_type_props),
         rail_type,
     )
 }
@@ -294,6 +301,7 @@ fn train_smoke_to_emit_with_engine(
     smoke_amount: u8,
 ) -> Option<TrainSmokeSet> {
     let head = VisualEffectHeadState::from_vehicle(map, vehicle, engine);
+    let rail_type_props = openttdrs_core::RailTypeRuntimeProps::defaults();
     let mut random = None;
     train_smoke_to_emit_with_engine_and_random(
         map,
@@ -301,6 +309,7 @@ fn train_smoke_to_emit_with_engine(
         engine,
         head,
         smoke_amount,
+        &rail_type_props,
         &mut random,
     )
 }
@@ -313,12 +322,13 @@ fn train_smoke_to_emit_with_engine_and_random(
     engine: &EngineDef,
     head: VisualEffectHeadState,
     smoke_amount: u8,
+    rail_type_props: &[openttdrs_core::RailTypeRuntimeProps; 4],
     random: &mut Option<&mut openttdrs_core::linkgraph_parity::Randomizer>,
 ) -> Option<TrainSmokeSet> {
     let amount = smoke_amount.min(2);
     if vehicle.kind != VehicleKind::Train
         || !head.allows_visual_effect(amount)
-        || !vehicle_has_power_on_current_rail(map, vehicle, engine)
+        || !vehicle_has_power_on_current_rail(map, vehicle, engine, rail_type_props)
         || !vehicle.depot_leave_cleared
         || openttdrs_core::vehicle_hidden_from_view(map, vehicle, vehicle.pos, vehicle.progress)
     {
@@ -472,6 +482,7 @@ fn advanced_effect_should_emit(
     smoke_amount: u8,
 ) -> bool {
     let head = VisualEffectHeadState::from_vehicle(map, vehicle, engine);
+    let rail_type_props = openttdrs_core::RailTypeRuntimeProps::defaults();
     let mut random = None;
     advanced_effect_should_emit_with_random(
         map,
@@ -480,12 +491,14 @@ fn advanced_effect_should_emit(
         head,
         kind,
         smoke_amount,
+        &rail_type_props,
         &mut random,
     )
 }
 
 /// Igual que [`advanced_effect_should_emit`], usando `_random` para las
 /// comprobaciones `Chance16` del tick visual real.
+#[allow(clippy::too_many_arguments)]
 fn advanced_effect_should_emit_with_random(
     map: &Map,
     vehicle: &Vehicle,
@@ -493,11 +506,12 @@ fn advanced_effect_should_emit_with_random(
     head: VisualEffectHeadState,
     kind: VehicleVisualEffectKind,
     smoke_amount: u8,
+    rail_type_props: &[openttdrs_core::RailTypeRuntimeProps; 4],
     random: &mut Option<&mut openttdrs_core::linkgraph_parity::Randomizer>,
 ) -> bool {
     let amount = smoke_amount.min(2);
     if !head.allows_visual_effect(amount)
-        || !vehicle_has_power_on_current_rail(map, vehicle, engine)
+        || !vehicle_has_power_on_current_rail(map, vehicle, engine, rail_type_props)
         || openttdrs_core::vehicle_hidden_from_view(map, vehicle, vehicle.pos, vehicle.progress)
         || openttdrs_core::vehicle_in_depot(map, vehicle.pos)
         || map
@@ -848,6 +862,7 @@ fn spawn_train_smoke(
     let map = &state.map;
     let map_width = map.dimensions().0;
     let engine_catalog = &state.engine_catalog;
+    let rail_type_props = &state.runtime.rail_type_props;
     let mut fleet = openttdrs_core::FleetIndex::default();
     fleet.rebuild(&state.vehicles);
     let visual_slots = visual_effect_vehicle_slots(&state.vehicles, &fleet);
@@ -886,6 +901,7 @@ fn spawn_train_smoke(
                 head,
                 visual_spec.kind,
                 prefs.smoke_amount,
+                rail_type_props,
                 &mut random,
             ) {
                 continue;
@@ -947,6 +963,7 @@ fn spawn_train_smoke(
                 engine,
                 head,
                 prefs.smoke_amount,
+                rail_type_props,
                 &mut random,
             )
         } else if matches!(
@@ -961,6 +978,7 @@ fn spawn_train_smoke(
             head,
             visual_spec.kind,
             prefs.smoke_amount,
+            rail_type_props,
             &mut random,
         ) {
             Some(match visual_spec.kind {
@@ -1182,6 +1200,7 @@ mod tests {
         wagon.cached_max_speed = u16::MAX;
         let engine = wagon.effective_engine();
         let head_state = VisualEffectHeadState::from_vehicle(&map, &head, head.effective_engine());
+        let rail_type_props = openttdrs_core::RailTypeRuntimeProps::defaults();
         let mut random = None;
 
         assert_eq!(
@@ -1191,6 +1210,7 @@ mod tests {
                 engine,
                 head_state,
                 2,
+                &rail_type_props,
                 &mut random,
             ),
             Some(TrainSmokeSet::Steam)
@@ -1216,12 +1236,14 @@ mod tests {
         let diesel_before = diesel_rng.state;
         let mut diesel_random = Some(&mut diesel_rng);
         let diesel_head = VisualEffectHeadState::from_vehicle(&map, &diesel, diesel_engine);
+        let rail_type_props = openttdrs_core::RailTypeRuntimeProps::defaults();
         let _ = train_smoke_to_emit_with_engine_and_random(
             &map,
             &mut diesel,
             diesel_engine,
             diesel_head,
             2,
+            &rail_type_props,
             &mut diesel_random,
         );
         assert_ne!(diesel_rng.state, diesel_before);
@@ -1238,6 +1260,7 @@ mod tests {
             steam_engine,
             steam_head,
             2,
+            &rail_type_props,
             &mut steam_random,
         );
         assert_eq!(steam_rng.state, steam_before);
@@ -1780,8 +1803,14 @@ mod tests {
         let rail = set_rail_type_on_tile(map.get(pos).expect("rail tile"), RailType::Rail);
         map.set_tile(pos, rail).expect("normal rail");
         let engine = vehicle.effective_engine();
+        let rail_type_props = openttdrs_core::RailTypeRuntimeProps::defaults();
 
-        assert!(!vehicle_has_power_on_current_rail(&map, &vehicle, engine));
+        assert!(!vehicle_has_power_on_current_rail(
+            &map,
+            &vehicle,
+            engine,
+            &rail_type_props,
+        ));
         assert!(train_smoke_to_emit_with_engine(&map, &mut vehicle, engine, 2).is_none());
         assert!(!advanced_effect_should_emit(
             &map,
@@ -1794,7 +1823,35 @@ mod tests {
         let electric =
             set_rail_type_on_tile(map.get(pos).expect("normal rail tile"), RailType::Electric);
         map.set_tile(pos, electric).expect("electric rail");
-        assert!(vehicle_has_power_on_current_rail(&map, &vehicle, engine));
+        assert!(vehicle_has_power_on_current_rail(
+            &map,
+            &vehicle,
+            engine,
+            &rail_type_props,
+        ));
+    }
+
+    #[test]
+    fn visual_effects_use_newgrf_powered_railtypes_mask() {
+        use openttdrs_core::{RailType, rail_type_bit, set_rail_type_on_tile};
+
+        let mut map = Map::new_flat(4, 4, 0);
+        let vehicle = running_train(openttdrs_core::engine::ENGINE_TRAIN_SH_30);
+        let pos = vehicle.pos;
+        map.set_kind(pos, TileKind::Rail).expect("rail kind");
+        let rail = set_rail_type_on_tile(map.get(pos).expect("rail tile"), RailType::Rail);
+        map.set_tile(pos, rail).expect("normal rail");
+        let engine = vehicle.effective_engine();
+        let mut rail_type_props = openttdrs_core::RailTypeRuntimeProps::defaults();
+        rail_type_props[usize::from(RailType::Electric.as_u8())].powered_mask =
+            rail_type_bit(RailType::Rail);
+
+        assert!(vehicle_has_power_on_current_rail(
+            &map,
+            &vehicle,
+            engine,
+            &rail_type_props,
+        ));
     }
 
     #[test]

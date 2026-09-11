@@ -4909,3 +4909,14 @@ restantes, consist visual completo y compositor/raster siguen pendientes, por
 lo que #329/#567 continúan abiertas. Core queda en `2495 passed; 0 failed; 1
 ignored` y cliente en `1413 passed; 0 failed; 2 ignored`, con Clippy
 estricto, formato y `diff --check` limpios.
+
+Actualización #329-VEHICLE-VISUAL-EFFECT-POWERED-RAILTYPES (2026-09-11): el
+gate de humo/chispa del renderer Bevy consulta ahora
+`state.runtime.rail_type_props` al evaluar si una unidad ferroviaria tiene
+potencia sobre la vía actual. Cuando NewGRF redefine `powered_railtypes`, la
+decisión usa esa máscara; sin override se conserva la tabla vanilla. La
+regresión cubre un motor eléctrico sobre vía normal con una máscara runtime
+redefinida. Esto acota la paridad del gate visual, pero no declara completa la
+topología de consist ni los callbacks/sprites locales restantes; #329/#567
+continúan abiertas. El foco quedó en `24 passed; 0 failed`, core railtype en
+`7 passed; 0 failed`, con Clippy estricto, formato y `diff --check` limpios.

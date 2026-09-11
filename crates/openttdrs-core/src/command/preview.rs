@@ -168,17 +168,43 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             .or_else(|| check_remove_rail_signal(map, *c, *fract_x, *fract_y).err()),
         Command::PlaceRoadDepot(c) => check_object_can_be_auto_cleared(state, *c)
             .err()
-            .or_else(|| preview_depot_any(map, *c, check_road_depot_placement)),
+            .or_else(|| preview_depot_any(map, *c, check_road_depot_placement))
+            .or_else(|| {
+                crate::depot::next_free_depot_id(map)
+                    .is_none()
+                    .then_some(CommandError::DepotPoolFull)
+            }),
         Command::PlaceRoadDepotDir(c, dir) => check_object_can_be_auto_cleared(state, *c)
             .err()
-            .or_else(|| check_road_depot_placement(map, *c, *dir).err()),
+            .or_else(|| check_road_depot_placement(map, *c, *dir).err())
+            .or_else(|| {
+                crate::depot::next_free_depot_id(map)
+                    .is_none()
+                    .then_some(CommandError::DepotPoolFull)
+            }),
         Command::PlaceRailDepot(c) => check_object_can_be_auto_cleared(state, *c)
             .err()
-            .or_else(|| preview_depot_any(map, *c, check_rail_depot_placement)),
+            .or_else(|| preview_depot_any(map, *c, check_rail_depot_placement))
+            .or_else(|| {
+                crate::depot::next_free_depot_id(map)
+                    .is_none()
+                    .then_some(CommandError::DepotPoolFull)
+            }),
         Command::PlaceRailDepotDir(c, dir) => check_object_can_be_auto_cleared(state, *c)
             .err()
-            .or_else(|| check_rail_depot_placement(map, *c, *dir).err()),
-        Command::PlaceShipDepotDir(c, dir) => check_ship_depot_placement(map, *c, *dir).err(),
+            .or_else(|| check_rail_depot_placement(map, *c, *dir).err())
+            .or_else(|| {
+                crate::depot::next_free_depot_id(map)
+                    .is_none()
+                    .then_some(CommandError::DepotPoolFull)
+            }),
+        Command::PlaceShipDepotDir(c, dir) => {
+            check_ship_depot_placement(map, *c, *dir).err().or_else(|| {
+                crate::depot::next_free_depot_id(map)
+                    .is_none()
+                    .then_some(CommandError::DepotPoolFull)
+            })
+        }
         Command::PlaceDock(c, _) => check_dock_placement(map, &state.stations, *c).err(),
         Command::PlaceAirport(c) => {
             check_airport_area(state, *c, false, crate::AirportSpecId::Heliport).err()

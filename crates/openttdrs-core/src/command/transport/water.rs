@@ -90,17 +90,18 @@ pub(crate) fn check_ship_depot_placement(
 
 /// Materializa una de las dos partes que `MakeShipDepot` escribe en `MP_WATER`.
 ///
-/// El índice de depósito todavía no tiene un pool persistente en el modelo local,
-/// por eso `m2` queda en cero; el resto de bytes se normaliza igual que el motor
-/// nativo para que save/reload no conserve payload de la tesela anterior.
+/// El `DepotID` del pool común se escribe en los dos bytes de `MAP2`; el resto
+/// de bytes se normaliza igual que el motor nativo para que save/reload no
+/// conserve payload de la tesela anterior.
 #[must_use]
-fn make_ship_depot_tile(original: Tile, owner: u8, dir: u8) -> Tile {
+fn make_ship_depot_tile(original: Tile, owner: u8, dir: u8, depot_id: u16) -> Tile {
     let mut tile = original;
     tile.kind = TileKind::ShipDepot;
     tile.mapt = 0x60 | (original.mapt & 0x0F);
     tile.m1 = set_water_class_m1(owner & 0x1F, water_class_from_m1(original.m1));
-    tile.m2 = 0;
-    tile.m2_hi = 0;
+    let [m2, m2_hi] = depot_id.to_le_bytes();
+    tile.m2 = m2;
+    tile.m2_hi = m2_hi;
     tile.m3 = 0;
     tile.m3hi = 0;
     tile.m5 = ship_depot_m5_for_dir(dir);
@@ -117,12 +118,14 @@ pub(in crate::command) fn place_ship_depot_dir(
 ) -> Result<(), CommandError> {
     let dir = dir & 0x03;
     check_ship_depot_placement(&state.map, c, dir)?;
+    let depot_id =
+        crate::depot::next_free_depot_id(&state.map).ok_or(CommandError::DepotPoolFull)?;
     let other = ship_depot_other_tile_for_dir(c, dir);
     let original = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let other_original = state.map.get(other).ok_or(CommandError::OutOfBounds)?;
     let owner = state.active_company.0;
-    let depot_tile = make_ship_depot_tile(original, owner, dir);
-    let other_tile = make_ship_depot_tile(other_original, owner, dir.wrapping_add(2));
+    let depot_tile = make_ship_depot_tile(original, owner, dir, depot_id);
+    let other_tile = make_ship_depot_tile(other_original, owner, dir.wrapping_add(2), depot_id);
     // `MakeShipDepot` conserva la zona climática de cada parte, cambia el tipo
     // alto a MP_WATER y guarda WaterTileType::Depot (`0x30`) más part/eje en m5.
     // El segundo tile es la parte opuesta de la misma huella 2x1/1x2.

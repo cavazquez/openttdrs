@@ -1022,6 +1022,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
             "Cannot demolish: a vehicle is occupying the tile."
         }
         "Ubicación de depósito inválida." => "Invalid depot location.",
+        "No quedan identificadores de depósito disponibles." => {
+            "No depot identifiers are available."
+        }
         "Tipo de vehículo no permitido aquí." => "Vehicle type is not allowed here.",
         "Modelo de vehículo desconocido." => "Unknown vehicle model.",
         "No hay dinero suficiente." => "Insufficient funds.",

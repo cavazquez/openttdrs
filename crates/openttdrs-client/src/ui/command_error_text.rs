@@ -33,6 +33,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         }
         CommandError::VehicleInTheWay => "No se puede demoler: hay un vehículo ocupando la tesela.",
         CommandError::InvalidDepotTile => "Ubicación de depósito inválida.",
+        CommandError::DepotPoolFull => "No quedan identificadores de depósito disponibles.",
         CommandError::VehicleKindNotAllowed => "Tipo de vehículo no permitido aquí.",
         CommandError::EngineNotFound => "Modelo de vehículo desconocido.",
         CommandError::InsufficientFunds => "No hay dinero suficiente.",
@@ -205,6 +206,7 @@ mod tests {
             CommandError::VehicleNotInDepot,
             CommandError::VehicleInTheWay,
             CommandError::InvalidDepotTile,
+            CommandError::DepotPoolFull,
             CommandError::VehicleKindNotAllowed,
             CommandError::EngineNotFound,
             CommandError::InsufficientFunds,

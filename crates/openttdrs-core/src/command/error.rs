@@ -35,6 +35,8 @@ pub enum CommandError {
     /// No se puede demoler una tesela que ocupa un vehículo.
     VehicleInTheWay,
     InvalidDepotTile,
+    /// El pool común de depósitos alcanzó la capacidad nativa.
+    DepotPoolFull,
     VehicleKindNotAllowed,
     /// El motor pedido no existe en el catálogo.
     EngineNotFound,

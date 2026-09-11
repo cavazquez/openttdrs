@@ -7,6 +7,42 @@ use crate::vehicle::VehicleKind;
 
 const WATER_TILE_TYPE_DEPOT: u8 = 3;
 
+/// Cantidad máxima de entradas del `DepotPool` nativo (`DepotID`).
+///
+/// `OpenTTD` reserva `0xFFFF` como inválido y limita el pool a los IDs
+/// `0..64000`; mantener el límite aquí evita que dos clases de depósito
+/// escriban el mismo `MAP2` al construir en una partida nueva.
+pub const DEPOT_POOL_SIZE: u16 = 64_000;
+
+/// Devuelve el `DepotID` almacenado en `MAP2` para un depósito de tierra o
+/// naval. Los hangares de aeropuerto son estaciones y no pertenecen a este
+/// pool nativo.
+#[must_use]
+pub fn depot_id_from_tile(tile: crate::map::Tile) -> Option<u16> {
+    matches!(
+        tile.kind,
+        TileKind::RoadDepot | TileKind::RailDepot | TileKind::ShipDepot
+    )
+    .then(|| u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8))
+}
+
+/// Busca el primer `DepotID` libre en el pool común de `OpenTTD`.
+///
+/// El barrido deduplica las dos secciones de un depósito naval porque ambas
+/// teselas contienen el mismo ID. Más adelante el pool persistente podrá
+/// reemplazar esta consulta por una estructura incremental; mientras tanto,
+/// reconstruir desde `MAP2` también cubre mapas importados y `.ottdmap`.
+#[must_use]
+pub fn next_free_depot_id(map: &Map) -> Option<u16> {
+    let mut used = BTreeSet::new();
+    for &tile in map.tiles() {
+        if let Some(id) = depot_id_from_tile(tile) {
+            used.insert(id);
+        }
+    }
+    (0..DEPOT_POOL_SIZE).find(|id| !used.contains(id))
+}
+
 /// Eje de una sección de depósito naval (`WBL_DEPOT_AXIS` en `m5`).
 #[must_use]
 pub fn ship_depot_axis(tile: crate::map::Tile) -> u8 {
@@ -482,5 +518,36 @@ mod tests {
             TileCoord::new(5, 4),
             true
         ));
+    }
+
+    #[test]
+    fn depot_id_allocator_reads_map2_and_reuses_the_first_free_id() {
+        let mut s = GameState::new(8, 8);
+        let road = TileCoord::new(1, 1);
+        let rail = TileCoord::new(2, 1);
+        let ship = TileCoord::new(3, 1);
+
+        s.map.set_kind(road, TileKind::RoadDepot).unwrap();
+        s.map.set_m2_u16(road, 0).unwrap();
+        s.map.set_kind(rail, TileKind::RailDepot).unwrap();
+        s.map.set_m2_u16(rail, 2).unwrap();
+        s.map.set_kind(ship, TileKind::ShipDepot).unwrap();
+        s.map.set_m2_u16(ship, 5).unwrap();
+
+        assert_eq!(depot_id_from_tile(s.map.get(road).unwrap()), Some(0));
+        assert_eq!(depot_id_from_tile(s.map.get(rail).unwrap()), Some(2));
+        assert_eq!(depot_id_from_tile(s.map.get(ship).unwrap()), Some(5));
+        assert_eq!(next_free_depot_id(&s.map), Some(1));
+    }
+
+    #[test]
+    fn airport_map2_does_not_consume_depot_pool_id() {
+        let mut s = GameState::new(8, 8);
+        let airport = TileCoord::new(1, 1);
+        s.map.set_kind(airport, TileKind::Airport).unwrap();
+        s.map.set_m2_u16(airport, 0).unwrap();
+
+        assert_eq!(depot_id_from_tile(s.map.get(airport).unwrap()), None);
+        assert_eq!(next_free_depot_id(&s.map), Some(0));
     }
 }

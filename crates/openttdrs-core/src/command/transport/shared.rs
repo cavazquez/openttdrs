@@ -260,6 +260,46 @@ pub(in crate::command) fn place_single_transport_tile(
     m5: u8,
     cost: i64,
 ) -> Result<(), CommandError> {
+    place_single_transport_tile_with_optional_depot_id(
+        state,
+        c,
+        kind_to_place,
+        mapt,
+        m5,
+        cost,
+        None,
+    )
+}
+
+pub(in crate::command) fn place_single_transport_tile_with_depot_id(
+    state: &mut GameState,
+    c: TileCoord,
+    kind_to_place: TileKind,
+    mapt: u8,
+    m5: u8,
+    cost: i64,
+    depot_id: u16,
+) -> Result<(), CommandError> {
+    place_single_transport_tile_with_optional_depot_id(
+        state,
+        c,
+        kind_to_place,
+        mapt,
+        m5,
+        cost,
+        Some(depot_id),
+    )
+}
+
+fn place_single_transport_tile_with_optional_depot_id(
+    state: &mut GameState,
+    c: TileCoord,
+    kind_to_place: TileKind,
+    mapt: u8,
+    m5: u8,
+    cost: i64,
+    depot_id: Option<u16>,
+) -> Result<(), CommandError> {
     check_single_transport_tile(&state.map, c)?;
     require_tile_owned_by_active(state, c)?;
     state
@@ -270,6 +310,12 @@ pub(in crate::command) fn place_single_transport_tile(
         .map
         .set_mapt_m5(c, mapt, m5)
         .map_err(|_| CommandError::OutOfBounds)?;
+    if let Some(depot_id) = depot_id {
+        state
+            .map
+            .set_m2_u16(c, depot_id)
+            .map_err(|_| CommandError::OutOfBounds)?;
+    }
     let _ = state.map.set_m1(c, state.active_company.0);
     state.economy.money -= cost;
     Ok(())

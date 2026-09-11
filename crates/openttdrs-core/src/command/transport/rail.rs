@@ -18,8 +18,9 @@ use super::shared::check_object_can_be_auto_cleared;
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
-    check_in_bounds, place_single_transport_tile, propagate_rail_diag_to_neighbors,
-    refresh_track_junction_from_neighbor, trackbits_to_signal_present,
+    check_in_bounds, place_single_transport_tile, place_single_transport_tile_with_depot_id,
+    propagate_rail_diag_to_neighbors, refresh_track_junction_from_neighbor,
+    trackbits_to_signal_present,
 };
 
 pub(crate) fn check_place_rail(map: &Map, c: TileCoord) -> Result<(), CommandError> {
@@ -354,13 +355,16 @@ pub(in crate::command) fn place_rail_depot_dir(
         require_tile_owned_by_active(state, exit)?;
         check_rail_trackbits_on_tile(&state.map, exit, after)?;
     }
-    place_single_transport_tile(
+    let depot_id =
+        crate::depot::next_free_depot_id(&state.map).ok_or(CommandError::DepotPoolFull)?;
+    place_single_transport_tile_with_depot_id(
         state,
         c,
         TileKind::RailDepot,
         0x10,
         (2 << 6) | dir,
         train_depot_build_cost(&state.global_economy, rail_cost_multiplier),
+        depot_id,
     )?;
     if let Some((exit, before, after)) = connection
         && before != after

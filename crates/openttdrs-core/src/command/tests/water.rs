@@ -25,6 +25,8 @@ fn place_ship_depot_on_water_with_water_entrance() {
     assert_eq!(tile.m5, 0x30, "WaterTileType::Depot vigente");
     assert_eq!(other_tile.kind, TileKind::ShipDepot);
     assert_eq!(other_tile.m5, 0x31, "parte opuesta sobre el eje X");
+    assert_eq!(crate::depot::depot_id_from_tile(tile), Some(0));
+    assert_eq!(crate::depot::depot_id_from_tile(other_tile), Some(0));
     assert_eq!(
         s.economy.money,
         money - ship_depot_build_cost(&s.global_economy)
@@ -68,8 +70,8 @@ fn place_ship_depot_writes_current_raw_contract_and_active_owner() {
     assert_eq!(tile.kind, TileKind::ShipDepot);
     assert_eq!(tile.mapt, 0x62, "se conserva la zona climática de MAPT");
     assert_eq!(tile.m5, 0x32, "tipo Depot + parte/eje de la orientación");
-    assert_eq!(tile.m2, 0);
-    assert_eq!(tile.m2_hi, 0);
+    assert_eq!(crate::depot::depot_id_from_tile(tile), Some(0));
+    assert_eq!(crate::depot::depot_id_from_tile(other_tile), Some(0));
     assert_eq!(tile.m3, 0);
     assert_eq!(tile.m3hi, 0);
     assert_eq!(tile.m6, 0, "MakeShipDepot limpia el contador alto");
@@ -161,6 +163,46 @@ fn place_ship_depot_writes_both_native_parts_for_each_direction() {
         assert_eq!(s.map.get(other).unwrap().kind, TileKind::ShipDepot);
         assert_eq!(s.map.get(other).unwrap().m5, other_m5);
     }
+}
+
+#[test]
+fn depot_builders_share_native_pool_ids() {
+    let mut s = GameState::new(16, 16);
+    let road = TileCoord::new(2, 2);
+    let rail = TileCoord::new(6, 2);
+    let ship = TileCoord::new(10, 8);
+    let ship_other = TileCoord::new(11, 8);
+
+    s.map
+        .set_kind(TileCoord::new(2, 1), TileKind::Road)
+        .unwrap();
+    s.map
+        .set_kind(TileCoord::new(6, 1), TileKind::Rail)
+        .unwrap();
+    for coord in [ship, TileCoord::new(9, 8), ship_other] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(road, 3)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(rail, 3)).unwrap();
+    apply_command(&mut s, &Command::PlaceShipDepotDir(ship, 0)).unwrap();
+
+    assert_eq!(
+        crate::depot::depot_id_from_tile(s.map.get(road).unwrap()),
+        Some(0)
+    );
+    assert_eq!(
+        crate::depot::depot_id_from_tile(s.map.get(rail).unwrap()),
+        Some(1)
+    );
+    assert_eq!(
+        crate::depot::depot_id_from_tile(s.map.get(ship).unwrap()),
+        Some(2)
+    );
+    assert_eq!(
+        crate::depot::depot_id_from_tile(s.map.get(ship_other).unwrap()),
+        Some(2)
+    );
 }
 
 #[test]

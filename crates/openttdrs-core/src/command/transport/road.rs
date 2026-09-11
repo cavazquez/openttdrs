@@ -26,7 +26,9 @@ use super::super::{CommandError, require_tile_owned_by_active, tile_owner};
 use super::shared::check_object_can_be_auto_cleared;
 
 #[allow(unused_imports)]
-use crate::command::transport::internal::{check_in_bounds, place_single_transport_tile};
+use crate::command::transport::internal::{
+    check_in_bounds, place_single_transport_tile, place_single_transport_tile_with_depot_id,
+};
 
 pub(crate) fn check_place_road_bits(map: &Map, c: TileCoord) -> Result<(), CommandError> {
     check_in_bounds(map, c)?;
@@ -90,13 +92,16 @@ pub(in crate::command) fn place_road_depot_dir(
     let dir = dir & 0x03;
     check_road_depot_placement(&state.map, c, dir)?;
     check_object_can_be_auto_cleared(state, c)?;
-    place_single_transport_tile(
+    let depot_id =
+        crate::depot::next_free_depot_id(&state.map).ok_or(CommandError::DepotPoolFull)?;
+    place_single_transport_tile_with_depot_id(
         state,
         c,
         TileKind::RoadDepot,
         0x20,
         (2 << 6) | dir,
         road_depot_build_cost(&state.global_economy),
+        depot_id,
     )?;
     if let Some((exit, road_bits)) = road_depot_exit_for_dir(&state.map, c, dir)
         && state.map.get_kind(exit) == Some(TileKind::Road)

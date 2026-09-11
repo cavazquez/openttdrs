@@ -4758,3 +4758,14 @@ reloj del primario y quedan pendientes su contador/período FTA independiente,
 por lo que #329/#567 continúan abiertas. Core queda en `2486 passed; 0 failed;
 1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`, con Clippy
 estricto, formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-AGE-COUNTER (2026-09-11): el
+correo de `AIR_SHADOW` mantiene ahora una cuenta atrás independiente de la
+bodega primaria. Ambos relojes usan el período efectivo del motor como
+fallback, pero una sombra cargada puede envejecer sin que envejezca el hold
+principal. La cuenta se exporta en `AIR_SHADOW.common.cargo_age_counter` y se
+recupera mediante `next` al importar SAV. Sigue pendiente resolver el período
+específico de la sombra/FTA y materializar la entidad nativa separada; #329/#567
+continúan abiertas. Core queda en `2487 passed; 0 failed; 1 ignored` y cliente
+en `1394 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y
+`diff --check` limpios.

@@ -4243,3 +4243,17 @@ orientación separada. Core queda en `2445 passed; 0 failed; 1 ignored` y
 cliente en `1388 passed; 0 failed; 2 ignored`, con formato, Clippy estricto
 de librería/binario y diff limpios. #567 sigue abierta por callbacks navales
 restantes y aceptación visual manual bajo Weston; #326 permanece abierta.
+
+Actualización #567-SHIP-DEPOT-RUNTIME-STATE (2026-09-11, `640bb8e9`): el
+runtime naval mantiene el contrato raw de `Ship::state`: los barcos nuevos y
+los que llegan al centro del depósito quedan en `TRACK_BIT_DEPOT`, al salir
+recuperan el eje de navegación y el rumbo/orientación nativos, y cada avance
+ordinario vuelve a persistir sus track bits. Los barcos importados con estado
+antiguo `0` se normalizan de forma compatible; el comando Arrancar también
+reconstruye el estado del depósito antes de despachar la ruta. Se agregaron
+regresiones para las cuatro orientaciones de salida y para llegada, espera y
+reanudación con la siguiente orden. Core queda en `2447 passed; 0 failed; 1
+ignored` y cliente en `1388 passed; 0 failed; 2 ignored`, con formato,
+Clippy estricto de librería/binario y diff limpios. #567 sigue abierta por
+callbacks y pathfinding navales restantes y aceptación visual manual bajo
+Weston; #326 permanece abierta.

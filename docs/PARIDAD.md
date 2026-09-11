@@ -3984,3 +3984,16 @@ con coordenadas para estados antiguos sin fila `DEPT`. La suite cliente queda
 en 1374 pasadas y 2 ignoradas; Clippy estricto y formato pasan. #567 sigue
 abierta por renombrado interactivo, callbacks/vecinos y aceptación visual de
 la huella naval, clipping, orden global y framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-RENAME (2026-09-11, `ddf89531`): el nuevo
+`Command::RenameDepot` replica `CmdRenameDepot`: valida propiedad, límite nativo
+de 31 caracteres, nombres custom únicos y reset al nombre generado con el
+ordinal libre correcto. La ventana de depósito incorpora el campo editable,
+botones OK/No, Enter/Escape y funciona al seleccionar cualquiera de las dos
+secciones de un depósito naval. La mutación queda en `SavDepot` y por tanto se
+persiste por `DEPT`; también migra perezosamente depósitos de JSON antiguos que
+sólo conservaban `MAP2`. Hay regresiones de núcleo y UI para nombre, duplicado,
+límite, reset y huella naval. La suite core queda en 2404 pasadas y 1 ignorada;
+la cliente en 1375 pasadas y 2 ignoradas, con Clippy estricto y formato verdes.
+#567 sigue abierta por callbacks/vecinos, preview visual, clipping, orden global
+y framebuffer; #326 permanece abierta.

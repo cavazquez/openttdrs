@@ -46,6 +46,13 @@ pub(crate) enum PreviewPlan {
         dir: u8,
         valid: bool,
     },
+    /// Preview compuesto del muelle nativo (pieza de tierra + pieza acuática).
+    Dock {
+        origin: TileCoord,
+        water: TileCoord,
+        dir: u8,
+        valid: bool,
+    },
     /// Preview de puente (span completo)
     BridgeSpan { tiles: Vec<(i32, i32)>, valid: bool },
     /// Preview de señales ferroviarias (arrastre multi-tile)
@@ -115,6 +122,16 @@ pub(crate) fn compute_preview_tiles(ctx: &PreviewContext) -> Vec<(i32, i32)> {
         .into_iter()
         .map(|coord| (coord.x, coord.y))
         .collect();
+    }
+
+    // El muelle recibe la pieza de tierra como origen y materializa una
+    // segunda pieza de estación sobre el agua. El tile de aproximación no es
+    // parte del sprite del muelle y queda libre para la navegación.
+    if action == BuildMenuAction::Dock {
+        let origin = TileCoord::new(tx, ty);
+        let water =
+            openttdrs_core::station::dock_water_tile(origin, ctx.station_state.orientation & 0x03);
+        return vec![(origin.x, origin.y), (water.x, water.y)];
     }
 
     // Túnel: path de preview
@@ -217,5 +234,22 @@ mod tests {
             rail_lane_bit: None,
         };
         assert_eq!(compute_preview_tiles(&ctx), vec![(5, 5), (5, 4)]);
+    }
+
+    #[test]
+    fn compute_preview_tiles_dock_uses_land_and_water_parts() {
+        let map = Map::new_flat(10, 10, 0);
+        let mut station_state = StationBuildState::default();
+        station_state.orientation = 1;
+        let ctx = PreviewContext {
+            map: &map,
+            action: BuildMenuAction::Dock,
+            cursor_tile: (5, 5),
+            tile_fract: (0, 0),
+            station_state: &station_state,
+            drag_state: &DragBuildState::default(),
+            rail_lane_bit: None,
+        };
+        assert_eq!(compute_preview_tiles(&ctx), vec![(5, 5), (5, 6)]);
     }
 }

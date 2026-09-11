@@ -2,6 +2,7 @@
 
 mod bridge;
 mod dispatch;
+mod dock;
 mod ghost_lerp;
 pub(super) mod industry;
 mod orders;

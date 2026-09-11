@@ -12,6 +12,7 @@ use crate::ui::toolbar::StationBuildState;
 
 use super::BuildGhostPreview;
 use super::bridge::spawn_bridge_span_preview;
+use super::dock::spawn_dock_preview;
 use super::industry::spawn_industry_template_preview;
 use super::plan::{PreviewPlan, TilePreviewKind, TilePreviewPlan, preview_tint, rail_signal_tint};
 use super::rail_depot::{RailDepotPreviewSpawn, spawn_rail_depot_preview};
@@ -86,6 +87,23 @@ pub(crate) fn spawn_preview_plan(
                 company,
                 &sim.state.map,
                 *origin,
+                *dir,
+                *valid,
+            );
+        }
+        PreviewPlan::Dock {
+            origin,
+            water,
+            dir,
+            valid,
+        } => {
+            spawn_dock_preview(
+                commands,
+                asset_server,
+                company,
+                &sim.state.map,
+                *origin,
+                *water,
                 *dir,
                 *valid,
             );

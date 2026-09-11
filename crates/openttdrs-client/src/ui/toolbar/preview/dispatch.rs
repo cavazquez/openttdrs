@@ -48,6 +48,24 @@ pub(crate) fn build_preview_plan(ctx: &PreviewContext, game_state: &GameState) -
         return PreviewPlan::ShipDepot { origin, dir, valid };
     }
 
+    // El muelle tiene una pieza sobre tierra y otra sobre agua; conservar
+    // ambas en el plan evita que el renderer vuelva al ghost genérico 1×1.
+    if action == BuildMenuAction::Dock {
+        let origin = TileCoord::new(tx, ty);
+        if game_state.map.get(origin).is_none() {
+            return PreviewPlan::None;
+        }
+        let dir = ctx.station_state.orientation & 0x03;
+        let water = openttdrs_core::station::dock_water_tile(origin, dir);
+        let valid = command_would_fail(game_state, &Command::PlaceDock(origin, dir)).is_none();
+        return PreviewPlan::Dock {
+            origin,
+            water,
+            dir,
+            valid,
+        };
+    }
+
     // Caso especial: waypoint ferroviario
     if action == BuildMenuAction::RailWaypoint {
         let coord = TileCoord::new(tx, ty);
@@ -392,6 +410,44 @@ mod tests {
                 assert!(valid);
             }
             _ => panic!("expected the dedicated ship depot preview plan"),
+        }
+    }
+
+    #[test]
+    fn dispatch_dock_plan_keeps_both_native_parts() {
+        let mut state = GameState::new(10, 10);
+        state.economy.money = 100_000;
+        let origin = TileCoord::new(5, 5);
+        let water = TileCoord::new(5, 6);
+        let approach = TileCoord::new(5, 7);
+        state.map.set_kind(origin, TileKind::Grass).unwrap();
+        state.map.set_kind(water, TileKind::Water).unwrap();
+        state.map.set_kind(approach, TileKind::Water).unwrap();
+        let mut station_state = StationBuildState::default();
+        station_state.orientation = 1;
+        let ctx = PreviewContext {
+            map: &state.map,
+            action: BuildMenuAction::Dock,
+            cursor_tile: (origin.x, origin.y),
+            tile_fract: (0, 0),
+            station_state: &station_state,
+            drag_state: &DragBuildState::default(),
+            rail_lane_bit: None,
+        };
+
+        match build_preview_plan(&ctx, &state) {
+            PreviewPlan::Dock {
+                origin: actual,
+                water: actual_water,
+                dir,
+                valid,
+            } => {
+                assert_eq!(actual, origin);
+                assert_eq!(actual_water, water);
+                assert_eq!(dir, 1);
+                assert!(valid);
+            }
+            _ => panic!("expected the dedicated dock preview plan"),
         }
     }
 

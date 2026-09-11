@@ -301,6 +301,8 @@ pub struct ParsedVehicleMeta {
     pub weight_t: u16,
     pub lifelength_years: u8,
     pub model_life_years: u8,
+    /// Action0 ship `0x1D`: ticks antes de envejecer la carga; cero desactiva.
+    pub cargo_age_period: u16,
     pub climate_mask: u8,
     pub load_amount: u8,
     pub reliability_spd_dec: u16,
@@ -396,6 +398,7 @@ impl ParsedVehicleMeta {
             weight_t: weight,
             lifelength_years: life,
             model_life_years: u8::MAX,
+            cargo_age_period: crate::engine::DEFAULT_CARGO_AGE_PERIOD,
             climate_mask: 0x0F,
             load_amount: 0,
             reliability_spd_dec: if feature == ACTION0_FEATURE_SHIPS {
@@ -3916,7 +3919,12 @@ fn parse_ship_property(
                 meta.cargo_classes_specified = true;
             }
         }
-        0x1D | 0x20 => {
+        0x1D => {
+            for meta in metas {
+                meta.cargo_age_period = read_u16(payload, i)?;
+            }
+        }
+        0x20 => {
             skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
         }
         0x26 => {

@@ -138,6 +138,10 @@ fn default_cached_total_length() -> u16 {
     u16::from(crate::train_consist::VEHICLE_LENGTH)
 }
 
+const fn default_cached_cargo_age_period() -> u16 {
+    crate::engine::DEFAULT_CARGO_AGE_PERIOD
+}
+
 /// Fase interna de un vehículo road dentro de un depósito.
 ///
 /// Equivale al estado `RVSB_IN_DEPOT` y a los frames de entrada/salida de
@@ -383,6 +387,10 @@ pub struct Vehicle {
     /// Cuenta atrás nativa hasta el siguiente envejecimiento de carga.
     #[serde(default)]
     pub cargo_age_counter: u16,
+    /// Caché de `EngineInfo::cargo_age_period`; cero desactiva el envejecimiento.
+    /// Saves antiguos recuperan el período vanilla hasta que se reevalúa el motor.
+    #[serde(default = "default_cached_cargo_age_period")]
+    pub cached_cargo_age_period: u16,
     /// Packets a bordo (fuente de verdad Fase 2); `cargo`/`cargo_source` se sincronizan.
     #[serde(default)]
     pub cargo_packets: crate::cargo_packet::VehicleCargoList,
@@ -764,6 +772,7 @@ impl Vehicle {
             cargo_source: None,
             cargo_transit_ticks: 0,
             cargo_age_counter: 0,
+            cached_cargo_age_period: engine.cargo_age_period,
             cargo_packets: crate::cargo_packet::VehicleCargoList::default(),
             last_pickup_station: None,
             last_depart_tick: None,

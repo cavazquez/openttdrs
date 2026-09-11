@@ -1166,20 +1166,36 @@ pub(super) fn grow_towns(state: &mut GameState, tick: u64) {
 }
 
 pub(super) fn age_vehicle_cargo(state: &mut GameState) {
-    let aging_tick = state.tick.get() > 0
-        && state
-            .tick
-            .get()
-            .is_multiple_of(u64::from(economy::CARGO_AGING_TICKS));
     for vehicle in &mut state.vehicles {
+        let period =
+            crate::newgrf_callback::engine_for_vehicle_catalog(&state.engine_catalog, vehicle)
+                .cargo_age_period;
+        vehicle.cached_cargo_age_period = period;
+
         vehicle.ensure_packets_from_legacy();
-        if vehicle.cargo == 0 {
+        let has_cargo = vehicle.cargo > 0;
+        if has_cargo {
+            vehicle.cargo_transit_ticks = vehicle.cargo_transit_ticks.saturating_add(1);
+        }
+        if period == 0 {
             continue;
         }
-        vehicle.cargo_transit_ticks = vehicle.cargo_transit_ticks.saturating_add(1);
-        if aging_tick {
-            vehicle.cargo_packets.age_one_period();
-            vehicle.sync_cargo_from_packets();
+
+        // `OpenTTD` clamps a loaded save to a newly changed property before
+        // decrementing. A zero counter is the legacy/uninitialized state; it
+        // starts a full period instead of aging immediately.
+        vehicle.cargo_age_counter = vehicle.cargo_age_counter.min(period);
+        if vehicle.cargo_age_counter == 0 {
+            vehicle.cargo_age_counter = period;
+        }
+        vehicle.cargo_age_counter = vehicle.cargo_age_counter.saturating_sub(1);
+
+        if vehicle.cargo_age_counter == 0 {
+            if has_cargo {
+                vehicle.cargo_packets.age_one_period();
+                vehicle.sync_cargo_from_packets();
+            }
+            vehicle.cargo_age_counter = period;
         }
     }
 }

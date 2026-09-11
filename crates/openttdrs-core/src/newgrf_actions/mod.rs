@@ -5280,7 +5280,7 @@ mod tests {
         let a0 = vec![
             0x00,
             ACTION0_FEATURE_SHIPS,
-            0x03,
+            0x04,
             0x01,
             0x00,
             0x0B,
@@ -5289,10 +5289,14 @@ mod tests {
             128, // ocean = 50%
             0x15,
             64, // canal = 25%
+            0x1D,
+            37,
+            0, // período de envejecimiento personalizado
         ];
         let meta = parse_action0_vehicle_metas(&a0).unwrap().remove(0);
         assert_eq!(meta.ocean_speed_frac, 128);
         assert_eq!(meta.canal_speed_frac, 64);
+        assert_eq!(meta.cargo_age_period, 37);
 
         let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'S', b'P', 0, 1], "ship", "");
         let dir = tempfile_dir_with("shipf.grf", &bytes);
@@ -5308,6 +5312,7 @@ mod tests {
             .unwrap();
         assert_eq!(eng.ocean_speed_frac, 128);
         assert_eq!(eng.canal_speed_frac, 64);
+        assert_eq!(eng.cargo_age_period, 37);
         assert_eq!(crate::ship_speed_for_tile(eng, false), 50);
         assert_eq!(crate::ship_speed_for_tile(eng, true), 25);
         assert!(

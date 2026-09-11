@@ -945,6 +945,41 @@ fn onboard_cargo_ages_every_185_ticks() {
     assert_eq!(s.vehicles[0].cargo_packets.max_periods_in_transit(), 1);
 }
 
+#[test]
+fn vehicle_cargo_aging_uses_engine_period_and_zero_disables_it() {
+    let mut s = GameState::new(8, 8);
+    let engine = s
+        .engine_catalog
+        .iter_mut()
+        .find(|engine| engine.id == crate::engine::ENGINE_SHIP_MPS)
+        .expect("vanilla ship engine");
+    engine.cargo_age_period = 3;
+
+    let pos = TileCoord::new(1, 1);
+    let mut ship = Vehicle::new(0, VehicleKind::Ship, pos, pos);
+    ship.cargo = 10;
+    ship.cargo_type = Some(CargoType::Coal);
+    s.vehicles.push(ship);
+
+    s.step();
+    s.step();
+    assert_eq!(s.vehicles[0].cargo_packets.max_periods_in_transit(), 0);
+    s.step();
+    assert_eq!(s.vehicles[0].cargo_packets.max_periods_in_transit(), 1);
+    assert_eq!(s.vehicles[0].cached_cargo_age_period, 3);
+
+    s.engine_catalog
+        .iter_mut()
+        .find(|engine| engine.id == crate::engine::ENGINE_SHIP_MPS)
+        .expect("vanilla ship engine")
+        .cargo_age_period = 0;
+    for _ in 0..6 {
+        s.step();
+    }
+    assert_eq!(s.vehicles[0].cargo_packets.max_periods_in_transit(), 1);
+    assert_eq!(s.vehicles[0].cached_cargo_age_period, 0);
+}
+
 /// Tras producir, la mina reparte el carbón a las estaciones de su cobertura: el rating
 /// decide la tajada de cada una (`TransportIndustryGoods` / `MoveGoodsToStation`).
 #[test]

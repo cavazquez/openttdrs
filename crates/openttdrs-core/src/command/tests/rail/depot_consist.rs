@@ -422,6 +422,7 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         model_life_years: u8::MAX,
         cargo_age_period: crate::engine::DEFAULT_CARGO_AGE_PERIOD,
         ship_acceleration: 0,
+        ship_refittable: true,
         load_amount: 0,
         train_image_index: 2,
         dual_headed: false,

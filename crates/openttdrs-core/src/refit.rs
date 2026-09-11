@@ -90,6 +90,9 @@ pub fn refittable_cargo_types(vehicle: &Vehicle) -> &'static [CargoType] {
 /// (Action0 train `0x1D`) o listas vanilla.
 #[must_use]
 pub fn refittable_cargo_types_for_engine(engine: &crate::engine::EngineDef) -> Vec<CargoType> {
+    if engine.kind == VehicleKind::Ship && !engine.ship_refittable {
+        return Vec::new();
+    }
     let mut cargos = if engine.cargo_classes_specified {
         let mut class_cargos = crate::cargo::ALL_CARGO_TYPES
             .iter()
@@ -172,6 +175,9 @@ pub fn refittable_cargo_types_for_engine_with_catalog_and_climate(
     cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
     climate: Climate,
 ) -> Vec<CargoType> {
+    if engine.kind == VehicleKind::Ship && !engine.ship_refittable {
+        return Vec::new();
+    }
     let mut cargos = if engine.cargo_classes_specified {
         let mut candidates = crate::cargo::ALL_CARGO_TYPES.to_vec();
         for cargo in cargo_catalog

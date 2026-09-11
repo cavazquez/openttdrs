@@ -297,6 +297,8 @@ pub struct ParsedVehicleMeta {
     /// Índice local de la propiedad de cargo por defecto (`0x10`/`0x0C`).
     #[allow(clippy::struct_field_names)]
     pub default_cargo_local_id: Option<u8>,
+    /// Action0 ship `0x09`: permite refit en la inicialización del vehículo.
+    pub ship_refittable: bool,
     pub power_hp: u32,
     pub weight_t: u16,
     pub lifelength_years: u8,
@@ -399,6 +401,7 @@ impl ParsedVehicleMeta {
             capacity,
             cargo,
             default_cargo_local_id: None,
+            ship_refittable: true,
             power_hp: power,
             weight_t: weight,
             lifelength_years: life,
@@ -3850,13 +3853,18 @@ fn parse_ship_property(
     metas: &mut [ParsedVehicleMeta],
 ) -> Option<()> {
     match prop {
-        0x08 | 0x09 | 0x16 | 0x1C => {
+        0x08 | 0x16 | 0x1C => {
             if prop == 0x1C {
                 for meta in metas {
                     meta.visual_effect = normalize_visual_effect(read_u8(payload, i)?);
                 }
             } else {
                 skip_bytes(payload, i, metas.len())?;
+            }
+        }
+        0x09 => {
+            for meta in metas {
+                meta.ship_refittable = read_u8(payload, i)? != 0;
             }
         }
         0x24 => {

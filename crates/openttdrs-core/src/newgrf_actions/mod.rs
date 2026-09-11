@@ -4731,6 +4731,36 @@ mod tests {
         );
     }
 
+    #[test]
+    fn ships_refittable_property_disables_refit_options() {
+        let a0 = [0x00, ACTION0_FEATURE_SHIPS, 0x01, 0x01, 0x00, 0x09, 0x00];
+        let meta = parse_action0_vehicle_metas(&a0).unwrap().remove(0);
+        assert!(!meta.ship_refittable);
+
+        let bytes =
+            build_grf_v2_with_action0_and_action8(&a0, [b'R', b'F', 0, 1], "ship-nonrefit", "");
+        let dir = tempfile_dir_with("ship-nonrefit.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ship-nonrefit.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|engine| engine.from_newgrf && engine.kind == VehicleKind::Ship)
+            .unwrap();
+        assert!(!engine.ship_refittable);
+        assert!(crate::refit::refittable_cargo_types_for_engine(engine).is_empty());
+        assert!(
+            crate::refit::refittable_cargo_types_for_engine_with_catalog(
+                engine,
+                &state.cargo_spec_catalog,
+            )
+            .is_empty()
+        );
+    }
+
     /// #329: Action0 conserva las clases allowed/disallowed/required de cada
     /// feature de vehículos, en vez de consumirlas como propiedades opacas.
     #[test]

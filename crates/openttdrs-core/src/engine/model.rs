@@ -39,6 +39,10 @@ const fn default_ship_acceleration() -> u8 {
     DEFAULT_SHIP_ACCELERATION
 }
 
+const fn default_ship_refittable() -> bool {
+    true
+}
+
 /// Primer ID reservado para motores Action0 `NewGRF` (trains).
 pub const NEWGRF_ENGINE_ID_BASE: u16 = 1000;
 
@@ -83,6 +87,11 @@ pub struct EngineDef {
     /// antiguos o motores que no declaran la propiedad.
     #[serde(default = "default_ship_acceleration")]
     pub ship_acceleration: u8,
+    /// Action0 ship `0x09`: el barco conserva opciones de refit cuando es
+    /// `true`. `true` también es el valor compatible para saves y catálogos
+    /// que no tienen esta propiedad.
+    #[serde(default = "default_ship_refittable")]
+    pub ship_refittable: bool,
     /// Unidades transferidas por tick (`EngineInfo::load_amount`). Cero usa el
     /// fallback por tipo de carga para saves y motores vanilla del port.
     #[serde(default)]

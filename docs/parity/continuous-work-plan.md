@@ -4271,6 +4271,20 @@ librería/binario y diff limpios. #567 sigue abierta por callbacks y
 pathfinding navales restantes y aceptación visual manual bajo Weston; #326
 permanece abierta.
 
+Actualización #567-SHIP-DEPOT-OPPOSITE-EXIT (2026-09-11, `a3db8ce0`): la salida
+naval del depósito consulta el primer tramo de la ruta antes de fijar el rumbo,
+replicando la decisión de `YapfShip::CheckShipReverse` cuando el camino usa la
+sección opuesta de la huella. En ese caso invierte `direction`,
+`ship_rotation` y el eje raw antes de liberar el barco; la salida normal y los
+barcos sin un primer tramo válido conservan la orientación de la boca. Se agregó
+una regresión con una ruta que sólo puede comenzar por la sección opuesta. Core
+queda en `2450 passed; 0 failed; 1 ignored` y cliente en `1388 passed; 0 failed;
+2 ignored`, con formato, `diff --check` y Clippy estricto del binario cliente
+limpios. El barrido `core --all-targets` sigue exponiendo 65 advertencias
+preexistentes fuera de esta etapa. #567 sigue abierta por callbacks navales,
+pathfinding de trackdirs y aceptación visual manual bajo Weston; #326 permanece
+abierta.
+
 Actualización #567-SHIP-REVERSE-BLOCKED-TRACK (2026-09-11, `4a8c36dd`): el
 controlador naval replica el fallback de `ReverseShip` cuando la ruta deja de
 ser navegable por una modificación del mapa, una conexión de agua inválida,

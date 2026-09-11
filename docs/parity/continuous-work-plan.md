@@ -4882,3 +4882,17 @@ del consist visual, livery/callbacks restantes y el compositor/raster global;
 #329/#567 continúan abiertas. Core queda en `2493 passed; 0 failed; 1 ignored`
 y cliente en `1407 passed; 0 failed; 2 ignored`, con Clippy estricto, formato
 y `diff --check` limpios.
+
+Actualización #329-VEHICLE-VISUAL-EFFECT-CONSIST-CONTEXT (2026-09-11): el
+renderer Bevy procesa ahora cada cadena en orden cabeza→cola y toma de la
+cabeza las reglas globales de `Vehicle::ShowVisualEffect` (estado de marcha,
+reversa, parada de estación, velocidad máxima y potencia/peso) mientras
+conserva por unidad la visibilidad, railtype, callback y posición del efecto.
+Esto corrige la divergencia donde un vagón con velocidad propia cero no podía
+usar la velocidad de la cabeza o podía consumir RNG fuera del orden nativo.
+Las regresiones cubren orden de cadena, bloqueo de followers por cabeza parada,
+uso de velocidad de cabeza y umbral de entrada a estación. Siguen pendientes
+la propagación completa de consist visual NewGRF, livery/callbacks restantes y
+el compositor/raster global; #329/#567 continúan abiertas. Cliente queda en
+`1411 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y
+`diff --check` limpios.

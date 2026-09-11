@@ -7,7 +7,7 @@ use bevy::prelude::*;
 
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    EngineDef, Vehicle, VehicleAdvancedVisualEffectSpawn, VehicleOrder, VehicleVisualEffectKind,
+    EngineDef, Vehicle, VehicleAdvancedVisualEffectSpawn, VehicleVisualEffectKind,
     extrapolate_vehicle_pose, resolve_vehicle_spawn_visual_effect_callback, slope_dz_at_subtile,
     train_smoke_kind, vehicle_subtile_at_with_map, vehicle_visual_effect_spec,
 };
@@ -187,15 +187,62 @@ fn chance16(random: u16, numerator: i32, denominator: u32) -> bool {
     ((random_low * denominator + denominator / 2) >> 16) < u64::try_from(numerator).unwrap_or(0)
 }
 
-fn train_is_stopping_at_station(map: &Map, vehicle: &Vehicle) -> bool {
+fn train_is_stopping_at_station(map: &Map, vehicle: &Vehicle, max_speed: u16) -> bool {
     openttdrs_core::train_on_rail_platform(map, vehicle.pos)
+        && vehicle.cur_speed >= max_speed
         && (vehicle.awaiting_load_window
             || vehicle.cargo_loading
             || vehicle.cargo_unloading
-            || matches!(
-                vehicle.current_order_ref(),
-                Some(VehicleOrder::Station { .. })
-            ))
+            || vehicle.current_order_ref().is_some_and(|order| {
+                order.should_stop_at_station(vehicle.last_station_visited, vehicle.pos)
+            }))
+}
+
+/// Snapshot de las condiciones que `Vehicle::ShowVisualEffect` lee de la
+/// cabeza del consist. OpenTTD decide una sola vez si el consist puede emitir
+/// y usa la velocidad/potencia/peso de la cabeza al evaluar cada unidad.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct VisualEffectHeadState {
+    kind: VehicleKind,
+    running: bool,
+    crashed: bool,
+    cur_speed: u16,
+    max_speed: u16,
+    cached_power_hp: u32,
+    cached_weight_t: u16,
+    train_flags: u16,
+    stopping_at_station: bool,
+}
+
+impl VisualEffectHeadState {
+    #[must_use]
+    fn from_vehicle(map: &Map, vehicle: &Vehicle, engine: &EngineDef) -> Self {
+        let max_speed = if vehicle.cached_max_speed == 0 || vehicle.cached_max_speed == u16::MAX {
+            engine.max_speed.max(1)
+        } else {
+            vehicle.cached_max_speed.max(1)
+        };
+        Self {
+            kind: vehicle.kind,
+            running: vehicle.running,
+            crashed: vehicle.crashed,
+            cur_speed: vehicle.cur_speed,
+            max_speed,
+            cached_power_hp: vehicle.cached_power_hp.max(engine.power_hp),
+            cached_weight_t: vehicle.cached_weight_t.max(engine.weight_t),
+            train_flags: vehicle.train_flags,
+            stopping_at_station: vehicle.kind == VehicleKind::Train
+                && train_is_stopping_at_station(map, vehicle, max_speed),
+        }
+    }
+
+    #[must_use]
+    fn allows_visual_effect(self, smoke_amount: u8) -> bool {
+        if smoke_amount == 0 || !self.running || self.crashed || self.cur_speed < 2 {
+            return false;
+        }
+        self.kind != VehicleKind::Train || (self.train_flags & 1 == 0 && !self.stopping_at_station)
+    }
 }
 
 /// Replica el filtro `HasPowerOnRail` de `Vehicle::ShowVisualEffect`.
@@ -246,8 +293,16 @@ fn train_smoke_to_emit_with_engine(
     engine: &EngineDef,
     smoke_amount: u8,
 ) -> Option<TrainSmokeSet> {
+    let head = VisualEffectHeadState::from_vehicle(map, vehicle, engine);
     let mut random = None;
-    train_smoke_to_emit_with_engine_and_random(map, vehicle, engine, smoke_amount, &mut random)
+    train_smoke_to_emit_with_engine_and_random(
+        map,
+        vehicle,
+        engine,
+        head,
+        smoke_amount,
+        &mut random,
+    )
 }
 
 /// Igual que [`train_smoke_to_emit_with_engine`], pero consumiendo el stream
@@ -256,29 +311,22 @@ fn train_smoke_to_emit_with_engine_and_random(
     map: &Map,
     vehicle: &mut Vehicle,
     engine: &EngineDef,
+    head: VisualEffectHeadState,
     smoke_amount: u8,
     random: &mut Option<&mut openttdrs_core::linkgraph_parity::Randomizer>,
 ) -> Option<TrainSmokeSet> {
     let amount = smoke_amount.min(2);
-    if amount == 0
-        || vehicle.kind != VehicleKind::Train
+    if vehicle.kind != VehicleKind::Train
+        || !head.allows_visual_effect(amount)
         || !vehicle_has_power_on_current_rail(map, vehicle, engine)
-        || !vehicle.running
-        || vehicle.crashed
-        || vehicle.cur_speed < 2
         || !vehicle.depot_leave_cleared
         || openttdrs_core::vehicle_hidden_from_view(map, vehicle, vehicle.pos, vehicle.progress)
-        || train_is_stopping_at_station(map, vehicle)
     {
         return None;
     }
 
-    let max_speed = if vehicle.cached_max_speed == 0 || vehicle.cached_max_speed == u16::MAX {
-        engine.max_speed.max(1)
-    } else {
-        vehicle.cached_max_speed.max(1)
-    };
-    let speed = vehicle.cur_speed.min(max_speed);
+    let max_speed = head.max_speed;
+    let speed = head.cur_speed.min(max_speed);
     let smoke_kind = match vehicle_visual_effect_spec(engine, vehicle).kind {
         VehicleVisualEffectKind::Disabled => return None,
         VehicleVisualEffectKind::Steam => openttdrs_core::TrainSmokeKind::Steam,
@@ -297,16 +345,8 @@ fn train_smoke_to_emit_with_engine_and_random(
             (u64::from(tick_counter) & mask == 0).then_some(TrainSmokeSet::Steam)
         }
         openttdrs_core::TrainSmokeKind::Diesel => {
-            let power = if vehicle.cached_power_hp == 0 {
-                engine.power_hp
-            } else {
-                vehicle.cached_power_hp
-            };
-            let weight = if vehicle.cached_weight_t == 0 {
-                engine.weight_t
-            } else {
-                vehicle.cached_weight_t
-            };
+            let power = head.cached_power_hp;
+            let weight = head.cached_weight_t;
             let power_shift = (power >> 10).min(31);
             let weight_shift = (u32::from(weight) >> 9).min(31);
             let power_weight_effect =
@@ -431,8 +471,17 @@ fn advanced_effect_should_emit(
     kind: VehicleVisualEffectKind,
     smoke_amount: u8,
 ) -> bool {
+    let head = VisualEffectHeadState::from_vehicle(map, vehicle, engine);
     let mut random = None;
-    advanced_effect_should_emit_with_random(map, vehicle, engine, kind, smoke_amount, &mut random)
+    advanced_effect_should_emit_with_random(
+        map,
+        vehicle,
+        engine,
+        head,
+        kind,
+        smoke_amount,
+        &mut random,
+    )
 }
 
 /// Igual que [`advanced_effect_should_emit`], usando `_random` para las
@@ -441,15 +490,13 @@ fn advanced_effect_should_emit_with_random(
     map: &Map,
     vehicle: &Vehicle,
     engine: &EngineDef,
+    head: VisualEffectHeadState,
     kind: VehicleVisualEffectKind,
     smoke_amount: u8,
     random: &mut Option<&mut openttdrs_core::linkgraph_parity::Randomizer>,
 ) -> bool {
     let amount = smoke_amount.min(2);
-    if amount == 0
-        || !vehicle.running
-        || vehicle.crashed
-        || vehicle.cur_speed < 2
+    if !head.allows_visual_effect(amount)
         || !vehicle_has_power_on_current_rail(map, vehicle, engine)
         || openttdrs_core::vehicle_hidden_from_view(map, vehicle, vehicle.pos, vehicle.progress)
         || openttdrs_core::vehicle_in_depot(map, vehicle.pos)
@@ -462,17 +509,8 @@ fn advanced_effect_should_emit_with_random(
     {
         return false;
     }
-    if vehicle.kind == VehicleKind::Train
-        && (vehicle.train_flags & 1 != 0 || train_is_stopping_at_station(map, vehicle))
-    {
-        return false;
-    }
-    let max_speed = if vehicle.cached_max_speed == 0 || vehicle.cached_max_speed == u16::MAX {
-        engine.max_speed.max(1)
-    } else {
-        vehicle.cached_max_speed.max(1)
-    };
-    let speed = vehicle.cur_speed.min(max_speed);
+    let max_speed = head.max_speed;
+    let speed = head.cur_speed.min(max_speed);
     let tick_counter = vehicle.newgrf_tick_counter;
     match kind {
         VehicleVisualEffectKind::Steam => {
@@ -480,9 +518,9 @@ fn advanced_effect_should_emit_with_random(
             u64::from(tick_counter) & (1_u64 << bits.min(63)).saturating_sub(1) == 0
         }
         VehicleVisualEffectKind::Diesel => {
-            let power_weight_effect = if vehicle.kind == VehicleKind::Train {
-                let power_shift = (vehicle.cached_power_hp >> 10).min(31);
-                let weight_shift = (u32::from(vehicle.cached_weight_t) >> 9).min(31);
+            let power_weight_effect = if head.kind == VehicleKind::Train {
+                let power_shift = (head.cached_power_hp >> 10).min(31);
+                let weight_shift = (u32::from(head.cached_weight_t) >> 9).min(31);
                 (32_u32 >> power_shift) as i32 - (32_u32 >> weight_shift) as i32
             } else {
                 0
@@ -725,6 +763,64 @@ fn spawn_train_smoke_effect(
     true
 }
 
+/// Ordena las unidades como `Vehicle::ShowVisualEffect`: cabeza primaria y
+/// luego `Next()` hasta la cola. Los ids que no pertenecen a una cadena sana
+/// se conservan al final para que un save parcialmente corrupto no pierda sus
+/// efectos visuales.
+fn visual_effect_vehicle_slots(
+    vehicles: &[Vehicle],
+    fleet: &openttdrs_core::FleetIndex,
+) -> Vec<usize> {
+    let mut slots = Vec::with_capacity(vehicles.len());
+    let mut seen = vec![false; vehicles.len()];
+    for vehicle in vehicles.iter().filter(|vehicle| vehicle.is_consist_head()) {
+        for &unit_id in fleet.consist(vehicle.id) {
+            let Some(slot) = fleet.slot(unit_id) else {
+                continue;
+            };
+            if !seen[slot] {
+                seen[slot] = true;
+                slots.push(slot);
+            }
+        }
+    }
+    for (slot, seen) in seen.into_iter().enumerate() {
+        if !seen {
+            slots.push(slot);
+        }
+    }
+    slots
+}
+
+/// Calcula una vez por unidad la cabeza de consist que gobierna sus filtros y
+/// fórmulas. El snapshot se construye antes del préstamo mutable del loop de
+/// spawn para poder leer la cabeza y escribir el efecto de cualquier follower.
+fn visual_effect_head_states(
+    map: &Map,
+    vehicles: &[Vehicle],
+    fleet: &openttdrs_core::FleetIndex,
+    engine_catalog: &[EngineDef],
+) -> Vec<VisualEffectHeadState> {
+    vehicles
+        .iter()
+        .enumerate()
+        .map(|(slot, vehicle)| {
+            let head_slot = fleet
+                .head_id(vehicle.id)
+                .and_then(|head_id| fleet.slot(head_id))
+                .unwrap_or(slot);
+            let head = vehicles.get(head_slot).unwrap_or(vehicle);
+            let engine_id = head
+                .engine_id
+                .unwrap_or_else(|| openttdrs_core::default_engine_id(head.kind));
+            let engine = openttdrs_core::engine_in_catalog(engine_catalog, engine_id)
+                .or_else(|| openttdrs_core::engine_by_id(engine_id))
+                .unwrap_or_else(|| head.effective_engine());
+            VisualEffectHeadState::from_vehicle(map, head, engine)
+        })
+        .collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_train_smoke(
     mut sim: ResMut<SimWorld>,
@@ -752,12 +848,21 @@ fn spawn_train_smoke(
     let map = &state.map;
     let map_width = map.dimensions().0;
     let engine_catalog = &state.engine_catalog;
+    let mut fleet = openttdrs_core::FleetIndex::default();
+    fleet.rebuild(&state.vehicles);
+    let visual_slots = visual_effect_vehicle_slots(&state.vehicles, &fleet);
+    let head_states = visual_effect_head_states(map, &state.vehicles, &fleet, engine_catalog);
     let mut random = Some(&mut state.random);
     let mut visual_sound_events = Vec::new();
-    for vehicle in &mut state.vehicles {
+    for slot in visual_slots {
         if active_count >= MAX_TRAIN_SMOKE_EFFECTS {
             break;
         }
+        let head = head_states[slot];
+        if !head.allows_visual_effect(prefs.smoke_amount) {
+            continue;
+        }
+        let vehicle = &mut state.vehicles[slot];
         let engine_id = vehicle
             .engine_id
             .unwrap_or_else(|| openttdrs_core::default_engine_id(vehicle.kind));
@@ -778,6 +883,7 @@ fn spawn_train_smoke(
                 map,
                 vehicle,
                 engine,
+                head,
                 visual_spec.kind,
                 prefs.smoke_amount,
                 &mut random,
@@ -839,6 +945,7 @@ fn spawn_train_smoke(
                 map,
                 vehicle,
                 engine,
+                head,
                 prefs.smoke_amount,
                 &mut random,
             )
@@ -851,6 +958,7 @@ fn spawn_train_smoke(
             map,
             vehicle,
             engine,
+            head,
             visual_spec.kind,
             prefs.smoke_amount,
             &mut random,
@@ -1042,6 +1150,64 @@ mod tests {
     }
 
     #[test]
+    fn visual_effect_slots_follow_consist_chain_order() {
+        let pos = TileCoord::new(1, 1);
+        let mut head = Vehicle::new(1, VehicleKind::Train, pos, pos);
+        head.next_unit = Some(2);
+        let mut wagon = Vehicle::new(2, VehicleKind::Train, pos, pos);
+        wagon.prev_unit = Some(1);
+        wagon.next_unit = Some(3);
+        let mut tail = Vehicle::new(3, VehicleKind::Train, pos, pos);
+        tail.prev_unit = Some(2);
+        let vehicles = vec![tail, head, wagon];
+        let mut fleet = openttdrs_core::FleetIndex::default();
+        fleet.rebuild(&vehicles);
+
+        assert_eq!(
+            visual_effect_vehicle_slots(&vehicles, &fleet),
+            vec![1, 2, 0]
+        );
+    }
+
+    #[test]
+    fn visual_effects_use_head_context_for_wagons() {
+        let map = Map::new_flat(4, 4, 0);
+        let mut head = running_train(ENGINE_TRAIN_KIRBY);
+        head.next_unit = Some(8);
+        head.cached_max_speed = 160;
+        let mut wagon = running_train(ENGINE_TRAIN_KIRBY);
+        wagon.id = 8;
+        wagon.prev_unit = Some(head.id);
+        wagon.cur_speed = 0;
+        wagon.cached_max_speed = u16::MAX;
+        let engine = wagon.effective_engine();
+        let head_state = VisualEffectHeadState::from_vehicle(&map, &head, head.effective_engine());
+        let mut random = None;
+
+        assert_eq!(
+            train_smoke_to_emit_with_engine_and_random(
+                &map,
+                &mut wagon,
+                engine,
+                head_state,
+                2,
+                &mut random,
+            ),
+            Some(TrainSmokeSet::Steam)
+        );
+    }
+
+    #[test]
+    fn visual_effect_head_gate_blocks_a_wagon_when_head_is_stopped() {
+        let map = Map::new_flat(4, 4, 0);
+        let mut head = running_train(ENGINE_TRAIN_KIRBY);
+        head.running = false;
+        let state = VisualEffectHeadState::from_vehicle(&map, &head, head.effective_engine());
+
+        assert!(!state.allows_visual_effect(2));
+    }
+
+    #[test]
     fn probabilistic_train_effect_consumes_global_stream_only_when_needed() {
         let map = Map::new_flat(4, 4, 0);
         let mut diesel = running_train(openttdrs_core::engine::ENGINE_TRAIN_MANLEY_MOREL);
@@ -1049,10 +1215,12 @@ mod tests {
         let mut diesel_rng = openttdrs_core::linkgraph_parity::Randomizer::new(1);
         let diesel_before = diesel_rng.state;
         let mut diesel_random = Some(&mut diesel_rng);
+        let diesel_head = VisualEffectHeadState::from_vehicle(&map, &diesel, diesel_engine);
         let _ = train_smoke_to_emit_with_engine_and_random(
             &map,
             &mut diesel,
             diesel_engine,
+            diesel_head,
             2,
             &mut diesel_random,
         );
@@ -1063,10 +1231,12 @@ mod tests {
         let mut steam_rng = openttdrs_core::linkgraph_parity::Randomizer::new(1);
         let steam_before = steam_rng.state;
         let mut steam_random = Some(&mut steam_rng);
+        let steam_head = VisualEffectHeadState::from_vehicle(&map, &steam, steam_engine);
         let _ = train_smoke_to_emit_with_engine_and_random(
             &map,
             &mut steam,
             steam_engine,
+            steam_head,
             2,
             &mut steam_random,
         );
@@ -1561,8 +1731,27 @@ mod tests {
         assert!(train_smoke_to_emit(&map, &mut vehicle, 0, 2).is_none());
 
         vehicle.engine_id = Some(ENGINE_TRAIN_KIRBY);
+        // `ShowVisualEffect` suprime la emisión sólo al alcanzar el techo de
+        // entrada de estación, no durante cualquier aproximación.
+        vehicle.cached_max_speed = vehicle.cur_speed;
         vehicle.set_station_orders(vec![vehicle.pos]);
         assert!(map.set_kind(vehicle.pos, TileKind::Station).is_ok());
+        assert!(train_smoke_to_emit(&map, &mut vehicle, 0, 2).is_none());
+    }
+
+    #[test]
+    fn station_gate_only_suppresses_effect_at_entry_speed() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut vehicle = running_train(ENGINE_TRAIN_KIRBY);
+        vehicle.set_station_orders(vec![vehicle.pos]);
+        assert!(map.set_kind(vehicle.pos, TileKind::Station).is_ok());
+
+        vehicle.cached_max_speed = 48;
+        assert_eq!(
+            train_smoke_to_emit(&map, &mut vehicle, 0, 2),
+            Some(TrainSmokeSet::Steam)
+        );
+        vehicle.cached_max_speed = vehicle.cur_speed;
         assert!(train_smoke_to_emit(&map, &mut vehicle, 0, 2).is_none());
     }
 

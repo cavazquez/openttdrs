@@ -3695,6 +3695,19 @@ estricto y formato verdes. #567 sigue abierta por el auto-clear de objetos,
 estaciones e industrias sobre agua, callbacks/vecinos y aceptación visual en
 Weston; #326 permanece abierta.
 
+Actualización #329/#567-VEHICLE-LENGTH-VERSION (2026-09-11, `1c042321`): la
+longitud NewGRF ya respeta la frontera nativa de versión: GRF < 8 consulta
+CB11, mientras GRF ≥ 8 consulta `PROP_TRAIN_SHORTEN_FACTOR`/`PROP_ROADVEH_SHORTEN_FACTOR`
+mediante CB36 y vuelve a Action0 sin mezclar el callback antiguo. La
+reconstrucción de `ConsistChanged` vuelve a evaluar las unidades NewGRF antes
+de sumar longitud, corrigiendo también cadenas importadas que arrancaban con
+el valor por defecto. Se agregaron regresiones para ambas versiones, el
+fallback inválido de CB36 y la importación; core queda en `2470 passed; 0
+failed; 1 ignored` y cliente en `1392 passed; 0 failed; 2 ignored`, con
+Clippy estricto, formato y suites completas limpios. #329/#567 siguen abiertas
+por callbacks avanzados, `NoNews`/`NoPreview`/`JoinPreview` y aceptación visual
+manual bajo Weston; #326 permanece abierta.
+
 Actualización #326/#567-OBJECT-WATER-GROUND (2026-09-10, `ad80376f`): el
 renderer de objetos NewGRF ya interpreta `ObjectFlag::DrawWater` (bit 10) y el
 ground directo `SPR_FLAT_WATER_TILE` como `DrawWaterClassGround` cuando

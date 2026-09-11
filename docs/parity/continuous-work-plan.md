@@ -5062,3 +5062,11 @@ round-trip y la próxima salida de las unidades compartidas, como
 `CheckShipStayInDepot` + `LeaveUnbunchingDepot`. Las regresiones cubren la
 espera y la programación naval; #567 continúa abierta por callbacks,
 pathfinding completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-SERVICE-EXIT (2026-09-11): una nave que libera
+el estado de depósito ejecuta ahora el servicio nativo antes de acelerar,
+incluyendo salidas iniciadas manualmente o rehidratadas desde un save. Esto
+evita que `needs_servicing` y la fiabilidad queden desfasados respecto de
+`VehicleServiceInDepot`; la regresión comprueba servicio, fiabilidad y cambio
+de estado en el mismo tick. #567 continúa abierta por callbacks, pathfinding
+completo y aceptación visual/framebuffer.

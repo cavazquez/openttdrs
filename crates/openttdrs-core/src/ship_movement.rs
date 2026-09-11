@@ -652,6 +652,10 @@ fn ship_stay_in_or_leave_depot(
     v.ship_rotation = facing;
     v.ship_track = ship_depot_track(tile);
     v.ship_state = ship_state_for_track(v.ship_track);
+    // `CheckShipStayInDepot` ejecuta `VehicleServiceInDepot` justo antes de
+    // liberar la nave. Esto cubre también una salida iniciada manualmente o
+    // desde un save, cuyo tick de llegada pudo haber ocurrido mucho antes.
+    v.service_at_depot_with_catalog(engine_catalog);
     v.cur_speed = 0;
     false
 }
@@ -1478,6 +1482,32 @@ mod tests {
         assert_eq!(v.ship_rotation, DIR_SW);
         assert_eq!(v.ship_track, TRACK_X);
         assert_eq!(v.ship_state, SHIP_STATE_TRACK_X);
+    }
+
+    #[test]
+    fn ship_depot_leave_services_before_releasing_state() {
+        let mut map = crate::map::Map::new_flat(10, 10, 0);
+        let depot = TileCoord::new(4, 4);
+        let exit = TileCoord::new(3, 4);
+        map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        map.set_kind(exit, TileKind::Water).unwrap();
+
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, depot, exit);
+        ship.running = true;
+        ship.ship_pos_valid = true;
+        ship.ship_x = depot.x * 16 + 8;
+        ship.ship_y = depot.y * 16 + 8;
+        ship.ship_state = SHIP_STATE_DEPOT;
+        ship.ship_track = TRACK_X;
+        ship.path.push_back(exit);
+        ship.needs_servicing = true;
+        ship.reliability = 1;
+
+        ship_controller_tick(&mut ship, Some(&map));
+
+        assert!(!ship.needs_servicing);
+        assert!(ship.reliability > 1);
+        assert_ne!(ship.ship_state, SHIP_STATE_DEPOT);
     }
 
     #[test]

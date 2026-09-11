@@ -4,7 +4,7 @@ use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build
 use crate::test_fixtures::SandboxMap;
 use crate::{
     Command, GameState, StopKind, TileCoord, TileKind, Vehicle, VehicleKind, WaterClass,
-    apply_command, bridge_above_axis_from_mapt, set_water_class_m1,
+    apply_command, bridge_above_axis_from_mapt, command_would_fail, set_water_class_m1,
 };
 
 #[test]
@@ -236,6 +236,10 @@ fn clear_ship_depot_rejects_vehicle_on_the_other_section() {
         .push(Vehicle::new(1, VehicleKind::Ship, other, other));
     let money = s.economy.money;
 
+    assert_eq!(
+        command_would_fail(&s, &Command::ClearTile(depot)),
+        Some(crate::CommandError::VehicleInTheWay)
+    );
     assert_eq!(
         apply_command(&mut s, &Command::ClearTile(depot)),
         Err(crate::CommandError::VehicleInTheWay)

@@ -11,7 +11,7 @@ use super::terraform::{check_level_land, check_lower_land, check_raise_land};
 use super::town;
 use super::transport::{
     check_airport_area, check_airport_area_with_explicit_layout, check_bridge_with_stations,
-    check_clear_tile, check_cycle_rail_signal_type, check_dock_placement,
+    check_clear_ship_depot, check_clear_tile, check_cycle_rail_signal_type, check_dock_placement,
     check_object_can_be_auto_cleared, check_object_can_be_cleared, check_place_aqueduct,
     check_place_buoy, check_place_canal, check_place_lock, check_place_rail,
     check_place_rail_signal_oriented, check_place_rail_waypoint, check_place_river,
@@ -288,6 +288,9 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
                 })
         }
         Command::ClearTile(c) => {
+            if map.get_kind(*c) == Some(crate::map::TileKind::ShipDepot) {
+                return check_clear_ship_depot(state, *c).err();
+            }
             let ownership = if state.cheats.magic_bulldozer_active() {
                 None
             } else {

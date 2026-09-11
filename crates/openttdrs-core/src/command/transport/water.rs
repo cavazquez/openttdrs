@@ -144,17 +144,10 @@ pub(in crate::command) fn clear_ship_depot(
     state: &mut GameState,
     c: TileCoord,
 ) -> Result<(), CommandError> {
+    check_clear_ship_depot(state, c)?;
     let other =
         crate::depot::ship_depot_other_tile(&state.map, c).ok_or(CommandError::InvalidDepotTile)?;
     let tiles = [c, other];
-    for tile in tiles {
-        if !state.cheats.magic_bulldozer_active() {
-            crate::command::require_tile_owned_by_active(state, tile)?;
-        }
-        if state.vehicles.iter().any(|vehicle| vehicle.pos == tile) {
-            return Err(CommandError::VehicleInTheWay);
-        }
-    }
     let water_classes = tiles.map(|tile| {
         state
             .map
@@ -166,6 +159,29 @@ pub(in crate::command) fn clear_ship_depot(
             .map_err(|_| CommandError::OutOfBounds)?;
     }
     state.economy.money -= ship_depot_clear_cost(&state.global_economy);
+    Ok(())
+}
+
+/// Validación de solo lectura para `RemoveShipDepot`.
+///
+/// El cursor puede estar en cualquiera de las dos secciones, pero la
+/// propiedad y la ocupación se comprueban sobre la huella completa antes de
+/// cambiar el mapa. El preview reutiliza esta función para no anunciar una
+/// demolición que `clear_ship_depot` rechazaría.
+pub(in crate::command) fn check_clear_ship_depot(
+    state: &GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    let other =
+        crate::depot::ship_depot_other_tile(&state.map, c).ok_or(CommandError::InvalidDepotTile)?;
+    for tile in [c, other] {
+        if !state.cheats.magic_bulldozer_active() {
+            crate::command::require_tile_owned_by_active(state, tile)?;
+        }
+        if state.vehicles.iter().any(|vehicle| vehicle.pos == tile) {
+            return Err(CommandError::VehicleInTheWay);
+        }
+    }
     Ok(())
 }
 

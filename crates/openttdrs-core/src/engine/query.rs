@@ -1,6 +1,7 @@
 //! Consultas de catálogo: disponibilidad, depósito y helpers de render.
 
 use crate::vehicle::VehicleKind;
+use std::collections::HashSet;
 
 use super::catalog_data::{
     ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_FOKKER, ENGINE_AIRCRAFT_TRICARIO, ENGINE_BUS_MPS,
@@ -146,7 +147,47 @@ pub fn engines_for_depot_kind_in(
         EngineCatalogSort::Speed => list.sort_by_key(|e| std::cmp::Reverse(e.max_speed)),
         EngineCatalogSort::IntroYear => list.sort_by_key(|e| e.intro_year),
     }
+    order_engine_variants(&mut list);
     list
+}
+
+/// Reordena una lista de compra como un árbol plano: cada motor padre aparece
+/// antes que sus variantes directas y los hermanos conservan el orden que ya
+/// determinó el filtro/orden elegido.
+pub fn order_engine_variants(list: &mut Vec<&EngineDef>) {
+    fn append_tree<'a>(
+        engine: &'a EngineDef,
+        source: &[&'a EngineDef],
+        visited: &mut HashSet<u16>,
+        ordered: &mut Vec<&'a EngineDef>,
+    ) {
+        if !visited.insert(engine.id) {
+            return;
+        }
+        ordered.push(engine);
+        for child in source
+            .iter()
+            .filter(|candidate| candidate.variant_parent_id == Some(engine.id))
+        {
+            append_tree(child, source, visited, ordered);
+        }
+    }
+
+    let source = list.clone();
+    let mut visited = HashSet::new();
+    let mut ordered = Vec::with_capacity(source.len());
+    for engine in &source {
+        let parent_is_visible = engine
+            .variant_parent_id
+            .is_some_and(|parent| source.iter().any(|candidate| candidate.id == parent));
+        if !parent_is_visible {
+            append_tree(engine, &source, &mut visited, &mut ordered);
+        }
+    }
+    for engine in &source {
+        append_tree(engine, &source, &mut visited, &mut ordered);
+    }
+    *list = ordered;
 }
 
 /// Agrupa `train_image_index` en uno de los conjuntos de sprites descargados.
@@ -231,7 +272,7 @@ mod tests {
     use super::*;
     use crate::vehicle::VehicleKind;
 
-    use super::super::catalog_data::{ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY};
+    use super::super::catalog_data::{ENGINE_SHIP_OIL, ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY};
 
     #[test]
     fn engines_for_depot_purchase_filters_by_year_and_kind() {
@@ -282,5 +323,18 @@ mod tests {
         let mps = engine_for_vehicle(VehicleKind::Bus, ENGINE_BUS_MPS);
         assert_eq!(mps.max_speed, 112);
         assert_eq!(mps.speed_kmh(), 56);
+    }
+
+    #[test]
+    fn variant_parent_is_listed_before_child() {
+        let parent = engine_for_vehicle(VehicleKind::Ship, ENGINE_SHIP_MPS).clone();
+        let mut child = engine_for_vehicle(VehicleKind::Ship, ENGINE_SHIP_OIL).clone();
+        child.variant_parent_id = Some(parent.id);
+        let mut list = vec![&child, &parent];
+        order_engine_variants(&mut list);
+        assert_eq!(
+            list.iter().map(|engine| engine.id).collect::<Vec<_>>(),
+            vec![parent.id, child.id,]
+        );
     }
 }

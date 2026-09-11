@@ -86,6 +86,16 @@ pub struct EngineDef {
     /// la lista de compra; `None` conserva el orden de carga.
     #[serde(default)]
     pub purchase_list_order_target: Option<u16>,
+    /// Action0 vehicle `0x20`: motor padre de esta variante en la lista de
+    /// compra. Se guarda como ID global porque el catálogo ya resolvió el
+    /// ID local del GRF al finalizar la carga.
+    #[serde(default)]
+    pub variant_parent_id: Option<u16>,
+    /// ID local pendiente de resolver mientras se materializa un stack
+    /// `NewGRF`. No se serializa: sólo sirve para cerrar el enlace después de
+    /// que todos los motores del GRF estén en el catálogo.
+    #[serde(default, skip)]
+    pub newgrf_variant_parent_local_id: Option<u16>,
     /// Ticks antes de envejecer la carga (`EngineInfo::cargo_age_period`).
     /// Cero desactiva el envejecimiento para ese motor.
     #[serde(default = "default_cargo_age_period")]

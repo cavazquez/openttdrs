@@ -307,6 +307,8 @@ pub struct ParsedVehicleMeta {
     pub retire_early_years: u8,
     /// Action0 ship `0x1B`: ID local delante del que se inserta en la compra.
     pub purchase_list_order_target: Option<u16>,
+    /// Action0 vehicle `0x20`: ID local del motor padre de esta variante.
+    pub variant_parent_local_id: Option<u16>,
     /// Action0 ship `0x1D`: ticks antes de envejecer la carga; cero desactiva.
     pub cargo_age_period: u16,
     /// Action0 ship `0x24`: aceleración por tick; cero usa el fallback vanilla.
@@ -412,6 +414,7 @@ impl ParsedVehicleMeta {
             model_life_years: u8::MAX,
             retire_early_years: 0,
             purchase_list_order_target: None,
+            variant_parent_local_id: None,
             cargo_age_period: crate::engine::DEFAULT_CARGO_AGE_PERIOD,
             ship_acceleration: if feature == ACTION0_FEATURE_SHIPS {
                 crate::engine::DEFAULT_SHIP_ACCELERATION
@@ -3972,7 +3975,9 @@ fn parse_ship_property(
             }
         }
         0x20 => {
-            skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
+            for meta in metas {
+                meta.variant_parent_local_id = Some(read_u16(payload, i)?);
+            }
         }
         0x26 => {
             for meta in metas {

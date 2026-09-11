@@ -1,5 +1,6 @@
 //! Aplicación de Action0 `Trains` desde el `NewGRF` stack.
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use crate::GameState;
@@ -67,6 +68,73 @@ fn apply_purchase_list_order_changes(catalog: &mut Vec<EngineDef>) {
             })
             .unwrap_or(target_index.min(catalog.len()));
         catalog.insert(insert_index, source);
+    }
+}
+
+/// Resuelve `Action0 0x20` desde IDs locales del GRF a IDs globales del
+/// catálogo, una vez que se cargaron todos los vehículos del stack.
+fn resolve_variant_parent_links(catalog: &mut [EngineDef]) {
+    let links = catalog
+        .iter()
+        .filter_map(|engine| {
+            engine
+                .newgrf_variant_parent_local_id
+                .map(|parent_local_id| {
+                    (
+                        engine.id,
+                        engine.kind,
+                        engine.newgrf_grfid,
+                        engine.newgrf_local_id,
+                        parent_local_id,
+                    )
+                })
+        })
+        .collect::<Vec<_>>();
+
+    for engine in catalog.iter_mut() {
+        engine.variant_parent_id = None;
+    }
+
+    for (source_id, kind, grfid, source_local_id, parent_local_id) in links {
+        if source_local_id == parent_local_id {
+            continue;
+        }
+        let Some(parent_id) = catalog
+            .iter()
+            .find(|engine| {
+                engine.kind == kind
+                    && engine.newgrf_grfid == grfid
+                    && engine.newgrf_local_id == parent_local_id
+            })
+            .map(|engine| engine.id)
+        else {
+            continue;
+        };
+        if let Some(source) = catalog.iter_mut().find(|engine| engine.id == source_id) {
+            source.variant_parent_id = Some(parent_id);
+        }
+    }
+
+    // Native FinaliseEngineArray drops a relation that would create a cycle.
+    // Do the same per source so malformed GRFs cannot make list traversal loop.
+    let ids = catalog.iter().map(|engine| engine.id).collect::<Vec<_>>();
+    for source_id in ids {
+        let mut seen = HashSet::new();
+        let mut current = Some(source_id);
+        let mut cyclic = false;
+        while let Some(id) = current {
+            if !seen.insert(id) {
+                cyclic = true;
+                break;
+            }
+            current = catalog
+                .iter()
+                .find(|engine| engine.id == id)
+                .and_then(|engine| engine.variant_parent_id);
+        }
+        if cyclic && let Some(source) = catalog.iter_mut().find(|engine| engine.id == source_id) {
+            source.variant_parent_id = None;
+        }
     }
 }
 
@@ -268,6 +336,8 @@ fn push_feature_vehicles(
             model_life_years: meta.model_life_years,
             retire_early_years: meta.retire_early_years,
             purchase_list_order_target: meta.purchase_list_order_target,
+            variant_parent_id: None,
+            newgrf_variant_parent_local_id: meta.variant_parent_local_id,
             cargo_age_period: meta.cargo_age_period,
             ship_acceleration: meta.ship_acceleration,
             ship_refittable: meta.kind != VehicleKind::Ship || meta.ship_refittable,
@@ -417,6 +487,8 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 model_life_years: meta.model_life_years,
                 retire_early_years: 0,
                 purchase_list_order_target: None,
+                variant_parent_id: None,
+                newgrf_variant_parent_local_id: None,
                 cargo_age_period: crate::engine::DEFAULT_CARGO_AGE_PERIOD,
                 ship_acceleration: 0,
                 ship_refittable: true,
@@ -483,6 +555,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
             );
         }
     }
+    resolve_variant_parent_links(&mut catalog);
     apply_purchase_list_order_changes(&mut catalog);
     state.engine_catalog = catalog;
 }

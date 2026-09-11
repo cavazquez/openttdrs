@@ -4663,7 +4663,7 @@ mod tests {
             ACTION0_FEATURE_SHIPS,
             0x01,
             0x01,
-            0x00,
+            0x01,
             0x1E,
             0x02,
             0x05,
@@ -4865,6 +4865,71 @@ mod tests {
             .map(|engine| engine.newgrf_local_id)
             .collect::<Vec<_>>();
         assert_eq!(local_ids, vec![1, 0]);
+    }
+
+    #[test]
+    fn ships_variant_property_links_child_to_parent_in_purchase_catalog() {
+        let parent_a0 = [0x00, ACTION0_FEATURE_SHIPS, 0x00, 0x01, 0x00];
+        let child_a0 = [
+            0x00,
+            ACTION0_FEATURE_SHIPS,
+            0x01,
+            0x01,
+            0x01,
+            0x20,
+            0x00,
+            0x00,
+        ];
+        let parent_meta = parse_action0_vehicle_metas(&parent_a0).unwrap().remove(0);
+        let child_meta = parse_action0_vehicle_metas(&child_a0).unwrap().remove(0);
+        assert_eq!(parent_meta.variant_parent_local_id, None);
+        assert_eq!(child_meta.variant_parent_local_id, Some(0));
+
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&parent_a0, &child_a0],
+            [b'V', b'R', 0, 1],
+            "ship-variants",
+            "",
+        );
+        let dir = tempfile_dir_with("ship-variants.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ship-variants.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+
+        let ships = state
+            .engine_catalog
+            .iter()
+            .filter(|engine| engine.from_newgrf && engine.kind == VehicleKind::Ship)
+            .collect::<Vec<_>>();
+        assert_eq!(ships.len(), 2);
+        let parent = ships
+            .iter()
+            .find(|engine| engine.newgrf_local_id == 0)
+            .unwrap();
+        let child = ships
+            .iter()
+            .find(|engine| engine.newgrf_local_id == 1)
+            .unwrap();
+        assert_eq!(child.variant_parent_id, Some(parent.id));
+
+        let purchase = crate::engine::engines_for_depot_kind_in(
+            &state.engine_catalog,
+            crate::engine::DepotPurchaseKind::Ship,
+            1920,
+            crate::engine::EngineCatalogSort::Catalog,
+            crate::engine::RoadEngineFilter::All,
+        );
+        let parent_pos = purchase
+            .iter()
+            .position(|engine| engine.id == parent.id)
+            .unwrap();
+        let child_pos = purchase
+            .iter()
+            .position(|engine| engine.id == child.id)
+            .unwrap();
+        assert!(parent_pos < child_pos);
     }
 
     /// #329: Action0 conserva las clases allowed/disallowed/required de cada

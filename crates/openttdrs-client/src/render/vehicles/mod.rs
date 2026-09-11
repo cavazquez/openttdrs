@@ -258,6 +258,8 @@ mod tests {
             .clone();
         engine.id = id;
         engine.newgrf_local_id = 0;
+        engine.variant_parent_id = None;
+        engine.newgrf_variant_parent_local_id = None;
         engine.sprite_stack = true;
         engine.newgrf_runtime = Some(Box::new(graphics));
         engine

@@ -4553,3 +4553,13 @@ tipo de cargo. La sombra continúa siendo metadata/exportación, no una segunda
 `Vehicle` con pool de carga propio; #329/#567 siguen abiertas. Core queda en
 `2480 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2
 ignored`, con Clippy estricto, formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-REFIT-PERSISTENCE (2026-09-11,
+`bfcbc187`): `sync_cargo_from_packets()` y `clear_cargo()` conservan ahora el
+tipo de carga elegido por refit en aeronaves cuando no quedan paquetes. Así,
+un avión refitado a correo no vuelve silenciosamente a pasajeros durante el
+siguiente tick o después de descargar; la capacidad secundaria permanece en
+cero para correo y vuelve a `0x11` al retornar a una carga de clase pasajeros.
+La sombra sigue siendo metadata/exportación y no una segunda `Vehicle`; #329/#567
+continúan abiertas. Core queda en `2481 passed; 0 failed; 1 ignored`, con
+Clippy estricto, formato y `diff --check` limpios.

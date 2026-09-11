@@ -469,7 +469,47 @@ fn depot_is_rail(sim: &SimWorld, depot_pos: TileCoord) -> bool {
     sim.state.map.get_kind(depot_pos) == Some(TileKind::RailDepot)
 }
 
+fn depot_metadata(sim: &SimWorld, depot_pos: TileCoord) -> Option<&openttdrs_core::SavDepot> {
+    let depot_id = sim
+        .state
+        .map
+        .get(depot_pos)
+        .and_then(openttdrs_core::depot_id_from_tile)?;
+    sim.state
+        .depots
+        .iter()
+        .find(|depot| depot.depot_id == depot_id)
+}
+
+fn generated_depot_title(locale: Locale, sim: &SimWorld, depot_pos: TileCoord) -> Option<String> {
+    let depot = depot_metadata(sim, depot_pos)?;
+    if !depot.name.is_empty() {
+        return Some(depot.name.clone());
+    }
+    let town_name = depot
+        .town_id
+        .and_then(|town_id| sim.state.towns.iter().find(|town| town.id == town_id))
+        .map(|town| town.name.as_str())
+        .filter(|name| !name.is_empty())?;
+    let kind = match sim.state.map.get_kind(depot_pos) {
+        Some(TileKind::RailDepot) => "Depósito de Trenes",
+        Some(TileKind::ShipDepot) => "Depósito de Barcos",
+        Some(TileKind::RoadDepot) => "Depósito de Carretera",
+        _ => return None,
+    };
+    let serial = (depot.town_cn != 0).then(|| format!(" #{}", u32::from(depot.town_cn) + 1));
+    Some(format!(
+        "{} {}{}",
+        town_name,
+        localized_text(locale, kind),
+        serial.unwrap_or_default()
+    ))
+}
+
 fn depot_title(locale: Locale, sim: &SimWorld, depot_pos: TileCoord) -> String {
+    if let Some(title) = generated_depot_title(locale, sim, depot_pos) {
+        return title;
+    }
     let nombre = match sim.state.map.get_kind(depot_pos) {
         Some(TileKind::RailDepot) => "Depósito de Trenes",
         Some(TileKind::ShipDepot) => "Depósito de Barcos",
@@ -1407,5 +1447,30 @@ mod tests {
             "Depósito de Carretera (2, 2)"
         );
         assert!(depot_vehicle_row_label(Locale::Es, &sim, vehicle).contains("(0a)"));
+    }
+
+    #[test]
+    fn depot_title_resolves_custom_and_generated_native_names() {
+        let (mut sim, depot, _) = world_with_bus();
+        sim.state.towns.push(openttdrs_core::Town {
+            id: 7,
+            pos: TileCoord::new(2, 2),
+            name: "Villa Central".into(),
+            ..Default::default()
+        });
+        sim.state.depots[0].town_id = Some(7);
+        sim.state.depots[0].town_cn = 2;
+
+        assert_eq!(
+            depot_title(Locale::En, &sim, depot),
+            "Villa Central Road depot #3"
+        );
+        assert_eq!(
+            depot_title(Locale::Es, &sim, depot),
+            "Villa Central Depósito de Carretera #3"
+        );
+
+        sim.state.depots[0].name = "Taller Norte".into();
+        assert_eq!(depot_title(Locale::En, &sim, depot), "Taller Norte");
     }
 }

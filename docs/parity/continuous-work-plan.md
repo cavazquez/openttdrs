@@ -4180,3 +4180,14 @@ comandos. Core queda en `2433 passed; 0 failed; 1 ignored` y cliente en
 `1388 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y diff
 limpios. #567 sigue abierta por callbacks/pathfinding navales y aceptación
 visual manual bajo Weston; #326 permanece abierta.
+
+Actualización #567-SHIP-DOCK-PATH-ALTERNATES (2026-09-11, `3e321177`): el
+resolver expone todos los `DockingTile` físicos de una estación naval unida y
+el routing prueba los amarres alternativos cuando el más cercano no tiene una
+ruta navegable. Se elige la ruta alcanzable más corta con desempate estable por
+distancia y coordenadas; una regresión cubre un amarre separado por altura sin
+esclusa y un segundo muelle conectado. Core queda en
+`2434 passed; 0 failed; 1 ignored` y cliente en `1388 passed; 0 failed; 2
+ignored`, con Clippy estricto, formato y diff limpios. #567 sigue abierta por
+callbacks navales y aceptación visual manual bajo Weston; #326 permanece
+abierta.

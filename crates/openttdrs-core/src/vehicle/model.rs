@@ -419,6 +419,11 @@ pub struct Vehicle {
     /// Saves antiguos recuperan el período vanilla hasta que se reevalúa el motor.
     #[serde(default = "default_cached_cargo_age_period")]
     pub cached_cargo_age_period: u16,
+    /// Caché del período efectivo de envejecimiento de `AIR_SHADOW`.
+    /// Puede diferir del período de la bodega principal cuando `CB36`
+    /// modifica la propiedad `0x1C` para la unidad auxiliar.
+    #[serde(default)]
+    pub cached_aircraft_mail_age_period: u16,
     /// Packets a bordo (fuente de verdad Fase 2); `cargo`/`cargo_source` se sincronizan.
     #[serde(default)]
     pub cargo_packets: crate::cargo_packet::VehicleCargoList,
@@ -813,6 +818,11 @@ impl Vehicle {
             cargo_transit_ticks: 0,
             cargo_age_counter: 0,
             cached_cargo_age_period: engine.cargo_age_period,
+            cached_aircraft_mail_age_period: if kind == VehicleKind::Aircraft {
+                engine.cargo_age_period
+            } else {
+                0
+            },
             cargo_packets: crate::cargo_packet::VehicleCargoList::default(),
             last_pickup_station: None,
             last_depart_tick: None,

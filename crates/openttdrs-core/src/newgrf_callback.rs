@@ -1277,6 +1277,54 @@ pub fn resolve_aircraft_mail_capacity(
     Some(callback_capacity.unwrap_or(fallback))
 }
 
+/// Resuelve el período de envejecimiento de la carga de `AIR_SHADOW`.
+///
+/// `OpenTTD` vuelve a evaluar `CB36` para la entidad sombra, no para el hold
+/// principal. Como el port todavía mantiene ambas cargas dentro de un único
+/// `Vehicle`, se presenta temporalmente al callback la vista de correo de la
+/// sombra y se restaura el estado primario al terminar. Los registros
+/// persistentes siguen el writeback común; la entidad FTA independiente queda
+/// fuera de este helper.
+#[must_use]
+pub fn aircraft_mail_cargo_age_period(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+    cargo_catalog: &[CargoSpecDef],
+) -> u16 {
+    if engine.kind != VehicleKind::Aircraft {
+        return 0;
+    }
+
+    let fallback = engine.cargo_age_period;
+    let mail_capacity = vehicle.aircraft_mail_capacity.unwrap_or_else(|| {
+        aircraft_mail_capacity_for_cargo(engine, CargoType::Passengers, cargo_catalog)
+    });
+    let mail_cargo = if vehicle.aircraft_mail_packets.is_empty() {
+        u32::from(vehicle.aircraft_mail_cargo.unwrap_or(0))
+    } else {
+        vehicle.aircraft_mail_packets.total()
+    };
+    let previous = (
+        vehicle.cargo_type,
+        vehicle.cargo,
+        vehicle.capacity,
+        vehicle.cargo_subtype,
+    );
+    vehicle.cargo_type = Some(CargoType::Mail);
+    vehicle.cargo = mail_cargo;
+    vehicle.capacity = u32::from(mail_capacity);
+    vehicle.cargo_subtype = 0;
+    let callback_period = resolve_vehicle_modify_property_callback(engine, vehicle, 0x1C, false)
+        .and_then(|value| u16::try_from(value).ok());
+    (
+        vehicle.cargo_type,
+        vehicle.cargo,
+        vehicle.capacity,
+        vehicle.cargo_subtype,
+    ) = previous;
+    callback_period.unwrap_or(fallback)
+}
+
 /// Resuelve el factor de compra o explotación de una unidad mediante CB36.
 ///
 /// Los factores de coste son BYTE en las cuatro clases. Un resultado fuera de
@@ -6543,6 +6591,48 @@ mod tests {
         assert_eq!(
             aircraft_mail_capacity_for_cargo(&engine, CargoType::Custom(0), &[custom_passenger]),
             7
+        );
+    }
+
+    #[test]
+    fn aircraft_shadow_cargo_age_period_uses_cb36_and_restores_primary_state() {
+        let mut engine = crate::engine::engine_for_vehicle(
+            VehicleKind::Aircraft,
+            crate::engine::ENGINE_AIRCRAFT_DAKOTA,
+        )
+        .clone();
+        engine.newgrf_grfid = 0x4147_4553;
+        engine.newgrf_local_id = 0;
+        engine.cargo_age_period = 100;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(37)));
+
+        let mut vehicle = Vehicle::new(
+            74,
+            VehicleKind::Aircraft,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.cargo_type = Some(CargoType::Passengers);
+        vehicle.cargo = 80;
+        vehicle.capacity = 80;
+        vehicle.cargo_subtype = 3;
+        vehicle.aircraft_mail_capacity = Some(7);
+        vehicle.aircraft_mail_cargo = Some(5);
+
+        assert_eq!(
+            aircraft_mail_cargo_age_period(&engine, &mut vehicle, &[]),
+            37,
+            "la sombra usa el resultado CB36 de la propiedad 0x1C"
+        );
+        assert_eq!(
+            (
+                vehicle.cargo_type,
+                vehicle.cargo,
+                vehicle.capacity,
+                vehicle.cargo_subtype,
+            ),
+            (Some(CargoType::Passengers), 80, 80, 3),
+            "resolver la sombra no debe alterar el hold principal"
         );
     }
 

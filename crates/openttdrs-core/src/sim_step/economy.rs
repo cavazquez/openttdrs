@@ -1167,51 +1167,65 @@ pub(super) fn grow_towns(state: &mut GameState, tick: u64) {
 
 pub(super) fn age_vehicle_cargo(state: &mut GameState) {
     for vehicle in &mut state.vehicles {
-        let period =
-            crate::newgrf_callback::engine_for_vehicle_catalog(&state.engine_catalog, vehicle)
-                .cargo_age_period;
+        let engine =
+            crate::newgrf_callback::engine_for_vehicle_catalog(&state.engine_catalog, vehicle);
+        let period = engine.cargo_age_period;
         vehicle.cached_cargo_age_period = period;
 
         vehicle.ensure_packets_from_legacy();
         vehicle.ensure_aircraft_mail_packets_from_legacy();
+        let shadow_period = if vehicle.kind == crate::vehicle::VehicleKind::Aircraft {
+            crate::newgrf_callback::aircraft_mail_cargo_age_period(
+                engine,
+                vehicle,
+                &state.cargo_spec_catalog,
+            )
+        } else {
+            0
+        };
+        vehicle.cached_aircraft_mail_age_period = shadow_period;
         let has_cargo = vehicle.cargo > 0;
         if has_cargo {
             vehicle.cargo_transit_ticks = vehicle.cargo_transit_ticks.saturating_add(1);
         }
-        if period == 0 {
+        if period == 0 && shadow_period == 0 {
             continue;
         }
 
         // `OpenTTD` clamps a loaded save to a newly changed property before
         // decrementing. A zero counter is the legacy/uninitialized state; it
         // starts a full period instead of aging immediately.
-        vehicle.cargo_age_counter = vehicle.cargo_age_counter.min(period);
-        if vehicle.cargo_age_counter == 0 {
-            vehicle.cargo_age_counter = period;
-        }
-        vehicle.cargo_age_counter = vehicle.cargo_age_counter.saturating_sub(1);
-
-        if vehicle.cargo_age_counter == 0 {
-            if has_cargo {
-                vehicle.cargo_packets.age_one_period();
-                vehicle.sync_cargo_from_packets();
+        if period != 0 {
+            vehicle.cargo_age_counter = vehicle.cargo_age_counter.min(period);
+            if vehicle.cargo_age_counter == 0 {
+                vehicle.cargo_age_counter = period;
             }
-            vehicle.cargo_age_counter = period;
+            vehicle.cargo_age_counter = vehicle.cargo_age_counter.saturating_sub(1);
+
+            if vehicle.cargo_age_counter == 0 {
+                if has_cargo {
+                    vehicle.cargo_packets.age_one_period();
+                    vehicle.sync_cargo_from_packets();
+                }
+                vehicle.cargo_age_counter = period;
+            }
         }
 
         // `AIR_SHADOW` es una entidad nativa distinta: comparte el período
-        // efectivo del avión como fallback, pero conserva su propia cuenta
-        // atrás. Esto permite que una sombra cargada envejezca aunque la
-        // bodega primaria esté vacía o tenga un contador distinto.
-        if !vehicle.aircraft_mail_packets.is_empty() {
-            vehicle.aircraft_mail_age_counter = vehicle.aircraft_mail_age_counter.min(period);
+        // efectivo del avión como fallback (o el resultado de su propio
+        // `CB36`), pero conserva su propia cuenta atrás. Esto permite que una
+        // sombra cargada envejezca aunque la bodega primaria esté vacía o
+        // tenga un contador distinto.
+        if shadow_period != 0 && !vehicle.aircraft_mail_packets.is_empty() {
+            vehicle.aircraft_mail_age_counter =
+                vehicle.aircraft_mail_age_counter.min(shadow_period);
             if vehicle.aircraft_mail_age_counter == 0 {
-                vehicle.aircraft_mail_age_counter = period;
+                vehicle.aircraft_mail_age_counter = shadow_period;
             }
             vehicle.aircraft_mail_age_counter = vehicle.aircraft_mail_age_counter.saturating_sub(1);
             if vehicle.aircraft_mail_age_counter == 0 {
                 vehicle.aircraft_mail_packets.age_one_period();
-                vehicle.aircraft_mail_age_counter = period;
+                vehicle.aircraft_mail_age_counter = shadow_period;
             }
         }
     }

@@ -602,6 +602,17 @@ pub fn ship_depot_exit_blocked(map: &Map, vehicles: &[Vehicle], vehicle_index: u
     })
 }
 
+/// Equivalente al `ReverseShip` nativo cuando la vía siguiente desaparece.
+///
+/// La rotación gráfica se conserva para que el siguiente tick pueda animar el
+/// giro sobre el lugar, mientras que la caché de ruta se invalida para que el
+/// planificador elija una salida nueva.
+fn reverse_ship_after_blocked_track(v: &mut Vehicle) {
+    v.direction = crate::vehicle::reverse_direction(v.direction);
+    v.cur_speed = 0;
+    v.path.clear();
+}
+
 fn choose_track_for_entry(diagdir: u8) -> u8 {
     track_from_diagdir(diagdir)
 }
@@ -896,18 +907,18 @@ pub fn ship_controller_tick_with_catalog(
         }
 
         if map.is_some_and(|m| !is_water_network_tile_at(m, new_tile)) {
-            v.cur_speed = 0;
+            reverse_ship_after_blocked_track(v);
             return;
         }
         if let Some(map) = map
             && !water_tiles_connected(map, old_tile, new_tile)
         {
-            v.cur_speed = 0;
+            reverse_ship_after_blocked_track(v);
             return;
         }
 
         let Some(diagdir) = diagdir_between_tiles(old_tile, new_tile) else {
-            v.cur_speed = 0;
+            reverse_ship_after_blocked_track(v);
             return;
         };
 
@@ -915,8 +926,8 @@ pub fn ship_controller_tick_with_catalog(
         if v.path.front() == Some(&new_tile) {
             v.path.pop_front();
         } else if !v.path.is_empty() {
-            // Ruta desfasada: no saltar a un frente lejano.
-            v.cur_speed = 0;
+            // Ruta desfasada: como `ReverseShip`, no saltar a un frente lejano.
+            reverse_ship_after_blocked_track(v);
             return;
         }
 
@@ -926,7 +937,7 @@ pub fn ship_controller_tick_with_catalog(
             |m| choose_ship_track(m, new_tile, diagdir, path_next, v.dest),
         );
         let Some(entry) = ship_subcoord(diagdir, track) else {
-            v.cur_speed = 0;
+            reverse_ship_after_blocked_track(v);
             return;
         };
 
@@ -1308,6 +1319,39 @@ mod tests {
         s.vehicles[1].cur_speed = 1;
         s.vehicles[1].pos = TileCoord::new(8, 3);
         assert!(!ship_depot_exit_blocked(&s.map, &s.vehicles, 0));
+    }
+
+    #[test]
+    fn ship_reverses_and_clears_path_when_water_disappears() {
+        let mut s = GameState::new(8, 4);
+        for x in 0..=4 {
+            s.map
+                .set_kind(TileCoord::new(x, 1), TileKind::Water)
+                .unwrap();
+        }
+        let pos = TileCoord::new(1, 1);
+        let next = TileCoord::new(2, 1);
+        let mut v = Vehicle::new(1, VehicleKind::Ship, pos, TileCoord::new(4, 1));
+        v.running = true;
+        v.ship_pos_valid = true;
+        v.ship_x = pos.x * 16 + 15;
+        v.ship_y = pos.y * 16 + 8;
+        v.direction = DIR_SW;
+        v.ship_rotation = DIR_SW;
+        v.ship_track = TRACK_X;
+        v.ship_state = SHIP_STATE_TRACK_X;
+        v.cur_speed = 255;
+        v.progress = 255;
+        v.path.push_back(next);
+        s.map.set_kind(next, TileKind::Grass).unwrap();
+
+        ship_controller_tick(&mut v, Some(&s.map));
+
+        assert_eq!(v.pos, pos);
+        assert_eq!(v.direction, DIR_NE);
+        assert_eq!(v.ship_rotation, DIR_SW);
+        assert_eq!(v.cur_speed, 0);
+        assert!(v.path.is_empty());
     }
 
     #[test]

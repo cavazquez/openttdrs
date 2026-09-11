@@ -4485,3 +4485,15 @@ passed; 0 failed; 2 ignored`, con formato, `diff --check` y Clippy estricto
 limpios. #329/#567 continúan abiertas por `NoNews`, `NoPreview`,
 `JoinPreview`, callbacks navales restantes y aceptación visual manual bajo
 Weston; #326 permanece abierta.
+
+Actualización #329/#567-VEHICLE-NO-DEFAULT-CARGO-MULTIPLIER (2026-09-11,
+`820174d8`): Action0 conserva el bit 5 de `EngineMiscFlag` para trenes,
+carretera, barcos y aeronaves, lo propaga a `EngineDef` con default compatible
+para JSON anterior y permite que CB15 controle también la capacidad del cargo
+por defecto cuando `NoDefaultCargoMultiplier` está activo. La regresión cubre
+parser y catálogo de las cuatro familias, además de la selección runtime de
+CB15. Core queda en `2474 passed; 0 failed; 1 ignored` y cliente en `1392
+passed; 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check`
+limpios. #329/#567 siguen abiertas por subtipos completos, capacidad secundaria
+de aeronaves, balanceo de consist, APIs legacy sin catálogo y aceptación visual
+manual bajo Weston; #326 permanece abierta.

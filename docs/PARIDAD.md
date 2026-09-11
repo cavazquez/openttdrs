@@ -4050,3 +4050,15 @@ La suite core queda en 2407 pasadas y 1 ignorada; la cliente en 1383 pasadas y
 2 ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta por
 callbacks/vecinos restantes, aceptación visual en Weston, clipping integrado
 con framebuffer y matriz completa; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-SITE-CONTRACT (2026-09-11, `a5c88094`):
+la validación de construcción naval ahora replica las fases de
+`CmdBuildShipDepot`: después de comprobar agua en ambas partes, rechaza
+`IsBridgeAbove` en cualquiera de ellas y exige `IsTileFlat` para las dos. El
+preview y la ejecución comparten el mismo resultado y no mutan mapa, pool ni
+dinero cuando fallan. Se agregaron mensajes ES/EN y regresiones para ambas
+partes en los cuatro ejes. Core queda en 2409 pasadas y 1 ignorada; cliente en
+1383 pasadas y 2 ignoradas, con Clippy estricto y formato verdes. #567 sigue
+abierta por la semántica completa de `HasTileWaterGround`/auto-clear,
+callbacks/vecinos, aceptación visual en Weston y matriz completa; #326
+permanece abierta.

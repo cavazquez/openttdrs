@@ -207,16 +207,16 @@ pub struct Vehicle {
     pub aircraft_mail_capacity: Option<u16>,
     /// Cantidad de correo de la sombra de una aeronave.
     ///
-    /// El valor es metadata escalar mientras el runtime no materializa una
-    /// segunda lista de paquetes para la sombra. `None` identifica JSON viejo
-    /// o aeronaves creadas localmente sin estado SAV importado.
+    /// El valor se mantiene como resumen serializable de compatibilidad; la
+    /// lista `aircraft_mail_packets` es la fuente de verdad cuando existe.
+    /// `None` identifica JSON viejo o aeronaves creadas localmente sin estado
+    /// SAV importado.
     #[serde(default)]
     pub aircraft_mail_cargo: Option<u16>,
     /// Paquetes de correo de la sombra aérea nativa.
     ///
-    /// Se mantienen asociados al primario hasta que el runtime pueda
-    /// materializar la entidad `AIR_SHADOW` completa sin duplicar la unidad
-    /// visible ni su ciclo FTA.
+    /// Se mantienen asociados al primario para no duplicar la unidad visible;
+    /// la entidad `AIR_SHADOW` y su ciclo FTA siguen pendientes.
     #[serde(default)]
     pub aircraft_mail_packets: crate::cargo_packet::VehicleCargoList,
     #[serde(default = "default_running_true")]

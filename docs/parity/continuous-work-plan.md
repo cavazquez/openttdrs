@@ -4585,3 +4585,13 @@ carga/descarga, pagos y trasbordos de estación, además de la entidad FTA
 separada; #329/#567 siguen abiertas. Core queda en `2481 passed; 0 failed; 1
 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`, con Clippy estricto,
 formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-STATION-LOAD (2026-09-11): la
+lista secundaria de correo ya participa en la fase de carga de estación y en
+el envejecimiento del reloj del avión. Respeta capacidad `0x11`, rating,
+reservas y consumo de stock; conserva `NewCargo`, `CargoTaken`, next-hop y
+contadores de carga sin tocar el hold primario de pasajeros. Sigue pendiente
+la descarga con pagos/trasbordos y la entidad FTA separada; #329/#567 continúan
+abiertas. Core queda en `2483 passed; 0 failed; 1 ignored` y cliente en `1394
+passed; 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check`
+limpios.

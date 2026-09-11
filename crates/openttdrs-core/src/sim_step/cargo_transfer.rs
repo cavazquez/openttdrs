@@ -919,6 +919,7 @@ pub(super) fn unload_vehicles(
     purge_finished_runtime_payments(state);
 }
 
+#[allow(clippy::too_many_lines)]
 pub(super) fn load_vehicles(
     state: &mut GameState,
     loaded_this_tick: &mut [bool],
@@ -987,11 +988,21 @@ pub(super) fn load_vehicles(
                     |_| state.runtime.fleet_index.consist(vehicle_id).len(),
                 ) <= 1
             };
-        if state.vehicles[i].capacity == 0 || locomotive_without_wagon {
+        let can_load_aircraft_mail = state.vehicles[i].kind == VehicleKind::Aircraft
+            && state.vehicles[i]
+                .aircraft_mail_capacity
+                .is_some_and(|capacity| {
+                    state.vehicles[i].aircraft_mail_packets.total() < u32::from(capacity)
+                });
+        let primary_can_load = state.vehicles[i].capacity > 0 && !locomotive_without_wagon;
+        if !primary_can_load && !can_load_aircraft_mail {
             state.vehicles[i].cargo_loading = false;
             continue;
         }
-        if (allow_top_up || loading) && state.vehicles[i].cargo >= state.vehicles[i].capacity {
+        if (allow_top_up || loading)
+            && state.vehicles[i].cargo >= state.vehicles[i].capacity
+            && !can_load_aircraft_mail
+        {
             state.vehicles[i].cargo_loading = false;
             continue;
         }
@@ -1016,15 +1027,26 @@ pub(super) fn load_vehicles(
         let physically_at =
             station_index_at_vehicle(state, &state.vehicles[i]) == Some(station_idx);
 
-        if try_load_from_industry(state, i, station_idx, loaded_flag) {
+        if unloaded_this_tick[i] {
             continue;
         }
-        if unloaded_this_tick[i] {
+        if can_load_aircraft_mail {
+            let _ = try_load_aircraft_mail_from_station_waiting_cargo(
+                state,
+                i,
+                station_idx,
+                loaded_flag,
+            );
+        }
+        if primary_can_load && try_load_from_industry(state, i, station_idx, loaded_flag) {
             continue;
         }
         // Con `MoveGoodsToStation` la mina vuelca al andén: el camión en la tesela de la
         // industria carga de la estación que la cubre aunque no esté físicamente en ella.
-        if physically_at || station_has_industry_waiting(state, station_idx, &state.vehicles[i]) {
+        if primary_can_load
+            && (physically_at
+                || station_has_industry_waiting(state, station_idx, &state.vehicles[i]))
+        {
             try_load_from_station_waiting_cargo(state, i, station_idx, loaded_flag);
         }
     }
@@ -1286,6 +1308,152 @@ fn has_loadable_supply(state: &GameState) -> bool {
         .any(|station| station.cargo_stock != crate::CargoStock::default())
 }
 
+/// Carga la capacidad de correo de `AIR_SHADOW` sin mezclarla con el hold
+/// principal de pasajeros. La estación sigue siendo la fuente canónica: la
+/// reserva, el rating, `MoveGoodsToStation`, los callbacks de estación y el
+/// consumo de stock deben observar el mismo flujo que una carga de correo
+/// normal.
+#[allow(clippy::too_many_lines)]
+fn try_load_aircraft_mail_from_station_waiting_cargo(
+    state: &mut GameState,
+    vehicle_idx: usize,
+    station_idx: usize,
+    loaded_flag: &mut bool,
+) -> bool {
+    if state.vehicles[vehicle_idx].kind != VehicleKind::Aircraft {
+        return false;
+    }
+    let Some(mail_capacity) = state.vehicles[vehicle_idx].aircraft_mail_capacity else {
+        return false;
+    };
+    let mail_capacity = u32::from(mail_capacity);
+    let mail_loaded = state.vehicles[vehicle_idx].aircraft_mail_packets.total();
+    let room = mail_capacity.saturating_sub(mail_loaded);
+    if room == 0 {
+        return false;
+    }
+
+    state.stations[station_idx].ensure_packets_from_stock();
+    let station_pos = state.stations[station_idx].pos;
+    if !state.stations[station_idx].accepts_cargo(CargoType::Mail) {
+        return false;
+    }
+
+    let visit = state.vehicles[vehicle_idx]
+        .station_visit_with_callbacks_and_catalog(state.tick.get(), &state.engine_catalog);
+    station::note_station_load_attempt(&mut state.stations[station_idx], CargoType::Mail, visit);
+    let available = state.stations[station_idx].cargo_stock.get(CargoType::Mail);
+    let company = state.vehicles[vehicle_idx].owner;
+    let rating = station::station_rating_for_company_cargo(
+        &state.stations[station_idx],
+        company,
+        CargoType::Mail,
+    );
+    let base_speed = vehicle_load_unload_speed(state, vehicle_idx, CargoType::Mail);
+    // `GetLoadAmount` reduces the default load slice of an aircraft shadow to
+    // one quarter of the primary aircraft amount. Keep at least one unit so a
+    // valid mail hold cannot stall forever on a small callback result.
+    let speed = base_speed.saturating_add(3) / 4;
+    let speed = speed.max(1);
+    let mut load = station::load_amount_for_rating(available.min(room).min(speed), rating);
+    if load == 0 && available > 0 && rating > 0 {
+        load = 1.min(speed).min(room);
+    }
+    if load == 0 {
+        return false;
+    }
+
+    let _ = state.stations[station_idx].cargo_packets.reserve(load);
+    let mut taken = state.stations[station_idx].take_waiting_cargo(CargoType::Mail, load);
+    if taken.is_empty() {
+        state.stations[station_idx]
+            .cargo_packets
+            .consume_reserved(load);
+        return false;
+    }
+
+    let order_hop = crate::VehicleOrder::get_next_stopping_station(
+        &state.vehicles[vehicle_idx].orders,
+        state.vehicles[vehicle_idx].cur_implicit_order_index,
+        station_pos,
+        None,
+    )
+    .into_iter()
+    .next();
+    for packet in &mut taken {
+        if packet.first_station.is_none() {
+            packet.first_station = Some(station_pos);
+        }
+        let origin = packet.first_station.unwrap_or(station_pos);
+        let distribution = state
+            .cargo_dist
+            .distribution_for(CargoType::Mail, &state.cargo_spec_catalog);
+        packet.next_hop = crate::flow_stat::resolve_next_hop(
+            distribution,
+            &state.runtime.station_flows,
+            station_pos,
+            CargoType::Mail,
+            origin,
+            order_hop,
+            &mut state.random,
+        );
+        packet.update_loading_tile(station_pos);
+    }
+    let loaded_units: u32 = taken.iter().map(|packet| u32::from(packet.count)).sum();
+    state.stations[station_idx]
+        .cargo_packets
+        .consume_reserved(loaded_units);
+
+    let first_pickup = state.vehicles[vehicle_idx].cargo == 0
+        && state.vehicles[vehicle_idx].aircraft_mail_packets.is_empty();
+    if first_pickup {
+        let vehicle_id = state.vehicles[vehicle_idx].id;
+        trigger_vehicle_randomisation_event(state, vehicle_id, VehicleRandomTrigger::NewCargo);
+    }
+    state.vehicles[vehicle_idx]
+        .aircraft_mail_packets
+        .append_packets(taken);
+    state.vehicles[vehicle_idx].aircraft_mail_cargo = Some(
+        u16::try_from(
+            state.vehicles[vehicle_idx]
+                .aircraft_mail_packets
+                .total()
+                .min(u32::from(u16::MAX)),
+        )
+        .unwrap_or(u16::MAX),
+    );
+    state.vehicles[vehicle_idx].last_pickup_station = Some(station_pos);
+    state.vehicles[vehicle_idx].last_depart_tick = Some(state.tick.get());
+    let visit = state.vehicles[vehicle_idx]
+        .station_visit_with_callbacks_and_catalog(state.tick.get(), &state.engine_catalog);
+    station::on_station_cargo_pickup(
+        &mut state.stations[station_idx],
+        CargoType::Mail,
+        company,
+        visit,
+    );
+    if state.stations[station_idx].cargo_stock.get(CargoType::Mail) == 0 {
+        trigger_station_cargo_animation(
+            state,
+            station_pos,
+            crate::StationAnimationTrigger::CargoTaken,
+            CargoType::Mail,
+        );
+    }
+    let vehicle_pos = state.vehicles[vehicle_idx].pos;
+    trigger_station_vehicle_load_animation(state, station_pos, vehicle_pos);
+    *loaded_flag = true;
+    if first_pickup {
+        state.stats.cargo_pickups += 1;
+    }
+    state.stats.cargo_units_loaded += u64::from(loaded_units);
+
+    let mail_full = state.vehicles[vehicle_idx].aircraft_mail_packets.total() >= mail_capacity;
+    let station_empty = state.stations[station_idx].cargo_stock.get(CargoType::Mail) == 0;
+    state.vehicles[vehicle_idx].cargo_loading = !(mail_full || station_empty);
+    true
+}
+
 #[allow(clippy::too_many_lines)] // carga de industria, órdenes y next-hop son una transición atómica.
 fn try_load_from_industry(
     state: &mut GameState,
@@ -1361,7 +1529,8 @@ fn try_load_from_industry(
         &mut state.random,
     );
     packet.update_loading_tile(station_pos);
-    let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
+    let first_pickup = state.vehicles[vehicle_idx].cargo == 0
+        && state.vehicles[vehicle_idx].aircraft_mail_packets.is_empty();
     if first_pickup {
         let vehicle_id = state.vehicles[vehicle_idx].id;
         trigger_vehicle_randomisation_event(state, vehicle_id, VehicleRandomTrigger::NewCargo);
@@ -1536,7 +1705,8 @@ fn try_load_from_station_waiting_cargo(
     state.stations[station_idx]
         .cargo_packets
         .consume_reserved(loaded_units);
-    let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
+    let first_pickup = state.vehicles[vehicle_idx].cargo == 0
+        && state.vehicles[vehicle_idx].aircraft_mail_packets.is_empty();
     if first_pickup {
         let vehicle_id = state.vehicles[vehicle_idx].id;
         trigger_vehicle_randomisation_event(state, vehicle_id, VehicleRandomTrigger::NewCargo);
@@ -1921,6 +2091,41 @@ mod tests {
         station.cargo_stock.passengers = 1;
         state.stations.push(station);
         assert!(has_loadable_supply(&state));
+    }
+
+    #[test]
+    fn aircraft_shadow_mail_loads_from_station_without_touching_primary_hold() {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(4, 4);
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::Airport);
+        station.goods.get_mut(CargoType::Mail).rating = 255;
+        station.add_waiting_cargo(CargoType::Mail, 20);
+        state.stations.push(station);
+
+        let engine = state
+            .engine_catalog
+            .iter_mut()
+            .find(|engine| engine.id == crate::engine::ENGINE_AIRCRAFT_DAKOTA)
+            .expect("vanilla aircraft engine");
+        engine.mail_capacity = 10;
+        let mut aircraft = crate::Vehicle::new(1, VehicleKind::Aircraft, pos, pos);
+        aircraft.aircraft_mail_capacity = Some(10);
+        aircraft.capacity = 40;
+        state.vehicles.push(aircraft);
+
+        let mut loaded = false;
+        assert!(try_load_aircraft_mail_from_station_waiting_cargo(
+            &mut state,
+            0,
+            0,
+            &mut loaded,
+        ));
+        assert!(loaded);
+        assert_eq!(state.vehicles[0].cargo, 0);
+        assert_eq!(state.vehicles[0].cargo_type, Some(CargoType::Passengers));
+        assert_eq!(state.vehicles[0].aircraft_mail_cargo, Some(2));
+        assert_eq!(state.vehicles[0].aircraft_mail_packets.total(), 2);
+        assert_eq!(state.stations[0].cargo_stock.get(CargoType::Mail), 18);
     }
 
     #[test]

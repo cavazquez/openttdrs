@@ -980,6 +980,38 @@ fn vehicle_cargo_aging_uses_engine_period_and_zero_disables_it() {
     assert_eq!(s.vehicles[0].cached_cargo_age_period, 0);
 }
 
+#[test]
+fn aircraft_shadow_mail_ages_with_primary_vehicle_clock() {
+    let mut s = GameState::new(8, 8);
+    let engine = s
+        .engine_catalog
+        .iter_mut()
+        .find(|engine| engine.id == crate::engine::ENGINE_AIRCRAFT_DAKOTA)
+        .expect("vanilla aircraft engine");
+    engine.cargo_age_period = 2;
+    engine.mail_capacity = 10;
+
+    let pos = TileCoord::new(1, 1);
+    let mut aircraft = Vehicle::new(0, VehicleKind::Aircraft, pos, pos);
+    aircraft.aircraft_mail_capacity = Some(10);
+    let mut mail = crate::CargoPacket::new(CargoType::Mail, 4, pos);
+    mail.periods_in_transit = 0;
+    aircraft.aircraft_mail_packets.push(mail);
+    aircraft.aircraft_mail_cargo = Some(4);
+    s.vehicles.push(aircraft);
+
+    s.step();
+    assert_eq!(
+        s.vehicles[0].aircraft_mail_packets.max_periods_in_transit(),
+        0
+    );
+    s.step();
+    assert_eq!(
+        s.vehicles[0].aircraft_mail_packets.max_periods_in_transit(),
+        1
+    );
+}
+
 /// Tras producir, la mina reparte el carbón a las estaciones de su cobertura: el rating
 /// decide la tajada de cada una (`TransportIndustryGoods` / `MoveGoodsToStation`).
 #[test]

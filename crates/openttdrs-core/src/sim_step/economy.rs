@@ -1195,6 +1195,12 @@ pub(super) fn age_vehicle_cargo(state: &mut GameState) {
                 vehicle.cargo_packets.age_one_period();
                 vehicle.sync_cargo_from_packets();
             }
+            if !vehicle.aircraft_mail_packets.is_empty() {
+                // `AIR_SHADOW` comparte el reloj de envejecimiento del
+                // avión, pero conserva sus propios packets y por tanto su
+                // origen/edad para el pago de correo.
+                vehicle.aircraft_mail_packets.age_one_period();
+            }
             vehicle.cargo_age_counter = period;
         }
     }

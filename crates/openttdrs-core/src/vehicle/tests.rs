@@ -734,6 +734,20 @@ fn service_at_depot_restores_reliability() {
 }
 
 #[test]
+fn aircraft_refit_cargo_survives_empty_sync_and_clear() {
+    let pos = TileCoord::new(2, 2);
+    let mut aircraft = Vehicle::new(74, VehicleKind::Aircraft, pos, pos);
+    aircraft.cargo_type = Some(crate::CargoType::Mail);
+    aircraft.refit_capacity = 7;
+
+    aircraft.sync_cargo_from_packets();
+    assert_eq!(aircraft.cargo_type, Some(crate::CargoType::Mail));
+
+    aircraft.clear_cargo();
+    assert_eq!(aircraft.cargo_type, Some(crate::CargoType::Mail));
+}
+
+#[test]
 fn requires_service_by_percent_threshold() {
     let mut v = Vehicle::new(
         1,

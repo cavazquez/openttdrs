@@ -70,9 +70,12 @@ impl super::model::Vehicle {
                 .then_some(self.cargo_type)
                 .flatten();
             self.cargo_type = match self.kind {
-                super::model::VehicleKind::Bus
-                | super::model::VehicleKind::Tram
-                | super::model::VehicleKind::Aircraft => Some(CargoType::Passengers),
+                super::model::VehicleKind::Bus | super::model::VehicleKind::Tram => {
+                    Some(CargoType::Passengers)
+                }
+                super::model::VehicleKind::Aircraft => {
+                    refitted_type.or(Some(CargoType::Passengers))
+                }
                 super::model::VehicleKind::Truck
                 | super::model::VehicleKind::Train
                 | super::model::VehicleKind::Ship => refitted_type,
@@ -128,9 +131,10 @@ impl super::model::Vehicle {
         self.cargo_unloading = false;
         self.cargo = 0;
         self.cargo_type = match self.kind {
-            super::model::VehicleKind::Bus
-            | super::model::VehicleKind::Tram
-            | super::model::VehicleKind::Aircraft => Some(CargoType::Passengers),
+            super::model::VehicleKind::Bus | super::model::VehicleKind::Tram => {
+                Some(CargoType::Passengers)
+            }
+            super::model::VehicleKind::Aircraft => refitted_type.or(Some(CargoType::Passengers)),
             super::model::VehicleKind::Truck
             | super::model::VehicleKind::Train
             | super::model::VehicleKind::Ship => refitted_type,

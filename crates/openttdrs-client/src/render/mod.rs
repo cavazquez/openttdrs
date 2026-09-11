@@ -114,8 +114,8 @@ pub(crate) use tiles::{
 pub(crate) use vehicles::{
     AircraftRotorSprite, AircraftShadowSprite, ConsistUnitSprite, NewGrfTrainSpriteCache,
     NewGrfVehicleLayer, TruckHandles, VehicleCargoLabel, VehicleIndex, VehicleRenderPlugin,
-    VehicleSprite, aircraft_rotor_preview_layers, pick_vehicle_id_at_world, vehicle_sprite_pos_at,
-    vehicle_world_position,
+    VehicleSprite, aircraft_rotor_preview_layers, pick_vehicle_id_at_world, vehicle_preview_layers,
+    vehicle_sprite_pos_at, vehicle_world_position,
 };
 pub(crate) use viewport::{
     ABSOLUTE_MAX_ORTHO_SCALE, MIN_ORTHO_SCALE, TileViewportBounds, chunk_tile_bounds,

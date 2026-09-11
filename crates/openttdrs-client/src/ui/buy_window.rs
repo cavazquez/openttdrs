@@ -21,7 +21,7 @@ use crate::i18n::{Locale, localized_text};
 use crate::render::newgrf_cache::{DecodedSpriteImagePolicy, decoded_sprite_image};
 use crate::render::{
     NewGrfTrainSpriteCache, NewGrfVehicleLayer, RemapMapVisualsPending, TruckHandles,
-    aircraft_rotor_preview_layers,
+    aircraft_rotor_preview_layers, vehicle_preview_layers,
 };
 use crate::settings::ClientPreferences;
 use crate::sprites::CompanyColour;
@@ -96,6 +96,7 @@ const ROW_SPRITE_H: f32 = 24.0;
 const PREVIEW_W: f32 = 96.0;
 const PREVIEW_H: f32 = 64.0;
 const PREVIEW_LAYER_SCALE: f32 = 2.0;
+const PREVIEW_BODY_LAYERS: usize = 8;
 const PREVIEW_ROTOR_LAYERS: usize = 8;
 const PLACEHOLDER_SPRITE: &str = "assets/opengfx/tiles/vehicle_train_e.png";
 
@@ -107,6 +108,11 @@ pub(crate) struct BuyVehiclePreviewImage;
 
 #[derive(Component)]
 pub(crate) struct BuyVehiclePreviewFrame;
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct BuyVehiclePreviewBody {
+    layer_index: usize,
+}
 
 #[derive(Component, Clone, Copy)]
 pub(crate) struct BuyVehiclePreviewRotor {
@@ -355,6 +361,17 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
                         ..default()
                     },
                 ));
+                for layer_index in 1..PREVIEW_BODY_LAYERS {
+                    preview.spawn((
+                        BuyVehiclePreviewBody { layer_index },
+                        ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
+                        Node {
+                            position_type: PositionType::Absolute,
+                            display: Display::None,
+                            ..default()
+                        },
+                    ));
+                }
                 for layer_index in 0..PREVIEW_ROTOR_LAYERS {
                     preview.spawn((
                         BuyVehiclePreviewRotor { layer_index },
@@ -625,6 +642,10 @@ fn preview_rotor_rect(layer: &NewGrfVehicleLayer) -> (f32, f32, f32, f32) {
     )
 }
 
+fn preview_layer_rect(layer: &NewGrfVehicleLayer) -> (f32, f32, f32, f32) {
+    preview_rotor_rect(layer)
+}
+
 fn toolbar_button_active(state: &BuyVehicleWindowState, button: BuyVehicleToolbarButton) -> bool {
     match button {
         BuyVehicleToolbarButton::SortName => state.sort == EngineCatalogSort::Name,
@@ -835,6 +856,14 @@ pub(crate) fn sync_buy_window_preview(
             Without<Button>,
         ),
     >,
+    mut preview_body_q: Query<
+        (&BuyVehiclePreviewBody, &mut ImageNode, &mut Node),
+        (
+            Without<BuyVehiclePreviewImage>,
+            Without<BuyVehiclePreviewRotor>,
+            Without<BuyVehiclePreviewFrame>,
+        ),
+    >,
     mut preview_rotor_q: Query<
         (&BuyVehiclePreviewRotor, &mut ImageNode, &mut Node),
         (
@@ -852,14 +881,47 @@ pub(crate) fn sync_buy_window_preview(
     };
     match (buy_state.depot_pos, preview_engine, trucks.as_ref()) {
         (Some(_), Some(engine), Some(trucks)) => {
+            let body_layers = vehicle_preview_layers(
+                &sim,
+                engine,
+                sim.state.company_colour,
+                &mut newgrf_train_sprites,
+                &mut images,
+            );
             if let Ok((mut image, mut node)) = preview_q.single_mut() {
-                image.image = preview_sprite_for_engine(
-                    trucks,
-                    engine,
-                    &mut preview_cache,
-                    &mut images,
-                    sim.state.company_colour,
-                );
+                if let Some(layer) = body_layers.first() {
+                    image.image = layer.handle.clone();
+                    let (left, top, width, height) = preview_layer_rect(layer);
+                    node.left = Val::Px(left);
+                    node.top = Val::Px(top);
+                    node.width = Val::Px(width);
+                    node.height = Val::Px(height);
+                } else {
+                    image.image = preview_sprite_for_engine(
+                        trucks,
+                        engine,
+                        &mut preview_cache,
+                        &mut images,
+                        sim.state.company_colour,
+                    );
+                    node.left = Val::Px(0.0);
+                    node.top = Val::Px(0.0);
+                    node.width = Val::Percent(100.0);
+                    node.height = Val::Percent(100.0);
+                }
+                node.display = Display::Flex;
+            }
+            for (body, mut image, mut node) in &mut preview_body_q {
+                let Some(layer) = body_layers.get(body.layer_index) else {
+                    node.display = Display::None;
+                    continue;
+                };
+                let (left, top, width, height) = preview_layer_rect(layer);
+                image.image = layer.handle.clone();
+                node.left = Val::Px(left);
+                node.top = Val::Px(top);
+                node.width = Val::Px(width);
+                node.height = Val::Px(height);
                 node.display = Display::Flex;
             }
             let rotor_layers = aircraft_rotor_preview_layers(
@@ -888,6 +950,9 @@ pub(crate) fn sync_buy_window_preview(
         _ => {
             frame.display = Display::None;
             if let Ok((_, mut node)) = preview_q.single_mut() {
+                node.display = Display::None;
+            }
+            for (_, _, mut node) in &mut preview_body_q {
                 node.display = Display::None;
             }
             for (_, _, mut node) in &mut preview_rotor_q {

@@ -587,6 +587,65 @@ pub(super) fn custom_aircraft_rotor_layers_for_preview(
     )
 }
 
+/// Resuelve las capas del cuerpo para una entidad que todavía no existe.
+///
+/// La compra usa una orientación estable (`DIR_E`) y el scope GUI. Los
+/// callbacks que necesitan una unidad real reciben el contexto vacío, igual
+/// que la preview de rotor; los parámetros del GRF y el `SpriteStack` sí se
+/// conservan para que la vista coincida con la que se dibujará al comprar.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn custom_vehicle_layers_for_preview(
+    engine: &EngineDef,
+    sim: &crate::state::SimWorld,
+    primary: CompanyColour,
+    cache: &mut NewGrfTrainSpriteCache,
+    images: &mut Assets<Image>,
+) -> Vec<NewGrfVehicleLayer> {
+    let dir = usize::from(openttdrs_core::DIR_E);
+    if engine.newgrf_runtime.is_some() {
+        let mut ctx = openttdrs_core::Action2EvalCtx::default();
+        ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
+            &sim.state.newgrf_stack,
+            engine.newgrf_grfid,
+        ));
+        ctx.vars.insert(0x1F, u32::from(openttdrs_core::DIR_E));
+        let palette_override = engine.uses_2cc.then(|| {
+            openttdrs_core::TWOCC_PALETTE_BASE
+                + u16::from(primary.as_u8())
+                + u16::from(primary.as_u8()) * 16
+        });
+        let layers = cache.handles_for_runtime_with_override(
+            engine,
+            dir,
+            None,
+            primary,
+            primary,
+            None,
+            palette_override,
+            &sim.state.runtime.twocc_action5_newgrf_sprites,
+            &mut ctx,
+            images,
+        );
+        if !layers.is_empty() {
+            return layers;
+        }
+    }
+
+    let Some(view) = engine.newgrf_view(dir) else {
+        return Vec::new();
+    };
+    let Some(handle) = cache.handle_for_with_livery(engine, dir, primary, primary, images) else {
+        return Vec::new();
+    };
+    vec![NewGrfVehicleLayer {
+        handle,
+        x_offs: view.x_offs,
+        y_offs: view.y_offs,
+        width: view.width,
+        height: view.height,
+    }]
+}
+
 #[allow(clippy::too_many_arguments)]
 fn custom_aircraft_rotor_layers_for_engine(
     engine: &EngineDef,

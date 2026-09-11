@@ -4704,3 +4704,15 @@ La entidad FTA separada, sus scopes/estado propios y la validación visual y
 runtime restante siguen pendientes, por lo que #329/#567 continúan abiertas.
 Core queda en `2488 passed; 0 failed; 1 ignored` y cliente en `1400 passed; 0
 failed; 2 ignored`, con Clippy estricto, formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-BUY-BODY-STACK (2026-09-11): el
+preview seleccionado de compra ya consulta el mismo resolver Action2 del mapa
+para el cuerpo de cualquier vehículo NewGRF. La orientación GUI estable,
+parámetros del GRF, paleta 2CC, offsets/tamaño y hasta ocho capas de
+`SpriteStack` se conservan; las capas adicionales viven en children estables y
+se ocultan cuando una resolución no las entrega. Las vistas NewGRF horneadas
+usan sus bounds antes de caer al sprite vanilla. La entidad FTA separada, sus
+scopes/estado propios y la validación visual/runtime restante siguen
+pendientes, por lo que #329/#567 continúan abiertas. Core queda en `2488
+passed; 0 failed; 1 ignored` y cliente en `1401 passed; 0 failed; 2 ignored`,
+con Clippy estricto, formato y `diff --check` limpios.

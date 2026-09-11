@@ -64,6 +64,27 @@ pub(crate) fn aircraft_rotor_preview_layers(
     }]
 }
 
+/// Capas del cuerpo custom que se dibuja en la vista previa de compra.
+///
+/// Devuelve sólo capas NewGRF; el llamador conserva el sprite vanilla como
+/// fallback cuando el motor no tiene una vista resoluble.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn vehicle_preview_layers(
+    sim: &SimWorld,
+    engine: &EngineDef,
+    company_colour: u8,
+    cache: &mut NewGrfTrainSpriteCache,
+    images: &mut Assets<Image>,
+) -> Vec<NewGrfVehicleLayer> {
+    assets::custom_vehicle_layers_for_preview(
+        engine,
+        sim,
+        crate::sprites::CompanyColour::from_u8(company_colour),
+        cache,
+        images,
+    )
+}
+
 /// Clasifica el avión con el `EngineDef` activo, incluidos motores NewGRF.
 fn aircraft_is_helicopter_for(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) -> bool {
     let engine = vehicle
@@ -968,6 +989,38 @@ mod tests {
             .next()
             .expect("newgrf layer");
         assert_eq!(selected.handle, handle);
+    }
+
+    #[test]
+    fn vehicle_preview_layers_resolve_runtime_body_sprite_stack() {
+        use crate::sprites::CompanyColour;
+
+        let engine = eight_layer_sprite_stack_engine(0x7F04, 42);
+        let mut state = GameState::new(8, 8);
+        state.engine_catalog.push(engine.clone());
+        let sim = SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+
+        let layers = vehicle_preview_layers(
+            &sim,
+            &engine,
+            CompanyColour::Red.as_u8(),
+            &mut cache,
+            &mut images,
+        );
+
+        assert_eq!(layers.len(), 8);
+        assert_eq!(layers[0].x_offs, 42);
+        assert_eq!(layers[7].x_offs, 42);
+        assert_eq!(
+            images.get(&layers[0].handle).unwrap().data.as_deref(),
+            Some(&[42, 0, 0, 255][..])
+        );
     }
 
     #[test]

@@ -64,8 +64,12 @@ fn drain_sim_events_from_core(mut sim: ResMut<SimWorld>, mut pending: ResMut<Pen
 }
 
 #[must_use]
-const fn aircraft_takeoff_sound(engine_id: u16) -> SoundId {
-    if openttdrs_core::aircraft_is_helicopter(engine_id) {
+fn aircraft_takeoff_sound(engine_id: u16, engine_catalog: &[openttdrs_core::EngineDef]) -> SoundId {
+    let is_helicopter = openttdrs_core::engine_in_catalog(engine_catalog, engine_id).map_or_else(
+        || openttdrs_core::aircraft_is_helicopter(engine_id),
+        openttdrs_core::aircraft_is_helicopter_def,
+    );
+    if is_helicopter {
         SoundId::TakeoffHelicopter
     } else if openttdrs_core::aircraft_is_jet(engine_id) {
         SoundId::TakeoffJet
@@ -75,8 +79,12 @@ const fn aircraft_takeoff_sound(engine_id: u16) -> SoundId {
 }
 
 #[must_use]
-const fn aircraft_landing_sound(engine_id: u16) -> SoundId {
-    if openttdrs_core::aircraft_is_helicopter(engine_id) {
+fn aircraft_landing_sound(engine_id: u16, engine_catalog: &[openttdrs_core::EngineDef]) -> SoundId {
+    let is_helicopter = openttdrs_core::engine_in_catalog(engine_catalog, engine_id).map_or_else(
+        || openttdrs_core::aircraft_is_helicopter(engine_id),
+        openttdrs_core::aircraft_is_helicopter_def,
+    );
+    if is_helicopter {
         SoundId::TakeoffHelicopter
     } else {
         SoundId::SkidPlane
@@ -451,8 +459,10 @@ fn dispatch_sim_events(
                 engine_id,
             } => {
                 if hud.sound_vehicle {
-                    let default_sound = SoundId::departure_for_engine_id(engine_id)
-                        .unwrap_or_else(|| aircraft_takeoff_sound(engine_id));
+                    let default_sound =
+                        SoundId::departure_for_engine_id(engine_id).unwrap_or_else(|| {
+                            aircraft_takeoff_sound(engine_id, &sim.state.engine_catalog)
+                        });
                     play_vehicle_event_sound(
                         &mut sim,
                         &mut sfx,
@@ -471,12 +481,14 @@ fn dispatch_sim_events(
                 engine_id,
             } => {
                 if hud.sound_vehicle {
+                    let default_sound =
+                        aircraft_landing_sound(engine_id, &sim.state.engine_catalog);
                     play_vehicle_event_sound(
                         &mut sim,
                         &mut sfx,
                         vehicle_id,
                         VehicleSoundEvent::Touchdown,
-                        aircraft_landing_sound(engine_id),
+                        default_sound,
                         at,
                         0.8,
                         78,
@@ -531,20 +543,40 @@ mod aircraft_sound_tests {
 
     #[test]
     fn selects_helicopter_propeller_and_jet_sounds_by_engine() {
+        let catalog = openttdrs_core::vanilla_engine_catalog();
         assert_eq!(
-            aircraft_takeoff_sound(openttdrs_core::ENGINE_AIRCRAFT_TRICARIO),
+            aircraft_takeoff_sound(openttdrs_core::ENGINE_AIRCRAFT_TRICARIO, &catalog),
             SoundId::TakeoffHelicopter
         );
         assert_eq!(
-            aircraft_takeoff_sound(openttdrs_core::ENGINE_AIRCRAFT_DAKOTA),
+            aircraft_takeoff_sound(openttdrs_core::ENGINE_AIRCRAFT_DAKOTA, &catalog),
             SoundId::TakeoffPropeller
         );
         assert_eq!(
-            aircraft_takeoff_sound(openttdrs_core::ENGINE_AIRCRAFT_FOKKER),
+            aircraft_takeoff_sound(openttdrs_core::ENGINE_AIRCRAFT_FOKKER, &catalog),
             SoundId::TakeoffJet
         );
         assert_eq!(
-            aircraft_landing_sound(openttdrs_core::ENGINE_AIRCRAFT_TRICARIO),
+            aircraft_landing_sound(openttdrs_core::ENGINE_AIRCRAFT_TRICARIO, &catalog),
+            SoundId::TakeoffHelicopter
+        );
+    }
+
+    #[test]
+    fn active_catalog_helicopter_uses_helicopter_sounds() {
+        let mut custom = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_AIRCRAFT_DAKOTA)
+            .unwrap()
+            .clone();
+        custom.id = 0x7F01;
+        custom.is_helicopter = true;
+        let catalog = vec![custom];
+
+        assert_eq!(
+            aircraft_takeoff_sound(0x7F01, &catalog),
+            SoundId::TakeoffHelicopter
+        );
+        assert_eq!(
+            aircraft_landing_sound(0x7F01, &catalog),
             SoundId::TakeoffHelicopter
         );
     }

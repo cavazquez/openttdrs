@@ -3649,6 +3649,17 @@ verdes. #567 sigue abierta por la matriz completa Sea/Canal/River, costas,
 callbacks, piezas restantes, clipping, orden global y framebuffer; #326
 permanece abierta.
 
+Actualización #326/#567-SHIP-DEPOT-WATER-STRUCTURE-CLEAR (2026-09-11,
+`6e46b15d`): el preview y la ejecución ya no sobrescriben una esclusa ni una
+sección de depósito naval existente. Ambas son `MP_WATER` con `WaterClass`
+válida y por eso pasan `HasTileWaterGround`, pero `ClearTile_Water | Auto` las
+rechaza con `BUILDING_MUST_BE_DEMOLISHED`; el port replica ahora ese rechazo y
+lo prueba en los cuatro ejes sin mutar huella, pool ni dinero. Core queda en
+2410 pasadas y 1 ignorada; cliente en 1383 pasadas y 2 ignoradas, con Clippy
+estricto y formato verdes. #567 sigue abierta por el auto-clear de objetos,
+estaciones e industrias sobre agua, callbacks/vecinos y aceptación visual en
+Weston; #326 permanece abierta.
+
 Actualización #326/#567-OBJECT-WATER-GROUND (2026-09-10, `ad80376f`): el
 renderer de objetos NewGRF ya interpreta `ObjectFlag::DrawWater` (bit 10) y el
 ground directo `SPR_FLAT_WATER_TILE` como `DrawWaterClassGround` cuando

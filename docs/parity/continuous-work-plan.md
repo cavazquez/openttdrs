@@ -4519,3 +4519,14 @@ compra, refit/autoreplace, balanceo de capacidad y persistencia SAV para una
 subetapa propia. Core queda en `2478 passed; 0 failed; 1 ignored` y cliente en
 `1394 passed; 0 failed; 2 ignored`, con Clippy de producción, formato,
 `diff --check` y `parity-docs` limpios. #329/#567 siguen abiertas.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-SHADOW-SAV (2026-09-11,
+`caa9ccb4`): el escritor `VEHS` ya reconstruye la sombra auxiliar de cada
+aeronave con `CargoType::Mail` y `EngineDef.mail_capacity` en `cargo_cap`.
+La capacidad principal de pasajeros queda separada y las referencias
+primario→sombra→rotor no cambian. La sombra sigue siendo sólo una proyección
+de exportación: faltan una unidad secundaria en `Vehicle`, compra/refit/
+autoreplace balanceados y su rehidratación al importar SAV. Core queda en
+`2478 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2
+ignored`, con Clippy de producción, formato, `diff --check` y
+`parity-docs` limpios. #329/#567 siguen abiertas.

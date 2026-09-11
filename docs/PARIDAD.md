@@ -4648,3 +4648,15 @@ balanceo durante refit/autoreplace y su persistencia SAV. Core queda en `2478
 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`,
 con Clippy de producción, formato, `diff --check` y `parity-docs` limpios.
 #329/#567 siguen abiertas.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-SHADOW-SAV (2026-09-11,
+`caa9ccb4`): el escritor `VEHS` ya reconstruye la unidad auxiliar que OpenTTD
+espera detrás de cada aeronave. La sombra declara `CargoType::Mail` y recibe
+`EngineDef.mail_capacity` en `cargo_cap`, sin mezclarlo con la capacidad de
+pasajeros del primario; la cadena ala fija+sombra o helicóptero+sombra+rotor se
+mantiene intacta. El modelo `Vehicle` todavía no simula una unidad secundaria,
+por lo que siguen pendientes su creación al comprar, balanceo durante
+refit/autoreplace y rehidratación de la sombra desde SAV. Core queda en `2478
+passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`,
+con Clippy de producción, formato y `diff --check` limpios. #329/#567 siguen
+abiertas.

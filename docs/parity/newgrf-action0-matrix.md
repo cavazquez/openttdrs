@@ -159,7 +159,7 @@ Fuente: `newgrf_act0_aircraft.cpp`.
 | `0C` velocidad (conversión `×128/10`) | **runtime** |
 | `0E` running cost factor | **runtime** |
 | `0F` capacidad de pasajeros | **runtime** |
-| `11` capacidad de correo | **runtime parcial** (`mail_capacity` se conserva en `EngineDef` y se muestra en la compra; la unidad sombra/articulada aún no se materializa) |
+| `11` capacidad de correo | **runtime parcial** (`mail_capacity` se conserva en `EngineDef`, se muestra en la compra y el escritor SAV lo reconstruye en la sombra `VEHS` como `MAIL`/`cargo_cap`; la unidad sombra aún no existe en el runtime ni se rehidrata como `Vehicle`) |
 | `12` sound effect BYTE | **runtime** (`sound_effect`) |
 | `14` callback mask BYTE / `22` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
 | `17` misc flags (bit1 `Uses2CC`, bit5 `NoDefaultCargoMultiplier`, bit6 `NoBreakdownSmoke`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc`, `no_default_cargo_multiplier`, `no_breakdown_smoke` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |

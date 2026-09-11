@@ -4764,3 +4764,16 @@ visual/runtime amplia siguen pendientes, por lo que #329/#567 continúan
 abiertas. Core queda en `2488 passed; 0 failed; 1 ignored` y cliente en `1401
 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check`
 limpios para este cambio.
+
+Actualización #329/#567-VEHICLE-STATIC-SPRITE-STACK (2026-09-11): el catálogo
+ya conserva el grafo `TrainSpriteGraphics` cuando Action0 declara
+`SpriteStack`, aunque el GRF no tenga random/variational ni otro motivo previo
+para una resolución runtime. Esto permite que el renderer resuelva también
+los slots estáticos de cuerpo y rotor con la misma semántica de Action2; los
+motores sin `SpriteStack` mantienen el almacenamiento anterior. La regresión
+aplica un GRF de tren y verifica que el grafo sobrevive a la construcción del
+catálogo. La entidad FTA separada, sus scopes/estado propios y la validación
+visual/runtime amplia siguen pendientes, por lo que #329/#567 continúan
+abiertas. Core queda en `2489 passed; 0 failed; 1 ignored` y cliente en `1401
+passed; 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check`
+limpios.

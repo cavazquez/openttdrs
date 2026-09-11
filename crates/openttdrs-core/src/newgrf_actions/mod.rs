@@ -2796,6 +2796,55 @@ mod tests {
     }
 
     #[test]
+    fn apply_train_keeps_static_sprite_stack_graph() {
+        let mut a0 = build_action0_train_payload(1960, 100, 800, "Static Stack");
+        let name = a0
+            .iter()
+            .position(|byte| *byte == 0xFE)
+            .expect("name property");
+        a0.splice(name..name, [0x27, 0x80]);
+        a0[2] += 1;
+
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::newgrf_sprites::build_grf_v2_train_with_preview_sprite(
+            &a0,
+            0,
+            8,
+            8,
+            &indices,
+            [b'S', b'T', 0, 1],
+            "static-stack",
+        );
+        let dir = tempfile_dir_with("static-stack.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("static-stack.grf", 2));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|candidate| candidate.from_newgrf)
+            .expect("static SpriteStack engine");
+        assert!(engine.sprite_stack);
+        let runtime = engine
+            .newgrf_runtime
+            .as_ref()
+            .expect("static SpriteStack graph must survive catalog application");
+        assert!(
+            runtime
+                .views_for_local_id_u16(engine.newgrf_local_id)
+                .is_some()
+        );
+    }
+
+    #[test]
     fn apply_train_with_action2_chain_attaches_preview() {
         let a0 = build_action0_train_payload(1975, 120, 900, "A2 Loco Apply");
         let mut indices = vec![0u8; 8 * 8];

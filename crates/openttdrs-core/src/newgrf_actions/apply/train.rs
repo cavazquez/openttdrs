@@ -295,7 +295,11 @@ fn push_feature_vehicles(
             .extended_assigns
             .iter()
             .any(|(local_id, _)| *local_id == meta.local_id);
-        let newgrf_runtime = if gfx.needs_runtime_resolve()
+        // Un SpriteStack estático también necesita conservar el grafo: el
+        // cliente resuelve cada slot con var 10 aunque no haya random ni
+        // variational que, por sí solos, obliguen a mantenerlo.
+        let newgrf_runtime = if meta.sprite_stack
+            || gfx.needs_runtime_resolve()
             || has_cargo_groups
             || has_extended_id
             || !gfx.wagon_overrides.is_empty()
@@ -461,7 +465,10 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
             let has_extended_id = gfx.extended_assigns.iter().any(|(id, _)| *id == local_id);
-            let newgrf_runtime = if gfx.needs_runtime_resolve()
+            // El flag SpriteStack cambia la forma de consumir Action1/2 aun
+            // cuando la selección sea estática; no perder el grafo aquí.
+            let newgrf_runtime = if meta.sprite_stack
+                || gfx.needs_runtime_resolve()
                 || has_extended_id
                 || !gfx.wagon_overrides.is_empty()
             {

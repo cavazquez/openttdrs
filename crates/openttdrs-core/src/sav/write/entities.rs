@@ -20,6 +20,7 @@ const FACIL_TRAIN: u8 = 0x01;
 const FACIL_TRUCK_STOP: u8 = 0x02;
 const FACIL_BUS_STOP: u8 = 0x04;
 const FACIL_AIRPORT: u8 = 0x08;
+#[cfg(test)]
 const FACIL_DOCK: u8 = 0x10;
 const FACIL_WAYPOINT: u8 = 0x80;
 
@@ -95,22 +96,6 @@ struct RoadStopTileExport {
     spec_index: u8,
     random_bits: u8,
     animation_frame: u8,
-}
-
-fn facilities_for_stop(kind: StopKind) -> u8 {
-    match kind {
-        StopKind::RailStation => FACIL_TRAIN,
-        StopKind::TruckStop => FACIL_TRUCK_STOP,
-        StopKind::BusStop => FACIL_BUS_STOP,
-        StopKind::Dock | StopKind::Buoy => FACIL_DOCK,
-        StopKind::Airport => FACIL_AIRPORT,
-        // `BuildOilRig` creates one neutral station exposing both the
-        // helipad and the dock.  Serialising it as an airport alone loses
-        // the ship facility on the next OpenTTD load.
-        StopKind::OilRig => FACIL_AIRPORT | FACIL_DOCK,
-        StopKind::RailWaypoint => FACIL_WAYPOINT | FACIL_TRAIN,
-        StopKind::RoadWaypoint => FACIL_WAYPOINT | FACIL_BUS_STOP | FACIL_TRUCK_STOP,
-    }
 }
 
 fn is_waypoint(facilities: u8) -> bool {
@@ -914,7 +899,7 @@ pub(crate) fn stnn_records_with_cargo(
         // sola entidad (por ejemplo tren + aeropuerto). `StopKind` representa
         // la facilidad principal, por lo que la huella aérea también debe
         // volver a activar `FACIL_AIRPORT` al exportar.
-        let mut facilities = facilities_for_stop(st.stop_kind);
+        let mut facilities = st.effective_facilities();
         if !st.airport_tiles.is_empty() || st.airport_newgrf_spec_id.is_some() {
             facilities |= FACIL_AIRPORT;
         }
@@ -2157,6 +2142,24 @@ mod tests {
             decoded[0].build_date,
             crate::station::STATION_BUILD_DATE_DEFAULT + 123
         );
+    }
+
+    #[test]
+    fn stnn_record_preserves_mixed_train_and_dock_facilities() {
+        let mut state = GameState::new(16, 16);
+        let mut station = Station::new_with_kind(TileCoord::new(4, 4), StopKind::RailStation);
+        station.facilities = FACIL_TRAIN | FACIL_DOCK;
+        state.stations.push(station);
+
+        let records = stnn_records(&state, 16).expect("STNN records");
+        assert_eq!(records[0][0], FACIL_TRAIN | FACIL_DOCK);
+        let chunk = stnn_chunk(&records).expect("STNN chunk");
+        let decoded = crate::sav::entities::stations_from_chunks(
+            &crate::sav::chunks::parse_chunks(&chunk).expect("parse STNN"),
+            16,
+            352,
+        );
+        assert_eq!(decoded[0].facilities, FACIL_TRAIN | FACIL_DOCK);
     }
 
     #[test]

@@ -285,6 +285,11 @@ pub struct Station {
     pub ottd_station_id: Option<u32>,
     #[serde(default)]
     pub stop_kind: StopKind,
+    /// Bits nativos `BaseStation::facilities` cuando la estación proviene de
+    /// un SAV. Cero conserva el fallback de partidas JSON antiguas y de
+    /// estaciones creadas en runtime: derivar la facilidad de `stop_kind`.
+    #[serde(default)]
+    pub facilities: u8,
     /// Compañía propietaria (Fase 4; default jugador).
     #[serde(default)]
     pub owner: CompanyId,
@@ -561,6 +566,7 @@ impl Station {
             town_id: None,
             ottd_station_id: None,
             stop_kind,
+            facilities: 0,
             owner: CompanyId::PLAYER,
             neutral_industry_id: None,
             name: None,
@@ -882,25 +888,36 @@ impl Station {
         self.pos == c || self.airport_tiles.contains(&c) || self.joined_tiles.contains(&c)
     }
 
+    /// Máscara efectiva de `BaseStation::facilities`.
+    ///
+    /// Los saves JSON anteriores no tenían el byte nativo; usar `StopKind`
+    /// como fallback también mantiene coherentes las estaciones creadas por
+    /// helpers que cambian el tipo después de construirlas.
+    #[must_use]
+    pub fn effective_facilities(&self) -> u8 {
+        if self.facilities != 0 {
+            self.facilities
+        } else {
+            u8::try_from(self.stop_kind.facilities_mask()).unwrap_or(0)
+        }
+    }
+
     #[must_use]
     pub fn can_service_vehicle(&self, vehicle_kind: VehicleKind) -> bool {
-        matches!(
-            (vehicle_kind, self.stop_kind),
-            (
-                VehicleKind::Train,
-                StopKind::RailStation | StopKind::RailWaypoint
-            ) | (VehicleKind::Bus | VehicleKind::Tram, StopKind::BusStop)
-                | (VehicleKind::Truck, StopKind::TruckStop)
-                | (
-                    VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram,
-                    StopKind::RoadWaypoint,
-                )
-                | (
-                    VehicleKind::Ship,
-                    StopKind::Dock | StopKind::Buoy | StopKind::OilRig
-                )
-                | (VehicleKind::Aircraft, StopKind::Airport | StopKind::OilRig)
-        )
+        const FACIL_TRAIN: u8 = 0x01;
+        const FACIL_TRUCK_STOP: u8 = 0x02;
+        const FACIL_BUS_STOP: u8 = 0x04;
+        const FACIL_AIRPORT: u8 = 0x08;
+        const FACIL_DOCK: u8 = 0x10;
+
+        let facilities = self.effective_facilities();
+        match vehicle_kind {
+            VehicleKind::Train => facilities & FACIL_TRAIN != 0,
+            VehicleKind::Bus | VehicleKind::Tram => facilities & FACIL_BUS_STOP != 0,
+            VehicleKind::Truck => facilities & FACIL_TRUCK_STOP != 0,
+            VehicleKind::Ship => facilities & FACIL_DOCK != 0,
+            VehicleKind::Aircraft => facilities & FACIL_AIRPORT != 0,
+        }
     }
 
     #[must_use]

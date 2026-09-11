@@ -1597,6 +1597,7 @@ impl GameState {
                     stop_kind_from_facilities(st.facilities)
                 };
             let mut station = Station::new_with_kind(st.pos, stop_kind);
+            station.facilities = st.facilities;
             station.ottd_station_id = Some(st.station_id);
             station.town_id = st.town_id;
             station.owner = crate::company::CompanyId(st.owner);
@@ -3095,6 +3096,9 @@ mod tests {
         let state = GameState::from_sav_game(sav);
         let station = state.stations.first().expect("intermodal station");
         assert_eq!(station.stop_kind, StopKind::RailStation);
+        assert_eq!(station.effective_facilities(), FACIL_TRAIN | FACIL_DOCK);
+        assert!(station.can_service_vehicle(crate::vehicle::VehicleKind::Train));
+        assert!(station.can_service_vehicle(crate::vehicle::VehicleKind::Ship));
         for tile in [first_land, first_water, second_land, second_water] {
             assert!(station.covers_tile(tile), "missing dock tile {tile:?}");
         }

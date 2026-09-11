@@ -74,7 +74,7 @@ pub(super) fn set_vehicle_order_list(
     }
     let vehicle = &mut state.vehicles[vehicle_idx];
     vehicle.set_vehicle_orders(orders);
-    vehicle.sync_order_destination(&state.map);
+    vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
     Ok(())
 }
 
@@ -91,7 +91,7 @@ pub(super) fn set_vehicle_orders(
         return Err(CommandError::VehicleNotFound);
     };
     vehicle.set_orders(orders);
-    vehicle.sync_order_destination(&state.map);
+    vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
     Ok(())
 }
 
@@ -1199,7 +1199,7 @@ pub(super) fn remove_vehicle_order_at(
     vehicle.path.clear();
     vehicle.depart_turn = 0;
     vehicle.no_network_route_to_order = false;
-    vehicle.sync_order_destination(&state.map);
+    vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
     Ok(())
 }
 
@@ -1221,7 +1221,7 @@ pub(super) fn skip_vehicle_order(
     vehicle.progress = 0;
     vehicle.current_order = (vehicle.current_order + 1) % vehicle.orders.len();
     vehicle.origin = vehicle.pos;
-    vehicle.sync_order_destination(&state.map);
+    vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
     Ok(())
 }
 
@@ -1270,7 +1270,7 @@ fn toggle_vehicle_order_flag(
     };
     vehicle.orders[index] = updated;
     if index == vehicle.current_order {
-        vehicle.sync_order_destination(&state.map);
+        vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
     }
     Ok(())
 }
@@ -1527,7 +1527,7 @@ pub(super) fn turn_around_vehicle(
     state.vehicles[idx].wait_counter = 0;
     state.vehicles[idx].pbs_stuck = false;
     state.vehicles[idx].no_network_route_to_order = false;
-    state.vehicles[idx].sync_order_destination(&state.map);
+    state.vehicles[idx].sync_order_destination_with_stations(&state.map, &state.stations);
     crate::rail_pbs::update_train_reservations(&state.map, &mut state.vehicles);
     if crate::rail_pbs::train_waiting_for_pbs_path(&state.map, &state.vehicles[idx]) {
         state.vehicles[idx].pbs_stuck = true;

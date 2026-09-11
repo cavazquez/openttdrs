@@ -245,7 +245,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             // de movimiento; consumir el evento antes de re-rutear o avanzar.
             super::trigger_pending_train_station_departure(state, i);
             if was_at_station && !state.vehicles[i].awaiting_load_window {
-                state.vehicles[i].sync_order_destination(&state.map);
+                state.vehicles[i].sync_order_destination_with_stations(&state.map, &state.stations);
             }
             let head_id = state.vehicles[i].id;
             if crate::train_consist::reverse_consist_at_stop_indexed(
@@ -332,7 +332,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                     &mut state.vehicles[i],
                     &mut state.runtime.reservation_tile_dirty,
                 );
-                state.vehicles[i].sync_order_destination(&state.map);
+                state.vehicles[i].sync_order_destination_with_stations(&state.map, &state.stations);
                 if head_on {
                     reroute_head_on_to_alt_platform(state, i);
                 }

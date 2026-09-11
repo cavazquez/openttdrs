@@ -869,7 +869,7 @@ pub(super) fn unload_vehicles(
             state.vehicles[i].last_depart_tick = None;
             // Avanzar orden al terminar descarga (road stop o plataforma rail).
             state.vehicles[i].advance_after_unloading();
-            state.vehicles[i].sync_order_destination(&state.map);
+            state.vehicles[i].sync_order_destination_with_stations(&state.map, &state.stations);
         } else {
             state.vehicles[i].cargo_unloading = true;
         }

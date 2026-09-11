@@ -470,7 +470,7 @@ fn check_road_vehicle_needs_service(state: &mut crate::GameState, idx: usize) {
         VehicleOrder::depot_pass_through(depot),
     );
     vehicle.path.clear();
-    vehicle.sync_order_destination(&state.map);
+    vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
 }
 
 #[cfg(test)]

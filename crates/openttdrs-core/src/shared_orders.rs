@@ -34,7 +34,7 @@ pub fn sync_shared_orders_to_vehicles(state: &mut GameState, shared_id: u32) {
             if vehicle.current_order >= vehicle.orders.len() && !vehicle.orders.is_empty() {
                 vehicle.current_order = vehicle.orders.len() - 1;
             }
-            vehicle.sync_order_destination(&state.map);
+            vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
         }
     }
 }

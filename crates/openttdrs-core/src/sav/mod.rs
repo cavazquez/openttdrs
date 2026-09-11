@@ -882,11 +882,15 @@ fn vehicle_already_on_own_network(map: &Map, vehicle: &Vehicle) -> bool {
 ///
 /// No mueve vehículos que ya están sobre su red: un path signal oneway puede
 /// hacer fallar `find_path` sin que la posición del `.sav` sea inválida.
-fn reconcile_imported_vehicle_position(map: &Map, vehicle: &mut Vehicle) {
+fn reconcile_imported_vehicle_position(
+    map: &Map,
+    stations: &[crate::station::Station],
+    vehicle: &mut Vehicle,
+) {
     if vehicle.orders.is_empty() {
         return;
     }
-    vehicle.sync_order_destination(map);
+    vehicle.sync_order_destination_with_stations(map, stations);
     let net = pathfinder::path_network_for_vehicle(vehicle.kind);
     if pathfinder::find_path(map, vehicle.pos, vehicle.dest, net).is_some() {
         return;
@@ -2069,7 +2073,7 @@ impl GameState {
                 let last = vehicle.orders.len().saturating_sub(1);
                 vehicle.current_order = v.current_order.min(last);
                 vehicle.cur_implicit_order_index = v.cur_implicit_order_index.min(last);
-                reconcile_imported_vehicle_position(&state.map, &mut vehicle);
+                reconcile_imported_vehicle_position(&state.map, &state.stations, &mut vehicle);
             }
             vehicle.timetable_autofill_samples = vehicle
                 .orders

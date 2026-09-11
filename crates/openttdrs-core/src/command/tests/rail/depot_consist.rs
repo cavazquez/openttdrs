@@ -412,6 +412,7 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         price: 50_000,
         running_cost_year: 2_000,
         capacity: 0,
+        mail_capacity: 0,
         cargo: None,
         power_hp: 2_000,
         weight_t: 90,

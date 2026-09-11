@@ -487,8 +487,19 @@ fn stats_text(
     };
     let power_unit = if locale == Locale::En { "hp" } else { "cv" };
     let year = localized_text(locale, "año");
+    let capacity = if engine.kind == VehicleKind::Aircraft && engine.mail_capacity > 0 {
+        format!(
+            "{} {} / {} {}",
+            engine.capacity,
+            cargo_label(locale, engine.cargo),
+            engine.mail_capacity,
+            localized_text(locale, "correo"),
+        )
+    } else {
+        format!("{} {}", engine.capacity, cargo_label(locale, engine.cargo))
+    };
     let mut stats = format!(
-        "{role}{newgrf}{}: ${}  {}: {}t\n{}: {}km/h  {}: {}{power_unit}\n{}: ${}/{}\n{}: {} {}\n{}: {}  {}: {}%",
+        "{role}{newgrf}{}: ${}  {}: {}t\n{}: {}km/h  {}: {}{power_unit}\n{}: ${}/{}\n{}: {capacity}\n{}: {}  {}: {}%",
         localized_text(locale, "Precio"),
         engine.price,
         localized_text(locale, "Peso"),
@@ -501,8 +512,6 @@ fn stats_text(
         engine.running_cost_year,
         year,
         localized_text(locale, "Capacidad"),
-        engine.capacity,
-        cargo_label(locale, engine.cargo),
         localized_text(locale, "Diseñado"),
         engine.intro_year,
         localized_text(locale, "Fiabilidad"),
@@ -1233,5 +1242,19 @@ mod tests {
 
         let english = stats_text(Locale::En, &engine, &catalog);
         assert!(english.contains("Badges: ELEC, FERRY"));
+    }
+
+    #[test]
+    fn aircraft_stats_show_secondary_mail_capacity() {
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_AIRCRAFT_DAKOTA)
+            .unwrap()
+            .clone();
+        engine.mail_capacity = 7;
+
+        let spanish = stats_text(Locale::Es, &engine, &[]);
+        assert!(spanish.contains("Capacidad: 25 pasajeros / 7 correo"));
+
+        let english = stats_text(Locale::En, &engine, &[]);
+        assert!(english.contains("Capacity: 25 passengers / 7 mail"));
     }
 }

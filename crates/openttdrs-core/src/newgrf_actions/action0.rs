@@ -299,6 +299,9 @@ pub struct ParsedVehicleMeta {
     pub price_factor: u8,
     pub running_cost_factor: u8,
     pub capacity: u32,
+    /// Action0 aircraft `0x11`: capacidad secundaria de correo (BYTE).
+    /// Se conserva aunque la unidad sombra aún no sea una `Vehicle` separada.
+    pub mail_capacity: u16,
     pub cargo: Option<crate::cargo::CargoType>,
     /// Índice local de la propiedad de cargo por defecto (`0x10`/`0x0C`).
     #[allow(clippy::struct_field_names)]
@@ -423,6 +426,7 @@ impl ParsedVehicleMeta {
             price_factor: price,
             running_cost_factor: running,
             capacity,
+            mail_capacity: 0,
             cargo,
             default_cargo_local_id: None,
             ship_refittable: true,
@@ -4163,7 +4167,11 @@ fn parse_aircraft_property(
                 meta.capacity = u32::from(read_u16(payload, i)?);
             }
         }
-        0x11 => skip_bytes(payload, i, metas.len())?, // mail capacity: EngineDef has one cargo
+        0x11 => {
+            for meta in metas {
+                meta.mail_capacity = u16::from(read_u8(payload, i)?);
+            }
+        }
         0x12 => {
             for meta in metas {
                 meta.sound_effect = read_u8(payload, i)?;

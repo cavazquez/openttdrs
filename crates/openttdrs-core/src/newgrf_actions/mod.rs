@@ -2088,7 +2088,7 @@ mod tests {
         let aircraft = vec![
             0x00,
             ACTION0_FEATURE_AIRCRAFT,
-            0x04,
+            0x05,
             0x01,
             0x09,
             0x0B,
@@ -2097,6 +2097,8 @@ mod tests {
             40,
             0x0E,
             90,
+            0x11,
+            7,
             0x0F,
             0x78,
             0x00,
@@ -2105,6 +2107,46 @@ mod tests {
         assert_eq!(meta.kind, VehicleKind::Aircraft);
         assert_eq!(meta.max_speed, 512);
         assert_eq!(meta.capacity, 120);
+        assert_eq!(meta.mail_capacity, 7);
+    }
+
+    #[test]
+    fn aircraft_mail_capacity_property_reaches_engine_catalog() {
+        let action0 = [
+            0x00,
+            ACTION0_FEATURE_AIRCRAFT,
+            0x02,
+            0x01,
+            0x09,
+            0x11,
+            7,
+            0x0F,
+            120,
+            0,
+        ];
+        let meta = parse_action0_vehicle_metas(&action0).unwrap().remove(0);
+        assert_eq!(meta.mail_capacity, 7);
+
+        let bytes = build_grf_v2_with_action0_and_action8(
+            &action0,
+            [b'M', b'A', 0, 1],
+            "aircraft-mail",
+            "",
+        );
+        let dir = tempfile_dir_with("aircraft-mail.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("aircraft-mail.grf", 0x4D41_0001));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|candidate| candidate.from_newgrf && candidate.kind == VehicleKind::Aircraft)
+            .expect("aircraft with mail capacity should enter catalog");
+        assert_eq!(engine.capacity, 120);
+        assert_eq!(engine.mail_capacity, 7);
     }
 
     #[test]

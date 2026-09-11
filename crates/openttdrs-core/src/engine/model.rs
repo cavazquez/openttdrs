@@ -61,6 +61,11 @@ pub struct EngineDef {
     pub running_cost_year: i64,
     /// Capacidad del modelo (pasajeros/sacas/cajas). 0 = solo locomotora.
     pub capacity: u32,
+    /// Capacidad secundaria de correo de una aeronave (`Action0 0x11`).
+    /// La unidad sombra/articulada que la transporta todavía se modela en una
+    /// etapa posterior; conservar el valor aquí evita perderlo en el catálogo.
+    #[serde(default)]
+    pub mail_capacity: u16,
     /// Carga de diseño del modelo (`None` = locomotora sin carga propia).
     pub cargo: Option<CargoType>,
     pub power_hp: u32,

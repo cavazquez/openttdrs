@@ -223,6 +223,41 @@ fn depot_builders_share_native_pool_ids() {
 }
 
 #[test]
+fn depot_registration_matches_nearest_town_and_transport_type() {
+    let mut s = GameState::new(16, 16);
+    s.towns.push(crate::Town {
+        id: 7,
+        pos: TileCoord::new(4, 4),
+        name: "Villa Central".into(),
+        ..Default::default()
+    });
+
+    let first = TileCoord::new(4, 4);
+    let second = TileCoord::new(7, 4);
+    for exit in [TileCoord::new(3, 4), TileCoord::new(6, 4)] {
+        s.map.set_kind(exit, TileKind::Road).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(first, 0)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(second, 0)).unwrap();
+
+    assert_eq!(s.depots[0].town_id, Some(7));
+    assert_eq!(s.depots[0].town_cn, 0);
+    assert_eq!(s.depots[1].town_id, Some(7));
+    assert_eq!(s.depots[1].town_cn, 1);
+
+    let rail = TileCoord::new(4, 8);
+    s.map
+        .set_kind(TileCoord::new(4, 7), TileKind::Rail)
+        .unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(rail, 3)).unwrap();
+    assert_eq!(s.depots[2].town_id, Some(7));
+    assert_eq!(
+        s.depots[2].town_cn, 0,
+        "el ordinal se reinicia para otro tipo de Depot"
+    );
+}
+
+#[test]
 fn place_ship_depot_rejects_second_part_without_mutating_first() {
     let mut s = GameState::new(12, 12);
     let depot = TileCoord::new(4, 4);

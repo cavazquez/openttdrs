@@ -240,23 +240,57 @@ pub(in crate::command) fn check_object_can_be_auto_cleared(
     Ok(())
 }
 
+fn depot_kind_at(state: &GameState, tile: TileCoord) -> Option<TileKind> {
+    state.map.get_kind(tile).filter(|kind| {
+        matches!(
+            kind,
+            TileKind::RoadDepot | TileKind::RailDepot | TileKind::ShipDepot
+        )
+    })
+}
+
+/// Replica el contador `town_cn` de `MakeDefaultName(Depot)`.
+///
+/// El contador es independiente por pueblo y tipo de transporte; el ID del
+/// pool no interviene en el nombre visible. El mapa ya contiene el depósito
+/// nuevo al llamar a esta función, pero la fila aún no fue registrada.
+fn next_depot_town_cn(state: &GameState, town_id: u32, depot_kind: Option<TileKind>) -> u16 {
+    (0..=u16::MAX)
+        .find(|candidate| {
+            !state.depots.iter().any(|depot| {
+                depot.town_id == Some(town_id)
+                    && depot.town_cn == *candidate
+                    && depot_kind_at(state, depot.tile) == depot_kind
+            })
+        })
+        .unwrap_or(u16::MAX)
+}
+
 /// Registra la fila semántica que `new Depot(tile)` crea junto con `MAP2`.
 ///
-/// Los nombres generados y la asociación al pueblo se completarán cuando el
-/// runtime de nombres de estaciones/depósitos esté conectado; conservar la
-/// fila desde el primer tick evita que el escritor pierda la identidad del
-/// depósito recién construido.
+/// `MakeDefaultName` asocia el depósito al pueblo más cercano y asigna el
+/// primer ordinal libre para ese pueblo y tipo. El texto sigue vacío para que
+/// el cliente pueda resolver la plantilla según el locale activo.
 pub(in crate::command::transport) fn register_depot(
     state: &mut GameState,
     depot_id: u16,
     tile: TileCoord,
 ) {
     state.depots.retain(|depot| depot.depot_id != depot_id);
+    let depot_kind = depot_kind_at(state, tile);
+    let (town_id, town_cn) = crate::town::nearest_town_index(&state.towns, tile)
+        .and_then(|(town_index, _)| state.towns.get(town_index))
+        .map_or((None, 0), |town| {
+            (
+                Some(town.id),
+                next_depot_town_cn(state, town.id, depot_kind),
+            )
+        });
     state.depots.push(crate::sav::SavDepot {
         depot_id,
         tile,
-        town_id: None,
-        town_cn: 0,
+        town_id,
+        town_cn,
         name: String::new(),
         build_date: crate::news::openttd_date_from_calendar_day_index(u64::from(
             state.calendar.date,

@@ -4497,3 +4497,15 @@ passed; 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check`
 limpios. #329/#567 siguen abiertas por subtipos completos, capacidad secundaria
 de aeronaves, balanceo de consist, APIs legacy sin catálogo y aceptación visual
 manual bajo Weston; #326 permanece abierta.
+
+Actualización #329/#567-VEHICLE-ENGINE-FLAGS (2026-09-11, `54545c37`): las
+propiedades DWORD de flags adicionales ya se leen y llegan al
+catálogo para trenes (`0x30`), carretera (`0x27`), barcos y aeronaves (`0x21`).
+La máscara misc separada conserva `NoBreakdownSmoke` (bit 6) en las cuatro
+familias. El puente de eventos del cliente mantiene el sonido de avería y
+suprime únicamente `EV_BREAKDOWN_SMOKE` cuando corresponde. La regresión cubre
+parser, materialización del catálogo y el consumidor FX; `NoNews`, `NoPreview` y
+`JoinPreview` siguen preservados sin efecto porque aún falta el ciclo runtime de
+disponibilidad/previews. Core queda en `2477 passed; 0 failed; 1 ignored` y
+cliente en `1393 passed; 0 failed; 2 ignored`, con Clippy de producción,
+formato, `diff --check` y `parity-docs` limpios. #329/#567 siguen abiertas.

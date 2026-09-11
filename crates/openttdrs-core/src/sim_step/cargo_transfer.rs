@@ -1655,6 +1655,8 @@ fn station_index_at_vehicle(state: &GameState, vehicle: &crate::Vehicle) -> Opti
             state.map.get_kind(vehicle.pos),
             Some(TileKind::Station | TileKind::Airport)
         )
+        && !(vehicle.kind == VehicleKind::Ship
+            && state.map.get_kind(vehicle.pos) == Some(TileKind::Water))
     {
         return None;
     }
@@ -1867,6 +1869,49 @@ mod tests {
         station.cargo_stock.passengers = 1;
         state.stations.push(station);
         assert!(has_loadable_supply(&state));
+    }
+
+    #[test]
+    fn imported_ship_at_dock_approach_is_found_outside_station_tiles() {
+        let mut state = GameState::new(20, 20);
+        let anchor = TileCoord::new(1, 1);
+        let land = TileCoord::new(5, 4);
+        let water = crate::station::dock_water_tile(land, 1);
+        let approach = TileCoord::new(5, 6);
+        let station_id = 23_u16;
+
+        for (tile, gfx) in [
+            (land, 1_u8),
+            (water, crate::station::DOCK_WATER_PART_GFX + 1),
+        ] {
+            let mut raw = state.map.get(tile).unwrap();
+            raw.kind = TileKind::Station;
+            raw.mapt = 0x50;
+            raw.m1 = crate::map::set_water_class_m1(raw.m1, crate::WaterClass::Sea);
+            raw.m2 = station_id as u8;
+            raw.m2_hi = (station_id >> 8) as u8;
+            raw.m5 = gfx;
+            raw.m6 = crate::station::STATION_TYPE_DOCK << 3;
+            state.map.set_tile(tile, raw).unwrap();
+        }
+        state.map.set_kind(approach, TileKind::Water).unwrap();
+        let mut approach_tile = state.map.get(approach).unwrap();
+        approach_tile.m1 =
+            crate::map::set_water_class_m1(approach_tile.m1 | 0x80, crate::WaterClass::Sea);
+        state.map.set_tile(approach, approach_tile).unwrap();
+
+        let mut station = crate::Station::new_with_kind(anchor, crate::StopKind::RailStation);
+        station.facilities = 0x01 | 0x10;
+        station.ottd_station_id = Some(u32::from(station_id));
+        station.joined_tiles = vec![land, water];
+        state.stations.push(station);
+        state
+            .runtime
+            .terminal_spatial_index
+            .rebuild(&state.map, &state.stations);
+
+        let ship = crate::Vehicle::new(1, VehicleKind::Ship, approach, approach);
+        assert_eq!(station_index_at_vehicle(&state, &ship), Some(0));
     }
 
     #[test]

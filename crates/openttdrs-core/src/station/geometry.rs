@@ -568,23 +568,41 @@ pub fn vehicle_physically_at_station(
                 && train_on_rail_platform(map, vpos)
         }
         VehicleKind::Ship => {
-            matches!(
-                station.stop_kind,
-                StopKind::Dock | StopKind::Buoy | StopKind::OilRig
-            ) && (if station.stop_kind == StopKind::Buoy {
+            if station.stop_kind == StopKind::Buoy {
                 vpos == station.pos
             } else if station.stop_kind == StopKind::OilRig {
                 vpos == station.pos && crate::ship_movement::is_water_network_tile_at(map, vpos)
             } else {
-                let dock_water = crate::station::dock_footprint_for_tile(map, station.pos)
-                    .map(|footprint| footprint[1]);
-                let target = dock_water.unwrap_or(station.pos);
-                vpos.x.abs_diff(target.x) + vpos.y.abs_diff(target.y) == 1
-                    && map.get(vpos).is_some_and(|tile| {
-                        crate::ship_movement::is_water_network_tile_at(map, vpos)
-                            && (dock_water.is_none() || tile.m1 & 0x80 != 0)
+                let dock_water_tiles: Vec<_> = dock_station_tiles(map, station)
+                    .into_iter()
+                    .filter_map(|tile| {
+                        crate::station::dock_footprint_for_tile(map, tile)
+                            .map(|footprint| footprint[1])
                     })
-            })
+                    .collect();
+                if !dock_water_tiles.is_empty() {
+                    dock_water_tiles.iter().any(|target| {
+                        vpos.x.abs_diff(target.x) + vpos.y.abs_diff(target.y) == 1
+                            && map.get(vpos).is_some_and(|tile| {
+                                crate::ship_movement::is_water_network_tile_at(map, vpos)
+                                    && tile.m1 & 0x80 != 0
+                            })
+                    })
+                } else if station.stop_kind == StopKind::Dock {
+                    // Fallback de saves legacy con una única coordenada de
+                    // muelle o sin el par de teselas reconstruible.
+                    let dock_water = crate::station::dock_footprint_for_tile(map, station.pos)
+                        .map(|footprint| footprint[1]);
+                    let target = dock_water.unwrap_or(station.pos);
+                    vpos.x.abs_diff(target.x) + vpos.y.abs_diff(target.y) == 1
+                        && map.get(vpos).is_some_and(|tile| {
+                            crate::ship_movement::is_water_network_tile_at(map, vpos)
+                                && (dock_water.is_none() || tile.m1 & 0x80 != 0)
+                        })
+                } else {
+                    false
+                }
+            }
         }
         VehicleKind::Aircraft => false,
     }

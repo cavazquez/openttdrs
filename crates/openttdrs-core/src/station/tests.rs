@@ -261,6 +261,55 @@ mod coherence_tests {
     }
 
     #[test]
+    fn ship_service_uses_every_joined_dock_on_intermodal_station() {
+        let mut state = GameState::new(20, 20);
+        let anchor = TileCoord::new(1, 1);
+        let first_land = TileCoord::new(5, 4);
+        let second_land = TileCoord::new(5, 10);
+        let first_water = crate::station::dock_water_tile(first_land, 1);
+        let second_water = crate::station::dock_water_tile(second_land, 1);
+        let first_docking = TileCoord::new(5, 6);
+        let second_docking = TileCoord::new(5, 12);
+        let native_id = 23_u16;
+
+        for (land, water) in [(first_land, first_water), (second_land, second_water)] {
+            for (tile, gfx) in [
+                (land, 1_u8),
+                (water, crate::station::DOCK_WATER_PART_GFX + 1),
+            ] {
+                let mut raw = state.map.get(tile).expect("tesela de muelle");
+                raw.kind = TileKind::Station;
+                raw.mapt = 0x50;
+                raw.m1 = crate::map::set_water_class_m1(raw.m1, WaterClass::Sea);
+                raw.m2 = native_id as u8;
+                raw.m2_hi = (native_id >> 8) as u8;
+                raw.m5 = gfx;
+                raw.m6 = crate::station::STATION_TYPE_DOCK << 3;
+                state.map.set_tile(tile, raw).unwrap();
+            }
+        }
+        for tile in [first_docking, second_docking] {
+            state.map.set_kind(tile, TileKind::Water).unwrap();
+            let mut raw = state.map.get(tile).unwrap();
+            raw.m1 = crate::map::set_water_class_m1(raw.m1 | 0x80, WaterClass::Sea);
+            state.map.set_tile(tile, raw).unwrap();
+        }
+
+        let mut station = Station::new_with_kind(anchor, StopKind::RailStation);
+        station.facilities = 0x01 | 0x10;
+        station.joined_tiles = vec![first_land, first_water, second_land, second_water];
+        assert!(station.can_service_vehicle(VehicleKind::Ship));
+        assert!(station.accepts_cargo(CargoType::Passengers));
+
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, second_docking, second_docking);
+        assert!(vehicle_physically_at_station(&state.map, &ship, &station));
+        ship.pos = first_docking;
+        assert!(vehicle_physically_at_station(&state.map, &ship, &station));
+        ship.pos = TileCoord::new(15, 15);
+        assert!(!vehicle_physically_at_station(&state.map, &ship, &station));
+    }
+
+    #[test]
     fn station_map_coherence_flags_orphan_tile_and_state() {
         let mut state = GameState::new(6, 6);
         state

@@ -902,6 +902,18 @@ impl Station {
         }
     }
 
+    /// La estación expone una facilidad aérea en su máscara nativa.
+    #[must_use]
+    pub fn has_airport_facility(&self) -> bool {
+        self.effective_facilities() & 0x08 != 0
+    }
+
+    /// La estación expone una facilidad naval en su máscara nativa.
+    #[must_use]
+    pub fn has_dock_facility(&self) -> bool {
+        self.effective_facilities() & 0x10 != 0
+    }
+
     #[must_use]
     pub fn can_service_vehicle(&self, vehicle_kind: VehicleKind) -> bool {
         const FACIL_TRAIN: u8 = 0x01;
@@ -935,6 +947,13 @@ impl Station {
             StopKind::RailWaypoint | StopKind::Buoy | StopKind::RoadWaypoint
         ) {
             return false;
+        }
+        // En una estación intermodal `StopKind` sólo identifica la facilidad
+        // principal. Un muelle conserva la capacidad naval de pasajeros y
+        // mercancías aunque la fila STNN haya quedado clasificada como rail,
+        // road o aeropuerto.
+        if self.stop_kind != StopKind::Buoy && self.has_dock_facility() {
+            return true;
         }
         match self.stop_kind {
             StopKind::BusStop => matches!(cargo, CargoType::Passengers | CargoType::Mail),

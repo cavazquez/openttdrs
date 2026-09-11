@@ -106,12 +106,12 @@ fn vehicle_has_incompatible_stop(state: &GameState, v: &Vehicle) -> bool {
         VehicleOrder::Station { station, .. } => state
             .stations
             .iter()
-            .find(|s| s.pos == *station)
+            .find(|s| s.covers_tile(*station))
             .is_some_and(|st| !st.can_service_vehicle(v.kind) || st.is_waypoint()),
         VehicleOrder::Waypoint { waypoint, .. } => state
             .stations
             .iter()
-            .find(|s| s.pos == *waypoint)
+            .find(|s| s.covers_tile(*waypoint))
             .is_none_or(|st| !st.can_service_vehicle(v.kind)),
         VehicleOrder::Depot { .. } | VehicleOrder::Tile(_) | VehicleOrder::Conditional { .. } => {
             false
@@ -134,7 +134,7 @@ fn vehicle_waiting_for_cargo(state: &GameState, v: &Vehicle) -> bool {
     if !station_covers_tile(station, v.pos, 1) && v.pos != station {
         return false;
     }
-    let Some(st) = state.stations.iter().find(|s| s.pos == station) else {
+    let Some(st) = state.stations.iter().find(|s| s.covers_tile(station)) else {
         return false;
     };
     if !st.can_service_vehicle(v.kind) {

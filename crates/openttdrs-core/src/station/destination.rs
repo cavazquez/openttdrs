@@ -164,7 +164,7 @@ pub fn resolve_aircraft_station_dest(
 ) -> TileCoord {
     stations
         .iter()
-        .find(|s| s.stop_kind.has_airport_facility() && s.covers_tile(station_pos))
+        .find(|s| s.has_airport_facility() && s.covers_tile(station_pos))
         .map_or(station_pos, |s| {
             crate::airport::airport_loading_tile(s, map)
         })

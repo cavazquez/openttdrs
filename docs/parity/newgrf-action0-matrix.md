@@ -131,7 +131,7 @@ Fuente: `newgrf_act0_ships.cpp`.
 | `15` canal speed fraction | **runtime** (`canal_speed_frac` → `ship_speed_for_tile`) |
 | `17` misc flags (bit1 `Uses2CC`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |
 | `18`/`19`/`25` cargo classes allowed/disallowed/required WORD | **runtime** (`EngineDef` + refit por `CargoClass`, XOR de `refit_mask`) |
-| `08` sprite index | consumida; fallback visual específico aún pendiente |
+| `08` sprite index | **runtime parcial** (`ship_image_index` normaliza el valor nativo, `native_sprite_num` lo persiste y el renderer/preview Bevy seleccionan MPS/Oil/Coal/Ferry; fallback original de custom `0xFD` aún pendiente) |
 | `09` refittable | **runtime** (`ship_refittable` bloquea las opciones de refit) |
 | `11` legacy refit mask | **runtime** (traducción local→global en `refit_mask`) |
 | `13` refit cost | **runtime** (`refit_cost`) |

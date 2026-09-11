@@ -4410,3 +4410,15 @@ etapa preserva el contrato de datos y no simula efectos. Core queda en
 ignored`, con formato, diff, checker de paridad y Clippy estricto limpios.
 #329/#567 continúan abiertas por la semántica runtime restante, callbacks y
 aceptación visual manual bajo Weston; #326 permanece abierta.
+
+Actualización #329/#567-SHIP-SPRITE-INDEX (2026-09-11, `09a15a73`): Action0
+naval `0x08` ya normaliza el índice de sprite como OpenTTD, lo propaga al
+catálogo y lo copia al `Vehicle::native_sprite_num` que ya participa del
+round-trip SAV. La preview de compra y las capas fallback de Bevy seleccionan
+el conjunto MPS/Oil/Coal/Ferry desde ese índice; `0xFF` conserva la marca
+custom `0xFD` y cede prioridad a las vistas Action1/2 disponibles. El
+fallback al `original_image_index` nativo cuando no existen vistas custom aún
+no está modelado. Core queda en `2462 passed; 0 failed; 1 ignored` y cliente
+en `1389 passed; 0 failed; 2 ignored`, con formato, diff y Clippy estricto
+limpios. #329/#567 siguen abiertas por esa semántica restante, callbacks y
+aceptación visual manual bajo Weston; #326 permanece abierta.

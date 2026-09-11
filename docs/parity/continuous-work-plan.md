@@ -4076,3 +4076,15 @@ ignorada; cliente en 1387 pasadas y 2 ignoradas, con Clippy estricto y formato
 verdes. #567 sigue abierta por la selección explícita `station_to_join`, la
 reconciliación de estaciones mixtas y saves importados, el pathfinder naval y
 la aceptación visual manual bajo Weston; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DOCK-SAV-FOOTPRINT (2026-09-11, `6bd69913`): al
+cargar un SAV se reconstruyen todas las piezas `MP_STATION` de muelles por su
+`StationID` de `MAP2`, incluyendo varios muelles pertenecientes a la misma
+estación lógica. La tierra y el agua quedan en `joined_tiles`, se conserva el
+`m2_hi` de IDs nativos y las órdenes, cobertura, pathfinder y demolición ya
+pueden consultar la huella importada completa. Se agregó una regresión con dos
+muelles separados que comparten estación. Core queda en 2426 pasadas y 1
+ignorada; cliente en 1387 pasadas y 2 ignoradas, con Clippy estricto y formato
+verdes. #567 sigue abierta por la selección explícita `station_to_join`, la
+reconciliación de estaciones mixtas, callbacks navales y la aceptación visual
+manual bajo Weston; #326 permanece abierta.

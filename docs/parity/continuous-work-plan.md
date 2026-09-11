@@ -5096,3 +5096,10 @@ Esto alinea el estado que consultan la interfaz, los callbacks NewGRF y los
 saves con `VehicleServiceInDepot`; las regresiones cubren el método vanilla y
 el camino de servicio con catálogo runtime. #329/#567 continúan abiertas por
 la semántica restante de vehículos, callbacks y aceptación visual/framebuffer.
+
+Actualización #329/#567-NEEDS-SERVICE-DURING-BREAKDOWN (2026-09-11): el cálculo
+local de `NeedsServicing` ya no cancela una revisión vencida sólo porque
+`breakdown_ctr` esté activo. OpenTTD mantiene separadas la cuenta regresiva de
+avería y la decisión de servicio; la regresión cubre el intervalo diario
+vencido durante esa cuenta. #329/#567 continúan abiertas por la semántica
+restante de vehículos, callbacks y aceptación visual/framebuffer.

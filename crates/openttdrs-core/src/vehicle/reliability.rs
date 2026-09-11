@@ -203,9 +203,6 @@ impl super::model::Vehicle {
     }
 
     fn interval_requires_service(&self, servint_ispercent: bool) -> bool {
-        if self.breakdown_ctr != 0 {
-            return false;
-        }
         if servint_ispercent {
             let engine_id = self
                 .engine_id
@@ -964,6 +961,23 @@ mod tests {
         ));
         assert_eq!(state.vehicles[0].dest, own_depot);
         assert_eq!(state.map.get_kind(rival_depot), Some(TileKind::ShipDepot));
+    }
+
+    #[test]
+    fn service_interval_remains_due_during_breakdown_countdown() {
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        vehicle.running = true;
+        vehicle.service_interval_days = 1;
+        vehicle.last_service_day = 0;
+        vehicle.sim_tick = u64::from(crate::economy::TICKS_PER_DAY);
+        vehicle.breakdown_ctr = 64;
+
+        assert!(vehicle.requires_service_for_company(false));
     }
 
     #[test]

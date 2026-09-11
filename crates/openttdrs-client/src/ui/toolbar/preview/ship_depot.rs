@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use openttdrs_core::{Map, TileCoord, ship_depot_footprint};
 
 use crate::iso::{iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
-use crate::render::viewport_sort::ParentSpriteBounds;
+use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::{
     CompanyColoredSprites, ViewportSortableParent, sprite_from_company_or_asset,
     viewport_insertion_key, viewport_source_depth,
@@ -96,17 +96,7 @@ fn ship_depot_parent_bounds(
     extent_x: i32,
     extent_y: i32,
 ) -> ParentSpriteBounds {
-    let xmin = coord.x * 16 + dx;
-    let ymin = coord.y * 16 + dy;
-    let zmin = i32::from(base_z) * 8;
-    ParentSpriteBounds::new(
-        xmin,
-        ymin,
-        zmin,
-        xmin + extent_x - 1,
-        ymin + extent_y - 1,
-        zmin + 19,
-    )
+    tile_seq_parent_bounds(coord.x, coord.y, base_z, dx, dy, 0, extent_x, extent_y, 20)
 }
 
 #[cfg(test)]

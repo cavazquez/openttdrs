@@ -60,6 +60,39 @@ impl ParentSpriteBounds {
     }
 }
 
+/// Convierte una línea `TILE_SEQ_LINE` a la caja inclusiva que recibe el
+/// sorter de OpenTTD.
+///
+/// Las coordenadas `dx/dy/dz` son offsets respecto del origen de la tesela y
+/// `ex/ey/ez` son extensiones, no máximos. Mantener esta conversión junto al
+/// tipo de bounds evita que runtime y previews difieran en los bordes del
+/// mapa por un `-1` o por una elevación omitida.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub(crate) const fn tile_seq_parent_bounds(
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    dx: i32,
+    dy: i32,
+    dz: i32,
+    ex: i32,
+    ey: i32,
+    ez: i32,
+) -> ParentSpriteBounds {
+    let xmin = tx * 16 + dx;
+    let ymin = ty * 16 + dy;
+    let zmin = base_z as i32 * 8 + dz;
+    ParentSpriteBounds::new(
+        xmin,
+        ymin,
+        zmin,
+        xmin + ex - 1,
+        ymin + ey - 1,
+        zmin + ez - 1,
+    )
+}
+
 /// El padre puede no dibujar imagen, pero conserva su caja y sus children.
 ///
 /// Es el equivalente de `SPR_EMPTY_BOUNDING_BOX`: el padre participa en el

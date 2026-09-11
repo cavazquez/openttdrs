@@ -45,7 +45,7 @@ use crate::render::station_newgrf::{
     NewGrfStationSpriteCache, newgrf_station_def_for_tile, station_newgrf_view_index_for_tile,
 };
 use crate::render::viewport_sort::{
-    ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order,
+    ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order, tile_seq_parent_bounds,
 };
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
@@ -638,20 +638,10 @@ fn tile_seq_parent_sprite(
     ey: i32,
     ez: i32,
 ) -> ParentSprite {
-    let xmin = tx * 16 + dx;
-    let ymin = ty * 16 + dy;
-    let zmin = i32::from(base_z) * 8 + dz;
     ParentSprite::sprite(
         id,
         sprite_id,
-        ParentSpriteBounds::new(
-            xmin,
-            ymin,
-            zmin,
-            xmin + ex - 1,
-            ymin + ey - 1,
-            zmin + ez - 1,
-        ),
+        tile_seq_parent_bounds(tx, ty, base_z, dx, dy, dz, ex, ey, ez),
     )
 }
 
@@ -5947,9 +5937,7 @@ fn ship_depot_parent_bounds(
     extent_x: i32,
     extent_y: i32,
 ) -> ParentSpriteBounds {
-    tile_seq_parent_sprite(
-        0,
-        0,
+    tile_seq_parent_bounds(
         ctx.tx_i32(),
         ctx.ty_i32(),
         base_z,
@@ -5960,7 +5948,6 @@ fn ship_depot_parent_bounds(
         extent_y,
         20,
     )
-    .bounds
 }
 
 /// Caja literal que `DrawRailTileSeq` entrega a `AddSortableSpriteToDraw`

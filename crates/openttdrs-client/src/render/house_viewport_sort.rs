@@ -854,7 +854,10 @@ fn child_depth_in_parent_interval(
 mod tests {
     use super::*;
     use bevy::window::PrimaryWindow;
-    use openttdrs_core::GameState;
+    use openttdrs_core::{GameState, TileCoord, ship_depot_footprint};
+
+    use crate::render::viewport_sort::tile_seq_parent_bounds;
+    use crate::sprites::{ship_depot_layers, ship_depot_seq_extent};
 
     fn viewport_scope_test_world(map_width: u32, map_height: u32) -> World {
         let mut world = World::new();
@@ -1010,6 +1013,93 @@ mod tests {
             !scope.sprite_reaches_viewport(outside_native_edge),
             "un PNG que sólo toca el borde no debe reservar un slot"
         );
+    }
+
+    fn scope_around_parent_bounds(bounds: ParentSpriteBounds) -> DiagonalViewportSortScope {
+        let xmin = i64::from(bounds.xmin.min(bounds.xmax));
+        let xmax = i64::from(bounds.xmin.max(bounds.xmax));
+        let ymin = i64::from(bounds.ymin.min(bounds.ymax));
+        let ymax = i64::from(bounds.ymin.max(bounds.ymax));
+        let zmin = i64::from(bounds.zmin.min(bounds.zmax));
+        let x_end = xmax + 1;
+        let y_end = ymax + 1;
+        let z_end = i64::from(bounds.zmin.max(bounds.zmax)) + 1;
+        let projected_left = 2 * (ymin - x_end);
+        let projected_right = 2 * (y_end - xmin) + 1;
+        let projected_bottom = -x_end - y_end + zmin - 1;
+        let projected_top = -xmin - ymin + z_end;
+        let width = (projected_right - projected_left + 2) as f32;
+        let height = (projected_top - projected_bottom + 2) as f32;
+        DiagonalViewportSortScope::from_camera(
+            Vec2::new(
+                (projected_left + projected_right) as f32 * 0.5,
+                (projected_bottom + projected_top) as f32 * 0.5,
+            ),
+            1.0,
+            width,
+            height,
+        )
+    }
+
+    #[test]
+    fn ship_depot_bounds_keep_all_layers_when_the_footprint_touches_map_edges() {
+        // Cada caso deja una de las dos teselas exactamente en el borde del
+        // mapa 16×16. El viewport se centra en la caja proyectada de cada
+        // capa, por lo que un falso `-1` o una extensión truncada la dejaría
+        // fuera justo en el caso que más fácilmente se pierde por clipping.
+        let cases = [
+            (TileCoord::new(14, 4), 0u8), // extremo este
+            (TileCoord::new(4, 1), 1u8),  // extremo norte
+            (TileCoord::new(1, 4), 2u8),  // extremo oeste
+            (TileCoord::new(4, 14), 3u8), // extremo sur
+        ];
+        let mut layer_count = 0;
+        let mut edge_layer_count = 0;
+
+        for (origin, dir) in cases {
+            let [origin, other] = ship_depot_footprint(origin, dir);
+            assert!(origin.x < 16 && origin.y < 16);
+            assert!(other.x < 16 && other.y < 16);
+            let axis_y = dir & 1 != 0;
+            let origin_south = matches!(dir & 3, 1 | 2);
+            let (extent_x, extent_y) = ship_depot_seq_extent(axis_y);
+
+            for (coord, part_south) in [(origin, origin_south), (other, !origin_south)] {
+                for layer in ship_depot_layers(axis_y, part_south) {
+                    let bounds = tile_seq_parent_bounds(
+                        coord.x,
+                        coord.y,
+                        0,
+                        layer.dx as i32,
+                        layer.dy as i32,
+                        0,
+                        extent_x,
+                        extent_y,
+                        20,
+                    );
+                    let reaches_map_edge = match dir {
+                        0 => coord.x == 15 && bounds.xmax == 16 * 16 - 1,
+                        1 => coord.y == 0 && bounds.ymin == 0,
+                        2 => coord.x == 0 && bounds.xmin == 0,
+                        3 => coord.y == 15 && bounds.ymax == 16 * 16 - 1,
+                        _ => unreachable!(),
+                    };
+                    if reaches_map_edge {
+                        edge_layer_count += 1;
+                    }
+                    assert!(
+                        scope_around_parent_bounds(bounds).parent_bounds_reach_viewport(bounds),
+                        "la capa {} del depósito dir={} no alcanza el viewport",
+                        layer.sprite_index,
+                        dir
+                    );
+                    layer_count += 1;
+                }
+            }
+        }
+
+        assert_eq!(layer_count, 12);
+        assert_eq!(edge_layer_count, 6);
     }
 
     #[test]

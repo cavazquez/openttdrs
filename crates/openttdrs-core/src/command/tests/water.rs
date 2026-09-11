@@ -350,6 +350,77 @@ fn place_ship_depot_rejects_water_industry_during_auto_clear() {
     }
 }
 
+#[test]
+fn ship_depot_refreshes_docking_tile_for_water_neighbors() {
+    for dir in 0..4_u8 {
+        for part in 0..2_usize {
+            let mut s = GameState::new(8, 8);
+            let depot = TileCoord::new(3, 3);
+            let footprint = crate::ship_depot_footprint(depot, dir);
+            for coord in footprint {
+                s.map.set_kind(coord, TileKind::Water).unwrap();
+            }
+
+            let side_dir = if dir & 1 == 0 { 3 } else { 0 };
+            let (dx, dy) = crate::map::diag_dir_offset(side_dir);
+            let dock_pos = TileCoord::new(footprint[part].x + dx, footprint[part].y + dy);
+            let mut dock = s.map.get(dock_pos).unwrap();
+            dock.kind = TileKind::Station;
+            dock.mapt = 0x50; // MP_STATION.
+            dock.m5 = 4; // GFX_DOCK_BASE_WATER_PART.
+            dock.m6 = crate::station::STATION_TYPE_DOCK << 3;
+            dock.m1 = set_water_class_m1(dock.m1, WaterClass::Sea);
+            s.map.set_tile(dock_pos, dock).unwrap();
+            s.stations
+                .push(crate::Station::new_with_kind(dock_pos, StopKind::Dock));
+
+            apply_command(&mut s, &Command::PlaceShipDepotDir(depot, dir))
+                .expect("depósito junto a la parte acuática del muelle");
+            assert_ne!(
+                s.map.get(footprint[part]).unwrap().m1 & 0x80,
+                0,
+                "dir={dir} part={part} debe marcar DockingTile"
+            );
+
+            apply_command(&mut s, &Command::ClearTile(depot)).expect("limpiar depósito naval");
+            assert_ne!(
+                s.map.get(footprint[part]).unwrap().m1 & 0x80,
+                0,
+                "dir={dir} part={part} debe conservar DockingTile al limpiar"
+            );
+        }
+    }
+}
+
+#[test]
+fn ship_depot_refreshes_docking_tile_for_neutral_oil_rig_industry() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(3, 3);
+    let footprint = crate::ship_depot_footprint(depot, 0);
+    for coord in footprint {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    let neighbor = TileCoord::new(depot.x, depot.y - 1);
+    let mut industry = s.map.get(neighbor).unwrap();
+    industry.kind = TileKind::Industry;
+    industry.mapt = 0x40; // MP_INDUSTRY.
+    industry.m2 = 7;
+    industry.m2_hi = 0;
+    industry.m1 = set_water_class_m1(industry.m1, WaterClass::Sea);
+    s.map.set_tile(neighbor, industry).unwrap();
+    let mut oil_rig = crate::Station::new_with_kind(neighbor, StopKind::OilRig);
+    oil_rig.neutral_industry_id = Some(7);
+    s.stations.push(oil_rig);
+
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0))
+        .expect("depósito junto a industria con estación neutral");
+    assert_ne!(
+        s.map.get(depot).unwrap().m1 & 0x80,
+        0,
+        "la estación neutral del oil rig habilita el amarre"
+    );
+}
+
 fn add_water_object(
     state: &mut GameState,
     origin: TileCoord,

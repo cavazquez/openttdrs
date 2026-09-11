@@ -112,6 +112,51 @@ fn ship_depot_auto_clear_plan(
     Ok(plan)
 }
 
+/// `CheckForDockingTile` de `OpenTTD`: una sección de agua puede ser alcanzada
+/// por un barco si tiene al lado la parte acuática de un muelle, una industria
+/// con estación neutral o una tesela de oil rig.
+fn ship_depot_has_docking_neighbor(state: &GameState, c: TileCoord) -> bool {
+    (0..4).any(|dir| {
+        let (dx, dy) = crate::map::diag_dir_offset(dir);
+        let neighbor = TileCoord::new(c.x + dx, c.y + dy);
+        let Some(tile) = state.map.get(neighbor) else {
+            return false;
+        };
+        match tile.kind {
+            TileKind::Station => match crate::station::stop_kind_from_m6(tile.m6) {
+                // `IsDockWaterPart` usa GFX_DOCK_BASE_WATER_PART = 4.
+                StopKind::Dock => tile.m5 >= 4,
+                StopKind::OilRig => true,
+                _ => false,
+            },
+            TileKind::Industry => {
+                let industry_id = crate::map::industry_instance_id(&tile);
+                state.stations.iter().any(|station| {
+                    station.stop_kind == StopKind::OilRig
+                        && station.neutral_industry_id == Some(industry_id)
+                })
+            }
+            _ => false,
+        }
+    })
+}
+
+/// Actualiza `SetDockingTile` sobre una sección de agua recién materializada.
+fn refresh_ship_depot_docking_tile(state: &mut GameState, c: TileCoord) {
+    let Some(mut tile) = state.map.get(c) else {
+        return;
+    };
+    if !matches!(tile.kind, TileKind::Water | TileKind::ShipDepot) {
+        return;
+    }
+    if ship_depot_has_docking_neighbor(state, c) {
+        tile.m1 |= 0x80;
+    } else {
+        tile.m1 &= !0x80;
+    }
+    let _ = state.map.set_tile(c, tile);
+}
+
 fn check_ship_depot_water_tile(state: &GameState, c: TileCoord) -> Result<(), CommandError> {
     check_in_bounds(&state.map, c)?;
     match state.map.get(c) {
@@ -243,6 +288,8 @@ pub(in crate::command) fn place_ship_depot_dir(
         .map
         .set_tile(other, other_tile)
         .map_err(|_| CommandError::OutOfBounds)?;
+    refresh_ship_depot_docking_tile(state, c);
+    refresh_ship_depot_docking_tile(state, other);
     register_depot(state, depot_id, c);
     state.economy.money -= ship_depot_build_cost(&state.global_economy);
     Ok(())
@@ -273,6 +320,8 @@ pub(in crate::command) fn clear_ship_depot(
         make_water_tile(&mut state.map, tile, water_class)
             .map_err(|_| CommandError::OutOfBounds)?;
     }
+    refresh_ship_depot_docking_tile(state, c);
+    refresh_ship_depot_docking_tile(state, other);
     unregister_depot(state, depot_id);
     state.economy.money -= ship_depot_clear_cost(&state.global_economy);
     Ok(())

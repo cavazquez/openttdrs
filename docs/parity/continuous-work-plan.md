@@ -5072,13 +5072,13 @@ de estado en el mismo tick. #567 continúa abierta por callbacks, pathfinding
 completo y aceptación visual/framebuffer.
 
 Actualización #567-SHIP-DEPOT-SERVICE-IN-DEPOT (2026-09-11): el callback
-económico naval comprueba primero el estado físico de depósito y ejecuta el
-servicio aunque la nave conserve una orden de depósito. Así una unidad que
-permanece detenida varios días no espera hasta la salida para limpiar
-`needs_servicing`, igual que `CheckIfShipNeedsService` +
-`VehicleServiceInDepot`; la regresión cubre orden manual, fiabilidad y
-permanencia en la huella 2×1. #567 continúa abierta por callbacks,
-pathfinding y aceptación visual/framebuffer.
+económico naval comprueba primero el estado físico de depósito cuando la
+orden persistente no es otra orden de depósito y ejecuta el servicio sin
+esperar a la salida. Esto conserva la precedencia de
+`NeedsAutomaticServicing()` —que no interrumpe una orden de depósito— y
+mantiene `needs_servicing` alineado con `VehicleServiceInDepot`; la regresión
+cubre una orden de circuito, fiabilidad y permanencia en la huella 2×1.
+#567 continúa abierta por callbacks, pathfinding y aceptación visual/framebuffer.
 
 Actualización #567-SHIP-DEPOT-SERVICE-CANCEL (2026-09-11): si el depósito
 propio deja de ser alcanzable o cambia de propietario después de programar un

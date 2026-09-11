@@ -491,9 +491,16 @@ fn check_ship_needs_service(state: &mut crate::GameState, idx: usize) {
     let Some(vehicle) = state.vehicles.get(idx) else {
         return;
     };
+    let has_persistent_depot_order = vehicle
+        .orders
+        .iter()
+        .any(|order| matches!(order, VehicleOrder::Depot { stop: true, .. }));
     if vehicle.kind != VehicleKind::Ship
         || !vehicle.running
         || vehicle.prev_unit.is_some()
+        || has_persistent_depot_order
+        || vehicle.awaiting_load_window
+        || vehicle.cargo_transfer_active()
         || state
             .companies
             .get(vehicle.owner.index())
@@ -962,6 +969,7 @@ mod tests {
         }
         apply_command(&mut state, &Command::PlaceShipDepotDir(depot, 2)).unwrap();
         let north = crate::ship_depot_north_tile(&state.map, depot).unwrap();
+        let target = TileCoord::new(8, 2);
         let mut ship = Vehicle::new(1, VehicleKind::Ship, north, north);
         ship.running = true;
         ship.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
@@ -969,7 +977,7 @@ mod tests {
         ship.last_service_day = 0;
         ship.reliability = 1_000;
         ship.needs_servicing = true;
-        ship.orders = vec![VehicleOrder::depot(north)];
+        ship.orders = vec![VehicleOrder::station(target)];
         state.vehicles.push(ship);
         state.companies[0].servint_ships = 360;
         state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
@@ -987,6 +995,48 @@ mod tests {
         );
         assert!(!state.vehicles[0].needs_servicing);
         assert_eq!(state.vehicles[0].orders.len(), 1);
+        assert!(matches!(
+            state.vehicles[0].current_order_ref(),
+            Some(VehicleOrder::Station { station, .. }) if *station == target
+        ));
+        assert_eq!(state.map.get_kind(north), Some(TileKind::ShipDepot));
+    }
+
+    #[test]
+    fn ship_service_check_does_not_interrupt_existing_depot_order() {
+        use crate::vehicle::order::VehicleOrder;
+        use crate::{Command, GameState, TileKind, VehicleKind, WaterClass, apply_command};
+
+        let mut state = GameState::new(12, 8);
+        for y in [2_i32, 3_i32] {
+            for x in 0..12_i32 {
+                crate::map::make_water_tile(&mut state.map, TileCoord::new(x, y), WaterClass::Sea)
+                    .unwrap();
+            }
+        }
+        let depot = TileCoord::new(5, 3);
+        apply_command(&mut state, &Command::PlaceShipDepotDir(depot, 2)).unwrap();
+        let north = crate::ship_depot_north_tile(&state.map, depot).unwrap();
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, north, north);
+        ship.running = true;
+        ship.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+        ship.service_interval_days = 1;
+        ship.last_service_day = 0;
+        ship.reliability = 1_000;
+        ship.reliability_spd_dec = 0;
+        ship.needs_servicing = true;
+        ship.orders = vec![VehicleOrder::depot(north)];
+        state.vehicles.push(ship);
+        state.companies[0].servint_ships = 360;
+        state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
+        state.sync_timers_from_tick();
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(state.vehicles[0].reliability, 1_000);
+        assert!(state.vehicles[0].needs_servicing);
+        assert_eq!(state.vehicles[0].orders, vec![VehicleOrder::depot(north)]);
         assert_eq!(state.map.get_kind(north), Some(TileKind::ShipDepot));
     }
 

@@ -188,6 +188,13 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             }
             continue;
         }
+        if state.vehicles[i].kind == VehicleKind::Ship
+            && state.vehicles[i].running
+            && crate::ship_movement::ship_depot_exit_blocked(&state.map, &state.vehicles, i)
+        {
+            state.vehicles[i].cur_speed = 0;
+            continue;
+        }
         if state.vehicles[i].crashed {
             continue;
         }

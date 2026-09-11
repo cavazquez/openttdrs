@@ -578,6 +578,30 @@ fn ship_stay_in_or_leave_depot(v: &mut Vehicle, map: &Map) -> bool {
     false
 }
 
+/// Indica si otro barco está usando la misma boca de depósito.
+///
+/// `CheckShipStayInDepot` de `OpenTTD` sólo aplica esta espera cuando el otro
+/// barco tiene velocidad distinta de cero. Así un convoy de barcos que se
+/// inicia a la vez deja salir una sola unidad por tick sin convertir el
+/// depósito en una reserva permanente.
+#[must_use]
+pub fn ship_depot_exit_blocked(map: &Map, vehicles: &[Vehicle], vehicle_index: usize) -> bool {
+    let Some(vehicle) = vehicles.get(vehicle_index) else {
+        return false;
+    };
+    if vehicle.kind != VehicleKind::Ship || vehicle.ship_state != SHIP_STATE_DEPOT {
+        return false;
+    }
+    let depot_tile = crate::depot::ship_depot_north_tile(map, vehicle.pos).unwrap_or(vehicle.pos);
+    vehicles.iter().enumerate().any(|(other_index, other)| {
+        other_index != vehicle_index
+            && other.kind == VehicleKind::Ship
+            && other.cur_speed != 0
+            && crate::depot::ship_depot_north_tile(map, other.pos).unwrap_or(other.pos)
+                == depot_tile
+    })
+}
+
 fn choose_track_for_entry(diagdir: u8) -> u8 {
     track_from_diagdir(diagdir)
 }
@@ -1258,6 +1282,32 @@ mod tests {
         assert_eq!(v.ship_state, SHIP_STATE_TRACK_X);
         assert_eq!(v.direction, DIR_SW);
         assert_eq!(v.ship_rotation, DIR_SW);
+    }
+
+    #[test]
+    fn ship_depot_exit_waits_for_another_ship_using_the_same_mouth() {
+        let mut s = GameState::new(12, 8);
+        let depot = TileCoord::new(4, 3);
+        let [origin, other] = crate::ship_depot_footprint(depot, 2);
+        for tile in [origin, other] {
+            s.map.set_kind(tile, TileKind::Water).unwrap();
+        }
+        apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 2)).unwrap();
+        let north = crate::ship_depot_north_tile(&s.map, depot).unwrap();
+        let mut waiting = Vehicle::new(1, VehicleKind::Ship, north, TileCoord::new(8, 3));
+        waiting.ship_state = SHIP_STATE_DEPOT;
+        let mut leaving = Vehicle::new(2, VehicleKind::Ship, north, TileCoord::new(8, 3));
+        leaving.ship_state = SHIP_STATE_TRACK_X;
+        leaving.cur_speed = 1;
+        s.vehicles.extend([waiting, leaving]);
+
+        assert!(ship_depot_exit_blocked(&s.map, &s.vehicles, 0));
+
+        s.vehicles[1].cur_speed = 0;
+        assert!(!ship_depot_exit_blocked(&s.map, &s.vehicles, 0));
+        s.vehicles[1].cur_speed = 1;
+        s.vehicles[1].pos = TileCoord::new(8, 3);
+        assert!(!ship_depot_exit_blocked(&s.map, &s.vehicles, 0));
     }
 
     #[test]

@@ -780,9 +780,9 @@ pub use ship_movement::{
     SHIP_STATE_TRACK_Y, SHIP_STATE_WORMHOLE, SHIP_SUBCOORD, ShipLockOccupancy, ShipSubcoordData,
     choose_ship_track, find_closest_ship_depot, is_water_network_tile, is_water_network_tile_at,
     lock_sprite_level, release_ship_lock, ship_accelerate, ship_arrival_ready,
-    ship_controller_tick, ship_controller_tick_with_catalog, ship_lock_occupancy_allows,
-    ship_move_up_down_on_lock, ship_requires_path, ship_subcoord, try_claim_ship_lock,
-    water_tile_is_lock, water_tiles_connected,
+    ship_controller_tick, ship_controller_tick_with_catalog, ship_depot_exit_blocked,
+    ship_lock_occupancy_allows, ship_move_up_down_on_lock, ship_requires_path, ship_subcoord,
+    try_claim_ship_lock, water_tile_is_lock, water_tiles_connected,
 };
 pub use sign::{MAX_SIGN_NAME_CHARS, Sign, SignOwner};
 pub use sim_events::{

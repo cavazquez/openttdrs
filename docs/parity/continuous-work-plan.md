@@ -5129,8 +5129,8 @@ de vehículos, callbacks y aceptación visual/framebuffer.
 
 Actualización #329/#567-SERVICE-BREAKDOWN-CHANCE (2026-09-11): el servicio en
 depósito conserva ahora una cuarta parte de `breakdown_chance`, como
-`VehicleServiceInDepot`, en lugar de borrar por completo el acumulador. Esto
-mantiene la protección nativa contra una avería inmediata y las regresiones
-cubren tanto el método vanilla como el catálogo runtime; queda pendiente
-propagar el modificador específico de averías reducidas a todos los puntos de
-servicio. #329/#567 continúan abiertas.
+`VehicleServiceInDepot`, y la borra sólo cuando el setting es «averías
+reducidas». El ciclo de simulación propaga ese setting a todos los vehículos
+antes de los callbacks de economía y movimiento; las regresiones cubren la
+propagación y el método de servicio. #329/#567 continúan abiertas por otros
+criterios pendientes.

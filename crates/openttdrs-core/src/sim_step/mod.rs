@@ -189,6 +189,7 @@ pub(crate) fn step(state: &mut GameState) {
     // remaps de chunks en cada frame.
     state.runtime.begin_tick_visual_delta();
     state.ensure_companies();
+    sync_vehicle_breakdown_setting(state);
     state.runtime.fleet_index.rebuild(&state.vehicles);
     state
         .runtime
@@ -245,6 +246,7 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
 
     state.runtime.begin_tick_visual_delta();
     state.ensure_companies();
+    sync_vehicle_breakdown_setting(state);
     state.runtime.fleet_index.rebuild(&state.vehicles);
     state
         .runtime
@@ -340,6 +342,15 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     timings.total_ns = nanos(wall0);
 
     timings
+}
+
+/// Propaga el setting global al contexto efímero que necesitan las rutinas de
+/// servicio invocadas desde controladores que sólo reciben `Vehicle`.
+fn sync_vehicle_breakdown_setting(state: &mut GameState) {
+    let setting = state.vehicle_breakdowns.min(2);
+    for vehicle in &mut state.vehicles {
+        vehicle.service_breakdown_level = setting;
+    }
 }
 
 /// Reconstruye el byte que `RoadStop::status.base()` expone a `StationScope`.
@@ -1248,6 +1259,25 @@ mod tests {
         STATION_ANIMATION_TRIGGER_VEHICLE_ARRIVES, STATION_ANIMATION_TRIGGER_VEHICLE_DEPARTS,
         TileCoord, Vehicle, VehicleKind, VehicleOrder, find_path,
     };
+
+    #[test]
+    fn simulation_syncs_vehicle_breakdown_setting_before_runtime_work() {
+        let mut state = GameState::new(8, 8);
+        state.vehicle_breakdowns = 1;
+        state.vehicles.push(Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(2, 2),
+            TileCoord::new(3, 2),
+        ));
+
+        sync_vehicle_breakdown_setting(&mut state);
+        assert_eq!(state.vehicles[0].service_breakdown_level, 1);
+
+        state.vehicle_breakdowns = 2;
+        sync_vehicle_breakdown_setting(&mut state);
+        assert_eq!(state.vehicles[0].service_breakdown_level, 2);
+    }
 
     /// CB140 sintético: conserva en MAP7 el ordinal de `var 18`.
     fn path_reservation_callbacks() -> TrainSpriteGraphics {

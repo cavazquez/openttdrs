@@ -169,6 +169,10 @@ const fn default_depot_leave_cleared() -> bool {
     true
 }
 
+const fn default_service_breakdown_level() -> u8 {
+    2
+}
+
 /// Vehículo que avanza sub-tile (`progress` 0–255) siguiendo un camino BFS.
 ///
 /// Si no hay camino calculado (`path` vacío y `pos != dest`) usa movimiento Manhattan
@@ -581,6 +585,13 @@ pub struct Vehicle {
     /// Averías sufridas desde la última revisión (`breakdowns_since_last_service`).
     #[serde(default)]
     pub breakdowns_since_last_service: u8,
+    /// Setting efímero de averías usado por `VehicleServiceInDepot`.
+    ///
+    /// Se sincroniza desde `GameState::vehicle_breakdowns` al comenzar cada
+    /// tick y no forma parte del save; el valor 2 conserva el comportamiento
+    /// normal para vehículos creados fuera del ciclo principal.
+    #[serde(skip, default = "default_service_breakdown_level")]
+    pub(crate) service_breakdown_level: u8,
     /// Contador económico diario (`Vehicle::day_counter`), usado por CB32.
     #[serde(default)]
     pub newgrf_day_counter: u8,
@@ -872,6 +883,7 @@ impl Vehicle {
             breakdown_ctr: 0,
             breakdown_delay: 0,
             breakdowns_since_last_service: 0,
+            service_breakdown_level: default_service_breakdown_level(),
             newgrf_day_counter: 0,
             newgrf_tick_counter: 0,
             running_ticks: 0,

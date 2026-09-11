@@ -132,6 +132,9 @@ impl super::model::Vehicle {
         self.breakdown_ctr = 0;
         self.breakdown_delay = 0;
         self.breakdown_chance /= 4;
+        if self.service_breakdown_level == 1 {
+            self.breakdown_chance = 0;
+        }
         self.breakdowns_since_last_service = 0;
         let service_day =
             crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
@@ -162,6 +165,9 @@ impl super::model::Vehicle {
         self.breakdown_ctr = 0;
         self.breakdown_delay = 0;
         self.breakdown_chance /= 4;
+        if self.service_breakdown_level == 1 {
+            self.breakdown_chance = 0;
+        }
         self.breakdowns_since_last_service = 0;
         let service_day =
             crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
@@ -778,6 +784,22 @@ mod tests {
         assert_eq!(vehicle.breakdowns_since_last_service, 0);
         assert_eq!(vehicle.last_service_day, 11);
         assert_eq!(vehicle.last_service_newgrf_day, 11);
+    }
+
+    #[test]
+    fn reduced_breakdowns_service_clears_post_service_chance() {
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        vehicle.service_breakdown_level = 1;
+        vehicle.breakdown_chance = 200;
+
+        vehicle.service_at_depot();
+
+        assert_eq!(vehicle.breakdown_chance, 0);
     }
 
     #[test]

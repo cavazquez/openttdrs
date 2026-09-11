@@ -51,9 +51,11 @@ pub enum RoadEngineFilter {
 #[must_use]
 pub fn engine_available_in_year(engine: &EngineDef, calendar_year: u32) -> bool {
     let intro = u32::from(engine.intro_year);
+    let available_years =
+        u32::from(engine.model_life_years).saturating_sub(u32::from(engine.retire_early_years));
     calendar_year >= intro
         && (engine.model_life_years == u8::MAX
-            || calendar_year < intro.saturating_add(u32::from(engine.model_life_years)))
+            || calendar_year < intro.saturating_add(available_years))
 }
 
 /// Motores visibles en la ventana de compra de un depósito, filtrados y ordenados.

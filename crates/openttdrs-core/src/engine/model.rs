@@ -78,6 +78,10 @@ pub struct EngineDef {
     /// `0xFF` conserva la semántica de disponibilidad ilimitada de `OpenTTD`.
     #[serde(default = "default_model_life_years")]
     pub model_life_years: u8,
+    /// Action0 vehicle `retire_early`: años que adelantan el retiro del
+    /// modelo; `0` conserva la disponibilidad completa.
+    #[serde(default)]
+    pub retire_early_years: u8,
     /// Ticks antes de envejecer la carga (`EngineInfo::cargo_age_period`).
     /// Cero desactiva el envejecimiento para ese motor.
     #[serde(default = "default_cargo_age_period")]

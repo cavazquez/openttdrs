@@ -318,9 +318,12 @@ impl super::model::Vehicle {
             0 => false,
             2 => {
                 self.breakdown_ctr = 1;
-                if self.kind != VehicleKind::Aircraft {
-                    self.cur_speed = 0;
+                self.breakdowns_since_last_service =
+                    self.breakdowns_since_last_service.saturating_add(1);
+                if self.kind == VehicleKind::Aircraft {
+                    return false;
                 }
+                self.cur_speed = 0;
                 true
             }
             1 => {
@@ -834,6 +837,22 @@ mod tests {
         assert!(v.handle_breakdown(0));
         assert_eq!(v.breakdown_ctr, 1);
         assert_eq!(v.cur_speed, 0);
+        assert_eq!(v.breakdowns_since_last_service, 1);
+    }
+
+    #[test]
+    fn breakdown_counter_saturates_at_native_limit() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Aircraft,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.breakdown_ctr = 2;
+        v.breakdowns_since_last_service = u8::MAX;
+
+        assert!(!v.handle_breakdown(0));
+        assert_eq!(v.breakdowns_since_last_service, u8::MAX);
     }
 
     #[test]

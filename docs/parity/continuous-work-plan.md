@@ -5103,3 +5103,12 @@ local de `NeedsServicing` ya no cancela una revisión vencida sólo porque
 avería y la decisión de servicio; la regresión cubre el intervalo diario
 vencido durante esa cuenta. #329/#567 continúan abiertas por la semántica
 restante de vehículos, callbacks y aceptación visual/framebuffer.
+
+Actualización #329/#567-BREAKDOWN-COUNTER (2026-09-11): al entrar en la fase
+activa de una avería, cada vehículo incrementa ahora
+`breakdowns_since_last_service` con el límite nativo de 255. El valor queda
+disponible para la UI, callbacks NewGRF y saves, y las regresiones cubren tanto
+el incremento como la saturación. La transición de aeronaves también conserva
+el retorno `false` de `HandleBreakdown`, ya que no detienen su movimiento por
+esta fase; #329/#567 continúan abiertas por la semántica restante de vehículos,
+callbacks y aceptación visual/framebuffer.

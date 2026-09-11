@@ -3901,3 +3901,13 @@ regresiona contra las cuatro orientaciones y el runtime. La suite cliente
 queda en 1382 pasadas y 2 ignoradas, con Clippy estricto y formato verdes.
 #567 sigue abierta por callbacks/vecinos, clipping de viewport y framebuffer;
 #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-EDGE-CLIPPING (2026-09-11, `b104f9e1`):
+runtime y preview naval ahora convierten `TILE_SEQ_LINE` mediante el mismo
+helper de bounds inclusivos. Se agregó una regresión sobre las cuatro
+orientaciones con huellas válidas que alcanzan los extremos este, norte, oeste
+y sur de un mapa 16×16: las 12 capas se conservan y las 6 que tocan el límite
+no se descartan por un `-1` de extensión o clipping. La suite cliente queda en
+1383 pasadas y 2 ignoradas, con Clippy estricto y formato verdes. #567 sigue
+abierta por callbacks/vecinos, validación visual en Weston, clipping integrado
+con el framebuffer y la matriz completa de paridad; #326 permanece abierta.

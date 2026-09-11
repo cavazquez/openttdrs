@@ -5053,3 +5053,12 @@ legacy conserva la sección sur en `Vehicle::pos`; la consulta no altera la
 posición física hasta que el runtime la hidrate. La regresión ejecuta las cinco
 operaciones con esa posición legacy; #567 continúa abierta por callbacks,
 pathfinding completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-UNBUNCH (2026-09-11): el controlador naval
+respeta ahora la espera de unbunch para órdenes compartidas y registra la
+salida sólo cuando la nave abandona realmente el estado de depósito. Una
+reentrada al mismo depósito no reprogama la lista; una salida actualiza el
+round-trip y la próxima salida de las unidades compartidas, como
+`CheckShipStayInDepot` + `LeaveUnbunchingDepot`. Las regresiones cubren la
+espera y la programación naval; #567 continúa abierta por callbacks,
+pathfinding completo y aceptación visual/framebuffer.

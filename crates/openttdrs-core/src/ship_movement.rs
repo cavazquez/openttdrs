@@ -610,6 +610,15 @@ fn ship_stay_in_or_leave_depot(
         return false;
     }
 
+    // `CheckShipStayInDepot` respeta la separación de salidas de las listas
+    // compartidas antes de resolver una orden que pueda dejar el depósito.
+    // El mismo estado se usa para trenes en `depot_leave`; los barcos no
+    // tienen consist, pero sí participan de la misma lista de unbunch.
+    if crate::depot_leave::vehicle_waiting_for_unbunching(v) {
+        v.cur_speed = 0;
+        return true;
+    }
+
     // `CheckShipStayInDepot` llama a `VehicleEnterDepot` cuando una orden de
     // depósito vuelve a apuntar exactamente al depósito en el que ya está el
     // barco. Sin esta rama, el par (destino igual + path vacío) de abajo lo
@@ -1563,6 +1572,49 @@ mod tests {
         assert_eq!(ship.current_order, 1);
         assert_eq!(ship.dest, waypoint);
         assert_eq!(ship.ship_state, SHIP_STATE_DEPOT);
+    }
+
+    #[test]
+    fn ship_unbunch_wait_keeps_depot_until_shared_departure_window() {
+        let mut map = crate::map::Map::new_flat(10, 10, 0);
+        let depot = TileCoord::new(4, 4);
+        let exit = TileCoord::new(3, 4);
+        map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        map.set_kind(exit, TileKind::Water).unwrap();
+
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, depot, exit);
+        ship.running = true;
+        ship.ship_pos_valid = true;
+        ship.ship_x = depot.x * 16 + 8;
+        ship.ship_y = depot.y * 16 + 8;
+        ship.ship_state = SHIP_STATE_DEPOT;
+        ship.ship_track = TRACK_X;
+        ship.ship_rotation = DIR_NE;
+        ship.direction = DIR_NE;
+        ship.path.push_back(exit);
+        ship.orders = vec![
+            VehicleOrder::Depot {
+                depot,
+                stop: false,
+                wait_ticks: 0,
+                travel_ticks: 0,
+                refit_cargo: None,
+                unbunch: true,
+            },
+            VehicleOrder::waypoint(exit),
+        ];
+        ship.current_order = 1;
+        ship.shared_order_id = Some(12);
+        ship.sim_tick = 100;
+        ship.depot_unbunching_next_departure = 101;
+
+        ship_controller_tick(&mut ship, Some(&map));
+        assert_eq!(ship.ship_state, SHIP_STATE_DEPOT);
+        assert_eq!(ship.cur_speed, 0);
+
+        ship.sim_tick = 101;
+        ship_controller_tick(&mut ship, Some(&map));
+        assert_ne!(ship.ship_state, SHIP_STATE_DEPOT);
     }
 
     #[test]

@@ -406,6 +406,16 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             &state.engine_catalog,
             state.construction.plane_speed,
         );
+        if vehicle_kind == VehicleKind::Ship
+            && was_in_depot
+            && !crate::refit::vehicle_is_in_depot(&state.map, &state.vehicles[i])
+        {
+            // `CheckShipStayInDepot` llama a `LeaveUnbunchingDepot` justo al
+            // liberar la nave. Hacerlo después del controller permite que
+            // una orden same-depot permanezca dentro y que sólo una salida
+            // real reprograme a sus compañeras compartidas.
+            crate::depot_leave::leave_unbunching_depot(&mut state.vehicles, i);
+        }
         refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
         trigger_depot_on_entry(state, i, was_in_depot);
         // `Vehicle::MoveTo` calls `PlayVehicleSound(VSE_TUNNEL)` only at the

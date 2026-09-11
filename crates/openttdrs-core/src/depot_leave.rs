@@ -117,7 +117,7 @@ pub(crate) fn tick_train_stay_in_depot_indexed(
         }
         vehicle.wait_counter = 0;
 
-        if is_waiting_for_unbunching(vehicle) {
+        if vehicle_waiting_for_unbunching(vehicle) {
             vehicle.cur_speed = 0;
             return true;
         }
@@ -175,7 +175,7 @@ pub(crate) fn tick_train_stay_in_depot_indexed(
 
 /// ¿La orden de depósito previa (o actual) pide unbunch y aún no toca salir?
 #[must_use]
-fn is_waiting_for_unbunching(vehicle: &Vehicle) -> bool {
+pub(crate) fn vehicle_waiting_for_unbunching(vehicle: &Vehicle) -> bool {
     // OpenTTD: sin lista compartida no hay unbunch.
     if vehicle.shared_order_id.is_none() || vehicle.orders.len() <= 1 {
         return false;
@@ -198,7 +198,7 @@ fn previous_or_current_order_is_unbunching(vehicle: &Vehicle) -> bool {
 }
 
 /// Programa la separación de salidas entre vehículos con órdenes compartidas.
-fn leave_unbunching_depot(vehicles: &mut [Vehicle], index: usize) {
+pub(crate) fn leave_unbunching_depot(vehicles: &mut [Vehicle], index: usize) {
     let Some(vehicle) = vehicles.get(index) else {
         return;
     };
@@ -569,6 +569,44 @@ mod tests {
         assert_eq!(v.pos, depot);
         assert!(!v.depot_leave_cleared);
         assert!(v.reliability > 100, "debe haber hecho service_at_depot");
+    }
+
+    #[test]
+    fn ship_unbunch_departure_schedules_shared_peers() {
+        let depot = TileCoord::new(4, 4);
+        let next = TileCoord::new(6, 4);
+        let mut lead = Vehicle::new(1, VehicleKind::Ship, depot, next);
+        lead.running = true;
+        lead.shared_order_id = Some(42);
+        lead.orders = vec![
+            VehicleOrder::Depot {
+                depot,
+                stop: false,
+                wait_ticks: 0,
+                travel_ticks: 0,
+                refit_cargo: None,
+                unbunch: true,
+            },
+            VehicleOrder::waypoint(next),
+        ];
+        lead.current_order = 1;
+        lead.sim_tick = 100;
+        lead.round_trip_time = 12;
+
+        let mut peer = Vehicle::new(2, VehicleKind::Ship, depot, next);
+        peer.running = true;
+        peer.shared_order_id = Some(42);
+        peer.orders = lead.orders.clone();
+        peer.current_order = 1;
+        peer.round_trip_time = 12;
+
+        let mut vehicles = vec![lead, peer];
+        leave_unbunching_depot(&mut vehicles, 0);
+
+        assert_eq!(vehicles[0].depot_unbunching_last_departure, 100);
+        assert_eq!(vehicles[0].depot_unbunching_next_departure, 106);
+        assert_eq!(vehicles[1].depot_unbunching_next_departure, 106);
+        assert_eq!(vehicles[0].timetable_lateness, 0);
     }
 
     #[test]

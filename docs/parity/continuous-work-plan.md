@@ -3920,3 +3920,13 @@ crear una fila de `DepotID` ni cobrar dinero. La suite core queda en 2406
 pasadas y 1 ignorada; #567 sigue abierta por callbacks/vecinos restantes,
 aceptación visual en Weston, clipping integrado con framebuffer y matriz
 completa; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-WATER-FOOTPRINT-CONTRACT (2026-09-11,
+`8e7ef38a`): se eliminó la condición no nativa que exigía una tercera tesela
+de agua delante de la boca. La referencia `CmdBuildShipDepot` sólo valida agua
+en las dos teselas de la huella; ahora preview y ejecución aceptan esa misma
+configuración en los cuatro ejes, manteniendo el rechazo de tierra y bordes.
+La suite core queda en 2407 pasadas y 1 ignorada; la cliente en 1383 pasadas y
+2 ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta por
+callbacks/vecinos restantes, aceptación visual en Weston, clipping integrado
+con framebuffer y matriz completa; #326 permanece abierta.

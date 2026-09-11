@@ -4705,3 +4705,15 @@ refit a una clase no pasajera. Sigue pendiente materializar la segunda
 Core queda en `2481 passed; 0 failed; 1 ignored` y cliente en `1394 passed;
 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check` limpios;
 #329/#567 continúan abiertas.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-PACKET-ROUNDTRIP (2026-09-11,
+`bf7167cf`): el primario de aeronave conserva ahora una `VehicleCargoList`
+separada para la carga de `AIR_SHADOW`. Sus paquetes se agregan al pool `CAPA`,
+se enlazan desde `VEHS.common.cargo.packets` de la sombra y se rehidratan con
+origen, ruta, edad y feeder al importar; el contador escalar queda derivado de
+la lista cuando existe. El refit trunca esa lista conforme a la nueva
+capacidad, igual que `Aircraft::Next()->cargo.Truncate()`. Sigue pendiente usar
+esta lista en el ciclo de estación (carga, descarga, pagos y trasbordos) y
+materializar la entidad FTA separada; #329/#567 continúan abiertas. Core queda
+en `2481 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2
+ignored`, con Clippy estricto, formato y `diff --check` limpios.

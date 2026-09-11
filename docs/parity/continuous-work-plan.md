@@ -4574,3 +4574,14 @@ próximo SAV. Sigue pendiente materializar la segunda `VehicleCargoList` y
 actualizar el contador durante carga/descarga real. Core queda en `2481 passed;
 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`, con
 Clippy estricto, formato y `diff --check` limpios; #329/#567 continúan abiertas.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-PACKET-ROUNDTRIP (2026-09-11,
+`bf7167cf`): el primario de aeronave conserva una `VehicleCargoList` separada
+para `AIR_SHADOW`; sus paquetes se exportan al pool `CAPA`, se referencian en
+`VEHS.common.cargo.packets` de la sombra y se rehidratan con origen, ruta, edad
+y feeder. Cuando existe la lista, su total reemplaza al contador escalar y el
+refit aplica truncamiento a la nueva capacidad. Falta integrar esa lista con
+carga/descarga, pagos y trasbordos de estación, además de la entidad FTA
+separada; #329/#567 siguen abiertas. Core queda en `2481 passed; 0 failed; 1
+ignored` y cliente en `1394 passed; 0 failed; 2 ignored`, con Clippy estricto,
+formato y `diff --check` limpios.

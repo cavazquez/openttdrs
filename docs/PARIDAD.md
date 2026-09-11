@@ -4769,3 +4769,13 @@ específico de la sombra/FTA y materializar la entidad nativa separada; #329/#56
 continúan abiertas. Core queda en `2487 passed; 0 failed; 1 ignored` y cliente
 en `1394 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y
 `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-AGE-PERIOD-CB36 (2026-09-11):
+el período de envejecimiento de `AIR_SHADOW` ya se resuelve como en
+`UpdateAircraftCache`: `CB36` consulta la propiedad `0x1C` sobre la vista de
+correo de la sombra y su resultado se mantiene en un caché separado. El
+período primario y el secundario pueden ser cero o distintos, y la evaluación
+restaura la carga principal después del callback. La entidad FTA separada y
+sus scopes/estado propios siguen pendientes; #329/#567 continúan abiertas.
+Core queda en `2488 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0
+failed; 2 ignored`, con Clippy estricto, formato y `diff --check` limpios.

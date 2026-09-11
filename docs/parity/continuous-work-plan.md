@@ -4191,3 +4191,16 @@ esclusa y un segundo muelle conectado. Core queda en
 ignored`, con Clippy estricto, formato y diff limpios. #567 sigue abierta por
 callbacks navales y aceptación visual manual bajo Weston; #326 permanece
 abierta.
+
+Actualización #567-SHIP-DEPOT-AUTO-SERVICE (2026-09-11, `ceb7a450`): el
+servicio automático naval ahora busca depósitos propios dentro de
+`MAX_SHIP_DEPOT_SEARCH_DISTANCE = 80`, compara `DistanceSquare` con desempate
+estable y exige una ruta navegable desde la cuenca actual. El barrido económico
+inserta la orden `Depot { stop: false }` sólo para barcos primarios que necesitan
+servicio y cuando la compañía tiene habilitado `servint_ships`; depósitos
+rivales y cuencas aisladas quedan fuera. Se agregaron regresiones de propietario,
+límite geométrico, conectividad y la inserción de la orden. Core queda en
+`2437 passed; 0 failed; 1 ignored` y cliente en `1388 passed; 0 failed; 2
+ignored`, con Clippy estricto, formato y diff limpios. La aceptación visual
+manual bajo Weston sigue pendiente. #567 sigue abierta por callbacks navales
+restantes y validación visual; #326 permanece abierta.

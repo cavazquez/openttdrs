@@ -4108,3 +4108,15 @@ ambas partes. Core queda en 2414 pasadas y 1 ignorada; cliente en 1383
 pasadas y 2 ignoradas, con Clippy estricto y formato verdes. #567 sigue
 abierta por callbacks/vecinos, contratos de plataforma petrolera y aceptación
 visual en Weston; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-DOCKING-NEIGHBORS (2026-09-11,
+`e54e29bc`): la construcción y la limpieza del depósito naval vuelven a
+ejecutar el equivalente raw de `CheckForDockingTile` para sus dos secciones.
+El bit `DockingTile` se recalcula en las cuatro orientaciones frente a la parte
+acuática de un muelle, una tesela `MP_STATION` de oil rig o una industria cuyo
+`IndustryID` tiene estación neutral enlazada; el resultado se prueba también
+con el vecino presente al limpiar. No se altera todavía la selección completa
+de destinos del pathfinder. Core queda en 2416 pasadas y 1 ignorada; cliente en
+1383 pasadas y 2 ignoradas, con Clippy estricto y formato verdes. #567 sigue
+abierta por consumo del estado de docking en navegación, callbacks restantes y
+aceptación visual en Weston; #326 permanece abierta.

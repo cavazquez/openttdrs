@@ -3775,3 +3775,12 @@ segunda tesela ocupada. La suite core queda en 2391 pasadas y 1 ignorada, con
 Clippy estricto, formato y `diff --check` verdes. #567 sigue abierta por
 demolición de ambas partes, pool `DepotID`, vecinos/callbacks, preview,
 clipping, orden global y framebuffer; #326 permanece abierta.
+
+Actualización MENU-INTRO-SHOWCASE (2026-09-11, `76c41084`): se reemplazó el
+fondo procedural escaso del menú por el showcase determinista 64×64 y se
+materializa su flota inicial sin ejecutar simulación. El tráfico animado cubre
+bus, camión, tren, barco, avión y una línea maglev aislada con railtype explícito;
+el paneo queda acotado para conservar los elementos alrededor del panel. La
+suite cliente queda en 1373 pasadas y 2 ignoradas, con Clippy estricto verde.
+La comprobación visual requiere una sesión Weston/X11 accesible al proceso;
+esto no altera los criterios de cierre de #326 ni #567.

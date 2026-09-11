@@ -3893,3 +3893,14 @@ segunda tesela ocupada. La suite core queda en 2391 pasadas y 1 ignorada, con
 Clippy estricto, formato y `diff --check` verdes. #567 sigue abierta por
 demolición de ambas partes, pool `DepotID`, vecinos/callbacks, preview,
 clipping, orden global y framebuffer; #326 permanece abierta.
+
+Actualización MENU-INTRO-SHOWCASE (2026-09-11, `76c41084`): el fondo de la
+pantalla de inicio deja de depender de un mapa aleatorio escaso y reutiliza la
+escena determinista 64×64 del showcase: ciudad, casas, cadena industrial,
+carretera, estaciones, doble vía, puerto, aeropuertos y sus vehículos iniciales.
+El renderer del menú materializa esa flota sin activar el reloj de simulación;
+el tráfico decorativo animado añade buses, camiones, trenes, barcos, aviones y
+una línea maglev aislada con railtype `Maglev`. Se redujo el paneo para mantener
+la composición detrás del panel central. La suite cliente queda en 1373
+pasadas y 2 ignoradas; Clippy estricto pasa. Es una mejora de presentación del
+menú y no modifica la generación de partidas nuevas ni cierra #326/#567.

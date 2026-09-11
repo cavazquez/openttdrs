@@ -469,10 +469,15 @@ fn next_station_id(state: &GameState) -> Option<u16> {
     (0..=u16::MAX).find(|id| !used.contains(id))
 }
 
+fn station_can_join_dock(state: &GameState, station: &Station) -> bool {
+    station.owner == state.active_company
+        && station.stop_kind != StopKind::OilRig
+        && station.has_dock_facility()
+        && !crate::station::dock_station_tiles(&state.map, station).is_empty()
+}
+
 /// Encuentra la única estación naval propia que `GetStationAround` podría
-/// asociar al área del nuevo muelle. La herramienta local todavía no expone
-/// el selector nativo `station_to_join`, por lo que el caso automático se
-/// limita a estaciones del mismo tipo y propietario.
+/// asociar al área del nuevo muelle.
 fn find_adjacent_dock_station(
     state: &GameState,
     c: TileCoord,
@@ -482,7 +487,7 @@ fn find_adjacent_dock_station(
     let new_tiles = [c, water];
     let mut found = None;
     for (index, station) in state.stations.iter().enumerate() {
-        if station.owner != state.active_company || station.stop_kind != StopKind::Dock {
+        if !station_can_join_dock(state, station) {
             continue;
         }
         let existing_tiles = crate::station::dock_station_tiles(&state.map, station);
@@ -499,19 +504,97 @@ fn find_adjacent_dock_station(
     Ok(found)
 }
 
+/// Resuelve un `station_to_join` nativo a la estación lógica local.
+///
+/// El ID se valida contra la estación y contra la huella física de muelle. No
+/// basta con encontrar una estación con el mismo `ottd_station_id`: una
+/// estación intermodal puede compartirlo, pero debe demostrar que conserva al
+/// menos una pieza naval real antes de aceptar otra.
+fn find_dock_station_by_native_id(
+    state: &GameState,
+    station_to_join: u16,
+) -> Result<(usize, u16), CommandError> {
+    let mut found = None;
+    for (index, station) in state.stations.iter().enumerate() {
+        if !station_can_join_dock(state, station)
+            || super::station::dock_station_native_id(state, station) != Some(station_to_join)
+        {
+            continue;
+        }
+        if found.is_some() {
+            return Err(CommandError::CannotJoinStations);
+        }
+        found = Some((index, station_to_join));
+    }
+    found.ok_or(CommandError::CannotJoinStations)
+}
+
+fn find_dock_joining_station(
+    state: &GameState,
+    c: TileCoord,
+    dir: u8,
+    station_to_join: Option<u16>,
+) -> Result<Option<(usize, u16)>, CommandError> {
+    let Some(station_to_join) = station_to_join else {
+        return find_adjacent_dock_station(state, c, dir);
+    };
+    let (station_index, station_id) = find_dock_station_by_native_id(state, station_to_join)?;
+    let water = crate::station::dock_water_tile(c, dir & 0x03);
+    let existing_tiles =
+        crate::station::dock_station_tiles(&state.map, &state.stations[station_index]);
+    let adjacent = crate::station::station_tile_sets_adjacent(&[c, water], &existing_tiles);
+    if !state.construction.distant_join_stations && !adjacent {
+        return Err(CommandError::CannotJoinStations);
+    }
+    Ok(Some((station_index, station_id)))
+}
+
+pub(in crate::command) fn check_dock_placement_at_station_with_state(
+    state: &GameState,
+    c: TileCoord,
+    dir: u8,
+    station_to_join: u16,
+) -> Result<(), CommandError> {
+    check_dock_placement_with_state(state, c, dir)?;
+    let _ = find_dock_joining_station(state, c, dir, Some(station_to_join))?;
+    Ok(())
+}
+
+pub(in crate::command) fn place_dock_at_station(
+    state: &mut GameState,
+    c: TileCoord,
+    dir: u8,
+    station_to_join: u16,
+) -> Result<(), CommandError> {
+    place_dock_with_station(state, c, dir, Some(station_to_join))
+}
+
 pub(in crate::command) fn place_dock(
     state: &mut GameState,
     c: TileCoord,
     dir: u8,
 ) -> Result<(), CommandError> {
-    check_dock_placement_with_state(state, c, dir)?;
+    place_dock_with_station(state, c, dir, None)
+}
+
+fn place_dock_with_station(
+    state: &mut GameState,
+    c: TileCoord,
+    dir: u8,
+    station_to_join: Option<u16>,
+) -> Result<(), CommandError> {
+    if let Some(station_id) = station_to_join {
+        check_dock_placement_at_station_with_state(state, c, dir, station_id)?;
+    } else {
+        check_dock_placement_with_state(state, c, dir)?;
+    }
     let dir = dir & 0x03;
     let water = crate::station::dock_water_tile(c, dir);
     let auto_clear_objects = auto_clear_object_plan(state, [c, water])?;
     for object_tiles in auto_clear_objects {
         clear_object_footprint_keep_water(state, object_tiles[0], &object_tiles)?;
     }
-    let joining_station = find_adjacent_dock_station(state, c, dir)?;
+    let joining_station = find_dock_joining_station(state, c, dir, station_to_join)?;
     let station_id = joining_station.map_or_else(
         || next_station_id(state).ok_or(CommandError::StationPoolFull),
         |(_, id)| Ok(id),

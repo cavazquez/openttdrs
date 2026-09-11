@@ -1310,6 +1310,81 @@ fn joining_docks_unifies_native_id_and_promotes_anchor_after_clear() {
 }
 
 #[test]
+fn place_dock_reuses_explicit_station_to_join_at_distance() {
+    let mut s = GameState::new(20, 12);
+    s.construction.distant_join_stations = true;
+    let first = TileCoord::new(4, 4);
+    let second = TileCoord::new(12, 4);
+    for land in [first, second] {
+        let water = crate::station::dock_water_tile(land, 1);
+        let approach = crate::station::dock_water_tile(water, 1);
+        s.map.set_kind(land, TileKind::Grass).unwrap();
+        s.map.set_kind(water, TileKind::Water).unwrap();
+        s.map.set_kind(approach, TileKind::Water).unwrap();
+        set_dock_land_slope(&mut s.map, land, 1, 1);
+    }
+
+    apply_command(&mut s, &Command::PlaceDock(first, 1)).unwrap();
+    let station_id = s.stations[0].ottd_station_id.unwrap() as u16;
+
+    apply_command(
+        &mut s,
+        &Command::PlaceDockAtStation {
+            origin: second,
+            dir: 1,
+            station_to_join: station_id,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].pos, first);
+    assert!(s.stations[0].covers_tile(second));
+    assert!(s.stations[0].covers_tile(crate::station::dock_water_tile(second, 1)));
+    for tile in [
+        first,
+        crate::station::dock_water_tile(first, 1),
+        second,
+        crate::station::dock_water_tile(second, 1),
+    ] {
+        let raw = s.map.get(tile).unwrap();
+        assert_eq!(u16::from(raw.m2) | (u16::from(raw.m2_hi) << 8), station_id);
+    }
+}
+
+#[test]
+fn place_dock_rejects_unknown_explicit_station_before_mutation() {
+    let mut s = GameState::new(12, 12);
+    let land = TileCoord::new(5, 4);
+    let water = crate::station::dock_water_tile(land, 1);
+    let approach = crate::station::dock_water_tile(water, 1);
+    s.map.set_kind(land, TileKind::Grass).unwrap();
+    s.map.set_kind(water, TileKind::Water).unwrap();
+    s.map.set_kind(approach, TileKind::Water).unwrap();
+    set_dock_land_slope(&mut s.map, land, 1, 1);
+    let before_land = s.map.get(land).unwrap();
+    let before_water = s.map.get(water).unwrap();
+    let money = s.economy.money;
+
+    let command = Command::PlaceDockAtStation {
+        origin: land,
+        dir: 1,
+        station_to_join: 77,
+    };
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::CannotJoinStations)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::CannotJoinStations)
+    );
+    assert_eq!(s.map.get(land), Some(before_land));
+    assert_eq!(s.map.get(water), Some(before_water));
+    assert_eq!(s.economy.money, money);
+}
+
+#[test]
 fn place_aqueduct_between_facing_slopes() {
     let mut s = SandboxMap::flat_rich(16, 12, 1);
     // Oeste → este: rampa SW en (3,5), rampa NE en (7,5).

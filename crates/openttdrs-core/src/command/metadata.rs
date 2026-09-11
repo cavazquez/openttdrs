@@ -108,6 +108,7 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::PlaceRoadWaypoint(c)
         | Command::PlaceShipDepotDir(c, _)
         | Command::PlaceDock(c, _)
+        | Command::PlaceDockAtStation { origin: c, .. }
         | Command::PlaceAirport(c)
         | Command::PlaceCanal(c)
         | Command::PlaceRiver(c)

@@ -351,6 +351,11 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::PlaceRailDepotDir(c, dir) => transport::place_rail_depot_dir(state, *c, *dir),
         Command::PlaceShipDepotDir(c, dir) => transport::place_ship_depot_dir(state, *c, *dir),
         Command::PlaceDock(c, dir) => transport::place_dock(state, *c, *dir),
+        Command::PlaceDockAtStation {
+            origin,
+            dir,
+            station_to_join,
+        } => transport::place_dock_at_station(state, *origin, *dir, *station_to_join),
         Command::PlaceAirport(c) => transport::place_airport(state, *c),
         Command::PlaceAirportArea {
             origin,

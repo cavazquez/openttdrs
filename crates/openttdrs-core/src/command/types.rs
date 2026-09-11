@@ -66,6 +66,15 @@ pub enum Command {
     PlaceShipDepotDir(TileCoord, u8),
     /// Muelle 1×1 sobre agua costera; `dir` orienta el sprite (eje X/Y).
     PlaceDock(TileCoord, u8),
+    /// Muelle que reutiliza explícitamente el `StationID` nativo indicado.
+    ///
+    /// Es la variante reproducible de `CmdBuildDock(..., station_to_join, ...)`;
+    /// `PlaceDock` conserva la búsqueda automática de una estación adyacente.
+    PlaceDockAtStation {
+        origin: TileCoord,
+        dir: u8,
+        station_to_join: u16,
+    },
     /// Helipuerto / aeropuerto 1×1 (compra aviones + carga pasajeros).
     PlaceAirport(TileCoord),
     /// Aeropuerto por spec; `axis_y` rota el footprint.

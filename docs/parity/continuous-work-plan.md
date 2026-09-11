@@ -3784,3 +3784,16 @@ el paneo queda acotado para conservar los elementos alrededor del panel. La
 suite cliente queda en 1373 pasadas y 2 ignoradas, con Clippy estricto verde.
 La comprobación visual requiere una sesión Weston/X11 accesible al proceso;
 esto no altera los criterios de cierre de #326 ni #567.
+
+Actualización #326/#567-SHIP-DEPOT-CLEAR-CANONICAL (2026-09-11, `c794daf2`):
+`ClearTile` ya trata el depósito naval como una huella indivisible: una orden
+emitida sobre cualquiera de sus dos teselas valida ownership, ocupación y
+vecindad, restaura ambas aguas conservando Sea/Canal/River y cobra
+`PR_CLEAR_DEPOT_SHIP` (90). `DepotSpatialIndex`, la búsqueda Manhattan y el BFS
+naval sólo exponen la sección norte canónica, evitando depósitos duplicados o
+referencias a la mitad sur. Se agregó el error de vehículo ocupando la huella y
+regresiones para las dos entradas y las clases de agua. La suite core queda en
+2395 pasadas y 1 ignorada; la cliente en 1373 pasadas y 2 ignoradas, con Clippy
+estricto del cliente verde. #567 sigue abierta por el pool `DepotID`, vecinos y
+callbacks, preview, clipping, orden global y framebuffer; #326 permanece
+abierta.

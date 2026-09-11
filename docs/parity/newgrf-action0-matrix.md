@@ -159,9 +159,10 @@ Fuente: `newgrf_act0_aircraft.cpp`.
 | `0C` velocidad (conversión `×128/10`) | **runtime** |
 | `0E` running cost factor | **runtime** |
 | `0F` capacidad de pasajeros | **runtime** |
+| `11` capacidad de correo | **runtime parcial** (`mail_capacity` se conserva en `EngineDef` y se muestra en la compra; la unidad sombra/articulada aún no se materializa) |
 | `12` sound effect BYTE | **runtime** (`sound_effect`) |
 | `14` callback mask BYTE / `22` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
-| `17` misc flags (bit1 `Uses2CC`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |
+| `17` misc flags (bit1 `Uses2CC`, bit5 `NoDefaultCargoMultiplier`, bit6 `NoBreakdownSmoke`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc`, `no_default_cargo_multiplier`, `no_breakdown_smoke` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |
 | `18`/`19`/`23` cargo classes allowed/disallowed/required WORD | **runtime** (`EngineDef` + refit por `CargoClass`, XOR de `refit_mask`) |
 | `08`, `0D`, `11`, `13`, `15`–`16`, `1A`, `1B`, `1F`–`21`, `24` restantes | consumidas si tienen ancho fijo; semántica pendiente |
 | `1D`, `1E` | pendiente: listas CTT variables |

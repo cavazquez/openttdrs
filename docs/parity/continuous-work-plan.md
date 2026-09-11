@@ -4509,3 +4509,13 @@ parser, materialización del catálogo y el consumidor FX; `NoNews`, `NoPreview`
 disponibilidad/previews. Core queda en `2477 passed; 0 failed; 1 ignored` y
 cliente en `1393 passed; 0 failed; 2 ignored`, con Clippy de producción,
 formato, `diff --check` y `parity-docs` limpios. #329/#567 siguen abiertas.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-CAPACITY (2026-09-11,
+`ca8ce2c1`): Action0 aircraft `0x11` (BYTE) ya se conserva en
+`ParsedVehicleMeta.mail_capacity`/`EngineDef.mail_capacity`, se materializa en
+el catálogo y la compra muestra pasajeros y correo por separado. La unidad
+sombra/articulada de correo todavía no existe en el modelo `Vehicle`; quedan
+compra, refit/autoreplace, balanceo de capacidad y persistencia SAV para una
+subetapa propia. Core queda en `2478 passed; 0 failed; 1 ignored` y cliente en
+`1394 passed; 0 failed; 2 ignored`, con Clippy de producción, formato,
+`diff --check` y `parity-docs` limpios. #329/#567 siguen abiertas.

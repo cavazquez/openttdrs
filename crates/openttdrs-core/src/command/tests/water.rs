@@ -41,6 +41,37 @@ fn place_ship_depot_on_water_with_water_entrance() {
 }
 
 #[test]
+fn place_ship_depot_needs_only_the_two_footprint_tiles_on_water() {
+    // El resto de los vecinos queda como tierra. OpenTTD no exige una tercera
+    // tesela de agua delante de la boca: sólo valida las dos teselas que el
+    // depósito reemplaza.
+    let cases = [
+        (0u8, TileCoord::new(2, 2)),
+        (1, TileCoord::new(2, 2)),
+        (2, TileCoord::new(1, 2)),
+        (3, TileCoord::new(2, 1)),
+    ];
+
+    for (dir, depot) in cases {
+        let mut s = GameState::new(4, 4);
+        let [origin, other] = crate::ship_depot_footprint(depot, dir);
+        for coord in [origin, other] {
+            s.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+        let command = Command::PlaceShipDepotDir(depot, dir);
+
+        assert_eq!(
+            command_would_fail(&s, &command),
+            None,
+            "preview dir={dir} no debe inventar una tercera condición de agua"
+        );
+        apply_command(&mut s, &command).expect("huella naval sobre dos aguas");
+        assert_eq!(s.map.get_kind(origin), Some(TileKind::ShipDepot));
+        assert_eq!(s.map.get_kind(other), Some(TileKind::ShipDepot));
+    }
+}
+
+#[test]
 fn place_ship_depot_writes_current_raw_contract_and_active_owner() {
     let mut s = GameState::new(12, 12);
     s.ensure_rival_transcargo();

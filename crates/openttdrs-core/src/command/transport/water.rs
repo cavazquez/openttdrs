@@ -15,41 +15,9 @@ use super::super::CommandError;
 use super::shared::{check_in_bounds, register_depot, unregister_depot};
 use super::station::apply_station_m6;
 
-/// Offset de la boca del depósito según `dir` (0=NE..3=NW, misma convención road/rail).
-#[must_use]
-const fn ship_depot_dir_offset(dir: u8) -> (i32, i32) {
-    match dir & 0x03 {
-        0 => (-1, 0),
-        1 => (0, 1),
-        2 => (1, 0),
-        _ => (0, -1),
-    }
-}
-
-#[must_use]
-pub(in crate::command) fn ship_depot_exit_for_dir(
-    map: &Map,
-    depot_pos: TileCoord,
-    dir: u8,
-) -> Option<TileCoord> {
-    let (dx, dy) = ship_depot_dir_offset(dir);
-    let c = TileCoord::new(depot_pos.x + dx, depot_pos.y + dy);
-    let (mw, mh) = map.dimensions();
-    if c.x < 0 || c.y < 0 || c.x >= mw.cast_signed() || c.y >= mh.cast_signed() {
-        return None;
-    }
-    Some(c)
-}
-
 #[must_use]
 fn ship_depot_other_tile_for_dir(depot_pos: TileCoord, dir: u8) -> TileCoord {
     crate::depot::ship_depot_footprint(depot_pos, dir)[1]
-}
-
-#[must_use]
-fn ship_depot_entrance_faces_water(map: &Map, c: TileCoord, dir: u8) -> bool {
-    ship_depot_exit_for_dir(map, c, dir)
-        .is_some_and(|exit| map.get_kind(exit) == Some(TileKind::Water))
 }
 
 /// Codifica la dirección local de la boca como `part/eje` nativos de `m5`.
@@ -80,11 +48,11 @@ pub(crate) fn check_ship_depot_placement(
     let dir = dir & 0x03;
     check_ship_depot_water_tile(map, c)?;
     check_ship_depot_water_tile(map, ship_depot_other_tile_for_dir(c, dir))?;
-    if ship_depot_entrance_faces_water(map, c, dir) {
-        Ok(())
-    } else {
-        Err(CommandError::StationNotAdjacentToTransport)
-    }
+    // `CmdBuildShipDepot` no consulta una tercera tesela delante de la boca:
+    // su contrato sólo exige agua en las dos teselas que reemplaza. La
+    // navegación podrá usar el mapa contiguo después de construir; imponer
+    // aquí una entrada adicional rechaza depósitos válidos junto a tierra.
+    Ok(())
 }
 
 /// Materializa una de las dos partes que `MakeShipDepot` escribe en `MP_WATER`.

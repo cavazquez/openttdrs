@@ -3877,3 +3877,17 @@ límite, reset y huella naval. La suite core queda en 2404 pasadas y 1 ignorada;
 la cliente en 1375 pasadas y 2 ignoradas, con Clippy estricto y formato verdes.
 #567 sigue abierta por callbacks/vecinos, preview visual, clipping, orden global
 y framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-BUILD-PREVIEW (2026-09-11, `1545eb34`):
+el preview de construcción naval dejó de usar el sprite fijo `ship_depot_ne`.
+`PreviewPlan::ShipDepot` conserva la orientación del comando, calcula la
+huella de dos teselas mediante `ship_depot_footprint` y valida ambas partes.
+Las tres capas de cada depósito completo (una sección norte y dos de la boca)
+usan los mismos anclajes, remap y extensiones `TILE_SEQ_LINE` que el renderer
+del mapa, en las cuatro orientaciones; una sección fuera del mapa se omite
+visualmente pero mantiene el preview inválido. La tabla de seis sprites y la
+geometría quedan compartidas entre runtime y ghost para evitar divergencias de
+clipping local. Core queda en 2405 pasadas y 1 ignorada; cliente en 1381
+pasadas y 2 ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta
+por callbacks/vecinos, clipping de viewport, orden global y framebuffer;
+#326 permanece abierta.

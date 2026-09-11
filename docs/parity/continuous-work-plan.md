@@ -4983,3 +4983,13 @@ refit de interfaz/comando, refit automático de órdenes y autoreplace naval; el
 helper de tesela queda para geometría/render que todavía requiere una auditoría
 separada. #567 continúa abierta por callbacks, pathfinding completo y aceptación
 visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-SPEED-STATE (2026-09-11): el límite de 61 de
+`Train::GetCurrentMaxSpeed` durante una salida ferroviaria consulta ahora el
+estado equivalente a `TRACK_BIT_DEPOT`, no sólo si la coordenada cae sobre una
+tesela de depósito. Así el tren conserva el límite mientras está dentro y lo
+libera al cruzar el estado de vía aunque la interpolación aún conserve el
+footprint. La regresión cubre ambos estados; el bloqueo de efectos visuales por
+`IsDepotTile` se mantiene separado porque es el contrato nativo de
+`Vehicle::ShowVisualEffect`. #567 continúa abierta por callbacks, pathfinding
+completo y aceptación visual/framebuffer.

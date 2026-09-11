@@ -476,7 +476,11 @@ impl super::model::Vehicle {
         if matches!(train_accel, TrainAccelerationModel::Realistic) {
             max_speed = max_speed.min(self.cached_max_curve_speed);
             if let Some(map) = map {
-                if crate::refit::vehicle_in_depot(map, self.pos) {
+                // `Train::GetCurrentMaxSpeed` limita a 61 cuando la unidad
+                // conserva `TRACK_BIT_DEPOT`. La coordenada puede seguir en
+                // el footprint durante la interpolación de salida, por lo
+                // que la clase de tesela sola no representa ese estado.
+                if crate::refit::vehicle_is_in_depot(map, self) {
                     max_speed = max_speed.min(61);
                 }
                 if let Some(dist) = self.realistic_station_distance_to_go(map) {
@@ -1252,6 +1256,7 @@ impl super::model::Vehicle {
 #[cfg(test)]
 mod tests {
     use super::aircraft_progress_step_for_plane_speed;
+    use crate::{Map, TileCoord, TileKind, Vehicle, VehicleKind};
 
     #[test]
     fn aircraft_progress_step_matches_plane_speed_divisor() {
@@ -1261,5 +1266,38 @@ mod tests {
         assert_eq!(aircraft_progress_step_for_plane_speed(64, 4), 16);
         assert_eq!(aircraft_progress_step_for_plane_speed(64, 0), 64);
         assert_eq!(aircraft_progress_step_for_plane_speed(64, 9), 16);
+    }
+
+    #[test]
+    fn realistic_train_depot_speed_cap_follows_track_state_during_exit() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let depot = TileCoord::new(3, 3);
+        map.set_kind(depot, TileKind::RailDepot).unwrap();
+
+        let mut inside = Vehicle::new(1, VehicleKind::Train, depot, depot);
+        inside.cur_speed = 70;
+        inside.subspeed = u8::MAX;
+        inside.depot_leave_cleared = false;
+        let capped = inside.train_do_update_speed(
+            Some(&map),
+            crate::engine::TrainAccelerationModel::Realistic,
+            false,
+            &[],
+        );
+
+        // The train still occupies the depot tile while the exit animation
+        // has already cleared `TRACK_BIT_DEPOT`.
+        inside.depot_leave_cleared = true;
+        let leaving = inside.train_do_update_speed(
+            Some(&map),
+            crate::engine::TrainAccelerationModel::Realistic,
+            false,
+            &[],
+        );
+
+        assert!(
+            leaving.cur_speed > capped.cur_speed,
+            "a train leaving the footprint must not retain the depot speed cap"
+        );
     }
 }

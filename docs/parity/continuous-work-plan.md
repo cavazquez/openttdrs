@@ -4856,3 +4856,16 @@ completa del consist visual y el compositor/raster global; #329/#567 continúan
 abiertas. Core queda en `2491 passed; 0 failed; 1 ignored` y cliente en `1404
 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check`
 limpios.
+
+Actualización #329-VEHICLE-WAGON-OVERRIDE-PRESENCE (2026-09-11): la presencia
+de `UsesWagonOverride` ya se deriva de una asignación Action3 compatible, no
+solamente de compartir GRFID. La clave valida el ID local del vagón, el motor
+que encabeza el consist y la carga (incluido el grupo default); el resultado
+se reutiliza para `PoweredWagon`, para excluir el límite de velocidad del
+vagón y para que el renderer Bevy seleccione el grupo reemplazado sólo cuando
+existe. Las regresiones cubren asignación real, ausencia de asignación, cabeza
+de consist y límite de velocidad. Siguen pendientes el stream RNG global, la
+propagación completa del consist visual, livery/callbacks restantes y el
+compositor/raster global; #329/#567 continúan abiertas. Core queda en `2492
+passed; 0 failed; 1 ignored` y cliente en `1405 passed; 0 failed; 2 ignored`,
+con Clippy estricto, formato y `diff --check` limpios.

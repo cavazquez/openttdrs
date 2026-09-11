@@ -438,6 +438,8 @@ mod tests {
         head.pow_wag_power = 400;
         head.capacity = 0;
         head.cargo = None;
+        head.newgrf_grfid = 0x5445_5354;
+        head.newgrf_local_id = 1;
 
         let Some(mut wagon) =
             crate::engine::engine_by_id(crate::engine::ENGINE_WAGON_PASSENGER).cloned()
@@ -448,6 +450,17 @@ mod tests {
         // Type default + bit 7: the wagon remains unpowered even though the
         // head supplies powered-wagon power.
         wagon.visual_effect = 0x80;
+        wagon.newgrf_grfid = head.newgrf_grfid;
+        wagon.newgrf_local_id = 2;
+        wagon.newgrf_runtime = Some(Box::new(crate::newgrf_sprites::TrainSpriteGraphics {
+            wagon_overrides: vec![crate::newgrf_sprites::WagonOverrideAssign {
+                wagon_local_id: wagon.newgrf_local_id,
+                overriding_local_id: head.newgrf_local_id,
+                selector: 0xFF,
+                set_id: 0,
+            }],
+            ..Default::default()
+        }));
         let mut catalog = vec![head, wagon];
 
         consist_changed_with_map_and_catalog_and_cargo(&mut vs, 1, None, &catalog, &[]);
@@ -458,5 +471,79 @@ mod tests {
         catalog[1].visual_effect = 0;
         consist_changed_with_map_and_catalog_and_cargo(&mut vs, 1, None, &catalog, &[]);
         assert!(vs[1].powered_wagon);
+
+        // Same GRFID and local IDs are not sufficient: removing the Action3
+        // assignment makes `UsesWagonOverride` false again.
+        catalog[1]
+            .newgrf_runtime
+            .as_mut()
+            .expect("wagon override runtime")
+            .wagon_overrides
+            .clear();
+        consist_changed_with_map_and_catalog_and_cargo(&mut vs, 1, None, &catalog, &[]);
+        assert!(!vs[1].powered_wagon);
+    }
+
+    #[test]
+    fn consist_changed_ignores_speed_limit_for_wagon_override() {
+        let mut vs = vec![train(1), train(2)];
+        vs[0].engine_id = Some(20_011);
+        vs[1].engine_id = Some(20_012);
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+
+        let mut head = crate::engine::engine_for_vehicle(VehicleKind::Train, 0).clone();
+        head.id = 20_011;
+        head.max_speed = 160;
+        head.capacity = 0;
+        head.cargo = None;
+        head.newgrf_grfid = 0x5445_5354;
+        head.newgrf_local_id = 11;
+        let Some(mut wagon) =
+            crate::engine::engine_by_id(crate::engine::ENGINE_WAGON_PASSENGER).cloned()
+        else {
+            panic!("vanilla passenger wagon");
+        };
+        wagon.id = 20_012;
+        wagon.max_speed = 40;
+        wagon.newgrf_grfid = head.newgrf_grfid;
+        wagon.newgrf_local_id = 12;
+        wagon.newgrf_runtime = Some(Box::new(crate::newgrf_sprites::TrainSpriteGraphics {
+            wagon_overrides: vec![crate::newgrf_sprites::WagonOverrideAssign {
+                wagon_local_id: wagon.newgrf_local_id,
+                overriding_local_id: head.newgrf_local_id,
+                selector: 0xFF,
+                set_id: 0,
+            }],
+            ..Default::default()
+        }));
+        let mut catalog = vec![head, wagon];
+
+        consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
+            &mut vs,
+            1,
+            None,
+            &catalog,
+            &[],
+            1,
+            true,
+        );
+        assert_eq!(vs[0].cached_max_speed, 160);
+
+        catalog[1]
+            .newgrf_runtime
+            .as_mut()
+            .expect("wagon override runtime")
+            .wagon_overrides
+            .clear();
+        consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
+            &mut vs,
+            1,
+            None,
+            &catalog,
+            &[],
+            1,
+            true,
+        );
+        assert_eq!(vs[0].cached_max_speed, 40);
     }
 }

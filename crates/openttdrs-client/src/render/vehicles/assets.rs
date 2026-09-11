@@ -158,7 +158,7 @@ fn overriding_engine_local_id(
     vehicle: &Vehicle,
     wagon_engine: &EngineDef,
 ) -> Option<u16> {
-    if wagon_engine.newgrf_grfid == 0 {
+    if !vehicle.is_wagon_unit() || wagon_engine.newgrf_grfid == 0 {
         return None;
     }
     let mut current_id = vehicle.id;
@@ -182,7 +182,20 @@ fn overriding_engine_local_id(
     }
     let head_engine_id = head_engine_id?;
     let head_engine = super::engine_in_sim(sim, head_engine_id)?;
-    (head_engine.newgrf_grfid == wagon_engine.newgrf_grfid).then_some(head_engine.newgrf_local_id)
+    if head_engine.newgrf_grfid != wagon_engine.newgrf_grfid {
+        return None;
+    }
+    wagon_engine
+        .newgrf_runtime
+        .as_ref()
+        .is_some_and(|runtime| {
+            runtime.has_wagon_override_u16(
+                wagon_engine.newgrf_local_id,
+                head_engine.newgrf_local_id,
+                vehicle.cargo_type,
+            )
+        })
+        .then_some(head_engine.newgrf_local_id)
 }
 
 /// Huella de cribado para una imagen ya horneada.
@@ -1026,6 +1039,90 @@ mod tests {
         engine.original_image_index = 0xFD;
 
         assert_eq!(ship_image_index_for_engine(&engine), 0);
+    }
+
+    #[test]
+    fn wagon_override_lookup_requires_a_matching_action3_assignment() {
+        use openttdrs_core::newgrf_sprites::{TrainSpriteGraphics, WagonOverrideAssign};
+
+        let grfid = 0x5445_5354;
+        let mut head_engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train")
+            .clone();
+        head_engine.id = 0x7F10;
+        head_engine.newgrf_grfid = grfid;
+        head_engine.newgrf_local_id = 1;
+        let mut wagon_engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_WAGON_PASSENGER)
+            .expect("vanilla wagon")
+            .clone();
+        wagon_engine.id = 0x7F11;
+        wagon_engine.newgrf_grfid = grfid;
+        wagon_engine.newgrf_local_id = 2;
+        wagon_engine.newgrf_runtime = Some(Box::new(TrainSpriteGraphics {
+            wagon_overrides: vec![WagonOverrideAssign {
+                wagon_local_id: wagon_engine.newgrf_local_id,
+                overriding_local_id: head_engine.newgrf_local_id,
+                selector: 0xFF,
+                set_id: 0,
+            }],
+            ..Default::default()
+        }));
+
+        let mut state = openttdrs_core::GameState::new(8, 8);
+        state.engine_catalog.extend([head_engine, wagon_engine]);
+        let mut head = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        head.engine_id = Some(0x7F10);
+        head.next_unit = Some(2);
+        let mut wagon = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        wagon.engine_id = Some(0x7F11);
+        wagon.prev_unit = Some(1);
+        state.vehicles.extend([head.clone(), wagon.clone()]);
+        let sim = crate::state::SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let wagon_engine = sim
+            .state
+            .engine_catalog
+            .iter()
+            .find(|engine| engine.id == 0x7F11)
+            .expect("catalog wagon");
+
+        assert_eq!(
+            overriding_engine_local_id(&sim, &wagon, wagon_engine),
+            Some(1)
+        );
+        assert_eq!(overriding_engine_local_id(&sim, &head, wagon_engine), None);
+
+        let mut wagon_without_override = wagon_engine.clone();
+        wagon_without_override
+            .newgrf_runtime
+            .as_mut()
+            .expect("wagon override runtime")
+            .wagon_overrides
+            .clear();
+        assert_eq!(
+            overriding_engine_local_id(&sim, &wagon, &wagon_without_override),
+            None
+        );
+        assert_eq!(
+            wagon_without_override
+                .newgrf_runtime
+                .as_ref()
+                .map(|runtime| runtime.has_wagon_override_u16(2, 1, None)),
+            Some(false)
+        );
     }
 
     #[test]

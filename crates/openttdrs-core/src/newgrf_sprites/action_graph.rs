@@ -1701,5 +1701,8 @@ mod tests {
             panic!("default wagon override");
         };
         assert_eq!(default[0].x_offs, 9);
+        assert!(gfx.has_wagon_override_u16(7, 3, Some(crate::cargo::CargoType::Passengers)));
+        assert!(gfx.has_wagon_override_u16(7, 3, Some(crate::cargo::CargoType::Coal)));
+        assert!(!gfx.has_wagon_override_u16(7, 9999, Some(crate::cargo::CargoType::Coal)));
     }
 }

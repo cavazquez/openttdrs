@@ -1015,6 +1015,40 @@ impl TrainSpriteGraphics {
         self.views_for_local_id_u16_ctx(local_id, ctx)
     }
 
+    fn wagon_override_set_id(
+        &self,
+        wagon_local_id: u16,
+        overriding_local_id: u16,
+        cargo: Option<crate::cargo::CargoType>,
+    ) -> Option<u16> {
+        let selector = cargo.map(crate::cargo::CargoType::temperate_id);
+        self.wagon_overrides
+            .iter()
+            .find(|override_assign| {
+                override_assign.wagon_local_id == wagon_local_id
+                    && override_assign.overriding_local_id == overriding_local_id
+                    && (selector.is_some_and(|cargo_id| override_assign.selector == cargo_id)
+                        || override_assign.selector == 0xFF)
+            })
+            .map(|override_assign| override_assign.set_id)
+    }
+
+    /// ¿Existe un *wagon override* para este vagón, motor principal y carga?
+    ///
+    /// La respuesta representa la misma presencia que `UsesWagonOverride` en
+    /// `OpenTTD`: no basta con que ambos motores provengan del mismo GRF, debe
+    /// existir una asignación Action3 compatible.
+    #[must_use]
+    pub fn has_wagon_override_u16(
+        &self,
+        wagon_local_id: u16,
+        overriding_local_id: u16,
+        cargo: Option<crate::cargo::CargoType>,
+    ) -> bool {
+        self.wagon_override_set_id(wagon_local_id, overriding_local_id, cargo)
+            .is_some()
+    }
+
     /// Vistas de un vagón aplicando un *wagon override* para el motor que
     /// encabeza el consist.
     ///
@@ -1029,17 +1063,7 @@ impl TrainSpriteGraphics {
         cargo: Option<crate::cargo::CargoType>,
         ctx: &mut Action2EvalCtx,
     ) -> Option<&[DecodedSprite]> {
-        let selector = cargo.map(crate::cargo::CargoType::temperate_id);
-        let set_id = self
-            .wagon_overrides
-            .iter()
-            .find(|override_assign| {
-                override_assign.wagon_local_id == wagon_local_id
-                    && override_assign.overriding_local_id == overriding_local_id
-                    && (selector.is_some_and(|cargo_id| override_assign.selector == cargo_id)
-                        || override_assign.selector == 0xFF)
-            })
-            .map(|override_assign| override_assign.set_id)?;
+        let set_id = self.wagon_override_set_id(wagon_local_id, overriding_local_id, cargo)?;
         let action1_idx = self.resolve_action1_set_ctx(set_id, ctx);
         self.sets
             .get(usize::from(action1_idx))

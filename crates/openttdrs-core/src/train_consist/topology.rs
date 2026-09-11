@@ -18,6 +18,33 @@ pub fn engine_is_train_engine(engine: &EngineDef) -> bool {
     engine.kind == VehicleKind::Train && !engine_is_wagon(engine)
 }
 
+/// ¿El motor de una unidad tiene una asignación Action3 de *wagon override*
+/// para la cabeza actual del consist y la carga que transporta?
+///
+/// El GRFID forma parte de la clave porque los IDs locales sólo son únicos
+/// dentro del GRF que los declaró. La relación `prev_unit` evita aplicar un
+/// override al motor que encabeza el consist.
+fn uses_wagon_override(
+    vehicle: &Vehicle,
+    wagon_engine: &EngineDef,
+    head_engine: &EngineDef,
+) -> bool {
+    if !vehicle.is_wagon_unit()
+        || !wagon_engine.is_wagon()
+        || wagon_engine.newgrf_grfid == 0
+        || wagon_engine.newgrf_grfid != head_engine.newgrf_grfid
+    {
+        return false;
+    }
+    wagon_engine.newgrf_runtime.as_ref().is_some_and(|runtime| {
+        runtime.has_wagon_override_u16(
+            wagon_engine.newgrf_local_id,
+            head_engine.newgrf_local_id,
+            vehicle.cargo_type,
+        )
+    })
+}
+
 /// Recorre la cadena desde `head_id` hacia atrás (`next_unit`).
 #[must_use]
 pub fn consist_unit_ids(vehicles: &[Vehicle], head_id: u32) -> Vec<u32> {
@@ -194,9 +221,11 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
             .unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
         let visual_spec = crate::newgrf_callback::vehicle_visual_effect_spec(eng, v);
         // OpenTTD: powered wagon si la cabeza aporta `pow_wag_power`, la
-        // unidad usa el override de vagón y CB10/Action0 no fija
+        // unidad usa un override de vagón real y CB10/Action0 no fija
         // `VE_DISABLE_WAGON_POWER` (bit 7).
-        let powered = head_pow_wag_power > 0 && eng.is_wagon() && !visual_spec.wagon_power_disabled;
+        let powered = head_pow_wag_power > 0
+            && uses_wagon_override(v, eng, head_eng)
+            && !visual_spec.wagon_power_disabled;
         powered_flags.push((id, powered));
     }
     for &(id, powered) in &powered_flags {
@@ -263,11 +292,10 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
             tilt = tilt && eng.rail_tilts;
             curve_mod = curve_mod.min(eng.curve_speed_mod);
         }
-        // OpenTTD ignora el límite de velocidad de los vagones cuando
-        // `vehicle.wagon_speed_limits` está desactivado. El override de
-        // vagón de NewGRF (`UsesWagonOverride`) aún no está modelado aquí;
-        // `eng.is_wagon()` conserva la semántica vanilla para este ajuste.
-        if speed > 0 && (wagon_speed_limits || !eng.is_wagon()) {
+        // OpenTTD ignora el límite de velocidad de un vagón cuando el ajuste
+        // está desactivado o cuando su sprite proviene de un wagon override.
+        let uses_wagon_override = uses_wagon_override(v, eng, head_eng);
+        if speed > 0 && (wagon_speed_limits || !eng.is_wagon()) && !uses_wagon_override {
             max_speed = max_speed.min(speed);
         }
         // Compatible railtypes: solo unidades con potencia propia (no powered wagons).

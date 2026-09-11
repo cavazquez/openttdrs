@@ -4324,3 +4324,15 @@ límite geométrico, conectividad y la inserción de la orden. Core queda en
 ignored`, con Clippy estricto, formato y diff limpios. La aceptación visual
 manual bajo Weston sigue pendiente. #567 sigue abierta por callbacks navales
 restantes y validación visual; #326 permanece abierta.
+
+Actualización #567-SHIP-DOCK-ROUTING-COST (2026-09-11, `647b4502`): el
+routing naval ya no conserva automáticamente el amarre geométricamente más
+cercano cuando la estación tiene varios `DockingTile` elegibles. Evalúa las
+rutas navegables de toda la huella física y selecciona la de menor longitud,
+con desempate estable por distancia y coordenadas; para una estación con un
+solo candidato conserva el camino genérico. Se agregó una regresión con un
+amarre cercano alcanzable pero bloqueado por un rodeo más largo. Core queda en
+`2438 passed; 0 failed; 1 ignored` y cliente en `1388 passed; 0 failed; 2
+ignored`, con Clippy estricto, formato y diff limpios. #567 sigue abierta por
+callbacks navales restantes y aceptación visual manual bajo Weston; #326
+permanece abierta.

@@ -80,7 +80,14 @@ pub(crate) fn command_for_action(
         BuildMenuAction::ShipDepot => {
             Some(Command::PlaceShipDepotDir(pos, station_state.orientation))
         }
-        BuildMenuAction::Dock => Some(Command::PlaceDock(pos, station_state.orientation)),
+        BuildMenuAction::Dock => Some(match station_state.dock_station_to_join {
+            Some(station_to_join) => Command::PlaceDockAtStation {
+                origin: pos,
+                dir: station_state.orientation,
+                station_to_join,
+            },
+            None => Command::PlaceDock(pos, station_state.orientation),
+        }),
         BuildMenuAction::Canal => Some(Command::PlaceCanal(pos)),
         BuildMenuAction::River => Some(Command::PlaceRiver(pos)),
         BuildMenuAction::Buoy => Some(Command::PlaceBuoy(pos)),
@@ -379,6 +386,36 @@ mod tests {
                 newgrf_spec_id: 10,
                 layout: 3,
                 spec: openttdrs_core::AirportSpecId::Small,
+            })
+        );
+    }
+
+    #[test]
+    fn dock_command_keeps_explicit_station_to_join() {
+        let station_state = StationBuildState {
+            orientation: 2,
+            dock_station_to_join: Some(0x1234),
+            ..Default::default()
+        };
+        let origin = TileCoord::new(7, 9);
+        let command = command_for_action(
+            BuildMenuAction::Dock,
+            origin,
+            &station_state,
+            None,
+            None,
+            None,
+            0,
+            false,
+            RailType::Rail,
+            0,
+        );
+        assert_eq!(
+            command,
+            Some(Command::PlaceDockAtStation {
+                origin,
+                dir: 2,
+                station_to_join: 0x1234,
             })
         );
     }

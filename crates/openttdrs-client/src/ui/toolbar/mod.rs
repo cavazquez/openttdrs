@@ -459,6 +459,8 @@ pub(crate) struct StationBuildState {
     pub(crate) shift_held: bool,
     /// Primera estación elegida al unir (herramienta JoinStation).
     pub(crate) join_keep: Option<openttdrs_core::TileCoord>,
+    /// `StationID` nativo fijado por el botón «Muelle+» del panel de estación.
+    pub(crate) dock_station_to_join: Option<u16>,
 }
 
 impl Default for StationBuildState {
@@ -481,6 +483,7 @@ impl Default for StationBuildState {
             ctrl_held: false,
             shift_held: false,
             join_keep: None,
+            dock_station_to_join: None,
         }
     }
 }

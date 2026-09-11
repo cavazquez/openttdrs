@@ -58,6 +58,9 @@ pub(crate) fn build_menu_interaction(
         if *action != BuildMenuAction::JoinStation {
             station_state.join_keep = None;
         }
+        if *action != BuildMenuAction::Dock {
+            station_state.dock_station_to_join = None;
+        }
         if *action == BuildMenuAction::Orders {
             start_order_destination_pick(&order_state, &mut next_pick);
         } else {

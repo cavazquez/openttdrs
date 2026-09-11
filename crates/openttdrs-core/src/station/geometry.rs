@@ -127,6 +127,28 @@ pub fn dock_station_tiles(map: &Map, station: &Station) -> Vec<TileCoord> {
     tiles
 }
 
+/// `StationID` nativo de una estación que conserva una pieza Dock.
+///
+/// `ottd_station_id` es la fuente preferida para estaciones importadas y
+/// unidas. El fallback lee `MAP2` de la huella física para mantener operables
+/// los saves legacy que todavía no materializaron ese campo lógico.
+#[must_use]
+pub fn dock_station_native_id(map: &Map, station: &Station) -> Option<u16> {
+    station
+        .ottd_station_id
+        .and_then(|id| u16::try_from(id).ok())
+        .or_else(|| {
+            dock_station_tiles(map, station)
+                .into_iter()
+                .find_map(|tile| {
+                    let raw = map.get(tile)?;
+                    (raw.kind == TileKind::Station
+                        && super::tile_encoding::stop_kind_from_m6(raw.m6) == StopKind::Dock)
+                        .then(|| u16::from(raw.m2) | (u16::from(raw.m2_hi) << 8))
+                })
+        })
+}
+
 /// Eje de una estación rail (`true` = eje Y) a partir de `m5` de sus plataformas.
 #[must_use]
 pub fn rail_station_axis_y(map: &Map, stations: &[Station], station: &Station) -> Option<bool> {

@@ -57,7 +57,8 @@ pub(crate) fn build_preview_plan(ctx: &PreviewContext, game_state: &GameState) -
         }
         let dir = ctx.station_state.orientation & 0x03;
         let water = openttdrs_core::station::dock_water_tile(origin, dir);
-        let valid = command_would_fail(game_state, &Command::PlaceDock(origin, dir)).is_none();
+        let command = station_state_dock_command(ctx.station_state, origin, dir);
+        let valid = command_would_fail(game_state, &command).is_none();
         return PreviewPlan::Dock {
             origin,
             water,
@@ -172,6 +173,21 @@ pub(crate) fn build_preview_plan(ctx: &PreviewContext, game_state: &GameState) -
     }
 
     PreviewPlan::TileByTile { tiles: tile_plans }
+}
+
+fn station_state_dock_command(
+    station_state: &crate::ui::toolbar::StationBuildState,
+    origin: TileCoord,
+    dir: u8,
+) -> Command {
+    match station_state.dock_station_to_join {
+        Some(station_to_join) => Command::PlaceDockAtStation {
+            origin,
+            dir,
+            station_to_join,
+        },
+        None => Command::PlaceDock(origin, dir),
+    }
 }
 
 /// Determina el tipo de preview para un tile individual.

@@ -28,8 +28,8 @@ use crate::ui::vehicle_list::VehicleListState;
 
 use super::order_panel::apply_order_edit;
 use super::{
-    BuildMenuAction, BuildMenuUi, OrderEditState, StationBuildState, ToolbarTooltipTarget,
-    UiToolState, open_order_edit_for_vehicle,
+    BuildMenuAction, BuildMenuUi, OrderEditState, StationBuildState, ToolbarGroup, ToolbarState,
+    ToolbarTooltipTarget, UiToolState, open_order_edit_for_vehicle,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -100,6 +100,8 @@ pub(crate) enum StationCargoPanelButton {
     CargoFilter,
     /// Activa JoinStation con esta estación como `keep`.
     JoinWith,
+    /// Fija el `StationID` y activa la herramienta para construir otro muelle.
+    BuildDockAtStation,
     Close,
 }
 
@@ -217,6 +219,13 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands, asset_server: Re
                         StationCargoPanelButton::CargoFilter,
                         "Carga",
                         "Filtrar carga: todas / con espera / aceptadas",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::BuildDockAtStation,
+                        "Muelle+",
+                        "Construir otro muelle unido a esta estación",
                     );
                     spawn_station_button(
                         row,
@@ -400,6 +409,15 @@ fn station_tile_kind_label(
     }
 }
 
+fn dock_station_join_id(map: &Map, station: &Station) -> Option<u16> {
+    if !station.has_dock_facility()
+        || openttdrs_core::station::dock_station_tiles(map, station).is_empty()
+    {
+        return None;
+    }
+    openttdrs_core::station::dock_station_native_id(map, station)
+}
+
 fn vehicles_visiting(sim: &SimWorld, station_pos: TileCoord) -> Vec<u32> {
     sim.state
         .vehicles
@@ -434,6 +452,10 @@ pub(crate) fn sync_station_cargo_panel(
         ),
     >,
     mut rename_row_q: Query<(Entity, &mut Node), With<StationCargoRenameRow>>,
+    mut panel_buttons_q: Query<
+        (Entity, &StationCargoPanelButton, &mut Visibility),
+        (With<Button>, Without<FloatingWindow>),
+    >,
     windows: Query<&FloatingWindow>,
     parents: Query<&ChildOf>,
     mut last_pos: Local<Option<TileCoord>>,
@@ -450,6 +472,11 @@ pub(crate) fn sync_station_cargo_panel(
         for (window, mut vis) in &mut root_q {
             if window.id == FloatingWindowId::Station {
                 *vis = Visibility::Hidden;
+            }
+        }
+        for (_, button, mut visibility) in &mut panel_buttons_q {
+            if matches!(button, StationCargoPanelButton::BuildDockAtStation) {
+                *visibility = Visibility::Hidden;
             }
         }
         return;
@@ -482,8 +509,39 @@ pub(crate) fn sync_station_cargo_panel(
             openttdrs_core::station_at_tile(&sim.state.map, &sim.state.stations, station_pos)
         })
     else {
+        for (_, button, mut visibility) in &mut panel_buttons_q {
+            if matches!(button, StationCargoPanelButton::BuildDockAtStation) {
+                *visibility = Visibility::Hidden;
+            }
+        }
         return;
     };
+    for (entity, button, mut visibility) in &mut panel_buttons_q {
+        if !matches!(button, StationCargoPanelButton::BuildDockAtStation) {
+            continue;
+        }
+        let Some(key) = window_key_for_descendant(entity, &windows, &parents) else {
+            continue;
+        };
+        let position = station_pool
+            .as_deref()
+            .and_then(|pool| pool.slots.get(key.instance as usize))
+            .copied()
+            .flatten();
+        let available = position
+            .and_then(|position| {
+                sim.state.stations.iter().find(|candidate| {
+                    candidate.pos == position || candidate.joined_tiles.contains(&position)
+                })
+            })
+            .and_then(|candidate| dock_station_join_id(&sim.state.map, candidate))
+            .is_some();
+        *visibility = if available {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
     let focused_kind_label = station_tile_kind_label(
         &sim.state.map,
         station_panel.selected_tile,
@@ -702,6 +760,7 @@ pub(crate) fn handle_station_cargo_panel_buttons(
     mut vehicle_chain: ResMut<crate::ui::vehicle_chain::VehicleChainRegistry>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
     mut tool_state: ResMut<UiToolState>,
+    mut toolbar_state: Option<ResMut<ToolbarState>>,
     mut station_build: ResMut<StationBuildState>,
     mut vehicle_list: ResMut<VehicleListState>,
     mut sim: ResMut<SimWorld>,
@@ -774,6 +833,32 @@ pub(crate) fn handle_station_cargo_panel_buttons(
             StationCargoPanelButton::JoinWith => {
                 station_build.join_keep = Some(station_pos);
                 tool_state.active_tool = Some(BuildMenuAction::JoinStation);
+            }
+            StationCargoPanelButton::BuildDockAtStation => {
+                let Some(station) = sim.state.stations.iter().find(|candidate| {
+                    candidate.pos == station_pos || candidate.joined_tiles.contains(&station_pos)
+                }) else {
+                    push_build_command_error(
+                        &mut hud_feedback,
+                        CommandError::CannotJoinStations,
+                        time.elapsed_secs(),
+                    );
+                    continue;
+                };
+                let Some(station_id) = dock_station_join_id(&sim.state.map, station) else {
+                    push_build_command_error(
+                        &mut hud_feedback,
+                        CommandError::CannotJoinStations,
+                        time.elapsed_secs(),
+                    );
+                    continue;
+                };
+                station_build.join_keep = None;
+                station_build.dock_station_to_join = Some(station_id);
+                if let Some(toolbar_state) = toolbar_state.as_deref_mut() {
+                    toolbar_state.active_group = Some(ToolbarGroup::Water);
+                }
+                tool_state.active_tool = Some(BuildMenuAction::Dock);
             }
             StationCargoPanelButton::PickOrders => {
                 let Some(vehicle_id) =

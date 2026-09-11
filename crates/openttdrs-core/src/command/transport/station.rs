@@ -911,19 +911,7 @@ pub(in crate::command::transport) fn dock_station_native_id(
     state: &GameState,
     station: &Station,
 ) -> Option<u16> {
-    station
-        .ottd_station_id
-        .and_then(|id| u16::try_from(id).ok())
-        .or_else(|| {
-            crate::station::dock_station_tiles(&state.map, station)
-                .into_iter()
-                .find_map(|tile| {
-                    let raw = state.map.get(tile)?;
-                    (raw.kind == TileKind::Station
-                        && crate::station::stop_kind_from_m6(raw.m6) == StopKind::Dock)
-                        .then(|| u16::from(raw.m2) | (u16::from(raw.m2_hi) << 8))
-                })
-        })
+    crate::station::dock_station_native_id(&state.map, station)
 }
 
 /// Une dos paradas road 1×1 o dos estaciones rail (misma compañía, mismo

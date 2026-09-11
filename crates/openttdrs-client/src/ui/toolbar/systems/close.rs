@@ -53,6 +53,7 @@ fn cancel_ingame_placement(
     toolbar_state.active_group = None;
     tool_state.active_tool = None;
     station_state.join_keep = None;
+    station_state.dock_station_to_join = None;
     cancel_placement(drag_state);
     order_state.clear();
     next_pick.set(OrderPickState::Idle);

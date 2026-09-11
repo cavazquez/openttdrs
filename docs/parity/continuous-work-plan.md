@@ -4804,3 +4804,13 @@ abiertas. La regresión cubre wrap por unidad y la cadencia de vapor; actualizar
 los conteos verificados: core `2490 passed; 0 failed; 1 ignored` y cliente
 `1401 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y
 `diff --check` limpios.
+
+Actualización #329-VEHICLE-VISUAL-EFFECT-AIRCRAFT-ALTITUDE (2026-09-11): la
+posición de mundo de CB10/CB160 suma ahora la altitud física de aeronaves al
+Z del terreno usando la misma escala del cuerpo y rotor (`altitude ×
+TILE_PIXEL_HEIGHT`). Así los efectos de una aeronave en vuelo, despegue o
+aterrizaje no quedan dibujados sobre la costa mientras el sprite está en el
+aire; trenes, carretera y barcos conservan su contrato de terreno. La
+regresión compara tierra y crucero y conserva X/Y y offsets relativos. El
+stream RNG global, filtros/consist completos, bounds del sorter de aeronaves y
+compositor/sorter global siguen pendientes; #329/#567 continúan abiertas.

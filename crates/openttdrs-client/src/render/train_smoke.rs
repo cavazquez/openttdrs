@@ -515,10 +515,15 @@ fn train_smoke_world_position(
     let world_delta = anchor.x * 0.5;
     let x = (world_sum - world_delta) * 0.5 + offset.x as f32;
     let y = (world_sum + world_delta) * 0.5 + offset.y as f32;
+    let aircraft_altitude = if vehicle.kind == VehicleKind::Aircraft {
+        f32::from(vehicle.altitude) * height_px
+    } else {
+        0.0
+    };
     TrainSmokeWorldPosition {
         x,
         y,
-        z: terrain_z + offset.z as f32,
+        z: terrain_z + aircraft_altitude + offset.z as f32,
         source_tile: train_smoke_source_tile(map, x, y),
     }
 }
@@ -1109,6 +1114,27 @@ mod tests {
                 origin.z.round() as i32,
             ),
             "EffectVehicle::UpdateDeltaXY usa un prisma inclusivo de 1×1×1"
+        );
+    }
+
+    #[test]
+    fn aircraft_effect_world_position_tracks_flight_altitude() {
+        let map = Map::new_flat(4, 4, 0);
+        let pos = TileCoord::new(1, 1);
+        let mut aircraft = Vehicle::new(12, VehicleKind::Aircraft, pos, pos);
+        aircraft.aircraft_phase = openttdrs_core::AircraftPhase::Flying;
+        let pose = openttdrs_core::VehiclePose::from_vehicle(&aircraft);
+        let ground = train_smoke_world_position(&aircraft, &map, pose, IVec3::ZERO);
+
+        aircraft.altitude = openttdrs_core::aircraft_movement::AIRCRAFT_CRUISE_ALTITUDE;
+        let airborne = train_smoke_world_position(&aircraft, &map, pose, IVec3::ZERO);
+
+        assert_eq!(airborne.x, ground.x);
+        assert_eq!(airborne.y, ground.y);
+        assert_eq!(
+            airborne.z - ground.z,
+            f32::from(openttdrs_core::aircraft_movement::AIRCRAFT_CRUISE_ALTITUDE)
+                * f32::from(openttdrs_core::TILE_PIXEL_HEIGHT)
         );
     }
 

@@ -4334,3 +4334,14 @@ personalizada. Core queda en `2453 passed; 0 failed; 1 ignored` y cliente en
 estricto limpios. #329/#567 siguen abiertas por callbacks, propiedades
 navales restantes y aceptación visual manual bajo Weston; #326 permanece
 abierta.
+
+Actualización #329/#567-SHIP-LEGACY-REFIT-MASK (2026-09-11, `47a89b38`): el
+parser Action0 conserva la máscara histórica naval `0x11` y la aplicación la
+traduce desde los índices locales del GRF a la máscara global de cargos,
+equivalente a `TranslateRefitMask` nativo, antes de combinarla con las clases
+y las listas CTT. Se agregó una regresión que lleva los bits locales de Oil y
+Goods hasta `EngineDef` y verifica los cargos refitables resultantes. Core
+queda en `2454 passed; 0 failed; 1 ignored` y cliente en `1388 passed; 0
+failed; 2 ignored`, con formato, `git diff --check` y Clippy estricto limpios.
+#329/#567 siguen abiertas por callbacks y propiedades navales restantes, y
+por aceptación visual manual bajo Weston; #326 permanece abierta.

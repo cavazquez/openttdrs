@@ -1782,6 +1782,7 @@ impl GameState {
                 vehicle.native_engine_type = Some(v.engine_type);
                 vehicle.native_sprite_num = v.sprite_num;
                 vehicle.acceleration = v.acceleration;
+                vehicle.aircraft_mail_capacity = Some(v.aircraft_mail_capacity);
                 vehicle.refit_capacity = v.refit_capacity;
                 vehicle.group_id = v.group_id;
                 vehicle.next_shared_vehicle_id = v.next_shared_sav_id;
@@ -3688,6 +3689,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    aircraft_mail_capacity: 0,
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
@@ -3796,6 +3798,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    aircraft_mail_capacity: 0,
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
@@ -3904,6 +3907,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    aircraft_mail_capacity: 0,
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
@@ -4012,6 +4016,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    aircraft_mail_capacity: 0,
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],

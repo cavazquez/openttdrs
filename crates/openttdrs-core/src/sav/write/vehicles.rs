@@ -267,6 +267,9 @@ fn aircraft_is_helicopter_for(state: &GameState, v: &Vehicle) -> bool {
 /// desde el motor efectivo para que `OpenTTD` no pierda la propiedad Action0
 /// `0x11` al cargar el archivo.
 fn aircraft_mail_capacity_for(state: &GameState, v: &Vehicle) -> u16 {
+    if let Some(capacity) = v.aircraft_mail_capacity {
+        return capacity;
+    }
     let engine = crate::newgrf_callback::engine_for_vehicle_catalog(&state.engine_catalog, v);
     if engine.kind == VehicleKind::Aircraft {
         engine.mail_capacity
@@ -1961,6 +1964,21 @@ mod tests {
             record_get(shadow_common, "cargo_cap").and_then(SlValue::as_u64),
             Some(7),
             "la sombra conserva Action0 aircraft 0x11"
+        );
+        let imported = crate::sav::entities::vehicles_from_chunks(
+            &chunks,
+            64,
+            &crate::sav::orders::SavOrderImport::from_chunks(&chunks, 360),
+            360,
+        );
+        assert_eq!(
+            imported.len(),
+            1,
+            "la importación conserva sólo el primario"
+        );
+        assert_eq!(
+            imported[0].aircraft_mail_capacity, 7,
+            "la capacidad secundaria se recupera desde la fila AIR_SHADOW"
         );
     }
 

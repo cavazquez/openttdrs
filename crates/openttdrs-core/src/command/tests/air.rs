@@ -105,6 +105,37 @@ fn place_airport_small_footprint_and_hangar_buy() {
 }
 
 #[test]
+fn aircraft_purchase_keeps_secondary_mail_capacity_on_primary() {
+    let mut s = GameState::new(20, 20);
+    let origin = TileCoord::new(2, 2);
+    apply_command(
+        &mut s,
+        &Command::PlaceAirportArea {
+            origin,
+            axis_y: false,
+            spec: crate::AirportSpecId::Small,
+        },
+    )
+    .unwrap();
+
+    let mut engine =
+        crate::engine::engine_for_vehicle(VehicleKind::Aircraft, ENGINE_AIRCRAFT_DAKOTA).clone();
+    engine.id = 0x7E01;
+    engine.name = "Mail shadow test aircraft".into();
+    engine.mail_capacity = 7;
+    s.engine_catalog.push(engine);
+
+    let hangar = s.stations[0].pos;
+    apply_command(&mut s, &Command::BuildVehicleAtDepot(hangar, 0x7E01)).unwrap();
+    let aircraft = s
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.kind == VehicleKind::Aircraft)
+        .expect("avión comprado");
+    assert_eq!(aircraft.aircraft_mail_capacity, Some(7));
+}
+
+#[test]
 fn newgrf_airport_build_uses_declared_east_layout_without_transposing_tiles() {
     // `AirportTileTableIterator` usa los offsets Action0 tal cual. La segunda
     // variante no es la transposición de la primera: además de ocupar 2×4,

@@ -232,6 +232,11 @@ fn apply_engine_with_refit(
     climate: crate::Climate,
 ) {
     vehicle.engine_id = Some(new_engine.id);
+    vehicle.aircraft_mail_capacity = if new_engine.kind == VehicleKind::Aircraft {
+        Some(new_engine.mail_capacity)
+    } else {
+        None
+    };
     vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(new_engine, vehicle);
     if let Some(c) = new_engine.cargo {
         vehicle.cargo_type = Some(c);

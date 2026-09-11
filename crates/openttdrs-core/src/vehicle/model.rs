@@ -198,6 +198,13 @@ pub struct Vehicle {
     #[serde(default)]
     pub cargo_subtype: u8,
     pub capacity: u32,
+    /// Capacidad de correo de la sombra de una aeronave.
+    ///
+    /// `None` identifica JSON antiguo o un vehículo que todavía no se ha
+    /// materializado desde un catálogo; en ese caso los consumidores pueden
+    /// usar la propiedad del motor como fallback.
+    #[serde(default)]
+    pub aircraft_mail_capacity: Option<u16>,
     #[serde(default = "default_running_true")]
     pub running: bool,
     /// Remanente físico de `DoUpdateSpeed` (`Vehicle::progress` de `OpenTTD`).
@@ -713,6 +720,7 @@ impl Vehicle {
             cargo_type,
             cargo_subtype: 0,
             capacity: super::VEHICLE_CAPACITY,
+            aircraft_mail_capacity: None,
             running: true,
             progress: 0,
             road_state: 0,

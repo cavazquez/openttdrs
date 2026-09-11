@@ -2270,6 +2270,11 @@ pub struct SavVehicle {
     pub cargo: u16,
     /// Capacidad efectiva tras refit (`Vehicle::cargo_cap`).
     pub cargo_capacity: u16,
+    /// Capacidad de correo de la sombra auxiliar de una aeronave.
+    ///
+    /// Se obtiene de la fila `next` (`AIR_SHADOW`) y vale cero para los demás
+    /// tipos o para saves que no contienen una sombra legible.
+    pub aircraft_mail_capacity: u16,
     /// Capacidad máxima de refit (`Vehicle::refit_cap`).
     pub refit_capacity: u16,
     /// Referencias físicas al pool `CAPA` (`Vehicle::cargo.packets`).
@@ -2424,8 +2429,25 @@ pub(crate) fn vehicles_from_chunks(
     let Some(vehs) = find_chunk(chunks, "VEHS") else {
         return Vec::new();
     };
+    let rows = table_rows(vehs, save_version);
+    let aircraft_shadow_capacities: HashMap<u32, u16> = rows
+        .iter()
+        .filter_map(|(sav_id, record)| {
+            let sub = nested_struct(record, "aircraft")?;
+            let common = nested_struct(sub, "common")?;
+            let subtype = record_get(common, "subtype").and_then(SlValue::as_u64)?;
+            if subtype != 4 {
+                return None;
+            }
+            let capacity = record_get(common, "cargo_cap")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0);
+            Some((*sav_id, capacity))
+        })
+        .collect();
     let mut out = Vec::new();
-    for (sav_id, record) in table_rows(vehs, save_version) {
+    for (sav_id, record) in rows {
         let Some(vtype) = record_get(&record, "type").and_then(SlValue::as_u64) else {
             continue;
         };
@@ -2449,6 +2471,13 @@ pub(crate) fn vehicles_from_chunks(
             // siguiente `33` con la fila 33 en vez de la 32.
             .and_then(|next| next.checked_sub(1))
             .and_then(|next| u32::try_from(next).ok());
+        let aircraft_mail_capacity = if kind == SavVehicleKind::Aircraft {
+            next_sav_id
+                .and_then(|shadow_id| aircraft_shadow_capacities.get(&shadow_id).copied())
+                .unwrap_or(0)
+        } else {
+            0
+        };
         let next_shared_sav_id = record_get(common, "next_shared")
             .and_then(SlValue::as_u64)
             .and_then(|next| next.checked_sub(1))
@@ -3061,6 +3090,7 @@ pub(crate) fn vehicles_from_chunks(
             cargo_subtype,
             cargo,
             cargo_capacity,
+            aircraft_mail_capacity,
             refit_capacity,
             cargo_packet_ids,
             cargo_action_counts,

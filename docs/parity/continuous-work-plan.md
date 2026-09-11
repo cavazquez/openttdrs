@@ -5028,3 +5028,11 @@ arranque/parada, autoreemplazo masivo y reordenamiento; la regresión ejecuta
 las cinco operaciones desde la sección sur y verifica que todos los barcos
 siguen anclados al mismo depósito. #567 continúa abierta por callbacks,
 pathfinding completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-SHARED-ORDERS (2026-09-11): las listas de órdenes
+compartidas normalizan una orden naval que llega desde la sección sur antes de
+persistirla o copiarla a otros vehículos. La creación de la lista, el vínculo
+de una segunda nave y la edición posterior conservan los flags completos de la
+orden y dejan tanto la lista como `vehicle.dest` en el ancla norte. #567
+continúa abierta por callbacks, pathfinding completo y aceptación
+visual/framebuffer.

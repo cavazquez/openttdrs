@@ -1707,6 +1707,64 @@ fn ship_depot_commands_from_south_section_use_north_anchor() {
 }
 
 #[test]
+fn shared_ship_depot_orders_canonicalize_south_section() {
+    use crate::engine::ENGINE_SHIP_MPS;
+
+    let mut s = GameState::new(16, 10);
+    let origin = TileCoord::new(5, 4);
+    let [first, second] = crate::ship_depot_footprint(origin, 0);
+    for tile in [first, second] {
+        s.map.set_kind(tile, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceShipDepotDir(origin, 0)).unwrap();
+    let north = crate::ship_depot_north_tile(&s.map, origin).unwrap();
+    let south = crate::ship_depot_other_tile(&s.map, north).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(north, ENGINE_SHIP_MPS),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(north, ENGINE_SHIP_MPS),
+    )
+    .unwrap();
+    let first_id = s.vehicles[0].id;
+    let second_id = s.vehicles[1].id;
+    s.vehicles[0].orders = vec![VehicleOrder::depot(south)];
+
+    apply_command(&mut s, &Command::CreateSharedOrdersFromVehicle(first_id)).unwrap();
+    let shared_id = s.vehicles[0].shared_order_id.unwrap();
+    assert_eq!(s.shared_order_lists[0].orders[0].destination(), north);
+
+    apply_command(
+        &mut s,
+        &Command::LinkVehicleToSharedOrders {
+            vehicle_id: second_id,
+            shared_id,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[1].orders[0].destination(), north);
+
+    apply_command(
+        &mut s,
+        &Command::SetSharedOrderAt {
+            shared_id,
+            index: 0,
+            order: VehicleOrder::depot(south),
+        },
+    )
+    .unwrap();
+    assert_eq!(s.shared_order_lists[0].orders[0].destination(), north);
+    assert!(
+        s.vehicles
+            .iter()
+            .all(|vehicle| vehicle.orders[0].destination() == north)
+    );
+}
+
+#[test]
 fn ship_paths_via_buoy() {
     use crate::pathfinder::{PathNetwork, find_path};
 

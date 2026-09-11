@@ -264,6 +264,7 @@ pub(super) fn create_shared_orders_from_vehicle(
         return Err(CommandError::VehicleNotFound);
     };
     vehicle.shared_order_id = Some(id);
+    sync_shared_orders_to_vehicles(state, id);
     Ok(())
 }
 
@@ -302,6 +303,10 @@ pub(super) fn set_shared_order_at(
     index: usize,
     order: VehicleOrder,
 ) -> Result<(), CommandError> {
+    let order = order.with_depot_tile(crate::depot::canonical_depot_command_tile(
+        &state.map,
+        order.destination(),
+    ));
     in_bounds(&state.map, order.destination())?;
     let Some(list) = state
         .shared_order_lists

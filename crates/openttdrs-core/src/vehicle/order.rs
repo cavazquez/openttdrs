@@ -583,6 +583,33 @@ impl VehicleOrder {
         }
     }
 
+    /// Devuelve la misma orden con una coordenada de depósito reemplazada.
+    ///
+    /// La operación sólo afecta a `Depot`; conservarla junto al modelo de
+    /// órdenes evita que los writers de listas compartidas pierdan flags de
+    /// parada, espera, refit o unbunch al normalizar anclas navales.
+    #[must_use]
+    pub const fn with_depot_tile(self, depot: TileCoord) -> Self {
+        match self {
+            Self::Depot {
+                stop,
+                wait_ticks,
+                travel_ticks,
+                refit_cargo,
+                unbunch,
+                ..
+            } => Self::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks,
+                refit_cargo,
+                unbunch,
+            },
+            other => other,
+        }
+    }
+
     #[must_use]
     pub const fn conditional(condition: OrderConditionKind, value: u16, jump_to: usize) -> Self {
         let comparator = match condition.legacy_comparator() {

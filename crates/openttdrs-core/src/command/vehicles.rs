@@ -26,27 +26,10 @@ pub(super) fn set_vehicle_order_list(
     let orders: Vec<_> = orders
         .into_iter()
         .map(|order| match (vehicle_kind, order) {
-            (VehicleKind::Ship, VehicleOrder::Depot { depot, .. }) => {
+            (VehicleKind::Ship, order @ VehicleOrder::Depot { depot, .. }) => {
                 let canonical =
                     crate::depot::canonical_depot_tile_for_vehicle(&state.map, depot, vehicle_kind);
-                match order {
-                    VehicleOrder::Depot {
-                        stop,
-                        wait_ticks,
-                        travel_ticks,
-                        refit_cargo,
-                        unbunch,
-                        ..
-                    } => VehicleOrder::Depot {
-                        depot: canonical,
-                        stop,
-                        wait_ticks,
-                        travel_ticks,
-                        refit_cargo,
-                        unbunch,
-                    },
-                    _ => unreachable!("el patrón del depósito ya fue comprobado"),
-                }
+                order.with_depot_tile(canonical)
             }
             (_, order) => order,
         })

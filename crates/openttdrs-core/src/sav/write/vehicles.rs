@@ -271,11 +271,15 @@ fn aircraft_mail_capacity_for(state: &GameState, v: &Vehicle) -> u16 {
         return capacity;
     }
     let engine = crate::newgrf_callback::engine_for_vehicle_catalog(&state.engine_catalog, v);
-    if engine.kind == VehicleKind::Aircraft {
-        engine.mail_capacity
-    } else {
-        0
-    }
+    let cargo = v
+        .cargo_type
+        .or(engine.cargo)
+        .unwrap_or(crate::CargoType::Passengers);
+    crate::newgrf_callback::aircraft_mail_capacity_for_cargo(
+        engine,
+        cargo,
+        &state.cargo_spec_catalog,
+    )
 }
 
 type SavRecordBytes = Vec<u8>;

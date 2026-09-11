@@ -232,11 +232,6 @@ fn apply_engine_with_refit(
     climate: crate::Climate,
 ) {
     vehicle.engine_id = Some(new_engine.id);
-    vehicle.aircraft_mail_capacity = if new_engine.kind == VehicleKind::Aircraft {
-        Some(new_engine.mail_capacity)
-    } else {
-        None
-    };
     vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(new_engine, vehicle);
     if let Some(c) = new_engine.cargo {
         vehicle.cargo_type = Some(c);
@@ -252,6 +247,20 @@ fn apply_engine_with_refit(
             vehicle.cargo_type = Some(first);
         }
     }
+    vehicle.aircraft_mail_capacity = if new_engine.kind == VehicleKind::Aircraft {
+        let cargo = vehicle
+            .cargo_type
+            .or(new_engine.cargo)
+            .unwrap_or(crate::CargoType::Passengers);
+        crate::newgrf_callback::resolve_aircraft_mail_capacity(
+            new_engine,
+            vehicle,
+            cargo,
+            cargo_spec_catalog,
+        )
+    } else {
+        None
+    };
     // `DetermineCapacity` se vuelve a ejecutar al cambiar el motor, no en el
     // siguiente tick de carga. Esto es observable para CB36 dependiente del
     // cargo y evita que autoreplace conserve transitoriamente la capacidad

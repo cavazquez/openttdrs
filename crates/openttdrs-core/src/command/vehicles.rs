@@ -219,11 +219,6 @@ pub(super) fn build_vehicle_at_depot(
     let mut vehicle = Vehicle::new(next_id, engine.kind, depot_pos, depot_pos);
     vehicle.running = false;
     vehicle.engine_id = Some(engine.id);
-    vehicle.aircraft_mail_capacity = if engine.kind == VehicleKind::Aircraft {
-        Some(engine.mail_capacity)
-    } else {
-        None
-    };
     if vehicle.kind == VehicleKind::Ship {
         vehicle.native_sprite_num = engine.ship_image_index;
         vehicle.acceleration = engine.ship_acceleration.max(1);
@@ -231,6 +226,20 @@ pub(super) fn build_vehicle_at_depot(
     if vehicle.cargo_type.is_none() {
         vehicle.cargo_type = engine.cargo;
     }
+    vehicle.aircraft_mail_capacity = if engine.kind == VehicleKind::Aircraft {
+        let cargo = vehicle
+            .cargo_type
+            .or(engine.cargo)
+            .unwrap_or(crate::cargo::CargoType::Passengers);
+        crate::newgrf_callback::resolve_aircraft_mail_capacity(
+            &engine,
+            &mut vehicle,
+            cargo,
+            &state.cargo_spec_catalog,
+        )
+    } else {
+        None
+    };
     vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(&engine, &mut vehicle);
     crate::vehicle::init_vehicle_reliability_from_engine_with_catalog(
         &mut vehicle,
@@ -1181,6 +1190,18 @@ pub(super) fn refit_vehicle(
             .cloned();
         // CB36 se evalúa con el cargo objetivo, igual que DetermineCapacity.
         vehicle.cargo_type = Some(cargo);
+        vehicle.aircraft_mail_capacity = if vehicle.kind == VehicleKind::Aircraft {
+            engine.as_ref().and_then(|engine| {
+                crate::newgrf_callback::resolve_aircraft_mail_capacity(
+                    engine,
+                    vehicle,
+                    cargo,
+                    &state.cargo_spec_catalog,
+                )
+            })
+        } else {
+            None
+        };
         let callback_capacity = engine.as_ref().and_then(|engine| {
             crate::newgrf_callback::resolve_vehicle_refit_capacity_callback(engine, vehicle, cargo)
         });

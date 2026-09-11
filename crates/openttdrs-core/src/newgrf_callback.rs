@@ -1226,6 +1226,57 @@ pub fn resolve_vehicle_capacity_property_callback(
         .and_then(|value| u32::try_from(value).ok())
 }
 
+/// Devuelve la capacidad de correo de la unidad sombra de una aeronave para
+/// un cargo ya elegido.
+///
+/// `OpenTTD::Engine::DetermineCapacity` conserva esta capacidad en la unidad
+/// auxiliar sólo cuando el cargo principal pertenece a `CargoClass::Passengers`.
+/// La propiedad `0x11` es una capacidad nativa, no una capacidad de carga a la
+/// que se aplique el multiplicador del `CargoSpec` principal.
+#[must_use]
+pub fn aircraft_mail_capacity_for_cargo(
+    engine: &EngineDef,
+    cargo: CargoType,
+    cargo_catalog: &[CargoSpecDef],
+) -> u16 {
+    if engine.kind != VehicleKind::Aircraft {
+        return 0;
+    }
+    let classes = crate::cargo_spec::cargo_spec_for_type(cargo_catalog, cargo)
+        .map_or_else(|| cargo.classes(), |spec| spec.classes);
+    if classes & crate::cargo::CARGO_CLASS_PASSENGERS != 0 {
+        engine.mail_capacity
+    } else {
+        0
+    }
+}
+
+/// Resuelve la capacidad secundaria de correo usando `CB36` sobre la
+/// propiedad Action0 `0x11`, con fallback al valor del catálogo.
+///
+/// El cargo temporal se instala durante la consulta porque los callbacks de
+/// propiedad reciben el vehículo ya refitado. Se restaura después, mientras
+/// que los registros persistentes escritos por el callback siguen el contrato
+/// común de los demás callbacks de vehículo.
+#[must_use]
+pub fn resolve_aircraft_mail_capacity(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+    cargo: CargoType,
+    cargo_catalog: &[CargoSpecDef],
+) -> Option<u16> {
+    if engine.kind != VehicleKind::Aircraft {
+        return None;
+    }
+    let fallback = aircraft_mail_capacity_for_cargo(engine, cargo, cargo_catalog);
+    let previous_cargo = vehicle.cargo_type;
+    vehicle.cargo_type = Some(cargo);
+    let callback_capacity = resolve_vehicle_modify_property_callback(engine, vehicle, 0x11, false)
+        .and_then(|value| u16::try_from(value).ok());
+    vehicle.cargo_type = previous_cargo;
+    Some(callback_capacity.unwrap_or(fallback))
+}
+
 /// Resuelve el factor de compra o explotación de una unidad mediante CB36.
 ///
 /// Los factores de coste son BYTE en las cuatro clases. Un resultado fuera de
@@ -6452,6 +6503,46 @@ mod tests {
         assert_eq!(
             resolve_vehicle_refit_capacity_callback(&engine, &mut vehicle, CargoType::Coal),
             None
+        );
+    }
+
+    #[test]
+    fn aircraft_mail_capacity_follows_passenger_class_during_refit() {
+        let mut engine = crate::engine::engine_for_vehicle(
+            VehicleKind::Aircraft,
+            crate::engine::ENGINE_AIRCRAFT_DAKOTA,
+        )
+        .clone();
+        engine.mail_capacity = 7;
+        let mut vehicle = Vehicle::new(
+            73,
+            VehicleKind::Aircraft,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.cargo_type = Some(CargoType::Mail);
+        assert_eq!(
+            aircraft_mail_capacity_for_cargo(&engine, CargoType::Passengers, &[]),
+            7
+        );
+        assert_eq!(
+            aircraft_mail_capacity_for_cargo(&engine, CargoType::Mail, &[]),
+            0
+        );
+        assert_eq!(
+            resolve_aircraft_mail_capacity(&engine, &mut vehicle, CargoType::Passengers, &[]),
+            Some(7)
+        );
+        assert_eq!(vehicle.cargo_type, Some(CargoType::Mail));
+
+        let custom_passenger = crate::cargo_spec::CargoSpecDef {
+            id: crate::cargo::CUSTOM_CARGO_OFFSET,
+            classes: crate::cargo::CARGO_CLASS_PASSENGERS,
+            ..crate::cargo_spec::CargoSpecDef::default()
+        };
+        assert_eq!(
+            aircraft_mail_capacity_for_cargo(&engine, CargoType::Custom(0), &[custom_passenger]),
+            7
         );
     }
 

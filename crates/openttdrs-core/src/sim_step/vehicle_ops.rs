@@ -41,6 +41,7 @@ pub(super) fn update_servicing_and_road_depot_orders(state: &mut GameState) {
     crate::vehicle::update_vehicle_servicing_flags(state);
 }
 
+#[allow(clippy::too_many_lines)]
 pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
     let pending: Vec<(u32, crate::cargo::CargoType)> = state
         .vehicles
@@ -117,6 +118,29 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
         }
         for (idx, _cost) in refits {
             state.vehicles[idx].cargo_type = Some(cargo);
+            let engine = state.vehicles[idx]
+                .engine_id
+                .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+                .cloned()
+                .or_else(|| {
+                    state.vehicles[idx]
+                        .engine_id
+                        .and_then(crate::engine::engine_by_id)
+                        .cloned()
+                });
+            state.vehicles[idx].aircraft_mail_capacity =
+                if state.vehicles[idx].kind == crate::vehicle::VehicleKind::Aircraft {
+                    engine.as_ref().and_then(|engine| {
+                        crate::newgrf_callback::resolve_aircraft_mail_capacity(
+                            engine,
+                            &mut state.vehicles[idx],
+                            cargo,
+                            &state.cargo_spec_catalog,
+                        )
+                    })
+                } else {
+                    None
+                };
             state.vehicles[idx].refit_capacity =
                 u16::try_from(state.vehicles[idx].capacity).unwrap_or(u16::MAX);
         }

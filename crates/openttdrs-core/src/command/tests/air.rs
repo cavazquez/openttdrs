@@ -132,6 +132,41 @@ fn aircraft_purchase_keeps_secondary_mail_capacity_on_primary() {
         .iter()
         .find(|vehicle| vehicle.kind == VehicleKind::Aircraft)
         .expect("avión comprado");
+    let aircraft_id = aircraft.id;
+    assert_eq!(aircraft.aircraft_mail_capacity, Some(7));
+
+    apply_command(
+        &mut s,
+        &Command::RefitVehicle {
+            vehicle_id: aircraft_id,
+            cargo: crate::CargoType::Mail,
+            unit_ids: Vec::new(),
+        },
+    )
+    .unwrap();
+    let aircraft = s
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == aircraft_id)
+        .expect("avión refitado a correo");
+    assert_eq!(aircraft.cargo_type, Some(crate::CargoType::Mail));
+    assert_eq!(aircraft.aircraft_mail_capacity, Some(0));
+
+    apply_command(
+        &mut s,
+        &Command::RefitVehicle {
+            vehicle_id: aircraft_id,
+            cargo: crate::CargoType::Passengers,
+            unit_ids: Vec::new(),
+        },
+    )
+    .unwrap();
+    let aircraft = s
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == aircraft_id)
+        .expect("avión refitado a pasajeros");
+    assert_eq!(aircraft.cargo_type, Some(crate::CargoType::Passengers));
     assert_eq!(aircraft.aircraft_mail_capacity, Some(7));
 }
 

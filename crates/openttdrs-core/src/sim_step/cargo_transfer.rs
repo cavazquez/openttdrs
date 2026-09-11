@@ -256,6 +256,24 @@ pub(super) fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
         else {
             continue;
         };
+        let cargo = state.vehicles[index].cargo_type.or(engine.cargo).unwrap_or(
+            match state.vehicles[index].kind {
+                VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
+                    CargoType::Passengers
+                }
+                VehicleKind::Truck | VehicleKind::Ship => CargoType::Goods,
+                VehicleKind::Train => unreachable!("trenes se actualizan por consist"),
+            },
+        );
+        if state.vehicles[index].kind == VehicleKind::Aircraft {
+            state.vehicles[index].aircraft_mail_capacity =
+                crate::newgrf_callback::resolve_aircraft_mail_capacity(
+                    &engine,
+                    &mut state.vehicles[index],
+                    cargo,
+                    &state.cargo_spec_catalog,
+                );
+        }
         if engine.newgrf_grfid == 0 || engine.newgrf_runtime.is_none() {
             continue;
         }
@@ -270,15 +288,6 @@ pub(super) fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
         if refit_capacity.is_none() && property_capacity.is_none() {
             continue;
         }
-        let cargo = state.vehicles[index].cargo_type.or(engine.cargo).unwrap_or(
-            match state.vehicles[index].kind {
-                VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
-                    CargoType::Passengers
-                }
-                VehicleKind::Truck | VehicleKind::Ship => CargoType::Goods,
-                VehicleKind::Train => unreachable!("trenes se actualizan por consist"),
-            },
-        );
         state.vehicles[index].capacity = if let Some(capacity) = refit_capacity {
             capacity
         } else {
@@ -1170,6 +1179,19 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
             .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
             .cloned();
         state.vehicles[idx].cargo_type = Some(target);
+        state.vehicles[idx].aircraft_mail_capacity =
+            if state.vehicles[idx].kind == VehicleKind::Aircraft {
+                engine.as_ref().and_then(|engine| {
+                    crate::newgrf_callback::resolve_aircraft_mail_capacity(
+                        engine,
+                        &mut state.vehicles[idx],
+                        target,
+                        &state.cargo_spec_catalog,
+                    )
+                })
+            } else {
+                None
+            };
         if let Some(engine) = engine {
             let callback_capacity = crate::newgrf_callback::resolve_vehicle_refit_capacity_callback(
                 &engine,

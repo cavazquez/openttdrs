@@ -4618,19 +4618,6 @@ pendientes, por lo que #329/#567 continúan abiertas. Core queda en `2486
 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`,
 con Clippy estricto, formato y `diff --check` limpios.
 
-Actualización #329/#567-VEHICLE-UI-CONSIST-SPRITES (2026-09-11): las tiras
-compactas de `VehicleViewWindow`, `VehicleDetailsWindow`, `DepotPanel` y la
-lista global de vehículos ya comparten la clasificación del catálogo activo y
-la primera capa del resolver NewGRF runtime. Los widgets conservan sus
-children, drag e interacción existentes; el panel de depósito y la lista
-global separan la sincronización de imágenes para no superar el límite ECS de
-Bevy. Las capas completas del mapa y el `SpriteStack` del preview grande no se
-reemplazan por una textura plana. La entidad FTA separada, sus scopes/estado
-propios y la validación visual/runtime restante siguen pendientes, por lo que
-#329/#567 continúan abiertas. Core queda en `2488 passed; 0 failed; 1
-ignored` y cliente en `1401 passed; 0 failed; 2 ignored`, con Clippy estricto,
-formato y `diff --check` limpios.
-
 Actualización #329/#567-VEHICLE-WINDOW-CONSIST-NEWGRF (2026-09-11): las
 tiras de consist de `VehicleViewWindow` ya consultan el catálogo activo para
 las unidades NewGRF y reutilizan la primera capa del resolver de compra,
@@ -4740,3 +4727,16 @@ scopes/estado propios y la validación visual/runtime restante siguen
 pendientes, por lo que #329/#567 continúan abiertas. Core queda en `2488
 passed; 0 failed; 1 ignored` y cliente en `1401 passed; 0 failed; 2 ignored`,
 con Clippy estricto, formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-UI-CONSIST-SPRITES (2026-09-11): las tiras
+compactas de `VehicleViewWindow`, `VehicleDetailsWindow`, `DepotPanel` y la
+lista global de vehículos ya comparten la clasificación del catálogo activo y
+la primera capa del resolver NewGRF runtime. Los widgets conservan sus
+children, drag e interacción existentes; el panel de depósito y la lista
+global separan la sincronización de imágenes para no superar el límite ECS de
+Bevy. Las capas completas del mapa y el `SpriteStack` del preview grande no se
+reemplazan por una textura plana. La entidad FTA separada, sus scopes/estado
+propios y la validación visual/runtime restante siguen pendientes, por lo que
+#329/#567 continúan abiertas. Core queda en `2488 passed; 0 failed; 1
+ignored` y cliente en `1401 passed; 0 failed; 2 ignored`, con Clippy estricto,
+formato y `diff --check` limpios.

@@ -11,7 +11,7 @@ use crate::ui::autoreplace_window::{
 use crate::ui::buy_window::{
     BuyVehicleWindowState, NewGrfTrainPreviewCache, buy_window_on_closed,
     buy_window_search_keyboard, handle_buy_window_buttons, setup_buy_window, sync_buy_window,
-    sync_buy_window_search_placeholder,
+    sync_buy_window_preview, sync_buy_window_search_placeholder,
 };
 use crate::ui::cargo_payment_window::{
     CargoPaymentWindowState, cargo_payment_window_on_closed, open_cargo_payment_from_routes,
@@ -187,6 +187,7 @@ impl Plugin for GameWindowsPlugin {
                 Update,
                 (
                     sync_buy_window,
+                    sync_buy_window_preview,
                     sync_destination_picker,
                     sync_vehicle_window,
                     sync_vehicle_details_window,

@@ -544,52 +544,108 @@ pub(super) fn custom_aircraft_rotor_layers(
 
     let (livery_primary, livery_secondary) = super::vehicle_livery_colours(sim, vehicle);
     let primary = owner_colour.unwrap_or(livery_primary);
+    custom_aircraft_rotor_layers_for_engine(
+        engine,
+        frame,
+        sim,
+        vehicle.direction,
+        primary,
+        livery_secondary,
+        Some(vehicle),
+        cache,
+        images,
+    )
+}
+
+/// Resuelve las capas del rotor para una entidad que todavía no existe.
+///
+/// La ventana de compra usa el scope GUI de `GetRotorOverrideSprite`: la
+/// orientación estable es `DIR_W` y el rotor se muestra detenido (frame 0),
+/// pero conserva los parámetros del GRF y la misma semántica de `SpriteStack`
+/// que el render del mapa.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn custom_aircraft_rotor_layers_for_preview(
+    engine: &EngineDef,
+    sim: &crate::state::SimWorld,
+    primary: CompanyColour,
+    cache: &mut NewGrfTrainSpriteCache,
+    images: &mut Assets<Image>,
+) -> Vec<NewGrfVehicleLayer> {
+    if engine.kind != VehicleKind::Aircraft || !openttdrs_core::aircraft_is_helicopter_def(engine) {
+        return Vec::new();
+    }
+    custom_aircraft_rotor_layers_for_engine(
+        engine,
+        0,
+        sim,
+        openttdrs_core::DIR_W,
+        primary,
+        primary,
+        None,
+        cache,
+        images,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn custom_aircraft_rotor_layers_for_engine(
+    engine: &EngineDef,
+    frame: usize,
+    sim: &crate::state::SimWorld,
+    physical_direction: openttdrs_core::VehicleDirection,
+    primary: CompanyColour,
+    secondary: CompanyColour,
+    vehicle: Option<&Vehicle>,
+    cache: &mut NewGrfTrainSpriteCache,
+    images: &mut Assets<Image>,
+) -> Vec<NewGrfVehicleLayer> {
     if engine.newgrf_runtime.is_some() {
-        let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(
-            &sim.state.vehicles,
-            vehicle.id,
-            sim.state.tick,
-            &sim.state.engine_catalog,
-            primary.as_u8(),
-        );
-        openttdrs_core::enrich_vehicle_track_badge_vars(
-            &mut ctx,
-            &sim.state.vehicles,
-            vehicle.id,
-            &sim.state.map,
-            &sim.state.engine_catalog,
-            &sim.state.runtime.rail_type_badges,
-            &sim.state.road_type_catalog,
-        );
+        let mut ctx = vehicle.map_or_else(openttdrs_core::Action2EvalCtx::default, |vehicle| {
+            let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(
+                &sim.state.vehicles,
+                vehicle.id,
+                sim.state.tick,
+                &sim.state.engine_catalog,
+                primary.as_u8(),
+            );
+            openttdrs_core::enrich_vehicle_track_badge_vars(
+                &mut ctx,
+                &sim.state.vehicles,
+                vehicle.id,
+                &sim.state.map,
+                &sim.state.engine_catalog,
+                &sim.state.runtime.rail_type_badges,
+                &sim.state.road_type_catalog,
+            );
+            ctx
+        });
         ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
             &sim.state.newgrf_stack,
             engine.newgrf_grfid,
         ));
         // OpenTTD's rotor resolver exposes the physical aircraft direction in
         // var 1F while the selected view index is the rotor animation state.
-        ctx.vars.insert(0x1F, u32::from(vehicle.direction));
-        let palette_override =
-            openttdrs_core::resolve_vehicle_colour_mapping_callback(engine, vehicle)
-                .map(|mapping| {
-                    mapping.palette_for_companies(
-                        primary.as_u8(),
-                        livery_secondary.as_u8(),
-                        engine.uses_2cc,
-                    )
+        ctx.vars.insert(0x1F, u32::from(physical_direction));
+        let palette_override = vehicle
+            .and_then(|vehicle| {
+                openttdrs_core::resolve_vehicle_colour_mapping_callback(engine, vehicle)
+            })
+            .map(|mapping| {
+                mapping.palette_for_companies(primary.as_u8(), secondary.as_u8(), engine.uses_2cc)
+            })
+            .or_else(|| {
+                engine.uses_2cc.then(|| {
+                    openttdrs_core::TWOCC_PALETTE_BASE
+                        + u16::from(primary.as_u8())
+                        + u16::from(secondary.as_u8()) * 16
                 })
-                .or_else(|| {
-                    engine.uses_2cc.then(|| {
-                        openttdrs_core::TWOCC_PALETTE_BASE
-                            + u16::from(primary.as_u8())
-                            + u16::from(livery_secondary.as_u8()) * 16
-                    })
-                });
+            });
         return cache.handles_for_runtime_with_override(
             engine,
             frame,
             None,
             primary,
-            livery_secondary,
+            secondary,
             None,
             palette_override,
             &sim.state.runtime.twocc_action5_newgrf_sprites,
@@ -601,8 +657,7 @@ pub(super) fn custom_aircraft_rotor_layers(
     let Some(view) = engine.newgrf_view(frame) else {
         return Vec::new();
     };
-    let Some(handle) =
-        cache.handle_for_with_livery(engine, frame, primary, livery_secondary, images)
+    let Some(handle) = cache.handle_for_with_livery(engine, frame, primary, secondary, images)
     else {
         return Vec::new();
     };

@@ -6,11 +6,11 @@ mod spawn;
 mod sync;
 
 use bevy::prelude::{Assets, Image};
-use openttdrs_core::EngineDef;
+use openttdrs_core::{EngineDef, VehicleKind};
 
 use crate::state::SimWorld;
 
-pub(crate) use assets::{NewGrfTrainSpriteCache, TruckHandles};
+pub(crate) use assets::{NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles};
 pub(crate) use picking::pick_vehicle_id_at_world;
 pub(crate) use plugin::VehicleRenderPlugin;
 pub(crate) use pose::{
@@ -25,6 +25,43 @@ pub(crate) use sync::{
 fn engine_in_sim(sim: &SimWorld, engine_id: u16) -> Option<&EngineDef> {
     openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, engine_id)
         .or_else(|| openttdrs_core::engine_by_id(engine_id))
+}
+
+/// Capas del rotor que se dibuja en la vista previa de compra.
+///
+/// El preview no tiene una unidad real para aportar estado de consist, por lo
+/// que el resolver usa el scope GUI y frame detenido. Si el motor no publica
+/// una vista custom, se conserva el rotor OpenGFX con sus bounds nativos.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn aircraft_rotor_preview_layers(
+    sim: &SimWorld,
+    engine: &EngineDef,
+    company_colour: u8,
+    cache: &mut NewGrfTrainSpriteCache,
+    images: &mut Assets<Image>,
+    trucks: &TruckHandles,
+) -> Vec<NewGrfVehicleLayer> {
+    if engine.kind != VehicleKind::Aircraft || !openttdrs_core::aircraft_is_helicopter_def(engine) {
+        return Vec::new();
+    }
+    let custom = assets::custom_aircraft_rotor_layers_for_preview(
+        engine,
+        sim,
+        crate::sprites::CompanyColour::from_u8(company_colour),
+        cache,
+        images,
+    );
+    if !custom.is_empty() {
+        return custom;
+    }
+    let layer = &assets::AIRCRAFT_ROTOR_LAYERS[0];
+    vec![NewGrfVehicleLayer {
+        handle: trucks.aircraft_rotor(0),
+        x_offs: layer.x_offs as i16,
+        y_offs: layer.y_offs as i16,
+        width: layer.w as u16,
+        height: layer.h as u16,
+    }]
 }
 
 /// Clasifica el avión con el `EngineDef` activo, incluidos motores NewGRF.

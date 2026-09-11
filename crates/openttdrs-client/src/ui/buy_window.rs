@@ -19,7 +19,10 @@ use std::collections::HashMap;
 
 use crate::i18n::{Locale, localized_text};
 use crate::render::newgrf_cache::{DecodedSpriteImagePolicy, decoded_sprite_image};
-use crate::render::{RemapMapVisualsPending, TruckHandles};
+use crate::render::{
+    NewGrfTrainSpriteCache, NewGrfVehicleLayer, RemapMapVisualsPending, TruckHandles,
+    aircraft_rotor_preview_layers,
+};
 use crate::settings::ClientPreferences;
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
@@ -90,6 +93,10 @@ pub(crate) struct BuyVehicleRowSprite {
 
 const ROW_SPRITE_W: f32 = 40.0;
 const ROW_SPRITE_H: f32 = 24.0;
+const PREVIEW_W: f32 = 96.0;
+const PREVIEW_H: f32 = 64.0;
+const PREVIEW_LAYER_SCALE: f32 = 2.0;
+const PREVIEW_ROTOR_LAYERS: usize = 8;
 const PLACEHOLDER_SPRITE: &str = "assets/opengfx/tiles/vehicle_train_e.png";
 
 #[derive(Component)]
@@ -97,6 +104,14 @@ pub(crate) struct BuyVehicleStatsText;
 
 #[derive(Component)]
 pub(crate) struct BuyVehiclePreviewImage;
+
+#[derive(Component)]
+pub(crate) struct BuyVehiclePreviewFrame;
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct BuyVehiclePreviewRotor {
+    layer_index: usize,
+}
 
 #[derive(Component)]
 pub(crate) struct BuyVehicleBuyButton;
@@ -312,18 +327,46 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
                     });
                 }
             });
-        panel.spawn((
-            BuyVehiclePreviewImage,
-            ImageNode::new(asset_server.load::<Image>("assets/opengfx/tiles/vehicle_train_e.png")),
-            Node {
-                width: Val::Px(96.0),
-                height: Val::Px(64.0),
-                margin: UiRect::top(Val::Px(4.0)),
-                align_self: AlignSelf::Center,
-                display: Display::None,
-                ..default()
-            },
-        ));
+        panel
+            .spawn((
+                BuyVehiclePreviewFrame,
+                Node {
+                    width: Val::Px(PREVIEW_W),
+                    height: Val::Px(PREVIEW_H),
+                    margin: UiRect::top(Val::Px(4.0)),
+                    align_self: AlignSelf::Center,
+                    display: Display::None,
+                    overflow: Overflow::clip(),
+                    ..default()
+                },
+            ))
+            .with_children(|preview| {
+                preview.spawn((
+                    BuyVehiclePreviewImage,
+                    ImageNode::new(
+                        asset_server.load::<Image>("assets/opengfx/tiles/vehicle_train_e.png"),
+                    ),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                ));
+                for layer_index in 0..PREVIEW_ROTOR_LAYERS {
+                    preview.spawn((
+                        BuyVehiclePreviewRotor { layer_index },
+                        ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
+                        Node {
+                            position_type: PositionType::Absolute,
+                            display: Display::None,
+                            ..default()
+                        },
+                    ));
+                }
+            });
         panel.spawn((
             BuyVehicleStatsText,
             Text::new(""),
@@ -571,6 +614,17 @@ fn preview_sprite_for_engine(
     }
 }
 
+fn preview_rotor_rect(layer: &NewGrfVehicleLayer) -> (f32, f32, f32, f32) {
+    let width = f32::from(layer.width) * PREVIEW_LAYER_SCALE;
+    let height = f32::from(layer.height) * PREVIEW_LAYER_SCALE;
+    (
+        (PREVIEW_W - width) * 0.5 + f32::from(layer.x_offs) * PREVIEW_LAYER_SCALE,
+        (PREVIEW_H - height) * 0.5 + f32::from(layer.y_offs) * PREVIEW_LAYER_SCALE,
+        width,
+        height,
+    )
+}
+
 fn toolbar_button_active(state: &BuyVehicleWindowState, button: BuyVehicleToolbarButton) -> bool {
     match button {
         BuyVehicleToolbarButton::SortName => state.sort == EngineCatalogSort::Name,
@@ -646,17 +700,6 @@ pub(crate) fn sync_buy_window(
             With<BuyVehicleStatsText>,
             Without<BuyVehicleRowText>,
             Without<FloatingWindowTitleText>,
-        ),
-    >,
-    mut preview_q: Query<
-        (&mut ImageNode, &mut Node),
-        (
-            With<BuyVehiclePreviewImage>,
-            Without<BuyVehicleRow>,
-            Without<BuyVehicleRowSprite>,
-            Without<BuyVehicleRoadToolbar>,
-            Without<BuyVehicleRailToolbar>,
-            Without<Button>,
         ),
     >,
 ) {
@@ -766,13 +809,50 @@ pub(crate) fn sync_buy_window(
                 |engine| stats_text(locale, engine, &sim.state.badge_catalog),
             );
     }
-    if let Ok((mut image, mut node)) = preview_q.single_mut() {
-        let engine = buy_state.selected_engine.and_then(|id| {
-            openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, id)
-                .or_else(|| openttdrs_core::engine_by_id(id))
-        });
-        match (engine, trucks.as_ref()) {
-            (Some(engine), Some(trucks)) => {
+}
+
+/// Sincroniza el recuadro de preview y las capas auxiliares del rotor.
+///
+/// Se mantiene separado de [`sync_buy_window`] porque Bevy limita a dieciséis
+/// parámetros ECS por sistema y el listado ya ocupa ese presupuesto.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sync_buy_window_preview(
+    buy_state: Res<BuyVehicleWindowState>,
+    sim: Res<SimWorld>,
+    trucks: Option<Res<TruckHandles>>,
+    mut preview_cache: ResMut<NewGrfTrainPreviewCache>,
+    mut newgrf_train_sprites: ResMut<NewGrfTrainSpriteCache>,
+    mut images: ResMut<Assets<Image>>,
+    mut preview_frame_q: Query<&mut Node, With<BuyVehiclePreviewFrame>>,
+    mut preview_q: Query<
+        (&mut ImageNode, &mut Node),
+        (
+            With<BuyVehiclePreviewImage>,
+            Without<BuyVehicleRow>,
+            Without<BuyVehicleRowSprite>,
+            Without<BuyVehicleRoadToolbar>,
+            Without<BuyVehicleRailToolbar>,
+            Without<Button>,
+        ),
+    >,
+    mut preview_rotor_q: Query<
+        (&BuyVehiclePreviewRotor, &mut ImageNode, &mut Node),
+        (
+            Without<BuyVehiclePreviewImage>,
+            Without<BuyVehiclePreviewFrame>,
+        ),
+    >,
+) {
+    let preview_engine = buy_state.selected_engine.and_then(|id| {
+        openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, id)
+            .or_else(|| openttdrs_core::engine_by_id(id))
+    });
+    let Ok(mut frame) = preview_frame_q.single_mut() else {
+        return;
+    };
+    match (buy_state.depot_pos, preview_engine, trucks.as_ref()) {
+        (Some(_), Some(engine), Some(trucks)) => {
+            if let Ok((mut image, mut node)) = preview_q.single_mut() {
                 image.image = preview_sprite_for_engine(
                     trucks,
                     engine,
@@ -782,7 +862,35 @@ pub(crate) fn sync_buy_window(
                 );
                 node.display = Display::Flex;
             }
-            _ => {
+            let rotor_layers = aircraft_rotor_preview_layers(
+                &sim,
+                engine,
+                sim.state.company_colour,
+                &mut newgrf_train_sprites,
+                &mut images,
+                trucks,
+            );
+            for (rotor, mut image, mut node) in &mut preview_rotor_q {
+                let Some(layer) = rotor_layers.get(rotor.layer_index) else {
+                    node.display = Display::None;
+                    continue;
+                };
+                let (left, top, width, height) = preview_rotor_rect(layer);
+                image.image = layer.handle.clone();
+                node.left = Val::Px(left);
+                node.top = Val::Px(top);
+                node.width = Val::Px(width);
+                node.height = Val::Px(height);
+                node.display = Display::Flex;
+            }
+            frame.display = Display::Flex;
+        }
+        _ => {
+            frame.display = Display::None;
+            if let Ok((_, mut node)) = preview_q.single_mut() {
+                node.display = Display::None;
+            }
+            for (_, _, mut node) in &mut preview_rotor_q {
                 node.display = Display::None;
             }
         }
@@ -1291,5 +1399,18 @@ mod tests {
                 .iter()
                 .any(|engine| engine.id == openttdrs_core::ENGINE_AIRCRAFT_DAKOTA)
         );
+    }
+
+    #[test]
+    fn preview_rotor_rect_scales_and_centers_newgrf_bounds() {
+        let layer = NewGrfVehicleLayer {
+            handle: Handle::<Image>::default(),
+            x_offs: -10,
+            y_offs: -3,
+            width: 22,
+            height: 10,
+        };
+
+        assert_eq!(preview_rotor_rect(&layer), (6.0, 16.0, 44.0, 20.0));
     }
 }

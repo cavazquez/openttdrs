@@ -3998,6 +3998,17 @@ failed; 2 ignored`, con formato, `git diff --check` y Clippy estricto limpios.
 #329/#567 siguen abiertas por callbacks y propiedades navales restantes, y por
 aceptación visual manual bajo Weston; #326 permanece abierta.
 
+Actualización #329/#567-SHIP-PURCHASE-ORDER (2026-09-11, `0982aacc`): Action0
+naval `0x1B` ya conserva el `ExtendedByte` que indica el ID local delante del
+que debe insertarse el barco. Las operaciones se aplican después de cargar
+todo el stack, buscando por `(tipo, GRFID, ID local)` para que los destinos
+posteriores también sean válidos. La regresión cruza dos barcos y verifica el
+orden final del catálogo. Core queda en `2458 passed; 0 failed; 1 ignored` y
+cliente mantiene `1388 passed; 0 failed; 2 ignored`, con formato, `git
+diff --check` y Clippy estricto limpios. #329/#567 siguen abiertas por
+callbacks y propiedades navales restantes, y por aceptación visual manual bajo
+Weston; #326 permanece abierta.
+
 Actualización #329/#567-SHIP-RETIRE-EARLY (2026-09-11, `4c18b55d`): Action0
 naval `0x16` ya conserva los años de retiro anticipado. `engine_available_in_year`
 los descuenta de la vida del modelo para la compra y el autoreemplazo, con

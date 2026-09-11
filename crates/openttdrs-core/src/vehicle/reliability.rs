@@ -378,7 +378,10 @@ impl super::model::Vehicle {
 
     /// Fases de `HandleBreakdown` durante el movimiento.
     ///
-    /// Devuelve `true` si el vehículo acaba de entrar en avería (humo/sonido).
+    /// Devuelve `true` si el vehículo debe permanecer detenido durante este
+    /// tick. El evento de entrada se detecta comparando el estado anterior en
+    /// el ciclo de movimiento; `OpenTTD` mantiene este retorno activo durante
+    /// toda la avería, no sólo en el tick que la inicia.
     pub fn handle_breakdown(&mut self, _tick: u64) -> bool {
         match self.breakdown_ctr {
             0 => false,
@@ -390,30 +393,36 @@ impl super::model::Vehicle {
                     return false;
                 }
                 self.cur_speed = 0;
+                self.advance_active_breakdown();
                 true
             }
             1 => {
                 if self.kind == VehicleKind::Aircraft {
                     return false;
                 }
-                let cadence = if self.kind == VehicleKind::Train {
-                    4
-                } else {
-                    2
-                };
-                if self.newgrf_tick_counter.is_multiple_of(cadence) && self.breakdown_delay > 0 {
-                    self.breakdown_delay -= 1;
-                    if self.breakdown_delay == 0 {
-                        self.breakdown_ctr = 0;
-                    }
-                }
-                false
+                self.advance_active_breakdown();
+                true
             }
             _ => {
                 if !self.cargo_loading && !self.cargo_unloading {
                     self.breakdown_ctr -= 1;
                 }
                 false
+            }
+        }
+    }
+
+    /// Aplica la cadencia nativa a una avería ya activa.
+    fn advance_active_breakdown(&mut self) {
+        let cadence = if self.kind == VehicleKind::Train {
+            4
+        } else {
+            2
+        };
+        if self.newgrf_tick_counter.is_multiple_of(cadence) && self.breakdown_delay > 0 {
+            self.breakdown_delay -= 1;
+            if self.breakdown_delay == 0 {
+                self.breakdown_ctr = 0;
             }
         }
     }
@@ -973,12 +982,32 @@ mod tests {
         v.breakdown_delay = 2;
 
         v.newgrf_tick_counter = 1;
-        assert!(!v.handle_breakdown(0));
+        assert!(v.handle_breakdown(0));
         assert_eq!(v.breakdown_delay, 2);
 
         v.newgrf_tick_counter = 2;
-        assert!(!v.handle_breakdown(0));
+        assert!(v.handle_breakdown(0));
         assert_eq!(v.breakdown_delay, 1);
+    }
+
+    #[test]
+    fn breakdown_start_applies_active_cadence_before_movement() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Ship,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.breakdown_ctr = 2;
+        v.breakdown_delay = 1;
+        v.newgrf_tick_counter = 2;
+        v.cur_speed = 40;
+
+        assert!(v.handle_breakdown(0));
+        assert_eq!(v.breakdown_ctr, 0);
+        assert_eq!(v.breakdown_delay, 0);
+        assert_eq!(v.breakdowns_since_last_service, 1);
+        assert_eq!(v.cur_speed, 0);
     }
 
     #[test]

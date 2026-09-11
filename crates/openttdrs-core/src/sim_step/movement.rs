@@ -381,8 +381,9 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             state.vehicles[i].wait_counter = 0;
         }
         let had_force = state.vehicles[i].force_proceed;
-        let just_broke = state.vehicles[i].handle_breakdown(tick);
-        if just_broke {
+        let was_broken_down = state.vehicles[i].is_broken_down();
+        let breakdown_stopped = state.vehicles[i].handle_breakdown(tick);
+        if breakdown_stopped && !was_broken_down {
             state
                 .runtime
                 .pending_sim_events
@@ -392,7 +393,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                     kind: state.vehicles[i].kind,
                 });
         }
-        if state.vehicles[i].is_broken_down() {
+        if breakdown_stopped {
             continue;
         }
         let prev_speed = state.vehicles[i].cur_speed;

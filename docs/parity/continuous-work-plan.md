@@ -5142,3 +5142,11 @@ controlador atiende sólo la cabeza, una generación efímera detecta el servici
 y actualiza los seguidores enlazados sin repetir la operación de la cabeza. La
 regresión cubre una cadena ferroviaria; #329/#567 continúan abiertas por
 criterios restantes.
+
+Actualización #329/#567-BREAKDOWN-STOP-RETURN (2026-09-11):
+`Vehicle::HandleBreakdown` devuelve ahora «detenido» durante toda la avería y
+consume también la primera unidad de `breakdown_delay` al pasar de contador 2
+a 1, como la caída nativa. El evento visual/sonoro conserva una sola emisión
+al comenzar la avería; la regresión cubre el retorno durante la cuenta activa y
+el vencimiento en la misma transición. #329/#567 continúan abiertas por otros
+criterios pendientes.

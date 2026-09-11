@@ -4157,3 +4157,17 @@ estricto y formato verdes. La aceptación visual manual bajo Weston sigue
 pendiente, igual que pendiente/auto-clear/join de `CmdBuildDock` y la
 reconciliación completa de identidad en saves importados; #567 y #326 siguen
 abiertas.
+
+Actualización #326/#567-SHIP-DOCK-SLOPE-CONTRACT (2026-09-11, código
+`69e0e696`, fixture `6cf84239`):
+`CmdBuildDock` ya no acepta una costa plana con una dirección arbitraria. La
+tesela de tierra debe tener una pendiente inclinada y su dirección acuática
+debe coincidir con `ReverseDiagDir(GetInclinedSlopeDirection(tile))`; las dos
+teselas de agua continúan exigiendo planitud. El showcase de inicio usa ahora
+dos costas inclinadas reales, por lo que mantiene los puertos visibles con la
+misma geometría que el mapa nativo. Se cubren las cuatro orientaciones y el
+rechazo de costa plana/dirección incompatible. Core queda en 2421 pasadas y 1
+ignorada; cliente en 1387 pasadas y 2 ignoradas, con Clippy estricto y formato
+verdes. #567 sigue abierta por auto-clear/join, reconciliación completa de
+identidad en saves importados y aceptación visual manual bajo Weston; #326
+permanece abierta.

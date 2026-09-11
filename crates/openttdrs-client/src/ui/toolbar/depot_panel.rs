@@ -618,13 +618,36 @@ fn depot_title(locale: Locale, sim: &SimWorld, depot_pos: TileCoord) -> String {
     )
 }
 
+fn vehicle_is_in_depot_panel(
+    sim: &SimWorld,
+    depot_pos: TileCoord,
+    vehicle: &openttdrs_core::Vehicle,
+) -> bool {
+    if vehicle.pos != depot_pos {
+        return false;
+    }
+    match vehicle.kind {
+        VehicleKind::Train => !vehicle.depot_leave_cleared,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => {
+            vehicle.road_depot_phase == openttdrs_core::vehicle::RoadDepotPhase::InDepot
+        }
+        VehicleKind::Ship => vehicle.ship_state == openttdrs_core::ship_movement::SHIP_STATE_DEPOT,
+        VehicleKind::Aircraft => {
+            vehicle.aircraft_phase == openttdrs_core::AircraftPhase::InHangar
+                && sim.state.map.get_kind(depot_pos) == Some(TileKind::Airport)
+        }
+    }
+}
+
 fn vehicles_at_depot(sim: &SimWorld, depot_pos: TileCoord) -> Vec<&openttdrs_core::Vehicle> {
     let mut vehicles: Vec<_> = sim
         .state
         .vehicles
         .iter()
         // Solo cabezas de consist / vehículos sueltos (vagones enganchados no tienen fila).
-        .filter(|vehicle| vehicle.pos == depot_pos && vehicle.is_consist_head())
+        .filter(|vehicle| {
+            vehicle.is_consist_head() && vehicle_is_in_depot_panel(sim, depot_pos, vehicle)
+        })
         .collect();
     vehicles.sort_by(|a, b| match (a.depot_display_slot, b.depot_display_slot) {
         (Some(sa), Some(sb)) => sa.cmp(&sb).then_with(|| a.id.cmp(&b.id)),
@@ -1691,6 +1714,29 @@ mod tests {
                 .find(|vehicle| vehicle.id == vehicle_id)
                 .unwrap()
                 .running
+        );
+    }
+
+    #[test]
+    fn depot_panel_lists_only_ships_with_native_depot_state() {
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(3, 3);
+        state.map.set_kind(depot, TileKind::ShipDepot).unwrap();
+
+        let mut inside = Vehicle::new(1, VehicleKind::Ship, depot, depot);
+        inside.ship_state = openttdrs_core::ship_movement::SHIP_STATE_DEPOT;
+        let mut leaving = Vehicle::new(2, VehicleKind::Ship, depot, depot);
+        leaving.ship_state = openttdrs_core::ship_movement::SHIP_STATE_TRACK_X;
+        state.vehicles = vec![leaving, inside];
+        let sim = SimWorld {
+            state,
+            ..SimWorld::default()
+        };
+
+        let listed = vehicles_at_depot(&sim, depot);
+        assert_eq!(
+            listed.iter().map(|vehicle| vehicle.id).collect::<Vec<_>>(),
+            [1]
         );
     }
 

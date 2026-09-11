@@ -4947,3 +4947,12 @@ durante la espera dentro del depósito y vuelve a mostrarse cuando ya tiene un
 estado de vía durante la salida, aunque la interpolación aún no haya dejado el
 footprint. La regresión cubre ambos estados; #567 sigue abierta por callbacks,
 pathfinding completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-LIST-STATE (2026-09-11): la lista de la ventana
+de depósito filtra ahora con el estado físico equivalente a `IsInDepot` para
+cada clase de vehículo. En particular, un barco que ya pasó a un
+`SHIP_STATE_TRACK_*` durante la salida deja de aparecer como unidad disponible,
+aunque `pos` todavía apunte al footprint naval; se conservan las reglas de
+hangar, depósito vial y `depot_leave_cleared` ferroviario. La regresión separa
+un barco dentro y otro saliendo; #567 sigue abierta por callbacks, pathfinding
+completo y aceptación visual/framebuffer.

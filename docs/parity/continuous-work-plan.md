@@ -4155,3 +4155,17 @@ regresiones para ambos muelles y para el fallback de SAV. Core queda en
 ignored`, con Clippy estricto, formato y diff limpios. #567 sigue abierta por
 `station_to_join`, pathfinder/callbacks navales restantes y aceptación visual
 manual bajo Weston; #326 permanece abierta.
+
+Actualización #567-SHIP-DOCK-EXPLICIT-JOIN (2026-09-11, `f77aa520`): el
+comando de muelle incorpora la variante reproducible
+`PlaceDockAtStation { origin, dir, station_to_join }`, equivalente al
+`CmdBuildDock` nativo con `station_to_join`. La validación resuelve el
+`StationID` contra una estación propia que conserva una huella Dock real,
+respeta `distant_join_stations` y rechaza IDs ambiguos o inexistentes antes de
+limpiar objetos, modificar el mapa o cobrar. La búsqueda automática también
+puede reutilizar una estación intermodal con facilidad naval. Se agregaron
+regresiones para unión distante y rechazo atómico. Core queda en
+`2433 passed; 0 failed; 1 ignored` y cliente en `1387 passed; 0 failed; 2
+ignored`, con Clippy estricto, formato y diff limpios. #567 sigue abierta por
+el selector de estación en toolbar/preview, callbacks y pathfinding navales y
+la aceptación visual manual bajo Weston; #326 permanece abierta.

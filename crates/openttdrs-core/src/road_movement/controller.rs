@@ -120,11 +120,11 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
     };
     let Some(rd) = rd else {
         // Fin de tabla sin marcador: forzar NEXT_TILE lógico.
-        return enter_next_tile(vehicles, v_idx, map, drive_on_right);
+        return enter_next_tile(vehicles, v_idx, map, drive_on_right, engine_catalog);
     };
 
     if rd.is_next_tile() {
-        return enter_next_tile(vehicles, v_idx, map, drive_on_right);
+        return enter_next_tile(vehicles, v_idx, map, drive_on_right, engine_catalog);
     }
 
     if rd.is_turned() {
@@ -165,7 +165,7 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
             v.cur_speed = 0;
             v.subspeed = 0;
             v.progress = 0;
-            v.advance_destination_after_arrival();
+            v.advance_destination_after_arrival_with_catalog(engine_catalog);
             return true;
         }
         if next_frame != stop
@@ -182,7 +182,7 @@ pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
     }
 
     vehicles[v_idx].frame = next_frame;
-    if handle_drive_through_stop(&mut vehicles[v_idx], state, next_frame, map) {
+    if handle_drive_through_stop(&mut vehicles[v_idx], state, next_frame, map, engine_catalog) {
         return true;
     }
     let _ = (rd.x, rd.y); // pose visual: frame indexa la tabla
@@ -195,6 +195,7 @@ fn enter_next_tile(
     v_idx: usize,
     map: Option<&Map>,
     drive_on_right: bool,
+    engine_catalog: &[crate::engine::EngineDef],
 ) -> bool {
     let Some(target) = vehicles[v_idx].movement_target() else {
         vehicles[v_idx].cur_speed = 0;
@@ -204,7 +205,7 @@ fn enter_next_tile(
     if !was_in_bay && map.is_some_and(|map| crate::station::is_drive_through_road_stop(map, target))
     {
         let inbound = crate::vehicle::direction_from_tile_step(vehicles[v_idx].pos, target);
-        vehicles[v_idx].advance_one_tile(map);
+        vehicles[v_idx].advance_one_tile_with_catalog(map, engine_catalog);
         vehicles[v_idx].road_state = RVSB_IN_DT_ROAD_STOP | trackdir_from_direction(inbound);
         vehicles[v_idx].frame = RVC_DEFAULT_START_FRAME;
         vehicles[v_idx].direction = inbound;
@@ -227,7 +228,7 @@ fn enter_next_tile(
             return false;
         };
         let inbound = crate::vehicle::direction_from_tile_step(vehicles[v_idx].pos, target);
-        vehicles[v_idx].advance_one_tile(map);
+        vehicles[v_idx].advance_one_tile_with_catalog(map, engine_catalog);
         vehicles[v_idx].road_state = RVSB_IN_ROAD_STOP
             | trackdir_from_direction(inbound)
             | if far { 0 } else { RVSB_USING_SECOND_BAY };
@@ -240,7 +241,7 @@ fn enter_next_tile(
 
     let v = &mut vehicles[v_idx];
     let prev_dir = v.direction;
-    v.advance_one_tile(map);
+    v.advance_one_tile_with_catalog(map, engine_catalog);
     if v.direction != prev_dir || v.movement_target().is_some() {
         let inbound = v.direction;
         let outbound = v.movement_target().map_or(inbound, |next| {
@@ -280,6 +281,7 @@ fn handle_drive_through_stop(
     state: u8,
     next_frame: u8,
     map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
 ) -> bool {
     if !is_drive_through_road_state(state)
         || next_frame != RVC_DRIVE_THROUGH_STOP_FRAME
@@ -290,7 +292,7 @@ fn handle_drive_through_stop(
     v.cur_speed = 0;
     v.subspeed = 0;
     v.progress = 0;
-    v.advance_destination_after_arrival();
+    v.advance_destination_after_arrival_with_catalog(engine_catalog);
     true
 }
 
@@ -517,7 +519,7 @@ fn road_vehicle_tick_side_with_traffic(
         v.cur_speed = 0;
         return;
     }
-    v.complete_station_load_window();
+    v.complete_station_load_window_with_catalog(engine_catalog);
     if v.awaiting_load_window {
         v.cur_speed = 0;
         return;
@@ -597,7 +599,7 @@ fn road_vehicle_tick_side_with_traffic(
         v.cur_speed = result.cur_speed;
         v.subspeed = result.subspeed;
         if v.cur_speed == 0 && v.pos == v.dest && !is_bay_road_state(v.road_state) {
-            v.advance_destination_after_arrival();
+            v.advance_destination_after_arrival_with_catalog(engine_catalog);
         }
         return;
     };

@@ -136,6 +136,33 @@ impl super::model::Vehicle {
             crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
     }
 
+    /// Igual que [`Self::service_at_depot`], resolviendo `SyncReliability`
+    /// desde el catálogo runtime cuando el motor proviene de `NewGRF`.
+    pub(crate) fn service_at_depot_with_catalog(
+        &mut self,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
+        let engine_id = self
+            .engine_id
+            .unwrap_or_else(|| crate::engine::default_engine_id(self.kind));
+        if let Some(engine) = crate::engine::engine_in_catalog(engine_catalog, engine_id)
+            .or_else(|| crate::engine::engine_by_id(engine_id))
+        {
+            let source = crate::engine::engine_reliability_source(engine, engine_catalog);
+            self.reliability = u16::from(source.reliability_pct) * 100;
+            self.reliability_spd_dec = source.reliability_spd_dec;
+            self.max_age_days = u32::from(source.lifelength_years) * DAYS_PER_VEHICLE_YEAR;
+        } else {
+            self.reliability = initial_reliability_for_engine(engine_id, self.kind);
+        }
+        self.needs_servicing = false;
+        self.breakdown_ctr = 0;
+        self.breakdown_delay = 0;
+        self.breakdown_chance = 0;
+        self.last_service_day =
+            crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
+    }
+
     /// ¿Toca revisión? (`NeedsServicing`: intervalo en días o % de fiabilidad).
     ///
     /// Órdenes `Depot { stop: false }` = «servicio si hace falta» (se saltan si esto es false).
@@ -636,6 +663,40 @@ mod tests {
         assert_eq!(vehicle.reliability, 6_100);
         assert_eq!(vehicle.reliability_spd_dec, 44);
         assert_eq!(vehicle.max_age_days, 17 * DAYS_PER_VEHICLE_YEAR);
+    }
+
+    #[test]
+    fn sync_reliability_survives_service_at_depot() {
+        let mut parent =
+            crate::engine::engine_for_vehicle(VehicleKind::Ship, crate::engine::ENGINE_SHIP_MPS)
+                .clone();
+        parent.id = 20_021;
+        parent.reliability_pct = 61;
+        parent.reliability_spd_dec = 44;
+        parent.lifelength_years = 17;
+        let mut child =
+            crate::engine::engine_for_vehicle(VehicleKind::Ship, crate::engine::ENGINE_SHIP_OIL)
+                .clone();
+        child.id = 20_022;
+        child.variant_parent_id = Some(parent.id);
+        child.extra_flags = crate::engine::EXTRA_ENGINE_FLAG_SYNC_RELIABILITY;
+
+        let catalog = [parent, child.clone()];
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Ship,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        vehicle.engine_id = Some(child.id);
+        vehicle.reliability = 1_000;
+        vehicle.needs_servicing = true;
+        vehicle.service_at_depot_with_catalog(&catalog);
+
+        assert_eq!(vehicle.reliability, 6_100);
+        assert_eq!(vehicle.reliability_spd_dec, 44);
+        assert_eq!(vehicle.max_age_days, 17 * DAYS_PER_VEHICLE_YEAR);
+        assert!(!vehicle.needs_servicing);
     }
 
     #[test]

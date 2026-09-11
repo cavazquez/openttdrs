@@ -230,7 +230,7 @@ impl super::model::Vehicle {
         // movimiento, así que a esta altura ya tuvieron su oportunidad: si
         // actuaron, la orden avanzó y la bandera se limpió; si no, la salida
         // de la parada se decide ahora.
-        self.complete_station_load_window();
+        self.complete_station_load_window_with_catalog(engine_catalog);
 
         if self.kind == super::model::VehicleKind::Train {
             if self.cur_speed != 0 && self.needs_train_turnaround() {
@@ -286,7 +286,7 @@ impl super::model::Vehicle {
                 self.cur_speed = 0;
             }
             if (self.cur_speed == 0 || at_fta_airport_stand) && self.pos == self.dest {
-                self.advance_destination_after_arrival();
+                self.advance_destination_after_arrival_with_catalog(engine_catalog);
             }
             return;
         }
@@ -339,7 +339,7 @@ impl super::model::Vehicle {
         loop {
             remaining = remaining.saturating_sub(255);
             self.progress = 0;
-            self.advance_one_tile(map);
+            self.advance_one_tile_with_catalog(map, engine_catalog);
             if remaining < 255 {
                 // Si `advance_destination_after_arrival` ancló en 255, no pisar con el resto.
                 if self.progress != 255
@@ -372,7 +372,7 @@ impl super::model::Vehicle {
         if self.movement_target().is_none() {
             self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
             if self.cur_speed == 0 && self.pos == self.dest {
-                self.advance_destination_after_arrival();
+                self.advance_destination_after_arrival_with_catalog(engine_catalog);
             }
             return;
         }
@@ -425,7 +425,7 @@ impl super::model::Vehicle {
             self.rail_pixel = self.rail_pixel.saturating_add(1);
             if self.rail_pixel >= 16 {
                 self.rail_pixel = 0;
-                self.advance_one_tile(map);
+                self.advance_one_tile_with_catalog(map, engine_catalog);
             }
             if self.cur_speed == 0 || self.movement_target().is_none() {
                 break;
@@ -749,7 +749,16 @@ impl super::model::Vehicle {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn advance_one_tile(&mut self, map: Option<&Map>) {
+        self.advance_one_tile_with_catalog(map, &[]);
+    }
+
+    pub(crate) fn advance_one_tile_with_catalog(
+        &mut self,
+        map: Option<&Map>,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
         // P2.7: en cruces elegir vía con YAPF y reservar atómicamente al entrar.
         if self.kind == super::model::VehicleKind::Train
             && self.is_consist_head()
@@ -767,10 +776,10 @@ impl super::model::Vehicle {
             self.push_rail_tile_history(left);
             self.push_road_tile_history(left);
             if self.pos == self.dest && !self.defers_connected_bay_arrival(map) {
-                self.advance_destination_after_arrival();
+                self.advance_destination_after_arrival_with_catalog(engine_catalog);
             }
         } else if self.pos == self.dest && !self.defers_connected_bay_arrival(map) {
-            self.advance_destination_after_arrival();
+            self.advance_destination_after_arrival_with_catalog(engine_catalog);
         } else {
             if matches!(
                 self.kind,
@@ -800,7 +809,7 @@ impl super::model::Vehicle {
                 && !self.orders.is_empty()
                 && !self.defers_connected_bay_arrival(map)
             {
-                self.advance_destination_after_arrival();
+                self.advance_destination_after_arrival_with_catalog(engine_catalog);
             }
         }
         if let Some(map) = map {
@@ -1000,7 +1009,15 @@ impl super::model::Vehicle {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn advance_destination_after_arrival(&mut self) {
+        self.advance_destination_after_arrival_with_catalog(&[]);
+    }
+
+    pub(crate) fn advance_destination_after_arrival_with_catalog(
+        &mut self,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
         self.path.clear();
         self.depart_turn = 0;
         if self.orders.is_empty() {
@@ -1015,7 +1032,7 @@ impl super::model::Vehicle {
             self.progress = 255;
             return;
         }
-        self.finish_arrival_processing();
+        self.finish_arrival_processing_with_catalog(engine_catalog);
     }
 
     /// Salida con sentido opuesto al de llegada (giro animado en parada bus/camión).
@@ -1093,7 +1110,15 @@ impl super::model::Vehicle {
     /// Cierra la ventana de carga abierta en la llegada (inicio del `step`
     /// siguiente). Si las fases de carga/descarga actuaron, ya avanzaron la
     /// orden (`advance_after_loading`/`_unloading`) y aquí no queda nada.
+    #[allow(dead_code)]
     pub(crate) fn complete_station_load_window(&mut self) {
+        self.complete_station_load_window_with_catalog(&[]);
+    }
+
+    pub(crate) fn complete_station_load_window_with_catalog(
+        &mut self,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
         if !self.awaiting_load_window {
             return;
         }
@@ -1104,11 +1129,19 @@ impl super::model::Vehicle {
         }
         self.awaiting_load_window = false;
         if !self.orders.is_empty() && self.pos == self.dest && self.progress == 255 {
-            self.finish_arrival_after_load_window();
+            self.finish_arrival_after_load_window_with_catalog(engine_catalog);
         }
     }
 
+    #[allow(dead_code)]
     pub(super) fn finish_arrival_processing(&mut self) {
+        self.finish_arrival_processing_with_catalog(&[]);
+    }
+
+    pub(super) fn finish_arrival_processing_with_catalog(
+        &mut self,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
         // Llegada a una orden de estación: abre una «ventana de carga» de un
         // tick (análogo a `Vehicle::BeginLoading` de OpenTTD) para que la fase
         // de carga/descarga de `sim_step` actúe antes de avanzar la orden.
@@ -1133,10 +1166,18 @@ impl super::model::Vehicle {
             self.progress = 255;
             return;
         }
-        self.finish_arrival_after_load_window();
+        self.finish_arrival_after_load_window_with_catalog(engine_catalog);
     }
 
+    #[allow(dead_code)]
     pub(super) fn finish_arrival_after_load_window(&mut self) {
+        self.finish_arrival_after_load_window_with_catalog(&[]);
+    }
+
+    pub(super) fn finish_arrival_after_load_window_with_catalog(
+        &mut self,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
         if self.cargo_transfer_active() {
             self.progress = 255;
             return;
@@ -1162,7 +1203,11 @@ impl super::model::Vehicle {
                 if let Some(cargo) = order.depot_refit_cargo() {
                     self.pending_depot_order_refit = Some(cargo);
                 }
-                self.service_at_depot();
+                if engine_catalog.is_empty() {
+                    self.service_at_depot();
+                } else {
+                    self.service_at_depot_with_catalog(engine_catalog);
+                }
             }
             if halt {
                 self.running = false;

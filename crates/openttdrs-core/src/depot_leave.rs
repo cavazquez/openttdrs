@@ -145,7 +145,7 @@ pub(crate) fn tick_train_stay_in_depot_indexed(
         if !has_depot_reservation(map, head_pos)
             && let Some(v) = vehicles.get_mut(index)
         {
-            v.service_at_depot();
+            v.service_at_depot_with_catalog(engine_catalog);
         }
         if let Some(v) = vehicles.get_mut(index) {
             v.cur_speed = 0;
@@ -163,7 +163,7 @@ pub(crate) fn tick_train_stay_in_depot_indexed(
 
     let _ = set_depot_reservation(map, head_pos, true);
     if let Some(v) = vehicles.get_mut(index) {
-        v.service_at_depot();
+        v.service_at_depot_with_catalog(engine_catalog);
         v.depot_leave_cleared = true;
         v.cur_speed = 0;
         v.pbs_stuck = false;

@@ -391,7 +391,15 @@ impl super::model::Vehicle {
         // Autofill completo en `timetable::Vehicle::update_vehicle_timetable`.
     }
 
+    #[allow(dead_code)]
     pub(crate) fn complete_timetable_wait(&mut self) {
+        self.complete_timetable_wait_with_catalog(&[]);
+    }
+
+    pub(crate) fn complete_timetable_wait_with_catalog(
+        &mut self,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
         let kind = self.timetable_wait_kind;
         let planned = self
             .orders
@@ -410,7 +418,7 @@ impl super::model::Vehicle {
                 if self.timetable_active {
                     self.timetable_lateness = self.timetable_lateness.saturating_add(1);
                 }
-                self.finish_arrival_processing();
+                self.finish_arrival_processing_with_catalog(engine_catalog);
             }
             super::model::TimetableWaitKind::AfterArrival => {
                 self.sanitize_current_order();
@@ -425,13 +433,21 @@ impl super::model::Vehicle {
         self.resolve_conditional_orders();
     }
 
+    #[allow(dead_code)]
     pub(crate) fn tick_timetable_wait(&mut self) {
+        self.tick_timetable_wait_with_catalog(&[]);
+    }
+
+    pub(crate) fn tick_timetable_wait_with_catalog(
+        &mut self,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
         if self.timetable_wait_remaining == 0 {
             return;
         }
         self.timetable_wait_remaining = self.timetable_wait_remaining.saturating_sub(1);
         if self.timetable_wait_remaining == 0 {
-            self.complete_timetable_wait();
+            self.complete_timetable_wait_with_catalog(engine_catalog);
         }
     }
 

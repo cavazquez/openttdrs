@@ -247,7 +247,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             // sentido opuesto. La inversión del consist ocurre en un tick
             // detenido y antes de evaluar tráfico o mover un solo píxel.
             let was_at_station = state.vehicles[i].awaiting_load_window;
-            state.vehicles[i].complete_station_load_window();
+            state.vehicles[i].complete_station_load_window_with_catalog(&state.engine_catalog);
             // El cierre sin transferencia decide la salida dentro de la fase
             // de movimiento; consumir el evento antes de re-rutear o avanzar.
             super::trigger_pending_train_station_departure(state, i);

@@ -996,7 +996,7 @@ pub fn ship_controller_tick_with_catalog(
         if ship_arrival_ready(v, map) || (v.pos == v.dest && v.orders.is_empty()) {
             mark_ship_depot_arrival(v, map);
             v.cur_speed = 0;
-            v.advance_destination_after_arrival();
+            v.advance_destination_after_arrival_with_catalog(engine_catalog);
             return;
         }
         // El path por teselas se consume al entrar al destino, pero docks y
@@ -1033,7 +1033,7 @@ pub fn ship_controller_tick_with_catalog(
             if ship_arrival_ready(v, map) {
                 mark_ship_depot_arrival(v, map);
                 v.cur_speed = 0;
-                v.advance_destination_after_arrival();
+                v.advance_destination_after_arrival_with_catalog(engine_catalog);
                 return;
             }
             continue;
@@ -1094,7 +1094,7 @@ pub fn ship_controller_tick_with_catalog(
         if ship_arrival_ready(v, map) {
             mark_ship_depot_arrival(v, map);
             v.cur_speed = 0;
-            v.advance_destination_after_arrival();
+            v.advance_destination_after_arrival_with_catalog(engine_catalog);
             return;
         }
 

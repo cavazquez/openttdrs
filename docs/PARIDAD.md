@@ -4289,3 +4289,14 @@ regresiones para unión distante y rechazo atómico. Core queda en
 ignored`, con Clippy estricto, formato y diff limpios. #567 sigue abierta por
 el selector de estación en toolbar/preview, callbacks y pathfinding navales y
 la aceptación visual manual bajo Weston; #326 permanece abierta.
+
+Actualización #567-SHIP-DOCK-EXPLICIT-JOIN-UI (2026-09-11, `8307a604`): el
+panel Station View ofrece `Muelle+` sólo para estaciones que conservan
+facility Dock y una huella física naval; fija el `StationID` nativo, cambia al
+grupo Agua y emite `PlaceDockAtStation`. El preview Bevy consulta el mismo
+comando, por lo que la validez visual refleja la regla de unión distante y no
+vuelve a la asociación automática. Se agregó una regresión del constructor de
+comandos. Core queda en `2433 passed; 0 failed; 1 ignored` y cliente en
+`1388 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y diff
+limpios. #567 sigue abierta por callbacks/pathfinding navales y aceptación
+visual manual bajo Weston; #326 permanece abierta.

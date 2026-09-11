@@ -33,6 +33,18 @@ pub const TRACK_LOWER: u8 = 3;
 pub const TRACK_LEFT: u8 = 4;
 pub const TRACK_RIGHT: u8 = 5;
 
+/// Bits de `Ship::state` que representan una vía ordinaria.
+pub const SHIP_STATE_TRACK_X: u8 = 1 << TRACK_X;
+pub const SHIP_STATE_TRACK_Y: u8 = 1 << TRACK_Y;
+pub const SHIP_STATE_TRACK_UPPER: u8 = 1 << TRACK_UPPER;
+pub const SHIP_STATE_TRACK_LOWER: u8 = 1 << TRACK_LOWER;
+pub const SHIP_STATE_TRACK_LEFT: u8 = 1 << TRACK_LEFT;
+pub const SHIP_STATE_TRACK_RIGHT: u8 = 1 << TRACK_RIGHT;
+/// `TRACK_BIT_WORMHOLE` de `OpenTTD`.
+pub const SHIP_STATE_WORMHOLE: u8 = 0x40;
+/// `TRACK_BIT_DEPOT` de `OpenTTD`.
+pub const SHIP_STATE_DEPOT: u8 = 0x80;
+
 /// `DiagDirection` de `OpenTTD`.
 pub const DIAGDIR_NE: u8 = 0;
 pub const DIAGDIR_SE: u8 = 1;
@@ -336,6 +348,28 @@ fn track_from_diagdir(diagdir: u8) -> u8 {
     }
 }
 
+#[must_use]
+const fn ship_state_for_track(track: u8) -> u8 {
+    match track {
+        TRACK_X => SHIP_STATE_TRACK_X,
+        TRACK_Y => SHIP_STATE_TRACK_Y,
+        TRACK_UPPER => SHIP_STATE_TRACK_UPPER,
+        TRACK_LOWER => SHIP_STATE_TRACK_LOWER,
+        TRACK_LEFT => SHIP_STATE_TRACK_LEFT,
+        TRACK_RIGHT => SHIP_STATE_TRACK_RIGHT,
+        _ => 0,
+    }
+}
+
+#[must_use]
+fn ship_depot_track(tile: crate::map::Tile) -> u8 {
+    if crate::depot::ship_depot_axis(tile) == 0 {
+        TRACK_X
+    } else {
+        TRACK_Y
+    }
+}
+
 fn ensure_ship_world_pos(v: &mut Vehicle, map: Option<&Map>) {
     if v.ship_pos_valid {
         return;
@@ -343,6 +377,15 @@ fn ensure_ship_world_pos(v: &mut Vehicle, map: Option<&Map>) {
     v.ship_x = v.pos.x.saturating_mul(16).saturating_add(8);
     v.ship_y = v.pos.y.saturating_mul(16).saturating_add(8);
     v.ship_track = track_from_diagdir(dir_to_diagdir(v.direction));
+    if let Some(tile) = map
+        .and_then(|map| map.get(v.pos))
+        .filter(|tile| tile.kind == TileKind::ShipDepot)
+    {
+        v.ship_track = ship_depot_track(tile);
+        v.ship_state = SHIP_STATE_DEPOT;
+    } else {
+        v.ship_state = ship_state_for_track(v.ship_track);
+    }
     v.ship_pos_valid = true;
     if v.z_pos.is_none() {
         let h = map.map_or(0, |m| tile_height(m, v.pos));
@@ -479,6 +522,60 @@ fn apply_ship_direction_change(v: &mut Vehicle, new_dir: VehicleDirection) {
             v.direction = new_dir;
         }
     }
+}
+
+/// Marca el estado raw de un barco que alcanzó el centro de un depósito.
+fn mark_ship_depot_arrival(v: &mut Vehicle, map: Option<&Map>) {
+    let Some(tile) = map.and_then(|map| map.get(v.pos)) else {
+        return;
+    };
+    if tile.kind != TileKind::ShipDepot {
+        return;
+    }
+    v.ship_track = ship_depot_track(tile);
+    v.ship_state = SHIP_STATE_DEPOT;
+    v.cur_speed = 0;
+}
+
+/// Replica `CheckShipStayInDepot` para el estado que sí puede observar el port.
+///
+/// Un barco detenido en el centro conserva `TRACK_BIT_DEPOT`. Al disponer de
+/// una orden que apunta fuera, la salida vuelve a calcular el rumbo desde la
+/// sección del depósito, cambia a la vía del eje y recién entonces el
+/// controlador puede acelerar. Sin destino, permanece detenido como el
+/// vehículo nativo.
+fn ship_stay_in_or_leave_depot(v: &mut Vehicle, map: &Map) -> bool {
+    let Some(tile) = map
+        .get(v.pos)
+        .filter(|tile| tile.kind == TileKind::ShipDepot)
+    else {
+        return false;
+    };
+
+    // Saves JSON antiguos no persistían `Ship::state`; la tesela es una fuente
+    // segura para reconstruir DEPOT antes de intentar la primera salida.
+    if v.ship_state == 0 {
+        v.ship_track = ship_depot_track(tile);
+        v.ship_state = SHIP_STATE_DEPOT;
+    }
+    if v.ship_state != SHIP_STATE_DEPOT {
+        return false;
+    }
+
+    // La ruta puede llegar un tick después de la sincronización de órdenes,
+    // por lo que sólo el par (destino igual + path vacío) bloquea la salida.
+    if v.path.is_empty() && v.dest == v.pos {
+        v.cur_speed = 0;
+        return true;
+    }
+
+    let facing = crate::depot::ship_depot_facing(tile);
+    v.direction = facing;
+    v.ship_rotation = facing;
+    v.ship_track = ship_depot_track(tile);
+    v.ship_state = ship_state_for_track(v.ship_track);
+    v.cur_speed = 0;
+    false
 }
 
 fn choose_track_for_entry(diagdir: u8) -> u8 {
@@ -709,6 +806,12 @@ pub fn ship_controller_tick_with_catalog(
         return;
     }
 
+    if let Some(map) = map
+        && ship_stay_in_or_leave_depot(v, map)
+    {
+        return;
+    }
+
     face_path_target(v);
 
     // OpenTTD separa el rumbo que gobierna la física (`direction`) de la
@@ -723,6 +826,7 @@ pub fn ship_controller_tick_with_catalog(
 
     if v.movement_target().is_none() {
         if ship_arrival_ready(v, map) || (v.pos == v.dest && v.orders.is_empty()) {
+            mark_ship_depot_arrival(v, map);
             v.cur_speed = 0;
             v.advance_destination_after_arrival();
             return;
@@ -759,6 +863,7 @@ pub fn ship_controller_tick_with_catalog(
             v.ship_x = new_x;
             v.ship_y = new_y;
             if ship_arrival_ready(v, map) {
+                mark_ship_depot_arrival(v, map);
                 v.cur_speed = 0;
                 v.advance_destination_after_arrival();
                 return;
@@ -804,6 +909,7 @@ pub fn ship_controller_tick_with_catalog(
         v.ship_x = (new_x & !0xF) | i32::from(entry.x_subcoord);
         v.ship_y = (new_y & !0xF) | i32::from(entry.y_subcoord);
         v.ship_track = track;
+        v.ship_state = ship_state_for_track(track);
         if v.orders.is_empty() {
             v.origin = old_tile;
         }
@@ -818,6 +924,7 @@ pub fn ship_controller_tick_with_catalog(
         }
 
         if ship_arrival_ready(v, map) {
+            mark_ship_depot_arrival(v, map);
             v.cur_speed = 0;
             v.advance_destination_after_arrival();
             return;
@@ -1058,6 +1165,99 @@ mod tests {
         }
         ship_controller_tick(&mut v, None);
         assert_eq!(v.ship_rotation, DIR_SE);
+    }
+
+    #[test]
+    fn ship_depot_leave_restores_native_state_and_heading() {
+        let cases = [(0_u8, DIR_NE), (1, DIR_NW), (2, DIR_NE), (3, DIR_NW)];
+        for (dir, expected_facing) in cases {
+            let mut s = GameState::new(16, 16);
+            let depot = TileCoord::new(6, 6);
+            let [origin, other] = crate::ship_depot_footprint(depot, dir);
+            let north_guess = match dir {
+                1 => TileCoord::new(origin.x, origin.y - 1),
+                2 => TileCoord::new(origin.x - 1, origin.y),
+                _ => origin,
+            };
+            let mouth = match expected_facing {
+                DIR_NE => TileCoord::new(north_guess.x - 1, north_guess.y),
+                DIR_SE => TileCoord::new(north_guess.x, north_guess.y + 1),
+                DIR_SW => TileCoord::new(north_guess.x + 1, north_guess.y),
+                DIR_NW => TileCoord::new(north_guess.x, north_guess.y - 1),
+                _ => unreachable!(),
+            };
+            for tile in [origin, other, mouth] {
+                s.map.set_kind(tile, TileKind::Water).unwrap();
+            }
+            apply_command(&mut s, &Command::PlaceShipDepotDir(depot, dir)).unwrap();
+            let north = crate::ship_depot_north_tile(&s.map, depot).unwrap();
+            let mut v = Vehicle::new(1, VehicleKind::Ship, north, mouth);
+            v.running = true;
+            v.ship_pos_valid = true;
+            v.ship_x = north.x * 16 + 8;
+            v.ship_y = north.y * 16 + 8;
+            v.ship_state = SHIP_STATE_DEPOT;
+            v.ship_track = TRACK_Y;
+            v.ship_rotation = (expected_facing + 4) & 7;
+            v.direction = v.ship_rotation;
+            v.path = std::collections::VecDeque::from([mouth]);
+
+            ship_controller_tick(&mut v, Some(&s.map));
+
+            let expected_track = if matches!(expected_facing, DIR_NE | DIR_SW) {
+                TRACK_X
+            } else {
+                TRACK_Y
+            };
+            let expected_state = match expected_track {
+                TRACK_X => SHIP_STATE_TRACK_X,
+                TRACK_Y => SHIP_STATE_TRACK_Y,
+                _ => unreachable!(),
+            };
+            assert_eq!(v.direction, expected_facing, "dir={dir}");
+            assert_eq!(v.ship_rotation, expected_facing, "dir={dir}");
+            assert_eq!(v.ship_track, expected_track, "dir={dir}");
+            assert_eq!(v.ship_state, expected_state, "dir={dir}");
+        }
+    }
+
+    #[test]
+    fn ship_arrival_marks_depot_state_before_next_order_leaves() {
+        let mut s = GameState::new(16, 8);
+        for x in 1..=10 {
+            s.map
+                .set_kind(TileCoord::new(x, 3), TileKind::Water)
+                .unwrap();
+        }
+        let depot = TileCoord::new(4, 3);
+        apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 2)).unwrap();
+        let target = TileCoord::new(10, 3);
+        let mut v = Vehicle::new(1, VehicleKind::Ship, depot, depot);
+        v.running = true;
+        v.ship_pos_valid = true;
+        v.ship_x = depot.x * 16 + 8;
+        v.ship_y = depot.y * 16 + 8;
+        v.ship_state = SHIP_STATE_TRACK_X;
+        v.ship_track = TRACK_X;
+        v.orders = vec![
+            VehicleOrder::depot_pass_through(depot),
+            VehicleOrder::waypoint(target),
+        ];
+        v.current_order = 0;
+        v.path.clear();
+
+        ship_controller_tick(&mut v, Some(&s.map));
+
+        assert_eq!(v.ship_state, SHIP_STATE_DEPOT);
+        assert!(v.running);
+        assert_eq!(v.current_order, 1);
+        assert_eq!(v.dest, target);
+
+        v.path.push_back(TileCoord::new(depot.x + 1, depot.y));
+        ship_controller_tick(&mut v, Some(&s.map));
+        assert_eq!(v.ship_state, SHIP_STATE_TRACK_X);
+        assert_eq!(v.direction, DIR_SW);
+        assert_eq!(v.ship_rotation, DIR_SW);
     }
 
     #[test]

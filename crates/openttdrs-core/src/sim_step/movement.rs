@@ -35,7 +35,7 @@ fn vehicle_is_in_depot(state: &GameState, index: usize) -> bool {
             vehicle.road_depot_phase == RoadDepotPhase::InDepot
         }
         VehicleKind::Train => state.map.get_kind(vehicle.pos) == Some(crate::TileKind::RailDepot),
-        VehicleKind::Ship => state.map.get_kind(vehicle.pos) == Some(crate::TileKind::ShipDepot),
+        VehicleKind::Ship => vehicle.ship_state == crate::ship_movement::SHIP_STATE_DEPOT,
     }
 }
 

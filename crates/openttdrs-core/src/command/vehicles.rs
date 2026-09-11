@@ -274,6 +274,7 @@ pub(super) fn build_vehicle_at_depot(
         let facing = crate::depot::ship_depot_facing(tile);
         vehicle.direction = facing;
         vehicle.ship_rotation = facing;
+        vehicle.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
         vehicle.ship_x = depot_pos.x.saturating_mul(16).saturating_add(8);
         vehicle.ship_y = depot_pos.y.saturating_mul(16).saturating_add(8);
         vehicle.ship_pos_valid = true;
@@ -809,6 +810,33 @@ pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(),
     Ok(())
 }
 
+fn prepare_ship_depot_for_start(map: &crate::map::Map, vehicle: &mut Vehicle) {
+    if vehicle.kind != VehicleKind::Ship
+        || map.get_kind(vehicle.pos) != Some(crate::TileKind::ShipDepot)
+    {
+        return;
+    }
+    let Some(tile) = map.get(vehicle.pos) else {
+        return;
+    };
+    let facing = crate::depot::ship_depot_facing(tile);
+    vehicle.direction = facing;
+    vehicle.ship_rotation = facing;
+    vehicle.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+    vehicle.ship_track = if crate::depot::ship_depot_axis(tile) == 0 {
+        crate::ship_movement::TRACK_X
+    } else {
+        crate::ship_movement::TRACK_Y
+    };
+    vehicle.ship_x = vehicle.pos.x.saturating_mul(16).saturating_add(8);
+    vehicle.ship_y = vehicle.pos.y.saturating_mul(16).saturating_add(8);
+    vehicle.ship_pos_valid = true;
+    vehicle.cur_speed = 0;
+    vehicle.progress = 0;
+    vehicle.path.clear();
+    vehicle.no_network_route_to_order = false;
+}
+
 pub(super) fn toggle_vehicle_running(
     state: &mut GameState,
     vehicle_id: u32,
@@ -883,6 +911,9 @@ pub(super) fn toggle_vehicle_running(
         {
             vehicle.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
             vehicle.progress = 0;
+        }
+        if now_running && vehicle.kind == VehicleKind::Ship {
+            prepare_ship_depot_for_start(&state.map, vehicle);
         }
         (was_running, vehicle_pos, vehicle_kind, now_running)
     };

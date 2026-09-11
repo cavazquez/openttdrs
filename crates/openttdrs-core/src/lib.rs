@@ -775,12 +775,14 @@ pub use score::{
 pub use shared_orders::SharedOrderList;
 #[allow(deprecated)]
 pub use ship_movement::{
-    LOCK_TRANSIT_TICKS, SHIP_ACCELERATION_DEFAULT, SHIP_SUBCOORD, ShipLockOccupancy,
-    ShipSubcoordData, choose_ship_track, find_closest_ship_depot, is_water_network_tile,
-    is_water_network_tile_at, lock_sprite_level, release_ship_lock, ship_accelerate,
-    ship_arrival_ready, ship_controller_tick, ship_controller_tick_with_catalog,
-    ship_lock_occupancy_allows, ship_move_up_down_on_lock, ship_requires_path, ship_subcoord,
-    try_claim_ship_lock, water_tile_is_lock, water_tiles_connected,
+    LOCK_TRANSIT_TICKS, SHIP_ACCELERATION_DEFAULT, SHIP_STATE_DEPOT, SHIP_STATE_TRACK_LEFT,
+    SHIP_STATE_TRACK_LOWER, SHIP_STATE_TRACK_RIGHT, SHIP_STATE_TRACK_UPPER, SHIP_STATE_TRACK_X,
+    SHIP_STATE_TRACK_Y, SHIP_STATE_WORMHOLE, SHIP_SUBCOORD, ShipLockOccupancy, ShipSubcoordData,
+    choose_ship_track, find_closest_ship_depot, is_water_network_tile, is_water_network_tile_at,
+    lock_sprite_level, release_ship_lock, ship_accelerate, ship_arrival_ready,
+    ship_controller_tick, ship_controller_tick_with_catalog, ship_lock_occupancy_allows,
+    ship_move_up_down_on_lock, ship_requires_path, ship_subcoord, try_claim_ship_lock,
+    water_tile_is_lock, water_tiles_connected,
 };
 pub use sign::{MAX_SIGN_NAME_CHARS, Sign, SignOwner};
 pub use sim_events::{

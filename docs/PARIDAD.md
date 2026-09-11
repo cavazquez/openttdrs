@@ -4443,3 +4443,14 @@ el avance. Core queda en `2449 passed; 0 failed; 1 ignored` y cliente en
 librería/binario y diff limpios. #567 sigue abierta por callbacks y
 pathfinding navales restantes y aceptación visual manual bajo Weston; #326
 permanece abierta.
+
+Actualización #329/#567-SHIP-ACCELERATION (2026-09-11, `086e1c3c`): el parser
+Action0 conserva la propiedad naval `0x24` (`ship_acceleration`) y el catálogo
+la propaga a la compra de barcos. `ShipAccelerate` deja de usar siempre `+1` y
+aplica la aceleración persistida, con `1` como fallback para saves antiguos.
+Se agregaron regresiones de parser→catálogo y de movimiento con aceleración
+personalizada. Core queda en `2453 passed; 0 failed; 1 ignored` y cliente en
+`1388 passed; 0 failed; 2 ignored`, con formato, `git diff --check` y Clippy
+estricto limpios. #329/#567 siguen abiertas por callbacks, propiedades
+navales restantes y aceptación visual manual bajo Weston; #326 permanece
+abierta.

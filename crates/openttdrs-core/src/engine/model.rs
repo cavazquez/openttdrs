@@ -82,6 +82,10 @@ pub struct EngineDef {
     /// modelo; `0` conserva la disponibilidad completa.
     #[serde(default)]
     pub retire_early_years: u8,
+    /// Action0 vehicle `0x1B`/`0x20`: ID local delante del que se inserta en
+    /// la lista de compra; `None` conserva el orden de carga.
+    #[serde(default)]
+    pub purchase_list_order_target: Option<u16>,
     /// Ticks antes de envejecer la carga (`EngineInfo::cargo_age_period`).
     /// Cero desactiva el envejecimiento para ese motor.
     #[serde(default = "default_cargo_age_period")]

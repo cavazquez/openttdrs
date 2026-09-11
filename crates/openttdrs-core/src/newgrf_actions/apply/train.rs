@@ -23,6 +23,53 @@ fn vehicle_price_bases(kind: VehicleKind) -> (i64, i64) {
     }
 }
 
+/// Aplica las operaciones Action0 de orden de compra después de que todos los
+/// vehículos del stack estén materializados, como `CommitVehicleListOrderChanges`.
+fn apply_purchase_list_order_changes(catalog: &mut Vec<EngineDef>) {
+    let changes = catalog
+        .iter()
+        .filter_map(|engine| {
+            engine.purchase_list_order_target.map(|target| {
+                (
+                    engine.id,
+                    engine.kind,
+                    engine.newgrf_grfid,
+                    engine.newgrf_local_id,
+                    target,
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    for (source_id, kind, grfid, source_local_id, target_local_id) in changes {
+        if source_local_id == target_local_id {
+            continue;
+        }
+        let Some(source_index) = catalog.iter().position(|engine| engine.id == source_id) else {
+            continue;
+        };
+        let Some(target_index) = catalog.iter().position(|engine| {
+            engine.kind == kind
+                && engine.newgrf_grfid == grfid
+                && engine.newgrf_local_id == target_local_id
+        }) else {
+            continue;
+        };
+        if source_index == target_index {
+            continue;
+        }
+        let source = catalog.remove(source_index);
+        let insert_index = catalog
+            .iter()
+            .position(|engine| {
+                engine.kind == kind
+                    && engine.newgrf_grfid == grfid
+                    && engine.newgrf_local_id == target_local_id
+            })
+            .unwrap_or(target_index.min(catalog.len()));
+        catalog.insert(insert_index, source);
+    }
+}
+
 /// Traduce `EngineInfo::refit_mask` desde los slots locales del GRF al
 /// `CargoType` global, equivalente a `TranslateRefitMask` de `newgrf.cpp`.
 fn translate_legacy_refit_mask(
@@ -220,6 +267,7 @@ fn push_feature_vehicles(
             lifelength_years: meta.lifelength_years,
             model_life_years: meta.model_life_years,
             retire_early_years: meta.retire_early_years,
+            purchase_list_order_target: meta.purchase_list_order_target,
             cargo_age_period: meta.cargo_age_period,
             ship_acceleration: meta.ship_acceleration,
             ship_refittable: meta.kind != VehicleKind::Ship || meta.ship_refittable,
@@ -368,6 +416,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 lifelength_years: meta.lifelength_years,
                 model_life_years: meta.model_life_years,
                 retire_early_years: 0,
+                purchase_list_order_target: None,
                 cargo_age_period: crate::engine::DEFAULT_CARGO_AGE_PERIOD,
                 ship_acceleration: 0,
                 ship_refittable: true,
@@ -434,6 +483,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
             );
         }
     }
+    apply_purchase_list_order_changes(&mut catalog);
     state.engine_catalog = catalog;
 }
 

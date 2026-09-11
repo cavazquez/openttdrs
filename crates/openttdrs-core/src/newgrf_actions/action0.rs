@@ -305,6 +305,8 @@ pub struct ParsedVehicleMeta {
     pub model_life_years: u8,
     /// Action0 ship `0x16`: años que adelantan el retiro del modelo.
     pub retire_early_years: u8,
+    /// Action0 ship `0x1B`: ID local delante del que se inserta en la compra.
+    pub purchase_list_order_target: Option<u16>,
     /// Action0 ship `0x1D`: ticks antes de envejecer la carga; cero desactiva.
     pub cargo_age_period: u16,
     /// Action0 ship `0x24`: aceleración por tick; cero usa el fallback vanilla.
@@ -409,6 +411,7 @@ impl ParsedVehicleMeta {
             lifelength_years: life,
             model_life_years: u8::MAX,
             retire_early_years: 0,
+            purchase_list_order_target: None,
             cargo_age_period: crate::engine::DEFAULT_CARGO_AGE_PERIOD,
             ship_acceleration: if feature == ACTION0_FEATURE_SHIPS {
                 crate::engine::DEFAULT_SHIP_ACCELERATION
@@ -3976,7 +3979,11 @@ fn parse_ship_property(
                 meta.badge_local_ids = read_badge_local_ids(payload, i)?;
             }
         }
-        0x1B => skip_bytes(payload, i, metas.len())?,
+        0x1B => {
+            for meta in metas {
+                meta.purchase_list_order_target = Some(read_extended_byte(payload, i)?);
+            }
+        }
         0x22 => {
             for meta in metas {
                 meta.callback_mask =

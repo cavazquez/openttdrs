@@ -4829,6 +4829,44 @@ mod tests {
         assert!(!crate::engine::engine_available_in_year(engine, 1927));
     }
 
+    #[test]
+    fn ships_purchase_order_property_moves_source_before_local_target() {
+        let a0 = [
+            0x00,
+            ACTION0_FEATURE_SHIPS,
+            0x01,
+            0x02,
+            0x00,
+            0x1B,
+            0x01,
+            0x00,
+        ];
+        let metas = parse_action0_vehicle_metas(&a0).unwrap();
+        assert_eq!(
+            metas
+                .iter()
+                .map(|meta| meta.purchase_list_order_target)
+                .collect::<Vec<_>>(),
+            vec![Some(1), Some(0)]
+        );
+
+        let bytes =
+            build_grf_v2_with_action0_and_action8(&a0, [b'R', b'F', 0, 1], "ship-order", "");
+        let dir = tempfile_dir_with("ship-order.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ship-order.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let local_ids = state
+            .engine_catalog
+            .iter()
+            .filter(|engine| engine.from_newgrf && engine.kind == VehicleKind::Ship)
+            .map(|engine| engine.newgrf_local_id)
+            .collect::<Vec<_>>();
+        assert_eq!(local_ids, vec![1, 0]);
+    }
+
     /// #329: Action0 conserva las clases allowed/disallowed/required de cada
     /// feature de vehículos, en vez de consumirlas como propiedades opacas.
     #[test]

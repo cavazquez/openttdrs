@@ -5,14 +5,36 @@ use crate::vehicle::VehicleKind;
 
 /// Umbral de fiabilidad bajo el cual conviene servicio en depósito.
 pub const SERVICING_RELIABILITY_THRESHOLD: u16 = 5_000;
-/// Intervalo de revisión por defecto (`OpenTTD` `service_interval` ≈ 150 días).
+/// Intervalo de revisión por defecto de trenes y vehículos de carretera.
 pub const DEFAULT_SERVICE_INTERVAL_DAYS: u16 = 150;
+/// Intervalo de revisión por defecto de trenes (`DEF_SERVINT_DAYS_TRAINS`).
+pub const DEFAULT_SERVICE_INTERVAL_DAYS_TRAINS: u16 = DEFAULT_SERVICE_INTERVAL_DAYS;
+/// Intervalo de revisión por defecto de vehículos de carretera
+/// (`DEF_SERVINT_DAYS_ROADVEH`).
+pub const DEFAULT_SERVICE_INTERVAL_DAYS_ROAD_VEHICLES: u16 = 150;
+/// Intervalo de revisión por defecto de aeronaves (`DEF_SERVINT_DAYS_AIRCRAFT`).
+pub const DEFAULT_SERVICE_INTERVAL_DAYS_AIRCRAFT: u16 = 100;
+/// Intervalo de revisión por defecto de barcos (`DEF_SERVINT_DAYS_SHIPS`).
+pub const DEFAULT_SERVICE_INTERVAL_DAYS_SHIPS: u16 = 360;
 /// Duración máxima de avería en ticks (`breakdown_delay` hasta 255).
 pub const BREAKDOWN_DURATION_TICKS: u32 = 255;
 /// Velocidad mínima para acumular riesgo de avería (`vehicle.cpp:1340`).
 pub const MIN_SPEED_FOR_BREAKDOWN: u16 = 5;
 /// Días de calendario por año (paridad `CalendarTime::DAYS_IN_LEAP_YEAR`).
 pub const DAYS_PER_VEHICLE_YEAR: u32 = 366;
+
+/// Devuelve el intervalo inicial de servicio para el tipo nativo de vehículo.
+#[must_use]
+pub const fn default_service_interval_days_for_kind(kind: VehicleKind) -> u16 {
+    match kind {
+        VehicleKind::Aircraft => DEFAULT_SERVICE_INTERVAL_DAYS_AIRCRAFT,
+        VehicleKind::Ship => DEFAULT_SERVICE_INTERVAL_DAYS_SHIPS,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => {
+            DEFAULT_SERVICE_INTERVAL_DAYS_ROAD_VEHICLES
+        }
+        VehicleKind::Train => DEFAULT_SERVICE_INTERVAL_DAYS_TRAINS,
+    }
+}
 
 /// Tabla `_breakdown_chance[rel >> 10]` (`vehicle.cpp:1303-1312`).
 const BREAKDOWN_CHANCE_TABLE: [u8; 64] = [

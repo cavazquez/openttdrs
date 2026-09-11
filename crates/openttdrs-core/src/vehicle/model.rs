@@ -803,7 +803,8 @@ impl Vehicle {
             sim_tick: 0,
             reliability,
             needs_servicing: false,
-            service_interval_days: crate::vehicle::reliability::DEFAULT_SERVICE_INTERVAL_DAYS,
+            service_interval_days:
+                crate::vehicle::reliability::default_service_interval_days_for_kind(kind),
             last_service_day: 0,
             last_service_newgrf_day: 0,
             reliability_spd_dec,

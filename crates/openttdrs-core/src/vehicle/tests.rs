@@ -750,6 +750,31 @@ fn requires_service_by_day_interval() {
 }
 
 #[test]
+fn vehicle_constructor_uses_native_service_interval_by_kind() {
+    let train = Vehicle::new(
+        1,
+        VehicleKind::Train,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    let aircraft = Vehicle::new(
+        2,
+        VehicleKind::Aircraft,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    let ship = Vehicle::new(
+        3,
+        VehicleKind::Ship,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    assert_eq!(train.service_interval_days, 150);
+    assert_eq!(aircraft.service_interval_days, 100);
+    assert_eq!(ship.service_interval_days, 360);
+}
+
+#[test]
 fn service_if_needed_depot_order_is_skipped_when_fresh() {
     let mut map = crate::map::Map::new_flat(8, 8, 0);
     let depot = TileCoord::new(2, 2);

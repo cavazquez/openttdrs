@@ -889,12 +889,14 @@ pub use train_movement::{
 };
 pub use vehicle::reverse_direction;
 pub use vehicle::{
-    AircraftPhase, BREAKDOWN_DURATION_TICKS, DEFAULT_SERVICE_INTERVAL_DAYS, DIR_E, DIR_N, DIR_NE,
-    DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionComparator, OrderConditionKind,
+    AircraftPhase, BREAKDOWN_DURATION_TICKS, DEFAULT_SERVICE_INTERVAL_DAYS,
+    DEFAULT_SERVICE_INTERVAL_DAYS_AIRCRAFT, DEFAULT_SERVICE_INTERVAL_DAYS_ROAD_VEHICLES,
+    DEFAULT_SERVICE_INTERVAL_DAYS_SHIPS, DEFAULT_SERVICE_INTERVAL_DAYS_TRAINS, DIR_E, DIR_N,
+    DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionComparator, OrderConditionKind,
     OrderLoadType, OrderNonStop, OrderStopLocation, OrderUnloadType,
     SERVICING_RELIABILITY_THRESHOLD, TimetableWaitKind, VEHICLE_PROGRESS_STEP, Vehicle,
     VehicleDirection, VehicleIssueDetail, VehicleKind, VehicleOperationalSummary, VehicleOrder,
-    direction_from_tile_step,
+    default_service_interval_days_for_kind, direction_from_tile_step,
 };
 pub use vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup};
 pub use world_gen::{

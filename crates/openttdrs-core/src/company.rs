@@ -339,14 +339,15 @@ pub struct Company {
     #[serde(default)]
     pub servint_ispercent: bool,
     /// Intervalos de servicio por tipo de vehículo (`settings.vehicle.*`).
-    /// `0` conserva la semántica de `OpenTTD`: usar el valor del tipo de vehículo.
-    #[serde(default)]
+    /// `0` desactiva el servicio automático; los defaults nativos se aplican
+    /// al crear una compañía o al leer un save sin estos campos.
+    #[serde(default = "default_servint_trains")]
     pub servint_trains: u16,
-    #[serde(default)]
+    #[serde(default = "default_servint_roadveh")]
     pub servint_roadveh: u16,
-    #[serde(default)]
+    #[serde(default = "default_servint_aircraft")]
     pub servint_aircraft: u16,
-    #[serde(default)]
+    #[serde(default = "default_servint_ships")]
     pub servint_ships: u16,
 }
 
@@ -372,6 +373,22 @@ const fn default_company_landscaping_limit() -> u32 {
 
 fn default_company_yearly_expenses() -> Vec<i64> {
     vec![0; COMPANY_YEARLY_EXPENSES_COUNT]
+}
+
+const fn default_servint_trains() -> u16 {
+    crate::vehicle::DEFAULT_SERVICE_INTERVAL_DAYS_TRAINS
+}
+
+const fn default_servint_roadveh() -> u16 {
+    crate::vehicle::DEFAULT_SERVICE_INTERVAL_DAYS_ROAD_VEHICLES
+}
+
+const fn default_servint_aircraft() -> u16 {
+    crate::vehicle::DEFAULT_SERVICE_INTERVAL_DAYS_AIRCRAFT
+}
+
+const fn default_servint_ships() -> u16 {
+    crate::vehicle::DEFAULT_SERVICE_INTERVAL_DAYS_SHIPS
 }
 
 impl Company {
@@ -413,10 +430,10 @@ impl Company {
             engine_renew_list_head: None,
             renew_keep_length: false,
             servint_ispercent: false,
-            servint_trains: 0,
-            servint_roadveh: 0,
-            servint_aircraft: 0,
-            servint_ships: 0,
+            servint_trains: default_servint_trains(),
+            servint_roadveh: default_servint_roadveh(),
+            servint_aircraft: default_servint_aircraft(),
+            servint_ships: default_servint_ships(),
         }
     }
 
@@ -458,10 +475,10 @@ impl Company {
             engine_renew_list_head: None,
             renew_keep_length: false,
             servint_ispercent: false,
-            servint_trains: 0,
-            servint_roadveh: 0,
-            servint_aircraft: 0,
-            servint_ships: 0,
+            servint_trains: default_servint_trains(),
+            servint_roadveh: default_servint_roadveh(),
+            servint_aircraft: default_servint_aircraft(),
+            servint_ships: default_servint_ships(),
         }
     }
 
@@ -503,10 +520,10 @@ impl Company {
             engine_renew_list_head: None,
             renew_keep_length: false,
             servint_ispercent: false,
-            servint_trains: 0,
-            servint_roadveh: 0,
-            servint_aircraft: 0,
-            servint_ships: 0,
+            servint_trains: default_servint_trains(),
+            servint_roadveh: default_servint_roadveh(),
+            servint_aircraft: default_servint_aircraft(),
+            servint_ships: default_servint_ships(),
         }
     }
 
@@ -824,6 +841,44 @@ mod tests {
         let mut rival = Company::rival_transcargo(CompanyEconomy::default(), 1);
         rival.id = CompanyId(1);
         assert_eq!(first_free_company_colour(&[player, rival]), 2);
+    }
+
+    #[test]
+    fn new_companies_use_native_service_interval_defaults() {
+        let player = Company::player(CompanyEconomy::default(), 0);
+        let rival = Company::rival_transcargo(CompanyEconomy::default(), 1);
+        for company in [&player, &rival] {
+            assert_eq!(company.servint_trains, 150);
+            assert_eq!(company.servint_roadveh, 150);
+            assert_eq!(company.servint_aircraft, 100);
+            assert_eq!(company.servint_ships, 360);
+        }
+    }
+
+    #[test]
+    fn missing_service_settings_use_defaults_but_explicit_zero_stays_disabled() {
+        let company = Company::player(CompanyEconomy::default(), 0);
+        let mut encoded = serde_json::to_value(&company).unwrap();
+        let object = encoded.as_object_mut().unwrap();
+        for key in [
+            "servint_trains",
+            "servint_roadveh",
+            "servint_aircraft",
+            "servint_ships",
+        ] {
+            object.remove(key);
+        }
+        let restored: Company = serde_json::from_value(encoded).unwrap();
+        assert_eq!(restored.servint_trains, 150);
+        assert_eq!(restored.servint_roadveh, 150);
+        assert_eq!(restored.servint_aircraft, 100);
+        assert_eq!(restored.servint_ships, 360);
+
+        let mut disabled = company;
+        disabled.servint_ships = 0;
+        let restored_disabled: Company =
+            serde_json::from_value(serde_json::to_value(disabled).unwrap()).unwrap();
+        assert_eq!(restored_disabled.servint_ships, 0);
     }
 
     #[test]

@@ -3917,3 +3917,13 @@ regresiones para las dos entradas y las clases de agua. La suite core queda en
 estricto del cliente verde. #567 sigue abierta por el pool `DepotID`, vecinos y
 callbacks, preview, clipping, orden global y framebuffer; #326 permanece
 abierta.
+
+Actualización #326/#567-SHIP-DEPOT-PREVIEW-FOOTPRINT (2026-09-11, `b9c5c810`):
+el preview de `ClearTile` reutiliza ahora la validación de `RemoveShipDepot`:
+si el cursor cae en cualquiera de las dos secciones, el HUD comprueba ambas
+propiedades y ambas ocupaciones antes de anunciar la acción. La regresión
+confirma que un barco en la sección opuesta produce `VehicleInTheWay` tanto en
+preview como en ejecución, sin mutar mapa ni dinero. Las pruebas focales y
+Clippy estricto del cliente pasan. #567 sigue abierta por el pool `DepotID`,
+vecinos/callbacks, preview visual, clipping, orden global y framebuffer; #326
+permanece abierta.

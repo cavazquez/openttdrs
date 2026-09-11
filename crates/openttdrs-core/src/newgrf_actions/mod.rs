@@ -2088,7 +2088,7 @@ mod tests {
         let aircraft = vec![
             0x00,
             ACTION0_FEATURE_AIRCRAFT,
-            0x05,
+            0x06,
             0x01,
             0x09,
             0x0B,
@@ -2102,12 +2102,16 @@ mod tests {
             0x0F,
             0x78,
             0x00,
+            0x1C,
+            37,
+            0,
         ];
         let meta = parse_action0_vehicle_metas(&aircraft).unwrap().remove(0);
         assert_eq!(meta.kind, VehicleKind::Aircraft);
         assert_eq!(meta.max_speed, 512);
         assert_eq!(meta.capacity, 120);
         assert_eq!(meta.mail_capacity, 7);
+        assert_eq!(meta.cargo_age_period, 37);
     }
 
     #[test]
@@ -2115,13 +2119,16 @@ mod tests {
         let action0 = [
             0x00,
             ACTION0_FEATURE_AIRCRAFT,
-            0x02,
+            0x03,
             0x01,
             0x09,
             0x11,
             7,
             0x0F,
             120,
+            0,
+            0x1C,
+            37,
             0,
         ];
         let meta = parse_action0_vehicle_metas(&action0).unwrap().remove(0);
@@ -2147,6 +2154,7 @@ mod tests {
             .expect("aircraft with mail capacity should enter catalog");
         assert_eq!(engine.capacity, 120);
         assert_eq!(engine.mail_capacity, 7);
+        assert_eq!(engine.cargo_age_period, 37);
     }
 
     #[test]

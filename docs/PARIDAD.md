@@ -4749,3 +4749,12 @@ sus reservas/reparto nativos y la validación visual y runtime restante siguen
 pendientes, por lo que #329/#567 continúan abiertas. Core queda en `2486
 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`,
 con Clippy estricto, formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-AGE-PERIOD (2026-09-11): el
+parser de aeronaves ya consume Action0 `0x1C` con el ancho nativo WORD y
+propaga el período al catálogo `EngineDef`. La regresión cubre tanto la lectura
+directa como la instalación de un motor NewGRF; la sombra todavía comparte el
+reloj del primario y quedan pendientes su contador/período FTA independiente,
+por lo que #329/#567 continúan abiertas. Core queda en `2486 passed; 0 failed;
+1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`, con Clippy
+estricto, formato y `diff --check` limpios.

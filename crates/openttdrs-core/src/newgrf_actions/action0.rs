@@ -4177,6 +4177,12 @@ fn parse_aircraft_property(
                 meta.sound_effect = read_u8(payload, i)?;
             }
         }
+        // Propiedad 0x1C: período de envejecimiento de carga en ticks.
+        0x1C => {
+            for meta in metas {
+                meta.cargo_age_period = read_u16(payload, i)?;
+            }
+        }
         // CTT refit include (`0x1D`) / exclude (`0x1E`).
         0x1D | 0x1E => {
             for meta in metas {

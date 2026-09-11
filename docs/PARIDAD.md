@@ -4238,3 +4238,16 @@ de `GameState`. La cobertura queda integrada en el core completo
 ignored`), con Clippy estricto, formato y diff limpios. #567 sigue abierta por
 `station_to_join`, callbacks/pathfinding naval restantes y validación visual
 manual bajo Weston; #326 permanece abierta.
+
+Actualización #567-SHIP-DOCK-MIXED-SAV (2026-09-11, `e261921c`): el importador
+ahora reconstruye la huella de muelles cuando una fila `STNN` combina
+`FACIL_DOCK` con tren, bus o aeropuerto; `dock_station_tiles` filtra las
+piezas raw `StationType::Dock` y ya no descarta esa geometría sólo porque
+`StopKind` conserve otra facilidad principal. Oil Rig mantiene su tratamiento
+especial y no se convierte en un muelle de dos piezas. Se agregó una regresión
+SAV con ancla ferroviaria y dos muelles separados que comparten `MAP2 StationID`.
+Core queda en `2428 passed; 0 failed; 1 ignored` y cliente en
+`1387 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y diff limpios.
+#567 sigue abierta por la máscara de facilidades efectiva para servicio naval,
+`station_to_join`, callbacks/pathfinding y aceptación visual manual bajo
+Weston; #326 permanece abierta.

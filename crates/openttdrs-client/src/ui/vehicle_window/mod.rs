@@ -30,7 +30,9 @@ pub(crate) use rename::{
     vehicle_window_rename_keyboard,
 };
 pub(crate) use setup::setup_vehicle_window;
-pub(crate) use sync::{sync_vehicle_window, sync_vehicle_window_consist};
+pub(crate) use sync::{
+    sync_vehicle_window, sync_vehicle_window_camera, sync_vehicle_window_consist,
+};
 
 const PREVIEW_TEX_W: u32 = 260;
 const PREVIEW_TEX_H: u32 = 100;

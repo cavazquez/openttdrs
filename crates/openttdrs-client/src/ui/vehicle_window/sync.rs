@@ -6,6 +6,7 @@ use openttdrs_core::VehicleKind;
 
 use crate::render::{
     NewGrfTrainSpriteCache, PrimaryGameCamera, TruckHandles, vehicle_world_position_with_catalog,
+    vehicle_world_position_with_newgrf,
 };
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
@@ -80,10 +81,6 @@ pub(crate) fn sync_vehicle_window(
         ),
     >,
     _rename_input_q: Query<&mut EditableText, With<VehicleWindowRenameInput>>,
-    mut preview: Query<
-        (&mut Transform, &mut Camera),
-        (With<VehicleWindowPreviewCamera>, Without<PrimaryGameCamera>),
-    >,
 ) {
     let locale = prefs.locale();
     let focused_slot = window_state.vehicle_id.and_then(|id| chain.slot_of(id));
@@ -185,18 +182,50 @@ pub(crate) fn sync_vehicle_window(
             **toggle = toggle_label.clone();
         }
     }
+}
 
-    // Preview camera sigue solo al vehículo enfocado.
+/// Mantiene la cámara del preview alineada con la capa NewGRF efectiva.
+///
+/// Se ejecuta aparte de la sincronización textual porque necesita el cache de
+/// texturas y `TruckHandles`, dos recursos que no deben agrandar todavía más
+/// la consulta ECS de la ventana.
+pub(crate) fn sync_vehicle_window_camera(
+    window_state: Res<VehicleWindowState>,
+    chain: Res<VehicleChainRegistry>,
+    sim: Res<SimWorld>,
+    trucks: Option<Res<TruckHandles>>,
+    mut cache: ResMut<NewGrfTrainSpriteCache>,
+    mut images: ResMut<Assets<Image>>,
+    mut preview: Query<
+        (&mut Transform, &mut Camera),
+        (With<VehicleWindowPreviewCamera>, Without<PrimaryGameCamera>),
+    >,
+) {
     let focused = window_state
         .vehicle_id
+        .and_then(|id| chain.slot_of(id))
+        .and_then(|slot| chain.vehicle_at(slot))
         .and_then(|id| sim.state.vehicles.iter().find(|v| v.id == id));
     if let Ok((mut tf, mut cam)) = preview.single_mut() {
         if let Some(vehicle) = focused {
             cam.is_active = true;
-            let world_pos = vehicle_world_position_with_catalog(
-                vehicle,
-                &sim.state.map,
-                &sim.state.engine_catalog,
+            let world_pos = trucks.as_deref().map_or_else(
+                || {
+                    vehicle_world_position_with_catalog(
+                        vehicle,
+                        &sim.state.map,
+                        &sim.state.engine_catalog,
+                    )
+                },
+                |trucks| {
+                    vehicle_world_position_with_newgrf(
+                        &sim,
+                        trucks,
+                        vehicle,
+                        &mut cache,
+                        &mut images,
+                    )
+                },
             );
             tf.translation = Vec3::new(world_pos.x, world_pos.y, 999.0);
         } else {

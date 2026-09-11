@@ -4751,3 +4751,16 @@ materializada siguen pendientes, igual que la entidad FTA separada y la
 validación visual/runtime amplia; #329/#567 continúan abiertas. Core queda en
 `2488 passed; 0 failed; 1 ignored` y cliente en `1401 passed; 0 failed; 2
 ignored`, con Clippy estricto, formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-CAMERA-RUNTIME-BOUNDS (2026-09-11): la
+cámara de `VehicleViewWindow` ahora reutiliza la primera capa que el renderer
+resuelve para la unidad real, incluidos offsets/tamaño de cuerpos NewGRF
+definidos sólo por Action2 runtime y `SpriteStack`. Si no hay una capa
+resoluble conserva el fallback catalogado/vanilla. La sincronización de cámara
+se separó del sistema textual para mantener acotada la consulta ECS; la
+regresión usa el mismo fixture runtime desplazado y verifica la posición
+efectiva. La entidad FTA separada, sus scopes/estado propios y la validación
+visual/runtime amplia siguen pendientes, por lo que #329/#567 continúan
+abiertas. Core queda en `2488 passed; 0 failed; 1 ignored` y cliente en `1401
+passed; 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check`
+limpios para este cambio.

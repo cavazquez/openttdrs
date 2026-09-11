@@ -5,7 +5,7 @@ mod pose;
 mod spawn;
 mod sync;
 
-use bevy::prelude::{Assets, Image};
+use bevy::prelude::{Assets, Image, Vec3};
 use openttdrs_core::{EngineDef, VehicleKind};
 
 use crate::state::SimWorld;
@@ -185,6 +185,45 @@ fn vehicle_livery_colour(
     vehicle: &openttdrs_core::Vehicle,
 ) -> crate::sprites::CompanyColour {
     vehicle_livery_colours(sim, vehicle).0
+}
+
+/// Posición para centrar una vista usando la primera capa que realmente
+/// resolverá el renderer, incluidos cuerpos NewGRF definidos sólo en runtime.
+///
+/// El preview de vehículo comparte el ancla lógica con el mapa, pero su
+/// cámara debe conocer también el offset y el tamaño de la capa seleccionada;
+/// de lo contrario un `SpriteStack` desplazado queda corrido aunque el mapa
+/// lo dibuje correctamente.
+#[must_use]
+pub(crate) fn vehicle_world_position_with_newgrf(
+    sim: &SimWorld,
+    trucks: &TruckHandles,
+    vehicle: &openttdrs_core::Vehicle,
+    cache: &mut NewGrfTrainSpriteCache,
+    images: &mut Assets<Image>,
+) -> Vec3 {
+    let pose = openttdrs_core::extrapolate_vehicle_pose(vehicle, 0.0);
+    let layers = trucks.for_vehicle_with_newgrf_layers(
+        vehicle,
+        pose,
+        None,
+        Some(vehicle_livery_colour(sim, vehicle)),
+        sim,
+        cache,
+        images,
+    );
+    if let Some(layer) = layers.first() {
+        return pose::vehicle_sprite_pos_at_offsets(
+            vehicle,
+            &sim.state.map,
+            pose,
+            f32::from(layer.x_offs),
+            f32::from(layer.y_offs),
+            f32::from(layer.width),
+            f32::from(layer.height),
+        );
+    }
+    vehicle_world_position_with_catalog(vehicle, &sim.state.map, &sim.state.engine_catalog)
 }
 
 fn ensure_vehicle_livery_palettes(
@@ -1005,6 +1044,14 @@ mod tests {
         let engine = eight_layer_sprite_stack_engine(0x7F04, 42);
         let mut state = GameState::new(8, 8);
         state.engine_catalog.push(engine.clone());
+        let mut vehicle = Vehicle::new(
+            700,
+            VehicleKind::Train,
+            TileCoord::new(2, 2),
+            TileCoord::new(3, 2),
+        );
+        vehicle.engine_id = Some(engine.id);
+        state.vehicles.push(vehicle);
         let sim = SimWorld {
             state,
             loaded_file: false,
@@ -1028,6 +1075,27 @@ mod tests {
             images.get(&layers[0].handle).unwrap().data.as_deref(),
             Some(&[42, 0, 0, 255][..])
         );
+
+        let vehicle = &sim.state.vehicles[0];
+        let runtime_pos = vehicle_world_position_with_newgrf(
+            &sim,
+            &default_handles(),
+            vehicle,
+            &mut cache,
+            &mut images,
+        );
+        let fallback_pos =
+            vehicle_world_position_with_catalog(vehicle, &sim.state.map, &sim.state.engine_catalog);
+        assert_ne!(
+            (runtime_pos.x, runtime_pos.y),
+            (fallback_pos.x, fallback_pos.y),
+            "la cámara debe adoptar los offsets del cuerpo runtime"
+        );
+
+        let pose = openttdrs_core::extrapolate_vehicle_pose(vehicle, 0.0);
+        let expected_pos =
+            pose::vehicle_sprite_pos_at_offsets(vehicle, &sim.state.map, pose, 42.0, 0.0, 1.0, 1.0);
+        assert_eq!(runtime_pos, expected_pos);
     }
 
     #[test]

@@ -58,8 +58,8 @@ use crate::ui::vehicle_details_window::{
 };
 use crate::ui::vehicle_window::{
     VehicleWindowState, handle_vehicle_rename_buttons, handle_vehicle_window_buttons,
-    setup_vehicle_window, sync_vehicle_window, sync_vehicle_window_consist,
-    vehicle_window_on_closed, vehicle_window_rename_editable_keyboard,
+    setup_vehicle_window, sync_vehicle_window, sync_vehicle_window_camera,
+    sync_vehicle_window_consist, vehicle_window_on_closed, vehicle_window_rename_editable_keyboard,
     vehicle_window_rename_keyboard,
 };
 
@@ -191,6 +191,7 @@ impl Plugin for GameWindowsPlugin {
                     sync_buy_window_preview,
                     sync_destination_picker,
                     sync_vehicle_window,
+                    sync_vehicle_window_camera,
                     sync_vehicle_window_consist,
                     sync_vehicle_details_window,
                     sync_timetable_window,

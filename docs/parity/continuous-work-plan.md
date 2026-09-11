@@ -4062,3 +4062,17 @@ Core queda en 2423 pasadas y 1 ignorada; cliente en 1387 pasadas y 2
 ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta por join,
 reconciliación completa de identidad en saves importados y aceptación visual
 manual bajo Weston; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DOCK-STATION-JOIN (2026-09-11, `01de28ee`): la
+huella física completa de un muelle ahora se agrupa por su estación lógica:
+la tierra y el agua comparten `StationID`, los muelles propios adyacentes
+reutilizan esa identidad al construir y `JoinStations` puede fusionar dos
+estaciones navales respetando su footprint. La fusión reescribe los MAP2 de
+ambas piezas, órdenes y destinos compartidos; al demoler el ancla se promueve
+otra pieza de tierra y se redirigen las órdenes locales, sin borrar la
+estación restante. Se agregaron regresiones para construcción adyacente,
+unión explícita y promoción tras demolición. Core queda en 2425 pasadas y 1
+ignorada; cliente en 1387 pasadas y 2 ignoradas, con Clippy estricto y formato
+verdes. #567 sigue abierta por la selección explícita `station_to_join`, la
+reconciliación de estaciones mixtas y saves importados, el pathfinder naval y
+la aceptación visual manual bajo Weston; #326 permanece abierta.

@@ -3989,6 +3989,15 @@ abierta hasta conectar estas filas con la tabla `DEPT` de SAV y completar
 nombre/pueblo/callbacks, preview visual, clipping, orden global y framebuffer;
 #326 permanece abierta.
 
+Actualización #329/#567-SHIP-LONG-INTRO (2026-09-11, `48bfc684`): Action0
+naval `0x1A` ya lee la fecha larga de introducción (`DWORD`, días desde la
+época NewGRF), la convierte al año del catálogo y la conserva al aplicar el
+GRF. La regresión verifica tanto el parser como el `EngineDef` resultante.
+Core queda en `2455 passed; 0 failed; 1 ignored` y cliente en `1388 passed; 0
+failed; 2 ignored`, con formato, `git diff --check` y Clippy estricto limpios.
+#329/#567 siguen abiertas por callbacks y propiedades navales restantes, y por
+aceptación visual manual bajo Weston; #326 permanece abierta.
+
 Actualización #326/#567-SHIP-DEPOT-DEPT-PERSISTENCE (2026-09-11, `e5a44e76`):
 las filas de `SavDepot` ya se cargan y escriben en la tabla nativa `DEPT`,
 conservando el índice denso `DepotID`, `Depot::xy`, `REF_TOWN` moderno y

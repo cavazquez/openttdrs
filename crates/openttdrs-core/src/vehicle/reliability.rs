@@ -1,7 +1,7 @@
 //! Fiabilidad, servicio y averías del vehículo.
 
 use crate::cargodist::parity::Randomizer;
-use crate::vehicle::VehicleKind;
+use crate::vehicle::{Vehicle, VehicleKind};
 
 /// Umbral de fiabilidad bajo el cual conviene servicio en depósito.
 pub const SERVICING_RELIABILITY_THRESHOLD: u16 = 5_000;
@@ -121,6 +121,64 @@ fn extract_bits(value: u32, offset: u32, count: u32) -> u8 {
     u8::try_from((value >> offset) & mask).unwrap_or(u8::MAX)
 }
 
+/// Ejecuta `VehicleServiceInDepot` sobre la cabeza y toda su cadena `Next()`.
+///
+/// `Vehicle` conserva la lógica de una unidad porque varios controladores
+/// históricos no reciben la flota completa. Los puntos autoritativos que sí
+/// tienen `FleetIndex` llaman a esta variante para mantener sincronizados
+/// fiabilidad, fechas, averías y callbacks de cada unidad con motor.
+pub(crate) fn service_vehicle_chain_with_catalog(
+    vehicles: &mut [Vehicle],
+    fleet: &crate::fleet_index::FleetIndex,
+    head_id: u32,
+    engine_catalog: &[crate::engine::EngineDef],
+) {
+    service_vehicle_units_with_catalog(vehicles, fleet, head_id, engine_catalog, false);
+}
+
+/// Completa el servicio de las unidades posteriores cuando la cabeza ya fue
+/// servida dentro de un controlador que sólo tenía un `&mut Vehicle`.
+pub(crate) fn service_vehicle_followers_with_catalog(
+    vehicles: &mut [Vehicle],
+    fleet: &crate::fleet_index::FleetIndex,
+    head_id: u32,
+    engine_catalog: &[crate::engine::EngineDef],
+) {
+    service_vehicle_units_with_catalog(vehicles, fleet, head_id, engine_catalog, true);
+}
+
+fn service_vehicle_units_with_catalog(
+    vehicles: &mut [Vehicle],
+    fleet: &crate::fleet_index::FleetIndex,
+    head_id: u32,
+    engine_catalog: &[crate::engine::EngineDef],
+    skip_head: bool,
+) {
+    let slots: Vec<usize> = fleet
+        .consist(head_id)
+        .iter()
+        .filter_map(|&id| fleet.slot(id))
+        .collect();
+    let Some(&head_slot) = slots.first() else {
+        return;
+    };
+    let Some(head_kind) = vehicles.get(head_slot).map(|vehicle| vehicle.kind) else {
+        return;
+    };
+    for (chain_index, slot) in slots.into_iter().enumerate() {
+        if skip_head && chain_index == 0 {
+            continue;
+        }
+        let Some(vehicle) = vehicles.get(slot) else {
+            break;
+        };
+        if vehicle.kind != head_kind {
+            break;
+        }
+        vehicles[slot].service_at_depot_with_catalog(engine_catalog);
+    }
+}
+
 impl super::model::Vehicle {
     /// Restaura fiabilidad tras servicio en depósito.
     pub fn service_at_depot(&mut self) {
@@ -140,6 +198,7 @@ impl super::model::Vehicle {
             crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
         self.last_service_day = service_day;
         self.last_service_newgrf_day = i32::try_from(service_day).unwrap_or(i32::MAX);
+        self.service_generation = self.service_generation.wrapping_add(1);
     }
 
     /// Igual que [`Self::service_at_depot`], resolviendo `SyncReliability`
@@ -173,6 +232,7 @@ impl super::model::Vehicle {
             crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
         self.last_service_day = service_day;
         self.last_service_newgrf_day = i32::try_from(service_day).unwrap_or(i32::MAX);
+        self.service_generation = self.service_generation.wrapping_add(1);
     }
 
     /// ¿Toca revisión? (`NeedsServicing`: intervalo en días o % de fiabilidad).
@@ -539,6 +599,10 @@ fn check_ship_needs_service(state: &mut crate::GameState, idx: usize) {
     // callback económico.
     if vehicle_is_in_depot(&state.map, vehicle) {
         let engine_catalog = state.engine_catalog.clone();
+        // Los barcos no tienen unidades `Next()` en el modelo nativo. Este
+        // callback también se invoca directamente desde fixtures/cargas antes
+        // de reconstruir los índices efímeros, por lo que la operación de una
+        // sola nave debe conservar una ruta independiente del `FleetIndex`.
         state.vehicles[idx].service_at_depot_with_catalog(&engine_catalog);
         return;
     }
@@ -800,6 +864,35 @@ mod tests {
         vehicle.service_at_depot();
 
         assert_eq!(vehicle.breakdown_chance, 0);
+    }
+
+    #[test]
+    fn service_at_depot_updates_linked_engine_units() {
+        let depot = TileCoord::new(0, 0);
+        let mut head = Vehicle::new(1, VehicleKind::Train, depot, depot);
+        let mut tail = Vehicle::new(2, VehicleKind::Train, depot, depot);
+        head.next_unit = Some(tail.id);
+        tail.prev_unit = Some(head.id);
+        head.breakdown_chance = 200;
+        head.breakdowns_since_last_service = 3;
+        head.reliability = 1_000;
+        head.sim_tick = u64::from(crate::economy::TICKS_PER_DAY) * 4;
+        tail.breakdown_chance = 200;
+        tail.breakdowns_since_last_service = 3;
+        tail.reliability = 1_000;
+        tail.sim_tick = u64::from(crate::economy::TICKS_PER_DAY) * 4;
+
+        let mut vehicles = vec![head, tail];
+        let mut fleet = crate::fleet_index::FleetIndex::default();
+        fleet.rebuild(&vehicles);
+
+        service_vehicle_chain_with_catalog(&mut vehicles, &fleet, 1, &[]);
+
+        for vehicle in &vehicles {
+            assert_eq!(vehicle.breakdown_chance, 50);
+            assert_eq!(vehicle.breakdowns_since_last_service, 0);
+            assert_eq!(vehicle.last_service_day, 4);
+        }
     }
 
     #[test]

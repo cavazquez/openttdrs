@@ -865,7 +865,13 @@ struct VehicleOpsTimings {
 
 fn phase_vehicle_ops_pre_move(state: &mut GameState) -> VehicleOpsTimings {
     let mut timings = VehicleOpsTimings::default();
+    let service_generations: Vec<(u32, u32)> = state
+        .vehicles
+        .iter()
+        .map(|vehicle| (vehicle.id, vehicle.service_generation))
+        .collect();
     vehicle_ops::tick_vehicle_timetables(state);
+    service_followers_after_generation_changes(state, &service_generations);
     vehicle_ops::sync_autoreplace_depot_flags(state);
     let p0 = Instant::now();
     vehicle_ops::run_autoreplace_in_depots(state);
@@ -875,6 +881,27 @@ fn phase_vehicle_ops_pre_move(state: &mut GameState) -> VehicleOpsTimings {
     routing::assign_orderless_wander_destinations(state);
     movement::tick_aircraft_phases(state);
     timings
+}
+
+/// Completa el servicio de seguidores cuando una espera de horario cierra una
+/// llegada desde un método que sólo tenía prestada una unidad.
+fn service_followers_after_generation_changes(state: &mut GameState, before: &[(u32, u32)]) {
+    let changed_heads: Vec<u32> = before
+        .iter()
+        .filter_map(|&(id, generation)| {
+            let slot = state.runtime.fleet_index.slot(id)?;
+            let vehicle = state.vehicles.get(slot)?;
+            (vehicle.service_generation != generation && vehicle.is_consist_head()).then_some(id)
+        })
+        .collect();
+    for head_id in changed_heads {
+        crate::vehicle::service_vehicle_followers_with_catalog(
+            &mut state.vehicles,
+            &state.runtime.fleet_index,
+            head_id,
+            &state.engine_catalog,
+        );
+    }
 }
 
 /// Reservas PBS + sync a `m2_hi` (fase gruesa hasta B4).

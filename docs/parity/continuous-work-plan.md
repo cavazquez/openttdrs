@@ -5134,3 +5134,11 @@ reducidas». El ciclo de simulación propaga ese setting a todos los vehículos
 antes de los callbacks de economía y movimiento; las regresiones cubren la
 propagación y el método de servicio. #329/#567 continúan abiertas por otros
 criterios pendientes.
+
+Actualización #329/#567-SERVICE-CONSIST (2026-09-11): los puntos de servicio
+que poseen la flota ahora recorren `next_unit`, igual que
+`VehicleServiceInDepot` recorre `Next()` hasta `HasEngineType()`. Cuando un
+controlador atiende sólo la cabeza, una generación efímera detecta el servicio
+y actualiza los seguidores enlazados sin repetir la operación de la cabeza. La
+regresión cubre una cadena ferroviaria; #329/#567 continúan abiertas por
+criterios restantes.

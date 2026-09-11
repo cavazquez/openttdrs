@@ -147,6 +147,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         state.vehicles[i].newgrf_tick_counter =
             state.vehicles[i].newgrf_tick_counter.wrapping_add(1);
         let was_in_depot = vehicle_is_in_depot(state, i);
+        let service_vehicle_id = state.vehicles[i].id;
         // Vagones y partes articuladas: no se mueven solos; se sincronizan
         // tras la cabeza para conservar una única cinemática por vehículo.
         if state.vehicles[i].is_wagon_unit() || state.vehicles[i].is_articulated_unit() {
@@ -165,6 +166,10 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         {
             continue;
         }
+        // La salida ferroviaria ya ejecuta el servicio de toda la cadena;
+        // comenzar aquí una nueva ventana de detección evita duplicar el
+        // servicio de los seguidores al completar el movimiento del tick.
+        let service_generation_before = state.vehicles[i].service_generation;
         // Activación escalonada de vagones aún en Track::Depot.
         if state.vehicles[i].kind == VehicleKind::Train
             && state.vehicles[i].is_consist_head()
@@ -180,6 +185,14 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         }
         let previous_road_pos = state.vehicles[i].pos;
         if tick_road_depot_movement(state, i) {
+            if state.vehicles[i].service_generation != service_generation_before {
+                crate::vehicle::service_vehicle_followers_with_catalog(
+                    &mut state.vehicles,
+                    &state.runtime.fleet_index,
+                    service_vehicle_id,
+                    &state.engine_catalog,
+                );
+            }
             let articulated = sync_road_articulated_parts(state, i);
             road_traffic.update_vehicle(&state.vehicles, i, previous_road_pos);
             for (slot, previous) in articulated {
@@ -218,6 +231,14 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 &mut road_traffic,
             );
             state.vehicles = vehicles;
+            if state.vehicles[i].service_generation != service_generation_before {
+                crate::vehicle::service_vehicle_followers_with_catalog(
+                    &mut state.vehicles,
+                    &state.runtime.fleet_index,
+                    service_vehicle_id,
+                    &state.engine_catalog,
+                );
+            }
             let articulated = sync_road_articulated_parts(state, i);
             // `RoadVehArrivesAt` abre `BeginLoading` dentro del controller.
             // Disparar tras recuperar el préstamo completo conserva el tile
@@ -406,6 +427,14 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             &state.engine_catalog,
             state.construction.plane_speed,
         );
+        if state.vehicles[i].service_generation != service_generation_before {
+            crate::vehicle::service_vehicle_followers_with_catalog(
+                &mut state.vehicles,
+                &state.runtime.fleet_index,
+                service_vehicle_id,
+                &state.engine_catalog,
+            );
+        }
         if vehicle_kind == VehicleKind::Ship
             && was_in_depot
             && !crate::refit::vehicle_is_in_depot(&state.map, &state.vehicles[i])

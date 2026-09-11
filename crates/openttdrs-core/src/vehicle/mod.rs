@@ -9,7 +9,8 @@ mod order_execution;
 mod reliability;
 pub(crate) use reliability::{
     init_vehicle_reliability_from_engine, init_vehicle_reliability_from_engine_with_catalog,
-    process_vehicle_calendar_day, process_vehicle_economy_day, update_vehicle_servicing_flags,
+    process_vehicle_calendar_day, process_vehicle_economy_day, service_vehicle_chain_with_catalog,
+    service_vehicle_followers_with_catalog, update_vehicle_servicing_flags,
 };
 
 // Re-exportaciones públicas desde model.rs

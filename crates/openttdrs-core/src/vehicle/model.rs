@@ -592,6 +592,13 @@ pub struct Vehicle {
     /// normal para vehículos creados fuera del ciclo principal.
     #[serde(skip, default = "default_service_breakdown_level")]
     pub(crate) service_breakdown_level: u8,
+    /// Generación efímera incrementada por cada servicio en depósito.
+    ///
+    /// Permite que el ciclo con acceso a la flota detecte un servicio
+    /// ejecutado dentro de un controlador que sólo recibe una unidad y
+    /// actualice también sus seguidores.
+    #[serde(skip, default)]
+    pub(crate) service_generation: u32,
     /// Contador económico diario (`Vehicle::day_counter`), usado por CB32.
     #[serde(default)]
     pub newgrf_day_counter: u8,
@@ -884,6 +891,7 @@ impl Vehicle {
             breakdown_delay: 0,
             breakdowns_since_last_service: 0,
             service_breakdown_level: default_service_breakdown_level(),
+            service_generation: 0,
             newgrf_day_counter: 0,
             newgrf_tick_counter: 0,
             running_ticks: 0,

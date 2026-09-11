@@ -1,5 +1,8 @@
 use crate::GameState;
-use crate::depot::nearest_depot_tile_indexed;
+use crate::depot::{
+    MAX_SHIP_DEPOT_SEARCH_DISTANCE, nearest_depot_tile_indexed,
+    nearest_reachable_ship_depot_tile_indexed,
+};
 use crate::map::{TileCoord, TileKind};
 use crate::pathfinder::{PathNetwork, farthest_reachable_tile};
 use crate::vehicle::{MAX_VEHICLE_NAME_CHARS, Vehicle, VehicleKind, VehicleOrder};
@@ -1436,16 +1439,27 @@ pub(super) fn append_goto_nearest_depot(
     let Some(vehicle_idx) = state.runtime.fleet_index.slot(vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
-    let (kind, pos) = {
+    let (kind, pos, owner) = {
         let v = &state.vehicles[vehicle_idx];
-        (v.kind, v.pos)
+        (v.kind, v.pos, v.owner)
     };
-    let Some(depot) = nearest_depot_tile_indexed(
-        &state.map,
-        pos,
-        kind,
-        &mut state.runtime.depot_spatial_index,
-    ) else {
+    let depot = if kind == VehicleKind::Ship {
+        nearest_reachable_ship_depot_tile_indexed(
+            &state.map,
+            pos,
+            owner,
+            MAX_SHIP_DEPOT_SEARCH_DISTANCE,
+            &mut state.runtime.depot_spatial_index,
+        )
+    } else {
+        nearest_depot_tile_indexed(
+            &state.map,
+            pos,
+            kind,
+            &mut state.runtime.depot_spatial_index,
+        )
+    };
+    let Some(depot) = depot else {
         return Err(CommandError::DepotNotFound);
     };
     in_bounds(&state.map, depot)?;

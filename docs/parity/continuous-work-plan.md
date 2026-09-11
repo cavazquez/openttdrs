@@ -5011,3 +5011,11 @@ evita confundir una reentrada con ausencia de destino: una orden `halt` deja al
 barco detenido y una orden pass-through procesa servicio/refit y avanza a la
 siguiente orden. Las dos variantes tienen regresiones directas; #567 continúa
 abierta por callbacks, pathfinding completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-NEAREST-ROUTE (2026-09-11): el comando manual de
+ir al depósito más cercano usa para barcos la búsqueda equivalente a
+`Ship::FindClosestDepot`: propietario de la unidad, distancia máxima nativa y
+ruta navegable hasta la sección norte. El resto de vehículos conserva la
+selección indexada existente. La regresión evita elegir un depósito rival más
+cercano sobre la misma lámina de agua; #567 continúa abierta por callbacks,
+pathfinding completo y aceptación visual/framebuffer.

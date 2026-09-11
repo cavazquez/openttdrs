@@ -190,7 +190,7 @@ pub enum Command {
         vehicle_id: u32,
         index: usize,
     },
-    /// Añade orden al depósito compatible más cercano (Manhattan).
+    /// Añade orden al depósito compatible más cercano (alcanzable para barcos).
     AppendGotoNearestDepot(u32),
     /// Renombra un vehículo (`None` o cadena vacía → quitar nombre).
     RenameVehicle {

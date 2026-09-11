@@ -679,6 +679,36 @@ fn refit_ship_requires_native_depot_state() {
 }
 
 #[test]
+fn append_goto_nearest_ship_depot_uses_owned_reachable_depot() {
+    let mut s = GameState::new(24, 8);
+    for y in [2_i32, 3_i32] {
+        for x in 0..24_i32 {
+            crate::map::make_water_tile(&mut s.map, TileCoord::new(x, y), WaterClass::Sea).unwrap();
+        }
+    }
+    let rival = TileCoord::new(5, 2);
+    let own = TileCoord::new(17, 2);
+    apply_command(&mut s, &Command::PlaceShipDepotDir(rival, 3)).unwrap();
+    apply_command(&mut s, &Command::PlaceShipDepotDir(own, 3)).unwrap();
+    for tile in crate::ship_depot_footprint(rival, 3) {
+        let mut raw = s.map.get(tile).unwrap();
+        raw.m1 = (raw.m1 & !0x1F) | 1;
+        s.map.set_tile(tile, raw).unwrap();
+    }
+
+    let from = TileCoord::new(7, 2);
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Ship, from, from));
+    apply_command(&mut s, &Command::AppendGotoNearestDepot(1)).unwrap();
+
+    assert_eq!(s.vehicles[0].orders.len(), 1);
+    assert_eq!(
+        s.vehicles[0].orders[0].destination(),
+        crate::ship_depot_north_tile(&s.map, own).unwrap()
+    );
+}
+
+#[test]
 fn depot_order_refit_requires_native_ship_depot_state() {
     use crate::engine::ENGINE_SHIP_MPS;
 

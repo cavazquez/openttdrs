@@ -273,6 +273,7 @@ pub(super) fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
                     cargo,
                     &state.cargo_spec_catalog,
                 );
+            state.vehicles[index].clamp_aircraft_mail_cargo();
         }
         if engine.newgrf_grfid == 0 || engine.newgrf_runtime.is_none() {
             continue;
@@ -1192,6 +1193,7 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
             } else {
                 None
             };
+        state.vehicles[idx].clamp_aircraft_mail_cargo();
         if let Some(engine) = engine {
             let callback_capacity = crate::newgrf_callback::resolve_vehicle_refit_capacity_callback(
                 &engine,

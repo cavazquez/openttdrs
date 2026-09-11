@@ -141,6 +141,7 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
                 } else {
                     None
                 };
+            state.vehicles[idx].clamp_aircraft_mail_cargo();
             state.vehicles[idx].refit_capacity =
                 u16::try_from(state.vehicles[idx].capacity).unwrap_or(u16::MAX);
         }

@@ -261,6 +261,7 @@ fn apply_engine_with_refit(
     } else {
         None
     };
+    vehicle.clamp_aircraft_mail_cargo();
     // `DetermineCapacity` se vuelve a ejecutar al cambiar el motor, no en el
     // siguiente tick de carga. Esto es observable para CB36 dependiente del
     // cargo y evita que autoreplace conserve transitoriamente la capacidad

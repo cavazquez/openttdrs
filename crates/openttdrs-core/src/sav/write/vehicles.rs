@@ -282,6 +282,15 @@ fn aircraft_mail_capacity_for(state: &GameState, v: &Vehicle) -> u16 {
     )
 }
 
+/// Cantidad escalar de correo que acompaña a la sombra SAV del avión.
+///
+/// El runtime Rust aún no mantiene una segunda `VehicleCargoList`; conservar
+/// este contador evita que un round-trip `OpenTTD` → Rust → `OpenTTD` lo convierta
+/// silenciosamente en cero.
+fn aircraft_mail_cargo_for(v: &Vehicle) -> u16 {
+    v.aircraft_mail_cargo.unwrap_or(0)
+}
+
 type SavRecordBytes = Vec<u8>;
 type SavRecordList = Vec<SavRecordBytes>;
 
@@ -1040,6 +1049,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
         if is_air {
             let is_helicopter = aircraft_is_helicopter_for(state, v);
             let mail_capacity = aircraft_mail_capacity_for(state, v);
+            let mail_cargo = aircraft_mail_cargo_for(v);
             // Primario + sombra (y rotor para helicópteros). OpenTTD exige
             // ambos auxiliares al cargar un `Aircraft` normal.
             let shadow_idx = sparse_idx + 1;
@@ -1105,7 +1115,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     cargo_subtype: 0,
                     cargo_capacity: mail_capacity,
                     refit_capacity: 0,
-                    cargo_count: 0,
+                    cargo_count: mail_cargo,
                     cargo_packet_refs: Vec::new(),
                     cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
@@ -1909,6 +1919,7 @@ mod tests {
         let mut helicopter = Vehicle::new(99, VehicleKind::Aircraft, air_pos, air_pos);
         helicopter.engine_id = Some(0x7F00);
         helicopter.capacity = 80;
+        helicopter.aircraft_mail_cargo = Some(5);
         state.vehicles = vec![helicopter];
 
         let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
@@ -1969,6 +1980,11 @@ mod tests {
             Some(7),
             "la sombra conserva Action0 aircraft 0x11"
         );
+        assert_eq!(
+            record_get(shadow_common, "cargo_count").and_then(SlValue::as_u64),
+            Some(5),
+            "la sombra conserva la cantidad de correo separada del primario"
+        );
         let imported = crate::sav::entities::vehicles_from_chunks(
             &chunks,
             64,
@@ -1983,6 +1999,10 @@ mod tests {
         assert_eq!(
             imported[0].aircraft_mail_capacity, 7,
             "la capacidad secundaria se recupera desde la fila AIR_SHADOW"
+        );
+        assert_eq!(
+            imported[0].aircraft_mail_cargo, 5,
+            "la cantidad secundaria se recupera desde la fila AIR_SHADOW"
         );
     }
 

@@ -205,6 +205,13 @@ pub struct Vehicle {
     /// usar la propiedad del motor como fallback.
     #[serde(default)]
     pub aircraft_mail_capacity: Option<u16>,
+    /// Cantidad de correo de la sombra de una aeronave.
+    ///
+    /// El valor es metadata escalar mientras el runtime no materializa una
+    /// segunda lista de paquetes para la sombra. `None` identifica JSON viejo
+    /// o aeronaves creadas localmente sin estado SAV importado.
+    #[serde(default)]
+    pub aircraft_mail_cargo: Option<u16>,
     #[serde(default = "default_running_true")]
     pub running: bool,
     /// Remanente físico de `DoUpdateSpeed` (`Vehicle::progress` de `OpenTTD`).
@@ -721,6 +728,7 @@ impl Vehicle {
             cargo_subtype: 0,
             capacity: super::VEHICLE_CAPACITY,
             aircraft_mail_capacity: None,
+            aircraft_mail_cargo: None,
             running: true,
             progress: 0,
             road_state: 0,
@@ -879,6 +887,23 @@ impl Vehicle {
             running_cost_accum: 0,
             pending_depot_order_refit: None,
         }
+    }
+
+    /// Ajusta el contador escalar de correo de la sombra al cambiar su
+    /// capacidad, igual que `Aircraft::Next()->cargo.Truncate()` nativo.
+    ///
+    /// La operación sólo es aplicable cuando ya conocemos la capacidad
+    /// efectiva; los JSON antiguos que todavía no tienen ese dato conservan
+    /// el valor pendiente para que el siguiente cálculo pueda resolverlo.
+    pub fn clamp_aircraft_mail_cargo(&mut self) {
+        if self.kind != VehicleKind::Aircraft {
+            self.aircraft_mail_cargo = None;
+            return;
+        }
+        let Some(capacity) = self.aircraft_mail_capacity else {
+            return;
+        };
+        self.aircraft_mail_cargo = Some(self.aircraft_mail_cargo.unwrap_or(0).min(capacity));
     }
 
     /// ¿Es la cabeza del consist (o un vehículo que no tiene cadena)?

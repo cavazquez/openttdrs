@@ -240,6 +240,7 @@ pub(super) fn build_vehicle_at_depot(
     } else {
         None
     };
+    vehicle.clamp_aircraft_mail_cargo();
     vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(&engine, &mut vehicle);
     crate::vehicle::init_vehicle_reliability_from_engine_with_catalog(
         &mut vehicle,
@@ -1202,6 +1203,7 @@ pub(super) fn refit_vehicle(
         } else {
             None
         };
+        vehicle.clamp_aircraft_mail_cargo();
         let callback_capacity = engine.as_ref().and_then(|engine| {
             crate::newgrf_callback::resolve_vehicle_refit_capacity_callback(engine, vehicle, cargo)
         });

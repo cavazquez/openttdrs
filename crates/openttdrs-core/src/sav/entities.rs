@@ -2275,6 +2275,12 @@ pub struct SavVehicle {
     /// Se obtiene de la fila `next` (`AIR_SHADOW`) y vale cero para los demás
     /// tipos o para saves que no contienen una sombra legible.
     pub aircraft_mail_capacity: u16,
+    /// Cantidad de correo de la fila `AIR_SHADOW` asociada por `next`.
+    ///
+    /// Se mantiene separado de `cargo`: el primario y la sombra son dos
+    /// vehículos nativos distintos aunque el importador exponga sólo el
+    /// primario al runtime Rust.
+    pub aircraft_mail_cargo: u16,
     /// Capacidad máxima de refit (`Vehicle::refit_cap`).
     pub refit_capacity: u16,
     /// Referencias físicas al pool `CAPA` (`Vehicle::cargo.packets`).
@@ -2446,6 +2452,22 @@ pub(crate) fn vehicles_from_chunks(
             Some((*sav_id, capacity))
         })
         .collect();
+    let aircraft_shadow_cargo: HashMap<u32, u16> = rows
+        .iter()
+        .filter_map(|(sav_id, record)| {
+            let sub = nested_struct(record, "aircraft")?;
+            let common = nested_struct(sub, "common")?;
+            let subtype = record_get(common, "subtype").and_then(SlValue::as_u64)?;
+            if subtype != 4 {
+                return None;
+            }
+            let cargo = record_get(common, "cargo_count")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0);
+            Some((*sav_id, cargo))
+        })
+        .collect();
     let mut out = Vec::new();
     for (sav_id, record) in rows {
         let Some(vtype) = record_get(&record, "type").and_then(SlValue::as_u64) else {
@@ -2474,6 +2496,13 @@ pub(crate) fn vehicles_from_chunks(
         let aircraft_mail_capacity = if kind == SavVehicleKind::Aircraft {
             next_sav_id
                 .and_then(|shadow_id| aircraft_shadow_capacities.get(&shadow_id).copied())
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let aircraft_mail_cargo = if kind == SavVehicleKind::Aircraft {
+            next_sav_id
+                .and_then(|shadow_id| aircraft_shadow_cargo.get(&shadow_id).copied())
                 .unwrap_or(0)
         } else {
             0
@@ -3091,6 +3120,7 @@ pub(crate) fn vehicles_from_chunks(
             cargo,
             cargo_capacity,
             aircraft_mail_capacity,
+            aircraft_mail_cargo,
             refit_capacity,
             cargo_packet_ids,
             cargo_action_counts,

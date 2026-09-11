@@ -4575,3 +4575,16 @@ fallback vanilla. Core queda en `2466 passed; 0 failed; 1 ignored` y cliente en
 estricto limpios. #329/#567 continúan abiertas por `NoNews`, `NoPreview`,
 `JoinPreview`, callbacks navales, propiedades restantes y aceptación visual
 manual bajo Weston; #326 permanece abierta.
+
+Actualización #329/#567-SHIP-ORIGINAL-SPRITE-FALLBACK (2026-09-11, `d4998002`):
+`EngineDef` conserva ahora `original_image_index`, calculado desde los once
+slots navales vanilla que OpenTTD usa como base antes de aplicar Action0/1/2.
+Cuando un barco custom `0xFD` no resuelve una vista Action1/2 o callback, el
+renderer y la preview de compra de Bevy recuperan esa familia base en vez de
+forzar MPS; índices inválidos siguen cayendo de forma determinista a MPS. Se
+agregaron regresiones de tabla, materialización del catálogo y selección
+visual. Core queda en `2468 passed; 0 failed; 1 ignored` y cliente en `1392
+passed; 0 failed; 2 ignored`, con formato, `diff --check` y Clippy estricto
+limpios. #329/#567 continúan abiertas por `NoNews`, `NoPreview`,
+`JoinPreview`, callbacks navales restantes y aceptación visual manual bajo
+Weston; #326 permanece abierta.

@@ -4739,3 +4739,13 @@ La entidad FTA separada, sus reservas/reparto nativos y la validación visual y
 runtime restante siguen pendientes; #329/#567 continúan abiertas. Core queda
 en `2485 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2
 ignored`, con Clippy estricto, formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-STATION-TRANSFER (2026-09-11):
+el correo secundario puede atravesar una estación con orden `Transfer`, volver
+a la cola de `StationCargoList` sin ingreso final y conservar `first_station`
+al recargarse en el avión. La regresión cubre el ciclo descarga → espera →
+recarga sin mezclar el hold principal de pasajeros; la entidad FTA separada,
+sus reservas/reparto nativos y la validación visual y runtime restante siguen
+pendientes, por lo que #329/#567 continúan abiertas. Core queda en `2486
+passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`,
+con Clippy estricto, formato y `diff --check` limpios.

@@ -2633,6 +2633,76 @@ mod tests {
     }
 
     #[test]
+    fn aircraft_shadow_mail_transfer_roundtrips_through_station_queue() {
+        let source = TileCoord::new(1, 1);
+        let transfer = TileCoord::new(3, 3);
+        let mut state = GameState::new(6, 6);
+        state.map.set_kind(source, TileKind::Airport).unwrap();
+        state.map.set_kind(transfer, TileKind::Airport).unwrap();
+        state.stations.push(crate::Station::new_with_kind(
+            source,
+            crate::StopKind::Airport,
+        ));
+        let mut transfer_station =
+            crate::Station::new_with_kind(transfer, crate::StopKind::Airport);
+        transfer_station.goods.get_mut(CargoType::Mail).rating = 255;
+        state.stations.push(transfer_station);
+
+        let mut transfer_order = crate::VehicleOrder::station(transfer);
+        if let crate::VehicleOrder::Station { unload_type, .. } = &mut transfer_order {
+            *unload_type = crate::OrderUnloadType::Transfer;
+        }
+        let mut aircraft = crate::Vehicle::new(1, VehicleKind::Aircraft, transfer, transfer);
+        aircraft.aircraft_mail_capacity = Some(10);
+        aircraft.aircraft_mail_cargo = Some(2);
+        aircraft.last_pickup_station = Some(source);
+        aircraft.last_depart_tick = Some(0);
+        aircraft.orders = vec![transfer_order];
+        aircraft.aircraft_mail_packets.push(
+            crate::CargoPacket::new(CargoType::Mail, 2, source)
+                .with_first_station(source)
+                .with_next_hop(None),
+        );
+        state.vehicles.push(aircraft);
+
+        let mut unloaded = vec![false];
+        unload_vehicles(&mut state, 1, &[false], &mut unloaded);
+
+        assert!(unloaded[0]);
+        assert!(state.vehicles[0].aircraft_mail_packets.is_empty());
+        assert_eq!(state.stations[1].cargo_stock.get(CargoType::Mail), 2);
+        assert_eq!(state.stats.cargo_units_delivered, 2);
+        assert_eq!(state.stats.cargo_income_earned, 0);
+        let queued = state.stations[1]
+            .cargo_packets
+            .packets()
+            .find(|packet| packet.cargo == CargoType::Mail)
+            .expect("transferred mail packet in station queue");
+        assert_eq!(queued.first_station, Some(source));
+
+        let mut loaded = false;
+        assert!(try_load_aircraft_mail_from_station_waiting_cargo(
+            &mut state,
+            0,
+            1,
+            &mut loaded,
+        ));
+        assert!(loaded);
+        assert_eq!(state.stations[1].cargo_stock.get(CargoType::Mail), 0);
+        assert_eq!(state.vehicles[0].aircraft_mail_packets.total(), 2);
+        assert_eq!(state.vehicles[0].aircraft_mail_cargo, Some(2));
+        assert_eq!(
+            state.vehicles[0]
+                .aircraft_mail_packets
+                .packets
+                .iter()
+                .next()
+                .and_then(|packet| packet.first_station),
+            Some(source)
+        );
+    }
+
+    #[test]
     fn imported_ship_at_dock_approach_is_found_outside_station_tiles() {
         let mut state = GameState::new(20, 20);
         let anchor = TileCoord::new(1, 1);

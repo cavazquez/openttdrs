@@ -4,7 +4,11 @@ use bevy::prelude::*;
 use openttdrs_core::{Map, TileCoord, ship_depot_footprint};
 
 use crate::iso::{iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
-use crate::render::{CompanyColoredSprites, sprite_from_company_or_asset};
+use crate::render::viewport_sort::ParentSpriteBounds;
+use crate::render::{
+    CompanyColoredSprites, ViewportSortableParent, sprite_from_company_or_asset,
+    viewport_insertion_key, viewport_source_depth,
+};
 use crate::sprites::{SHIP_DEPOT_PATHS, ship_depot_layers};
 
 use super::BuildGhostPreview;
@@ -27,6 +31,7 @@ pub(crate) fn spawn_ship_depot_preview(
     let [origin, other] = ship_depot_footprint(origin, dir);
     let axis_y = dir & 0x01 != 0;
     let origin_is_south = matches!(dir & 0x03, 1 | 2);
+    let (extent_x, extent_y) = crate::sprites::ship_depot_seq_extent(axis_y);
     let tint = super::plan::preview_tint(valid);
 
     for (coord, part_south) in [(origin, origin_is_south), (other, !origin_is_south)] {
@@ -37,7 +42,7 @@ pub(crate) fn spawn_ship_depot_preview(
         let ref_pos = iso(coord.x, coord.y);
         for (layer_i, layer) in ship_depot_layers(axis_y, part_south).iter().enumerate() {
             let local = remap_tile_offset(layer.dx, layer.dy, 0.0) * 0.5;
-            let pos = overlay_pos(
+            let mut pos = overlay_pos(
                 ref_pos + local,
                 layer.xrel,
                 layer.yrel,
@@ -48,6 +53,8 @@ pub(crate) fn spawn_ship_depot_preview(
                 coord.x,
                 coord.y,
             );
+            let source_depth = viewport_source_depth(pos.z, coord.x as u32, map.dimensions().0);
+            pos.z = source_depth;
             let sprite = sprite_from_company_or_asset(
                 company,
                 asset_server,
@@ -58,9 +65,48 @@ pub(crate) fn spawn_ship_depot_preview(
                 BuildGhostPreview,
                 sprite,
                 Transform::from_translation(pos).with_scale(Vec3::splat(PREVIEW_SCALE)),
+                ViewportSortableParent {
+                    sprite_id: 4070 + layer.sprite_index as u32,
+                    bounds: ship_depot_parent_bounds(
+                        coord,
+                        base_z,
+                        layer.dx as i32,
+                        layer.dy as i32,
+                        extent_x,
+                        extent_y,
+                    ),
+                    insertion_key: viewport_insertion_key(
+                        coord.x as u32,
+                        coord.y as u32,
+                        (layer_i as u8).saturating_add(1),
+                    ),
+                    source_depth,
+                },
             ));
         }
     }
+}
+
+/// Caja `TILE_SEQ_LINE` que comparte el ghost con el parent del mapa.
+fn ship_depot_parent_bounds(
+    coord: TileCoord,
+    base_z: u8,
+    dx: i32,
+    dy: i32,
+    extent_x: i32,
+    extent_y: i32,
+) -> ParentSpriteBounds {
+    let xmin = coord.x * 16 + dx;
+    let ymin = coord.y * 16 + dy;
+    let zmin = i32::from(base_z) * 8;
+    ParentSpriteBounds::new(
+        xmin,
+        ymin,
+        zmin,
+        xmin + extent_x - 1,
+        ymin + extent_y - 1,
+        zmin + 19,
+    )
 }
 
 #[cfg(test)]
@@ -93,5 +139,21 @@ mod tests {
                 + ship_depot_layers(axis_y, !origin_south).len();
             assert_eq!(count, 3);
         }
+    }
+
+    #[test]
+    fn preview_parent_bounds_match_runtime_tile_seq_line() {
+        let coord = TileCoord::new(1, 1);
+        let layer = ship_depot_layers(false, false)[0];
+        assert_eq!(
+            ship_depot_parent_bounds(coord, 0, layer.dx as i32, layer.dy as i32, 16, 1),
+            ParentSpriteBounds::new(16, 31, 0, 31, 31, 19)
+        );
+
+        let layer = ship_depot_layers(true, true)[1];
+        assert_eq!(
+            ship_depot_parent_bounds(coord, 3, layer.dx as i32, layer.dy as i32, 1, 16),
+            ParentSpriteBounds::new(31, 16, 24, 31, 31, 43)
+        );
     }
 }

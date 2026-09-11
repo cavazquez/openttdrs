@@ -201,8 +201,8 @@ pub use cargo_spec::{
 };
 pub use cheats::CheatsState;
 pub use command::{
-    Command, CommandError, LevelMode, MAX_STATION_NAME_CHARS, OrderMoveDirection,
-    ROAD_PLACE_FORCE_AXIS, apply_command, check_place_industry_spec,
+    Command, CommandError, LevelMode, MAX_DEPOT_NAME_CHARS, MAX_STATION_NAME_CHARS,
+    OrderMoveDirection, ROAD_PLACE_FORCE_AXIS, apply_command, check_place_industry_spec,
     check_place_industry_spec_def_layout, command_effects, command_would_fail,
     finalize_road_drag_line, industry_template, infer_road_drag_axis,
     place_industry_spec_def_layout_sandbox, place_industry_spec_def_sandbox, preview_road_bits_at,

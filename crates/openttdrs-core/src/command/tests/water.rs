@@ -258,6 +258,91 @@ fn depot_registration_matches_nearest_town_and_transport_type() {
 }
 
 #[test]
+fn rename_depot_validates_unique_length_and_reset() {
+    let mut s = GameState::new(16, 16);
+    s.towns.push(crate::Town {
+        id: 7,
+        pos: TileCoord::new(4, 4),
+        name: "Villa Central".into(),
+        ..Default::default()
+    });
+    let first = TileCoord::new(4, 4);
+    let second = TileCoord::new(8, 4);
+    for exit in [TileCoord::new(3, 4), TileCoord::new(7, 4)] {
+        s.map.set_kind(exit, TileKind::Road).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(first, 0)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(second, 0)).unwrap();
+
+    apply_command(
+        &mut s,
+        &Command::RenameDepot {
+            depot_pos: first,
+            name: Some("Terminal Norte".into()),
+        },
+    )
+    .unwrap();
+    assert_eq!(s.depots[0].name, "Terminal Norte");
+
+    assert_eq!(
+        apply_command(
+            &mut s,
+            &Command::RenameDepot {
+                depot_pos: second,
+                name: Some("Terminal Norte".into()),
+            },
+        ),
+        Err(crate::CommandError::DepotNameTaken)
+    );
+    assert_eq!(
+        apply_command(
+            &mut s,
+            &Command::RenameDepot {
+                depot_pos: second,
+                name: Some("12345678901234567890123456789012".into()),
+            },
+        ),
+        Err(crate::CommandError::DepotNameTooLong)
+    );
+
+    apply_command(
+        &mut s,
+        &Command::RenameDepot {
+            depot_pos: first,
+            name: None,
+        },
+    )
+    .unwrap();
+    assert!(s.depots[0].name.is_empty());
+    assert_eq!(s.depots[0].town_id, Some(7));
+    assert_eq!(s.depots[0].town_cn, 0);
+}
+
+#[test]
+fn rename_ship_depot_from_either_section_updates_one_pool_row() {
+    let mut s = GameState::new(12, 12);
+    let depot = TileCoord::new(4, 4);
+    let other = TileCoord::new(5, 4);
+    for coord in [depot, TileCoord::new(3, 4), other] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+
+    apply_command(
+        &mut s,
+        &Command::RenameDepot {
+            depot_pos: other,
+            name: Some("Puerto Azul".into()),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(s.depots.len(), 1);
+    assert_eq!(s.depots[0].tile, depot);
+    assert_eq!(s.depots[0].name, "Puerto Azul");
+}
+
+#[test]
 fn place_ship_depot_rejects_second_part_without_mutating_first() {
     let mut s = GameState::new(12, 12);
     let depot = TileCoord::new(4, 4);

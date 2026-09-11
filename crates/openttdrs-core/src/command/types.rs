@@ -193,6 +193,12 @@ pub enum Command {
         station_pos: TileCoord,
         name: Option<String>,
     },
+    /// Renombra un depósito de carretera, vía o barcos (`None` → nombre generado).
+    /// En barcos se acepta cualquiera de las dos teselas de la huella.
+    RenameDepot {
+        depot_pos: TileCoord,
+        name: Option<String>,
+    },
     /// Pone todos los vehículos en `depot_pos` en marcha o detenidos.
     SetDepotVehiclesRunning {
         depot_pos: TileCoord,

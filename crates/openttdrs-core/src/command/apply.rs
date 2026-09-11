@@ -162,6 +162,9 @@ fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), Com
         Command::RenameStation { station_pos, name } => {
             transport::rename_station(state, *station_pos, name.clone())
         }
+        Command::RenameDepot { depot_pos, name } => {
+            transport::rename_depot(state, *depot_pos, name.clone())
+        }
         Command::SetDepotVehiclesRunning { depot_pos, running } => {
             vehicles::set_depot_vehicles_running(state, *depot_pos, *running)
         }
@@ -451,6 +454,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         | Command::AppendGotoNearestDepot(..)
         | Command::RenameVehicle { .. }
         | Command::RenameStation { .. }
+        | Command::RenameDepot { .. }
         | Command::SetDepotVehiclesRunning { .. }
         | Command::MoveVehicleOrder { .. }
         | Command::ToggleVehicleOrderDepotStop { .. }

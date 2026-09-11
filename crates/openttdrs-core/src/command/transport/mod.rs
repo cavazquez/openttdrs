@@ -16,6 +16,7 @@ pub use road::{
     ROAD_PLACE_FORCE_AXIS, finalize_road_drag_line, infer_road_drag_axis, preview_road_bits_at,
     road_bits_for_autoroute, road_drag_line_tiles, road_locked_tool_axis,
 };
+pub use shared::MAX_DEPOT_NAME_CHARS;
 pub use station::{MAX_STATION_NAME_CHARS, rail_station_footprint, rail_station_layout};
 
 pub(in crate::command) use air::*;

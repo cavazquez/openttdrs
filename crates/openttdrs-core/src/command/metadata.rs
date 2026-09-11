@@ -217,7 +217,7 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         // ═══════════════════════════════════════════════════════════════════
         // Comandos de estaciones (NO modifican mapa, solo metadata)
         // ═══════════════════════════════════════════════════════════════════
-        Command::RenameStation { .. } => CommandEffects::none(),
+        Command::RenameStation { .. } | Command::RenameDepot { .. } => CommandEffects::none(),
 
         // ═══════════════════════════════════════════════════════════════════
         // Comandos de carteles (NO modifican mapa, solo overlays)

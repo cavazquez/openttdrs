@@ -379,6 +379,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::AppendGotoNearestDepot(..)
         | Command::RenameVehicle { .. }
         | Command::RenameStation { .. }
+        | Command::RenameDepot { .. }
         | Command::SetDepotVehiclesRunning { .. }
         | Command::MoveVehicleOrder { .. }
         | Command::ToggleVehicleOrderDepotStop { .. }

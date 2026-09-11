@@ -53,6 +53,10 @@ pub enum CommandError {
     VehicleNameTooLong,
     /// Nombre de estación demasiado largo.
     StationNameTooLong,
+    /// Nombre de depósito demasiado largo.
+    DepotNameTooLong,
+    /// Ya existe otro depósito con ese nombre.
+    DepotNameTaken,
     /// Refit no permitido (fuera de depósito, con carga o tipo inválido).
     RefitNotAllowed,
     /// Horario: el ajuste no aplica a este tipo de orden.

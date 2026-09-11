@@ -32,8 +32,8 @@ pub use metadata::command_effects;
 pub use preview::command_would_fail;
 pub(crate) use terraform::simulate_generated_terraform_north_corner;
 pub use transport::{
-    MAX_STATION_NAME_CHARS, rail_bits_placement_target, rail_station_footprint,
-    rail_station_layout, rail_trackbits_from_neighbors,
+    MAX_DEPOT_NAME_CHARS, MAX_STATION_NAME_CHARS, rail_bits_placement_target,
+    rail_station_footprint, rail_station_layout, rail_trackbits_from_neighbors,
 };
 pub use transport::{
     ROAD_PLACE_FORCE_AXIS, finalize_road_drag_line, infer_road_drag_axis, preview_road_bits_at,

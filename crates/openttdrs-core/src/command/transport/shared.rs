@@ -249,16 +249,26 @@ fn depot_kind_at(state: &GameState, tile: TileCoord) -> Option<TileKind> {
     })
 }
 
+/// Límite nativo de `MAX_LENGTH_DEPOT_NAME_CHARS`: incluye el terminador NUL,
+/// por lo que el comando acepta como máximo 31 caracteres Unicode.
+pub const MAX_DEPOT_NAME_CHARS: usize = 32;
+
 /// Replica el contador `town_cn` de `MakeDefaultName(Depot)`.
 ///
 /// El contador es independiente por pueblo y tipo de transporte; el ID del
 /// pool no interviene en el nombre visible. El mapa ya contiene el depósito
 /// nuevo al llamar a esta función, pero la fila aún no fue registrada.
-fn next_depot_town_cn(state: &GameState, town_id: u32, depot_kind: Option<TileKind>) -> u16 {
+fn next_depot_town_cn(
+    state: &GameState,
+    town_id: u32,
+    depot_kind: Option<TileKind>,
+    excluded_depot_id: Option<u16>,
+) -> u16 {
     (0..=u16::MAX)
         .find(|candidate| {
             !state.depots.iter().any(|depot| {
-                depot.town_id == Some(town_id)
+                excluded_depot_id != Some(depot.depot_id)
+                    && depot.town_id == Some(town_id)
                     && depot.town_cn == *candidate
                     && depot_kind_at(state, depot.tile) == depot_kind
             })
@@ -283,7 +293,7 @@ pub(in crate::command::transport) fn register_depot(
         .map_or((None, 0), |town| {
             (
                 Some(town.id),
-                next_depot_town_cn(state, town.id, depot_kind),
+                next_depot_town_cn(state, town.id, depot_kind, None),
             )
         });
     state.depots.push(crate::sav::SavDepot {
@@ -301,6 +311,78 @@ pub(in crate::command::transport) fn register_depot(
 /// Retira la fila `DEPT` después de que el mapa ya fue limpiado con éxito.
 pub(in crate::command::transport) fn unregister_depot(state: &mut GameState, depot_id: u16) {
     state.depots.retain(|depot| depot.depot_id != depot_id);
+}
+
+/// Renombra un depósito usando el mismo contrato que `CmdRenameDepot`.
+///
+/// El comando recibe una posición porque es la forma en que el cliente
+/// identifica la ventana. Para depósitos navales, ambas secciones resuelven
+/// al mismo `DepotID` y se valida la propiedad sobre `Depot::xy` (la sección
+/// norte persistida).
+pub(in crate::command) fn rename_depot(
+    state: &mut GameState,
+    depot_pos: TileCoord,
+    name: Option<String>,
+) -> Result<(), CommandError> {
+    let tile = state
+        .map
+        .get(depot_pos)
+        .ok_or(CommandError::DepotNotFound)?;
+    let depot_id = crate::depot::depot_id_from_tile(tile).ok_or(CommandError::DepotNotFound)?;
+    let canonical_tile = if tile.kind == TileKind::ShipDepot {
+        crate::depot::ship_depot_north_tile(&state.map, depot_pos).unwrap_or(depot_pos)
+    } else {
+        depot_pos
+    };
+
+    // Saves JSON antiguos no tenían DEPT en el estado de juego. La creación
+    // perezosa conserva la capacidad de renombrar esos depósitos y permite
+    // que el siguiente guardado los migre al pool semántico.
+    if !state.depots.iter().any(|depot| depot.depot_id == depot_id) {
+        register_depot(state, depot_id, canonical_tile);
+    }
+    let depot_idx = state
+        .depots
+        .iter()
+        .position(|depot| depot.depot_id == depot_id)
+        .ok_or(CommandError::DepotNotFound)?;
+    let actual_tile = state.depots[depot_idx].tile;
+    require_tile_owned_by_active(state, actual_tile)?;
+
+    let normalized = name.unwrap_or_default();
+    if normalized.chars().count() >= MAX_DEPOT_NAME_CHARS {
+        return Err(CommandError::DepotNameTooLong);
+    }
+    if !normalized.is_empty()
+        && state
+            .depots
+            .iter()
+            .any(|depot| !depot.name.is_empty() && depot.name == normalized)
+    {
+        return Err(CommandError::DepotNameTaken);
+    }
+
+    if normalized.is_empty() {
+        state.depots[depot_idx].name.clear();
+        let (town_id, town_cn) = crate::town::nearest_town_index(&state.towns, actual_tile)
+            .and_then(|(town_index, _)| state.towns.get(town_index))
+            .map_or((None, 0), |town| {
+                (
+                    Some(town.id),
+                    next_depot_town_cn(
+                        state,
+                        town.id,
+                        depot_kind_at(state, actual_tile),
+                        Some(depot_id),
+                    ),
+                )
+            });
+        state.depots[depot_idx].town_id = town_id;
+        state.depots[depot_idx].town_cn = town_cn;
+    } else {
+        state.depots[depot_idx].name = normalized;
+    }
+    Ok(())
 }
 
 pub(in crate::command) fn transport_tile_is_buildable(kind: TileKind) -> bool {

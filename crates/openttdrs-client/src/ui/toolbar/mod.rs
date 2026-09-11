@@ -44,8 +44,9 @@ pub(crate) use construction_picker_windows::{
     terraform_picker_on_closed, tree_picker_on_closed,
 };
 pub(crate) use depot_panel::{
-    DepotPanelState, begin_depot_list_drag, depot_panel_on_closed, finish_depot_list_drag,
-    handle_depot_panel_buttons, setup_depot_panel, sync_depot_panel,
+    DepotPanelState, begin_depot_list_drag, depot_panel_on_closed, depot_rename_editable_keyboard,
+    depot_rename_keyboard, finish_depot_list_drag, handle_depot_panel_buttons,
+    handle_depot_rename_buttons, setup_depot_panel, sync_depot_panel,
 };
 pub(crate) use editor_toolbar::{
     EditorDocumentState, EditorToolbarLayoutState, EditorTownMenuState,

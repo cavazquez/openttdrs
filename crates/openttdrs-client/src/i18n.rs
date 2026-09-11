@@ -724,6 +724,7 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Editar órdenes" => "Edit orders",
         "Centrar cámara en la estación" => "Center camera on station",
         "Renombrar estación" => "Rename station",
+        "Renombrar depósito" => "Rename depot",
         "Ver vehículos que visitan esta estación" => "View vehicles visiting this station",
         "Filtrar carga: todas / con espera / aceptadas" => "Filter cargo: all / waiting / accepted",
         "Unir con otra estación" => "Join another station",
@@ -1036,6 +1037,8 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "No hay depósito compatible en el mapa." => "No compatible depot found on the map.",
         "El nombre del vehículo es demasiado largo." => "Vehicle name is too long.",
         "El nombre de la estación es demasiado largo." => "Station name is too long.",
+        "El nombre del depósito es demasiado largo." => "Depot name is too long.",
+        "Ya existe otro depósito con ese nombre." => "Another depot already has that name.",
         "Solo se puede refit en depósito, sin carga y con un tipo compatible." => {
             "Refit is only possible in a depot, with no cargo, and with a compatible type."
         }

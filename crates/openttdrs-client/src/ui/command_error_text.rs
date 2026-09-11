@@ -43,6 +43,8 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::DepotNotFound => "No hay depósito compatible en el mapa.",
         CommandError::VehicleNameTooLong => "El nombre del vehículo es demasiado largo.",
         CommandError::StationNameTooLong => "El nombre de la estación es demasiado largo.",
+        CommandError::DepotNameTooLong => "El nombre del depósito es demasiado largo.",
+        CommandError::DepotNameTaken => "Ya existe otro depósito con ese nombre.",
         CommandError::RefitNotAllowed => {
             "Solo se puede refit en depósito, sin carga y con un tipo compatible."
         }
@@ -216,6 +218,8 @@ mod tests {
             CommandError::DepotNotFound,
             CommandError::VehicleNameTooLong,
             CommandError::StationNameTooLong,
+            CommandError::DepotNameTooLong,
+            CommandError::DepotNameTaken,
             CommandError::RefitNotAllowed,
             CommandError::TimetableNotApplicable,
             CommandError::AutoreplaceNotAllowed,

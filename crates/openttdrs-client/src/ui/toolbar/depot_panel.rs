@@ -4,11 +4,14 @@
 //! Drag a zonas «Vender» / «Vender cadena»; en vía, Ctrl+drag mueve la cola
 //! (`MoveRailVehicle.move_chain`). Barra: Nuevos / Clonar / Centrar (+ secundarios).
 
+use bevy::input::ButtonState;
+use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
+use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{consist_unit_ids, engine_by_id};
+use openttdrs_core::{MAX_DEPOT_NAME_CHARS, consist_unit_ids, engine_by_id};
 
 use crate::camera::tile_camera_world_pos;
 use crate::i18n::{Locale, localized_text};
@@ -57,6 +60,8 @@ pub(crate) struct DepotPanelState {
     pub(crate) list_drag_from: Option<usize>,
     /// Si `Some`, el drag parte de un sprite de unidad del consist (vagón).
     pub(crate) list_drag_unit_idx: Option<usize>,
+    /// El campo de nombre está visible y recibe entrada de teclado.
+    pub(crate) rename_editing: bool,
 }
 
 /// Contenedor de una fila (sprite + nombre + vender) para mostrar/ocultar junta.
@@ -100,6 +105,18 @@ pub(crate) struct DepotRunningLabel {
     slot: usize,
 }
 
+#[derive(Component)]
+pub(crate) struct DepotRenameRow;
+
+#[derive(Component)]
+pub(crate) struct DepotRenameInput;
+
+#[derive(Component, Clone, Copy)]
+pub(crate) enum DepotRenameButton {
+    Apply,
+    Cancel,
+}
+
 /// Zona de drop lateral para vender al soltar el drag.
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DepotSellDrop {
@@ -115,6 +132,8 @@ pub(crate) enum DepotPanelButton {
     /// Compra una copia del vehículo seleccionado (motor + órdenes).
     CloneVehicle,
     CenterDepot,
+    /// Abre el campo de nombre del depósito.
+    Rename,
     /// Sube el vehículo seleccionado en la lista del depósito.
     MoveSlotUp,
     /// Baja el vehículo seleccionado en la lista del depósito.
@@ -141,6 +160,38 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
         480.0,
     );
     commands.entity(content).with_children(|panel| {
+        panel
+            .spawn((
+                DepotRenameRow,
+                Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(4.0),
+                    align_items: AlignItems::Center,
+                    display: Display::None,
+                    margin: UiRect::bottom(Val::Px(4.0)),
+                    ..default()
+                },
+                BuildMenuUi,
+            ))
+            .with_children(|row| {
+                row.spawn((
+                    DepotRenameInput,
+                    EditableText::new(""),
+                    window_text_font(asset_server, UiFontRole::Caption),
+                    TextColor(TEXT_COLOR),
+                    Node {
+                        flex_grow: 1.0,
+                        height: Val::Px(22.0),
+                        padding: UiRect::horizontal(Val::Px(4.0)),
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BorderColor::all(BTN_BORDER),
+                ));
+                spawn_depot_rename_action(row, asset_server, DepotRenameButton::Apply, "OK");
+                spawn_depot_rename_action(row, asset_server, DepotRenameButton::Cancel, "No");
+            });
         panel
             .spawn(Node {
                 width: Val::Percent(100.0),
@@ -224,6 +275,14 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
                 spawn_depot_button(
                     row,
                     asset_server,
+                    DepotPanelButton::Rename,
+                    "Nom.",
+                    false,
+                    false,
+                );
+                spawn_depot_button(
+                    row,
+                    asset_server,
                     DepotPanelButton::MoveSlotUp,
                     "↑",
                     false,
@@ -255,6 +314,38 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
                 );
             });
     });
+}
+
+fn spawn_depot_rename_action(
+    parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    action: DepotRenameButton,
+    label: &'static str,
+) {
+    parent
+        .spawn((
+            Button,
+            action,
+            Node {
+                min_width: Val::Px(36.0),
+                height: Val::Px(22.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(BTN_BG),
+            BorderColor::all(BTN_BORDER),
+            Interaction::default(),
+            BuildMenuUi,
+        ))
+        .with_children(|button| {
+            button.spawn((
+                Text::new(label),
+                window_text_font(asset_server, UiFontRole::Caption),
+                TextColor(TEXT_COLOR),
+            ));
+        });
 }
 
 fn spawn_depot_vehicle_row(
@@ -579,6 +670,7 @@ pub(crate) fn sync_depot_panel(
     trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
+    mut rename_row_q: Query<&mut Node, With<DepotRenameRow>>,
     mut container_q: Query<
         (
             &DepotRowContainer,
@@ -643,12 +735,22 @@ pub(crate) fn sync_depot_panel(
     };
     let Some(depot_pos) = depot_state.depot_pos else {
         *vis = Visibility::Hidden;
+        if let Ok(mut row) = rename_row_q.single_mut() {
+            row.display = Display::None;
+        }
         for (_, mut node, _, _) in &mut container_q {
             node.display = Display::None;
         }
         return;
     };
     *vis = Visibility::Visible;
+    if let Ok(mut row) = rename_row_q.single_mut() {
+        row.display = if depot_state.rename_editing {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
     if let Some((_, mut title)) = title_q
         .iter_mut()
         .find(|(t, _)| t.0 == FloatingWindowId::Depot)
@@ -765,6 +867,7 @@ pub(crate) fn depot_panel_on_closed(
             depot_state.reorder_from_slot = None;
             depot_state.list_drag_from = None;
             depot_state.list_drag_unit_idx = None;
+            depot_state.rename_editing = false;
         }
     }
 }
@@ -1153,6 +1256,7 @@ pub(crate) fn handle_depot_panel_buttons(
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
+    mut rename_input_q: Query<&mut EditableText, With<DepotRenameInput>>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     prefs: Option<Res<ClientPreferences>>,
     time: Res<Time>,
@@ -1320,6 +1424,128 @@ pub(crate) fn handle_depot_panel_buttons(
                     transform.translation.y = world.y;
                 }
             }
+            DepotPanelButton::Rename => {
+                depot_state.rename_editing = true;
+                if let Some(depot) = depot_metadata(&sim, depot_pos)
+                    && let Ok(mut editable) = rename_input_q.single_mut()
+                {
+                    editable.editor_mut().set_text(&depot.name);
+                }
+            }
+        }
+    }
+}
+
+fn apply_depot_rename(
+    depot_state: &mut DepotPanelState,
+    sim: &mut SimWorld,
+    hud_feedback: &mut HudBuildFeedback,
+    rename_input_q: &Query<&EditableText, With<DepotRenameInput>>,
+    elapsed_secs: f32,
+) {
+    let Some(depot_pos) = depot_state.depot_pos else {
+        return;
+    };
+    let name = rename_input_q
+        .single()
+        .ok()
+        .map(|editable| editable.value().to_string())
+        .filter(|name| !name.trim().is_empty());
+    match crate::network::apply_player_command(
+        &mut sim.state,
+        &Command::RenameDepot { depot_pos, name },
+    ) {
+        Ok(()) => depot_state.rename_editing = false,
+        Err(error) => push_build_command_error(hud_feedback, error, elapsed_secs),
+    }
+}
+
+/// Aplica o cancela el nombre desde los botones del editor del depósito.
+pub(crate) fn handle_depot_rename_buttons(
+    mut buttons: Query<(&Interaction, &DepotRenameButton), (Changed<Interaction>, With<Button>)>,
+    mut depot_state: ResMut<DepotPanelState>,
+    rename_input_q: Query<&EditableText, With<DepotRenameInput>>,
+    mut sim: ResMut<SimWorld>,
+    mut hud_feedback: ResMut<HudBuildFeedback>,
+    time: Res<Time>,
+) {
+    for (interaction, action) in &mut buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        match action {
+            DepotRenameButton::Cancel => depot_state.rename_editing = false,
+            DepotRenameButton::Apply => apply_depot_rename(
+                &mut depot_state,
+                &mut sim,
+                &mut hud_feedback,
+                &rename_input_q,
+                time.elapsed_secs(),
+            ),
+        }
+    }
+}
+
+/// Enter aplica el nombre; Escape cancela la edición del depósito.
+pub(crate) fn depot_rename_keyboard(
+    mut depot_state: ResMut<DepotPanelState>,
+    keys: Res<ButtonInput<KeyCode>>,
+    rename_input_q: Query<&EditableText, With<DepotRenameInput>>,
+    mut sim: ResMut<SimWorld>,
+    mut hud_feedback: ResMut<HudBuildFeedback>,
+    time: Res<Time>,
+) {
+    if !depot_state.rename_editing {
+        return;
+    }
+    if keys.just_pressed(KeyCode::Escape) {
+        depot_state.rename_editing = false;
+    } else if keys.just_pressed(KeyCode::Enter) {
+        apply_depot_rename(
+            &mut depot_state,
+            &mut sim,
+            &mut hud_feedback,
+            &rename_input_q,
+            time.elapsed_secs(),
+        );
+    }
+}
+
+/// Teclas alfanuméricas en el campo de nombre del depósito.
+pub(crate) fn depot_rename_editable_keyboard(
+    depot_state: Res<DepotPanelState>,
+    mut key_events: MessageReader<KeyboardInput>,
+    mut rename_input_q: Query<&mut EditableText, With<DepotRenameInput>>,
+) {
+    if !depot_state.rename_editing {
+        return;
+    }
+    let Ok(mut editable) = rename_input_q.single_mut() else {
+        return;
+    };
+    for event in key_events.read() {
+        if event.state != ButtonState::Pressed {
+            continue;
+        }
+        if matches!(event.logical_key, Key::Backspace) {
+            editable.queue_edit(bevy::text::TextEdit::Backspace);
+            continue;
+        }
+        if matches!(event.logical_key, Key::Delete) {
+            editable.queue_edit(bevy::text::TextEdit::Delete);
+            continue;
+        }
+        let Some(text) = &event.text else {
+            continue;
+        };
+        for character in text.chars() {
+            if !character.is_control()
+                && editable.value().chars().count() < MAX_DEPOT_NAME_CHARS - 1
+            {
+                editable.queue_edit(bevy::text::TextEdit::Insert(
+                    winit::keyboard::SmolStr::from(character.to_string()),
+                ));
+            }
         }
     }
 }
@@ -1408,6 +1634,21 @@ mod tests {
             world.resource::<BuyVehicleWindowState>().depot_pos,
             Some(depot)
         );
+    }
+
+    #[test]
+    fn rename_button_stores_custom_depot_name() {
+        let (sim, depot, _) = world_with_bus();
+        let mut world = World::new();
+        insert_depot_resources(&mut world, sim, depot);
+        world.spawn((DepotRenameInput, EditableText::new("Terminal Central")));
+        world.spawn((Button, DepotRenameButton::Apply, Interaction::Pressed));
+
+        world.run_system_once(handle_depot_rename_buttons).unwrap();
+
+        let sim = world.resource::<SimWorld>();
+        assert_eq!(sim.state.depots[0].name, "Terminal Central");
+        assert!(!world.resource::<DepotPanelState>().rename_editing);
     }
 
     #[test]

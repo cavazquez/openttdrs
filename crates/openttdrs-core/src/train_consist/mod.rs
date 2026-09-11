@@ -425,4 +425,38 @@ mod tests {
         // Sin pow_wag_power en el catálogo vanilla no hay powered wagons.
         assert!(!vs[1].powered_wagon);
     }
+
+    #[test]
+    fn consist_changed_respects_visual_effect_wagon_power_bit() {
+        let mut vs = vec![train(1), train(2)];
+        vs[0].engine_id = Some(20_001);
+        vs[1].engine_id = Some(20_002);
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+
+        let mut head = crate::engine::engine_for_vehicle(VehicleKind::Train, 0).clone();
+        head.id = 20_001;
+        head.pow_wag_power = 400;
+        head.capacity = 0;
+        head.cargo = None;
+
+        let Some(mut wagon) =
+            crate::engine::engine_by_id(crate::engine::ENGINE_WAGON_PASSENGER).cloned()
+        else {
+            panic!("vagón vanilla ausente");
+        };
+        wagon.id = 20_002;
+        // Type default + bit 7: the wagon remains unpowered even though the
+        // head supplies powered-wagon power.
+        wagon.visual_effect = 0x80;
+        let mut catalog = vec![head, wagon];
+
+        consist_changed_with_map_and_catalog_and_cargo(&mut vs, 1, None, &catalog, &[]);
+        assert!(!vs[1].powered_wagon);
+
+        // Clearing bit 7 opts the same wagon into the head's powered-wagon
+        // contribution.
+        catalog[1].visual_effect = 0;
+        consist_changed_with_map_and_catalog_and_cargo(&mut vs, 1, None, &catalog, &[]);
+        assert!(vs[1].powered_wagon);
+    }
 }

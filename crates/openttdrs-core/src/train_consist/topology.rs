@@ -185,15 +185,18 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
     // Primera pasada: marcar powered wagons y acumular métricas.
     let mut powered_flags: Vec<(u32, bool)> = Vec::with_capacity(ids.len());
     for &id in &ids {
-        let Some(v) = vehicles.iter().find(|v| v.id == id) else {
+        let Some(v) = vehicles.iter_mut().find(|v| v.id == id) else {
             continue;
         };
         let eng = v
             .engine_id
             .and_then(|id| engine_for_id(engine_catalog, id))
             .unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
-        // OpenTTD: powered wagon si la cabeza aporta `pow_wag_power` y la unidad es vagón.
-        let powered = head_pow_wag_power > 0 && eng.is_wagon();
+        let visual_spec = crate::newgrf_callback::vehicle_visual_effect_spec(eng, v);
+        // OpenTTD: powered wagon si la cabeza aporta `pow_wag_power`, la
+        // unidad usa el override de vagón y CB10/Action0 no fija
+        // `VE_DISABLE_WAGON_POWER` (bit 7).
+        let powered = head_pow_wag_power > 0 && eng.is_wagon() && !visual_spec.wagon_power_disabled;
         powered_flags.push((id, powered));
     }
     for &(id, powered) in &powered_flags {

@@ -960,9 +960,16 @@ pub fn resolve_vehicle_visual_effect_spec_callback(
     if result == CALLBACK_FAILED || result >= 0x100 {
         return None;
     }
-    Some(decode_vehicle_visual_effect_spec(
-        u8::try_from(result).ok()?,
-    ))
+    // `VE_DEFAULT` is a sentinel while the property is being evaluated. The
+    // native cache normalizes it before storing the callback result, keeping
+    // the disable-effect and disable-wagon-power bits set (0xCF).
+    let result = u8::try_from(result).ok()?;
+    let result = if result == crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT {
+        result & !(0x03 << 4)
+    } else {
+        result
+    };
+    Some(decode_vehicle_visual_effect_spec(result))
 }
 
 /// Un efecto solicitado por `CBID_VEHICLE_SPAWN_VISUAL_EFFECT`.
@@ -1055,7 +1062,12 @@ fn decode_vehicle_visual_effect_spec(value: u8) -> VehicleVisualEffectSpec {
             kind: VehicleVisualEffectKind::Default,
             offset: 8,
             advanced: false,
-            wagon_power_disabled: true,
+            // The catalog sentinel is resolved by `UpdateVisualEffect` to
+            // the engine class (or the wagon default), without disabling
+            // powered-wagon participation. An explicit callback `0xFF` is
+            // normalized to `0xCF` by the caller above and does not use this
+            // branch.
+            wagon_power_disabled: false,
         };
     }
     let advanced = value & (1 << 6) != 0;
@@ -6030,6 +6042,15 @@ mod tests {
             Some(VehicleVisualEffectKind::Disabled)
         );
 
+        // A callback returning VE_DEFAULT is normalized like
+        // `Vehicle::UpdateVisualEffect`: it is an explicit disabled result,
+        // including the powered-wagon bit.
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0xFF)));
+        let callback_default =
+            resolve_vehicle_visual_effect_spec_callback(&engine, &mut vehicle).unwrap();
+        assert_eq!(callback_default.kind, VehicleVisualEffectKind::Disabled);
+        assert!(callback_default.wagon_power_disabled);
+
         // Cero pide la clase por defecto y un resultado ancho cae al fallback.
         engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0)));
         assert_eq!(
@@ -6060,6 +6081,7 @@ mod tests {
             vehicle_visual_effect_kind(&engine, &mut vehicle),
             VehicleVisualEffectKind::Default
         );
+        assert!(!vehicle_visual_effect_spec(&engine, &mut vehicle).wagon_power_disabled);
     }
 
     #[test]

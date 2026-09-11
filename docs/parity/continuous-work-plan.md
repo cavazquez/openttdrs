@@ -4843,3 +4843,16 @@ opt-in NewGRF y el fallback vanilla. Siguen pendientes la propagación completa
 del consist, el stream RNG global y el compositor/raster global; #329/#567
 continúan abiertas. Cliente queda en `1404 passed; 0 failed; 2 ignored`, con
 Clippy estricto, formato y `diff --check` validados para esta etapa.
+
+Actualización #329-VEHICLE-POWERED-WAGON-VISUAL-EFFECT (2026-09-11): la
+reconstrucción del consist ahora respeta el bit 7 (`VE_DISABLE_WAGON_POWER`)
+de CB10/Action0 al decidir si un vagón recibe la potencia adicional de la
+cabeza. También se normaliza el retorno `0xFF` de CB10 a `0xCF`, igual que
+`Vehicle::UpdateVisualEffect`; el sentinel de catálogo conserva la selección
+vanilla sin desactivar por accidente la potencia de vagones. Las regresiones
+cubren callback explícito, sentinel y consist con bit 7 activo/inactivo.
+Siguen pendientes `UsesWagonOverride`, el stream RNG global, la propagación
+completa del consist visual y el compositor/raster global; #329/#567 continúan
+abiertas. Core queda en `2491 passed; 0 failed; 1 ignored` y cliente en `1404
+passed; 0 failed; 2 ignored`, con Clippy estricto, formato y `diff --check`
+limpios.

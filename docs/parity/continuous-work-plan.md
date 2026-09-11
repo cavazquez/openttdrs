@@ -5088,3 +5088,11 @@ de `current_order` a `Dummy` de `CheckIfShipNeedsService` sin borrar órdenes
 persistentes; la regresión cubre el cambio de propietario y el destino
 restaurado. #567 continúa abierta por callbacks, pathfinding y aceptación
 visual/framebuffer.
+
+Actualización #329/#567-VEHICLE-SERVICE-BOOKKEEPING (2026-09-11): todo servicio
+en depósito limpia ahora `breakdowns_since_last_service` y actualiza tanto la
+fecha económica como `date_of_last_service_newgrf` desde el día simulado.
+Esto alinea el estado que consultan la interfaz, los callbacks NewGRF y los
+saves con `VehicleServiceInDepot`; las regresiones cubren el método vanilla y
+el camino de servicio con catálogo runtime. #329/#567 continúan abiertas por
+la semántica restante de vehículos, callbacks y aceptación visual/framebuffer.

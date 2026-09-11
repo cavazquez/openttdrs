@@ -132,8 +132,11 @@ impl super::model::Vehicle {
         self.breakdown_ctr = 0;
         self.breakdown_delay = 0;
         self.breakdown_chance = 0;
-        self.last_service_day =
+        self.breakdowns_since_last_service = 0;
+        let service_day =
             crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
+        self.last_service_day = service_day;
+        self.last_service_newgrf_day = i32::try_from(service_day).unwrap_or(i32::MAX);
     }
 
     /// Igual que [`Self::service_at_depot`], resolviendo `SyncReliability`
@@ -159,8 +162,11 @@ impl super::model::Vehicle {
         self.breakdown_ctr = 0;
         self.breakdown_delay = 0;
         self.breakdown_chance = 0;
-        self.last_service_day =
+        self.breakdowns_since_last_service = 0;
+        let service_day =
             crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
+        self.last_service_day = service_day;
+        self.last_service_newgrf_day = i32::try_from(service_day).unwrap_or(i32::MAX);
     }
 
     /// ¿Toca revisión? (`NeedsServicing`: intervalo en días o % de fiabilidad).
@@ -754,12 +760,18 @@ mod tests {
         vehicle.engine_id = Some(child.id);
         vehicle.reliability = 1_000;
         vehicle.needs_servicing = true;
+        vehicle.breakdowns_since_last_service = 9;
+        vehicle.last_service_newgrf_day = -7;
+        vehicle.sim_tick = u64::from(crate::economy::TICKS_PER_DAY) * 11;
         vehicle.service_at_depot_with_catalog(&catalog);
 
         assert_eq!(vehicle.reliability, 6_100);
         assert_eq!(vehicle.reliability_spd_dec, 44);
         assert_eq!(vehicle.max_age_days, 17 * DAYS_PER_VEHICLE_YEAR);
         assert!(!vehicle.needs_servicing);
+        assert_eq!(vehicle.breakdowns_since_last_service, 0);
+        assert_eq!(vehicle.last_service_day, 11);
+        assert_eq!(vehicle.last_service_newgrf_day, 11);
     }
 
     #[test]

@@ -894,7 +894,11 @@ pub(crate) fn rename_station(
     Ok(())
 }
 
-fn rewrite_order_station(order: &mut crate::VehicleOrder, from: TileCoord, to: TileCoord) {
+pub(in crate::command::transport) fn rewrite_order_station(
+    order: &mut crate::VehicleOrder,
+    from: TileCoord,
+    to: TileCoord,
+) {
     use crate::VehicleOrder;
     match order {
         VehicleOrder::Station { station, .. } if *station == from => *station = to,
@@ -903,9 +907,29 @@ fn rewrite_order_station(order: &mut crate::VehicleOrder, from: TileCoord, to: T
     }
 }
 
+pub(in crate::command::transport) fn dock_station_native_id(
+    state: &GameState,
+    station: &Station,
+) -> Option<u16> {
+    station
+        .ottd_station_id
+        .and_then(|id| u16::try_from(id).ok())
+        .or_else(|| {
+            crate::station::dock_station_tiles(&state.map, station)
+                .into_iter()
+                .find_map(|tile| {
+                    let raw = state.map.get(tile)?;
+                    (raw.kind == TileKind::Station
+                        && crate::station::stop_kind_from_m6(raw.m6) == StopKind::Dock)
+                        .then(|| u16::from(raw.m2) | (u16::from(raw.m2_hi) << 8))
+                })
+        })
+}
+
 /// Une dos paradas road 1×1 o dos estaciones rail (misma compañía, mismo
 /// tipo; rail: mismo eje). Cuando `station.distant_join_stations` está
 /// desactivado, exige que sus huellas sean adyacentes.
+#[allow(clippy::too_many_lines)]
 pub(crate) fn join_stations(
     state: &mut GameState,
     keep: TileCoord,
@@ -949,6 +973,11 @@ pub(crate) fn join_stations(
                 }
                 crate::station::station_tile_sets_adjacent(&keep_tiles, &merge_tiles)
             }
+            StopKind::Dock => {
+                let keep_tiles = crate::station::dock_station_tiles(&state.map, keep_st);
+                let merge_tiles = crate::station::dock_station_tiles(&state.map, merge_st);
+                crate::station::station_tile_sets_adjacent(&keep_tiles, &merge_tiles)
+            }
             _ => return Err(CommandError::CannotJoinStations),
         }
     };
@@ -960,6 +989,10 @@ pub(crate) fn join_stations(
     // quedarse con el estado del ancla `keep`.
     state.stations[keep_idx].normalize_road_stop_tile_states();
     state.stations[merge_idx].normalize_road_stop_tile_states();
+    let dock_keep_id = (state.stations[keep_idx].stop_kind == StopKind::Dock)
+        .then(|| dock_station_native_id(state, &state.stations[keep_idx]));
+    let dock_merge_tiles = (state.stations[merge_idx].stop_kind == StopKind::Dock)
+        .then(|| crate::station::dock_station_tiles(&state.map, &state.stations[merge_idx]));
     let mut merge_st = state.stations.remove(merge_idx);
     // Tras remove, keep_idx puede haber cambiado.
     let keep_idx = state
@@ -967,6 +1000,18 @@ pub(crate) fn join_stations(
         .iter()
         .position(|s| s.pos == keep)
         .ok_or(CommandError::StationNotFound)?;
+
+    if let Some(Some(station_id)) = dock_keep_id {
+        state.stations[keep_idx].ottd_station_id = Some(u32::from(station_id));
+        if let Some(merge_tiles) = dock_merge_tiles.as_ref() {
+            for &tile in merge_tiles {
+                if state.map.get_kind(tile) != Some(TileKind::Station) {
+                    continue;
+                }
+                let _ = state.map.set_m2_u16(tile, station_id);
+            }
+        }
+    }
 
     merge_st.ensure_packets_from_stock();
     let merge_packets = merge_st.cargo_packets.drain_all();
@@ -987,12 +1032,20 @@ pub(crate) fn join_stations(
         let b = merge_tsp.get(cargo);
         keep_st.time_since_pickup.set(cargo, a.max(b));
     }
-    if !keep_st.joined_tiles.contains(&merge) {
-        keep_st.joined_tiles.push(merge);
-    }
-    for t in merge_joined {
-        if t != keep && !keep_st.joined_tiles.contains(&t) {
-            keep_st.joined_tiles.push(t);
+    if let Some(dock_tiles) = dock_merge_tiles.as_ref() {
+        for &t in dock_tiles {
+            if t != keep && !keep_st.joined_tiles.contains(&t) {
+                keep_st.joined_tiles.push(t);
+            }
+        }
+    } else {
+        if !keep_st.joined_tiles.contains(&merge) {
+            keep_st.joined_tiles.push(merge);
+        }
+        for t in merge_joined {
+            if t != keep && !keep_st.joined_tiles.contains(&t) {
+                keep_st.joined_tiles.push(t);
+            }
         }
     }
     for (tile, tile_state) in merge_road_stop_tile_states {
@@ -1003,11 +1056,21 @@ pub(crate) fn join_stations(
     for vehicle in &mut state.vehicles {
         for order in &mut vehicle.orders {
             rewrite_order_station(order, merge, keep);
+            if let Some(dock_tiles) = dock_merge_tiles.as_ref() {
+                for &tile in dock_tiles {
+                    rewrite_order_station(order, tile, keep);
+                }
+            }
         }
     }
     for list in &mut state.shared_order_lists {
         for order in &mut list.orders {
             rewrite_order_station(order, merge, keep);
+            if let Some(dock_tiles) = dock_merge_tiles.as_ref() {
+                for &tile in dock_tiles {
+                    rewrite_order_station(order, tile, keep);
+                }
+            }
         }
     }
     for sub in &mut state.subsidies {

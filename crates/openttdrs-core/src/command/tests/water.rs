@@ -1205,6 +1205,111 @@ fn place_dock_rejects_non_autoremove_water_object_atomically() {
 }
 
 #[test]
+fn place_adjacent_dock_reuses_station_identity_and_footprint() {
+    let mut s = GameState::new(16, 12);
+    let first = TileCoord::new(5, 4);
+    let second = TileCoord::new(6, 4);
+    for land in [first, second] {
+        let water = crate::station::dock_water_tile(land, 1);
+        let approach = crate::station::dock_water_tile(water, 1);
+        s.map.set_kind(land, TileKind::Grass).unwrap();
+        s.map.set_kind(water, TileKind::Water).unwrap();
+        s.map.set_kind(approach, TileKind::Water).unwrap();
+        set_dock_land_slope(&mut s.map, land, 1, 1);
+    }
+
+    apply_command(&mut s, &Command::PlaceDock(first, 1)).unwrap();
+    apply_command(&mut s, &Command::PlaceDock(second, 1)).unwrap();
+
+    assert_eq!(s.stations.len(), 1);
+    let station = &s.stations[0];
+    assert_eq!(station.pos, first);
+    assert!(
+        station
+            .joined_tiles
+            .contains(&crate::station::dock_water_tile(first, 1))
+    );
+    assert!(station.joined_tiles.contains(&second));
+    assert!(
+        station
+            .joined_tiles
+            .contains(&crate::station::dock_water_tile(second, 1))
+    );
+    let first_id = crate::depot::depot_id_from_tile(s.map.get(first).unwrap());
+    assert_eq!(first_id, None, "un muelle no consume DepotID");
+    let station_id = |tile: TileCoord| {
+        let raw = s.map.get(tile).unwrap();
+        u16::from(raw.m2) | (u16::from(raw.m2_hi) << 8)
+    };
+    assert_eq!(
+        station_id(first),
+        station_id(crate::station::dock_water_tile(first, 1))
+    );
+    assert_eq!(station_id(first), station_id(second));
+    assert_eq!(
+        station_id(first),
+        station_id(crate::station::dock_water_tile(second, 1))
+    );
+}
+
+#[test]
+fn joining_docks_unifies_native_id_and_promotes_anchor_after_clear() {
+    let mut s = GameState::new(18, 12);
+    let first = TileCoord::new(4, 4);
+    let second = TileCoord::new(8, 4);
+    for land in [first, second] {
+        let water = crate::station::dock_water_tile(land, 1);
+        let approach = crate::station::dock_water_tile(water, 1);
+        s.map.set_kind(land, TileKind::Grass).unwrap();
+        s.map.set_kind(water, TileKind::Water).unwrap();
+        s.map.set_kind(approach, TileKind::Water).unwrap();
+        set_dock_land_slope(&mut s.map, land, 1, 1);
+    }
+
+    apply_command(&mut s, &Command::PlaceDock(first, 1)).unwrap();
+    apply_command(&mut s, &Command::PlaceDock(second, 1)).unwrap();
+    assert_eq!(s.stations.len(), 2);
+    let second_id_before = {
+        let raw = s.map.get(second).unwrap();
+        u16::from(raw.m2) | (u16::from(raw.m2_hi) << 8)
+    };
+
+    apply_command(
+        &mut s,
+        &Command::JoinStations {
+            keep: first,
+            merge: second,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].pos, first);
+    assert!(s.stations[0].covers_tile(crate::station::dock_water_tile(second, 1)));
+    let first_id = {
+        let raw = s.map.get(first).unwrap();
+        u16::from(raw.m2) | (u16::from(raw.m2_hi) << 8)
+    };
+    assert_ne!(first_id, second_id_before);
+    assert_eq!(first_id, {
+        let raw = s.map.get(second).unwrap();
+        u16::from(raw.m2) | (u16::from(raw.m2_hi) << 8)
+    });
+
+    apply_command(&mut s, &Command::ClearTile(first)).unwrap();
+
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].pos, second);
+    assert_eq!(s.map.get_kind(first), Some(TileKind::Grass));
+    assert_eq!(
+        s.map.get_kind(crate::station::dock_water_tile(first, 1)),
+        Some(TileKind::Water)
+    );
+    assert!(s.stations[0].covers_tile(second));
+    assert!(!s.stations[0].covers_tile(first));
+}
+
+#[test]
 fn place_aqueduct_between_facing_slopes() {
     let mut s = SandboxMap::flat_rich(16, 12, 1);
     // Oeste → este: rampa SW en (3,5), rampa NE en (7,5).

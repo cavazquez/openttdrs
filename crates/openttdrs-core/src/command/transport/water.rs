@@ -379,6 +379,12 @@ pub(crate) fn check_dock_placement(
     check_in_bounds(map, c)?;
     let dir = dir & 0x03;
     let water = crate::station::dock_water_tile(c, dir);
+    if [c, water].iter().any(|&tile| {
+        map.get(tile)
+            .is_some_and(|raw| matches!(raw.kind, TileKind::Station | TileKind::Airport))
+    }) {
+        return Err(CommandError::StationAlreadyExists);
+    }
     let approach = crate::station::dock_water_tile(water, dir);
     if stations
         .iter()
@@ -463,6 +469,36 @@ fn next_station_id(state: &GameState) -> Option<u16> {
     (0..=u16::MAX).find(|id| !used.contains(id))
 }
 
+/// Encuentra la única estación naval propia que `GetStationAround` podría
+/// asociar al área del nuevo muelle. La herramienta local todavía no expone
+/// el selector nativo `station_to_join`, por lo que el caso automático se
+/// limita a estaciones del mismo tipo y propietario.
+fn find_adjacent_dock_station(
+    state: &GameState,
+    c: TileCoord,
+    dir: u8,
+) -> Result<Option<(usize, u16)>, CommandError> {
+    let water = crate::station::dock_water_tile(c, dir & 0x03);
+    let new_tiles = [c, water];
+    let mut found = None;
+    for (index, station) in state.stations.iter().enumerate() {
+        if station.owner != state.active_company || station.stop_kind != StopKind::Dock {
+            continue;
+        }
+        let existing_tiles = crate::station::dock_station_tiles(&state.map, station);
+        if !crate::station::station_tile_sets_adjacent(&new_tiles, &existing_tiles) {
+            continue;
+        }
+        let station_id = super::station::dock_station_native_id(state, station)
+            .ok_or(CommandError::CannotJoinStations)?;
+        if found.is_some() {
+            return Err(CommandError::CannotJoinStations);
+        }
+        found = Some((index, station_id));
+    }
+    Ok(found)
+}
+
 pub(in crate::command) fn place_dock(
     state: &mut GameState,
     c: TileCoord,
@@ -475,7 +511,11 @@ pub(in crate::command) fn place_dock(
     for object_tiles in auto_clear_objects {
         clear_object_footprint_keep_water(state, object_tiles[0], &object_tiles)?;
     }
-    let station_id = next_station_id(state).ok_or(CommandError::StationPoolFull)?;
+    let joining_station = find_adjacent_dock_station(state, c, dir)?;
+    let station_id = joining_station.map_or_else(
+        || next_station_id(state).ok_or(CommandError::StationPoolFull),
+        |(_, id)| Ok(id),
+    )?;
     let mut land_tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let mut water_tile = state.map.get(water).ok_or(CommandError::OutOfBounds)?;
 
@@ -510,11 +550,23 @@ pub(in crate::command) fn place_dock(
         .map
         .set_tile(water, water_tile)
         .map_err(|_| CommandError::OutOfBounds)?;
-    let mut st = Station::new_with_kind(c, StopKind::Dock);
-    st.owner = state.active_company;
-    st.ottd_station_id = Some(u32::from(station_id));
-    st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
-    state.stations.push(st);
+    if let Some((station_index, _)) = joining_station {
+        let station = &mut state.stations[station_index];
+        station.ottd_station_id = Some(u32::from(station_id));
+        for tile in [c, water] {
+            if tile != station.pos && !station.joined_tiles.contains(&tile) {
+                station.joined_tiles.push(tile);
+            }
+        }
+    } else {
+        let mut st = Station::new_with_kind(c, StopKind::Dock);
+        st.owner = state.active_company;
+        st.ottd_station_id = Some(u32::from(station_id));
+        st.build_date =
+            crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
+        st.joined_tiles.push(water);
+        state.stations.push(st);
+    }
     refresh_ship_docking_tiles_around(state, c);
     refresh_ship_docking_tiles_around(state, water);
     state.economy.money -= station_build_cost(&state.global_economy);
@@ -546,6 +598,70 @@ pub(in crate::command) fn check_clear_dock(
     Ok(footprint)
 }
 
+/// Quita una huella naval de su estación lógica antes de modificar el mapa.
+///
+/// Una estación puede contener varios muelles. Si se demuele el muelle que
+/// servía de ancla, se promueve otra pieza de tierra; de lo contrario sólo se
+/// quitan las dos coordenadas demolidas. Las órdenes locales guardan
+/// coordenadas, así que se redirigen a la nueva ancla como el `StationID`
+/// estable del motor nativo.
+fn remove_dock_footprint_from_station(state: &mut GameState, footprint: [TileCoord; 2]) {
+    let Some(station_index) = state.stations.iter().position(|station| {
+        station.stop_kind == StopKind::Dock
+            && crate::station::dock_station_tiles(&state.map, station)
+                .iter()
+                .any(|tile| footprint.contains(tile))
+    }) else {
+        return;
+    };
+    let owned_tiles =
+        crate::station::dock_station_tiles(&state.map, &state.stations[station_index]);
+    let remaining_tiles: Vec<_> = owned_tiles
+        .iter()
+        .copied()
+        .filter(|tile| !footprint.contains(tile))
+        .collect();
+    let old_pos = state.stations[station_index].pos;
+    let new_pos = if footprint.contains(&old_pos) {
+        remaining_tiles
+            .iter()
+            .copied()
+            .find(|tile| crate::station::dock_land_tile(&state.map, *tile) == Some(*tile))
+    } else {
+        Some(old_pos)
+    };
+
+    let Some(new_pos) = new_pos else {
+        state.stations.remove(station_index);
+        return;
+    };
+    let station = &mut state.stations[station_index];
+    station.pos = new_pos;
+    station.joined_tiles = remaining_tiles
+        .into_iter()
+        .filter(|tile| *tile != new_pos)
+        .collect();
+    for vehicle in &mut state.vehicles {
+        for order in &mut vehicle.orders {
+            for &tile in &footprint {
+                super::station::rewrite_order_station(order, tile, new_pos);
+            }
+        }
+    }
+    for list in &mut state.shared_order_lists {
+        for order in &mut list.orders {
+            for &tile in &footprint {
+                super::station::rewrite_order_station(order, tile, new_pos);
+            }
+        }
+    }
+    for subsidy in &mut state.subsidies {
+        if footprint.contains(&subsidy.dest_station_pos) {
+            subsidy.dest_station_pos = new_pos;
+        }
+    }
+}
+
 /// Demuele un muelle completo, restaurando su agua y refrescando los marcadores
 /// de amarre de los vecinos.
 pub(in crate::command) fn clear_dock(
@@ -555,6 +671,7 @@ pub(in crate::command) fn clear_dock(
     let footprint = check_clear_dock(state, c)?;
     let [land, water] = footprint;
     let legacy_single_tile = land == water;
+    remove_dock_footprint_from_station(state, footprint);
     if legacy_single_tile {
         let water_class = state
             .map
@@ -586,9 +703,6 @@ pub(in crate::command) fn clear_dock(
         make_water_tile(&mut state.map, water, water_class)
             .map_err(|_| CommandError::OutOfBounds)?;
     }
-    state
-        .stations
-        .retain(|station| station.pos != land && station.pos != water);
     refresh_ship_docking_tiles_around(state, land);
     if !legacy_single_tile {
         refresh_ship_docking_tiles_around(state, water);

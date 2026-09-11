@@ -2,7 +2,7 @@ use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::diag_dir_offset;
 use crate::vehicle::VehicleKind;
 
-use super::tile_encoding::station_type_from_m6;
+use super::tile_encoding::{dock_footprint_for_tile, station_type_from_m6};
 use super::{Station, StopKind};
 
 #[must_use]
@@ -86,6 +86,30 @@ pub fn rail_station_owned_tiles(
 pub fn station_tile_sets_adjacent(a: &[TileCoord], b: &[TileCoord]) -> bool {
     a.iter()
         .any(|ta| b.iter().any(|tb| manhattan(*ta, *tb) == 1))
+}
+
+/// Huella física completa de una estación naval, agrupada por su entidad
+/// lógica. Cada muelle aporta la pieza de tierra y la pieza de agua; los
+/// muelles legacy de una sola tesela conservan esa única coordenada.
+#[must_use]
+pub fn dock_station_tiles(map: &Map, station: &Station) -> Vec<TileCoord> {
+    if station.stop_kind != StopKind::Dock {
+        return Vec::new();
+    }
+    let mut seeds = Vec::with_capacity(station.joined_tiles.len() + 1);
+    seeds.push(station.pos);
+    seeds.extend(station.joined_tiles.iter().copied());
+    let mut tiles = Vec::with_capacity(seeds.len().saturating_mul(2));
+    for seed in seeds {
+        if let Some(footprint) = dock_footprint_for_tile(map, seed) {
+            tiles.extend(footprint);
+        } else {
+            tiles.push(seed);
+        }
+    }
+    tiles.sort_unstable();
+    tiles.dedup();
+    tiles
 }
 
 /// Eje de una estación rail (`true` = eje Y) a partir de `m5` de sus plataformas.

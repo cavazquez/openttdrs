@@ -20,6 +20,34 @@ pub(super) fn set_vehicle_order_list(
         return Err(CommandError::VehicleNotFound);
     };
     let vehicle_kind = state.vehicles[vehicle_idx].kind;
+    let orders: Vec<_> = orders
+        .into_iter()
+        .map(|order| match (vehicle_kind, order) {
+            (VehicleKind::Ship, VehicleOrder::Depot { depot, .. }) => {
+                let canonical =
+                    crate::depot::canonical_depot_tile_for_vehicle(&state.map, depot, vehicle_kind);
+                match order {
+                    VehicleOrder::Depot {
+                        stop,
+                        wait_ticks,
+                        travel_ticks,
+                        refit_cargo,
+                        unbunch,
+                        ..
+                    } => VehicleOrder::Depot {
+                        depot: canonical,
+                        stop,
+                        wait_ticks,
+                        travel_ticks,
+                        refit_cargo,
+                        unbunch,
+                    },
+                    _ => unreachable!("el patrón del depósito ya fue comprobado"),
+                }
+            }
+            (_, order) => order,
+        })
+        .collect();
     let aircraft_engine_id = state.vehicles[vehicle_idx].engine_id;
     for order in &orders {
         in_bounds(&state.map, order.destination())?;
@@ -134,15 +162,8 @@ pub(super) fn build_vehicle_at_depot(
     // OpenTTD normaliza el vehículo a GetShipDepotNorthTile antes de crearlo.
     // Hacerlo aquí evita que un barco construido sobre la sección opuesta
     // nazca una tesela desplazado y con la orientación incorrecta.
-    let depot_pos = if state
-        .map
-        .get(depot_pos)
-        .is_some_and(|tile| tile.kind == TileKind::ShipDepot)
-    {
-        crate::depot::ship_depot_north_tile(&state.map, depot_pos).unwrap_or(depot_pos)
-    } else {
-        depot_pos
-    };
+    let depot_pos =
+        crate::depot::canonical_depot_tile_for_vehicle(&state.map, depot_pos, VehicleKind::Ship);
     let Some(tile) = state.map.get(depot_pos) else {
         return Err(CommandError::OutOfBounds);
     };

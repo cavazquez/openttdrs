@@ -374,11 +374,17 @@ fn ensure_ship_world_pos(v: &mut Vehicle, map: Option<&Map>) {
     if v.ship_pos_valid {
         return;
     }
-    v.ship_x = v.pos.x.saturating_mul(16).saturating_add(8);
-    v.ship_y = v.pos.y.saturating_mul(16).saturating_add(8);
+    let world_pos = map
+        .filter(|map| map.get_kind(v.pos) == Some(TileKind::ShipDepot))
+        .map_or(v.pos, |map| {
+            crate::depot::canonical_depot_tile_for_vehicle(map, v.pos, VehicleKind::Ship)
+        });
+    v.pos = world_pos;
+    v.ship_x = world_pos.x.saturating_mul(16).saturating_add(8);
+    v.ship_y = world_pos.y.saturating_mul(16).saturating_add(8);
     v.ship_track = track_from_diagdir(dir_to_diagdir(v.direction));
     if let Some(tile) = map
-        .and_then(|map| map.get(v.pos))
+        .and_then(|map| map.get(world_pos))
         .filter(|tile| tile.kind == TileKind::ShipDepot)
     {
         v.ship_track = ship_depot_track(tile);
@@ -388,7 +394,7 @@ fn ensure_ship_world_pos(v: &mut Vehicle, map: Option<&Map>) {
     }
     v.ship_pos_valid = true;
     if v.z_pos.is_none() {
-        let h = map.map_or(0, |m| tile_height(m, v.pos));
+        let h = map.map_or(0, |m| tile_height(m, world_pos));
         v.z_pos = Some(i16::from(h) * TILE_PIXEL_HEIGHT);
     }
 }
@@ -525,12 +531,21 @@ fn apply_ship_direction_change(v: &mut Vehicle, new_dir: VehicleDirection) {
 
 /// Marca el estado raw de un barco que alcanzó el centro de un depósito.
 fn mark_ship_depot_arrival(v: &mut Vehicle, map: Option<&Map>) {
-    let Some(tile) = map.and_then(|map| map.get(v.pos)) else {
+    let Some(map) = map else {
+        return;
+    };
+    let Some(tile) = map.get(v.pos) else {
         return;
     };
     if tile.kind != TileKind::ShipDepot {
         return;
     }
+    let depot_pos = crate::depot::canonical_depot_tile_for_vehicle(map, v.pos, VehicleKind::Ship);
+    v.pos = depot_pos;
+    v.ship_x = depot_pos.x.saturating_mul(16).saturating_add(8);
+    v.ship_y = depot_pos.y.saturating_mul(16).saturating_add(8);
+    v.ship_pos_valid = true;
+    let tile = map.get(depot_pos).unwrap_or(tile);
     v.ship_track = ship_depot_track(tile);
     v.ship_state = SHIP_STATE_DEPOT;
     v.cur_speed = 0;
@@ -564,6 +579,16 @@ fn ship_should_reverse_on_depot_exit(v: &Vehicle, tile: crate::map::Tile) -> boo
 /// controlador puede acelerar. Sin destino, permanece detenido como el
 /// vehículo nativo.
 fn ship_stay_in_or_leave_depot(v: &mut Vehicle, map: &Map) -> bool {
+    if matches!(v.ship_state, 0 | SHIP_STATE_DEPOT) {
+        let depot_pos =
+            crate::depot::canonical_depot_tile_for_vehicle(map, v.pos, VehicleKind::Ship);
+        if depot_pos != v.pos {
+            v.pos = depot_pos;
+            v.ship_x = depot_pos.x.saturating_mul(16).saturating_add(8);
+            v.ship_y = depot_pos.y.saturating_mul(16).saturating_add(8);
+            v.ship_pos_valid = true;
+        }
+    }
     let Some(tile) = map
         .get(v.pos)
         .filter(|tile| tile.kind == TileKind::ShipDepot)
@@ -887,7 +912,13 @@ pub fn ship_arrival_ready(v: &Vehicle, map: Option<&Map>) -> bool {
     };
     match order {
         VehicleOrder::Depot { depot, .. } => {
-            v.pos == *depot && (v.ship_x & 0xF) == 8 && (v.ship_y & 0xF) == 8
+            let depot_pos = map.map_or(*depot, |map| {
+                crate::depot::canonical_depot_tile_for_vehicle(map, *depot, VehicleKind::Ship)
+            });
+            let vehicle_pos = map.map_or(v.pos, |map| {
+                crate::depot::canonical_depot_tile_for_vehicle(map, v.pos, VehicleKind::Ship)
+            });
+            vehicle_pos == depot_pos && (v.ship_x & 0xF) == 8 && (v.ship_y & 0xF) == 8
         }
         VehicleOrder::Station { .. } => {
             if dest_is_buoy(v.dest, map) {
@@ -1429,12 +1460,13 @@ mod tests {
         }
         let depot = TileCoord::new(4, 3);
         apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 2)).unwrap();
+        let north = crate::ship_depot_north_tile(&s.map, depot).unwrap();
         let target = TileCoord::new(10, 3);
-        let mut v = Vehicle::new(1, VehicleKind::Ship, depot, depot);
+        let mut v = Vehicle::new(1, VehicleKind::Ship, north, depot);
         v.running = true;
         v.ship_pos_valid = true;
-        v.ship_x = depot.x * 16 + 8;
-        v.ship_y = depot.y * 16 + 8;
+        v.ship_x = north.x * 16 + 8;
+        v.ship_y = north.y * 16 + 8;
         v.ship_state = SHIP_STATE_TRACK_X;
         v.ship_track = TRACK_X;
         v.orders = vec![
@@ -1451,7 +1483,7 @@ mod tests {
         assert_eq!(v.current_order, 1);
         assert_eq!(v.dest, target);
 
-        v.path.push_back(TileCoord::new(depot.x + 1, depot.y));
+        v.path.push_back(TileCoord::new(north.x + 1, north.y));
         ship_controller_tick(&mut v, Some(&s.map));
         assert_eq!(v.ship_state, SHIP_STATE_TRACK_X);
         assert_eq!(v.direction, DIR_SW);
@@ -1785,6 +1817,43 @@ mod tests {
         assert!(ship_arrival_ready(&v, Some(&s.map)));
         v.pos = TileCoord::new(0, 1);
         assert!(!ship_arrival_ready(&v, Some(&s.map)));
+    }
+
+    #[test]
+    fn ship_depot_order_and_state_use_north_section_anchor() {
+        let mut s = GameState::new(12, 8);
+        let depot = TileCoord::new(4, 3);
+        let [origin, other] = crate::ship_depot_footprint(depot, 0);
+        for tile in [origin, other] {
+            s.map.set_kind(tile, TileKind::Water).unwrap();
+        }
+        apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+        let north = crate::ship_depot_north_tile(&s.map, depot).unwrap();
+        let south = crate::ship_depot_other_tile(&s.map, north).unwrap();
+
+        let mut v = Vehicle::new(1, VehicleKind::Ship, north, north);
+        v.ship_pos_valid = true;
+        v.ship_x = north.x * 16 + 8;
+        v.ship_y = north.y * 16 + 8;
+        v.orders = vec![VehicleOrder::depot(south)];
+        v.current_order = 0;
+        v.sync_order_destination(&s.map);
+
+        assert_eq!(v.dest, north);
+        assert!(ship_arrival_ready(&v, Some(&s.map)));
+
+        let mut imported = Vehicle::new(2, VehicleKind::Ship, south, north);
+        imported.running = true;
+        imported.ship_pos_valid = true;
+        imported.ship_x = south.x * 16 + 8;
+        imported.ship_y = south.y * 16 + 8;
+        imported.ship_state = SHIP_STATE_DEPOT;
+        imported.ship_track = TRACK_X;
+        ship_controller_tick(&mut imported, Some(&s.map));
+
+        assert_eq!(imported.pos, north);
+        assert_eq!((imported.ship_x & 0xF, imported.ship_y & 0xF), (8, 8));
+        assert_eq!(imported.ship_state, SHIP_STATE_DEPOT);
     }
 
     #[test]

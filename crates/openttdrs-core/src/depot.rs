@@ -139,6 +139,21 @@ pub fn ship_depot_north_tile(map: &Map, pos: TileCoord) -> Option<TileCoord> {
     Some(ship_depot_other_tile(map, pos).unwrap_or(pos))
 }
 
+/// Normaliza la coordenada de un depósito al ancla que usa el vehículo.
+///
+/// `OpenTTD` identifica un depósito naval por su `DepotID` y conserva la
+/// sección norte como `Depot::xy`; las órdenes y vehículos no deben quedar
+/// apuntando a la sección sur sólo porque el cursor o un save legacy la haya
+/// usado como coordenada.
+#[must_use]
+pub fn canonical_depot_tile_for_vehicle(map: &Map, pos: TileCoord, kind: VehicleKind) -> TileCoord {
+    if kind == VehicleKind::Ship && map.get_kind(pos) == Some(TileKind::ShipDepot) {
+        ship_depot_north_tile(map, pos).unwrap_or(pos)
+    } else {
+        pos
+    }
+}
+
 #[must_use]
 fn is_depot_candidate(map: &Map, pos: TileCoord, kind: VehicleKind) -> bool {
     let target = depot_tile_kind_for_vehicle(kind);
@@ -559,6 +574,29 @@ mod tests {
         assert_eq!(
             nearest_depot_tile_indexed(&s.map, TileCoord::new(0, 5), VehicleKind::Ship, &mut index,),
             Some(north)
+        );
+    }
+
+    #[test]
+    fn canonical_vehicle_depot_tile_maps_ship_south_to_north_only() {
+        let mut s = GameState::new(12, 12);
+        let origin = TileCoord::new(5, 5);
+        let [first, second] = ship_depot_footprint(origin, 0);
+        for coord in [first, second] {
+            s.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+        apply_command(&mut s, &Command::PlaceShipDepotDir(origin, 0)).unwrap();
+        let north = ship_depot_north_tile(&s.map, origin).unwrap();
+        let south = ship_depot_other_tile(&s.map, north).unwrap();
+
+        assert_eq!(
+            canonical_depot_tile_for_vehicle(&s.map, south, VehicleKind::Ship),
+            north
+        );
+        assert_eq!(
+            canonical_depot_tile_for_vehicle(&s.map, south, VehicleKind::Train),
+            south,
+            "la normalización es específica de barcos"
         );
     }
 

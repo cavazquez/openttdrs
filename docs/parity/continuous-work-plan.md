@@ -4929,3 +4929,12 @@ la búsqueda de barcos, el centrado de cámara y las acciones de compra cuando
 el cursor cae en la sección sur. Las cuatro orientaciones y los depósitos no
 navales tienen regresiones separadas; #567 sigue abierta por callbacks,
 pathfinding completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-ORDER-ANCHOR (2026-09-11): la coordenada de un
+depósito naval se normaliza ahora a la sección norte en las órdenes nuevas y al
+resolver órdenes legacy/shared, manteniendo el equivalente local del
+`DepotID`/`Depot::xy` nativo. La llegada y la preparación de un barco también
+recentran posición y estado cuando un save lo dejó en la sección sur antes de
+la salida. Las regresiones cubren las cuatro rutas de consulta, una orden
+emitida desde la sección opuesta y un barco importado detenido; #567 sigue
+abierta por callbacks, pathfinding completo y aceptación visual/framebuffer.

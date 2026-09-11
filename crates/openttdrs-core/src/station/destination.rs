@@ -161,6 +161,9 @@ pub fn resolve_order_destination_from_with_stations(
         (VehicleKind::Ship, VehicleOrder::Station { station, .. }) => {
             ship_docking_tile_for_station(map, stations, station, from).unwrap_or(station)
         }
+        (VehicleKind::Ship, VehicleOrder::Depot { depot, .. }) => {
+            crate::depot::canonical_depot_tile_for_vehicle(map, depot, VehicleKind::Ship)
+        }
         (_, VehicleOrder::Depot { depot, .. }) => depot,
         (
             VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram,

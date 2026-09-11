@@ -3,8 +3,8 @@
 use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build_cost};
 use crate::test_fixtures::SandboxMap;
 use crate::{
-    Command, GameState, StopKind, TileCoord, TileKind, Vehicle, VehicleKind, WaterClass,
-    apply_command, bridge_above_axis_from_mapt, command_would_fail, set_water_class_m1,
+    Command, GameState, StopKind, TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder,
+    WaterClass, apply_command, bridge_above_axis_from_mapt, command_would_fail, set_water_class_m1,
 };
 
 #[test]
@@ -1481,6 +1481,34 @@ fn ship_buys_at_depot_and_paths_to_dock() {
     ship.sync_order_destination(&s.map);
     let path = find_path(&s.map, ship.pos, ship.dest, PathNetwork::Water);
     assert!(path.is_some(), "ruta agua depósito → muelle");
+}
+
+#[test]
+fn ship_depot_order_from_south_section_is_stored_at_north_anchor() {
+    let mut s = GameState::new(16, 10);
+    let depot = TileCoord::new(4, 4);
+    let [origin, other] = crate::ship_depot_footprint(depot, 0);
+    for tile in [origin, other, TileCoord::new(3, 4)] {
+        s.map.set_kind(tile, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+    let north = crate::ship_depot_north_tile(&s.map, depot).unwrap();
+    let south = crate::ship_depot_other_tile(&s.map, north).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(north, crate::engine::ENGINE_SHIP_MPS),
+    )
+    .unwrap();
+    let id = s.vehicles[0].id;
+
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(id, vec![VehicleOrder::depot(south)]),
+    )
+    .unwrap();
+
+    assert_eq!(s.vehicles[0].orders[0].destination(), north);
+    assert_eq!(s.vehicles[0].dest, north);
 }
 
 #[test]

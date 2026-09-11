@@ -4,7 +4,9 @@
 //! wagon removal (`renew_keep_length`).
 
 use crate::engine::{EngineDef, engine_available_in_year, engine_by_id};
-use crate::refit::{refittable_cargo_types_for_engine_with_catalog_and_climate, vehicle_in_depot};
+use crate::refit::{
+    refittable_cargo_types_for_engine_with_catalog_and_climate, vehicle_is_in_depot,
+};
 use crate::train_consist::{consist_unit_ids, detach_unit, engine_is_wagon};
 use crate::vehicle::{Vehicle, VehicleKind};
 use crate::{CompanyId, GameState, economy};
@@ -387,7 +389,7 @@ pub fn try_autoreplace_vehicle(
     };
 
     let vehicle = &state.vehicles[vehicle_idx];
-    if vehicle.cargo > 0 || !vehicle_in_depot(&state.map, vehicle.pos) {
+    if vehicle.cargo > 0 || !vehicle_is_in_depot(&state.map, vehicle) {
         return Ok(false);
     }
     let owner = vehicle.owner;
@@ -913,6 +915,7 @@ mod tests {
         state.companies[0].economy.money = 500_000;
         let mut v = Vehicle::new(1, VehicleKind::Truck, depot, depot);
         v.engine_id = Some(crate::engine::default_engine_id(VehicleKind::Truck));
+        v.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
         v.max_age_days = 30;
         v.build_tick = 0;
         state.vehicles.push(v);
@@ -943,6 +946,38 @@ mod tests {
     }
 
     #[test]
+    fn autoreplace_skips_ship_leaving_depot_footprint() {
+        use crate::engine::{ENGINE_SHIP_MPS, ENGINE_SHIP_OIL};
+
+        let mut state = GameState::new(12, 12);
+        let depot = TileCoord::new(4, 4);
+        state.map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        state.companies[0].economy.money = 5_000_000;
+        state.companies[0].engine_renew_money = 0;
+        state.economy.money = 5_000_000;
+        state.tick = crate::GameTick::new(
+            u64::from(60_u32) * 365 * u64::from(crate::economy::TICKS_PER_DAY),
+        );
+
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, depot, depot);
+        ship.engine_id = Some(ENGINE_SHIP_MPS);
+        ship.ship_state = crate::ship_movement::SHIP_STATE_TRACK_X;
+        ship.running = true;
+        state.vehicles.push(ship);
+        state
+            .autoreplace_rules
+            .push(AutoReplaceRule::new(ENGINE_SHIP_MPS, ENGINE_SHIP_OIL));
+
+        assert!(!try_autoreplace_vehicle(&mut state, 1).unwrap());
+        assert_eq!(state.vehicles[0].engine_id, Some(ENGINE_SHIP_MPS));
+
+        state.vehicles[0].ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+        state.vehicles[0].running = false;
+        assert!(try_autoreplace_vehicle(&mut state, 1).unwrap());
+        assert_eq!(state.vehicles[0].engine_id, Some(ENGINE_SHIP_OIL));
+    }
+
+    #[test]
     fn replace_chain_spawns_dual_head_rear() {
         use crate::engine::{ENGINE_TRAIN_KIRBY, ENGINE_TRAIN_MANLEY_MOREL};
         use crate::train_consist::consist_unit_ids;
@@ -959,6 +994,7 @@ mod tests {
         );
         let mut head = Vehicle::new(1, VehicleKind::Train, depot, depot);
         head.engine_id = Some(ENGINE_TRAIN_KIRBY);
+        head.depot_leave_cleared = false;
         state.vehicles.push(head);
         state.autoreplace_rules.push(AutoReplaceRule::new(
             ENGINE_TRAIN_KIRBY,
@@ -1043,6 +1079,7 @@ mod tests {
 
         let mut vehicle = Vehicle::new(1, VehicleKind::Bus, depot, depot);
         vehicle.engine_id = Some(1_401);
+        vehicle.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
         vehicle.capacity = 12;
         vehicle.cargo_type = Some(crate::CargoType::Passengers);
         state.vehicles.push(vehicle);

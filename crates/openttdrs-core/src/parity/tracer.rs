@@ -151,7 +151,7 @@ fn rail_snapshot(
         blocked_by_reservation: crate::rail_pbs::train_blocked_by_reservation(&state.map, v),
         reserved_len: u16::try_from(v.reserved_steps.len()).unwrap_or(u16::MAX),
         reservation_end,
-        in_depot: refit::vehicle_in_depot(&state.map, v.pos),
+        in_depot: refit::vehicle_is_in_depot(&state.map, v),
         at_platform: train_at_rail_platform(&state.map, v.pos),
     })
 }
@@ -256,7 +256,7 @@ fn capture_prev(state: &GameState) -> BTreeMap<u32, PrevVehicle> {
                     trend: 0,
                     blocked_by_signal: rail_blocked_by_signal(state, &trains, v),
                     in_depot: v.kind == VehicleKind::Train
-                        && refit::vehicle_in_depot(&state.map, v.pos),
+                        && refit::vehicle_is_in_depot(&state.map, v),
                     cargo_transfer_was_active: v.cargo_transfer_active(),
                 },
             )

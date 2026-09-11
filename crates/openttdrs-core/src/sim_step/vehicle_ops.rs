@@ -11,7 +11,7 @@ pub(super) fn tick_vehicle_timetables(state: &mut GameState) {
 
 pub(super) fn sync_autoreplace_depot_flags(state: &mut GameState) {
     for vehicle in &mut state.vehicles {
-        if vehicle.running || !crate::refit::vehicle_in_depot(&state.map, vehicle.pos) {
+        if vehicle.running || !crate::refit::vehicle_is_in_depot(&state.map, vehicle) {
             vehicle.autoreplace_attempted_this_stop = false;
         }
     }
@@ -25,7 +25,7 @@ pub(super) fn run_autoreplace_in_depots(state: &mut GameState) {
             !v.running
                 && v.cargo == 0
                 && !v.autoreplace_attempted_this_stop
-                && crate::refit::vehicle_in_depot(&state.map, v.pos)
+                && crate::refit::vehicle_is_in_depot(&state.map, v)
         })
         .map(|v| v.id)
         .collect();
@@ -61,7 +61,9 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
             let Some(idx) = state.runtime.fleet_index.slot(unit_id) else {
                 continue;
             };
-            if state.vehicles[idx].cargo > 0 {
+            if state.vehicles[idx].cargo > 0
+                || !crate::refit::vehicle_is_in_depot(&state.map, &state.vehicles[idx])
+            {
                 continue;
             }
             let allowed = state.vehicles[idx]

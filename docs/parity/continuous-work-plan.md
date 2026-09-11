@@ -4972,3 +4972,14 @@ El helper histórico que sólo clasifica la tesela permanece separado para la
 geometría. Esto evita que una unidad naval saliendo conserve la marca
 «depósito» en un lector mientras ya fue liberada en otro; #567 sigue abierta
 por callbacks, pathfinding completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-OPERATION-STATE (2026-09-11): las decisiones de
+refit, autoreplace y sus barridos automáticos consultan ahora el estado físico
+equivalente a `Vehicle::IsInDepot`, no sólo la clase de la tesela. Una nave
+que ya pasó a `SHIP_STATE_TRACK_*` durante la salida no puede refitarse ni
+reemplazarse aunque conserve temporalmente el footprint del depósito; las
+trazas ferroviarias también reflejan el estado real. Las regresiones cubren
+refit de interfaz/comando, refit automático de órdenes y autoreplace naval; el
+helper de tesela queda para geometría/render que todavía requiere una auditoría
+separada. #567 continúa abierta por callbacks, pathfinding completo y aceptación
+visual/framebuffer.

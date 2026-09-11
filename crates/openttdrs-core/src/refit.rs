@@ -493,7 +493,7 @@ pub fn next_refit_cargo(vehicle: &Vehicle) -> Option<CargoType> {
 #[must_use]
 pub fn refit_allowed(vehicle: &Vehicle, map: &Map) -> bool {
     vehicle.cargo == 0
-        && vehicle_in_depot(map, vehicle.pos)
+        && vehicle_is_in_depot(map, vehicle)
         && refittable_cargo_types(vehicle).len() > 1
 }
 
@@ -525,7 +525,7 @@ pub fn refit_allowed_with_catalog_and_climate(
     cargo_catalog: &[crate::cargo_spec::CargoSpecDef],
     climate: Climate,
 ) -> bool {
-    if vehicle.cargo != 0 || !vehicle_in_depot(map, vehicle.pos) {
+    if vehicle.cargo != 0 || !vehicle_is_in_depot(map, vehicle) {
         return false;
     }
     refittable_cargo_types_with_catalog_and_climate(vehicle, engine_catalog, cargo_catalog, climate)
@@ -645,6 +645,19 @@ mod tests {
         assert!(vehicle_is_in_depot(&map, &aircraft));
         aircraft.aircraft_phase = crate::vehicle::AircraftPhase::Taxi;
         assert!(!vehicle_is_in_depot(&map, &aircraft));
+    }
+
+    #[test]
+    fn refit_allowed_follows_native_ship_depot_state() {
+        let mut map = crate::map::Map::new_flat(8, 8, 0);
+        let depot = TileCoord::new(3, 3);
+        map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, depot, depot);
+        ship.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+        assert!(refit_allowed(&ship, &map));
+
+        ship.ship_state = crate::ship_movement::SHIP_STATE_TRACK_X;
+        assert!(!refit_allowed(&ship, &map));
     }
 
     #[test]

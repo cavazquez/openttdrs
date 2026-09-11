@@ -3,8 +3,9 @@
 use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build_cost};
 use crate::test_fixtures::SandboxMap;
 use crate::{
-    Command, GameState, StopKind, TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder,
-    WaterClass, apply_command, bridge_above_axis_from_mapt, command_would_fail, set_water_class_m1,
+    CargoType, Command, GameState, StopKind, TileCoord, TileKind, Vehicle, VehicleKind,
+    VehicleOrder, WaterClass, apply_command, bridge_above_axis_from_mapt, command_would_fail,
+    set_water_class_m1,
 };
 
 #[test]
@@ -617,6 +618,81 @@ fn build_ship_uses_north_section_and_initial_depot_facing() {
         assert!(ship.ship_pos_valid, "dir={dir} debe nacer centrado");
         assert_eq!((ship.ship_x & 0xF, ship.ship_y & 0xF), (8, 8));
     }
+}
+
+#[test]
+fn refit_ship_requires_native_depot_state() {
+    use crate::engine::ENGINE_SHIP_MPS;
+
+    let mut s = GameState::new(12, 12);
+    let depot = TileCoord::new(5, 5);
+    let [origin, other] = crate::ship_depot_footprint(depot, 0);
+    for coord in [origin, other] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(origin, ENGINE_SHIP_MPS),
+    )
+    .unwrap();
+    let id = s.vehicles[0].id;
+
+    s.vehicles[0].ship_state = crate::ship_movement::SHIP_STATE_TRACK_X;
+    assert_eq!(
+        apply_command(
+            &mut s,
+            &Command::RefitVehicle {
+                vehicle_id: id,
+                cargo: CargoType::Oil,
+                unit_ids: Vec::new(),
+            },
+        ),
+        Err(crate::CommandError::RefitNotAllowed)
+    );
+
+    s.vehicles[0].ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+    apply_command(
+        &mut s,
+        &Command::RefitVehicle {
+            vehicle_id: id,
+            cargo: CargoType::Oil,
+            unit_ids: Vec::new(),
+        },
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[0].cargo_type, Some(CargoType::Oil));
+}
+
+#[test]
+fn depot_order_refit_requires_native_ship_depot_state() {
+    use crate::engine::ENGINE_SHIP_MPS;
+
+    let mut s = GameState::new(12, 12);
+    let depot = TileCoord::new(5, 5);
+    let [origin, other] = crate::ship_depot_footprint(depot, 0);
+    for coord in [origin, other] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(origin, ENGINE_SHIP_MPS),
+    )
+    .unwrap();
+    let ship = &mut s.vehicles[0];
+    ship.cargo = 0;
+    ship.running = false;
+    ship.ship_state = crate::ship_movement::SHIP_STATE_TRACK_X;
+    ship.pending_depot_order_refit = Some(CargoType::Oil);
+    s.step();
+    assert_ne!(s.vehicles[0].cargo_type, Some(CargoType::Oil));
+    assert!(s.vehicles[0].pending_depot_order_refit.is_none());
+
+    s.vehicles[0].ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+    s.vehicles[0].pending_depot_order_refit = Some(CargoType::Oil);
+    s.step();
+    assert_eq!(s.vehicles[0].cargo_type, Some(CargoType::Oil));
 }
 
 #[test]

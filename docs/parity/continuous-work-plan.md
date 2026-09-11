@@ -4387,3 +4387,15 @@ queda en `2454 passed; 0 failed; 1 ignored` y cliente en `1388 passed; 0
 failed; 2 ignored`, con formato, `git diff --check` y Clippy estricto limpios.
 #329/#567 siguen abiertas por callbacks y propiedades navales restantes, y
 por aceptación visual manual bajo Weston; #326 permanece abierta.
+
+Actualización #329/#567-SHIP-VARIANTS (2026-09-11, `3f99efd2`): Action0 naval
+`0x20` ya conserva el ID local del motor padre, lo resuelve al ID global cuando
+todo el stack está materializado y elimina enlaces que formen ciclos, igual que
+`FinaliseEngineArray` nativo. La consulta del catálogo de compra mantiene cada
+padre delante de sus variantes directas, respetando el orden elegido para los
+hermanos. La regresión integra dos barcos del mismo GRF y verifica el enlace y
+el orden final. Core queda en `2460 passed; 0 failed; 1 ignored` y cliente en
+`1388 passed; 0 failed; 2 ignored`, con formato, `git diff --check`, checker de
+paridad y Clippy estricto limpios. #329/#567 siguen abiertas por callbacks,
+propiedades navales y aceptación visual manual bajo Weston; #326 permanece
+abierta.

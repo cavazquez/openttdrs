@@ -131,7 +131,19 @@ Fuente: `newgrf_act0_ships.cpp`.
 | `15` canal speed fraction | **runtime** (`canal_speed_frac` → `ship_speed_for_tile`) |
 | `17` misc flags (bit1 `Uses2CC`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |
 | `18`/`19`/`25` cargo classes allowed/disallowed/required WORD | **runtime** (`EngineDef` + refit por `CargoClass`, XOR de `refit_mask`) |
-| `08`, `09`, `11`, `13`, `16`, `1A`, `1B`, `1D`, `20`–`21`, `23`–`24`, `26` restantes | consumidas si tienen ancho fijo; semántica pendiente |
+| `08` sprite index | consumida; fallback visual específico aún pendiente |
+| `09` refittable | **runtime** (`ship_refittable` bloquea las opciones de refit) |
+| `11` legacy refit mask | **runtime** (traducción local→global en `refit_mask`) |
+| `13` refit cost | **runtime** (`refit_cost`) |
+| `16` retire early | **runtime** (`retire_early_years` en disponibilidad) |
+| `1A` long introduction date | **runtime** (`intro_year`) |
+| `1B` purchase list order | **runtime** (reordena el catálogo después de cargar el stack) |
+| `1D` cargo aging period | **runtime** (`cargo_age_period`) |
+| `20` engine variant | **runtime parcial** (`variant_parent_id` y orden padre→variante en compra) |
+| `21` extra miscellaneous flags | consumida; flags de noticias/preview y fiabilidad de variantes pendientes |
+| `23` velocidad WORD | **runtime** (`max_speed`) |
+| `24` aceleración | **runtime** (`ship_acceleration`) |
+| `26` badge list | **runtime parcial** (traducción y catálogo; UI de jerarquía pendiente) |
 | `1E` CTT include (lista variable) | **runtime** (`refit_mask` → `refittable_cargo_types_for_engine`; #274) |
 | `1F` CTT exclude (lista variable) | **runtime**: la máscara se resta del `include` (o de la lista vanilla cuando no hay `include`) al ofrecer cargas de refit (#274) |
 

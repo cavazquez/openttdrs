@@ -4638,6 +4638,18 @@ y la validación visual y runtime restante siguen pendientes, por lo que
 ignored` y cliente en `1397 passed; 0 failed; 2 ignored`, con Clippy estricto,
 formato y `diff --check` limpios.
 
+Actualización #329/#567-VEHICLE-AIRCRAFT-HELICOPTER-CUSTOM-ROTOR
+(2026-09-11): el rotor auxiliar del cliente ya intenta resolver la primera
+capa del grupo NewGRF del helicóptero activo. El frame animado se usa como
+índice de vista, `var 1F` recibe la orientación física del avión, se conservan
+la paleta y los offsets/tamaño custom y el rotor OpenGFX queda como fallback
+cuando Action2 no devuelve una vista. La regresión cubre un motor NewGRF con
+ID fuera de vanilla y un selector Action2 dependiente de `var 1F`; SpriteStack
+del rotor y la validación visual/runtime restante quedan pendientes, por lo
+que #329/#567 continúan abiertas. Core queda en `2488 passed; 0 failed; 1
+ignored` y cliente en `1398 passed; 0 failed; 2 ignored`, con Clippy estricto,
+formato y `diff --check` limpios.
+
 Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-AGE-COUNTER (2026-09-11): el
 correo de `AIR_SHADOW` mantiene ahora una cuenta atrás independiente de la
 bodega primaria. Ambos relojes usan el período efectivo del motor como

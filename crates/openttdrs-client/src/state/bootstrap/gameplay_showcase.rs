@@ -79,8 +79,10 @@ const SHOWCASE_WATER_X0: i32 = 5;
 const SHOWCASE_WATER_X1: i32 = 58;
 const SHOWCASE_WATER_Y0: i32 = 22;
 const SHOWCASE_WATER_Y1: i32 = 28;
-const SHOWCASE_DOCK_WEST: TileCoord = TileCoord::new(8, SHOWCASE_WATER_Y0);
-const SHOWCASE_DOCK_EAST: TileCoord = TileCoord::new(55, SHOWCASE_WATER_Y1);
+// `PlaceDock` recibe la pieza de tierra; la pieza acuática queda en la
+// primera fila/columna del rectángulo de agua según la orientación nativa.
+const SHOWCASE_DOCK_WEST: TileCoord = TileCoord::new(8, SHOWCASE_WATER_Y0 - 1);
+const SHOWCASE_DOCK_EAST: TileCoord = TileCoord::new(55, SHOWCASE_WATER_Y1 + 1);
 const SHOWCASE_BUOY_WEST: TileCoord = TileCoord::new(20, 24);
 const SHOWCASE_BUOY_EAST: TileCoord = TileCoord::new(43, 26);
 const SHOWCASE_SHIP_DEPOT: TileCoord = TileCoord::new(31, 25);
@@ -537,8 +539,8 @@ fn place_water_showcase(state: &mut GameState) {
             let _ = state.map.set_mapt_m5(c, 0x60, 0);
         }
     }
-    let _ = apply_command(state, &Command::PlaceDock(SHOWCASE_DOCK_WEST, 0));
-    let _ = apply_command(state, &Command::PlaceDock(SHOWCASE_DOCK_EAST, 0));
+    let _ = apply_command(state, &Command::PlaceDock(SHOWCASE_DOCK_WEST, 1));
+    let _ = apply_command(state, &Command::PlaceDock(SHOWCASE_DOCK_EAST, 3));
     let _ = apply_command(state, &Command::PlaceBuoy(SHOWCASE_BUOY_WEST));
     let _ = apply_command(state, &Command::PlaceBuoy(SHOWCASE_BUOY_EAST));
     let _ = apply_command(state, &Command::PlaceShipDepotDir(SHOWCASE_SHIP_DEPOT, 2));

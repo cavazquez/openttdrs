@@ -13,7 +13,7 @@ use crate::map::{
 };
 use crate::{GameState, Station, StopKind};
 
-use super::super::CommandError;
+use super::super::{CommandError, require_tile_owned_by_active};
 use super::shared::{
     check_in_bounds, check_object_can_be_auto_cleared, clear_object_footprint_keep_water,
     register_depot, unregister_depot,
@@ -155,6 +155,19 @@ fn refresh_ship_depot_docking_tile(state: &mut GameState, c: TileCoord) {
         tile.m1 &= !0x80;
     }
     let _ = state.map.set_tile(c, tile);
+}
+
+/// Reevalúa las teselas de agua vecinas a una instalación acuática.
+///
+/// `UpdateStationDockingTiles` no sólo modifica la tesela recién escrita: un
+/// muelle nuevo o demolido también cambia el bit `DockingTile` de los tiles de
+/// agua que lo rodean. La misma rutina sirve para el ciclo de vida de docks y
+/// depósitos, manteniendo el orden de actualización determinista.
+fn refresh_ship_docking_tiles_around(state: &mut GameState, center: TileCoord) {
+    for dir in 0..4 {
+        let (dx, dy) = crate::map::diag_dir_offset(dir);
+        refresh_ship_depot_docking_tile(state, TileCoord::new(center.x + dx, center.y + dy));
+    }
 }
 
 fn check_ship_depot_water_tile(state: &GameState, c: TileCoord) -> Result<(), CommandError> {
@@ -350,34 +363,76 @@ pub(in crate::command) fn check_clear_ship_depot(
     Ok(())
 }
 
-/// Muelle: agua plana con al menos un vecino de tierra (costa).
+/// Muelle: pieza de tierra inclinada, pieza de agua contigua y un segundo
+/// tile de agua plano para la boca.
+///
+/// `CmdBuildDock` recibe la tesela de tierra. La pieza acuática que queda
+/// junto a ella se convierte en `MP_STATION` con `GFX_DOCK_BASE_WATER_PART`,
+/// pero la siguiente tesela sigue siendo agua libre y debe existir para que un
+/// barco pueda aproximarse.
 pub(crate) fn check_dock_placement(
     map: &Map,
     stations: &[Station],
     c: TileCoord,
+    dir: u8,
 ) -> Result<(), CommandError> {
     check_in_bounds(map, c)?;
-    if stations.iter().any(|s| s.pos == c) {
+    let dir = dir & 0x03;
+    let water = crate::station::dock_water_tile(c, dir);
+    let approach = crate::station::dock_water_tile(water, dir);
+    if stations
+        .iter()
+        .any(|s| s.covers_tile(c) || s.covers_tile(water))
+    {
         return Err(CommandError::StationAlreadyExists);
     }
-    if map.get_kind(c) != Some(TileKind::Water) {
-        return Err(CommandError::CannotPlaceStationOnOccupiedTile);
+    // This stage only has a lossless clear path for plain clear ground.  Do
+    // not silently replace a forest until the command also models native
+    // auto-clear costs and callbacks.
+    if map.get_kind(c) != Some(TileKind::Grass) {
+        return Err(CommandError::SiteUnsuitable);
     }
-    let land_neighbor = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-        .into_iter()
-        .any(|(dx, dy)| {
-            let n = TileCoord::new(c.x + dx, c.y + dy);
-            map.get_kind(n).is_some_and(|k| {
-                !matches!(
-                    k,
-                    TileKind::Water | TileKind::ShipDepot | TileKind::Void | TileKind::Station
-                )
-            })
-        });
-    if !land_neighbor {
-        return Err(CommandError::StationNotAdjacentToTransport);
+    let Some(water_tile) = map.get(water) else {
+        return Err(CommandError::SiteUnsuitable);
+    };
+    if !has_tile_water_ground(water_tile)
+        || water_tile.kind != TileKind::Water
+        || tile_slope_and_z(map, water).is_none_or(|(tileh, _)| tileh != 0)
+    {
+        return Err(CommandError::SiteUnsuitable);
+    }
+    let Some(approach_tile) = map.get(approach) else {
+        return Err(CommandError::SiteUnsuitable);
+    };
+    if approach_tile.kind != TileKind::Water
+        || tile_slope_and_z(map, approach).is_none_or(|(tileh, _)| tileh != 0)
+    {
+        return Err(CommandError::SiteUnsuitable);
     }
     Ok(())
+}
+
+/// Primer `StationID` libre para una estación nueva escrita en `MAP2`.
+///
+/// Las estaciones creadas por versiones antiguas del port pueden conservar
+/// `m2 = 0` sin un `ottd_station_id`; ese valor se considera ocupado para no
+/// asociar por accidente un muelle nuevo a una estación legacy.
+fn next_station_id(state: &GameState) -> Option<u16> {
+    let mut used = std::collections::BTreeSet::new();
+    for station in &state.stations {
+        if let Some(id) = station
+            .ottd_station_id
+            .and_then(|id| u16::try_from(id).ok())
+        {
+            used.insert(id);
+        }
+    }
+    for tile in state.map.tiles() {
+        if matches!(tile.kind, TileKind::Station | TileKind::Airport) {
+            used.insert(u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8));
+        }
+    }
+    (0..=u16::MAX).find(|id| !used.contains(id))
 }
 
 pub(in crate::command) fn place_dock(
@@ -385,22 +440,128 @@ pub(in crate::command) fn place_dock(
     c: TileCoord,
     dir: u8,
 ) -> Result<(), CommandError> {
-    check_dock_placement(&state.map, &state.stations, c)?;
-    let m5 = u8::from(dir & 1 != 0);
-    let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
-    tile.kind = TileKind::Station;
-    tile.mapt = 0x50;
-    tile.m5 = m5;
-    tile.m6 = apply_station_m6(tile.m6, StopKind::Dock);
+    check_dock_placement(&state.map, &state.stations, c, dir)?;
+    let dir = dir & 0x03;
+    let water = crate::station::dock_water_tile(c, dir);
+    let station_id = next_station_id(state).ok_or(CommandError::StationPoolFull)?;
+    let mut land_tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let mut water_tile = state.map.get(water).ok_or(CommandError::OutOfBounds)?;
+
+    let [station_id_low, station_id_high] = station_id.to_le_bytes();
+    land_tile.kind = TileKind::Station;
+    land_tile.mapt = 0x50;
+    land_tile.m1 = (land_tile.m1 & !0x1F) | state.active_company.0;
+    land_tile.m2 = station_id_low;
+    land_tile.m2_hi = station_id_high;
+    land_tile.m3 = 0;
+    land_tile.m3hi = 0;
+    land_tile.m5 = dir;
+    land_tile.m6 = apply_station_m6(land_tile.m6, StopKind::Dock);
+    land_tile.m7 = 0;
+    land_tile.m8 = 0;
+    water_tile.kind = TileKind::Station;
+    water_tile.mapt = 0x50;
+    water_tile.m1 = (water_tile.m1 & !0x1F) | state.active_company.0;
+    water_tile.m2 = station_id_low;
+    water_tile.m2_hi = station_id_high;
+    water_tile.m3 = 0;
+    water_tile.m3hi = 0;
+    water_tile.m5 = crate::station::DOCK_WATER_PART_GFX + (dir & 1);
+    water_tile.m6 = apply_station_m6(water_tile.m6, StopKind::Dock);
+    water_tile.m7 = 0;
+    water_tile.m8 = 0;
     state
         .map
-        .set_tile(c, tile)
+        .set_tile(c, land_tile)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    state
+        .map
+        .set_tile(water, water_tile)
         .map_err(|_| CommandError::OutOfBounds)?;
     let mut st = Station::new_with_kind(c, StopKind::Dock);
     st.owner = state.active_company;
+    st.ottd_station_id = Some(u32::from(station_id));
     st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
     state.stations.push(st);
+    refresh_ship_docking_tiles_around(state, c);
+    refresh_ship_docking_tiles_around(state, water);
     state.economy.money -= station_build_cost(&state.global_economy);
+    Ok(())
+}
+
+/// Comprueba la demolición de cualquiera de las dos piezas de un muelle.
+pub(in crate::command) fn check_clear_dock(
+    state: &GameState,
+    c: TileCoord,
+) -> Result<[TileCoord; 2], CommandError> {
+    let Some(tile) = state.map.get(c) else {
+        return Err(CommandError::OutOfBounds);
+    };
+    if tile.kind != TileKind::Station
+        || crate::station::stop_kind_from_m6(tile.m6) != StopKind::Dock
+    {
+        return Err(CommandError::StationNotFound);
+    }
+    let footprint = crate::station::dock_footprint_for_tile(&state.map, c).unwrap_or([c, c]);
+    for tile in footprint {
+        if !state.cheats.magic_bulldozer_active() {
+            require_tile_owned_by_active(state, tile)?;
+        }
+        if state.vehicles.iter().any(|vehicle| vehicle.pos == tile) {
+            return Err(CommandError::VehicleInTheWay);
+        }
+    }
+    Ok(footprint)
+}
+
+/// Demuele un muelle completo, restaurando su agua y refrescando los marcadores
+/// de amarre de los vecinos.
+pub(in crate::command) fn clear_dock(
+    state: &mut GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    let footprint = check_clear_dock(state, c)?;
+    let [land, water] = footprint;
+    let legacy_single_tile = land == water;
+    if legacy_single_tile {
+        let water_class = state
+            .map
+            .get(land)
+            .map_or(WaterClass::Sea, |tile| water_class_from_m1(tile.m1));
+        make_water_tile(&mut state.map, land, water_class)
+            .map_err(|_| CommandError::OutOfBounds)?;
+    } else {
+        let mut land_tile = state.map.get(land).ok_or(CommandError::OutOfBounds)?;
+        land_tile.kind = TileKind::Grass;
+        land_tile.mapt = 0;
+        land_tile.m1 = 0;
+        land_tile.m2 = 0;
+        land_tile.m2_hi = 0;
+        land_tile.m3 = 0;
+        land_tile.m3hi = 0;
+        land_tile.m5 = 0;
+        land_tile.m6 = 0;
+        land_tile.m7 = 0;
+        land_tile.m8 = 0;
+        state
+            .map
+            .set_tile(land, land_tile)
+            .map_err(|_| CommandError::OutOfBounds)?;
+        let water_class = state
+            .map
+            .get(water)
+            .map_or(WaterClass::Sea, |tile| water_class_from_m1(tile.m1));
+        make_water_tile(&mut state.map, water, water_class)
+            .map_err(|_| CommandError::OutOfBounds)?;
+    }
+    state
+        .stations
+        .retain(|station| station.pos != land && station.pos != water);
+    refresh_ship_docking_tiles_around(state, land);
+    if !legacy_single_tile {
+        refresh_ship_docking_tiles_around(state, water);
+    }
+    state.economy.money -= crate::CLEAR_TILE_COST;
     Ok(())
 }
 
@@ -667,11 +828,11 @@ pub(crate) fn check_place_dock_or_station(
     map: &Map,
     stations: &[Station],
     c: TileCoord,
-    _dir: u8,
+    dir: u8,
     stop_kind: StopKind,
 ) -> Result<(), CommandError> {
     if stop_kind == StopKind::Dock {
-        check_dock_placement(map, stations, c)
+        check_dock_placement(map, stations, c, dir)
     } else if stop_kind == StopKind::Buoy {
         check_place_buoy(map, stations, c)
     } else {

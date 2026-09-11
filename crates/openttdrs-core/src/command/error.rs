@@ -22,6 +22,8 @@ pub enum CommandError {
     /// La tesela no tiene ningún vecino con carretera/vía (ni equivalente transitable).
     StationNotAdjacentToTransport,
     StationAlreadyExists,
+    /// El pool de estaciones alcanzó la capacidad que puede representar MAP2.
+    StationPoolFull,
     /// Tamaño de andenes/longitud no permitido por el `StationSpec` activo.
     StationSizeNotAllowed,
     StationNotFound,

@@ -1007,6 +1007,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
             "The entrance must face the road or rail in that direction."
         }
         "Ya hay una estación en esta tesela." => "There is already a station on this tile.",
+        "No quedan identificadores de estación disponibles." => {
+            "No station identifiers are available."
+        }
         "Este tipo de estación no permite ese número de andenes o longitud." => {
             "This station type does not allow that platform count or length."
         }

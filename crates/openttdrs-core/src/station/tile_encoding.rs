@@ -42,6 +42,69 @@ pub const STATION_TYPE_RAIL_WAYPOINT: u8 = 7;
 /// `StationType::RoadWaypoint` en bits 3–6 de `m6` (`station_type.h`).
 pub const STATION_TYPE_ROAD_WAYPOINT: u8 = 8;
 
+/// Primer `StationGfx` de la parte acuática de un muelle.
+///
+/// `MakeDock` escribe la pieza sobre tierra con `gfx = DiagDirection` y la
+/// pieza sobre agua con `gfx = GFX_DOCK_BASE_WATER_PART + Axis`. Mantener el
+/// umbral en core permite que navegación, demolición y renderer distingan la
+/// mitad transitable de la rampa aun cuando el mapa provenga de un SAV.
+pub const DOCK_WATER_PART_GFX: u8 = 4;
+
+/// Devuelve la tesela de agua de un muelle a partir de su pieza de tierra.
+///
+/// La dirección es la que `MakeDock` guarda en `MAP5` de la pieza de tierra:
+/// la parte acuática está exactamente una tesela en `TileOffsByDiagDir(dir)`.
+#[must_use]
+pub const fn dock_water_tile(land: crate::map::TileCoord, dir: u8) -> crate::map::TileCoord {
+    let (dx, dy) = crate::map::diag_dir_offset(dir);
+    crate::map::TileCoord::new(land.x + dx, land.y + dy)
+}
+
+/// Busca la pieza de tierra que acompaña a una pieza de muelle.
+///
+/// La parte acuática sólo conserva el eje (`gfx = 4`/`5`), por lo que para
+/// recuperar la dirección completa se comprueban las cuatro piezas vecinas y
+/// se exige que su `MAP5` apunte de vuelta a la tesela consultada.
+#[must_use]
+pub fn dock_land_tile(map: &Map, tile: crate::map::TileCoord) -> Option<crate::map::TileCoord> {
+    let raw = map.get(tile)?;
+    if raw.kind != TileKind::Station || stop_kind_from_m6(raw.m6) != StopKind::Dock {
+        return None;
+    }
+    if raw.m5 < DOCK_WATER_PART_GFX {
+        return Some(tile);
+    }
+    (0..4).find_map(|dir| {
+        let (dx, dy) = crate::map::diag_dir_offset(dir);
+        let land = crate::map::TileCoord::new(tile.x - dx, tile.y - dy);
+        let candidate = map.get(land)?;
+        (candidate.kind == TileKind::Station
+            && stop_kind_from_m6(candidate.m6) == StopKind::Dock
+            && candidate.m5 & 0x03 == dir
+            && dock_water_tile(land, dir) == tile)
+            .then_some(land)
+    })
+}
+
+/// Devuelve la huella nativa `[tierra, agua]` de un muelle completo.
+#[must_use]
+pub fn dock_footprint_for_tile(
+    map: &Map,
+    tile: crate::map::TileCoord,
+) -> Option<[crate::map::TileCoord; 2]> {
+    let land = dock_land_tile(map, tile)?;
+    let land_raw = map.get(land)?;
+    let dir = land_raw.m5 & 0x03;
+    let water = dock_water_tile(land, dir);
+    let water_raw = map.get(water)?;
+    (water_raw.kind == TileKind::Station
+        && stop_kind_from_m6(water_raw.m6) == StopKind::Dock
+        && water_raw.m5 >= DOCK_WATER_PART_GFX
+        && u16::from(land_raw.m2) | (u16::from(land_raw.m2_hi) << 8)
+            == u16::from(water_raw.m2) | (u16::from(water_raw.m2_hi) << 8))
+        .then_some([land, water])
+}
+
 /// `station_map.h`: bit 2 de `m6` indica una reserva PBS en una tesela rail.
 ///
 /// El byte `m6` también contiene el tipo de estación en los bits 3–6; mantener

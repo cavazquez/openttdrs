@@ -537,8 +537,14 @@ pub fn vehicle_physically_at_station(
             } else if station.stop_kind == StopKind::OilRig {
                 vpos == station.pos && crate::ship_movement::is_water_network_tile_at(map, vpos)
             } else {
-                vpos.x.abs_diff(station.pos.x) + vpos.y.abs_diff(station.pos.y) == 1
-                    && crate::ship_movement::is_water_network_tile_at(map, vpos)
+                let dock_water = crate::station::dock_footprint_for_tile(map, station.pos)
+                    .map(|footprint| footprint[1]);
+                let target = dock_water.unwrap_or(station.pos);
+                vpos.x.abs_diff(target.x) + vpos.y.abs_diff(target.y) == 1
+                    && map.get(vpos).is_some_and(|tile| {
+                        crate::ship_movement::is_water_network_tile_at(map, vpos)
+                            && (dock_water.is_none() || tile.m1 & 0x80 != 0)
+                    })
             })
         }
         VehicleKind::Aircraft => false,

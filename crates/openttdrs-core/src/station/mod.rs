@@ -47,9 +47,10 @@ pub use model::{
 };
 pub use move_goods::{can_move_goods_to_station, move_goods_to_station, update_station_waiting};
 pub use tile_encoding::{
-    STATION_TILE_PYLONS, STATION_TILE_RESERVATION, STATION_TILE_WIRES, STATION_TYPE_BUOY,
-    STATION_TYPE_DOCK, STATION_TYPE_OILRIG, STATION_TYPE_RAIL_WAYPOINT, STATION_TYPE_ROAD_WAYPOINT,
-    default_station_catenary_flags, is_rail_station_type, is_rail_waypoint_at,
+    DOCK_WATER_PART_GFX, STATION_TILE_PYLONS, STATION_TILE_RESERVATION, STATION_TILE_WIRES,
+    STATION_TYPE_BUOY, STATION_TYPE_DOCK, STATION_TYPE_OILRIG, STATION_TYPE_RAIL_WAYPOINT,
+    STATION_TYPE_ROAD_WAYPOINT, default_station_catenary_flags, dock_footprint_for_tile,
+    dock_land_tile, dock_water_tile, is_rail_station_type, is_rail_waypoint_at,
     is_rail_waypoint_tile, station_tile_can_have_pylons, station_tile_can_have_wires,
     station_tile_has_reservation, station_type_from_m6, stop_kind_from_m6,
 };

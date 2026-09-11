@@ -203,12 +203,13 @@ pub fn is_water_network_tile_at(map: &Map, c: TileCoord) -> bool {
     if tile.kind != TileKind::Station {
         return false;
     }
-    matches!(
-        crate::station::station_type_from_m6(tile.m6),
-        crate::station::STATION_TYPE_OILRIG
-            | crate::station::STATION_TYPE_DOCK
-            | crate::station::STATION_TYPE_BUOY
-    )
+    match crate::station::stop_kind_from_m6(tile.m6) {
+        crate::station::StopKind::OilRig | crate::station::StopKind::Buoy => true,
+        // A native dock has a land half (`m5 = 0..=3`) and a water half
+        // (`m5 = 4..=5`). Only the latter belongs to the water network.
+        crate::station::StopKind::Dock => tile.m5 >= crate::station::DOCK_WATER_PART_GFX,
+        _ => false,
+    }
 }
 
 #[must_use]

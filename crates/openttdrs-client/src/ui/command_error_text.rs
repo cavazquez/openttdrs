@@ -21,6 +21,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
             "La entrada debe dar a la carretera o vía en esa dirección."
         }
         CommandError::StationAlreadyExists => "Ya hay una estación en esta tesela.",
+        CommandError::StationPoolFull => "No quedan identificadores de estación disponibles.",
         CommandError::StationSizeNotAllowed => {
             "Este tipo de estación no permite ese número de andenes o longitud."
         }
@@ -221,6 +222,7 @@ mod tests {
             CommandError::CannotPlaceStationOnOccupiedTile,
             CommandError::StationNotAdjacentToTransport,
             CommandError::StationAlreadyExists,
+            CommandError::StationPoolFull,
             CommandError::StationSizeNotAllowed,
             CommandError::StationNotFound,
             CommandError::VehicleNotFound,

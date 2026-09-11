@@ -11,9 +11,9 @@ use super::terraform::{check_level_land, check_lower_land, check_raise_land};
 use super::town;
 use super::transport::{
     check_airport_area, check_airport_area_with_explicit_layout, check_bridge_with_stations,
-    check_clear_ship_depot, check_clear_tile, check_cycle_rail_signal_type, check_dock_placement,
-    check_object_can_be_auto_cleared, check_object_can_be_cleared, check_place_aqueduct,
-    check_place_buoy, check_place_canal, check_place_lock, check_place_rail,
+    check_clear_dock, check_clear_ship_depot, check_clear_tile, check_cycle_rail_signal_type,
+    check_dock_placement, check_object_can_be_auto_cleared, check_object_can_be_cleared,
+    check_place_aqueduct, check_place_buoy, check_place_canal, check_place_lock, check_place_rail,
     check_place_rail_signal_oriented, check_place_rail_waypoint, check_place_river,
     check_place_road_bits, check_place_road_waypoint, check_rail_depot_placement,
     check_rail_station_area, check_rail_station_slope_callbacks,
@@ -205,7 +205,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
                     .is_none()
                     .then_some(CommandError::DepotPoolFull)
             }),
-        Command::PlaceDock(c, _) => check_dock_placement(map, &state.stations, *c).err(),
+        Command::PlaceDock(c, dir) => check_dock_placement(map, &state.stations, *c, *dir).err(),
         Command::PlaceAirport(c) => {
             check_airport_area(state, *c, false, crate::AirportSpecId::Heliport).err()
         }
@@ -314,6 +314,12 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
                 })
         }
         Command::ClearTile(c) => {
+            if map.get(*c).is_some_and(|tile| {
+                tile.kind == crate::map::TileKind::Station
+                    && crate::station::stop_kind_from_m6(tile.m6) == crate::StopKind::Dock
+            }) {
+                return check_clear_dock(state, *c).err();
+            }
             if map.get_kind(*c) == Some(crate::map::TileKind::ShipDepot) {
                 return check_clear_ship_depot(state, *c).err();
             }

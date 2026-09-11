@@ -888,26 +888,92 @@ fn clear_ship_depot_rejects_vehicle_on_the_other_section() {
 #[test]
 fn place_dock_on_coast_and_serves_ship() {
     let mut s = GameState::new(12, 12);
-    let dock = TileCoord::new(5, 5);
     let land = TileCoord::new(5, 4);
-    let water = TileCoord::new(6, 5);
-    s.map.set_kind(dock, TileKind::Water).unwrap();
-    s.map.set_kind(water, TileKind::Water).unwrap();
+    let water = TileCoord::new(5, 5);
+    let approach = TileCoord::new(5, 6);
     s.map.set_kind(land, TileKind::Grass).unwrap();
+    s.map.set_kind(water, TileKind::Water).unwrap();
+    s.map.set_kind(approach, TileKind::Water).unwrap();
     let money = s.economy.money;
-    apply_command(&mut s, &Command::PlaceDock(dock, 0)).unwrap();
-    assert_eq!(s.map.get_kind(dock), Some(TileKind::Station));
+    apply_command(&mut s, &Command::PlaceDock(land, 1)).unwrap();
+    assert_eq!(s.map.get_kind(land), Some(TileKind::Station));
     assert_eq!(
-        crate::station::station_type_from_m6(s.map.get(dock).unwrap().m6),
+        crate::station::station_type_from_m6(s.map.get(land).unwrap().m6),
         crate::station::STATION_TYPE_DOCK
     );
-    assert!(crate::ship_movement::is_water_network_tile_at(&s.map, dock));
+    assert_eq!(s.map.get_kind(water), Some(TileKind::Station));
+    assert_eq!(s.map.get(water).unwrap().m5, 5);
+    assert!(!crate::ship_movement::is_water_network_tile_at(
+        &s.map, land
+    ));
+    assert!(crate::ship_movement::is_water_network_tile_at(
+        &s.map, water
+    ));
     assert_eq!(s.stations.len(), 1);
     assert_eq!(s.stations[0].stop_kind, StopKind::Dock);
+    assert_eq!(s.stations[0].pos, land);
+    assert_eq!(s.stations[0].ottd_station_id, Some(0));
     assert!(s.stations[0].can_service_vehicle(VehicleKind::Ship));
     assert_eq!(
         s.economy.money,
         money - station_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn dock_uses_shared_native_id_and_clears_from_water_part() {
+    let mut s = GameState::new(12, 12);
+    let land = TileCoord::new(6, 5);
+    let water = TileCoord::new(5, 5);
+    let approach = TileCoord::new(4, 5);
+    s.map.set_kind(land, TileKind::Grass).unwrap();
+    s.map.set_kind(water, TileKind::Water).unwrap();
+    s.map.set_kind(approach, TileKind::Water).unwrap();
+    let money = s.economy.money;
+
+    apply_command(&mut s, &Command::PlaceDock(land, 0)).unwrap();
+
+    let land_tile = s.map.get(land).unwrap();
+    let water_tile = s.map.get(water).unwrap();
+    assert_eq!(land_tile.kind, TileKind::Station);
+    assert_eq!(water_tile.kind, TileKind::Station);
+    assert_eq!(land_tile.m5, 0);
+    assert_eq!(water_tile.m5, crate::station::DOCK_WATER_PART_GFX);
+    assert_eq!(
+        crate::depot::depot_id_from_tile(land_tile),
+        None,
+        "los docks no deben entrar al pool de depósitos"
+    );
+    assert_eq!(
+        u16::from(land_tile.m2) | (u16::from(land_tile.m2_hi) << 8),
+        u16::from(water_tile.m2) | (u16::from(water_tile.m2_hi) << 8)
+    );
+    assert!(crate::ship_movement::is_water_network_tile_at(
+        &s.map, water
+    ));
+    assert!(!crate::ship_movement::is_water_network_tile_at(
+        &s.map, land
+    ));
+    assert_eq!(s.stations[0].pos, land);
+    assert_eq!(
+        command_would_fail(&s, &Command::ClearTile(water)),
+        None,
+        "la pieza acuática debe ser un cursor válido de demolición"
+    );
+
+    apply_command(&mut s, &Command::ClearTile(water)).unwrap();
+
+    assert_eq!(s.map.get_kind(land), Some(TileKind::Grass));
+    assert_eq!(s.map.get_kind(water), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(approach), Some(TileKind::Water));
+    let cleared_land = s.map.get(land).unwrap();
+    assert_eq!(cleared_land.m2, 0);
+    assert_eq!(cleared_land.m2_hi, 0);
+    assert_eq!(cleared_land.m6, 0);
+    assert!(s.stations.is_empty());
+    assert_eq!(
+        s.economy.money,
+        money - station_build_cost(&s.global_economy) - crate::CLEAR_TILE_COST
     );
 }
 
@@ -1041,11 +1107,13 @@ fn ship_buys_at_depot_and_paths_to_dock() {
             .set_kind(TileCoord::new(x, 4), TileKind::Water)
             .unwrap();
     }
+    let dock_land = TileCoord::new(10, 3);
+    s.map.set_kind(dock_land, TileKind::Grass).unwrap();
     s.map
-        .set_kind(TileCoord::new(10, 3), TileKind::Grass)
+        .set_kind(TileCoord::new(10, 5), TileKind::Water)
         .unwrap();
     apply_command(&mut s, &Command::PlaceShipDepotDir(TileCoord::new(2, 4), 2)).unwrap(); // boca +x hacia agua
-    apply_command(&mut s, &Command::PlaceDock(TileCoord::new(10, 4), 0)).unwrap();
+    apply_command(&mut s, &Command::PlaceDock(dock_land, 1)).unwrap();
     apply_command(
         &mut s,
         &Command::BuildVehicleAtDepot(TileCoord::new(2, 4), ENGINE_SHIP_MPS),
@@ -1057,7 +1125,7 @@ fn ship_buys_at_depot_and_paths_to_dock() {
         .find(|v| v.kind == VehicleKind::Ship)
         .unwrap();
     ship.running = true;
-    ship.set_vehicle_orders(vec![VehicleOrder::station(TileCoord::new(10, 4))]);
+    ship.set_vehicle_orders(vec![VehicleOrder::station(dock_land)]);
     ship.sync_order_destination(&s.map);
     let path = find_path(&s.map, ship.pos, ship.dest, PathNetwork::Water);
     assert!(path.is_some(), "ruta agua depósito → muelle");

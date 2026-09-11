@@ -637,6 +637,12 @@ pub(in crate::command) fn clear_tile(
     c: TileCoord,
 ) -> Result<(), CommandError> {
     check_clear_tile(&state.map, c)?;
+    if state.map.get(c).is_some_and(|tile| {
+        tile.kind == TileKind::Station
+            && crate::station::stop_kind_from_m6(tile.m6) == crate::StopKind::Dock
+    }) {
+        return super::water::clear_dock(state, c);
+    }
     if state.map.get_kind(c) == Some(TileKind::ShipDepot) {
         return super::water::clear_ship_depot(state, c);
     }

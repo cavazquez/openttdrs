@@ -20,24 +20,29 @@ fn ship_docking_tile_for_station(
     from: TileCoord,
 ) -> Option<TileCoord> {
     let station_tile = map.get(station)?;
-    if station_tile.kind != TileKind::Station
-        || !matches!(
-            crate::station::stop_kind_from_m6(station_tile.m6),
-            super::StopKind::Dock | super::StopKind::OilRig
-        )
-    {
+    if station_tile.kind != TileKind::Station {
         return None;
     }
 
-    (0..4)
-        .filter_map(|dir| {
-            let (dx, dy) = diag_dir_offset(dir);
-            let candidate = TileCoord::new(station.x + dx, station.y + dy);
-            map.get(candidate).and_then(|tile| {
-                (matches!(tile.kind, TileKind::Water | TileKind::ShipDepot)
-                    && tile.m1 & 0x80 != 0
-                    && crate::ship_movement::is_water_network_tile_at(map, candidate))
-                .then_some(candidate)
+    let origins = match crate::station::stop_kind_from_m6(station_tile.m6) {
+        super::StopKind::Dock => crate::station::dock_footprint_for_tile(map, station)
+            .map_or_else(|| vec![station], |footprint| vec![footprint[1]]),
+        super::StopKind::OilRig => vec![station],
+        _ => return None,
+    };
+
+    origins
+        .into_iter()
+        .flat_map(|origin| {
+            (0..4).filter_map(move |dir| {
+                let (dx, dy) = diag_dir_offset(dir);
+                let candidate = TileCoord::new(origin.x + dx, origin.y + dy);
+                map.get(candidate).and_then(|tile| {
+                    (matches!(tile.kind, TileKind::Water | TileKind::ShipDepot)
+                        && tile.m1 & 0x80 != 0
+                        && crate::ship_movement::is_water_network_tile_at(map, candidate))
+                    .then_some(candidate)
+                })
             })
         })
         .min_by_key(|candidate| {

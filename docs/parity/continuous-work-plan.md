@@ -3978,3 +3978,13 @@ huella. Core queda en 2413 pasadas y 1 ignorada; cliente en 1383 pasadas y 2
 ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta por
 industrias acuáticas, callbacks/vecinos y aceptación visual en Weston; #326
 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-WATER-INDUSTRY-CLEAR (2026-09-11,
+`e2f86f69`): `ClearTile_Industry(..., Auto)` queda representado en el port con
+`IndustryInTheWay` cuando una industria ocupa una tesela de agua de la huella
+naval. La previsualización y la ejecución comparten el rechazo, conservan la
+tesela original y no cobran ni crean el depósito; se agregó cobertura para
+ambas partes. Core queda en 2414 pasadas y 1 ignorada; cliente en 1383
+pasadas y 2 ignoradas, con Clippy estricto y formato verdes. #567 sigue
+abierta por callbacks/vecinos, contratos de plataforma petrolera y aceptación
+visual en Weston; #326 permanece abierta.

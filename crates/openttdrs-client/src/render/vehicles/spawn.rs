@@ -245,10 +245,7 @@ pub(crate) fn spawn_initial_vehicles(
                     source_depth: shadow_source_depth,
                 },
             ));
-            if vehicle
-                .engine_id
-                .is_some_and(openttdrs_core::aircraft_is_helicopter)
-            {
+            if super::aircraft_is_helicopter_for(sim, vehicle) {
                 let rotor = &super::assets::AIRCRAFT_ROTOR_LAYERS[0];
                 let mut rotor_pos =
                     aircraft_aux_sprite_pos_at(vehicle, &sim.state.map, pose, rotor, true, 1.1);

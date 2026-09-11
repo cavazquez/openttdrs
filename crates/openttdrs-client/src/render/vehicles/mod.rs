@@ -27,6 +27,15 @@ fn engine_in_sim(sim: &SimWorld, engine_id: u16) -> Option<&EngineDef> {
         .or_else(|| openttdrs_core::engine_by_id(engine_id))
 }
 
+/// Clasifica el avión con el `EngineDef` activo, incluidos motores NewGRF.
+fn aircraft_is_helicopter_for(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) -> bool {
+    let engine = vehicle
+        .engine_id
+        .and_then(|id| engine_in_sim(sim, id))
+        .unwrap_or_else(|| vehicle.effective_engine());
+    openttdrs_core::aircraft_is_helicopter_def(engine)
+}
+
 /// Sólo estos vehículos tienen children estables para `SpriteStack`.
 fn vehicle_uses_newgrf_stack(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) -> bool {
     vehicle
@@ -166,6 +175,28 @@ mod tests {
         v.engine_id = Some(openttdrs_core::ENGINE_TRUCK_MPS);
         v.cur_speed = 96;
         v
+    }
+
+    #[test]
+    fn custom_catalog_helicopter_uses_helicopter_classification() {
+        let mut sim = SimWorld {
+            state: GameState::new(8, 8),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let mut custom = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_AIRCRAFT_DAKOTA)
+            .unwrap()
+            .clone();
+        custom.id = 0x7F01;
+        custom.from_newgrf = true;
+        custom.is_helicopter = true;
+        sim.state.engine_catalog = vec![custom];
+
+        let pos = TileCoord::new(2, 2);
+        let mut vehicle = Vehicle::new(1, VehicleKind::Aircraft, pos, pos);
+        vehicle.engine_id = Some(0x7F01);
+
+        assert!(aircraft_is_helicopter_for(&sim, &vehicle));
     }
 
     fn default_handles() -> TruckHandles {

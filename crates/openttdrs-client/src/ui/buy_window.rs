@@ -417,7 +417,7 @@ pub(crate) fn engines_for_buy_window<'a>(
     );
     if depot_kind == DepotPurchaseKind::Aircraft {
         let heliport = openttdrs_core::airport_tile_is_heliport(&sim.state.map, depot_pos);
-        engines.retain(|e| openttdrs_core::aircraft_is_helicopter(e.id) == heliport);
+        engines.retain(|e| openttdrs_core::aircraft_is_helicopter_def(e) == heliport);
     }
     if depot_kind == DepotPurchaseKind::Rail {
         match rail_filter {
@@ -1256,5 +1256,40 @@ mod tests {
 
         let english = stats_text(Locale::En, &engine, &[]);
         assert!(english.contains("Capacity: 25 passengers / 7 mail"));
+    }
+
+    #[test]
+    fn buy_window_keeps_custom_helicopters_on_heliports() {
+        let depot = TileCoord::new(2, 2);
+        let mut state = GameState::new(8, 8);
+        apply_command(&mut state, &Command::PlaceAirport(depot)).unwrap();
+        let mut custom = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_AIRCRAFT_DAKOTA)
+            .unwrap()
+            .clone();
+        custom.id = 0x7F01;
+        custom.name = "Helicóptero NewGRF".into();
+        custom.from_newgrf = true;
+        custom.is_helicopter = true;
+        state.engine_catalog.push(custom);
+        let sim = SimWorld {
+            state,
+            ..SimWorld::default()
+        };
+
+        let engines = engines_for_buy_window(
+            &sim,
+            depot,
+            EngineCatalogSort::Name,
+            RoadEngineFilter::All,
+            RailBuyFilter::All,
+            "",
+        );
+
+        assert!(engines.iter().any(|engine| engine.id == 0x7F01));
+        assert!(
+            !engines
+                .iter()
+                .any(|engine| engine.id == openttdrs_core::ENGINE_AIRCRAFT_DAKOTA)
+        );
     }
 }

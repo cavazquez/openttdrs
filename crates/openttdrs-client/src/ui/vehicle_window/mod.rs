@@ -18,7 +18,8 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{default_engine_id, engine_for_vehicle};
 
-use crate::render::TruckHandles;
+use crate::render::{NewGrfTrainSpriteCache, TruckHandles, vehicle_preview_layers};
+use crate::state::SimWorld;
 use crate::ui::floating_window::FloatingWindowClosed;
 use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
@@ -29,7 +30,7 @@ pub(crate) use rename::{
     vehicle_window_rename_keyboard,
 };
 pub(crate) use setup::setup_vehicle_window;
-pub(crate) use sync::sync_vehicle_window;
+pub(crate) use sync::{sync_vehicle_window, sync_vehicle_window_consist};
 
 const PREVIEW_TEX_W: u32 = 260;
 const PREVIEW_TEX_H: u32 = 100;
@@ -147,6 +148,30 @@ pub(crate) fn vehicle_side_sprite(
     } else {
         trucks.intro_sprite(vehicle.kind, 2)
     }
+}
+
+/// Sprite lateral de una unidad para las tiras de consist de las ventanas.
+///
+/// Las unidades vanilla conservan la ruta existente. Una unidad NewGRF usa
+/// el mismo resolver de preview que la ventana de compra, incluyendo la
+/// primera capa runtime de `SpriteStack`; la vista completa del mapa sigue
+/// usando el contexto de la entidad real.
+pub(crate) fn vehicle_side_sprite_for_sim(
+    trucks: &TruckHandles,
+    sim: &SimWorld,
+    vehicle: &openttdrs_core::Vehicle,
+    cache: &mut NewGrfTrainSpriteCache,
+    images: &mut Assets<Image>,
+) -> Handle<Image> {
+    if let Some(engine) = vehicle
+        .engine_id
+        .and_then(|id| openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, id))
+        && let Some(layer) =
+            vehicle_preview_layers(sim, engine, sim.state.company_colour, cache, images).first()
+    {
+        return layer.handle.clone();
+    }
+    vehicle_side_sprite(trucks, vehicle)
 }
 
 pub(crate) fn vehicle_window_on_closed(

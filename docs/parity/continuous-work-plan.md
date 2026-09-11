@@ -4618,6 +4618,17 @@ pendientes, por lo que #329/#567 continúan abiertas. Core queda en `2486
 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`,
 con Clippy estricto, formato y `diff --check` limpios.
 
+Actualización #329/#567-VEHICLE-WINDOW-CONSIST-NEWGRF (2026-09-11): las
+tiras de consist de `VehicleViewWindow` ya consultan el catálogo activo para
+las unidades NewGRF y reutilizan la primera capa del resolver de compra,
+incluido el resultado runtime de `SpriteStack`; las unidades vanilla mantienen
+su sprite lateral existente. La tira quedó en un sistema ECS separado para no
+exceder el límite de parámetros de Bevy. La entidad FTA separada, sus
+scopes/estado propios y la validación visual/runtime restante siguen
+pendientes, por lo que #329/#567 continúan abiertas. Core queda en `2488
+passed; 0 failed; 1 ignored` y cliente en `1401 passed; 0 failed; 2 ignored`,
+con Clippy estricto, formato y `diff --check` limpios.
+
 Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-AGE-PERIOD (2026-09-11): el
 parser de aeronaves ya consume Action0 `0x1C` con el ancho nativo WORD y
 propaga el período al catálogo `EngineDef`. La regresión cubre tanto la lectura

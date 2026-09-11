@@ -4,7 +4,9 @@ use bevy::prelude::*;
 use bevy::text::EditableText;
 use openttdrs_core::VehicleKind;
 
-use crate::render::{PrimaryGameCamera, TruckHandles, vehicle_world_position};
+use crate::render::{
+    NewGrfTrainSpriteCache, PrimaryGameCamera, TruckHandles, vehicle_world_position,
+};
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{FloatingWindow, FloatingWindowId, FloatingWindowTitleText};
@@ -14,7 +16,7 @@ use super::status::format_vehicle_status;
 use super::{
     VehicleConsistUnitSprite, VehicleWindowPreviewCamera, VehicleWindowRefitOnly,
     VehicleWindowRenameInput, VehicleWindowRenameRow, VehicleWindowState, VehicleWindowStatusText,
-    VehicleWindowToggleText, VehicleWindowTrainOnly, vehicle_side_sprite,
+    VehicleWindowToggleText, VehicleWindowTrainOnly, vehicle_side_sprite_for_sim,
 };
 
 /// TitleText → contenedor → title bar → FloatingWindow root.
@@ -30,7 +32,6 @@ pub(crate) fn sync_vehicle_window(
     chain: Res<VehicleChainRegistry>,
     sim: Res<SimWorld>,
     prefs: Res<ClientPreferences>,
-    trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(
         Entity,
         &mut FloatingWindow,
@@ -79,19 +80,6 @@ pub(crate) fn sync_vehicle_window(
         ),
     >,
     _rename_input_q: Query<&mut EditableText, With<VehicleWindowRenameInput>>,
-    mut consist_q: Query<
-        (
-            &VehicleChainSlot,
-            &VehicleConsistUnitSprite,
-            &mut ImageNode,
-            &mut Node,
-        ),
-        (
-            Without<VehicleWindowRenameRow>,
-            Without<VehicleWindowTrainOnly>,
-            Without<VehicleWindowRefitOnly>,
-        ),
-    >,
     mut preview: Query<
         (&mut Transform, &mut Camera),
         (With<VehicleWindowPreviewCamera>, Without<PrimaryGameCamera>),
@@ -110,11 +98,6 @@ pub(crate) fn sync_vehicle_window(
         let vehicle = vehicle_id.and_then(|id| sim.state.vehicles.iter().find(|v| v.id == id));
         let Some(vehicle) = vehicle else {
             *vis = Visibility::Hidden;
-            for (consist_slot, _, _, mut node) in &mut consist_q {
-                if consist_slot.0 == slot_idx {
-                    node.display = Display::None;
-                }
-            }
             for (row_slot, mut row) in &mut train_row_q {
                 if row_slot.0 == slot_idx {
                     row.display = Display::None;
@@ -133,29 +116,6 @@ pub(crate) fn sync_vehicle_window(
             continue;
         };
         *vis = Visibility::Visible;
-
-        let unit_ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, vehicle.id);
-        if let Some(trucks) = trucks.as_ref() {
-            for (consist_slot, sprite, mut image, mut node) in &mut consist_q {
-                if consist_slot.0 != slot_idx {
-                    continue;
-                }
-                if let Some(&unit_id) = unit_ids.get(sprite.unit_idx)
-                    && let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id)
-                {
-                    node.display = Display::Flex;
-                    image.image = vehicle_side_sprite(trucks, unit);
-                } else {
-                    node.display = Display::None;
-                }
-            }
-        } else {
-            for (consist_slot, _, _, mut node) in &mut consist_q {
-                if consist_slot.0 == slot_idx {
-                    node.display = Display::None;
-                }
-            }
-        }
 
         let show_rename = window_state.rename_editing && focused_slot == Some(slot_idx);
         for (row_slot, mut row) in &mut rename_row_q {
@@ -238,5 +198,58 @@ pub(crate) fn sync_vehicle_window(
         } else {
             cam.is_active = false;
         }
+    }
+}
+
+/// Sincroniza la tira de unidades sin cargarla en el sistema general de la
+/// ventana. Bevy limita los parámetros ECS y la resolución runtime NewGRF
+/// necesita además el cache de imágenes.
+pub(crate) fn sync_vehicle_window_consist(
+    chain: Res<VehicleChainRegistry>,
+    sim: Res<SimWorld>,
+    trucks: Option<Res<TruckHandles>>,
+    mut cache: ResMut<NewGrfTrainSpriteCache>,
+    mut images: ResMut<Assets<Image>>,
+    mut consist_q: Query<
+        (
+            &VehicleChainSlot,
+            &VehicleConsistUnitSprite,
+            &mut ImageNode,
+            &mut Node,
+        ),
+        (
+            Without<VehicleWindowRenameRow>,
+            Without<VehicleWindowTrainOnly>,
+            Without<VehicleWindowRefitOnly>,
+        ),
+    >,
+) {
+    let Some(trucks) = trucks.as_ref() else {
+        for (_, _, _, mut node) in &mut consist_q {
+            node.display = Display::None;
+        }
+        return;
+    };
+
+    for (slot, sprite, mut image, mut node) in &mut consist_q {
+        let Some(vehicle_id) = chain.vehicle_at(slot.0) else {
+            node.display = Display::None;
+            continue;
+        };
+        let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
+            node.display = Display::None;
+            continue;
+        };
+        let unit_ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, vehicle.id);
+        let Some(&unit_id) = unit_ids.get(sprite.unit_idx) else {
+            node.display = Display::None;
+            continue;
+        };
+        let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id) else {
+            node.display = Display::None;
+            continue;
+        };
+        node.display = Display::Flex;
+        image.image = vehicle_side_sprite_for_sim(trucks, &sim, unit, &mut cache, &mut images);
     }
 }

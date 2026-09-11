@@ -5070,3 +5070,12 @@ evita que `needs_servicing` y la fiabilidad queden desfasados respecto de
 `VehicleServiceInDepot`; la regresión comprueba servicio, fiabilidad y cambio
 de estado en el mismo tick. #567 continúa abierta por callbacks, pathfinding
 completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-SERVICE-IN-DEPOT (2026-09-11): el callback
+económico naval comprueba primero el estado físico de depósito y ejecuta el
+servicio aunque la nave conserve una orden de depósito. Así una unidad que
+permanece detenida varios días no espera hasta la salida para limpiar
+`needs_servicing`, igual que `CheckIfShipNeedsService` +
+`VehicleServiceInDepot`; la regresión cubre orden manual, fiabilidad y
+permanencia en la huella 2×1. #567 continúa abierta por callbacks,
+pathfinding y aceptación visual/framebuffer.

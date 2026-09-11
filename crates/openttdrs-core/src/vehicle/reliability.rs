@@ -484,6 +484,7 @@ const ROAD_SERVICE_MAX_PENALTY: u32 = 20;
 /// por lo que un cero mantiene el servicio automático desactivado.
 fn check_ship_needs_service(state: &mut crate::GameState, idx: usize) {
     use crate::depot::{MAX_SHIP_DEPOT_SEARCH_DISTANCE, nearest_reachable_ship_depot_tile_indexed};
+    use crate::refit::vehicle_is_in_depot;
     use crate::vehicle::VehicleKind;
     use crate::vehicle::order::VehicleOrder;
 
@@ -493,10 +494,6 @@ fn check_ship_needs_service(state: &mut crate::GameState, idx: usize) {
     if vehicle.kind != VehicleKind::Ship
         || !vehicle.running
         || vehicle.prev_unit.is_some()
-        || vehicle
-            .orders
-            .iter()
-            .any(|order| matches!(order, VehicleOrder::Depot { .. }))
         || state
             .companies
             .get(vehicle.owner.index())
@@ -510,6 +507,26 @@ fn check_ship_needs_service(state: &mut crate::GameState, idx: usize) {
         state_ref.vehicles[idx].requires_service_with(state_ref)
     };
     if !needs {
+        return;
+    }
+    // `CheckIfShipNeedsService` llama primero a `VehicleServiceInDepot` si la
+    // cadena ya está dentro de un depósito. No esperar a la salida importa
+    // cuando la orden actual es un depósito manual o de servicio: el barco
+    // puede permanecer allí varios días y OpenTTD lo deja listo en este
+    // callback económico.
+    if vehicle_is_in_depot(&state.map, vehicle) {
+        let engine_catalog = state.engine_catalog.clone();
+        state.vehicles[idx].service_at_depot_with_catalog(&engine_catalog);
+        return;
+    }
+    // Fuera de un depósito, conservar una orden existente evita insertar una
+    // segunda parada de servicio. La rama anterior debe quedar antes de este
+    // filtro para mantener la precedencia nativa.
+    if vehicle
+        .orders
+        .iter()
+        .any(|order| matches!(order, VehicleOrder::Depot { .. }))
+    {
         return;
     }
     let (pos, owner) = {
@@ -889,5 +906,48 @@ mod tests {
         ));
         assert_eq!(state.vehicles[0].dest, own_depot);
         assert_eq!(state.map.get_kind(rival_depot), Some(TileKind::ShipDepot));
+    }
+
+    #[test]
+    fn ship_service_check_services_a_ship_already_inside_depot() {
+        use crate::vehicle::order::VehicleOrder;
+        use crate::{Command, GameState, TileKind, VehicleKind, WaterClass, apply_command};
+
+        let mut state = GameState::new(12, 8);
+        let depot = TileCoord::new(5, 3);
+        for y in [2_i32, 3_i32] {
+            for x in 0..12_i32 {
+                crate::map::make_water_tile(&mut state.map, TileCoord::new(x, y), WaterClass::Sea)
+                    .unwrap();
+            }
+        }
+        apply_command(&mut state, &Command::PlaceShipDepotDir(depot, 2)).unwrap();
+        let north = crate::ship_depot_north_tile(&state.map, depot).unwrap();
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, north, north);
+        ship.running = true;
+        ship.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+        ship.service_interval_days = 1;
+        ship.last_service_day = 0;
+        ship.reliability = 1_000;
+        ship.needs_servicing = true;
+        ship.orders = vec![VehicleOrder::depot(north)];
+        state.vehicles.push(ship);
+        state.companies[0].servint_ships = 360;
+        state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
+        state.sync_timers_from_tick();
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(
+            state.vehicles[0].reliability,
+            initial_reliability_for_engine(
+                crate::engine::default_engine_id(VehicleKind::Ship),
+                VehicleKind::Ship,
+            )
+        );
+        assert!(!state.vehicles[0].needs_servicing);
+        assert_eq!(state.vehicles[0].orders.len(), 1);
+        assert_eq!(state.map.get_kind(north), Some(TileKind::ShipDepot));
     }
 }

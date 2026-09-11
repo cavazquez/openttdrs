@@ -4692,3 +4692,15 @@ separada, sus scopes/estado propios y la validación visual siguen pendientes,
 por lo que #329/#567 continúan abiertas. Core queda en `2488 passed; 0 failed;
 1 ignored` y cliente en `1396 passed; 0 failed; 2 ignored`, con Clippy
 estricto, formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-HELICOPTER-BUY-PREVIEW
+(2026-09-11): la vista de compra ya usa un contenedor por capas para el
+helicóptero seleccionado. El cuerpo conserva su preview existente y el rotor
+consulta el mismo resolver Action2 que el mapa, con `var 1F = DIR_W`, frame
+detenido, offsets/tamaño NewGRF y hasta ocho children estables para
+`SpriteStack`; cuando no hay vista custom se muestra la capa detenida de
+OpenGFX. La regresión cubre la geometría escalada y centrada de los offsets.
+La entidad FTA separada, sus scopes/estado propios y la validación visual y
+runtime restante siguen pendientes, por lo que #329/#567 continúan abiertas.
+Core queda en `2488 passed; 0 failed; 1 ignored` y cliente en `1400 passed; 0
+failed; 2 ignored`, con Clippy estricto, formato y `diff --check` limpios.

@@ -3921,10 +3921,17 @@ fn parse_ship_property(
                 meta.sound_effect = read_u8(payload, i)?;
             }
         }
-        0x1A | 0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
         0x11 => {
             for meta in metas {
                 meta.legacy_refit_mask = read_u32(payload, i)?;
+            }
+        }
+        0x1A => {
+            for meta in metas {
+                let days = read_u32(payload, i)?;
+                meta.intro_year =
+                    1920u16.saturating_add(u16::try_from(days / 365).unwrap_or(u16::MAX));
             }
         }
         0x14 => {

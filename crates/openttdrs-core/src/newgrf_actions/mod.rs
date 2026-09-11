@@ -4761,6 +4761,39 @@ mod tests {
         );
     }
 
+    #[test]
+    fn ships_long_intro_date_reaches_engine_catalog() {
+        let a0 = [
+            0x00,
+            ACTION0_FEATURE_SHIPS,
+            0x01,
+            0x01,
+            0x00,
+            0x1A,
+            0x42,
+            0x0E,
+            0x00,
+            0x00,
+        ];
+        let meta = parse_action0_vehicle_metas(&a0).unwrap().remove(0);
+        assert_eq!(meta.intro_year, 1930);
+
+        let bytes =
+            build_grf_v2_with_action0_and_action8(&a0, [b'R', b'F', 0, 1], "ship-intro", "");
+        let dir = tempfile_dir_with("ship-intro.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ship-intro.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|engine| engine.from_newgrf && engine.kind == VehicleKind::Ship)
+            .unwrap();
+        assert_eq!(engine.intro_year, 1930);
+    }
+
     /// #329: Action0 conserva las clases allowed/disallowed/required de cada
     /// feature de vehículos, en vez de consumirlas como propiedades opacas.
     #[test]

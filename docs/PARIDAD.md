@@ -3649,6 +3649,20 @@ verdes. #567 sigue abierta por la matriz completa Sea/Canal/River, costas,
 callbacks, piezas restantes, clipping, orden global y framebuffer; #326
 permanece abierta.
 
+Actualización #567-SHIP-REVERSE-TRACKDIR (2026-09-11, `6cde3fb8`): cuando el
+siguiente tile deja de ser navegable, el controlador enumera los tres
+`Trackdir` que pueden recibirse desde el lado de retorno, descarta las bocas
+desconectadas y elige la salida con ruta acuática más corta hacia el destino;
+si ninguna completa el camino, aplica un desempate estable por track. La
+selección usa la misma tabla nativa de entrada/salida y conserva la rotación
+gráfica separada mientras detiene, actualiza `ship_track`/`ship_state` y limpia
+la caché. Se agregó una regresión donde la salida recta queda bloqueada y el
+barco debe tomar un giro lateral conectado. Core queda en `2451 passed; 0
+failed; 1 ignored` y cliente en `1388 passed; 0 failed; 2 ignored`, con
+formato, `git diff --check` y Clippy estricto limpios. #567 sigue abierta por
+callbacks navales, la equivalencia completa de YAPF/trackdirs y aceptación
+visual manual bajo Weston; #326 permanece abierta.
+
 Actualización #326/#567-SHIP-DEPOT-WATER-STRUCTURE-CLEAR (2026-09-11,
 `6e46b15d`): el preview y la ejecución ya no sobrescriben una esclusa ni una
 sección de depósito naval existente. Ambas son `MP_WATER` con `WaterClass`

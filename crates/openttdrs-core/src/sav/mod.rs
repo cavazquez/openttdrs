@@ -1547,6 +1547,10 @@ impl GameState {
         // Indexar una sola vez las piezas de aeropuerto importadas. `m2` es
         // el `StationID` y `m6` identifica el tipo de estación del tile.
         let mut imported_airport_tiles: HashMap<u32, Vec<TileCoord>> = HashMap::new();
+        // `STNN` conserva una sola fila lógica, mientras cada muelle ocupa
+        // dos piezas `MP_STATION`. Indexarlas por `MAP2` permite reconstruir
+        // la huella completa al importar un save.
+        let mut imported_dock_tiles: HashMap<u32, Vec<TileCoord>> = HashMap::new();
         let (map_w, map_h) = state.map.dimensions();
         for y in 0..map_h {
             let Ok(y) = i32::try_from(y) else {
@@ -1560,16 +1564,20 @@ impl GameState {
                 let Some(tile) = state.map.get(c) else {
                     continue;
                 };
-                if tile.kind != TileKind::Station
-                    || !crate::station::stop_kind_from_m6(tile.m6).has_airport_facility()
-                {
+                if tile.kind != TileKind::Station {
                     continue;
                 }
                 let station_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
-                imported_airport_tiles
-                    .entry(station_id)
-                    .or_default()
-                    .push(c);
+                let stop_kind = crate::station::stop_kind_from_m6(tile.m6);
+                if stop_kind.has_airport_facility() {
+                    imported_airport_tiles
+                        .entry(station_id)
+                        .or_default()
+                        .push(c);
+                }
+                if stop_kind == StopKind::Dock {
+                    imported_dock_tiles.entry(station_id).or_default().push(c);
+                }
             }
         }
         for st in &sav.stations {
@@ -1666,6 +1674,30 @@ impl GameState {
                         let _ = state.map.set_tile(c, tile);
                     }
                 }
+            }
+            if stop_kind == StopKind::Dock {
+                let mut physical_tiles = Vec::new();
+                for tile in imported_dock_tiles
+                    .remove(&st.station_id)
+                    .unwrap_or_default()
+                {
+                    if let Some(footprint) =
+                        crate::station::dock_footprint_for_tile(&state.map, tile)
+                    {
+                        physical_tiles.extend(footprint);
+                    } else {
+                        // Conserva una pieza legacy o un registro incompleto
+                        // para que la estación no pierda su identidad visible.
+                        physical_tiles.push(tile);
+                    }
+                }
+                physical_tiles.sort_unstable();
+                physical_tiles.dedup();
+                station.joined_tiles.extend(
+                    physical_tiles
+                        .into_iter()
+                        .filter(|tile| *tile != station.pos),
+                );
             }
             hydrate_sav_station_cargo(
                 &mut station,
@@ -2933,6 +2965,66 @@ mod tests {
             state.map.get(oilrig).map(|tile| tile.m6),
             Some(crate::station::STATION_TYPE_OILRIG << 3)
         );
+    }
+
+    #[test]
+    fn from_sav_game_reconstructs_imported_dock_footprint_by_station_id() {
+        let first_land = TileCoord::new(2, 3);
+        let first_water = crate::station::dock_water_tile(first_land, 1);
+        let second_land = TileCoord::new(6, 3);
+        let second_water = crate::station::dock_water_tile(second_land, 1);
+        let station_id = 0x1234_u16;
+        let mut map = Map::new_flat(10, 8, 0);
+        for (land, water) in [(first_land, first_water), (second_land, second_water)] {
+            let mut land_tile = map.get(land).expect("dock land");
+            land_tile.kind = TileKind::Station;
+            land_tile.m5 = 1;
+            land_tile.m6 = crate::station::STATION_TYPE_DOCK << 3;
+            map.set_tile(land, land_tile).expect("set dock land");
+            map.set_m2_u16(land, station_id).expect("dock land id");
+
+            let mut water_tile = map.get(water).expect("dock water");
+            water_tile.kind = TileKind::Station;
+            water_tile.m5 = crate::station::DOCK_WATER_PART_GFX;
+            water_tile.m6 = crate::station::STATION_TYPE_DOCK << 3;
+            map.set_tile(water, water_tile).expect("set dock water");
+            map.set_m2_u16(water, station_id).expect("dock water id");
+        }
+
+        let mut sav = empty_sav(352, map);
+        sav.stations.push(SavStation {
+            station_id: u32::from(station_id),
+            pos: first_land,
+            owner: crate::company::CompanyId::PLAYER.0,
+            name: Some("Muelle importado".into()),
+            facilities: FACIL_DOCK,
+            string_id: None,
+            build_date: crate::station::STATION_BUILD_DATE_DEFAULT,
+            town_id: None,
+            airport_type: 0,
+            airport_w: 0,
+            airport_h: 0,
+            airport_layout: 0,
+            airport_rotation: 0,
+            airport_blocks: 0,
+            had_vehicle_of_type: 0,
+            last_vehicle_type: 0xFF,
+            time_since_load: u8::MAX,
+            time_since_unload: u8::MAX,
+            airport_persistent_storage_id: None,
+            cargo: Vec::new(),
+        });
+
+        let state = GameState::from_sav_game(sav);
+        let station = state.stations.first().expect("dock station");
+        assert_eq!(station.stop_kind, StopKind::Dock);
+        assert!(station.joined_tiles.contains(&first_water));
+        assert!(station.joined_tiles.contains(&second_land));
+        assert!(station.joined_tiles.contains(&second_water));
+        assert!(station.covers_tile(first_water));
+        assert!(station.covers_tile(second_water));
+        assert_eq!(state.map.get(first_land).map(|tile| tile.m2), Some(0x34));
+        assert_eq!(state.map.get(first_land).map(|tile| tile.m2_hi), Some(0x12));
     }
 
     #[test]

@@ -157,17 +157,34 @@ fn effect_tick_state(kind: TrainSmokeSet, age_ticks: u64) -> Option<EffectTickSt
     Some(EffectTickState { frame, rise })
 }
 
-fn deterministic_random16(vehicle_id: u32, tick_counter: u8, salt: u32) -> u16 {
-    wang_hash(vehicle_id, u32::from(tick_counter), salt) as u16
+fn visual_random_word(
+    random: &mut Option<&mut openttdrs_core::linkgraph_parity::Randomizer>,
+    vehicle_id: u32,
+    tick_counter: u8,
+    salt: u32,
+) -> u32 {
+    match random.as_mut() {
+        Some(random) => random.next(),
+        None => wang_hash(vehicle_id, u32::from(tick_counter), salt),
+    }
+}
+
+fn visual_random16(
+    random: &mut Option<&mut openttdrs_core::linkgraph_parity::Randomizer>,
+    vehicle_id: u32,
+    tick_counter: u8,
+    salt: u32,
+) -> u16 {
+    visual_random_word(random, vehicle_id, tick_counter, salt) as u16
 }
 
 fn chance16(random: u16, numerator: i32, denominator: u32) -> bool {
     if numerator <= 0 || denominator == 0 {
         return false;
     }
-    let threshold =
-        (u64::try_from(numerator).unwrap_or(0) * 65_536 / u64::from(denominator)).min(65_536);
-    u64::from(random) < threshold
+    let random_low = u64::from(random);
+    let denominator = u64::from(denominator);
+    ((random_low * denominator + denominator / 2) >> 16) < u64::try_from(numerator).unwrap_or(0)
 }
 
 fn train_is_stopping_at_station(map: &Map, vehicle: &Vehicle) -> bool {
@@ -222,11 +239,25 @@ fn train_smoke_to_emit(
 
 /// Igual que `train_smoke_to_emit`, pero usando el catálogo de motores de la
 /// partida para resolver callbacks de vehículos NewGRF.
+#[cfg(test)]
 fn train_smoke_to_emit_with_engine(
     map: &Map,
     vehicle: &mut Vehicle,
     engine: &EngineDef,
     smoke_amount: u8,
+) -> Option<TrainSmokeSet> {
+    let mut random = None;
+    train_smoke_to_emit_with_engine_and_random(map, vehicle, engine, smoke_amount, &mut random)
+}
+
+/// Igual que [`train_smoke_to_emit_with_engine`], pero consumiendo el stream
+/// global cuando el caller está dentro del tick visual autoritativo.
+fn train_smoke_to_emit_with_engine_and_random(
+    map: &Map,
+    vehicle: &mut Vehicle,
+    engine: &EngineDef,
+    smoke_amount: u8,
+    random: &mut Option<&mut openttdrs_core::linkgraph_parity::Randomizer>,
 ) -> Option<TrainSmokeSet> {
     let amount = smoke_amount.min(2);
     if amount == 0
@@ -284,7 +315,7 @@ fn train_smoke_to_emit_with_engine(
             let numerator = 64 - i32::from(speed) * 32 / i32::from(max_speed) + power_weight_effect;
             (speed < speed_limit
                 && chance16(
-                    deterministic_random16(vehicle.id, tick_counter, 0xD1E5_E100),
+                    visual_random16(random, vehicle.id, tick_counter, 0xD1E5_E100),
                     numerator,
                     512_u32 >> amount,
                 ))
@@ -294,7 +325,7 @@ fn train_smoke_to_emit_with_engine(
             let numerator = 6 - i32::from(speed) * 4 / i32::from(max_speed);
             (tick_counter & 3 == 0
                 && chance16(
-                    deterministic_random16(vehicle.id, tick_counter, 0xE1EC_7A1C),
+                    visual_random16(random, vehicle.id, tick_counter, 0xE1EC_7A1C),
                     numerator,
                     360_u32 >> amount,
                 ))
@@ -392,12 +423,27 @@ fn advanced_effect_offset(
 /// El callback avanzado no debe ejecutarse para un vehículo detenido, oculto,
 /// dentro de un depósito/túnel o cubierto por un puente.
 #[must_use]
+#[cfg(test)]
 fn advanced_effect_should_emit(
     map: &Map,
     vehicle: &Vehicle,
     engine: &EngineDef,
     kind: VehicleVisualEffectKind,
     smoke_amount: u8,
+) -> bool {
+    let mut random = None;
+    advanced_effect_should_emit_with_random(map, vehicle, engine, kind, smoke_amount, &mut random)
+}
+
+/// Igual que [`advanced_effect_should_emit`], usando `_random` para las
+/// comprobaciones `Chance16` del tick visual real.
+fn advanced_effect_should_emit_with_random(
+    map: &Map,
+    vehicle: &Vehicle,
+    engine: &EngineDef,
+    kind: VehicleVisualEffectKind,
+    smoke_amount: u8,
+    random: &mut Option<&mut openttdrs_core::linkgraph_parity::Randomizer>,
 ) -> bool {
     let amount = smoke_amount.min(2);
     if amount == 0
@@ -445,7 +491,7 @@ fn advanced_effect_should_emit(
             let numerator = 64 - i32::from(speed) * 32 / i32::from(max_speed) + power_weight_effect;
             speed < speed_limit
                 && chance16(
-                    deterministic_random16(vehicle.id, tick_counter, 0xD1E5_E100),
+                    visual_random16(random, vehicle.id, tick_counter, 0xD1E5_E100),
                     numerator,
                     512_u32 >> amount,
                 )
@@ -454,7 +500,7 @@ fn advanced_effect_should_emit(
             let numerator = 6 - i32::from(speed) * 4 / i32::from(max_speed);
             tick_counter & 3 == 0
                 && chance16(
-                    deterministic_random16(vehicle.id, tick_counter, 0xE1EC_7A1C),
+                    visual_random16(random, vehicle.id, tick_counter, 0xE1EC_7A1C),
                     numerator,
                     360_u32 >> amount,
                 )
@@ -706,6 +752,7 @@ fn spawn_train_smoke(
     let map = &state.map;
     let map_width = map.dimensions().0;
     let engine_catalog = &state.engine_catalog;
+    let mut random = Some(&mut state.random);
     let mut visual_sound_events = Vec::new();
     for vehicle in &mut state.vehicles {
         if active_count >= MAX_TRAIN_SMOKE_EFFECTS {
@@ -727,21 +774,27 @@ fn spawn_train_smoke(
             if matches!(visual_spec.kind, VehicleVisualEffectKind::Disabled) {
                 continue;
             }
-            if !advanced_effect_should_emit(
+            if !advanced_effect_should_emit_with_random(
                 map,
                 vehicle,
                 engine,
                 visual_spec.kind,
                 prefs.smoke_amount,
+                &mut random,
             ) {
                 continue;
             }
             // `ShowVisualEffect` no emite el modelo vanilla cuando el bit 6
             // pide el callback avanzado: si el callback falla, el resultado
             // correcto es no crear efectos, no degradar a humo estándar.
-            let random =
-                deterministic_random16(vehicle.id, vehicle.newgrf_tick_counter, 0x1600_0000);
-            let advanced = resolve_vehicle_spawn_visual_effect_callback(engine, vehicle, random);
+            let random_word = visual_random_word(
+                &mut random,
+                vehicle.id,
+                vehicle.newgrf_tick_counter,
+                0x1600_0000,
+            );
+            let advanced =
+                resolve_vehicle_spawn_visual_effect_callback(engine, vehicle, random_word);
             let Some(advanced) = advanced else {
                 continue;
             };
@@ -782,18 +835,25 @@ fn spawn_train_smoke(
             continue;
         }
         let set_kind = if vehicle.kind == VehicleKind::Train {
-            train_smoke_to_emit_with_engine(map, vehicle, engine, prefs.smoke_amount)
+            train_smoke_to_emit_with_engine_and_random(
+                map,
+                vehicle,
+                engine,
+                prefs.smoke_amount,
+                &mut random,
+            )
         } else if matches!(
             visual_spec.kind,
             VehicleVisualEffectKind::Steam
                 | VehicleVisualEffectKind::Diesel
                 | VehicleVisualEffectKind::Electric
-        ) && advanced_effect_should_emit(
+        ) && advanced_effect_should_emit_with_random(
             map,
             vehicle,
             engine,
             visual_spec.kind,
             prefs.smoke_amount,
+            &mut random,
         ) {
             Some(match visual_spec.kind {
                 VehicleVisualEffectKind::Steam => TrainSmokeSet::Steam,
@@ -959,6 +1019,58 @@ mod tests {
             train_smoke_kind(ENGINE_TRAIN_ASIASTAR),
             TrainSmokeKind::Electric
         );
+    }
+
+    #[test]
+    fn visual_random_word_uses_global_stream_when_available() {
+        let mut expected = openttdrs_core::linkgraph_parity::Randomizer::new(1);
+        let expected_word = expected.next();
+        let mut actual = openttdrs_core::linkgraph_parity::Randomizer::new(1);
+        let mut random = Some(&mut actual);
+
+        assert_eq!(
+            visual_random_word(&mut random, 7, 3, 0x1600_0000),
+            expected_word
+        );
+        assert_eq!(actual, expected);
+
+        let mut fallback = None;
+        assert_eq!(
+            visual_random_word(&mut fallback, 7, 3, 0x1600_0000),
+            wang_hash(7, 3, 0x1600_0000)
+        );
+    }
+
+    #[test]
+    fn probabilistic_train_effect_consumes_global_stream_only_when_needed() {
+        let map = Map::new_flat(4, 4, 0);
+        let mut diesel = running_train(openttdrs_core::engine::ENGINE_TRAIN_MANLEY_MOREL);
+        let diesel_engine = diesel.effective_engine();
+        let mut diesel_rng = openttdrs_core::linkgraph_parity::Randomizer::new(1);
+        let diesel_before = diesel_rng.state;
+        let mut diesel_random = Some(&mut diesel_rng);
+        let _ = train_smoke_to_emit_with_engine_and_random(
+            &map,
+            &mut diesel,
+            diesel_engine,
+            2,
+            &mut diesel_random,
+        );
+        assert_ne!(diesel_rng.state, diesel_before);
+
+        let mut steam = running_train(ENGINE_TRAIN_KIRBY);
+        let steam_engine = steam.effective_engine();
+        let mut steam_rng = openttdrs_core::linkgraph_parity::Randomizer::new(1);
+        let steam_before = steam_rng.state;
+        let mut steam_random = Some(&mut steam_rng);
+        let _ = train_smoke_to_emit_with_engine_and_random(
+            &map,
+            &mut steam,
+            steam_engine,
+            2,
+            &mut steam_random,
+        );
+        assert_eq!(steam_rng.state, steam_before);
     }
 
     #[test]

@@ -1010,7 +1010,7 @@ pub struct VehicleAdvancedVisualEffect {
 pub fn resolve_vehicle_spawn_visual_effect_callback(
     engine: &EngineDef,
     vehicle: &mut Vehicle,
-    random: u16,
+    random: u32,
 ) -> Option<VehicleAdvancedVisualEffect> {
     if engine.newgrf_grfid == 0 {
         return None;
@@ -1021,7 +1021,7 @@ pub fn resolve_vehicle_spawn_visual_effect_callback(
         engine.newgrf_local_id,
         CBID_VEHICLE_SPAWN_VISUAL_EFFECT,
         0,
-        u32::from(random),
+        random,
         &mut ctx,
     );
     writeback_vehicle_persistent_registers(vehicle, &ctx);
@@ -6180,6 +6180,41 @@ mod tests {
             result.spawns[3],
             VehicleAdvancedVisualEffectSpawn::default()
         );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_spawn_visual_effect_receives_full_random_word() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x5350_574E;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_compare_u32(0x18, 0x7BCD_1234)));
+
+        let mut matching_vehicle = Vehicle::new(
+            46,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        let matching = resolve_vehicle_spawn_visual_effect_callback(
+            &engine,
+            &mut matching_vehicle,
+            0x7BCD_1234,
+        )
+        .expect("matching callback result");
+        assert_eq!(matching.count, 1);
+
+        let mut truncated_vehicle = matching_vehicle.clone();
+        let truncated = resolve_vehicle_spawn_visual_effect_callback(
+            &engine,
+            &mut truncated_vehicle,
+            0x0000_1234,
+        )
+        .expect("truncated callback result");
+        assert_eq!(truncated.count, 0);
     }
 
     #[test]

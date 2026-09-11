@@ -4869,3 +4869,16 @@ propagación completa del consist visual, livery/callbacks restantes y el
 compositor/raster global; #329/#567 continúan abiertas. Core queda en `2492
 passed; 0 failed; 1 ignored` y cliente en `1405 passed; 0 failed; 2 ignored`,
 con Clippy estricto, formato y `diff --check` limpios.
+
+Actualización #329-VEHICLE-VISUAL-EFFECT-GLOBAL-RNG (2026-09-11): el call
+site visual del cliente consume ahora el `Randomizer` global de la partida
+para las llamadas `Chance16` de humo/chispas y para el parámetro RNG de CB160,
+manteniendo el orden y sin consumir palabras en ramas que OpenTTD no evalúa.
+CB160 recibe la palabra completa de 32 bits en lugar del `u16` truncado; los
+wrappers de pruebas sin partida conservan un fallback determinista. Las
+regresiones cubren el avance exacto del stream, la no-consumición del vapor y
+la diferencia de bits altos en CB160. Siguen pendientes la propagación completa
+del consist visual, livery/callbacks restantes y el compositor/raster global;
+#329/#567 continúan abiertas. Core queda en `2493 passed; 0 failed; 1 ignored`
+y cliente en `1407 passed; 0 failed; 2 ignored`, con Clippy estricto, formato
+y `diff --check` limpios.

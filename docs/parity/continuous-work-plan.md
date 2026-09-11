@@ -3844,3 +3844,23 @@ canónica del depósito naval. La suite core queda en 2401 pasadas y 1 ignorada;
 la cliente en 1373 pasadas y 2 ignoradas, con Clippy estricto verde. #567 sigue
 abierta por mutaciones/UI de nombre y pueblo generado, callbacks/vecinos,
 preview visual, clipping, orden global y framebuffer; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-TOWN-ORDINAL (2026-09-11, `1ebceb02`):
+la creación de depósitos ya replica la parte dinámica de `MakeDefaultName`:
+elige el pueblo más cercano y el primer `town_cn` libre dentro de ese pueblo y
+tipo de transporte. Dos depósitos viales cercanos reciben ordinales 0 y 1;
+un depósito ferroviario o naval no consume esos ordinales. La demolición y la
+tabla `DEPT` ya parten de la misma fila persistente. La suite core queda en
+2402 pasadas y 1 ignorada, con Clippy estricto del cliente verde. #567 sigue
+abierta por el comando de renombrado, resolución completa de callbacks y
+vecinos, preview visual, clipping, orden global y framebuffer; #326 permanece
+abierta.
+
+Actualización #326/#567-SHIP-DEPOT-NATIVE-TITLE (2026-09-11, `2a731579`):
+la ventana de depósito consulta el `DepotID` de `MAP2`, también al seleccionar
+la mitad sur de un depósito naval. Si existe nombre custom lo muestra; si no,
+resuelve `pueblo + tipo + ordinal` en el locale activo, y conserva el fallback
+con coordenadas para estados antiguos sin fila `DEPT`. La suite cliente queda
+en 1374 pasadas y 2 ignoradas; Clippy estricto y formato pasan. #567 sigue
+abierta por renombrado interactivo, callbacks/vecinos y aceptación visual de
+la huella naval, clipping, orden global y framebuffer; #326 permanece abierta.

@@ -1079,6 +1079,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Hay una plataforma petrolera aquí; demolila antes de construir el depósito naval." => {
             "There is an oil rig here; demolish it before building the ship depot."
         }
+        "Hay una industria aquí; demolila antes de construir el depósito naval." => {
+            "There is an industry here; demolish it before building the ship depot."
+        }
         "Este tipo de puente no está disponible (año, longitud o presupuesto)." => {
             "This bridge type is unavailable (year, length, or budget)."
         }

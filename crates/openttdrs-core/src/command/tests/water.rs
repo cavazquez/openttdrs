@@ -314,6 +314,42 @@ fn place_ship_depot_classifies_water_station_blockers() {
     }
 }
 
+#[test]
+fn place_ship_depot_rejects_water_industry_during_auto_clear() {
+    for part in 0..2_usize {
+        let mut s = GameState::new(8, 8);
+        let depot = TileCoord::new(3, 3);
+        let footprint = crate::ship_depot_footprint(depot, 0);
+        for coord in footprint {
+            s.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+        let blocked_tile = footprint[part];
+        let mut industry = s.map.get(blocked_tile).unwrap();
+        industry.kind = TileKind::Industry;
+        industry.mapt = 0x40; // MP_INDUSTRY.
+        industry.m1 = set_water_class_m1(industry.m1, WaterClass::Sea);
+        s.map.set_tile(blocked_tile, industry).unwrap();
+        let before = s.map.get(blocked_tile).unwrap();
+        let money = s.economy.money;
+        let command = Command::PlaceShipDepotDir(depot, 0);
+
+        assert_eq!(
+            command_would_fail(&s, &command),
+            Some(crate::CommandError::IndustryInTheWay),
+            "preview part={part} no debe limpiar la industria acuática"
+        );
+        assert_eq!(
+            apply_command(&mut s, &command),
+            Err(crate::CommandError::IndustryInTheWay),
+            "ejecución part={part} no debe sobrescribir la industria acuática"
+        );
+        assert_eq!(s.map.get(blocked_tile), Some(before));
+        assert_eq!(s.map.get_kind(footprint[1 - part]), Some(TileKind::Water));
+        assert!(s.depots.is_empty());
+        assert_eq!(s.economy.money, money);
+    }
+}
+
 fn add_water_object(
     state: &mut GameState,
     origin: TileCoord,

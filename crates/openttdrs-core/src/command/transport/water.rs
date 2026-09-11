@@ -125,6 +125,11 @@ fn check_ship_depot_water_tile(state: &GameState, c: TileCoord) -> Result<(), Co
                     StopKind::OilRig => Err(CommandError::OilRigInTheWay),
                     _ => Err(CommandError::BuildingMustBeDemolished),
                 }
+            } else if tile.kind == TileKind::Industry {
+                // `ClearTile_Industry(..., Auto)` siempre devuelve
+                // `GENERIC_OBJECT_IN_THE_WAY`; una industria no se demuele
+                // como parte de la construcción de otro objeto.
+                Err(CommandError::IndustryInTheWay)
             } else if is_map_object_tile(tile.mapt) {
                 check_object_can_be_auto_cleared(state, c)
             } else {

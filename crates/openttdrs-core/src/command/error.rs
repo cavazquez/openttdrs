@@ -87,6 +87,8 @@ pub enum CommandError {
     BuoyInTheWay,
     /// Una plataforma petrolera existente bloquea la limpieza automática del agua.
     OilRigInTheWay,
+    /// Una industria existente bloquea la limpieza automática del agua.
+    IndustryInTheWay,
     /// Puente sin hueco que salvar (agua o terreno más bajo bajo el tramo).
     BridgeTypeNotAvailable,
     InvalidBridgeSpan,

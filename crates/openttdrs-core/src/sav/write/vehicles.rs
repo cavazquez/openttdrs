@@ -20,6 +20,7 @@ use super::codec::{write_gamma, write_str};
 use super::entities::CargoPacketExport;
 #[cfg(test)]
 use super::entities::cargo_packet_export;
+use crate::cargo::CargoType;
 use crate::game_state::GameState;
 use crate::map::{TileCoord, TileKind, coord_to_linear_index};
 use crate::news::openttd_date_from_calendar_day_index;
@@ -257,6 +258,21 @@ fn openttd_aircraft_engine_type(v: &Vehicle) -> u16 {
 fn aircraft_is_helicopter_for(state: &GameState, v: &Vehicle) -> bool {
     let engine = crate::newgrf_callback::engine_for_vehicle_catalog(&state.engine_catalog, v);
     crate::engine::aircraft_is_helicopter_def(engine)
+}
+
+/// Capacidad de correo de la unidad sombra que acompaña a un avión.
+///
+/// El modelo de simulación conserva la sombra como entidad visual/SAV, no
+/// como un segundo `Vehicle`; al exportar debemos reconstruir su `cargo_cap`
+/// desde el motor efectivo para que `OpenTTD` no pierda la propiedad Action0
+/// `0x11` al cargar el archivo.
+fn aircraft_mail_capacity_for(state: &GameState, v: &Vehicle) -> u16 {
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(&state.engine_catalog, v);
+    if engine.kind == VehicleKind::Aircraft {
+        engine.mail_capacity
+    } else {
+        0
+    }
 }
 
 type SavRecordBytes = Vec<u8>;
@@ -1016,6 +1032,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
 
         if is_air {
             let is_helicopter = aircraft_is_helicopter_for(state, v);
+            let mail_capacity = aircraft_mail_capacity_for(state, v);
             // Primario + sombra (y rotor para helicópteros). OpenTTD exige
             // ambos auxiliares al cargar un `Aircraft` normal.
             let shadow_idx = sparse_idx + 1;
@@ -1077,9 +1094,9 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     engine_type,
                     vehstatus: VEHSTATUS_STOPPED,
                     acceleration: 0,
-                    cargo: 0,
+                    cargo: CargoType::Mail.temperate_id(),
                     cargo_subtype: 0,
-                    cargo_capacity: 0,
+                    cargo_capacity: mail_capacity,
                     refit_capacity: 0,
                     cargo_count: 0,
                     cargo_packet_refs: Vec::new(),
@@ -1878,11 +1895,13 @@ mod tests {
         custom_engine.name = "NewGRF Rotor".to_owned();
         custom_engine.from_newgrf = true;
         custom_engine.is_helicopter = true;
+        custom_engine.mail_capacity = 7;
         state.engine_catalog = vec![custom_engine];
 
         let air_pos = TileCoord::new(40, 40);
         let mut helicopter = Vehicle::new(99, VehicleKind::Aircraft, air_pos, air_pos);
         helicopter.engine_id = Some(0x7F00);
+        helicopter.capacity = 80;
         state.vehicles = vec![helicopter];
 
         let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
@@ -1914,6 +1933,34 @@ mod tests {
                 u64::from(AIR_SHADOW),
                 u64::from(AIR_ROTOR)
             ]
+        );
+
+        fn common(row: &crate::sav::table::SlRecord) -> &crate::sav::table::SlRecord {
+            let aircraft = match record_get(row, "aircraft") {
+                Some(SlValue::Structs(items)) => items.first().expect("aircraft"),
+                other => panic!("aircraft ausente: {other:?}"),
+            };
+            match record_get(aircraft, "common") {
+                Some(SlValue::Structs(items)) => items.first().expect("common"),
+                other => panic!("common ausente: {other:?}"),
+            }
+        }
+        let primary_common = common(&rows[0].1);
+        assert_eq!(
+            record_get(primary_common, "cargo_cap").and_then(SlValue::as_u64),
+            Some(80),
+            "la capacidad principal permanece separada de la sombra de correo"
+        );
+        let shadow_common = common(&rows[1].1);
+        assert_eq!(
+            record_get(shadow_common, "cargo_type").and_then(SlValue::as_u64),
+            Some(u64::from(CargoType::Mail.temperate_id())),
+            "la sombra debe declarar correo"
+        );
+        assert_eq!(
+            record_get(shadow_common, "cargo_cap").and_then(SlValue::as_u64),
+            Some(7),
+            "la sombra conserva Action0 aircraft 0x11"
         );
     }
 

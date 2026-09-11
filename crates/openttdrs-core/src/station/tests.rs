@@ -200,6 +200,67 @@ mod coherence_tests {
     }
 
     #[test]
+    fn ship_station_destination_uses_nearest_joined_dock_footprint() {
+        let mut state = GameState::new(20, 20);
+        let first_land = TileCoord::new(5, 4);
+        let second_land = TileCoord::new(5, 10);
+        let first_water = crate::station::dock_water_tile(first_land, 1);
+        let second_water = crate::station::dock_water_tile(second_land, 1);
+        let first_docking = TileCoord::new(5, 6);
+        let second_docking = TileCoord::new(5, 12);
+        let native_id = 23_u16;
+
+        for (land, water) in [(first_land, first_water), (second_land, second_water)] {
+            for (tile, gfx) in [
+                (land, 1_u8),
+                (water, crate::station::DOCK_WATER_PART_GFX + 1),
+            ] {
+                let mut raw = state.map.get(tile).expect("tesela de muelle");
+                raw.kind = TileKind::Station;
+                raw.mapt = 0x50;
+                raw.m1 = crate::map::set_water_class_m1(raw.m1, WaterClass::Sea);
+                raw.m2 = native_id as u8;
+                raw.m2_hi = (native_id >> 8) as u8;
+                raw.m5 = gfx;
+                raw.m6 = crate::station::STATION_TYPE_DOCK << 3;
+                state.map.set_tile(tile, raw).unwrap();
+            }
+        }
+        for tile in [first_docking, second_docking] {
+            state.map.set_kind(tile, TileKind::Water).unwrap();
+            let mut raw = state.map.get(tile).unwrap();
+            raw.m1 = crate::map::set_water_class_m1(raw.m1 | 0x80, WaterClass::Sea);
+            state.map.set_tile(tile, raw).unwrap();
+        }
+
+        let mut station = Station::new_with_kind(first_land, StopKind::Dock);
+        station.joined_tiles = vec![first_water, second_land, second_water];
+        let order = crate::vehicle::VehicleOrder::station(first_land);
+
+        assert_eq!(
+            resolve_order_destination_from_with_stations(
+                &state.map,
+                &[station],
+                VehicleKind::Ship,
+                order,
+                TileCoord::new(5, 15),
+            ),
+            second_docking,
+            "la estación unida debe elegir el amarre naval más cercano"
+        );
+        assert_eq!(
+            resolve_order_destination_from(
+                &state.map,
+                VehicleKind::Ship,
+                order,
+                TileCoord::new(5, 15),
+            ),
+            first_docking,
+            "la API legacy conserva el ancla para callers sin GameState"
+        );
+    }
+
+    #[test]
     fn station_map_coherence_flags_orphan_tile_and_state() {
         let mut state = GameState::new(6, 6);
         state

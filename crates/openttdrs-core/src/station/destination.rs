@@ -3,8 +3,8 @@ use crate::vehicle::{VehicleKind, VehicleOrder};
 
 use super::Station;
 use super::geometry::{
-    is_connected_bay_road_stop, is_drive_through_road_stop, rail_station_approach_tile,
-    rail_station_stop_tile_for_approach, road_stop_approach_tile,
+    dock_station_tiles, is_connected_bay_road_stop, is_drive_through_road_stop,
+    rail_station_approach_tile, rail_station_stop_tile_for_approach, road_stop_approach_tile,
 };
 
 /// Busca la tesela de amarre que `YapfShip` usaría para un muelle u oil rig.
@@ -16,19 +16,41 @@ use super::geometry::{
 #[must_use]
 fn ship_docking_tile_for_station(
     map: &Map,
+    stations: &[Station],
     station: TileCoord,
     from: TileCoord,
 ) -> Option<TileCoord> {
-    let station_tile = map.get(station)?;
-    if station_tile.kind != TileKind::Station {
-        return None;
-    }
-
-    let origins = match crate::station::stop_kind_from_m6(station_tile.m6) {
-        super::StopKind::Dock => crate::station::dock_footprint_for_tile(map, station)
-            .map_or_else(|| vec![station], |footprint| vec![footprint[1]]),
-        super::StopKind::OilRig => vec![station],
-        _ => return None,
+    let origins = if let Some(logical_station) = stations.iter().find(|candidate| {
+        candidate.stop_kind == super::StopKind::Dock && candidate.covers_tile(station)
+    }) {
+        let mut origins = Vec::new();
+        for physical_tile in dock_station_tiles(map, logical_station) {
+            if let Some(footprint) = crate::station::dock_footprint_for_tile(map, physical_tile) {
+                origins.push(footprint[1]);
+            } else if map.get(physical_tile).is_some_and(|tile| {
+                tile.kind == TileKind::Station
+                    && crate::station::stop_kind_from_m6(tile.m6) == super::StopKind::Dock
+            }) {
+                // Conserva el fallback de partidas legacy con sólo una pieza
+                // de muelle persistida.
+                origins.push(physical_tile);
+            }
+        }
+        if origins.is_empty() {
+            return None;
+        }
+        origins
+    } else {
+        let station_tile = map.get(station)?;
+        if station_tile.kind != TileKind::Station {
+            return None;
+        }
+        match crate::station::stop_kind_from_m6(station_tile.m6) {
+            super::StopKind::Dock => crate::station::dock_footprint_for_tile(map, station)
+                .map_or_else(|| vec![station], |footprint| vec![footprint[1]]),
+            super::StopKind::OilRig => vec![station],
+            _ => return None,
+        }
     };
 
     origins
@@ -74,6 +96,24 @@ pub fn resolve_order_destination_from(
     order: VehicleOrder,
     from: TileCoord,
 ) -> TileCoord {
+    resolve_order_destination_from_with_stations(map, &[], kind, order, from)
+}
+
+/// Como `resolve_order_destination_from`, usando el estado lógico de las
+/// estaciones para resolver todos los muelles unidos de una misma parada.
+///
+/// La variante legacy sólo conoce la tesela ancla de la orden. Eso alcanza para
+/// un muelle aislado, pero en una estación unida desde SAV puede haber varias
+/// huellas físicas y el amarre correcto depende de la posición actual del
+/// barco.
+#[must_use]
+pub fn resolve_order_destination_from_with_stations(
+    map: &Map,
+    stations: &[Station],
+    kind: VehicleKind,
+    order: VehicleOrder,
+    from: TileCoord,
+) -> TileCoord {
     match (kind, order) {
         (
             VehicleKind::Train,
@@ -97,7 +137,7 @@ pub fn resolve_order_destination_from(
         }
         (VehicleKind::Train, VehicleOrder::Waypoint { waypoint, .. }) => waypoint,
         (VehicleKind::Ship, VehicleOrder::Station { station, .. }) => {
-            ship_docking_tile_for_station(map, station, from).unwrap_or(station)
+            ship_docking_tile_for_station(map, stations, station, from).unwrap_or(station)
         }
         (_, VehicleOrder::Depot { depot, .. }) => depot,
         (

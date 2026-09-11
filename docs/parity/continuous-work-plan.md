@@ -4011,3 +4011,17 @@ regresiones de selección y fallback. Core queda en 2418 pasadas y 1 ignorada;
 cliente en 1383 pasadas y 2 ignoradas, con Clippy estricto y formato verdes.
 #567 sigue abierta por identidad completa de estación en el pathfinder,
 callbacks restantes y aceptación visual en Weston; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DOCK-TWO-TILE-FOOTPRINT (2026-09-11,
+`cc52ea2f`): `PlaceDock` ahora conserva la huella nativa de dos teselas:
+una pieza de tierra (`StationGfx 0..3`) y una pieza acuática
+(`StationGfx 4..5`) con el mismo `StationID` en MAP2. La red naval ya no
+atraviesa la pieza de tierra; las órdenes y la carga prefieren una tesela de
+amarre marcada junto a la parte acuática. La demolición desde cualquiera de
+las dos piezas restaura tierra/agua, limpia los metadatos y recalcula vecinos;
+los muelles legacy de una sola tesela conservan limpieza de compatibilidad.
+Core queda en 2419 pasadas y 1 ignorada; cliente en 1383 pasadas y 2
+ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta por
+pendientes de pendiente/auto-clear/join de `CmdBuildDock`, reconciliación
+completa de identidad en saves importados, preview visual y aceptación en
+Weston; #326 permanece abierta.

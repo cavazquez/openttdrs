@@ -424,6 +424,7 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         purchase_list_order_target: None,
         variant_parent_id: None,
         newgrf_variant_parent_local_id: None,
+        extra_flags: 0,
         cargo_age_period: crate::engine::DEFAULT_CARGO_AGE_PERIOD,
         ship_acceleration: 0,
         ship_refittable: true,

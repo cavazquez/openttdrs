@@ -96,6 +96,11 @@ pub struct EngineDef {
     /// que todos los motores del GRF estén en el catálogo.
     #[serde(default, skip)]
     pub newgrf_variant_parent_local_id: Option<u16>,
+    /// Action0 vehicle `0x21`/`0x27`/`0x30`: flags adicionales del motor.
+    /// Se conserva el valor nativo aunque sus consumidores de noticias,
+    /// preview y fiabilidad de variantes todavía no estén materializados.
+    #[serde(default)]
+    pub extra_flags: u32,
     /// Ticks antes de envejecer la carga (`EngineInfo::cargo_age_period`).
     /// Cero desactiva el envejecimiento para ese motor.
     #[serde(default = "default_cargo_age_period")]

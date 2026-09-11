@@ -309,6 +309,10 @@ pub struct ParsedVehicleMeta {
     pub purchase_list_order_target: Option<u16>,
     /// Action0 vehicle `0x20`: ID local del motor padre de esta variante.
     pub variant_parent_local_id: Option<u16>,
+    /// Action0 ship `0x21`: flags adicionales del motor, en formato nativo.
+    /// Se conservan para que los consumidores de preview/fiabilidad puedan
+    /// aplicarlos cuando exista el subsistema runtime correspondiente.
+    pub extra_flags: u32,
     /// Action0 ship `0x1D`: ticks antes de envejecer la carga; cero desactiva.
     pub cargo_age_period: u16,
     /// Action0 ship `0x24`: aceleración por tick; cero usa el fallback vanilla.
@@ -415,6 +419,7 @@ impl ParsedVehicleMeta {
             retire_early_years: 0,
             purchase_list_order_target: None,
             variant_parent_local_id: None,
+            extra_flags: 0,
             cargo_age_period: crate::engine::DEFAULT_CARGO_AGE_PERIOD,
             ship_acceleration: if feature == ACTION0_FEATURE_SHIPS {
                 crate::engine::DEFAULT_SHIP_ACCELERATION
@@ -3935,7 +3940,11 @@ fn parse_ship_property(
                 meta.sound_effect = read_u8(payload, i)?;
             }
         }
-        0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        0x21 => {
+            for meta in metas {
+                meta.extra_flags = read_u32(payload, i)?;
+            }
+        }
         0x11 => {
             for meta in metas {
                 meta.legacy_refit_mask = read_u32(payload, i)?;

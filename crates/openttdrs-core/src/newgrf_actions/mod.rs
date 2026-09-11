@@ -4932,6 +4932,41 @@ mod tests {
         assert!(parent_pos < child_pos);
     }
 
+    #[test]
+    fn ships_extra_flags_property_reaches_engine_catalog() {
+        let extra_flags = 0x0000_000Au32;
+        let a0 = [
+            0x00,
+            ACTION0_FEATURE_SHIPS,
+            0x01,
+            0x01,
+            0x00,
+            0x21,
+            extra_flags as u8,
+            (extra_flags >> 8) as u8,
+            (extra_flags >> 16) as u8,
+            (extra_flags >> 24) as u8,
+        ];
+        let meta = parse_action0_vehicle_metas(&a0).unwrap().remove(0);
+        assert_eq!(meta.extra_flags, extra_flags);
+
+        let bytes =
+            build_grf_v2_with_action0_and_action8(&a0, [b'F', b'L', 0, 1], "ship-extra-flags", "");
+        let dir = tempfile_dir_with("ship-extra-flags.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ship-extra-flags.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|engine| engine.from_newgrf && engine.kind == VehicleKind::Ship)
+            .unwrap();
+        assert_eq!(engine.extra_flags, extra_flags);
+    }
+
     /// #329: Action0 conserva las clases allowed/disallowed/required de cada
     /// feature de vehículos, en vez de consumirlas como propiedades opacas.
     #[test]

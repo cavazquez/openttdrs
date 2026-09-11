@@ -4434,3 +4434,15 @@ failed; 1 ignored`; Clippy estricto, formato y `diff --check` están limpios.
 #329/#567 continúan abiertas por `NoNews`, `NoPreview`, `JoinPreview`, callbacks
 navales, propiedades restantes y aceptación visual manual bajo Weston; #326
 permanece abierta.
+
+Actualización #329/#567-SHIP-SYNC-SERVICE (2026-09-11, `d5786d15`): el catálogo
+activo ya acompaña la llegada y el cierre de carga de trenes, carretera y barcos,
+además de las esperas tempranas de horario. El servicio en depósito vuelve a
+resolver la fuente `variant_parent_id` cuando el motor tiene
+`SyncReliability`, restaurando fiabilidad, decaimiento y vida útil del padre sin
+perder el reset normal de averías; las APIs legacy sin catálogo mantienen el
+fallback vanilla. Core queda en `2466 passed; 0 failed; 1 ignored` y cliente en
+`1390 passed; 0 failed; 2 ignored`, con formato, `diff --check` y Clippy
+estricto limpios. #329/#567 continúan abiertas por `NoNews`, `NoPreview`,
+`JoinPreview`, callbacks navales, propiedades restantes y aceptación visual
+manual bajo Weston; #326 permanece abierta.

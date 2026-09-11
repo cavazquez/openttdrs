@@ -4085,3 +4085,16 @@ dinero. Core queda en 2412 pasadas y 1 ignorada; cliente en 1383 pasadas y 2
 ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta por
 estaciones/industrias acuáticas, callbacks/vecinos y aceptación visual en
 Weston; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-WATER-STATION-CLEAR (2026-09-11,
+`7a06dcdf`): la fase de auto-clear de `CmdBuildShipDepot` ahora interpreta el
+`StationType` crudo de cada `MP_STATION` acuática. Una boya devuelve
+`BuoyInTheWay`, un muelle `MustDemolishDockFirst` y una plataforma petrolera
+`OilRigInTheWay`, como las rutas específicas de `ClearTile_Station(...,
+Auto)`; otros tipos de estación conservan el bloqueo estructural. Preview y
+ejecución usan la misma clasificación y no mutan mapa, pool ni dinero al
+fallar. Se agregaron mensajes ES/EN y una regresión para ambas partes de la
+huella. Core queda en 2413 pasadas y 1 ignorada; cliente en 1383 pasadas y 2
+ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta por
+industrias acuáticas, callbacks/vecinos y aceptación visual en Weston; #326
+permanece abierta.

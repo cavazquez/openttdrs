@@ -4171,3 +4171,14 @@ ignorada; cliente en 1387 pasadas y 2 ignoradas, con Clippy estricto y formato
 verdes. #567 sigue abierta por auto-clear/join, reconciliación completa de
 identidad en saves importados y aceptación visual manual bajo Weston; #326
 permanece abierta.
+
+Actualización #326/#567-SHIP-DOCK-AUTOCLEAR (2026-09-11, `0cec5a22`): el
+preflight y la ejecución de `PlaceDock` comparten ahora un plan de limpieza
+para las dos piezas de la huella. Los objetos `MP_OBJECT` con `Autoremove` se
+eliminan una sola vez aunque crucen ambas piezas, conservan la clase de agua y
+aplican su coste nativo; los objetos no removibles producen `ObjectInTheWay`
+sin mutar mapa, pool ni dinero. El preview Bevy reutiliza la misma validación.
+Core queda en 2423 pasadas y 1 ignorada; cliente en 1387 pasadas y 2
+ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta por join,
+reconciliación completa de identidad en saves importados y aceptación visual
+manual bajo Weston; #326 permanece abierta.

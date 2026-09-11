@@ -4073,3 +4073,15 @@ partes en los cuatro ejes. Core queda en 2409 pasadas y 1 ignorada; cliente en
 abierta por la semántica completa de `HasTileWaterGround`/auto-clear,
 callbacks/vecinos, aceptación visual en Weston y matriz completa; #326
 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-WATER-OBJECT-CLEAR (2026-09-11,
+`9028c101`): `CmdBuildShipDepot` ya acepta `MP_OBJECT` con
+`HasTileWaterGround` cuando su spec declara `Autoremove`. El port comparte el
+preflight con `command_would_fail`, deduplica una huella multitile y restaura
+cada parte con su `WaterClass` antes de escribir el depósito; también corrige
+la lectura de ownership ignorando los bits altos de `MAPO`. Objetos no
+autoremovibles siguen devolviendo `ObjectInTheWay` sin mutar mapa, pool ni
+dinero. Core queda en 2412 pasadas y 1 ignorada; cliente en 1383 pasadas y 2
+ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta por
+estaciones/industrias acuáticas, callbacks/vecinos y aceptación visual en
+Weston; #326 permanece abierta.

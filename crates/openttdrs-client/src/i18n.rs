@@ -1067,6 +1067,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Sitio inadecuado: el depósito naval requiere dos teselas de agua planas." => {
             "Unsuitable site: the ship depot requires two flat water tiles."
         }
+        "Hay una estructura que debe demolerse antes de construir aquí." => {
+            "A structure must be demolished before building here."
+        }
         "Este tipo de puente no está disponible (año, longitud o presupuesto)." => {
             "This bridge type is unavailable (year, length, or budget)."
         }

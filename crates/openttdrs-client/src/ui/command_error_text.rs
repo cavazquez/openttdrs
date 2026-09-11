@@ -68,6 +68,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::SiteUnsuitable => {
             "Sitio inadecuado: el depósito naval requiere dos teselas de agua planas."
         }
+        CommandError::BuildingMustBeDemolished => {
+            "Hay una estructura que debe demolerse antes de construir aquí."
+        }
         CommandError::BridgeTypeNotAvailable => {
             "Este tipo de puente no está disponible (año, longitud o presupuesto)."
         }
@@ -237,6 +240,7 @@ mod tests {
             CommandError::InvalidTunnelEndpoints,
             CommandError::MustDemolishBridgeFirst,
             CommandError::SiteUnsuitable,
+            CommandError::BuildingMustBeDemolished,
             CommandError::BridgeTypeNotAvailable,
             CommandError::InvalidBridgeSpan,
             CommandError::BridgeTooLowForRoadStop,

@@ -79,6 +79,8 @@ pub enum CommandError {
     MustDemolishBridgeFirst,
     /// El depósito naval sólo admite dos teselas de agua planas.
     SiteUnsuitable,
+    /// Una estructura existente no puede limpiarse automáticamente.
+    BuildingMustBeDemolished,
     /// Puente sin hueco que salvar (agua o terreno más bajo bajo el tramo).
     BridgeTypeNotAvailable,
     InvalidBridgeSpan,

@@ -225,6 +225,42 @@ fn place_ship_depot_requires_flat_water_on_both_parts() {
 }
 
 #[test]
+fn place_ship_depot_rejects_water_structures_during_auto_clear() {
+    for dir in 0..4_u8 {
+        let mut s = GameState::new(8, 8);
+        let depot = TileCoord::new(3, 3);
+        let footprint = crate::ship_depot_footprint(depot, dir);
+        for coord in footprint {
+            s.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+        let mut lock = s.map.get(footprint[1]).unwrap();
+        lock.m5 = 0x20; // WaterTileType::Lock, eje X; sigue siendo MP_WATER.
+        s.map.set_tile(footprint[1], lock).unwrap();
+        let money = s.economy.money;
+        let command = Command::PlaceShipDepotDir(depot, dir);
+
+        assert_eq!(
+            command_would_fail(&s, &command),
+            Some(crate::CommandError::BuildingMustBeDemolished),
+            "preview dir={dir} no debe limpiar una esclusa automáticamente"
+        );
+        assert_eq!(
+            apply_command(&mut s, &command),
+            Err(crate::CommandError::BuildingMustBeDemolished),
+            "ejecución dir={dir} no debe sobrescribir una esclusa"
+        );
+        assert!(
+            footprint
+                .into_iter()
+                .all(|coord| s.map.get_kind(coord) == Some(TileKind::Water))
+        );
+        assert_eq!(s.map.get(footprint[1]).unwrap().m5, 0x20);
+        assert!(s.depots.is_empty());
+        assert_eq!(s.economy.money, money);
+    }
+}
+
+#[test]
 fn place_ship_depot_writes_both_native_parts_for_each_direction() {
     let cases = [
         (

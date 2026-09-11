@@ -35,7 +35,12 @@ const fn ship_depot_m5_for_dir(dir: u8) -> u8 {
 fn check_ship_depot_water_tile(map: &Map, c: TileCoord) -> Result<(), CommandError> {
     check_in_bounds(map, c)?;
     match map.get(c) {
-        Some(tile) if tile.kind == TileKind::Water && has_tile_water_ground(tile) => Ok(()),
+        Some(tile)
+            if matches!(tile.kind, TileKind::Water | TileKind::ShipDepot)
+                && has_tile_water_ground(tile) =>
+        {
+            Ok(())
+        }
         Some(tile) if tile.kind == TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
         _ => Err(CommandError::CannotPlaceStationOnOccupiedTile),
     }
@@ -69,6 +74,16 @@ pub(crate) fn check_ship_depot_placement(
     for tile in [origin, other] {
         if tile_slope_and_z(map, tile).is_none_or(|(tileh, _)| tileh != 0) {
             return Err(CommandError::SiteUnsuitable);
+        }
+    }
+    // Locks y depósitos también son `MP_WATER` con una clase válida, pero
+    // `ClearTile_Water` los rechaza cuando recibe `Auto`; nunca se deben
+    // sobrescribir silenciosamente durante la construcción.
+    for tile in [origin, other] {
+        if map.get(tile).is_some_and(|raw| {
+            matches!(raw.kind, TileKind::Water | TileKind::ShipDepot) && (raw.m5 >> 4) & 0x0F != 0
+        }) {
+            return Err(CommandError::BuildingMustBeDemolished);
         }
     }
     // `CmdBuildShipDepot` no consulta una tercera tesela delante de la boca:

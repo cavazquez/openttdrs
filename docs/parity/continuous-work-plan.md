@@ -4025,3 +4025,15 @@ ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta por
 pendientes de pendiente/auto-clear/join de `CmdBuildDock`, reconciliación
 completa de identidad en saves importados, preview visual y aceptación en
 Weston; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DOCK-PREVIEW (2026-09-11, `4bf16be1`): el ghost
+de construcción de muelles dejó de usar el sprite genérico 1×1. El plan Bevy
+conserva origen, dirección y pieza acuática; el renderer de preview emite la
+rampa de tierra y la plataforma de agua con las seis variantes `StationGfx`,
+las mismas cajas `TILE_SEQ_LINE` y el mismo ordenamiento que el mapa runtime.
+La tesela de aproximación queda libre y un muelle inválido mantiene el tint de
+error en ambas piezas. Cliente queda en 1387 pasadas y 2 ignoradas, con Clippy
+estricto y formato verdes. La aceptación visual manual bajo Weston sigue
+pendiente, igual que pendiente/auto-clear/join de `CmdBuildDock` y la
+reconciliación completa de identidad en saves importados; #567 y #326 siguen
+abiertas.

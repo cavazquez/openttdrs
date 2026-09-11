@@ -1803,6 +1803,7 @@ impl GameState {
                 vehicle.acceleration = v.acceleration;
                 vehicle.aircraft_mail_capacity = Some(v.aircraft_mail_capacity);
                 vehicle.aircraft_mail_cargo = Some(v.aircraft_mail_cargo);
+                vehicle.aircraft_mail_age_counter = v.aircraft_mail_age_counter;
                 hydrate_sav_packet_list(
                     &mut vehicle.aircraft_mail_packets,
                     &v.aircraft_mail_packet_ids,
@@ -3725,6 +3726,7 @@ mod tests {
                     aircraft_mail_capacity: 0,
                     aircraft_mail_cargo: 0,
                     aircraft_mail_packet_ids: Vec::new(),
+                    aircraft_mail_age_counter: 0,
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
@@ -3836,6 +3838,7 @@ mod tests {
                     aircraft_mail_capacity: 0,
                     aircraft_mail_cargo: 0,
                     aircraft_mail_packet_ids: Vec::new(),
+                    aircraft_mail_age_counter: 0,
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
@@ -3947,6 +3950,7 @@ mod tests {
                     aircraft_mail_capacity: 0,
                     aircraft_mail_cargo: 0,
                     aircraft_mail_packet_ids: Vec::new(),
+                    aircraft_mail_age_counter: 0,
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
@@ -4058,6 +4062,7 @@ mod tests {
                     aircraft_mail_capacity: 0,
                     aircraft_mail_cargo: 0,
                     aircraft_mail_packet_ids: Vec::new(),
+                    aircraft_mail_age_counter: 0,
                     refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],

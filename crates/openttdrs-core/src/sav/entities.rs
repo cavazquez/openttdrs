@@ -2283,6 +2283,8 @@ pub struct SavVehicle {
     pub aircraft_mail_cargo: u16,
     /// Referencias `CAPA` de la carga de la fila `AIR_SHADOW`.
     pub aircraft_mail_packet_ids: Vec<u32>,
+    /// Cuenta atrás de envejecimiento de la fila `AIR_SHADOW` asociada.
+    pub aircraft_mail_age_counter: u16,
     /// Capacidad máxima de refit (`Vehicle::refit_cap`).
     pub refit_capacity: u16,
     /// Referencias físicas al pool `CAPA` (`Vehicle::cargo.packets`).
@@ -2497,6 +2499,22 @@ pub(crate) fn vehicles_from_chunks(
             Some((*sav_id, packet_ids))
         })
         .collect();
+    let aircraft_shadow_age_counters: HashMap<u32, u16> = rows
+        .iter()
+        .filter_map(|(sav_id, record)| {
+            let sub = nested_struct(record, "aircraft")?;
+            let common = nested_struct(sub, "common")?;
+            let subtype = record_get(common, "subtype").and_then(SlValue::as_u64)?;
+            if subtype != 4 {
+                return None;
+            }
+            let counter = record_get(common, "cargo_age_counter")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0);
+            Some((*sav_id, counter))
+        })
+        .collect();
     let mut out = Vec::new();
     for (sav_id, record) in rows {
         let Some(vtype) = record_get(&record, "type").and_then(SlValue::as_u64) else {
@@ -2542,6 +2560,13 @@ pub(crate) fn vehicles_from_chunks(
                 .unwrap_or_default()
         } else {
             Vec::new()
+        };
+        let aircraft_mail_age_counter = if kind == SavVehicleKind::Aircraft {
+            next_sav_id
+                .and_then(|shadow_id| aircraft_shadow_age_counters.get(&shadow_id).copied())
+                .unwrap_or(0)
+        } else {
+            0
         };
         let next_shared_sav_id = record_get(common, "next_shared")
             .and_then(SlValue::as_u64)
@@ -3158,6 +3183,7 @@ pub(crate) fn vehicles_from_chunks(
             aircraft_mail_capacity,
             aircraft_mail_cargo,
             aircraft_mail_packet_ids,
+            aircraft_mail_age_counter,
             refit_capacity,
             cargo_packet_ids,
             cargo_action_counts,

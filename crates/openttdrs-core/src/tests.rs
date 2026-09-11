@@ -1012,6 +1012,44 @@ fn aircraft_shadow_mail_ages_with_primary_vehicle_clock() {
     );
 }
 
+#[test]
+fn aircraft_shadow_mail_ages_from_its_own_counter() {
+    let mut s = GameState::new(8, 8);
+    let engine = s
+        .engine_catalog
+        .iter_mut()
+        .find(|engine| engine.id == crate::engine::ENGINE_AIRCRAFT_DAKOTA)
+        .expect("vanilla aircraft engine");
+    engine.cargo_age_period = 2;
+    engine.mail_capacity = 10;
+
+    let pos = TileCoord::new(1, 1);
+    let mut aircraft = Vehicle::new(0, VehicleKind::Aircraft, pos, pos);
+    aircraft.aircraft_mail_capacity = Some(10);
+    aircraft.cargo_age_counter = 2;
+    aircraft.aircraft_mail_age_counter = 1;
+    let mut mail = crate::CargoPacket::new(CargoType::Mail, 4, pos);
+    mail.periods_in_transit = 0;
+    aircraft.aircraft_mail_packets.push(mail);
+    aircraft.aircraft_mail_cargo = Some(4);
+    s.vehicles.push(aircraft);
+
+    s.step();
+
+    assert_eq!(
+        s.vehicles[0].aircraft_mail_packets.max_periods_in_transit(),
+        1,
+        "la sombra envejece con su propio contador"
+    );
+    assert_eq!(
+        s.vehicles[0].cargo_packets.max_periods_in_transit(),
+        0,
+        "la bodega primaria no debe envejecer por el tick de la sombra"
+    );
+    assert_eq!(s.vehicles[0].cargo_age_counter, 1);
+    assert_eq!(s.vehicles[0].aircraft_mail_age_counter, 2);
+}
+
 /// Tras producir, la mina reparte el carbón a las estaciones de su cobertura: el rating
 /// decide la tajada de cada una (`TransportIndustryGoods` / `MoveGoodsToStation`).
 #[test]

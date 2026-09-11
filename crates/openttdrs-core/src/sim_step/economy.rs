@@ -1196,13 +1196,23 @@ pub(super) fn age_vehicle_cargo(state: &mut GameState) {
                 vehicle.cargo_packets.age_one_period();
                 vehicle.sync_cargo_from_packets();
             }
-            if !vehicle.aircraft_mail_packets.is_empty() {
-                // `AIR_SHADOW` comparte el reloj de envejecimiento del
-                // avión, pero conserva sus propios packets y por tanto su
-                // origen/edad para el pago de correo.
-                vehicle.aircraft_mail_packets.age_one_period();
-            }
             vehicle.cargo_age_counter = period;
+        }
+
+        // `AIR_SHADOW` es una entidad nativa distinta: comparte el período
+        // efectivo del avión como fallback, pero conserva su propia cuenta
+        // atrás. Esto permite que una sombra cargada envejezca aunque la
+        // bodega primaria esté vacía o tenga un contador distinto.
+        if !vehicle.aircraft_mail_packets.is_empty() {
+            vehicle.aircraft_mail_age_counter = vehicle.aircraft_mail_age_counter.min(period);
+            if vehicle.aircraft_mail_age_counter == 0 {
+                vehicle.aircraft_mail_age_counter = period;
+            }
+            vehicle.aircraft_mail_age_counter = vehicle.aircraft_mail_age_counter.saturating_sub(1);
+            if vehicle.aircraft_mail_age_counter == 0 {
+                vehicle.aircraft_mail_packets.age_one_period();
+                vehicle.aircraft_mail_age_counter = period;
+            }
         }
     }
 }

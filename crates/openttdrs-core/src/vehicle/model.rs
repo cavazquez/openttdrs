@@ -219,6 +219,13 @@ pub struct Vehicle {
     /// la entidad `AIR_SHADOW` y su ciclo FTA siguen pendientes.
     #[serde(default)]
     pub aircraft_mail_packets: crate::cargo_packet::VehicleCargoList,
+    /// Cuenta atrás de envejecimiento de los paquetes de correo de `AIR_SHADOW`.
+    ///
+    /// `OpenTTD` mantiene un contador en la entidad sombra, independiente del
+    /// contador de la bodega principal aunque ambos usen inicialmente el
+    /// mismo período de motor.
+    #[serde(default)]
+    pub aircraft_mail_age_counter: u16,
     #[serde(default = "default_running_true")]
     pub running: bool,
     /// Remanente físico de `DoUpdateSpeed` (`Vehicle::progress` de `OpenTTD`).
@@ -737,6 +744,7 @@ impl Vehicle {
             aircraft_mail_capacity: None,
             aircraft_mail_cargo: None,
             aircraft_mail_packets: crate::cargo_packet::VehicleCargoList::default(),
+            aircraft_mail_age_counter: 0,
             running: true,
             progress: 0,
             road_state: 0,

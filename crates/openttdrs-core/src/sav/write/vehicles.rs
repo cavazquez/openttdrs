@@ -293,6 +293,11 @@ fn aircraft_mail_cargo_for(v: &Vehicle) -> u16 {
     u16::try_from(v.aircraft_mail_packets.total()).unwrap_or(u16::MAX)
 }
 
+/// Cuenta atrás propia de `AIR_SHADOW::cargo_age_counter`.
+fn aircraft_mail_age_counter_for(v: &Vehicle) -> u16 {
+    v.aircraft_mail_age_counter
+}
+
 type SavRecordBytes = Vec<u8>;
 type SavRecordList = Vec<SavRecordBytes>;
 
@@ -1127,7 +1132,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     cargo_count: mail_cargo,
                     cargo_packet_refs: aircraft_mail_packet_refs_for(cargo_export, v).to_vec(),
                     cargo_action_counts: [0; 4],
-                    cargo_age_counter: 0,
+                    cargo_age_counter: aircraft_mail_age_counter_for(v),
                     age_days: 0,
                     economy_age_days: 0,
                     max_age_days: 0,
@@ -1931,6 +1936,7 @@ mod tests {
         helicopter
             .aircraft_mail_packets
             .push(crate::CargoPacket::new(CargoType::Mail, 5, air_pos));
+        helicopter.aircraft_mail_age_counter = 23;
         state.vehicles = vec![helicopter];
 
         let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
@@ -1997,6 +2003,11 @@ mod tests {
             "la sombra conserva la cantidad de correo separada del primario"
         );
         assert_eq!(
+            record_get(shadow_common, "cargo_age_counter").and_then(SlValue::as_u64),
+            Some(23),
+            "la sombra conserva su cuenta atrás de envejecimiento"
+        );
+        assert_eq!(
             record_get(shadow_common, "cargo.packets").and_then(|value| match value {
                 SlValue::List(refs) => Some(refs.len()),
                 _ => None,
@@ -2027,6 +2038,10 @@ mod tests {
             imported[0].aircraft_mail_packet_ids,
             vec![0],
             "la sombra conserva los ids CAPA sin confundirlos con el primario"
+        );
+        assert_eq!(
+            imported[0].aircraft_mail_age_counter, 23,
+            "la importación recupera la cuenta atrás desde AIR_SHADOW"
         );
     }
 

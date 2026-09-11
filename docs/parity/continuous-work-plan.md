@@ -4647,3 +4647,14 @@ restaura la carga principal después del callback. La entidad FTA separada y
 sus scopes/estado propios siguen pendientes; #329/#567 continúan abiertas.
 Core queda en `2488 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0
 failed; 2 ignored`, con Clippy estricto, formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-HELICOPTER-CATALOG-VISUALS
+(2026-09-11): la clasificación de helicópteros del cliente ya consulta el
+`EngineDef` del catálogo activo, no sólo los tres IDs vanilla. Los motores
+NewGRF marcados por Action0 `0x09` reciben su rotor auxiliar en Bevy y quedan
+filtrados en el helipuerto correcto de la ventana de compra. Las regresiones
+cubren la clasificación de render y la lista de compra; la entidad FTA
+separada, sus scopes/estado propios y la validación visual siguen pendientes,
+por lo que #329/#567 continúan abiertas. Core queda en `2488 passed; 0 failed;
+1 ignored` y cliente en `1396 passed; 0 failed; 2 ignored`, con Clippy
+estricto, formato y `diff --check` limpios.

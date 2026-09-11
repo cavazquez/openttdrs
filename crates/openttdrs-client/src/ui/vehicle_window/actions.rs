@@ -7,7 +7,8 @@ use openttdrs_core::{Command, station::resolve_order_destination};
 use crate::camera::tile_camera_world_pos;
 use crate::i18n::Locale;
 use crate::render::{
-    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, vehicle_world_position,
+    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending,
+    vehicle_world_position_with_catalog,
 };
 use crate::settings::ClientPreferences;
 use crate::state::{OrderPickState, SimWorld};
@@ -121,7 +122,11 @@ pub(crate) fn handle_vehicle_window_buttons(
             }
             VehicleWindowButton::CenterCamera => {
                 if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                    let world_pos = vehicle_world_position(vehicle, &sim.state.map);
+                    let world_pos = vehicle_world_position_with_catalog(
+                        vehicle,
+                        &sim.state.map,
+                        &sim.state.engine_catalog,
+                    );
                     if let Ok(mut transform) = cam_q.single_mut() {
                         transform.translation.x = world_pos.x;
                         transform.translation.y = world_pos.y;

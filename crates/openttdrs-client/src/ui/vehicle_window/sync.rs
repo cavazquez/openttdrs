@@ -5,7 +5,7 @@ use bevy::text::EditableText;
 use openttdrs_core::VehicleKind;
 
 use crate::render::{
-    NewGrfTrainSpriteCache, PrimaryGameCamera, TruckHandles, vehicle_world_position,
+    NewGrfTrainSpriteCache, PrimaryGameCamera, TruckHandles, vehicle_world_position_with_catalog,
 };
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
@@ -193,7 +193,11 @@ pub(crate) fn sync_vehicle_window(
     if let Ok((mut tf, mut cam)) = preview.single_mut() {
         if let Some(vehicle) = focused {
             cam.is_active = true;
-            let world_pos = vehicle_world_position(vehicle, &sim.state.map);
+            let world_pos = vehicle_world_position_with_catalog(
+                vehicle,
+                &sim.state.map,
+                &sim.state.engine_catalog,
+            );
             tf.translation = Vec3::new(world_pos.x, world_pos.y, 999.0);
         } else {
             cam.is_active = false;

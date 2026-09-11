@@ -4740,3 +4740,14 @@ propios y la validación visual/runtime restante siguen pendientes, por lo que
 #329/#567 continúan abiertas. Core queda en `2488 passed; 0 failed; 1
 ignored` y cliente en `1401 passed; 0 failed; 2 ignored`, con Clippy estricto,
 formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-CAMERA-CATALOG-OFFSETS (2026-09-11): los
+botones de centrado y la cámara de `VehicleViewWindow` ya calculan la posición
+del sprite con los offsets del `EngineDef` activo cuando existe una vista
+NewGRF; los motores sin vista catalogada conservan el fallback vanilla. La
+regresión usa una vista NewGRF con bounds desplazados y comprueba que la cámara
+no vuelva a la posición OpenGFX. Los grupos runtime sin una entidad visual
+materializada siguen pendientes, igual que la entidad FTA separada y la
+validación visual/runtime amplia; #329/#567 continúan abiertas. Core queda en
+`2488 passed; 0 failed; 1 ignored` y cliente en `1401 passed; 0 failed; 2
+ignored`, con Clippy estricto, formato y `diff --check` limpios.

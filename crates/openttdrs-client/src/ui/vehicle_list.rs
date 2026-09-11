@@ -11,7 +11,7 @@ use openttdrs_core::prelude::*;
 use crate::i18n::{Locale, localized_text};
 use crate::render::{
     MapPreviewCamera, NewGrfTrainSpriteCache, PrimaryGameCamera, RemapMapVisualsPending,
-    TruckHandles, vehicle_world_position,
+    TruckHandles, vehicle_world_position_with_catalog,
 };
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
@@ -736,7 +736,11 @@ pub(crate) fn handle_vehicle_list_buttons(
             }
             VehicleListAction::CenterCamera => {
                 if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                    let world_pos = vehicle_world_position(vehicle, &sim.state.map);
+                    let world_pos = vehicle_world_position_with_catalog(
+                        vehicle,
+                        &sim.state.map,
+                        &sim.state.engine_catalog,
+                    );
                     if let Ok(mut transform) = cam_q.single_mut() {
                         transform.translation.x = world_pos.x;
                         transform.translation.y = world_pos.y;
@@ -1355,7 +1359,8 @@ mod tests {
             TileCoord::new(4, 5),
         );
         vehicle.owner = state.active_company;
-        let expected = vehicle_world_position(&vehicle, &state.map);
+        let expected =
+            vehicle_world_position_with_catalog(&vehicle, &state.map, &state.engine_catalog);
         state.vehicles.push(vehicle);
         world.insert_resource(sim_with(state));
         world.resource_mut::<VehicleListState>().selected = Some(3);

@@ -14,7 +14,7 @@ pub(crate) use assets::{NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles
 pub(crate) use picking::pick_vehicle_id_at_world;
 pub(crate) use plugin::VehicleRenderPlugin;
 pub(crate) use pose::{
-    vehicle_draw_anchor_from_pose, vehicle_sprite_pos_at, vehicle_world_position,
+    vehicle_draw_anchor_from_pose, vehicle_sprite_pos_at, vehicle_world_position_with_catalog,
 };
 pub(crate) use spawn::spawn_initial_vehicles;
 pub(crate) use sync::{
@@ -975,6 +975,13 @@ mod tests {
             (pos_vanilla.x, pos_vanilla.y),
             (pos_newgrf.x, pos_newgrf.y),
             "offsets NewGRF deben mover el sprite vs OpenGFX"
+        );
+        let pos_camera = vehicle_world_position_with_catalog(&v, map, &state.engine_catalog);
+        let pos_vanilla_camera = vehicle_sprite_pos_at(&v, map, pose);
+        assert_ne!(
+            (pos_camera.x, pos_camera.y),
+            (pos_vanilla_camera.x, pos_vanilla_camera.y),
+            "la cámara debe usar los offsets del catálogo NewGRF"
         );
 
         let sim = SimWorld {

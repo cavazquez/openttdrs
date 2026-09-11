@@ -59,10 +59,18 @@ pub(crate) fn vehicle_draw_anchor_from_pose(
     (anchor, base_z, pose.pos.x, pose.pos.y)
 }
 
-/// Posición mundo del sprite del vehículo (para cámara de seguimiento).
+/// Posición para centrar cámaras usando los offsets del catálogo NewGRF.
+///
+/// El fallback conserva exactamente la posición vanilla cuando el motor no
+/// tiene una vista horneada en el catálogo; los grupos runtime sin una entidad
+/// visual materializada siguen siendo responsabilidad del renderer.
 #[must_use]
-pub(crate) fn vehicle_world_position(v: &Vehicle, map: &Map) -> Vec3 {
-    vehicle_sprite_pos(v, map, 0.0)
+pub(crate) fn vehicle_world_position_with_catalog(
+    v: &Vehicle,
+    map: &Map,
+    catalog: &[EngineDef],
+) -> Vec3 {
+    vehicle_sprite_pos_at_with_catalog(v, map, extrapolate_vehicle_pose(v, 0.0), Some(catalog))
 }
 
 pub(crate) fn vehicle_sprite_pos_at(

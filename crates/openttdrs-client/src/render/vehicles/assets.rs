@@ -81,15 +81,33 @@ fn train_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
 }
 
 fn ship_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+    match ship_image_index_for(v) {
+        1 => &SHIP_VEHICLE_LAYERS_OIL,
+        2 => &SHIP_VEHICLE_LAYERS_COAL,
+        3 => &SHIP_VEHICLE_LAYERS_FERRY,
+        _ => &SHIP_VEHICLE_LAYERS,
+    }
+}
+
+/// Índice visual naval persistido en `Vehicle::native_sprite_num`.
+///
+/// Partidas antiguas del port no inicializaban ese byte al comprar un barco;
+/// para ellas se reconstruye el índice de los cuatro motores vanilla. Un
+/// índice custom (`0xFD`) cae al sprite base si no hay vistas NewGRF.
+fn ship_image_index_for(v: &Vehicle) -> u8 {
+    if v.native_sprite_num != 0 {
+        return if v.native_sprite_num < 4 {
+            v.native_sprite_num
+        } else {
+            0
+        };
+    }
     let engine_id = v
         .engine_id
         .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
-    match engine_id {
-        openttdrs_core::ENGINE_SHIP_OIL => &SHIP_VEHICLE_LAYERS_OIL,
-        openttdrs_core::ENGINE_SHIP_COAL => &SHIP_VEHICLE_LAYERS_COAL,
-        openttdrs_core::ENGINE_SHIP_FERRY => &SHIP_VEHICLE_LAYERS_FERRY,
-        _ => &SHIP_VEHICLE_LAYERS,
-    }
+    openttdrs_core::engine_by_id(engine_id)
+        .map(|engine| engine.ship_image_index)
+        .unwrap_or(0)
 }
 
 fn aircraft_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
@@ -582,10 +600,10 @@ impl TruckHandles {
     ) -> Handle<Image> {
         let i = dir.min(7);
         match engine.kind {
-            VehicleKind::Ship => match engine.id {
-                openttdrs_core::ENGINE_SHIP_OIL => self.ship_oil[i].clone(),
-                openttdrs_core::ENGINE_SHIP_COAL => self.ship_coal[i].clone(),
-                openttdrs_core::ENGINE_SHIP_FERRY => self.ship_ferry[i].clone(),
+            VehicleKind::Ship => match engine.ship_image_index {
+                1 => self.ship_oil[i].clone(),
+                2 => self.ship_coal[i].clone(),
+                3 => self.ship_ferry[i].clone(),
                 _ => self.ship[i].clone(),
             },
             VehicleKind::Aircraft => match engine.id {
@@ -628,17 +646,12 @@ impl TruckHandles {
         match v.kind {
             VehicleKind::Truck if v.uses_loaded_road_sprite() => self.truck_loaded[i].clone(),
             VehicleKind::Truck => self.truck[i].clone(),
-            VehicleKind::Ship => {
-                let engine_id = v
-                    .engine_id
-                    .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
-                match engine_id {
-                    openttdrs_core::ENGINE_SHIP_OIL => self.ship_oil[i].clone(),
-                    openttdrs_core::ENGINE_SHIP_COAL => self.ship_coal[i].clone(),
-                    openttdrs_core::ENGINE_SHIP_FERRY => self.ship_ferry[i].clone(),
-                    _ => self.ship[i].clone(),
-                }
-            }
+            VehicleKind::Ship => match ship_image_index_for(v) {
+                1 => self.ship_oil[i].clone(),
+                2 => self.ship_coal[i].clone(),
+                3 => self.ship_ferry[i].clone(),
+                _ => self.ship[i].clone(),
+            },
             VehicleKind::Bus | VehicleKind::Tram if v.uses_loaded_road_sprite() => {
                 self.bus_loaded[i].clone()
             }

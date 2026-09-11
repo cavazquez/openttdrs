@@ -220,6 +220,7 @@ pub(super) fn build_vehicle_at_depot(
     vehicle.running = false;
     vehicle.engine_id = Some(engine.id);
     if vehicle.kind == VehicleKind::Ship {
+        vehicle.native_sprite_num = engine.ship_image_index;
         vehicle.acceleration = engine.ship_acceleration.max(1);
     }
     if vehicle.cargo_type.is_none() {

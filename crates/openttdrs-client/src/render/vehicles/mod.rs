@@ -145,8 +145,9 @@ mod tests {
     };
 
     use assets::vehicle_gfx::{
-        AIRCRAFT_ROTOR_LAYERS, BUS_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS, TRAIN_WAGON_COAL_LAYERS,
-        TRAIN_WAGON_COAL_LOADED_LAYERS, TRAIN_WAGON_PASSENGER_LAYERS,
+        AIRCRAFT_ROTOR_LAYERS, BUS_VEHICLE_LAYERS, SHIP_VEHICLE_LAYERS, SHIP_VEHICLE_LAYERS_OIL,
+        TRAIN_VEHICLE_LAYERS, TRAIN_WAGON_COAL_LAYERS, TRAIN_WAGON_COAL_LOADED_LAYERS,
+        TRAIN_WAGON_PASSENGER_LAYERS,
     };
     use assets::{TruckHandles, vehicle_layers};
     use picking::pick_vehicle_id_at_world;
@@ -1484,6 +1485,35 @@ mod tests {
         assert_ne!(
             TRAIN_VEHICLE_LAYERS[DIR_SW as usize].path,
             BUS_VEHICLE_LAYERS[DIR_SW as usize].path
+        );
+    }
+
+    #[test]
+    fn ship_layers_follow_persisted_native_sprite_index() {
+        let mut mps = Vehicle::new(
+            1,
+            VehicleKind::Ship,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        mps.native_sprite_num = 0;
+        assert_eq!(
+            vehicle_layers(&mps)[DIR_E as usize].path,
+            SHIP_VEHICLE_LAYERS[DIR_E as usize].path
+        );
+
+        let mut oil = mps.clone();
+        oil.native_sprite_num = 1;
+        assert_eq!(
+            vehicle_layers(&oil)[DIR_E as usize].path,
+            SHIP_VEHICLE_LAYERS_OIL[DIR_E as usize].path
+        );
+
+        let mut custom_without_views = mps;
+        custom_without_views.native_sprite_num = 0xFD;
+        assert_eq!(
+            vehicle_layers(&custom_without_views)[DIR_E as usize].path,
+            SHIP_VEHICLE_LAYERS[DIR_E as usize].path
         );
     }
 

@@ -54,6 +54,16 @@ pub const ENGINE_AIRCRAFT_FOKKER: u16 = 301;
 /// Helicóptero `OpenGFX` (`image_index` 9 → sprites 3813..3820).
 pub const ENGINE_AIRCRAFT_TRICARIO: u16 = 302;
 
+/// Índice de sprite naval de los cuatro motores vanilla del catálogo.
+pub(crate) const fn vanilla_ship_image_index(id: u16) -> u8 {
+    match id {
+        ENGINE_SHIP_OIL => 1,
+        ENGINE_SHIP_COAL => 2,
+        ENGINE_SHIP_FERRY => 3,
+        _ => 0,
+    }
+}
+
 /// Fiabilidad inicial aproximada por clase de motor del original.
 pub(crate) const RELIABILITY_STEAM: u8 = 75;
 pub(crate) const RELIABILITY_DIESEL: u8 = 85;
@@ -146,6 +156,7 @@ macro_rules! road {
             ship_refittable: true,
             load_amount: 0,
             train_image_index: 0,
+            ship_image_index: vanilla_ship_image_index($id),
             dual_headed: false,
             rail_engine_class: 0,
             rail_is_mu: false,
@@ -233,6 +244,7 @@ macro_rules! train {
             ship_refittable: true,
             load_amount: 0,
             train_image_index: $img,
+            ship_image_index: 0,
             dual_headed: $dual,
             rail_engine_class: vanilla_train_engine_class($id),
             rail_is_mu: vanilla_train_engine_is_mu($id),

@@ -743,7 +743,11 @@ impl Vehicle {
             direction: DIR_NE,
             engine_id: Some(engine_id),
             native_engine_type: None,
-            native_sprite_num: 0,
+            native_sprite_num: if kind == VehicleKind::Ship {
+                engine.ship_image_index
+            } else {
+                0
+            },
             name: None,
             cur_speed: 0,
             acceleration: if kind == VehicleKind::Ship {

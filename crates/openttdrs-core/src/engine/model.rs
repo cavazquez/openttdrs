@@ -121,6 +121,11 @@ pub struct EngineDef {
     pub load_amount: u8,
     /// Índice de sprite de locomotora (`OpenTTD` `image_index`; 0 en carretera).
     pub train_image_index: u8,
+    /// Índice de sprite naval (`ShipVehicleInfo::image_index`, 0..=3).
+    /// `0xFD` representa sprite `NewGRF`; si no hay vistas custom se usa el
+    /// sprite original/fallback del motor.
+    #[serde(default)]
+    pub ship_image_index: u8,
     /// `RailVehicleType::Multihead` (`engines.h`): compra spawnea cabina trasera.
     #[serde(default)]
     pub dual_headed: bool,

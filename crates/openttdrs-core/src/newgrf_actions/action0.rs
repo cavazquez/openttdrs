@@ -313,6 +313,9 @@ pub struct ParsedVehicleMeta {
     /// Se conservan para que los consumidores de preview/fiabilidad puedan
     /// aplicarlos cuando exista el subsistema runtime correspondiente.
     pub extra_flags: u32,
+    /// Action0 ship `0x08`: índice de sprite naval normalizado a 0..=3 o
+    /// `0xFD` para sprite custom `NewGRF`.
+    pub ship_image_index: u8,
     /// Action0 ship `0x1D`: ticks antes de envejecer la carga; cero desactiva.
     pub cargo_age_period: u16,
     /// Action0 ship `0x24`: aceleración por tick; cero usa el fallback vanilla.
@@ -420,6 +423,7 @@ impl ParsedVehicleMeta {
             purchase_list_order_target: None,
             variant_parent_local_id: None,
             extra_flags: 0,
+            ship_image_index: 0,
             cargo_age_period: crate::engine::DEFAULT_CARGO_AGE_PERIOD,
             ship_acceleration: if feature == ACTION0_FEATURE_SHIPS {
                 crate::engine::DEFAULT_SHIP_ACCELERATION
@@ -3873,7 +3877,23 @@ fn parse_ship_property(
                     meta.visual_effect = normalize_visual_effect(read_u8(payload, i)?);
                 }
             } else {
-                skip_bytes(payload, i, metas.len())?;
+                for meta in metas {
+                    let original = read_u8(payload, i)?;
+                    let sprite = if original == 0xFF {
+                        0xFD
+                    } else if original < 0xFD {
+                        original >> 1
+                    } else {
+                        original
+                    };
+                    meta.ship_image_index = if sprite < 4 {
+                        sprite
+                    } else if sprite == 0xFD {
+                        0xFD
+                    } else {
+                        0
+                    };
+                }
             }
         }
         0x16 => {

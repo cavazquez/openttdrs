@@ -4967,6 +4967,27 @@ mod tests {
         assert_eq!(engine.extra_flags, extra_flags);
     }
 
+    #[test]
+    fn ships_sprite_index_property_normalizes_vanilla_and_custom_values() {
+        let vanilla = [0x00, ACTION0_FEATURE_SHIPS, 0x01, 0x01, 0x00, 0x08, 0x04];
+        assert_eq!(
+            parse_action0_vehicle_metas(&vanilla)
+                .unwrap()
+                .remove(0)
+                .ship_image_index,
+            2
+        );
+
+        let custom = [0x00, ACTION0_FEATURE_SHIPS, 0x01, 0x01, 0x00, 0x08, 0xFF];
+        assert_eq!(
+            parse_action0_vehicle_metas(&custom)
+                .unwrap()
+                .remove(0)
+                .ship_image_index,
+            0xFD
+        );
+    }
+
     /// #329: Action0 conserva las clases allowed/disallowed/required de cada
     /// feature de vehículos, en vez de consumirlas como propiedades opacas.
     #[test]

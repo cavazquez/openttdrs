@@ -7,19 +7,23 @@ use super::geometry::{
     rail_station_approach_tile, rail_station_stop_tile_for_approach, road_stop_approach_tile,
 };
 
-/// Busca la tesela de amarre que `YapfShip` usaría para un muelle u oil rig.
+/// Enumera las teselas de amarre que `YapfShip` puede usar para una estación.
 ///
 /// El modelo local conserva la estación como ancla de la orden, mientras que
 /// `OpenTTD` termina el path en una tesela acuática vecina marcada con
 /// `DockingTile`. El marcador raw permite migrar esa semántica sin exigir que
 /// partidas JSON antiguas ya tengan una lista de docking persistida.
+///
+/// El orden es estable por distancia a `from` y coordenadas. El pathfinder
+/// puede recorrer la lista completa cuando el amarre geométricamente más
+/// cercano no pertenece a la misma cuenca navegable.
 #[must_use]
-fn ship_docking_tile_for_station(
+pub fn ship_docking_tiles_for_station(
     map: &Map,
     stations: &[Station],
     station: TileCoord,
     from: TileCoord,
-) -> Option<TileCoord> {
+) -> Vec<TileCoord> {
     let origins = if let Some(logical_station) = stations.iter().find(|candidate| {
         candidate.covers_tile(station) && !dock_station_tiles(map, candidate).is_empty()
     }) {
@@ -37,23 +41,25 @@ fn ship_docking_tile_for_station(
             }
         }
         if origins.is_empty() {
-            return None;
+            return Vec::new();
         }
         origins
     } else {
-        let station_tile = map.get(station)?;
+        let Some(station_tile) = map.get(station) else {
+            return Vec::new();
+        };
         if station_tile.kind != TileKind::Station {
-            return None;
+            return Vec::new();
         }
         match crate::station::stop_kind_from_m6(station_tile.m6) {
             super::StopKind::Dock => crate::station::dock_footprint_for_tile(map, station)
                 .map_or_else(|| vec![station], |footprint| vec![footprint[1]]),
             super::StopKind::OilRig => vec![station],
-            _ => return None,
+            _ => return Vec::new(),
         }
     };
 
-    origins
+    let mut candidates: Vec<_> = origins
         .into_iter()
         .flat_map(|origin| {
             (0..4).filter_map(move |dir| {
@@ -67,13 +73,29 @@ fn ship_docking_tile_for_station(
                 })
             })
         })
-        .min_by_key(|candidate| {
-            (
-                candidate.x.abs_diff(from.x) + candidate.y.abs_diff(from.y),
-                candidate.x,
-                candidate.y,
-            )
-        })
+        .collect();
+    candidates.sort_unstable_by_key(|candidate| {
+        (
+            candidate.x.abs_diff(from.x) + candidate.y.abs_diff(from.y),
+            candidate.x,
+            candidate.y,
+        )
+    });
+    candidates.dedup();
+    candidates
+}
+
+/// Busca el amarre geométricamente más cercano de una estación naval.
+#[must_use]
+fn ship_docking_tile_for_station(
+    map: &Map,
+    stations: &[Station],
+    station: TileCoord,
+    from: TileCoord,
+) -> Option<TileCoord> {
+    ship_docking_tiles_for_station(map, stations, station, from)
+        .into_iter()
+        .next()
 }
 
 /// Destino de movimiento según tipo de vehículo y orden.

@@ -47,6 +47,13 @@ struct GenericRouteJob {
     network: pathfinder::PathNetwork,
 }
 
+#[derive(Debug)]
+struct ShipDockRouteCandidate {
+    key: (usize, u32, i32, i32),
+    dest: TileCoord,
+    path: Vec<TileCoord>,
+}
+
 /// Por debajo de este tamaño, el overhead de sincronización supera el ahorro
 /// y conviene mantener la caché secuencial por tick.
 const PARALLEL_GENERIC_ROUTE_THRESHOLD: usize = 32;
@@ -287,6 +294,15 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
         if let Some(path) = path {
             state.vehicles[i].path = path.into_iter().collect();
             state.vehicles[i].no_network_route_to_order = false;
+        } else if state.vehicles[i].kind == VehicleKind::Ship
+            && let Some((dest, path)) = route_ship_to_available_dock(state, i, wh)
+        {
+            // `UpdateOrderDest` elige el amarre más cercano como fast path.
+            // Si esa cuenca no es navegable desde el barco, probar el resto de
+            // la huella física evita marcar toda la estación como inalcanzable.
+            state.vehicles[i].dest = dest;
+            state.vehicles[i].path = path.into_iter().collect();
+            state.vehicles[i].no_network_route_to_order = false;
         } else {
             state.vehicles[i].no_network_route_to_order = true;
         }
@@ -342,6 +358,60 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
     }
     timings.generic_route_ns = nanos(p0);
     timings
+}
+
+/// Encuentra una ruta naval a cualquier amarre físico de la estación.
+///
+/// El destino sincronizado antes de esta fase conserva el fast path del amarre
+/// más cercano. Esta búsqueda sólo se usa cuando ese destino no tiene ruta y
+/// permite recuperar otra pieza de una estación multi-muelle, como hace
+/// `YapfShip` al evaluar todos los `DockingTile` de la estación nativa.
+fn route_ship_to_available_dock(
+    state: &mut GameState,
+    vehicle_idx: usize,
+    wormholes: Option<&pathfinder::TunnelWormholes>,
+) -> Option<(TileCoord, Vec<TileCoord>)> {
+    let vehicle = &state.vehicles[vehicle_idx];
+    let Some(crate::vehicle::VehicleOrder::Station { station, .. }) =
+        vehicle.current_order_ref().copied()
+    else {
+        return None;
+    };
+    let from = vehicle.pos;
+    let candidates =
+        crate::station::ship_docking_tiles_for_station(&state.map, &state.stations, station, from);
+    let mut best: Option<ShipDockRouteCandidate> = None;
+    for candidate in candidates {
+        let path = if from == candidate {
+            Some(Vec::new())
+        } else {
+            pathfinder::find_path_cached(
+                &state.map,
+                &mut state.runtime.path_cache,
+                from,
+                candidate,
+                pathfinder::PathNetwork::Water,
+                wormholes,
+            )
+        };
+        let Some(path) = path else {
+            continue;
+        };
+        let key = (
+            path.len(),
+            candidate.x.abs_diff(from.x) + candidate.y.abs_diff(from.y),
+            candidate.x,
+            candidate.y,
+        );
+        if best.as_ref().is_none_or(|best| key < best.key) {
+            best = Some(ShipDockRouteCandidate {
+                key,
+                dest: candidate,
+                path,
+            });
+        }
+    }
+    best.map(|candidate| (candidate.dest, candidate.path))
 }
 
 /// Sincroniza destinos y adjudica primero los andenes a los trenes más cercanos.
@@ -724,5 +794,100 @@ mod tests {
             ),
             "las reservas ya acumuladas siguen teniendo prioridad"
         );
+    }
+
+    #[test]
+    fn ship_routing_tries_alternate_joined_dock_when_nearest_is_unreachable() {
+        let mut state = GameState::new(20, 20);
+        let first_land = TileCoord::new(5, 4);
+        let second_land = TileCoord::new(5, 10);
+        let first_water = crate::station::dock_water_tile(first_land, 1);
+        let second_water = crate::station::dock_water_tile(second_land, 1);
+        let first_docking = TileCoord::new(5, 6);
+        let second_docking = TileCoord::new(5, 12);
+        let native_id = 23_u16;
+
+        for tile in [first_water, second_water] {
+            crate::map::make_water_tile(&mut state.map, tile, crate::WaterClass::Sea)
+                .expect("agua bajo el muelle");
+        }
+        for (land, water) in [(first_land, first_water), (second_land, second_water)] {
+            for (tile, gfx) in [
+                (land, 1_u8),
+                (water, crate::station::DOCK_WATER_PART_GFX + 1),
+            ] {
+                let mut raw = state.map.get(tile).expect("tesela de muelle");
+                raw.kind = crate::TileKind::Station;
+                raw.mapt = 0x50;
+                raw.m1 = crate::map::set_water_class_m1(raw.m1, crate::WaterClass::Sea);
+                raw.m2 = native_id as u8;
+                raw.m2_hi = (native_id >> 8) as u8;
+                raw.m5 = gfx;
+                raw.m6 = crate::station::STATION_TYPE_DOCK << 3;
+                state.map.set_tile(tile, raw).unwrap();
+            }
+        }
+
+        for y in 7..=12 {
+            if y == second_water.y {
+                continue;
+            }
+            let tile = TileCoord::new(5, y);
+            crate::map::make_water_tile(&mut state.map, tile, crate::WaterClass::Sea)
+                .expect("corredor naval");
+        }
+        // El amarre más cercano queda una altura por encima sin esclusa: es un
+        // DockingTile válido, pero no pertenece a la cuenca del barco.
+        crate::map::make_water_tile(&mut state.map, first_docking, crate::WaterClass::Sea)
+            .expect("amarre aislado");
+        state.map.set_height(first_docking, 2).unwrap();
+        let mut first_docking_raw = state.map.get(first_docking).unwrap();
+        first_docking_raw.m1 |= 0x80;
+        state
+            .map
+            .set_tile(first_docking, first_docking_raw)
+            .unwrap();
+
+        let mut second_docking_raw = state.map.get(second_docking).unwrap();
+        second_docking_raw.m1 |= 0x80;
+        state
+            .map
+            .set_tile(second_docking, second_docking_raw)
+            .unwrap();
+
+        let mut station = crate::Station::new_with_kind(first_land, crate::StopKind::Dock);
+        station.facilities = 0x10;
+        station.ottd_station_id = Some(u32::from(native_id));
+        station.joined_tiles = vec![first_water, second_land, second_water];
+        state.stations.push(station);
+
+        let from = TileCoord::new(5, 7);
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, from, from);
+        ship.running = true;
+        ship.orders = vec![crate::vehicle::VehicleOrder::station(first_land)];
+        state.vehicles.push(ship);
+
+        let first_path = crate::find_path(
+            &state.map,
+            from,
+            first_docking,
+            pathfinder::PathNetwork::Water,
+        );
+        assert_ne!(
+            state.map.get(from).unwrap().height,
+            state.map.get(first_docking).unwrap().height,
+            "las alturas de fixture deben diferir"
+        );
+        assert!(!crate::ship_movement::water_tiles_connected(
+            &state.map,
+            from,
+            first_docking,
+        ));
+        assert!(first_path.is_none(), "ruta inesperada: {first_path:?}");
+        recompute_vehicle_paths_profiled(&mut state);
+
+        assert_eq!(state.vehicles[0].dest, second_docking);
+        assert_eq!(state.vehicles[0].path.back(), Some(&second_docking));
+        assert!(!state.vehicles[0].no_network_route_to_order);
     }
 }

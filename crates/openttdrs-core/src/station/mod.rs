@@ -27,7 +27,7 @@ pub use coverage::{
 };
 pub use destination::{
     resolve_aircraft_station_dest, resolve_order_destination, resolve_order_destination_from,
-    resolve_order_destination_from_with_stations,
+    resolve_order_destination_from_with_stations, ship_docking_tiles_for_station,
 };
 pub use geometry::{
     bay_entry_direction, dock_station_native_id, dock_station_tiles, is_connected_bay_road_stop,

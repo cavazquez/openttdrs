@@ -7,13 +7,17 @@ use crate::bridge_spec::{
 use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build_cost};
 use crate::map::{
     Map, Tile, TileCoord, TileKind, WaterClass, has_tile_water_ground, inclined_slope_direction,
-    is_tunnel_entrance_slope, make_water_tile, set_water_class_m1, tile_slope_and_z,
-    water_class_from_m1,
+    is_map_object_tile, is_tunnel_entrance_slope, make_water_tile, object_footprint_tiles,
+    object_id_from_tile, object_origin_from_tile, object_type_dims_id, set_water_class_m1,
+    tile_slope_and_z, water_class_from_m1,
 };
 use crate::{GameState, Station, StopKind};
 
 use super::super::CommandError;
-use super::shared::{check_in_bounds, register_depot, unregister_depot};
+use super::shared::{
+    check_in_bounds, check_object_can_be_auto_cleared, clear_object_footprint_keep_water,
+    register_depot, unregister_depot,
+};
 use super::station::apply_station_m6;
 
 #[must_use]
@@ -32,14 +36,93 @@ const fn ship_depot_m5_for_dir(dir: u8) -> u8 {
     0x30 | PART_AXIS_BY_DIR[dir as usize & 0x03]
 }
 
-fn check_ship_depot_water_tile(map: &Map, c: TileCoord) -> Result<(), CommandError> {
-    check_in_bounds(map, c)?;
-    match map.get(c) {
-        Some(tile)
-            if matches!(tile.kind, TileKind::Water | TileKind::ShipDepot)
-                && has_tile_water_ground(tile) =>
+fn ship_depot_object_footprint(
+    state: &GameState,
+    c: TileCoord,
+) -> Result<Vec<TileCoord>, CommandError> {
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let object_id = object_id_from_tile(&tile).ok_or(CommandError::ObjectInTheWay)?;
+    let (origin, width, height) = if let Some(object) = state
+        .objects
+        .iter()
+        .find(|object| object.object_id == object_id)
+    {
+        let width = u8::try_from(object.width)
+            .ok()
+            .filter(|width| *width > 0)
+            .ok_or(CommandError::ObjectInTheWay)?;
+        let height = u8::try_from(object.height)
+            .ok()
+            .filter(|height| *height > 0)
+            .ok_or(CommandError::ObjectInTheWay)?;
+        (object.tile, width, height)
+    } else {
+        let object_type = state
+            .map
+            .object_type_at(c)
+            .ok_or(CommandError::ObjectInTheWay)?;
+        let origin = object_origin_from_tile(&tile, c).ok_or(CommandError::ObjectInTheWay)?;
+        let (width, height) = object_type_dims_id(object_type, &state.object_spec_catalog);
+        if width == 0 || height == 0 {
+            return Err(CommandError::ObjectInTheWay);
+        }
+        (origin, width, height)
+    };
+    let object_tiles = object_footprint_tiles(origin, width, height);
+    for &object_tile in &object_tiles {
+        check_in_bounds(&state.map, object_tile)?;
+        if !state
+            .map
+            .get(object_tile)
+            .is_some_and(|raw| is_map_object_tile(raw.mapt))
         {
-            Ok(())
+            return Err(CommandError::ObjectInTheWay);
+        }
+    }
+    if object_tiles.contains(&c) {
+        Ok(object_tiles)
+    } else {
+        Err(CommandError::ObjectInTheWay)
+    }
+}
+
+/// Planifica los objetos que `CmdLandscapeClear(... | Auto)` eliminaría.
+///
+/// El motor marca una huella ya limpiada para que un objeto que ocupa las dos
+/// partes del depósito sólo se destruya una vez. La lista deduplicada conserva
+/// esa misma regla para que preview y ejecución sean atómicos.
+fn ship_depot_auto_clear_plan(
+    state: &GameState,
+    tiles: [TileCoord; 2],
+) -> Result<Vec<Vec<TileCoord>>, CommandError> {
+    let mut plan = Vec::new();
+    for tile in tiles {
+        let Some(raw) = state.map.get(tile) else {
+            return Err(CommandError::OutOfBounds);
+        };
+        if !is_map_object_tile(raw.mapt) {
+            continue;
+        }
+        check_object_can_be_auto_cleared(state, tile)?;
+        let object_tiles = ship_depot_object_footprint(state, tile)?;
+        if !plan.contains(&object_tiles) {
+            plan.push(object_tiles);
+        }
+    }
+    Ok(plan)
+}
+
+fn check_ship_depot_water_tile(state: &GameState, c: TileCoord) -> Result<(), CommandError> {
+    check_in_bounds(&state.map, c)?;
+    match state.map.get(c) {
+        Some(tile) if has_tile_water_ground(tile) => {
+            if matches!(tile.kind, TileKind::Water | TileKind::ShipDepot) {
+                Ok(())
+            } else if is_map_object_tile(tile.mapt) {
+                check_object_can_be_auto_cleared(state, c)
+            } else {
+                Err(CommandError::CannotPlaceStationOnOccupiedTile)
+            }
         }
         Some(tile) if tile.kind == TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
         _ => Err(CommandError::CannotPlaceStationOnOccupiedTile),
@@ -47,7 +130,7 @@ fn check_ship_depot_water_tile(map: &Map, c: TileCoord) -> Result<(), CommandErr
 }
 
 pub(crate) fn check_ship_depot_placement(
-    map: &Map,
+    state: &GameState,
     c: TileCoord,
     dir: u8,
 ) -> Result<(), CommandError> {
@@ -57,12 +140,13 @@ pub(crate) fn check_ship_depot_placement(
     // teselas. Mantener esa fase separada conserva el error nativo cuando la
     // segunda parte cae fuera del mapa o no es agua.
     for tile in [origin, other] {
-        check_ship_depot_water_tile(map, tile)?;
+        check_ship_depot_water_tile(state, tile)?;
     }
     // `IsBridgeAbove` mira los bits de MAPT aunque el suelo inferior sea agua.
     // Un puente sobre cualquiera de las dos partes bloquea la construcción.
     for tile in [origin, other] {
-        if map
+        if state
+            .map
             .get(tile)
             .is_some_and(|raw| bridge_above_axis_from_mapt(raw.mapt).is_some())
         {
@@ -72,7 +156,7 @@ pub(crate) fn check_ship_depot_placement(
     // `IsTileFlat` se evalúa sobre las dos teselas; esto también impide
     // construir sobre rápidos o una pendiente de terreno importada.
     for tile in [origin, other] {
-        if tile_slope_and_z(map, tile).is_none_or(|(tileh, _)| tileh != 0) {
+        if tile_slope_and_z(&state.map, tile).is_none_or(|(tileh, _)| tileh != 0) {
             return Err(CommandError::SiteUnsuitable);
         }
     }
@@ -80,7 +164,7 @@ pub(crate) fn check_ship_depot_placement(
     // `ClearTile_Water` los rechaza cuando recibe `Auto`; nunca se deben
     // sobrescribir silenciosamente durante la construcción.
     for tile in [origin, other] {
-        if map.get(tile).is_some_and(|raw| {
+        if state.map.get(tile).is_some_and(|raw| {
             matches!(raw.kind, TileKind::Water | TileKind::ShipDepot) && (raw.m5 >> 4) & 0x0F != 0
         }) {
             return Err(CommandError::BuildingMustBeDemolished);
@@ -90,6 +174,7 @@ pub(crate) fn check_ship_depot_placement(
     // su contrato sólo exige agua en las dos teselas que reemplaza. La
     // navegación podrá usar el mapa contiguo después de construir; imponer
     // aquí una entrada adicional rechaza depósitos válidos junto a tierra.
+    let _ = ship_depot_auto_clear_plan(state, [origin, other])?;
     Ok(())
 }
 
@@ -122,10 +207,14 @@ pub(in crate::command) fn place_ship_depot_dir(
     dir: u8,
 ) -> Result<(), CommandError> {
     let dir = dir & 0x03;
-    check_ship_depot_placement(&state.map, c, dir)?;
+    check_ship_depot_placement(state, c, dir)?;
     let depot_id =
         crate::depot::next_free_depot_id(&state.map).ok_or(CommandError::DepotPoolFull)?;
     let other = ship_depot_other_tile_for_dir(c, dir);
+    let auto_clear_objects = ship_depot_auto_clear_plan(state, [c, other])?;
+    for object_tiles in auto_clear_objects {
+        clear_object_footprint_keep_water(state, object_tiles[0], &object_tiles)?;
+    }
     let original = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let other_original = state.map.get(other).ok_or(CommandError::OutOfBounds)?;
     let owner = state.active_company.0;

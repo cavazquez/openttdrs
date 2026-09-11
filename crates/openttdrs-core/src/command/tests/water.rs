@@ -260,6 +260,121 @@ fn place_ship_depot_rejects_water_structures_during_auto_clear() {
     }
 }
 
+fn add_water_object(
+    state: &mut GameState,
+    origin: TileCoord,
+    size: u8,
+    flags: u16,
+) -> Vec<TileCoord> {
+    let object_type = 5u16;
+    state.object_spec_catalog.push(crate::ObjectSpecDef {
+        id: object_type,
+        class_label: "WATR".into(),
+        name: "Water object".into(),
+        size,
+        from_newgrf: true,
+        local_id: 0,
+        grfid: 0x5741_5452,
+        newgrf_grf_version: 8,
+        climate_mask: crate::DEFAULT_OBJECT_CLIMATE_MASK,
+        build_cost_factor: 1,
+        clear_cost_factor: 1,
+        flags,
+        animation_frames: 0,
+        animation_status: 0xFF,
+        animation_speed: 2,
+        animation_triggers: 0,
+        callback_mask: 0,
+        views: Vec::new(),
+        newgrf_runtime: None,
+        associated_badges: Vec::new(),
+    });
+    let width = size & 0x0F;
+    let height = (size >> 4) & 0x0F;
+    let object_tiles = crate::map::object_footprint_tiles(origin, width, height);
+    let mut tile = state.map.get(origin).expect("objeto sobre el mapa");
+    tile.kind = TileKind::Unknown(crate::map::OTTD_MP_OBJECT);
+    tile.mapt = crate::map::MP_OBJECT_MAPT;
+    tile.m5 = u8::try_from(object_type).expect("tipo de objeto local");
+    tile.m1 = set_water_class_m1(state.active_company.0, WaterClass::Canal);
+    tile.m2 = 0;
+    tile.m2_hi = 0;
+    for &object_tile in &object_tiles {
+        state.map.set_tile(object_tile, tile).unwrap();
+    }
+    let object_id = crate::map::object_id_from_tile(&tile).expect("ObjectID");
+    state.objects.push(crate::sav::SavObject {
+        object_id,
+        tile: origin,
+        width: u16::from(width),
+        height: u16::from(height),
+        town: 0,
+        build_date: state.calendar.date,
+        colour: state.company_colour,
+        view: 0,
+        object_type,
+    });
+    object_tiles
+}
+
+#[test]
+fn place_ship_depot_auto_clears_autoremove_water_object_and_keeps_water() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(3, 3);
+    let other = crate::ship_depot_footprint(depot, 1)[1];
+    let object_tiles = add_water_object(
+        &mut s,
+        depot,
+        0x12,
+        crate::object_spec::OBJECT_FLAG_AUTOREMOVE,
+    );
+    s.map.set_kind(other, TileKind::Water).unwrap();
+    let money = s.economy.money;
+    let clear_cost = crate::economy::object_clear_cost_factored(
+        &s.global_economy,
+        1,
+        u32::try_from(object_tiles.len()).unwrap(),
+    );
+    let command = Command::PlaceShipDepotDir(depot, 1);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command).expect("el depósito puede limpiar el objeto autoremove");
+
+    assert_eq!(s.objects.len(), 0, "se quita la instancia completa");
+    assert_eq!(s.map.get_kind(object_tiles[1]), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(depot), Some(TileKind::ShipDepot));
+    assert_eq!(s.map.get_kind(other), Some(TileKind::ShipDepot));
+    assert_eq!(
+        s.economy.money,
+        money - clear_cost - ship_depot_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_ship_depot_rejects_non_autoremove_water_object_atomically() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(3, 3);
+    let other = crate::ship_depot_footprint(depot, 1)[1];
+    add_water_object(&mut s, depot, 0x11, 0);
+    s.map.set_kind(other, TileKind::Water).unwrap();
+    let before = s.map.get(depot).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceShipDepotDir(depot, 1);
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::ObjectInTheWay)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::ObjectInTheWay)
+    );
+    assert_eq!(s.map.get(depot), Some(before));
+    assert_eq!(s.map.get_kind(other), Some(TileKind::Water));
+    assert_eq!(s.objects.len(), 1);
+    assert_eq!(s.economy.money, money);
+}
+
 #[test]
 fn place_ship_depot_writes_both_native_parts_for_each_direction() {
     let cases = [

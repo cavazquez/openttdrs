@@ -3,8 +3,8 @@ use crate::economy::{object_clear_cost_factored, road_stop_clear_cost_factored};
 use crate::map::{
     Map, OBJECT_TYPE_COMPANY_HEADQUARTERS, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
     OBJECT_TYPE_STATUE_COMPANY, OBJECT_TYPE_TRANSMITTER, TileCoord, TileKind, WaterClass,
-    is_map_object_tile, make_water_tile, object_id_from_tile, object_type_from_tile,
-    water_class_from_m1,
+    has_tile_water_ground, is_map_object_tile, make_water_tile, object_id_from_tile,
+    object_type_from_tile, water_class_from_m1,
 };
 use crate::object_spec::{
     NEW_OBJECT_OFFSET, OBJECT_FLAG_AUTOREMOVE, OBJECT_FLAG_CANNOT_REMOVE, OBJECT_FLAG_CLEAR_INCOME,
@@ -91,7 +91,11 @@ fn road_stop_clear_cost_for_tile(state: &GameState, c: TileCoord) -> Option<i64>
 /// Los objetos vanilla sin coste usan factor cero. Un objeto importado sin
 /// spec conserva el fallback histórico del llamador, porque no es posible
 /// recuperar su multiplicador Action0 de forma fiable.
-fn object_clear_money_delta(state: &GameState, object_type: u16, tile_count: u32) -> Option<i64> {
+pub(in crate::command::transport) fn object_clear_money_delta(
+    state: &GameState,
+    object_type: u16,
+    tile_count: u32,
+) -> Option<i64> {
     let (cost_factor, clear_income) = if object_type == u16::from(OBJECT_TYPE_OWNED_LAND) {
         (OWNED_LAND_COST_FACTOR, true)
     } else if object_type < NEW_OBJECT_OFFSET {
@@ -187,7 +191,8 @@ pub(in crate::command) fn check_object_can_be_cleared(
     if !is_map_object_tile(tile.mapt) {
         return Ok(());
     }
-    if tile.m1 != OWNER_NONE_M1 && tile.m1 != state.active_company.0 {
+    let owner = tile.m1 & 0x1F;
+    if owner != OWNER_NONE_M1 && owner != state.active_company.0 {
         return Err(CommandError::TileNotOwned);
     }
     let Some(object_type) = state.map.object_type_at(c) else {
@@ -234,7 +239,8 @@ pub(in crate::command) fn check_object_can_be_auto_cleared(
     if !autoremove {
         return Err(CommandError::ObjectInTheWay);
     }
-    if tile.m1 != OWNER_NONE_M1 && tile.m1 != state.active_company.0 {
+    let owner = tile.m1 & 0x1F;
+    if owner != OWNER_NONE_M1 && owner != state.active_company.0 {
         return Err(CommandError::TileNotOwned);
     }
     Ok(())
@@ -532,10 +538,11 @@ fn check_town_demolition_rating(
     }
 }
 
-fn clear_object_footprint(
+fn clear_object_footprint_impl(
     state: &mut GameState,
     c: TileCoord,
     object_tiles: &[TileCoord],
+    keep_water: bool,
 ) -> Result<(), CommandError> {
     let object_id = state.map.get(c).and_then(|tile| object_id_from_tile(&tile));
     let object_clear_delta = state.map.object_type_at(c).and_then(|object_type| {
@@ -550,20 +557,38 @@ fn clear_object_footprint(
         .get(c)
         .filter(|tile| object_type_from_tile(tile) == Some(OBJECT_TYPE_STATUE_COMPANY))
         .map(|tile| crate::company::CompanyId(tile.m1));
+    let preserved_water = if keep_water {
+        object_tiles
+            .iter()
+            .map(|&tile| {
+                state
+                    .map
+                    .get(tile)
+                    .and_then(|raw| has_tile_water_ground(raw).then(|| water_class_from_m1(raw.m1)))
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
     for tile in object_tiles {
         if !state.cheats.magic_bulldozer_active() {
             require_tile_owned_by_active(state, *tile)?;
         }
     }
-    for &tile in object_tiles {
-        state
-            .map
-            .set_kind(tile, TileKind::Grass)
-            .map_err(|_| CommandError::OutOfBounds)?;
-        state
-            .map
-            .set_mapt_m5(tile, 0x00, 0x00)
-            .map_err(|_| CommandError::OutOfBounds)?;
+    for (index, &tile) in object_tiles.iter().enumerate() {
+        if let Some(water_class) = preserved_water.get(index).copied().flatten() {
+            make_water_tile(&mut state.map, tile, water_class)
+                .map_err(|_| CommandError::OutOfBounds)?;
+        } else {
+            state
+                .map
+                .set_kind(tile, TileKind::Grass)
+                .map_err(|_| CommandError::OutOfBounds)?;
+            state
+                .map
+                .set_mapt_m5(tile, 0x00, 0x00)
+                .map_err(|_| CommandError::OutOfBounds)?;
+        }
         let _ = state.map.set_m2(tile, 0);
         crate::command::sign::remove_signs_at(state, tile);
     }
@@ -589,6 +614,22 @@ fn clear_object_footprint(
         state.economy.money -= CLEAR_TILE_COST;
     }
     Ok(())
+}
+
+fn clear_object_footprint(
+    state: &mut GameState,
+    c: TileCoord,
+    object_tiles: &[TileCoord],
+) -> Result<(), CommandError> {
+    clear_object_footprint_impl(state, c, object_tiles, false)
+}
+
+pub(in crate::command::transport) fn clear_object_footprint_keep_water(
+    state: &mut GameState,
+    c: TileCoord,
+    object_tiles: &[TileCoord],
+) -> Result<(), CommandError> {
+    clear_object_footprint_impl(state, c, object_tiles, true)
 }
 
 pub(in crate::command) fn clear_tile(

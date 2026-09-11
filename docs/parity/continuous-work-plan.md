@@ -4627,6 +4627,17 @@ por lo que #329/#567 continúan abiertas. Core queda en `2486 passed; 0 failed;
 1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`, con Clippy
 estricto, formato y `diff --check` limpios.
 
+Actualización #329/#567-VEHICLE-AIRCRAFT-HELICOPTER-CATALOG-AUDIO
+(2026-09-11): el puente de audio de despegue y aterrizaje ya consulta el
+`EngineDef` del catálogo activo antes de elegir el sonido. Un helicóptero
+NewGRF con ID fuera del rango vanilla recibe `TakeoffHelicopter` en ambos
+eventos; los IDs no catalogados conservan el fallback vanilla. La regresión
+cubre las dos transiciones; la entidad FTA separada, sus scopes/estado propios
+y la validación visual y runtime restante siguen pendientes, por lo que
+#329/#567 continúan abiertas. Core queda en `2488 passed; 0 failed; 1
+ignored` y cliente en `1397 passed; 0 failed; 2 ignored`, con Clippy estricto,
+formato y `diff --check` limpios.
+
 Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-AGE-COUNTER (2026-09-11): el
 correo de `AIR_SHADOW` mantiene ahora una cuenta atrás independiente de la
 bodega primaria. Ambos relojes usan el período efectivo del motor como

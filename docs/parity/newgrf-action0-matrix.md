@@ -143,7 +143,7 @@ Fuente: `newgrf_act0_ships.cpp`.
 | `21` extra miscellaneous flags | **runtime parcial** (preserva el `DWord` en `EngineDef.extra_flags`; consumidores `NoNews`, `NoPreview`, `JoinPreview` y `SyncReliability` pendientes) |
 | `23` velocidad WORD | **runtime** (`max_speed`) |
 | `24` aceleración | **runtime** (`ship_acceleration`) |
-| `26` badge list | **runtime parcial** (traducción y catálogo; UI de jerarquía pendiente) |
+| `26` badge list | **runtime** (`EngineDef.badges` traducido por `GlobalVar 0x18`; variables `0x64`/`0x7A` y etiquetas visibles en los detalles de compra) |
 | `1E` CTT include (lista variable) | **runtime** (`refit_mask` → `refittable_cargo_types_for_engine`; #274) |
 | `1F` CTT exclude (lista variable) | **runtime**: la máscara se resta del `include` (o de la lista vanilla cuando no hay `include`) al ofrecer cargas de refit (#274) |
 

@@ -3661,6 +3661,15 @@ cliente en `1388 passed; 0 failed; 2 ignored`, con formato, `git diff
 propiedades de envejecimiento de los demás features, callbacks navales y
 aceptación visual manual bajo Weston; #326 permanece abierta.
 
+Actualización #329/#567-SHIP-BADGES (2026-09-11, `c5abead2`): la lista nativa
+naval `Action0 0x26` ya no queda sólo en el catálogo interno: la ventana de
+compra resuelve `EngineDef.badges` contra `GameState.badge_catalog`, muestra las
+etiquetas en el orden declarado y descarta ids desconocidos sin romper la
+ficha. La etiqueta se localiza como `Insignias`/`Badges` y la regresión cubre
+ambos idiomas, orden y fallback. #329/#567 continúan abiertas por las
+propiedades navales y callbacks restantes, además de la aceptación visual
+manual bajo Weston; #326 permanece abierta.
+
 Actualización #567-SHIP-REVERSE-TRACKDIR (2026-09-11, `6cde3fb8`): cuando el
 siguiente tile deja de ser navegable, el controlador enumera los tres
 `Trackdir` que pueden recibirse desde el lado de retorno, descarta las bocas

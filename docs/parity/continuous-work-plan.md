@@ -4563,3 +4563,14 @@ cero para correo y vuelve a `0x11` al retornar a una carga de clase pasajeros.
 La sombra sigue siendo metadata/exportación y no una segunda `Vehicle`; #329/#567
 continúan abiertas. Core queda en `2481 passed; 0 failed; 1 ignored`, con
 Clippy estricto, formato y `diff --check` limpios.
+
+Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-CARGO-ROUNDTRIP (2026-09-11,
+`0e094600`): el contador `cargo_count` de `AIR_SHADOW` ya se conserva junto a
+`cargo_cap` al importar y exportar `VEHS`; el enlace `next` del primario vuelve a
+asociar ambos valores sin mezclar la carga principal. Hangar, estación,
+autorefit y autoreemplazo aplican la poda nativa del correo a la nueva
+capacidad, por lo que un refit no deja carga secundaria imposible para el
+próximo SAV. Sigue pendiente materializar la segunda `VehicleCargoList` y
+actualizar el contador durante carga/descarga real. Core queda en `2481 passed;
+0 failed; 1 ignored` y cliente en `1394 passed; 0 failed; 2 ignored`, con
+Clippy estricto, formato y `diff --check` limpios; #329/#567 continúan abiertas.

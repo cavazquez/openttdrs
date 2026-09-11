@@ -894,6 +894,7 @@ fn place_dock_on_coast_and_serves_ship() {
     s.map.set_kind(land, TileKind::Grass).unwrap();
     s.map.set_kind(water, TileKind::Water).unwrap();
     s.map.set_kind(approach, TileKind::Water).unwrap();
+    set_dock_land_slope(&mut s.map, land, 1, 1);
     let money = s.economy.money;
     apply_command(&mut s, &Command::PlaceDock(land, 1)).unwrap();
     assert_eq!(s.map.get_kind(land), Some(TileKind::Station));
@@ -929,6 +930,7 @@ fn dock_uses_shared_native_id_and_clears_from_water_part() {
     s.map.set_kind(land, TileKind::Grass).unwrap();
     s.map.set_kind(water, TileKind::Water).unwrap();
     s.map.set_kind(approach, TileKind::Water).unwrap();
+    set_dock_land_slope(&mut s.map, land, 0, 1);
     let money = s.economy.money;
 
     apply_command(&mut s, &Command::PlaceDock(land, 0)).unwrap();
@@ -1064,6 +1066,81 @@ fn set_sw_slope(map: &mut crate::Map, tx: i32, ty: i32, base: u8) {
         .unwrap();
 }
 
+fn set_dock_land_slope(map: &mut crate::Map, land: TileCoord, dir: u8, base: u8) {
+    for corner in [
+        TileCoord::new(land.x, land.y),
+        TileCoord::new(land.x + 1, land.y),
+        TileCoord::new(land.x, land.y + 1),
+        TileCoord::new(land.x + 1, land.y + 1),
+    ] {
+        map.set_height(corner, base).unwrap();
+    }
+    let high = match crate::map::opposite_diag_dir(dir) {
+        0 => [
+            TileCoord::new(land.x, land.y),
+            TileCoord::new(land.x, land.y + 1),
+        ],
+        1 => [
+            TileCoord::new(land.x, land.y + 1),
+            TileCoord::new(land.x + 1, land.y + 1),
+        ],
+        2 => [
+            TileCoord::new(land.x + 1, land.y),
+            TileCoord::new(land.x + 1, land.y + 1),
+        ],
+        3 => [
+            TileCoord::new(land.x, land.y),
+            TileCoord::new(land.x + 1, land.y),
+        ],
+        _ => unreachable!("opposite_diag_dir siempre devuelve 0..=3"),
+    };
+    for corner in high {
+        map.set_height(corner, base + 1).unwrap();
+    }
+}
+
+#[test]
+fn dock_requires_an_inclined_coast_matching_direction() {
+    let mut s = GameState::new(12, 12);
+    let land = TileCoord::new(5, 4);
+    let water = TileCoord::new(5, 5);
+    let approach = TileCoord::new(5, 6);
+    s.map.set_kind(land, TileKind::Grass).unwrap();
+    s.map.set_kind(water, TileKind::Water).unwrap();
+    s.map.set_kind(approach, TileKind::Water).unwrap();
+
+    assert_eq!(
+        command_would_fail(&s, &Command::PlaceDock(land, 1)),
+        Some(crate::CommandError::SiteUnsuitable)
+    );
+    set_dock_land_slope(&mut s.map, land, 1, 1);
+    assert_eq!(command_would_fail(&s, &Command::PlaceDock(land, 1)), None);
+    assert_eq!(
+        command_would_fail(&s, &Command::PlaceDock(land, 0)),
+        Some(crate::CommandError::SiteUnsuitable)
+    );
+}
+
+#[test]
+fn dock_accepts_each_native_slope_direction() {
+    for dir in 0..4 {
+        let mut s = GameState::new(12, 12);
+        let land = TileCoord::new(5, 5);
+        let water = crate::station::dock_water_tile(land, dir);
+        let approach = crate::station::dock_water_tile(water, dir);
+        s.map.set_kind(land, TileKind::Grass).unwrap();
+        s.map.set_kind(water, TileKind::Water).unwrap();
+        s.map.set_kind(approach, TileKind::Water).unwrap();
+        set_dock_land_slope(&mut s.map, land, dir, 1);
+
+        assert_eq!(
+            command_would_fail(&s, &Command::PlaceDock(land, dir)),
+            None,
+            "orientación nativa {dir}"
+        );
+    }
+}
+
 #[test]
 fn place_aqueduct_between_facing_slopes() {
     let mut s = SandboxMap::flat_rich(16, 12, 1);
@@ -1112,6 +1189,7 @@ fn ship_buys_at_depot_and_paths_to_dock() {
     s.map
         .set_kind(TileCoord::new(10, 5), TileKind::Water)
         .unwrap();
+    set_dock_land_slope(&mut s.map, dock_land, 1, 1);
     apply_command(&mut s, &Command::PlaceShipDepotDir(TileCoord::new(2, 4), 2)).unwrap(); // boca +x hacia agua
     apply_command(&mut s, &Command::PlaceDock(dock_land, 1)).unwrap();
     apply_command(

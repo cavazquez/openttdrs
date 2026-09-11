@@ -8,8 +8,8 @@ use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build
 use crate::map::{
     Map, Tile, TileCoord, TileKind, WaterClass, has_tile_water_ground, inclined_slope_direction,
     is_map_object_tile, is_tunnel_entrance_slope, make_water_tile, object_footprint_tiles,
-    object_id_from_tile, object_origin_from_tile, object_type_dims_id, set_water_class_m1,
-    tile_slope_and_z, water_class_from_m1,
+    object_id_from_tile, object_origin_from_tile, object_type_dims_id, opposite_diag_dir,
+    set_water_class_m1, tile_slope_and_z, water_class_from_m1,
 };
 use crate::{GameState, Station, StopKind};
 
@@ -390,6 +390,15 @@ pub(crate) fn check_dock_placement(
     // not silently replace a forest until the command also models native
     // auto-clear costs and callbacks.
     if map.get_kind(c) != Some(TileKind::Grass) {
+        return Err(CommandError::SiteUnsuitable);
+    }
+    let Some((land_tileh, _)) = tile_slope_and_z(map, c) else {
+        return Err(CommandError::SiteUnsuitable);
+    };
+    let Some(slope_direction) = inclined_slope_direction(land_tileh) else {
+        return Err(CommandError::SiteUnsuitable);
+    };
+    if opposite_diag_dir(slope_direction) != dir {
         return Err(CommandError::SiteUnsuitable);
     }
     let Some(water_tile) = map.get(water) else {

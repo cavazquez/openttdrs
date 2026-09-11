@@ -8,6 +8,7 @@ use openttdrs_core::{
     ENGINE_SHIP_FERRY, ENGINE_SHIP_MPS, ENGINE_TRAIN_KIRBY, ENGINE_WAGON_COAL, Industry,
     IndustryKind, IndustrySpec, OrderNonStop, PathNetwork, RAIL_TB_LEFT, RAIL_TB_LOWER,
     RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_X, RAIL_TB_Y, SIGTYPE_BLOCK, find_path,
+    opposite_diag_dir,
 };
 
 /// Carretera del barrio residencial (eje X).
@@ -530,6 +531,39 @@ fn set_showcase_rail_bits(state: &mut GameState, c: TileCoord, bits: u8) {
     let _ = state.map.set_tile(c, tile);
 }
 
+fn set_showcase_dock_land_slope(state: &mut GameState, land: TileCoord, dir: u8, base: u8) {
+    for corner in [
+        TileCoord::new(land.x, land.y),
+        TileCoord::new(land.x + 1, land.y),
+        TileCoord::new(land.x, land.y + 1),
+        TileCoord::new(land.x + 1, land.y + 1),
+    ] {
+        let _ = state.map.set_height(corner, base);
+    }
+    let high = match opposite_diag_dir(dir) {
+        0 => [
+            TileCoord::new(land.x, land.y),
+            TileCoord::new(land.x, land.y + 1),
+        ],
+        1 => [
+            TileCoord::new(land.x, land.y + 1),
+            TileCoord::new(land.x + 1, land.y + 1),
+        ],
+        2 => [
+            TileCoord::new(land.x + 1, land.y),
+            TileCoord::new(land.x + 1, land.y + 1),
+        ],
+        3 => [
+            TileCoord::new(land.x, land.y),
+            TileCoord::new(land.x + 1, land.y),
+        ],
+        _ => unreachable!("opposite_diag_dir siempre devuelve una dirección válida"),
+    };
+    for corner in high {
+        let _ = state.map.set_height(corner, base + 1);
+    }
+}
+
 fn place_water_showcase(state: &mut GameState) {
     for y in SHOWCASE_WATER_Y0..=SHOWCASE_WATER_Y1 {
         for x in SHOWCASE_WATER_X0..=SHOWCASE_WATER_X1 {
@@ -539,6 +573,8 @@ fn place_water_showcase(state: &mut GameState) {
             let _ = state.map.set_mapt_m5(c, 0x60, 0);
         }
     }
+    set_showcase_dock_land_slope(state, SHOWCASE_DOCK_WEST, 1, 1);
+    set_showcase_dock_land_slope(state, SHOWCASE_DOCK_EAST, 3, 1);
     let _ = apply_command(state, &Command::PlaceDock(SHOWCASE_DOCK_WEST, 1));
     let _ = apply_command(state, &Command::PlaceDock(SHOWCASE_DOCK_EAST, 3));
     let _ = apply_command(state, &Command::PlaceBuoy(SHOWCASE_BUOY_WEST));

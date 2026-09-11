@@ -5036,3 +5036,11 @@ de una segunda nave y la edición posterior conservan los flags completos de la
 orden y dejan tanto la lista como `vehicle.dest` en el ancla norte. #567
 continúa abierta por callbacks, pathfinding completo y aceptación
 visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-LOAD-ANCHOR (2026-09-11): la hidratación final
+normaliza órdenes navales provenientes de `.sav`, JSON versionado y JSON legacy
+después de reconstruir el mapa. También corrige `vehicle.dest` y las listas
+compartidas, cubriendo el caso en que el decodificador de órdenes sólo conocía
+el índice lineal y había recibido la sección sur. La regresión de carga verifica
+orden, destino y pool compartido; #567 continúa abierta por callbacks,
+pathfinding completo y aceptación visual/framebuffer.

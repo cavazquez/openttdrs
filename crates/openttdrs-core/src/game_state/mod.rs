@@ -1266,6 +1266,50 @@ impl GameState {
         for vehicle in &mut self.vehicles {
             vehicle.sanitize_current_order();
         }
+        self.canonicalize_depot_orders();
+    }
+
+    /// Normaliza anclas navales después de deserializar vehículos y listas.
+    ///
+    /// El parser SAV decodifica una orden antes de poder asociarla al `Map`, y
+    /// los JSON legacy pueden conservar la sección sur de un depósito 2×1.
+    /// El modelo runtime usa siempre la sección norte como `Depot::xy`; ajustar
+    /// también `dest` evita que la orden y el destino diverjan en el primer
+    /// tick después de cargar.
+    fn canonicalize_depot_orders(&mut self) {
+        let map = &self.map;
+        for vehicle in &mut self.vehicles {
+            let kind = vehicle.kind;
+            vehicle.orders = vehicle
+                .orders
+                .iter()
+                .copied()
+                .map(|order| {
+                    order.with_depot_tile(crate::depot::canonical_depot_tile_for_vehicle(
+                        map,
+                        order.destination(),
+                        kind,
+                    ))
+                })
+                .collect();
+            if kind == crate::vehicle::VehicleKind::Ship {
+                vehicle.dest =
+                    crate::depot::canonical_depot_tile_for_vehicle(map, vehicle.dest, kind);
+            }
+        }
+        for list in &mut self.shared_order_lists {
+            list.orders = list
+                .orders
+                .iter()
+                .copied()
+                .map(|order| {
+                    order.with_depot_tile(crate::depot::canonical_depot_command_tile(
+                        map,
+                        order.destination(),
+                    ))
+                })
+                .collect();
+        }
     }
 
     /// Reconstruye `StationFlows` con el pipeline `OpenTTD` (Demand + MCF1/2).

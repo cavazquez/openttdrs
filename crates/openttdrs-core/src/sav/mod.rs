@@ -2324,6 +2324,10 @@ impl GameState {
                 capa_semantic_records: records.capa,
             });
         }
+        // El decodificador de órdenes no conoce la huella del mapa al leer
+        // `ORDL`. Reaplicar la regla de `Depot::xy` al final cubre saves
+        // nativos/legacy que hayan guardado una sección naval opuesta.
+        state.sanitize_all_vehicle_orders();
         state
     }
 }

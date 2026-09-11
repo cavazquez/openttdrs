@@ -532,6 +532,32 @@ mod tests {
     }
 
     #[test]
+    fn load_json_canonicalizes_ship_depot_order_anchor() {
+        let mut s = crate::GameState::new(12, 12);
+        let origin = TileCoord::new(5, 4);
+        let [first, second] = crate::ship_depot_footprint(origin, 0);
+        for tile in [first, second] {
+            s.map.set_kind(tile, crate::TileKind::Water).unwrap();
+        }
+        crate::apply_command(&mut s, &crate::Command::PlaceShipDepotDir(origin, 0)).unwrap();
+        let north = crate::ship_depot_north_tile(&s.map, origin).unwrap();
+        let south = crate::ship_depot_other_tile(&s.map, north).unwrap();
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, north, south);
+        ship.orders = vec![VehicleOrder::depot(south)];
+        ship.shared_order_id = Some(7);
+        s.vehicles.push(ship);
+        s.shared_order_lists.push(crate::SharedOrderList {
+            id: 7,
+            orders: vec![VehicleOrder::depot(south)],
+        });
+
+        let loaded = load_from_str(&s.save_json().unwrap()).unwrap();
+        assert_eq!(loaded.vehicles[0].orders[0].destination(), north);
+        assert_eq!(loaded.vehicles[0].dest, north);
+        assert_eq!(loaded.shared_order_lists[0].orders[0].destination(), north);
+    }
+
+    #[test]
     fn vehicle_advance_and_sync_no_panic_after_sanitization() {
         use crate::map::Map;
 

@@ -5112,3 +5112,10 @@ el incremento como la saturación. La transición de aeronaves también conserva
 el retorno `false` de `HandleBreakdown`, ya que no detienen su movimiento por
 esta fase; #329/#567 continúan abiertas por la semántica restante de vehículos,
 callbacks y aceptación visual/framebuffer.
+
+Actualización #329/#567-BREAKDOWN-CADENCE (2026-09-11): la cuenta de
+`breakdown_delay` usa ahora el ritmo de `Vehicle::HandleBreakdown`: cada dos
+ticks para barcos y vehículos de carretera, y cada cuatro para trenes. La
+regresión naval verifica que un tick intermedio no acorte la avería. #329/#567
+continúan abiertas por la semántica restante de vehículos, callbacks y
+aceptación visual/framebuffer.

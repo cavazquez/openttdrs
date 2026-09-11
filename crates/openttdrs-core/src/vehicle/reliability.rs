@@ -313,7 +313,7 @@ impl super::model::Vehicle {
     /// Fases de `HandleBreakdown` durante el movimiento.
     ///
     /// Devuelve `true` si el vehículo acaba de entrar en avería (humo/sonido).
-    pub fn handle_breakdown(&mut self, tick: u64) -> bool {
+    pub fn handle_breakdown(&mut self, _tick: u64) -> bool {
         match self.breakdown_ctr {
             0 => false,
             2 => {
@@ -330,8 +330,12 @@ impl super::model::Vehicle {
                 if self.kind == VehicleKind::Aircraft {
                     return false;
                 }
-                let half_rate = self.kind == VehicleKind::Train && (tick & 3) != 0;
-                if !half_rate && self.breakdown_delay > 0 {
+                let cadence = if self.kind == VehicleKind::Train {
+                    4
+                } else {
+                    2
+                };
+                if self.newgrf_tick_counter.is_multiple_of(cadence) && self.breakdown_delay > 0 {
                     self.breakdown_delay -= 1;
                     if self.breakdown_delay == 0 {
                         self.breakdown_ctr = 0;
@@ -838,6 +842,26 @@ mod tests {
         assert_eq!(v.breakdown_ctr, 1);
         assert_eq!(v.cur_speed, 0);
         assert_eq!(v.breakdowns_since_last_service, 1);
+    }
+
+    #[test]
+    fn breakdown_delay_uses_native_vehicle_cadence() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Ship,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.breakdown_ctr = 1;
+        v.breakdown_delay = 2;
+
+        v.newgrf_tick_counter = 1;
+        assert!(!v.handle_breakdown(0));
+        assert_eq!(v.breakdown_delay, 2);
+
+        v.newgrf_tick_counter = 2;
+        assert!(!v.handle_breakdown(0));
+        assert_eq!(v.breakdown_delay, 1);
     }
 
     #[test]

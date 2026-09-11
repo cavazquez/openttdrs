@@ -11,7 +11,7 @@ use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
 
 use crate::i18n::localized_text;
-use crate::render::TruckHandles;
+use crate::render::{NewGrfTrainSpriteCache, TruckHandles};
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -26,7 +26,7 @@ use crate::ui::vehicle_chain::{
     MAX_VEHICLE_CHAIN_SLOTS, VehicleChainRegistry, VehicleChainSlot, vehicle_window_key,
 };
 use crate::ui::vehicle_window::{
-    CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, vehicle_side_sprite,
+    CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, vehicle_side_sprite_for_sim,
 };
 
 pub(crate) use details::speed_to_kmh;
@@ -431,6 +431,8 @@ pub(crate) fn sync_vehicle_details_window(
     sim: Res<SimWorld>,
     prefs: Res<ClientPreferences>,
     trucks: Option<Res<TruckHandles>>,
+    mut cache: ResMut<NewGrfTrainSpriteCache>,
+    mut images: ResMut<Assets<Image>>,
     mut root_q: Query<(
         Entity,
         &mut FloatingWindow,
@@ -556,7 +558,8 @@ pub(crate) fn sync_vehicle_details_window(
                     && let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id)
                 {
                     node.display = Display::Flex;
-                    image.image = vehicle_side_sprite(trucks, unit);
+                    image.image =
+                        vehicle_side_sprite_for_sim(trucks, &sim, unit, &mut cache, &mut images);
                 } else {
                     node.display = Display::None;
                 }

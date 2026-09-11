@@ -10,8 +10,8 @@ use openttdrs_core::prelude::*;
 
 use crate::i18n::{Locale, localized_text};
 use crate::render::{
-    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles,
-    vehicle_world_position,
+    MapPreviewCamera, NewGrfTrainSpriteCache, PrimaryGameCamera, RemapMapVisualsPending,
+    TruckHandles, vehicle_world_position,
 };
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
@@ -30,6 +30,7 @@ use crate::ui::toolbar::BuildMenuUi;
 use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::{
     CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState, vehicle_side_sprite,
+    vehicle_side_sprite_for_sim,
 };
 
 const LIST_HEIGHT: f32 = 300.0;
@@ -160,8 +161,10 @@ pub(crate) struct VehicleListRow {
     vehicle_id: u32,
 }
 
-#[derive(Component)]
-pub(crate) struct VehicleListRowSprite;
+#[derive(Component, Clone, Copy)]
+pub(crate) struct VehicleListRowSprite {
+    vehicle_id: u32,
+}
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct VehicleListSortButton(VehicleListSort);
@@ -1179,7 +1182,7 @@ fn spawn_vehicle_list_row(
     ))
     .with_children(|row| {
         row.spawn((
-            VehicleListRowSprite,
+            VehicleListRowSprite { vehicle_id },
             ImageNode::new(sprite),
             Node {
                 width: Val::Px(CONSIST_UNIT_SPRITE_W),
@@ -1194,6 +1197,36 @@ fn spawn_vehicle_list_row(
             TextColor(WINDOW_TEXT),
         ));
     });
+}
+
+/// Actualiza los sprites de las filas ya materializadas sin cargar el cache
+/// NewGRF en el sistema que reconstruye toda la lista (que ya usa el límite
+/// completo de parámetros ECS de Bevy).
+pub(crate) fn sync_vehicle_list_sprites(
+    state: Res<VehicleListState>,
+    sim: Res<SimWorld>,
+    trucks: Option<Res<TruckHandles>>,
+    mut cache: ResMut<NewGrfTrainSpriteCache>,
+    mut images: ResMut<Assets<Image>>,
+    mut sprite_q: Query<(&VehicleListRowSprite, &mut ImageNode)>,
+) {
+    if !state.open {
+        return;
+    }
+    let Some(trucks) = trucks.as_ref() else {
+        return;
+    };
+    for (sprite, mut image) in &mut sprite_q {
+        let Some(vehicle) = sim
+            .state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.id == sprite.vehicle_id)
+        else {
+            continue;
+        };
+        image.image = vehicle_side_sprite_for_sim(trucks, &sim, vehicle, &mut cache, &mut images);
+    }
 }
 
 pub(crate) fn vehicle_list_on_closed(

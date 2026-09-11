@@ -15,7 +15,10 @@ use openttdrs_core::{MAX_DEPOT_NAME_CHARS, consist_unit_ids, engine_by_id};
 
 use crate::camera::tile_camera_world_pos;
 use crate::i18n::{Locale, localized_text};
-use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles};
+use crate::render::{
+    MapPreviewCamera, NewGrfTrainSpriteCache, PrimaryGameCamera, RemapMapVisualsPending,
+    TruckHandles,
+};
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::autoreplace_window::AutoreplaceWindowState;
@@ -30,7 +33,7 @@ use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::{
     CONSIST_STRIP_MAX_UNITS, CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState,
-    vehicle_side_sprite,
+    vehicle_side_sprite_for_sim,
 };
 
 use super::{BuildMenuUi, OrderEditState};
@@ -667,7 +670,6 @@ pub(crate) fn sync_depot_panel(
     depot_state: Res<DepotPanelState>,
     sim: Res<SimWorld>,
     prefs: Res<ClientPreferences>,
-    trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
     mut rename_row_q: Query<&mut Node, With<DepotRenameRow>>,
@@ -685,16 +687,6 @@ pub(crate) fn sync_depot_panel(
         (With<Button>, Without<DepotConsistUnitSprite>),
     >,
     mut row_text_q: Query<(&DepotVehicleRowText, &mut Text), Without<FloatingWindowTitleText>>,
-    mut consist_q: Query<
-        (
-            &DepotConsistUnitSprite,
-            &mut ImageNode,
-            &mut Node,
-            &mut BorderColor,
-            &Interaction,
-        ),
-        (Without<DepotRowContainer>, Without<DepotSellDrop>),
-    >,
     mut clone_label_q: Query<
         &mut Text,
         (
@@ -762,7 +754,6 @@ pub(crate) fn sync_depot_panel(
     }
     let vehicles_here = vehicles_at_depot(&sim, depot_pos);
     let drag_from = depot_state.list_drag_from;
-    let drag_unit = depot_state.list_drag_unit_idx;
     let hovered_slot = row_interaction_q.iter().find_map(|(row, interaction)| {
         matches!(*interaction, Interaction::Hovered | Interaction::Pressed).then_some(row.slot)
     });
@@ -825,31 +816,62 @@ pub(crate) fn sync_depot_panel(
             SELL_BORDER
         });
     }
-    if let Some(trucks) = trucks.as_ref() {
-        for (sprite, mut image, mut node, mut border, interaction) in &mut consist_q {
-            let Some(head) = vehicles_here.get(sprite.slot) else {
-                node.display = Display::None;
-                continue;
-            };
-            let unit_ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, head.id);
-            if let Some(&unit_id) = unit_ids.get(sprite.unit_idx)
-                && let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id)
-            {
-                node.display = Display::Flex;
-                image.image = vehicle_side_sprite(trucks, unit);
-                let dragging_this =
-                    drag_from == Some(sprite.slot) && drag_unit == Some(sprite.unit_idx);
-                *border = if dragging_this || *interaction == Interaction::Hovered {
-                    BorderColor::all(Color::srgb(0.9, 0.78, 0.48))
-                } else {
-                    BorderColor::all(Color::NONE)
-                };
-            } else {
-                node.display = Display::None;
-            }
-        }
-    } else {
+}
+
+/// Sincroniza los mini-sprites del depósito en un sistema separado para poder
+/// resolver capas NewGRF con el cache de imágenes sin sobrepasar el límite de
+/// parámetros ECS del panel principal.
+pub(crate) fn sync_depot_panel_consist(
+    depot_state: Res<DepotPanelState>,
+    sim: Res<SimWorld>,
+    trucks: Option<Res<TruckHandles>>,
+    mut cache: ResMut<NewGrfTrainSpriteCache>,
+    mut images: ResMut<Assets<Image>>,
+    mut consist_q: Query<
+        (
+            &DepotConsistUnitSprite,
+            &mut ImageNode,
+            &mut Node,
+            &mut BorderColor,
+            &Interaction,
+        ),
+        (Without<DepotRowContainer>, Without<DepotSellDrop>),
+    >,
+) {
+    let Some(depot_pos) = depot_state.depot_pos else {
         for (_, _, mut node, _, _) in &mut consist_q {
+            node.display = Display::None;
+        }
+        return;
+    };
+    let Some(trucks) = trucks.as_ref() else {
+        for (_, _, mut node, _, _) in &mut consist_q {
+            node.display = Display::None;
+        }
+        return;
+    };
+    let vehicles_here = vehicles_at_depot(&sim, depot_pos);
+    let drag_from = depot_state.list_drag_from;
+    let drag_unit = depot_state.list_drag_unit_idx;
+    for (sprite, mut image, mut node, mut border, interaction) in &mut consist_q {
+        let Some(head) = vehicles_here.get(sprite.slot) else {
+            node.display = Display::None;
+            continue;
+        };
+        let unit_ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, head.id);
+        if let Some(&unit_id) = unit_ids.get(sprite.unit_idx)
+            && let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id)
+        {
+            node.display = Display::Flex;
+            image.image = vehicle_side_sprite_for_sim(trucks, &sim, unit, &mut cache, &mut images);
+            let dragging_this =
+                drag_from == Some(sprite.slot) && drag_unit == Some(sprite.unit_idx);
+            *border = if dragging_this || *interaction == Interaction::Hovered {
+                BorderColor::all(Color::srgb(0.9, 0.78, 0.48))
+            } else {
+                BorderColor::all(Color::NONE)
+            };
+        } else {
             node.display = Display::None;
         }
     }

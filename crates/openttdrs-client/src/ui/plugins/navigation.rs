@@ -45,8 +45,8 @@ use crate::ui::town_directory::{
 use crate::ui::vehicle_list::{
     VehicleListState, handle_vehicle_group_rename_buttons, handle_vehicle_list_buttons,
     open_vehicle_list_from_routes, setup_vehicle_list, sync_vehicle_group_rename_row,
-    sync_vehicle_list, sync_vehicle_list_locale, sync_vehicle_list_static_labels,
-    vehicle_list_group_rename_keyboard, vehicle_list_on_closed,
+    sync_vehicle_list, sync_vehicle_list_locale, sync_vehicle_list_sprites,
+    sync_vehicle_list_static_labels, vehicle_list_group_rename_keyboard, vehicle_list_on_closed,
 };
 
 pub(crate) struct NavigationUiPlugin;
@@ -152,6 +152,10 @@ impl Plugin for NavigationUiPlugin {
                         .run_if(in_state(ClientScreen::InGame)),
                     sync_vehicle_list
                         .after(sync_vehicle_list_static_labels)
+                        .in_set(UpdateSet::Ui)
+                        .run_if(in_state(ClientScreen::InGame)),
+                    sync_vehicle_list_sprites
+                        .after(sync_vehicle_list)
                         .in_set(UpdateSet::Ui)
                         .run_if(in_state(ClientScreen::InGame)),
                     handle_vehicle_group_rename_buttons

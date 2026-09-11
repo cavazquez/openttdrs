@@ -441,7 +441,21 @@ fn cargo_label(locale: Locale, cargo: Option<CargoType>) -> String {
     }
 }
 
-fn stats_text(locale: Locale, engine: &EngineDef) -> String {
+fn badge_labels_for_engine(
+    engine: &EngineDef,
+    badge_catalog: &[openttdrs_core::BadgeDef],
+) -> Vec<String> {
+    openttdrs_core::badges_for_spec(&engine.badges, badge_catalog)
+        .into_iter()
+        .map(|badge| badge.label.clone())
+        .collect()
+}
+
+fn stats_text(
+    locale: Locale,
+    engine: &EngineDef,
+    badge_catalog: &[openttdrs_core::BadgeDef],
+) -> String {
     let role = if engine.is_wagon() {
         format!(
             "{}: {} ({})\n",
@@ -473,7 +487,7 @@ fn stats_text(locale: Locale, engine: &EngineDef) -> String {
     };
     let power_unit = if locale == Locale::En { "hp" } else { "cv" };
     let year = localized_text(locale, "año");
-    format!(
+    let mut stats = format!(
         "{role}{newgrf}{}: ${}  {}: {}t\n{}: {}km/h  {}: {}{power_unit}\n{}: ${}/{}\n{}: {} {}\n{}: {}  {}: {}%",
         localized_text(locale, "Precio"),
         engine.price,
@@ -493,7 +507,16 @@ fn stats_text(locale: Locale, engine: &EngineDef) -> String {
         engine.intro_year,
         localized_text(locale, "Fiabilidad"),
         engine.reliability_pct,
-    )
+    );
+    let badge_labels = badge_labels_for_engine(engine, badge_catalog);
+    if !badge_labels.is_empty() {
+        stats.push_str(&format!(
+            "\n{}: {}",
+            localized_text(locale, "Insignias"),
+            badge_labels.join(", "),
+        ));
+    }
+    stats
 }
 
 fn localized_buy_search_placeholder(locale: Locale) -> String {
@@ -731,7 +754,7 @@ pub(crate) fn sync_buy_window(
             })
             .map_or_else(
                 || localized_text(locale, "Selecciona un modelo para ver sus características."),
-                |engine| stats_text(locale, engine),
+                |engine| stats_text(locale, engine, &sim.state.badge_catalog),
             );
     }
     if let Ok((mut image, mut node)) = preview_q.single_mut() {
@@ -1159,13 +1182,13 @@ mod tests {
     #[test]
     fn buy_window_stats_follow_locale_without_translating_engine_or_custom_cargo_names() {
         let engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_BUS_MPS).unwrap();
-        let spanish = stats_text(Locale::Es, engine);
+        let spanish = stats_text(Locale::Es, engine, &[]);
         assert!(spanish.contains("Precio:"));
         assert!(spanish.contains("Potencia:"));
         assert!(spanish.contains("cv"));
         assert!(spanish.contains("/año"));
 
-        let english = stats_text(Locale::En, engine);
+        let english = stats_text(Locale::En, engine, &[]);
         assert!(english.contains("Price:"));
         assert!(english.contains("Power:"));
         assert!(english.contains("hp"));
@@ -1179,5 +1202,36 @@ mod tests {
         );
         assert_eq!(localized_buy_search_placeholder(Locale::En), "search…");
         assert_eq!(localized_buy_search_placeholder(Locale::Es), "buscar…");
+    }
+
+    #[test]
+    fn buy_window_stats_show_engine_badges_in_catalog_order() {
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_BUS_MPS)
+            .unwrap()
+            .clone();
+        engine.badges = vec![17, 23, 99];
+        let catalog = vec![
+            openttdrs_core::BadgeDef {
+                id: 17,
+                label: "ELEC".into(),
+                flags: 0,
+                from_newgrf: true,
+                grfid: 1,
+            },
+            openttdrs_core::BadgeDef {
+                id: 23,
+                label: "FERRY".into(),
+                flags: 0,
+                from_newgrf: true,
+                grfid: 1,
+            },
+        ];
+
+        let spanish = stats_text(Locale::Es, &engine, &catalog);
+        assert!(spanish.contains("Insignias: ELEC, FERRY"));
+        assert!(!spanish.contains("99"));
+
+        let english = stats_text(Locale::En, &engine, &catalog);
+        assert!(english.contains("Badges: ELEC, FERRY"));
     }
 }

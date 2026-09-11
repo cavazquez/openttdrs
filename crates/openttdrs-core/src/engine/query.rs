@@ -22,6 +22,50 @@ pub fn engine_in_catalog(catalog: &[EngineDef], id: u16) -> Option<&EngineDef> {
     catalog.iter().find(|e| e.id == id)
 }
 
+/// Bits de `EngineInfo::extra_flags` que afectan al ciclo de vida del motor.
+///
+/// `OpenTTD` define estos bits como una máscara `DWord` en Action0 `0x21`.
+/// Mantenerlos nombrados evita que los consumidores runtime tengan que repetir
+/// números mágicos y deja el resto de la máscara disponible para futuras
+/// propiedades.
+pub const EXTRA_ENGINE_FLAG_NO_NEWS: u32 = 1 << 0;
+pub const EXTRA_ENGINE_FLAG_NO_PREVIEW: u32 = 1 << 1;
+pub const EXTRA_ENGINE_FLAG_JOIN_PREVIEW: u32 = 1 << 2;
+pub const EXTRA_ENGINE_FLAG_SYNC_RELIABILITY: u32 = 1 << 3;
+
+/// Devuelve el motor cuya edad y fiabilidad debe compartir `engine`.
+///
+/// `SyncReliability` sigue la cadena de variantes hacia el padre, como
+/// `CalcEngineReliability` en `OpenTTD`. Un enlace ausente o cíclico deja la
+/// definición actual como fuente segura para que un catálogo parcialmente
+/// materializado no bloquee la creación del vehículo.
+#[must_use]
+pub fn engine_reliability_source<'a>(
+    engine: &'a EngineDef,
+    catalog: &'a [EngineDef],
+) -> &'a EngineDef {
+    let mut source = engine;
+    let fallback = engine;
+    let mut visited = HashSet::new();
+    loop {
+        if source.extra_flags & EXTRA_ENGINE_FLAG_SYNC_RELIABILITY == 0
+            || !visited.insert(source.id)
+        {
+            return source;
+        }
+        let Some(parent_id) = source.variant_parent_id else {
+            return source;
+        };
+        if parent_id == source.id || visited.contains(&parent_id) {
+            return fallback;
+        }
+        let Some(parent) = catalog.iter().find(|candidate| candidate.id == parent_id) else {
+            return source;
+        };
+        source = parent;
+    }
+}
+
 /// Motores de un tipo de vehículo concreto (orden del catálogo).
 pub fn engines_of_kind(kind: VehicleKind) -> impl Iterator<Item = &'static EngineDef> {
     engines_table().iter().filter(move |e| e.kind == kind)
@@ -336,5 +380,52 @@ mod tests {
             list.iter().map(|engine| engine.id).collect::<Vec<_>>(),
             vec![parent.id, child.id,]
         );
+    }
+
+    #[test]
+    fn sync_reliability_uses_variant_parent_source() {
+        let mut parent = engine_for_vehicle(VehicleKind::Ship, ENGINE_SHIP_MPS).clone();
+        parent.id = 20_001;
+        parent.reliability_pct = 61;
+        parent.reliability_spd_dec = 44;
+        parent.lifelength_years = 17;
+        let mut child = engine_for_vehicle(VehicleKind::Ship, ENGINE_SHIP_OIL).clone();
+        child.id = 20_002;
+        child.variant_parent_id = Some(parent.id);
+        child.extra_flags = EXTRA_ENGINE_FLAG_SYNC_RELIABILITY;
+        child.reliability_pct = 91;
+        child.reliability_spd_dec = 99;
+        child.lifelength_years = 30;
+
+        let catalog = [parent.clone(), child.clone()];
+        let source = engine_reliability_source(&child, &catalog);
+        assert_eq!(source.id, parent.id);
+        assert_eq!(source.reliability_pct, 61);
+        assert_eq!(source.reliability_spd_dec, 44);
+        assert_eq!(source.lifelength_years, 17);
+    }
+
+    #[test]
+    fn sync_reliability_stops_at_missing_or_cyclic_parent() {
+        let mut missing = engine_for_vehicle(VehicleKind::Ship, ENGINE_SHIP_OIL).clone();
+        missing.id = 20_003;
+        missing.variant_parent_id = Some(20_004);
+        missing.extra_flags = EXTRA_ENGINE_FLAG_SYNC_RELIABILITY;
+        assert_eq!(
+            engine_reliability_source(&missing, &[missing.clone()]).id,
+            missing.id
+        );
+
+        let mut first = engine_for_vehicle(VehicleKind::Ship, ENGINE_SHIP_MPS).clone();
+        first.id = 20_005;
+        first.variant_parent_id = Some(20_006);
+        first.extra_flags = EXTRA_ENGINE_FLAG_SYNC_RELIABILITY;
+        let mut second = engine_for_vehicle(VehicleKind::Ship, ENGINE_SHIP_OIL).clone();
+        second.id = 20_006;
+        second.variant_parent_id = Some(first.id);
+        second.extra_flags = EXTRA_ENGINE_FLAG_SYNC_RELIABILITY;
+        let catalog = [first.clone(), second];
+        let source = engine_reliability_source(&first, &catalog);
+        assert_eq!(source.id, first.id);
     }
 }

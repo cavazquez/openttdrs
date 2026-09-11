@@ -228,6 +228,7 @@ fn apply_engine_with_refit(
     new_engine: &EngineDef,
     current_tick: u64,
     cargo_spec_catalog: &[crate::cargo_spec::CargoSpecDef],
+    engine_catalog: &[crate::engine::EngineDef],
     climate: crate::Climate,
 ) {
     vehicle.engine_id = Some(new_engine.id);
@@ -280,7 +281,11 @@ fn apply_engine_with_refit(
         vehicle.refit_capacity = u16::try_from(vehicle.capacity).unwrap_or(u16::MAX);
     }
     vehicle.build_tick = current_tick;
-    crate::vehicle::init_vehicle_reliability_from_engine(vehicle, new_engine);
+    crate::vehicle::init_vehicle_reliability_from_engine_with_catalog(
+        vehicle,
+        new_engine,
+        engine_catalog,
+    );
 }
 
 fn company_for_vehicle(
@@ -485,6 +490,7 @@ fn replace_chain(
         new_engine,
         current_tick,
         &state.cargo_spec_catalog,
+        &state.engine_catalog,
         state.climate,
     );
 
@@ -529,6 +535,7 @@ fn replace_chain(
                 &eng,
                 current_tick,
                 &state.cargo_spec_catalog,
+                &state.engine_catalog,
                 state.climate,
             );
         }
@@ -605,6 +612,7 @@ fn sync_dual_head_after_replace(
                     new_engine,
                     current_tick,
                     &state.cargo_spec_catalog,
+                    &state.engine_catalog,
                     state.climate,
                 );
             }
@@ -639,6 +647,7 @@ fn sync_dual_head_after_replace(
             new_engine,
             current_tick,
             &state.cargo_spec_catalog,
+            &state.engine_catalog,
             state.climate,
         );
         rear.build_tick = current_tick;

@@ -227,7 +227,11 @@ pub(super) fn build_vehicle_at_depot(
         vehicle.cargo_type = engine.cargo;
     }
     vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(&engine, &mut vehicle);
-    crate::vehicle::init_vehicle_reliability_from_engine(&mut vehicle, &engine);
+    crate::vehicle::init_vehicle_reliability_from_engine_with_catalog(
+        &mut vehicle,
+        &engine,
+        &state.engine_catalog,
+    );
     let property_capacity = (engine.capacity > 0 || engine.cargo.is_some())
         .then(|| {
             crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
@@ -527,7 +531,11 @@ pub(crate) fn spawn_newgrf_articulated_parts(
         part.newgrf_mirrored = mirrored;
         part.prev_unit = Some(previous_id);
         part.unit_length = crate::newgrf_callback::vehicle_unit_length(&part_engine, &mut part);
-        crate::vehicle::init_vehicle_reliability_from_engine(&mut part, &part_engine);
+        crate::vehicle::init_vehicle_reliability_from_engine_with_catalog(
+            &mut part,
+            &part_engine,
+            &state.engine_catalog,
+        );
         if matches!(
             front_engine.kind,
             VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram

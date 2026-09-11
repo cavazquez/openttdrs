@@ -97,8 +97,9 @@ pub struct EngineDef {
     #[serde(default, skip)]
     pub newgrf_variant_parent_local_id: Option<u16>,
     /// Action0 vehicle `0x21`/`0x27`/`0x30`: flags adicionales del motor.
-    /// Se conserva el valor nativo aunque sus consumidores de noticias,
-    /// preview y fiabilidad de variantes todavía no estén materializados.
+    /// Se conserva el valor nativo; `SyncReliability` ya se aplica al crear o
+    /// autoreemplazar vehículos y los consumidores de noticias/preview siguen
+    /// pendientes.
     #[serde(default)]
     pub extra_flags: u32,
     /// Ticks antes de envejecer la carga (`EngineInfo::cargo_age_period`).

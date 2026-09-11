@@ -64,6 +64,17 @@ pub(crate) fn init_vehicle_reliability_from_engine(
     vehicle.max_age_days = u32::from(engine.lifelength_years) * DAYS_PER_VEHICLE_YEAR;
 }
 
+pub(crate) fn init_vehicle_reliability_from_engine_with_catalog(
+    vehicle: &mut super::model::Vehicle,
+    engine: &crate::engine::EngineDef,
+    engine_catalog: &[crate::engine::EngineDef],
+) {
+    let source = crate::engine::engine_reliability_source(engine, engine_catalog);
+    vehicle.reliability = u16::from(source.reliability_pct) * 100;
+    vehicle.reliability_spd_dec = source.reliability_spd_dec;
+    vehicle.max_age_days = u32::from(source.lifelength_years) * DAYS_PER_VEHICLE_YEAR;
+}
+
 fn scale_reliability_to_openttd(reliability: u16) -> u32 {
     u32::from(reliability) * 65535 / 10000
 }
@@ -592,6 +603,39 @@ mod tests {
         let before = v.reliability;
         v.check_vehicle_breakdown(&mut Randomizer::new(1));
         assert!(v.reliability < before);
+    }
+
+    #[test]
+    fn sync_reliability_initializes_vehicle_from_variant_parent() {
+        let mut parent =
+            crate::engine::engine_for_vehicle(VehicleKind::Ship, crate::engine::ENGINE_SHIP_MPS)
+                .clone();
+        parent.id = 20_011;
+        parent.reliability_pct = 61;
+        parent.reliability_spd_dec = 44;
+        parent.lifelength_years = 17;
+        let mut child =
+            crate::engine::engine_for_vehicle(VehicleKind::Ship, crate::engine::ENGINE_SHIP_OIL)
+                .clone();
+        child.id = 20_012;
+        child.variant_parent_id = Some(parent.id);
+        child.extra_flags = crate::engine::EXTRA_ENGINE_FLAG_SYNC_RELIABILITY;
+        child.reliability_pct = 91;
+        child.reliability_spd_dec = 99;
+        child.lifelength_years = 30;
+
+        let catalog = [parent, child.clone()];
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Ship,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        init_vehicle_reliability_from_engine_with_catalog(&mut vehicle, &child, &catalog);
+
+        assert_eq!(vehicle.reliability, 6_100);
+        assert_eq!(vehicle.reliability_spd_dec, 44);
+        assert_eq!(vehicle.max_age_days, 17 * DAYS_PER_VEHICLE_YEAR);
     }
 
     #[test]

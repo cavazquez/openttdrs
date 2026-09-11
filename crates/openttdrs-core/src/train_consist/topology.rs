@@ -211,14 +211,24 @@ pub fn consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_an
             .engine_id
             .and_then(|id| engine_for_id(engine_catalog, id))
             .unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
-        let callback_capacity = (eng.capacity > 0 || eng.cargo.is_some())
+        let refit_callback_capacity = (eng.capacity > 0 || eng.cargo.is_some())
+            .then(|| crate::newgrf_callback::resolve_vehicle_current_refit_capacity(eng, v))
+            .flatten();
+        let property_callback_capacity = (eng.capacity > 0 || eng.cargo.is_some())
             .then(|| crate::newgrf_callback::resolve_vehicle_capacity_property_callback(eng, v))
             .flatten();
-        let capacity = callback_capacity.unwrap_or(eng.capacity);
+        // CB15 devuelve la capacidad final y por eso tiene prioridad sobre
+        // la propiedad modificada por CB36. Si falla, DetermineCapacity cae
+        // a la propiedad Action0/CB36 y recién después al valor catalogado.
+        let capacity = refit_callback_capacity
+            .or(property_callback_capacity)
+            .unwrap_or(eng.capacity);
         // La cabeza guarda la suma del consist más abajo; cada follower sí
         // conserva su capacidad local para que LoadUnloadStation no vuelva a
         // usar la propiedad Action0 después de un cambio dinámico de CB36.
-        if id != head_id && callback_capacity.is_some() {
+        if id != head_id
+            && (refit_callback_capacity.is_some() || property_callback_capacity.is_some())
+        {
             v.capacity = capacity;
         }
         let speed = crate::newgrf_callback::vehicle_max_speed(eng, v);

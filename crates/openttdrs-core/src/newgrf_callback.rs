@@ -1488,6 +1488,29 @@ pub fn resolve_vehicle_refit_capacity_callback(
     (result != CALLBACK_FAILED).then_some(u32::from(result))
 }
 
+/// Resuelve la capacidad de refit que `Engine::DetermineCapacity` usaría para
+/// una unidad ya materializada.
+///
+/// `CBID_VEHICLE_REFIT_CAPACITY` no se consulta para la configuración vanilla
+/// por defecto en la ruta antigua: sólo entra cuando el cargo actual difiere
+/// del cargo declarado por Action0 o cuando hay un subtipo de refit activo.
+/// Mantener esa frontera evita que un callback pensado para la conversión
+/// cambie también la capacidad de compra inicial. El flag nativo
+/// `NoDefaultCargoMultiplier` todavía no tiene un campo equivalente en
+/// `EngineDef`; los motores que lo necesiten siguen usando la ruta explícita
+/// de refit de los callers.
+#[must_use]
+pub fn resolve_vehicle_current_refit_capacity(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+) -> Option<u32> {
+    let cargo = vehicle.cargo_type?;
+    if engine.cargo == Some(cargo) && vehicle.cargo_subtype == 0 {
+        return None;
+    }
+    resolve_vehicle_refit_capacity_callback(engine, vehicle, cargo)
+}
+
 /// Resultado del callback de sonido de un vehículo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VehicleSoundOverride {
@@ -4848,6 +4871,80 @@ mod tests {
         gfx
     }
 
+    /// Devuelve resultados distintos para CB15 y CB36, para verificar que la
+    /// capacidad de una unidad refitada no vuelva accidentalmente a la
+    /// propiedad modificada del motor.
+    fn gfx_callback_capacity_by_callback(
+        refit_capacity: u16,
+        property_capacity: u16,
+    ) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::from(u16::MAX),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![
+                    (
+                        3,
+                        u32::from(CBID_VEHICLE_REFIT_CAPACITY),
+                        u32::from(CBID_VEHICLE_REFIT_CAPACITY),
+                    ),
+                    (
+                        4,
+                        u32::from(CBID_VEHICLE_MODIFY_PROPERTY),
+                        u32::from(CBID_VEHICLE_MODIFY_PROPERTY),
+                    ),
+                ],
+                default: 0,
+            },
+        );
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::from(refit_capacity),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx.action2_var.insert(
+            4,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::from(property_capacity),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     fn gfx_callback_fund_more_text_grf_string(string_id: u32) -> TrainSpriteGraphics {
         let mut gfx = gfx_callback_literal_u16(0x40F);
         let Some(entry) = gfx.action2_var.get_mut(&2) else {
@@ -6355,6 +6452,83 @@ mod tests {
         assert_eq!(
             resolve_vehicle_refit_capacity_callback(&engine, &mut vehicle, CargoType::Coal),
             None
+        );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_current_refit_capacity_only_enters_non_default_mode() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x5245_4643;
+        engine.newgrf_local_id = 0;
+        engine.cargo = Some(CargoType::Passengers);
+        engine.vehicle_callback_mask = 1 << 3;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(42)));
+        let mut vehicle = Vehicle::new(
+            52,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.cargo_type = Some(CargoType::Passengers);
+        assert_eq!(
+            resolve_vehicle_current_refit_capacity(&engine, &mut vehicle),
+            None,
+            "el cargo por defecto no debe invocar CB15 en la ruta legacy"
+        );
+        vehicle.cargo_type = Some(CargoType::Coal);
+        assert_eq!(
+            resolve_vehicle_current_refit_capacity(&engine, &mut vehicle),
+            Some(42)
+        );
+        vehicle.cargo_type = Some(CargoType::Passengers);
+        vehicle.cargo_subtype = 2;
+        assert_eq!(
+            resolve_vehicle_current_refit_capacity(&engine, &mut vehicle),
+            Some(42),
+            "un subtipo no-default sí activa CB15"
+        );
+    }
+
+    #[test]
+    fn consist_changed_prefers_refit_capacity_callback_over_property_callback() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.id = 60_046;
+        engine.from_newgrf = true;
+        engine.newgrf_grfid = 0x4341_5031;
+        engine.newgrf_local_id = 0;
+        engine.cargo = Some(CargoType::Passengers);
+        engine.capacity = 20;
+        engine.vehicle_callback_mask = 1 << 3;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_capacity_by_callback(42, 7)));
+
+        let mut vehicle = Vehicle::new(
+            91,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.engine_id = Some(engine.id);
+        vehicle.cargo_type = Some(CargoType::Coal);
+        vehicle.capacity = engine.capacity;
+        let mut vehicles = vec![vehicle];
+        crate::train_consist::consist_changed_with_map_and_catalog(
+            &mut vehicles,
+            91,
+            None,
+            &[engine],
+        );
+
+        assert_eq!(
+            vehicles[0].capacity, 42,
+            "CB15 debe ganar a la propiedad CB36 para un cargo refitado"
         );
     }
 

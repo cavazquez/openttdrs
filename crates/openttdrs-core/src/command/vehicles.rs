@@ -543,6 +543,14 @@ pub(crate) fn spawn_newgrf_articulated_parts(
             part.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
             part.road_state = crate::road_movement::RVSB_IN_DEPOT;
         }
+        let refit_callback_capacity = (part_engine.capacity > 0 || part_engine.cargo.is_some())
+            .then(|| {
+                crate::newgrf_callback::resolve_vehicle_current_refit_capacity(
+                    &part_engine,
+                    &mut part,
+                )
+            })
+            .flatten();
         let property_capacity = (part_engine.capacity > 0 || part_engine.cargo.is_some())
             .then(|| {
                 crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
@@ -551,8 +559,15 @@ pub(crate) fn spawn_newgrf_articulated_parts(
                 )
             })
             .flatten();
-        let raw_capacity = property_capacity.unwrap_or(part_engine.capacity);
-        if raw_capacity > 0 {
+        if let Some(capacity) = refit_callback_capacity {
+            // CB15 ya entrega la capacidad final, sin el multiplicador de
+            // CargoSpec que sólo corresponde a la propiedad base/CB36.
+            part.capacity = capacity;
+            part.cargo_type = part_engine.cargo.or(front_cargo_type);
+        } else if let Some(raw_capacity) =
+            property_capacity.or((part_engine.capacity > 0).then_some(part_engine.capacity))
+            && raw_capacity > 0
+        {
             part.capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
                 raw_capacity,
                 &state.cargo_spec_catalog,
@@ -1193,6 +1208,27 @@ pub(super) fn refit_vehicle(
         if let Some(engine) = engine.as_ref() {
             vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(engine, vehicle);
         }
+    }
+    // `RefitVehicle` cambia unidades individuales, pero la capacidad visible
+    // de un tren vive en la cabeza del consist. Recalcular después de aplicar
+    // todas las mutaciones hace que CB15/CB36 vean el estado final de cada
+    // vagón y evita dejar una suma antigua hasta el siguiente evento.
+    if state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == vehicle_id)
+        .is_some_and(|vehicle| vehicle.kind == VehicleKind::Train)
+        && let Some(head_id) = crate::consist_head_id(&state.vehicles, vehicle_id)
+    {
+        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
+            &mut state.vehicles,
+            head_id,
+            Some(&state.map),
+            &state.engine_catalog,
+            &state.cargo_spec_catalog,
+            state.freight_trains,
+            state.construction.wagon_speed_limits,
+        );
     }
     state.economy.money -= refit_cost;
     Ok(())

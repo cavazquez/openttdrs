@@ -259,12 +259,17 @@ pub(super) fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
         if engine.newgrf_grfid == 0 || engine.newgrf_runtime.is_none() {
             continue;
         }
-        let Some(raw_capacity) = crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
+        let refit_capacity = crate::newgrf_callback::resolve_vehicle_current_refit_capacity(
             &engine,
             &mut state.vehicles[index],
-        ) else {
+        );
+        let property_capacity = crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
+            &engine,
+            &mut state.vehicles[index],
+        );
+        if refit_capacity.is_none() && property_capacity.is_none() {
             continue;
-        };
+        }
         let cargo = state.vehicles[index].cargo_type.or(engine.cargo).unwrap_or(
             match state.vehicles[index].kind {
                 VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
@@ -274,11 +279,18 @@ pub(super) fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
                 VehicleKind::Train => unreachable!("trenes se actualizan por consist"),
             },
         );
-        state.vehicles[index].capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
-            raw_capacity,
-            &state.cargo_spec_catalog,
-            cargo,
-        );
+        state.vehicles[index].capacity = if let Some(capacity) = refit_capacity {
+            capacity
+        } else {
+            let Some(property_capacity) = property_capacity else {
+                continue;
+            };
+            crate::cargo_spec::apply_cargo_capacity_multiplier(
+                property_capacity,
+                &state.cargo_spec_catalog,
+                cargo,
+            )
+        };
     }
 }
 
@@ -1194,6 +1206,22 @@ fn maybe_refit_at_station(state: &mut GameState, vehicle_idx: usize, station_idx
             state.vehicles[idx].refit_capacity =
                 u16::try_from(state.vehicles[idx].capacity).unwrap_or(u16::MAX);
         }
+    }
+    if state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == head_id)
+        .is_some_and(|vehicle| vehicle.kind == VehicleKind::Train)
+    {
+        crate::train_consist::consist_changed_with_map_and_catalog_and_cargo_with_freight_multiplier_and_wagon_speed_limits(
+            &mut state.vehicles,
+            head_id,
+            Some(&state.map),
+            &state.engine_catalog,
+            &state.cargo_spec_catalog,
+            state.freight_trains,
+            state.construction.wagon_speed_limits,
+        );
     }
     state.economy.money -= total_cost;
     true

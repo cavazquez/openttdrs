@@ -252,11 +252,17 @@ fn apply_engine_with_refit(
     // cargo y evita que autoreplace conserve transitoriamente la capacidad
     // del motor anterior. Las locomotoras sin capacidad propia mantienen el
     // placeholder hasta que `ConsistChanged` suma los vagones.
-    let callback_capacity =
+    let refit_callback_capacity =
+        crate::newgrf_callback::resolve_vehicle_current_refit_capacity(new_engine, vehicle);
+    let property_callback_capacity =
         crate::newgrf_callback::resolve_vehicle_capacity_property_callback(new_engine, vehicle);
     let raw_capacity =
-        callback_capacity.or((new_engine.capacity > 0).then_some(new_engine.capacity));
-    if let Some(raw_capacity) = raw_capacity {
+        property_callback_capacity.or((new_engine.capacity > 0).then_some(new_engine.capacity));
+    if let Some(capacity) = refit_callback_capacity {
+        // CB15 devuelve la capacidad final; no se vuelve a aplicar el
+        // multiplicador del CargoSpec, igual que Engine::DetermineCapacity.
+        vehicle.capacity = capacity;
+    } else if let Some(raw_capacity) = raw_capacity {
         let cargo = vehicle
             .cargo_type
             .or(new_engine.cargo)

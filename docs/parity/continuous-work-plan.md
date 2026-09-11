@@ -4335,6 +4335,17 @@ estricto limpios. #329/#567 siguen abiertas por callbacks, propiedades
 navales restantes y aceptación visual manual bajo Weston; #326 permanece
 abierta.
 
+Actualización #329/#567-SHIP-REFITTABLE (2026-09-11, `8b9a578c`): Action0
+naval `0x09` deja de descartarse. El parser conserva el indicador de
+refitabilidad, el catálogo lo propaga con `true` como compatibilidad para
+vanilla/saves antiguos, y las APIs de refit ya no ofrecen cargos cuando el GRF
+declara `0`. Se agregó una regresión parser→catálogo para las rutas con y sin
+catálogo de cargos. Core queda en `2455 passed; 0 failed; 1 ignored` y cliente
+en `1388 passed; 0 failed; 2 ignored`, con formato, `git diff --check` y
+Clippy estricto limpios. #329/#567 siguen abiertas por callbacks y
+propiedades navales restantes, y por aceptación visual manual bajo Weston;
+#326 permanece abierta.
+
 Actualización #329/#567-SHIP-LEGACY-REFIT-MASK (2026-09-11, `47a89b38`): el
 parser Action0 conserva la máscara histórica naval `0x11` y la aplicación la
 traduce desde los índices locales del GRF a la máscara global de cargos,

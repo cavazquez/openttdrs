@@ -4031,3 +4031,12 @@ no se descartan por un `-1` de extensión o clipping. La suite cliente queda en
 1383 pasadas y 2 ignoradas, con Clippy estricto y formato verdes. #567 sigue
 abierta por callbacks/vecinos, validación visual en Weston, clipping integrado
 con el framebuffer y la matriz completa de paridad; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-MAP-EDGE-ATOMIC (2026-09-11,
+`9704a135`): el contrato de construcción naval ahora tiene regresión para las
+cuatro orientaciones cuando la segunda tesela cae fuera de un mapa 4×4. El
+preview y la ejecución devuelven `OutOfBounds` sin escribir la primera sección,
+crear una fila de `DepotID` ni cobrar dinero. La suite core queda en 2406
+pasadas y 1 ignorada; #567 sigue abierta por callbacks/vecinos restantes,
+aceptación visual en Weston, clipping integrado con framebuffer y matriz
+completa; #326 permanece abierta.

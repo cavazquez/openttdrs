@@ -12,7 +12,7 @@ use crate::map::{
 use crate::{GameState, Station, StopKind};
 
 use super::super::CommandError;
-use super::shared::check_in_bounds;
+use super::shared::{check_in_bounds, register_depot, unregister_depot};
 use super::station::apply_station_m6;
 
 /// Offset de la boca del depósito según `dir` (0=NE..3=NW, misma convención road/rail).
@@ -137,6 +137,7 @@ pub(in crate::command) fn place_ship_depot_dir(
         .map
         .set_tile(other, other_tile)
         .map_err(|_| CommandError::OutOfBounds)?;
+    register_depot(state, depot_id, c);
     state.economy.money -= ship_depot_build_cost(&state.global_economy);
     Ok(())
 }
@@ -150,6 +151,11 @@ pub(in crate::command) fn clear_ship_depot(
     check_clear_ship_depot(state, c)?;
     let other =
         crate::depot::ship_depot_other_tile(&state.map, c).ok_or(CommandError::InvalidDepotTile)?;
+    let depot_id = state
+        .map
+        .get(c)
+        .and_then(crate::depot::depot_id_from_tile)
+        .ok_or(CommandError::InvalidDepotTile)?;
     let tiles = [c, other];
     let water_classes = tiles.map(|tile| {
         state
@@ -161,6 +167,7 @@ pub(in crate::command) fn clear_ship_depot(
         make_water_tile(&mut state.map, tile, water_class)
             .map_err(|_| CommandError::OutOfBounds)?;
     }
+    unregister_depot(state, depot_id);
     state.economy.money -= ship_depot_clear_cost(&state.global_economy);
     Ok(())
 }

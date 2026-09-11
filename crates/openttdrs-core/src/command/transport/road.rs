@@ -28,6 +28,7 @@ use super::shared::check_object_can_be_auto_cleared;
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
     check_in_bounds, place_single_transport_tile, place_single_transport_tile_with_depot_id,
+    register_depot,
 };
 
 pub(crate) fn check_place_road_bits(map: &Map, c: TileCoord) -> Result<(), CommandError> {
@@ -110,6 +111,7 @@ pub(in crate::command) fn place_road_depot_dir(
         // no cobra una carretera adicional por actualizar la tesela vecina.
         let _ = place_road_bits_without_charge(state, exit, road_bits);
     }
+    register_depot(state, depot_id, c);
     Ok(())
 }
 

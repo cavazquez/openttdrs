@@ -240,6 +240,35 @@ pub(in crate::command) fn check_object_can_be_auto_cleared(
     Ok(())
 }
 
+/// Registra la fila semántica que `new Depot(tile)` crea junto con `MAP2`.
+///
+/// Los nombres generados y la asociación al pueblo se completarán cuando el
+/// runtime de nombres de estaciones/depósitos esté conectado; conservar la
+/// fila desde el primer tick evita que el escritor pierda la identidad del
+/// depósito recién construido.
+pub(in crate::command::transport) fn register_depot(
+    state: &mut GameState,
+    depot_id: u16,
+    tile: TileCoord,
+) {
+    state.depots.retain(|depot| depot.depot_id != depot_id);
+    state.depots.push(crate::sav::SavDepot {
+        depot_id,
+        tile,
+        town_id: None,
+        town_cn: 0,
+        name: String::new(),
+        build_date: crate::news::openttd_date_from_calendar_day_index(u64::from(
+            state.calendar.date,
+        )),
+    });
+}
+
+/// Retira la fila `DEPT` después de que el mapa ya fue limpiado con éxito.
+pub(in crate::command::transport) fn unregister_depot(state: &mut GameState, depot_id: u16) {
+    state.depots.retain(|depot| depot.depot_id != depot_id);
+}
+
 pub(in crate::command) fn transport_tile_is_buildable(kind: TileKind) -> bool {
     !matches!(kind, TileKind::Water | TileKind::Void)
 }
@@ -454,6 +483,7 @@ pub(in crate::command) fn clear_tile(
     if state.map.get_kind(c) == Some(TileKind::ShipDepot) {
         return super::water::clear_ship_depot(state, c);
     }
+    let depot_id = state.map.get(c).and_then(crate::depot::depot_id_from_tile);
     if let Some(kind) = state.map.get_kind(c) {
         check_town_demolition_rating(state, c, kind)?;
     }
@@ -521,6 +551,9 @@ pub(in crate::command) fn clear_tile(
         .map
         .set_mapt_m5(c, 0x00, 0x00)
         .map_err(|_| CommandError::OutOfBounds)?;
+    if let Some(depot_id) = depot_id {
+        unregister_depot(state, depot_id);
+    }
     state.stations.retain(|s| s.pos != c);
     state
         .industries

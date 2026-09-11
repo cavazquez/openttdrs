@@ -403,6 +403,11 @@ pub struct GameState {
     /// en callbacks y al serializar el save.
     #[serde(default)]
     pub objects: Vec<crate::sav::SavObject>,
+    /// Instancias del pool nativo `Depot` (`DEPT`). Las baldosas del mapa
+    /// contienen el mismo índice en `MAP2`; este vector conserva la metadata
+    /// que no puede vivir en una tesela (nombre, pueblo y fecha).
+    #[serde(default)]
+    pub depots: Vec<crate::sav::SavDepot>,
     /// Mapeos `NewGRF` de objetos (`OBID`) usados para resolver IDs locales.
     #[serde(default)]
     pub object_mappings: Vec<crate::sav::SavObjectMapping>,
@@ -935,6 +940,7 @@ impl GameState {
             vehicles: Vec::new(),
             stations: Vec::new(),
             objects: Vec::new(),
+            depots: Vec::new(),
             object_mappings: Vec::new(),
             towns: Vec::new(),
             stats: SimStats::default(),
@@ -1083,6 +1089,7 @@ impl GameState {
             vehicles: Vec::new(),
             stations: Vec::new(),
             objects: Vec::new(),
+            depots: Vec::new(),
             object_mappings: Vec::new(),
             towns: Vec::new(),
             stats: SimStats::default(),

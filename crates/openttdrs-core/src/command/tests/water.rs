@@ -27,6 +27,13 @@ fn place_ship_depot_on_water_with_water_entrance() {
     assert_eq!(other_tile.m5, 0x31, "parte opuesta sobre el eje X");
     assert_eq!(crate::depot::depot_id_from_tile(tile), Some(0));
     assert_eq!(crate::depot::depot_id_from_tile(other_tile), Some(0));
+    assert_eq!(s.depots.len(), 1);
+    assert_eq!(s.depots[0].depot_id, 0);
+    assert_eq!(s.depots[0].tile, depot);
+    assert_eq!(
+        s.depots[0].build_date,
+        crate::news::openttd_date_from_calendar_day_index(u64::from(s.calendar.date))
+    );
     assert_eq!(
         s.economy.money,
         money - ship_depot_build_cost(&s.global_economy)
@@ -203,6 +210,16 @@ fn depot_builders_share_native_pool_ids() {
         crate::depot::depot_id_from_tile(s.map.get(ship_other).unwrap()),
         Some(2)
     );
+    assert_eq!(
+        s.depots
+            .iter()
+            .map(|depot| depot.depot_id)
+            .collect::<Vec<_>>(),
+        vec![0, 1, 2]
+    );
+    assert_eq!(s.depots[0].tile, road);
+    assert_eq!(s.depots[1].tile, rail);
+    assert_eq!(s.depots[2].tile, ship);
 }
 
 #[test]
@@ -259,6 +276,7 @@ fn clear_ship_depot_from_either_section_restores_both_water_tiles() {
     );
     assert_eq!(s.map.get(depot).unwrap().m5, 0);
     assert_eq!(s.map.get(other).unwrap().m5, 0);
+    assert!(s.depots.is_empty());
     assert_eq!(
         s.economy.money,
         money - ship_depot_clear_cost(&s.global_economy)

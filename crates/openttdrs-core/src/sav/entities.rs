@@ -52,6 +52,28 @@ pub struct SavObjectMapping {
     pub substitute_id: u16,
 }
 
+/// Instancia persistida del pool `Depot` (`DEPT`).
+///
+/// La tesela conserva el `Depot::xy` original y las baldosas `MAP2` guardan
+/// el mismo `depot_id` en carretera, ferrocarril y las dos secciones navales.
+/// `town_id` usa el ID semántico (`None` equivale a `REF_TOWN == 0`), mientras
+/// `build_date` conserva el `TimerGameCalendar::Date` nativo.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SavDepot {
+    /// Índice común del pool (`DepotID`) escrito también en `MAP2`.
+    pub depot_id: u16,
+    /// `Depot::xy`, normalmente la tesela sobre la que se ejecutó el comando.
+    pub tile: TileCoord,
+    /// Pueblo asociado, si el save nativo conserva la referencia.
+    pub town_id: Option<u32>,
+    /// Contador de construcción usado por los nombres generados.
+    pub town_cn: u16,
+    /// Nombre personalizado; vacío cuando todavía se usa el nombre generado.
+    pub name: String,
+    /// Fecha absoluta nativa de `OpenTTD` (`TimerGameCalendar::Date`).
+    pub build_date: i32,
+}
+
 /// Estación decodificada del save (posición + nombre custom + facilities).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavStation {

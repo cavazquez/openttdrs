@@ -93,7 +93,7 @@ use crate::vehicle::{AircraftPhase, Vehicle, VehicleKind};
 use std::collections::{BTreeMap, HashMap};
 
 pub use entities::{
-    SavCargoPacket, SavIndustry, SavIndustryAcceptedCargo, SavIndustryAcceptedHistory,
+    SavCargoPacket, SavDepot, SavIndustry, SavIndustryAcceptedCargo, SavIndustryAcceptedHistory,
     SavIndustryProducedCargo, SavIndustryProducedHistory, SavObject, SavObjectMapping,
     SavPersistentStorage, SavRoadStopSpecMapping, SavRoadStopStationData, SavRoadStopTileData,
     SavStation, SavStationCargo, SavVehicle, SavVehicleKind, format_generated_station_name,

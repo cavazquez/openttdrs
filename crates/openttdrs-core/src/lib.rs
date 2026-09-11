@@ -757,7 +757,7 @@ pub use road_type::{
     tram_road_type_from_tile, tram_track_bits, vanilla_road_type_catalog,
 };
 pub use sav::{
-    EXPORT_SAVE_VERSION, SavCargoPacket, SavContainer, SavError, SavGame, SavIndustry,
+    EXPORT_SAVE_VERSION, SavCargoPacket, SavContainer, SavDepot, SavError, SavGame, SavIndustry,
     SavIndustryAcceptedCargo, SavIndustryAcceptedHistory, SavIndustryProducedCargo,
     SavIndustryProducedHistory, SavOpaqueChunk, SavPersistentStorage, SavStation, SavStationCargo,
     SavVehicle, SavVehicleKind, house_spec_is_size_1x1, house_spec_population, save as save_sav,

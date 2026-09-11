@@ -19,7 +19,7 @@ use super::shared::check_object_can_be_auto_cleared;
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
     check_in_bounds, place_single_transport_tile, place_single_transport_tile_with_depot_id,
-    propagate_rail_diag_to_neighbors, refresh_track_junction_from_neighbor,
+    propagate_rail_diag_to_neighbors, refresh_track_junction_from_neighbor, register_depot,
     trackbits_to_signal_present,
 };
 
@@ -373,6 +373,7 @@ pub(in crate::command) fn place_rail_depot_dir(
         // propagación de autorraíl, que contaminaría líneas paralelas vecinas.
         write_normal_rail_tile(state, exit, after)?;
     }
+    register_depot(state, depot_id, c);
     Ok(())
 }
 

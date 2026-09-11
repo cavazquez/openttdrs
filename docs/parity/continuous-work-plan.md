@@ -4650,6 +4650,17 @@ que #329/#567 continúan abiertas. Core queda en `2488 passed; 0 failed; 1
 ignored` y cliente en `1398 passed; 0 failed; 2 ignored`, con Clippy estricto,
 formato y `diff --check` limpios.
 
+Actualización #329/#567-VEHICLE-AIRCRAFT-HELICOPTER-ROTOR-STACK
+(2026-09-11): las capas adicionales del rotor NewGRF ya se materializan como
+children estables, con la misma resolución Action2, offsets aéreos y
+profundidad ordenable que la capa principal. Las capas que no existen en una
+resolución se ocultan y pueden reaparecer sin reconstruir la entidad; la
+regresión base sigue cubriendo frame y `var 1F`. La entidad FTA separada, la
+validación visual/runtime restante y el fallback estático con SpriteStack sin
+runtime quedan pendientes, por lo que #329/#567 continúan abiertas. Core queda
+en `2488 passed; 0 failed; 1 ignored` y cliente en `1398 passed; 0 failed; 2
+ignored`, con Clippy estricto, formato y `diff --check` limpios.
+
 Actualización #329/#567-VEHICLE-AIRCRAFT-MAIL-AGE-COUNTER (2026-09-11): el
 correo de `AIR_SHADOW` mantiene ahora una cuenta atrás independiente de la
 bodega primaria. Ambos relojes usan el período efectivo del motor como

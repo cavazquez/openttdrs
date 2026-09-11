@@ -5,7 +5,7 @@ mod coherence_tests {
     use crate::test_fixtures::SimHarness;
     use crate::{
         CargoType, Command, CompanyId, GameState, Industry, IndustryKind, PathNetwork, TileCoord,
-        TileKind, Vehicle, VehicleKind, command::apply_command, find_path,
+        TileKind, Vehicle, VehicleKind, WaterClass, command::apply_command, find_path,
     };
 
     #[test]
@@ -136,6 +136,67 @@ mod coherence_tests {
             StopKind::OilRig
         );
         assert_eq!(stop_kind_from_m6(7 << 3), StopKind::RailWaypoint);
+    }
+
+    #[test]
+    fn ship_station_destination_uses_adjacent_docking_tile() {
+        let mut state = GameState::new(8, 8);
+        let station = TileCoord::new(5, 4);
+        let docking = TileCoord::new(4, 4);
+        for coord in [station, docking] {
+            state.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+
+        let mut dock = state.map.get(station).unwrap();
+        dock.kind = TileKind::Station;
+        dock.mapt = 0x50; // MP_STATION.
+        dock.m5 = 4; // GFX_DOCK_BASE_WATER_PART.
+        dock.m6 = crate::station::STATION_TYPE_DOCK << 3;
+        dock.m1 = crate::map::set_water_class_m1(dock.m1, WaterClass::Sea);
+        state.map.set_tile(station, dock).unwrap();
+
+        let mut docking_tile = state.map.get(docking).unwrap();
+        docking_tile.m1 = crate::map::set_water_class_m1(docking_tile.m1 | 0x80, WaterClass::Sea);
+        state.map.set_tile(docking, docking_tile).unwrap();
+
+        let order = crate::vehicle::VehicleOrder::station(station);
+        assert_eq!(
+            resolve_order_destination_from(
+                &state.map,
+                VehicleKind::Ship,
+                order,
+                TileCoord::new(1, 4),
+            ),
+            docking
+        );
+    }
+
+    #[test]
+    fn ship_station_destination_falls_back_for_legacy_or_buoy_tiles() {
+        let mut state = GameState::new(8, 8);
+        let buoy = TileCoord::new(5, 4);
+        let neighboring_water = TileCoord::new(4, 4);
+        for coord in [buoy, neighboring_water] {
+            state.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+        let mut buoy_tile = state.map.get(buoy).unwrap();
+        buoy_tile.kind = TileKind::Station;
+        buoy_tile.mapt = 0x50; // MP_STATION.
+        buoy_tile.m6 = crate::station::STATION_TYPE_BUOY << 3;
+        state.map.set_tile(buoy, buoy_tile).unwrap();
+        let mut water = state.map.get(neighboring_water).unwrap();
+        water.m1 |= 0x80;
+        state.map.set_tile(neighboring_water, water).unwrap();
+
+        assert_eq!(
+            resolve_order_destination_from(
+                &state.map,
+                VehicleKind::Ship,
+                crate::vehicle::VehicleOrder::station(buoy),
+                TileCoord::new(1, 4),
+            ),
+            buoy
+        );
     }
 
     #[test]

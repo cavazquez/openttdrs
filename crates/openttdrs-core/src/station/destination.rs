@@ -1,4 +1,4 @@
-use crate::map::{Map, TileCoord};
+use crate::map::{Map, TileCoord, TileKind, diag_dir_offset};
 use crate::vehicle::{VehicleKind, VehicleOrder};
 
 use super::Station;
@@ -6,6 +6,48 @@ use super::geometry::{
     is_connected_bay_road_stop, is_drive_through_road_stop, rail_station_approach_tile,
     rail_station_stop_tile_for_approach, road_stop_approach_tile,
 };
+
+/// Busca la tesela de amarre que `YapfShip` usaría para un muelle u oil rig.
+///
+/// El modelo local conserva la estación como ancla de la orden, mientras que
+/// `OpenTTD` termina el path en una tesela acuática vecina marcada con
+/// `DockingTile`. El marcador raw permite migrar esa semántica sin exigir que
+/// partidas JSON antiguas ya tengan una lista de docking persistida.
+#[must_use]
+fn ship_docking_tile_for_station(
+    map: &Map,
+    station: TileCoord,
+    from: TileCoord,
+) -> Option<TileCoord> {
+    let station_tile = map.get(station)?;
+    if station_tile.kind != TileKind::Station
+        || !matches!(
+            crate::station::stop_kind_from_m6(station_tile.m6),
+            super::StopKind::Dock | super::StopKind::OilRig
+        )
+    {
+        return None;
+    }
+
+    (0..4)
+        .filter_map(|dir| {
+            let (dx, dy) = diag_dir_offset(dir);
+            let candidate = TileCoord::new(station.x + dx, station.y + dy);
+            map.get(candidate).and_then(|tile| {
+                (matches!(tile.kind, TileKind::Water | TileKind::ShipDepot)
+                    && tile.m1 & 0x80 != 0
+                    && crate::ship_movement::is_water_network_tile_at(map, candidate))
+                .then_some(candidate)
+            })
+        })
+        .min_by_key(|candidate| {
+            (
+                candidate.x.abs_diff(from.x) + candidate.y.abs_diff(from.y),
+                candidate.x,
+                candidate.y,
+            )
+        })
+}
 
 /// Destino de movimiento según tipo de vehículo y orden.
 ///
@@ -49,6 +91,9 @@ pub fn resolve_order_destination_from(
             .unwrap_or(station)
         }
         (VehicleKind::Train, VehicleOrder::Waypoint { waypoint, .. }) => waypoint,
+        (VehicleKind::Ship, VehicleOrder::Station { station, .. }) => {
+            ship_docking_tile_for_station(map, station, from).unwrap_or(station)
+        }
         (_, VehicleOrder::Depot { depot, .. }) => depot,
         (
             VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram,

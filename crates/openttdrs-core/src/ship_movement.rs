@@ -631,7 +631,117 @@ pub fn ship_depot_exit_blocked(map: &Map, vehicles: &[Vehicle], vehicle_index: u
 /// La rotación gráfica se conserva para que el siguiente tick pueda animar el
 /// giro sobre el lugar, mientras que la caché de ruta se invalida para que el
 /// planificador elija una salida nueva.
-fn reverse_ship_after_blocked_track(v: &mut Vehicle) {
+#[must_use]
+fn ship_exit_diagdir(direction: VehicleDirection, track: u8) -> u8 {
+    // `VehicleExitDir` de OpenTTD: los tracks de esquina cambian el lado de
+    // salida para las direcciones cardinales; los tracks X/Y diagonales salen
+    // por el eje indicado por el rumbo.
+    let mut diagdir = dir_to_diagdir(direction);
+    if direction & 1 == 0 {
+        let straight_track = match diagdir {
+            DIAGDIR_NE => TRACK_RIGHT,
+            DIAGDIR_SE => TRACK_LOWER,
+            DIAGDIR_SW => TRACK_LEFT,
+            _ => TRACK_UPPER,
+        };
+        if track != straight_track {
+            diagdir = (diagdir + 3) & 3;
+        }
+    }
+    diagdir
+}
+
+/// Lado de salida del `Trackdir` que entra por `entry` en una tesela naval.
+/// Es la tabla `_trackdir_to_exitdir` nativa reducida a los seis tracks de
+/// barcos; los pares restantes no pueden recibir ese `Trackdir`.
+#[must_use]
+fn ship_track_exit_diagdir(entry: u8, track: u8) -> Option<u8> {
+    const INVALID: u8 = INVALID_DIR;
+    const EXITS: [[u8; 6]; 4] = [
+        // DIAGDIR_NE: X_NE, LOWER_E, LEFT_N.
+        [
+            DIAGDIR_NE, INVALID, INVALID, DIAGDIR_SE, DIAGDIR_NW, INVALID,
+        ],
+        // DIAGDIR_SE: Y_SE, UPPER_E, LEFT_S.
+        [
+            INVALID, DIAGDIR_SE, DIAGDIR_NE, INVALID, DIAGDIR_SW, INVALID,
+        ],
+        // DIAGDIR_SW: X_SW, UPPER_W, RIGHT_S.
+        [
+            DIAGDIR_SW, INVALID, DIAGDIR_NW, INVALID, INVALID, DIAGDIR_SE,
+        ],
+        // DIAGDIR_NW: Y_NW, LOWER_W, RIGHT_N.
+        [
+            INVALID, DIAGDIR_NW, INVALID, DIAGDIR_SW, INVALID, DIAGDIR_NE,
+        ],
+    ];
+    let exit = EXITS
+        .get(usize::from(entry))?
+        .get(usize::from(track))
+        .copied()?;
+    (exit != INVALID).then_some(exit)
+}
+
+/// Equivalente local de `ReverseShipIntoTrackdir`.
+///
+/// `CheckShipReverse` nativo restringe la búsqueda al lado desde el que el
+/// barco puede volver a entrar en la tesela y deja que YAPF elija el mejor
+/// `Trackdir`. Como el runtime local guarda rutas por teselas, se enumeran los
+/// tres tracks que alcanzan ese lado, se descartan los vecinos desconectados y
+/// se compara la longitud de una ruta desde cada salida hasta `dest`.
+fn reverse_ship_into_trackdir(v: &mut Vehicle, map: &Map) -> bool {
+    let reverse_entry = (ship_exit_diagdir(v.direction, v.ship_track) + 2) & 3;
+    let mut candidates = Vec::new();
+    for track in [
+        TRACK_X,
+        TRACK_Y,
+        TRACK_UPPER,
+        TRACK_LOWER,
+        TRACK_LEFT,
+        TRACK_RIGHT,
+    ] {
+        let Some(subcoord) = ship_subcoord(reverse_entry, track) else {
+            continue;
+        };
+        let Some(exit) = ship_track_exit_diagdir(reverse_entry, track) else {
+            continue;
+        };
+        let next = tile_in_diagdir(v.pos, exit);
+        if !water_tiles_connected(map, v.pos, next) {
+            continue;
+        }
+
+        let route_len = if next == v.dest {
+            Some(1)
+        } else {
+            crate::pathfinder::find_path(map, next, v.dest, crate::pathfinder::PathNetwork::Water)
+                .map(|path| path.len().saturating_add(1))
+        };
+        candidates.push((route_len.unwrap_or(usize::MAX), track, subcoord.dir));
+    }
+
+    let Some((_, track, direction)) = candidates.into_iter().min_by_key(|candidate| {
+        // El orden por track hace reproducible el fallback que en OpenTTD usa
+        // `GetRandomTrackdir` cuando ninguna salida tiene camino completo.
+        (candidate.0, candidate.1)
+    }) else {
+        return false;
+    };
+
+    v.direction = direction;
+    v.ship_track = track;
+    v.ship_state = ship_state_for_track(track);
+    v.cur_speed = 0;
+    v.path.clear();
+    true
+}
+
+fn reverse_ship_after_blocked_track(v: &mut Vehicle, map: Option<&Map>) {
+    if let Some(map) = map
+        && reverse_ship_into_trackdir(v, map)
+    {
+        return;
+    }
     v.direction = crate::vehicle::reverse_direction(v.direction);
     v.cur_speed = 0;
     v.path.clear();
@@ -931,18 +1041,18 @@ pub fn ship_controller_tick_with_catalog(
         }
 
         if map.is_some_and(|m| !is_water_network_tile_at(m, new_tile)) {
-            reverse_ship_after_blocked_track(v);
+            reverse_ship_after_blocked_track(v, map);
             return;
         }
         if let Some(map) = map
             && !water_tiles_connected(map, old_tile, new_tile)
         {
-            reverse_ship_after_blocked_track(v);
+            reverse_ship_after_blocked_track(v, Some(map));
             return;
         }
 
         let Some(diagdir) = diagdir_between_tiles(old_tile, new_tile) else {
-            reverse_ship_after_blocked_track(v);
+            reverse_ship_after_blocked_track(v, map);
             return;
         };
 
@@ -951,7 +1061,7 @@ pub fn ship_controller_tick_with_catalog(
             v.path.pop_front();
         } else if !v.path.is_empty() {
             // Ruta desfasada: como `ReverseShip`, no saltar a un frente lejano.
-            reverse_ship_after_blocked_track(v);
+            reverse_ship_after_blocked_track(v, map);
             return;
         }
 
@@ -961,7 +1071,7 @@ pub fn ship_controller_tick_with_catalog(
             |m| choose_ship_track(m, new_tile, diagdir, path_next, v.dest),
         );
         let Some(entry) = ship_subcoord(diagdir, track) else {
-            reverse_ship_after_blocked_track(v);
+            reverse_ship_after_blocked_track(v, map);
             return;
         };
 
@@ -1404,6 +1514,46 @@ mod tests {
         assert_eq!(v.pos, pos);
         assert_eq!(v.direction, DIR_NE);
         assert_eq!(v.ship_rotation, DIR_SW);
+        assert_eq!(v.cur_speed, 0);
+        assert!(v.path.is_empty());
+    }
+
+    #[test]
+    fn ship_blocked_track_chooses_connected_reverse_turn() {
+        let mut s = GameState::new(8, 8);
+        let pos = TileCoord::new(3, 3);
+        let reverse = TileCoord::new(2, 3);
+        let side = TileCoord::new(3, 4);
+        let destination = side;
+        for tile in [pos, reverse, side] {
+            s.map.set_kind(tile, TileKind::Water).unwrap();
+        }
+
+        let mut v = Vehicle::new(1, VehicleKind::Ship, pos, destination);
+        v.running = true;
+        v.ship_pos_valid = true;
+        v.ship_x = pos.x * 16 + 15;
+        v.ship_y = pos.y * 16 + 8;
+        v.direction = DIR_SW;
+        v.ship_rotation = DIR_SW;
+        v.ship_track = TRACK_X;
+        v.ship_state = SHIP_STATE_TRACK_X;
+        v.cur_speed = 255;
+        v.progress = 255;
+        // El frente se vuelve inaccesible; el vecino de reversa recta y el
+        // giro SE siguen siendo válidos. La ruta útil es el giro lateral.
+        v.path.push_back(TileCoord::new(4, 3));
+        s.map
+            .set_kind(TileCoord::new(4, 3), TileKind::Grass)
+            .unwrap();
+
+        ship_controller_tick(&mut v, Some(&s.map));
+
+        assert_eq!(v.pos, pos);
+        assert_eq!(v.direction, DIR_E);
+        assert_eq!(v.ship_rotation, DIR_SW);
+        assert_eq!(v.ship_track, TRACK_LOWER);
+        assert_eq!(v.ship_state, SHIP_STATE_TRACK_LOWER);
         assert_eq!(v.cur_speed, 0);
         assert!(v.path.is_empty());
     }

@@ -5079,3 +5079,12 @@ permanece detenida varios días no espera hasta la salida para limpiar
 `VehicleServiceInDepot`; la regresión cubre orden manual, fiabilidad y
 permanencia en la huella 2×1. #567 continúa abierta por callbacks,
 pathfinding y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-SERVICE-CANCEL (2026-09-11): si el depósito
+propio deja de ser alcanzable o cambia de propietario después de programar un
+servicio automático, el callback retira sólo la orden naval temporal
+`stop:false` y restaura la orden real del circuito. Esto replica la conversión
+de `current_order` a `Dummy` de `CheckIfShipNeedsService` sin borrar órdenes
+persistentes; la regresión cubre el cambio de propietario y el destino
+restaurado. #567 continúa abierta por callbacks, pathfinding y aceptación
+visual/framebuffer.

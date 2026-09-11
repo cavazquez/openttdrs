@@ -240,6 +240,10 @@ pub struct ParsedTrainMeta {
     pub uses_2cc: bool,
     /// Action0 misc flag bit 5: CB15 también se consulta para el cargo por defecto.
     pub no_default_cargo_multiplier: bool,
+    /// Action0 train `0x30`: flags adicionales del motor, en formato nativo.
+    pub extra_flags: u32,
+    /// Action0 train `0x27`, misc flag bit 6: no crear humo al averiarse.
+    pub no_breakdown_smoke: bool,
     pub capacity: u32,
     pub cargo: Option<crate::cargo::CargoType>,
     /// Índice local de `0x15` antes de aplicar la CTT del GRF.
@@ -311,10 +315,13 @@ pub struct ParsedVehicleMeta {
     pub purchase_list_order_target: Option<u16>,
     /// Action0 vehicle `0x20`: ID local del motor padre de esta variante.
     pub variant_parent_local_id: Option<u16>,
-    /// Action0 ship `0x21`: flags adicionales del motor, en formato nativo.
+    /// Action0 vehicle flags adicionales del motor, en formato nativo
+    /// (train `0x30`, road `0x27`, ship/aircraft `0x21`).
     /// Se conservan para que los consumidores de preview/fiabilidad puedan
     /// aplicarlos cuando exista el subsistema runtime correspondiente.
     pub extra_flags: u32,
+    /// Action0 misc flag bit 6: no crear humo al averiarse.
+    pub no_breakdown_smoke: bool,
     /// Action0 ship `0x08`: índice de sprite naval normalizado a 0..=3 o
     /// `0xFD` para sprite custom `NewGRF`.
     pub ship_image_index: u8,
@@ -427,6 +434,7 @@ impl ParsedVehicleMeta {
             purchase_list_order_target: None,
             variant_parent_local_id: None,
             extra_flags: 0,
+            no_breakdown_smoke: false,
             ship_image_index: 0,
             cargo_age_period: crate::engine::DEFAULT_CARGO_AGE_PERIOD,
             ship_acceleration: if feature == ACTION0_FEATURE_SHIPS {
@@ -3360,6 +3368,8 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut rail_is_mu = false;
     let mut uses_2cc = false;
     let mut no_default_cargo_multiplier = false;
+    let mut extra_flags = 0u32;
+    let mut no_breakdown_smoke = false;
     let mut capacity = 0u32;
     let mut cargo = None;
     let mut default_cargo_local_id = None;
@@ -3516,12 +3526,13 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
             0x27 => {
                 // `EngineMiscFlag`: RailTilts = bit 0, Uses2CC = bit 1,
                 // RailIsMU = bit 2, NoDefaultCargoMultiplier = bit 5 y
-                // SpriteStack = bit 7.
+                // NoBreakdownSmoke = bit 6, SpriteStack = bit 7.
                 let flags = read_u8(payload, &mut i)?;
                 rail_tilts = flags & 0x01 != 0;
                 uses_2cc = flags & 0x02 != 0;
                 rail_is_mu = flags & 0x04 != 0;
                 no_default_cargo_multiplier = flags & 0x20 != 0;
+                no_breakdown_smoke = flags & 0x40 != 0;
                 sprite_stack = flags & 0x80 != 0;
             }
             0x2E => {
@@ -3541,9 +3552,12 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
             0x2B | 0x2F => {
                 skip_bytes(payload, &mut i, 2)?;
             }
-            // 0x0E running cost base; 0x2A/0x30 listas/DWORD: consumidas.
-            0x0E | 0x2A | 0x30 => {
+            // 0x0E running cost base; 0x2A lista/DWORD: consumida.
+            0x0E | 0x2A => {
                 skip_bytes(payload, &mut i, 4)?;
+            }
+            0x30 => {
+                extra_flags = read_u32(payload, &mut i)?;
             }
             0x2C | 0x2D => {
                 let count = usize::from(read_u8(payload, &mut i)?);
@@ -3612,6 +3626,8 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         rail_is_mu,
         uses_2cc,
         no_default_cargo_multiplier,
+        extra_flags,
+        no_breakdown_smoke,
         capacity,
         cargo,
         default_cargo_local_id,
@@ -3760,13 +3776,19 @@ fn parse_road_vehicle_property(
                 meta.running_cost_factor = read_u8(payload, i)?;
             }
         }
-        // 0x0A/0x16/0x1F/0x27: dword props aún no mapeadas al runtime.
-        0x0A | 0x16 | 0x1F | 0x27 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        // 0x0A/0x16/0x1F: dword props aún no mapeadas al runtime.
+        0x0A | 0x16 | 0x1F => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        0x27 => {
+            for meta in metas {
+                meta.extra_flags = read_u32(payload, i)?;
+            }
+        }
         0x1C => {
             for meta in metas {
                 let flags = read_u8(payload, i)?;
                 meta.uses_2cc = flags & 0x02 != 0;
                 meta.no_default_cargo_multiplier = flags & 0x20 != 0;
+                meta.no_breakdown_smoke = flags & 0x40 != 0;
                 meta.sprite_stack = flags & 0x80 != 0;
             }
         }
@@ -3931,6 +3953,7 @@ fn parse_ship_property(
                 let flags = read_u8(payload, i)?;
                 meta.uses_2cc = flags & 0x02 != 0;
                 meta.no_default_cargo_multiplier = flags & 0x20 != 0;
+                meta.no_breakdown_smoke = flags & 0x40 != 0;
                 meta.sprite_stack = flags & 0x80 != 0;
             }
         }
@@ -4094,6 +4117,7 @@ fn parse_aircraft_property(
                 let flags = read_u8(payload, i)?;
                 meta.uses_2cc = flags & 0x02 != 0;
                 meta.no_default_cargo_multiplier = flags & 0x20 != 0;
+                meta.no_breakdown_smoke = flags & 0x40 != 0;
                 meta.sprite_stack = flags & 0x80 != 0;
             }
         }
@@ -4160,7 +4184,12 @@ fn parse_aircraft_property(
                 }
             }
         }
-        0x13 | 0x1A | 0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        0x13 | 0x1A => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        0x21 => {
+            for meta in metas {
+                meta.extra_flags = read_u32(payload, i)?;
+            }
+        }
         0x18 | 0x19 => {
             for meta in metas {
                 let classes = read_u16(payload, i)?;

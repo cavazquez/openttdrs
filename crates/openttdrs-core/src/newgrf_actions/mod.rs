@@ -2493,13 +2493,34 @@ mod tests {
     }
 
     #[test]
+    fn vehicle_action0_misc_flags_enable_no_breakdown_smoke() {
+        let train = [0x00, ACTION0_FEATURE_TRAINS, 0x01, 0x01, 0x00, 0x27, 0x40];
+        assert!(parse_action0_train_meta(&train).unwrap().no_breakdown_smoke);
+
+        for (feature, misc_prop) in [
+            (ACTION0_FEATURE_ROAD_VEHICLES, 0x1C),
+            (ACTION0_FEATURE_SHIPS, 0x17),
+            (ACTION0_FEATURE_AIRCRAFT, 0x17),
+        ] {
+            let action0 = [0x00, feature, 0x01, 0x01, 0x00, misc_prop, 0x40];
+            assert!(
+                parse_action0_vehicle_metas(&action0)
+                    .unwrap()
+                    .remove(0)
+                    .no_breakdown_smoke,
+                "{feature:#04x} should preserve NoBreakdownSmoke"
+            );
+        }
+    }
+
+    #[test]
     fn apply_vehicle_misc_flags_propagates_2cc_to_engine_catalog() {
         for (feature, misc_prop, kind) in [
             (ACTION0_FEATURE_ROAD_VEHICLES, 0x1C, VehicleKind::Bus),
             (ACTION0_FEATURE_SHIPS, 0x17, VehicleKind::Ship),
             (ACTION0_FEATURE_AIRCRAFT, 0x17, VehicleKind::Aircraft),
         ] {
-            let action0 = [0x00, feature, 0x01, 0x01, 0x00, misc_prop, 0x22];
+            let action0 = [0x00, feature, 0x01, 0x01, 0x00, misc_prop, 0x62];
             let bytes = build_grf_v2_with_action0_and_action8(
                 &action0,
                 [b'2', b'C', feature, 1],
@@ -2522,6 +2543,10 @@ mod tests {
                 engine.no_default_cargo_multiplier,
                 "{kind:?} should preserve NoDefaultCargoMultiplier"
             );
+            assert!(
+                engine.no_breakdown_smoke,
+                "{kind:?} should preserve NoBreakdownSmoke"
+            );
         }
     }
 
@@ -2543,6 +2568,31 @@ mod tests {
             .find(|candidate| candidate.from_newgrf && candidate.kind == VehicleKind::Train)
             .expect("train with misc flags should enter catalog");
         assert!(engine.no_default_cargo_multiplier);
+    }
+
+    #[test]
+    fn apply_train_misc_flag_propagates_no_breakdown_smoke() {
+        let action0 = [0x00, ACTION0_FEATURE_TRAINS, 0x01, 0x01, 0x00, 0x27, 0x40];
+        let bytes = build_grf_v2_with_action0_and_action8(
+            &action0,
+            [b'N', b'B', 0, 1],
+            "no_breakdown_smoke",
+            "",
+        );
+        let dir = tempfile_dir_with("no_breakdown_smoke.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state.newgrf_stack.push(crate::NewGrfEntry::new(
+            "no_breakdown_smoke.grf",
+            0x4E42_0001,
+        ));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|candidate| candidate.from_newgrf && candidate.kind == VehicleKind::Train)
+            .expect("train with misc flags should enter catalog");
+        assert!(engine.no_breakdown_smoke);
     }
 
     #[test]
@@ -5013,6 +5063,51 @@ mod tests {
             .find(|engine| engine.from_newgrf && engine.kind == VehicleKind::Ship)
             .unwrap();
         assert_eq!(engine.extra_flags, extra_flags);
+    }
+
+    #[test]
+    fn vehicle_extra_flags_property_reaches_engine_catalog_for_each_feature() {
+        let extra_flags = 1u32 << 6;
+        for (feature, property, kind) in [
+            (ACTION0_FEATURE_TRAINS, 0x30, VehicleKind::Train),
+            (ACTION0_FEATURE_ROAD_VEHICLES, 0x27, VehicleKind::Bus),
+            (ACTION0_FEATURE_SHIPS, 0x21, VehicleKind::Ship),
+            (ACTION0_FEATURE_AIRCRAFT, 0x21, VehicleKind::Aircraft),
+        ] {
+            let mut action0 = vec![0x00, feature, 0x01, 0x01, 0x00, property];
+            action0.extend_from_slice(&extra_flags.to_le_bytes());
+            let meta_extra_flags = if feature == ACTION0_FEATURE_TRAINS {
+                parse_action0_train_meta(&action0)
+                    .expect("train Action0 should parse")
+                    .extra_flags
+            } else {
+                parse_action0_vehicle_metas(&action0)
+                    .expect("vehicle Action0 should parse")
+                    .remove(0)
+                    .extra_flags
+            };
+            assert_eq!(meta_extra_flags, extra_flags, "feature {feature:#04x}");
+
+            let bytes = build_grf_v2_with_action0_and_action8(
+                &action0,
+                [b'E', b'F', feature, 1],
+                "extra-flags",
+                "",
+            );
+            let dir = tempfile_dir_with("extra-flags.grf", &bytes);
+            let mut state = GameState::new(4, 4);
+            state
+                .newgrf_stack
+                .push(crate::NewGrfEntry::new("extra-flags.grf", 0x4546_0001));
+            apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+
+            let engine = state
+                .engine_catalog
+                .iter()
+                .find(|candidate| candidate.from_newgrf && candidate.kind == kind)
+                .expect("vehicle with extra flags should enter catalog");
+            assert_eq!(engine.extra_flags, extra_flags, "feature {feature:#04x}");
+        }
     }
 
     #[test]

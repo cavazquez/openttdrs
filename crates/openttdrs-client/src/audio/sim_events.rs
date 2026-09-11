@@ -94,6 +94,27 @@ fn vehicle_departure_sound(sim: &SimWorld, vehicle_id: u32, kind: VehicleKind) -
         .unwrap_or_else(|| SoundId::departure_for_kind(kind))
 }
 
+/// `EngineMiscFlag::NoBreakdownSmoke` sólo suprime el efecto visual. El SFX
+/// de avería se resuelve en el mismo evento y debe conservarse, igual que en
+/// `Vehicle::Breakdown` del upstream.
+fn vehicle_breakdown_smoke_enabled(sim: &SimWorld, vehicle_id: u32) -> bool {
+    let Some(engine_id) = sim
+        .state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == vehicle_id)
+        .and_then(|vehicle| vehicle.engine_id)
+    else {
+        return true;
+    };
+
+    sim.state
+        .engine_catalog
+        .iter()
+        .find(|engine| engine.id == engine_id)
+        .is_none_or(|engine| !engine.no_breakdown_smoke)
+}
+
 /// Nivel de detalle para el registro del bus de eventos. Todo `SimEvent` se
 /// conserva en la traza: los eventos frecuentes se bajan a `debug` para que
 /// una partida normal no produzca miles de líneas por minuto.
@@ -359,7 +380,9 @@ fn dispatch_sim_events(
                         85,
                     );
                 }
-                fx.push_breakdown(vehicle_id, at);
+                if vehicle_breakdown_smoke_enabled(&sim, vehicle_id) {
+                    fx.push_breakdown(vehicle_id, at);
+                }
             }
             SimEvent::Bubble { at, direction } => {
                 bubbles.push(at, direction);
@@ -557,6 +580,32 @@ mod tests {
         let drained = std::mem::take(&mut pending.0);
         assert_eq!(drained.len(), 1);
         assert!(pending.0.is_empty());
+    }
+
+    #[test]
+    fn breakdown_smoke_honours_engine_misc_flag() {
+        let mut sim = SimWorld {
+            state: GameState::new(4, 4),
+            ..Default::default()
+        };
+        let vehicle = Vehicle::new(
+            17,
+            VehicleKind::Ship,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 2),
+        );
+        let engine_id = vehicle.engine_id.expect("new vehicle has an engine");
+        sim.state.vehicles.push(vehicle);
+
+        assert!(vehicle_breakdown_smoke_enabled(&sim, 17));
+        let engine = sim
+            .state
+            .engine_catalog
+            .iter_mut()
+            .find(|engine| engine.id == engine_id)
+            .expect("default ship engine should be in the catalog");
+        engine.no_breakdown_smoke = true;
+        assert!(!vehicle_breakdown_smoke_enabled(&sim, 17));
     }
 
     #[test]

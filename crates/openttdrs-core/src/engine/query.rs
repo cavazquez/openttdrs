@@ -32,6 +32,7 @@ pub const EXTRA_ENGINE_FLAG_NO_NEWS: u32 = 1 << 0;
 pub const EXTRA_ENGINE_FLAG_NO_PREVIEW: u32 = 1 << 1;
 pub const EXTRA_ENGINE_FLAG_JOIN_PREVIEW: u32 = 1 << 2;
 pub const EXTRA_ENGINE_FLAG_SYNC_RELIABILITY: u32 = 1 << 3;
+pub const EXTRA_ENGINE_FLAG_NO_BREAKDOWN_SMOKE: u32 = 1 << 6;
 
 /// Devuelve el motor cuya edad y fiabilidad debe compartir `engine`.
 ///

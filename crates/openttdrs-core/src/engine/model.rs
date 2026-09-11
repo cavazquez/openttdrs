@@ -106,6 +106,10 @@ pub struct EngineDef {
     /// para el cargo por defecto y su resultado no recibe multiplicador.
     #[serde(default)]
     pub no_default_cargo_multiplier: bool,
+    /// `EngineMiscFlag::NoBreakdownSmoke`: la avería conserva su sonido pero
+    /// no crea el efecto visual de humo.
+    #[serde(default)]
+    pub no_breakdown_smoke: bool,
     /// Ticks antes de envejecer la carga (`EngineInfo::cargo_age_period`).
     /// Cero desactiva el envejecimiento para ese motor.
     #[serde(default = "default_cargo_age_period")]

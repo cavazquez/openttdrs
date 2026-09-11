@@ -154,6 +154,17 @@ impl super::model::Vehicle {
 
     /// `UpdateOrderDest` — resuelve destino (estación, depósito, condicional, waypoint).
     pub fn update_order_dest(&mut self, map: &crate::map::Map, conditional_depth: usize) -> bool {
+        self.update_order_dest_with_stations(map, &[], conditional_depth)
+    }
+
+    /// Variante de `UpdateOrderDest` que conserva la identidad física de las
+    /// estaciones al elegir el destino naval.
+    pub fn update_order_dest_with_stations(
+        &mut self,
+        map: &crate::map::Map,
+        stations: &[crate::station::Station],
+        conditional_depth: usize,
+    ) -> bool {
         if self.orders.is_empty() {
             return false;
         }
@@ -169,16 +180,20 @@ impl super::model::Vehicle {
             crate::vehicle::order::VehicleOrder::Station { .. }
             | crate::vehicle::order::VehicleOrder::Waypoint { .. }
             | crate::vehicle::order::VehicleOrder::Tile(_) => {
-                self.apply_order_destination(map, order);
+                self.apply_order_destination_with_stations(map, stations, order);
                 true
             }
             crate::vehicle::order::VehicleOrder::Depot { stop: false, .. } => {
                 // Servicio opcional: saltar si no hace falta.
                 if !self.needs_servicing {
                     self.increment_real_order_index();
-                    return self.update_order_dest(map, conditional_depth + 1);
+                    return self.update_order_dest_with_stations(
+                        map,
+                        stations,
+                        conditional_depth + 1,
+                    );
                 }
-                self.apply_order_destination(map, order);
+                self.apply_order_destination_with_stations(map, stations, order);
                 true
             }
             crate::vehicle::order::VehicleOrder::Depot {
@@ -203,9 +218,13 @@ impl super::model::Vehicle {
                         return true;
                     }
                     self.increment_real_order_index();
-                    return self.update_order_dest(map, conditional_depth + 1);
+                    return self.update_order_dest_with_stations(
+                        map,
+                        stations,
+                        conditional_depth + 1,
+                    );
                 }
-                self.apply_order_destination(map, order);
+                self.apply_order_destination_with_stations(map, stations, order);
                 true
             }
             crate::vehicle::order::VehicleOrder::Conditional { .. } => {
@@ -214,14 +233,15 @@ impl super::model::Vehicle {
                 self.current_order = next;
                 self.update_real_order_index();
                 self.current_order_time = 0;
-                self.update_order_dest(map, conditional_depth + 1)
+                self.update_order_dest_with_stations(map, stations, conditional_depth + 1)
             }
         }
     }
 
-    fn apply_order_destination(
+    fn apply_order_destination_with_stations(
         &mut self,
         map: &crate::map::Map,
+        stations: &[crate::station::Station],
         order: crate::vehicle::order::VehicleOrder,
     ) {
         if self.kind == super::model::VehicleKind::Aircraft && self.awaiting_load_window {
@@ -241,12 +261,14 @@ impl super::model::Vehicle {
                 crate::vehicle::order::VehicleOrder::Station { station, .. } => {
                     crate::airport::airport_loading_tile_at(map, station)
                 }
-                _ => {
-                    crate::station::resolve_order_destination_from(map, self.kind, order, self.pos)
-                }
+                _ => crate::station::resolve_order_destination_from_with_stations(
+                    map, stations, self.kind, order, self.pos,
+                ),
             }
         } else {
-            crate::station::resolve_order_destination_from(map, self.kind, order, self.pos)
+            crate::station::resolve_order_destination_from_with_stations(
+                map, stations, self.kind, order, self.pos,
+            )
         };
     }
 
@@ -415,12 +437,21 @@ impl super::model::Vehicle {
 
     /// Actualiza `dest` según la orden actual (vía adyacente para estaciones de tren).
     pub fn sync_order_destination(&mut self, map: &crate::map::Map) {
+        self.sync_order_destination_with_stations(map, &[]);
+    }
+
+    /// Actualiza `dest` usando el catálogo lógico de estaciones del `GameState`.
+    pub fn sync_order_destination_with_stations(
+        &mut self,
+        map: &crate::map::Map,
+        stations: &[crate::station::Station],
+    ) {
         if self.orders.is_empty() {
             return;
         }
         self.sanitize_current_order();
         self.update_real_order_index();
-        let _ = self.update_order_dest(map, 0);
+        let _ = self.update_order_dest_with_stations(map, stations, 0);
     }
 
     pub(super) fn do_advance_after_arrival(&mut self, pass_through: bool) {

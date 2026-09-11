@@ -192,7 +192,7 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
 
     let p0 = Instant::now();
     for vehicle in &mut state.vehicles {
-        vehicle.sync_order_destination(&state.map);
+        vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
     }
     timings.order_sync_ns = nanos(p0);
 

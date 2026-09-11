@@ -110,6 +110,75 @@ fn spawn_newgrf_stack_children(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn spawn_aircraft_rotor_stack_children(
+    commands: &mut Commands,
+    sim: &SimWorld,
+    vehicle: &Vehicle,
+    pose: openttdrs_core::VehiclePose,
+    parent: Entity,
+    parent_pos: Vec3,
+    visibility: Visibility,
+    layers: &[NewGrfVehicleLayer],
+    fallback: Handle<Image>,
+) {
+    if !super::vehicle_uses_newgrf_stack(sim, vehicle) || layers.is_empty() {
+        return;
+    }
+    for stack_index in 1..8 {
+        let Some(layer) = layers.get(stack_index) else {
+            commands.spawn((
+                MapVisualLayer,
+                super::sync::AircraftRotorStackSprite {
+                    vehicle_id: vehicle.id,
+                    stack_index,
+                },
+                Sprite {
+                    image: fallback.clone(),
+                    ..default()
+                },
+                Transform::from_translation(parent_pos),
+                Visibility::Hidden,
+                ViewportSortableChild {
+                    parent,
+                    source_depth: parent_pos.z,
+                },
+            ));
+            continue;
+        };
+        let mut layer_pos = aircraft_aux_sprite_pos_at_offsets(
+            vehicle,
+            &sim.state.map,
+            pose,
+            f32::from(layer.x_offs),
+            f32::from(layer.y_offs),
+            f32::from(layer.width),
+            f32::from(layer.height),
+            true,
+            1.1,
+        );
+        let source_depth = vehicle_source_depth(vehicle, &sim.state.map, pose, layer_pos);
+        layer_pos.z = source_depth;
+        commands.spawn((
+            MapVisualLayer,
+            super::sync::AircraftRotorStackSprite {
+                vehicle_id: vehicle.id,
+                stack_index,
+            },
+            Sprite {
+                image: layer.handle.clone(),
+                ..default()
+            },
+            Transform::from_translation(layer_pos),
+            visibility,
+            ViewportSortableChild {
+                parent,
+                source_depth,
+            },
+        ));
+    }
+}
+
 pub(super) fn vehicle_cargo_label(v: &Vehicle) -> String {
     let cargo = v.cargo_type.map_or("ANY", openttdrs_core::CargoType::label);
     format!("{cargo} {}/{}", v.cargo, v.capacity)
@@ -247,7 +316,7 @@ pub(crate) fn spawn_initial_vehicles(
                 },
             ));
             if super::aircraft_is_helicopter_for(sim, vehicle) {
-                let custom_rotor = super::assets::custom_aircraft_rotor_layer(
+                let custom_rotor_layers = super::assets::custom_aircraft_rotor_layers(
                     vehicle,
                     0,
                     sim,
@@ -255,7 +324,8 @@ pub(crate) fn spawn_initial_vehicles(
                     cache,
                     images,
                 );
-                let (x_offs, y_offs, width, height) = custom_rotor.as_ref().map_or_else(
+                let custom_rotor = custom_rotor_layers.first();
+                let (x_offs, y_offs, width, height) = custom_rotor.map_or_else(
                     || {
                         let layer = &super::assets::AIRCRAFT_ROTOR_LAYERS[0];
                         (layer.x_offs, layer.y_offs, layer.w, layer.h)
@@ -286,22 +356,36 @@ pub(crate) fn spawn_initial_vehicles(
                     sim.state.map.dimensions().0,
                 );
                 rotor_pos.z = rotor_source_depth;
-                commands.spawn((
-                    MapVisualLayer,
-                    AircraftRotorSprite(vehicle.id),
-                    Sprite {
-                        image: custom_rotor
-                            .map(|layer| layer.handle)
-                            .unwrap_or_else(|| trucks.aircraft_rotor(0)),
-                        ..default()
-                    },
-                    Transform::from_translation(rotor_pos),
+                let rotor_image = custom_rotor
+                    .map(|layer| layer.handle.clone())
+                    .unwrap_or_else(|| trucks.aircraft_rotor(0));
+                let rotor_entity = commands
+                    .spawn((
+                        MapVisualLayer,
+                        AircraftRotorSprite(vehicle.id),
+                        Sprite {
+                            image: rotor_image.clone(),
+                            ..default()
+                        },
+                        Transform::from_translation(rotor_pos),
+                        vis,
+                        ViewportSortableChild {
+                            parent: vehicle_entity,
+                            source_depth: rotor_source_depth,
+                        },
+                    ))
+                    .id();
+                spawn_aircraft_rotor_stack_children(
+                    commands,
+                    sim,
+                    vehicle,
+                    pose,
+                    rotor_entity,
+                    rotor_pos,
                     vis,
-                    ViewportSortableChild {
-                        parent: vehicle_entity,
-                        source_depth: rotor_source_depth,
-                    },
-                ));
+                    &custom_rotor_layers,
+                    rotor_image,
+                );
             }
         }
         if matches!(

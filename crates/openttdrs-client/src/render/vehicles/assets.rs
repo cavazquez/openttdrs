@@ -522,19 +522,24 @@ impl NewGrfTrainSpriteCache {
 /// selecciona la vista con el estado del rotor en lugar de la orientación del
 /// cuerpo. `var 1F` conserva la orientación física para que un Action2 pueda
 /// distinguir el helicóptero en el mapa.
+/// Resuelve todas las capas del rotor custom, incluyendo `SpriteStack`.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn custom_aircraft_rotor_layer(
+pub(super) fn custom_aircraft_rotor_layers(
     vehicle: &Vehicle,
     frame: usize,
     sim: &crate::state::SimWorld,
     owner_colour: Option<CompanyColour>,
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
-) -> Option<NewGrfVehicleLayer> {
-    let engine_id = vehicle.engine_id?;
-    let engine = super::engine_in_sim(sim, engine_id)?;
+) -> Vec<NewGrfVehicleLayer> {
+    let Some(engine_id) = vehicle.engine_id else {
+        return Vec::new();
+    };
+    let Some(engine) = super::engine_in_sim(sim, engine_id) else {
+        return Vec::new();
+    };
     if engine.kind != VehicleKind::Aircraft || !openttdrs_core::aircraft_is_helicopter_def(engine) {
-        return None;
+        return Vec::new();
     }
 
     let (livery_primary, livery_secondary) = super::vehicle_livery_colours(sim, vehicle);
@@ -579,32 +584,35 @@ pub(super) fn custom_aircraft_rotor_layer(
                             + u16::from(livery_secondary.as_u8()) * 16
                     })
                 });
-        return cache
-            .handles_for_runtime_with_override(
-                engine,
-                frame,
-                None,
-                primary,
-                livery_secondary,
-                None,
-                palette_override,
-                &sim.state.runtime.twocc_action5_newgrf_sprites,
-                &mut ctx,
-                images,
-            )
-            .into_iter()
-            .next();
+        return cache.handles_for_runtime_with_override(
+            engine,
+            frame,
+            None,
+            primary,
+            livery_secondary,
+            None,
+            palette_override,
+            &sim.state.runtime.twocc_action5_newgrf_sprites,
+            &mut ctx,
+            images,
+        );
     }
 
-    let view = engine.newgrf_view(frame)?;
-    let handle = cache.handle_for_with_livery(engine, frame, primary, livery_secondary, images)?;
-    Some(NewGrfVehicleLayer {
+    let Some(view) = engine.newgrf_view(frame) else {
+        return Vec::new();
+    };
+    let Some(handle) =
+        cache.handle_for_with_livery(engine, frame, primary, livery_secondary, images)
+    else {
+        return Vec::new();
+    };
+    vec![NewGrfVehicleLayer {
         handle,
         x_offs: view.x_offs,
         y_offs: view.y_offs,
         width: view.width,
         height: view.height,
-    })
+    }]
 }
 
 type DirHandles = [Handle<Image>; 8];
@@ -983,7 +991,7 @@ mod tests {
         let mut cache = NewGrfTrainSpriteCache::default();
         let mut images = Assets::<Image>::default();
 
-        let layer = custom_aircraft_rotor_layer(
+        let layer = custom_aircraft_rotor_layers(
             &vehicle,
             2,
             &sim,
@@ -991,11 +999,100 @@ mod tests {
             &mut cache,
             &mut images,
         )
+        .into_iter()
+        .next()
         .expect("custom rotor layer");
         assert_eq!(layer.x_offs, 13);
         assert_eq!(
             images.get(&layer.handle).unwrap().data.as_deref(),
             Some(&[23, 0, 0, 255][..])
         );
+    }
+
+    #[test]
+    fn custom_helicopter_rotor_sprite_stack_returns_all_layers() {
+        use openttdrs_core::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, DecodedSprite, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        let sprite = |offset: i16, red: u8| DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: offset,
+            y_offs: 0,
+            rgba: vec![red, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_AIRCRAFT_DAKOTA)
+            .expect("vanilla aircraft")
+            .clone();
+        engine.id = 0x7F03;
+        engine.from_newgrf = true;
+        engine.is_helicopter = true;
+        engine.sprite_stack = true;
+        engine.newgrf_local_id = 0x22;
+        engine.newgrf_runtime = Some(Box::new(TrainSpriteGraphics {
+            sets: vec![
+                Vec::new(),
+                Vec::new(),
+                vec![sprite(10, 10)],
+                vec![sprite(20, 20)],
+            ],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0x22,
+                set_id: 1,
+            }],
+            action2_var: [(
+                1,
+                Action2VarEntry {
+                    first: Action2VarTerm {
+                        variable: 0x10,
+                        param: None,
+                        adjust: Action2VarAdjust {
+                            shift: 8,
+                            and_mask: 0xFF,
+                            ..Default::default()
+                        },
+                    },
+                    ops: Vec::new(),
+                    ranges: vec![(2, 0, 0), (3, 1, 1)],
+                    default: 3,
+                },
+            )]
+            .into_iter()
+            .collect(),
+            ..Default::default()
+        }));
+
+        let mut state = GameState::new(8, 8);
+        state.engine_catalog.push(engine);
+        let mut vehicle = Vehicle::new(
+            78,
+            VehicleKind::Aircraft,
+            TileCoord::new(2, 2),
+            TileCoord::new(3, 2),
+        );
+        vehicle.engine_id = Some(0x7F03);
+        state.vehicles.push(vehicle.clone());
+        let sim = crate::state::SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+
+        let layers = custom_aircraft_rotor_layers(
+            &vehicle,
+            0,
+            &sim,
+            Some(CompanyColour::Red),
+            &mut cache,
+            &mut images,
+        );
+        assert_eq!(layers.len(), 2);
+        assert_eq!(layers[0].x_offs, 10);
+        assert_eq!(layers[1].x_offs, 20);
     }
 }

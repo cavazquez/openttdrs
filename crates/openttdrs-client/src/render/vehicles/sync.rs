@@ -9,7 +9,7 @@ use crate::simulation::SimClock;
 use crate::state::SimWorld;
 
 use super::assets::{
-    NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles, custom_aircraft_rotor_layer,
+    NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles, custom_aircraft_rotor_layers,
     vehicle_layers,
 };
 use super::pose::{
@@ -43,6 +43,13 @@ pub(crate) struct AircraftShadowSprite(pub(super) u32);
 
 #[derive(Component)]
 pub(crate) struct AircraftRotorSprite(pub(super) u32);
+
+/// Capa adicional del rotor auxiliar de un helicóptero `SpriteStack`.
+#[derive(Component)]
+pub(crate) struct AircraftRotorStackSprite {
+    pub(super) vehicle_id: u32,
+    pub(super) stack_index: usize,
+}
 
 /// Sprite de vagón enganchado (mismo id de cabeza + offset visual).
 #[derive(Component)]
@@ -194,6 +201,7 @@ pub(crate) fn update_vehicles(
             Without<VehicleCargoLabel>,
             Without<AircraftShadowSprite>,
             Without<AircraftRotorSprite>,
+            Without<AircraftRotorStackSprite>,
         ),
     >,
     mut labels: Query<
@@ -241,6 +249,23 @@ pub(crate) fn update_vehicles(
             Without<AircraftShadowSprite>,
         ),
     >,
+    mut rotor_stack_layers: Query<
+        (
+            &AircraftRotorStackSprite,
+            &mut Transform,
+            &mut Sprite,
+            &mut Visibility,
+            &mut ViewportSortableChild,
+        ),
+        (
+            Without<VehicleSprite>,
+            Without<ConsistUnitSprite>,
+            Without<VehicleCargoLabel>,
+            Without<AircraftShadowSprite>,
+            Without<AircraftRotorSprite>,
+            Without<VehicleNewGrfStackSprite>,
+        ),
+    >,
 ) {
     for c in &sim.state.companies {
         company.ensure_palette(
@@ -254,6 +279,7 @@ pub(crate) fn update_vehicles(
     // La clave es la entity, no el id de cabeza, para no cruzar trailers ni
     // poses discretas con la pose interpolada de otra representación.
     let mut stack_layers_by_parent: HashMap<Entity, ResolvedNewGrfStack> = HashMap::new();
+    let mut rotor_layers_by_vehicle: HashMap<u32, Vec<NewGrfVehicleLayer>> = HashMap::new();
     for (entity, vs, mut transform, mut sprite, mut visibility, parent) in &mut q {
         let Some(i) = vehicle_index.core.slot(vs.0) else {
             continue;
@@ -511,7 +537,7 @@ pub(crate) fn update_vehicles(
             continue;
         }
         let frame = aircraft_rotor_frame(v, sim.state.tick.get());
-        let custom_rotor = custom_aircraft_rotor_layer(
+        let custom_rotor_layers = custom_aircraft_rotor_layers(
             v,
             frame,
             &sim,
@@ -519,6 +545,7 @@ pub(crate) fn update_vehicles(
             &mut cache,
             &mut images,
         );
+        let custom_rotor = custom_rotor_layers.first();
         let (x_offs, y_offs, width, height) = custom_rotor.as_ref().map_or_else(
             || {
                 let layer = &super::assets::AIRCRAFT_ROTOR_LAYERS[frame];
@@ -558,9 +585,55 @@ pub(crate) fn update_vehicles(
         set_sprite_image_if_changed(
             &mut sprite,
             custom_rotor
-                .map(|layer| layer.handle)
+                .map(|layer| layer.handle.clone())
                 .unwrap_or_else(|| trucks.aircraft_rotor(frame)),
         );
+        rotor_layers_by_vehicle.insert(v.id, custom_rotor_layers);
+    }
+
+    for (layer, mut transform, mut sprite, mut visibility, mut child) in &mut rotor_stack_layers {
+        let Some(i) = vehicle_index.core.slot(layer.vehicle_id) else {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        };
+        let Some(v) = sim.state.vehicles.get(i) else {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        };
+        let Some(layers) = rotor_layers_by_vehicle.get(&layer.vehicle_id) else {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        };
+        let Some(layer_data) = layers.get(layer.stack_index) else {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        };
+        let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
+        if vehicle_is_hidden_from_view(&sim, v, pose) {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        }
+        visibility.set_if_neq(Visibility::Visible);
+        let mut rotor_pos = aircraft_aux_sprite_pos_at_offsets(
+            v,
+            &sim.state.map,
+            pose,
+            f32::from(layer_data.x_offs),
+            f32::from(layer_data.y_offs),
+            f32::from(layer_data.width),
+            f32::from(layer_data.height),
+            true,
+            1.1,
+        );
+        let source_depth = vehicle_source_depth(v, &sim.state.map, pose, rotor_pos);
+        rotor_pos.z = source_depth;
+        set_vehicle_translation_if_changed(&mut transform, rotor_pos, true);
+        set_sprite_image_if_changed(&mut sprite, layer_data.handle.clone());
+        set_sprite_color_if_changed(&mut sprite, vehicle_tint(v));
+        child.set_if_neq(ViewportSortableChild {
+            parent: child.parent,
+            source_depth,
+        });
     }
 
     for (label, mut transform, mut text, mut color, mut visibility) in &mut labels {

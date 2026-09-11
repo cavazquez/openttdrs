@@ -6,7 +6,9 @@ use std::path::Path;
 use crate::GameState;
 use crate::cargo::CargoType;
 use crate::cargo_spec::CargoSpecDef;
-use crate::engine::{EngineDef, next_free_engine_id, vanilla_engine_catalog};
+use crate::engine::{
+    EngineDef, next_free_engine_id, vanilla_engine_catalog, vanilla_ship_image_index_for_local_id,
+};
 use crate::newgrf_type_tables::{GrfTypeTranslationTables, cargo_from_local_id_with_catalog};
 use crate::vehicle::VehicleKind;
 
@@ -345,6 +347,11 @@ fn push_feature_vehicles(
             load_amount: meta.load_amount,
             train_image_index: 0,
             ship_image_index: meta.ship_image_index,
+            original_image_index: if meta.kind == VehicleKind::Ship {
+                vanilla_ship_image_index_for_local_id(meta.local_id)
+            } else {
+                0
+            },
             dual_headed: false,
             rail_engine_class: 0,
             rail_is_mu: false,
@@ -498,6 +505,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 load_amount: meta.load_amount,
                 train_image_index: meta.train_image_index,
                 ship_image_index: 0,
+                original_image_index: 0,
                 dual_headed: meta.dual_headed,
                 rail_engine_class: meta.rail_engine_class,
                 rail_is_mu: meta.rail_is_mu,

@@ -431,6 +431,7 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         load_amount: 0,
         train_image_index: 2,
         ship_image_index: 0,
+        original_image_index: 0,
         dual_headed: false,
         rail_engine_class: 0,
         rail_is_mu: false,

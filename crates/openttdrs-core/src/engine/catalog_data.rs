@@ -64,6 +64,18 @@ pub(crate) const fn vanilla_ship_image_index(id: u16) -> u8 {
     }
 }
 
+/// Índice original que `Engine(VEH_SHIP, local_id)` copia antes de aplicar un
+/// override `NewGRF`. Los once slots originales no son cuatro tipos distintos:
+/// varios comparten la misma silueta, por eso el índice depende del ID local.
+pub(crate) const fn vanilla_ship_image_index_for_local_id(local_id: u16) -> u8 {
+    match local_id {
+        0 | 1 => 1,
+        2 | 3 | 5 | 6 => 2,
+        4 => 3,
+        _ => 0,
+    }
+}
+
 /// Fiabilidad inicial aproximada por clase de motor del original.
 pub(crate) const RELIABILITY_STEAM: u8 = 75;
 pub(crate) const RELIABILITY_DIESEL: u8 = 85;
@@ -157,6 +169,7 @@ macro_rules! road {
             load_amount: 0,
             train_image_index: 0,
             ship_image_index: vanilla_ship_image_index($id),
+            original_image_index: vanilla_ship_image_index($id),
             dual_headed: false,
             rail_engine_class: 0,
             rail_is_mu: false,
@@ -245,6 +258,7 @@ macro_rules! train {
             load_amount: 0,
             train_image_index: $img,
             ship_image_index: 0,
+            original_image_index: 0,
             dual_headed: $dual,
             rail_engine_class: vanilla_train_engine_class($id),
             rail_is_mu: vanilla_train_engine_is_mu($id),

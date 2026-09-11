@@ -127,6 +127,13 @@ pub struct EngineDef {
     /// sprite original/fallback del motor.
     #[serde(default)]
     pub ship_image_index: u8,
+    /// Índice original del sprite antes de que Action0/1/2 lo reemplace.
+    ///
+    /// Es el fallback nativo cuando `ship_image_index` es `0xFD` pero la
+    /// resolución custom no produce una vista válida. Los saves anteriores
+    /// no lo tenían y reciben el índice base `0`.
+    #[serde(default)]
+    pub original_image_index: u8,
     /// `RailVehicleType::Multihead` (`engines.h`): compra spawnea cabina trasera.
     #[serde(default)]
     pub dual_headed: bool,

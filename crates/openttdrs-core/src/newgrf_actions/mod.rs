@@ -4988,6 +4988,45 @@ mod tests {
         );
     }
 
+    #[test]
+    fn original_ship_image_index_matches_native_local_slots() {
+        let expected = [1, 1, 2, 2, 3, 2, 2, 0, 0, 0, 0];
+        for (local_id, expected_index) in expected.into_iter().enumerate() {
+            assert_eq!(
+                crate::engine::vanilla_ship_image_index_for_local_id(
+                    u16::try_from(local_id).unwrap()
+                ),
+                expected_index,
+                "local ship slot {local_id}"
+            );
+        }
+    }
+
+    #[test]
+    fn custom_ship_catalog_preserves_original_image_index() {
+        let action0 = [0x00, ACTION0_FEATURE_SHIPS, 0x01, 0x01, 0x02, 0x08, 0xFF];
+        let bytes = build_grf_v2_with_action0_and_action8(
+            &action0,
+            [b'S', b'O', 0, 1],
+            "ship-original",
+            "",
+        );
+        let dir = tempfile_dir_with("ship-original.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ship-original.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|engine| engine.from_newgrf && engine.kind == VehicleKind::Ship)
+            .unwrap();
+        assert_eq!(engine.ship_image_index, 0xFD);
+        assert_eq!(engine.original_image_index, 2);
+    }
+
     /// #329: Action0 conserva las clases allowed/disallowed/required de cada
     /// feature de vehículos, en vez de consumirlas como propiedades opacas.
     #[test]

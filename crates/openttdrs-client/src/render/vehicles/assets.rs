@@ -81,12 +81,25 @@ fn train_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
 }
 
 fn ship_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
-    match ship_image_index_for(v) {
+    ship_layers_for_image_index(ship_image_index_for(v))
+}
+
+fn ship_layers_for_image_index(image_index: u8) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+    match image_index {
         1 => &SHIP_VEHICLE_LAYERS_OIL,
         2 => &SHIP_VEHICLE_LAYERS_COAL,
         3 => &SHIP_VEHICLE_LAYERS_FERRY,
         _ => &SHIP_VEHICLE_LAYERS,
     }
+}
+
+fn ship_image_index_for_engine(engine: &EngineDef) -> u8 {
+    let image_index = if engine.ship_image_index >= 0xFD {
+        engine.original_image_index
+    } else {
+        engine.ship_image_index
+    };
+    if image_index < 4 { image_index } else { 0 }
 }
 
 /// Índice visual naval persistido en `Vehicle::native_sprite_num`.
@@ -600,7 +613,7 @@ impl TruckHandles {
     ) -> Handle<Image> {
         let i = dir.min(7);
         match engine.kind {
-            VehicleKind::Ship => match engine.ship_image_index {
+            VehicleKind::Ship => match ship_image_index_for_engine(engine) {
                 1 => self.ship_oil[i].clone(),
                 2 => self.ship_coal[i].clone(),
                 3 => self.ship_ferry[i].clone(),
@@ -757,7 +770,48 @@ impl TruckHandles {
                     height: view.height,
                 }];
             }
+            if eng.kind == VehicleKind::Ship && eng.ship_image_index >= 0xFD {
+                let base = &ship_layers_for_image_index(ship_image_index_for_engine(eng))[dir];
+                return vec![NewGrfVehicleLayer {
+                    handle: self.intro_sprite_for_engine(eng, dir),
+                    x_offs: base.x_offs as i16,
+                    y_offs: base.y_offs as i16,
+                    width: base.w as u16,
+                    height: base.h as u16,
+                }];
+            }
         }
         Vec::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_ship_sprite_uses_original_index_for_fallback() {
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_SHIP_MPS)
+            .expect("vanilla ship")
+            .clone();
+        engine.ship_image_index = 0xFD;
+        engine.original_image_index = 2;
+
+        assert_eq!(ship_image_index_for_engine(&engine), 2);
+        assert_eq!(
+            ship_layers_for_image_index(ship_image_index_for_engine(&engine))[0].path,
+            SHIP_VEHICLE_LAYERS_COAL[0].path
+        );
+    }
+
+    #[test]
+    fn invalid_original_ship_sprite_uses_mps_fallback() {
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_SHIP_MPS)
+            .expect("vanilla ship")
+            .clone();
+        engine.ship_image_index = 0xFD;
+        engine.original_image_index = 0xFD;
+
+        assert_eq!(ship_image_index_for_engine(&engine), 0);
     }
 }

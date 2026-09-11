@@ -4263,3 +4263,15 @@ en `2429 passed; 0 failed; 1 ignored` y cliente en
 #567 sigue abierta por las comprobaciones físicas/carga multi-modal, selección
 `station_to_join`, callbacks/pathfinding naval y aceptación visual manual bajo
 Weston; #326 permanece abierta.
+
+Actualización #567-SHIP-DOCK-PHYSICAL-SERVICE (2026-09-11, `a3a1be1e`): la
+comprobación física de servicio naval recorre todas las piezas de agua de los
+muelles unidos y la carga puede localizar un barco importado desde su tesela
+de amarre aunque el índice cubra sólo `MP_STATION`. Las estaciones mixtas
+aceptan también carga de pasajeros por su facilidad Dock; las órdenes y el
+estado operacional resuelven la entidad por toda su cobertura. Se agregaron
+regresiones para ambos muelles y para el fallback de SAV. Core queda en
+`2431 passed; 0 failed; 1 ignored` y cliente en `1387 passed; 0 failed; 2
+ignored`, con Clippy estricto, formato y diff limpios. #567 sigue abierta por
+`station_to_join`, pathfinder/callbacks navales restantes y aceptación visual
+manual bajo Weston; #326 permanece abierta.

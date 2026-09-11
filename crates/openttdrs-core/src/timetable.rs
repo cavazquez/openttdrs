@@ -47,6 +47,28 @@ pub fn round_timetable_ticks(ticks: u32) -> u32 {
 }
 
 impl Vehicle {
+    /// Indica si esta unidad ejecuta el controlador que avanza el reloj de
+    /// órdenes en `OpenTTD::Vehicle::Tick`.
+    pub(crate) fn is_timetable_controller_unit(
+        &self,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) -> bool {
+        if !self.is_consist_head() {
+            return false;
+        }
+        match self.kind {
+            crate::vehicle::VehicleKind::Train => {
+                crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, self)
+                    .is_train_engine()
+            }
+            crate::vehicle::VehicleKind::Bus
+            | crate::vehicle::VehicleKind::Truck
+            | crate::vehicle::VehicleKind::Tram
+            | crate::vehicle::VehicleKind::Ship
+            | crate::vehicle::VehicleKind::Aircraft => true,
+        }
+    }
+
     /// Avanza el cronómetro de la orden actual (`Vehicle::current_order_time`).
     pub(crate) fn tick_timetable_clock(&mut self) {
         if self.timetable_active {

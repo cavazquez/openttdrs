@@ -5150,3 +5150,11 @@ a 1, como la caída nativa. El evento visual/sonoro conserva una sola emisión
 al comenzar la avería; la regresión cubre el retorno durante la cuenta activa y
 el vencimiento en la misma transición. #329/#567 continúan abiertas por otros
 criterios pendientes.
+
+Actualización #329/#567-TIMETABLE-CONTROLLER-TICK (2026-09-11): el reloj de
+`current_order_time` y la espera de horario avanzan sólo en la unidad que
+ejecuta el controlador nativo: motor delantero, cabeza vial, barco o avión
+normal. Los vagones y partes articuladas conservan sus contadores sin avanzar,
+igual que los vehículos que OpenTTD no considera `IsFrontEngine()`. La regresión
+comprueba una cadena ferroviaria; #329/#567 continúan abiertas por otros
+criterios pendientes.

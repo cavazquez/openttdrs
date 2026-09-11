@@ -1306,6 +1306,33 @@ mod tests {
         assert_eq!(state.vehicles[0].service_breakdown_level, 2);
     }
 
+    #[test]
+    fn timetable_tick_advances_only_native_controller_units() {
+        let pos = TileCoord::new(2, 2);
+        let mut head = Vehicle::new(1, VehicleKind::Train, pos, pos);
+        head.timetable_active = true;
+        head.current_order_time = 4;
+
+        let mut wagon = Vehicle::new(2, VehicleKind::Train, pos, pos);
+        wagon.prev_unit = Some(head.id);
+        wagon.timetable_active = true;
+        wagon.current_order_time = 9;
+        wagon.timetable_wait_remaining = 3;
+        head.next_unit = Some(wagon.id);
+
+        let mut state = GameState::new(8, 8);
+        state.tick = crate::GameTick::new(17);
+        state.vehicles = vec![head, wagon];
+
+        vehicle_ops::tick_vehicle_timetables(&mut state);
+
+        assert_eq!(state.vehicles[0].current_order_time, 5);
+        assert_eq!(state.vehicles[1].current_order_time, 9);
+        assert_eq!(state.vehicles[1].timetable_wait_remaining, 3);
+        assert_eq!(state.vehicles[0].sim_tick, 17);
+        assert_eq!(state.vehicles[1].sim_tick, 17);
+    }
+
     /// CB140 sintético: conserva en MAP7 el ordinal de `var 18`.
     fn path_reservation_callbacks() -> TrainSpriteGraphics {
         let mut gfx = TrainSpriteGraphics::default();

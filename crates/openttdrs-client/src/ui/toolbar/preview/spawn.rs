@@ -22,6 +22,7 @@ use super::road_stop::{
     RoadStopPreviewSpawn, bus_stop_ground_path, spawn_road_stop_preview, truck_stop_ground_path,
 };
 use super::road_waypoint::spawn_road_waypoint_preview;
+use super::ship_depot::spawn_ship_depot_preview;
 use super::sprites::preview_image_for_action;
 use super::station_coverage::{spawn_station_coverage_preview, station_preview_has_coverage};
 use super::tunnel::spawn_tunnel_entrance_preview;
@@ -77,6 +78,17 @@ pub(crate) fn spawn_preview_plan(
         }
         PreviewPlan::RoadWaypoint { coord, valid } => {
             spawn_road_waypoint_preview(commands, asset_server, &sim.state.map, *coord, *valid);
+        }
+        PreviewPlan::ShipDepot { origin, dir, valid } => {
+            spawn_ship_depot_preview(
+                commands,
+                asset_server,
+                company,
+                &sim.state.map,
+                *origin,
+                *dir,
+                *valid,
+            );
         }
         PreviewPlan::BridgeSpan { tiles, valid } => {
             spawn_bridge_span_preview(

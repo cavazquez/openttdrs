@@ -37,6 +37,8 @@ mod rail;
 mod rail_tunnel_base_sprites_generated;
 #[path = "sprites/road.rs"]
 mod road;
+#[path = "sprites/ship_depot.rs"]
+mod ship_depot;
 #[path = "sprites/shore_draw_data_generated.rs"]
 mod shore_draw_data_generated;
 #[path = "sprites/signal_sprite_meta_generated.rs"]
@@ -70,6 +72,7 @@ pub(crate) use rail_tunnel_base_sprites_generated::{
     RAIL_TUNNEL_BASE_CLIMATE_COUNT, RAIL_TUNNEL_BASE_SPRITE_COUNT, RAIL_TUNNEL_BASE_SPRITE_META,
     rail_tunnel_base_slot, rail_tunnel_base_sprite_id,
 };
+pub(crate) use ship_depot::{SHIP_DEPOT_PATHS, ship_depot_layers, ship_depot_seq_extent};
 pub(crate) use tile_atlas_generated::{
     TILE_ATLAS_NAMES, TILE_ATLAS_PAGE_COUNT, TILE_ATLAS_PAGE_RANGES, TILE_ATLAS_PAGE_SIZES,
     TILE_ATLAS_RECTS,

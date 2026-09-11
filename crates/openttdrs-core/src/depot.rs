@@ -55,6 +55,23 @@ pub fn ship_depot_part(tile: crate::map::Tile) -> u8 {
     tile.m5 & 0x01
 }
 
+/// Devuelve las dos teselas de la huella naval para una dirección de construcción.
+///
+/// El primer elemento es la tesela que recibe `PlaceShipDepotDir`; el segundo
+/// es la sección opuesta que `MakeShipDepot` materializa mediante
+/// `GetOtherShipDepotTile`. La dirección es la convención diagonal nativa
+/// (`0=NE`, `1=SE`, `2=SW`, `3=NW`) y se reduce a sus dos bits bajos.
+#[must_use]
+pub fn ship_depot_footprint(depot_pos: TileCoord, dir: u8) -> [TileCoord; 2] {
+    let other = match dir & 0x03 {
+        0 => TileCoord::new(depot_pos.x + 1, depot_pos.y),
+        1 => TileCoord::new(depot_pos.x, depot_pos.y - 1),
+        2 => TileCoord::new(depot_pos.x - 1, depot_pos.y),
+        _ => TileCoord::new(depot_pos.x, depot_pos.y + 1),
+    };
+    [depot_pos, other]
+}
+
 #[must_use]
 fn ship_depot_is_section(tile: crate::map::Tile) -> bool {
     tile.kind == TileKind::ShipDepot && (tile.m5 >> 4) & 0x0F == WATER_TILE_TYPE_DEPOT
@@ -482,6 +499,31 @@ mod tests {
         assert_eq!(
             nearest_depot_tile_indexed(&s.map, TileCoord::new(0, 5), VehicleKind::Ship, &mut index,),
             Some(north)
+        );
+    }
+
+    #[test]
+    fn ship_depot_footprint_matches_native_direction_offsets() {
+        let origin = TileCoord::new(5, 5);
+        assert_eq!(
+            ship_depot_footprint(origin, 0),
+            [origin, TileCoord::new(6, 5)]
+        );
+        assert_eq!(
+            ship_depot_footprint(origin, 1),
+            [origin, TileCoord::new(5, 4)]
+        );
+        assert_eq!(
+            ship_depot_footprint(origin, 2),
+            [origin, TileCoord::new(4, 5)]
+        );
+        assert_eq!(
+            ship_depot_footprint(origin, 3),
+            [origin, TileCoord::new(5, 6)]
+        );
+        assert_eq!(
+            ship_depot_footprint(origin, 7),
+            ship_depot_footprint(origin, 3)
         );
     }
 

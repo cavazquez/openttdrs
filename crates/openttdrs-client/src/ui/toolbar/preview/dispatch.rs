@@ -1,7 +1,7 @@
 //! Dispatch: decidir qué tipo de preview construir según la herramienta activa.
 
 use openttdrs_core::prelude::*;
-use openttdrs_core::{is_tunnel_entrance_slope, tile_slope_and_z};
+use openttdrs_core::{Command, is_tunnel_entrance_slope, tile_slope_and_z};
 
 use crate::iso::tile_slope_and_min_z;
 use crate::sprites::road_flat_sprite_index;
@@ -33,6 +33,19 @@ pub(crate) fn build_preview_plan(ctx: &PreviewContext, game_state: &GameState) -
             origin: TileCoord::new(tx, ty),
             show_coverage: ctx.station_state.airport_show_coverage,
         };
+    }
+
+    // El depósito naval tiene dos secciones y seis capas OpenGFX; no puede
+    // pasar por el dispatcher genérico de un sprite por tesela.
+    if action == BuildMenuAction::ShipDepot {
+        let origin = TileCoord::new(tx, ty);
+        if game_state.map.get(origin).is_none() {
+            return PreviewPlan::None;
+        }
+        let dir = ctx.station_state.orientation & 0x03;
+        let valid =
+            command_would_fail(game_state, &Command::PlaceShipDepotDir(origin, dir)).is_none();
+        return PreviewPlan::ShipDepot { origin, dir, valid };
     }
 
     // Caso especial: waypoint ferroviario
@@ -345,6 +358,40 @@ mod tests {
                 assert_eq!(origin, TileCoord::new(5, 5));
             }
             _ => panic!("Expected RailStation plan"),
+        }
+    }
+
+    #[test]
+    fn dispatch_ship_depot_plan_keeps_origin_direction_and_validity() {
+        let mut state = GameState::new(10, 10);
+        state.economy.money = 100_000;
+        let origin = TileCoord::new(5, 5);
+        for coord in [origin, TileCoord::new(6, 5), TileCoord::new(4, 5)] {
+            state.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+        let mut station_state = StationBuildState::default();
+        station_state.orientation = 0;
+        let ctx = PreviewContext {
+            map: &state.map,
+            action: BuildMenuAction::ShipDepot,
+            cursor_tile: (origin.x, origin.y),
+            tile_fract: (0, 0),
+            station_state: &station_state,
+            drag_state: &DragBuildState::default(),
+            rail_lane_bit: None,
+        };
+
+        match build_preview_plan(&ctx, &state) {
+            PreviewPlan::ShipDepot {
+                origin: actual,
+                dir,
+                valid,
+            } => {
+                assert_eq!(actual, origin);
+                assert_eq!(dir, 0);
+                assert!(valid);
+            }
+            _ => panic!("expected the dedicated ship depot preview plan"),
         }
     }
 

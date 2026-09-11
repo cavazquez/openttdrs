@@ -40,6 +40,12 @@ pub(crate) enum PreviewPlan {
     RailWaypoint { coord: TileCoord, valid: bool },
     /// Preview de waypoint de carretera
     RoadWaypoint { coord: TileCoord, valid: bool },
+    /// Preview compuesto del depósito naval (huella de dos teselas).
+    ShipDepot {
+        origin: TileCoord,
+        dir: u8,
+        valid: bool,
+    },
     /// Preview de puente (span completo)
     BridgeSpan { tiles: Vec<(i32, i32)>, valid: bool },
     /// Preview de señales ferroviarias (arrastre multi-tile)
@@ -96,6 +102,19 @@ pub(crate) fn compute_preview_tiles(ctx: &PreviewContext) -> Vec<(i32, i32)> {
     // Parada bus/camión: siempre 1×1 en el cursor (no arrastre).
     if matches!(action, BuildMenuAction::BusStop | BuildMenuAction::Station) {
         return vec![(tx, ty)];
+    }
+
+    // Depósito naval: el comando siempre materializa una huella de dos
+    // teselas, incluso cuando la segunda queda fuera del mapa y el preview
+    // terminará marcándose inválido.
+    if action == BuildMenuAction::ShipDepot {
+        return openttdrs_core::ship_depot_footprint(
+            TileCoord::new(tx, ty),
+            ctx.station_state.orientation,
+        )
+        .into_iter()
+        .map(|coord| (coord.x, coord.y))
+        .collect();
     }
 
     // Túnel: path de preview
@@ -181,5 +200,22 @@ mod tests {
         };
         let tiles = compute_preview_tiles(&ctx);
         assert_eq!(tiles, vec![(5, 5)]);
+    }
+
+    #[test]
+    fn compute_preview_tiles_ship_depot_uses_native_footprint() {
+        let map = Map::new_flat(10, 10, 0);
+        let mut station_state = StationBuildState::default();
+        station_state.orientation = 1;
+        let ctx = PreviewContext {
+            map: &map,
+            action: BuildMenuAction::ShipDepot,
+            cursor_tile: (5, 5),
+            tile_fract: (0, 0),
+            station_state: &station_state,
+            drag_state: &DragBuildState::default(),
+            rail_lane_bit: None,
+        };
+        assert_eq!(compute_preview_tiles(&ctx), vec![(5, 5), (5, 4)]);
     }
 }

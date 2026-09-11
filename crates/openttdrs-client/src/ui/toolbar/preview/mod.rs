@@ -14,6 +14,7 @@ mod road_depot;
 mod road_stop;
 mod road_waypoint;
 mod rotate;
+mod ship_depot;
 mod spawn;
 mod sprites;
 pub(super) mod station_coverage;

@@ -68,9 +68,9 @@ pub(crate) fn preview_image_for_action(
         }
         BuildMenuAction::TramRemove => None,
         BuildMenuAction::RoadDepot => None,
-        BuildMenuAction::ShipDepot => {
-            Some(asset_server.load::<Image>("assets/opengfx/tiles/ship_depot_ne.png"))
-        }
+        // El depósito naval lo maneja `PreviewPlan::ShipDepot`, que necesita
+        // dibujar la huella completa y sus capas por orientación.
+        BuildMenuAction::ShipDepot => None,
         BuildMenuAction::Dock => {
             let path = if station_state.orientation & 1 != 0 {
                 "assets/opengfx/tiles/dock_flat_y.png"

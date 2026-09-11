@@ -43,8 +43,7 @@ pub(in crate::command) fn ship_depot_exit_for_dir(
 
 #[must_use]
 fn ship_depot_other_tile_for_dir(depot_pos: TileCoord, dir: u8) -> TileCoord {
-    let (dx, dy) = ship_depot_dir_offset(dir);
-    TileCoord::new(depot_pos.x - dx, depot_pos.y - dy)
+    crate::depot::ship_depot_footprint(depot_pos, dir)[1]
 }
 
 #[must_use]

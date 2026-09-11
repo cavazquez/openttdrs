@@ -56,14 +56,15 @@ use crate::render::{
 use crate::sprites::{
     CatenarySpriteDraw, CatenaryWireDraw, CompanyColour, DockTileLayer,
     ROAD_DEPOT_GROUND_SPRITE_ID, RailDepotLayerGfx, RailStationLayer, RoadDepotLayerGfx,
-    RoadStopLayerGfx, StationTileClass, TransparencyOption, airport_station_base_for_gfx,
-    airport_station_ground_layers_for_gfx, airport_station_layers_for_gfx,
-    airport_station_overlay_rel_for_sprite, airport_station_sprite_for_id,
-    catenary_depot_wire_draw, catenary_hidden, catenary_pylon_world_z_delta,
-    catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_wire_sprite,
-    catenary_wire_world_z_delta, collect_catenary_pylons_from_map_with_pcp_override,
-    collect_catenary_wire_draws_from_map, dock_tile_gfx, dock_tile_is_water_part, dock_tile_layer,
-    is_hidden, log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
+    RoadStopLayerGfx, SHIP_DEPOT_PATHS, StationTileClass, TransparencyOption,
+    airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
+    airport_station_layers_for_gfx, airport_station_overlay_rel_for_sprite,
+    airport_station_sprite_for_id, catenary_depot_wire_draw, catenary_hidden,
+    catenary_pylon_world_z_delta, catenary_reference_sprite_id, catenary_sprite_color,
+    catenary_tunnel_wire_sprite, catenary_wire_world_z_delta,
+    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
+    dock_tile_gfx, dock_tile_is_water_part, dock_tile_layer, is_hidden,
+    log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
     rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
     rail_station_draw_layers, rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
@@ -72,8 +73,8 @@ use crate::sprites::{
     remap_rail_sprite_id, road_depot_build_layers, road_depot_seq_gfx, road_flat_sprite_index,
     road_ground_sprite_id, road_stop_build_layers, road_stop_drive_through_layers,
     road_stop_ground_index, road_stop_ground_sprite_id, road_stop_seq_gfx,
-    road_waypoint_build_layers, road_waypoint_sprite_index, roadside_is_paved, station_tile_class,
-    with_to_alpha,
+    road_waypoint_build_layers, road_waypoint_sprite_index, roadside_is_paved, ship_depot_layers,
+    ship_depot_seq_extent, station_tile_class, with_to_alpha,
 };
 
 fn buildings_hidden() -> bool {
@@ -5850,40 +5851,16 @@ fn spawn_ship_depot_tile(
     let m5 = ctx.tile.map_or(0, |tile| tile.m5);
     let part_south = m5 & 0x01 != 0;
     let axis_y = m5 & 0x02 != 0;
-    // `TILE_SEQ_LINE` usa un borde de 16×1 para Axis::X y uno de 1×16
-    // para Axis::Y. No es el tamaño del PNG: es la caja de ordenación
+    // `TILE_SEQ_LINE` no es el tamaño del PNG: es la caja de ordenación
     // isométrica con la que OpenTTD compone ambas mitades del depósito.
-    let (extent_x, extent_y) = if axis_y { (1, 16) } else { (16, 1) };
-    let layers: &[(usize, f32, f32, f32, f32, f32, f32)] = match (axis_y, part_south) {
-        // Eje X, norte: 4072 / ship_depot_nw (32x53, -29,-37).
-        (false, false) => &[(2, 0.0, 15.0, -29.0, -37.0, 32.0, 53.0)],
-        // Eje X, sur: 4074 (14x13, -31,2) + 4070 (64x64, -61,-48).
-        (false, true) => &[
-            (4, 0.0, 0.0, -31.0, 2.0, 14.0, 13.0),
-            (0, 0.0, 15.0, -61.0, -48.0, 64.0, 64.0),
-        ],
-        // Eje Y, norte: 4073 / ship_depot_ne (32x53, -1,-36).
-        (true, false) => &[(3, 15.0, 0.0, -1.0, -36.0, 32.0, 53.0)],
-        // Eje Y, sur: 4075 (14x13, 19,3) + 4071 (64x64, -1,-47).
-        (true, true) => &[
-            (5, 0.0, 0.0, 19.0, 3.0, 14.0, 13.0),
-            (1, 15.0, 0.0, -1.0, -47.0, 64.0, 64.0),
-        ],
-    };
-
-    const SHIP_DEPOT_PATHS: [&str; 6] = [
-        "assets/opengfx/tiles/ship_depot_se_front.png",
-        "assets/opengfx/tiles/ship_depot_sw_front.png",
-        "assets/opengfx/tiles/ship_depot_nw.png",
-        "assets/opengfx/tiles/ship_depot_ne.png",
-        "assets/opengfx/tiles/ship_depot_se_rear.png",
-        "assets/opengfx/tiles/ship_depot_sw_rear.png",
-    ];
+    let (extent_x, extent_y) = ship_depot_seq_extent(axis_y);
+    let layers = ship_depot_layers(axis_y, part_south);
     // `GetCompanyPalette(owner)`: `PALETTE_RECOLOUR_START + colour`. En Kale
     // el owner es DarkBlue y por eso el oráculo expone 775.
     let company_palette = 775 + u32::from(owner_colour.unwrap_or_default().as_u8());
 
-    for (layer_i, &(sprite_i, dx, dy, xrel, yrel, width, height)) in layers.iter().enumerate() {
+    for (layer_i, layer) in layers.iter().enumerate() {
+        let sprite_i = layer.sprite_index;
         let sprite_id = 4070 + sprite_i as u32;
         WorldDrawTrace::record_sprite_with_palette_and_geometry(
             "ship-depot",
@@ -5898,16 +5875,21 @@ fn spawn_ship_depot_tile(
             (0, 0, 0),
             0,
             Some(crate::render::world_draw_trace::TraceSpriteBounds::new(
-                dx as i32, dy as i32, 0, extent_x, extent_y, 20,
+                layer.dx as i32,
+                layer.dy as i32,
+                0,
+                extent_x,
+                extent_y,
+                20,
             )),
         );
-        let local = remap_tile_offset(dx, dy, 0.0) * 0.5;
+        let local = remap_tile_offset(layer.dx, layer.dy, 0.0) * 0.5;
         let mut pos = overlay_pos(
             ctx.iso_pos + local,
-            xrel,
-            yrel,
-            width,
-            height,
+            layer.xrel,
+            layer.yrel,
+            layer.width,
+            layer.height,
             base_z,
             0.04 + layer_i as f32 * 0.0005,
             ctx.tx_i32(),
@@ -5933,7 +5915,12 @@ fn spawn_ship_depot_tile(
             ViewportSortableParent {
                 sprite_id,
                 bounds: ship_depot_parent_bounds(
-                    ctx, base_z, dx as i32, dy as i32, extent_x, extent_y,
+                    ctx,
+                    base_z,
+                    layer.dx as i32,
+                    layer.dy as i32,
+                    extent_x,
+                    extent_y,
                 ),
                 insertion_key: viewport_insertion_key(
                     ctx.tx,

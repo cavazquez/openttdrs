@@ -81,6 +81,12 @@ pub enum CommandError {
     SiteUnsuitable,
     /// Una estructura existente no puede limpiarse automáticamente.
     BuildingMustBeDemolished,
+    /// Un muelle existente bloquea la limpieza automática del agua.
+    MustDemolishDockFirst,
+    /// Una boya existente bloquea la limpieza automática del agua.
+    BuoyInTheWay,
+    /// Una plataforma petrolera existente bloquea la limpieza automática del agua.
+    OilRigInTheWay,
     /// Puente sin hueco que salvar (agua o terreno más bajo bajo el tramo).
     BridgeTypeNotAvailable,
     InvalidBridgeSpan,

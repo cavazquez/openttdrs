@@ -71,6 +71,15 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::BuildingMustBeDemolished => {
             "Hay una estructura que debe demolerse antes de construir aquí."
         }
+        CommandError::MustDemolishDockFirst => {
+            "Hay un muelle aquí; demolilo antes de construir el depósito naval."
+        }
+        CommandError::BuoyInTheWay => {
+            "Hay una boya aquí; retirala antes de construir el depósito naval."
+        }
+        CommandError::OilRigInTheWay => {
+            "Hay una plataforma petrolera aquí; demolila antes de construir el depósito naval."
+        }
         CommandError::BridgeTypeNotAvailable => {
             "Este tipo de puente no está disponible (año, longitud o presupuesto)."
         }
@@ -241,6 +250,9 @@ mod tests {
             CommandError::MustDemolishBridgeFirst,
             CommandError::SiteUnsuitable,
             CommandError::BuildingMustBeDemolished,
+            CommandError::MustDemolishDockFirst,
+            CommandError::BuoyInTheWay,
+            CommandError::OilRigInTheWay,
             CommandError::BridgeTypeNotAvailable,
             CommandError::InvalidBridgeSpan,
             CommandError::BridgeTooLowForRoadStop,

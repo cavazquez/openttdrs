@@ -118,6 +118,13 @@ fn check_ship_depot_water_tile(state: &GameState, c: TileCoord) -> Result<(), Co
         Some(tile) if has_tile_water_ground(tile) => {
             if matches!(tile.kind, TileKind::Water | TileKind::ShipDepot) {
                 Ok(())
+            } else if tile.kind == TileKind::Station {
+                match crate::station::stop_kind_from_m6(tile.m6) {
+                    StopKind::Dock => Err(CommandError::MustDemolishDockFirst),
+                    StopKind::Buoy => Err(CommandError::BuoyInTheWay),
+                    StopKind::OilRig => Err(CommandError::OilRigInTheWay),
+                    _ => Err(CommandError::BuildingMustBeDemolished),
+                }
             } else if is_map_object_tile(tile.mapt) {
                 check_object_can_be_auto_cleared(state, c)
             } else {

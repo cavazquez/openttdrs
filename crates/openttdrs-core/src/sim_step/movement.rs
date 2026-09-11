@@ -147,6 +147,12 @@ pub(super) fn move_vehicles(state: &mut GameState) {
     train_crashes.rebuild(&state.vehicles);
     for i in 0..vehicle_count {
         state.vehicles[i].sim_tick = tick;
+        // `Vehicle::Tick` incrementa el contador nativo antes de cualquier
+        // rama de movimiento. Debe avanzar también para vagones, articulados
+        // y unidades que esperan en un depot/bloqueo: callbacks y efectos
+        // visuales consultan el contador por unidad, no el tick global.
+        state.vehicles[i].newgrf_tick_counter =
+            state.vehicles[i].newgrf_tick_counter.wrapping_add(1);
         let was_in_depot = vehicle_is_in_depot(state, i);
         // Vagones y partes articuladas: no se mueven solos; se sincronizan
         // tras la cabeza para conservar una única cinemática por vehículo.
@@ -868,8 +874,8 @@ fn reroute_head_on_to_alt_platform(state: &mut GameState, vehicle_idx: usize) {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::{
-        sync_road_articulated_parts, tick_road_depot_movement, trigger_depot_on_entry,
-        vehicle_entered_train_tunnel,
+        move_vehicles, sync_road_articulated_parts, tick_road_depot_movement,
+        trigger_depot_on_entry, vehicle_entered_train_tunnel,
     };
     use crate::engine::engines_table;
     use crate::newgrf_sprites::{Action2RandomEntry, TrainSpriteAssign, TrainSpriteGraphics};
@@ -907,6 +913,26 @@ mod tests {
 
         assert!(vehicle_entered_train_tunnel(&state, 0, outside));
         assert!(!vehicle_entered_train_tunnel(&state, 0, entrance));
+    }
+
+    #[test]
+    fn movement_advances_native_tick_counter_for_every_vehicle_unit() {
+        let mut state = GameState::new(8, 8);
+        let pos = TileCoord::new(2, 2);
+        let mut head = Vehicle::new(1, VehicleKind::Train, pos, pos);
+        head.running = false;
+        head.newgrf_tick_counter = 254;
+        let mut wagon = Vehicle::new(2, VehicleKind::Train, pos, pos);
+        wagon.running = false;
+        wagon.prev_unit = Some(head.id);
+        wagon.newgrf_tick_counter = u8::MAX;
+        head.next_unit = Some(wagon.id);
+        state.vehicles.extend([head, wagon]);
+
+        move_vehicles(&mut state);
+
+        assert_eq!(state.vehicles[0].newgrf_tick_counter, u8::MAX);
+        assert_eq!(state.vehicles[1].newgrf_tick_counter, 0);
     }
 
     #[test]

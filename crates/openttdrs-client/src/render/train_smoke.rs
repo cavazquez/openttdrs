@@ -157,9 +157,8 @@ fn effect_tick_state(kind: TrainSmokeSet, age_ticks: u64) -> Option<EffectTickSt
     Some(EffectTickState { frame, rise })
 }
 
-fn deterministic_random16(vehicle_id: u32, tick: u64, salt: u32) -> u16 {
-    let folded_tick = tick as u32 ^ (tick >> 32) as u32;
-    wang_hash(vehicle_id, folded_tick, salt) as u16
+fn deterministic_random16(vehicle_id: u32, tick_counter: u8, salt: u32) -> u16 {
+    wang_hash(vehicle_id, u32::from(tick_counter), salt) as u16
 }
 
 fn chance16(random: u16, numerator: i32, denominator: u32) -> bool {
@@ -188,11 +187,12 @@ fn train_is_stopping_at_station(map: &Map, vehicle: &Vehicle) -> bool {
 fn train_smoke_to_emit(
     map: &Map,
     vehicle: &mut Vehicle,
-    tick: u64,
+    tick_counter: u8,
     smoke_amount: u8,
 ) -> Option<TrainSmokeSet> {
+    vehicle.newgrf_tick_counter = tick_counter;
     let engine = vehicle.effective_engine();
-    train_smoke_to_emit_with_engine(map, vehicle, engine, tick, smoke_amount)
+    train_smoke_to_emit_with_engine(map, vehicle, engine, smoke_amount)
 }
 
 /// Igual que `train_smoke_to_emit`, pero usando el catálogo de motores de la
@@ -201,7 +201,6 @@ fn train_smoke_to_emit_with_engine(
     map: &Map,
     vehicle: &mut Vehicle,
     engine: &EngineDef,
-    tick: u64,
     smoke_amount: u8,
 ) -> Option<TrainSmokeSet> {
     let amount = smoke_amount.min(2);
@@ -231,11 +230,12 @@ fn train_smoke_to_emit_with_engine(
         VehicleVisualEffectKind::Electric => openttdrs_core::TrainSmokeKind::Electric,
         VehicleVisualEffectKind::Default => train_smoke_kind(engine.id),
     };
+    let tick_counter = vehicle.newgrf_tick_counter;
     match smoke_kind {
         openttdrs_core::TrainSmokeKind::Steam => {
             let bits = u32::from((4_u8 >> amount) + (speed.saturating_mul(3) / max_speed) as u8);
             let mask = (1_u64 << bits.min(63)).saturating_sub(1);
-            (tick & mask == 0).then_some(TrainSmokeSet::Steam)
+            (u64::from(tick_counter) & mask == 0).then_some(TrainSmokeSet::Steam)
         }
         openttdrs_core::TrainSmokeKind::Diesel => {
             let power = if vehicle.cached_power_hp == 0 {
@@ -256,7 +256,7 @@ fn train_smoke_to_emit_with_engine(
             let numerator = 64 - i32::from(speed) * 32 / i32::from(max_speed) + power_weight_effect;
             (speed < speed_limit
                 && chance16(
-                    deterministic_random16(vehicle.id, tick, 0xD1E5_E100),
+                    deterministic_random16(vehicle.id, tick_counter, 0xD1E5_E100),
                     numerator,
                     512_u32 >> amount,
                 ))
@@ -264,9 +264,9 @@ fn train_smoke_to_emit_with_engine(
         }
         openttdrs_core::TrainSmokeKind::Electric => {
             let numerator = 6 - i32::from(speed) * 4 / i32::from(max_speed);
-            (tick & 3 == 0
+            (tick_counter & 3 == 0
                 && chance16(
-                    deterministic_random16(vehicle.id, tick, 0xE1EC_7A1C),
+                    deterministic_random16(vehicle.id, tick_counter, 0xE1EC_7A1C),
                     numerator,
                     360_u32 >> amount,
                 ))
@@ -369,7 +369,6 @@ fn advanced_effect_should_emit(
     vehicle: &Vehicle,
     engine: &EngineDef,
     kind: VehicleVisualEffectKind,
-    tick: u64,
     smoke_amount: u8,
 ) -> bool {
     let amount = smoke_amount.min(2);
@@ -399,10 +398,11 @@ fn advanced_effect_should_emit(
         vehicle.cached_max_speed.max(1)
     };
     let speed = vehicle.cur_speed.min(max_speed);
+    let tick_counter = vehicle.newgrf_tick_counter;
     match kind {
         VehicleVisualEffectKind::Steam => {
             let bits = u32::from((4_u8 >> amount) + (speed.saturating_mul(3) / max_speed) as u8);
-            tick & (1_u64 << bits.min(63)).saturating_sub(1) == 0
+            u64::from(tick_counter) & (1_u64 << bits.min(63)).saturating_sub(1) == 0
         }
         VehicleVisualEffectKind::Diesel => {
             let power_weight_effect = if vehicle.kind == VehicleKind::Train {
@@ -416,16 +416,16 @@ fn advanced_effect_should_emit(
             let numerator = 64 - i32::from(speed) * 32 / i32::from(max_speed) + power_weight_effect;
             speed < speed_limit
                 && chance16(
-                    deterministic_random16(vehicle.id, tick, 0xD1E5_E100),
+                    deterministic_random16(vehicle.id, tick_counter, 0xD1E5_E100),
                     numerator,
                     512_u32 >> amount,
                 )
         }
         VehicleVisualEffectKind::Electric => {
             let numerator = 6 - i32::from(speed) * 4 / i32::from(max_speed);
-            tick & 3 == 0
+            tick_counter & 3 == 0
                 && chance16(
-                    deterministic_random16(vehicle.id, tick, 0xE1EC_7A1C),
+                    deterministic_random16(vehicle.id, tick_counter, 0xE1EC_7A1C),
                     numerator,
                     360_u32 >> amount,
                 )
@@ -698,7 +698,6 @@ fn spawn_train_smoke(
                 vehicle,
                 engine,
                 visual_spec.kind,
-                tick,
                 prefs.smoke_amount,
             ) {
                 continue;
@@ -706,7 +705,8 @@ fn spawn_train_smoke(
             // `ShowVisualEffect` no emite el modelo vanilla cuando el bit 6
             // pide el callback avanzado: si el callback falla, el resultado
             // correcto es no crear efectos, no degradar a humo estándar.
-            let random = deterministic_random16(vehicle.id, tick, 0x1600_0000);
+            let random =
+                deterministic_random16(vehicle.id, vehicle.newgrf_tick_counter, 0x1600_0000);
             let advanced = resolve_vehicle_spawn_visual_effect_callback(engine, vehicle, random);
             let Some(advanced) = advanced else {
                 continue;
@@ -748,7 +748,7 @@ fn spawn_train_smoke(
             continue;
         }
         let set_kind = if vehicle.kind == VehicleKind::Train {
-            train_smoke_to_emit_with_engine(map, vehicle, engine, tick, prefs.smoke_amount)
+            train_smoke_to_emit_with_engine(map, vehicle, engine, prefs.smoke_amount)
         } else if matches!(
             visual_spec.kind,
             VehicleVisualEffectKind::Steam
@@ -759,7 +759,6 @@ fn spawn_train_smoke(
             vehicle,
             engine,
             visual_spec.kind,
-            tick,
             prefs.smoke_amount,
         ) {
             Some(match visual_spec.kind {
@@ -940,7 +939,7 @@ mod tests {
         engine.vehicle_callback_mask = 1;
         // CB10 bit 6 = VE_DISABLE_EFFECT.
         engine.newgrf_runtime = Some(Box::new(callback_literal(0x40)));
-        assert!(train_smoke_to_emit_with_engine(&map, &mut vehicle, &engine, 0, 2).is_none());
+        assert!(train_smoke_to_emit_with_engine(&map, &mut vehicle, &engine, 2).is_none());
     }
 
     #[test]
@@ -1033,7 +1032,14 @@ mod tests {
                 &vehicle,
                 engine,
                 VehicleVisualEffectKind::Steam,
-                0,
+                2
+            ));
+            vehicle.newgrf_tick_counter = 1;
+            assert!(!advanced_effect_should_emit(
+                &map,
+                &vehicle,
+                engine,
+                VehicleVisualEffectKind::Steam,
                 2
             ));
             vehicle.running = false;
@@ -1042,7 +1048,6 @@ mod tests {
                 &vehicle,
                 engine,
                 VehicleVisualEffectKind::Steam,
-                0,
                 2
             ));
         }
@@ -1395,13 +1400,16 @@ mod tests {
     }
 
     #[test]
-    fn steam_density_uses_tick_mask_and_not_visual_time() {
+    fn steam_density_uses_vehicle_tick_counter() {
         let map = Map::new_flat(4, 4, 0);
         let mut vehicle = running_train(ENGINE_TRAIN_KIRBY);
+        let engine = vehicle.effective_engine();
+        vehicle.newgrf_tick_counter = 0;
         assert_eq!(
-            train_smoke_to_emit(&map, &mut vehicle, 0, 2),
+            train_smoke_to_emit_with_engine(&map, &mut vehicle, engine, 2),
             Some(TrainSmokeSet::Steam)
         );
-        assert!(train_smoke_to_emit(&map, &mut vehicle, 1, 2).is_none());
+        vehicle.newgrf_tick_counter = 1;
+        assert!(train_smoke_to_emit_with_engine(&map, &mut vehicle, engine, 2).is_none());
     }
 }

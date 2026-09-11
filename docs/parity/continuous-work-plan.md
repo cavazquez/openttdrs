@@ -4789,3 +4789,18 @@ validación visual/runtime amplia siguen pendientes, por lo que #329/#567
 continúan abiertas. Core queda en `2489 passed; 0 failed; 1 ignored` y cliente
 en `1401 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y
 `diff --check` limpios.
+
+Actualización #329-VEHICLE-VISUAL-EFFECT-TICK-COUNTER (2026-09-11): el
+contador nativo `Vehicle::tick_counter` ahora avanza al comienzo del tick de
+cada unidad, incluyendo vagones, articulados y vehículos que luego esperan en
+depot, señal o bloqueo; también conserva el wrap de `u8` del upstream. CB10 y
+CB160 usan ese contador por vehículo para la cadencia de vapor/chispa, la
+proyección determinista local de diésel y el valor aleatorio del callback, de
+modo que la emisión no depende del FPS ni de que dos unidades compartan el
+tick global. La persistencia SAV ya existente conserva el contador entre
+guardado y carga. El stream RNG global, filtros/consist completos, altura de
+aeronaves y compositor/sorter siguen pendientes; #329/#567 continúan
+abiertas. La regresión cubre wrap por unidad y la cadencia de vapor; actualizar
+los conteos verificados: core `2490 passed; 0 failed; 1 ignored` y cliente
+`1401 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y
+`diff --check` limpios.

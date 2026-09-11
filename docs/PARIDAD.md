@@ -4251,3 +4251,15 @@ Core queda en `2428 passed; 0 failed; 1 ignored` y cliente en
 #567 sigue abierta por la máscara de facilidades efectiva para servicio naval,
 `station_to_join`, callbacks/pathfinding y aceptación visual manual bajo
 Weston; #326 permanece abierta.
+
+Actualización #567-SHIP-DOCK-FACILITY-SERVICE (2026-09-11, `bf334130`):
+`Station` conserva ahora el byte nativo `STNN.facilities`; una fila importada
+con tren + muelle puede aceptar trenes y barcos aunque `StopKind` mantenga la
+facilidad principal ferroviaria. El escritor SAV vuelve a emitir la máscara
+completa, mientras estaciones runtime y JSON legacy derivan el valor desde
+`StopKind`. Se agregaron regresiones de importación y serialización. Core queda
+en `2429 passed; 0 failed; 1 ignored` y cliente en
+`1387 passed; 0 failed; 2 ignored`, con Clippy estricto, formato y diff limpios.
+#567 sigue abierta por las comprobaciones físicas/carga multi-modal, selección
+`station_to_join`, callbacks/pathfinding naval y aceptación visual manual bajo
+Weston; #326 permanece abierta.

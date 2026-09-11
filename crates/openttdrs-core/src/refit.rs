@@ -418,6 +418,12 @@ fn vehicle_hidden_on_depot_tile(map: &Map, vehicle: &Vehicle) -> bool {
     if !vehicle.running {
         return true;
     }
+    if vehicle.kind == VehicleKind::Ship {
+        // OpenTTD derives `VehState::Hidden` from `Ship::IsInDepot`, not from
+        // the map tile alone.  A ship can still occupy the depot footprint
+        // while its track state is already the first exit section.
+        return vehicle.ship_state == crate::ship_movement::SHIP_STATE_DEPOT;
+    }
     let Some(next) = vehicle.movement_target() else {
         return true;
     };
@@ -572,6 +578,22 @@ mod tests {
         bus.running = true;
         bus.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
         assert!(vehicle_hidden_on_map(&map, &bus));
+    }
+
+    #[test]
+    fn running_ship_depot_state_is_hidden_but_track_state_is_visible() {
+        let mut map = crate::map::Map::new_flat(8, 8, 0);
+        let depot = TileCoord::new(3, 3);
+        map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, depot, depot);
+        ship.running = true;
+        ship.ship_state = crate::ship_movement::SHIP_STATE_DEPOT;
+        assert!(vehicle_hidden_on_map(&map, &ship));
+
+        // The native ship stops being hidden as soon as it has a track state,
+        // even if its interpolated position still lies on the depot tile.
+        ship.ship_state = crate::ship_movement::SHIP_STATE_TRACK_X;
+        assert!(!vehicle_hidden_on_map(&map, &ship));
     }
 
     #[test]

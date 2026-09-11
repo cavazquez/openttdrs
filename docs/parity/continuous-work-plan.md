@@ -4938,3 +4938,12 @@ recentran posición y estado cuando un save lo dejó en la sección sur antes de
 la salida. Las regresiones cubren las cuatro rutas de consulta, una orden
 emitida desde la sección opuesta y un barco importado detenido; #567 sigue
 abierta por callbacks, pathfinding completo y aceptación visual/framebuffer.
+
+Actualización #567-SHIP-DEPOT-HIDDEN-STATE (2026-09-11): la visibilidad de un
+barco que todavía ocupa un depósito naval se decide ahora por
+`SHIP_STATE_DEPOT`, equivalente local de `Ship::IsInDepot`/`VehState::Hidden`,
+en lugar de ocultarlo sólo por la clase de tesela. Así la unidad sigue oculta
+durante la espera dentro del depósito y vuelve a mostrarse cuando ya tiene un
+estado de vía durante la salida, aunque la interpolación aún no haya dejado el
+footprint. La regresión cubre ambos estados; #567 sigue abierta por callbacks,
+pathfinding completo y aceptación visual/framebuffer.

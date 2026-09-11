@@ -4088,3 +4088,33 @@ ignorada; cliente en 1387 pasadas y 2 ignoradas, con Clippy estricto y formato
 verdes. #567 sigue abierta por la selección explícita `station_to_join`, la
 reconciliación de estaciones mixtas, callbacks navales y la aceptación visual
 manual bajo Weston; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DOCK-STATEFUL-DESTINATION (2026-09-11,
+`5e9a444e`): se agregó una resolución de destino naval que recibe el catálogo
+lógico de estaciones y recorre todas las huellas de muelle unidas. La API
+legacy conserva el comportamiento del ancla para callers sin `GameState`, y
+una regresión confirma que un barco cercano al segundo muelle elige su tesela
+de amarre, incluso cuando la orden apunta al primer ancla. Core queda en 2427
+pasadas y 1 ignorada; cliente en 1387 pasadas y 2 ignoradas, con Clippy
+estricto y formato verdes. #567 sigue abierta por la integración del
+pathfinder naval completo, `station_to_join`, callbacks y aceptación visual
+manual bajo Weston; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DOCK-ROUTING-STATE (2026-09-11, `38b9cca8`):
+`Vehicle` y la fase de routing del tick usan la resolución stateful al
+sincronizar destinos. Esto conecta los muelles múltiples restaurados desde SAV
+con la ruta efectiva de barcos activos sin cambiar trenes, carretera, aire ni
+los callers legacy. Core queda en 2427 pasadas y 1 ignorada; cliente en 1387
+pasadas y 2 ignoradas, con Clippy estricto y formato verdes. #567 sigue abierta
+por los puntos de selección explícita y callbacks navales restantes, además de
+la aceptación visual manual bajo Weston; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DOCK-RESYNC-CALLERS (2026-09-11, `2d3a29aa`):
+las resincronizaciones posteriores a descarga, reversión PBS, mantenimiento,
+órdenes compartidas, comandos de flota y reconciliación de vehículos SAV ya no
+pueden sobrescribir el destino multi-muelle con la API legacy cuando disponen
+de `GameState`. La cobertura queda integrada en el core completo
+(`2427 passed; 0 failed; 1 ignored`) y cliente
+(`1387 passed; 0 failed; 2 ignored`), con Clippy estricto, formato y diff
+limpios. #567 sigue abierta por `station_to_join`, callbacks/pathfinding naval
+restantes y validación visual manual bajo Weston; #326 permanece abierta.

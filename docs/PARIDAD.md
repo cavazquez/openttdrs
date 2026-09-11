@@ -4120,3 +4120,14 @@ de destinos del pathfinder. Core queda en 2416 pasadas y 1 ignorada; cliente en
 1383 pasadas y 2 ignoradas, con Clippy estricto y formato verdes. #567 sigue
 abierta por consumo del estado de docking en navegación, callbacks restantes y
 aceptación visual en Weston; #326 permanece abierta.
+
+Actualización #326/#567-SHIP-DEPOT-DOCKING-DESTINATION (2026-09-11,
+`c3f384e4`): las órdenes navales a un muelle u oil rig ahora prefieren, cuando
+existe, la tesela de agua adyacente marcada `DockingTile`, igual que
+`YapfShip::PfDetectDestinationTile`; la selección es determinista por
+distancia a la unidad y las boyas conservan su destino directo. Los saves
+legacy sin marcador mantienen el fallback al ancla de estación. Se agregaron
+regresiones de selección y fallback. Core queda en 2418 pasadas y 1 ignorada;
+cliente en 1383 pasadas y 2 ignoradas, con Clippy estricto y formato verdes.
+#567 sigue abierta por identidad completa de estación en el pathfinder,
+callbacks restantes y aceptación visual en Weston; #326 permanece abierta.

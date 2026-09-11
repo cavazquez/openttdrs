@@ -3531,6 +3531,18 @@ verdes. #567 sigue abierta por la matriz completa Sea/Canal/River, costas,
 callbacks, piezas restantes, clipping, orden global y framebuffer; #326
 permanece abierta.
 
+Actualización #329/#567-SHIP-CARGO-AGE-PERIOD (2026-09-11, `e231a0b4`): el
+parser Action0 conserva la propiedad naval `0x1D` (`cargo_age_period`) en el
+catálogo NewGRF, con `185` como default compatible y `0` como desactivación.
+La economía deja de usar un múltiplo global fijo y aplica el contador nativo
+por vehículo, actualizando también la caché cuando cambia el motor. Se
+agregaron regresiones de propagación parser→catálogo, período personalizado y
+desactivación explícita. Core queda en `2452 passed; 0 failed; 1 ignored` y
+cliente en `1388 passed; 0 failed; 2 ignored`, con formato, `git diff
+--check` y Clippy estricto limpios. #567/#329 siguen abiertas por las
+propiedades de envejecimiento de los demás features, callbacks navales y
+aceptación visual manual bajo Weston; #326 permanece abierta.
+
 Actualización #567-SHIP-REVERSE-TRACKDIR (2026-09-11, `6cde3fb8`): cuando el
 siguiente tile deja de ser navegable, el controlador enumera los tres
 `Trackdir` que pueden recibirse desde el lado de retorno, descarta las bocas

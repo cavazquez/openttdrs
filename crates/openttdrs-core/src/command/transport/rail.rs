@@ -665,7 +665,17 @@ fn rail_portal_other_end(map: &Map, c: TileCoord) -> Option<TileCoord> {
 fn rail_conversion_endpoints(map: &Map, c: TileCoord) -> Result<[TileCoord; 2], CommandError> {
     let tile = map.get(c).ok_or(CommandError::OutOfBounds)?;
     match tile.kind {
-        TileKind::Rail => Ok([c, c]),
+        TileKind::Rail | TileKind::RailDepot => Ok([c, c]),
+        TileKind::Station
+            if crate::station::is_rail_station_type(crate::station::station_type_from_m6(
+                tile.m6,
+            )) =>
+        {
+            Ok([c, c])
+        }
+        TileKind::Road if crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind) => {
+            Ok([c, c])
+        }
         TileKind::RailTunnel | TileKind::RailBridge => rail_portal_other_end(map, c)
             .map(|other| [c, other])
             .ok_or(CommandError::NoRailToConvert),
@@ -696,33 +706,48 @@ pub(in crate::command) fn check_convert_rail(
     }
 
     let is_portal = endpoints[1] != endpoints[0];
+    let compatible = crate::rail_type::rail_types_compatible_with_props(
+        current,
+        to_type,
+        &state.runtime.rail_type_props,
+    );
     if is_portal {
         // `TunnelBridgeIsFree` is deliberately checked only for conversions
         // between incompatible rail networks. Rail <-> electric may happen
         // while a train is on the portal, just like in OpenTTD.
-        if !crate::rail_type::rail_types_compatible_with_props(
-            current,
-            to_type,
-            &state.runtime.rail_type_props,
-        ) && state.vehicles.iter().any(|vehicle| {
-            endpoints.contains(&vehicle.pos)
-                && matches!(
-                    vehicle.kind,
-                    crate::vehicle::VehicleKind::Train
-                        | crate::vehicle::VehicleKind::Truck
-                        | crate::vehicle::VehicleKind::Bus
-                        | crate::vehicle::VehicleKind::Tram
-                        | crate::vehicle::VehicleKind::Ship
-                )
-        }) {
+        if !compatible
+            && state.vehicles.iter().any(|vehicle| {
+                endpoints.contains(&vehicle.pos)
+                    && matches!(
+                        vehicle.kind,
+                        crate::vehicle::VehicleKind::Train
+                            | crate::vehicle::VehicleKind::Truck
+                            | crate::vehicle::VehicleKind::Bus
+                            | crate::vehicle::VehicleKind::Tram
+                            | crate::vehicle::VehicleKind::Ship
+                    )
+            })
+        {
             return Err(CommandError::VehicleInTheWay);
         }
-    } else if state.vehicles.iter().any(|vehicle| {
-        vehicle.pos == c && train_incompatible_with_rail_type(state, vehicle, to_type)
-    }) {
-        // No convertir si un tren en la tesela quedaría incompatible con el
-        // nuevo tipo; se conserva el error específico de la orden plana.
-        return Err(CommandError::TrainIncompatibleWithRailType);
+    } else {
+        if tile.kind == TileKind::Rail
+            && state.vehicles.iter().any(|vehicle| {
+                vehicle.pos == c && train_incompatible_with_rail_type(state, vehicle, to_type)
+            })
+        {
+            // No convertir si un tren en la tesela quedaría incompatible con
+            // el nuevo tipo; se conserva el error específico de la orden plana.
+            return Err(CommandError::TrainIncompatibleWithRailType);
+        }
+        if !compatible
+            && tile.kind != TileKind::Rail
+            && state.vehicles.iter().any(|vehicle| {
+                vehicle.pos == c && !matches!(vehicle.kind, crate::vehicle::VehicleKind::Aircraft)
+            })
+        {
+            return Err(CommandError::VehicleInTheWay);
+        }
     }
 
     let span_tiles = if is_portal {
@@ -807,6 +832,17 @@ pub(in crate::command) fn convert_rail(
                 );
             }
         }
+    } else if let Some(index) = state.vehicles.iter().position(|vehicle| {
+        vehicle.kind == crate::vehicle::VehicleKind::Train
+            && vehicle.is_consist_head()
+            && train_incompatible_with_rail_type(state, vehicle, to_type)
+            && vehicle.reserved_steps.iter().any(|step| step.tile == c)
+    }) {
+        crate::rail_pbs::free_train_track_reservation(
+            &mut state.map,
+            &mut state.vehicles[index],
+            &mut state.runtime.reservation_tile_dirty,
+        );
     }
 
     let endpoint_count = if is_portal { 2 } else { 1 };

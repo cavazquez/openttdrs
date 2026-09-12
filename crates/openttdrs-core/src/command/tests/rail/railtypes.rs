@@ -153,6 +153,72 @@ fn convert_rail_tunnel_updates_both_mouths_and_keeps_middle_terrain() {
 }
 
 #[test]
+fn convert_rail_station_and_depot_updates_their_railtype_byte() {
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(12, 8);
+    s.economy.money = 100_000;
+    let rail = TileCoord::new(2, 3);
+    let station = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRail(rail)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailStation(station, 0)).unwrap();
+    let station_m6 = s.map.get(station).unwrap().m6;
+    apply_command(
+        &mut s,
+        &Command::ConvertRail(station, RailType::Electric.as_u8()),
+    )
+    .unwrap();
+    assert_eq!(
+        rail_type_from_tile(s.map.get(station).unwrap()),
+        RailType::Electric
+    );
+    assert_eq!(s.map.get(station).unwrap().m6, station_m6);
+
+    let depot_rail = TileCoord::new(7, 3);
+    let depot = TileCoord::new(7, 4);
+    apply_command(&mut s, &Command::PlaceRail(depot_rail)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::ConvertRail(depot, RailType::Electric.as_u8()),
+    )
+    .unwrap();
+    assert_eq!(
+        rail_type_from_tile(s.map.get(depot).unwrap()),
+        RailType::Electric
+    );
+}
+
+#[test]
+fn convert_rail_crossing_updates_railtype_without_touching_road_bits() {
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(8, 8);
+    s.economy.money = 100_000;
+    let crossing = TileCoord::new(3, 3);
+    s.map.set_kind(crossing, crate::TileKind::Road).unwrap();
+    let mut tile = s.map.get(crossing).unwrap();
+    tile.mapt = crate::map::OTTD_MP_ROAD << 4;
+    tile.m3 = 0x0A;
+    tile.m5 = 0x01 | (1 << 6);
+    tile.m8 = 0;
+    s.map.set_tile(crossing, tile).unwrap();
+    let m3_before = tile.m3;
+    let m5_before = tile.m5;
+
+    apply_command(
+        &mut s,
+        &Command::ConvertRail(crossing, RailType::Electric.as_u8()),
+    )
+    .unwrap();
+
+    let after = s.map.get(crossing).unwrap();
+    assert_eq!(rail_type_from_tile(after), RailType::Electric);
+    assert_eq!(after.m3, m3_before);
+    assert_eq!(after.m5, m5_before);
+}
+
+#[test]
 fn electric_engine_requires_electrified_neighbor() {
     use crate::rail_type::RailType;
 

@@ -310,6 +310,9 @@ pub fn free_train_track_reservation(
         {
             tile.m5 &= !CROSSING_RESERVATION_M5_BIT;
             changed = true;
+        } else if is_rail_station_reservation_tile(&tile) && station_tile_has_reservation(tile.m6) {
+            tile.m6 &= !STATION_TILE_RESERVATION;
+            changed = true;
         }
         if changed {
             let _ = map.set_tile(step.tile, tile);

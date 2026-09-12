@@ -5120,6 +5120,17 @@ regresión naval verifica que un tick intermedio no acorte la avería. #329/#567
 continúan abiertas por la semántica restante de vehículos, callbacks y
 aceptación visual/framebuffer.
 
+Corrección #329/#567-CONVERT-RAIL-STATION-CROSSING-DEPOT (2026-09-12):
+`ConvertRail` también acepta plataformas y waypoints ferroviarios, depósitos
+de tren y cruces a nivel representados en `MP_STATION`, `MP_RAILWAY` y
+`MP_ROAD`. Se conserva la codificación de la estación/cruce y sólo se cambia
+`m8`; el preflight bloquea vehículos sobre piezas no compatibles, y la
+liberación PBS limpia ahora el bit de reserva de estaciones además de vías,
+cruces y portales. La conversión por arrastre de footprints completos y las
+restricciones NewGRF específicas todavía requieren cobertura; #329/#567 sigue
+abierta por infraestructura, callbacks, pathfinding y aceptación
+visual/framebuffer.
+
 Actualización #329/#567-WATER-LOCK-OBJECT-AUTOREMOVE (2026-09-12): la
 limpieza automática de `PlaceLock` ahora admite objetos `MP_OBJECT` con flag
 `Autoremove`, valida la huella completa, conserva agua/clase por tile y cobra

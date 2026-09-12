@@ -1283,6 +1283,30 @@ fn free_train_track_reservation_clears_steps_and_m2() {
 }
 
 #[test]
+fn free_train_track_reservation_clears_station_reservation_bit() {
+    let mut state = GameState::new(8, 4);
+    let station_tile = TileCoord::new(3, 1);
+    state.map.set_kind(station_tile, TileKind::Station).unwrap();
+    let mut tile = state.map.get(station_tile).unwrap();
+    tile.mapt = 0x50;
+    tile.m6 = crate::station::STATION_TILE_RESERVATION;
+    state.map.set_tile(station_tile, tile).unwrap();
+
+    let mut train = Vehicle::new(1, VehicleKind::Train, station_tile, station_tile);
+    train.reserved_steps = vec![ReservedRailStep::new(station_tile, crate::RAIL_TB_X)];
+    state.vehicles.push(train);
+    let mut dirty = Vec::new();
+    free_train_track_reservation(&mut state.map, &mut state.vehicles[0], &mut dirty);
+
+    assert!(state.vehicles[0].reserved_steps.is_empty());
+    assert_eq!(
+        state.map.get(station_tile).unwrap().m6 & crate::station::STATION_TILE_RESERVATION,
+        0
+    );
+    assert_eq!(dirty, vec![station_tile]);
+}
+
+#[test]
 fn choose_train_track_reserves_on_enter() {
     let mut state = GameState::new(10, 4);
     let y = 1;

@@ -438,3 +438,36 @@ fn replacing_rail_bridge_preserves_pbs_reservation_on_both_ramps() {
     assert!(state.runtime.reservation_tiles_active.contains(&start));
     assert!(state.runtime.reservation_tiles_active.contains(&end));
 }
+
+#[test]
+fn bridge_build_rejects_partial_overlap_without_mutating_existing_pair() {
+    let mut state = GameState::new(10, 6);
+    let c = TileCoord::new;
+    for x in 2..=3 {
+        state.map.set_kind(c(x, 2), TileKind::Water).unwrap();
+    }
+    let old_start = c(1, 2);
+    let old_end = c(4, 2);
+    apply_command(
+        &mut state,
+        &Command::PlaceRailBridge(old_start, old_end, BridgeType::Wooden),
+    )
+    .unwrap();
+    let before_start = state.map.get(old_start).unwrap();
+    let before_end = state.map.get(old_end).unwrap();
+    let money_before = state.economy.money;
+    let command = Command::PlaceRailBridge(old_start, c(5, 2), BridgeType::Wooden);
+
+    assert_eq!(
+        command_would_fail(&state, &command),
+        Some(CommandError::MustDemolishBridgeFirst)
+    );
+    assert_eq!(
+        apply_command(&mut state, &command),
+        Err(CommandError::MustDemolishBridgeFirst)
+    );
+    assert_eq!(state.map.get(old_start), Some(before_start));
+    assert_eq!(state.map.get(old_end), Some(before_end));
+    assert_eq!(state.map.get_kind(c(5, 2)), Some(TileKind::Grass));
+    assert_eq!(state.economy.money, money_before);
+}

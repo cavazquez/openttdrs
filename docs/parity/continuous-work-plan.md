@@ -5802,3 +5802,12 @@ dirección de `m5` determina el `TrackBits` X/Y de la rampa. Las regresiones
 cubren puente, túnel, round-trip SAV y liberación de los dos extremos.
 #329/#567 continúa abierta por ownership de reservas, reemplazos, callbacks,
 variantes de puente/túnel y aceptación visual/framebuffer restantes.
+
+Corrección #329/#567-TUNNEL-BRIDGE-REPLACEMENT (2026-09-12): el preflight de
+construcción ahora distingue la rama nativa de reemplazo de puente: sólo
+permite cambiar el tipo visual cuando las dos bocas actuales forman exactamente
+el par solicitado, conserva PBS en `m5` y mantiene el preview alineado con la
+ejecución. Una boca de otro puente, un túnel o un vano que cruza el trazado
+devuelve `MustDemolishBridgeFirst`/`MustDemolishTunnelFirst` sin mutar mapa ni
+dinero. #329/#567 continúa abierta por ownership más amplio, variantes,
+callbacks y aceptación visual/framebuffer restantes.

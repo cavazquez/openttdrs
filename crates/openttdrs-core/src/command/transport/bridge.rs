@@ -70,6 +70,86 @@ fn check_tunnel_bridge_transport(tile: crate::map::Tile, is_rail: bool) -> bool 
     tile.m5 & 0x0C == expected
 }
 
+fn bridge_other_end_for_kind(map: &Map, ramp: TileCoord, kind: TileKind) -> Option<TileCoord> {
+    match kind {
+        TileKind::RoadBridge => road_bridge_other_end(map, ramp),
+        TileKind::RailBridge => rail_bridge_other_end(map, ramp),
+        _ => None,
+    }
+}
+
+fn bridge_pair_matches(map: &Map, start: TileCoord, end: TileCoord, kind: TileKind) -> bool {
+    map.get(start).is_some_and(|tile| {
+        tile.kind == kind
+            && tile.is_tunnel_bridge_tile()
+            && tile.m5 & 0x80 != 0
+            && map.get(end).is_some_and(|other| {
+                other.kind == kind && other.is_tunnel_bridge_tile() && other.m5 & 0x80 != 0
+            })
+            && bridge_other_end_for_kind(map, start, kind) == Some(end)
+    })
+}
+
+/// Valida que un puente nuevo no sobrescriba una estructura parcialmente.
+///
+/// El comando nativo tiene una rama especial sólo cuando las dos rampas
+/// actuales forman exactamente el puente solicitado. En ese caso se permite
+/// el reemplazo visual; una boca de otro puente, un túnel o un vano de puente
+/// que cruza el trazado debe demolerse primero.
+fn check_bridge_replacement(
+    state: &GameState,
+    start: TileCoord,
+    end: TileCoord,
+    kind: TileKind,
+) -> Result<(), CommandError> {
+    let exact_pair = bridge_pair_matches(&state.map, start, end, kind);
+    for tile_coord in [start, end] {
+        let Some(tile) = state.map.get(tile_coord) else {
+            continue;
+        };
+        match tile.kind {
+            TileKind::RoadTunnel | TileKind::RailTunnel => {
+                return Err(CommandError::MustDemolishTunnelFirst);
+            }
+            TileKind::RoadBridge | TileKind::RailBridge => {
+                if !exact_pair || tile.kind != kind {
+                    return Err(CommandError::MustDemolishBridgeFirst);
+                }
+                check_tunnel_bridge_owner(state, tile_coord)?;
+            }
+            _ => {}
+        }
+    }
+
+    if !exact_pair {
+        let line = axis_line(start, end);
+        if line.iter().any(|tile| {
+            state.map.get(*tile).is_some_and(|raw| {
+                crate::bridge_spec::bridge_above_axis_from_mapt(raw.mapt).is_some()
+            })
+        }) {
+            return Err(CommandError::MustDemolishBridgeFirst);
+        }
+    }
+    Ok(())
+}
+
+pub(in crate::command) fn check_bridge_placement_with_state(
+    state: &GameState,
+    start: TileCoord,
+    end: TileCoord,
+    kind: TileKind,
+) -> Result<(), CommandError> {
+    check_bridge_with_stations(
+        &state.map,
+        &state.stations,
+        &state.road_stop_spec_catalog,
+        start,
+        end,
+    )?;
+    check_bridge_replacement(state, start, end, kind)
+}
+
 /// Detecta el reemplazo nativo de un puente ferroviario ya existente.
 ///
 /// `CmdBuildBridge` conserva `HasTunnelBridgeReservation` al cambiar sólo el
@@ -79,10 +159,8 @@ fn rail_bridge_replacement_has_reservation(map: &Map, start: TileCoord, end: Til
     let Some(tile) = map.get(start) else {
         return false;
     };
-    tile.kind == TileKind::RailBridge
-        && tile.is_tunnel_bridge_tile()
+    bridge_pair_matches(map, start, end, TileKind::RailBridge)
         && check_tunnel_bridge_transport(tile, true)
-        && rail_bridge_other_end(map, start) == Some(end)
         && crate::tunnel_bridge_rail_reserved(tile)
 }
 
@@ -486,6 +564,9 @@ pub(in crate::command) fn place_tunnel_or_bridge(
         b,
         is_tunnel,
     )?;
+    if !is_tunnel {
+        check_bridge_replacement(state, a, b, kind_to_place)?;
+    }
     let line = if is_tunnel {
         let end = resolve_tunnel_end(&state.map, a).ok_or(CommandError::InvalidTunnelEndpoints)?;
         let (start_tileh, _) =

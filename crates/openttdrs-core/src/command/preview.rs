@@ -10,7 +10,7 @@ use super::industry::{check_place_industry_spec, check_place_industry_spec_layou
 use super::terraform::{check_level_land, check_lower_land, check_raise_land};
 use super::town;
 use super::transport::{
-    check_airport_area, check_airport_area_with_explicit_layout, check_bridge_with_stations,
+    check_airport_area, check_airport_area_with_explicit_layout, check_bridge_placement_with_state,
     check_clear_dock, check_clear_ship_depot, check_clear_tile, check_clear_tunnel_or_bridge,
     check_clear_water, check_cycle_rail_signal_type, check_dock_placement_at_station_with_state,
     check_dock_placement_with_state, check_object_can_be_auto_cleared, check_object_can_be_cleared,
@@ -242,8 +242,34 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         Command::PlaceRoadTunnel(a, _) | Command::PlaceRailTunnel(a, _) => {
             check_tunnel(map, *a).err()
         }
-        Command::PlaceRoadBridge(a, b, bt) | Command::PlaceRailBridge(a, b, bt) => {
-            check_bridge_with_stations(map, &state.stations, &state.road_stop_spec_catalog, *a, *b)
+        Command::PlaceRoadBridge(a, b, bt) => {
+            check_bridge_placement_with_state(state, *a, *b, crate::map::TileKind::RoadBridge)
+                .err()
+                .or_else(|| {
+                    if bridge_available_at_tick_in(
+                        &state.bridge_spec_catalog,
+                        *bt,
+                        state.tick,
+                        *a,
+                        *b,
+                    ) {
+                        None
+                    } else {
+                        Some(CommandError::BridgeTypeNotAvailable)
+                    }
+                })
+                .or_else(|| {
+                    if state.economy.money
+                        >= bridge_build_cost_in(&state.bridge_spec_catalog, *bt, *a, *b)
+                    {
+                        None
+                    } else {
+                        Some(CommandError::InsufficientFunds)
+                    }
+                })
+        }
+        Command::PlaceRailBridge(a, b, bt) => {
+            check_bridge_placement_with_state(state, *a, *b, crate::map::TileKind::RailBridge)
                 .err()
                 .or_else(|| {
                     if bridge_available_at_tick_in(

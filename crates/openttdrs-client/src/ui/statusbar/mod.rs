@@ -10,7 +10,7 @@ pub(crate) use history::{
 };
 pub(crate) use setup::setup_status_bar;
 pub(crate) use sync::{
-    drain_news_events, handle_news_popup_close, handle_news_popup_focus,
+    drain_news_events, handle_news_popup_accept, handle_news_popup_close, handle_news_popup_focus,
     handle_status_bar_center_click, sync_status_bar, update_news_playback,
 };
 
@@ -125,6 +125,9 @@ pub(crate) struct NewsPopupCloseButton;
 
 #[derive(Component)]
 pub(crate) struct NewsPopupFocusButton;
+
+#[derive(Component)]
+pub(crate) struct NewsPopupAcceptButton;
 
 #[cfg(test)]
 mod tests {

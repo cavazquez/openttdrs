@@ -338,6 +338,7 @@ mod tests {
         world.init_resource::<NewsUiState>();
         world.init_resource::<CameraFocusRequest>();
         world.init_resource::<SelectedTileInfo>();
+        world.init_resource::<BuyVehicleWindowState>();
         world.init_resource::<HudBuildFeedback>();
         let row = world
             .spawn((Button, NewsHistoryRow { item_id: 7 }, Interaction::Pressed))

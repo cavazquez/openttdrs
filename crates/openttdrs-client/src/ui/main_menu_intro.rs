@@ -32,7 +32,9 @@ pub(crate) struct MainMenuIntroState {
 const INTRO_SETTINGS: NewGameSettings = NewGameSettings {
     climate: openttdrs_core::Climate::Temperate,
     map_size: MapSizePreset::SMALL,
-    start_year: 1950,
+    // 1961 deja visibles todos los vehículos del showcase (incluidos
+    // helicóptero y ferry) sin conceder excepciones de preview al jugador.
+    start_year: 1961,
     // El menú necesita una composición legible y repetible, no el ruido visual
     // de un mapa aleatorio. `preserve_demo` reutiliza el showcase 64×64 que ya
     // contiene ciudad, industria, vías, puerto y aeropuertos.

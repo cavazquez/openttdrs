@@ -12,9 +12,10 @@ use crate::ui::hud::{
 };
 use crate::ui::statusbar::{
     NewsHistoryState, NewsUiState, drain_news_events, handle_news_history_row_click,
-    handle_news_popup_close, handle_news_popup_focus, handle_open_news_history,
-    handle_status_bar_center_click, news_history_on_closed, setup_news_history_window,
-    setup_status_bar, sync_news_history_window, sync_status_bar, update_news_playback,
+    handle_news_popup_accept, handle_news_popup_close, handle_news_popup_focus,
+    handle_open_news_history, handle_status_bar_center_click, news_history_on_closed,
+    setup_news_history_window, setup_status_bar, sync_news_history_window, sync_status_bar,
+    update_news_playback,
 };
 use crate::ui::toolbar::{RailSignalGhostState, toolbar_click_beep};
 
@@ -52,6 +53,7 @@ impl Plugin for HudUiPlugin {
                     handle_status_bar_center_click.after(sync_status_bar),
                     handle_news_popup_close.after(update_news_playback),
                     handle_news_popup_focus.after(update_news_playback),
+                    handle_news_popup_accept.after(update_news_playback),
                     handle_open_news_history,
                     handle_news_history_row_click,
                     news_history_on_closed,

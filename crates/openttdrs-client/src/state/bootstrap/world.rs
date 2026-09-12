@@ -336,6 +336,7 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
     state.climate = settings.climate;
     state.disasters_enabled = settings.disasters_enabled;
     state.tick = tick_for_calendar_year(settings.start_year);
+    state.sync_timers_from_tick();
     fill_flat_grass(&mut state);
     let preserve = if settings.preserve_demo {
         demo_preserve_rects()

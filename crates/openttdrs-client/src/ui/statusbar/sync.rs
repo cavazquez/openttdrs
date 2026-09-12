@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use openttdrs_core::{NewsDisplayMode, NewsReference, NewsType, PendingNewsEvent, format_money};
+use openttdrs_core::{
+    Command, NewsDisplayMode, NewsReference, NewsType, PendingNewsEvent, format_money,
+};
 
 use crate::camera::{CameraFocusRequest, tile_camera_world_pos};
 use crate::i18n::{Locale, localized_calendar_date};
@@ -7,7 +9,7 @@ use crate::news_prefs::NewsDisplayPrefs;
 use crate::settings::ClientPreferences;
 use crate::state::{EditorSession, SimRunState, SimWorld, sim_is_paused};
 use crate::ui::buy_window::{BuyVehicleWindowState, select_engine_from_news};
-use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo};
+use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, push_build_command_error};
 
 use super::{
     COMPANY_DISPLAY_NAME, NewsUiState, StatusBarDateText, StatusBarDefaultText, StatusBarMoneyText,
@@ -291,7 +293,14 @@ pub(crate) fn update_news_playback(
                 );
                 continue;
             }
-            spawn_news_popup(&mut commands, &item, &mut news_ui, &mut feedback);
+            let preview_engine_id = preview_engine_id_for_news(&sim.state, &item);
+            spawn_news_popup(
+                &mut commands,
+                &item,
+                preview_engine_id.is_some(),
+                &mut news_ui,
+                &mut feedback,
+            );
             news_ui.shown_full.insert(id);
             break;
         }
@@ -362,6 +371,7 @@ pub(crate) fn update_news_playback(
 fn spawn_news_popup(
     commands: &mut Commands,
     item: &openttdrs_core::NewsItem,
+    show_preview_accept: bool,
     news_ui: &mut NewsUiState,
     feedback: &mut HudBuildFeedback,
 ) {
@@ -484,6 +494,36 @@ fn spawn_news_popup(
                         TextColor(Color::srgb(0.15, 0.15, 0.15)),
                     ));
                 });
+            if show_preview_accept {
+                popup
+                    .spawn((
+                        super::NewsPopupAcceptButton,
+                        Button,
+                        crate::ui::toolbar::BuildMenuUi,
+                        Node {
+                            align_self: AlignSelf::FlexEnd,
+                            min_width: Val::Px(150.0),
+                            min_height: Val::Px(28.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            padding: UiRect::horizontal(Val::Px(10.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.48, 0.43, 0.25)),
+                        BorderColor::all(Color::srgb(0.15, 0.13, 0.08)),
+                        Interaction::default(),
+                    ))
+                    .with_children(|button| {
+                        button.spawn((
+                            Text::new("Aceptar preview"),
+                            TextFont {
+                                font_size: FontSize::Rem(UiFontRole::Body.rem_size()),
+                                ..default()
+                            },
+                            TextColor(Color::srgb(0.98, 0.96, 0.86)),
+                        ));
+                    });
+            }
         })
         .id();
 
@@ -529,6 +569,24 @@ fn spawn_news_popup(
             info!("noticias: id={} accidente; campanilla", item.id);
         }
     }
+}
+
+fn preview_engine_id_for_news(
+    state: &openttdrs_core::GameState,
+    item: &openttdrs_core::NewsItem,
+) -> Option<u16> {
+    if item.news_type != NewsType::NewVehicles {
+        return None;
+    }
+    let NewsReference::Engine(engine_id) = item.reference else {
+        return None;
+    };
+    state
+        .runtime
+        .engine_preview_offers
+        .get(&engine_id)
+        .is_some_and(|offer| offer.company == Some(state.active_company))
+        .then_some(engine_id)
 }
 
 pub(crate) fn focus_news_reference(
@@ -595,6 +653,46 @@ pub(crate) fn handle_news_popup_close(
     }
 }
 
+/// Ejecuta la aceptación de una preview desde su noticia, usando el mismo
+/// dispatch autoritativo que el resto de acciones del HUD.
+pub(crate) fn handle_news_popup_accept(
+    mut commands: Commands,
+    mut news_ui: ResMut<NewsUiState>,
+    mut sim: ResMut<SimWorld>,
+    mut feedback: ResMut<HudBuildFeedback>,
+    time: Res<Time>,
+    interaction_q: Query<&Interaction, (Changed<Interaction>, With<super::NewsPopupAcceptButton>)>,
+) {
+    for interaction in &interaction_q {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let Some(popup) = news_ui.popup.as_ref() else {
+            continue;
+        };
+        let Some(item) = sim.state.news.get(popup.item_id) else {
+            continue;
+        };
+        let Some(engine_id) = preview_engine_id_for_news(&sim.state, item) else {
+            continue;
+        };
+        match crate::network::apply_player_command(
+            &mut sim.state,
+            &Command::WantEnginePreview(engine_id),
+        ) {
+            Ok(()) => {
+                if let Some(popup) = news_ui.popup.take() {
+                    commands.entity(popup.entity).despawn();
+                }
+                feedback.message =
+                    Some("Preview aceptada: el modelo ya está disponible para tu compañía.".into());
+                feedback.expires_at_secs = time.elapsed_secs() + 5.0;
+            }
+            Err(error) => push_build_command_error(&mut feedback, error, time.elapsed_secs()),
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)] // sistema ECS: noticia, foco y catálogo.
 pub(crate) fn handle_status_bar_center_click(
     mut news_ui: ResMut<NewsUiState>,
@@ -657,7 +755,9 @@ mod tests {
         add_news_item,
     };
 
-    use super::{drain_news_events, sync_status_bar, update_news_playback};
+    use super::{
+        drain_news_events, handle_news_popup_accept, sync_status_bar, update_news_playback,
+    };
     use crate::news_prefs::NewsDisplayPrefs;
     use crate::settings::ClientPreferences;
     use crate::state::{EditorSession, SimRunState, SimWorld};
@@ -795,6 +895,77 @@ mod tests {
             world.get_resource_ref::<SimWorld>().unwrap().last_changed(),
             before,
             "un drain vacío no invalida consumidores de SimWorld"
+        );
+    }
+
+    #[test]
+    fn preview_news_button_accepts_offer_and_closes_popup() {
+        let mut state = GameState::new(8, 8);
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_BUS_MPS)
+            .unwrap()
+            .clone();
+        engine.id = 30_020;
+        engine.name = "Preview button bus".into();
+        engine.intro_year = 1950;
+        engine.from_newgrf = true;
+        state.engine_catalog.push(engine);
+        state.runtime.engine_preview_offers.insert(
+            30_020,
+            openttdrs_core::EnginePreviewOffer {
+                company: Some(openttdrs_core::CompanyId::PLAYER),
+                wait_days: 20,
+                asked_companies: 1,
+            },
+        );
+        let tick = state.tick;
+        add_news_item(
+            &mut state,
+            NewsItem::new(
+                7,
+                "Preview exclusiva",
+                Some("Aceptar modelo".into()),
+                NewsType::NewVehicles,
+                NewsDisplayMode::Full,
+                tick,
+                NewsReference::Engine(30_020),
+            ),
+        );
+        let mut world = World::new();
+        let button = world
+            .spawn((
+                super::super::NewsPopupAcceptButton,
+                Button,
+                Interaction::Pressed,
+            ))
+            .id();
+        world.insert_resource(SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        });
+        world.insert_resource(NewsUiState {
+            popup: Some(super::super::PopupState {
+                item_id: 7,
+                bottom: 0.0,
+                target_bottom: 0.0,
+                hold_remaining_ms: 0.0,
+                sliding_in: false,
+                entity: button,
+            }),
+            ..NewsUiState::default()
+        });
+        world.init_resource::<HudBuildFeedback>();
+        world.insert_resource(Time::<()>::default());
+
+        world.run_system_once(handle_news_popup_accept).unwrap();
+
+        let sim = world.resource::<SimWorld>();
+        assert!(sim.state.companies[0].has_available_engine(30_020));
+        assert!(sim.state.runtime.engine_preview_offers.is_empty());
+        assert!(world.resource::<NewsUiState>().popup.is_none());
+        assert_eq!(
+            world.resource::<HudBuildFeedback>().message.as_deref(),
+            Some("Preview aceptada: el modelo ya está disponible para tu compañía.")
         );
     }
 }

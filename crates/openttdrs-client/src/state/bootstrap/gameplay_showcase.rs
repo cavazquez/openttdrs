@@ -131,7 +131,11 @@ pub(crate) fn place_gameplay_showcase(state: &mut GameState) {
     place_pathfinding_lab(state);
     place_water_showcase(state);
     place_air_showcase(state);
-    spawn_showcase_vehicles(state);
+    // Estos vehículos son parte de la maqueta preconstruida, no una compra
+    // del jugador. Permitir temporalmente sus motores posteriores evita que
+    // una partida que comienza en 1950 pierda el ferry y el helicóptero por
+    // el gate normal de disponibilidad; el catálogo se restaura enseguida.
+    with_showcase_vehicle_availability(state, spawn_showcase_vehicles);
 }
 
 fn place_town_block(state: &mut GameState) {
@@ -635,6 +639,30 @@ fn spawn_showcase_vehicles(state: &mut GameState) {
     spawn_rail_exhibit_shuttles(state);
     spawn_ship_lines(state);
     spawn_air_lines(state);
+}
+
+fn with_showcase_vehicle_availability(state: &mut GameState, build: fn(&mut GameState)) {
+    let mut original_intro_years = Vec::new();
+    for engine_id in [ENGINE_SHIP_FERRY, ENGINE_AIRCRAFT_TRICARIO] {
+        if let Some(engine) = state
+            .engine_catalog
+            .iter_mut()
+            .find(|engine| engine.id == engine_id)
+        {
+            original_intro_years.push((engine_id, engine.intro_year));
+            engine.intro_year = 0;
+        }
+    }
+    build(state);
+    for (engine_id, intro_year) in original_intro_years {
+        if let Some(engine) = state
+            .engine_catalog
+            .iter_mut()
+            .find(|engine| engine.id == engine_id)
+        {
+            engine.intro_year = intro_year;
+        }
+    }
 }
 
 fn spawn_rail_exhibit_shuttles(state: &mut GameState) {

@@ -1038,6 +1038,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         }
         "Tipo de vehículo no permitido aquí." => "Vehicle type is not allowed here.",
         "Modelo de vehículo desconocido." => "Unknown vehicle model.",
+        "Este modelo todavía no está disponible para tu compañía." => {
+            "This model is not yet available to your company."
+        }
         "No hay dinero suficiente." => "Insufficient funds.",
         "Parada incompatible con este vehículo." => "Stop is incompatible with this vehicle.",
         "Índice de orden inválido." => "Invalid order index.",

@@ -6138,3 +6138,17 @@ Pasaron 2684 tests del core (1 ignorado), 16 focalizados de autoreemplazo,
 Clippy estricto en core y cliente, formato y `git diff --check`. #329 sigue
 abierta por CB31 en órdenes de depot, callbacks avanzados y APIs legacy sin
 catálogo; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-CB31-MASS-DEPOT (2026-09-12, `ecf8edc2`): el comando
+`SetDepotVehiclesRunning` evalúa `CBID_VEHICLE_START_STOP_CHECK` por cada unidad
+que realmente cambia de estado, usando el motor NewGRF del catálogo activo. Una
+denegación queda limitada a esa unidad para que las demás arranquen o se
+detengan, y el diagnóstico efímero conserva el último rechazo para el feedback
+del HUD. La regresión cubre tanto arranque como parada masiva, el motivo `D010`
+y la continuidad de una unidad permitida. Esto separa el botón explícito de
+arranque/parada —que delega en el comando individual nativo— de la salida
+automática de una orden de depósito, que no consulta CB31 mientras deja la
+unidad en marcha. Pasaron 2685 tests del core (1 ignorado), 2 focalizados,
+Clippy estricto en core y cliente, formato y `git diff --check`. #329 sigue
+abierta por callbacks avanzados, órdenes de depósito restantes y APIs legacy
+sin catálogo; #326/#567 permanecen abiertas.

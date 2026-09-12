@@ -1341,7 +1341,23 @@ que las acciones individuales. `try_autoreplace_vehicle` evalúa ahora CB31
 cuando el autoreemplazo debe detener una unidad en marcha, conserva el
 writeback persistente y publica el rechazo como noticia/diagnóstico; una unidad
 ya detenida en depósito no recibe una segunda evaluación. Las reglas de CB31
-para órdenes de depot siguen pendientes en #329.
+para órdenes de depot siguen pendientes en #329. El comando
+`SetDepotVehiclesRunning` también evalúa CB31 por unidad al arrancar o detener
+masivamente vehículos estacionados: una denegación no aborta las demás unidades
+y conserva el diagnóstico del último rechazo. La salida automática de una
+orden de depósito no se mezcla con este call site: `VehicleEnterDepot` mantiene
+la unidad en marcha cuando la orden no es de parada, por lo que la consulta
+CB31 corresponde al start/stop explícito posterior, igual que en OpenTTD.
+
+### #329-VEHICLE-CB31-MASS-DEPOT — arranque/parada masiva de depósito
+
+Actualizado: 2026-09-12 (`ecf8edc2`). `SetDepotVehiclesRunning` comparte el
+resolver de CB31 del comando individual y lo ejecuta sólo para las unidades
+cuya bandera `running` cambia. Un resultado rechazado deja esa unidad en su
+estado anterior, pero permite que el resto del depósito continúe; el último
+`VehicleStartStopCallbackDiagnostic` queda disponible para el HUD. La prueba
+de regresión cubre `D010` tanto al arrancar como al detener y verifica que una
+unidad permitida se modifica en la misma operación.
 
 ### #329-VEHICLE-LENGTH-VERSION — frontera CB11/CB36
 

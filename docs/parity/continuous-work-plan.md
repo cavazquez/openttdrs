@@ -5196,6 +5196,12 @@ detenido sólo impide acumular una nueva avería. La regresión cubre un autobú
 detenido dentro del slot diario. #329/#567 continúan abiertas por callbacks,
 pathfinding y aceptación visual/framebuffer.
 
+Actualización #329/#567-SHIP-DOCK-RANDOM-RESTORE (2026-09-12): al demoler un
+muelle se restaura la pieza acuática con el consumo nativo de `Random()` para
+canal/río y `MAP4 = 0` para mar. La regresión usa demolición desde la sección
+de agua y comprueba el byte persistido y el estado final del RNG. #329/#567
+continúan abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+
 Actualización #329/#567-LOADING-RELIABILITY-DECAY (2026-09-11): con averías
 reducidas, la ventana de carga o transferencia se trata como un vehículo
 detenido para el riesgo, pero no salta el decaimiento diario de fiabilidad.

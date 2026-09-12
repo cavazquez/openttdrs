@@ -1431,3 +1431,11 @@ cada sección restaurada de canal o río y persiste el byte bajo en `MAP4`; una
 sección de mar conserva `MAP4 = 0`, como `MakeWaterKeepingClass` nativo. La
 regresión demuele desde la sección sur, verifica el orden río→canal y compara
 el estado final del RNG. Otros criterios de #329/#567 siguen pendientes.
+
+### #329/#567-SHIP-DOCK-RANDOM-RESTORE — `MAP4` al demoler muelles
+
+Actualizado: 2026-09-12. La demolición de un muelle ahora restaura su pieza
+acuática mediante `MakeWaterKeepingClass`: si el agua subyacente es canal o
+río consume `Random()` y persiste el byte bajo en `MAP4`; el tramo de tierra no
+consume una tirada. La regresión parte de la pieza acuática y verifica el byte
+raw y el estado final del RNG. Otros criterios de #329/#567 siguen pendientes.

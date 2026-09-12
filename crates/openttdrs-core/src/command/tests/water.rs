@@ -1167,6 +1167,9 @@ fn dock_uses_shared_native_id_and_clears_from_water_part() {
     s.map.set_kind(land, TileKind::Grass).unwrap();
     s.map.set_kind(water, TileKind::Water).unwrap();
     s.map.set_kind(approach, TileKind::Water).unwrap();
+    let mut water_tile = s.map.get(water).unwrap();
+    water_tile.m1 = set_water_class_m1(water_tile.m1, WaterClass::Canal);
+    s.map.set_tile(water, water_tile).unwrap();
     set_dock_land_slope(&mut s.map, land, 0, 1);
     let money = s.economy.money;
 
@@ -1199,12 +1202,19 @@ fn dock_uses_shared_native_id_and_clears_from_water_part() {
         None,
         "la pieza acuática debe ser un cursor válido de demolición"
     );
+    s.random = crate::cargodist::parity::Randomizer {
+        state: [0x1122_3344, 0x5566_7788],
+    };
+    let mut expected_random = s.random;
+    let expected_water_bits = u8::try_from(expected_random.next() & 0xFF).unwrap_or(0);
 
     apply_command(&mut s, &Command::ClearTile(water)).unwrap();
 
     assert_eq!(s.map.get_kind(land), Some(TileKind::Grass));
     assert_eq!(s.map.get_kind(water), Some(TileKind::Water));
     assert_eq!(s.map.get_kind(approach), Some(TileKind::Water));
+    assert_eq!(s.map.get(water).unwrap().m3hi, expected_water_bits);
+    assert_eq!(s.random, expected_random);
     let cleared_land = s.map.get(land).unwrap();
     assert_eq!(cleared_land.m2, 0);
     assert_eq!(cleared_land.m2_hi, 0);

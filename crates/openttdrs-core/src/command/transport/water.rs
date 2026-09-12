@@ -7,10 +7,9 @@ use crate::bridge_spec::{
 use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build_cost};
 use crate::map::{
     Map, Tile, TileCoord, TileKind, WaterClass, has_tile_water_ground, inclined_slope_direction,
-    is_map_object_tile, is_tunnel_entrance_slope, make_water_tile,
-    make_water_tile_with_random_bits, object_footprint_tiles, object_id_from_tile,
-    object_origin_from_tile, object_type_dims_id, opposite_diag_dir, set_water_class_m1,
-    tile_slope_and_z, water_class_from_m1,
+    is_map_object_tile, is_tunnel_entrance_slope, make_water_tile_with_random_bits,
+    object_footprint_tiles, object_id_from_tile, object_origin_from_tile, object_type_dims_id,
+    opposite_diag_dir, set_water_class_m1, tile_slope_and_z, water_class_from_m1,
 };
 use crate::{GameState, Station, StopKind};
 
@@ -784,8 +783,7 @@ pub(in crate::command) fn clear_dock(
             .map
             .get(land)
             .map_or(WaterClass::Sea, |tile| water_class_from_m1(tile.m1));
-        make_water_tile(&mut state.map, land, water_class)
-            .map_err(|_| CommandError::OutOfBounds)?;
+        make_water_tile_after_native_clear(state, land, water_class)?;
     } else {
         let mut land_tile = state.map.get(land).ok_or(CommandError::OutOfBounds)?;
         land_tile.kind = TileKind::Grass;
@@ -807,8 +805,7 @@ pub(in crate::command) fn clear_dock(
             .map
             .get(water)
             .map_or(WaterClass::Sea, |tile| water_class_from_m1(tile.m1));
-        make_water_tile(&mut state.map, water, water_class)
-            .map_err(|_| CommandError::OutOfBounds)?;
+        make_water_tile_after_native_clear(state, water, water_class)?;
     }
     refresh_ship_docking_tiles_around(state, land);
     if !legacy_single_tile {

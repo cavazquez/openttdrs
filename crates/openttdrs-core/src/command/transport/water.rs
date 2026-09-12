@@ -171,6 +171,24 @@ fn refresh_ship_docking_tiles_around(state: &mut GameState, center: TileCoord) {
     }
 }
 
+/// Materializa agua restaurada con el consumo de `MakeWaterKeepingClass`.
+///
+/// `OpenTTD` sólo toma `Random()` para canal/río; el mar usa el byte `MAP4 = 0`.
+fn make_water_tile_after_native_clear(
+    state: &mut GameState,
+    c: TileCoord,
+    water_class: WaterClass,
+) -> Result<(), CommandError> {
+    let random_bits = match water_class {
+        WaterClass::Canal | WaterClass::River => {
+            u8::try_from(state.random.next() & 0xFF).unwrap_or(0)
+        }
+        WaterClass::Sea | WaterClass::Invalid => 0,
+    };
+    make_water_tile_with_random_bits(&mut state.map, c, water_class, random_bits)
+        .map_err(|_| CommandError::OutOfBounds)
+}
+
 fn check_ship_depot_water_tile(state: &GameState, c: TileCoord) -> Result<(), CommandError> {
     check_in_bounds(&state.map, c)?;
     match state.map.get(c) {
@@ -331,8 +349,7 @@ pub(in crate::command) fn clear_ship_depot(
             .map_or(WaterClass::Sea, |raw| water_class_from_m1(raw.m1))
     });
     for (tile, water_class) in tiles.into_iter().zip(water_classes) {
-        make_water_tile(&mut state.map, tile, water_class)
-            .map_err(|_| CommandError::OutOfBounds)?;
+        make_water_tile_after_native_clear(state, tile, water_class)?;
     }
     refresh_ship_depot_docking_tile(state, c);
     refresh_ship_depot_docking_tile(state, other);

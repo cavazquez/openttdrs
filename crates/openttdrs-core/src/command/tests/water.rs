@@ -986,6 +986,14 @@ fn clear_ship_depot_from_either_section_restores_both_water_tiles() {
     }
     apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 2)).unwrap();
     let money = s.economy.money;
+    s.random = crate::cargodist::parity::Randomizer {
+        state: [0x1122_3344, 0x5566_7788],
+    };
+    let mut expected_random = s.random;
+    // El cursor apunta a la sección River; RemoveShipDepot procesa primero
+    // esa tesela y luego la sección Canal, como el arreglo local `[c, other]`.
+    let expected_other_bits = u8::try_from(expected_random.next() & 0xFF).unwrap_or(0);
+    let expected_depot_bits = u8::try_from(expected_random.next() & 0xFF).unwrap_or(0);
 
     // `other` es la sección norte; se demuele desde el extremo opuesto al
     // que recibió el comando de construcción para cubrir ambos accesos.
@@ -993,6 +1001,9 @@ fn clear_ship_depot_from_either_section_restores_both_water_tiles() {
 
     assert_eq!(s.map.get_kind(depot), Some(TileKind::Water));
     assert_eq!(s.map.get_kind(other), Some(TileKind::Water));
+    assert_eq!(s.map.get(other).unwrap().m3hi, expected_other_bits);
+    assert_eq!(s.map.get(depot).unwrap().m3hi, expected_depot_bits);
+    assert_eq!(s.random, expected_random);
     assert_eq!(
         crate::map::water_class(s.map.get(depot).unwrap()),
         Some(WaterClass::Canal)

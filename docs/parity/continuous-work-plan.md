@@ -5403,3 +5403,10 @@ su byte bajo en `MAP4` (`m3hi`) mediante una primitiva de agua con bits
 aleatorios explícitos. La regresión comprueba canal y río, el byte raw y la
 posición final del RNG. #329/#567 continúan abiertas por callbacks,
 pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-SHIP-DEPOT-RANDOM-RESTORE (2026-09-12): al demoler un
+depósito naval, cada sección restaurada de canal/río consume ahora su palabra
+global `Random()` y guarda el byte bajo en `MAP4`; el mar mantiene el valor
+cero. La regresión cubre la demolición desde la sección opuesta y el orden de
+consumo río→canal. #329/#567 continúan abiertas por callbacks, pathfinding y
+aceptación visual/framebuffer.

@@ -1423,3 +1423,11 @@ mantiene además una variante explícita para que los generadores y los comandos
 no mezclen fixtures deterministas con el stream de gameplay. La regresión
 verifica tanto el byte persistido como el estado posterior del RNG. Otros
 criterios de #329/#567 siguen pendientes.
+
+### #329/#567-SHIP-DEPOT-RANDOM-RESTORE — `MAP4` al demoler depósitos
+
+Actualizado: 2026-09-12. `RemoveShipDepot` ahora consume un `Random()` por
+cada sección restaurada de canal o río y persiste el byte bajo en `MAP4`; una
+sección de mar conserva `MAP4 = 0`, como `MakeWaterKeepingClass` nativo. La
+regresión demuele desde la sección sur, verifica el orden río→canal y compara
+el estado final del RNG. Otros criterios de #329/#567 siguen pendientes.

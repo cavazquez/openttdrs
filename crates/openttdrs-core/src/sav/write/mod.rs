@@ -25,6 +25,7 @@
 mod chunks;
 pub(crate) mod codec;
 mod depots;
+mod engine;
 mod entities;
 mod fleet;
 mod industry_builder;
@@ -762,6 +763,14 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(anit);
     }
     for chunk in &state.sav_opaque_chunks {
+        if chunk.name == *b"ENGN" {
+            if let Some(patched) = engine::patch_engine_chunk(state, chunk)? {
+                data.extend_from_slice(&patched);
+            } else {
+                data.extend_from_slice(&chunks::raw_chunk(chunk.name, chunk.ch_type, &chunk.body));
+            }
+            continue;
+        }
         if super::REBUILT_CHUNKS.contains(&chunk.name)
             || (rebuilt_anit.is_some() && chunk.name == *b"ANIT")
             || (rebuild_objects && chunk.name == *b"OBJS")

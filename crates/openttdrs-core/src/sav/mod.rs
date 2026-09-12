@@ -15,6 +15,7 @@ mod chunks;
 mod container;
 mod date;
 mod economy;
+mod engine;
 mod entities;
 mod fleet;
 pub(crate) mod house_population_generated;
@@ -1345,6 +1346,7 @@ impl GameState {
         state.sav_objects_dirty = false;
         state.sav_object_mappings_dirty = false;
         state.sav_opaque_chunks = sav.opaque_chunks;
+        let engine_states = engine::states_from_opaque(&state.sav_opaque_chunks);
         for tile_index in animated_tile_indices {
             let Some(coord) = crate::map::tile_index_to_coord(tile_index, &state.map) else {
                 continue;
@@ -1557,6 +1559,10 @@ impl GameState {
             // por defecto (100 000) los pise.
             state.sync_active_from_mirrors();
         }
+        // `ENGN.company_avail` y la oferta activa no forman parte de `PLYR`.
+        // Rehidratarlo después del pool de compañías mantiene las excepciones
+        // de preview disponibles para la UI y para el siguiente tick.
+        engine::hydrate_state_from_pool(&mut state, &engine_states);
         let station_positions: HashMap<u32, TileCoord> = sav
             .station_index
             .iter()

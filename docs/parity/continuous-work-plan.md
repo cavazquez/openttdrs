@@ -5339,3 +5339,11 @@ una pieza de hangar. Se normalizan velocidad y altitud antes de procesar la
 orden de depósito, evitando dejar la aeronave visible como si siguiera en
 rodaje. La regresión cubre la llegada con ruta vacía al hangar. #329/#567
 continúan abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-AIRCRAFT-HANGAR-MOTION-RESET (2026-09-12): la entrada
+al hangar limpia también `progress` y `subspeed`, como
+`HandleAircraftEnterHangar`; la misma normalización se reutiliza cuando el
+aterrizaje termina directamente sobre una bahía. La regresión verifica que no
+queden fracciones de movimiento que reaparezcan al siguiente despegue.
+#329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
+framebuffer.

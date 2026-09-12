@@ -48,11 +48,17 @@ fn clear_aircraft_breakdown_if_slow(v: &mut Vehicle) {
     }
 }
 
+fn enter_aircraft_hangar(v: &mut Vehicle) {
+    v.aircraft_phase = AircraftPhase::InHangar;
+    v.altitude = 0;
+    v.cur_speed = 0;
+    v.subspeed = 0;
+    v.progress = 0;
+}
+
 fn taxi_arrival_enters_hangar(v: &mut Vehicle, map: &Map) -> bool {
     if v.pos == v.dest && v.path.is_empty() && airport_tile_is_hangar(map, v.pos) {
-        v.aircraft_phase = AircraftPhase::InHangar;
-        v.altitude = 0;
-        v.cur_speed = 0;
+        enter_aircraft_hangar(v);
         return true;
     }
     false
@@ -195,7 +201,7 @@ pub fn tick_aircraft_phase_with_catalog_and_plane_speed(
                     v.aircraft_phase = AircraftPhase::Taxi;
                     v.path = straight_line_path(v.pos, v.dest).into();
                 } else if airport_tile_is_hangar(map, v.pos) {
-                    v.aircraft_phase = AircraftPhase::InHangar;
+                    enter_aircraft_hangar(v);
                 } else {
                     v.aircraft_phase = AircraftPhase::Taxi;
                 }
@@ -302,6 +308,8 @@ mod tests {
         aircraft.aircraft_phase = AircraftPhase::Taxi;
         aircraft.altitude = AIRCRAFT_CRUISE_ALTITUDE;
         aircraft.cur_speed = 12;
+        aircraft.subspeed = 23;
+        aircraft.progress = u8::MAX;
         state.vehicles.push(aircraft);
 
         tick_aircraft_phase(&mut state.vehicles[0], &state.map, &mut state.stations);
@@ -309,5 +317,30 @@ mod tests {
         assert_eq!(state.vehicles[0].aircraft_phase, AircraftPhase::InHangar);
         assert_eq!(state.vehicles[0].altitude, 0);
         assert_eq!(state.vehicles[0].cur_speed, 0);
+        assert_eq!(state.vehicles[0].subspeed, 0);
+        assert_eq!(state.vehicles[0].progress, 0);
+    }
+
+    #[test]
+    fn landing_aircraft_resets_motion_when_already_over_hangar() {
+        let mut state = GameState::new(8, 8);
+        let hangar = TileCoord::new(3, 3);
+        state.map.set_kind(hangar, TileKind::Airport).unwrap();
+        let mut tile = state.map.get(hangar).unwrap();
+        tile.m5 = AirportPiece::Hangar as u8;
+        state.map.set_tile(hangar, tile).unwrap();
+
+        let mut aircraft = Vehicle::new(1, VehicleKind::Aircraft, hangar, hangar);
+        aircraft.aircraft_phase = AircraftPhase::Landing;
+        aircraft.aircraft_phase_ticks = 1;
+        aircraft.subspeed = 23;
+        aircraft.progress = u8::MAX;
+        state.vehicles.push(aircraft);
+
+        tick_aircraft_phase(&mut state.vehicles[0], &state.map, &mut state.stations);
+
+        assert_eq!(state.vehicles[0].aircraft_phase, AircraftPhase::InHangar);
+        assert_eq!(state.vehicles[0].subspeed, 0);
+        assert_eq!(state.vehicles[0].progress, 0);
     }
 }

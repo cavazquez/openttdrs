@@ -18,9 +18,8 @@ pub use controller::{
     individual_road_vehicle_controller, individual_road_vehicle_controller_side,
     individual_road_vehicle_controller_side_indexed,
     individual_road_vehicle_controller_side_indexed_with_catalog, road_vehicle_step_solo,
-    road_vehicle_step_solo_with_catalog,
-    road_vehicle_tick, road_vehicle_tick_side, road_vehicle_tick_side_indexed,
-    road_vehicle_tick_side_indexed_with_acceleration,
+    road_vehicle_step_solo_with_catalog, road_vehicle_tick, road_vehicle_tick_side,
+    road_vehicle_tick_side_indexed, road_vehicle_tick_side_indexed_with_acceleration,
     road_vehicle_tick_side_indexed_with_acceleration_and_catalog,
     road_vehicle_tick_side_indexed_with_acceleration_and_catalogs,
 };

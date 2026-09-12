@@ -29,8 +29,8 @@ use crate::ui::navigation::{OpenUiRoute, UiRoute};
 use crate::ui::toolbar::BuildMenuUi;
 use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::{
-    CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState, vehicle_side_sprite,
-    vehicle_side_sprite_for_sim,
+    CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState, vehicle_side_sprite_for_sim,
+    vehicle_side_sprite_with_catalog,
 };
 
 const LIST_HEIGHT: f32 = 300.0;
@@ -1195,7 +1195,7 @@ fn spawn_vehicle_list_row(
                 .vehicles
                 .iter()
                 .find(|v| v.id == vehicle_id)
-                .map(|v| vehicle_side_sprite(t, v))
+                .map(|v| vehicle_side_sprite_with_catalog(t, v, &sim.state.engine_catalog))
         })
         .unwrap_or_else(|| asset_server.load::<Image>(PLACEHOLDER_SPRITE));
     list.spawn((

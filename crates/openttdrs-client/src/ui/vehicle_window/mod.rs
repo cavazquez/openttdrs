@@ -141,10 +141,34 @@ pub(crate) fn vehicle_side_sprite(
     trucks: &TruckHandles,
     vehicle: &openttdrs_core::Vehicle,
 ) -> Handle<Image> {
-    let engine_id = vehicle
-        .engine_id
-        .unwrap_or_else(|| default_engine_id(vehicle.kind));
-    let engine = engine_for_vehicle(vehicle.kind, engine_id);
+    let engine = engine_for_vehicle(
+        vehicle.kind,
+        vehicle
+            .engine_id
+            .unwrap_or_else(|| default_engine_id(vehicle.kind)),
+    );
+    vehicle_side_sprite_for_engine(trucks, vehicle, engine)
+}
+
+fn vehicle_side_engine<'a>(
+    vehicle: &openttdrs_core::Vehicle,
+    engine_catalog: &'a [openttdrs_core::EngineDef],
+) -> &'a openttdrs_core::EngineDef {
+    openttdrs_core::engine_for_vehicle_catalog(engine_catalog, vehicle)
+}
+
+/// Sprite lateral inicial de una unidad usando el catálogo activo.
+///
+/// La lista global se reconstruye antes de que el cache de capas NewGRF pueda
+/// resolver el preview completo. En ese primer frame hay que conservar, al
+/// menos, el `train_image_index`/índice nativo del motor de la partida; de lo
+/// contrario una unidad custom aparece un instante con la silueta vanilla.
+pub(crate) fn vehicle_side_sprite_with_catalog(
+    trucks: &TruckHandles,
+    vehicle: &openttdrs_core::Vehicle,
+    engine_catalog: &[openttdrs_core::EngineDef],
+) -> Handle<Image> {
+    let engine = vehicle_side_engine(vehicle, engine_catalog);
     vehicle_side_sprite_for_engine(trucks, vehicle, engine)
 }
 
@@ -257,5 +281,27 @@ mod tests {
         assert_eq!(state.vehicle_id, None);
         assert!(state.open.is_empty());
         assert!(!state.rename_editing);
+    }
+
+    #[test]
+    fn vehicle_side_engine_prefers_active_catalog_definition() {
+        let mut custom =
+            engine_for_vehicle(VehicleKind::Train, default_engine_id(VehicleKind::Train)).clone();
+        custom.id = openttdrs_core::NEWGRF_ENGINE_ID_BASE;
+        custom.train_image_index = 0x1B;
+
+        let mut vehicle = openttdrs_core::Vehicle::new(
+            7,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 2),
+        );
+        vehicle.engine_id = Some(custom.id);
+
+        let catalog = [custom];
+        let engine = vehicle_side_engine(&vehicle, &catalog);
+
+        assert_eq!(engine.id, openttdrs_core::NEWGRF_ENGINE_ID_BASE);
+        assert_eq!(engine.train_image_index, 0x1B);
     }
 }

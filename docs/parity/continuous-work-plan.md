@@ -5180,3 +5180,11 @@ mantiene acotado por `EconomyTime::MAX_DATE`, como `EconomyAgeVehicle`; la
 regresión cubre las reglas por unidad, el límite y el slot escalonado.
 #329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
 framebuffer.
+
+Actualización #329/#567-DAY-COUNTER-UNITS (2026-09-11): `day_counter` deja de
+avanzar en partes articuladas de carretera, mientras conserva el incremento
+para cada unidad ferroviaria/naval y para las cabezas viales y aeronaves
+runtime. El callback CB32 sigue evaluándose antes del handler diario, pero el
+contador persistido ahora refleja qué unidades llegan al incremento nativo.
+#329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
+framebuffer.

@@ -331,17 +331,29 @@ impl super::model::Vehicle {
     /// la cabeza de los vehículos de carretera y los aviones normales. Las
     /// sombras/rotores no existen como vehículos runtime en este port.
     pub fn age_vehicle_economy_day(&mut self) {
-        let should_age = match self.kind {
-            VehicleKind::Train | VehicleKind::Ship | VehicleKind::Aircraft => true,
-            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => self.prev_unit.is_none(),
-        };
-        if !should_age {
+        if !self.participates_in_economy_day() {
             return;
         }
 
         self.economy_age_days = self.economy_age_days.min(MAX_ECONOMY_AGE_DAYS);
         if self.economy_age_days < MAX_ECONOMY_AGE_DAYS {
             self.economy_age_days += 1;
+        }
+    }
+
+    /// Avanza el `day_counter` sólo para las unidades cuyo handler económico
+    /// nativo lo incrementa. Los vagones sí lo hacen; las partes articuladas
+    /// viales retornan antes de llegar a ese incremento.
+    pub fn advance_newgrf_day_counter(&mut self) {
+        if self.participates_in_economy_day() {
+            self.newgrf_day_counter = self.newgrf_day_counter.wrapping_add(1);
+        }
+    }
+
+    fn participates_in_economy_day(&self) -> bool {
+        match self.kind {
+            VehicleKind::Train | VehicleKind::Ship | VehicleKind::Aircraft => true,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => self.prev_unit.is_none(),
         }
     }
 
@@ -539,7 +551,7 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
             }
         }
         state.vehicles[i].age_vehicle_economy_day();
-        state.vehicles[i].newgrf_day_counter = state.vehicles[i].newgrf_day_counter.wrapping_add(1);
+        state.vehicles[i].advance_newgrf_day_counter();
         if state.vehicles[i].prev_unit.is_none() {
             state.vehicles[i].check_vehicle_breakdown_with_setting(
                 &mut state.random,
@@ -1167,6 +1179,39 @@ mod tests {
 
         assert_eq!(state.vehicles[0].economy_age_days, 9);
         assert_eq!(state.vehicles[1].economy_age_days, 10);
+    }
+
+    #[test]
+    fn newgrf_day_counter_matches_native_economy_units() {
+        let pos = TileCoord::new(1, 1);
+        let mut train = Vehicle::new(1, VehicleKind::Train, pos, pos);
+        let mut wagon = Vehicle::new(2, VehicleKind::Train, pos, pos);
+        wagon.prev_unit = Some(train.id);
+        let mut road_head = Vehicle::new(3, VehicleKind::Bus, pos, pos);
+        let mut articulated_road = Vehicle::new(4, VehicleKind::Bus, pos, pos);
+        articulated_road.prev_unit = Some(road_head.id);
+        articulated_road.newgrf_articulated = true;
+        let mut ship = Vehicle::new(5, VehicleKind::Ship, pos, pos);
+        let mut aircraft = Vehicle::new(6, VehicleKind::Aircraft, pos, pos);
+
+        for vehicle in [
+            &mut train,
+            &mut wagon,
+            &mut road_head,
+            &mut articulated_road,
+            &mut ship,
+            &mut aircraft,
+        ] {
+            vehicle.newgrf_day_counter = 41;
+            vehicle.advance_newgrf_day_counter();
+        }
+
+        assert_eq!(train.newgrf_day_counter, 42);
+        assert_eq!(wagon.newgrf_day_counter, 42);
+        assert_eq!(road_head.newgrf_day_counter, 42);
+        assert_eq!(articulated_road.newgrf_day_counter, 41);
+        assert_eq!(ship.newgrf_day_counter, 42);
+        assert_eq!(aircraft.newgrf_day_counter, 42);
     }
 
     #[test]

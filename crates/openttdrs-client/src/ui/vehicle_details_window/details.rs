@@ -1,7 +1,10 @@
 //! Texto de detalles por unidad y resúmenes de tab (OpenTTD `DrawTrainDetails` / #175).
 
 use openttdrs_core::prelude::*;
-use openttdrs_core::{CargoType, cargo_spec_display_name, format_money};
+use openttdrs_core::{
+    CargoType, cargo_spec_display_name, consist_power_hp_with_catalog,
+    consist_weight_t_with_catalog, engine_for_vehicle_catalog, format_money,
+};
 
 use crate::i18n::{Locale, localized_text};
 use crate::state::SimWorld;
@@ -55,14 +58,14 @@ pub(crate) fn vehicle_details_summary(
     let ids = details_unit_ids(vehicle, sim);
     let units = ids.len();
     let weight = if vehicle.kind == VehicleKind::Train {
-        openttdrs_core::consist_weight_t(&sim.state.vehicles, vehicle.id)
+        consist_weight_t_with_catalog(&sim.state.vehicles, vehicle.id, &sim.state.engine_catalog)
     } else {
-        vehicle.effective_engine().weight_t
+        engine_for_vehicle_catalog(&sim.state.engine_catalog, vehicle).weight_t
     };
     let power = if vehicle.kind == VehicleKind::Train {
-        openttdrs_core::consist_power_hp(&sim.state.vehicles, vehicle.id)
+        consist_power_hp_with_catalog(&sim.state.vehicles, vehicle.id, &sim.state.engine_catalog)
     } else {
-        vehicle.effective_engine().power_hp
+        engine_for_vehicle_catalog(&sim.state.engine_catalog, vehicle).power_hp
     };
     let (cargo, capacity) = ids.iter().fold((0_u32, 0_u32), |(c, cap), &id| {
         let Some(u) = sim.state.vehicles.iter().find(|v| v.id == id) else {
@@ -94,7 +97,7 @@ pub(crate) fn vehicle_details_unit_line(
     sim: &SimWorld,
     tab: VehicleDetailsTab,
 ) -> String {
-    let engine = unit.effective_engine();
+    let engine = engine_for_vehicle_catalog(&sim.state.engine_catalog, unit);
     match tab {
         VehicleDetailsTab::Info => {
             let age = unit.vehicle_age_years(sim.state.tick.get());
@@ -182,7 +185,7 @@ pub(crate) fn vehicle_details_body(
     }
     // Tab Info de un solo vehículo: enriquecer con velocidad/órdenes (cabeza).
     if tab == VehicleDetailsTab::Info && details_unit_ids(vehicle, sim).len() == 1 {
-        let engine = vehicle.effective_engine();
+        let engine = engine_for_vehicle_catalog(&sim.state.engine_catalog, vehicle);
         let shared = vehicle.shared_order_id.map_or_else(String::new, |id| {
             format!(" · {} #{id}", localized_text(locale, "Órdenes compartidas"))
         });
@@ -373,5 +376,45 @@ mod tests {
         assert!(totals.contains("Profit this year:"));
         assert!(totals.contains("/year"));
         assert!(!totals.contains("Unidades:") && !totals.contains("Peso:"));
+    }
+
+    #[test]
+    fn vehicle_details_use_active_catalog_engine_stats() {
+        let custom_id = openttdrs_core::NEWGRF_ENGINE_ID_BASE + 56;
+        let mut state = GameState::new(8, 8);
+        let mut custom = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_BUS_MPS)
+            .unwrap()
+            .clone();
+        custom.id = custom_id;
+        custom.name = "Bus NewGRF".into();
+        custom.weight_t = 37;
+        custom.power_hp = 777;
+        custom.max_speed = 144;
+        custom.from_newgrf = true;
+        custom.newgrf_grfid = 0x4445_5441;
+        custom.newgrf_local_id = 0;
+        state.engine_catalog.push(custom);
+
+        let mut vehicle = Vehicle::new(
+            42,
+            VehicleKind::Bus,
+            TileCoord::new(3, 4),
+            TileCoord::new(3, 4),
+        );
+        vehicle.engine_id = Some(custom_id);
+        state.vehicles.push(vehicle.clone());
+        let sim = SimWorld {
+            state,
+            ..SimWorld::default()
+        };
+
+        let info = vehicle_details_body(Locale::En, &vehicle, &sim, VehicleDetailsTab::Info);
+        assert!(info.contains("Bus NewGRF"));
+        assert!(info.contains("37 t"));
+        assert!(info.contains("777 hp"));
+
+        let totals = vehicle_details_body(Locale::En, &vehicle, &sim, VehicleDetailsTab::Totals);
+        assert!(totals.contains("Weight: 37 t"));
+        assert!(totals.contains("Power: 777 hp"));
     }
 }

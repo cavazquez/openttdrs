@@ -21,7 +21,8 @@ pub use couple::{
 pub(crate) use metrics::cargo_weight_t;
 pub use metrics::{
     consist_capacity, consist_occupied_tiles, consist_occupied_tiles_indexed, consist_power_hp,
-    consist_tile_span, consist_weight_t,
+    consist_power_hp_with_catalog, consist_tile_span, consist_weight_t,
+    consist_weight_t_with_catalog,
 };
 pub use newgrf_vars::{
     action2_eval_ctx_for_unit, cargo_class_bits, cargo_type_a_id, enrich_vehicle_track_badge_vars,

@@ -1,7 +1,7 @@
 //! Métricas del consist: capacidad, peso, potencia, longitud en teselas.
 
 use crate::cargo::CargoType;
-use crate::engine::engine_by_id;
+use crate::engine::{EngineDef, engine_by_id};
 use crate::map::TileCoord;
 use crate::vehicle::Vehicle;
 
@@ -98,20 +98,58 @@ pub fn consist_capacity(vehicles: &[Vehicle], head_id: u32) -> u32 {
 /// Peso total (t) del consist.
 #[must_use]
 pub fn consist_weight_t(vehicles: &[Vehicle], head_id: u32) -> u16 {
+    consist_weight_t_with_catalog(vehicles, head_id, &[])
+}
+
+/// Peso total (t) del consist usando el catálogo runtime.
+#[must_use]
+pub fn consist_weight_t_with_catalog(
+    vehicles: &[Vehicle],
+    head_id: u32,
+    catalog: &[EngineDef],
+) -> u16 {
     consist_unit_ids(vehicles, head_id)
         .into_iter()
         .filter_map(|id| vehicles.iter().find(|v| v.id == id))
-        .map(|v| v.engine_id.and_then(engine_by_id).map_or(0, |e| e.weight_t))
+        .map(|v| {
+            v.engine_id
+                .and_then(|id| {
+                    catalog
+                        .iter()
+                        .find(|engine| engine.id == id)
+                        .or_else(|| engine_by_id(id))
+                })
+                .map_or(0, |e| e.weight_t)
+        })
         .fold(0_u16, u16::saturating_add)
 }
 
 /// Potencia total (HP) del consist.
 #[must_use]
 pub fn consist_power_hp(vehicles: &[Vehicle], head_id: u32) -> u32 {
+    consist_power_hp_with_catalog(vehicles, head_id, &[])
+}
+
+/// Potencia total (HP) del consist usando el catálogo runtime.
+#[must_use]
+pub fn consist_power_hp_with_catalog(
+    vehicles: &[Vehicle],
+    head_id: u32,
+    catalog: &[EngineDef],
+) -> u32 {
     consist_unit_ids(vehicles, head_id)
         .into_iter()
         .filter_map(|id| vehicles.iter().find(|v| v.id == id))
-        .map(|v| v.engine_id.and_then(engine_by_id).map_or(0, |e| e.power_hp))
+        .map(|v| {
+            v.engine_id
+                .and_then(|id| {
+                    catalog
+                        .iter()
+                        .find(|engine| engine.id == id)
+                        .or_else(|| engine_by_id(id))
+                })
+                .map_or(0, |e| e.power_hp)
+        })
         .fold(0_u32, u32::saturating_add)
 }
 
@@ -178,6 +216,49 @@ pub fn consist_occupied_tiles_indexed(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn consist_metrics_resolve_custom_engines_from_catalog() {
+        let custom_id = crate::engine::NEWGRF_ENGINE_ID_BASE + 57;
+        let mut custom = engine_by_id(crate::engine::ENGINE_TRAIN_KIRBY)
+            .unwrap()
+            .clone();
+        custom.id = custom_id;
+        custom.weight_t = 123;
+        custom.power_hp = 456;
+
+        let mut head = Vehicle::new(
+            1,
+            crate::vehicle::VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        head.engine_id = Some(custom_id);
+        let mut wagon = Vehicle::new(
+            2,
+            crate::vehicle::VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        wagon.engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        head.next_unit = Some(wagon.id);
+        wagon.prev_unit = Some(head.id);
+        let vehicles = vec![head, wagon];
+        let catalog = [custom];
+
+        assert_eq!(
+            consist_weight_t_with_catalog(&vehicles, 1, &catalog),
+            123 + engine_by_id(crate::engine::ENGINE_WAGON_PASSENGER)
+                .unwrap()
+                .weight_t
+        );
+        assert_eq!(
+            consist_power_hp_with_catalog(&vehicles, 1, &catalog),
+            456 + engine_by_id(crate::engine::ENGINE_WAGON_PASSENGER)
+                .unwrap()
+                .power_hp
+        );
+    }
 
     #[test]
     fn custom_cargo_weight_uses_active_cargo_spec() {

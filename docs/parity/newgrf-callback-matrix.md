@@ -1381,3 +1381,14 @@ al reemplazar una sección por canal; la regresión cubre el owner del canal, la
 clase de agua y el bit compartido de `m1`. Las altas y bajas de depósitos y
 muelles siguen recalculando sus vecinos según su instalación activa. Otros
 criterios de #329/#567 siguen pendientes.
+
+### #329/#567-SHIP-DEPOT-WATER-TYPE — validación del subtipo `MP_WATER`
+
+Actualizado: 2026-09-12. Las consultas de `DepotID`, el asignador del pool y
+el índice espacial ya exigen `WaterTileType::Depot` (`m5 >> 4 == 3`) cuando
+la tesela semántica es `TileKind::ShipDepot`. Un `MAP2` residual sobre agua
+común ya no reserva un ID ni aparece como depósito alcanzable; la regresión
+`malformed_ship_depot_m5_does_not_consume_pool_or_lookup` cubre tanto la
+consulta lineal como la indexada. La tolerancia de las fixtures sintéticas de
+movimiento permanece separada de la validación del pool. Otros criterios de
+#329/#567 siguen pendientes.

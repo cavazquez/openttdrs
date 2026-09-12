@@ -25,11 +25,14 @@ pub const MAX_SHIP_DEPOT_SEARCH_DISTANCE: u32 = 80;
 /// pool nativo.
 #[must_use]
 pub fn depot_id_from_tile(tile: crate::map::Tile) -> Option<u16> {
-    matches!(
-        tile.kind,
-        TileKind::RoadDepot | TileKind::RailDepot | TileKind::ShipDepot
-    )
-    .then(|| u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8))
+    let is_depot = match tile.kind {
+        TileKind::RoadDepot | TileKind::RailDepot => true,
+        // `TileKind` is a convenient semantic mirror, but the native water
+        // map identifies a ship depot by the WaterTileType encoded in m5.
+        TileKind::ShipDepot => ship_depot_is_section(tile),
+        _ => false,
+    };
+    is_depot.then(|| u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8))
 }
 
 /// Busca el primer `DepotID` libre en el pool común de `OpenTTD`.
@@ -192,7 +195,8 @@ fn is_depot_candidate(map: &Map, pos: TileCoord, kind: VehicleKind) -> bool {
     let target = depot_tile_kind_for_vehicle(kind);
     map.get_kind(pos) == Some(target)
         && (kind != VehicleKind::Ship
-            || ship_depot_north_tile(map, pos).is_some_and(|north| north == pos))
+            || (map.get(pos).is_some_and(ship_depot_is_section)
+                && ship_depot_north_tile(map, pos).is_some_and(|north| north == pos)))
 }
 
 /// Bit de reserva PBS en depósitos ferroviarios (`HasDepotReservation` / `m5` bit 4).
@@ -242,7 +246,10 @@ impl DepotSpatialIndex {
             TileKind::RailDepot => {
                 self.rail.insert(pos);
             }
-            TileKind::ShipDepot if ship_depot_north_tile(map, pos) == Some(pos) => {
+            TileKind::ShipDepot
+                if map.get(pos).is_some_and(ship_depot_is_section)
+                    && ship_depot_north_tile(map, pos) == Some(pos) =>
+            {
                 self.ship.insert(pos);
             }
             TileKind::Airport if crate::airport::airport_tile_is_hangar(map, pos) => {
@@ -947,12 +954,37 @@ mod tests {
         s.map.set_kind(rail, TileKind::RailDepot).unwrap();
         s.map.set_m2_u16(rail, 2).unwrap();
         s.map.set_kind(ship, TileKind::ShipDepot).unwrap();
+        s.map.set_mapt_m5(ship, 0x60, 0x30).unwrap();
         s.map.set_m2_u16(ship, 5).unwrap();
 
         assert_eq!(depot_id_from_tile(s.map.get(road).unwrap()), Some(0));
         assert_eq!(depot_id_from_tile(s.map.get(rail).unwrap()), Some(2));
         assert_eq!(depot_id_from_tile(s.map.get(ship).unwrap()), Some(5));
         assert_eq!(next_free_depot_id(&s.map), Some(1));
+    }
+
+    #[test]
+    fn malformed_ship_depot_m5_does_not_consume_pool_or_lookup() {
+        let mut s = GameState::new(8, 8);
+        let ship = TileCoord::new(3, 3);
+        s.map.set_kind(ship, TileKind::ShipDepot).unwrap();
+        s.map.set_m2_u16(ship, 5).unwrap();
+
+        // `TileKind` alone no alcanza: un MP_WATER sin WaterTileType::Depot
+        // no es una entrada válida del pool nativo.
+        assert_eq!(depot_id_from_tile(s.map.get(ship).unwrap()), None);
+        assert_eq!(next_free_depot_id(&s.map), Some(0));
+        assert_eq!(
+            nearest_depot_tile(&s.map, TileCoord::new(0, 0), VehicleKind::Ship),
+            None
+        );
+
+        let mut index = DepotSpatialIndex::default();
+        assert_eq!(index.len_for(&s.map, VehicleKind::Ship), 0);
+        assert_eq!(
+            nearest_depot_tile_indexed(&s.map, TileCoord::new(0, 0), VehicleKind::Ship, &mut index,),
+            None
+        );
     }
 
     #[test]

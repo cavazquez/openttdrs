@@ -5371,3 +5371,11 @@ canal marcada como punto de atraque tras reemplazar una instalación; la
 regresión conserva owner/clase y exige el bit 7 limpio. Las altas y bajas de
 depósitos y muelles mantienen su recálculo explícito de vecinos. #329/#567
 continúan abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-SHIP-DEPOT-WATER-TYPE (2026-09-12): las lecturas de
+`DepotID`, el asignador del pool y el índice espacial validan ahora el
+`WaterTileType::Depot` de `m5` además de `TileKind::ShipDepot`, como
+`IsShipDepotTile` nativo. Una tesela semánticamente marcada como depósito pero
+con agua común ya no consume un slot ni se ofrece como destino de servicio;
+la regresión cubre consultas lineales e indexadas. #329/#567 continúan
+abiertas por callbacks, pathfinding y aceptación visual/framebuffer.

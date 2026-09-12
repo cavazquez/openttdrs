@@ -520,6 +520,15 @@ pub const fn aircraft_is_jet(engine_id: u16) -> bool {
     engine_id == ENGINE_AIRCRAFT_FOKKER
 }
 
+/// ¿El motor aéreo tiene el bit nativo `AIR_FAST`?
+///
+/// En motores `NewGRF`, la propiedad Action0 aircraft `0x0A` se materializa
+/// como `is_large_aircraft`; los IDs vanilla conservan el fallback histórico.
+#[must_use]
+pub fn aircraft_is_jet_def(engine: &EngineDef) -> bool {
+    engine.is_large_aircraft || aircraft_is_jet(engine.id)
+}
+
 #[must_use]
 pub fn engine_for_vehicle(kind: VehicleKind, id: u16) -> &'static EngineDef {
     if let Some(engine) = engines_table()
@@ -686,6 +695,15 @@ mod tests {
         let mps = engine_for_vehicle(VehicleKind::Bus, ENGINE_BUS_MPS);
         assert_eq!(mps.max_speed, 112);
         assert_eq!(mps.speed_kmh(), 56);
+    }
+
+    #[test]
+    fn custom_large_aircraft_is_fast() {
+        let mut custom = engine_for_vehicle(VehicleKind::Aircraft, ENGINE_AIRCRAFT_DAKOTA).clone();
+        custom.id = NEWGRF_ENGINE_ID_BASE + 63;
+        custom.is_large_aircraft = true;
+
+        assert!(aircraft_is_jet_def(&custom));
     }
 
     #[test]

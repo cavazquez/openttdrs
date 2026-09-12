@@ -71,7 +71,10 @@ fn aircraft_takeoff_sound(engine_id: u16, engine_catalog: &[openttdrs_core::Engi
     );
     if is_helicopter {
         SoundId::TakeoffHelicopter
-    } else if openttdrs_core::aircraft_is_jet(engine_id) {
+    } else if openttdrs_core::engine_in_catalog(engine_catalog, engine_id)
+        .is_some_and(openttdrs_core::aircraft_is_jet_def)
+        || openttdrs_core::aircraft_is_jet(engine_id)
+    {
         SoundId::TakeoffJet
     } else {
         SoundId::TakeoffPropeller
@@ -578,6 +581,21 @@ mod aircraft_sound_tests {
         assert_eq!(
             aircraft_landing_sound(0x7F01, &catalog),
             SoundId::TakeoffHelicopter
+        );
+    }
+
+    #[test]
+    fn active_catalog_large_aircraft_uses_jet_sound() {
+        let mut custom = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_AIRCRAFT_DAKOTA)
+            .unwrap()
+            .clone();
+        custom.id = 0x7F02;
+        custom.is_large_aircraft = true;
+        let catalog = vec![custom];
+
+        assert_eq!(
+            aircraft_takeoff_sound(0x7F02, &catalog),
+            SoundId::TakeoffJet
         );
     }
 }

@@ -154,8 +154,8 @@ pub fn maybe_crash_after_brake_tick(
     let Some(def) = crate::airport_class::airport_spec_def(st.airport_spec) else {
         return false;
     };
-    let engine_id = v.engine_id.unwrap_or(0);
-    let is_jet = crate::engine::aircraft_is_jet(engine_id);
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(&state.engine_catalog, v);
+    let is_jet = crate::engine::aircraft_is_jet_def(engine);
     let no_jetcrash = state.cheats.no_jetcrash_active();
     let roll = roll_crash_die(&mut state.random);
     if !should_crash_aircraft(

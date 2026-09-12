@@ -5416,3 +5416,10 @@ global `Random()` y guarda el byte bajo en `MAP4`; el mar mantiene el valor
 cero. La regresión cubre la demolición desde la sección opuesta y el orden de
 consumo río→canal. #329/#567 continúan abiertas por callbacks, pathfinding y
 aceptación visual/framebuffer.
+
+Actualización #329/#567-SHIP-BUOY-RANDOM-RESTORE (2026-09-12): retirar una
+boya restaura el agua subyacente con el consumo nativo de `Random()` para
+canal/río y `MAP4 = 0` para mar. La regresión cubre la eliminación por otra
+compañía y el estado final del RNG; la neutralidad del waypoint se conserva.
+#329/#567 continúan abiertas por callbacks, pathfinding y aceptación
+visual/framebuffer.

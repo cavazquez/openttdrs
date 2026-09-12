@@ -693,7 +693,7 @@ pub(in crate::command) fn clear_tile(
             .map
             .get(c)
             .map_or(WaterClass::Sea, |tile| water_class_from_m1(tile.m1));
-        make_water_tile(&mut state.map, c, water_class).map_err(|_| CommandError::OutOfBounds)?;
+        super::water::make_water_tile_after_native_clear(state, c, water_class)?;
         let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
         tile.m6 = 0;
         state

@@ -173,7 +173,7 @@ fn refresh_ship_docking_tiles_around(state: &mut GameState, center: TileCoord) {
 /// Materializa agua restaurada con el consumo de `MakeWaterKeepingClass`.
 ///
 /// `OpenTTD` sólo toma `Random()` para canal/río; el mar usa el byte `MAP4 = 0`.
-fn make_water_tile_after_native_clear(
+pub(in crate::command::transport) fn make_water_tile_after_native_clear(
     state: &mut GameState,
     c: TileCoord,
     water_class: WaterClass,

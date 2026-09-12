@@ -1294,6 +1294,11 @@ fn neutral_buoy_can_be_removed_by_another_company() {
 
     apply_command(&mut s, &Command::PlaceBuoy(buoy)).unwrap();
     s.active_company = crate::company::CompanyId(1);
+    s.random = crate::cargodist::parity::Randomizer {
+        state: [0x1122_3344, 0x5566_7788],
+    };
+    let mut expected_random = s.random;
+    let expected_water_bits = u8::try_from(expected_random.next() & 0xFF).unwrap_or(0);
 
     apply_command(&mut s, &Command::ClearTile(buoy)).unwrap();
 
@@ -1301,6 +1306,8 @@ fn neutral_buoy_can_be_removed_by_another_company() {
     assert_eq!(water.kind, TileKind::Water);
     assert_eq!(water.m1 & 0x1F, 3);
     assert_eq!(crate::map::water_class_from_m1(water.m1), WaterClass::Canal);
+    assert_eq!(water.m3hi, expected_water_bits);
+    assert_eq!(s.random, expected_random);
     assert!(s.stations.is_empty());
 }
 

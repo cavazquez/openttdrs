@@ -1439,3 +1439,11 @@ acuática mediante `MakeWaterKeepingClass`: si el agua subyacente es canal o
 río consume `Random()` y persiste el byte bajo en `MAP4`; el tramo de tierra no
 consume una tirada. La regresión parte de la pieza acuática y verifica el byte
 raw y el estado final del RNG. Otros criterios de #329/#567 siguen pendientes.
+
+### #329/#567-SHIP-BUOY-RANDOM-RESTORE — `MAP4` al retirar boyas
+
+Actualizado: 2026-09-12. La retirada de una boya restaura el agua subyacente
+con `MakeWaterKeepingClass`: canal y río consumen `Random()` y guardan su byte
+bajo en `MAP4`, mientras el mar conserva cero. La regresión cubre la retirada
+por una compañía distinta y conserva el estado neutral de la boya antes de
+restaurar el canal. Otros criterios de #329/#567 siguen pendientes.

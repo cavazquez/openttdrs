@@ -5250,3 +5250,10 @@ temporal nativo en `Dummy`. Las órdenes persistentes (`stop:true`) no se
 alteran. La regresión cubre la demolición del único depósito entre dos slots
 económicos. #329/#567 continúan abiertas por callbacks, pathfinding y
 aceptación visual/framebuffer.
+
+Actualización #329/#567-ROAD-SERVICE-SETTING (2026-09-12): el servicio
+automático vial respeta `Company::settings.vehicle.servint_roadveh == 0` y no
+inserta una orden de depósito aunque el vehículo ya haya superado su intervalo
+local. La regresión usa un depósito alcanzable y una compañía con servicio
+vial desactivado. #329/#567 continúan abiertas por callbacks, pathfinding y
+aceptación visual/framebuffer.

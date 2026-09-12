@@ -770,6 +770,10 @@ fn check_road_vehicle_needs_service(state: &mut crate::GameState, idx: usize) {
     ) || !vehicle.running
         || vehicle.prev_unit.is_some()
         || has_persistent_depot_order
+        || state
+            .companies
+            .get(vehicle.owner.index())
+            .is_none_or(|company| company.servint_roadveh == 0)
     {
         return;
     }
@@ -1426,6 +1430,43 @@ mod tests {
             Some(VehicleOrder::Station { station, .. }) if *station == TileCoord::new(8, 4)
         ));
         assert_eq!(state.vehicles[0].dest, TileCoord::new(8, 4));
+    }
+
+    #[test]
+    fn disabled_road_service_interval_does_not_insert_depot_order() {
+        use crate::vehicle::order::VehicleOrder;
+        use crate::{Command, GameState, apply_command};
+
+        let mut state = GameState::new(12, 12);
+        let depot = TileCoord::new(6, 4);
+        let road = TileCoord::new(3, 4);
+        for x in 2..=5 {
+            apply_command(
+                &mut state,
+                &Command::PlaceRoadBits(TileCoord::new(x, 4), 0x0F),
+            )
+            .unwrap();
+        }
+        apply_command(&mut state, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+        state.companies[0].servint_roadveh = 0;
+
+        let mut vehicle = Vehicle::new(1, VehicleKind::Bus, road, TileCoord::new(8, 4));
+        vehicle.running = true;
+        vehicle.service_interval_days = 1;
+        vehicle.last_service_day = 0;
+        vehicle.orders = vec![VehicleOrder::station(TileCoord::new(8, 4))];
+        state.vehicles.push(vehicle);
+        state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
+        state.sync_timers_from_tick();
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(state.vehicles[0].orders.len(), 1);
+        assert!(matches!(
+            state.vehicles[0].current_order_ref(),
+            Some(VehicleOrder::Station { station, .. }) if *station == TileCoord::new(8, 4)
+        ));
     }
 
     #[test]

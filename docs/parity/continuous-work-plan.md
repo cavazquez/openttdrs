@@ -6006,3 +6006,15 @@ Clippy estricto, formato y `git diff --check`. #329/#567 continúan abiertas
 por el flujo de oferta exclusiva de `NoPreview`, la propagación recursiva de
 `JoinPreview`, callbacks de vehículos y aceptación visual manual bajo Weston;
 #326 permanece abierta.
+
+Corrección #329/#567-VEHICLE-PREVIEW-LIFECYCLE (2026-09-12, `cfb2858a`): el
+core modela el estado anual de cada motor como no introducido, preview
+exclusivo, disponibilidad pendiente, disponible o retirado, distinguiendo
+`NoPreview` del motor común y respetando la vida útil. La resolución de
+`JoinPreview` encuentra la raíz y agrupa variantes recursivamente, con
+protección ante padres ausentes y ciclos. Las noticias de vehículos esperan
+hasta `Available` y la hidratación inicial evita una ráfaga histórica; la
+regresión cubre ciclo anual, grupo recursivo y deduplicación. Pasaron los
+2675 tests del core (1 ignorado), Clippy estricto en core y client, formato y
+`git diff --check`. #329/#567 siguen abiertas: falta conectar la aceptación de
+la oferta al comando/UI y completar callbacks; #326 permanece abierta.

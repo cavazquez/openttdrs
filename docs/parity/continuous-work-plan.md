@@ -6184,3 +6184,14 @@ del catálogo activo y su etiqueta localizada. Pasaron 1426 tests del cliente
 (2 ignorados), Clippy estricto en cliente, formato y `git diff --check`. #329
 sigue abierta por callbacks avanzados, órdenes de depósito restantes y APIs
 legacy sin catálogo; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-DETAILS-CATALOG-STATS (2026-09-12, `0402e423`): la
+ficha de detalles resuelve cada unidad contra `GameState.engine_catalog`.
+Peso, potencia, velocidad máxima y nombre de los motores custom dejan de caer
+al slot vanilla; los totales de tren usan además métricas de consist con
+catálogo, conservando las funciones legacy como fallback. Las regresiones
+cubren un bus NewGRF y un consist con motor custom. Pasaron 2688 tests del
+core (1 ignorado), 1427 del cliente (2 ignorados), Clippy estricto en core y
+cliente, formato y `git diff --check`. #329 sigue abierta por callbacks
+avanzados, órdenes de depósito restantes, títulos/listados legacy y APIs sin
+catálogo; #326/#567 permanecen abiertas.

@@ -1614,6 +1614,15 @@ se enlaza mediante `prev_unit` y aparece en la enumeración completa del
 consist. La regresión ECS cubre el flujo de compra y el acople; los callbacks
 avanzados y las APIs legacy sin catálogo siguen parciales.
 
+### #329-VEHICLE-DETAILS-CATALOG-STATS — ficha y métricas del consist
+
+Actualizado: 2026-09-12 (`0402e423`). La ficha de detalles consulta el motor
+de cada unidad en `GameState.engine_catalog`; sus líneas de información,
+capacidad y coste ya no usan el slot vanilla para un ID NewGRF. Los totales de
+trenes llaman a métricas de peso/potencia catalog-aware, por lo que una cabeza
+o vagón custom conserva sus valores de Action0 en la UI. El fallback de las
+APIs legacy sin catálogo permanece disponible.
+
 ### #329-VEHICLE-AUTOREPLACE-CATALOG-UI — selector de motores NewGRF
 
 Actualizado: 2026-09-12 (`529f046b`). La ventana de autoreemplazo obtiene los

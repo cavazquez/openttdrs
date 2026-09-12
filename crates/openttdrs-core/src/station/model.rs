@@ -280,7 +280,10 @@ pub struct Station {
     /// tesela `MP_STATION` importada con su estación, aun cuando la estación
     /// ocupe un andén grande o varias paradas unidas.
     ///
-    /// Las estaciones creadas dentro del juego no tienen este identificador.
+    /// Las estaciones nuevas que materializan una huella nativa (por ejemplo,
+    /// muelles y boyas) lo asignan al crear sus teselas; las estaciones
+    /// legacy/runtime que no necesitan identidad de save pueden dejarlo en
+    /// `None`.
     #[serde(default)]
     pub ottd_station_id: Option<u32>,
     #[serde(default)]

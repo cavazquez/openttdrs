@@ -1392,3 +1392,14 @@ común ya no reserva un ID ni aparece como depósito alcanzable; la regresión
 consulta lineal como la indexada. La tolerancia de las fixtures sintéticas de
 movimiento permanece separada de la validación del pool. Otros criterios de
 #329/#567 siguen pendientes.
+
+### #329/#567-SHIP-BUOY-RAW-CONTRACT — contrato nativo de `MakeBuoy`
+
+Actualizado: 2026-09-12. La construcción de boyas ahora asigna un `StationID`
+libre compartido, conserva el owner y la clase del agua en `MAPO`, limpia el
+flag `DockingTile`, reinicia los campos crudos de la estación y conserva el
+nibble bajo de `MAPT`, igual que `MakeBuoy`/`MakeStation` nativos. El registro
+lógico queda neutral (`OWNER_NONE`) y la demolición puede realizarse desde otra
+compañía sin perder el owner del canal subyacente. Las regresiones cubren
+`m2/m2_hi`, `m3/m3hi`, `m5..m8`, `m6` y la restauración del agua. Otros
+criterios de #329/#567 siguen pendientes.

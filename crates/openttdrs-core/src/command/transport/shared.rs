@@ -646,7 +646,15 @@ pub(in crate::command) fn clear_tile(
     if let Some(kind) = state.map.get_kind(c) {
         check_town_demolition_rating(state, c, kind)?;
     }
-    if !state.cheats.magic_bulldozer_active() {
+    let is_neutral_buoy = state.stations.iter().any(|station| {
+        station.pos == c
+            && station.stop_kind == crate::station::StopKind::Buoy
+            && station.owner == crate::company::CompanyId::NONE
+    });
+    // Native `CmdLandscapeClear` lets any company remove a buoy. Its tile
+    // owner still belongs to the underlying water and is restored by
+    // `RemoveBuoy`, so it must not be used as a station ownership gate here.
+    if !state.cheats.magic_bulldozer_active() && !is_neutral_buoy {
         require_tile_owned_by_active(state, c)?;
     }
     check_object_can_be_cleared(state, c)?;

@@ -5379,3 +5379,12 @@ Actualización #329/#567-SHIP-DEPOT-WATER-TYPE (2026-09-12): las lecturas de
 con agua común ya no consume un slot ni se ofrece como destino de servicio;
 la regresión cubre consultas lineales e indexadas. #329/#567 continúan
 abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-SHIP-BUOY-RAW-CONTRACT (2026-09-12): la construcción
+de boyas materializa el contrato de `MakeBuoy`/`MakeStation`: asigna un
+`StationID` global, conserva owner/clase de agua, limpia `DockingTile` y los
+campos crudos de la estación, preserva el nibble bajo de `MAPT` y registra el
+waypoint como neutral. La demolición por otra compañía restaura el canal sin
+alterar su owner. Las regresiones cubren la huella raw completa y la propiedad
+neutral. #329/#567 continúan abiertas por callbacks, pathfinding y aceptación
+visual/framebuffer.

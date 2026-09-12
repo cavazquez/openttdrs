@@ -162,7 +162,10 @@ pub(in crate::command::transport) fn ottd_station_type_bits(stop_kind: StopKind)
 }
 
 pub(in crate::command::transport) fn apply_station_m6(m6: u8, stop_kind: StopKind) -> u8 {
-    (m6 & !0x78) | (ottd_station_type_bits(stop_kind) << 3)
+    // `MakeStation` clears the PBS bit (bit 2) and the reserved high bit
+    // before writing `StationType` into bits 3..6. Only bits 0..1 survive
+    // station materialisation.
+    (m6 & 0x03) | (ottd_station_type_bits(stop_kind) << 3)
 }
 
 pub(in crate::command::transport) fn rail_station_gfx_from_axis(axis_y: bool) -> u8 {
@@ -1067,4 +1070,18 @@ pub(crate) fn join_stations(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{StopKind, apply_station_m6};
+
+    #[test]
+    fn station_m6_initializer_clears_non_station_bits() {
+        let result = apply_station_m6(0xFF, StopKind::Buoy);
+
+        assert_eq!(result & 0x03, 0x03, "los bits bajos no son StationType");
+        assert_eq!(result & 0x78, 6 << 3, "StationType::Buoy en bits 3..6");
+        assert_eq!(result & 0x84, 0, "MakeStation limpia bits 2 y 7");
+    }
 }

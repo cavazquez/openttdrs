@@ -879,17 +879,35 @@ pub(in crate::command) fn place_buoy(
     c: TileCoord,
 ) -> Result<(), CommandError> {
     check_place_buoy(&state.map, &state.stations, c)?;
+    let station_id = next_station_id(state).ok_or(CommandError::StationPoolFull)?;
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let water_class = water_class_from_m1(tile.m1);
+    let [station_id_low, station_id_high] = station_id.to_le_bytes();
     tile.kind = TileKind::Station;
-    tile.mapt = 0x50;
+    // `SetTileType(MP_STATION)` changes only the type nibble. This preserves
+    // the bridge/tropical metadata in the low nibble of MAPT.
+    tile.mapt = 0x50 | (tile.mapt & 0x0F);
+    // `MakeBuoy` keeps the owner and water class of the underlying water but
+    // always clears DockingTile. The low five bits are MAPO owner; bit 7 is a
+    // separate docking flag.
+    tile.m1 = set_water_class_m1(tile.m1 & !0x80, water_class);
+    tile.m2 = station_id_low;
+    tile.m2_hi = station_id_high;
+    tile.m3 = 0;
+    tile.m3hi = 0;
     tile.m5 = 0;
     tile.m6 = apply_station_m6(tile.m6, StopKind::Buoy);
+    tile.m7 = 0;
+    tile.m8 = 0;
     state
         .map
         .set_tile(c, tile)
         .map_err(|_| CommandError::OutOfBounds)?;
     let mut st = Station::new_with_kind(c, StopKind::Buoy);
-    st.owner = state.active_company;
+    // OpenTTD waypoints are neutral even though MakeBuoy stores the owner of
+    // the underlying water in the tile so removal can restore that water.
+    st.owner = crate::company::CompanyId::NONE;
+    st.ottd_station_id = Some(u32::from(station_id));
     st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
     state.stations.push(st);
     state.economy.money -= station_build_cost(&state.global_economy) / 2;

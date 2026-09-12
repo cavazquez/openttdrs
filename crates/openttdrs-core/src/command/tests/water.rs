@@ -1150,6 +1150,65 @@ fn place_buoy_on_water_is_ship_waypoint() {
 }
 
 #[test]
+fn place_buoy_writes_native_station_tile_contract() {
+    let mut s = GameState::new(12, 12);
+    let buoy = TileCoord::new(4, 4);
+    let mut raw = s.map.get(buoy).expect("tile");
+    raw.kind = TileKind::Water;
+    raw.mapt = 0x0B;
+    raw.m1 = set_water_class_m1(0x80 | 3, WaterClass::Canal);
+    raw.m2 = 0xAA;
+    raw.m2_hi = 0xBB;
+    raw.m3 = 0xCC;
+    raw.m3hi = 0xDD;
+    raw.m5 = 0;
+    raw.m6 = 0xFF;
+    raw.m7 = 0xEE;
+    raw.m8 = 0xFFFF;
+    s.map.set_tile(buoy, raw).unwrap();
+
+    apply_command(&mut s, &Command::PlaceBuoy(buoy)).unwrap();
+
+    let tile = s.map.get(buoy).expect("buoy tile");
+    assert_eq!(tile.kind, TileKind::Station);
+    assert_eq!(tile.mapt, 0x5B, "SetTileType conserva el nibble bajo");
+    assert_eq!(tile.m1 & 0x1F, 3, "MakeBuoy conserva el owner del agua");
+    assert_eq!(tile.m1 & 0x80, 0, "MakeStation limpia DockingTile");
+    assert_eq!(crate::map::water_class_from_m1(tile.m1), WaterClass::Canal);
+    assert_eq!(tile.m2, 0);
+    assert_eq!(tile.m2_hi, 0);
+    assert_eq!(tile.m3, 0);
+    assert_eq!(tile.m3hi, 0);
+    assert_eq!(tile.m5, 0);
+    assert_eq!(tile.m6, (6 << 3) | 0x03);
+    assert_eq!(tile.m7, 0);
+    assert_eq!(tile.m8, 0);
+    assert_eq!(s.stations[0].owner, crate::company::CompanyId::NONE);
+    assert_eq!(s.stations[0].ottd_station_id, Some(0));
+}
+
+#[test]
+fn neutral_buoy_can_be_removed_by_another_company() {
+    let mut s = GameState::new(8, 8);
+    let buoy = TileCoord::new(4, 4);
+    let mut raw = s.map.get(buoy).expect("tile");
+    raw.kind = TileKind::Water;
+    raw.m1 = set_water_class_m1(3, WaterClass::Canal);
+    s.map.set_tile(buoy, raw).unwrap();
+
+    apply_command(&mut s, &Command::PlaceBuoy(buoy)).unwrap();
+    s.active_company = crate::company::CompanyId(1);
+
+    apply_command(&mut s, &Command::ClearTile(buoy)).unwrap();
+
+    let water = s.map.get(buoy).expect("restored water");
+    assert_eq!(water.kind, TileKind::Water);
+    assert_eq!(water.m1 & 0x1F, 3);
+    assert_eq!(crate::map::water_class_from_m1(water.m1), WaterClass::Canal);
+    assert!(s.stations.is_empty());
+}
+
+#[test]
 fn clearing_buoy_restores_underlying_canal_water() {
     use crate::map::is_canal_tile;
 

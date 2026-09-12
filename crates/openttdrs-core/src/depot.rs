@@ -186,6 +186,9 @@ pub fn vehicle_at_depot_command_tile(map: &Map, vehicle: &Vehicle, depot: TileCo
 
 #[must_use]
 fn is_depot_candidate(map: &Map, pos: TileCoord, kind: VehicleKind) -> bool {
+    if kind == VehicleKind::Aircraft {
+        return crate::airport::airport_tile_is_hangar(map, pos);
+    }
     let target = depot_tile_kind_for_vehicle(kind);
     map.get_kind(pos) == Some(target)
         && (kind != VehicleKind::Ship
@@ -204,7 +207,7 @@ pub struct DepotSpatialIndex {
     road: BTreeSet<TileCoord>,
     rail: BTreeSet<TileCoord>,
     ship: BTreeSet<TileCoord>,
-    airport: BTreeSet<TileCoord>,
+    aircraft_hangar: BTreeSet<TileCoord>,
     initialized: bool,
     full_map_scans: u64,
 }
@@ -217,7 +220,7 @@ impl DepotSpatialIndex {
         self.road.clear();
         self.rail.clear();
         self.ship.clear();
-        self.airport.clear();
+        self.aircraft_hangar.clear();
         let (width, height) = map.dimensions();
         for y in 0..height.cast_signed() {
             for x in 0..width.cast_signed() {
@@ -242,8 +245,8 @@ impl DepotSpatialIndex {
             TileKind::ShipDepot if ship_depot_north_tile(map, pos) == Some(pos) => {
                 self.ship.insert(pos);
             }
-            TileKind::Airport => {
-                self.airport.insert(pos);
+            TileKind::Airport if crate::airport::airport_tile_is_hangar(map, pos) => {
+                self.aircraft_hangar.insert(pos);
             }
             _ => {}
         }
@@ -270,7 +273,7 @@ impl DepotSpatialIndex {
             VehicleKind::Train => &self.rail,
             VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => &self.road,
             VehicleKind::Ship => &self.ship,
-            VehicleKind::Aircraft => &self.airport,
+            VehicleKind::Aircraft => &self.aircraft_hangar,
         }
     }
 }
@@ -604,6 +607,40 @@ mod tests {
         assert_eq!(
             nearest_depot_tile_indexed(&s.map, TileCoord::new(0, 5), VehicleKind::Ship, &mut index,),
             Some(north)
+        );
+    }
+
+    #[test]
+    fn aircraft_depot_queries_keep_only_hangar_tiles() {
+        let mut s = GameState::new(12, 6);
+        let near_apron = TileCoord::new(2, 2);
+        let far_hangar = TileCoord::new(8, 2);
+        s.map.set_kind(near_apron, TileKind::Airport).unwrap();
+        s.map.set_kind(far_hangar, TileKind::Airport).unwrap();
+
+        let mut apron = s.map.get(near_apron).unwrap();
+        apron.m5 = 2; // `AirportPiece::Apron`, no hangar service.
+        s.map.set_tile(near_apron, apron).unwrap();
+        let mut hangar = s.map.get(far_hangar).unwrap();
+        hangar.m5 = 1; // `AirportPiece::Hangar`.
+        s.map.set_tile(far_hangar, hangar).unwrap();
+
+        let from = TileCoord::new(0, 2);
+        assert_eq!(
+            nearest_depot_tile(&s.map, from, VehicleKind::Aircraft),
+            Some(far_hangar)
+        );
+
+        let mut index = DepotSpatialIndex::default();
+        assert_eq!(index.len_for(&s.map, VehicleKind::Aircraft), 1);
+        assert_eq!(
+            nearest_depot_tile_indexed(
+                &s.map,
+                from,
+                VehicleKind::Aircraft,
+                &mut index,
+            ),
+            Some(far_hangar)
         );
     }
 

@@ -5294,3 +5294,10 @@ que `NeedsServicing` nativo, incluso si un estado restaurado conserva
 `running=true` y un intervalo vencido. La regresión cubre tanto la consulta
 como el barrido económico sin insertar una orden temporal. #329/#567 continúan
 abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-AIRCRAFT-HANGAR-INDEX (2026-09-12): el índice espacial
+de depósitos aéreos sólo conserva piezas `Hangar`/`Heliport`; las pistas,
+aprons y terminales de un aeropuerto ya no pueden ser elegidas por una orden
+sin destino ni por “ir al depósito más cercano”. La regresión coloca un apron
+más próximo que el hangar y verifica ambas consultas. #329/#567 continúan
+abiertas por callbacks, pathfinding y aceptación visual/framebuffer.

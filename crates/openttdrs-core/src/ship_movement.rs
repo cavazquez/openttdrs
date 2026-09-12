@@ -515,6 +515,15 @@ fn ship_rotation_step(current: VehicleDirection, target: VehicleDirection) -> Ve
     current.wrapping_add(if diff > 4 { 7 } else { 1 }) & 7
 }
 
+/// Conserva el punto desde el que comenzó un giro no inmediato.
+///
+/// `Ship::UpdateDeltaXY` usa estos dos valores para que el sprite siga anclado
+/// a la posición anterior mientras `rotation` alcanza a `direction`.
+fn remember_ship_rotation_position(v: &mut Vehicle) {
+    v.ship_rotation_x_pos = Some(v.ship_x);
+    v.ship_rotation_y_pos = Some(v.ship_y);
+}
+
 fn apply_ship_direction_change(v: &mut Vehicle, new_dir: VehicleDirection) {
     let diff = new_dir.wrapping_sub(v.direction) & 7;
     match diff {
@@ -525,6 +534,7 @@ fn apply_ship_direction_change(v: &mut Vehicle, new_dir: VehicleDirection) {
         _ => {
             v.cur_speed = 0;
             v.direction = new_dir;
+            remember_ship_rotation_position(v);
         }
     }
 }
@@ -648,6 +658,8 @@ fn ship_stay_in_or_leave_depot(
     } else {
         crate::depot::ship_depot_facing(tile)
     };
+    v.ship_rotation_x_pos = None;
+    v.ship_rotation_y_pos = None;
     v.direction = facing;
     v.ship_rotation = facing;
     v.ship_track = ship_depot_track(tile);
@@ -800,6 +812,7 @@ fn reverse_ship_into_trackdir(v: &mut Vehicle, map: &Map) -> bool {
         return false;
     };
 
+    remember_ship_rotation_position(v);
     v.direction = direction;
     v.ship_track = track;
     v.ship_state = ship_state_for_track(track);
@@ -814,6 +827,7 @@ fn reverse_ship_after_blocked_track(v: &mut Vehicle, map: Option<&Map>) {
     {
         return;
     }
+    remember_ship_rotation_position(v);
     v.direction = crate::vehicle::reverse_direction(v.direction);
     v.cur_speed = 0;
     v.path.clear();
@@ -1010,6 +1024,7 @@ fn face_path_target(v: &mut Vehicle) {
         let diff = want.wrapping_sub(v.direction) & 7;
         if !matches!(diff, 0 | 1 | 7) {
             v.cur_speed = 0;
+            remember_ship_rotation_position(v);
         }
         v.direction = want;
         v.ship_track = track_from_diagdir(dir_to_diagdir(want));
@@ -1182,6 +1197,9 @@ pub fn ship_controller_tick_with_catalog(
             // (solo tests sin GameState); en sim real el routing rellena path.
             let face = direction_from_tile_step(v.pos, v.dest);
             if v.pos != v.dest {
+                if !matches!(face.wrapping_sub(v.direction) & 7, 0 | 1 | 7) {
+                    remember_ship_rotation_position(v);
+                }
                 v.direction = face;
             }
             return;
@@ -1719,6 +1737,8 @@ mod tests {
         assert_eq!(v.pos, pos);
         assert_eq!(v.direction, DIR_NE);
         assert_eq!(v.ship_rotation, DIR_SW);
+        assert_eq!(v.ship_rotation_x_pos, Some(v.ship_x));
+        assert_eq!(v.ship_rotation_y_pos, Some(v.ship_y));
         assert_eq!(v.cur_speed, 0);
         assert!(v.path.is_empty());
     }

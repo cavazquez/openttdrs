@@ -365,6 +365,16 @@ pub struct Vehicle {
     /// Rotación gráfica persistida por `SlVehicleShip`.
     #[serde(default)]
     pub ship_rotation: u8,
+    /// Posición X antes del giro gráfico de un barco (`Ship::rotation_x_pos`).
+    ///
+    /// `OpenTTD` lo mantiene sólo durante la rotación y lo marca `NOSAVE`; `None`
+    /// también permite cargar estados antiguos usando la posición actual como
+    /// origen, evitando aplicar un desplazamiento espurio desde `(0, 0)`.
+    #[serde(skip)]
+    pub ship_rotation_x_pos: Option<i32>,
+    /// Posición Y antes del giro gráfico de un barco (`Ship::rotation_y_pos`).
+    #[serde(skip)]
+    pub ship_rotation_y_pos: Option<i32>,
     /// Caché de ruta nativo de barco (`Ship::path`, sólo `Trackdir`).
     #[serde(default)]
     pub ship_path: Vec<u8>,
@@ -818,6 +828,8 @@ impl Vehicle {
             ship_track: 0,
             ship_state: 0,
             ship_rotation: DIR_NE,
+            ship_rotation_x_pos: None,
+            ship_rotation_y_pos: None,
             ship_path: Vec::new(),
             ship_tick_counter: 0,
             motion_counter: 0,

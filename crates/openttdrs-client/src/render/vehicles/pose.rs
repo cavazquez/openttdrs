@@ -168,7 +168,7 @@ pub(crate) fn vehicle_parent_bounds(
             i32::from(v.altitude).saturating_mul(i32::from(openttdrs_core::TILE_PIXEL_HEIGHT)),
         );
 
-    let (origin_x, origin_y, extent_x, extent_y, extent_z) = match v.kind {
+    let (mut origin_x, mut origin_y, extent_x, extent_y, extent_z) = match v.kind {
         VehicleKind::Ship => match v.ship_rotation & 7 {
             openttdrs_core::DIR_NE | openttdrs_core::DIR_SW => (-16, -3, 32, 6, 6),
             openttdrs_core::DIR_SE | openttdrs_core::DIR_NW => (-3, -16, 6, 32, 6),
@@ -201,6 +201,14 @@ pub(crate) fn vehicle_parent_bounds(
             (-1, -1, 3, 3, 6)
         }
     };
+    if v.kind == VehicleKind::Ship && v.ship_pos_valid && v.direction != v.ship_rotation {
+        // `Ship::UpdateDeltaXY` aplica esta corrección mientras el rumbo físico
+        // cambió pero la rotación visible todavía lo alcanza.
+        let rotation_x = v.ship_rotation_x_pos.unwrap_or(v.ship_x);
+        let rotation_y = v.ship_rotation_y_pos.unwrap_or(v.ship_y);
+        origin_x -= v.ship_x.saturating_sub(rotation_x);
+        origin_y -= v.ship_y.saturating_sub(rotation_y);
+    }
     ParentSpriteBounds::new(
         world_x + origin_x,
         world_y + origin_y,

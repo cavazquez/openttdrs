@@ -5922,3 +5922,11 @@ el umbral de salida y conserva la potencia sintética de la unidad legacy. La
 traza emite DepotExit en el primer tick sin añadir una espera artificial de
 37 ticks; la regresión completa de parity_system y la suite del core quedan
 verdes.
+
+Corrección #330/#326-SHIP-ROTATION-BOUNDS (2026-09-12): los barcos ahora
+conservan la posición previa al comenzar una reversa o un giro fuerte, igual que
+`Ship::rotation_x_pos/y_pos` (`NOSAVE`). El compositor Bevy aplica ese delta al
+prisma de sorting mientras `direction != rotation`, evitando el desplazamiento
+visual lateral durante la salida de depósito, cruces y giros sobre el agua. Se
+añadieron regresiones del controlador y de la caja gráfica; #330/#326 continúa
+abierta por los demás oráculos de movimiento y contratos de compositor.

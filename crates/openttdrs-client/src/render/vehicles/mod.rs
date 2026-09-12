@@ -545,6 +545,29 @@ mod tests {
             (6, 32, 6)
         );
 
+        ship.ship_pos_valid = true;
+        ship.ship_x = tile.x * 16 + 12;
+        ship.ship_y = tile.y * 16 + 8;
+        ship.direction = DIR_NE;
+        ship.ship_rotation = DIR_SE;
+        ship.ship_rotation_x_pos = Some(tile.x * 16 + 8);
+        ship.ship_rotation_y_pos = Some(tile.y * 16 + 8);
+        let rotating_ship_bounds = vehicle_parent_bounds(
+            &ship,
+            &map,
+            openttdrs_core::VehiclePose::from_vehicle(&ship),
+        );
+        assert_eq!(
+            (
+                rotating_ship_bounds.xmin,
+                rotating_ship_bounds.ymin,
+                rotating_ship_bounds.xmax,
+                rotating_ship_bounds.ymax,
+            ),
+            (133, 120, 138, 151),
+            "el bounds debe conservar el ancla previa mientras el barco gira"
+        );
+
         let mut aircraft = Vehicle::new(4, VehicleKind::Aircraft, tile, tile);
         aircraft.aircraft_phase = openttdrs_core::AircraftPhase::Flying;
         let aircraft_bounds = vehicle_parent_bounds(

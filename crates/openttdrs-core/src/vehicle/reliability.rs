@@ -330,7 +330,17 @@ impl super::model::Vehicle {
 
     /// `AgeVehicle`: duplica `reliability_spd_dec` en ciertos años tras `max_age`.
     pub fn age_vehicle_calendar_day(&mut self, calendar_day: u64) {
-        if !self.is_primary_for_aging() {
+        self.age_vehicle_calendar_day_with_catalog(calendar_day, &[]);
+    }
+
+    /// Igual que [`Self::age_vehicle_calendar_day`], resolviendo la clase de
+    /// la unidad contra el catálogo runtime de la partida.
+    pub(crate) fn age_vehicle_calendar_day_with_catalog(
+        &mut self,
+        calendar_day: u64,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
+        if !self.is_primary_for_aging(engine_catalog) {
             return;
         }
         let build_day =
@@ -488,13 +498,14 @@ impl super::model::Vehicle {
         }
     }
 
-    fn is_primary_for_aging(&self) -> bool {
+    fn is_primary_for_aging(&self, engine_catalog: &[crate::engine::EngineDef]) -> bool {
         if self.prev_unit.is_some() {
             return false;
         }
         if self.kind == VehicleKind::Train {
-            return self.engine_id.is_none_or(|id| {
-                crate::engine::engine_for_vehicle(self.kind, id).is_train_engine()
+            return self.engine_id.is_none_or(|_| {
+                crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, self)
+                    .is_train_engine()
             });
         }
         true
@@ -521,7 +532,8 @@ pub(crate) fn process_vehicle_calendar_day(state: &mut crate::GameState) {
     while i < state.vehicles.len() {
         state.vehicles[i].sim_tick = tick;
         if state.vehicles[i].prev_unit.is_none() {
-            state.vehicles[i].age_vehicle_calendar_day(calendar_day);
+            state.vehicles[i]
+                .age_vehicle_calendar_day_with_catalog(calendar_day, &state.engine_catalog);
         }
         i = i.saturating_add(day_ticks);
     }
@@ -1162,6 +1174,31 @@ mod tests {
         let calendar_day = u64::from(DAYS_PER_VEHICLE_YEAR);
         v.age_vehicle_calendar_day(calendar_day);
         assert_eq!(v.reliability_spd_dec, 160);
+    }
+
+    #[test]
+    fn calendar_aging_uses_catalog_class_for_custom_train_wagon() {
+        let pos = TileCoord::new(1, 1);
+        let custom_id = crate::engine::NEWGRF_ENGINE_ID_BASE + 41;
+        let mut custom_wagon =
+            crate::engine::engine_for_vehicle(VehicleKind::Train, crate::engine::ENGINE_WAGON_COAL)
+                .clone();
+        custom_wagon.id = custom_id;
+
+        let mut wagon = Vehicle::new(1, VehicleKind::Train, pos, pos);
+        wagon.engine_id = Some(custom_id);
+        wagon.reliability_spd_dec = 80;
+        wagon.max_age_days = DAYS_PER_VEHICLE_YEAR;
+
+        let mut state = crate::GameState::new(8, 8);
+        state.engine_catalog.push(custom_wagon);
+        state.calendar.date = DAYS_PER_VEHICLE_YEAR;
+        state.calendar.date_fract = 0;
+        state.vehicles.push(wagon);
+
+        process_vehicle_calendar_day(&mut state);
+
+        assert_eq!(state.vehicles[0].reliability_spd_dec, 80);
     }
 
     #[test]

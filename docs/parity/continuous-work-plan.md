@@ -5877,3 +5877,12 @@ el desglose normal/eléctrica/monorail/maglev. La métrica de carretera sigue
 siendo provisional por teselas y queda para su frente de contadores propio.
 #329/#567 continúa abierta por contadores vial/agua/aeropuerto, callbacks,
 arrastre de áreas y aceptación visual/framebuffer.
+
+Corrección #329/#567-ROAD-INFRASTRUCTURE-SUMMARY (2026-09-12): Finanzas ya no
+usa cantidad de teselas como proxy vial. El core reconstruye piezas por
+`RoadType` para carretera y tranvía, respetando owners separados, bits de
+trazado, cruces, depósitos, paradas/waypoints y el factor longitud × 4 × 2 de
+túneles/puentes; los enlaces estructurales se cuentan una sola vez. La UI
+expone el total de piezas y el desglose efectivo por clase, incluyendo tipos
+NewGRF. #329/#567 continúa abierta por agua/aeropuertos, metadata incremental
+de writers viales, callbacks, arrastre de áreas y aceptación visual/framebuffer.

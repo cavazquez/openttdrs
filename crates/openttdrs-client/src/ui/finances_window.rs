@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::{
-    CompanyId, LOAN_INTERVAL, RailInfrastructureSummary, format_money,
-    rail_infrastructure_for_company,
+    CompanyId, LOAN_INTERVAL, RailInfrastructureSummary, RoadInfrastructureSummary, RoadTramType,
+    format_money, rail_infrastructure_for_company, road_infrastructure_for_company_with_stations,
 };
 
 use crate::i18n::{Locale, localized_text};
@@ -66,7 +66,7 @@ struct FinancesSnapshot {
     vehicles: usize,
     stations: usize,
     rail_infrastructure: RailInfrastructureSummary,
-    road_tiles: u32,
+    road_infrastructure: RoadInfrastructureSummary,
     companies: Vec<CompanyFinanceRow>,
 }
 
@@ -302,7 +302,12 @@ pub(crate) fn sync_finances_window(
             .map_or_else(RailInfrastructureSummary::default, |s| {
                 s.rail_infrastructure
             }),
-        road_tiles: cache.snapshot.as_ref().map_or(0, |s| s.road_tiles),
+        road_infrastructure: cache
+            .snapshot
+            .as_ref()
+            .map_or_else(RoadInfrastructureSummary::default, |s| {
+                s.road_infrastructure
+            }),
         companies,
     };
     let need_infra = cache.snapshot.as_ref().is_none_or(|prev| {
@@ -317,34 +322,21 @@ pub(crate) fn sync_finances_window(
             || prev.stations != soft.stations
             || prev.companies != soft.companies
     });
-    let (rail_infrastructure, road_tiles) = if need_infra {
+    let (rail_infrastructure, road_infrastructure) = if need_infra {
         let rail_infrastructure =
             rail_infrastructure_for_company(&sim.state.map, sim.state.active_company);
-        let road_tiles = u32::try_from(
-            sim.state
-                .map
-                .tiles()
-                .iter()
-                .filter(|tile| {
-                    (tile.m1 & 0x1F) == (sim.state.active_company.0 & 0x1F)
-                        && matches!(
-                            tile.kind,
-                            openttdrs_core::TileKind::Road
-                                | openttdrs_core::TileKind::RoadDepot
-                                | openttdrs_core::TileKind::RoadBridge
-                                | openttdrs_core::TileKind::RoadTunnel
-                        )
-                })
-                .count(),
-        )
-        .unwrap_or(u32::MAX);
-        (rail_infrastructure, road_tiles)
+        let road_infrastructure = road_infrastructure_for_company_with_stations(
+            &sim.state.map,
+            &sim.state.stations,
+            sim.state.active_company,
+        );
+        (rail_infrastructure, road_infrastructure)
     } else {
-        (soft.rail_infrastructure, soft.road_tiles)
+        (soft.rail_infrastructure, soft.road_infrastructure)
     };
     let snapshot = FinancesSnapshot {
         rail_infrastructure,
-        road_tiles,
+        road_infrastructure,
         ..soft
     };
     if cache.locale == Some(locale) && cache.snapshot.as_ref() == Some(&snapshot) {
@@ -397,7 +389,7 @@ pub(crate) fn sync_finances_window(
              {}:\n\
                {}: {}\n\
                {}: {}\n\
-               {}: {} {} ({}: {}, {}: {}, {}: {}, {}: {}; {}: {}) · {}: {} {}{}",
+             {}: {} {} ({}: {}, {}: {}, {}: {}, {}: {}; {}: {}) · {}: {} {} ({}: {}, {}: {}){}",
             localized_text(locale, "Efectivo"),
             format_money(snapshot.money),
             localized_text(locale, "Préstamo"),
@@ -444,8 +436,16 @@ pub(crate) fn sync_finances_window(
             localized_text(locale, "Señales"),
             snapshot.rail_infrastructure.signals,
             localized_text(locale, "Carretera"),
-            snapshot.road_tiles,
-            localized_text(locale, "teselas"),
+            snapshot.road_infrastructure.road_total(),
+            localized_text(locale, "piezas"),
+            localized_text(locale, "Carretera"),
+            snapshot
+                .road_infrastructure
+                .road_class_total(RoadTramType::Road, &sim.state.road_type_catalog),
+            localized_text(locale, "Tranvía"),
+            snapshot
+                .road_infrastructure
+                .road_class_total(RoadTramType::Tram, &sim.state.road_type_catalog),
             companies_block,
         );
     }

@@ -484,6 +484,10 @@ pub use house_spec::{
     next_free_house_id, pick_town_house_id, pick_town_house_id_with_catalog, resolve_house_draw_id,
     vanilla_or_newgrf_house,
 };
+pub use infrastructure::{
+    ROAD_INFRASTRUCTURE_ROADTYPE_COUNT, RoadInfrastructureSummary, road_infrastructure_for_company,
+    road_infrastructure_for_company_with_stations,
+};
 pub use map::{
     ObjectScopeCounts, action2_eval_ctx_for_object_tile,
     action2_eval_ctx_for_object_tile_with_counts, action2_eval_ctx_for_object_tile_with_map,

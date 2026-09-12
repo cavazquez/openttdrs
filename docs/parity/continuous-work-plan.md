@@ -6296,3 +6296,13 @@ la regresión cubre un vagón custom sin unidad anterior. Pasaron 2692 tests del
 core (1 ignorado), Clippy estricto, formato y `git diff --check`. #329 continúa
 abierta por callbacks, vistas runtime completas y consumidores legacy
 restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-AUTORENEW-CLASS-CATALOG (2026-09-12, `2e1d1fe4`):
+`needs_autorenewing` conserva su wrapper vanilla, pero los dos caminos
+autoritativos de autoreemplazo resuelven la clase ferroviaria con
+`GameState.engine_catalog`. Un vagón NewGRF libre ya no se interpreta como
+locomotora por defecto ni entra accidentalmente en autorrenovación por edad;
+la regresión compara ambos contratos. Pasaron 2693 tests del core (1
+ignorado), Clippy estricto, formato y `git diff --check`. #329 continúa
+abierta por callbacks, vistas runtime completas y consumidores legacy
+restantes; #326/#567 permanecen abiertas.

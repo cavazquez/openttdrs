@@ -1715,3 +1715,11 @@ decisión de aplicar `AgeVehicle` distingue una locomotora de un vagón custom
 aunque su ID no exista en la tabla vanilla. La API sin catálogo mantiene el
 fallback para consumidores legacy y una regresión evita duplicar el
 decaimiento anual de un vagón NewGRF libre.
+
+### #329-AUTORENEW-CLASS-CATALOG — clase de motor en autorreemplazo
+
+Actualizado: 2026-09-12 (`2e1d1fe4`). `pending_autoreplace_for_service` y
+`try_autoreplace_vehicle` pasan el catálogo runtime a
+`needs_autorenewing_with_catalog`; la API legacy mantiene el fallback vanilla.
+Así un vagón NewGRF sin unidad anterior no se ofrece como locomotora
+autorrenovable sólo porque su ID no exista en la tabla estática.

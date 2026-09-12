@@ -65,7 +65,10 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
             "Túnel inválido: entrada en pendiente inclinada (NE/SE/SW/NW) y salida al mismo nivel."
         }
         CommandError::MustDemolishBridgeFirst => {
-            "Hay un puente sobre el depósito; demolilo antes de construir aquí."
+            "Hay un puente que debe demolerse antes de construir aquí."
+        }
+        CommandError::MustDemolishTunnelFirst => {
+            "Hay un túnel que debe demolerse antes de construir aquí."
         }
         CommandError::SiteUnsuitable => {
             "Sitio inadecuado: el depósito naval requiere dos teselas de agua planas."
@@ -73,18 +76,12 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::BuildingMustBeDemolished => {
             "Hay una estructura que debe demolerse antes de construir aquí."
         }
-        CommandError::MustDemolishDockFirst => {
-            "Hay un muelle aquí; demolilo antes de construir el depósito naval."
-        }
-        CommandError::BuoyInTheWay => {
-            "Hay una boya aquí; retirala antes de construir el depósito naval."
-        }
+        CommandError::MustDemolishDockFirst => "Hay un muelle aquí; demolilo antes de construir.",
+        CommandError::BuoyInTheWay => "Hay una boya aquí; retirala antes de construir.",
         CommandError::OilRigInTheWay => {
-            "Hay una plataforma petrolera aquí; demolila antes de construir el depósito naval."
+            "Hay una plataforma petrolera aquí; demolila antes de construir."
         }
-        CommandError::IndustryInTheWay => {
-            "Hay una industria aquí; demolila antes de construir el depósito naval."
-        }
+        CommandError::IndustryInTheWay => "Hay una industria aquí; demolila antes de construir.",
         CommandError::BridgeTypeNotAvailable => {
             "Este tipo de puente no está disponible (año, longitud o presupuesto)."
         }
@@ -258,6 +255,7 @@ mod tests {
             CommandError::TimetableWaitPending,
             CommandError::InvalidTunnelEndpoints,
             CommandError::MustDemolishBridgeFirst,
+            CommandError::MustDemolishTunnelFirst,
             CommandError::SiteUnsuitable,
             CommandError::BuildingMustBeDemolished,
             CommandError::MustDemolishDockFirst,

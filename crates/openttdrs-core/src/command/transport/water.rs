@@ -1389,6 +1389,41 @@ fn check_lock_object_tile(
     })
 }
 
+/// Error de `CMD_LANDSCAPE_CLEAR | Auto` para estructuras que no se pueden
+/// sobreconstruir durante `DoBuildLock`.
+///
+/// Las carreteras y vías normales no pasan por esta función todavía: el
+/// motor puede quitar automáticamente una carretera de un solo tramo, pero
+/// exige una decisión distinta para cruces, tranvías y trazados múltiples.
+/// Mantenerlas fuera evita convertir una regla parcial en una demolición
+/// silenciosa.
+#[must_use]
+fn lock_structure_clear_error(tile: Tile) -> Option<CommandError> {
+    match tile.kind {
+        TileKind::House => Some(CommandError::BuildingMustBeDemolished),
+        TileKind::Industry => Some(CommandError::IndustryInTheWay),
+        TileKind::Station => match crate::station::stop_kind_from_m6(tile.m6) {
+            StopKind::Dock => Some(CommandError::MustDemolishDockFirst),
+            StopKind::Buoy => Some(CommandError::BuoyInTheWay),
+            StopKind::OilRig => Some(CommandError::OilRigInTheWay),
+            _ => Some(CommandError::BuildingMustBeDemolished),
+        },
+        TileKind::RoadBridge | TileKind::RailBridge => Some(CommandError::MustDemolishBridgeFirst),
+        TileKind::RoadTunnel | TileKind::RailTunnel => Some(CommandError::MustDemolishTunnelFirst),
+        TileKind::Airport | TileKind::RoadDepot | TileKind::RailDepot | TileKind::ShipDepot => {
+            Some(CommandError::BuildingMustBeDemolished)
+        }
+        TileKind::Grass
+        | TileKind::Water
+        | TileKind::Forest
+        | TileKind::CoalField
+        | TileKind::Road
+        | TileKind::Rail
+        | TileKind::Void
+        | TileKind::Unknown(_) => None,
+    }
+}
+
 /// Prepara la parte de una esclusa como lo haría `DoBuildLock` antes de
 /// ejecutar las limpiezas. Esta fase no muta el mapa: preview y ejecución
 /// comparten exactamente las mismas guardas y costes.
@@ -1505,7 +1540,7 @@ fn check_lock_build_tile(
             add_canal_cost: !is_middle,
         }),
         TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
-        _ => Err(occupied_error),
+        _ => lock_structure_clear_error(tile).map_or_else(|| Err(occupied_error), Err),
     }
 }
 

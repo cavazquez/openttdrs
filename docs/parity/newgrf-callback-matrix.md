@@ -1552,3 +1552,15 @@ agua/clase por tile que `ClearTile_Object`. El coste de la huella se integra
 una sola vez con la limpieza del centro y el canal del extremo terrestre; la
 secuencia también conserva el consumo de RNG de canal/río. Un objeto sin
 `Autoremove` devuelve `ObjectInTheWay` sin modificar mapa, pool ni dinero.
+
+### #329/#567-WATER-LOCK-STRUCTURE-BLOCKERS — estructuras protegidas por Auto
+
+Actualizado: 2026-09-12. `PlaceLock` distingue ahora los bloqueadores que
+`CMD_LANDSCAPE_CLEAR | Auto` de OpenTTD no puede retirar: casas,
+industrias, estaciones, depósitos, aeropuertos, rampas de puente y bocas de
+túnel. Las teselas navales conservan además los errores específicos de muelle,
+boya y Oil Rig; el preview y la ejecución recorren las tres partes de la
+esclusa sin mutar el mapa ante un fallo. La carretera/vía normal requiere otra
+subetapa porque `ClearTile_Road` puede aceptar un único roadbit sin tranvía,
+mientras que `ClearTile_Track` y las configuraciones compuestas deben
+rechazarse.

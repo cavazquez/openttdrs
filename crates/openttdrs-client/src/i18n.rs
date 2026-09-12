@@ -1066,8 +1066,11 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Túnel inválido: entrada en pendiente inclinada (NE/SE/SW/NW) y salida al mismo nivel." => {
             "Invalid tunnel: entrance on a sloped tile (NE/SE/SW/NW) and exit at the same level."
         }
-        "Hay un puente sobre el depósito; demolilo antes de construir aquí." => {
-            "There is a bridge over the depot; demolish it before building here."
+        "Hay un puente que debe demolerse antes de construir aquí." => {
+            "There is a bridge that must be demolished before building here."
+        }
+        "Hay un túnel que debe demolerse antes de construir aquí." => {
+            "There is a tunnel that must be demolished before building here."
         }
         "Sitio inadecuado: el depósito naval requiere dos teselas de agua planas." => {
             "Unsuitable site: the ship depot requires two flat water tiles."
@@ -1075,17 +1078,17 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Hay una estructura que debe demolerse antes de construir aquí." => {
             "A structure must be demolished before building here."
         }
-        "Hay un muelle aquí; demolilo antes de construir el depósito naval." => {
-            "There is a dock here; demolish it before building the ship depot."
+        "Hay un muelle aquí; demolilo antes de construir." => {
+            "There is a dock here; demolish it before building."
         }
-        "Hay una boya aquí; retirala antes de construir el depósito naval." => {
-            "There is a buoy here; remove it before building the ship depot."
+        "Hay una boya aquí; retirala antes de construir." => {
+            "There is a buoy here; remove it before building."
         }
-        "Hay una plataforma petrolera aquí; demolila antes de construir el depósito naval." => {
-            "There is an oil rig here; demolish it before building the ship depot."
+        "Hay una plataforma petrolera aquí; demolila antes de construir." => {
+            "There is an oil rig here; demolish it before building."
         }
-        "Hay una industria aquí; demolila antes de construir el depósito naval." => {
-            "There is an industry here; demolish it before building the ship depot."
+        "Hay una industria aquí; demolila antes de construir." => {
+            "There is an industry here; demolish it before building."
         }
         "Este tipo de puente no está disponible (año, longitud o presupuesto)." => {
             "This bridge type is unavailable (year, length, or budget)."

@@ -413,6 +413,132 @@ fn place_lock_rejects_non_autoremove_object_atomically() {
     assert_eq!(s.economy.money, money);
 }
 
+#[test]
+fn place_lock_preserves_native_errors_for_non_autoremove_structures() {
+    let cases = [
+        (
+            TileKind::House,
+            0,
+            crate::CommandError::BuildingMustBeDemolished,
+        ),
+        (TileKind::Industry, 0, crate::CommandError::IndustryInTheWay),
+        (
+            TileKind::Station,
+            0,
+            crate::CommandError::BuildingMustBeDemolished,
+        ),
+        (
+            TileKind::Station,
+            crate::station::STATION_TYPE_DOCK << 3,
+            crate::CommandError::MustDemolishDockFirst,
+        ),
+        (
+            TileKind::Station,
+            crate::station::STATION_TYPE_BUOY << 3,
+            crate::CommandError::BuoyInTheWay,
+        ),
+        (
+            TileKind::Station,
+            crate::station::STATION_TYPE_OILRIG << 3,
+            crate::CommandError::OilRigInTheWay,
+        ),
+        (
+            TileKind::RoadBridge,
+            0,
+            crate::CommandError::MustDemolishBridgeFirst,
+        ),
+        (
+            TileKind::RailBridge,
+            0,
+            crate::CommandError::MustDemolishBridgeFirst,
+        ),
+        (
+            TileKind::RoadTunnel,
+            0,
+            crate::CommandError::MustDemolishTunnelFirst,
+        ),
+        (
+            TileKind::RailTunnel,
+            0,
+            crate::CommandError::MustDemolishTunnelFirst,
+        ),
+        (
+            TileKind::RoadDepot,
+            0,
+            crate::CommandError::BuildingMustBeDemolished,
+        ),
+        (
+            TileKind::RailDepot,
+            0,
+            crate::CommandError::BuildingMustBeDemolished,
+        ),
+        (
+            TileKind::ShipDepot,
+            0,
+            crate::CommandError::BuildingMustBeDemolished,
+        ),
+        (
+            TileKind::Airport,
+            0,
+            crate::CommandError::BuildingMustBeDemolished,
+        ),
+    ];
+
+    for (kind, station_m6, expected_error) in cases {
+        for blocked_part in 0..3_usize {
+            let mut state = GameState::new(10, 6);
+            let parts = [
+                TileCoord::new(3, 2), // middle
+                TileCoord::new(2, 2), // lower
+                TileCoord::new(4, 2), // upper
+            ];
+            for &part in &parts {
+                state.map.set_kind(part, TileKind::Water).unwrap();
+            }
+            state.map.set_height(parts[0], 1).unwrap();
+            state.map.set_height(parts[1], 1).unwrap();
+            state.map.set_height(parts[2], 2).unwrap();
+
+            let blocked = parts[blocked_part];
+            let mut raw = state.map.get(blocked).unwrap();
+            raw.kind = kind;
+            raw.m6 = station_m6;
+            raw.mapt = match kind {
+                TileKind::House => 0x30,
+                TileKind::Station => 0x50,
+                TileKind::Industry => 0x80,
+                TileKind::RoadBridge
+                | TileKind::RailBridge
+                | TileKind::RoadTunnel
+                | TileKind::RailTunnel => 0x90,
+                _ => raw.mapt,
+            };
+            state.map.set_tile(blocked, raw).unwrap();
+
+            let before = parts.map(|part| state.map.get(part).expect("lock part"));
+            let money = state.economy.money;
+            let command = Command::PlaceLock(parts[0], false);
+
+            assert_eq!(
+                command_would_fail(&state, &command),
+                Some(expected_error),
+                "preview kind={kind:?} part={blocked_part}"
+            );
+            assert_eq!(
+                apply_command(&mut state, &command),
+                Err(expected_error),
+                "execute kind={kind:?} part={blocked_part}"
+            );
+            for (part, raw) in parts.into_iter().zip(before) {
+                assert_eq!(state.map.get(part), Some(raw));
+            }
+            assert_eq!(state.economy.money, money);
+            assert!(state.depots.is_empty());
+            assert!(state.stations.is_empty());
+        }
+    }
+}
+
 fn state_with_bridge_over_lock(high_bridge: bool) -> (GameState, TileCoord) {
     let mut state = GameState::new(12, 12);
     if high_bridge {

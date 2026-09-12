@@ -82,6 +82,8 @@ pub enum CommandError {
     InvalidTunnelEndpoints,
     /// Hay un puente sobre una de las teselas del depósito naval.
     MustDemolishBridgeFirst,
+    /// Hay un túnel en una de las teselas y no se puede limpiar automáticamente.
+    MustDemolishTunnelFirst,
     /// El depósito naval sólo admite dos teselas de agua planas.
     SiteUnsuitable,
     /// Una estructura existente no puede limpiarse automáticamente.

@@ -5129,6 +5129,17 @@ la regresión cubre coste, RNG, eliminación de la instancia y atomicidad.
 Quedan pendientes estructuras no autoremovibles, callbacks, pathfinding,
 infraestructura y aceptación visual/framebuffer.
 
+Actualización #329/#567-WATER-LOCK-STRUCTURE-BLOCKERS (2026-09-12): la
+limpieza automática de `PlaceLock` ya conserva los errores de
+`CMD_LANDSCAPE_CLEAR | Auto` para estructuras que no se pueden sobreconstruir:
+casas devuelven `BuildingMustBeDemolished`, industrias `IndustryInTheWay`,
+muelles/boyas/Oil Rigs sus bloqueos navales, y rampas de puente o túnel sus
+errores específicos. La validación se aplica por igual a `Middle`, `Lower` y
+`Upper`, mantiene preview/ejecución atómicos y no altera pools ni dinero. Las
+carreteras normales (que pueden auto-removerse sólo con un único roadbit sin
+tranvía), cruces, vías y callbacks de sus superficies quedan como subetapas
+separadas.
+
 Actualización #329/#567-AIRCRAFT-BREAKDOWN-LANDING (2026-09-11): el FSM de
 aeronaves limpia ahora `breakdown_ctr` cuando el avión vuelve a velocidad de
 suelo, equivalente a `HandleAircraftSmoke` al aterrizar. La limpieza se aplica

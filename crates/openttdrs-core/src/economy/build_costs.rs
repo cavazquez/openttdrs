@@ -109,6 +109,18 @@ pub fn rough_clear_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::ClearRough, 1, 0)
 }
 
+/// Coste de construir una esclusa (`PR_BUILD_LOCK`).
+#[must_use]
+pub fn lock_build_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::BuildLock, 1, 0)
+}
+
+/// Coste de retirar una esclusa (`PR_CLEAR_LOCK`).
+#[must_use]
+pub fn lock_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearLock, 1, 0)
+}
+
 /// Coste del depósito ferroviario (`PR_BUILD_DEPOT_TRAIN`) y su tramo de vía.
 ///
 /// `CmdBuildTrainDepot` suma ambos conceptos incluso cuando la boca ya toca una
@@ -237,6 +249,14 @@ mod tests {
         assert_eq!(
             signal_clear_cost(&ge),
             medium_default_price(PriceIndex::ClearSignals)
+        );
+        assert_eq!(
+            lock_build_cost(&ge),
+            medium_default_price(PriceIndex::BuildLock)
+        );
+        assert_eq!(
+            lock_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearLock)
         );
     }
 

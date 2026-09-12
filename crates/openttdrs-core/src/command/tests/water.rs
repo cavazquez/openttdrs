@@ -1,14 +1,14 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
 use crate::economy::{
-    canal_clear_cost, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
-    station_build_cost, water_clear_cost,
+    canal_clear_cost, lock_build_cost, lock_clear_cost, rough_clear_cost, ship_depot_build_cost,
+    ship_depot_clear_cost, station_build_cost, water_clear_cost,
 };
 use crate::test_fixtures::SandboxMap;
 use crate::{
     CargoType, Command, GameState, StopKind, TileCoord, TileKind, Vehicle, VehicleKind,
     VehicleOrder, WaterClass, apply_command, bridge_above_axis_from_mapt, command_would_fail,
-    set_water_class_m1,
+    set_water_class_m1, water_class_from_m1,
 };
 
 #[test]
@@ -125,6 +125,199 @@ fn clear_coast_uses_rough_cost_when_flat() {
 
     assert_eq!(s.map.get_kind(coast), Some(TileKind::Grass));
     assert_eq!(s.economy.money, money - rough_clear_cost(&s.global_economy));
+}
+
+#[test]
+fn place_lock_writes_native_three_part_contract() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    for coord in [lower, middle, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    for coord in [TileCoord::new(2, 3), TileCoord::new(3, 3)] {
+        s.map.set_height(coord, 1).unwrap();
+    }
+    for coord in [
+        TileCoord::new(5, 2),
+        TileCoord::new(4, 3),
+        TileCoord::new(5, 3),
+    ] {
+        s.map.set_height(coord, 2).unwrap();
+    }
+
+    let mut lower_raw = s.map.get(lower).unwrap();
+    lower_raw.mapt = 0x62;
+    lower_raw.m1 = set_water_class_m1(0x80, WaterClass::Canal);
+    lower_raw.m2 = 0xAA;
+    lower_raw.m2_hi = 0xBB;
+    lower_raw.m3 = 0xCC;
+    lower_raw.m3hi = 0xDD;
+    lower_raw.m5 = 0;
+    lower_raw.m6 = 0xFF;
+    lower_raw.m7 = 0xEE;
+    lower_raw.m8 = 0xFFFF;
+    s.map.set_tile(lower, lower_raw).unwrap();
+
+    let mut middle_raw = s.map.get(middle).unwrap();
+    middle_raw.mapt = 0x6B;
+    middle_raw.m1 = set_water_class_m1(0x80, WaterClass::Sea);
+    middle_raw.m2 = 0x11;
+    middle_raw.m2_hi = 0x22;
+    middle_raw.m3 = 0x33;
+    middle_raw.m3hi = 0x44;
+    middle_raw.m5 = 0;
+    middle_raw.m6 = 0xFF;
+    middle_raw.m7 = 0x55;
+    middle_raw.m8 = 0x6666;
+    s.map.set_tile(middle, middle_raw).unwrap();
+
+    let mut upper_raw = s.map.get(upper).unwrap();
+    upper_raw.mapt = 0x63;
+    upper_raw.m1 = set_water_class_m1(crate::company::OWNER_WATER_M1, WaterClass::River);
+    upper_raw.m2 = 0x77;
+    upper_raw.m2_hi = 0x88;
+    upper_raw.m3 = 0x99;
+    upper_raw.m3hi = 0xAA;
+    upper_raw.m5 = 0;
+    upper_raw.m6 = 0xFF;
+    upper_raw.m7 = 0xBB;
+    upper_raw.m8 = 0xCCCC;
+    s.map.set_tile(upper, upper_raw).unwrap();
+
+    let money = s.economy.money;
+    apply_command(&mut s, &Command::PlaceLock(middle, false)).unwrap();
+
+    let middle_tile = s.map.get(middle).unwrap();
+    assert_eq!(middle_tile.kind, TileKind::Water);
+    assert_eq!(middle_tile.mapt, 0x6B);
+    assert_eq!(middle_tile.m5, 0x22, "middle apunta hacia el extremo alto");
+    assert_eq!(middle_tile.m1 & 0x1F, 0, "middle pertenece al constructor");
+    assert_eq!(middle_tile.m1 & 0x80, 0);
+    assert_eq!(water_class_from_m1(middle_tile.m1), WaterClass::Sea);
+    assert_eq!(middle_tile.m6, 0x03);
+
+    let lower_tile = s.map.get(lower).unwrap();
+    assert_eq!(lower_tile.mapt, 0x62);
+    assert_eq!(lower_tile.m5, 0x26, "lower conserva parte 1 y orientación");
+    assert_eq!(lower_tile.m1 & 0x1F, 0);
+    assert_eq!(lower_tile.m1 & 0x80, 0);
+    assert_eq!(water_class_from_m1(lower_tile.m1), WaterClass::Canal);
+
+    let upper_tile = s.map.get(upper).unwrap();
+    assert_eq!(upper_tile.mapt, 0x63);
+    assert_eq!(upper_tile.m5, 0x2A, "upper conserva parte 2 y orientación");
+    assert_eq!(upper_tile.m1 & 0x1F, 0x11);
+    assert_eq!(upper_tile.m1 & 0x80, 0);
+    assert_eq!(water_class_from_m1(upper_tile.m1), WaterClass::River);
+
+    for coord in [lower, middle, upper] {
+        let tile = s.map.get(coord).unwrap();
+        assert_eq!(tile.m2, 0);
+        assert_eq!(tile.m2_hi, 0);
+        assert_eq!(tile.m3, 0);
+        assert_eq!(tile.m3hi, 0);
+        assert_eq!(tile.m7, 0);
+        assert_eq!(tile.m8, 0);
+    }
+    assert_eq!(s.economy.money, money - lock_build_cost(&s.global_economy));
+}
+
+#[test]
+fn clear_lock_from_any_part_restores_water_in_native_rng_order() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    for (coord, water_class) in [
+        (lower, WaterClass::Canal),
+        (middle, WaterClass::Sea),
+        (upper, WaterClass::River),
+    ] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+        let mut tile = s.map.get(coord).unwrap();
+        tile.m1 = set_water_class_m1(
+            if water_class == WaterClass::Canal {
+                0
+            } else {
+                crate::company::OWNER_WATER_M1
+            },
+            water_class,
+        );
+        s.map.set_tile(coord, tile).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    for coord in [TileCoord::new(2, 3), TileCoord::new(3, 3)] {
+        s.map.set_height(coord, 1).unwrap();
+    }
+    for coord in [
+        TileCoord::new(5, 2),
+        TileCoord::new(4, 3),
+        TileCoord::new(5, 3),
+    ] {
+        s.map.set_height(coord, 2).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceLock(middle, false)).unwrap();
+
+    s.random = crate::cargodist::parity::Randomizer {
+        state: [0x1122_3344, 0x5566_7788],
+    };
+    let mut expected_random = s.random;
+    let expected_upper_bits = u8::try_from(expected_random.next() & 0xFF).unwrap_or(0);
+    let expected_lower_bits = u8::try_from(expected_random.next() & 0xFF).unwrap_or(0);
+    let money = s.economy.money;
+
+    assert_eq!(command_would_fail(&s, &Command::ClearTile(upper)), None);
+    apply_command(&mut s, &Command::ClearTile(upper)).unwrap();
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Grass));
+    assert_eq!(s.map.get(middle).unwrap().m1, crate::company::OWNER_NONE_M1);
+    let lower_tile = s.map.get(lower).unwrap();
+    assert_eq!(lower_tile.kind, TileKind::Water);
+    assert_eq!(water_class_from_m1(lower_tile.m1), WaterClass::Canal);
+    assert_eq!(lower_tile.m3hi, expected_lower_bits);
+    let upper_tile = s.map.get(upper).unwrap();
+    assert_eq!(upper_tile.kind, TileKind::Water);
+    assert_eq!(water_class_from_m1(upper_tile.m1), WaterClass::River);
+    assert_eq!(upper_tile.m3hi, expected_upper_bits);
+    assert_eq!(s.random, expected_random);
+    assert_eq!(s.economy.money, money - lock_clear_cost(&s.global_economy));
+}
+
+#[test]
+fn clear_lock_rejects_vehicle_on_a_different_part() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    for coord in [lower, middle, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    apply_command(&mut s, &Command::PlaceLock(middle, false)).unwrap();
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Ship, lower, lower));
+    let money = s.economy.money;
+
+    assert_eq!(
+        command_would_fail(&s, &Command::ClearTile(middle)),
+        Some(crate::CommandError::VehicleInTheWay)
+    );
+    assert_eq!(
+        apply_command(&mut s, &Command::ClearTile(middle)),
+        Err(crate::CommandError::VehicleInTheWay)
+    );
+    assert!(s.map.get(lower).unwrap().m5 >> 4 == 2);
+    assert!(s.map.get(middle).unwrap().m5 >> 4 == 2);
+    assert!(s.map.get(upper).unwrap().m5 >> 4 == 2);
+    assert_eq!(s.economy.money, money);
 }
 
 #[test]

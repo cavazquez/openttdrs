@@ -1502,3 +1502,14 @@ costa por su contrato nativo: valida el dueño de un canal, rechaza vehículos,
 limpia el tile raw, reactiva vecinos no inundables y usa `PR_CLEAR_WATER`,
 `PR_CLEAR_CANAL` o `PR_CLEAR_ROUGH` según corresponda. Las esclusas conservan
 su ciclo separado de tres piezas y siguen pendientes.
+
+### #329/#567-WATER-LOCK-LIFECYCLE — ciclo de tres partes de `MakeLock`
+
+Actualizado: 2026-09-12. `PlaceLock` escribe `Lower`, `Middle` y `Upper` con
+la orientación diagonal nativa, las clases/owners originales y los campos raw
+reiniciados. `ClearTile` resuelve cualquiera de las tres partes, exige
+propiedad del `Middle`, rechaza vehículos en toda la huella y restaura primero
+`Upper` y luego `Lower`, conservando el orden de `Random()` de `RemoveLock`.
+El `Middle` fluvial usa `MakeRiver`; las demás clases vuelven a suelo claro.
+La integración de esclusas sobre tierra y el resto de criterios de #329/#567
+siguen pendientes.

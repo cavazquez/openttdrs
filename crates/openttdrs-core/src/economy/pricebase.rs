@@ -48,6 +48,10 @@ pub enum PriceIndex {
     BuildWaypointRail = 56,
     BuildCanal = 57,
     ClearCanal = 58,
+    BuildAqueduct = 59,
+    ClearAqueduct = 60,
+    BuildLock = 61,
+    ClearLock = 62,
 }
 
 impl PriceIndex {
@@ -121,6 +125,10 @@ const PRICE_BASE_SPECS: [PriceBaseSpec; PRICE_TABLE_LEN] = {
     table[56] = spec(600, PriceCategory::Construction);
     table[57] = spec(5_000, PriceCategory::Construction);
     table[58] = spec(5_000, PriceCategory::Construction);
+    table[59] = spec(10_000, PriceCategory::Construction);
+    table[60] = spec(2_000, PriceCategory::Construction);
+    table[61] = spec(7_500, PriceCategory::Construction);
+    table[62] = spec(2_000, PriceCategory::Construction);
     table
 };
 

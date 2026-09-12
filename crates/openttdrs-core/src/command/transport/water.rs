@@ -5,8 +5,8 @@ use crate::bridge_spec::{
     set_bridge_middle_mapt, set_bridge_type_m6,
 };
 use crate::economy::{
-    canal_clear_cost, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
-    station_build_cost, water_clear_cost,
+    canal_clear_cost, lock_build_cost, lock_clear_cost, rough_clear_cost, ship_depot_build_cost,
+    ship_depot_clear_cost, station_build_cost, water_clear_cost,
 };
 use crate::map::{
     Map, Tile, TileCoord, TileKind, WaterClass, clear_neighbour_non_flooding_states,
@@ -230,6 +230,7 @@ fn check_ship_depot_water_tile(state: &GameState, c: TileCoord) -> Result<(), Co
 
 const WATER_TILE_TYPE_CLEAR: u8 = 0;
 const WATER_TILE_TYPE_COAST: u8 = 1;
+const WATER_TILE_TYPE_LOCK: u8 = 2;
 
 #[must_use]
 fn water_tile_type(tile: Tile) -> u8 {
@@ -252,7 +253,7 @@ fn check_clear_water_owner(state: &GameState, tile: Tile) -> Result<(), CommandE
     }
 }
 
-/// Validación de `ClearTile_Water` para agua plana o costa.
+/// Validación de `ClearTile_Water` para agua plana, costa o esclusa.
 pub(crate) fn check_clear_water(state: &GameState, c: TileCoord) -> Result<(), CommandError> {
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     if tile.kind != TileKind::Water {
@@ -263,8 +264,9 @@ pub(crate) fn check_clear_water(state: &GameState, c: TileCoord) -> Result<(), C
             check_clear_water_owner(state, tile)?;
         }
         WATER_TILE_TYPE_COAST => {}
-        // Locks have a three-tile lifecycle and are handled by their own
-        // remover; never let generic clear leave two lock pieces orphaned.
+        WATER_TILE_TYPE_LOCK => return check_clear_lock(state, c),
+        // Unknown water structures must not be treated as plain water: doing
+        // so would clear only one part of a multi-tile structure.
         _ => return Err(CommandError::BuildingMustBeDemolished),
     }
     if state.vehicles.iter().any(|vehicle| vehicle.pos == c) {
@@ -278,8 +280,11 @@ pub(in crate::command) fn clear_water_tile(
     state: &mut GameState,
     c: TileCoord,
 ) -> Result<(), CommandError> {
-    check_clear_water(state, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    if water_tile_type(tile) == WATER_TILE_TYPE_LOCK {
+        return clear_lock(state, c);
+    }
+    check_clear_water(state, c)?;
     let cost = match water_tile_type(tile) {
         WATER_TILE_TYPE_CLEAR => {
             if water_class_from_m1(tile.m1) == WaterClass::Canal {
@@ -1143,19 +1148,136 @@ fn lock_axis_neighbors(c: TileCoord, axis_y: bool) -> (TileCoord, TileCoord) {
     }
 }
 
+/// Dirección diagonal que apunta desde el centro hacia el extremo alto.
+///
+/// `PlaceLock` conserva sólo el eje en su API local, así que la orientación
+/// completa de `m5` se deriva de las alturas de los dos extremos, como la
+/// dirección que `CmdBuildLock` obtiene de `GetInclinedSlopeDirection`.
+#[must_use]
+fn lock_direction_for_heights(axis_y: bool, first_height: u8, second_height: u8) -> u8 {
+    let first_direction = if axis_y { 3 } else { 0 };
+    let second_direction = if axis_y { 1 } else { 2 };
+    if first_height < second_height {
+        second_direction
+    } else {
+        first_direction
+    }
+}
+
+/// Devuelve `[middle, lower, upper]` según la orientación nativa de la
+/// esclusa. La dirección almacenada apunta siempre del centro al extremo alto.
+#[must_use]
+fn lock_tiles_from_middle(middle: TileCoord, direction: u8) -> [TileCoord; 3] {
+    let (dx, dy) = crate::map::diag_dir_offset(direction);
+    let lower = TileCoord::new(middle.x - dx, middle.y - dy);
+    let upper = TileCoord::new(middle.x + dx, middle.y + dy);
+    [middle, lower, upper]
+}
+
+/// Resuelve el centro de una esclusa a partir de cualquier parte de `MP_WATER`.
+/// También verifica que las tres partes pertenezcan a la misma estructura;
+/// evita dejar una esclusa huérfana al limpiar un tile importado corrupto.
+fn lock_geometry(state: &GameState, c: TileCoord) -> Result<([TileCoord; 3], u8), CommandError> {
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    if tile.kind != TileKind::Water || water_tile_type(tile) != WATER_TILE_TYPE_LOCK {
+        return Err(CommandError::BuildingMustBeDemolished);
+    }
+    let direction = tile.m5 & 0x03;
+    let part = (tile.m5 >> 2) & 0x03;
+    let (dx, dy) = crate::map::diag_dir_offset(direction);
+    let middle = match part {
+        0 => c,
+        1 => TileCoord::new(c.x + dx, c.y + dy),
+        2 => TileCoord::new(c.x - dx, c.y - dy),
+        _ => return Err(CommandError::BuildingMustBeDemolished),
+    };
+    let tiles = lock_tiles_from_middle(middle, direction);
+    for (coord, expected_part) in tiles.into_iter().zip([0_u8, 1, 2]) {
+        let Some(raw) = state.map.get(coord) else {
+            return Err(CommandError::OutOfBounds);
+        };
+        if raw.kind != TileKind::Water
+            || water_tile_type(raw) != WATER_TILE_TYPE_LOCK
+            || ((raw.m5 >> 2) & 0x03) != expected_part
+            || (raw.m5 & 0x03) != direction
+        {
+            return Err(CommandError::BuildingMustBeDemolished);
+        }
+    }
+    Ok((tiles, direction))
+}
+
+/// Comprueba la propiedad y ocupación de las tres partes de una esclusa.
+fn check_clear_lock(state: &GameState, c: TileCoord) -> Result<(), CommandError> {
+    let (tiles, _) = lock_geometry(state, c)?;
+    let middle = state.map.get(tiles[0]).ok_or(CommandError::OutOfBounds)?;
+    let owner = middle.m1 & 0x1F;
+    let owner_none = crate::company::OWNER_NONE_M1 & 0x1F;
+    if !state.cheats.magic_bulldozer_active()
+        && owner != owner_none
+        && owner != (state.active_company.0 & 0x1F)
+    {
+        return Err(CommandError::TileNotOwned);
+    }
+    if tiles
+        .iter()
+        .any(|tile| state.vehicles.iter().any(|vehicle| vehicle.pos == *tile))
+    {
+        return Err(CommandError::VehicleInTheWay);
+    }
+    Ok(())
+}
+
+/// Escribe una parte de `MakeLockTile`, normalizando todos los campos raw que
+/// `OpenTTD` reinicia al reemplazar la tesela.
+#[must_use]
+fn make_lock_tile(original: Tile, owner: u8, direction: u8, part: u8) -> Tile {
+    let mut tile = original;
+    tile.kind = TileKind::Water;
+    tile.mapt = 0x60 | (original.mapt & 0x0F);
+    tile.m1 = set_water_class_m1(owner & 0x1F, water_class_from_m1(original.m1));
+    tile.m2 = 0;
+    tile.m2_hi = 0;
+    tile.m3 = 0;
+    tile.m3hi = 0;
+    tile.m5 = 0x20 | ((part & 0x03) << 2) | (direction & 0x03);
+    tile.m6 &= 0x03;
+    tile.m7 = 0;
+    tile.m8 = 0;
+    tile
+}
+
 /// Esclusa: agua + vecinos del eje con `|Δheight| == 1`.
-pub(crate) fn check_place_lock(map: &Map, c: TileCoord, axis_y: bool) -> Result<(), CommandError> {
+pub(crate) fn check_place_lock(
+    state: &GameState,
+    c: TileCoord,
+    axis_y: bool,
+) -> Result<(), CommandError> {
+    let map = &state.map;
     check_in_bounds(map, c)?;
-    if map.get_kind(c) != Some(TileKind::Water) {
+    let center = map.get(c).ok_or(CommandError::OutOfBounds)?;
+    if center.kind != TileKind::Water || water_tile_type(center) != WATER_TILE_TYPE_CLEAR {
         return Err(CommandError::CannotPlaceStationOnOccupiedTile);
     }
     let (a, b) = lock_axis_neighbors(c, axis_y);
     check_in_bounds(map, a)?;
     check_in_bounds(map, b)?;
-    if !crate::ship_movement::is_water_network_tile_at(map, a)
-        || !crate::ship_movement::is_water_network_tile_at(map, b)
+    for endpoint in [a, b] {
+        if !crate::ship_movement::is_water_network_tile_at(map, endpoint) {
+            return Err(CommandError::StationNotAdjacentToTransport);
+        }
+        let tile = map.get(endpoint).ok_or(CommandError::OutOfBounds)?;
+        if tile.kind != TileKind::Water || water_tile_type(tile) != WATER_TILE_TYPE_CLEAR {
+            return Err(CommandError::BuildingMustBeDemolished);
+        }
+        check_clear_water_owner(state, tile)?;
+    }
+    check_clear_water_owner(state, center)?;
+    if [c, a, b]
+        .iter()
+        .any(|tile| state.vehicles.iter().any(|vehicle| vehicle.pos == *tile))
     {
-        return Err(CommandError::StationNotAdjacentToTransport);
+        return Err(CommandError::VehicleInTheWay);
     }
     let ha = map.get(a).map_or(0, |t| t.height);
     let hb = map.get(b).map_or(0, |t| t.height);
@@ -1170,15 +1292,64 @@ pub(in crate::command) fn place_lock(
     c: TileCoord,
     axis_y: bool,
 ) -> Result<(), CommandError> {
-    check_place_lock(&state.map, c, axis_y)?;
-    let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
-    // Water subtype Lock = 2 in bits 4–7; bit 0 of low nibble = axis.
-    tile.m5 = (2 << 4) | u8::from(axis_y);
-    state
-        .map
-        .set_tile(c, tile)
+    check_place_lock(state, c, axis_y)?;
+    let (lower, upper) = lock_axis_neighbors(c, axis_y);
+    let lower_original = state.map.get(lower).ok_or(CommandError::OutOfBounds)?;
+    let upper_original = state.map.get(upper).ok_or(CommandError::OutOfBounds)?;
+    let middle_original = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let direction =
+        lock_direction_for_heights(axis_y, lower_original.height, upper_original.height);
+    let middle_tile = make_lock_tile(middle_original, state.active_company.0, direction, 0);
+    let lower_tile = make_lock_tile(lower_original, lower_original.m1 & 0x1F, direction, 1);
+    let upper_tile = make_lock_tile(upper_original, upper_original.m1 & 0x1F, direction, 2);
+    for (coord, tile) in [(c, middle_tile), (lower, lower_tile), (upper, upper_tile)] {
+        state
+            .map
+            .set_tile(coord, tile)
+            .map_err(|_| CommandError::OutOfBounds)?;
+    }
+    state.economy.money -= lock_build_cost(&state.global_economy);
+    Ok(())
+}
+
+/// Retira una esclusa completa desde cualquiera de sus tres partes.
+pub(in crate::command) fn clear_lock(
+    state: &mut GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    let (tiles, _) = lock_geometry(state, c)?;
+    check_clear_lock(state, c)?;
+    let [middle, lower, upper] = tiles;
+    let classes = tiles.map(|tile| {
+        state
+            .map
+            .get(tile)
+            .map_or(WaterClass::Sea, |raw| water_class_from_m1(raw.m1))
+    });
+
+    if classes[0] == WaterClass::River {
+        let random_bits = u8::try_from(state.random.next() & 0xFF).unwrap_or(0);
+        crate::map::make_water_tile_with_random_bits(
+            &mut state.map,
+            middle,
+            WaterClass::River,
+            random_bits,
+        )
         .map_err(|_| CommandError::OutOfBounds)?;
-    state.economy.money -= station_build_cost(&state.global_economy);
+    } else {
+        clear_tile_after_native_water_restore(&mut state.map, middle)
+            .map_err(|_| CommandError::OutOfBounds)?;
+        clear_neighbour_non_flooding_states(&mut state.map, middle);
+    }
+
+    // `RemoveLock` restaura primero `tile + delta` (Upper) y luego
+    // `tile - delta` (Lower); ese orden también define el consumo de RNG.
+    make_water_tile_after_native_clear(state, upper, classes[2])?;
+    make_water_tile_after_native_clear(state, lower, classes[1])?;
+    for tile in [middle, lower, upper] {
+        refresh_ship_docking_tiles_around(state, tile);
+    }
+    state.economy.money -= lock_clear_cost(&state.global_economy);
     Ok(())
 }
 

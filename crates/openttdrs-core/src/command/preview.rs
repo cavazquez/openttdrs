@@ -235,7 +235,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         Command::PlaceRiver(c) => check_place_river(map, *c).err(),
         Command::PlaceBuoy(c) => check_place_buoy(map, &state.stations, *c).err(),
         Command::PlaceAqueduct(a, b) => check_place_aqueduct(map, *a, *b).err(),
-        Command::PlaceLock(c, axis_y) => check_place_lock(map, *c, *axis_y).err(),
+        Command::PlaceLock(c, axis_y) => check_place_lock(state, *c, *axis_y).err(),
         Command::PlaceHouse(c) | Command::PlaceForest(c) => {
             check_single_transport_tile(map, *c).err()
         }

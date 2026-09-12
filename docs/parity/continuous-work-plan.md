@@ -5464,3 +5464,12 @@ agua clara y costa como una tesela genérica. La nueva ruta valida ownership de
 canales, impide limpiar bajo un vehículo, restablece el payload de `MP_CLEAR`,
 reactiva vecinos no inundables y calcula los precios nativos de agua, canal y
 rough. Las esclusas de tres piezas quedan como subetapa independiente.
+
+Actualización #329/#567-WATER-LOCK-LIFECYCLE (2026-09-12): `PlaceLock` y
+`ClearTile` ya materializan/resuelven las tres partes `Lower/Middle/Upper`,
+codifican la orientación completa de `m5`, conservan clase y owner del agua,
+normalizan el payload raw y validan vehículos en toda la huella. La demolición
+restaura `Upper` y `Lower` en el orden RNG nativo, trata el `Middle` río como
+`MakeRiver` y el resto como `DoClearSquare`, con precios `PR_BUILD_LOCK` y
+`PR_CLEAR_LOCK`. #329/#567 siguen abiertas por auto-clear sobre tierra,
+infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.

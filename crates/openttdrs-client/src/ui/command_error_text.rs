@@ -38,6 +38,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::DepotPoolFull => "No quedan identificadores de depósito disponibles.",
         CommandError::VehicleKindNotAllowed => "Tipo de vehículo no permitido aquí.",
         CommandError::EngineNotFound => "Modelo de vehículo desconocido.",
+        CommandError::EngineNotAvailable => {
+            "Este modelo todavía no está disponible para tu compañía."
+        }
         CommandError::InsufficientFunds => "No hay dinero suficiente.",
         CommandError::IncompatibleStopForVehicle => "Parada incompatible con este vehículo.",
         CommandError::OrderIndexOutOfRange => "Índice de orden inválido.",
@@ -243,6 +246,7 @@ mod tests {
             CommandError::DepotPoolFull,
             CommandError::VehicleKindNotAllowed,
             CommandError::EngineNotFound,
+            CommandError::EngineNotAvailable,
             CommandError::InsufficientFunds,
             CommandError::IncompatibleStopForVehicle,
             CommandError::OrderIndexOutOfRange,

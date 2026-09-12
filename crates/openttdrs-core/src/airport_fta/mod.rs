@@ -238,6 +238,8 @@ mod tests {
     #[test]
     fn helidepot_cycle_hangar_takeoff_fly_land_pad() {
         let mut s = GameState::new(48, 48);
+        s.tick = crate::news::tick_for_calendar_year(1961);
+        s.sync_timers_from_tick();
         s.disasters_enabled = false;
         apply_command(
             &mut s,
@@ -362,6 +364,8 @@ mod tests {
     #[test]
     fn multi_aircraft_second_waits_while_pad_occupied() {
         let mut s = GameState::new(32, 32);
+        s.tick = crate::news::tick_for_calendar_year(1961);
+        s.sync_timers_from_tick();
         apply_command(
             &mut s,
             &Command::PlaceAirportArea {
@@ -584,6 +588,8 @@ mod tests {
     #[test]
     fn city_helicopter_orders_use_heli_headings() {
         let mut s = GameState::new(48, 48);
+        s.tick = crate::news::tick_for_calendar_year(1961);
+        s.sync_timers_from_tick();
         apply_command(
             &mut s,
             &Command::PlaceAirportArea {
@@ -642,6 +648,8 @@ mod tests {
     #[test]
     fn country_helicopter_uses_vertical_fta_instead_of_runway() {
         let mut s = GameState::new(32, 32);
+        s.tick = crate::news::tick_for_calendar_year(1961);
+        s.sync_timers_from_tick();
         apply_command(
             &mut s,
             &Command::PlaceAirportArea {
@@ -1300,6 +1308,8 @@ mod tests {
     #[test]
     fn oilrig_cycle_pad_takeoff_fly_land_pad() {
         let mut s = GameState::new(48, 48);
+        s.tick = crate::news::tick_for_calendar_year(1961);
+        s.sync_timers_from_tick();
         s.disasters_enabled = false;
         apply_command(
             &mut s,
@@ -1414,6 +1424,8 @@ mod tests {
     #[test]
     fn helistation_cycle_hangar_takeoff_fly_land_pad() {
         let mut s = GameState::new(48, 48);
+        s.tick = crate::news::tick_for_calendar_year(1961);
+        s.sync_timers_from_tick();
         apply_command(
             &mut s,
             &Command::PlaceAirportArea {

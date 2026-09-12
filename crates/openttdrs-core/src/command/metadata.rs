@@ -167,6 +167,7 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::SetVehicleOrderList(..)
         | Command::BuildRoadVehicleAtDepot(..)
         | Command::BuildVehicleAtDepot(..)
+        | Command::WantEnginePreview(..)
         | Command::AttachWagonToConsist { .. }
         | Command::DetachConsistUnit(..)
         | Command::MoveRailVehicle { .. }

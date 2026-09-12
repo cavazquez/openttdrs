@@ -140,6 +140,54 @@ fn sandbox_commands_place_visible_tile_kinds() {
 }
 
 #[test]
+fn accepting_engine_preview_grants_joined_variants_and_unblocks_purchase() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+
+    let mut root = crate::engine::engine_by_id(crate::ENGINE_BUS_MPS)
+        .unwrap()
+        .clone();
+    root.id = 30_010;
+    root.name = "Preview root".into();
+    root.intro_year = 1950;
+    root.from_newgrf = true;
+    let mut variant = root.clone();
+    variant.id = 30_011;
+    variant.name = "Preview variant".into();
+    variant.variant_parent_id = Some(root.id);
+    variant.extra_flags = crate::engine::EXTRA_ENGINE_FLAG_JOIN_PREVIEW;
+    s.engine_catalog.extend([root, variant]);
+    s.vehicles.push(crate::Vehicle::new(
+        1,
+        crate::VehicleKind::Bus,
+        TileCoord::new(1, 2),
+        TileCoord::new(1, 2),
+    ));
+
+    crate::poll_engine_previews(&mut s);
+    assert_eq!(
+        crate::command::command_would_fail(&s, &Command::WantEnginePreview(30_010)),
+        None
+    );
+    apply_command(&mut s, &Command::WantEnginePreview(30_010)).unwrap();
+
+    let company = &s.companies[0];
+    assert!(company.has_available_engine(30_010));
+    assert!(company.has_available_engine(30_011));
+    assert_eq!(
+        crate::command::command_would_fail(&s, &Command::BuildVehicleAtDepot(depot, 30_010),),
+        None
+    );
+    apply_command(&mut s, &Command::BuildVehicleAtDepot(depot, 30_010)).unwrap();
+    assert_eq!(
+        s.vehicles.last().and_then(|vehicle| vehicle.engine_id),
+        Some(30_010)
+    );
+}
+
+#[test]
 fn toyland_industry_rejected_on_temperate_map() {
     let mut s = GameState::new(16, 16);
     assert_eq!(

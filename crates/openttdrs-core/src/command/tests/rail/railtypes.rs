@@ -288,6 +288,8 @@ fn electric_engine_requires_electrified_neighbor() {
     use crate::rail_type::RailType;
 
     let mut s = SandboxMap::flat_rich(12, 8, 1);
+    s.tick = crate::news::tick_for_calendar_year(1993);
+    s.sync_timers_from_tick();
     for x in 2..=6_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }
@@ -322,6 +324,8 @@ fn disabling_elrails_allows_electric_engine_on_normal_rail() {
     use crate::rail_type::{RailType, rail_type_from_tile};
 
     let mut s = SandboxMap::flat_rich(12, 8, 1);
+    s.tick = crate::news::tick_for_calendar_year(1993);
+    s.sync_timers_from_tick();
     s.construction.disable_elrails = true;
     for x in 2..=6_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
@@ -516,6 +520,8 @@ fn monorail_engine_requires_monorail_neighbor() {
     use crate::rail_type::RailType;
 
     let mut s = SandboxMap::flat_rich(12, 8, 1);
+    s.tick = crate::news::tick_for_calendar_year(1991);
+    s.sync_timers_from_tick();
     for x in 2..=6_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }
@@ -546,6 +552,8 @@ fn maglev_engine_requires_maglev_neighbor() {
     use crate::rail_type::RailType;
 
     let mut s = SandboxMap::flat_rich(12, 8, 1);
+    s.tick = crate::news::tick_for_calendar_year(2001);
+    s.sync_timers_from_tick();
     for x in 2..=6_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }

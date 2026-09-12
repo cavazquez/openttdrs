@@ -317,6 +317,8 @@ fn newgrf_vehicle_length_callback_applies_when_buying() {
     );
 
     let mut s = GameState::new(8, 8);
+    s.tick = crate::news::tick_for_calendar_year(1987);
+    s.sync_timers_from_tick();
     let mut engine = crate::engine_by_id(ENGINE_BUS_FOSTER).unwrap().clone();
     engine.id = NEWGRF_ENGINE_ID_BASE;
     engine.from_newgrf = true;

@@ -141,6 +141,138 @@ pub fn engine_lifecycle_state_in_year(
     EngineLifecycleState::Available
 }
 
+/// ¿Puede una compañía construir el motor en el año actual?
+///
+/// Durante una preview exclusiva sólo la compañía que la aceptó recibe el
+/// bit equivalente a `Engine::company_avail`; una disponibilidad general no
+/// necesita una entrada en `available_engine_ids`.
+#[must_use]
+pub fn engine_is_buildable_for_company(
+    engine: &EngineDef,
+    calendar_year: u32,
+    available_engine_ids: &[u16],
+) -> bool {
+    match engine_lifecycle_state_in_year(engine, calendar_year) {
+        EngineLifecycleState::Available => true,
+        EngineLifecycleState::ExclusivePreview => available_engine_ids.contains(&engine.id),
+        EngineLifecycleState::NotIntroduced
+        | EngineLifecycleState::PendingAvailability
+        | EngineLifecycleState::Retired => false,
+    }
+}
+
+/// Cantidad de días de una oferta de preview, igual al contador inicial de
+/// `Engine::preview_wait` en `CalendarEnginesDailyLoop`.
+pub const ENGINE_PREVIEW_WAIT_DAYS: u8 = 20;
+
+/// Busca y mantiene la oferta exclusiva de cada motor en su ciclo de
+/// introducción.
+///
+/// La selección se ejecuta una vez por día desde el scheduler de simulación.
+/// El orden del pool de compañías es deliberado: funciona como desempate
+/// estable mientras el modelo propio todavía no conserva todo el historial de
+/// rendimiento que usa `GetPreviewCompany`.
+pub fn poll_engine_previews(state: &mut crate::GameState) {
+    let year = state.calendar.year;
+    let engine_ids: Vec<u16> = state
+        .engine_catalog
+        .iter()
+        .filter(|engine| {
+            engine_lifecycle_state_in_year(engine, year) == EngineLifecycleState::ExclusivePreview
+        })
+        .map(|engine| engine.id)
+        .collect();
+
+    for engine_id in engine_ids {
+        let Some((engine_kind, engine_name, engine_no_news)) =
+            engine_in_catalog(&state.engine_catalog, engine_id)
+                .map(|engine| (engine.kind, engine.name.clone(), engine.no_news()))
+        else {
+            continue;
+        };
+        // La aceptación se conserva en la compañía. No volver a abrir una
+        // oferta para el mismo motor durante el resto de la ventana anual.
+        if state
+            .companies
+            .iter()
+            .any(|company| company.has_available_engine(engine_id))
+        {
+            state.runtime.engine_preview_offers.remove(&engine_id);
+            continue;
+        }
+
+        let mut offer = state
+            .runtime
+            .engine_preview_offers
+            .remove(&engine_id)
+            .unwrap_or(crate::game_state::EnginePreviewOffer {
+                company: None,
+                wait_days: 0,
+                asked_companies: 0,
+            });
+
+        if offer.company.is_some() {
+            if offer.wait_days > 1 {
+                offer.wait_days -= 1;
+                state.runtime.engine_preview_offers.insert(engine_id, offer);
+                continue;
+            }
+            // La compañía no aceptó a tiempo: la siguiente comprobación
+            // diaria puede ofrecer el motor a otra compañía.
+            offer.company = None;
+            offer.wait_days = 0;
+        }
+
+        let company = preview_company_for(state, engine_kind, offer.asked_companies);
+        if let Some(company) = company {
+            if let Some(bit) = company_bit(company) {
+                offer.asked_companies |= bit;
+            }
+            offer.company = Some(company);
+            offer.wait_days = ENGINE_PREVIEW_WAIT_DAYS;
+            if !engine_no_news {
+                crate::news::push_engine_preview_news(
+                    state,
+                    engine_id,
+                    engine_kind,
+                    &engine_name,
+                    company,
+                );
+            }
+        } else {
+            // `GetPreviewCompany` marca todas las compañías cuando no hay un
+            // candidato. Mantener la máscara evita volver a sortear cada día.
+            offer.asked_companies = state
+                .companies
+                .iter()
+                .filter_map(|company| company_bit(company.id))
+                .fold(0, |mask, bit| mask | bit);
+        }
+        state.runtime.engine_preview_offers.insert(engine_id, offer);
+    }
+}
+
+fn company_bit(company: crate::CompanyId) -> Option<u16> {
+    (company.0 < 16).then(|| 1_u16 << company.0)
+}
+
+fn preview_company_for(
+    state: &crate::GameState,
+    kind: VehicleKind,
+    asked_companies: u16,
+) -> Option<crate::CompanyId> {
+    state.companies.iter().find_map(|company| {
+        let bit = company_bit(company.id)?;
+        (company.block_preview == 0
+            && asked_companies & bit == 0
+            && state
+                .vehicles
+                .iter()
+                .any(|vehicle| vehicle.owner == company.id && vehicle.kind == kind))
+        .then_some(company.id)
+    })
+}
+
 /// Devuelve el grupo de preview de un motor, incluyendo sólo variantes que
 /// declaran `JoinPreview` en cada enlace de la cadena.
 #[must_use]
@@ -403,7 +535,7 @@ pub fn engine_for_vehicle(kind: VehicleKind, id: u16) -> &'static EngineDef {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::vehicle::VehicleKind;
+    use crate::vehicle::{Vehicle, VehicleKind};
 
     use super::super::catalog_data::{ENGINE_SHIP_OIL, ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY};
 
@@ -468,6 +600,48 @@ mod tests {
             engine_lifecycle_state_in_year(&engine, 1950),
             EngineLifecycleState::PendingAvailability
         );
+    }
+
+    #[test]
+    fn exclusive_preview_requires_company_grant_until_general_availability() {
+        let mut engine = engine_for_vehicle(VehicleKind::Bus, ENGINE_BUS_MPS).clone();
+        engine.id = 30_000;
+        engine.intro_year = 1950;
+        assert!(!engine_is_buildable_for_company(&engine, 1950, &[]));
+        assert!(engine_is_buildable_for_company(&engine, 1950, &[30_000]));
+        assert!(engine_is_buildable_for_company(&engine, 1951, &[]));
+    }
+
+    #[test]
+    fn preview_scheduler_assigns_offer_to_matching_company() {
+        let mut state = crate::GameState::new(8, 8);
+        let mut engine = engine_for_vehicle(VehicleKind::Bus, ENGINE_BUS_MPS).clone();
+        engine.id = 30_001;
+        engine.name = "Preview bus".into();
+        engine.intro_year = 1950;
+        state.engine_catalog.push(engine);
+        state.vehicles.push(Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            crate::TileCoord::new(2, 2),
+            crate::TileCoord::new(2, 2),
+        ));
+
+        poll_engine_previews(&mut state);
+
+        let offer = state
+            .runtime
+            .engine_preview_offers
+            .get(&30_001)
+            .copied()
+            .expect("oferta de preview");
+        assert_eq!(offer.company, Some(crate::CompanyId::PLAYER));
+        assert_eq!(offer.wait_days, ENGINE_PREVIEW_WAIT_DAYS);
+        assert_eq!(offer.asked_companies, 1);
+        assert!(matches!(
+            state.news.items.front().map(|item| item.reference),
+            Some(crate::NewsReference::Engine(30_001))
+        ));
     }
 
     #[test]

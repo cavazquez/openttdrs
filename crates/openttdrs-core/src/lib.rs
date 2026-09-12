@@ -284,17 +284,17 @@ pub use engine::{
     aircraft_is_helicopter, aircraft_is_helicopter_def, aircraft_is_jet, decelerate_road_speed,
     decelerate_train_speed, default_engine_id, do_update_speed, engine_air_drag,
     engine_available_in_year, engine_by_id, engine_catalog, engine_for_vehicle, engine_in_catalog,
-    engine_lifecycle_state_in_year, engine_preview_group_for_in, engine_preview_group_in,
-    engine_preview_root_id_in, engine_tractive_effort, engines_for_depot_kind,
-    engines_for_depot_kind_in, engines_for_depot_purchase, engines_of_kind, get_advance_distance,
-    get_advance_speed, get_curve_speed_limit, next_free_engine_id, progress_step_for_speed,
-    road_default_air_drag, road_engine_air_drag, road_engine_tractive_effort, road_max_te_n,
-    road_realistic_acceleration, road_rolling_friction, scale_train_air_drag, ship_speed_for_tile,
-    ship_speed_for_tile_with_speed, tile_progress_length, train_acceleration,
-    train_default_air_drag, train_max_te_n, train_realistic_acceleration,
-    train_realistic_station_max_speed, train_smoke_kind, train_sprite_group,
-    train_visual_progress_from_motion, train_visual_progress_from_pixel, update_road_speed,
-    update_road_vehicle_speed, update_train_speed, vanilla_engine_catalog,
+    engine_is_buildable_for_company, engine_lifecycle_state_in_year, engine_preview_group_for_in,
+    engine_preview_group_in, engine_preview_root_id_in, engine_tractive_effort,
+    engines_for_depot_kind, engines_for_depot_kind_in, engines_for_depot_purchase, engines_of_kind,
+    get_advance_distance, get_advance_speed, get_curve_speed_limit, next_free_engine_id,
+    poll_engine_previews, progress_step_for_speed, road_default_air_drag, road_engine_air_drag,
+    road_engine_tractive_effort, road_max_te_n, road_realistic_acceleration, road_rolling_friction,
+    scale_train_air_drag, ship_speed_for_tile, ship_speed_for_tile_with_speed,
+    tile_progress_length, train_acceleration, train_default_air_drag, train_max_te_n,
+    train_realistic_acceleration, train_realistic_station_max_speed, train_smoke_kind,
+    train_sprite_group, train_visual_progress_from_motion, train_visual_progress_from_pixel,
+    update_road_speed, update_road_vehicle_speed, update_train_speed, vanilla_engine_catalog,
     vanilla_train_tractive_effort,
 };
 pub use entity_history::{
@@ -329,9 +329,9 @@ pub use game_state::CARGO_DELIVERY_PAYMENT;
 pub use game_state::IncomePopup;
 pub use game_state::{
     BRIDGE_BUILD_COST_PER_TILE, BUY_LAND_BASE_PRICE, CLEAR_TILE_COST, CargoPaymentState,
-    CompanyEconomy, DEPOT_BUILD_COST, ECONOMY_HISTORY_MONTHS, EconomyHistory, GameState,
-    MonthlyEconomySample, RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats,
-    SimulationRuntime, TERRAFORM_BASE_PRICE, TERRAFORM_COST, TUNNEL_BUILD_COST_PER_TILE,
+    CompanyEconomy, DEPOT_BUILD_COST, ECONOMY_HISTORY_MONTHS, EconomyHistory, EnginePreviewOffer,
+    GameState, MonthlyEconomySample, RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST,
+    SimStats, SimulationRuntime, TERRAFORM_BASE_PRICE, TERRAFORM_COST, TUNNEL_BUILD_COST_PER_TILE,
     WAYPOINT_BUILD_COST, company_net_value,
 };
 pub use gs::{
@@ -667,9 +667,9 @@ pub use news::{
     default_display_for_type, format_calendar_date, format_calendar_date_from_state,
     format_calendar_day_index, format_money, maybe_purge_old_news, news_display_mode_label,
     news_type_label, poll_new_vehicle_news, poll_vehicle_advice_news, purge_old_news_items,
-    push_cargo_delivery_news, push_first_vehicle_running_news, push_new_vehicle_available_news,
-    push_rival_achievement_news, push_vehicle_advice_news, tick_for_calendar_year,
-    vehicle_kind_label,
+    push_cargo_delivery_news, push_engine_preview_news, push_first_vehicle_running_news,
+    push_new_vehicle_available_news, push_rival_achievement_news, push_vehicle_advice_news,
+    tick_for_calendar_year, vehicle_kind_label,
 };
 pub use object_spec::{
     DEFAULT_OBJECT_BUILD_COST_FACTOR, DEFAULT_OBJECT_CLEAR_COST_FACTOR,

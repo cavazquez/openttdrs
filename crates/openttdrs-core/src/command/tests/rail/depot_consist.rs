@@ -373,6 +373,8 @@ fn build_vehicle_at_depot_rejects_insufficient_funds() {
 #[test]
 fn build_vehicle_at_depot_charges_model_price() {
     let mut s = GameState::new(8, 8);
+    s.tick = crate::news::tick_for_calendar_year(1987);
+    s.sync_timers_from_tick();
     let depot = TileCoord::new(2, 2);
     apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
     apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
@@ -403,6 +405,8 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
     use crate::engine::{EngineDef, NEWGRF_ENGINE_ID_BASE};
 
     let mut s = GameState::new(8, 8);
+    s.tick = crate::news::tick_for_calendar_year(1961);
+    s.sync_timers_from_tick();
     let depot = TileCoord::new(3, 3);
     apply_command(&mut s, &Command::PlaceRail(TileCoord::new(2, 3))).unwrap();
     apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
@@ -752,6 +756,8 @@ fn build_newgrf_road_vehicle_materializes_articulated_parts_from_callback() {
 #[test]
 fn build_manley_morel_creates_dual_head_pair() {
     let mut s = SandboxMap::flat_rich(12, 12, 1);
+    s.tick = crate::news::tick_for_calendar_year(1957);
+    s.sync_timers_from_tick();
     let depot = TileCoord::new(4, 4);
     apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
     apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
@@ -962,6 +968,8 @@ fn move_rail_vehicle_chain_keeps_tail_wagons() {
 #[test]
 fn clone_vehicle_at_depot_copies_engine_and_orders() {
     let mut s = GameState::new(8, 8);
+    s.tick = crate::news::tick_for_calendar_year(1987);
+    s.sync_timers_from_tick();
     let depot = TileCoord::new(2, 2);
     apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
     apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();

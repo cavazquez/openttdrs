@@ -231,6 +231,12 @@ pub struct Company {
     /// exclusiva de motor (`PLYR.block_preview`).
     #[serde(default)]
     pub block_preview: u8,
+    /// Motores habilitados sólo para esta compañía durante una preview
+    /// exclusiva (`Engine::company_avail`). Los motores disponibles de forma
+    /// general no necesitan aparecer aquí; la lista conserva la excepción
+    /// concedida por `CmdWantEnginePreview` y sobrevive a JSON/SAV híbridos.
+    #[serde(default)]
+    pub available_engine_ids: Vec<u16>,
     /// `TileIndex` crudo de la tesela norte de la sede (`PLYR.location_of_HQ`).
     ///
     /// El centinela [`INVALID_COMPANY_HQ_TILE`] indica que no hay sede. Es
@@ -395,6 +401,21 @@ const fn default_servint_ships() -> u16 {
 }
 
 impl Company {
+    /// ¿La compañía recibió una excepción de disponibilidad para este motor?
+    #[must_use]
+    pub fn has_available_engine(&self, engine_id: u16) -> bool {
+        self.available_engine_ids.contains(&engine_id)
+    }
+
+    /// Concede una preview sin duplicar el bit equivalente de
+    /// `Engine::company_avail` en la representación vectorial persistida.
+    pub fn grant_engine_preview(&mut self, engine_id: u16) {
+        if !self.has_available_engine(engine_id) {
+            self.available_engine_ids.push(engine_id);
+            self.available_engine_ids.sort_unstable();
+        }
+    }
+
     #[must_use]
     pub fn player(economy: CompanyEconomy, colour: u8) -> Self {
         Self {
@@ -407,6 +428,7 @@ impl Company {
             colour,
             money_fraction: 0,
             block_preview: 0,
+            available_engine_ids: Vec::new(),
             hq_tile: INVALID_COMPANY_HQ_TILE,
             last_build_tile: 0,
             inaugurated_year: 0,
@@ -452,6 +474,7 @@ impl Company {
             colour,
             money_fraction: 0,
             block_preview: 0,
+            available_engine_ids: Vec::new(),
             hq_tile: INVALID_COMPANY_HQ_TILE,
             last_build_tile: 0,
             inaugurated_year: 0,
@@ -497,6 +520,7 @@ impl Company {
             colour,
             money_fraction: 0,
             block_preview: 0,
+            available_engine_ids: Vec::new(),
             hq_tile: INVALID_COMPANY_HQ_TILE,
             last_build_tile: 0,
             inaugurated_year: 0,

@@ -1,7 +1,9 @@
 mod canonical_hash;
 mod runtime;
 
-pub use runtime::{GenerationIndustryAttempt, PendingLinkGraphJob, SimulationRuntime};
+pub use runtime::{
+    EnginePreviewOffer, GenerationIndustryAttempt, PendingLinkGraphJob, SimulationRuntime,
+};
 pub(crate) use runtime::{LegacySavAfterload, LegacySavIndustry};
 
 use crate::industry::Industry;
@@ -1592,6 +1594,34 @@ impl GameState {
     pub fn prepare_player_command(&mut self) {
         self.ensure_companies();
         self.sync_active_from_mirrors();
+    }
+
+    /// ¿Puede la compañía activa construir este motor en el año actual?
+    ///
+    /// La excepción por preview vive en la compañía, mientras que la fecha y
+    /// la definición permanecen en el catálogo global.
+    #[must_use]
+    pub fn engine_available_to_active_company(&self, engine_id: u16) -> bool {
+        let Some(engine) = self
+            .engine_catalog
+            .iter()
+            .find(|engine| engine.id == engine_id)
+            .or_else(|| crate::engine::engine_by_id(engine_id))
+        else {
+            return false;
+        };
+        let Some(company) = self
+            .companies
+            .iter()
+            .find(|company| company.id == self.active_company)
+        else {
+            return false;
+        };
+        crate::engine::engine_is_buildable_for_company(
+            engine,
+            self.calendar.year,
+            &company.available_engine_ids,
+        )
     }
 
     /// Copia economía/color de la compañía activa a los campos espejo.

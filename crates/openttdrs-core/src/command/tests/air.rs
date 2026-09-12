@@ -12,6 +12,8 @@ use crate::{AirportClassId, AirportLayoutTile, AirportTileLayout, NewgrfAirportS
 #[test]
 fn place_heliport_and_buy_helicopter() {
     let mut s = GameState::new(12, 12);
+    s.tick = crate::news::tick_for_calendar_year(1961);
+    s.sync_timers_from_tick();
     let c = TileCoord::new(4, 4);
     let money = s.economy.money;
     apply_command(&mut s, &Command::PlaceAirport(c)).unwrap();
@@ -462,6 +464,8 @@ fn ferry_engine_is_passenger_ship() {
 #[test]
 fn aircraft_phase_starts_on_heliport_pad() {
     let mut s = GameState::new(12, 12);
+    s.tick = crate::news::tick_for_calendar_year(1961);
+    s.sync_timers_from_tick();
     let c = TileCoord::new(4, 4);
     apply_command(&mut s, &Command::PlaceAirport(c)).unwrap();
     apply_command(
@@ -478,6 +482,8 @@ fn aircraft_phase_starts_on_heliport_pad() {
 #[test]
 fn small_airport_accepts_helicopter_and_airplane() {
     let mut s = GameState::new(20, 20);
+    s.tick = crate::news::tick_for_calendar_year(1961);
+    s.sync_timers_from_tick();
     let origin = TileCoord::new(2, 2);
     apply_command(
         &mut s,
@@ -513,6 +519,8 @@ fn small_airport_accepts_helicopter_and_airplane() {
 #[test]
 fn airplane_order_to_heliport_rejected() {
     let mut s = GameState::new(24, 24);
+    s.tick = crate::news::tick_for_calendar_year(1961);
+    s.sync_timers_from_tick();
     let heliport = TileCoord::new(2, 2);
     apply_command(&mut s, &Command::PlaceAirport(heliport)).unwrap();
     let small_origin = TileCoord::new(8, 2);

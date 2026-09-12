@@ -1,6 +1,24 @@
 use crate::command::Command;
+use crate::company::CompanyId;
 use crate::map::{Tile, TileCoord};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
+
+/// Oferta efímera de una preview exclusiva de motor.
+///
+/// `OpenTTD` la guarda en el pool `Engine` (`preview_company`,
+/// `preview_asked`, `preview_wait`). El catálogo propio conserva las
+/// definiciones de motor en `GameState`, por lo que esta parte mutable vive en
+/// el runtime y se reconstruye al reanudar el ciclo de calendario.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EnginePreviewOffer {
+    /// Compañía que puede aceptar ahora; `None` significa que se busca la
+    /// siguiente candidata durante la próxima comprobación diaria.
+    pub company: Option<CompanyId>,
+    /// Días restantes de la ventana de aceptación.
+    pub wait_days: u8,
+    /// Máscara de compañías ya consultadas para este motor.
+    pub asked_companies: u16,
+}
 
 /// Un intento de `CreateNewIndustry` durante la creación procedural del mundo.
 ///
@@ -142,6 +160,9 @@ pub struct SimulationRuntime {
     pub engine_available_news_sent: HashSet<u16>,
     /// Evita convertir un save cargado en una ráfaga de noticias históricas.
     pub engine_available_news_initialized: bool,
+
+    /// Ofertas exclusivas activas, indexadas por `EngineID`.
+    pub engine_preview_offers: HashMap<u16, EnginePreviewOffer>,
 
     /// Bordes del reloj de calendario en el tick actual.
     pub calendar_triggers: crate::timer::TimerTriggers,
@@ -316,6 +337,7 @@ impl SimulationRuntime {
             news_last_purge_day: 0,
             engine_available_news_sent: HashSet::new(),
             engine_available_news_initialized: false,
+            engine_preview_offers: HashMap::new(),
             calendar_triggers: crate::timer::TimerTriggers::default(),
             economy_triggers: crate::timer::TimerTriggers::default(),
             parity: None,

@@ -161,6 +161,9 @@ pub(super) fn build_vehicle_at_depot(
     else {
         return Err(CommandError::EngineNotFound);
     };
+    if !state.engine_available_to_active_company(engine.id) {
+        return Err(CommandError::EngineNotAvailable);
+    }
     let depot_ok = match engine.kind {
         VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => {
             tile.kind == TileKind::RoadDepot
@@ -348,6 +351,68 @@ pub(super) fn build_vehicle_at_depot(
     }
     state.economy.money -= purchase_cost;
     Ok(())
+}
+
+/// Acepta una oferta exclusiva y habilita también las variantes que declaran
+/// `JoinPreview`, como `AcceptEnginePreview` del runtime nativo.
+pub(super) fn want_engine_preview(
+    state: &mut GameState,
+    engine_id: u16,
+) -> Result<(), CommandError> {
+    let granted_ids = check_want_engine_preview(state, engine_id)?;
+    let Some(company) = state
+        .companies
+        .iter_mut()
+        .find(|company| company.id == state.active_company)
+    else {
+        return Err(CommandError::CompanyNotFound);
+    };
+    for granted_id in granted_ids {
+        company.grant_engine_preview(granted_id);
+    }
+    state.runtime.engine_preview_offers.remove(&engine_id);
+    Ok(())
+}
+
+/// Valida una aceptación y devuelve el conjunto de motores que recibirá la
+/// compañía. Se comparte con `command_would_fail` para que el preview de UI
+/// tenga el mismo resultado que la ejecución autoritativa.
+pub(crate) fn check_want_engine_preview(
+    state: &GameState,
+    engine_id: u16,
+) -> Result<Vec<u16>, CommandError> {
+    let Some(offer) = state.runtime.engine_preview_offers.get(&engine_id).copied() else {
+        return Err(CommandError::EngineNotAvailable);
+    };
+    if offer.company != Some(state.active_company) {
+        return Err(CommandError::EngineNotAvailable);
+    }
+    let Some(engine) = state
+        .engine_catalog
+        .iter()
+        .find(|engine| engine.id == engine_id)
+    else {
+        return Err(CommandError::EngineNotFound);
+    };
+    if crate::engine::engine_lifecycle_state_in_year(engine, state.calendar.year)
+        != crate::engine::EngineLifecycleState::ExclusivePreview
+    {
+        return Err(CommandError::EngineNotAvailable);
+    }
+
+    let granted_ids: Vec<u16> =
+        crate::engine::engine_preview_group_for_in(&state.engine_catalog, engine_id)
+            .into_iter()
+            .map(|engine| engine.id)
+            .collect();
+    if !state
+        .companies
+        .iter()
+        .any(|company| company.id == state.active_company)
+    {
+        return Err(CommandError::CompanyNotFound);
+    }
+    Ok(granted_ids)
 }
 
 fn check_aircraft_heli_depot_compat(

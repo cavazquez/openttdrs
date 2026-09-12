@@ -45,6 +45,9 @@ pub enum CommandError {
     VehicleKindNotAllowed,
     /// El motor pedido no existe en el catálogo.
     EngineNotFound,
+    /// El motor todavía está en preview, no fue aceptado por la compañía o
+    /// aún no llegó a su fecha de disponibilidad.
+    EngineNotAvailable,
     /// No hay dinero suficiente para pagar la compra.
     InsufficientFunds,
     IncompatibleStopForVehicle,

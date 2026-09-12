@@ -478,6 +478,7 @@ pub(crate) fn engines_for_buy_window<'a>(
         sort,
         road_filter,
     );
+    engines.retain(|engine| sim.state.engine_available_to_active_company(engine.id));
     if depot_kind == DepotPurchaseKind::Aircraft {
         let heliport = openttdrs_core::airport_tile_is_heliport(&sim.state.map, depot_pos);
         engines.retain(|e| openttdrs_core::aircraft_is_helicopter_def(e) == heliport);

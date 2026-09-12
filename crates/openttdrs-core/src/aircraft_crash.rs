@@ -231,6 +231,8 @@ mod tests {
     #[test]
     fn jet_crashes_on_country_brake_with_forced_rng() {
         let mut s = GameState::new(24, 24);
+        s.tick = crate::news::tick_for_calendar_year(1959);
+        s.sync_timers_from_tick();
         apply_command(
             &mut s,
             &Command::PlaceAirportArea {

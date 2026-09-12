@@ -405,6 +405,22 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             )
             .err()
         }
+        Command::WantEnginePreview(engine_id) => {
+            super::vehicles::check_want_engine_preview(state, *engine_id).err()
+        }
+        Command::BuildVehicleAtDepot(_, engine_id) => {
+            let exists = state
+                .engine_catalog
+                .iter()
+                .any(|engine| engine.id == *engine_id)
+                || crate::engine::engine_by_id(*engine_id).is_some();
+            if exists {
+                (!state.engine_available_to_active_company(*engine_id))
+                    .then_some(CommandError::EngineNotAvailable)
+            } else {
+                Some(CommandError::EngineNotFound)
+            }
+        }
         Command::PlaceIndustry(_)
         | Command::PlaceIndustryKind(_, _)
         | Command::PlaceIndustrySpec(_, _)
@@ -416,7 +432,6 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::SetVehicleStationOrders(..)
         | Command::SetVehicleOrderList(..)
         | Command::BuildRoadVehicleAtDepot(..)
-        | Command::BuildVehicleAtDepot(..)
         | Command::AttachWagonToConsist { .. }
         | Command::DetachConsistUnit(..)
         | Command::MoveRailVehicle { .. }

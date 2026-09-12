@@ -323,6 +323,41 @@ pub fn push_new_vehicle_available_news(
     add_news_item(state, item);
 }
 
+/// Publica el aviso de una preview exclusiva asignada a una compañía.
+///
+/// Comparte la categoría de vehículos nuevos para que el cliente reutilice
+/// el mismo historial y la referencia estable al catálogo. La disponibilidad
+/// efectiva sigue siendo por compañía: el aviso no convierte el motor en
+/// general hasta el siguiente ciclo anual.
+pub fn push_engine_preview_news(
+    state: &mut crate::GameState,
+    engine_id: u16,
+    kind: VehicleKind,
+    name: &str,
+    company: crate::CompanyId,
+) {
+    let company_name = state
+        .companies
+        .iter()
+        .find(|candidate| candidate.id == company)
+        .map_or_else(|| format!("compañía {}", company.0), |c| c.name.clone());
+    let kind_label = vehicle_kind_label(kind);
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        format!("Preview exclusiva: {kind_label} {name}"),
+        Some(format!(
+            "{company_name} puede probar el modelo {name} (motor {engine_id}) durante la preview."
+        )),
+        NewsType::NewVehicles,
+        default_display_for_type(NewsType::NewVehicles),
+        state.tick,
+        NewsReference::Engine(engine_id),
+    );
+    add_news_item(state, item);
+}
+
 /// La industria anuncia que cerrará el mes que viene.
 pub fn report_industry_closing(state: &mut crate::GameState, at: TileCoord) {
     let id = state.news.next_id;

@@ -251,6 +251,8 @@ mod tests {
     #[test]
     fn aircraft_flies_straight_to_destination() {
         let mut s = GameState::new(16, 16);
+        s.tick = crate::news::tick_for_calendar_year(1961);
+        s.sync_timers_from_tick();
         let airport = TileCoord::new(2, 2);
         s.map.set_kind(airport, TileKind::Airport).unwrap();
         apply_command(

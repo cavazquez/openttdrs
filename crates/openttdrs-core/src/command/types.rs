@@ -144,6 +144,8 @@ pub enum Command {
     /// Compra el modelo `engine_id` del catálogo en un depósito compatible
     /// (carretera o vía según el tipo del motor), validando fondos.
     BuildVehicleAtDepot(TileCoord, u16),
+    /// Acepta la oferta de preview exclusiva del motor para la compañía activa.
+    WantEnginePreview(u16),
     /// Engancha el vagón `wagon_id` al final del consist de `head_id` (ambos en depósito).
     AttachWagonToConsist {
         head_id: u32,

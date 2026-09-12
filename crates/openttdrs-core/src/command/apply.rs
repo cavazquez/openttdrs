@@ -120,6 +120,7 @@ fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), Com
         Command::BuildVehicleAtDepot(c, engine_id) => {
             vehicles::build_vehicle_at_depot(state, *c, *engine_id)
         }
+        Command::WantEnginePreview(engine_id) => vehicles::want_engine_preview(state, *engine_id),
         Command::AttachWagonToConsist { head_id, wagon_id } => {
             vehicles::attach_wagon_to_consist(state, *head_id, *wagon_id)
         }
@@ -444,6 +445,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         | Command::SetVehicleOrderList(..)
         | Command::BuildRoadVehicleAtDepot(..)
         | Command::BuildVehicleAtDepot(..)
+        | Command::WantEnginePreview(..)
         | Command::AttachWagonToConsist { .. }
         | Command::DetachConsistUnit(..)
         | Command::MoveRailVehicle { .. }

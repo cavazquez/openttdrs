@@ -435,6 +435,34 @@ fn locomotive_without_wagon_does_not_load_station_freight() {
 }
 
 #[test]
+fn custom_catalog_locomotive_without_wagon_does_not_load_station_freight() {
+    let mut s = GameState::new(12, 8);
+    let hub = TileCoord::new(3, 2);
+    s.stations
+        .push(Station::new_with_kind(hub, StopKind::RailStation));
+    s.stations[0].cargo_stock.goods = 9;
+
+    let mut custom = crate::engine::engine_by_id(crate::ENGINE_TRAIN_KIRBY)
+        .expect("vanilla train")
+        .clone();
+    custom.id = 0x7F30;
+    custom.name = "Locomotora NewGRF".into();
+    custom.capacity = 20;
+    s.engine_catalog.push(custom.clone());
+
+    let mut vehicle = Vehicle::new(0, VehicleKind::Train, hub, TileCoord::new(7, 2));
+    vehicle.engine_id = Some(custom.id);
+    vehicle.capacity = custom.capacity;
+    s.vehicles.push(vehicle);
+
+    for _ in 0..16 {
+        s.step();
+    }
+    assert_eq!(s.vehicles[0].cargo, 0);
+    assert_eq!(s.stations[0].cargo_stock.goods, 9);
+}
+
+#[test]
 fn truck_does_not_load_coal_from_station_while_passing_nearby() {
     use crate::command::apply_command;
 

@@ -1413,7 +1413,8 @@ pub(super) fn load_vehicles(
         // engine_id se preservan para escenarios y saves antiguos.
         let locomotive_without_wagon = state.vehicles[i].kind == VehicleKind::Train
             && state.vehicles[i].engine_id.is_some_and(|engine_id| {
-                crate::engine::engine_by_id(engine_id)
+                crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
+                    .or_else(|| crate::engine::engine_by_id(engine_id))
                     .is_some_and(crate::engine::EngineDef::is_train_engine)
             })
             && {

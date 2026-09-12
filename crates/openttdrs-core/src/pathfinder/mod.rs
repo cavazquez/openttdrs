@@ -99,7 +99,35 @@ pub fn find_rail_path_for_engine(
     wormholes: Option<&TunnelWormholes>,
     engine_id: Option<u16>,
 ) -> Option<Vec<TileCoord>> {
-    let required = engine_id.map(crate::rail_type::required_rail_type_for_engine);
+    find_rail_path_for_engine_with_catalog(map, from, to, wormholes, engine_id, &[])
+}
+
+/// Variante de [`find_rail_path_for_engine`] que resuelve primero el motor en
+/// el catálogo runtime. Los motores `NewGRF` pueden declarar su `RailType`
+/// requerido mediante Action0; si el catálogo no contiene el ID, se conserva
+/// el fallback de los motores vanilla.
+#[must_use]
+pub fn find_rail_path_for_engine_with_catalog(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    wormholes: Option<&TunnelWormholes>,
+    engine_id: Option<u16>,
+    engine_catalog: &[crate::engine::EngineDef],
+) -> Option<Vec<TileCoord>> {
+    let required = engine_id.map(|id| {
+        let engine = crate::engine::engine_in_catalog(engine_catalog, id)
+            .or_else(|| crate::engine::engine_by_id(id));
+        engine.map_or_else(
+            || crate::rail_type::required_rail_type_for_engine(id),
+            |engine| {
+                engine.required_rail_type.map_or_else(
+                    || crate::rail_type::required_rail_type_for_engine(engine.id),
+                    crate::rail_type::RailType::from_u8,
+                )
+            },
+        )
+    });
     yapf::find_rail_path_yapf_for_type(map, from, to, wormholes, required)
 }
 
@@ -126,7 +154,9 @@ pub fn find_path_cached(
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::engine::{ENGINE_TRAIN_KIRBY, NEWGRF_ENGINE_ID_BASE, engine_by_id};
     use crate::map::{RAIL_TB_X, RAIL_TB_Y, TileKind};
+    use crate::rail_type::{RailType, set_rail_type_on_tile};
     use crate::tnbp_decode::JgrTunnelRecord;
 
     #[test]
@@ -495,6 +525,46 @@ mod tests {
         assert!(
             find_path(&m, track, station, PathNetwork::Rail).is_some(),
             "el tren debe poder rutear hacia la plataforma conectada por el eje"
+        );
+    }
+
+    #[test]
+    fn catalog_rail_path_uses_custom_required_rail_type() {
+        let mut map = Map::new_flat(8, 1, 0);
+        for x in 0..=4_i32 {
+            let tile = TileCoord::new(x, 0);
+            write_rail(&mut map, tile, RAIL_TB_X);
+            if (1..4).contains(&x) {
+                let typed = set_rail_type_on_tile(map.get(tile).unwrap(), RailType::Maglev);
+                map.set_tile(tile, typed).unwrap();
+            }
+        }
+
+        let mut custom = engine_by_id(ENGINE_TRAIN_KIRBY)
+            .expect("el catálogo vanilla debe contener Kirby")
+            .clone();
+        custom.id = NEWGRF_ENGINE_ID_BASE + 61;
+        custom.required_rail_type = Some(RailType::Maglev.as_u8());
+        custom.from_newgrf = true;
+        let catalog = [custom];
+        let from = TileCoord::new(0, 0);
+        let to = TileCoord::new(4, 0);
+
+        assert!(
+            find_rail_path_for_engine(&map, from, to, None, Some(catalog[0].id)).is_none(),
+            "el wrapper legacy debe mantener el fallback Rail para IDs desconocidos"
+        );
+        assert!(
+            find_rail_path_for_engine_with_catalog(
+                &map,
+                from,
+                to,
+                None,
+                Some(catalog[0].id),
+                &catalog,
+            )
+            .is_some(),
+            "el motor NewGRF debe poder seguir su corredor Maglev"
         );
     }
 

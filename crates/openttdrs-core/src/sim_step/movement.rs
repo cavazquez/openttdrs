@@ -900,9 +900,14 @@ fn reroute_head_on_to_alt_platform(state: &mut GameState, vehicle_idx: usize) {
         if alt == current_dest {
             continue;
         }
-        if let Some(path) =
-            crate::pathfinder::find_rail_path_for_engine(&state.map, from, alt, wh, engine_id)
-        {
+        if let Some(path) = crate::pathfinder::find_rail_path_for_engine_with_catalog(
+            &state.map,
+            from,
+            alt,
+            wh,
+            engine_id,
+            &state.engine_catalog,
+        ) {
             state.vehicles[vehicle_idx].dest = alt;
             state.vehicles[vehicle_idx].path = path.into_iter().collect();
             state.vehicles[vehicle_idx].no_network_route_to_order = false;

@@ -314,12 +314,13 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
     for i in rail_jobs {
         let from = state.vehicles[i].pos;
         let to = state.vehicles[i].dest;
-        let path = pathfinder::find_rail_path_for_engine(
+        let path = pathfinder::find_rail_path_for_engine_with_catalog(
             &state.map,
             from,
             to,
             wh,
             state.vehicles[i].engine_id,
+            &state.engine_catalog,
         );
         if let Some(path) = path {
             state.vehicles[i].path = path.into_iter().collect();
@@ -338,12 +339,13 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
                     if alt == to {
                         continue;
                     }
-                    let alt_path = pathfinder::find_rail_path_for_engine(
+                    let alt_path = pathfinder::find_rail_path_for_engine_with_catalog(
                         &state.map,
                         from,
                         alt,
                         wh,
                         state.vehicles[i].engine_id,
+                        &state.engine_catalog,
                     );
                     if let Some(path) = alt_path {
                         state.vehicles[i].dest = alt;
@@ -577,12 +579,13 @@ fn route_train_to_available_platform(
             Some(Vec::new())
         } else {
             let started = Instant::now();
-            let path = pathfinder::find_rail_path_for_engine(
+            let path = pathfinder::find_rail_path_for_engine_with_catalog(
                 &state.map,
                 from,
                 candidate,
                 wormholes,
                 vehicle.engine_id,
+                &state.engine_catalog,
             );
             profile.record_path(nanos(started), path.is_some());
             path

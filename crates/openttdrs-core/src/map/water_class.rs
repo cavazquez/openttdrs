@@ -122,6 +122,56 @@ pub fn river_tile_is_ship_navigable(map: &Map, c: TileCoord) -> bool {
     tileh == 0 || inclined_slope_direction(tileh).is_none()
 }
 
+/// Decide la clase que `MakeWaterKeepingClass` conserva después de evaluar
+/// autoslope y altura.
+///
+/// Los canales y mares inclinados se convierten en suelo; un río sólo queda
+/// como agua en una de las cuatro pendientes diagonales válidas. Un mar plano
+/// por encima del nivel cero se convierte en canal antes de limpiar.
+#[must_use]
+pub fn water_class_after_native_clear(
+    map: &Map,
+    c: TileCoord,
+    water_class: WaterClass,
+) -> WaterClass {
+    let Some((tileh, z)) = tile_slope_and_z(map, c) else {
+        return WaterClass::Invalid;
+    };
+    if tileh != 0 {
+        if water_class == WaterClass::River && inclined_slope_direction(tileh).is_some() {
+            WaterClass::River
+        } else {
+            WaterClass::Invalid
+        }
+    } else if water_class == WaterClass::Sea && z > 0 {
+        WaterClass::Canal
+    } else {
+        water_class
+    }
+}
+
+/// Modela el `DoClearSquare` que precede a `MakeWaterKeepingClass` cuando la
+/// clase resultante es `WaterClass::Invalid`.
+pub fn clear_tile_after_native_water_restore(
+    map: &mut Map,
+    c: TileCoord,
+) -> Result<(), super::MapError> {
+    let mut tile = map.get(c).ok_or(super::MapError::OutOfBounds)?;
+    tile.kind = TileKind::Grass;
+    // El nibble bajo de MAPT contiene la zona y sobrevive a SetTileType.
+    tile.mapt &= 0x0F;
+    tile.m1 = crate::company::OWNER_NONE_M1;
+    tile.m2 = 0;
+    tile.m2_hi = 0;
+    tile.m3 = 0;
+    tile.m3hi = 0;
+    tile.m5 = 0;
+    tile.m6 = 0;
+    tile.m7 = 0;
+    tile.m8 = 0;
+    map.set_tile(c, tile)
+}
+
 /// Convierte la tesela en agua Clear con la clase dada (conserva altura).
 ///
 /// La variante pública histórica usa `MAP4 = 0`; los caminos que modelan una
@@ -321,5 +371,74 @@ mod tests {
         make_water_tile_with_random_bits(&mut map, c, WaterClass::River, 0xA5).expect("make river");
 
         assert_eq!(map.get(c).expect("river").m3hi, 0xA5);
+    }
+
+    #[test]
+    fn native_water_restore_class_matches_slope_and_height_rules() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let c = TileCoord::new(1, 1);
+        assert_eq!(
+            water_class_after_native_clear(&map, c, WaterClass::Sea),
+            WaterClass::Sea
+        );
+
+        map.set_height(c, 1).expect("north corner");
+        map.set_height(TileCoord::new(c.x + 1, c.y), 1)
+            .expect("west corner");
+        map.set_height(TileCoord::new(c.x, c.y + 1), 1)
+            .expect("east corner");
+        map.set_height(TileCoord::new(c.x + 1, c.y + 1), 1)
+            .expect("south corner");
+        assert_eq!(
+            water_class_after_native_clear(&map, c, WaterClass::Sea),
+            WaterClass::Canal
+        );
+
+        map.set_height(TileCoord::new(c.x + 1, c.y), 0)
+            .expect("west slope corner");
+        map.set_height(TileCoord::new(c.x + 1, c.y + 1), 0)
+            .expect("south slope corner");
+        assert_eq!(
+            water_class_after_native_clear(&map, c, WaterClass::Canal),
+            WaterClass::Invalid
+        );
+        assert_eq!(
+            water_class_after_native_clear(&map, c, WaterClass::River),
+            WaterClass::River
+        );
+    }
+
+    #[test]
+    fn native_water_restore_clear_resets_raw_tile_fields() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let c = TileCoord::new(1, 1);
+        let mut tile = map.get(c).expect("tile");
+        tile.kind = TileKind::Station;
+        tile.mapt = 0xAB;
+        tile.m1 = 0xFF;
+        tile.m2 = 0xAA;
+        tile.m2_hi = 0xBB;
+        tile.m3 = 0xCC;
+        tile.m3hi = 0xDD;
+        tile.m5 = 0xEE;
+        tile.m6 = 0xFF;
+        tile.m7 = 0x12;
+        tile.m8 = 0x3456;
+        map.set_tile(c, tile).expect("station tile");
+
+        clear_tile_after_native_water_restore(&mut map, c).expect("clear tile");
+
+        let cleared = map.get(c).expect("cleared tile");
+        assert_eq!(cleared.kind, TileKind::Grass);
+        assert_eq!(cleared.mapt, 0x0B);
+        assert_eq!(cleared.m1, crate::company::OWNER_NONE_M1);
+        assert_eq!(cleared.m2, 0);
+        assert_eq!(cleared.m2_hi, 0);
+        assert_eq!(cleared.m3, 0);
+        assert_eq!(cleared.m3hi, 0);
+        assert_eq!(cleared.m5, 0);
+        assert_eq!(cleared.m6, 0);
+        assert_eq!(cleared.m7, 0);
+        assert_eq!(cleared.m8, 0);
     }
 }

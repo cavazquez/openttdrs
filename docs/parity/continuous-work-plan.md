@@ -5451,3 +5451,10 @@ restauración deja `MP_CLEAR` para canales/mares sobre pendientes y conserva
 La rama de suelo limpia los planos raw y no avanza el RNG; la regresión cubre
 `SLOPE_NE`, payload residual y estado final. #329/#567 continúan abiertas por
 callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-INDUSTRY-WATER-RESTORE (2026-09-12): el cierre mensual
+de Oil Rig comparte la misma decisión de clase y limpieza que las rutas de
+transporte. Una pieza de canal inclinada vuelve a `MP_CLEAR` sin consumir RNG;
+las piezas de agua válidas conservan la tirada nativa. La regresión cubre la
+pendiente y el payload residual. #329/#567 continúan abiertas por callbacks,
+pathfinding, docking y aceptación visual/framebuffer.

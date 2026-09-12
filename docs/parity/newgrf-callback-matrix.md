@@ -1484,3 +1484,13 @@ suelo reinicia los campos raw como `DoClearSquare` y no consume `Random()`;
 queda separada de la promoción mar elevado→canal. La regresión usa una
 pendiente `SLOPE_NE` con payload residual y verifica limpieza y RNG. Otros
 criterios de #329/#567 siguen pendientes.
+
+### #329/#567-INDUSTRY-WATER-RESTORE — clausura de Oil Rig
+
+Actualizado: 2026-09-12. La clausura de una industria acuática reutiliza la
+decisión compartida de `MakeWaterKeepingClass`: una pieza de canal sobre una
+pendiente se convierte en suelo claro, mientras que las piezas planas y los
+ríos válidos conservan agua y consumen el byte bajo de `Random()`. La
+regresión cubre payload residual y confirma que la pendiente inválida no
+avanza el RNG. La retirada de estaciones neutrales y el resto de criterios de
+#329/#567 siguen pendientes.

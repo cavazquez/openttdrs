@@ -6,10 +6,11 @@ use crate::bridge_spec::{
 };
 use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build_cost};
 use crate::map::{
-    Map, Tile, TileCoord, TileKind, WaterClass, has_tile_water_ground, inclined_slope_direction,
-    is_map_object_tile, is_tunnel_entrance_slope, make_water_tile_with_random_bits,
-    object_footprint_tiles, object_id_from_tile, object_origin_from_tile, object_type_dims_id,
-    opposite_diag_dir, set_water_class_m1, tile_slope_and_z, water_class_from_m1,
+    Map, Tile, TileCoord, TileKind, WaterClass, clear_tile_after_native_water_restore,
+    has_tile_water_ground, inclined_slope_direction, is_map_object_tile, is_tunnel_entrance_slope,
+    make_water_tile_with_random_bits, object_footprint_tiles, object_id_from_tile,
+    object_origin_from_tile, object_type_dims_id, opposite_diag_dir, set_water_class_m1,
+    tile_slope_and_z, water_class_after_native_clear, water_class_from_m1,
 };
 use crate::{GameState, Station, StopKind};
 
@@ -178,40 +179,9 @@ pub(in crate::command::transport) fn make_water_tile_after_native_clear(
     c: TileCoord,
     water_class: WaterClass,
 ) -> Result<(), CommandError> {
-    // `MakeWaterKeepingClass` decide la clase antes de `DoClearSquare`.
-    // Autoslope convierte canales y mares inclinados en suelo; sólo un río
-    // con una dirección diagonal nativa válida puede sobrevivir inclinado.
-    let (tileh, z) = tile_slope_and_z(&state.map, c).unwrap_or((0, 0));
-    let water_class = if tileh != 0 {
-        if water_class == WaterClass::River && inclined_slope_direction(tileh).is_some() {
-            WaterClass::River
-        } else {
-            WaterClass::Invalid
-        }
-    } else if water_class == WaterClass::Sea && z > 0 {
-        // Un mar plano por encima del nivel cero se restaura como canal.
-        WaterClass::Canal
-    } else {
-        water_class
-    };
+    let water_class = water_class_after_native_clear(&state.map, c, water_class);
     if water_class == WaterClass::Invalid {
-        let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
-        // Equivalente a `DoClearSquare` + `MakeClear(CLEAR_GRASS, 0)`: el
-        // nibble bajo de MAPT describe la zona y sobrevive a SetTileType.
-        tile.kind = TileKind::Grass;
-        tile.mapt &= 0x0F;
-        tile.m1 = crate::company::OWNER_NONE_M1;
-        tile.m2 = 0;
-        tile.m2_hi = 0;
-        tile.m3 = 0;
-        tile.m3hi = 0;
-        tile.m5 = 0;
-        tile.m6 = 0;
-        tile.m7 = 0;
-        tile.m8 = 0;
-        state
-            .map
-            .set_tile(c, tile)
+        clear_tile_after_native_water_restore(&mut state.map, c)
             .map_err(|_| CommandError::OutOfBounds)?;
         return Ok(());
     }

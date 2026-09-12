@@ -179,9 +179,10 @@ pub use types::{
     TownHouseFootprint, TownHouseSpec,
 };
 pub use water_class::{
-    WaterClass, has_tile_water_ground, is_canal_tile, is_coast_tile, is_river_tile,
-    make_water_tile, make_water_tile_with_random_bits, river_tile_is_ship_navigable,
-    set_water_class_m1, tile_has_water_class, water_class, water_class_from_m1,
+    WaterClass, clear_tile_after_native_water_restore, has_tile_water_ground, is_canal_tile,
+    is_coast_tile, is_river_tile, make_water_tile, make_water_tile_with_random_bits,
+    river_tile_is_ship_navigable, set_water_class_m1, tile_has_water_class, water_class,
+    water_class_after_native_clear, water_class_from_m1,
 };
 pub use water_flood::{
     FloodingBehaviour, clear_neighbour_non_flooding_states, do_flood_tile, flood_vehicles,

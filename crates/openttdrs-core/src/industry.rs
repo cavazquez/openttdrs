@@ -2,7 +2,9 @@ use crate::Climate;
 use crate::cargodist::parity::Randomizer;
 use crate::entity_history::IndustryHistory;
 use crate::industry_spec::IndustrySpecDef;
-use crate::map::TileCoord;
+use crate::map::{
+    TileCoord, WaterClass, clear_tile_after_native_water_restore, water_class_after_native_clear,
+};
 use crate::station::{self, Station, StopKind};
 use crate::{ALL_CARGO_TYPES, CargoStock, CargoType};
 
@@ -3062,13 +3064,18 @@ fn remove_closed_industries_with_random(
                 let water_class = map
                     .get(tile)
                     .map(|current| crate::map::water_class_from_m1(current.m1))
-                    .filter(|class| *class != crate::map::WaterClass::Invalid)
-                    .unwrap_or(crate::map::WaterClass::Sea);
+                    .filter(|class| *class != WaterClass::Invalid)
+                    .unwrap_or(WaterClass::Sea);
+                let water_class = water_class_after_native_clear(map, tile, water_class);
+                if water_class == WaterClass::Invalid {
+                    let _ = clear_tile_after_native_water_restore(map, tile);
+                    continue;
+                }
                 let random_bits = match water_class {
-                    crate::map::WaterClass::Canal | crate::map::WaterClass::River => random
+                    WaterClass::Canal | WaterClass::River => random
                         .as_deref_mut()
                         .map_or(0, |rng| u8::try_from(rng.next() & 0xFF).unwrap_or(0)),
-                    crate::map::WaterClass::Sea | crate::map::WaterClass::Invalid => 0,
+                    WaterClass::Sea | WaterClass::Invalid => 0,
                 };
                 let _ = crate::map::make_water_tile_with_random_bits(
                     map,
@@ -3710,6 +3717,70 @@ mod tests {
                 Some(if index == 0 { expected_river_bits } else { 0 })
             );
         }
+        assert_eq!(random, expected_random);
+    }
+
+    #[test]
+    fn closing_sloped_oil_rig_clears_canal_like_native_restore() {
+        let origin = TileCoord::new(3, 3);
+        let mut map = crate::map::Map::new_flat(8, 8, 0);
+        map.set_height(origin, 1).expect("north corner");
+        map.set_height(TileCoord::new(origin.x + 1, origin.y), 0)
+            .expect("west corner");
+        map.set_height(TileCoord::new(origin.x, origin.y + 1), 1)
+            .expect("east corner");
+        map.set_height(TileCoord::new(origin.x + 1, origin.y + 1), 0)
+            .expect("south corner");
+
+        let mut tile = map.get(origin).expect("water tile");
+        tile.kind = crate::map::TileKind::Industry;
+        tile.mapt = 0x0B;
+        tile.m1 = crate::map::set_water_class_m1(0x03, WaterClass::Canal);
+        tile.m2 = 0xAA;
+        tile.m2_hi = 0xBB;
+        tile.m3 = 0xCC;
+        tile.m3hi = 0xDD;
+        tile.m5 = 0xEE;
+        tile.m6 = 0xFF;
+        tile.m7 = 0x12;
+        tile.m8 = 0x3456;
+        map.set_tile(origin, tile).expect("industry tile");
+
+        let mut rig = Industry::with_tiles_spec(
+            origin,
+            IndustryKind::OilWell,
+            IndustrySpec::OilRig,
+            vec![origin],
+            0,
+        );
+        rig.prod_level = PRODLEVEL_CLOSURE;
+        let mut industries = vec![rig];
+        let mut stations = Vec::new();
+        let mut random = Randomizer::new(0x2468);
+        let expected_random = random;
+
+        assert_eq!(
+            remove_closed_industries_with_neutral_stations_and_random(
+                &mut industries,
+                &mut map,
+                &mut stations,
+                &mut random,
+            ),
+            vec![origin]
+        );
+        assert!(industries.is_empty());
+        let cleared = map.get(origin).expect("cleared tile");
+        assert_eq!(cleared.kind, crate::map::TileKind::Grass);
+        assert_eq!(cleared.mapt, 0x0B);
+        assert_eq!(cleared.m1, crate::company::OWNER_NONE_M1);
+        assert_eq!(cleared.m2, 0);
+        assert_eq!(cleared.m2_hi, 0);
+        assert_eq!(cleared.m3, 0);
+        assert_eq!(cleared.m3hi, 0);
+        assert_eq!(cleared.m5, 0);
+        assert_eq!(cleared.m6, 0);
+        assert_eq!(cleared.m7, 0);
+        assert_eq!(cleared.m8, 0);
         assert_eq!(random, expected_random);
     }
 

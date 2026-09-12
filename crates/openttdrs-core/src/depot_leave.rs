@@ -80,7 +80,10 @@ pub(crate) fn tick_train_stay_in_depot_indexed(
     let power = vehicle.cached_power_hp;
     let engine_power = vehicle
         .engine_id
-        .and_then(crate::engine::engine_by_id)
+        .and_then(|engine_id| {
+            crate::engine::engine_in_catalog(engine_catalog, engine_id)
+                .or_else(|| crate::engine::engine_by_id(engine_id))
+        })
         .map_or(0, |e| e.power_hp);
 
     let unit_ids = fleet.consist(head_id);
@@ -446,7 +449,9 @@ mod tests {
     use super::*;
     use crate::command::{Command, apply_command};
     use crate::depot::has_depot_reservation;
-    use crate::engine::ENGINE_TRAIN_GINZU_A4;
+    use crate::engine::{
+        ENGINE_TRAIN_GINZU_A4, ENGINE_TRAIN_KIRBY, NEWGRF_ENGINE_ID_BASE, engine_by_id,
+    };
     use crate::test_fixtures::SandboxMap;
     use crate::vehicle::VehicleOrder;
 
@@ -490,6 +495,44 @@ mod tests {
             }
         }
         assert!(left, "debe salir del depósito tras la espera de 37 ticks");
+    }
+
+    #[test]
+    fn catalog_engine_power_allows_depot_exit_before_consist_cache_refresh() {
+        let mut state = SandboxMap::flat_rich(16, 16, 1);
+        let depot = TileCoord::new(5, 5);
+        let exit = TileCoord::new(5, 4);
+        apply_command(&mut state, &Command::PlaceRail(exit)).unwrap();
+        apply_command(&mut state, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+
+        let mut custom = engine_by_id(ENGINE_TRAIN_KIRBY)
+            .expect("el catálogo vanilla debe contener Kirby")
+            .clone();
+        custom.id = NEWGRF_ENGINE_ID_BASE + 62;
+        custom.power_hp = 1_000;
+        state.engine_catalog.push(custom.clone());
+
+        let mut train = crate::vehicle::Vehicle::new(1, VehicleKind::Train, depot, exit);
+        train.engine_id = Some(custom.id);
+        train.cached_power_hp = 0;
+        train.wait_counter = TRAIN_DEPOT_LEAVE_WAIT_TICKS;
+        state.vehicles.push(train);
+
+        let mut fleet = FleetIndex::default();
+        fleet.rebuild(&state.vehicles);
+        let _ = tick_train_stay_in_depot_indexed(
+            &mut state.map,
+            &mut state.vehicles,
+            0,
+            state.pathfinding,
+            &fleet,
+            &state.engine_catalog,
+        );
+
+        assert!(
+            state.vehicles[0].running,
+            "la potencia del catálogo debe impedir el apagado por caché vacía"
+        );
     }
 
     #[test]

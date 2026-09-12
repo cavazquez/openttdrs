@@ -831,6 +831,26 @@ fn check_aircraft_needs_service(state: &mut crate::GameState, idx: usize) {
     use crate::vehicle::VehicleKind;
     use crate::vehicle::order::VehicleOrder;
 
+    let stale_implicit_depot_order = state.vehicles.get(idx).is_some_and(|vehicle| {
+        vehicle.kind == VehicleKind::Aircraft
+            && vehicle
+            .current_order_ref()
+            .is_some_and(|order| match order {
+                VehicleOrder::Depot {
+                    depot, stop: false, ..
+                } => !airport_tile_is_hangar(&state.map, *depot),
+                _ => false,
+            })
+    });
+    if stale_implicit_depot_order {
+        // El `current_order` temporal nativo se convierte en `Dummy` cuando
+        // el hangar desaparece o deja de ser una pieza de servicio. Aquí la
+        // orden vive en la lista local, por lo que se retira y se restaura la
+        // orden persistente que estaba debajo.
+        cancel_pending_implicit_service_order(state, idx);
+        return;
+    }
+
     let Some(vehicle) = state.vehicles.get(idx) else {
         return;
     };
@@ -1678,6 +1698,56 @@ mod tests {
         assert_eq!(state.vehicles[0].orders.len(), 2);
         assert_eq!(state.vehicles[0].dest, airport);
         assert!(state.vehicles[0].needs_servicing);
+    }
+
+    #[test]
+    fn aircraft_service_order_is_removed_when_hangar_disappears() {
+        use crate::vehicle::order::VehicleOrder;
+        use crate::{Command, GameState, TileKind, apply_command};
+
+        let mut state = GameState::new(20, 20);
+        let origin = TileCoord::new(2, 2);
+        apply_command(
+            &mut state,
+            &Command::PlaceAirportArea {
+                origin,
+                axis_y: false,
+                spec: crate::AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        let airport = state.stations[0].pos;
+        let mut aircraft = Vehicle::new(1, VehicleKind::Aircraft, TileCoord::new(14, 14), airport);
+        aircraft.running = true;
+        aircraft.aircraft_phase = crate::vehicle::AircraftPhase::Flying;
+        aircraft.service_interval_days = 1;
+        aircraft.last_service_day = 0;
+        aircraft.orders = vec![VehicleOrder::station(airport)];
+        state.vehicles.push(aircraft);
+        state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
+        state.sync_timers_from_tick();
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+        assert!(matches!(
+            state.vehicles[0].current_order_ref(),
+            Some(VehicleOrder::Depot { stop: false, .. })
+        ));
+
+        let hangar = state.stations[0]
+            .airport_tiles
+            .iter()
+            .copied()
+            .find(|&tile| crate::airport::airport_tile_is_hangar(&state.map, tile))
+            .unwrap();
+        state.map.set_kind(hangar, TileKind::Grass).unwrap();
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(state.vehicles[0].orders.len(), 1);
+        assert!(matches!(
+            state.vehicles[0].current_order_ref(),
+            Some(VehicleOrder::Station { station, .. }) if *station == airport
+        ));
     }
 
     #[test]

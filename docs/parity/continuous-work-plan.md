@@ -5301,3 +5301,10 @@ aprons y terminales de un aeropuerto ya no pueden ser elegidas por una orden
 sin destino ni por “ir al depósito más cercano”. La regresión coloca un apron
 más próximo que el hangar y verifica ambas consultas. #329/#567 continúan
 abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-AIRCRAFT-STALE-SERVICE (2026-09-12): una orden aérea
+ temporal `stop:false` se retira cuando la pieza de hangar que tenía como
+ destino desaparece, reproduciendo la conversión nativa de `current_order` a
+ `Dummy` y conservando el circuito persistente. La regresión demuele el único
+ hangar después de insertar el servicio. #329/#567 continúan abiertas por
+ callbacks, pathfinding y aceptación visual/framebuffer.

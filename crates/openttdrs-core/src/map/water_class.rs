@@ -136,6 +136,11 @@ pub fn make_water_tile(map: &mut Map, c: TileCoord, wc: WaterClass) -> Result<()
         tile.m1 = crate::company::OWNER_WATER_M1;
     }
     tile.m5 = 0; // WaterTileType::Clear
+    // `MakeWater` siempre reinicia `DockingTile`; el bit 7 comparte MAPO con
+    // el owner y no debe sobrevivir cuando una instalación deja de ocupar la
+    // tesela. Los callers que necesiten un amarre válido lo recalculan luego
+    // con `CheckForDockingTile`.
+    tile.m1 &= !0x80;
     tile.m1 = set_water_class_m1(tile.m1, wc);
     // `MakeWater` reinicia el estado de la tesela anterior. Conservar `m3`
     // o los planos altos de MAP2/MAP4 deja restos de suelo, estaciones o
@@ -168,6 +173,22 @@ mod tests {
             WaterClass::River
         );
         assert_eq!(set_water_class_m1(0x9F, WaterClass::Sea) & 0x1F, 0x1F);
+    }
+
+    #[test]
+    fn make_water_tile_clears_docking_flag_before_recalculation() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let c = TileCoord::new(1, 1);
+        let mut old = map.get(c).expect("tile");
+        old.m1 = set_water_class_m1(0x80 | 3, WaterClass::Canal);
+        map.set_tile(c, old).expect("replace tile");
+
+        make_water_tile(&mut map, c, WaterClass::Canal).expect("make canal");
+
+        let water = map.get(c).expect("water");
+        assert_eq!(water.m1 & 0x80, 0, "MakeWater borra DockingTile");
+        assert_eq!(water.m1 & 0x1F, 3, "el owner del canal se conserva");
+        assert_eq!(water_class_from_m1(water.m1), WaterClass::Canal);
     }
 
     #[test]

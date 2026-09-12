@@ -5363,3 +5363,11 @@ Esto transfiere las dos piezas de un depósito naval aunque `m1` tenga clase de
 agua o `DockingTile`, conservando esos flags. La regresión cubre una compañía
 quebrada con un depósito naval y el flag de atraque activo. #329/#567 continúan
 abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-SHIP-DOCKING-RESET (2026-09-12): la materialización de
+agua común reinicia `DockingTile` antes de que los comandos navales recalculen
+los amarres, igual que `MakeWater` nativo. Esto evita dejar una sección de
+canal marcada como punto de atraque tras reemplazar una instalación; la
+regresión conserva owner/clase y exige el bit 7 limpio. Las altas y bajas de
+depósitos y muelles mantienen su recálculo explícito de vecinos. #329/#567
+continúan abiertas por callbacks, pathfinding y aceptación visual/framebuffer.

@@ -1371,3 +1371,13 @@ depósito naval aun cuando `m1` contenga clase de agua o `DockingTile`, y
 conserva esos flags durante la operación. La regresión usa una adquisición de
 compañía quebrada con el flag de atraque activo. Otros criterios de #329/#567
 siguen pendientes.
+
+### #329/#567-SHIP-DOCKING-RESET — limpieza del flag de atraque
+
+Actualizado: 2026-09-12. La materialización de agua común reinicia ahora
+`DockingTile` antes de que una ruta de construcción recalcule los amarres
+válidos, igual que `MakeWater` nativo. Esto evita conservar una marca obsoleta
+al reemplazar una sección por canal; la regresión cubre el owner del canal, la
+clase de agua y el bit compartido de `m1`. Las altas y bajas de depósitos y
+muelles siguen recalculando sus vecinos según su instalación activa. Otros
+criterios de #329/#567 siguen pendientes.

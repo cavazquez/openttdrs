@@ -1863,10 +1863,20 @@ pub(super) fn set_autoreplace_rule(
     if from_engine_id == to_engine_id {
         return Err(CommandError::AutoreplaceNotAllowed);
     }
-    let Some(from) = crate::engine::engine_by_id(from_engine_id) else {
+    let Some(from) = state
+        .engine_catalog
+        .iter()
+        .find(|engine| engine.id == from_engine_id)
+        .or_else(|| crate::engine::engine_by_id(from_engine_id))
+    else {
         return Err(CommandError::EngineNotFound);
     };
-    let Some(to) = crate::engine::engine_by_id(to_engine_id) else {
+    let Some(to) = state
+        .engine_catalog
+        .iter()
+        .find(|engine| engine.id == to_engine_id)
+        .or_else(|| crate::engine::engine_by_id(to_engine_id))
+    else {
         return Err(CommandError::EngineNotFound);
     };
     if from.kind != to.kind {

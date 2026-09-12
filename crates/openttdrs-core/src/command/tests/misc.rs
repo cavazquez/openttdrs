@@ -188,6 +188,35 @@ fn accepting_engine_preview_grants_joined_variants_and_unblocks_purchase() {
 }
 
 #[test]
+fn autoreplace_command_accepts_active_catalog_engines() {
+    let mut state = GameState::new(8, 8);
+    let from_id = crate::engine::NEWGRF_ENGINE_ID_BASE + 60;
+    let to_id = crate::engine::NEWGRF_ENGINE_ID_BASE + 61;
+    let mut from = crate::engine::engine_by_id(crate::ENGINE_BUS_MPS)
+        .unwrap()
+        .clone();
+    from.id = from_id;
+    from.name = "Bus NewGRF A".into();
+    let mut to = from.clone();
+    to.id = to_id;
+    to.name = "Bus NewGRF B".into();
+    state.engine_catalog.extend([from, to]);
+
+    apply_command(
+        &mut state,
+        &Command::SetAutoReplaceRule {
+            from_engine_id: from_id,
+            to_engine_id: to_id,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(state.autoreplace_rules.len(), 1);
+    assert_eq!(state.autoreplace_rules[0].from_engine_id, from_id);
+    assert_eq!(state.autoreplace_rules[0].to_engine_id, to_id);
+}
+
+#[test]
 fn toyland_industry_rejected_on_temperate_map() {
     let mut s = GameState::new(16, 16);
     assert_eq!(

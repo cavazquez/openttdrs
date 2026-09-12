@@ -668,7 +668,7 @@ fn depot_vehicle_row_label(
     };
     format!(
         "{}{}  ({}{age_suffix})  {}/{}",
-        vehicle.display_name(),
+        vehicle.display_name_with_catalog(&sim.state.engine_catalog),
         units,
         age,
         vehicle.cargo,
@@ -1762,7 +1762,9 @@ mod tests {
 
         assert_eq!(depot_title(Locale::En, &sim, depot), "Road depot (2, 2)");
         let english_row = depot_vehicle_row_label(Locale::En, &sim, vehicle);
-        assert!(english_row.contains(&vehicle.display_name()));
+        assert!(
+            english_row.contains(&vehicle.display_name_with_catalog(&sim.state.engine_catalog))
+        );
         assert!(english_row.contains("(0y)"));
         assert!(english_row.ends_with(&format!("{}/{}", vehicle.cargo, vehicle.capacity)));
 

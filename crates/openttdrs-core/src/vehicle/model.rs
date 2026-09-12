@@ -1024,13 +1024,23 @@ impl Vehicle {
     /// Etiqueta para UI: nombre personalizado o «modelo #id».
     #[must_use]
     pub fn display_name(&self) -> String {
+        self.display_name_with_catalog(&[])
+    }
+
+    /// Etiqueta para UI resolviendo el modelo en el catálogo runtime.
+    #[must_use]
+    pub fn display_name_with_catalog(&self, catalog: &[crate::engine::EngineDef]) -> String {
         if let Some(name) = &self.name {
             let trimmed = name.trim();
             if !trimmed.is_empty() {
                 return trimmed.to_string();
             }
         }
-        format!("{} #{}", self.effective_engine().name, self.id)
+        format!(
+            "{} #{}",
+            crate::newgrf_callback::engine_for_vehicle_catalog(catalog, self).name,
+            self.id
+        )
     }
 
     #[must_use]

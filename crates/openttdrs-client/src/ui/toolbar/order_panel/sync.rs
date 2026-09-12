@@ -92,6 +92,7 @@ pub(crate) fn sync_order_panel(
             locale,
             vehicle,
             order_pick_active(&pick_state) && order_state.focused == Some(vehicle_id),
+            &sim.state.engine_catalog,
         );
         for (title, mut text, child_of) in &mut title_q {
             if title.0 != FloatingWindowId::Orders {
@@ -234,7 +235,12 @@ fn hide_order_rows_for_slot(
     }
 }
 
-fn order_panel_title(locale: Locale, vehicle: &Vehicle, pick_active: bool) -> String {
+fn order_panel_title(
+    locale: Locale,
+    vehicle: &Vehicle,
+    pick_active: bool,
+    catalog: &[openttdrs_core::EngineDef],
+) -> String {
     let pick_hint = if pick_active {
         localized(locale, " · clic en parada")
     } else {
@@ -245,7 +251,7 @@ fn order_panel_title(locale: Locale, vehicle: &Vehicle, pick_active: bool) -> St
     });
     format!(
         "{} ({}){shared}{pick_hint}",
-        vehicle.display_name(),
+        vehicle.display_name_with_catalog(catalog),
         localized(locale, "Órdenes")
     )
 }
@@ -601,7 +607,7 @@ mod tests {
         };
         let order = order.with_cycled_travel();
 
-        let title = order_panel_title(Locale::En, &vehicle, true);
+        let title = order_panel_title(Locale::En, &vehicle, true, &[]);
         assert!(title.contains("(Orders)"));
         assert!(title.contains("shared pool #7"));
         assert!(title.contains("click a stop"));

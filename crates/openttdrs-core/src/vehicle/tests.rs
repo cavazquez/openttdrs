@@ -11,6 +11,29 @@ use super::model::{DIR_N, DIR_NE, DIR_S, DIR_SE, DIR_SW, Vehicle, VehicleKind};
 use super::order::{OrderConditionKind, VehicleOrder};
 
 #[test]
+fn display_name_with_catalog_uses_custom_engine_name() {
+    let custom_id = crate::engine::NEWGRF_ENGINE_ID_BASE + 58;
+    let mut custom = crate::engine::engine_by_id(crate::engine::ENGINE_BUS_MPS)
+        .unwrap()
+        .clone();
+    custom.id = custom_id;
+    custom.name = "Bus NewGRF".into();
+
+    let mut vehicle = Vehicle::new(
+        7,
+        VehicleKind::Bus,
+        TileCoord::new(1, 1),
+        TileCoord::new(1, 1),
+    );
+    vehicle.engine_id = Some(custom_id);
+
+    assert_eq!(
+        vehicle.display_name_with_catalog(&[custom]),
+        "Bus NewGRF #7"
+    );
+}
+
+#[test]
 fn progress_requires_multiple_ticks_per_tile() {
     let mut v = Vehicle::new(
         0,

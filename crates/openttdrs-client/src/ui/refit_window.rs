@@ -389,7 +389,10 @@ pub(crate) fn sync_refit_window(
         };
         *vis = Visibility::Visible;
 
-        let title_name = format!("Refit · {}", vehicle.display_name());
+        let title_name = format!(
+            "Refit · {}",
+            vehicle.display_name_with_catalog(&sim.state.engine_catalog)
+        );
         for (title, mut text, child_of) in &mut title_q {
             if title.0 != FloatingWindowId::Refit {
                 continue;

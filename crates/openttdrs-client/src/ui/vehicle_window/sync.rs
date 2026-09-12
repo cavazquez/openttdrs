@@ -152,7 +152,7 @@ pub(crate) fn sync_vehicle_window(
             }
         }
 
-        let title_name = vehicle.display_name();
+        let title_name = vehicle.display_name_with_catalog(&sim.state.engine_catalog);
         for (title, mut text, child_of) in &mut title_q {
             if title.0 != FloatingWindowId::Vehicle {
                 continue;

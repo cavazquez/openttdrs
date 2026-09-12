@@ -344,11 +344,15 @@ fn format_ticks(ticks: u32, seconds_mode: bool) -> String {
     }
 }
 
-fn timetable_title(locale: Locale, vehicle: &Vehicle) -> String {
+fn timetable_title(
+    locale: Locale,
+    vehicle: &Vehicle,
+    catalog: &[openttdrs_core::EngineDef],
+) -> String {
     format!(
         "{} — {}",
         localized(locale, "Horario"),
-        vehicle.display_name()
+        vehicle.display_name_with_catalog(catalog)
     )
 }
 
@@ -481,7 +485,7 @@ pub(crate) fn sync_timetable_window(
             continue;
         };
         *vis = Visibility::Visible;
-        let title_name = timetable_title(locale, vehicle);
+        let title_name = timetable_title(locale, vehicle, &sim.state.engine_catalog);
         for (title, mut text, child_of) in &mut title_q {
             if title.0 != FloatingWindowId::Timetable {
                 continue;

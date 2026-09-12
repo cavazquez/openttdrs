@@ -976,7 +976,7 @@ pub(crate) fn sync_vehicle_list(
                 .is_none_or(|pos| vehicle_visits_station(vehicle, pos))
         })
         .map(|vehicle| {
-            let mut name = vehicle.display_name();
+            let mut name = vehicle.display_name_with_catalog(&sim.state.engine_catalog);
             if state.company == VehicleCompanyFilter::All && vehicle.owner != company {
                 name = format!("[{}] {name}", vehicle.owner.0);
             }

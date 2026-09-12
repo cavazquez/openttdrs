@@ -259,7 +259,7 @@ pub use economy::{
     monthly_loan_interest, object_clear_cost_factored, rail_build_cost_factored, rail_clear_cost,
     road_build_cost_factored, road_clear_cost, road_clear_cost_factored, road_depot_clear_cost,
     road_stop_build_cost_factored, road_stop_clear_cost_factored, rocks_clear_cost,
-    rough_clear_cost, terraform_cost_per_corner, ticks_to_transit_periods,
+    rough_clear_cost, terraform_cost_per_corner, ticks_to_transit_periods, train_depot_clear_cost,
     transported_goods_income, transported_goods_income_for_climate,
     transported_goods_income_with_spec, trees_clear_cost, vehicle_asset_value_with_catalog,
     vehicle_purchase_cost, vehicle_purchase_cost_with_callbacks, vehicle_refit_cost_with_callbacks,

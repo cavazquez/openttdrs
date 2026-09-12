@@ -8,7 +8,7 @@ use crate::economy::{
     canal_build_cost, canal_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
     lock_clear_cost, rail_clear_cost, road_depot_clear_cost, rocks_clear_cost, rough_clear_cost,
     ship_depot_build_cost, ship_depot_clear_cost, signal_clear_cost, station_build_cost,
-    trees_clear_cost, water_clear_cost,
+    train_depot_clear_cost, trees_clear_cost, water_clear_cost,
 };
 use crate::map::rail_bits::RAIL_TILE_NORMAL;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
@@ -1485,6 +1485,25 @@ fn check_lock_road_depot_tile(
     })
 }
 
+/// Prepara el despeje manual de un depósito ferroviario.
+fn check_lock_rail_depot_tile(
+    state: &GameState,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    let owner = tile.m1 & 0x1F;
+    if owner != (state.active_company.0 & 0x1F) {
+        return Err(CommandError::TileNotOwned);
+    }
+    Ok(LockBuildTilePlan {
+        water_class: WaterClass::Canal,
+        owner: state.active_company.0,
+        clear_on_build: true,
+        clear_cost: train_depot_clear_cost(&state.global_economy),
+        add_canal_cost: !is_middle,
+    })
+}
+
 /// Cuenta las llamadas a `CMD_REMOVE_SINGLE_SIGNAL` que hace
 /// `ClearTile_Track` al retirar todos los carriles de una tesela.
 fn rail_signal_clear_count(tile: Tile) -> i64 {
@@ -1629,7 +1648,9 @@ fn check_lock_object_tile(
 #[must_use]
 fn lock_structure_clear_error(tile: Tile) -> Option<CommandError> {
     match tile.kind {
-        TileKind::House => Some(CommandError::BuildingMustBeDemolished),
+        TileKind::House | TileKind::Airport | TileKind::ShipDepot => {
+            Some(CommandError::BuildingMustBeDemolished)
+        }
         TileKind::Industry => Some(CommandError::IndustryInTheWay),
         TileKind::Station => match crate::station::stop_kind_from_m6(tile.m6) {
             StopKind::Dock => Some(CommandError::MustDemolishDockFirst),
@@ -1639,18 +1660,94 @@ fn lock_structure_clear_error(tile: Tile) -> Option<CommandError> {
         },
         TileKind::RoadBridge | TileKind::RailBridge => Some(CommandError::MustDemolishBridgeFirst),
         TileKind::RoadTunnel | TileKind::RailTunnel => Some(CommandError::MustDemolishTunnelFirst),
-        TileKind::Airport | TileKind::RailDepot | TileKind::ShipDepot => {
-            Some(CommandError::BuildingMustBeDemolished)
-        }
         TileKind::Grass
         | TileKind::Water
         | TileKind::Forest
         | TileKind::CoalField
         | TileKind::Road
         | TileKind::RoadDepot
+        | TileKind::RailDepot
         | TileKind::Rail
         | TileKind::Void
         | TileKind::Unknown(_) => None,
+    }
+}
+
+/// Prepara una tesela de agua para `CMD_LANDSCAPE_CLEAR` dentro de una
+/// esclusa, distinguiendo agua plana de costa.
+fn check_lock_water_tile(
+    state: &GameState,
+    c: TileCoord,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    let occupied_error = if is_middle {
+        CommandError::CannotPlaceStationOnOccupiedTile
+    } else {
+        CommandError::BuildingMustBeDemolished
+    };
+    match water_tile_type(tile) {
+        WATER_TILE_TYPE_CLEAR => {
+            let water_class = water_class_from_m1(tile.m1);
+            if is_middle {
+                check_non_freeform_edge(&state.map, c, state.construction.freeform_edges)?;
+                check_clear_water_owner(state, tile)?;
+                let clear_cost = if water_class == WaterClass::Canal {
+                    canal_clear_cost(&state.global_economy)
+                } else {
+                    water_clear_cost(&state.global_economy)
+                };
+                Ok(LockBuildTilePlan {
+                    water_class,
+                    owner: state.active_company.0,
+                    clear_on_build: true,
+                    clear_cost,
+                    add_canal_cost: false,
+                })
+            } else {
+                // Los extremos acuáticos no pasan por LandscapeClear en
+                // `DoBuildLock`; por eso no se comprueba ownership ni se
+                // cobra el despeje aquí.
+                Ok(LockBuildTilePlan {
+                    water_class,
+                    owner: tile.m1 & 0x1F,
+                    clear_on_build: false,
+                    clear_cost: 0,
+                    add_canal_cost: false,
+                })
+            }
+        }
+        WATER_TILE_TYPE_COAST => {
+            let clear_cost = if is_middle {
+                let (tileh, _) =
+                    tile_slope_and_z(&state.map, c).ok_or(CommandError::OutOfBounds)?;
+                if is_slope_with_one_corner_raised(tileh) {
+                    water_clear_cost(&state.global_economy)
+                } else {
+                    rough_clear_cost(&state.global_economy)
+                }
+            } else {
+                0
+            };
+            Ok(LockBuildTilePlan {
+                // `HasTileWaterGround` es false para una costa, así que el
+                // centro nativo cae a canal. Un extremo conserva su clase.
+                water_class: if is_middle {
+                    WaterClass::Canal
+                } else {
+                    water_class_from_m1(tile.m1)
+                },
+                owner: if is_middle {
+                    state.active_company.0
+                } else {
+                    tile.m1 & 0x1F
+                },
+                clear_on_build: is_middle,
+                clear_cost,
+                add_canal_cost: false,
+            })
+        }
+        _ => Err(occupied_error),
     }
 }
 
@@ -1677,70 +1774,7 @@ fn check_lock_build_tile(
     }
 
     match tile.kind {
-        TileKind::Water => match water_tile_type(tile) {
-            WATER_TILE_TYPE_CLEAR => {
-                let water_class = water_class_from_m1(tile.m1);
-                if is_middle {
-                    check_non_freeform_edge(&state.map, c, state.construction.freeform_edges)?;
-                    check_clear_water_owner(state, tile)?;
-                    let clear_cost = if water_class == WaterClass::Canal {
-                        canal_clear_cost(&state.global_economy)
-                    } else {
-                        water_clear_cost(&state.global_economy)
-                    };
-                    Ok(LockBuildTilePlan {
-                        water_class,
-                        owner: state.active_company.0,
-                        clear_on_build: true,
-                        clear_cost,
-                        add_canal_cost: false,
-                    })
-                } else {
-                    // Los extremos acuáticos no pasan por LandscapeClear en
-                    // `DoBuildLock`; por eso no se comprueba ownership ni se
-                    // cobra el despeje aquí.
-                    Ok(LockBuildTilePlan {
-                        water_class,
-                        owner: tile.m1 & 0x1F,
-                        clear_on_build: false,
-                        clear_cost: 0,
-                        add_canal_cost: false,
-                    })
-                }
-            }
-            WATER_TILE_TYPE_COAST => {
-                let clear_cost = if is_middle {
-                    let (tileh, _) =
-                        tile_slope_and_z(&state.map, c).ok_or(CommandError::OutOfBounds)?;
-                    if is_slope_with_one_corner_raised(tileh) {
-                        water_clear_cost(&state.global_economy)
-                    } else {
-                        rough_clear_cost(&state.global_economy)
-                    }
-                } else {
-                    0
-                };
-                Ok(LockBuildTilePlan {
-                    // `HasTileWaterGround` is false for a coast, so the
-                    // native middle falls back to a canal. An endpoint is
-                    // still `IsWaterTile` and keeps its saved class.
-                    water_class: if is_middle {
-                        WaterClass::Canal
-                    } else {
-                        water_class_from_m1(tile.m1)
-                    },
-                    owner: if is_middle {
-                        state.active_company.0
-                    } else {
-                        tile.m1 & 0x1F
-                    },
-                    clear_on_build: is_middle,
-                    clear_cost,
-                    add_canal_cost: false,
-                })
-            }
-            _ => Err(occupied_error),
-        },
+        TileKind::Water => check_lock_water_tile(state, c, is_middle, tile),
         TileKind::Grass => {
             if tile.ottd_type_nibble() != 0 {
                 return Err(occupied_error);
@@ -1771,6 +1805,7 @@ fn check_lock_build_tile(
         }),
         TileKind::Road => check_lock_road_tile(state, is_middle, tile),
         TileKind::RoadDepot => check_lock_road_depot_tile(state, is_middle, tile),
+        TileKind::RailDepot => check_lock_rail_depot_tile(state, is_middle, tile),
         TileKind::Rail => check_lock_rail_tile(state, tile),
         TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
         _ => lock_structure_clear_error(tile).map_or_else(|| Err(occupied_error), Err),
@@ -1786,11 +1821,14 @@ fn clear_lock_build_tile(
     if !plan.clear_on_build {
         return Ok(());
     }
-    let was_rail = state.map.get_kind(c) == Some(TileKind::Rail);
+    let was_rail = matches!(
+        state.map.get_kind(c),
+        Some(TileKind::Rail | TileKind::RailDepot)
+    );
     let depot_id = state
         .map
         .get(c)
-        .filter(|tile| tile.kind == TileKind::RoadDepot)
+        .filter(|tile| matches!(tile.kind, TileKind::RoadDepot | TileKind::RailDepot))
         .and_then(crate::depot::depot_id_from_tile);
     clear_tile_after_native_water_restore(&mut state.map, c)
         .map_err(|_| CommandError::OutOfBounds)?;

@@ -16,7 +16,7 @@ pub use build_costs::{
     road_stop_clear_cost_factored, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
     ship_depot_clear_cost, signal_build_cost, signal_clear_cost, station_build_cost,
     terraform_cost_per_corner, terraform_cost_per_corner_inflated, train_depot_build_cost,
-    trees_clear_cost, water_clear_cost, waypoint_build_cost,
+    train_depot_clear_cost, trees_clear_cost, water_clear_cost, waypoint_build_cost,
 };
 pub use global::{
     DEFAULT_DIFFICULTY_MOD, DEFAULT_INTEREST_RATE, EconomyType, FluctuationEvent, GlobalEconomy,

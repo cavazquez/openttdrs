@@ -5593,3 +5593,13 @@ acceso vial vecino permanece intacto; el costo de canal se conserva para un
 depósito que ocupa un extremo. Depósitos ferroviarios, cruces, túneles,
 puentes y estaciones siguen en subetapas propias. #329/#567 siguen abiertas
 por infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-RAIL-DEPOT-CLEAR (2026-09-12):
+`ClearTile_Track` manual ya puede retirar un depósito ferroviario durante
+`DoBuildLock`, aplicando `PR_CLEAR_DEPOT_TRAIN`, comprobando propiedad y
+desregistrando la fila `DEPT` antes de materializar el agua de la esclusa. La
+vía de acceso permanece intacta y la actualización de vecinos ferroviarios se
+conserva al convertir la tesela. El guard general de vehículos de `DoBuildLock`
+también cubre un tren detenido en esa huella. Las ramas de cruces, túneles,
+puentes y estaciones siguen en subetapas propias. #329/#567 siguen abiertas
+por infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.

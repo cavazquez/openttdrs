@@ -282,7 +282,7 @@ impl super::model::Vehicle {
                 | super::model::VehicleKind::Tram
         ) {
             // Sin vecinos: el tick de simulación usa `road_vehicle_tick` con la flota.
-            crate::road_movement::road_vehicle_step_solo(self, map);
+            crate::road_movement::road_vehicle_step_solo_with_catalog(self, map, engine_catalog);
             return;
         }
 

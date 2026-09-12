@@ -651,6 +651,28 @@ pub fn road_vehicle_step_solo(v: &mut Vehicle, map: Option<&Map>) {
     *v = tmp.remove(0);
 }
 
+/// Avance road sin vecinos usando el catálogo activo. La API histórica
+/// anterior conserva el fallback vanilla y `AM_ORIGINAL` para los callers que
+/// no tienen estado de partida.
+pub fn road_vehicle_step_solo_with_catalog(
+    v: &mut Vehicle,
+    map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+) {
+    let mut tmp = vec![v.clone()];
+    road_vehicle_tick_side_with_traffic(
+        &mut tmp,
+        0,
+        map,
+        false,
+        RoadVehicleAccelerationModel::Original,
+        None,
+        engine_catalog,
+        &[],
+    );
+    *v = tmp.remove(0);
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {

@@ -119,6 +119,34 @@ fn train_tile_prediction_uses_newgrf_speed_property() {
 }
 
 #[test]
+fn catalog_aware_step_keeps_custom_road_speed_cap() {
+    let custom_id = crate::engine::NEWGRF_ENGINE_ID_BASE + 59;
+    let mut custom = crate::engine::engine_by_id(crate::engine::ENGINE_BUS_MPS)
+        .unwrap()
+        .clone();
+    custom.id = custom_id;
+    custom.max_speed = 20;
+
+    let start = TileCoord::new(1, 1);
+    let mut bus = Vehicle::new(1, VehicleKind::Bus, start, TileCoord::new(2, 1));
+    bus.engine_id = Some(custom_id);
+    bus.running = true;
+    bus.cur_speed = custom.max_speed;
+    bus.path = VecDeque::from([TileCoord::new(2, 1)]);
+
+    bus.step_with_map_and_accel_and_catalog(
+        None,
+        crate::engine::TrainAccelerationModel::Original,
+        &[custom],
+    );
+
+    assert_eq!(
+        bus.cur_speed, 20,
+        "el tramo road solo no debe volver al límite del motor vanilla"
+    );
+}
+
+#[test]
 fn next_station_hop_skips_current_and_wraps() {
     let a = TileCoord::new(1, 1);
     let b = TileCoord::new(2, 2);

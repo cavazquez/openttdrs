@@ -6070,3 +6070,17 @@ además de Clippy estricto en core y cliente, formato y `git diff --check`.
 La serialización SAV del pool nativo `Engine::company_avail/preview_*` y los
 callbacks restantes siguen pendientes; #329/#567 continúan abiertas y #326
 permanece abierta.
+
+Corrección #329/#567-VEHICLE-SAV-ENGINE-POOL (2026-09-12, `7d3ecd0d`): el
+importador reconoce las columnas persistentes de `ENGN`
+(`company_avail`, `preview_asked`, `preview_company` y `preview_wait`) y
+rehidrata las excepciones de disponibilidad y las ofertas activas. Al
+reexportar un SAV nativo, el writer actualiza sólo esos campos para los
+motores vanilla con correspondencia conocida, conservando header, huecos,
+framing gamma y columnas futuras del pool. La aceptación limpia la oferta y
+deja el bit de compañía; una oferta activa conserva countdown y máscara de
+compañías consultadas. Los motores NewGRF/slots sin correspondencia y la
+creación de un `ENGN` nuevo cuando el save de origen no lo contiene siguen
+pendientes. Pasaron 2682 tests del core (1 ignorado), 1422 del cliente (2
+ignorados), Clippy estricto en core y cliente, formato y `git diff --check`.
+#329/#567 continúan abiertas y #326 permanece abierta.

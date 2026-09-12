@@ -347,8 +347,10 @@ pub(in crate::command) fn place_rail_depot_dir(
     let dir = dir & 0x03;
     check_rail_depot_placement(&state.map, c, dir)?;
     check_object_can_be_auto_cleared(state, c)?;
-    let rail_cost_multiplier =
-        state.runtime.rail_type_props[usize::from(state.current_rail_type.as_u8())].cost_multiplier;
+    let rail_cost_multiplier = crate::rail_type::rail_build_cost_multiplier_for_type(
+        state.current_rail_type,
+        &state.runtime.rail_type_props,
+    );
     let connection = rail_depot_connection(&state.map, c, dir);
     if let Some((exit, before, after)) = connection
         && before != after
@@ -385,8 +387,10 @@ pub(in crate::command) fn place_rail_depot_dir(
 }
 
 fn charge_rail_build(state: &mut GameState) {
-    let mult =
-        state.runtime.rail_type_props[usize::from(state.current_rail_type.as_u8())].cost_multiplier;
+    let mult = crate::rail_type::rail_build_cost_multiplier_for_type(
+        state.current_rail_type,
+        &state.runtime.rail_type_props,
+    );
     state.economy.money -= rail_build_cost_factored(&state.global_economy, mult);
 }
 

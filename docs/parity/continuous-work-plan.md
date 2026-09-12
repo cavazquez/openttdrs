@@ -5850,3 +5850,11 @@ que túneles y puentes cobran por toda la longitud del enlace; preview y
 ejecución comparten el mismo preflight de fondos. #329/#567 continúa abierta
 por contadores de infraestructura, callbacks, arrastre de áreas y aceptación
 visual/framebuffer.
+
+Corrección #329/#567-RAILTYPE-BUILD-COST (2026-09-12): construcción y limpieza
+ferroviaria ya resuelven el multiplicador efectivo por railtype, incluyendo
+los valores vanilla de eléctrica, monorail y maglev cuando `Action0` no aporta
+override. El coste de `PlaceRail`, depósitos y limpieza de túnel/puente o lock
+queda alineado con el mismo contrato que usa `RailConvertCost`. #329/#567
+continúa abierta por contadores de infraestructura, callbacks, arrastre de
+áreas y aceptación visual/framebuffer.

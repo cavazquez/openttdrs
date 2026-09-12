@@ -314,8 +314,9 @@ fn tunnel_bridge_clear_cost(state: &GameState, plan: &TunnelBridgeClearPlan) -> 
             .saturating_add(tram.saturating_mul(2))
     } else {
         let rail_type = crate::rail_type::rail_type_from_tile(tile);
-        let multiplier = crate::rail_type::rail_build_cost_multiplier(
-            &state.runtime.rail_type_props[usize::from(rail_type.as_u8())],
+        let multiplier = crate::rail_type::rail_build_cost_multiplier_for_type(
+            rail_type,
+            &state.runtime.rail_type_props,
         );
         rail_clear_cost(&state.global_economy, multiplier)
     };

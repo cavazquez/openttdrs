@@ -2114,16 +2114,13 @@ fn check_lock_rail_tile(state: &GameState, tile: Tile) -> Result<LockBuildTilePl
         return Err(CommandError::BuildingMustBeDemolished);
     }
     let rail_type = crate::rail_type::rail_type_from_tile(tile);
-    let props = state
-        .runtime
-        .rail_type_props
-        .get(usize::from(rail_type.as_u8()))
-        .copied()
-        .unwrap_or_default();
     let track_count = i64::from((tile.m5 & 0x3F).count_ones());
     let rail_cost = rail_clear_cost(
         &state.global_economy,
-        crate::rail_type::rail_build_cost_multiplier(&props),
+        crate::rail_type::rail_build_cost_multiplier_for_type(
+            rail_type,
+            &state.runtime.rail_type_props,
+        ),
     )
     .saturating_mul(track_count);
     let signal_cost =

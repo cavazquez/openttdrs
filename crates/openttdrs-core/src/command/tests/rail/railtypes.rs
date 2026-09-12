@@ -393,6 +393,43 @@ fn place_rail_depot_uses_current_rail_type() {
 }
 
 #[test]
+fn rail_build_and_depot_costs_use_vanilla_railtype_multipliers() {
+    use crate::economy::{rail_build_cost_factored, train_depot_build_cost};
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(10, 8);
+    s.global_economy = crate::economy::GlobalEconomy::new();
+    s.economy.money = 100_000;
+    s.current_rail_type = RailType::Electric;
+    let electric = TileCoord::new(3, 3);
+    let money_before_electric = s.economy.money;
+    apply_command(&mut s, &Command::PlaceRail(electric)).unwrap();
+    assert_eq!(
+        s.economy.money,
+        money_before_electric - rail_build_cost_factored(&s.global_economy, 12)
+    );
+    assert_eq!(
+        rail_type_from_tile(s.map.get(electric).unwrap()),
+        RailType::Electric
+    );
+
+    s.current_rail_type = RailType::Monorail;
+    let mono_rail = TileCoord::new(6, 4);
+    let depot = TileCoord::new(6, 5);
+    apply_command(&mut s, &Command::PlaceRail(mono_rail)).unwrap();
+    let money_before_depot = s.economy.money;
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+    assert_eq!(
+        s.economy.money,
+        money_before_depot - train_depot_build_cost(&s.global_economy, 16)
+    );
+    assert_eq!(
+        rail_type_from_tile(s.map.get(depot).unwrap()),
+        RailType::Monorail
+    );
+}
+
+#[test]
 fn convert_rail_cycles_through_mono_and_maglev() {
     use crate::rail_type::{RailType, rail_type_from_tile};
 

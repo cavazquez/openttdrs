@@ -593,6 +593,101 @@ fn place_lock_clears_single_tile_rail_station_and_updates_station_pool() {
 }
 
 #[test]
+fn place_lock_clears_multi_tile_rail_station_footprint() {
+    let mut s = GameState::new(12, 8);
+    let extra_left = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let extra_right = TileCoord::new(4, 2);
+    let lower = TileCoord::new(3, 1);
+    let upper = TileCoord::new(3, 3);
+
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: extra_left,
+            axis_y: false,
+            platforms: 1,
+            length: 3,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.stations[0].pos, middle);
+    for coord in [lower, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, true);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command)
+        .expect("RemoveRailStation debe retirar toda la huella antes de construir");
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(lower), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(upper), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(extra_left), Some(TileKind::Grass));
+    assert_eq!(s.map.get_kind(extra_right), Some(TileKind::Grass));
+    assert!(s.stations.is_empty());
+    assert_eq!(
+        s.economy.money,
+        money - 3 * rail_station_clear_cost(&s.global_economy) - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_rejects_vehicle_on_extra_rail_station_tile_atomically() {
+    let mut s = GameState::new(12, 8);
+    let extra_left = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let extra_right = TileCoord::new(4, 2);
+    let lower = TileCoord::new(3, 1);
+    let upper = TileCoord::new(3, 3);
+
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: extra_left,
+            axis_y: false,
+            platforms: 1,
+            length: 3,
+        },
+    )
+    .unwrap();
+    for coord in [lower, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Train, extra_left, extra_left));
+    let before =
+        [extra_left, middle, extra_right, lower, upper].map(|coord| s.map.get(coord).unwrap());
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, true);
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::VehicleInTheWay)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::VehicleInTheWay)
+    );
+    for (coord, raw) in [extra_left, middle, extra_right, lower, upper]
+        .into_iter()
+        .zip(before)
+    {
+        assert_eq!(s.map.get(coord), Some(raw));
+    }
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.economy.money, money);
+}
+
+#[test]
 fn place_lock_rejects_foreign_single_tile_rail_station_atomically() {
     let mut s = GameState::new(10, 6);
     let approach = TileCoord::new(2, 2);

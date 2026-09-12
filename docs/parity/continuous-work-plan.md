@@ -5689,9 +5689,18 @@ pathfinding y aceptación visual/framebuffer.
 Actualización #329/#567-WATER-LOCK-RAIL-STATION-1X1 (2026-09-12):
 `ClearTile_Station` ya retira una estación ferroviaria de una tesela desde
 `DoBuildLock`, usando `PR_CLEAR_STATION_RAIL`, respetando la propiedad y
-eliminando la entrada lógica de `Station`. La implementación delimita
-intencionalmente la huella a 1×1; las plataformas multi-tesela conservan el
-rechazo nativo hasta completar la reducción de área y sus efectos sobre
-reservas, infraestructura y órdenes. #329/#567 continúa abierta por las
-subetapas restantes de estaciones, aeropuertos, callbacks, pathfinding y
-aceptación visual/framebuffer.
+eliminando la entrada lógica de `Station`. Esta fue la primera subetapa
+verificable; la limpieza de la huella completa queda registrada debajo.
+
+Actualización #329/#567-WATER-LOCK-RAIL-STATION-FOOTPRINT (2026-09-12):
+`RemoveRailStation` ya se modela sobre toda la huella ferroviaria asignada a
+la entidad lógica, no sólo sobre la tesela apuntada por el cursor. El
+preflight cobra `PR_CLEAR_STATION_RAIL` por tesela, rechaza vehículos en
+cualquier parte de la huella y mantiene la operación atómica. Al ejecutar,
+la tesela central vuelve a agua para `MakeLock` y las demás se limpian a
+terreno; la planificación secuencial vuelve a evaluar los extremos y sólo
+añade canal cuando esos extremos todavía eran terreno. Las estaciones
+intermodales, reservas ferroviarias, reembolsos de vía e infraestructura
+nativa todavía requieren subetapas propias. #329/#567
+continúa abierta por esas diferencias y por aeropuertos, callbacks,
+pathfinding y aceptación visual/framebuffer.

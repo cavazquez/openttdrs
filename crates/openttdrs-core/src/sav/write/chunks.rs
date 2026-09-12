@@ -370,18 +370,29 @@ fn merge_field_bytes(
     let raw_count = read_gamma(raw_bytes, &mut raw_offset).ok()?;
     let mut canonical_offset = 0usize;
     let canonical_count = read_gamma(canonical_bytes, &mut canonical_offset).ok()?;
-    if raw_count != canonical_count {
-        // A length-bearing struct list can be re-encoded as one field while
-        // the parent record still keeps its unknown sibling columns. A
-        // fixed-size struct has no safe local framing for this change and
+    if raw_count != canonical_count && !root_field_allows_length_change(canonical_field) {
+        // A fixed-size struct has no safe local framing for this change and
         // must use the canonical table fallback.
-        return (root_field_allows_length_change(canonical_field)
-            && field_layout_matches(raw_field, canonical_field))
-        .then(|| canonical_bytes.to_vec());
+        return None;
+    }
+    if canonical_count > raw_count && !field_layout_matches(raw_field, canonical_field) {
+        // A new element needs bytes for every raw-only subfield. Without a
+        // semantic default for those future fields, copying only the known
+        // canonical bytes would make the raw header point past the element.
+        // Shrinking remains safe because all retained elements can be merged
+        // against their complete raw records.
+        return None;
     }
 
-    let mut merged = raw_bytes[..raw_offset].to_vec();
-    for _ in 0..raw_count {
+    // A length-bearing struct list can change size while the parent record
+    // still keeps its unknown sibling columns. Merge the common prefix so
+    // future subfields survive for entries that remain, then copy canonical
+    // bytes for newly appended entries. Removed entries intentionally cannot
+    // be retained because the semantic list changed.
+    let common_count = raw_count.min(canonical_count);
+    let mut merged = Vec::new();
+    write_gamma(canonical_count, &mut merged).ok()?;
+    for _ in 0..common_count {
         let raw_start = raw_offset;
         skip_record_fields(&raw_field.sub, raw_bytes, &mut raw_offset).ok()?;
         let canonical_start = canonical_offset;
@@ -393,6 +404,16 @@ fn merge_field_bytes(
             &canonical_bytes[canonical_start..canonical_offset],
         )?;
         merged.extend_from_slice(&merged_record);
+    }
+    for _ in common_count..canonical_count {
+        let canonical_start = canonical_offset;
+        skip_record_fields(&canonical_field.sub, canonical_bytes, &mut canonical_offset).ok()?;
+        merged.extend_from_slice(&canonical_bytes[canonical_start..canonical_offset]);
+    }
+    if raw_count > common_count {
+        for _ in common_count..raw_count {
+            skip_record_fields(&raw_field.sub, raw_bytes, &mut raw_offset).ok()?;
+        }
     }
     if raw_offset != raw_bytes.len() || canonical_offset != canonical_bytes.len() {
         return None;
@@ -1029,6 +1050,107 @@ mod tests {
         assert_eq!(
             crate::sav::table::record_get(&stats[0], "future").and_then(SlValue::as_u64),
             Some(0xCAFE)
+        );
+    }
+
+    #[test]
+    fn passthrough_preserves_nested_unknown_column_when_struct_list_shrinks() {
+        let mut raw_header = Vec::new();
+        raw_header.push(0x1B);
+        write_str("stats", &mut raw_header).expect("struct list field");
+        raw_header.push(0);
+        raw_header.push(2);
+        write_str("level", &mut raw_header).expect("known nested field");
+        raw_header.push(4);
+        write_str("future", &mut raw_header).expect("future nested field");
+        raw_header.push(0);
+
+        let mut raw_record = Vec::new();
+        write_gamma(2, &mut raw_record).expect("raw struct count");
+        raw_record.extend_from_slice(&[7, 0xCA, 0xFE, 8, 0xBA, 0xBE]);
+        let raw =
+            raw_table_chunk(*b"TEST", &raw_header, &[raw_record], CH_TABLE).expect("raw table");
+        let raw_chunk = SavOpaqueChunk {
+            name: *b"TEST",
+            ch_type: CH_TABLE,
+            body: raw[5..].to_vec(),
+        };
+
+        let mut canonical_header = Vec::new();
+        canonical_header.push(0x1B);
+        write_str("stats", &mut canonical_header).expect("canonical struct list field");
+        canonical_header.push(0);
+        canonical_header.push(2);
+        write_str("level", &mut canonical_header).expect("canonical nested field");
+        canonical_header.push(0);
+        let mut canonical_record = Vec::new();
+        write_gamma(1, &mut canonical_record).expect("canonical struct count");
+        canonical_record.push(9);
+        let canonical = raw_table_chunk(*b"TEST", &canonical_header, &[canonical_record], CH_TABLE)
+            .expect("canonical table");
+
+        let merged = table_chunk_with_passthrough_from_snapshot(Some(&raw_chunk), canonical, None)
+            .expect("merge");
+        let chunks = crate::sav::chunks::parse_chunks(&merged).expect("parse merged");
+        let rows =
+            crate::sav::table::parse_table_chunk(&chunks[0].body, false).expect("merged rows");
+        let Some(SlValue::Structs(stats)) = crate::sav::table::record_get(&rows[0].1, "stats")
+        else {
+            panic!("stats debería decodificar como struct list");
+        };
+        assert_eq!(stats.len(), 1);
+        assert_eq!(
+            crate::sav::table::record_get(&stats[0], "level").and_then(SlValue::as_u64),
+            Some(9)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(&stats[0], "future").and_then(SlValue::as_u64),
+            Some(0xCAFE)
+        );
+    }
+
+    #[test]
+    fn passthrough_merges_growing_struct_list_when_layout_is_stable() {
+        let mut header = Vec::new();
+        header.push(0x1B);
+        write_str("stats", &mut header).expect("struct list field");
+        header.push(0);
+        header.push(2);
+        write_str("level", &mut header).expect("nested field");
+        header.push(0);
+
+        let mut raw_record = Vec::new();
+        write_gamma(1, &mut raw_record).expect("raw struct count");
+        raw_record.push(7);
+        let raw = raw_table_chunk(*b"TEST", &header, &[raw_record], CH_TABLE).expect("raw table");
+        let raw_chunk = SavOpaqueChunk {
+            name: *b"TEST",
+            ch_type: CH_TABLE,
+            body: raw[5..].to_vec(),
+        };
+        let mut canonical_record = Vec::new();
+        write_gamma(2, &mut canonical_record).expect("canonical struct count");
+        canonical_record.extend_from_slice(&[9, 10]);
+        let canonical = raw_table_chunk(*b"TEST", &header, &[canonical_record], CH_TABLE)
+            .expect("canonical table");
+
+        let merged = table_chunk_with_passthrough_from_snapshot(Some(&raw_chunk), canonical, None)
+            .expect("merge");
+        let chunks = crate::sav::chunks::parse_chunks(&merged).expect("parse merged");
+        let rows =
+            crate::sav::table::parse_table_chunk(&chunks[0].body, false).expect("merged rows");
+        let Some(SlValue::Structs(stats)) = crate::sav::table::record_get(&rows[0].1, "stats")
+        else {
+            panic!("stats debería decodificar como struct list");
+        };
+        assert_eq!(stats.len(), 2);
+        assert_eq!(
+            crate::sav::table::record_get(&stats[0], "level").and_then(SlValue::as_u64),
+            Some(9)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(&stats[1], "level").and_then(SlValue::as_u64),
+            Some(10)
         );
     }
 

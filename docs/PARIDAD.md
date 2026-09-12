@@ -1542,11 +1542,13 @@ distingue vector de array fijo, por lo que cada writer conserva los tamaños
 nativos de sus arrays. [#374](parity/sav-indy-history-374.md) normaliza los
 historiales representables de `INDY.accepted`/`produced` a 61 registros (o
 cero para la historia aceptada aún nula) y los comprueba tras re-guardado
-dedicado. Un subcampo desconocido/incompatible, cambio de forma, una lista de
-structs que crece con subcampos desconocidos dentro de sus elementos, filas,
-índices o pools nativos no modelados sigue usando el writer canónico; la agregación
-runtime completa de esos historiales pertenece a #329/#330. Por eso #328/#329
-continúan abiertos.
+dedicado. Una lista de structs con longitud explícita puede ahora cambiar de
+tamaño conservando los subcampos futuros de los elementos que permanecen; las
+entradas nuevas sólo se fusionan cuando el descriptor es idéntico. Un subcampo
+desconocido/incompatible sin defaults seguros para una entrada nueva, cambio de
+forma, struct fijo, filas, índices o pools nativos no modelados sigue usando el
+writer canónico; la agregación runtime completa de esos historiales pertenece a
+#329/#330. Por eso #328/#329 continúan abiertos.
 
 <!-- active-parity-backlog:end -->
 

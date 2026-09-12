@@ -1641,3 +1641,14 @@ vehículo, depósito, órdenes, horario, refit, autoreemplazo y detalles usan
 ahora esa fuente; un ID NewGRF ya no aparece con el nombre del slot vanilla.
 La API legacy `display_name()` conserva el fallback estático para contextos
 sin catálogo.
+
+### #329-VEHICLE-RENDER-CATALOG-FALLBACK — fallback visual catalog-aware
+
+Actualizado: 2026-09-12 (`d4c6a7a0`). Los fallbacks del renderer de vehículos
+usan `engine_for_vehicle_catalog` y comparten el `EngineDef` activo para
+imagen, geometría y posición. Trenes custom conservan su `train_image_index`,
+vagones de carbón cambian al sprite cargado según su carga, y barcos con
+`ship_image_index = 0xFD` recuperan `original_image_index`; el mismo criterio
+se aplica a trailers, sombras, cámaras y previews laterales. Las vistas
+NewGRF runtime siguen teniendo prioridad cuando existen; esta etapa cubre el
+fallback nativo cuando no se puede resolver una vista custom.

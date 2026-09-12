@@ -6206,3 +6206,16 @@ Pasaron 2688 tests del core (1 ignorado), 1427 del cliente (2 ignorados),
 Clippy estricto en core y cliente, formato y `git diff --check`. #329 sigue
 abierta por consumidores legacy de física/render y callbacks avanzados;
 #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-RENDER-CATALOG-FALLBACK (2026-09-12, `d4c6a7a0`):
+los fallbacks visuales de mapa, trailers, sombras y cámara resuelven el
+`EngineDef` en `GameState.engine_catalog` antes de elegir el atlas OpenGFX.
+Esto conserva el `train_image_index` de un motor NewGRF, el sprite cargado de
+un vagón de carbón custom y el `original_image_index` de un barco `0xFD`; la
+geometría fallback usa el mismo grupo que la imagen. Las ventanas de vehículo
+comparten el resolver para previews sin vistas custom. Las regresiones cubren
+grupo ferroviario custom, vagón cargado y barco custom. Pasaron 2688 tests del
+core (1 ignorado), 1430 del cliente (2 ignorados), Clippy estricto en core y
+cliente, formato y `git diff --check`. #329 continúa abierta por vistas
+NewGRF completas, callbacks y consumidores legacy restantes; #326/#567
+permanecen abiertas.

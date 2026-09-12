@@ -224,7 +224,7 @@ pub fn calculate_company_value(state: &GameState, company_id: CompanyId) -> i64 
 
     let mut vehicle_assets = 0_i64;
     for v in &state.vehicles {
-        if v.owner != company_id || v.is_wagon_unit() {
+        if v.owner != company_id {
             continue;
         }
         if matches!(
@@ -372,6 +372,29 @@ mod tests {
         let value = calculate_company_value(&state, CompanyId::PLAYER);
         let station_part = 100 * 25;
         assert!(value >= liquid + station_part);
+    }
+
+    #[test]
+    fn company_value_uses_depreciated_vehicle_values_including_wagons() {
+        let mut state = GameState::new(8, 8);
+        state.ensure_companies();
+        let liquid = company_net_value(
+            state.companies[0].economy.money,
+            state.companies[0].economy.loan,
+        );
+        let pos = TileCoord::new(1, 1);
+        let mut head = Vehicle::new(1, VehicleKind::Train, pos, pos);
+        head.owner = CompanyId::PLAYER;
+        head.value = 1_000;
+        let mut wagon = Vehicle::new(2, VehicleKind::Train, pos, pos);
+        wagon.owner = CompanyId::PLAYER;
+        wagon.prev_unit = Some(head.id);
+        wagon.value = 2_000;
+        state.vehicles.extend([head, wagon]);
+
+        let value = calculate_company_value(&state, CompanyId::PLAYER);
+
+        assert_eq!(value, liquid + (1_000 * 3 / 2) + (2_000 * 3 / 2));
     }
 
     #[test]

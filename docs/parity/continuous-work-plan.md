@@ -5197,3 +5197,10 @@ cero, igual que las piezas materializadas por el constructor nativo; la
 regresión cubre el importe inicial y la depreciación escalonada. #329/#567
 continúan abiertas por valoración de activos, callbacks, pathfinding y
 aceptación visual/framebuffer.
+
+Actualización #329/#567-ASSET-VALUE (2026-09-11): el cálculo de patrimonio de
+la compañía usa ahora el valor contable persistido de cada unidad y suma
+también los vagones, como `CalculateCompanyAssetValue` (`v->value * 3 >> 1`).
+La regresión cubre una composición con cabeza y vagón y valores depreciados.
+#329/#567 continúan abiertas por devolución de venta, callbacks, pathfinding
+y aceptación visual/framebuffer.

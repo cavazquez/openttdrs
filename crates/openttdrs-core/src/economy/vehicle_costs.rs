@@ -132,24 +132,20 @@ pub fn vehicle_sell_refund_with_catalog(vehicle: &Vehicle, engine_catalog: &[Eng
     (base * 50) / 100
 }
 
-/// Valor contable del vehículo para `CalculateCompanyValue` (sin depreciación diaria aún).
+/// Valor contable persistido del vehículo para `CalculateCompanyValue`.
 #[must_use]
 pub fn vehicle_asset_value(vehicle: &Vehicle) -> i64 {
-    vehicle.effective_engine().price.max(1)
+    vehicle.value
 }
 
-/// Valor contable con catálogo activo y CB36 de coste de compra.
+/// Valor contable con catálogo activo.
+///
+/// `CalculateCompanyAssetValue` usa `Vehicle::value` directamente; se conserva
+/// el parámetro del catálogo para no romper los callers que ya pasan el
+/// catálogo al resolver activos con motores runtime.
 #[must_use]
-pub fn vehicle_asset_value_with_catalog(vehicle: &Vehicle, engine_catalog: &[EngineDef]) -> i64 {
-    let Some(engine) = vehicle
-        .engine_id
-        .and_then(|id| crate::engine::engine_in_catalog(engine_catalog, id))
-        .cloned()
-    else {
-        return vehicle_asset_value(vehicle);
-    };
-    let mut snapshot = vehicle.clone();
-    vehicle_purchase_cost_with_callbacks(&engine, &mut snapshot).max(1)
+pub fn vehicle_asset_value_with_catalog(vehicle: &Vehicle, _engine_catalog: &[EngineDef]) -> i64 {
+    vehicle_asset_value(vehicle)
 }
 
 /// Coste de explotación anual del motor (`Engine::GetRunningCost` / catálogo).

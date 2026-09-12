@@ -440,6 +440,53 @@ fn replacing_rail_bridge_preserves_pbs_reservation_on_both_ramps() {
 }
 
 #[test]
+fn replacing_rail_bridge_with_another_railtype_requires_demolition() {
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut state = GameState::new(10, 6);
+    state.economy.money = 100_000;
+    for x in 2..=3 {
+        state
+            .map
+            .set_kind(TileCoord::new(x, 2), TileKind::Water)
+            .unwrap();
+    }
+    let start = TileCoord::new(1, 2);
+    let end = TileCoord::new(4, 2);
+    apply_command(
+        &mut state,
+        &Command::PlaceRailBridge(start, end, BridgeType::Wooden),
+    )
+    .unwrap();
+    let before = [state.map.get(start).unwrap(), state.map.get(end).unwrap()];
+    let money_before = state.economy.money;
+    state.current_rail_type = RailType::Electric;
+    let command = Command::PlaceRailBridge(start, end, BridgeType::Concrete);
+
+    assert_eq!(
+        command_would_fail(&state, &command),
+        Some(CommandError::MustDemolishBridgeFirst)
+    );
+    assert_eq!(
+        apply_command(&mut state, &command),
+        Err(CommandError::MustDemolishBridgeFirst)
+    );
+    assert_eq!(
+        [state.map.get(start).unwrap(), state.map.get(end).unwrap()],
+        before
+    );
+    assert_eq!(state.economy.money, money_before);
+    assert_eq!(
+        rail_type_from_tile(state.map.get(start).unwrap()),
+        RailType::Rail
+    );
+    assert_eq!(
+        rail_type_from_tile(state.map.get(end).unwrap()),
+        RailType::Rail
+    );
+}
+
+#[test]
 fn bridge_build_rejects_partial_overlap_without_mutating_existing_pair() {
     let mut state = GameState::new(10, 6);
     let c = TileCoord::new;

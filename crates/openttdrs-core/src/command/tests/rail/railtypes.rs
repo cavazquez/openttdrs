@@ -393,6 +393,69 @@ fn place_rail_depot_uses_current_rail_type() {
 }
 
 #[test]
+fn place_rail_tunnel_uses_current_rail_type_on_both_mouths() {
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(16, 16);
+    s.economy.money = 100_000;
+    s.current_rail_type = RailType::Electric;
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    s.map.set_height(c(5, 5), 2).unwrap();
+    s.map.set_height(c(5, 6), 2).unwrap();
+    s.map.set_height(c(6, 5), 1).unwrap();
+    s.map.set_height(c(6, 6), 1).unwrap();
+    s.map.set_height(c(3, 5), 1).unwrap();
+    s.map.set_height(c(3, 6), 1).unwrap();
+    s.map.set_height(c(4, 5), 2).unwrap();
+    s.map.set_height(c(4, 6), 2).unwrap();
+
+    let start = c(5, 5);
+    let end = c(3, 5);
+    apply_command(&mut s, &Command::PlaceRailTunnel(start, end)).unwrap();
+
+    for mouth in [start, end] {
+        assert_eq!(
+            rail_type_from_tile(s.map.get(mouth).unwrap()),
+            RailType::Electric
+        );
+    }
+    assert_eq!(
+        rail_type_from_tile(s.map.get(c(4, 5)).unwrap()),
+        RailType::Rail,
+        "la representación sintética del vano no es una boca nativa"
+    );
+}
+
+#[test]
+fn place_rail_bridge_uses_current_rail_type_on_both_ramps() {
+    use crate::bridge_spec::BridgeType;
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(10, 6);
+    s.economy.money = 100_000;
+    s.current_rail_type = RailType::Maglev;
+    for x in 2..=3 {
+        s.map
+            .set_kind(TileCoord::new(x, 2), crate::TileKind::Water)
+            .unwrap();
+    }
+    let start = TileCoord::new(1, 2);
+    let end = TileCoord::new(4, 2);
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBridge(start, end, BridgeType::Wooden),
+    )
+    .unwrap();
+
+    for ramp in [start, end] {
+        assert_eq!(
+            rail_type_from_tile(s.map.get(ramp).unwrap()),
+            RailType::Maglev
+        );
+    }
+}
+
+#[test]
 fn rail_build_and_depot_costs_use_vanilla_railtype_multipliers() {
     use crate::economy::{rail_build_cost_factored, train_depot_build_cost};
     use crate::rail_type::{RailType, rail_type_from_tile};

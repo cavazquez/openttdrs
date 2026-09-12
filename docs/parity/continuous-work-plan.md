@@ -5858,3 +5858,11 @@ override. El coste de `PlaceRail`, depósitos y limpieza de túnel/puente o lock
 queda alineado con el mismo contrato que usa `RailConvertCost`. #329/#567
 continúa abierta por contadores de infraestructura, callbacks, arrastre de
 áreas y aceptación visual/framebuffer.
+
+Corrección #329/#567-RAILTYPE-TUNNEL-BRIDGE-PLACEMENT (2026-09-12): las bocas
+de túnel y rampas de puente ferroviarias ahora persisten en `m8` el railtype
+activo, como `MakeRailTunnel` y `MakeRailBridgeRamp`. El reemplazo visual de
+un puente conserva su reserva PBS, pero rechaza cambiar de railtype sin
+demolición, igual que el comando nativo; el tramo sintético del túnel no se
+trata como una segunda boca. #329/#567 continúa abierta por contadores de
+infraestructura, callbacks, arrastre de áreas y aceptación visual/framebuffer.

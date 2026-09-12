@@ -115,6 +115,11 @@ fn check_bridge_replacement(
                 if !exact_pair || tile.kind != kind {
                     return Err(CommandError::MustDemolishBridgeFirst);
                 }
+                if kind == TileKind::RailBridge
+                    && crate::rail_type::rail_type_from_tile(tile) != state.current_rail_type
+                {
+                    return Err(CommandError::MustDemolishBridgeFirst);
+                }
                 check_tunnel_bridge_owner(state, tile_coord)?;
             }
             _ => {}
@@ -595,34 +600,38 @@ pub(in crate::command) fn place_tunnel_or_bridge(
     };
     for (i, c) in line.iter().enumerate() {
         let mut tile = state.map.get(*c).ok_or(CommandError::OutOfBounds)?;
+        let is_endpoint = i == 0 || i + 1 == line.len();
         if is_tunnel {
             tile.kind = kind_to_place;
             tile.mapt = mapt;
             tile.m5 = tile_slope_and_z(&state.map, *c)
                 .and_then(|(h, _)| tunnel_entrance_m5(h, is_rail))
                 .unwrap_or(0);
-        } else {
-            let is_endpoint = i == 0 || i + 1 == line.len();
-            if is_endpoint {
-                tile.kind = kind_to_place;
-                tile.mapt = mapt;
-                let is_start = i == 0;
-                let dir = if is_start {
-                    axis_to_diag_dir(bridge_axis_y)
-                } else {
-                    reverse_diag_dir(axis_to_diag_dir(bridge_axis_y))
-                };
-                tile.m5 = bridge_ramp_m5(is_rail, dir)
-                    | if preserve_rail_bridge_reservation {
-                        0x10
-                    } else {
-                        0
-                    };
-                tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
-            } else {
-                tile.mapt = set_bridge_middle_mapt(tile.mapt, bridge_axis_y);
-                tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
+            if is_rail && is_endpoint {
+                tile = crate::rail_type::set_rail_type_on_tile(tile, state.current_rail_type);
             }
+        } else if is_endpoint {
+            tile.kind = kind_to_place;
+            tile.mapt = mapt;
+            let is_start = i == 0;
+            let dir = if is_start {
+                axis_to_diag_dir(bridge_axis_y)
+            } else {
+                reverse_diag_dir(axis_to_diag_dir(bridge_axis_y))
+            };
+            tile.m5 = bridge_ramp_m5(is_rail, dir)
+                | if preserve_rail_bridge_reservation {
+                    0x10
+                } else {
+                    0
+                };
+            tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
+            if is_rail {
+                tile = crate::rail_type::set_rail_type_on_tile(tile, state.current_rail_type);
+            }
+        } else {
+            tile.mapt = set_bridge_middle_mapt(tile.mapt, bridge_axis_y);
+            tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
         }
         // Dueño de la infra (`MAPO` / `m1`), igual que vía y carretera.
         tile.m1 = state.active_company.0;

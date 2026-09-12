@@ -14,7 +14,7 @@ use super::assets::{
 };
 use super::pose::{
     aircraft_aux_sprite_pos_at, aircraft_aux_sprite_pos_at_offsets, vehicle_insertion_key,
-    vehicle_parent_bounds, vehicle_pose_for_construction, vehicle_source_depth, vehicle_sprite_pos,
+    vehicle_parent_bounds, vehicle_pose_for_construction, vehicle_source_depth,
     vehicle_sprite_pos_at_offsets, vehicle_sprite_pos_at_with_catalog,
 };
 use super::spawn::{vehicle_cargo_color, vehicle_cargo_label};
@@ -280,6 +280,8 @@ pub(crate) fn update_vehicles(
     // poses discretas con la pose interpolada de otra representación.
     let mut stack_layers_by_parent: HashMap<Entity, ResolvedNewGrfStack> = HashMap::new();
     let mut rotor_layers_by_vehicle: HashMap<u32, Vec<NewGrfVehicleLayer>> = HashMap::new();
+    let mut rendered_vehicle_positions =
+        (!labels.is_empty()).then(|| HashMap::with_capacity(sim.state.vehicles.len()));
     for (entity, vs, mut transform, mut sprite, mut visibility, parent) in &mut q {
         let Some(i) = vehicle_index.core.slot(vs.0) else {
             continue;
@@ -321,6 +323,9 @@ pub(crate) fn update_vehicles(
         }
         let source_depth = vehicle_source_depth(v, &sim.state.map, pose, pos3);
         pos3.z = source_depth;
+        if let Some(positions) = rendered_vehicle_positions.as_mut() {
+            positions.insert(v.id, pos3);
+        }
         let preserves_sorted_depth = parent.is_some();
         set_vehicle_translation_if_changed(&mut transform, pos3, preserves_sorted_depth);
         if let Some(mut parent) = parent {
@@ -659,7 +664,18 @@ pub(crate) fn update_vehicles(
             continue;
         }
         visibility.set_if_neq(Visibility::Visible);
-        let pos3 = vehicle_sprite_pos(v, &sim.state.map, sim_clock.tick_alpha);
+        let pos3 = rendered_vehicle_positions
+            .as_ref()
+            .and_then(|positions| positions.get(&v.id))
+            .copied()
+            .unwrap_or_else(|| {
+                vehicle_sprite_pos_at_with_catalog(
+                    v,
+                    &sim.state.map,
+                    pose,
+                    Some(&sim.state.engine_catalog),
+                )
+            });
         set_vehicle_translation_if_changed(&mut transform, vehicle_cargo_label_pos(pos3), false);
         let cargo_label = vehicle_cargo_label(v);
         if text.as_str() != cargo_label {

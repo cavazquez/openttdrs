@@ -136,6 +136,7 @@ pub(crate) fn vehicle_sprite_pos_at_offsets(
     )
 }
 
+#[cfg(test)]
 pub(crate) fn vehicle_sprite_pos(v: &Vehicle, map: &Map, tick_alpha: f32) -> Vec3 {
     vehicle_sprite_pos_at(v, map, extrapolate_vehicle_pose(v, tick_alpha))
 }

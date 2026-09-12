@@ -790,6 +790,20 @@ mod tests {
             ottdmap_extras: None,
         };
         sim.state.vehicles.push(sample_vehicle(11));
+        let mut custom = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRUCK_MPS)
+            .expect("vanilla truck")
+            .clone();
+        custom.id = openttdrs_core::NEWGRF_ENGINE_ID_BASE + 74;
+        custom.newgrf_views = vec![openttdrs_core::DecodedSprite {
+            width: 4,
+            height: 4,
+            x_offs: 96,
+            y_offs: 0,
+            rgba: vec![255; 4 * 4 * 4],
+            mask: Vec::new(),
+        }];
+        sim.state.engine_catalog.push(custom.clone());
+        sim.state.vehicles[0].engine_id = Some(custom.id);
 
         let mut world = World::new();
         world.insert_resource(sim);
@@ -819,6 +833,21 @@ mod tests {
 
         let mut labels = world.query_filtered::<&Text2d, With<sync::VehicleCargoLabel>>();
         assert_eq!(labels.single(&world).unwrap().to_string(), "ANY 0/20");
+        let vehicle_pos = world
+            .query_filtered::<&Transform, With<sync::VehicleSprite>>()
+            .single(&world)
+            .unwrap()
+            .translation;
+        let label_pos = world
+            .query_filtered::<&Transform, With<sync::VehicleCargoLabel>>()
+            .single(&world)
+            .unwrap()
+            .translation;
+        assert_eq!(
+            label_pos,
+            Vec3::new(vehicle_pos.x, vehicle_pos.y + 21.0, vehicle_pos.z + 0.35),
+            "la etiqueta debe seguir la posición de la capa custom"
+        );
     }
 
     #[test]

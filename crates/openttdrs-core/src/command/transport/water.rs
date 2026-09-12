@@ -1705,6 +1705,44 @@ fn remove_lock_road_waypoint_state(state: &mut GameState, c: TileCoord) {
         .retain(|station| !(station.pos == c && station.stop_kind == StopKind::RoadWaypoint));
 }
 
+/// Prepara la retirada manual de un waypoint ferroviario.
+///
+/// `ClearTile_Station` selecciona `RemoveRailWaypoint` para este tipo de
+/// tesela. En el runtime actual el waypoint ocupa una sola tesela, por lo que
+/// el coste y la limpieza de la entidad son ambos unitarios.
+fn check_lock_rail_waypoint_tile(
+    state: &GameState,
+    c: TileCoord,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    if crate::station::stop_kind_from_m6(tile.m6) != StopKind::RailWaypoint {
+        return Err(CommandError::BuildingMustBeDemolished);
+    }
+    let station = state
+        .stations
+        .iter()
+        .find(|station| station.pos == c && station.stop_kind == StopKind::RailWaypoint);
+    let owner = station.map_or(tile.m1 & 0x1F, |station| station.owner.0 & 0x1F);
+    if owner != (state.active_company.0 & 0x1F) {
+        return Err(CommandError::TileNotOwned);
+    }
+    Ok(LockBuildTilePlan {
+        water_class: WaterClass::Canal,
+        owner: state.active_company.0,
+        clear_on_build: true,
+        clear_cost: rail_waypoint_clear_cost(&state.global_economy),
+        add_canal_cost: !is_middle,
+    })
+}
+
+fn remove_lock_rail_waypoint_state(state: &mut GameState, c: TileCoord) {
+    state.newgrf_animated_station_tiles.remove(&c);
+    state
+        .stations
+        .retain(|station| !(station.pos == c && station.stop_kind == StopKind::RailWaypoint));
+}
+
 /// Prepara la retirada manual de una boya durante `DoBuildLock`.
 ///
 /// `RemoveBuoy` conserva la clase del agua subyacente sólo para la parte
@@ -2082,6 +2120,11 @@ fn check_lock_build_tile(
         {
             check_lock_road_waypoint_tile(state, c, is_middle, tile)
         }
+        TileKind::Station
+            if crate::station::stop_kind_from_m6(tile.m6) == StopKind::RailWaypoint =>
+        {
+            check_lock_rail_waypoint_tile(state, c, is_middle, tile)
+        }
         TileKind::Station if crate::station::stop_kind_from_m6(tile.m6) == StopKind::Dock => {
             check_lock_dock_tile(state, c, is_middle, tile)
         }
@@ -2175,6 +2218,10 @@ fn clear_lock_build_tile(
         tile.kind == TileKind::Station
             && crate::station::stop_kind_from_m6(tile.m6) == StopKind::RoadWaypoint
     });
+    let was_rail_waypoint = state.map.get(c).is_some_and(|tile| {
+        tile.kind == TileKind::Station
+            && crate::station::stop_kind_from_m6(tile.m6) == StopKind::RailWaypoint
+    });
     let was_buoy = state.map.get(c).is_some_and(|tile| {
         tile.kind == TileKind::Station
             && crate::station::stop_kind_from_m6(tile.m6) == StopKind::Buoy
@@ -2193,13 +2240,16 @@ fn clear_lock_build_tile(
     if was_road_waypoint {
         remove_lock_road_waypoint_state(state, c);
     }
+    if was_rail_waypoint {
+        remove_lock_rail_waypoint_state(state, c);
+    }
     if was_buoy {
         remove_lock_buoy_state(state, c);
     }
     if let Some(depot_id) = depot_id {
         unregister_depot(state, depot_id);
     }
-    if was_rail {
+    if was_rail || was_rail_waypoint {
         super::rail::refresh_rail_neighbors(state, c)?;
         crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, c);
     }

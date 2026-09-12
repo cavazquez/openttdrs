@@ -495,6 +495,72 @@ fn place_lock_clears_road_waypoint_and_updates_station_pool() {
 }
 
 #[test]
+fn place_lock_clears_rail_waypoint_and_updates_station_pool() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+
+    apply_command(&mut s, &Command::SetRailBits(middle, 0x01)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailWaypoint(middle)).unwrap();
+    assert_eq!(s.stations[0].stop_kind, StopKind::RailWaypoint);
+    for coord in [lower, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command)
+        .expect("ClearTile_Station manual retira el waypoint ferroviario del centro");
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+    assert!(s.stations.is_empty());
+    assert_eq!(
+        s.economy.money,
+        money - rail_waypoint_clear_cost(&s.global_economy) - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_rejects_foreign_rail_waypoint_atomically() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+
+    apply_command(&mut s, &Command::SetRailBits(middle, 0x01)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailWaypoint(middle)).unwrap();
+    s.stations[0].owner = crate::CompanyId(1);
+    for coord in [lower, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let before = [lower, middle, upper].map(|coord| s.map.get(coord).unwrap());
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::TileNotOwned)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::TileNotOwned)
+    );
+    for (coord, raw) in [lower, middle, upper].into_iter().zip(before) {
+        assert_eq!(s.map.get(coord), Some(raw));
+    }
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.economy.money, money);
+}
+
+#[test]
 fn place_lock_promotes_joined_bus_stop_when_clearing_anchor() {
     let mut s = GameState::new(10, 8);
     let lower = TileCoord::new(2, 2);

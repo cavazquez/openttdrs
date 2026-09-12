@@ -5676,3 +5676,12 @@ Las regresiones cubren ambos accesos y el precio compuesto. Estaciones
 ferroviarias, aeropuertos y otras huellas multi-tesela siguen en subetapas
 separadas; #329/#567 continúa abierta por infraestructura, callbacks,
 pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-RAIL-WAYPOINT (2026-09-12):
+`ClearTile_Station` ya retira un `RailWaypoint` 1×1 durante `DoBuildLock`,
+usando `PR_CLEAR_WAYPOINT_RAIL`, validando la compañía propietaria y limpiando
+la entidad de estación junto con la invalidación de la red ferroviaria. La
+regresión cubre el despeje del centro y el coste compuesto. Las estaciones
+ferroviarias multi-tesela, aeropuertos, túneles y puentes siguen en subetapas
+separadas; #329/#567 continúa abierta por infraestructura, callbacks,
+pathfinding y aceptación visual/framebuffer.

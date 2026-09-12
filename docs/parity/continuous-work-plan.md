@@ -5575,3 +5575,12 @@ actualización de vecinos/glob de señales. Depósitos, túneles, puentes y otro
 subtipos siguen bloqueados. La regresión cubre una vía señalizada, su payload
 raw y el coste compuesto. #329/#567 siguen abiertas por infraestructura,
 callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-ROAD-CLEAR (2026-09-12): la rama manual de
+`ClearTile_Road` ya permite que `DoBuildLock` retire todas las piezas de una
+tesela normal, incluyendo overlays de tranvía y tipos NewGRF. El precio se
+calcula por pieza y aplica el reembolso nativo de tranvía; subtipos de cruce,
+depósito, túnel y puente siguen separados por sus contratos de demolición.
+Las regresiones cubren carretera compuesta, carretera+tranvía y atomicidad de
+un subtipo no soportado. #329/#567 siguen abiertas por infraestructura,
+callbacks, pathfinding y aceptación visual/framebuffer.

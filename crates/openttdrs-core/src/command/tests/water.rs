@@ -2,8 +2,8 @@
 
 use crate::economy::{
     canal_build_cost, canal_clear_cost, lock_build_cost, lock_clear_cost, road_clear_cost,
-    rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost, station_build_cost,
-    trees_clear_cost, water_clear_cost,
+    road_clear_cost_factored, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
+    station_build_cost, trees_clear_cost, water_clear_cost,
 };
 use crate::test_fixtures::SandboxMap;
 use crate::{
@@ -354,7 +354,7 @@ fn place_lock_auto_clears_forest_endpoint_with_tree_price() {
 }
 
 #[test]
-fn place_lock_auto_clears_single_road_and_charges_road_clear() {
+fn place_lock_clears_single_road_and_charges_road_clear() {
     let mut s = GameState::new(10, 6);
     let lower = TileCoord::new(2, 2);
     let middle = TileCoord::new(3, 2);
@@ -386,60 +386,83 @@ fn place_lock_auto_clears_single_road_and_charges_road_clear() {
 }
 
 #[test]
-fn place_lock_rejects_composite_road_tram_and_rail_auto_clear() {
-    let cases = [
-        (
-            TileKind::Road,
-            0x0A,
-            0,
-            crate::CommandError::MustRemoveRoadFirst,
-        ),
-        (
-            TileKind::Road,
-            0x02 | (1 << 6),
-            0,
-            crate::CommandError::MustRemoveRoadFirst,
-        ),
-        (
-            TileKind::Road,
-            0x02,
-            0x01,
-            crate::CommandError::MustRemoveRoadFirst,
-        ),
-    ];
+fn place_lock_clears_composite_road_and_tram_without_auto_flag() {
+    let cases = [(0x0A_u8, 0x00_u8, 0x0000_u16), (0x02, 0x05, 1 << 6)];
 
-    for (kind, m5, m3, expected_error) in cases {
+    for (road_bits, tram_bits, tram_type) in cases {
         let mut s = GameState::new(10, 6);
-        let parts = [
-            TileCoord::new(3, 2),
-            TileCoord::new(2, 2),
-            TileCoord::new(4, 2),
-        ];
-        for &part in &parts {
-            s.map.set_kind(part, TileKind::Water).unwrap();
+        let lower = TileCoord::new(2, 2);
+        let middle = TileCoord::new(3, 2);
+        let upper = TileCoord::new(4, 2);
+        for coord in [lower, middle, upper] {
+            s.map.set_kind(coord, TileKind::Water).unwrap();
         }
-        s.map.set_height(parts[0], 1).unwrap();
-        s.map.set_height(parts[1], 1).unwrap();
-        s.map.set_height(parts[2], 2).unwrap();
-        let blocked = parts[0];
-        let mut raw = s.map.get(blocked).unwrap();
-        raw.kind = kind;
-        raw.mapt = if kind == TileKind::Road { 0x20 } else { 0x10 };
-        raw.m5 = m5;
-        raw.m3 = m3;
-        raw.m1 = s.active_company.0;
-        s.map.set_tile(blocked, raw).unwrap();
-        let before = parts.map(|part| s.map.get(part).expect("lock part"));
-        let money = s.economy.money;
-        let command = Command::PlaceLock(parts[0], false);
+        s.map.set_height(lower, 1).unwrap();
+        s.map.set_height(middle, 1).unwrap();
+        s.map.set_height(upper, 2).unwrap();
 
-        assert_eq!(command_would_fail(&s, &command), Some(expected_error));
-        assert_eq!(apply_command(&mut s, &command), Err(expected_error));
-        for (part, raw) in parts.into_iter().zip(before) {
-            assert_eq!(s.map.get(part), Some(raw));
-        }
-        assert_eq!(s.economy.money, money);
+        let mut road = s.map.get(middle).unwrap();
+        road.kind = TileKind::Road;
+        road.mapt = 0x20;
+        road.m5 = road_bits;
+        road.m3 = tram_bits;
+        road.m8 = tram_type;
+        road.m1 = s.active_company.0;
+        s.map.set_tile(middle, road).unwrap();
+        let money = s.economy.money;
+        let road_cost = i64::from(road_bits.count_ones()) * road_clear_cost(&s.global_economy);
+        let tram_cost = i64::from(tram_bits.count_ones())
+            * road_clear_cost_factored(&s.global_economy, true, 0);
+        let command = Command::PlaceLock(middle, false);
+
+        assert_eq!(command_would_fail(&s, &command), None);
+        apply_command(&mut s, &command).expect("ClearTile_Road manual retira carretera y tranvía");
+
+        assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+        assert_eq!(
+            s.economy.money,
+            money - road_cost - tram_cost - lock_build_cost(&s.global_economy)
+        );
     }
+}
+
+#[test]
+fn place_lock_rejects_unsupported_road_subtype_atomically() {
+    let mut s = GameState::new(10, 6);
+    let parts = [
+        TileCoord::new(3, 2),
+        TileCoord::new(2, 2),
+        TileCoord::new(4, 2),
+    ];
+    for &part in &parts {
+        s.map.set_kind(part, TileKind::Water).unwrap();
+    }
+    s.map.set_height(parts[0], 1).unwrap();
+    s.map.set_height(parts[1], 1).unwrap();
+    s.map.set_height(parts[2], 2).unwrap();
+    let blocked = parts[0];
+    let mut raw = s.map.get(blocked).unwrap();
+    raw.kind = TileKind::Road;
+    raw.mapt = 0x20;
+    raw.m5 = 0x02 | (1 << 6);
+    raw.m1 = s.active_company.0;
+    s.map.set_tile(blocked, raw).unwrap();
+    let before = parts.map(|part| s.map.get(part).expect("lock part"));
+    let money = s.economy.money;
+    let command = Command::PlaceLock(parts[0], false);
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::MustRemoveRoadFirst)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::MustRemoveRoadFirst)
+    );
+    for (part, raw) in parts.into_iter().zip(before) {
+        assert_eq!(s.map.get(part), Some(raw));
+    }
+    assert_eq!(s.economy.money, money);
 }
 
 #[test]

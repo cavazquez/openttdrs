@@ -96,6 +96,21 @@ pub fn road_clear_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::ClearRoad, 1, 0)
 }
 
+/// Coste por pieza de carretera o tranvía (`RoadClearCost`).
+///
+/// `OpenTTD` cobra una tarifa plana al retirar carretera. El tranvía conserva
+/// esa tarifa y descuenta tres cuartos del coste de construcción del tipo
+/// retirado, por lo que puede producir un reembolso.
+#[must_use]
+pub fn road_clear_cost_factored(ge: &GlobalEconomy, is_tram: bool, cost_multiplier: u16) -> i64 {
+    let clear = road_clear_cost(ge);
+    if is_tram {
+        clear.saturating_sub(road_build_cost_factored(ge, cost_multiplier).saturating_mul(3) / 4)
+    } else {
+        clear
+    }
+}
+
 /// Coste de construir una señal ferroviaria (`PR_BUILD_SIGNALS`).
 #[must_use]
 pub fn signal_build_cost(ge: &GlobalEconomy) -> i64 {
@@ -279,6 +294,14 @@ mod tests {
         assert_eq!(
             road_clear_cost(&ge),
             medium_default_price(PriceIndex::ClearRoad)
+        );
+        assert_eq!(
+            road_clear_cost_factored(&ge, false, 16),
+            road_clear_cost(&ge)
+        );
+        assert_eq!(
+            road_clear_cost_factored(&ge, true, 16),
+            road_clear_cost(&ge) - road_build_cost_factored(&ge, 16) * 3 / 4
         );
         assert_eq!(
             station_build_cost(&ge),

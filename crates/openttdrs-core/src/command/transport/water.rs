@@ -6,9 +6,9 @@ use crate::bridge_spec::{
 };
 use crate::economy::{
     canal_build_cost, canal_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
-    lock_clear_cost, rail_clear_cost, road_clear_cost, rocks_clear_cost, rough_clear_cost,
-    ship_depot_build_cost, ship_depot_clear_cost, signal_clear_cost, station_build_cost,
-    trees_clear_cost, water_clear_cost,
+    lock_clear_cost, rail_clear_cost, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
+    ship_depot_clear_cost, signal_clear_cost, station_build_cost, trees_clear_cost,
+    water_clear_cost,
 };
 use crate::map::rail_bits::RAIL_TILE_NORMAL;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
@@ -1396,12 +1396,20 @@ struct LockBuildTilePlan {
     add_canal_cost: bool,
 }
 
-/// Prepara una carretera normal para `CMD_LANDSCAPE_CLEAR | Auto`.
+fn road_type_cost_multiplier(state: &GameState, road_type: crate::road_type::RoadType) -> u16 {
+    state
+        .road_type_catalog
+        .iter()
+        .find(|definition| definition.id == road_type)
+        .map_or(0, |definition| definition.cost_multiplier)
+}
+
+/// Prepara una carretera normal para `CMD_LANDSCAPE_CLEAR` sin `Auto`.
 ///
-/// `ClearTile_Road` sólo acepta una pieza de carretera y ningún trazado de
-/// tranvía. Un cruce, una geometría compuesta o cualquier overlay de tranvía
-/// necesita una demolición explícita y no debe quedar oculto detrás del
-/// fallback genérico de una esclusa.
+/// La rama manual de `ClearTile_Road` retira todas las piezas de carretera y
+/// tranvía de una tesela normal. Cada pieza conserva el precio de su tipo; el
+/// tranvía puede devolver dinero según su factor de construcción. Un cruce,
+/// depósito, túnel o puente queda fuera de esta subetapa.
 fn check_lock_road_tile(
     state: &GameState,
     is_middle: bool,
@@ -1410,12 +1418,12 @@ fn check_lock_road_tile(
     let road_subtype = (tile.m5 >> 6) & 0x03;
     let road_bits = tile.m5 & 0x0F;
     let tram_bits = crate::road_type::tram_track_bits(&tile);
-    if road_subtype != 0 || road_bits.count_ones() != 1 || tram_bits != 0 {
+    if road_subtype != 0 || (road_bits == 0 && tram_bits == 0) {
         return Err(CommandError::MustRemoveRoadFirst);
     }
 
     // `CheckAllowRemoveRoad` permite carretera municipal y carretera neutral;
-    // una red de otra compañía sigue bloqueando la limpieza automática.
+    // una red de otra compañía sigue bloqueando la limpieza manual compuesta.
     let owner = tile.m1 & 0x1F;
     let active = state.active_company.0 & 0x1F;
     if owner != active
@@ -1425,11 +1433,35 @@ fn check_lock_road_tile(
         return Err(CommandError::TileNotOwned);
     }
 
+    let road_cost = if road_bits == 0 {
+        0
+    } else {
+        let road_type = crate::road_type::road_type_from_tile(&tile);
+        crate::economy::road_clear_cost_factored(
+            &state.global_economy,
+            false,
+            road_type_cost_multiplier(state, road_type),
+        )
+        .saturating_mul(i64::from(road_bits.count_ones()))
+    };
+    let tram_cost = if tram_bits == 0 {
+        0
+    } else {
+        let tram_type = crate::road_type::tram_road_type_from_tile(&tile)
+            .unwrap_or(crate::road_type::RoadType::TRAM);
+        crate::economy::road_clear_cost_factored(
+            &state.global_economy,
+            true,
+            road_type_cost_multiplier(state, tram_type),
+        )
+        .saturating_mul(i64::from(tram_bits.count_ones()))
+    };
+
     Ok(LockBuildTilePlan {
         water_class: WaterClass::Canal,
         owner: state.active_company.0,
         clear_on_build: true,
-        clear_cost: road_clear_cost(&state.global_economy),
+        clear_cost: road_cost.saturating_add(tram_cost),
         add_canal_cost: !is_middle,
     })
 }
@@ -1572,8 +1604,8 @@ fn check_lock_object_tile(
 /// Error de `CMD_LANDSCAPE_CLEAR | Auto` para estructuras que no se pueden
 /// sobreconstruir durante `DoBuildLock`.
 ///
-/// Las carreteras y vías tienen validadores propios porque `ClearTile_Road`
-/// admite una carretera simple, mientras `ClearTile_Track | Auto` siempre
+/// Las carreteras y vías tienen validadores propios porque sus ramas manuales
+/// calculan un coste por pieza, mientras `ClearTile_Track | Auto` siempre
 /// rechaza la vía normal.
 #[must_use]
 fn lock_structure_clear_error(tile: Tile) -> Option<CommandError> {
@@ -1617,9 +1649,9 @@ fn check_lock_build_tile(
         CommandError::BuildingMustBeDemolished
     };
 
-    // `DoBuildLock` hereda `CommandFlag::Auto`: un objeto sólo se elimina si
-    // es autoremovible. La huella completa se planifica aparte para cobrarla
-    // una sola vez y para no sobrescribirla durante el preflight.
+    // `DoBuildLock` llama a `CMD_LANDSCAPE_CLEAR` sin `CommandFlag::Auto`.
+    // La huella completa se planifica aparte para cobrarla una sola vez y para
+    // no sobrescribirla durante el preflight.
     if is_map_object_tile(tile.mapt) {
         return check_lock_object_tile(state, c, is_middle, tile);
     }

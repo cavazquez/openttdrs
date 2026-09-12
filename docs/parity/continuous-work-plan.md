@@ -5971,3 +5971,13 @@ capa propia y la ausencia de una vista válida cae al sprite vanilla. La
 regresión cubre el reemplazo ECS y confirma que bounds, depth e inserción
 siguen siendo los de `TILE_SEQ_LINE`; #326/#567 continúa abierta por las
 familias navales restantes, clipping, framebuffer y la aceptación raster.
+
+Corrección #326/#329-AIRPORT-ACTION0-RANGES (2026-09-12): el parser de
+`Action0 Airports` ahora expande todos los ids consecutivos del bloque y
+consume cada propiedad una vez por id, conservando catchment, ruido, layout,
+dimensiones y sustitución de cada aeropuerto. Las coordenadas de layout
+preservan el byte no negativo de OpenTTD y sólo se sign-extienden para la
+entrada especial `gfx=0xFF`; las orientaciones E/O siguen transponiendo la
+huella sin truncar offsets grandes. Se añadieron regresiones de parser,
+catálogo y FTA; #326/#329 continúan abiertas por foundations/rotaciones,
+callbacks, sonidos y la aceptación raster completa.

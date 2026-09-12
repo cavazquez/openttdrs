@@ -535,8 +535,10 @@ pub struct ParsedIndustryTileMeta {
 /// Tesela de layout aeropuerto (`prop 0x0A`); `local_tile` si gfx era `0xFE`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParsedAirportLayoutTile {
-    pub x: i8,
-    pub y: i8,
+    /// Offset raw `TileIndexDiffC`: unsigned salvo la entrada especial
+    /// `gfx=0xFF`, que `OpenTTD` interpreta como signed de 8 bits.
+    pub x: i16,
+    pub y: i16,
     /// Gfx vanilla/airport-tile global, o id local si [`Self::use_local_tile`].
     pub gfx_or_local: u16,
     pub use_local_tile: bool,
@@ -4388,223 +4390,233 @@ pub fn collect_airport_tile_metas_from_grf(data: &[u8]) -> Vec<ParsedAirportTile
     out
 }
 
-/// Parsea Action0 `Airports` (`0x0D`). Requiere `prop 0x08` (subst o disable).
+/// Lee un layout `Airports` (`prop 0x0A`) y sus dimensiones acumuladas.
+///
+/// Los valores de una propiedad Action0 se repiten una vez por cada id del
+/// rango. Separar este lector evita que el parser consuma sólo el primer
+/// layout y deje el cursor desfasado al procesar el segundo id.
+fn read_airport_layout(
+    payload: &[u8],
+    i: &mut usize,
+) -> Option<(Vec<ParsedAirportLayout>, u8, u8)> {
+    let num_layouts = usize::from(read_u8(payload, i)?);
+    let _total_size = read_u32(payload, i)?;
+    let mut layouts = Vec::with_capacity(num_layouts);
+    let mut size_x = 0u8;
+    let mut size_y = 0u8;
+    for _ in 0..num_layouts {
+        let rotation = read_u8(payload, i)? & 6;
+        let mut tiles = Vec::new();
+        loop {
+            let x_raw = read_u8(payload, i)?;
+            let y_raw = read_u8(payload, i)?;
+            if x_raw == 0 && y_raw == 0x80 {
+                break;
+            }
+            let gfx = read_u8(payload, i)?;
+            let (x, y) = if gfx == 0xFF {
+                // OpenTTD lee primero ambos bytes como valores positivos y
+                // sólo para gfx=FF los convierte a int8_t.
+                (
+                    i16::from(x_raw.cast_signed()),
+                    i16::from(y_raw.cast_signed()),
+                )
+            } else {
+                (i16::from(x_raw), i16::from(y_raw))
+            };
+            let (gfx_or_local, use_local_tile) = if gfx == 0xFE {
+                (read_u16(payload, i)?, true)
+            } else {
+                (u16::from(gfx), false)
+            };
+            // Es la misma acumulación de `AirportChangeInfo`: las
+            // orientaciones E/O intercambian los ejes de la huella.
+            // `std::max<uint8_t>` en OpenTTD convierte el resultado a byte;
+            // `rem_euclid` conserva esa conversión modular también para el
+            // offset signed de la entrada gfx=0xFF.
+            let extent_x = u8::try_from(x.saturating_add(1).rem_euclid(256)).unwrap_or_default();
+            let extent_y = u8::try_from(y.saturating_add(1).rem_euclid(256)).unwrap_or_default();
+            if rotation == 2 || rotation == 6 {
+                size_x = size_x.max(extent_y);
+                size_y = size_y.max(extent_x);
+            } else {
+                size_x = size_x.max(extent_x);
+                size_y = size_y.max(extent_y);
+            }
+            tiles.push(ParsedAirportLayoutTile {
+                x,
+                y,
+                gfx_or_local,
+                use_local_tile,
+            });
+        }
+        layouts.push(ParsedAirportLayout { rotation, tiles });
+    }
+    Some((layouts, size_x, size_y))
+}
+
+/// Parsea un rango completo de Action0 `Airports` (`0x0D`).
+///
+/// `OpenTTD` lee cada propiedad una vez por cada id consecutivo del rango. Por
+/// ejemplo, un bloque `num_ids=2` contiene dos sustitutos en `0x08`, dos
+/// definiciones de layout en `0x0A` y dos valores de catchment en `0x0E`.
+/// Devolver todos los metadatos evita perder el segundo aeropuerto y mantiene
+/// alineado el cursor para las propiedades siguientes.
 #[must_use]
 #[allow(clippy::too_many_lines)]
-pub fn parse_action0_airport_meta(payload: &[u8]) -> Option<ParsedAirportMeta> {
+pub fn parse_action0_airport_metas(payload: &[u8]) -> Option<Vec<ParsedAirportMeta>> {
     let header = parse_action0_header(payload)?;
     if header.feature != ACTION0_FEATURE_AIRPORTS || header.num_ids == 0 || payload.len() < 5 {
         return None;
     }
-    let local_id = payload[4];
+    let first_id = payload[4];
+    let count = usize::from(header.num_ids);
+    let local_ids: Vec<u8> = (0..count)
+        .map(|offset| first_id.checked_add(u8::try_from(offset).ok()?))
+        .collect::<Option<_>>()?;
     let mut i = 5usize;
-    let mut subst_id: Option<u8> = None;
-    let mut disabled = false;
-    let mut layouts: Vec<ParsedAirportLayout> = Vec::new();
-    let mut size_x = 0u8;
-    let mut size_y = 0u8;
-    let mut min_year = 0u16;
-    let mut max_year = 0xFFFFu16;
-    let mut ttd_airport_type = 0u8;
-    let mut catchment = 4u8;
-    let mut noise_level = 3u8;
-    let mut maintenance_cost = 0u16;
-    let mut name = String::new();
-    let mut badge_local_ids = Vec::new();
+    let mut subst_ids = vec![None; count];
+    let mut disabled = vec![false; count];
+    let mut layouts = vec![Vec::new(); count];
+    let mut sizes = vec![(0u8, 0u8); count];
+    let mut min_year = vec![0u16; count];
+    let mut max_year = vec![0xFFFFu16; count];
+    let mut ttd_airport_type = vec![0u8; count];
+    let mut catchment = vec![4u8; count];
+    let mut noise_level = vec![3u8; count];
+    let mut maintenance_cost = vec![0u16; count];
+    let mut names = vec![String::new(); count];
+    let mut badge_local_ids = vec![Vec::new(); count];
 
     for _ in 0..header.num_props {
-        if i >= payload.len() {
-            break;
-        }
-        let prop = payload[i];
-        i += 1;
+        let prop = read_u8(payload, &mut i)?;
         match prop {
             0x08 => {
-                if i >= payload.len() {
-                    break;
-                }
-                let s = payload[i];
-                i += 1;
-                if s == 0xFF {
-                    disabled = true;
-                    subst_id = Some(local_id); // disable target = local vanilla id
-                } else if s < 10 {
-                    subst_id = Some(s);
+                for (index, local_id) in local_ids.iter().copied().enumerate() {
+                    let s = read_u8(payload, &mut i)?;
+                    if s == 0xFF {
+                        disabled[index] = true;
+                        subst_ids[index] = Some(local_id); // disable target = vanilla id
+                    } else if s < 10 {
+                        subst_ids[index] = Some(s);
+                    }
                 }
             }
             0x0A => {
-                if i >= payload.len() {
-                    break;
-                }
-                let num_layouts = usize::from(payload[i]);
-                i += 1;
-                if i + 4 > payload.len() {
-                    break;
-                }
-                i += 4; // total size DWORD (ignored)
-                layouts.clear();
-                size_x = 0;
-                size_y = 0;
-                for _j in 0..num_layouts {
-                    if i >= payload.len() {
-                        break;
-                    }
-                    let rotation = payload[i] & 6;
-                    i += 1;
-                    let mut tiles = Vec::new();
-                    loop {
-                        if i + 2 > payload.len() {
-                            break;
-                        }
-                        let x = payload[i].cast_signed();
-                        let y = payload[i + 1].cast_signed();
-                        i += 2;
-                        if x == 0 && y.cast_unsigned() == 0x80 {
-                            break;
-                        }
-                        if i >= payload.len() {
-                            break;
-                        }
-                        let gfx = payload[i];
-                        i += 1;
-                        let (gfx_or_local, use_local_tile) = if gfx == 0xFE {
-                            if i + 2 > payload.len() {
-                                break;
-                            }
-                            let local = u16::from_le_bytes([payload[i], payload[i + 1]]);
-                            i += 2;
-                            (local, true)
-                        } else {
-                            (u16::from(gfx), false)
-                        };
-                        // size from tile coords (N/S vs E/W)
-                        let (sx, sy) = if rotation == 2 || rotation == 6 {
-                            (
-                                u8::try_from(i32::from(y) + 1).unwrap_or(1),
-                                u8::try_from(i32::from(x) + 1).unwrap_or(1),
-                            )
-                        } else {
-                            (
-                                u8::try_from(i32::from(x) + 1).unwrap_or(1),
-                                u8::try_from(i32::from(y) + 1).unwrap_or(1),
-                            )
-                        };
-                        size_x = size_x.max(sx);
-                        size_y = size_y.max(sy);
-                        tiles.push(ParsedAirportLayoutTile {
-                            x,
-                            y,
-                            gfx_or_local,
-                            use_local_tile,
-                        });
-                    }
-                    layouts.push(ParsedAirportLayout { rotation, tiles });
+                for index in 0..count {
+                    let (airport_layouts, size_x, size_y) = read_airport_layout(payload, &mut i)?;
+                    layouts[index] = airport_layouts;
+                    sizes[index] = (size_x, size_y);
                 }
             }
             0x0C => {
-                if i + 4 > payload.len() {
-                    break;
+                for index in 0..count {
+                    min_year[index] = read_u16(payload, &mut i)?;
+                    max_year[index] = read_u16(payload, &mut i)?;
                 }
-                min_year = u16::from_le_bytes([payload[i], payload[i + 1]]);
-                max_year = u16::from_le_bytes([payload[i + 2], payload[i + 3]]);
-                i += 4;
             }
             0x0D => {
-                if i >= payload.len() {
-                    break;
+                for value in &mut ttd_airport_type {
+                    *value = read_u8(payload, &mut i)?;
                 }
-                ttd_airport_type = payload[i];
-                i += 1;
             }
             0x0E => {
-                if i >= payload.len() {
-                    break;
+                for value in &mut catchment {
+                    *value = read_u8(payload, &mut i)?.clamp(1, 10);
                 }
-                catchment = payload[i].clamp(1, 10);
-                i += 1;
             }
             0x0F => {
-                if i >= payload.len() {
-                    break;
+                for value in &mut noise_level {
+                    *value = read_u8(payload, &mut i)?;
                 }
-                noise_level = payload[i];
-                i += 1;
             }
             0x10 => {
-                if i + 2 > payload.len() {
-                    break;
-                }
-                let sid = u16::from_le_bytes([payload[i], payload[i + 1]]);
-                i += 2;
-                if sid == 0xFE {
-                    // C-string local name
-                    let start = i;
-                    while i < payload.len() && payload[i] != 0 {
-                        i += 1;
+                for name in &mut names {
+                    let sid = read_u16(payload, &mut i)?;
+                    if sid == 0xFE {
+                        // C-string local name
+                        let start = i;
+                        while i < payload.len() && payload[i] != 0 {
+                            i += 1;
+                        }
+                        *name = String::from_utf8_lossy(&payload[start..i]).into_owned();
+                        if i < payload.len() {
+                            i += 1;
+                        }
+                    } else {
+                        *name = format!("Airport#{sid}");
                     }
-                    name = String::from_utf8_lossy(&payload[start..i]).into_owned();
-                    if i < payload.len() {
-                        i += 1;
-                    }
-                } else {
-                    name = format!("Airport#{sid}");
                 }
             }
             0x11 => {
-                if i + 2 > payload.len() {
-                    break;
+                for value in &mut maintenance_cost {
+                    *value = read_u16(payload, &mut i)?;
                 }
-                maintenance_cost = u16::from_le_bytes([payload[i], payload[i + 1]]);
-                i += 2;
             }
             0x12 => {
-                badge_local_ids = read_badge_local_ids(payload, &mut i)?;
+                for value in &mut badge_local_ids {
+                    *value = read_badge_local_ids(payload, &mut i)?;
+                }
             }
             _ => break,
         }
     }
-    if disabled {
-        return Some(ParsedAirportMeta {
-            local_id,
-            subst_id: subst_id.unwrap_or(local_id),
-            disabled: true,
-            layouts: Vec::new(),
-            size_x: 0,
-            size_y: 0,
-            min_year,
-            max_year,
-            ttd_airport_type,
-            catchment,
-            noise_level,
-            maintenance_cost,
-            name,
-            badge_local_ids,
-        });
-    }
-    Some(ParsedAirportMeta {
-        local_id,
-        subst_id: subst_id?,
-        disabled: false,
-        layouts,
-        size_x,
-        size_y,
-        min_year,
-        max_year,
-        ttd_airport_type,
-        catchment,
-        noise_level,
-        maintenance_cost,
-        name,
-        badge_local_ids,
-    })
+    local_ids
+        .into_iter()
+        .enumerate()
+        .map(|(index, local_id)| {
+            let subst_id = subst_ids[index]?;
+            if disabled[index] {
+                Some(ParsedAirportMeta {
+                    local_id,
+                    subst_id,
+                    disabled: true,
+                    layouts: Vec::new(),
+                    size_x: 0,
+                    size_y: 0,
+                    min_year: min_year[index],
+                    max_year: max_year[index],
+                    ttd_airport_type: ttd_airport_type[index],
+                    catchment: catchment[index],
+                    noise_level: noise_level[index],
+                    maintenance_cost: maintenance_cost[index],
+                    name: names[index].clone(),
+                    badge_local_ids: badge_local_ids[index].clone(),
+                })
+            } else {
+                Some(ParsedAirportMeta {
+                    local_id,
+                    subst_id,
+                    disabled: false,
+                    layouts: layouts[index].clone(),
+                    size_x: sizes[index].0,
+                    size_y: sizes[index].1,
+                    min_year: min_year[index],
+                    max_year: max_year[index],
+                    ttd_airport_type: ttd_airport_type[index],
+                    catchment: catchment[index],
+                    noise_level: noise_level[index],
+                    maintenance_cost: maintenance_cost[index],
+                    name: names[index].clone(),
+                    badge_local_ids: badge_local_ids[index].clone(),
+                })
+            }
+        })
+        .collect()
+}
+
+/// Compatibilidad para callers que sólo necesitan el primer id del bloque.
+#[must_use]
+pub fn parse_action0_airport_meta(payload: &[u8]) -> Option<ParsedAirportMeta> {
+    parse_action0_airport_metas(payload)?.into_iter().next()
 }
 
 #[must_use]
 pub fn collect_airport_metas_from_grf(data: &[u8]) -> Vec<ParsedAirportMeta> {
     let mut out = Vec::new();
     let _ = for_each_pseudo_payload(data, |payload| {
-        if let Some(meta) = parse_action0_airport_meta(payload) {
-            out.push(meta);
+        if let Some(metas) = parse_action0_airport_metas(payload) {
+            out.extend(metas);
         }
     });
     out

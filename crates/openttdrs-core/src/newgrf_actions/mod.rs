@@ -40,12 +40,13 @@ pub use action0::{
     collect_railtype_metas_from_grf, collect_roadstop_metas_from_grf,
     collect_roadtype_metas_from_grf, collect_sound_metas_from_grf, collect_station_metas_from_grf,
     collect_train_metas_from_grf, collect_vehicle_metas_from_grf, for_each_pseudo_payload,
-    parse_action0_airport_meta, parse_action0_airport_tile_meta, parse_action0_badge_meta,
-    parse_action0_bridge_meta, parse_action0_canal_meta, parse_action0_cargo_meta,
-    parse_action0_header, parse_action0_house_meta, parse_action0_industry_meta,
-    parse_action0_industry_tile_meta, parse_action0_object_meta, parse_action0_railtype_metas,
-    parse_action0_roadstop_meta, parse_action0_roadtype_meta, parse_action0_sound_meta,
-    parse_action0_station_meta, parse_action0_train_meta, parse_action0_vehicle_metas,
+    parse_action0_airport_meta, parse_action0_airport_metas, parse_action0_airport_tile_meta,
+    parse_action0_badge_meta, parse_action0_bridge_meta, parse_action0_canal_meta,
+    parse_action0_cargo_meta, parse_action0_header, parse_action0_house_meta,
+    parse_action0_industry_meta, parse_action0_industry_tile_meta, parse_action0_object_meta,
+    parse_action0_railtype_metas, parse_action0_roadstop_meta, parse_action0_roadtype_meta,
+    parse_action0_sound_meta, parse_action0_station_meta, parse_action0_train_meta,
+    parse_action0_vehicle_metas,
 };
 
 pub use apply::{
@@ -5976,6 +5977,67 @@ mod tests {
             "NewGRF airport must not use vanilla FTA"
         );
         assert!(newgrf_airport_spec_def(&state.airport_spec_catalog, newgrf_id).is_some());
+    }
+
+    #[test]
+    fn airports_action0_ranges_keep_each_id_properties_and_layout_offsets() {
+        // OpenTTD repite el valor de cada propiedad para cada id del rango.
+        // El segundo aeropuerto usa además una orientación E distinta para
+        // detectar tanto el cursor desfasado como la transposición accidental.
+        let mut airport = vec![
+            0x00,
+            ACTION0_FEATURE_AIRPORTS,
+            0x04, // subst, layouts, catchment, noise
+            0x02, // two consecutive ids
+            0x03, // first local id
+            0x08,
+            0x00,
+            0x00,
+            0x0A,
+        ];
+        let mut append_layout = |rotation: u8, x: u8, y: u8, gfx: u8| {
+            airport.extend_from_slice(&[1, 0, 0, 0, 0, rotation, x, y, gfx, 0, 0x80]);
+        };
+        append_layout(0, 200, 1, 24);
+        append_layout(2, 0, 1, 14);
+        airport.extend_from_slice(&[0x0E, 2, 7, 0x0F, 3, 8]);
+
+        let parsed = parse_action0_airport_metas(&airport).expect("airport range");
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].local_id, 3);
+        assert_eq!(parsed[1].local_id, 4);
+        assert_eq!(parsed[0].catchment, 2);
+        assert_eq!(parsed[1].catchment, 7);
+        assert_eq!(parsed[0].noise_level, 3);
+        assert_eq!(parsed[1].noise_level, 8);
+        assert_eq!(parsed[0].layouts[0].tiles[0].x, 200);
+        assert_eq!(parsed[0].size_x, 201);
+        assert_eq!(parsed[0].size_y, 2);
+        assert_eq!(parsed[1].layouts[0].rotation, 2);
+        assert_eq!(parsed[1].layouts[0].tiles[0].x, 0);
+        assert_eq!(parsed[1].layouts[0].tiles[0].y, 1);
+        assert_eq!(parsed[1].size_x, 2);
+        assert_eq!(parsed[1].size_y, 1);
+
+        let bytes = build_grf_v2_with_action0_and_action8(
+            &airport,
+            [b'A', b'R', 0, 2],
+            "airport-range",
+            "",
+        );
+        let dir = tempfile_dir_with("airport-range.grf", &bytes);
+        let mut state = GameState::new(8, 8);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("airport-range.grf", 0x4152_0002));
+        apply_newgrf_airports(&mut state, &[&dir]);
+        assert_eq!(state.airport_spec_catalog.len(), 2);
+        assert_eq!(state.airport_spec_catalog[0].newgrf_local_id, 3);
+        assert_eq!(state.airport_spec_catalog[1].newgrf_local_id, 4);
+        assert_eq!(state.airport_spec_catalog[0].catchment, 2);
+        assert_eq!(state.airport_spec_catalog[1].catchment, 7);
+        assert_eq!(state.airport_spec_catalog[0].size_x, 201);
+        assert_eq!(state.airport_spec_catalog[1].size_x, 2);
     }
 
     #[test]

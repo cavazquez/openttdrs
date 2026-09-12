@@ -173,8 +173,11 @@ impl AirportSpecId {
 /// Tesela de layout `NewGRF` ya resuelta a gfx global o vanilla.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AirportLayoutTile {
-    pub x: i8,
-    pub y: i8,
+    /// Offset raw `TileIndexDiffC` del layout Action0. `OpenTTD` conserva
+    /// coordenadas no negativas como BYTE y sólo sign-extiende cuando el gfx
+    /// de la entrada es `0xFF`.
+    pub x: i16,
+    pub y: i16,
     /// Gfx de airport tile (vanilla &lt;74 o `NewGRF` ≥74).
     pub gfx: u16,
 }

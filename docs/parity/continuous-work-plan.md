@@ -5567,3 +5567,11 @@ límite nativo de tres cuartos del coste de construcción. La prueba de precios
 cubre ambos índices antes de reutilizarlos en limpieza compuesta. #329/#567
 siguen abiertas por infraestructura, callbacks, pathfinding y aceptación
 visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-RAIL-CLEAR (2026-09-12): `DoBuildLock`
+retira ahora vía normal y señales mediante la rama manual de
+`ClearTile_Track`, incluyendo el reembolso por pieza, el coste de señales y la
+actualización de vecinos/glob de señales. Depósitos, túneles, puentes y otros
+subtipos siguen bloqueados. La regresión cubre una vía señalizada, su payload
+raw y el coste compuesto. #329/#567 siguen abiertas por infraestructura,
+callbacks, pathfinding y aceptación visual/framebuffer.

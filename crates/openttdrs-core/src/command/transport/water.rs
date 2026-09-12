@@ -6,8 +6,9 @@ use crate::bridge_spec::{
 };
 use crate::economy::{
     canal_build_cost, canal_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
-    lock_clear_cost, road_clear_cost, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
-    ship_depot_clear_cost, station_build_cost, trees_clear_cost, water_clear_cost,
+    lock_clear_cost, rail_clear_cost, road_clear_cost, rocks_clear_cost, rough_clear_cost,
+    ship_depot_build_cost, ship_depot_clear_cost, signal_clear_cost, station_build_cost,
+    trees_clear_cost, water_clear_cost,
 };
 use crate::map::rail_bits::RAIL_TILE_NORMAL;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
@@ -1433,17 +1434,58 @@ fn check_lock_road_tile(
     })
 }
 
-/// Conserva el resultado de `ClearTile_Track | Auto` para una vía importada.
+/// Cuenta las llamadas a `CMD_REMOVE_SINGLE_SIGNAL` que hace
+/// `ClearTile_Track` al retirar todos los carriles de una tesela.
+fn rail_signal_clear_count(tile: Tile) -> i64 {
+    if !crate::rail_signals::rail_tile_is_signals(tile.m5) {
+        return 0;
+    }
+    let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
+    (0..6_u8)
+        .filter_map(crate::rail_signals::SignalTrack::from_u8)
+        .filter(|track| {
+            tile.m5 & track.track_bit() != 0
+                && present & crate::rail_signals::signal_on_track_mask(*track) != 0
+        })
+        .fold(0_i64, |count, _| count + 1)
+}
+
+/// Prepara una vía normal para `CMD_LANDSCAPE_CLEAR` sin `Auto`.
+///
+/// `DoBuildLock` retira cada pieza con `CMD_REMOVE_SINGLE_RAIL`, incluyendo
+/// las señales presentes. Las teselas de depósito, túnel/puente y otros
+/// subtipos siguen requiriendo demolición explícita.
 fn check_lock_rail_tile(state: &GameState, tile: Tile) -> Result<LockBuildTilePlan, CommandError> {
     let owner = tile.m1 & 0x1F;
     if owner != (state.active_company.0 & 0x1F) {
         return Err(CommandError::TileNotOwned);
     }
-    if (tile.m5 >> 6) & 0x03 == RAIL_TILE_NORMAL {
-        Err(CommandError::MustRemoveRailroadTrack)
-    } else {
-        Err(CommandError::BuildingMustBeDemolished)
+    let subtype = (tile.m5 >> 6) & 0x03;
+    if subtype != RAIL_TILE_NORMAL && subtype != crate::map::RAIL_TILE_SIGNALS {
+        return Err(CommandError::BuildingMustBeDemolished);
     }
+    let rail_type = crate::rail_type::rail_type_from_tile(tile);
+    let props = state
+        .runtime
+        .rail_type_props
+        .get(usize::from(rail_type.as_u8()))
+        .copied()
+        .unwrap_or_default();
+    let track_count = i64::from((tile.m5 & 0x3F).count_ones());
+    let rail_cost = rail_clear_cost(
+        &state.global_economy,
+        crate::rail_type::rail_build_cost_multiplier(&props),
+    )
+    .saturating_mul(track_count);
+    let signal_cost =
+        signal_clear_cost(&state.global_economy).saturating_mul(rail_signal_clear_count(tile));
+    Ok(LockBuildTilePlan {
+        water_class: WaterClass::Canal,
+        owner: state.active_company.0,
+        clear_on_build: true,
+        clear_cost: rail_cost.saturating_add(signal_cost),
+        add_canal_cost: false,
+    })
 }
 
 /// Precio de `ClearTile_Clear` para una tesela de terreno.
@@ -1691,9 +1733,14 @@ fn clear_lock_build_tile(
     if !plan.clear_on_build {
         return Ok(());
     }
+    let was_rail = state.map.get_kind(c) == Some(TileKind::Rail);
     clear_tile_after_native_water_restore(&mut state.map, c)
         .map_err(|_| CommandError::OutOfBounds)?;
     clear_neighbour_non_flooding_states(&mut state.map, c);
+    if was_rail {
+        super::rail::refresh_rail_neighbors(state, c)?;
+        crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, c);
+    }
     Ok(())
 }
 

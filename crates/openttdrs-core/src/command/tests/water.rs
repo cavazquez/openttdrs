@@ -406,18 +406,6 @@ fn place_lock_rejects_composite_road_tram_and_rail_auto_clear() {
             0x01,
             crate::CommandError::MustRemoveRoadFirst,
         ),
-        (
-            TileKind::Rail,
-            0x01,
-            0,
-            crate::CommandError::MustRemoveRailroadTrack,
-        ),
-        (
-            TileKind::Rail,
-            0x01 | (1 << 6),
-            0,
-            crate::CommandError::BuildingMustBeDemolished,
-        ),
     ];
 
     for (kind, m5, m3, expected_error) in cases {
@@ -452,6 +440,47 @@ fn place_lock_rejects_composite_road_tram_and_rail_auto_clear() {
         }
         assert_eq!(s.economy.money, money);
     }
+}
+
+#[test]
+fn place_lock_clears_plain_rail_and_signals_without_auto_flag() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    for coord in [lower, middle, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+
+    let mut rail = s.map.get(middle).unwrap();
+    rail.kind = TileKind::Rail;
+    rail.mapt = 0x10;
+    rail.m1 = s.active_company.0;
+    rail.m5 = 0x01 | (crate::map::RAIL_TILE_SIGNALS << 6);
+    rail.m2 = 0xAA;
+    rail.m3 = 0xC0;
+    rail.m3hi = 0x80;
+    rail.m8 = 0x03;
+    s.map.set_tile(middle, rail).unwrap();
+
+    let money = s.economy.money;
+    let rail_clear = crate::economy::rail_clear_cost(&s.global_economy, 8);
+    let expected_cost = rail_clear
+        + crate::economy::signal_clear_cost(&s.global_economy)
+        + crate::economy::lock_build_cost(&s.global_economy);
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command).expect("DoBuildLock retira vía y señal al limpiar el centro");
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+    assert_eq!(s.map.get(middle).unwrap().m5, 0x22);
+    assert_eq!(s.map.get(middle).unwrap().m3, 0);
+    assert_eq!(s.map.get(middle).unwrap().m3hi, 0);
+    assert_eq!(s.economy.money, money - expected_cost);
 }
 
 #[test]

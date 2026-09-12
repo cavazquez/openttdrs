@@ -1744,9 +1744,18 @@ catálogo siguen usando la tabla vanilla.
 
 ### #329-AIR-FAST-CATALOG — aeronave grande/rápida en crash y sonido
 
-Actualizado: 2026-09-12 (pendiente de commit). La propiedad Action0 aircraft
+Actualizado: 2026-09-12 (`890529c1`). La propiedad Action0 aircraft
 `0x0A` (`AIR_FAST`) se materializa en `EngineDef.is_large_aircraft` y ahora
 participa tanto en la decisión de crash como en el sonido de despegue. Un ID
 NewGRF fuera de la tabla vanilla conserva su clasificación de jet en ambos
 consumidores; los IDs vanilla mantienen el fallback histórico. La API
 `aircraft_is_jet` sin catálogo continúa disponible para consumidores legacy.
+
+### #329-RAIL-CLASS-CATALOG — humo, chispas y sonido de túnel
+
+Actualizado: 2026-09-12 (`471f0f32`). Los consumidores de efecto visual por
+defecto y el sonido `VSE_TUNNEL` resuelven la clase `EngineClass` del
+`EngineDef` activo: `EC_STEAM` produce humo, `EC_DIESEL` humo diésel y
+`EC_ELECTRIC`/`EC_MONORAIL`/`EC_MAGLEV` chispas o silencio de túnel. Los
+wrappers que sólo reciben un ID mantienen el fallback vanilla para saves y
+APIs legacy.

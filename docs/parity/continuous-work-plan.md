@@ -6286,15 +6286,6 @@ comprueba que el texto conserve el desplazamiento de la capa custom. Pasaron
 `git diff --check`. #329 continúa abierta por callbacks, vistas runtime
 completas y consumidores legacy restantes; #326/#567 permanecen abiertas.
 
-Corrección #329-AIR-FAST-CATALOG (2026-09-12, pendiente de commit): el
-crash de aeronaves y el sonido de despegue resuelven ahora `AIR_FAST` desde el
-`EngineDef` activo. Un avión NewGRF marcado como grande/rápido ya no se trata
-como propulsor por caer al ID vanilla; se conserva el fallback de los IDs
-históricos y se cubren core y cliente con regresiones específicas. Pasaron los
-tests dirigidos del core y cliente, Clippy estricto en ambos crates, formato y
-`git diff --check`. #329 continúa abierta por callbacks y consumidores
-legacy restantes; #326/#567 permanecen abiertas.
-
 Corrección #329-CALENDAR-AGING-CATALOG (2026-09-12, `54be092b`): el barrido
 diario de calendario resuelve ahora la clase de la unidad ferroviaria contra
 `GameState.engine_catalog`. Antes, un vagón NewGRF con ID fuera de la tabla
@@ -6337,3 +6328,21 @@ la regresión cubre una cabeza custom con potencia válida y caché vacía.
 Pasaron 2695 tests del core (1 ignorado), Clippy estricto, formato y
 `git diff --check`. #329 continúa abierta por callbacks, vistas runtime
 completas y consumidores legacy restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-AIR-FAST-CATALOG (2026-09-12, `890529c1`): el
+crash de aeronaves y el sonido de despegue resuelven ahora `AIR_FAST` desde el
+`EngineDef` activo. Un avión NewGRF marcado como grande/rápido ya no se trata
+como propulsor por caer al ID vanilla; se conserva el fallback de los IDs
+históricos y se cubren core y cliente con regresiones específicas. Pasaron los
+tests dirigidos del core y cliente, Clippy estricto en ambos crates, formato y
+`git diff --check`. #329 continúa abierta por callbacks y consumidores
+legacy restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-RAIL-CLASS-CATALOG (2026-09-12, `471f0f32`): el humo y las
+chispas del renderer, junto con el sonido de túnel, resuelven ahora
+`EngineDef.rail_engine_class` del catálogo activo. Un tren NewGRF eléctrico,
+monorail o maglev ya no cae a vapor sólo porque su ID no existe en la tabla
+vanilla; el wrapper por ID conserva el fallback legacy. Pasaron las
+regresiones dirigidas de core y cliente, Clippy estricto en ambos crates,
+formato y `git diff --check`. #329 continúa abierta por callbacks y
+consumidores legacy restantes; #326/#567 permanecen abiertas.

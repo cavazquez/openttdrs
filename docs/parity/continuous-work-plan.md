@@ -6084,3 +6084,14 @@ creación de un `ENGN` nuevo cuando el save de origen no lo contiene siguen
 pendientes. Pasaron 2682 tests del core (1 ignorado), 1422 del cliente (2
 ignorados), Clippy estricto en core y cliente, formato y `git diff --check`.
 #329/#567 continúan abiertas y #326 permanece abierta.
+
+Corrección #329/#567-VEHICLE-SAV-ENGINE-MAPPING (2026-09-12, `30a4bcea`): el
+puente nativo también lee `EIDS` y, después de aplicar el stack Action0,
+resuelve cada slot `ENGN` por `(GRFID, ID local)` y tipo de vehículo. Esto
+permite rehidratar y reexportar previews de motores NewGRF sin confundir un
+slot custom con el modelo vanilla del mismo índice. Si falta el GRF o la
+correspondencia no es segura, el slot permanece opaco y no se inventa un
+motor de catálogo. Pasaron 2683 tests del core (1 ignorado), 1422 del cliente
+(2 ignorados), Clippy estricto en core y cliente, formato y `git diff --check`.
+#329/#567 continúa abierta por callbacks, slots sin correspondencia y demás
+estado de vehículo NewGRF; #326 permanece abierta.

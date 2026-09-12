@@ -5273,3 +5273,10 @@ un aeropuerto pequeño y una aeronave en vuelo con destino al mismo. La búsqued
 de un hangar alternativo cuando no hay un aeropuerto objetivo válido permanece
 como subetapa separada. #329/#567 continúan abiertas por callbacks, pathfinding
 y aceptación visual/framebuffer.
+
+Actualización #329/#567-ROAD-SERVICE-LOADING (2026-09-12): el servicio
+automático vial ya no interrumpe una ventana de carga ni una transferencia de
+carga activa. Es el gate de `NeedsAutomaticServicing` que ya respetaban los
+handlers naval y aéreo; la regresión comprueba que un autobús debido conserva
+su orden de estación durante la carga. #329/#567 continúan abiertas por
+callbacks, pathfinding y aceptación visual/framebuffer.

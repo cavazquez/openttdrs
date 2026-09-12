@@ -1384,9 +1384,11 @@ columnas traseras y frente road/tram son parents globales con los prismas de
 los ordinales 4–11 preceden a las capas BUILD desde 12. La regresión ECS cubre
 una drive-through plana y otra nivelada en pendiente, verificando bounds,
 altura efectiva, ordinales y el vínculo child de sus capas de suelo. Las
-paradas y waypoints con layout NewGRF siguen en su ruta local de ordinales y
-no se declaran cubiertos. Kale no tiene un foco vial reproducible para medir
-raster; #326 permanece abierto por esos layouts, clipping, pivotes, children
+paradas y waypoints con `TileLayout` NewGRF completo o incompleto comparten ya
+la catenaria global 4–11; si el layout incompleto cae al fallback atómico,
+sus capas BUILD vanilla comienzan en 12. Sólo `NoCatenary` conserva los
+ordinales legacy. Kale no tiene un foco vial reproducible para medir raster;
+#326 permanece abierto por esa evidencia raster, clipping, pivotes, children
 globales y framebuffer.
 
 Actualización #326-ROAD-STOP-STATIC-TILELAYOUT-GLOBAL (2026-09-09): las
@@ -1422,6 +1424,16 @@ regresión paralela y su variante incompleta conserva el mismo contrato. Esto
 delimita #563, pero no habilita todavía el sort global de la catenaria directa
 ni aporta una comparación raster/oráculo específica; #326 y #561 siguen
 abiertos.
+
+Actualización #326-ROAD-STOP-LAYOUT-CATENARY-GLOBAL (2026-09-12): la catenaria
+road/tram de una parada o waypoint ya entra al compositor global aunque el
+`TileLayout` NewGRF no pueda materializarse completo. El fallback sigue siendo
+atómico —descarta ground/BUILD custom parciales—, pero conserva los recortes
+de catenaria con sus prismas `DrawRoadTypeCatenary` en 4–11 y emite el BUILD
+vanilla posterior desde 12. La regresión ECS cubre parada y waypoint
+incompletos, ambos ejes y layout vacío; `NoCatenary` mantiene su ruta legacy.
+Esto resuelve la brecha estructural de #563; aún falta el foco raster/oráculo
+vial y no se cierra #326 ni #561.
 
 El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
 Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,

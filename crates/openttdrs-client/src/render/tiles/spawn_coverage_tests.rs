@@ -2867,9 +2867,7 @@ fn assert_static_newgrf_road_stop_layout_with_orientation(
         })
         .collect();
     parents.sort_by_key(|(_, parent, _, _)| parent.insertion_key);
-    let expected_parent_rows = if incomplete_layout {
-        Vec::new()
-    } else if empty_sequence {
+    let expected_parent_rows = if incomplete_layout || empty_sequence {
         vec![
             (
                 catenary_back_id,
@@ -2979,10 +2977,10 @@ fn assert_static_newgrf_road_stop_layout_with_orientation(
                 .map(|(_, insertion_key)| *insertion_key)
                 .collect::<Vec<_>>(),
             vec![
-                viewport_insertion_key(3, 3, 2),
-                viewport_insertion_key(3, 3, 3)
+                viewport_insertion_key(3, 3, 12),
+                viewport_insertion_key(3, 3, 13)
             ],
-            "el fallback vanilla debe conservar los ordinales locales de BUILD"
+            "el fallback vanilla debe seguir a la catenaria en el stream global"
         );
         let custom_image_count = {
             let images = world.resource::<Assets<Image>>();

@@ -720,12 +720,11 @@ fn road_stop_sorted_layer_centers(
     centers
 }
 
-/// Ordinal de los parents BUILD que siguen en la ruta local de layout custom.
+/// Ordinal de los parents BUILD que siguen al fallback sin catenaria.
 ///
-/// El flujo nativo llama a `DrawRoadCatenary` antes de `DrawRailTileSeq`,
-/// pero la catenaria de un layout custom sigue temporalmente fuera del
-/// compositor global. Sus parents BUILD conservan este contrato hasta una
-/// migración dedicada.
+/// `NoCatenary` no reserva el tramo 4..=11; conservar este bloque mantiene
+/// estable la ruta legacy para esas paradas, mientras todos los demás casos
+/// usan el compositor global nativo.
 const ROAD_STOP_LEGACY_BUILDING_PARENT_ORDINAL: u8 = 2;
 
 /// `DrawRoadTypeCatenary` puede publicar tres columnas y un frente por road
@@ -2301,19 +2300,14 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 }
             }
             // OpenTTD emite la catenaria entre el suelo/overlay y
-            // `DrawRailTileSeq(TO_BUILDINGS)`. Un TileLayout completo ya se
-            // materializa como parents/children propios, por lo que puede
-            // reservar el stream global igual que el layout vanilla. Los
-            // layouts incompletos conservan su ruta local: su fallback puede
-            // mezclar sprites base que el cliente todavía no materializa.
+            // `DrawRailTileSeq(TO_BUILDINGS)`, independientemente de que el
+            // TileLayout custom pueda materializarse. El fallback atómico sólo
+            // cambia BUILD; los recortes de catenaria siguen siendo parents
+            // globales para no perder el orden entre teselas vecinas.
             let catenary_suppressed =
                 road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord);
-            let custom_layout_joins_global_sort = match custom_layout.as_ref() {
-                None => true,
-                Some((spec_id, layout, _, _)) => road_stop_layout_is_static(*spec_id, layout),
-            };
-            let catenary_parent_ordinal = (!catenary_suppressed && custom_layout_joins_global_sort)
-                .then_some(ROAD_STOP_CATENARY_PARENT_ORDINAL);
+            let catenary_parent_ordinal =
+                (!catenary_suppressed).then_some(ROAD_STOP_CATENARY_PARENT_ORDINAL);
             if !catenary_suppressed && let Some(tile) = ctx.tile {
                 let _ = spawn_road_stop_catenary(
                     commands,
@@ -2612,25 +2606,20 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     image_store,
                 );
             }
-            // Un TileLayout completo puede publicar sus propios parents y
-            // children después de la catenaria, igual que el waypoint
-            // vanilla. Los layouts incompletos conservan la catenaria directa
-            // y su fallback existente: todavía pueden requerir sprites base
-            // no materializables.
-            let waypoint_layout_joins_global_sort = match waypoint_layout.as_ref() {
-                None => true,
-                Some((spec_id, layout, _, _)) => road_stop_layout_is_static(*spec_id, layout),
-            };
+            // Un TileLayout completo publica sus propios parents y children
+            // después de la catenaria, igual que el waypoint vanilla. Si el
+            // layout es incompleto, sólo BUILD vuelve al fallback atómico;
+            // la catenaria conserva siempre el stream global nativo.
+            let waypoint_catenary_suppressed =
+                road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord);
             let waypoint_catenary_parent_ordinal =
-                waypoint_layout_joins_global_sort.then_some(ROAD_STOP_CATENARY_PARENT_ORDINAL);
+                (!waypoint_catenary_suppressed).then_some(ROAD_STOP_CATENARY_PARENT_ORDINAL);
             let waypoint_building_parent_ordinal = if waypoint_catenary_parent_ordinal.is_some() {
                 ROAD_VANILLA_BUILDING_PARENT_ORDINAL
             } else {
                 ROAD_STOP_LEGACY_BUILDING_PARENT_ORDINAL
             };
-            if !road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord)
-                && let Some(tile) = ctx.tile
-            {
+            if !waypoint_catenary_suppressed && let Some(tile) = ctx.tile {
                 spawn_road_stop_catenary(
                     commands,
                     map,

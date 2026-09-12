@@ -1440,6 +1440,15 @@ río consume `Random()` y persiste el byte bajo en `MAP4`; el tramo de tierra no
 consume una tirada. La regresión parte de la pieza acuática y verifica el byte
 raw y el estado final del RNG. Otros criterios de #329/#567 siguen pendientes.
 
+### #329/#567-WATER-OBJECT-RANDOM-RESTORE — objetos acuáticos auto-demolidos
+
+Actualizado: 2026-09-12. La limpieza automática de un objeto que ocupa agua
+restaura cada tesela mediante `MakeWaterKeepingClass`, consumiendo un
+`Random()` independiente para cada canal o río y dejando cero en mar. La
+regresión usa un objeto autoremove de dos tiles dentro de la huella de un
+depósito y comprueba la cantidad de palabras consumidas. Otros criterios de
+#329/#567 siguen pendientes.
+
 ### #329/#567-SHIP-BUOY-RANDOM-RESTORE — `MAP4` al retirar boyas
 
 Actualizado: 2026-09-12. La retirada de una boya restaura el agua subyacente

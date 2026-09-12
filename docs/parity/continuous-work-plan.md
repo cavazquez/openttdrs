@@ -5423,3 +5423,10 @@ canal/río y `MAP4 = 0` para mar. La regresión cubre la eliminación por otra
 compañía y el estado final del RNG; la neutralidad del waypoint se conserva.
 #329/#567 continúan abiertas por callbacks, pathfinding y aceptación
 visual/framebuffer.
+
+Actualización #329/#567-WATER-OBJECT-RANDOM-RESTORE (2026-09-12): la auto-
+demolición de objetos acuáticos restaura cada tile con `MakeWaterKeepingClass`
+y consume una palabra `Random()` por cada sección de canal/río; el mar conserva
+`MAP4 = 0`. La regresión usa un objeto autoremove de dos teselas dentro de la
+huella de un depósito y comprueba el avance total del RNG. #329/#567 continúan
+abiertas por callbacks, pathfinding y aceptación visual/framebuffer.

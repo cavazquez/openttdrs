@@ -3,8 +3,8 @@ use crate::economy::{object_clear_cost_factored, road_stop_clear_cost_factored};
 use crate::map::{
     Map, OBJECT_TYPE_COMPANY_HEADQUARTERS, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
     OBJECT_TYPE_STATUE_COMPANY, OBJECT_TYPE_TRANSMITTER, TileCoord, TileKind, WaterClass,
-    has_tile_water_ground, is_map_object_tile, make_water_tile, object_id_from_tile,
-    object_type_from_tile, water_class_from_m1,
+    has_tile_water_ground, is_map_object_tile, object_id_from_tile, object_type_from_tile,
+    water_class_from_m1,
 };
 use crate::object_spec::{
     NEW_OBJECT_OFFSET, OBJECT_FLAG_AUTOREMOVE, OBJECT_FLAG_CANNOT_REMOVE, OBJECT_FLAG_CLEAR_INCOME,
@@ -573,8 +573,7 @@ fn clear_object_footprint_impl(
     }
     for (index, &tile) in object_tiles.iter().enumerate() {
         if let Some(water_class) = preserved_water.get(index).copied().flatten() {
-            make_water_tile(&mut state.map, tile, water_class)
-                .map_err(|_| CommandError::OutOfBounds)?;
+            super::water::make_water_tile_after_native_clear(state, tile, water_class)?;
         } else {
             state
                 .map

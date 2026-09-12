@@ -500,9 +500,17 @@ fn place_ship_depot_auto_clears_autoremove_water_object_and_keeps_water() {
     let command = Command::PlaceShipDepotDir(depot, 1);
 
     assert_eq!(command_would_fail(&s, &command), None);
+    s.random = crate::cargodist::parity::Randomizer {
+        state: [0x1122_3344, 0x5566_7788],
+    };
+    let mut expected_random = s.random;
+    for _ in 0..object_tiles.len() {
+        let _ = expected_random.next();
+    }
     apply_command(&mut s, &command).expect("el depósito puede limpiar el objeto autoremove");
 
     assert_eq!(s.objects.len(), 0, "se quita la instancia completa");
+    assert_eq!(s.random, expected_random);
     assert_eq!(s.map.get_kind(object_tiles[1]), Some(TileKind::Water));
     assert_eq!(s.map.get_kind(depot), Some(TileKind::ShipDepot));
     assert_eq!(s.map.get_kind(other), Some(TileKind::ShipDepot));

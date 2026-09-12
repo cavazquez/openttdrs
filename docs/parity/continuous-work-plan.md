@@ -6306,3 +6306,15 @@ la regresión compara ambos contratos. Pasaron 2693 tests del core (1
 ignorado), Clippy estricto, formato y `git diff --check`. #329 continúa
 abierta por callbacks, vistas runtime completas y consumidores legacy
 restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-RAIL-PATH-CATALOG (2026-09-12, `04bd9568`): el pathfinding
+ferroviario YAPF de las rutas en vivo resuelve ahora el `EngineDef` desde
+`GameState.engine_catalog` antes de filtrar las teselas por `RailType`. Esto
+evita que un motor NewGRF con `required_rail_type` custom sea tratado como
+Rail al calcular su destino, al probar plataformas alternativas, al asignar
+andén o al reencaminarse tras un head-on. El wrapper público sin catálogo
+conserva el fallback vanilla para consumidores legacy y la regresión demuestra
+que un corredor Maglev sólo se acepta con el catálogo correcto. Pasaron 2694
+tests del core (1 ignorado), Clippy estricto, formato y `git diff --check`.
+#329 continúa abierta por callbacks, vistas runtime completas y consumidores
+legacy restantes; #326/#567 permanecen abiertas.

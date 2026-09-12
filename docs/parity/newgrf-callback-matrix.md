@@ -1723,3 +1723,13 @@ Actualizado: 2026-09-12 (`2e1d1fe4`). `pending_autoreplace_for_service` y
 `needs_autorenewing_with_catalog`; la API legacy mantiene el fallback vanilla.
 Así un vagón NewGRF sin unidad anterior no se ofrece como locomotora
 autorrenovable sólo porque su ID no exista en la tabla estática.
+
+### #329-RAIL-PATH-CATALOG — tipo de vía en YAPF
+
+Actualizado: 2026-09-12 (`04bd9568`). Las rutas ferroviarias en vivo pasan el
+catálogo runtime al resolver el motor antes de filtrar las teselas por
+`required_rail_type`. El contrato cubre la ruta general, los andenes
+alternativos, la adjudicación de plataformas y el reroute después de un
+head-on; los motores NewGRF ya no caen en Rail por no existir en la tabla
+vanilla. La API sin catálogo conserva el fallback legacy y la regresión separa
+un corredor Maglev del comportamiento Rail anterior.

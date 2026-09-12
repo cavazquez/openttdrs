@@ -5886,3 +5886,12 @@ túneles/puentes; los enlaces estructurales se cuentan una sola vez. La UI
 expone el total de piezas y el desglose efectivo por clase, incluyendo tipos
 NewGRF. #329/#567 continúa abierta por agua/aeropuertos, metadata incremental
 de writers viales, callbacks, arrastre de áreas y aceptación visual/framebuffer.
+
+Corrección #329/#567-ROAD-WRITER-METADATA (2026-09-12): los comandos runtime
+ya persisten la separación nativa entre la infraestructura de carretera y la
+capa tranviaria. Las carreteras conservan el owner de tranvía al actualizar
+bits; depósitos, paradas, waypoints y túneles/puentes escriben `RoadType`,
+MAP7 y el nibble de owner M3 correspondiente, también para compañías distintas
+del jugador. Las regresiones ejercitan construcción real con compañía rival.
+#329/#567 continúa abierta por conversión de capas existentes, agua,
+aeropuertos, callbacks, arrastre de áreas y aceptación visual/framebuffer.

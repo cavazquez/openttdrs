@@ -24,6 +24,37 @@ fn place_road_mutates_tile_kind() {
 }
 
 #[test]
+fn road_writers_persist_company_and_tram_layer_metadata() {
+    let mut s = GameState::new(10, 10);
+    s.ensure_rival_transcargo();
+    assert!(s.set_active_company(crate::CompanyId(1)));
+
+    let road = TileCoord::new(3, 4);
+    apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+    let road_tile = s.map.get(road).unwrap();
+    assert_eq!(road_tile.m1 & 0x1F, 1);
+    assert_eq!(road_tile.m3 >> 4, 1, "owner tranviario por defecto");
+
+    apply_command(&mut s, &Command::PlaceTramBits(road, 0x05)).unwrap();
+    let tram_tile = s.map.get(road).unwrap();
+    assert_eq!(tram_tile.m3 >> 4, 1, "owner de la capa tranviaria");
+    assert_eq!(
+        crate::road_type::tram_road_type_from_tile(&tram_tile),
+        Some(crate::RoadType::Tram)
+    );
+
+    let depot = TileCoord::new(2, 4);
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 2)).unwrap();
+    let depot_tile = s.map.get(depot).unwrap();
+    assert_eq!(depot_tile.m1 & 0x1F, 1);
+    assert_eq!(depot_tile.m7 & 0x1F, 1);
+    assert_eq!(
+        crate::road_type::road_type_from_tile(&depot_tile),
+        crate::RoadType::Road
+    );
+}
+
+#[test]
 fn road_cannot_overwrite_nonremovable_object() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(3, 4);
@@ -389,6 +420,26 @@ fn place_bus_stop_links_adjacent_road() {
         s.map.get(road).unwrap().m5 & 0x04 != 0,
         "carretera con bit hacia la parada"
     );
+}
+
+#[test]
+fn road_stop_writer_persists_map_owner_and_road_type() {
+    let mut s = GameState::new(8, 8);
+    s.ensure_rival_transcargo();
+    assert!(s.set_active_company(crate::CompanyId(1)));
+    let stop = TileCoord::new(1, 1);
+    let road = TileCoord::new(1, 0);
+    apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(stop, 3)).unwrap();
+
+    let tile = s.map.get(stop).unwrap();
+    assert_eq!(tile.m1 & 0x1F, 1, "owner de la estación");
+    assert_eq!(tile.m7 & 0x1F, 1, "owner de la capa road");
+    assert_eq!(
+        crate::road_type::road_type_from_tile(&tile),
+        crate::RoadType::Road
+    );
+    assert_eq!(tile.m3 >> 4, 0x0F, "owner none de tranvía sin overlay");
 }
 
 #[test]

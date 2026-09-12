@@ -705,6 +705,8 @@ mod tests {
     #[test]
     fn place_bridge_keeps_water_under_span() {
         let mut s = GameState::new(10, 10);
+        s.ensure_rival_transcargo();
+        assert!(s.set_active_company(crate::CompanyId(1)));
         let c = |x: i32, y: i32| TileCoord::new(x, y);
         for x in 2..=4 {
             s.map.set_kind(c(x, 2), TileKind::Water).unwrap();
@@ -721,6 +723,16 @@ mod tests {
             bridge_type_from_m6(s.map.get(c(1, 2)).unwrap().m6),
             BridgeType::CantileverRed
         );
+        for ramp in [c(1, 2), c(5, 2)] {
+            let tile = s.map.get(ramp).unwrap();
+            assert_eq!(tile.m1 & 0x1F, 1);
+            assert_eq!(tile.m7 & 0x1F, 1);
+            assert_eq!(
+                crate::road_type::road_type_from_tile(&tile),
+                crate::RoadType::Road
+            );
+            assert_eq!(tile.m3 >> 4, 0x0F);
+        }
     }
 
     #[test]

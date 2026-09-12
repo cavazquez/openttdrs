@@ -592,6 +592,47 @@ fn road_stop_build_cost_for_state(state: &GameState, stop_kind: StopKind) -> i64
         )
 }
 
+fn current_road_type_class(state: &GameState) -> crate::road_type::RoadTramType {
+    state
+        .road_type_catalog
+        .iter()
+        .find(|definition| definition.id == state.current_road_type)
+        .map_or_else(
+            || state.current_road_type.road_tram_type(),
+            |definition| definition.class,
+        )
+}
+
+/// Completa la metadata que `MakeRoadStop` escribe en MAP1/MAP7/M3/M8.
+///
+/// La geometría de la boca ya fue escrita por `connect_road_stop`; esta
+/// segunda escritura conserva sus bits bajos y persiste owner/tipo de cada
+/// capa para los contadores de infraestructura y los saves.
+fn persist_road_stop_transport_metadata(
+    state: &mut GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    tile.m1 = state.active_company.0;
+    tile.m7 = state.active_company.0;
+    if current_road_type_class(state) == crate::road_type::RoadTramType::Tram {
+        tile = crate::road_type::set_road_type_on_tile(
+            tile,
+            crate::road_type::RoadType::from_u8(0x3F),
+        );
+        tile = crate::road_type::set_tram_road_type_on_tile(tile, Some(state.current_road_type));
+        tile.m3 = (tile.m3 & 0x0F) | ((state.active_company.0 & 0x0F) << 4);
+    } else {
+        tile = crate::road_type::set_road_type_on_tile(tile, state.current_road_type);
+        tile = crate::road_type::set_tram_road_type_on_tile(tile, None);
+        tile.m3 = (tile.m3 & 0x0F) | 0xF0;
+    }
+    state
+        .map
+        .set_tile(c, tile)
+        .map_err(|_| CommandError::OutOfBounds)
+}
+
 pub(in crate::command::transport) fn station_placement_on_tile(
     state: &mut GameState,
     c: TileCoord,
@@ -638,6 +679,9 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     {
         let _ = state.map.set_tile(c, prev_tile);
         return Err(e);
+    }
+    if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {
+        persist_road_stop_transport_metadata(state, c)?;
     }
     let mut st = Station::new_with_kind(c, stop_kind);
     st.owner = state.active_company;
@@ -844,12 +888,20 @@ pub(in crate::command) fn place_road_waypoint(
     require_tile_owned_by_active(state, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let axis = road_waypoint_axis_bits(tile.m5).unwrap_or(0x0A);
+    let road_owner = tile.m1;
+    let tram_owner = if tile.m3 & 0x0F != 0 {
+        tile.m3 & 0xF0
+    } else {
+        0xF0
+    };
     let mut out = tile;
     out.kind = TileKind::Station;
     out.mapt = 0x50;
+    out.m1 = state.active_company.0;
+    out.m7 = road_owner;
     // Eje en m5 (0 = X, 1 = Y), bits de carretera en m3 para pathfinding.
     out.m5 = u8::from(axis == 0x05);
-    out.m3 = (out.m3 & !0x0F) | axis;
+    out.m3 = tram_owner | axis;
     out.m6 = apply_station_m6(out.m6, StopKind::RoadWaypoint);
     state
         .map

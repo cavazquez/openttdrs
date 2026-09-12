@@ -36,6 +36,37 @@ fn bridge_ramp_m5(is_rail: bool, dir: u8) -> u8 {
     0x80 | (transport << 2) | (dir & 0x03)
 }
 
+fn current_road_type_class(state: &GameState) -> crate::road_type::RoadTramType {
+    state
+        .road_type_catalog
+        .iter()
+        .find(|definition| definition.id == state.current_road_type)
+        .map_or_else(
+            || state.current_road_type.road_tram_type(),
+            |definition| definition.class,
+        )
+}
+
+fn persist_new_road_structure_metadata(
+    state: &GameState,
+    mut tile: crate::map::Tile,
+) -> crate::map::Tile {
+    tile.m7 = state.active_company.0;
+    if current_road_type_class(state) == crate::road_type::RoadTramType::Tram {
+        tile = crate::road_type::set_road_type_on_tile(
+            tile,
+            crate::road_type::RoadType::from_u8(0x3F),
+        );
+        tile = crate::road_type::set_tram_road_type_on_tile(tile, Some(state.current_road_type));
+        tile.m3 = (tile.m3 & 0x0F) | ((state.active_company.0 & 0x0F) << 4);
+    } else {
+        tile = crate::road_type::set_road_type_on_tile(tile, state.current_road_type);
+        tile = crate::road_type::set_tram_road_type_on_tile(tile, None);
+        tile.m3 = (tile.m3 & 0x0F) | 0xF0;
+    }
+    tile
+}
+
 struct TunnelBridgeClearPlan {
     kind: TileKind,
     end: TileCoord,
@@ -600,6 +631,8 @@ pub(in crate::command) fn place_tunnel_or_bridge(
     };
     for (i, c) in line.iter().enumerate() {
         let mut tile = state.map.get(*c).ok_or(CommandError::OutOfBounds)?;
+        let preserve_road_metadata =
+            matches!(tile.kind, TileKind::RoadTunnel | TileKind::RoadBridge);
         let is_endpoint = i == 0 || i + 1 == line.len();
         if is_tunnel {
             tile.kind = kind_to_place;
@@ -609,6 +642,8 @@ pub(in crate::command) fn place_tunnel_or_bridge(
                 .unwrap_or(0);
             if is_rail && is_endpoint {
                 tile = crate::rail_type::set_rail_type_on_tile(tile, state.current_rail_type);
+            } else if !is_rail && !preserve_road_metadata {
+                tile = persist_new_road_structure_metadata(state, tile);
             }
         } else if is_endpoint {
             tile.kind = kind_to_place;
@@ -628,6 +663,8 @@ pub(in crate::command) fn place_tunnel_or_bridge(
             tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
             if is_rail {
                 tile = crate::rail_type::set_rail_type_on_tile(tile, state.current_rail_type);
+            } else if !preserve_road_metadata {
+                tile = persist_new_road_structure_metadata(state, tile);
             }
         } else {
             tile.mapt = set_bridge_middle_mapt(tile.mapt, bridge_axis_y);

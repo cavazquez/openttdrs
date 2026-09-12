@@ -228,6 +228,8 @@ fn command_would_fail_matches_apply_for_road_water_and_station() {
     );
 
     let mut ridge = GameState::new(12, 12);
+    ridge.ensure_rival_transcargo();
+    assert!(ridge.set_active_company(crate::CompanyId(1)));
     let c = |x: i32, y: i32| TileCoord::new(x, y);
     ridge.map.set_height(c(5, 5), 2).unwrap();
     ridge.map.set_height(c(5, 6), 2).unwrap();
@@ -245,6 +247,16 @@ fn command_would_fail_matches_apply_for_road_water_and_station() {
     assert_eq!(ridge.map.get(c(5, 5)).unwrap().m5 & 0x03, 0);
     assert_eq!(ridge.map.get(c(3, 5)).unwrap().m5 & 0x03, 2);
     assert_eq!(ridge.map.get(c(4, 5)).unwrap().m5, 0);
+    for tunnel in [c(5, 5), c(4, 5), c(3, 5)] {
+        let tile = ridge.map.get(tunnel).unwrap();
+        assert_eq!(tile.m1 & 0x1F, 1);
+        assert_eq!(tile.m7 & 0x1F, 1);
+        assert_eq!(
+            crate::road_type::road_type_from_tile(&tile),
+            crate::RoadType::Road
+        );
+        assert_eq!(tile.m3 >> 4, 0x0F);
+    }
 }
 
 #[test]

@@ -104,6 +104,33 @@ pub(in crate::command) fn place_road_depot_dir(
         road_depot_build_cost(&state.global_economy),
         depot_id,
     )?;
+    let current_class = state
+        .road_type_catalog
+        .iter()
+        .find(|definition| definition.id == state.current_road_type)
+        .map_or_else(
+            || state.current_road_type.road_tram_type(),
+            |definition| definition.class,
+        );
+    let mut depot_tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    depot_tile.m7 = state.active_company.0;
+    if current_class == crate::road_type::RoadTramType::Tram {
+        depot_tile = crate::road_type::set_road_type_on_tile(
+            depot_tile,
+            crate::road_type::RoadType::from_u8(0x3F),
+        );
+        depot_tile =
+            crate::road_type::set_tram_road_type_on_tile(depot_tile, Some(state.current_road_type));
+        depot_tile.m3 = (depot_tile.m3 & 0x0F) | ((state.active_company.0 & 0x0F) << 4);
+    } else {
+        depot_tile = crate::road_type::set_road_type_on_tile(depot_tile, state.current_road_type);
+        depot_tile = crate::road_type::set_tram_road_type_on_tile(depot_tile, None);
+        depot_tile.m3 = (depot_tile.m3 & 0x0F) | 0xF0;
+    }
+    state
+        .map
+        .set_tile(c, depot_tile)
+        .map_err(|_| CommandError::OutOfBounds)?;
     if let Some((exit, road_bits)) = road_depot_exit_for_dir(&state.map, c, dir)
         && state.map.get_kind(exit) == Some(TileKind::Road)
     {
@@ -444,6 +471,11 @@ pub(in crate::command) fn write_normal_road_tile(
     // Conservar overlay de tranvía si ya era carretera (UI-6c).
     let preserve_tram = tile.kind == TileKind::Road;
     let tram_bits = if preserve_tram { tile.m3 & 0x0F } else { 0 };
+    let tram_owner = if preserve_tram {
+        tile.m3 & 0xF0
+    } else {
+        (state.active_company.0 & 0x0F) << 4
+    };
     let tram_m8 = if preserve_tram { tile.m8 & 0x0FC0 } else { 0 };
     tile.kind = TileKind::Road;
     // MP_ROAD normal tile: low nibble stores road bits, high bits subtype=0.
@@ -452,7 +484,7 @@ pub(in crate::command) fn write_normal_road_tile(
     tile.m1 = state.active_company.0;
     tile.m2 = 0;
     tile.m2_hi = 0;
-    tile.m3 = tram_bits;
+    tile.m3 = tram_owner | tram_bits;
     tile.m3hi = 0;
     tile.m6 = 0;
     tile.m7 = 0;
@@ -545,6 +577,12 @@ fn write_tram_geometry(
 ) -> Result<(), CommandError> {
     use crate::road_type::{set_tram_road_type_on_tile, set_tram_track_bits_on_tile};
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let existing_tram = tile.m3 & 0x0F;
+    let tram_owner = if existing_tram != 0 {
+        tile.m3 & 0xF0
+    } else {
+        (state.active_company.0 & 0x0F) << 4
+    };
     if !matches!(
         tile.kind,
         TileKind::Road | TileKind::RoadBridge | TileKind::RoadTunnel
@@ -554,6 +592,7 @@ fn write_tram_geometry(
     }
     let bits = tram_bits & 0x0F;
     tile = set_tram_track_bits_on_tile(tile, bits);
+    tile.m3 = (tile.m3 & 0x0F) | tram_owner;
     tile = set_tram_road_type_on_tile(
         tile,
         if bits == 0 {

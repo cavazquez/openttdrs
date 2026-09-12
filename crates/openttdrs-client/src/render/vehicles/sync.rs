@@ -10,7 +10,7 @@ use crate::state::SimWorld;
 
 use super::assets::{
     NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles, custom_aircraft_rotor_layers,
-    vehicle_layers,
+    vehicle_layers_with_catalog,
 };
 use super::pose::{
     aircraft_aux_sprite_pos_at, aircraft_aux_sprite_pos_at_offsets, vehicle_insertion_key,
@@ -335,7 +335,13 @@ pub(crate) fn update_vehicles(
             .first()
             .map(|layer| layer.handle.clone())
             .unwrap_or_else(|| {
-                trucks.for_vehicle(v, pose, Some(&company), Some(vehicle_owner_colour(&sim, v)))
+                trucks.for_vehicle_with_catalog(
+                    v,
+                    pose,
+                    Some(&company),
+                    Some(vehicle_owner_colour(&sim, v)),
+                    &sim.state.engine_catalog,
+                )
             });
         set_sprite_image_if_changed(&mut sprite, image);
         set_sprite_color_if_changed(&mut sprite, vehicle_tint(v));
@@ -423,11 +429,12 @@ pub(crate) fn update_vehicles(
             .first()
             .map(|layer| layer.handle.clone())
             .unwrap_or_else(|| {
-                trucks.for_vehicle(
+                trucks.for_vehicle_with_catalog(
                     unit,
                     trailer_pose,
                     Some(&company),
                     Some(vehicle_owner_colour(&sim, unit)),
+                    &sim.state.engine_catalog,
                 )
             });
         set_sprite_image_if_changed(&mut sprite, image);
@@ -506,7 +513,7 @@ pub(crate) fn update_vehicles(
         }
         visibility.set_if_neq(Visibility::Visible);
         let dir = openttdrs_core::vehicle_render_direction_at(v, pose).min(7) as usize;
-        let layer = &vehicle_layers(v)[dir];
+        let layer = &vehicle_layers_with_catalog(v, &sim.state.engine_catalog)[dir];
         let mut shadow_pos =
             aircraft_aux_sprite_pos_at(v, &sim.state.map, pose, layer, false, 0.85);
         let source_depth = vehicle_source_depth(v, &sim.state.map, pose, shadow_pos);
@@ -519,7 +526,10 @@ pub(crate) fn update_vehicles(
                 source_depth,
             });
         }
-        set_sprite_image_if_changed(&mut sprite, trucks.for_vehicle(v, pose, None, None));
+        set_sprite_image_if_changed(
+            &mut sprite,
+            trucks.for_vehicle_with_catalog(v, pose, None, None, &sim.state.engine_catalog),
+        );
     }
 
     for (rotor, mut transform, mut sprite, mut visibility, child) in &mut rotors {

@@ -49,12 +49,9 @@ pub(crate) use vehicle_gfx::{AIRCRAFT_ROTOR_LAYERS, VehicleLayerGfx};
 const TRAIN_GROUP_COUNT: usize = 10;
 const TRAIN_GROUP_COAL_LOADED: usize = 9;
 
-fn train_group_for_vehicle(v: &Vehicle) -> usize {
-    let engine_id = v
-        .engine_id
-        .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
-    let engine = openttdrs_core::engine_for_vehicle(v.kind, engine_id);
-    if engine_id == openttdrs_core::ENGINE_WAGON_COAL
+fn train_group_for_engine(engine: &EngineDef, v: &Vehicle) -> usize {
+    if engine.kind == VehicleKind::Train
+        && engine.cargo == Some(openttdrs_core::CargoType::Coal)
         && v.capacity > 0
         && v.cargo.saturating_mul(2) >= v.capacity
     {
@@ -63,25 +60,6 @@ fn train_group_for_vehicle(v: &Vehicle) -> usize {
         usize::from(openttdrs_core::train_sprite_group(engine.train_image_index))
             .min(TRAIN_GROUP_COUNT - 2)
     }
-}
-
-fn train_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
-    match train_group_for_vehicle(v) {
-        0 => &TRAIN_VEHICLE_LAYERS_T0,
-        1 => &TRAIN_VEHICLE_LAYERS_T1,
-        2 => &TRAIN_VEHICLE_LAYERS,
-        3 => &TRAIN_VEHICLE_LAYERS_TDIESEL,
-        4 => &TRAIN_VEHICLE_LAYERS_TELECTRIC,
-        5 => &TRAIN_WAGON_PASSENGER_LAYERS,
-        6 => &TRAIN_WAGON_MAIL_LAYERS,
-        7 => &TRAIN_WAGON_GOODS_LAYERS,
-        8 => &TRAIN_WAGON_COAL_LAYERS,
-        _ => &TRAIN_WAGON_COAL_LOADED_LAYERS,
-    }
-}
-
-fn ship_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
-    ship_layers_for_image_index(ship_image_index_for(v))
 }
 
 fn ship_layers_for_image_index(image_index: u8) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
@@ -107,45 +85,71 @@ fn ship_image_index_for_engine(engine: &EngineDef) -> u8 {
 /// Partidas antiguas del port no inicializaban ese byte al comprar un barco;
 /// para ellas se reconstruye el índice de los cuatro motores vanilla. Un
 /// índice custom (`0xFD`) cae al sprite base si no hay vistas NewGRF.
-fn ship_image_index_for(v: &Vehicle) -> u8 {
-    if v.native_sprite_num != 0 {
-        return if v.native_sprite_num < 4 {
-            v.native_sprite_num
-        } else {
-            0
-        };
+fn ship_image_index_for_vehicle(v: &Vehicle, engine: &EngineDef) -> u8 {
+    match v.native_sprite_num {
+        1..=3 => v.native_sprite_num,
+        0 | 0xFD..=u8::MAX => ship_image_index_for_engine(engine),
+        _ => 0,
     }
-    let engine_id = v
-        .engine_id
-        .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
-    openttdrs_core::engine_by_id(engine_id)
-        .map(|engine| engine.ship_image_index)
-        .unwrap_or(0)
 }
 
-fn aircraft_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
-    let engine_id = v
-        .engine_id
-        .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
-    match engine_id {
+fn aircraft_layers_for_engine(engine: &EngineDef) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+    match engine.id {
         openttdrs_core::ENGINE_AIRCRAFT_FOKKER => &AIRCRAFT_VEHICLE_LAYERS_FOKKER,
         openttdrs_core::ENGINE_AIRCRAFT_TRICARIO => &AIRCRAFT_VEHICLE_LAYERS_TRICARIO,
         _ => &AIRCRAFT_VEHICLE_LAYERS,
     }
 }
 
-pub(crate) fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+fn vehicle_layers_for_engine(
+    v: &Vehicle,
+    engine: &EngineDef,
+) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
     match v.kind {
         VehicleKind::Truck if v.uses_loaded_road_sprite() => &TRUCK_VEHICLE_LAYERS_LOADED,
         VehicleKind::Truck => &TRUCK_VEHICLE_LAYERS,
-        VehicleKind::Ship => ship_layers_for(v),
+        VehicleKind::Ship => ship_layers_for_image_index(ship_image_index_for_vehicle(v, engine)),
         VehicleKind::Bus | VehicleKind::Tram if v.uses_loaded_road_sprite() => {
             &BUS_VEHICLE_LAYERS_LOADED
         }
         VehicleKind::Bus | VehicleKind::Tram => &BUS_VEHICLE_LAYERS,
-        VehicleKind::Aircraft => aircraft_layers_for(v),
-        VehicleKind::Train => train_layers_for(v),
+        VehicleKind::Aircraft => aircraft_layers_for_engine(engine),
+        VehicleKind::Train => train_layers_for_engine(engine, v),
     }
+}
+
+fn train_layers_for_engine(
+    engine: &EngineDef,
+    v: &Vehicle,
+) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+    match train_group_for_engine(engine, v) {
+        0 => &TRAIN_VEHICLE_LAYERS_T0,
+        1 => &TRAIN_VEHICLE_LAYERS_T1,
+        2 => &TRAIN_VEHICLE_LAYERS,
+        3 => &TRAIN_VEHICLE_LAYERS_TDIESEL,
+        4 => &TRAIN_VEHICLE_LAYERS_TELECTRIC,
+        5 => &TRAIN_WAGON_PASSENGER_LAYERS,
+        6 => &TRAIN_WAGON_MAIL_LAYERS,
+        7 => &TRAIN_WAGON_GOODS_LAYERS,
+        8 => &TRAIN_WAGON_COAL_LAYERS,
+        _ => &TRAIN_WAGON_COAL_LOADED_LAYERS,
+    }
+}
+
+pub(crate) fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+    let engine_id = v
+        .engine_id
+        .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
+    let engine = openttdrs_core::engine_for_vehicle(v.kind, engine_id);
+    vehicle_layers_for_engine(v, engine)
+}
+
+pub(crate) fn vehicle_layers_with_catalog(
+    v: &Vehicle,
+    catalog: &[EngineDef],
+) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+    let engine = openttdrs_core::engine_for_vehicle_catalog(catalog, v);
+    vehicle_layers_for_engine(v, engine)
 }
 
 /// Devuelve el ID local del motor que encabeza la cadena de un vehículo.
@@ -850,6 +854,7 @@ impl TruckHandles {
                 openttdrs_core::ENGINE_AIRCRAFT_TRICARIO => self.aircraft_tricario[i].clone(),
                 _ => self.aircraft[i].clone(),
             },
+            VehicleKind::Train => self.train_preview(engine.train_image_index, dir),
             other => self.intro_sprite(other, dir),
         }
     }
@@ -860,18 +865,16 @@ impl TruckHandles {
         self.train_groups[group][dir.min(7)].clone()
     }
 
-    /// Textura del sprite según la pose de render (extrapolada entre ticks de
-    /// sim): la dirección del sprite acompaña la posición dibujada en curvas,
-    /// en vez de usar la dirección lógica del último tick.
-    pub(super) fn for_vehicle(
+    fn for_vehicle_with_engine(
         &self,
         v: &Vehicle,
         pose: openttdrs_core::VehiclePose,
+        engine: &EngineDef,
         company: Option<&CompanyColoredSprites>,
         owner_colour: Option<crate::sprites::CompanyColour>,
     ) -> Handle<Image> {
         let dir = openttdrs_core::vehicle_sprite_direction_at(v, pose).min(7) as usize;
-        let layer = &vehicle_layers(v)[dir];
+        let layer = &vehicle_layers_for_engine(v, engine)[dir];
         if let Some(c) = company {
             let handle = match owner_colour {
                 Some(col) => c.vehicle_handle_for_colour(col, layer.path),
@@ -885,7 +888,7 @@ impl TruckHandles {
         match v.kind {
             VehicleKind::Truck if v.uses_loaded_road_sprite() => self.truck_loaded[i].clone(),
             VehicleKind::Truck => self.truck[i].clone(),
-            VehicleKind::Ship => match ship_image_index_for(v) {
+            VehicleKind::Ship => match ship_image_index_for_vehicle(v, engine) {
                 1 => self.ship_oil[i].clone(),
                 2 => self.ship_coal[i].clone(),
                 3 => self.ship_ferry[i].clone(),
@@ -906,10 +909,27 @@ impl TruckHandles {
                 }
             }
             VehicleKind::Train => {
-                let group = train_group_for_vehicle(v);
+                let group = train_group_for_engine(engine, v);
                 self.train_groups[group][i].clone()
             }
         }
+    }
+
+    /// Textura del sprite según la pose de render (extrapolada entre ticks de
+    /// sim) resolviendo motores NewGRF en el catálogo de la partida. Los
+    /// sprites custom ya resueltos tienen prioridad en
+    /// `for_vehicle_with_newgrf_layers`; este método cubre sus fallbacks
+    /// nativos, sombras y trailers.
+    pub(super) fn for_vehicle_with_catalog(
+        &self,
+        v: &Vehicle,
+        pose: openttdrs_core::VehiclePose,
+        company: Option<&CompanyColoredSprites>,
+        owner_colour: Option<crate::sprites::CompanyColour>,
+        catalog: &[EngineDef],
+    ) -> Handle<Image> {
+        let engine = openttdrs_core::engine_for_vehicle_catalog(catalog, v);
+        self.for_vehicle_with_engine(v, pose, engine, company, owner_colour)
     }
 
     /// Capas NewGRF con offsets individuales para el parent y sus children.
@@ -1014,6 +1034,150 @@ impl TruckHandles {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn distinct_test_handles() -> TruckHandles {
+        fn set(base: u128) -> [Handle<Image>; 8] {
+            std::array::from_fn(|dir| {
+                Handle::Uuid(
+                    bevy::asset::uuid::Uuid::from_u128(base + u128::try_from(dir).unwrap_or(0)),
+                    std::marker::PhantomData,
+                )
+            })
+        }
+
+        TruckHandles {
+            bus: set(1),
+            bus_loaded: set(10),
+            truck: set(20),
+            truck_loaded: set(30),
+            ship: set(40),
+            ship_oil: set(50),
+            ship_coal: set(60),
+            ship_ferry: set(70),
+            aircraft: set(80),
+            aircraft_fokker: set(90),
+            aircraft_tricario: set(100),
+            aircraft_rotor: std::array::from_fn(|frame| {
+                Handle::Uuid(
+                    bevy::asset::uuid::Uuid::from_u128(110 + u128::try_from(frame).unwrap_or(0)),
+                    std::marker::PhantomData,
+                )
+            }),
+            train_groups: std::array::from_fn(|group| set(200 + group as u128 * 10)),
+        }
+    }
+
+    #[test]
+    fn catalog_fallback_uses_custom_train_image_group() {
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train")
+            .clone();
+        engine.id = 0x7F20;
+        engine.train_image_index = 20;
+
+        let mut vehicle = Vehicle::new(
+            200,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        vehicle.engine_id = Some(engine.id);
+        vehicle.direction = openttdrs_core::DIR_E;
+        let pose = openttdrs_core::VehiclePose::from_vehicle(&vehicle);
+        let handles = distinct_test_handles();
+
+        let selected = handles.for_vehicle_with_catalog(
+            &vehicle,
+            pose,
+            None,
+            None,
+            std::slice::from_ref(&engine),
+        );
+
+        assert_eq!(
+            selected,
+            handles.train_groups[4][openttdrs_core::DIR_E as usize]
+        );
+        assert_eq!(
+            vehicle_layers_with_catalog(&vehicle, std::slice::from_ref(&engine))
+                [openttdrs_core::DIR_E as usize]
+                .path,
+            TRAIN_VEHICLE_LAYERS_TELECTRIC[openttdrs_core::DIR_E as usize].path
+        );
+    }
+
+    #[test]
+    fn catalog_fallback_uses_custom_loaded_coal_wagon() {
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_WAGON_COAL)
+            .expect("vanilla coal wagon")
+            .clone();
+        engine.id = 0x7F21;
+        engine.train_image_index = 34;
+
+        let mut vehicle = Vehicle::new(
+            201,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        vehicle.engine_id = Some(engine.id);
+        vehicle.capacity = 30;
+        vehicle.cargo = 20;
+        vehicle.direction = openttdrs_core::DIR_E;
+        let pose = openttdrs_core::VehiclePose::from_vehicle(&vehicle);
+        let handles = distinct_test_handles();
+
+        let selected = handles.for_vehicle_with_catalog(
+            &vehicle,
+            pose,
+            None,
+            None,
+            std::slice::from_ref(&engine),
+        );
+
+        assert_eq!(
+            selected,
+            handles.train_groups[TRAIN_GROUP_COAL_LOADED][openttdrs_core::DIR_E as usize]
+        );
+    }
+
+    #[test]
+    fn catalog_fallback_uses_original_sprite_for_custom_ship() {
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_SHIP_MPS)
+            .expect("vanilla ship")
+            .clone();
+        engine.id = 0x7F22;
+        engine.ship_image_index = 0xFD;
+        engine.original_image_index = 2;
+
+        let mut vehicle = Vehicle::new(
+            202,
+            VehicleKind::Ship,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        vehicle.engine_id = Some(engine.id);
+        vehicle.native_sprite_num = 0xFD;
+        vehicle.ship_rotation = openttdrs_core::DIR_E;
+        let pose = openttdrs_core::VehiclePose::from_vehicle(&vehicle);
+        let handles = distinct_test_handles();
+
+        let selected = handles.for_vehicle_with_catalog(
+            &vehicle,
+            pose,
+            None,
+            None,
+            std::slice::from_ref(&engine),
+        );
+
+        assert_eq!(selected, handles.ship_coal[openttdrs_core::DIR_E as usize]);
+        assert_eq!(
+            vehicle_layers_with_catalog(&vehicle, std::slice::from_ref(&engine))
+                [openttdrs_core::DIR_E as usize]
+                .path,
+            SHIP_VEHICLE_LAYERS_COAL[openttdrs_core::DIR_E as usize].path
+        );
+    }
 
     #[test]
     fn custom_ship_sprite_uses_original_index_for_fallback() {

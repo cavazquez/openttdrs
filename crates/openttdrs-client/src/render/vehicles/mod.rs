@@ -1821,7 +1821,8 @@ mod tests {
         );
 
         let handles = default_handles();
-        let selected = assets::TruckHandles::for_vehicle(&handles, &v, pose, None, None);
+        let selected =
+            assets::TruckHandles::for_vehicle_with_catalog(&handles, &v, pose, None, None, &[]);
         assert_eq!(selected, handles.bus[render_dir]);
     }
 

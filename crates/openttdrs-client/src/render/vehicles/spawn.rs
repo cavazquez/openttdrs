@@ -8,7 +8,9 @@ use crate::render::{
 };
 use crate::state::SimWorld;
 
-use super::assets::{NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles, vehicle_layers};
+use super::assets::{
+    NewGrfTrainSpriteCache, NewGrfVehicleLayer, TruckHandles, vehicle_layers_with_catalog,
+};
 use super::pose::{
     aircraft_aux_sprite_pos_at, aircraft_aux_sprite_pos_at_offsets, vehicle_insertion_key,
     vehicle_parent_bounds, vehicle_source_depth, vehicle_sprite_pos_at_offsets,
@@ -54,7 +56,9 @@ fn spawn_newgrf_stack_children(
     let fallback = layers
         .first()
         .map(|layer| layer.handle.clone())
-        .unwrap_or_else(|| trucks.for_vehicle(vehicle, pose, None, None));
+        .unwrap_or_else(|| {
+            trucks.for_vehicle_with_catalog(vehicle, pose, None, None, &sim.state.engine_catalog)
+        });
     // VehicleSpriteSeq has eight slots in OpenTTD. Keep stable child entities
     // for all slots so a later load/unload transition can reveal a new layer
     // without rebuilding the map hierarchy.
@@ -252,11 +256,12 @@ pub(crate) fn spawn_initial_vehicles(
             .first()
             .map(|layer| layer.handle.clone())
             .unwrap_or_else(|| {
-                trucks.for_vehicle(
+                trucks.for_vehicle_with_catalog(
                     vehicle,
                     pose,
                     Some(company),
                     Some(vehicle_owner_colour(sim, vehicle)),
+                    &sim.state.engine_catalog,
                 )
             });
         let vehicle_entity = commands
@@ -290,7 +295,7 @@ pub(crate) fn spawn_initial_vehicles(
             &layers,
         );
         if vehicle.kind == VehicleKind::Aircraft {
-            let layer = &vehicle_layers(vehicle)
+            let layer = &vehicle_layers_with_catalog(vehicle, &sim.state.engine_catalog)
                 [openttdrs_core::vehicle_render_direction_at(vehicle, pose).min(7) as usize];
             let mut shadow_pos =
                 aircraft_aux_sprite_pos_at(vehicle, &sim.state.map, pose, layer, false, 0.85);
@@ -304,7 +309,13 @@ pub(crate) fn spawn_initial_vehicles(
                 MapVisualLayer,
                 AircraftShadowSprite(vehicle.id),
                 Sprite {
-                    image: trucks.for_vehicle(vehicle, pose, None, None),
+                    image: trucks.for_vehicle_with_catalog(
+                        vehicle,
+                        pose,
+                        None,
+                        None,
+                        &sim.state.engine_catalog,
+                    ),
                     color: Color::srgba(0.08, 0.08, 0.08, 0.5),
                     ..default()
                 },
@@ -487,7 +498,15 @@ fn spawn_consist_trailer_sprites(
         let unit_image = layers
             .first()
             .map(|layer| layer.handle.clone())
-            .unwrap_or_else(|| trucks.for_vehicle(unit, unit_pose, Some(company), owner_colour));
+            .unwrap_or_else(|| {
+                trucks.for_vehicle_with_catalog(
+                    unit,
+                    unit_pose,
+                    Some(company),
+                    owner_colour,
+                    &sim.state.engine_catalog,
+                )
+            });
         let unit_entity = commands
             .spawn((
                 MapVisualLayer,

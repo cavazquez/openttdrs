@@ -19,7 +19,7 @@ use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_a
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::{viewport_insertion_key, viewport_source_depth};
 
-use super::assets::{VehicleLayerGfx, vehicle_layers};
+use super::assets::{VehicleLayerGfx, vehicle_layers, vehicle_layers_with_catalog};
 
 pub(super) fn vehicle_layer(
     v: &Vehicle,
@@ -100,7 +100,10 @@ pub(crate) fn vehicle_sprite_pos_at_with_catalog(
             f32::from(view.height),
         )
     } else {
-        let layer = vehicle_layer(v, Some(map), pose);
+        let layer = catalog.map_or_else(
+            || vehicle_layer(v, Some(map), pose),
+            |cat| &vehicle_layers_with_catalog(v, cat)[dir],
+        );
         (layer.x_offs, layer.y_offs, layer.w, layer.h)
     };
     vehicle_sprite_pos_at_offsets(v, map, pose, x_offs, y_offs, w, h)

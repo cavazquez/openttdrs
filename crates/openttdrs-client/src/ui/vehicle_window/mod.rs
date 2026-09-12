@@ -144,11 +144,19 @@ pub(crate) fn vehicle_side_sprite(
     let engine_id = vehicle
         .engine_id
         .unwrap_or_else(|| default_engine_id(vehicle.kind));
+    let engine = engine_for_vehicle(vehicle.kind, engine_id);
+    vehicle_side_sprite_for_engine(trucks, vehicle, engine)
+}
+
+fn vehicle_side_sprite_for_engine(
+    trucks: &TruckHandles,
+    vehicle: &openttdrs_core::Vehicle,
+    engine: &openttdrs_core::EngineDef,
+) -> Handle<Image> {
     if vehicle.kind == VehicleKind::Train {
-        let engine = engine_for_vehicle(vehicle.kind, engine_id);
         trucks.train_preview(engine.train_image_index, 2)
     } else {
-        trucks.intro_sprite(vehicle.kind, 2)
+        trucks.intro_sprite_for_engine(engine, 2)
     }
 }
 
@@ -168,10 +176,13 @@ pub(crate) fn vehicle_side_sprite_for_sim(
     if let Some(engine) = vehicle
         .engine_id
         .and_then(|id| openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, id))
-        && let Some(layer) =
-            vehicle_preview_layers(sim, engine, sim.state.company_colour, cache, images).first()
     {
-        return layer.handle.clone();
+        if let Some(layer) =
+            vehicle_preview_layers(sim, engine, sim.state.company_colour, cache, images).first()
+        {
+            return layer.handle.clone();
+        }
+        return vehicle_side_sprite_for_engine(trucks, vehicle, engine);
     }
     vehicle_side_sprite(trucks, vehicle)
 }

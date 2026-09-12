@@ -183,6 +183,18 @@ pub fn lock_clear_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::ClearLock, 1, 0)
 }
 
+/// Coste base por tesela de retirar un puente (`PR_CLEAR_BRIDGE`).
+#[must_use]
+pub fn bridge_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearBridge, 1, 0)
+}
+
+/// Coste base por tesela de retirar un túnel (`PR_CLEAR_TUNNEL`).
+#[must_use]
+pub fn tunnel_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearTunnel, 1, 0)
+}
+
 /// Coste del depósito ferroviario (`PR_BUILD_DEPOT_TRAIN`) y su tramo de vía.
 ///
 /// `CmdBuildTrainDepot` suma ambos conceptos incluso cuando la boca ya toca una

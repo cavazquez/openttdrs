@@ -1,11 +1,17 @@
 use crate::GameState;
 use crate::bridge_spec::{
-    BridgeType, bridge_available_at_tick_in, bridge_build_cost_in, set_bridge_middle_mapt,
+    BridgeType, bridge_above_axis_from_mapt, bridge_available_at_tick_in, bridge_build_cost_in,
+    bridge_line_tiles, rail_bridge_other_end, road_bridge_other_end, set_bridge_middle_mapt,
     set_bridge_type_m6,
 };
+use crate::company::{OWNER_NONE_M1, OWNER_TOWN_M1};
+use crate::economy::{
+    bridge_clear_cost, rail_clear_cost, road_clear_cost_factored, tunnel_clear_cost,
+};
 use crate::map::{
-    Map, TileCoord, TileKind, complement_slope, inclined_slope_direction, resolve_tunnel_end,
-    tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles, tunnel_preview_path,
+    Map, TileCoord, TileKind, complement_slope, diag_dir_offset, inclined_slope_direction,
+    openttd_tile_index_to_coord, resolve_existing_tunnel_end, resolve_tunnel_end, tile_slope_and_z,
+    tunnel_entrance_m5, tunnel_path_tiles, tunnel_preview_path,
 };
 use crate::station::{Station, StopKind, station_at_tile};
 
@@ -28,6 +34,252 @@ fn reverse_diag_dir(dir: u8) -> u8 {
 fn bridge_ramp_m5(is_rail: bool, dir: u8) -> u8 {
     let transport = u8::from(!is_rail);
     0x80 | (transport << 2) | (dir & 0x03)
+}
+
+struct TunnelBridgeClearPlan {
+    kind: TileKind,
+    end: TileCoord,
+    line: Vec<TileCoord>,
+    is_tunnel: bool,
+}
+
+pub(in crate::command) fn tunnel_bridge_kind(kind: TileKind) -> Option<bool> {
+    match kind {
+        TileKind::RoadTunnel | TileKind::RoadBridge => Some(false),
+        TileKind::RailTunnel | TileKind::RailBridge => Some(true),
+        _ => None,
+    }
+}
+
+fn check_tunnel_bridge_owner(state: &GameState, c: TileCoord) -> Result<(), CommandError> {
+    if state.cheats.magic_bulldozer_active() {
+        return Ok(());
+    }
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let owner = tile.m1 & 0x1F;
+    let active = state.active_company.0 & 0x1F;
+    if owner != active && owner != (OWNER_NONE_M1 & 0x1F) && owner != (OWNER_TOWN_M1 & 0x1F) {
+        return Err(CommandError::TileNotOwned);
+    }
+    Ok(())
+}
+
+fn check_tunnel_bridge_transport(tile: crate::map::Tile, is_rail: bool) -> bool {
+    let expected = if is_rail { 0 } else { 0x04 };
+    tile.m5 & 0x0C == expected
+}
+
+fn tunnel_bridge_clear_plan(
+    state: &GameState,
+    c: TileCoord,
+) -> Result<TunnelBridgeClearPlan, CommandError> {
+    check_in_bounds(&state.map, c)?;
+    let start = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let Some(is_rail) = tunnel_bridge_kind(start.kind) else {
+        return Err(CommandError::InvalidTunnelEndpoints);
+    };
+    let is_tunnel = matches!(start.kind, TileKind::RoadTunnel | TileKind::RailTunnel);
+    if !start.is_tunnel_bridge_tile() || !check_tunnel_bridge_transport(start, is_rail) {
+        return Err(CommandError::InvalidTunnelEndpoints);
+    }
+
+    let end = if is_tunnel {
+        resolve_existing_tunnel_end(&state.map, c)
+    } else if is_rail {
+        rail_bridge_other_end(&state.map, c)
+    } else {
+        road_bridge_other_end(&state.map, c)
+    }
+    .ok_or(CommandError::InvalidTunnelEndpoints)?;
+    let end_tile = state.map.get(end).ok_or(CommandError::OutOfBounds)?;
+    if end_tile.kind != start.kind
+        || !end_tile.is_tunnel_bridge_tile()
+        || !check_tunnel_bridge_transport(end_tile, is_rail)
+    {
+        return Err(CommandError::InvalidTunnelEndpoints);
+    }
+    check_tunnel_bridge_owner(state, c)?;
+    check_tunnel_bridge_owner(state, end)?;
+    if state
+        .vehicles
+        .iter()
+        .any(|vehicle| vehicle.pos == c || vehicle.pos == end)
+    {
+        return Err(CommandError::VehicleInTheWay);
+    }
+
+    let line = if is_tunnel {
+        if start.m5 & 0x80 != 0 || end_tile.m5 & 0x80 != 0 {
+            return Err(CommandError::InvalidTunnelEndpoints);
+        }
+        let (step_x, step_y) = diag_dir_offset(start.m5 & 0x03);
+        let next = TileCoord::new(c.x + step_x, c.y + step_y);
+        let line = axis_line(c, end);
+        if line.len() < 2
+            || line.get(1).copied() != Some(next)
+            || end_tile.m5 & 0x03 != reverse_diag_dir(start.m5 & 0x03)
+        {
+            return Err(CommandError::InvalidTunnelEndpoints);
+        }
+        line
+    } else {
+        if start.m5 & 0x80 == 0 || end_tile.m5 & 0x80 == 0 {
+            return Err(CommandError::InvalidBridgeSpan);
+        }
+        let line = bridge_line_tiles(c, end);
+        let Some(&next) = line.get(1) else {
+            return Err(CommandError::InvalidBridgeSpan);
+        };
+        let (step_x, step_y) = diag_dir_offset(start.m5 & 0x03);
+        let expected_next = TileCoord::new(c.x + step_x, c.y + step_y);
+        let axis_y = c.x == end.x;
+        if line.len() < 3
+            || c.x != end.x && c.y != end.y
+            || next != expected_next
+            || end_tile.m5 & 0x03 != reverse_diag_dir(start.m5 & 0x03)
+        {
+            return Err(CommandError::InvalidBridgeSpan);
+        }
+        for middle in &line[1..line.len() - 1] {
+            if state
+                .map
+                .get(*middle)
+                .is_none_or(|tile| bridge_above_axis_from_mapt(tile.mapt) != Some(axis_y))
+            {
+                return Err(CommandError::InvalidBridgeSpan);
+            }
+        }
+        line
+    };
+
+    Ok(TunnelBridgeClearPlan {
+        kind: start.kind,
+        end,
+        line,
+        is_tunnel,
+    })
+}
+
+pub(in crate::command) fn check_clear_tunnel_or_bridge(
+    state: &GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    tunnel_bridge_clear_plan(state, c).map(|_| ())
+}
+
+fn road_type_cost_multiplier(state: &GameState, road_type: crate::road_type::RoadType) -> u16 {
+    state
+        .road_type_catalog
+        .iter()
+        .find(|definition| definition.id == road_type)
+        .map_or(0, |definition| definition.cost_multiplier)
+}
+
+fn tunnel_bridge_clear_cost(state: &GameState, plan: &TunnelBridgeClearPlan) -> i64 {
+    let base = if plan.is_tunnel {
+        tunnel_clear_cost(&state.global_economy)
+    } else {
+        bridge_clear_cost(&state.global_economy)
+    };
+    let Some(tile) = state.map.get(plan.line[0]) else {
+        return 0;
+    };
+    let transport = if matches!(plan.kind, TileKind::RoadTunnel | TileKind::RoadBridge) {
+        let road_type = crate::road_type::road_type_from_tile(&tile);
+        let road = road_clear_cost_factored(
+            &state.global_economy,
+            false,
+            road_type_cost_multiplier(state, road_type),
+        );
+        let tram = crate::road_type::tram_road_type_from_tile(&tile).map_or(0, |tram_type| {
+            road_clear_cost_factored(
+                &state.global_economy,
+                true,
+                road_type_cost_multiplier(state, tram_type),
+            )
+        });
+        road.saturating_mul(2)
+            .saturating_add(tram.saturating_mul(2))
+    } else {
+        let rail_type = crate::rail_type::rail_type_from_tile(tile);
+        let multiplier = crate::rail_type::rail_build_cost_multiplier(
+            &state.runtime.rail_type_props[usize::from(rail_type.as_u8())],
+        );
+        rail_clear_cost(&state.global_economy, multiplier)
+    };
+    base.saturating_add(transport)
+        .saturating_mul(i64::try_from(plan.line.len()).unwrap_or(i64::MAX))
+}
+
+fn clear_structure_square(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
+    state
+        .map
+        .set_kind(c, TileKind::Grass)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    state
+        .map
+        .set_mapt_m5(c, 0, 0)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    state
+        .map
+        .set_m2(c, 0)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    crate::command::sign::remove_signs_at(state, c);
+    Ok(())
+}
+
+fn remove_jgr_tunnel_record(state: &mut GameState, start: TileCoord, end: TileCoord) {
+    let (width, height) = state.map.dimensions();
+    state.jgr_tunnels_from_footer.retain(|record| {
+        let Some(record_start) = openttd_tile_index_to_coord(record.tile_n, width, height) else {
+            return true;
+        };
+        let Some(record_end) = openttd_tile_index_to_coord(record.tile_s, width, height) else {
+            return true;
+        };
+        !((record_start == start && record_end == end)
+            || (record_start == end && record_end == start))
+    });
+}
+
+pub(in crate::command) fn clear_tunnel_or_bridge(
+    state: &mut GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    let plan = tunnel_bridge_clear_plan(state, c)?;
+    let cost = tunnel_bridge_clear_cost(state, &plan);
+    if plan.is_tunnel {
+        for (index, tile) in plan.line.iter().enumerate() {
+            let is_endpoint = index == 0 || index + 1 == plan.line.len();
+            let is_synthetic_middle = state
+                .map
+                .get(*tile)
+                .is_some_and(|raw| raw.kind == plan.kind && raw.is_tunnel_bridge_tile());
+            if is_endpoint || is_synthetic_middle {
+                clear_structure_square(state, *tile)?;
+            }
+        }
+        remove_jgr_tunnel_record(state, c, plan.end);
+    } else {
+        clear_structure_square(state, c)?;
+        clear_structure_square(state, plan.end)?;
+        for middle in &plan.line[1..plan.line.len() - 1] {
+            let mut tile = state.map.get(*middle).ok_or(CommandError::OutOfBounds)?;
+            tile.mapt &= !0x0C;
+            state
+                .map
+                .set_tile(*middle, tile)
+                .map_err(|_| CommandError::OutOfBounds)?;
+        }
+    }
+    if matches!(plan.kind, TileKind::RailTunnel | TileKind::RailBridge) {
+        super::rail::refresh_rail_neighbors(state, c)?;
+        super::rail::refresh_rail_neighbors(state, plan.end)?;
+        crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, c);
+        crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, plan.end);
+    }
+    state.economy.money -= cost;
+    Ok(())
 }
 
 fn tile_max_z(map: &Map, c: TileCoord) -> Option<u8> {

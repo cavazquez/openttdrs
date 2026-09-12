@@ -11,8 +11,8 @@ use super::terraform::{check_level_land, check_lower_land, check_raise_land};
 use super::town;
 use super::transport::{
     check_airport_area, check_airport_area_with_explicit_layout, check_bridge_with_stations,
-    check_clear_dock, check_clear_ship_depot, check_clear_tile, check_clear_water,
-    check_cycle_rail_signal_type, check_dock_placement_at_station_with_state,
+    check_clear_dock, check_clear_ship_depot, check_clear_tile, check_clear_tunnel_or_bridge,
+    check_clear_water, check_cycle_rail_signal_type, check_dock_placement_at_station_with_state,
     check_dock_placement_with_state, check_object_can_be_auto_cleared, check_object_can_be_cleared,
     check_place_aqueduct, check_place_buoy, check_place_canal, check_place_lock, check_place_rail,
     check_place_rail_signal_oriented, check_place_rail_waypoint, check_place_river,
@@ -20,9 +20,9 @@ use super::transport::{
     check_rail_station_area, check_rail_station_slope_callbacks,
     check_rail_station_spec_restrictions, check_rail_trackbits_with_autoslope, check_remove_rail,
     check_remove_rail_signal, check_road_depot_placement, check_road_stop_spec_restrictions,
-    check_ship_depot_placement, check_single_transport_tile, check_station_placement, check_tunnel,
-    merged_rail_trackbits_on_tile, rail_station_footprint, rail_station_m5,
-    rail_trackbits_from_neighbors,
+    check_ship_depot_placement, check_single_transport_tile, check_station_placement,
+    check_town_demolition_rating, check_tunnel, merged_rail_trackbits_on_tile,
+    rail_station_footprint, rail_station_m5, rail_trackbits_from_neighbors,
 };
 use super::types::Command;
 use super::util::require_tile_owned_by_active;
@@ -322,6 +322,19 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
                 })
         }
         Command::ClearTile(c) => {
+            if let Some(kind) = map.get_kind(*c)
+                && matches!(
+                    kind,
+                    crate::map::TileKind::RoadBridge
+                        | crate::map::TileKind::RailBridge
+                        | crate::map::TileKind::RoadTunnel
+                        | crate::map::TileKind::RailTunnel
+                )
+            {
+                return check_town_demolition_rating(state, *c, kind)
+                    .err()
+                    .or_else(|| check_clear_tunnel_or_bridge(state, *c).err());
+            }
             if map.get(*c).is_some_and(|tile| {
                 tile.kind == crate::map::TileKind::Station
                     && crate::station::stop_kind_from_m6(tile.m6) == crate::StopKind::Dock

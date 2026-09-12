@@ -1,7 +1,7 @@
-use crate::bridge_spec::{BridgeType, bridge_build_cost};
+use crate::bridge_spec::{BridgeType, bridge_above_axis_from_mapt, bridge_build_cost};
 use crate::command::{Command, CommandError, apply_command, command_would_fail};
 use crate::{
-    GameState, PathNetwork, RAIL_TB_X, RAIL_TB_Y, TileCoord, TileKind, bridge_above_axis_from_mapt,
+    GameState, PathNetwork, RAIL_TB_X, RAIL_TB_Y, TileCoord, TileKind, Vehicle, VehicleKind,
     rail_bridge_other_end,
 };
 
@@ -72,6 +72,117 @@ fn bridge_accepts_span_over_water() {
         )
         .is_none()
     );
+}
+
+#[test]
+fn clear_road_bridge_restores_middle_ground_and_charges_full_span() {
+    let mut state = GameState::new(8, 8);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    for x in 2..=3 {
+        state.map.set_kind(c(x, 1), TileKind::Water).unwrap();
+    }
+    let middle = c(2, 1);
+    let mut original_middle = state.map.get(middle).unwrap();
+    original_middle.mapt = 0x21;
+    original_middle.m6 = 0xA5;
+    state.map.set_tile(middle, original_middle).unwrap();
+    let original_mapt = original_middle.mapt;
+    let start = c(1, 1);
+    let end = c(4, 1);
+    apply_command(
+        &mut state,
+        &Command::PlaceRoadBridge(start, end, BridgeType::Wooden),
+    )
+    .unwrap();
+    let middle_m6_after_build = state.map.get(middle).unwrap().m6;
+    let money_before_clear = state.economy.money;
+    let expected = (crate::economy::bridge_clear_cost(&state.global_economy)
+        + crate::economy::road_clear_cost(&state.global_economy) * 2)
+        * 4;
+
+    assert_eq!(command_would_fail(&state, &Command::ClearTile(start)), None);
+    apply_command(&mut state, &Command::ClearTile(start)).unwrap();
+
+    assert_eq!(state.map.get_kind(start), Some(TileKind::Grass));
+    assert_eq!(state.map.get_kind(end), Some(TileKind::Grass));
+    assert_eq!(state.map.get_kind(middle), Some(TileKind::Water));
+    assert_eq!(state.map.get(middle).unwrap().mapt, original_mapt & !0x0C);
+    assert_eq!(state.map.get(middle).unwrap().m6, middle_m6_after_build);
+    assert_eq!(
+        bridge_above_axis_from_mapt(state.map.get(middle).unwrap().mapt),
+        None
+    );
+    assert_eq!(state.economy.money, money_before_clear - expected);
+}
+
+#[test]
+fn clear_rail_tunnel_removes_synthetic_path_and_charges_full_length() {
+    let mut state = GameState::new(16, 16);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    state.map.set_height(c(5, 5), 2).unwrap();
+    state.map.set_height(c(5, 6), 2).unwrap();
+    state.map.set_height(c(6, 5), 1).unwrap();
+    state.map.set_height(c(6, 6), 1).unwrap();
+    state.map.set_height(c(3, 5), 1).unwrap();
+    state.map.set_height(c(3, 6), 1).unwrap();
+    state.map.set_height(c(4, 5), 2).unwrap();
+    state.map.set_height(c(4, 6), 2).unwrap();
+    let start = c(5, 5);
+    let end = c(3, 5);
+    apply_command(&mut state, &Command::PlaceRailTunnel(start, end)).unwrap();
+    let money_before_clear = state.economy.money;
+    let rail_multiplier =
+        crate::rail_type::rail_build_cost_multiplier(&state.runtime.rail_type_props[0]);
+    let expected = (crate::economy::tunnel_clear_cost(&state.global_economy)
+        + crate::economy::rail_clear_cost(&state.global_economy, rail_multiplier))
+        * 3;
+
+    assert_eq!(command_would_fail(&state, &Command::ClearTile(start)), None);
+    apply_command(&mut state, &Command::ClearTile(start)).unwrap();
+
+    for tile in [c(5, 5), c(4, 5), c(3, 5)] {
+        assert_eq!(state.map.get_kind(tile), Some(TileKind::Grass));
+        assert_eq!(state.map.get(tile).unwrap().mapt, 0);
+    }
+    assert_eq!(state.economy.money, money_before_clear - expected);
+}
+
+#[test]
+fn clear_tunnel_bridge_rejects_endpoint_vehicle_atomically() {
+    let mut state = GameState::new(8, 8);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    for x in 2..=3 {
+        state.map.set_kind(c(x, 1), TileKind::Water).unwrap();
+    }
+    let start = c(1, 1);
+    let end = c(4, 1);
+    apply_command(
+        &mut state,
+        &Command::PlaceRoadBridge(start, end, BridgeType::Wooden),
+    )
+    .unwrap();
+    let before = [
+        state.map.get(start).unwrap(),
+        state.map.get(c(2, 1)).unwrap(),
+        state.map.get(end).unwrap(),
+    ];
+    let money_before = state.economy.money;
+    state
+        .vehicles
+        .push(Vehicle::new(1, VehicleKind::Bus, start, end));
+
+    assert_eq!(
+        command_would_fail(&state, &Command::ClearTile(start)),
+        Some(CommandError::VehicleInTheWay)
+    );
+    assert_eq!(
+        apply_command(&mut state, &Command::ClearTile(start)),
+        Err(CommandError::VehicleInTheWay)
+    );
+    assert_eq!(state.map.get(start), Some(before[0]));
+    assert_eq!(state.map.get(c(2, 1)), Some(before[1]));
+    assert_eq!(state.map.get(end), Some(before[2]));
+    assert_eq!(state.economy.money, money_before);
 }
 
 fn state_with_custom_road_stop_bridge_height(min_height: u8) -> (GameState, TileCoord) {

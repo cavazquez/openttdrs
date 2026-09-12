@@ -540,7 +540,7 @@ pub(crate) fn axis_line(a: TileCoord, b: TileCoord) -> Vec<TileCoord> {
     }
 }
 
-fn check_town_demolition_rating(
+pub(in crate::command) fn check_town_demolition_rating(
     state: &GameState,
     c: TileCoord,
     kind: TileKind,
@@ -704,6 +704,9 @@ pub(in crate::command) fn clear_tile(
     let depot_id = state.map.get(c).and_then(crate::depot::depot_id_from_tile);
     if let Some(kind) = state.map.get_kind(c) {
         check_town_demolition_rating(state, c, kind)?;
+        if super::bridge::tunnel_bridge_kind(kind).is_some() {
+            return super::bridge::clear_tunnel_or_bridge(state, c);
+        }
     }
     let is_buoy = state.map.get(c).is_some_and(|tile| {
         tile.kind == TileKind::Station

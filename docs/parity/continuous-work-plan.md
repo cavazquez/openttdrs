@@ -5725,3 +5725,16 @@ se reevalúa antes de `MakeLock`. La infraestructura de agua, la variante
 `Bankrupt` y los callbacks/órdenes de servicio todavía requieren contratos
 propios. #329/#567 continúa abierta por infraestructura, callbacks,
 pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-TUNNEL-BRIDGE-CLEAR (2026-09-12):
+`ClearTile` ya demuele túneles y puentes completos desde cualquiera de sus
+bocas, con preflight compartido entre preview y ejecución. La operación
+comprueba ambos extremos, propiedad, vehículos y geometría almacenada; cobra
+`PR_CLEAR_TUNNEL`/`PR_CLEAR_BRIDGE` más la infraestructura de carretera, tranvía
+o vía por toda la longitud. En puentes conserva el terreno inferior y sólo
+quita los bits del tablero; en túneles locales limpia el tramo sintético y
+mantiene terreno intermedio importado. También elimina el registro JGR de la
+pareja cuando puede decodificar sus índices y actualiza vecinos/señales
+ferroviarios. La construcción, reservas y pathfinding completo de túneles y
+puentes aún requieren contratos propios; #329/#567 continúa abierta por esas
+diferencias y por callbacks, aceptación visual y framebuffer.

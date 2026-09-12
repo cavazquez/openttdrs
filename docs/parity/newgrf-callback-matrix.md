@@ -1690,3 +1690,11 @@ Así, un tren custom conserva desde el primer frame su `train_image_index` y no
 presenta durante una reconstrucción la silueta vanilla que el sistema de
 capas posterior reemplazaría. La regresión cubre la prioridad del catálogo;
 las capas NewGRF completas siguen resolviéndose en el refresco de sprites.
+
+### #329-VEHICLE-PICK-CATALOG-OFFSETS — selección sobre el sprite dibujado
+
+Actualizado: 2026-09-12 (`47534e0d`). El picking del mapa usa ahora los
+offsets/tamaño de la vista NewGRF del catálogo activo para calcular el centro
+seleccionable. Esto alinea el clic con el fallback visual catalog-aware y deja
+el radio y la prioridad por cercanía sin cambios; una vista runtime que aún no
+esté materializada conserva el fallback de catálogo.

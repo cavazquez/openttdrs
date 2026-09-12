@@ -6263,3 +6263,14 @@ su `train_image_index`. Pasaron 2691 tests del core (1 ignorado), 1431 del
 cliente (2 ignorados), Clippy estricto en cliente, formato y `git diff
 --check`. #329 continúa abierta por callbacks, vistas NewGRF completas y
 consumidores legacy restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-PICK-CATALOG-OFFSETS (2026-09-12, `47534e0d`): el
+hit-test de vehículos del mapa calcula ahora el centro con
+`vehicle_sprite_pos_at_with_catalog`, incluyendo offsets y dimensiones de la
+vista NewGRF decodificada. Un vehículo custom desplazado ya puede seleccionarse
+en el punto donde realmente se dibuja; la ocultación y el radio de picking no
+cambian. La regresión separa más de 34 px el centro vanilla del custom y
+comprueba ambos resultados. Pasaron 1432 tests del cliente (2 ignorados),
+Clippy estricto, formato y `git diff --check`. #329 continúa abierta por
+callbacks, vistas runtime completas y consumidores legacy restantes;
+#326/#567 permanecen abiertas.

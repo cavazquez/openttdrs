@@ -14,6 +14,7 @@ use crate::map::{
 use crate::rail_pbs::{YAPF_RESERVATION_CROSS_PENALTY, tile_track_reserved_by_map};
 use crate::rail_signals::{YapfSignalRouting, yapf_routing_signal};
 
+use super::network::tunnel_other_end;
 use super::{
     TunnelWormholes, is_rail_network_tile, is_rail_station_tile, station_entrance_faces_rail,
 };
@@ -453,6 +454,44 @@ fn expand_neighbors(ctx: &mut SearchCtx<'_>, key: NodeKey, cur_g: u32, cur_td: R
     {
         let bridge_tb = yapf_traversal_bits(map, other);
         for next_td in possible_trackdirs(bridge_tb, ENTRY_ANY) {
+            let Some(step) = cached_signal_step_cost(map, other, next_td, ctx.step_cache) else {
+                continue;
+            };
+            let tentative = cur_g + step;
+            let next_key = NodeKey {
+                tile: other,
+                track: next_td.track,
+                exit_dir: next_td.exit_dir,
+            };
+            if ctx.g_score.get(&next_key).is_none_or(|&g| tentative < g) {
+                ctx.g_score.insert(next_key, tentative);
+                ctx.parent.insert(next_key, key);
+                ctx.heap.push(AstarNode {
+                    est_total: tentative + manhattan(other, to),
+                    key: next_key,
+                });
+            }
+        }
+    }
+
+    // Túnel vanilla: sólo se serializan las dos bocas; el tramo intermedio
+    // sigue siendo terreno. El salto exige salir por la dirección que la boca
+    // guarda en `m5`, igual que `FollowTrack`/`GetOtherTunnelEnd` nativos.
+    if map.get_kind(key.tile) == Some(TileKind::RailTunnel)
+        && map
+            .get(key.tile)
+            .is_some_and(|tile| cur_td.exit_dir == pathfinder_dir_to_yapf(tile.m5 & 0x03))
+        && let Some(other) = tunnel_other_end(map, key.tile, TileKind::RailTunnel)
+        && (other == to
+            || (map.get_kind(other).is_some_and(is_rail_network_tile)
+                && tile_ok_for_required(map, other, required)))
+        && let Some(other_tile) = map.get(other)
+    {
+        let exit_dir = pathfinder_dir_to_yapf(opposite_dir(other_tile.m5 & 0x03));
+        let tunnel_tb = yapf_traversal_bits(map, other);
+        for next_td in
+            possible_trackdirs(tunnel_tb, ENTRY_ANY).filter(|next_td| next_td.exit_dir == exit_dir)
+        {
             let Some(step) = cached_signal_step_cost(map, other, next_td, ctx.step_cache) else {
                 continue;
             };

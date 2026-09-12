@@ -169,6 +169,16 @@ mod tests {
         m.set_tile(c, t).unwrap();
     }
 
+    fn write_tunnel(m: &mut Map, c: TileCoord, kind: TileKind, m5: u8) {
+        m.set_kind(c, kind).unwrap();
+        m.set_mapt_m5(c, 0x90, m5).unwrap();
+    }
+
+    fn write_bridge(m: &mut Map, c: TileCoord, kind: TileKind, m5: u8) {
+        m.set_kind(c, kind).unwrap();
+        m.set_mapt_m5(c, 0x90, 0x80 | m5).unwrap();
+    }
+
     #[test]
     fn astar_finds_path_on_straight_road() {
         let mut m = Map::new_flat(8, 8, 0);
@@ -183,6 +193,114 @@ mod tests {
         );
         assert!(path.is_some());
         assert_eq!(*path.unwrap().last().unwrap(), TileCoord::new(4, 0));
+    }
+
+    #[test]
+    fn astar_jumps_vanilla_road_tunnel_without_surface_tiles() {
+        let mut map = Map::new_flat(8, 3, 0);
+        write_road(&mut map, TileCoord::new(0, 1), 0x0A);
+        write_tunnel(
+            &mut map,
+            TileCoord::new(1, 1),
+            TileKind::RoadTunnel,
+            0x04 | 0x02,
+        );
+        write_tunnel(&mut map, TileCoord::new(5, 1), TileKind::RoadTunnel, 0x04);
+        write_road(&mut map, TileCoord::new(6, 1), 0x0A);
+
+        let path = find_path(
+            &map,
+            TileCoord::new(0, 1),
+            TileCoord::new(6, 1),
+            PathNetwork::Road,
+        )
+        .expect("A* debe saltar entre las dos bocas vanilla");
+        assert_eq!(
+            path,
+            vec![
+                TileCoord::new(1, 1),
+                TileCoord::new(5, 1),
+                TileCoord::new(6, 1)
+            ]
+        );
+
+        write_road(&mut map, TileCoord::new(1, 0), 0x0F);
+        assert!(
+            find_path(
+                &map,
+                TileCoord::new(1, 0),
+                TileCoord::new(6, 1),
+                PathNetwork::Road,
+            )
+            .is_none(),
+            "la boca no debe aceptar una entrada lateral"
+        );
+    }
+
+    #[test]
+    fn astar_road_bridge_accepts_only_its_outer_ramp_side() {
+        let mut map = Map::new_flat(8, 3, 0);
+        write_road(&mut map, TileCoord::new(0, 1), 0x0A);
+        write_bridge(
+            &mut map,
+            TileCoord::new(1, 1),
+            TileKind::RoadBridge,
+            0x04 | 0x02,
+        );
+        write_bridge(&mut map, TileCoord::new(5, 1), TileKind::RoadBridge, 0x04);
+        write_road(&mut map, TileCoord::new(6, 1), 0x0A);
+
+        assert_eq!(
+            find_path(
+                &map,
+                TileCoord::new(0, 1),
+                TileCoord::new(6, 1),
+                PathNetwork::Road,
+            )
+            .expect("A* debe saltar entre rampas del puente"),
+            vec![
+                TileCoord::new(1, 1),
+                TileCoord::new(5, 1),
+                TileCoord::new(6, 1)
+            ]
+        );
+
+        write_road(&mut map, TileCoord::new(1, 0), 0x0F);
+        assert!(
+            find_path(
+                &map,
+                TileCoord::new(1, 0),
+                TileCoord::new(6, 1),
+                PathNetwork::Road,
+            )
+            .is_none(),
+            "la rampa del puente no debe aceptar una entrada lateral"
+        );
+    }
+
+    #[test]
+    fn yapf_jumps_vanilla_rail_tunnel_without_surface_tiles() {
+        let mut map = Map::new_flat(8, 3, 0);
+        write_rail(&mut map, TileCoord::new(0, 1), RAIL_TB_X);
+        write_tunnel(&mut map, TileCoord::new(1, 1), TileKind::RailTunnel, 0x02);
+        write_tunnel(&mut map, TileCoord::new(5, 1), TileKind::RailTunnel, 0);
+        write_rail(&mut map, TileCoord::new(6, 1), RAIL_TB_X);
+
+        let path = find_path(
+            &map,
+            TileCoord::new(0, 1),
+            TileCoord::new(6, 1),
+            PathNetwork::Rail,
+        )
+        .expect("YAPF debe saltar entre las dos bocas vanilla");
+        assert_eq!(
+            path,
+            vec![
+                TileCoord::new(1, 1),
+                TileCoord::new(5, 1),
+                TileCoord::new(6, 1)
+            ]
+        );
     }
 
     #[test]

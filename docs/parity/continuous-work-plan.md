@@ -5757,3 +5757,16 @@ demolición. El salto rampa→rampa vial ya estaba implementado; esta subetapa
 corrige el contrato compartido sin duplicarlo. #329/#567 continúa abierta por
 la infraestructura, reservas de tránsito, pathfinding importado, callbacks,
 aceptación visual y framebuffer restantes.
+
+Corrección #329/#567-TUNNEL-PATH-WORMHOLE (2026-09-12): A* y YAPF ya
+atraviesan túneles vanilla cuyo save conserva sólo las dos bocas y deja el
+terreno del vano fuera de la red. El enlace exige `MP_TUNNELBRIDGE`, tipo de
+transporte y portal opuesto compatibles; YAPF sólo salta desde la dirección
+codificada en `m5` y retoma la dirección exterior de la segunda boca. La
+representación local que materializa el corredor conserva continuidad axial,
+sin convertir sus teselas interiores en portales falsos. Las bocas de carretera
+también restringen la entrada al lado exterior, y los puentes viales dejan de
+aceptar entradas laterales. Las pruebas cubren túnel de carretera y ferrocarril
+sin superficie intermedia, eje vertical materializado y entrada lateral
+rechazada. #329/#567 continúa abierta por reservas de tránsito, movimiento,
+callbacks, variantes de túnel/puente y aceptación visual/framebuffer restantes.

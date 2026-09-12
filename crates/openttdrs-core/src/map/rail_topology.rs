@@ -65,6 +65,21 @@ fn is_rail_station_tile(tile: &Tile) -> bool {
     tile.kind == TileKind::Station && (tile.m6 >> 3).trailing_zeros() >= 4
 }
 
+#[must_use]
+fn materialized_tunnel_axis(map: &Map, c: TileCoord, kind: TileKind) -> Option<u8> {
+    let horizontal = [(-1, 0), (1, 0)]
+        .into_iter()
+        .any(|(dx, dy)| map.get_kind(TileCoord::new(c.x + dx, c.y + dy)) == Some(kind));
+    let vertical = [(0, -1), (0, 1)]
+        .into_iter()
+        .any(|(dx, dy)| map.get_kind(TileCoord::new(c.x + dx, c.y + dy)) == Some(kind));
+    match (horizontal, vertical) {
+        (true, false) => Some(RAIL_TB_X),
+        (false, true) => Some(RAIL_TB_Y),
+        _ => None,
+    }
+}
+
 /// Trackbits transitables de una tesela de la red ferroviaria (sin depósitos,
 /// que se tratan aparte porque solo conectan por su boca).
 #[must_use]
@@ -77,7 +92,9 @@ pub fn rail_traversal_bits(map: &Map, c: TileCoord) -> u8 {
             let tb = t.m5 & 0x3F;
             if tb == 0 { RAIL_TB_X } else { tb }
         }
-        TileKind::RailTunnel | TileKind::RailBridge => RAIL_TB_CROSS,
+        TileKind::RailTunnel => materialized_tunnel_axis(map, c, TileKind::RailTunnel)
+            .unwrap_or(if t.m5 & 1 == 0 { RAIL_TB_X } else { RAIL_TB_Y }),
+        TileKind::RailBridge => RAIL_TB_CROSS,
         // Andenes y waypoints: vía a lo largo del eje en `m5` bit 0.
         TileKind::Station if is_rail_station_tile(&t) || is_rail_waypoint_tile(&t) => {
             if t.m5 & 1 != 0 { RAIL_TB_Y } else { RAIL_TB_X }
@@ -130,7 +147,7 @@ mod tests {
         assert_eq!(rail_traversal_bits(&map, c), RAIL_TB_X);
 
         map.set_kind(c, TileKind::RailTunnel).unwrap();
-        assert_eq!(rail_traversal_bits(&map, c), RAIL_TB_CROSS);
+        assert_eq!(rail_traversal_bits(&map, c), RAIL_TB_X);
 
         map.set_kind(c, TileKind::Station).unwrap();
         let mut t = map.get(c).unwrap();
@@ -141,5 +158,17 @@ mod tests {
 
         map.set_kind(c, TileKind::Grass).unwrap();
         assert_eq!(rail_traversal_bits(&map, c), 0);
+    }
+
+    #[test]
+    fn materialized_tunnel_infers_vertical_axis_from_neighbors() {
+        let mut map = Map::new_flat(5, 5, 0);
+        for y in 1..=3 {
+            map.set_kind(TileCoord::new(2, y), TileKind::RailTunnel)
+                .unwrap();
+        }
+        assert_eq!(rail_traversal_bits(&map, TileCoord::new(2, 1)), RAIL_TB_Y);
+        assert_eq!(rail_traversal_bits(&map, TileCoord::new(2, 2)), RAIL_TB_Y);
+        assert_eq!(rail_traversal_bits(&map, TileCoord::new(2, 3)), RAIL_TB_Y);
     }
 }

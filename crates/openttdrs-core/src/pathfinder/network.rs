@@ -2,7 +2,10 @@
 
 use std::collections::HashMap;
 
-use crate::map::{Map, Tile, TileCoord, TileKind, openttd_tile_index_to_coord};
+use crate::map::{
+    Map, Tile, TileCoord, TileKind, diag_dir_offset, openttd_tile_index_to_coord,
+    resolve_existing_tunnel_end,
+};
 use crate::ship_movement::{is_water_network_tile_at, water_tiles_connected};
 use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::VehicleKind;
@@ -111,6 +114,33 @@ pub(crate) fn is_rail_network_tile(kind: TileKind) -> bool {
     )
 }
 
+/// Portal opuesto de un túnel vanilla persistido en `MP_TUNNELBRIDGE`.
+///
+/// `OpenTTD` serializa sólo las dos bocas; el corredor intermedio conserva el
+/// terreno que había debajo. Los mapas construidos localmente pueden, en
+/// cambio, materializar cada tesela como `RoadTunnel`/`RailTunnel`. En ese
+/// segundo formato el vecino inmediato en la dirección de `m5` identifica la
+/// continuidad local y el A*/YAPF no debe saltar desde una tesela interior.
+#[must_use]
+pub(super) fn tunnel_other_end(map: &Map, c: TileCoord, kind: TileKind) -> Option<TileCoord> {
+    let start = map.get(c)?;
+    if start.kind != kind || !start.is_tunnel_bridge_tile() || start.m5 & 0x80 != 0 {
+        return None;
+    }
+    let (dx, dy) = diag_dir_offset(start.m5 & 0x03);
+    let next = TileCoord::new(c.x + dx, c.y + dy);
+    if map.get_kind(next) == Some(kind) {
+        return None;
+    }
+    let other = resolve_existing_tunnel_end(map, c)?;
+    let end = map.get(other)?;
+    (end.kind == kind
+        && end.is_tunnel_bridge_tile()
+        && end.m5 & 0x80 == 0
+        && end.m5 & 0x0C == start.m5 & 0x0C)
+        .then_some(other)
+}
+
 /// Enlaces «wormhole» entre entradas de túnel (p. ej. pool JGR `tile_n` ↔ `tile_s`).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TunnelWormholes {
@@ -164,8 +194,34 @@ fn effective_road_bits(map: &Map, c: TileCoord) -> u8 {
         return 0;
     };
     match t.kind {
-        // Rampas: m5 guarda DiagDir del puente/túnel, no road bits cardinales.
-        TileKind::RoadTunnel | TileKind::RoadBridge => 0x0F,
+        TileKind::RoadTunnel => {
+            // El formato local conserva el corredor como una cadena de
+            // teselas. Mantenerla recta evita que una boca vertical herede el
+            // `m5` plano de una tesela interior.
+            let horizontal = [(-1, 0), (1, 0)].into_iter().any(|(dx, dy)| {
+                map.get_kind(TileCoord::new(c.x + dx, c.y + dy)) == Some(TileKind::RoadTunnel)
+            });
+            let vertical = [(0, -1), (0, 1)].into_iter().any(|(dx, dy)| {
+                map.get_kind(TileCoord::new(c.x + dx, c.y + dy)) == Some(TileKind::RoadTunnel)
+            });
+            if horizontal && !vertical {
+                0x0A
+            } else if vertical && !horizontal {
+                0x05
+            } else {
+                // En un mapa importado sólo existe la boca. `m5` apunta hacia
+                // el interior; la carretera visible sale por la dirección
+                // opuesta (GetAnyRoadBits/DiagDirToRoadBits).
+                let (dx, dy) = diag_dir_offset(t.m5 & 0x03);
+                road_bits_toward_neighbor(-dx, -dy)
+            }
+        }
+        TileKind::RoadBridge => {
+            // El vano de un puente no son teselas de carretera: sólo las dos
+            // rampas son transitables y cada una admite su lado exterior.
+            let (dx, dy) = diag_dir_offset(t.m5 & 0x03);
+            road_bits_toward_neighbor(-dx, -dy)
+        }
         TileKind::Road => {
             let bits = t.m5 & 0x0F;
             if bits == 0 { 0x0F } else { bits }

@@ -8,6 +8,7 @@ use crate::map::{Map, TileCoord, TileKind};
 
 use super::network::{
     PathNetwork, TunnelWormholes, is_network_tile, is_road_stop_station_tile, tiles_connected,
+    tunnel_other_end,
 };
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -59,7 +60,7 @@ pub(super) fn reconstruct(
 
 /// A* road/tram (con wormholes opcionales). Rail/air/water se despachan en `mod`.
 #[must_use]
-#[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::cast_possible_wrap, clippy::too_many_lines)]
 pub(super) fn find_road_or_tram_path_with_wormholes(
     map: &Map,
     from: TileCoord,
@@ -155,6 +156,26 @@ pub(super) fn find_road_or_tram_path_with_wormholes(
         {
             let tentative = cur_g + step_cost(cur, other);
             if g_score.get(&other).is_none_or(|&g| tentative < g) {
+                g_score.insert(other, tentative);
+                parent.insert(other, cur);
+                heap.push(AstarNode {
+                    est_total: tentative + manhattan(other, to),
+                    pos: other,
+                });
+            }
+        }
+        // Túnel vanilla: el save conserva sólo las dos bocas y el terreno del
+        // vano queda fuera de la red. El salto es válido sólo desde el lado
+        // que `m5` marca como entrada; `tunnel_other_end` filtra además los
+        // túneles locales que materializan el corredor tesela a tesela.
+        if network == PathNetwork::Road
+            && map.get_kind(cur) == Some(TileKind::RoadTunnel)
+            && let Some(other) = tunnel_other_end(map, cur, TileKind::RoadTunnel)
+        {
+            let other_kind = map.get_kind(other).unwrap_or(TileKind::Grass);
+            let reachable = is_network_tile(map, other, other_kind, network) || other == to;
+            let tentative = cur_g + step_cost(cur, other);
+            if reachable && g_score.get(&other).is_none_or(|&g| tentative < g) {
                 g_score.insert(other, tentative);
                 parent.insert(other, cur);
                 heap.push(AstarNode {

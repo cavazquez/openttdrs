@@ -225,6 +225,79 @@ fn engine_for_state(state: &GameState, engine_id: u16) -> Option<EngineDef> {
         .or_else(|| engine_by_id(engine_id).cloned())
 }
 
+/// Evalúa CB31 antes de que un autoreemplazo tenga que detener una unidad.
+///
+/// El flujo nativo no vuelve a consultar el callback para una unidad que ya
+/// está detenida en el depósito; sí lo consulta cuando la operación debe
+/// detener una unidad en marcha. El callback se aplica sobre la unidad real
+/// para conservar su writeback de registros persistentes incluso cuando
+/// devuelve un motivo de rechazo.
+fn autoreplace_start_stop_callback_allows(state: &mut GameState, vehicle_idx: usize) -> bool {
+    let Some(vehicle) = state.vehicles.get(vehicle_idx) else {
+        return false;
+    };
+    if !vehicle.running {
+        return true;
+    }
+    let vehicle_id = vehicle.id;
+    let Some(engine_id) = vehicle.engine_id else {
+        return true;
+    };
+    let Some(engine) = engine_for_state(state, engine_id) else {
+        return true;
+    };
+    if engine.newgrf_runtime.is_none() {
+        return true;
+    }
+    let outcome = crate::newgrf_callback::resolve_vehicle_start_stop_callback(
+        &engine,
+        &mut state.vehicles[vehicle_idx],
+    );
+    if matches!(
+        outcome,
+        crate::newgrf_callback::VehicleStartStopCallbackOutcome::Allow
+    ) {
+        return true;
+    }
+    state.runtime.last_vehicle_start_stop_diagnostic =
+        Some(crate::newgrf_callback::VehicleStartStopCallbackDiagnostic {
+            vehicle_id,
+            grfid: engine.newgrf_grfid,
+            outcome,
+        });
+    false
+}
+
+fn autoreplace_start_stop_callback_denied(
+    state: &mut GameState,
+    vehicle_idx: usize,
+    vehicle_id: u32,
+) -> bool {
+    if autoreplace_start_stop_callback_allows(state, vehicle_idx) {
+        return false;
+    }
+    crate::news::push_autoreplace_failed_news(
+        state,
+        vehicle_id,
+        crate::CommandError::NewGrfCallbackDenied,
+    );
+    true
+}
+
+fn autoreplace_failed(state: &mut GameState, vehicle_id: u32, error: crate::CommandError) -> bool {
+    crate::news::push_autoreplace_failed_news(state, vehicle_id, error);
+    false
+}
+
+fn charge_autoreplace(state: &mut GameState, owner: CompanyId, cost: i64) {
+    if let Some(company) = state.companies.get_mut(owner.index()) {
+        company.economy.money -= cost;
+    }
+    if state.active_company == owner {
+        state.economy.money -= cost;
+    }
+}
+
 fn apply_engine_with_refit(
     vehicle: &mut Vehicle,
     new_engine: &EngineDef,
@@ -421,30 +494,26 @@ pub fn try_autoreplace_vehicle(
                 return Err(CommandError::AutoreplaceNotAllowed);
             }
             if !engine_available_in_year(&new_engine, calendar_year) {
-                crate::news::push_autoreplace_failed_news(
+                return Ok(autoreplace_failed(
                     state,
                     vehicle_id,
                     CommandError::EngineNotFound,
-                );
-                return Ok(false);
+                ));
             }
             let wagon_removal = company.renew_keep_length;
             let cost = autoreplace_cost(state, &state.vehicles[vehicle_idx], &new_engine);
             if !can_afford_replacement(company.economy.money, cost, company.engine_renew_money) {
-                crate::news::push_autoreplace_failed_news(
+                return Ok(autoreplace_failed(
                     state,
                     vehicle_id,
                     CommandError::InsufficientFunds,
-                );
+                ));
+            }
+            if autoreplace_start_stop_callback_denied(state, vehicle_idx, vehicle_id) {
                 return Ok(false);
             }
             replace_chain(state, vehicle_id, &new_engine, wagon_removal, current_tick)?;
-            if let Some(c) = state.companies.get_mut(owner.index()) {
-                c.economy.money -= cost;
-            }
-            if state.active_company == owner {
-                state.economy.money -= cost;
-            }
+            charge_autoreplace(state, owner, cost);
             return Ok(true);
         }
     }
@@ -458,27 +527,27 @@ pub fn try_autoreplace_vehicle(
         return Err(CommandError::EngineNotFound);
     };
     if !engine_available_in_year(&new_engine, calendar_year) {
-        crate::news::push_autoreplace_failed_news(state, vehicle_id, CommandError::EngineNotFound);
-        return Ok(false);
+        return Ok(autoreplace_failed(
+            state,
+            vehicle_id,
+            CommandError::EngineNotFound,
+        ));
     }
     let wagon_removal = company.renew_keep_length;
     let vehicle = &state.vehicles[vehicle_idx];
     let cost = autoreplace_cost(state, vehicle, &new_engine);
     if !can_afford_replacement(company.economy.money, cost, company.engine_renew_money) {
-        crate::news::push_autoreplace_failed_news(
+        return Ok(autoreplace_failed(
             state,
             vehicle_id,
             CommandError::InsufficientFunds,
-        );
+        ));
+    }
+    if autoreplace_start_stop_callback_denied(state, vehicle_idx, vehicle_id) {
         return Ok(false);
     }
     replace_chain(state, vehicle_id, &new_engine, wagon_removal, current_tick)?;
-    if let Some(c) = state.companies.get_mut(owner.index()) {
-        c.economy.money -= cost;
-    }
-    if state.active_company == owner {
-        state.economy.money -= cost;
-    }
+    charge_autoreplace(state, owner, cost);
     Ok(true)
 }
 
@@ -975,6 +1044,55 @@ mod tests {
         state.vehicles[0].running = false;
         assert!(try_autoreplace_vehicle(&mut state, 1).unwrap());
         assert_eq!(state.vehicles[0].engine_id, Some(ENGINE_SHIP_OIL));
+    }
+
+    #[test]
+    fn autoreplace_honours_cb31_when_stopping_running_vehicle() {
+        use crate::engine::{ENGINE_BUS_MPS, NEWGRF_ENGINE_ID_BASE};
+        use crate::newgrf_callback::VehicleStartStopCallbackOutcome;
+
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        state.map.set_kind(depot, TileKind::RoadDepot).unwrap();
+        state.companies[0].engine_renew_money = 0;
+        state.companies[0].economy.money = 5_000_000;
+        state.economy.money = 5_000_000;
+
+        let mut old_engine = crate::engine::engine_by_id(ENGINE_BUS_MPS).unwrap().clone();
+        old_engine.id = NEWGRF_ENGINE_ID_BASE + 31;
+        old_engine.newgrf_grfid = 0x4342_3331;
+        old_engine.newgrf_local_id = 0;
+        old_engine.newgrf_runtime = Some(Box::new(property_callback(0x10)));
+        state.engine_catalog.push(old_engine);
+
+        let mut bus = Vehicle::new(1, VehicleKind::Bus, depot, depot);
+        bus.engine_id = Some(NEWGRF_ENGINE_ID_BASE + 31);
+        bus.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
+        state.vehicles.push(bus);
+        state.autoreplace_rules.push(AutoReplaceRule::new(
+            NEWGRF_ENGINE_ID_BASE + 31,
+            ENGINE_BUS_MPS,
+        ));
+
+        assert!(!try_autoreplace_vehicle(&mut state, 1).unwrap());
+        assert_eq!(
+            state.vehicles[0].engine_id,
+            Some(NEWGRF_ENGINE_ID_BASE + 31)
+        );
+        let diagnostic = state
+            .runtime
+            .last_vehicle_start_stop_diagnostic
+            .expect("CB31 rejection should retain its diagnostic");
+        assert_eq!(diagnostic.vehicle_id, 1);
+        assert_eq!(
+            diagnostic.outcome,
+            VehicleStartStopCallbackOutcome::LocalString(0xD010)
+        );
+        assert_eq!(state.news.items.len(), 1);
+
+        state.vehicles[0].running = false;
+        assert!(try_autoreplace_vehicle(&mut state, 1).unwrap());
+        assert_eq!(state.vehicles[0].engine_id, Some(ENGINE_BUS_MPS));
     }
 
     #[test]

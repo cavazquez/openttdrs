@@ -62,9 +62,13 @@ fn patch_record(
     native_engine_id: u16,
     record: &mut [u8],
     ranges: &[(String, usize, usize)],
+    mappings: &[crate::sav::engine::SavEngineMapping],
 ) -> bool {
-    let Some(catalog_id) = crate::sav::engine::catalog_engine_id_for_native(native_engine_id)
-    else {
+    let Some(catalog_id) = crate::sav::engine::catalog_engine_id_for_native_in(
+        native_engine_id,
+        mappings,
+        &state.engine_catalog,
+    ) else {
         return false;
     };
 
@@ -124,6 +128,7 @@ pub(super) fn patch_engine_chunk(
     let mut dense_index = 0_u32;
     let mut changed = false;
     let mut body = chunk.body[..header_end].to_vec();
+    let mappings = crate::sav::engine::mappings_from_opaque(&state.sav_opaque_chunks);
 
     loop {
         let record_start = offset;
@@ -158,7 +163,8 @@ pub(super) fn patch_engine_chunk(
             return Ok(None);
         };
         if !record.is_empty() {
-            let record_changed = patch_record(state, native_engine_id, &mut record, &ranges);
+            let record_changed =
+                patch_record(state, native_engine_id, &mut record, &ranges, &mappings);
             changed |= record_changed;
         }
         if record == chunk.body[fields_start..record_end] {

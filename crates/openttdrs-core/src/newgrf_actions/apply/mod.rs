@@ -94,6 +94,10 @@ pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     // Cargoes antes de vehículos e industries para `GetCargoTranslation` (#224).
     cargo::apply_newgrf_cargoes_default_dirs(state);
     train::apply_newgrf_vehicles_trains_default_dirs(state);
+    // `ENGN` se carga antes que Action0; ahora que el catálogo conoce también
+    // los motores NewGRF, volver a resolver `EIDS` enlaza sus previews sin
+    // confundirlos con el slot vanilla del mismo índice local.
+    crate::sav::rehydrate_sav_engine_pool(state);
     // Industry tiles antes que industries (layouts `0xFE` → gfx global).
     industry::apply_newgrf_industry_tiles_default_dirs(state);
     industry::apply_newgrf_industries_default_dirs(state);

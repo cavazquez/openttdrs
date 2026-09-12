@@ -1346,7 +1346,6 @@ impl GameState {
         state.sav_objects_dirty = false;
         state.sav_object_mappings_dirty = false;
         state.sav_opaque_chunks = sav.opaque_chunks;
-        let engine_states = engine::states_from_opaque(&state.sav_opaque_chunks);
         for tile_index in animated_tile_indices {
             let Some(coord) = crate::map::tile_index_to_coord(tile_index, &state.map) else {
                 continue;
@@ -1562,7 +1561,7 @@ impl GameState {
         // `ENGN.company_avail` y la oferta activa no forman parte de `PLYR`.
         // Rehidratarlo después del pool de compañías mantiene las excepciones
         // de preview disponibles para la UI y para el siguiente tick.
-        engine::hydrate_state_from_pool(&mut state, &engine_states);
+        rehydrate_sav_engine_pool(&mut state);
         let station_positions: HashMap<u32, TileCoord> = sav
             .station_index
             .iter()
@@ -2336,6 +2335,18 @@ impl GameState {
         state.sanitize_all_vehicle_orders();
         state
     }
+}
+
+/// Reaplica el estado de `ENGN` después de reconstruir el catálogo de motores.
+///
+/// La primera llamada ocurre durante `from_sav_game`, cuando sólo existe el
+/// catálogo vanilla. El cliente vuelve a invocarla después de cargar Action0
+/// para que `EIDS` pueda resolver también motores `NewGRF` por `(GRFID, local)`,
+/// sin inventar IDs cuando el GRF no está instalado.
+pub(crate) fn rehydrate_sav_engine_pool(state: &mut GameState) {
+    let engine_states = engine::states_from_opaque(&state.sav_opaque_chunks);
+    let engine_mappings = engine::mappings_from_opaque(&state.sav_opaque_chunks);
+    engine::hydrate_state_from_pool(state, &engine_states, &engine_mappings);
 }
 
 /// Rehidrata los jobs que `OpenTTD` dejó entre `SpawnNext` y `JoinNext`.

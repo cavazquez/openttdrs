@@ -6095,3 +6095,19 @@ motor de catálogo. Pasaron 2683 tests del core (1 ignorado), 1422 del cliente
 (2 ignorados), Clippy estricto en core y cliente, formato y `git diff --check`.
 #329/#567 continúa abierta por callbacks, slots sin correspondencia y demás
 estado de vehículo NewGRF; #326 permanece abierta.
+
+Corrección #326/#567-SHIP-DEPOT-WESTON-CAPTURE (2026-09-12, `c4de2263`): la
+captura Wayland de `Depot` reveló dos conflictos reales de exclusividad ECS
+que abortaban Bevy 0.19 antes de componer el framebuffer: `sync_depot_panel`
+separa `DepotRowContainer` de `DepotRenameRow`, y
+`sync_buy_window_preview` separa la imagen de preview de su frame. El arnés
+de ventanas acepta ahora `OPENTTDRS_WINDOW_SHOT_DEPOT_KIND=road|rail|ship`,
+normaliza un depósito naval a su sección norte y conserva el fallback anterior
+para las capturas comunes. Bajo Weston headless, `Kale_TitleGame.sav` produjo
+una captura naval 1280×720 sin abortar; el depósito seleccionado no tenía
+barcos estacionados, por lo que esta evidencia desbloquea el camino de
+captura pero no cierra la aceptación visual ni la paridad de composición.
+Pasaron 1423 tests del cliente (2 ignorados), 39 tests focalizados del arnés,
+Clippy estricto en core y cliente, formato y `git diff --check`. #567 sigue
+abierta por callbacks, vecinos, estado naval restante y validación visual
+comparada; #326 permanece abierta.

@@ -1603,3 +1603,13 @@ Una `MP_RAILWAY` normal no se elimina con `Auto` y devuelve
 `MustRemoveRailroadTrack`; señales y otros subtipos siguen protegidos como
 estructura. La carretera simple conserva su coste `PR_CLEAR_ROAD` y las tres
 partes de la esclusa mantienen el preflight atómico.
+
+### #329-VEHICLE-BUY-CATALOG-WAGON — acople desde la ventana de compra
+
+Actualizado: 2026-09-12 (`f97265f0`). La ventana `Nuevos vehículos` resuelve
+el motor seleccionado y las cabezas de tren del depósito contra el catálogo
+activo antes de clasificar un vagón. Esto evita tratar un ID NewGRF como si
+fuera el motor vanilla que ocupaba ese slot: el vagón custom recién comprado
+se enlaza mediante `prev_unit` y aparece en la enumeración completa del
+consist. La regresión ECS cubre el flujo de compra y el acople; los callbacks
+avanzados y las APIs legacy sin catálogo siguen parciales.

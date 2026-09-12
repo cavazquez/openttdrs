@@ -6164,3 +6164,13 @@ vanilla al 90% y verifica ambos lados del umbral. Pasaron 2686 tests del core
 formato y `git diff --check`. #329 sigue abierta por callbacks avanzados,
 órdenes de depósito restantes y APIs legacy sin catálogo; #326/#567 permanecen
 abiertas.
+
+Corrección #329-VEHICLE-BUY-CATALOG-WAGON (2026-09-12, `f97265f0`): la ventana
+`Nuevos vehículos` resuelve el motor seleccionado y la locomotora del depósito
+contra `GameState.engine_catalog` antes de decidir si debe acoplar un vagón.
+Así, un vagón NewGRF comprado desde el catálogo activo se engancha a la cabeza
+del consist igual que un vagón vanilla; la regresión ECS cubre construcción,
+`prev_unit` y la enumeración completa del consist. Pasaron 1425 tests del
+cliente (2 ignorados), Clippy estricto en cliente y core, formato y
+`git diff --check`. #329 sigue abierta por callbacks avanzados, órdenes de
+depósito restantes y APIs legacy sin catálogo; #326/#567 permanecen abiertas.

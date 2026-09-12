@@ -1,6 +1,7 @@
 use crate::GameState;
 use crate::economy::{
-    rail_build_cost_factored, signal_build_cost, signal_clear_cost, train_depot_build_cost,
+    rail_build_cost_factored, rail_convert_cost, signal_build_cost, signal_clear_cost,
+    train_depot_build_cost,
 };
 use crate::map::{
     Map, TileCoord, TileKind, opposite_diag_dir, rail_bit_for_sides, rail_bits_touching_side,
@@ -689,6 +690,32 @@ fn rail_conversion_endpoints(map: &Map, c: TileCoord) -> Result<[TileCoord; 2], 
     }
 }
 
+fn rail_conversion_cost(
+    state: &GameState,
+    c: TileCoord,
+    endpoints: [TileCoord; 2],
+    from: crate::rail_type::RailType,
+    to: crate::rail_type::RailType,
+) -> i64 {
+    let Some(tile) = state.map.get(c) else {
+        return 0;
+    };
+    let units = if endpoints[1] != endpoints[0] {
+        i64::try_from(axis_line(c, endpoints[1]).len()).unwrap_or(i64::MAX)
+    } else if tile.kind == TileKind::Rail {
+        i64::from((tile.m5 & 0x3F).count_ones())
+    } else {
+        1
+    };
+    rail_convert_cost(
+        &state.global_economy,
+        from,
+        to,
+        &state.runtime.rail_type_props,
+    )
+    .saturating_mul(units)
+}
+
 pub(in crate::command) fn check_convert_rail(
     state: &GameState,
     c: TileCoord,
@@ -756,12 +783,7 @@ pub(in crate::command) fn check_convert_rail(
         }
     }
 
-    let span_tiles = if is_portal {
-        i64::try_from(axis_line(c, endpoints[1]).len()).unwrap_or(i64::MAX)
-    } else {
-        1
-    };
-    let conversion_cost = crate::rail_type::RAIL_CONVERT_COST.saturating_mul(span_tiles);
+    let conversion_cost = rail_conversion_cost(state, c, endpoints, current, to_type);
     if state.economy.money < conversion_cost {
         return Err(CommandError::InsufficientFunds);
     }
@@ -809,12 +831,7 @@ pub(in crate::command) fn convert_rail(
     }
 
     let is_portal = endpoints[1] != endpoints[0];
-    let span_tiles = if is_portal {
-        i64::try_from(axis_line(c, endpoints[1]).len()).unwrap_or(i64::MAX)
-    } else {
-        1
-    };
-    let conversion_cost = crate::rail_type::RAIL_CONVERT_COST.saturating_mul(span_tiles);
+    let conversion_cost = rail_conversion_cost(state, c, endpoints, current, to_type);
 
     if is_portal {
         // The reservation is attached to the first portal in the native map

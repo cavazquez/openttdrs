@@ -194,6 +194,43 @@ pub fn rail_build_cost_multiplier(props: &RailTypeRuntimeProps) -> u16 {
     }
 }
 
+/// Multiplicador de coste vanilla de cada vía (`_original_railtypes`).
+///
+/// Un `cost_multiplier` runtime igual a cero significa que el stack no
+/// proporcionó un override para ese tipo. En ese caso hay que recuperar el
+/// valor de la tabla original: no todos los railtypes vanilla cuestan lo
+/// mismo (8, 12, 16 y 24).
+#[must_use]
+pub const fn rail_type_default_cost_multiplier(rail_type: RailType) -> u16 {
+    match rail_type {
+        RailType::Rail => 8,
+        RailType::Electric => 12,
+        RailType::Monorail => 16,
+        RailType::Maglev => 24,
+    }
+}
+
+/// Multiplicador efectivo de construcción para un railtype.
+///
+/// Los valores no cero provienen de Action0 `0x13`; cero conserva el
+/// multiplicador de la definición vanilla correspondiente.
+#[must_use]
+pub fn rail_build_cost_multiplier_for_type(
+    rail_type: RailType,
+    props: &[RailTypeRuntimeProps; 4],
+) -> u16 {
+    props.get(usize::from(rail_type.as_u8())).map_or_else(
+        || rail_type_default_cost_multiplier(rail_type),
+        |prop| {
+            if prop.cost_multiplier == 0 {
+                rail_type_default_cost_multiplier(rail_type)
+            } else {
+                prop.cost_multiplier
+            }
+        },
+    )
+}
+
 /// Gráfico Action3 de un `RailType` `NewGRF` (señales u otro sprite type).
 ///
 /// Es efímero: se reconstruye desde el stack y nunca se serializa en el save.
@@ -271,7 +308,12 @@ pub fn set_rail_type_on_tile(mut tile: Tile, rail_type: RailType) -> Tile {
     tile
 }
 
-/// Coste de convertir una tesela de vía (`CmdConvertRail` simplificado).
+/// Coste legacy por tesela de vía (`CmdConvertRail` anterior al cálculo nativo).
+///
+/// Las órdenes actuales usan `economy::rail_convert_cost`, que considera el
+/// tipo origen/destino, los precios y los overrides runtime. Se conserva este
+/// símbolo para no romper callers antiguos que aún necesiten la constante
+/// simplificada.
 pub const RAIL_CONVERT_COST: i64 = 15;
 
 /// ¿Dos tipos de vía son transitables entre sí para pathfinding?

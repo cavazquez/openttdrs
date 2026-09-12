@@ -30,7 +30,7 @@ fn convert_rail_preserves_trackbits_and_sets_electric() {
 #[test]
 fn convert_rail_bridge_updates_both_ramps_and_scales_cost() {
     use crate::bridge_spec::{BridgeType, bridge_total_length};
-    use crate::rail_type::{RAIL_CONVERT_COST, RailType, rail_type_from_tile};
+    use crate::rail_type::{RailType, rail_type_from_tile};
 
     let mut s = GameState::new(10, 6);
     s.economy.money = 100_000;
@@ -48,6 +48,12 @@ fn convert_rail_bridge_updates_both_ramps_and_scales_cost() {
     .unwrap();
 
     let money_before = s.economy.money;
+    let per_trackbit = crate::economy::rail_convert_cost(
+        &s.global_economy,
+        RailType::Rail,
+        RailType::Electric,
+        &s.runtime.rail_type_props,
+    );
     apply_command(
         &mut s,
         &Command::ConvertRail(start, RailType::Electric.as_u8()),
@@ -64,7 +70,7 @@ fn convert_rail_bridge_updates_both_ramps_and_scales_cost() {
     );
     assert_eq!(
         s.economy.money,
-        money_before - RAIL_CONVERT_COST * i64::from(bridge_total_length(start, end))
+        money_before - per_trackbit * i64::from(bridge_total_length(start, end))
     );
 }
 
@@ -111,7 +117,7 @@ fn convert_rail_bridge_rejects_endpoint_vehicle_atomically() {
 
 #[test]
 fn convert_rail_tunnel_updates_both_mouths_and_keeps_middle_terrain() {
-    use crate::rail_type::{RAIL_CONVERT_COST, RailType, rail_type_from_tile};
+    use crate::rail_type::{RailType, rail_type_from_tile};
 
     let mut s = GameState::new(16, 16);
     s.economy.money = 100_000;
@@ -130,6 +136,12 @@ fn convert_rail_tunnel_updates_both_mouths_and_keeps_middle_terrain() {
     apply_command(&mut s, &Command::PlaceRailTunnel(start, end)).unwrap();
 
     let money_before = s.economy.money;
+    let per_trackbit = crate::economy::rail_convert_cost(
+        &s.global_economy,
+        RailType::Rail,
+        RailType::Electric,
+        &s.runtime.rail_type_props,
+    );
     apply_command(
         &mut s,
         &Command::ConvertRail(start, RailType::Electric.as_u8()),
@@ -149,7 +161,60 @@ fn convert_rail_tunnel_updates_both_mouths_and_keeps_middle_terrain() {
         RailType::Rail,
         "el vano conserva el terreno y no se convierte dos veces"
     );
-    assert_eq!(s.economy.money, money_before - RAIL_CONVERT_COST * 3);
+    assert_eq!(s.economy.money, money_before - per_trackbit * 3);
+}
+
+#[test]
+fn convert_rail_plain_costs_each_trackbit() {
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(8, 8);
+    s.economy.money = 100_000;
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRailBits(c, crate::RAIL_TB_CROSS)).unwrap();
+    let money_before = s.economy.money;
+    let per_trackbit = crate::economy::rail_convert_cost(
+        &s.global_economy,
+        RailType::Rail,
+        RailType::Monorail,
+        &s.runtime.rail_type_props,
+    );
+
+    apply_command(&mut s, &Command::ConvertRail(c, RailType::Monorail.as_u8())).unwrap();
+
+    assert_eq!(
+        rail_type_from_tile(s.map.get(c).unwrap()),
+        RailType::Monorail
+    );
+    assert_eq!(s.economy.money, money_before - per_trackbit * 2);
+}
+
+#[test]
+fn convert_rail_uses_runtime_target_cost_multiplier() {
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(8, 8);
+    s.economy.money = 100_000;
+    s.global_economy = crate::economy::GlobalEconomy::new();
+    s.runtime.rail_type_props[usize::from(RailType::Electric.as_u8())].cost_multiplier = 24;
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRail(c)).unwrap();
+    let money_before = s.economy.money;
+    let expected = crate::economy::rail_convert_cost(
+        &s.global_economy,
+        RailType::Rail,
+        RailType::Electric,
+        &s.runtime.rail_type_props,
+    );
+
+    apply_command(&mut s, &Command::ConvertRail(c, RailType::Electric.as_u8())).unwrap();
+
+    assert_eq!(
+        rail_type_from_tile(s.map.get(c).unwrap()),
+        RailType::Electric
+    );
+    assert_eq!(s.economy.money, money_before - expected);
+    assert_eq!(expected, 230, "RailConvertCost runtime con límite nativo");
 }
 
 #[test]

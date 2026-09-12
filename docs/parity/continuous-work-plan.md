@@ -5841,3 +5841,12 @@ Esto mantiene coherentes la compra de motores, la conversión posterior y el
 round-trip SAV; la conexión automática con la vía vecina conserva su propio
 tipo. #329/#567 continúa abierta por contadores de infraestructura, callbacks,
 arrastre de áreas y aceptación visual/framebuffer.
+
+Corrección #329/#567-RAIL-CONVERT-COST (2026-09-12): `ConvertRail` ya calcula
+`RailConvertCost(from, to)` con los precios de construcción/retirada y los
+multiplicadores Action0 runtime, recuperando los valores vanilla 8/12/16/24
+cuando no hay override. La conversión plana cobra por cada `TrackBit`, mientras
+que túneles y puentes cobran por toda la longitud del enlace; preview y
+ejecución comparten el mismo preflight de fondos. #329/#567 continúa abierta
+por contadores de infraestructura, callbacks, arrastre de áreas y aceptación
+visual/framebuffer.

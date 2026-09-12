@@ -4,6 +4,10 @@ use super::global::GlobalEconomy;
 use super::pricebase::{PriceIndex, get_price};
 use crate::StopKind;
 use crate::object_spec::OWNED_LAND_COST_FACTOR;
+use crate::rail_type::{
+    RailType, RailTypeRuntimeProps, powered_railtypes_mask_with_props,
+    rail_build_cost_multiplier_for_type, rail_type_bit,
+};
 
 /// Coste de terraform por esquina modificada (`Price::Terraform`).
 #[must_use]
@@ -70,6 +74,35 @@ pub fn rail_clear_cost(ge: &GlobalEconomy, cost_multiplier: u16) -> i64 {
     let configured = get_price(ge, PriceIndex::ClearRail, 1, 0);
     let build_cost = rail_build_cost_factored(ge, cost_multiplier);
     configured.max(-(build_cost.saturating_mul(3) / 4))
+}
+
+/// Coste por trackbit de `RailConvertCost(from, to)`.
+///
+/// `OpenTTD` cobra una reconstrucción completa para railtypes incompatibles. Si
+/// uno de los dos tipos entrega potencia sobre el otro, aplica en cambio un
+/// upgrade de un octavo del coste destino más la diferencia de materiales,
+/// limitado siempre por el coste de retirar y volver a construir.
+#[must_use]
+pub fn rail_convert_cost(
+    ge: &GlobalEconomy,
+    from: RailType,
+    to: RailType,
+    props: &[RailTypeRuntimeProps; 4],
+) -> i64 {
+    let from_multiplier = rail_build_cost_multiplier_for_type(from, props);
+    let to_multiplier = rail_build_cost_multiplier_for_type(to, props);
+    let from_build = rail_build_cost_factored(ge, from_multiplier);
+    let to_build = rail_build_cost_factored(ge, to_multiplier);
+    let rebuild = to_build.saturating_add(rail_clear_cost(ge, from_multiplier));
+
+    let power_compatible = powered_railtypes_mask_with_props(from, props) & rail_type_bit(to) != 0
+        || powered_railtypes_mask_with_props(to, props) & rail_type_bit(from) != 0;
+    if power_compatible {
+        let upgrade = to_build / 8 + (to_build - from_build).max(0);
+        upgrade.min(rebuild)
+    } else {
+        rebuild
+    }
 }
 
 /// Coste por tesela de carretera (`Price::BuildRoad`).
@@ -461,6 +494,24 @@ mod tests {
         assert_eq!(
             trees_clear_cost(&ge),
             medium_default_price(PriceIndex::ClearTrees)
+        );
+    }
+
+    #[test]
+    fn rail_convert_cost_matches_native_vanilla_matrix() {
+        let ge = GlobalEconomy::new();
+        let props = crate::rail_type::RailTypeRuntimeProps::defaults();
+        assert_eq!(
+            rail_convert_cost(&ge, RailType::Rail, RailType::Electric, &props),
+            68
+        );
+        assert_eq!(
+            rail_convert_cost(&ge, RailType::Rail, RailType::Monorail, &props),
+            130
+        );
+        assert_eq!(
+            rail_convert_cost(&ge, RailType::Monorail, RailType::Maglev, &props),
+            230
         );
     }
 

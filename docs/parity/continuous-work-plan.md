@@ -5323,3 +5323,12 @@ en `FindNearestHangar`, en vez de alterar la elección con una distancia
 Manhattan. La regresión usa un candidato vertical y otro diagonal cuyo orden
 Manhattan y cuadrático difiere. #329/#567 continúan abiertas por callbacks,
 pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-AIRCRAFT-MISSING-ORDERS-DEPOT (2026-09-12): cuando una
+aeronave sin órdenes pierde su aeropuerto objetivo, el fallback conserva la
+selección de hangar compatible y crea una orden temporal de depósito con
+`Halt`, equivalente a `HandleMissingAircraftOrders` → `SendToDepot` nativo.
+Así la llegada puede detener la aeronave en vez de dejar sólo un destino
+volátil. La regresión cubre la creación de la orden y la ruta hasta el hangar.
+#329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
+framebuffer.

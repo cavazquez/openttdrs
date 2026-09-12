@@ -703,7 +703,6 @@ pub(super) fn extend_orderless_vehicle_paths(state: &mut GameState) {
                 if hangar == pos {
                     continue;
                 }
-                state.vehicles[i].dest = hangar;
                 if let Some(path) = pathfinder::find_path_cached(
                     &state.map,
                     &mut state.runtime.path_cache,
@@ -712,6 +711,18 @@ pub(super) fn extend_orderless_vehicle_paths(state: &mut GameState) {
                     pathfinder::PathNetwork::Air,
                     wh,
                 ) {
+                    // `HandleMissingAircraftOrders` termina llamando a
+                    // `SendToDepot` sin `Service`, que crea una orden temporal
+                    // de depósito con `Halt`. El modelo local guarda ese
+                    // `current_order` en la lista para que la llegada detenga
+                    // el avión, igual que los demás desvíos implícitos.
+                    state.vehicles[i]
+                        .orders
+                        .push(crate::vehicle::VehicleOrder::depot(hangar));
+                    state.vehicles[i].current_order = 0;
+                    state.vehicles[i].cur_implicit_order_index = 0;
+                    state.vehicles[i].dest = hangar;
+                    state.vehicles[i].no_network_route_to_order = false;
                     state.vehicles[i].path = path.into_iter().collect();
                 }
             }
@@ -828,6 +839,43 @@ mod tests {
             ),
             "las reservas ya acumuladas siguen teniendo prioridad"
         );
+    }
+
+    #[test]
+    fn orderless_aircraft_fallback_creates_halt_depot_order() {
+        let mut state = GameState::new(24, 24);
+        crate::apply_command(
+            &mut state,
+            &crate::Command::PlaceAirportArea {
+                origin: TileCoord::new(14, 14),
+                axis_y: false,
+                spec: crate::AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        let hangar = state.stations[0]
+            .airport_tiles
+            .iter()
+            .copied()
+            .find(|&tile| crate::airport::airport_tile_is_hangar(&state.map, tile))
+            .unwrap();
+        let from = TileCoord::new(2, 2);
+        let mut aircraft = Vehicle::new(1, VehicleKind::Aircraft, from, from);
+        aircraft.aircraft_phase = crate::vehicle::AircraftPhase::Flying;
+        state.vehicles.push(aircraft);
+
+        extend_orderless_vehicle_paths(&mut state);
+
+        assert!(matches!(
+            state.vehicles[0].current_order_ref(),
+            Some(crate::vehicle::VehicleOrder::Depot {
+                depot,
+                stop: true,
+                ..
+            }) if *depot == hangar
+        ));
+        assert_eq!(state.vehicles[0].dest, hangar);
+        assert_eq!(state.vehicles[0].path.back(), Some(&hangar));
     }
 
     #[test]

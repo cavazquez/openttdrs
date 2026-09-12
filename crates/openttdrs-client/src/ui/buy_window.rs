@@ -1180,20 +1180,27 @@ pub(crate) fn handle_buy_window_buttons(
         ) {
             Ok(()) => {
                 // Vagón recién comprado: enganchar a la primera locomotora del depósito.
-                if let Some(engine) = openttdrs_core::engine_by_id(engine_id)
-                    && engine.is_wagon()
-                {
+                let selected_engine =
+                    openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, engine_id)
+                        .or_else(|| openttdrs_core::engine_by_id(engine_id));
+                if selected_engine.is_some_and(EngineDef::is_wagon) {
                     let wagon_id = sim.state.vehicles.iter().map(|v| v.id).max();
                     let head_id = sim
                         .state
                         .vehicles
                         .iter()
                         .find(|v| {
-                            v.pos == depot_pos
-                                && v.kind == VehicleKind::Train
-                                && v.is_consist_head()
-                                && !openttdrs_core::engine_by_id(v.engine_id.unwrap_or(0))
-                                    .is_some_and(openttdrs_core::EngineDef::is_wagon)
+                            if v.pos != depot_pos
+                                || v.kind != VehicleKind::Train
+                                || !v.is_consist_head()
+                            {
+                                return false;
+                            }
+                            let engine = v.engine_id.and_then(|id| {
+                                openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, id)
+                                    .or_else(|| openttdrs_core::engine_by_id(id))
+                            });
+                            !engine.is_some_and(EngineDef::is_wagon)
                         })
                         .map(|v| v.id);
                     if let (Some(wagon_id), Some(head_id)) = (wagon_id, head_id)
@@ -1412,6 +1419,61 @@ mod tests {
         assert_eq!(
             openttdrs_core::consist_unit_ids(&sim.state.vehicles, head_id).len(),
             2
+        );
+    }
+
+    #[test]
+    fn buy_custom_catalog_wagon_attaches_it_to_depot_locomotive() {
+        let depot = TileCoord::new(2, 2);
+        let custom_id = openttdrs_core::NEWGRF_ENGINE_ID_BASE + 33;
+        let mut state = rail_depot_state();
+        let mut custom = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_WAGON_PASSENGER)
+            .unwrap()
+            .clone();
+        custom.id = custom_id;
+        custom.name = "Vagón NewGRF".into();
+        custom.from_newgrf = true;
+        custom.newgrf_grfid = 0x5741_474E;
+        custom.newgrf_local_id = 0;
+        state.engine_catalog.push(custom);
+
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state,
+            ..SimWorld::default()
+        });
+        world.init_resource::<BuyVehicleWindowState>();
+        world.init_resource::<RemapMapVisualsPending>();
+        world.init_resource::<HudBuildFeedback>();
+        world.insert_resource(Time::<()>::default());
+        {
+            let mut buy = world.resource_mut::<BuyVehicleWindowState>();
+            buy.depot_pos = Some(depot);
+            buy.selected_engine = Some(custom_id);
+        }
+        world.spawn((Button, BuyVehicleBuyButton, Interaction::Pressed));
+
+        world.run_system_once(handle_buy_window_buttons).unwrap();
+
+        let sim = world.resource::<SimWorld>();
+        assert_eq!(sim.state.vehicles.len(), 2);
+        let head_id = sim
+            .state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.engine_id == Some(openttdrs_core::ENGINE_TRAIN_KIRBY))
+            .unwrap()
+            .id;
+        let custom_wagon = sim
+            .state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.engine_id == Some(custom_id))
+            .unwrap();
+        assert_eq!(custom_wagon.prev_unit, Some(head_id));
+        assert_eq!(
+            openttdrs_core::consist_unit_ids(&sim.state.vehicles, head_id),
+            vec![head_id, custom_wagon.id]
         );
     }
 

@@ -381,7 +381,15 @@ where
         .iter()
         .copied()
         .filter(|candidate| is_eligible(*candidate))
-        .min_by_key(|c| (from.x.abs_diff(c.x) + from.y.abs_diff(c.y), c.y, c.x))
+        .min_by_key(|c| {
+            let dx = from.x.abs_diff(c.x);
+            let dy = from.y.abs_diff(c.y);
+            (
+                dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy)),
+                c.y,
+                c.x,
+            )
+        })
 }
 
 /// Depósito alcanzable más cercano por pathfinding (road/tram).
@@ -657,6 +665,31 @@ mod tests {
         assert_eq!(
             nearest_depot_tile_indexed(&s.map, from, VehicleKind::Aircraft, &mut index,),
             Some(far_hangar)
+        );
+    }
+
+    #[test]
+    fn filtered_aircraft_lookup_uses_squared_distance() {
+        let mut s = GameState::new(8, 8);
+        let vertical = TileCoord::new(0, 5);
+        let diagonal = TileCoord::new(3, 3);
+        for coord in [vertical, diagonal] {
+            s.map.set_kind(coord, TileKind::Airport).unwrap();
+            let mut tile = s.map.get(coord).unwrap();
+            tile.m5 = 1;
+            s.map.set_tile(coord, tile).unwrap();
+        }
+
+        let mut index = DepotSpatialIndex::default();
+        assert_eq!(
+            nearest_depot_tile_indexed_by(
+                &s.map,
+                TileCoord::new(0, 0),
+                VehicleKind::Aircraft,
+                &mut index,
+                |_| true,
+            ),
+            Some(diagonal)
         );
     }
 

@@ -5316,3 +5316,10 @@ compatibilidad avión/helipuerto antes de elegir la alternativa más cercana,
 como `FindNearestHangar` nativo. Las regresiones cubren un helipuerto
 incompatible y un aeropuerto de otra compañía más próximo. #329/#567
 continúan abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-AIRCRAFT-HANGAR-DISTANCE (2026-09-12): el selector
+filtrado de hangares compara distancia cuadrática, igual que `DistanceSquare`
+en `FindNearestHangar`, en vez de alterar la elección con una distancia
+Manhattan. La regresión usa un candidato vertical y otro diagonal cuyo orden
+Manhattan y cuadrático difiere. #329/#567 continúan abiertas por callbacks,
+pathfinding y aceptación visual/framebuffer.

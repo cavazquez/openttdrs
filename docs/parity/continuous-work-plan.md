@@ -5332,3 +5332,10 @@ Así la llegada puede detener la aeronave en vez de dejar sólo un destino
 volátil. La regresión cubre la creación de la orden y la ruta hasta el hangar.
 #329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
 framebuffer.
+
+Actualización #329/#567-AIRCRAFT-TAXI-HANGAR-ARRIVAL (2026-09-12): el FSM aéreo
+transiciona explícitamente de `Taxi` a `InHangar` cuando la ruta termina sobre
+una pieza de hangar. Se normalizan velocidad y altitud antes de procesar la
+orden de depósito, evitando dejar la aeronave visible como si siguiera en
+rodaje. La regresión cubre la llegada con ruta vacía al hangar. #329/#567
+continúan abiertas por callbacks, pathfinding y aceptación visual/framebuffer.

@@ -48,6 +48,23 @@ fn clear_aircraft_breakdown_if_slow(v: &mut Vehicle) {
     }
 }
 
+fn taxi_arrival_enters_hangar(v: &mut Vehicle, map: &Map) -> bool {
+    if v.pos == v.dest && v.path.is_empty() && airport_tile_is_hangar(map, v.pos) {
+        v.aircraft_phase = AircraftPhase::InHangar;
+        v.altitude = 0;
+        v.cur_speed = 0;
+        return true;
+    }
+    false
+}
+
+fn aircraft_is_on_runway(v: &Vehicle, map: &Map, stations: &[Station]) -> bool {
+    map.get(v.pos)
+        .is_some_and(|t| t.kind == TileKind::Airport && AirportPiece::from_m5(t.m5).is_runway())
+        || (airport_tile_is_hangar(map, v.pos)
+            && airport_station_at(stations, v.pos).is_some_and(|s| s.airport_tiles.len() <= 1))
+}
+
 /// Estación aeropuerto que cubre `pos` (hangar o footprint).
 #[must_use]
 pub fn airport_station_at(stations: &[Station], pos: TileCoord) -> Option<&Station> {
@@ -116,10 +133,10 @@ pub fn tick_aircraft_phase_with_catalog_and_plane_speed(
             AircraftPhaseEvent::None
         }
         AircraftPhase::Taxi => {
-            let on_runway = map.get(v.pos).is_some_and(|t| {
-                t.kind == TileKind::Airport && AirportPiece::from_m5(t.m5).is_runway()
-            }) || (airport_tile_is_hangar(map, v.pos)
-                && airport_station_at(stations, v.pos).is_some_and(|s| s.airport_tiles.len() <= 1));
+            if taxi_arrival_enters_hangar(v, map) {
+                return AircraftPhaseEvent::None;
+            }
+            let on_runway = aircraft_is_on_runway(v, map, stations);
             if on_runway && v.path.is_empty() {
                 v.aircraft_phase = AircraftPhase::Takeoff;
                 v.aircraft_phase_ticks = AIRCRAFT_TAKEOFF_TICKS;
@@ -270,5 +287,27 @@ mod tests {
         tick_aircraft_phase(&mut state.vehicles[0], &state.map, &mut state.stations);
 
         assert_eq!(state.vehicles[0].breakdown_ctr, 0);
+    }
+
+    #[test]
+    fn taxiing_aircraft_enters_hangar_at_destination() {
+        let mut state = GameState::new(8, 8);
+        let hangar = TileCoord::new(3, 3);
+        state.map.set_kind(hangar, TileKind::Airport).unwrap();
+        let mut tile = state.map.get(hangar).unwrap();
+        tile.m5 = AirportPiece::Hangar as u8;
+        state.map.set_tile(hangar, tile).unwrap();
+
+        let mut aircraft = Vehicle::new(1, VehicleKind::Aircraft, hangar, hangar);
+        aircraft.aircraft_phase = AircraftPhase::Taxi;
+        aircraft.altitude = AIRCRAFT_CRUISE_ALTITUDE;
+        aircraft.cur_speed = 12;
+        state.vehicles.push(aircraft);
+
+        tick_aircraft_phase(&mut state.vehicles[0], &state.map, &mut state.stations);
+
+        assert_eq!(state.vehicles[0].aircraft_phase, AircraftPhase::InHangar);
+        assert_eq!(state.vehicles[0].altitude, 0);
+        assert_eq!(state.vehicles[0].cur_speed, 0);
     }
 }

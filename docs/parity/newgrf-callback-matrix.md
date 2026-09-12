@@ -1759,3 +1759,11 @@ defecto y el sonido `VSE_TUNNEL` resuelven la clase `EngineClass` del
 `EC_ELECTRIC`/`EC_MONORAIL`/`EC_MAGLEV` chispas o silencio de túnel. Los
 wrappers que sólo reciben un ID mantienen el fallback vanilla para saves y
 APIs legacy.
+
+### #329-CONVERT-RAIL-CATALOG — compatibilidad de tren en conversión de vía
+
+Actualizado: 2026-09-12 (`443b1ebb`). `check_convert_rail` consulta el
+`required_rail_type` del motor en `GameState.engine_catalog` al verificar un
+tren que ocupa la tesela. Esto conserva la conversión atómica y el error
+`TrainIncompatibleWithRailType` para un motor NewGRF maglev/monorail frente a
+una vía incompatible; los IDs desconocidos siguen usando el fallback vanilla.

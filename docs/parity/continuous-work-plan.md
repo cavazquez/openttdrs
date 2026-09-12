@@ -6346,3 +6346,12 @@ vanilla; el wrapper por ID conserva el fallback legacy. Pasaron las
 regresiones dirigidas de core y cliente, Clippy estricto en ambos crates,
 formato y `git diff --check`. #329 continúa abierta por callbacks y
 consumidores legacy restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-CONVERT-RAIL-CATALOG (2026-09-12, `443b1ebb`): la validación
+de `CmdConvertRail` resuelve ahora el `required_rail_type` del tren desde el
+catálogo activo antes de permitir la conversión de una tesela ocupada. Un
+motor NewGRF maglev ya no se interpreta como Rail por tener un ID fuera de la
+tabla vanilla; la prueba confirma el error específico y que la tesela queda
+intacta. Pasaron 21 pruebas de `railtypes`, Clippy estricto de core, formato y
+`git diff --check`. #329 continúa abierta por callbacks y consumidores
+legacy restantes; #326/#567 permanecen abiertas.

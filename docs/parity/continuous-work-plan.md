@@ -6018,3 +6018,14 @@ regresión cubre ciclo anual, grupo recursivo y deduplicación. Pasaron los
 2675 tests del core (1 ignorado), Clippy estricto en core y client, formato y
 `git diff --check`. #329/#567 siguen abiertas: falta conectar la aceptación de
 la oferta al comando/UI y completar callbacks; #326 permanece abierta.
+
+Corrección #329/#567-VEHICLE-NEWS-IDENTITY (2026-09-12, `78fc9b26`): las
+noticias `NewVehicles` conservan ahora el `engine_id` en
+`NewsReference::Engine`, en lugar de publicar una referencia vacía. Esto
+deja preparado el enlace estable entre la noticia, el catálogo y la futura
+aceptación de una preview sin depender del texto localizado ni de una
+captura de pantalla. La regresión de noticias comprueba la identidad junto
+con `NoNews` y la deduplicación; pasaron la prueba focalizada, Clippy
+estricto en core y client, formato y `git diff --check`. La aceptación
+interactiva y los callbacks de vehículos siguen pendientes; #326 permanece
+abierta.

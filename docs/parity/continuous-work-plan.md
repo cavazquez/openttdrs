@@ -5770,3 +5770,14 @@ aceptar entradas laterales. Las pruebas cubren túnel de carretera y ferrocarril
 sin superficie intermedia, eje vertical materializado y entrada lateral
 rechazada. #329/#567 continúa abierta por reservas de tránsito, movimiento,
 callbacks, variantes de túnel/puente y aceptación visual/framebuffer restantes.
+
+Corrección #329/#567-TUNNEL-PBS-WORMHOLE (2026-09-12): la topología de
+señales/PBS ya trata el enlace vanilla entre bocas como un hop dirigido.
+`rail_neighbors`, selección de pista y `TryReservePath` atraviesan el vano
+sin inventar teselas de superficie; la posición segura no corta la reserva
+en la primera boca. Los túneles locales materializados siguen usando sus
+vecinos axiales y no se convierten en wormholes falsos. La cobertura incluye
+una ruta PBS sin terreno intermedio y verifica que la reserva alcance la boca
+opuesta y la vía exterior. #329/#567 continúa abierta por reservas persistidas
+en m5, movimiento, callbacks, variantes de túnel/puente y aceptación
+visual/framebuffer restantes.

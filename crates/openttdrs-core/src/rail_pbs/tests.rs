@@ -893,6 +893,61 @@ fn find_path_to_safe_wait_reaches_next_path() {
     );
 }
 
+#[test]
+fn pbs_safe_wait_crosses_vanilla_rail_tunnel() {
+    let mut map = crate::Map::new_flat(8, 3, 0);
+    let west = TileCoord::new(0, 1);
+    let west_mouth = TileCoord::new(1, 1);
+    let east_mouth = TileCoord::new(5, 1);
+    let east = TileCoord::new(6, 1);
+
+    for c in [west, east] {
+        map.set_kind(c, TileKind::Rail).expect("vía");
+        let mut tile = map.get(c).expect("tile");
+        tile.m5 = crate::RAIL_TB_X;
+        map.set_tile(c, tile).expect("vía");
+    }
+    map.set_mapt_m5(west_mouth, 0x90, 0x02).expect("boca oeste");
+    map.set_kind(west_mouth, TileKind::RailTunnel)
+        .expect("boca oeste");
+    map.set_mapt_m5(east_mouth, 0x90, 0).expect("boca este");
+    map.set_kind(east_mouth, TileKind::RailTunnel)
+        .expect("boca este");
+
+    let preferred = vec![west_mouth, east_mouth, east];
+    assert!(!is_safe_waiting_position(
+        &map,
+        west_mouth,
+        Some(east_mouth),
+        false
+    ));
+    let path = find_path_to_safe_wait(&map, &[], 0, west, &preferred, &HashSet::new())
+        .expect("TryReserve debe atravesar el vano vanilla");
+    assert_eq!(path, preferred);
+
+    let mut train = Vehicle::new(1, VehicleKind::Train, west, east);
+    train.running = true;
+    train.path = preferred.iter().copied().collect();
+    let reserved = compute_train_reservation_with_settings(
+        &map,
+        &[train],
+        0,
+        &HashSet::new(),
+        crate::PathfindingSettings {
+            reserve_paths: true,
+            ..crate::PathfindingSettings::default()
+        },
+    );
+    assert!(
+        reserved.iter().any(|step| step.tile == east_mouth),
+        "la reserva debe incluir la boca opuesta: {reserved:?}"
+    );
+    assert!(
+        reserved.iter().any(|step| step.tile == east),
+        "la reserva debe continuar fuera del túnel: {reserved:?}"
+    );
+}
+
 /// Línea principal bloqueada + desvío libre: `TryReserve` solo corre en ticks de backoff.
 #[test]
 #[allow(clippy::too_many_lines)]

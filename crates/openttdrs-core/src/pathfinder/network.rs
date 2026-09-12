@@ -122,7 +122,7 @@ pub(crate) fn is_rail_network_tile(kind: TileKind) -> bool {
 /// segundo formato el vecino inmediato en la dirección de `m5` identifica la
 /// continuidad local y el A*/YAPF no debe saltar desde una tesela interior.
 #[must_use]
-pub(super) fn tunnel_other_end(map: &Map, c: TileCoord, kind: TileKind) -> Option<TileCoord> {
+pub(crate) fn tunnel_other_end(map: &Map, c: TileCoord, kind: TileKind) -> Option<TileCoord> {
     let start = map.get(c)?;
     if start.kind != kind || !start.is_tunnel_bridge_tile() || start.m5 & 0x80 != 0 {
         return None;

@@ -12,6 +12,23 @@ use super::rail_tile_is_signals;
 use super::rail_traversal_bits;
 
 #[must_use]
+fn vanilla_tunnel_exit_from_entry(
+    map: &Map,
+    cur: TileCoord,
+    prev: Option<TileCoord>,
+) -> Option<TileCoord> {
+    let prev = prev?;
+    let tile = map
+        .get(cur)
+        .filter(|tile| tile.kind == TileKind::RailTunnel)?;
+    let (dx, dy) = crate::map::diag_dir_offset(tile.m5 & 0x03);
+    if cur.x - prev.x != dx || cur.y - prev.y != dy {
+        return None;
+    }
+    crate::pathfinder::tunnel_other_end(map, cur, TileKind::RailTunnel)
+}
+
+#[must_use]
 pub(crate) fn rail_neighbors(map: &Map, cur: TileCoord, prev: Option<TileCoord>) -> Vec<TileCoord> {
     let tb = rail_traversal_bits(map, cur);
     if tb == 0 {
@@ -34,6 +51,11 @@ pub(crate) fn rail_neighbors(map: &Map, cur: TileCoord, prev: Option<TileCoord>)
     }
     if map.get_kind(cur) == Some(TileKind::RailBridge)
         && let Some(other) = crate::rail_bridge_other_end(map, cur)
+        && prev != Some(other)
+    {
+        out.push(other);
+    }
+    if let Some(other) = vanilla_tunnel_exit_from_entry(map, cur, prev)
         && prev != Some(other)
     {
         out.push(other);

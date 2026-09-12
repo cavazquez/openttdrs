@@ -120,7 +120,8 @@ pub fn is_safe_waiting_position(
         // El vano de un puente conserva su terreno original y el path contiene
         // el enlace lógico rampa→rampa. No es un fin de vía ni una posición de
         // espera segura: la reserva debe alcanzar la rampa opuesta.
-        return crate::rail_bridge_other_end(map, tile) != Some(next);
+        return crate::rail_bridge_other_end(map, tile) != Some(next)
+            && crate::pathfinder::tunnel_other_end(map, tile, TileKind::RailTunnel) != Some(next);
     };
     if has_block_signal_on_exit(map, tile, exit_dir) {
         return true;
@@ -284,7 +285,15 @@ fn find_path_to_safe_wait_with_wormholes_impl(
             continue;
         }
 
-        let prev = path_so_far.last().copied();
+        // `path_so_far` contiene los destinos ya añadidos, no la tesela actual
+        // como nodo separado. Para una boca vanilla necesitamos la tesela de
+        // entrada real (`from` en el primer salto), porque el enlace lógico
+        // sólo se habilita al llegar desde la dirección que guarda `m5`.
+        let prev = path_so_far
+            .len()
+            .checked_sub(2)
+            .and_then(|i| path_so_far.get(i).copied())
+            .or_else(|| (path_so_far.len() == 1).then_some(from));
         let mut neighbors = rail_neighbors(map, cur, prev);
         if let Some(wh) = wormholes
             && let Some(other) = wh.other_end(cur)

@@ -955,6 +955,30 @@ fn block_ahead_stops_at_next_signal() {
 }
 
 #[test]
+fn block_ahead_crosses_vanilla_rail_tunnel() {
+    let mut map = Map::new_flat(8, 3, 0);
+    let west = TileCoord::new(0, 1);
+    let west_mouth = TileCoord::new(1, 1);
+    let east_mouth = TileCoord::new(5, 1);
+    let east = TileCoord::new(6, 1);
+
+    write_rail(&mut map, west, RAIL_TB_X);
+    write_rail_tunnel(&mut map, west_mouth, 2);
+    map.set_mapt_m5(west_mouth, 0x90, 2)
+        .expect("boca oeste vanilla");
+    write_rail_tunnel(&mut map, east_mouth, 0);
+    map.set_mapt_m5(east_mouth, 0x90, 0)
+        .expect("boca este vanilla");
+    write_rail(&mut map, east, RAIL_TB_X);
+
+    assert_eq!(
+        rail_block_ahead(&map, west, 0),
+        vec![west_mouth, east_mouth, east],
+        "el bloque de señales debe atravesar el vano sin superficie"
+    );
+}
+
+#[test]
 fn train_blocked_when_block_occupied() {
     use crate::Vehicle;
     use crate::vehicle::VehicleKind;

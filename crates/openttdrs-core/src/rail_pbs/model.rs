@@ -89,6 +89,8 @@ pub fn rail_tile_has_pbs_reservation(m2_hi: u8) -> bool {
 pub fn track_for_rail_step(map: &Map, from: TileCoord, to: TileCoord) -> Option<u8> {
     if crate::rail_bridge_other_end(map, from) == Some(to)
         || crate::rail_bridge_other_end(map, to) == Some(from)
+        || crate::pathfinder::tunnel_other_end(map, from, crate::TileKind::RailTunnel) == Some(to)
+        || crate::pathfinder::tunnel_other_end(map, to, crate::TileKind::RailTunnel) == Some(from)
     {
         return Some(if from.y == to.y { RAIL_TB_X } else { RAIL_TB_Y });
     }
@@ -101,7 +103,9 @@ pub fn track_for_rail_step(map: &Map, from: TileCoord, to: TileCoord) -> Option<
 /// Pista usada en `from` al salir hacia `to`.
 #[must_use]
 pub fn track_on_departure_tile(map: &Map, from: TileCoord, to: TileCoord) -> Option<u8> {
-    if crate::rail_bridge_other_end(map, from) == Some(to) {
+    if crate::rail_bridge_other_end(map, from) == Some(to)
+        || crate::pathfinder::tunnel_other_end(map, from, crate::TileKind::RailTunnel) == Some(to)
+    {
         return Some(if from.y == to.y { RAIL_TB_X } else { RAIL_TB_Y });
     }
     let exit_dir = dir_from_to(from, to)?;

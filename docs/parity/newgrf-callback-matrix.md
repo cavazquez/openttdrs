@@ -1631,3 +1631,13 @@ activo, y usa la misma fuente para las etiquetas de reglas, resumen y ayuda.
 Los IDs NewGRF ya no quedan fuera del selector ni pierden su nombre al
 rehidratar una regla. La regresión cubre un motor custom de carretera; los
 callbacks avanzados y las APIs legacy sin catálogo siguen parciales.
+
+### #329-VEHICLE-NAME-CATALOG-UI — identidad visible del vehículo
+
+Actualizado: 2026-09-12 (`79d79eaa`). `Vehicle::display_name_with_catalog`
+centraliza la resolución del nombre contra `GameState.engine_catalog` y deja
+los nombres manuales por encima del modelo. Los títulos y listados de
+vehículo, depósito, órdenes, horario, refit, autoreemplazo y detalles usan
+ahora esa fuente; un ID NewGRF ya no aparece con el nombre del slot vanilla.
+La API legacy `display_name()` conserva el fallback estático para contextos
+sin catálogo.

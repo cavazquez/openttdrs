@@ -6195,3 +6195,14 @@ core (1 ignorado), 1427 del cliente (2 ignorados), Clippy estricto en core y
 cliente, formato y `git diff --check`. #329 sigue abierta por callbacks
 avanzados, órdenes de depósito restantes, títulos/listados legacy y APIs sin
 catálogo; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-NAME-CATALOG-UI (2026-09-12, `79d79eaa`):
+`Vehicle::display_name_with_catalog` centraliza el fallback de nombre y
+resuelve el motor en el catálogo runtime. Lista de vehículos, depósito,
+autoreemplazo, órdenes, horario, refit y títulos de vista/detalles ya no
+presentan el nombre vanilla del slot cuando el vehículo es NewGRF; los nombres
+manuales siguen teniendo prioridad. La regresión core cubre `Bus NewGRF #7`.
+Pasaron 2688 tests del core (1 ignorado), 1427 del cliente (2 ignorados),
+Clippy estricto en core y cliente, formato y `git diff --check`. #329 sigue
+abierta por consumidores legacy de física/render y callbacks avanzados;
+#326/#567 permanecen abiertas.

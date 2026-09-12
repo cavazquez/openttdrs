@@ -41,12 +41,12 @@ pub use action0::{
     collect_roadtype_metas_from_grf, collect_sound_metas_from_grf, collect_station_metas_from_grf,
     collect_train_metas_from_grf, collect_vehicle_metas_from_grf, for_each_pseudo_payload,
     parse_action0_airport_meta, parse_action0_airport_metas, parse_action0_airport_tile_meta,
-    parse_action0_badge_meta, parse_action0_bridge_meta, parse_action0_canal_meta,
-    parse_action0_cargo_meta, parse_action0_header, parse_action0_house_meta,
-    parse_action0_industry_meta, parse_action0_industry_tile_meta, parse_action0_object_meta,
-    parse_action0_railtype_metas, parse_action0_roadstop_meta, parse_action0_roadtype_meta,
-    parse_action0_sound_meta, parse_action0_station_meta, parse_action0_train_meta,
-    parse_action0_vehicle_metas,
+    parse_action0_airport_tile_metas, parse_action0_badge_meta, parse_action0_bridge_meta,
+    parse_action0_canal_meta, parse_action0_cargo_meta, parse_action0_header,
+    parse_action0_house_meta, parse_action0_industry_meta, parse_action0_industry_tile_meta,
+    parse_action0_object_meta, parse_action0_railtype_metas, parse_action0_roadstop_meta,
+    parse_action0_roadtype_meta, parse_action0_sound_meta, parse_action0_station_meta,
+    parse_action0_train_meta, parse_action0_vehicle_metas,
 };
 
 pub use apply::{
@@ -6038,6 +6038,90 @@ mod tests {
         assert_eq!(state.airport_spec_catalog[1].catchment, 7);
         assert_eq!(state.airport_spec_catalog[0].size_x, 201);
         assert_eq!(state.airport_spec_catalog[1].size_x, 2);
+    }
+
+    #[test]
+    fn airport_tiles_action0_ranges_keep_each_id_animation_and_override() {
+        // Las propiedades de AirportTiles se serializan por id, no una sola
+        // vez para todo el bloque Action0.
+        let tile = vec![
+            0x00,
+            ACTION0_FEATURE_AIRPORTTILES,
+            0x07, // subst, override, callback, animation, speed, triggers, badges
+            0x02, // two consecutive ids
+            0x05, // first local id
+            0x08,
+            24,
+            25,
+            0x09,
+            1,
+            2,
+            0x0E,
+            0x01,
+            0x02,
+            0x0F,
+            3,
+            0,
+            4,
+            1,
+            0x10,
+            4,
+            5,
+            0x11,
+            6,
+            7,
+            0x12,
+            0,
+            0,
+            0,
+            0,
+        ];
+
+        let parsed = parse_action0_airport_tile_metas(&tile).expect("airport tile range");
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].local_id, 5);
+        assert_eq!(parsed[1].local_id, 6);
+        assert_eq!(parsed[0].subst_id, 24);
+        assert_eq!(parsed[1].subst_id, 25);
+        assert_eq!(parsed[0].override_of, Some(1));
+        assert_eq!(parsed[1].override_of, Some(2));
+        assert_eq!(parsed[0].callback_mask, 1);
+        assert_eq!(parsed[1].callback_mask, 2);
+        assert_eq!(parsed[0].animation_frames, 3);
+        assert_eq!(parsed[1].animation_frames, 4);
+        assert_eq!(parsed[0].animation_status, 0);
+        assert_eq!(parsed[1].animation_status, 1);
+        assert_eq!(parsed[0].animation_speed, 4);
+        assert_eq!(parsed[1].animation_speed, 5);
+        assert_eq!(parsed[0].animation_triggers, 6);
+        assert_eq!(parsed[1].animation_triggers, 7);
+
+        let bytes = build_grf_v2_with_action0_and_action8(
+            &tile,
+            [b'A', b'T', 0, 2],
+            "airport-tile-range",
+            "",
+        );
+        let dir = tempfile_dir_with("airport-tile-range.grf", &bytes);
+        let mut state = GameState::new(8, 8);
+        state.newgrf_stack.push(crate::NewGrfEntry::new(
+            "airport-tile-range.grf",
+            0x4154_0002,
+        ));
+        apply_newgrf_airport_tiles(&mut state, &[&dir]);
+        assert_eq!(state.airport_tile_spec_catalog.len(), 2);
+        assert_eq!(state.airport_tile_spec_catalog[0].newgrf_local_id, 5);
+        assert_eq!(state.airport_tile_spec_catalog[1].newgrf_local_id, 6);
+        assert_eq!(state.airport_tile_spec_catalog[0].animation_frames, 3);
+        assert_eq!(state.airport_tile_spec_catalog[1].animation_frames, 4);
+        assert_eq!(
+            state.airport_tile_overrides[1],
+            state.airport_tile_spec_catalog[0].gfx.as_u16()
+        );
+        assert_eq!(
+            state.airport_tile_overrides[2],
+            state.airport_tile_spec_catalog[1].gfx.as_u16()
+        );
     }
 
     #[test]

@@ -4285,106 +4285,115 @@ pub fn collect_vehicle_metas_from_grf(data: &[u8], feature: u8) -> Vec<ParsedVeh
     out
 }
 
-/// Parsea Action0 `AirportTiles` (`0x11`). Requiere `prop 0x08` (subst).
+/// Parsea un rango completo de Action0 `AirportTiles` (`0x11`).
+///
+/// `OpenTTD` consume el valor de cada propiedad una vez por cada id del
+/// rango. Mantener los arrays por id evita que una definición con varios
+/// `AirportTiles` pierda la animación, el override o los badges de los ids
+/// posteriores.
 #[must_use]
-pub fn parse_action0_airport_tile_meta(payload: &[u8]) -> Option<ParsedAirportTileMeta> {
+pub fn parse_action0_airport_tile_metas(payload: &[u8]) -> Option<Vec<ParsedAirportTileMeta>> {
     let header = parse_action0_header(payload)?;
     if header.feature != ACTION0_FEATURE_AIRPORTTILES || header.num_ids == 0 || payload.len() < 5 {
         return None;
     }
-    let local_id = payload[4];
+    let first_id = payload[4];
+    let count = usize::from(header.num_ids);
+    let local_ids: Vec<u8> = (0..count)
+        .map(|offset| first_id.checked_add(u8::try_from(offset).ok()?))
+        .collect::<Option<_>>()?;
     let mut i = 5usize;
-    let mut subst_id: Option<u8> = None;
-    let mut override_of: Option<u8> = None;
-    let mut callback_mask = 0u8;
-    let mut animation_frames = 0u8;
-    let mut animation_status = 0xFFu8;
-    let mut animation_speed = 2u8;
-    let mut animation_triggers = 0u8;
-    let mut badge_local_ids = Vec::new();
+    let mut subst_ids = vec![None; count];
+    let mut override_of = vec![None; count];
+    let mut callback_masks = vec![0u8; count];
+    let mut animation_frames = vec![0u8; count];
+    let mut animation_status = vec![0xFFu8; count];
+    let mut animation_speeds = vec![2u8; count];
+    let mut animation_triggers = vec![0u8; count];
+    let mut badge_local_ids = vec![Vec::new(); count];
     for _ in 0..header.num_props {
-        if i >= payload.len() {
-            break;
-        }
-        let prop = payload[i];
-        i += 1;
+        let prop = read_u8(payload, &mut i)?;
         match prop {
             0x08 => {
-                if i >= payload.len() {
-                    break;
-                }
-                let s = payload[i];
-                i += 1;
-                if u16::from(s) < crate::airport_tile_spec::NEW_AIRPORT_TILE_OFFSET {
-                    subst_id = Some(s);
+                for subst_id in &mut subst_ids {
+                    let value = read_u8(payload, &mut i)?;
+                    if u16::from(value) < crate::airport_tile_spec::NEW_AIRPORT_TILE_OFFSET {
+                        *subst_id = Some(value);
+                    }
                 }
             }
             0x09 => {
-                if i >= payload.len() {
-                    break;
-                }
-                let o = payload[i];
-                i += 1;
-                if u16::from(o) < crate::airport_tile_spec::NEW_AIRPORT_TILE_OFFSET {
-                    override_of = Some(o);
+                for override_id in &mut override_of {
+                    let value = read_u8(payload, &mut i)?;
+                    if u16::from(value) < crate::airport_tile_spec::NEW_AIRPORT_TILE_OFFSET {
+                        *override_id = Some(value);
+                    }
                 }
             }
             0x0E => {
-                if i >= payload.len() {
-                    break;
+                for callback_mask in &mut callback_masks {
+                    *callback_mask = read_u8(payload, &mut i)?;
                 }
-                callback_mask = payload[i];
-                i += 1;
             }
             0x0F => {
-                // Animation: frames + status
-                if i + 2 > payload.len() {
-                    break;
+                for (frames, status) in animation_frames.iter_mut().zip(&mut animation_status) {
+                    // Animation: frames + status.
+                    *frames = read_u8(payload, &mut i)?;
+                    *status = read_u8(payload, &mut i)?;
                 }
-                animation_frames = payload[i];
-                animation_status = payload[i + 1];
-                i += 2;
             }
             0x10 => {
-                if i >= payload.len() {
-                    break;
+                for speed in &mut animation_speeds {
+                    *speed = read_u8(payload, &mut i)?;
                 }
-                animation_speed = payload[i];
-                i += 1;
             }
             0x11 => {
-                if i >= payload.len() {
-                    break;
+                for trigger in &mut animation_triggers {
+                    *trigger = read_u8(payload, &mut i)?;
                 }
-                animation_triggers = payload[i];
-                i += 1;
             }
             0x12 => {
-                badge_local_ids = read_badge_local_ids(payload, &mut i)?;
+                for badges in &mut badge_local_ids {
+                    *badges = read_badge_local_ids(payload, &mut i)?;
+                }
             }
             _ => break,
         }
     }
-    Some(ParsedAirportTileMeta {
-        local_id,
-        subst_id: subst_id?,
-        override_of,
-        callback_mask,
-        animation_frames,
-        animation_status,
-        animation_speed,
-        animation_triggers,
-        animation_special_flags: 0,
-        badge_local_ids,
-    })
+    local_ids
+        .into_iter()
+        .enumerate()
+        .map(|(index, local_id)| {
+            Some(ParsedAirportTileMeta {
+                local_id,
+                subst_id: subst_ids[index]?,
+                override_of: override_of[index],
+                callback_mask: callback_masks[index],
+                animation_frames: animation_frames[index],
+                animation_status: animation_status[index],
+                animation_speed: animation_speeds[index],
+                animation_triggers: animation_triggers[index],
+                animation_special_flags: 0,
+                badge_local_ids: badge_local_ids[index].clone(),
+            })
+        })
+        .collect()
+}
+
+/// Compatibilidad para callers que sólo necesitan el primer id del bloque.
+#[must_use]
+pub fn parse_action0_airport_tile_meta(payload: &[u8]) -> Option<ParsedAirportTileMeta> {
+    parse_action0_airport_tile_metas(payload)?
+        .into_iter()
+        .next()
 }
 
 #[must_use]
 pub fn collect_airport_tile_metas_from_grf(data: &[u8]) -> Vec<ParsedAirportTileMeta> {
     let mut out = Vec::new();
     let _ = for_each_pseudo_payload(data, |payload| {
-        if let Some(meta) = parse_action0_airport_tile_meta(payload) {
-            out.push(meta);
+        if let Some(metas) = parse_action0_airport_tile_metas(payload) {
+            out.extend(metas);
         }
     });
     out

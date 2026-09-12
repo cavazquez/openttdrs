@@ -5981,3 +5981,12 @@ entrada especial `gfx=0xFF`; las orientaciones E/O siguen transponiendo la
 huella sin truncar offsets grandes. Se añadieron regresiones de parser,
 catálogo y FTA; #326/#329 continúan abiertas por foundations/rotaciones,
 callbacks, sonidos y la aceptación raster completa.
+
+Corrección #326/#329-AIRPORTTILE-ACTION0-RANGES (2026-09-12): el parser de
+`Action0 AirportTiles` ahora expande todos los ids consecutivos y consume por
+id sustitución, override, callbacks, animación, velocidad, triggers y badges.
+El catálogo mantiene una entrada y un gfx global por cada definición, y los
+overrides no se desplazan al primer id del bloque. La regresión cubre dos
+teselas serializadas en una sola acción y comprueba sus animaciones y tabla
+de overrides; #326/#329 continúan abiertas por callbacks runtime, foundations,
+rotaciones, sonidos y la aceptación raster completa.

@@ -562,7 +562,7 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
         if state.vehicles[i].advance_newgrf_day_counter() {
             state.vehicles[i].decrease_vehicle_value();
         }
-        if state.vehicles[i].prev_unit.is_none() {
+        if state.vehicles[i].is_timetable_controller_unit(&state.engine_catalog) {
             state.vehicles[i].check_vehicle_breakdown_with_setting(
                 &mut state.random,
                 breakdown_level,
@@ -1242,6 +1242,30 @@ mod tests {
 
         assert_eq!(state.vehicles[0].newgrf_day_counter, 8);
         assert_eq!(state.vehicles[0].value, 25_500);
+    }
+
+    #[test]
+    fn free_train_wagon_does_not_run_front_engine_economy_handler() {
+        let pos = TileCoord::new(1, 1);
+        let mut wagon = Vehicle::new(1, VehicleKind::Train, pos, pos);
+        wagon.engine_id = Some(crate::engine::ENGINE_WAGON_COAL);
+        wagon.running = true;
+        wagon.cur_speed = 100;
+        wagon.reliability = 1_000;
+        wagon.reliability_spd_dec = 80;
+        wagon.breakdown_chance = u8::MAX;
+        wagon.needs_servicing = false;
+        let reliability_before = wagon.reliability;
+        let mut state = crate::GameState::new(8, 8);
+        state.vehicles.push(wagon);
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(state.vehicles[0].reliability, reliability_before);
+        assert_eq!(state.vehicles[0].breakdown_chance, u8::MAX);
+        assert_eq!(state.vehicles[0].breakdown_ctr, 0);
+        assert!(!state.vehicles[0].needs_servicing);
     }
 
     #[test]

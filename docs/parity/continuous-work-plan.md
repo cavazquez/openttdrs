@@ -5211,3 +5211,11 @@ unidad eliminada de un consist ferroviario, igual que `CmdSellVehicle` y
 `CmdSellRailWagon`. La regresión cubre un vehículo vial con depreciación y la
 venta de una composición cabeza+vagón. #329/#567 continúan abiertas por
 callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-FREE-WAGON-ECONOMY-HANDLER (2026-09-11): un vagón
+ferroviario suelto conserva sus actualizaciones de edad económica, contador y
+valor, pero ya no ejecuta por error el handler reservado al `IsFrontEngine()`:
+no acumula averías ni dispara servicio automático mientras permanece libre en
+el depósito. La regresión cubre un `ENGINE_WAGON_COAL` sin `prev_unit`.
+#329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
+framebuffer.

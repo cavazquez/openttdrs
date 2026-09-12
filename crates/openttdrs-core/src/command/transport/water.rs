@@ -556,6 +556,16 @@ pub(in crate::command) fn clear_ship_depot(
     state: &mut GameState,
     c: TileCoord,
 ) -> Result<(), CommandError> {
+    clear_ship_depot_impl(state, c, true)
+}
+
+/// Retira un depósito naval sin aplicar el coste cuando forma parte de un
+/// comando compuesto, como `DoBuildLock`.
+fn clear_ship_depot_impl(
+    state: &mut GameState,
+    c: TileCoord,
+    charge_money: bool,
+) -> Result<(), CommandError> {
     check_clear_ship_depot(state, c)?;
     let other =
         crate::depot::ship_depot_other_tile(&state.map, c).ok_or(CommandError::InvalidDepotTile)?;
@@ -577,7 +587,9 @@ pub(in crate::command) fn clear_ship_depot(
     refresh_ship_depot_docking_tile(state, c);
     refresh_ship_depot_docking_tile(state, other);
     unregister_depot(state, depot_id);
-    state.economy.money -= ship_depot_clear_cost(&state.global_economy);
+    if charge_money {
+        state.economy.money -= ship_depot_clear_cost(&state.global_economy);
+    }
     Ok(())
 }
 
@@ -1836,6 +1848,57 @@ fn clear_lock_rail_station(state: &mut GameState, c: TileCoord) -> Result<(), Co
     Ok(())
 }
 
+/// Prepara la retirada de un depósito naval durante `DoBuildLock`.
+///
+/// `ClearTile_Water` considera el depósito como una estructura, no como agua
+/// plana: una llamada sin `Auto` entra en `RemoveShipDepot`, que restaura sus
+/// dos partes y devuelve un único coste de demolición.
+fn check_lock_ship_depot_tile(
+    state: &GameState,
+    c: TileCoord,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    check_clear_ship_depot(state, c)?;
+    let original_water_class = if has_tile_water_ground(tile) {
+        water_class_from_m1(tile.m1)
+    } else {
+        WaterClass::Canal
+    };
+    // El centro conserva la clase capturada antes de `RemoveShipDepot`.
+    // Para un extremo, `MakeLock` consulta la clase de la superficie ya
+    // restaurada; resolverla aquí mantiene preview y ejecución idénticos.
+    let water_class = if is_middle {
+        original_water_class
+    } else {
+        match water_class_after_native_clear(&state.map, c, original_water_class) {
+            WaterClass::Invalid => WaterClass::Canal,
+            water_class => water_class,
+        }
+    };
+    let owner = if is_middle {
+        state.active_company.0
+    } else {
+        match water_class {
+            WaterClass::Sea | WaterClass::River => crate::company::OWNER_WATER_M1 & 0x1F,
+            WaterClass::Canal => tile.m1 & 0x1F,
+            WaterClass::Invalid => state.active_company.0,
+        }
+    };
+    Ok(LockBuildTilePlan {
+        water_class,
+        owner,
+        clear_on_build: true,
+        clear_cost: ship_depot_clear_cost(&state.global_economy),
+        add_canal_cost: !is_middle,
+    })
+}
+
+/// Ejecuta `RemoveShipDepot` como parte de `DoBuildLock`, sin doble cobro.
+fn clear_lock_ship_depot(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
+    clear_ship_depot_impl(state, c, false)
+}
+
 /// Devuelve el ancla y la huella que `RemoveAirport` debe retirar.
 fn airport_clear_info(
     state: &GameState,
@@ -2342,6 +2405,7 @@ fn check_lock_build_tile(
         {
             check_lock_rail_station_tile(state, c, is_middle, tile)
         }
+        TileKind::ShipDepot => check_lock_ship_depot_tile(state, c, is_middle, tile),
         TileKind::Airport => check_lock_airport_tile(state, c, is_middle),
         TileKind::Station if crate::station::stop_kind_from_m6(tile.m6) == StopKind::Dock => {
             check_lock_dock_tile(state, c, is_middle, tile)
@@ -2420,6 +2484,10 @@ fn clear_lock_build_tile(
     });
     if was_dock {
         return clear_dock_impl(state, c, false);
+    }
+    let was_ship_depot = state.map.get_kind(c) == Some(TileKind::ShipDepot);
+    if was_ship_depot {
+        return clear_lock_ship_depot(state, c);
     }
     let was_airport = state.map.get_kind(c) == Some(TileKind::Airport);
     if was_airport {

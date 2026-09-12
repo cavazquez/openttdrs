@@ -5715,3 +5715,13 @@ intermodales, reservas ferroviarias, reembolsos de vía e infraestructura
 nativa todavía requieren subetapas propias. #329/#567
 continúa abierta por esas diferencias y por aeropuertos, callbacks,
 pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-SHIP-DEPOT-CLEAR (2026-09-12):
+`DoBuildLock` ya entra en `RemoveShipDepot` cuando una de sus partes ocupa
+el centro o un extremo. Se comprueban las dos secciones y sus vehículos,
+se restaura la huella completa con la clase y aleatoriedad nativas y el coste
+`PR_CLEAR_DEPOT_SHIP` se suma una sola vez; la sección que vuelve a ser agua
+se reevalúa antes de `MakeLock`. La infraestructura de agua, la variante
+`Bankrupt` y los callbacks/órdenes de servicio todavía requieren contratos
+propios. #329/#567 continúa abierta por infraestructura, callbacks,
+pathfinding y aceptación visual/framebuffer.

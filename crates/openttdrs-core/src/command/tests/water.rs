@@ -688,6 +688,95 @@ fn place_lock_rejects_vehicle_on_extra_rail_station_tile_atomically() {
 }
 
 #[test]
+fn place_lock_clears_ship_depot_endpoint_and_restores_other_section() {
+    let mut s = GameState::new(12, 8);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let depot_endpoint = TileCoord::new(4, 2);
+    let depot_other = TileCoord::new(5, 2);
+    for coord in [lower, middle, depot_endpoint, depot_other] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot_endpoint, 0)).unwrap();
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(depot_endpoint, 2).unwrap();
+    s.map.set_height(depot_other, 2).unwrap();
+    // La sección que queda fuera de la esclusa también debe ser plana a z=2:
+    // `RemoveShipDepot` llama a `MakeWaterKeepingClass` sobre ambas partes y
+    // una pendiente no válida se convertiría correctamente en tierra.
+    for corner in [
+        TileCoord::new(4, 3),
+        TileCoord::new(6, 2),
+        TileCoord::new(5, 3),
+        TileCoord::new(6, 3),
+    ] {
+        s.map.set_height(corner, 2).unwrap();
+    }
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command)
+        .expect("RemoveShipDepot debe despejar la huella antes de construir");
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(depot_endpoint), Some(TileKind::Water));
+    assert_eq!(s.map.get(depot_endpoint).unwrap().m5 >> 4, 2);
+    assert_eq!(s.map.get_kind(depot_other), Some(TileKind::Water));
+    assert_eq!(s.map.get(depot_other).unwrap().m5, 0);
+    assert!(s.depots.is_empty());
+    assert_eq!(
+        s.economy.money,
+        money
+            - water_clear_cost(&s.global_economy)
+            - ship_depot_clear_cost(&s.global_economy)
+            - canal_build_cost(&s.global_economy)
+            - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_rejects_vehicle_on_other_ship_depot_section_atomically() {
+    let mut s = GameState::new(12, 8);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let depot_endpoint = TileCoord::new(4, 2);
+    let depot_other = TileCoord::new(5, 2);
+    for coord in [lower, middle, depot_endpoint, depot_other] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot_endpoint, 0)).unwrap();
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(depot_endpoint, 2).unwrap();
+    s.map.set_height(depot_other, 2).unwrap();
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Ship, depot_other, depot_other));
+    let before =
+        [lower, middle, depot_endpoint, depot_other].map(|coord| s.map.get(coord).unwrap());
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::VehicleInTheWay)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::VehicleInTheWay)
+    );
+    for (coord, raw) in [lower, middle, depot_endpoint, depot_other]
+        .into_iter()
+        .zip(before)
+    {
+        assert_eq!(s.map.get(coord), Some(raw));
+    }
+    assert_eq!(s.depots.len(), 1);
+    assert_eq!(s.economy.money, money);
+}
+
+#[test]
 fn place_lock_clears_airport_footprint_and_animation_state() {
     let mut s = GameState::new(16, 10);
     let origin = TileCoord::new(2, 2);
@@ -1302,7 +1391,9 @@ fn place_lock_preserves_native_errors_for_non_autoremove_structures() {
         (
             TileKind::ShipDepot,
             0,
-            crate::CommandError::BuildingMustBeDemolished,
+            // Un único tile con este tipo no es una huella naval válida;
+            // la rama específica de RemoveShipDepot debe detectarlo.
+            crate::CommandError::InvalidDepotTile,
         ),
         (
             TileKind::Airport,

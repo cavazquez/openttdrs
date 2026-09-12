@@ -5550,3 +5550,11 @@ la clase raw que recibe el depósito. La regresión cubre un objeto autoremove
 sobre mar elevado y conserva `Sea` en la sección materializada. #329/#567 siguen
 abiertas por infraestructura, callbacks, pathfinding y aceptación
 visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-OBJECT-CLEAR (2026-09-12): `DoBuildLock`
+llama a `CMD_LANDSCAPE_CLEAR` sin `DoCommandFlag::Auto`; la esclusa ahora
+permite retirar un objeto no-autoremovible cuando su demolición manual es
+válida, conserva la restauración acuática y cobra el coste del objeto una sola
+vez. Los objetos `CannotRemove` siguen bloqueando de forma atómica. La
+regresión cubre ambos contratos y el avance del RNG. #329/#567 siguen abiertas
+por infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.

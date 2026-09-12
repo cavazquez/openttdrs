@@ -24,9 +24,9 @@ use crate::{GameState, Station, StopKind};
 
 use super::super::{CommandError, require_tile_owned_by_active};
 use super::shared::{
-    check_in_bounds, check_object_can_be_auto_cleared, clear_object_footprint_keep_water,
-    clear_object_footprint_keep_water_without_charge, object_clear_money_delta, register_depot,
-    unregister_depot,
+    check_in_bounds, check_object_can_be_auto_cleared, check_object_can_be_cleared,
+    clear_object_footprint_keep_water, clear_object_footprint_keep_water_without_charge,
+    object_clear_money_delta, register_depot, unregister_depot,
 };
 use super::station::apply_station_m6;
 
@@ -46,7 +46,7 @@ const fn ship_depot_m5_for_dir(dir: u8) -> u8 {
     0x30 | PART_AXIS_BY_DIR[dir as usize & 0x03]
 }
 
-fn auto_clear_object_footprint(
+fn object_clear_footprint(
     state: &GameState,
     c: TileCoord,
 ) -> Result<Vec<TileCoord>, CommandError> {
@@ -105,6 +105,27 @@ fn auto_clear_object_plan(
     state: &GameState,
     tiles: impl IntoIterator<Item = TileCoord>,
 ) -> Result<Vec<Vec<TileCoord>>, CommandError> {
+    object_clear_plan(state, tiles, true)
+}
+
+/// Planifica los objetos que `DoBuildLock` retira con `CMD_LANDSCAPE_CLEAR`.
+///
+/// A diferencia de depósitos, muelles y boyas, `DoBuildLock` no añade
+/// `DoCommandFlag::Auto` al clear de sus tres partes. Por eso un objeto sin
+/// `Autoremove` sigue siendo válido si la demolición manual lo permite; sólo
+/// deben bloquearse los objetos `CannotRemove` o de otra compañía.
+fn lock_clear_object_plan(
+    state: &GameState,
+    tiles: impl IntoIterator<Item = TileCoord>,
+) -> Result<Vec<Vec<TileCoord>>, CommandError> {
+    object_clear_plan(state, tiles, false)
+}
+
+fn object_clear_plan(
+    state: &GameState,
+    tiles: impl IntoIterator<Item = TileCoord>,
+    automatic: bool,
+) -> Result<Vec<Vec<TileCoord>>, CommandError> {
     let mut plan = Vec::new();
     for tile in tiles {
         let Some(raw) = state.map.get(tile) else {
@@ -113,8 +134,12 @@ fn auto_clear_object_plan(
         if !is_map_object_tile(raw.mapt) {
             continue;
         }
-        check_object_can_be_auto_cleared(state, tile)?;
-        let object_tiles = auto_clear_object_footprint(state, tile)?;
+        if automatic {
+            check_object_can_be_auto_cleared(state, tile)?;
+        } else {
+            check_object_can_be_cleared(state, tile)?;
+        }
+        let object_tiles = object_clear_footprint(state, tile)?;
         if !plan.contains(&object_tiles) {
             plan.push(object_tiles);
         }
@@ -1468,7 +1493,7 @@ fn check_lock_object_tile(
     is_middle: bool,
     tile: Tile,
 ) -> Result<LockBuildTilePlan, CommandError> {
-    check_object_can_be_auto_cleared(state, c)?;
+    check_object_can_be_cleared(state, c)?;
     let original_water_class = water_class_from_m1(tile.m1);
     let has_water_ground = has_tile_water_ground(tile);
     let water_class = if is_middle {
@@ -1724,7 +1749,7 @@ pub(crate) fn check_place_lock(
     }
     let direction = lock_direction_for_heights(axis_y, ha, hb);
     let [middle, lower, upper] = lock_tiles_from_middle(c, direction);
-    let _auto_clear_objects = auto_clear_object_plan(state, [middle, lower, upper])?;
+    let _clear_objects = lock_clear_object_plan(state, [middle, lower, upper])?;
     let _middle_plan = check_lock_build_tile(state, middle, true)?;
     let _lower_plan = check_lock_build_tile(state, lower, false)?;
     let _upper_plan = check_lock_build_tile(state, upper, false)?;
@@ -1752,7 +1777,7 @@ pub(in crate::command) fn place_lock(
         .height;
     let direction = lock_direction_for_heights(axis_y, first_height, second_height);
     let [middle, lower, upper] = lock_tiles_from_middle(c, direction);
-    let auto_clear_objects = auto_clear_object_plan(state, [middle, lower, upper])?;
+    let auto_clear_objects = lock_clear_object_plan(state, [middle, lower, upper])?;
     let plans = [
         check_lock_build_tile(state, middle, true)?,
         check_lock_build_tile(state, lower, false)?,

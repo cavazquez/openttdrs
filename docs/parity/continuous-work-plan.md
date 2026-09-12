@@ -5594,6 +5594,15 @@ depósito que ocupa un extremo. Depósitos ferroviarios, cruces, túneles,
 puentes y estaciones siguen en subetapas propias. #329/#567 siguen abiertas
 por infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.
 
+Actualización #329/#567-WATER-LOCK-ROAD-CROSSING-CLEAR (2026-09-12):
+`ClearTile_Road` manual ya puede retirar un cruce a nivel durante
+`DoBuildLock`, recorriendo carretera y tranvía en el orden nativo, cobrando dos
+piezas por red y validando sus propietarios codificados en `m7`/`m3`. El
+ferrocarril subyacente se reemplaza por la tesela de agua de la esclusa, y la
+regresión cubre cruce simple y cruce con tranvía. Depósitos, túneles, puentes y
+estaciones siguen en subetapas propias. #329/#567 siguen abiertas por
+infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.
+
 Actualización #329/#567-WATER-LOCK-RAIL-DEPOT-CLEAR (2026-09-12):
 `ClearTile_Track` manual ya puede retirar un depósito ferroviario durante
 `DoBuildLock`, aplicando `PR_CLEAR_DEPOT_TRAIN`, comprobando propiedad y

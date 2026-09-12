@@ -1466,6 +1466,63 @@ fn check_lock_road_tile(
     })
 }
 
+fn check_lock_road_crossing_owner(state: &GameState, owner: u8) -> Result<(), CommandError> {
+    let owner = owner & 0x1F;
+    let active = state.active_company.0 & 0x1F;
+    if owner != active
+        && owner != (crate::company::OWNER_TOWN_M1 & 0x1F)
+        && owner != (crate::company::OWNER_NONE_M1 & 0x1F)
+    {
+        return Err(CommandError::TileNotOwned);
+    }
+    Ok(())
+}
+
+/// Prepara un cruce a nivel para `ClearTile_Road` sin `Auto`.
+fn check_lock_road_crossing_tile(
+    state: &GameState,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    let road_type = crate::road_type::road_type_from_tile(&tile);
+    let road_present = road_type.as_u8() != 0x3F;
+    let tram_type = crate::road_type::tram_road_type_from_tile(&tile);
+    if !road_present && tram_type.is_none() {
+        return Err(CommandError::MustRemoveRoadFirst);
+    }
+    if road_present {
+        check_lock_road_crossing_owner(state, tile.m7)?;
+    }
+    if tram_type.is_some() {
+        check_lock_road_crossing_owner(state, tile.m3 >> 4)?;
+    }
+    let road_cost = if road_present {
+        crate::economy::road_clear_cost_factored(
+            &state.global_economy,
+            false,
+            road_type_cost_multiplier(state, road_type),
+        )
+        .saturating_mul(2)
+    } else {
+        0
+    };
+    let tram_cost = tram_type.map_or(0, |tram_type| {
+        crate::economy::road_clear_cost_factored(
+            &state.global_economy,
+            true,
+            road_type_cost_multiplier(state, tram_type),
+        )
+        .saturating_mul(2)
+    });
+    Ok(LockBuildTilePlan {
+        water_class: WaterClass::Canal,
+        owner: state.active_company.0,
+        clear_on_build: true,
+        clear_cost: road_cost.saturating_add(tram_cost),
+        add_canal_cost: !is_middle,
+    })
+}
+
 /// Prepara el despeje manual de un depósito de carretera.
 fn check_lock_road_depot_tile(
     state: &GameState,
@@ -1803,6 +1860,9 @@ fn check_lock_build_tile(
             clear_cost: fields_clear_cost(&state.global_economy),
             add_canal_cost: !is_middle,
         }),
+        TileKind::Road if crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind) => {
+            check_lock_road_crossing_tile(state, is_middle, tile)
+        }
         TileKind::Road => check_lock_road_tile(state, is_middle, tile),
         TileKind::RoadDepot => check_lock_road_depot_tile(state, is_middle, tile),
         TileKind::RailDepot => check_lock_rail_depot_tile(state, is_middle, tile),

@@ -503,6 +503,51 @@ fn place_lock_clears_composite_road_and_tram_without_auto_flag() {
 }
 
 #[test]
+fn place_lock_clears_level_crossing_and_tram_without_auto_flag() {
+    let cases = [(0x00_u8, 0x0000_u16), (0x05, 1 << 6)];
+
+    for (tram_bits, tram_type) in cases {
+        let mut s = GameState::new(10, 6);
+        let lower = TileCoord::new(2, 2);
+        let middle = TileCoord::new(3, 2);
+        let upper = TileCoord::new(4, 2);
+        for coord in [lower, middle, upper] {
+            s.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+        s.map.set_height(lower, 1).unwrap();
+        s.map.set_height(middle, 1).unwrap();
+        s.map.set_height(upper, 2).unwrap();
+
+        let mut crossing = s.map.get(middle).unwrap();
+        crossing.kind = TileKind::Road;
+        crossing.mapt = 0x20;
+        crossing.m1 = s.active_company.0;
+        crossing.m3 = tram_bits;
+        crossing.m5 = 0x01 | (1 << 6);
+        crossing.m7 = s.active_company.0;
+        crossing.m8 = tram_type;
+        s.map.set_tile(middle, crossing).unwrap();
+        let money = s.economy.money;
+        let road_cost = road_clear_cost(&s.global_economy) * 2;
+        let tram_cost = if tram_bits == 0 {
+            0
+        } else {
+            road_clear_cost_factored(&s.global_economy, true, 0) * 2
+        };
+        let command = Command::PlaceLock(middle, false);
+
+        assert_eq!(command_would_fail(&s, &command), None);
+        apply_command(&mut s, &command).expect("ClearTile_Road manual retira el cruce");
+
+        assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+        assert_eq!(
+            s.economy.money,
+            money - road_cost - tram_cost - lock_build_cost(&s.global_economy)
+        );
+    }
+}
+
+#[test]
 fn place_lock_rejects_unsupported_road_subtype_atomically() {
     let mut s = GameState::new(10, 6);
     let parts = [
@@ -520,7 +565,7 @@ fn place_lock_rejects_unsupported_road_subtype_atomically() {
     let mut raw = s.map.get(blocked).unwrap();
     raw.kind = TileKind::Road;
     raw.mapt = 0x20;
-    raw.m5 = 0x02 | (1 << 6);
+    raw.m5 = 0x02 | (2 << 6);
     raw.m1 = s.active_company.0;
     s.map.set_tile(blocked, raw).unwrap();
     let before = parts.map(|part| s.map.get(part).expect("lock part"));

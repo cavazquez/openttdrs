@@ -6219,3 +6219,15 @@ core (1 ignorado), 1430 del cliente (2 ignorados), Clippy estricto en core y
 cliente, formato y `git diff --check`. #329 continúa abierta por vistas
 NewGRF completas, callbacks y consumidores legacy restantes; #326/#567
 permanecen abiertas.
+
+Corrección #329-CARGO-LOCOMOTIVE-CATALOG (2026-09-12, `68a52b47`):
+`load_vehicles` resuelve ahora `is_train_engine` desde el catálogo activo
+antes de decidir si una unidad ferroviaria sin vagón puede cargar. Una
+locomotora NewGRF presente sólo en `GameState.engine_catalog` ya no se trata
+como un vehículo de carga por haber fallado el lookup vanilla; la regla de
+escenarios y saves antiguos conserva el fallback estático. La regresión
+reproduce una locomotora custom con capacidad propia y confirma que no toma
+mercancía de la estación. Pasaron 2689 tests del core (1 ignorado), 1430 del
+cliente (2 ignorados), Clippy estricto en core y cliente, formato y
+`git diff --check`. #329 continúa abierta por callbacks y demás contratos de
+vehículo NewGRF; #326/#567 permanecen abiertas.

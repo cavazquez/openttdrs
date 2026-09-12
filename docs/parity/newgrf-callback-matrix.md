@@ -1652,3 +1652,13 @@ vagones de carbón cambian al sprite cargado según su carga, y barcos con
 se aplica a trailers, sombras, cámaras y previews laterales. Las vistas
 NewGRF runtime siguen teniendo prioridad cuando existen; esta etapa cubre el
 fallback nativo cuando no se puede resolver una vista custom.
+
+### #329-CARGO-LOCOMOTIVE-CATALOG — guarda de carga con motor runtime
+
+Actualizado: 2026-09-12 (`68a52b47`). La fase de carga consulta el
+`EngineDef` del catálogo activo para reconocer una locomotora ferroviaria sin
+vagón. Esto conserva el contrato nativo de que la cabeza no transporta carga
+por sí sola, incluso cuando su ID sólo existe por Action0/NewGRF; si el
+catálogo no conoce el motor, se mantiene el fallback vanilla para saves
+antiguos. La regresión cubre capacidad propia en una locomotora custom y
+stock de estación intacto.

@@ -116,7 +116,7 @@ fn route_directions_at(head: &Vehicle, tile: TileCoord) -> (VehicleDirection, Ve
     if tile == head.pos {
         let enter = head.direction;
         let exit = head.path.front().copied().map_or(enter, |next| {
-            crate::vehicle::direction_from_tile_step(tile, next)
+            crate::vehicle::direction_for_path_step(tile, next, head.path.get(1).copied(), enter)
         });
         return (enter, exit);
     }
@@ -128,14 +128,19 @@ fn route_directions_at(head: &Vehicle, tile: TileCoord) -> (VehicleDirection, Ve
     } else {
         head.rail_tile_history[index - 1]
     };
-    let exit = crate::vehicle::direction_from_tile_step(tile, newer);
+    let after_newer = match index {
+        0 => head.path.front().copied(),
+        1 => Some(head.pos),
+        _ => head.rail_tile_history.get(index - 2).copied(),
+    };
     let enter = head
         .rail_tile_history
         .get(index + 1)
         .copied()
-        .map_or(exit, |older| {
-            crate::vehicle::direction_from_tile_step(older, tile)
+        .map_or(head.direction, |older| {
+            crate::vehicle::direction_for_path_step(older, tile, Some(newer), head.direction)
         });
+    let exit = crate::vehicle::direction_for_path_step(tile, newer, after_newer, enter);
     (enter, exit)
 }
 
@@ -170,6 +175,8 @@ fn fallback_tile(from: TileCoord, direction: VehicleDirection, steps: usize) -> 
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
+
     use super::*;
     use crate::DIR_NE;
     use crate::vehicle::VehicleKind;
@@ -239,5 +246,26 @@ mod tests {
         // Cada eslabón aporta offset 8 → cola a 16 px detrás de la cabeza.
         assert_eq!(poses[2].tile, TileCoord::new(11, 10));
         assert_eq!(poses[2].rail_pixel, 15);
+    }
+
+    #[test]
+    fn tunnel_portal_keeps_consist_route_direction() {
+        let west = TileCoord::new(0, 1);
+        let west_mouth = TileCoord::new(1, 1);
+        let east_mouth = TileCoord::new(5, 1);
+        let east = TileCoord::new(6, 1);
+        let mut head = unit(1, east_mouth);
+        head.direction = crate::DIR_SW;
+        head.path = VecDeque::from([east]);
+        head.rail_tile_history = VecDeque::from([west_mouth, west]);
+
+        assert_eq!(
+            route_directions_at(&head, east_mouth),
+            (crate::DIR_SW, crate::DIR_SW)
+        );
+        assert_eq!(
+            route_directions_at(&head, west_mouth),
+            (crate::DIR_SW, crate::DIR_SW)
+        );
     }
 }

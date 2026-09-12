@@ -63,7 +63,7 @@ pub use traffic::{
 mod tests {
     use std::collections::VecDeque;
 
-    use crate::map::TileCoord;
+    use crate::map::{Map, TileCoord, TileKind};
     use crate::vehicle::{DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleDirection, VehicleKind};
 
     use super::*;
@@ -105,6 +105,28 @@ mod tests {
 
         assert_eq!(pose.pos, TileCoord::new(2, 2));
         assert_eq!(pose.progress, 126);
+    }
+
+    #[test]
+    fn train_render_direction_keeps_heading_after_vanilla_tunnel_jump() {
+        let mut map = Map::new_flat(8, 3, 0);
+        let west_mouth = TileCoord::new(1, 1);
+        let east_mouth = TileCoord::new(5, 1);
+        let east = TileCoord::new(6, 1);
+        map.set_kind(west_mouth, TileKind::RailTunnel).unwrap();
+        map.set_kind(east_mouth, TileKind::RailTunnel).unwrap();
+
+        let mut train = Vehicle::new(4, VehicleKind::Train, east_mouth, east);
+        train.path = VecDeque::from([east]);
+        train.rail_tile_history = VecDeque::from([west_mouth]);
+        train.direction = DIR_SW;
+        train.rail_pixel = 8;
+
+        let pose = VehiclePose::from_vehicle(&train);
+        assert_eq!(
+            vehicle_render_direction_at_with_map(&train, pose, Some(&map)),
+            DIR_SW
+        );
     }
 
     #[test]

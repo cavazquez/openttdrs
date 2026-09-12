@@ -29,7 +29,7 @@ impl VehiclePose {
             crate::engine::train_visual_progress_from_motion(
                 v.rail_pixel,
                 v.progress,
-                crate::engine::get_advance_distance(v.direction),
+                crate::engine::get_advance_distance(v.movement_direction()),
             )
         } else {
             f32::from(v.progress)

@@ -36,6 +36,7 @@ pub use reliability::{
 
 // Re-exportaciones públicas desde movement.rs
 pub use movement::VEHICLE_PROGRESS_STEP;
+pub(crate) use movement::direction_for_path_step;
 
 // Re-exportaciones públicas desde operational_status.rs
 pub use operational_status::{VehicleIssueDetail, VehicleOperationalSummary};

@@ -22,6 +22,32 @@ pub(crate) fn aircraft_progress_step_for_plane_speed(step: u8, plane_speed: u8) 
     step / plane_speed.clamp(1, 4)
 }
 
+#[must_use]
+fn is_adjacent_tile_step(from: TileCoord, to: TileCoord) -> bool {
+    from.x.abs_diff(to.x) + from.y.abs_diff(to.y) == 1
+}
+
+/// Dirección física de un paso de path, incluidos enlaces lógicos no adyacentes.
+///
+/// Los portales vanilla/JGR aparecen en `Vehicle::path` como un salto entre dos
+/// bocas. No existe una dirección geométrica válida para ese par; la salida
+/// adyacente siguiente conserva el rumbo del vehículo y evita que el fallback
+/// de `direction_from_tile_step` invente `DIR_NE`.
+#[must_use]
+pub(crate) fn direction_for_path_step(
+    from: TileCoord,
+    to: TileCoord,
+    after: Option<TileCoord>,
+    fallback: super::model::VehicleDirection,
+) -> super::model::VehicleDirection {
+    if is_adjacent_tile_step(from, to) {
+        return super::direction_from_tile_step(from, to);
+    }
+    after
+        .filter(|&next| is_adjacent_tile_step(to, next))
+        .map_or(fallback, |next| super::direction_from_tile_step(to, next))
+}
+
 /// Sprite cardinal intermedio al girar 90° entre dos diagonales.
 #[must_use]
 const fn turn_cardinal_direction(
@@ -45,7 +71,7 @@ impl super::model::Vehicle {
         let Some(next) = self.movement_target() else {
             return self.direction;
         };
-        super::direction_from_tile_step(self.pos, next)
+        direction_for_path_step(self.pos, next, self.path.get(1).copied(), self.direction)
     }
 
     /// Avance sub-tile por tick según motor y dirección.
@@ -107,12 +133,13 @@ impl super::model::Vehicle {
         let Some(next) = self.movement_target() else {
             return self.direction;
         };
-        let entry = super::direction_from_tile_step(self.pos, next);
+        let entry =
+            direction_for_path_step(self.pos, next, self.path.get(1).copied(), self.direction);
         if self.progress < 128 {
             return entry;
         }
         if let Some(&after) = self.path.get(1) {
-            let exit = super::direction_from_tile_step(next, after);
+            let exit = direction_for_path_step(next, after, None, entry);
             if exit != entry {
                 return turn_cardinal_direction(entry, exit);
             }
@@ -305,9 +332,9 @@ impl super::model::Vehicle {
             } else {
                 self.depart_turn = 0;
                 self.progress = 0;
-                if let Some(next) = self.movement_target() {
+                if self.movement_target().is_some() {
                     self.set_direction_with_curve_penalty(
-                        super::direction_from_tile_step(self.pos, next),
+                        self.movement_direction(),
                         map,
                         TrainAccelerationModel::Original,
                     );
@@ -389,9 +416,9 @@ impl super::model::Vehicle {
                 self.depart_turn = 0;
                 self.progress = 0;
                 self.rail_pixel = 0;
-                if let Some(next) = self.movement_target() {
+                if self.movement_target().is_some() {
                     self.set_direction_with_curve_penalty(
-                        super::direction_from_tile_step(self.pos, next),
+                        self.movement_direction(),
                         map,
                         train_accel,
                     );
@@ -700,14 +727,14 @@ impl super::model::Vehicle {
             speed = r.cur_speed;
             sub = r.subspeed;
             let mut j = r.advance;
-            let mut adv = get_advance_distance(self.direction);
+            let mut adv = get_advance_distance(self.movement_direction());
             while j >= adv && speed > 0 {
                 j -= adv;
                 pixel = pixel.saturating_add(1);
                 if pixel >= 16 {
                     return true;
                 }
-                adv = get_advance_distance(self.direction);
+                adv = get_advance_distance(self.movement_direction());
             }
             progress = u8::try_from(j.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
         }
@@ -854,8 +881,10 @@ impl super::model::Vehicle {
         // fraccional añadido para suavizar el render no debe adelantar eventos
         // físicos de Z entre ticks.
         let visual_progress = crate::engine::train_visual_progress_from_pixel(self.rail_pixel);
-        let (sub_x, sub_y) =
-            crate::road_movement::train_straight_subtile(self.direction, visual_progress);
+        let (sub_x, sub_y) = crate::road_movement::train_straight_subtile(
+            self.movement_direction(),
+            visual_progress,
+        );
         let new_z = slope_pixel_z(map, self.pos, sub_x, sub_y);
         let Some(old_z) = self.z_pos else {
             self.z_pos = Some(new_z);
@@ -882,7 +911,7 @@ impl super::model::Vehicle {
 
     fn update_direction_step(&mut self, from: TileCoord, to: TileCoord, map: Option<&Map>) {
         self.set_direction_with_curve_penalty(
-            super::direction_from_tile_step(from, to),
+            direction_for_path_step(from, to, self.path.front().copied(), self.direction),
             map,
             TrainAccelerationModel::Original,
         );
@@ -1050,10 +1079,10 @@ impl super::model::Vehicle {
         ) {
             return false;
         }
-        let Some(next) = self.movement_target() else {
+        if self.movement_target().is_none() {
             return false;
-        };
-        let outbound = super::direction_from_tile_step(self.pos, next);
+        }
+        let outbound = self.movement_direction();
         outbound == super::reverse_direction(self.direction)
     }
 
@@ -1072,10 +1101,10 @@ impl super::model::Vehicle {
         if !self.needs_train_turnaround() {
             return;
         }
-        let Some(next) = self.movement_target() else {
+        if self.movement_target().is_none() {
             return;
-        };
-        let outbound = super::direction_from_tile_step(self.pos, next);
+        }
+        let outbound = self.movement_direction();
         self.set_direction_with_curve_penalty(outbound, map, train_accel);
         self.rail_pixel = 15_u8.saturating_sub(self.rail_pixel.min(15));
         self.rail_tile_history.clear();
@@ -1085,10 +1114,10 @@ impl super::model::Vehicle {
 
     #[must_use]
     fn needs_train_turnaround(&self) -> bool {
-        let Some(next) = self.movement_target() else {
+        if self.movement_target().is_none() {
             return false;
-        };
-        let outbound = super::direction_from_tile_step(self.pos, next);
+        }
+        let outbound = self.movement_direction();
         outbound == super::reverse_direction(self.direction)
     }
 
@@ -1256,7 +1285,8 @@ impl super::model::Vehicle {
 #[cfg(test)]
 mod tests {
     use super::aircraft_progress_step_for_plane_speed;
-    use crate::{Map, TileCoord, TileKind, Vehicle, VehicleKind};
+    use crate::{DIR_SW, Map, TileCoord, TileKind, Vehicle, VehicleKind};
+    use std::collections::VecDeque;
 
     #[test]
     fn aircraft_progress_step_matches_plane_speed_divisor() {
@@ -1266,6 +1296,50 @@ mod tests {
         assert_eq!(aircraft_progress_step_for_plane_speed(64, 4), 16);
         assert_eq!(aircraft_progress_step_for_plane_speed(64, 0), 64);
         assert_eq!(aircraft_progress_step_for_plane_speed(64, 9), 16);
+    }
+
+    #[test]
+    fn train_vanilla_tunnel_jump_keeps_outgoing_direction() {
+        let mut map = Map::new_flat(8, 3, 0);
+        let west = TileCoord::new(0, 1);
+        let west_mouth = TileCoord::new(1, 1);
+        let east_mouth = TileCoord::new(5, 1);
+        let east = TileCoord::new(6, 1);
+
+        for c in [west, east] {
+            map.set_kind(c, TileKind::Rail).expect("vía");
+            let mut tile = map.get(c).expect("tile");
+            tile.m5 = crate::RAIL_TB_X;
+            map.set_tile(c, tile).expect("vía");
+        }
+        map.set_kind(west_mouth, TileKind::RailTunnel)
+            .expect("boca oeste");
+        map.set_mapt_m5(west_mouth, 0x90, 0x02)
+            .expect("datos boca oeste");
+        map.set_kind(east_mouth, TileKind::RailTunnel)
+            .expect("boca este");
+        map.set_mapt_m5(east_mouth, 0x90, 0)
+            .expect("datos boca este");
+
+        let mut train = Vehicle::new(1, VehicleKind::Train, west, east);
+        train.path = VecDeque::from([west_mouth, east_mouth, east]);
+        train.direction = DIR_SW;
+        train.cur_speed = 200;
+        train.rail_pixel = 15;
+
+        train.advance_one_tile(Some(&map));
+        assert_eq!(train.pos, west_mouth);
+        assert_eq!(train.movement_direction(), DIR_SW);
+
+        train.rail_pixel = 15;
+        train.advance_one_tile(Some(&map));
+        assert_eq!(train.pos, east_mouth);
+        assert_eq!(train.direction, DIR_SW);
+        assert_eq!(train.movement_direction(), DIR_SW);
+        assert_eq!(
+            train.cur_speed, 200,
+            "el portal no debe penalizar como un giro"
+        );
     }
 
     #[test]

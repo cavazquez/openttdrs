@@ -196,10 +196,10 @@ fn reverse_consist_at_stop_slots(
     if head.kind != VehicleKind::Train || !head.is_consist_head() || head.cur_speed != 0 {
         return false;
     }
-    let Some(next) = head.movement_target() else {
+    if head.movement_target().is_none() {
         return false;
-    };
-    let outbound = crate::vehicle::direction_from_tile_step(head.pos, next);
+    }
+    let outbound = head.movement_direction();
     if outbound != reverse_direction(head.direction) {
         return false;
     }
@@ -308,5 +308,23 @@ mod tests {
         assert!(vehicles.iter().all(|unit| unit.direction == DIR_NE));
         assert!(vehicles.iter().all(|unit| unit.cur_speed == 0));
         assert!(vehicles.iter().all(|unit| unit.path.is_empty()));
+    }
+
+    #[test]
+    fn reversal_detects_vanilla_tunnel_outbound_direction() {
+        let map = Map::new_flat(8, 3, 0);
+        let west_mouth = TileCoord::new(1, 1);
+        let east_mouth = TileCoord::new(5, 1);
+        let east = TileCoord::new(6, 1);
+        let mut head = train_unit(4, west_mouth.x, 0);
+        head.pos = west_mouth;
+        head.direction = DIR_NE;
+        head.curve_prev_direction = DIR_NE;
+        head.path = VecDeque::from([east_mouth, east]);
+        let mut vehicles = vec![head];
+
+        assert!(reverse_consist_at_stop(&mut vehicles, 4, &map));
+        assert_eq!(vehicles[0].direction, DIR_SW);
+        assert!(vehicles[0].path.is_empty());
     }
 }

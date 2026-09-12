@@ -5781,3 +5781,14 @@ una ruta PBS sin terreno intermedio y verifica que la reserva alcance la boca
 opuesta y la vía exterior. #329/#567 continúa abierta por reservas persistidas
 en m5, movimiento, callbacks, variantes de túnel/puente y aceptación
 visual/framebuffer restantes.
+
+Corrección #329/#567-TUNNEL-MOTION-DIRECTION (2026-09-12): el movimiento,
+la predicción de salida de señal y el cálculo de pendiente ferroviaria ya
+conservan el rumbo físico al consumir un hop vanilla/JGR no adyacente. La
+orientación de sprite y la pose de cada unidad del consist reconstruyen la
+salida adyacente siguiente, en vez de interpretar la pareja de bocas como
+`DIR_NE`; la reversa en una boca también consulta ese mismo contrato. Las
+regresiones cubren avance boca→boca, renderer con historial, poses de consist
+y reversa detenida. #329/#567 continúa abierta por reservas persistidas en
+m5, movimiento completo de variantes, callbacks y aceptación visual/framebuffer
+restantes.

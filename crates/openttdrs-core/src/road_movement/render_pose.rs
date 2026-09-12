@@ -19,7 +19,9 @@ use crate::train_movement::{
     diag_dir_side, train_depot_facing, train_depot_subtile, train_render_dir_on_track,
     train_subtile_on_track,
 };
-use crate::vehicle::{Vehicle, VehicleDirection, VehicleKind, direction_from_tile_step};
+use crate::vehicle::{
+    Vehicle, VehicleDirection, VehicleKind, direction_for_path_step, direction_from_tile_step,
+};
 
 /// Sub-tesela `OpenTTD` para dibujo (recto, curva de giro o media vuelta en parada).
 #[must_use]
@@ -150,8 +152,11 @@ fn train_route_on_tile(
     pose: VehiclePose,
 ) -> (VehicleDirection, Option<u8>) {
     let previous = train_previous_tile_at(v, pose);
-    let enter = previous.map_or(v.direction, |prev| direction_from_tile_step(prev, pose.pos));
-    let outbound = movement_target_at(v, pose.pos, pose.path_index).map_or_else(
+    let next = movement_target_at(v, pose.pos, pose.path_index);
+    let enter = previous.map_or(v.direction, |prev| {
+        direction_for_path_step(prev, pose.pos, next, v.direction)
+    });
+    let outbound = next.map_or_else(
         || {
             if v.prev_unit.is_some() {
                 v.curve_prev_direction
@@ -159,7 +164,14 @@ fn train_route_on_tile(
                 enter
             }
         },
-        |next| direction_from_tile_step(pose.pos, next),
+        |next| {
+            direction_for_path_step(
+                pose.pos,
+                next,
+                v.path.get(pose.path_index + 1).copied(),
+                enter,
+            )
+        },
     );
 
     let Some(tile) = map.get(pose.pos).filter(|tile| tile.kind == TileKind::Rail) else {

@@ -5646,6 +5646,15 @@ para despejes de depósitos/estaciones, waypoints, canales, esclusas e
 infraestructura. También se rellenan las bases que faltaban, evitando que un
 despeje recién implementado consulte accidentalmente una entrada cero.
 
+Corrección de contrato #329/#567-WATER-DOCK-PRICE (2026-09-12): `CmdBuildDock`
+ya cobra `PR_BUILD_STATION_DOCK` y `RemoveDock` devuelve
+`PR_CLEAR_STATION_DOCK`, en vez de reutilizar el precio ferroviario de una
+estación y `CLEAR_TILE_COST`. La regresión cubre construcción, demolición
+desde la pieza acuática y limpieza de un objeto autoremove. El ciclo de docks
+unidos, estaciones ferroviarias, aeropuertos y locks que intersecten una
+huella de muelle siguen en subetapas separadas; #329/#567 continúa abierta
+por infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.
+
 Actualización #329/#567-WATER-BUOY-LIFECYCLE (2026-09-12): las boyas ya usan
 `PR_BUILD_WAYPOINT_BUOY` y `PR_CLEAR_WAYPOINT_BUOY` en construcción y
 demolición, en lugar del precio aproximado de una estación o del despeje

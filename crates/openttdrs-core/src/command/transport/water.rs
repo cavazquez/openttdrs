@@ -5,11 +5,12 @@ use crate::bridge_spec::{
     bridge_height_over_tile, set_bridge_middle_mapt, set_bridge_type_m6,
 };
 use crate::economy::{
-    buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost, fields_clear_cost,
-    grass_clear_cost, lock_build_cost, lock_clear_cost, rail_clear_cost, rail_waypoint_clear_cost,
-    road_depot_clear_cost, road_stop_clear_cost_factored, rocks_clear_cost, rough_clear_cost,
-    ship_depot_build_cost, ship_depot_clear_cost, signal_clear_cost, station_build_cost,
-    train_depot_clear_cost, trees_clear_cost, water_clear_cost,
+    buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost, dock_build_cost,
+    dock_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost, lock_clear_cost,
+    rail_clear_cost, rail_waypoint_clear_cost, road_depot_clear_cost,
+    road_stop_clear_cost_factored, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
+    ship_depot_clear_cost, signal_clear_cost, station_build_cost, train_depot_clear_cost,
+    trees_clear_cost, water_clear_cost,
 };
 use crate::map::rail_bits::RAIL_TILE_NORMAL;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
@@ -898,7 +899,7 @@ fn place_dock_with_station(
     }
     refresh_ship_docking_tiles_around(state, c);
     refresh_ship_docking_tiles_around(state, water);
-    state.economy.money -= station_build_cost(&state.global_economy);
+    state.economy.money -= dock_build_cost(&state.global_economy);
     Ok(())
 }
 
@@ -1034,7 +1035,7 @@ pub(in crate::command) fn clear_dock(
     if !legacy_single_tile {
         refresh_ship_docking_tiles_around(state, water);
     }
-    state.economy.money -= crate::CLEAR_TILE_COST;
+    state.economy.money -= dock_clear_cost(&state.global_economy);
     Ok(())
 }
 

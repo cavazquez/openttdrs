@@ -229,6 +229,18 @@ pub fn station_build_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::BuildStationRail, 1, 0)
 }
 
+/// Coste de construir un muelle (`PR_BUILD_STATION_DOCK`).
+#[must_use]
+pub fn dock_build_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::BuildStationDock, 1, 0)
+}
+
+/// Coste de retirar un muelle (`PR_CLEAR_STATION_DOCK`).
+#[must_use]
+pub fn dock_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearStationDock, 1, 0)
+}
+
 /// Coste por tesela de una parada vial `NewGRF`.
 ///
 /// `RoadStopSpec::GetBuildCost` usa la categoría de bus/camión y el
@@ -356,6 +368,14 @@ mod tests {
         assert_eq!(
             station_build_cost(&ge),
             medium_default_price(PriceIndex::BuildStationRail)
+        );
+        assert_eq!(
+            dock_build_cost(&ge),
+            medium_default_price(PriceIndex::BuildStationDock)
+        );
+        assert_eq!(
+            dock_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearStationDock)
         );
         assert_eq!(
             train_depot_build_cost(&ge, 0),

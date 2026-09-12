@@ -1,11 +1,11 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
 use crate::economy::{
-    buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost, lock_build_cost,
-    lock_clear_cost, rail_waypoint_clear_cost, road_clear_cost, road_clear_cost_factored,
-    road_depot_clear_cost, road_stop_clear_cost_factored, rough_clear_cost, ship_depot_build_cost,
-    ship_depot_clear_cost, station_build_cost, train_depot_clear_cost, trees_clear_cost,
-    water_clear_cost,
+    buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost, dock_build_cost,
+    dock_clear_cost, lock_build_cost, lock_clear_cost, rail_waypoint_clear_cost, road_clear_cost,
+    road_clear_cost_factored, road_depot_clear_cost, road_stop_clear_cost_factored,
+    rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost, train_depot_clear_cost,
+    trees_clear_cost, water_clear_cost,
 };
 use crate::test_fixtures::SandboxMap;
 use crate::{
@@ -2386,10 +2386,7 @@ fn place_dock_on_coast_and_serves_ship() {
     assert_eq!(s.stations[0].pos, land);
     assert_eq!(s.stations[0].ottd_station_id, Some(0));
     assert!(s.stations[0].can_service_vehicle(VehicleKind::Ship));
-    assert_eq!(
-        s.economy.money,
-        money - station_build_cost(&s.global_economy)
-    );
+    assert_eq!(s.economy.money, money - dock_build_cost(&s.global_economy));
 }
 
 #[test]
@@ -2531,7 +2528,7 @@ fn dock_uses_shared_native_id_and_clears_from_water_part() {
     assert!(s.stations.is_empty());
     assert_eq!(
         s.economy.money,
-        money - station_build_cost(&s.global_economy) - crate::CLEAR_TILE_COST
+        money - dock_build_cost(&s.global_economy) - dock_clear_cost(&s.global_economy)
     );
 }
 
@@ -2875,7 +2872,7 @@ fn place_dock_auto_clears_autoremove_water_object_and_keeps_water() {
     assert_eq!(s.map.get_kind(approach), Some(TileKind::Water));
     assert_eq!(
         s.economy.money,
-        money - clear_cost - station_build_cost(&s.global_economy)
+        money - clear_cost - dock_build_cost(&s.global_economy)
     );
 }
 

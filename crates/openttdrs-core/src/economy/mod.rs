@@ -9,15 +9,15 @@ pub mod vehicle_costs;
 
 pub use build_costs::{
     build_object_cost, build_object_cost_factored, buoy_build_cost, buoy_clear_cost, buy_land_cost,
-    canal_build_cost, canal_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
-    lock_clear_cost, object_clear_cost_factored, rail_build_cost, rail_build_cost_factored,
-    rail_clear_cost, rail_waypoint_clear_cost, road_build_cost, road_build_cost_factored,
-    road_clear_cost, road_clear_cost_factored, road_depot_build_cost, road_depot_clear_cost,
-    road_stop_build_cost_factored, road_stop_clear_cost_factored, rocks_clear_cost,
-    rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost, signal_build_cost,
-    signal_clear_cost, station_build_cost, terraform_cost_per_corner,
-    terraform_cost_per_corner_inflated, train_depot_build_cost, train_depot_clear_cost,
-    trees_clear_cost, water_clear_cost, waypoint_build_cost,
+    canal_build_cost, canal_clear_cost, dock_build_cost, dock_clear_cost, fields_clear_cost,
+    grass_clear_cost, lock_build_cost, lock_clear_cost, object_clear_cost_factored,
+    rail_build_cost, rail_build_cost_factored, rail_clear_cost, rail_waypoint_clear_cost,
+    road_build_cost, road_build_cost_factored, road_clear_cost, road_clear_cost_factored,
+    road_depot_build_cost, road_depot_clear_cost, road_stop_build_cost_factored,
+    road_stop_clear_cost_factored, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
+    ship_depot_clear_cost, signal_build_cost, signal_clear_cost, station_build_cost,
+    terraform_cost_per_corner, terraform_cost_per_corner_inflated, train_depot_build_cost,
+    train_depot_clear_cost, trees_clear_cost, water_clear_cost, waypoint_build_cost,
 };
 pub use global::{
     DEFAULT_DIFFICULTY_MOD, DEFAULT_INTEREST_RATE, EconomyType, FluctuationEvent, GlobalEconomy,

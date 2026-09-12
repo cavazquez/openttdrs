@@ -178,16 +178,43 @@ pub(in crate::command::transport) fn make_water_tile_after_native_clear(
     c: TileCoord,
     water_class: WaterClass,
 ) -> Result<(), CommandError> {
-    // `MakeWaterKeepingClass` convierte un mar plano elevado en canal antes
-    // de limpiar: es el caso que evita que un tile de agua sobre terreno
-    // levantado reaparezca como `Sea` tras demoler una instalación.
-    let water_class = if water_class == WaterClass::Sea
-        && tile_slope_and_z(&state.map, c).is_some_and(|(_, z)| z > 0)
-    {
+    // `MakeWaterKeepingClass` decide la clase antes de `DoClearSquare`.
+    // Autoslope convierte canales y mares inclinados en suelo; sólo un río
+    // con una dirección diagonal nativa válida puede sobrevivir inclinado.
+    let (tileh, z) = tile_slope_and_z(&state.map, c).unwrap_or((0, 0));
+    let water_class = if tileh != 0 {
+        if water_class == WaterClass::River && inclined_slope_direction(tileh).is_some() {
+            WaterClass::River
+        } else {
+            WaterClass::Invalid
+        }
+    } else if water_class == WaterClass::Sea && z > 0 {
+        // Un mar plano por encima del nivel cero se restaura como canal.
         WaterClass::Canal
     } else {
         water_class
     };
+    if water_class == WaterClass::Invalid {
+        let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+        // Equivalente a `DoClearSquare` + `MakeClear(CLEAR_GRASS, 0)`: el
+        // nibble bajo de MAPT describe la zona y sobrevive a SetTileType.
+        tile.kind = TileKind::Grass;
+        tile.mapt &= 0x0F;
+        tile.m1 = crate::company::OWNER_NONE_M1;
+        tile.m2 = 0;
+        tile.m2_hi = 0;
+        tile.m3 = 0;
+        tile.m3hi = 0;
+        tile.m5 = 0;
+        tile.m6 = 0;
+        tile.m7 = 0;
+        tile.m8 = 0;
+        state
+            .map
+            .set_tile(c, tile)
+            .map_err(|_| CommandError::OutOfBounds)?;
+        return Ok(());
+    }
     let random_bits = match water_class {
         WaterClass::Canal | WaterClass::River => {
             u8::try_from(state.random.next() & 0xFF).unwrap_or(0)
@@ -1231,6 +1258,61 @@ mod tests {
         assert_eq!(restored.kind, TileKind::Water);
         assert_eq!(water_class_from_m1(restored.m1), WaterClass::Canal);
         assert_eq!(restored.m3hi, expected_bits);
+        assert_eq!(state.random, expected_random);
+    }
+
+    #[test]
+    fn native_clear_turns_sloped_canal_into_clear_land() {
+        let mut state = GameState::new(8, 8);
+        let water = TileCoord::new(3, 3);
+        state.map.set_height(water, 1).expect("north corner");
+        state
+            .map
+            .set_height(TileCoord::new(water.x + 1, water.y), 0)
+            .expect("west corner");
+        state
+            .map
+            .set_height(TileCoord::new(water.x, water.y + 1), 1)
+            .expect("east corner");
+        state
+            .map
+            .set_height(TileCoord::new(water.x + 1, water.y + 1), 0)
+            .expect("south corner");
+        assert_eq!(tile_slope_and_z(&state.map, water), Some((12, 0)));
+
+        let mut tile = state.map.get(water).expect("water tile");
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x0B;
+        tile.m1 = set_water_class_m1(0x03, WaterClass::Canal);
+        tile.m2 = 0xAA;
+        tile.m2_hi = 0xBB;
+        tile.m3 = 0xCC;
+        tile.m3hi = 0xDD;
+        tile.m5 = 0xEE;
+        tile.m6 = 0xFF;
+        tile.m7 = 0x12;
+        tile.m8 = 0x3456;
+        state.map.set_tile(water, tile).expect("sloped station");
+        state.random = crate::cargodist::parity::Randomizer {
+            state: [0x1122_3344, 0x5566_7788],
+        };
+        let expected_random = state.random;
+
+        make_water_tile_after_native_clear(&mut state, water, WaterClass::Canal)
+            .expect("clear sloped canal");
+
+        let cleared = state.map.get(water).expect("clear tile");
+        assert_eq!(cleared.kind, TileKind::Grass);
+        assert_eq!(cleared.mapt, 0x0B);
+        assert_eq!(cleared.m1, crate::company::OWNER_NONE_M1);
+        assert_eq!(cleared.m2, 0);
+        assert_eq!(cleared.m2_hi, 0);
+        assert_eq!(cleared.m3, 0);
+        assert_eq!(cleared.m3hi, 0);
+        assert_eq!(cleared.m5, 0);
+        assert_eq!(cleared.m6, 0);
+        assert_eq!(cleared.m7, 0);
+        assert_eq!(cleared.m8, 0);
         assert_eq!(state.random, expected_random);
     }
 }

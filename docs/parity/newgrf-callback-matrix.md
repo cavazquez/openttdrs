@@ -1474,3 +1474,13 @@ Actualizado: 2026-09-12. La restauración compartida que modela
 clase y no consume RNG. La regresión construye una estación sobre una tesela
 de mar elevada y comprueba clase, `MAP4` y estado final del stream. Otros
 criterios de #329/#567 siguen pendientes.
+
+### #329/#567-WATER-SLOPE-RESTORE — `MakeWaterKeepingClass` en pendientes
+
+Actualizado: 2026-09-12. La restauración compartida ahora deja suelo claro
+cuando la clase original es canal/mar sobre una pendiente, y sólo conserva un
+río si `GetInclinedSlopeDirection` devuelve una dirección válida. La rama de
+suelo reinicia los campos raw como `DoClearSquare` y no consume `Random()`;
+queda separada de la promoción mar elevado→canal. La regresión usa una
+pendiente `SLOPE_NE` con payload residual y verifica limpieza y RNG. Otros
+criterios de #329/#567 siguen pendientes.

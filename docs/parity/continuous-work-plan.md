@@ -5444,3 +5444,10 @@ de restauración convierte el mar con `z > 0` en canal, tal como
 el mar plano sigue sin tirada. La regresión usa una estación sobre cuatro
 esquinas elevadas y verifica clase, byte raw y RNG final. #329/#567 continúan
 abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-SLOPE-RESTORE (2026-09-12): la ruta común de
+restauración deja `MP_CLEAR` para canales/mares sobre pendientes y conserva
+únicamente ríos con dirección inclinada válida, como `MakeWaterKeepingClass`.
+La rama de suelo limpia los planos raw y no avanza el RNG; la regresión cubre
+`SLOPE_NE`, payload residual y estado final. #329/#567 continúan abiertas por
+callbacks, pathfinding y aceptación visual/framebuffer.

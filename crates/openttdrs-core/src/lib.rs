@@ -331,7 +331,8 @@ pub use industry::{
     IndustryProductionChange, IndustrySpec, PERCENT_TRANSPORTED_60, PRODLEVEL_CLOSURE,
     PRODLEVEL_DEFAULT, PRODLEVEL_MAXIMUM, PRODLEVEL_MINIMUM, apply_industry_production_action,
     change_industry_production, industry_produce_period_ticks, remove_closed_industries,
-    remove_closed_industries_with_neutral_stations, transport_industry_goods,
+    remove_closed_industries_with_neutral_stations,
+    remove_closed_industries_with_neutral_stations_and_random, transport_industry_goods,
     transport_industry_goods_with_settings,
 };
 pub use industry_builder::{

@@ -1456,3 +1456,12 @@ con `MakeWaterKeepingClass`: canal y río consumen `Random()` y guardan su byte
 bajo en `MAP4`, mientras el mar conserva cero. La regresión cubre la retirada
 por una compañía distinta y conserva el estado neutral de la boya antes de
 restaurar el canal. Otros criterios de #329/#567 siguen pendientes.
+
+### #329/#499-INDUSTRY-RANDOM-RESTORE — cierre de Oil Rig
+
+Actualizado: 2026-09-12. El cierre mensual de una industria acuática usa ahora
+el RNG global al restaurar cada pieza mediante el contrato equivalente a
+`MakeWaterKeepingClass`: cada canal o río consume una palabra y escribe su byte
+bajo en `MAP4`; el mar no consume RNG y queda en cero. La regresión cubre la
+plataforma con estación neutral, verifica el byte raw y el estado final del
+stream. Otros criterios de #329/#499 siguen pendientes.

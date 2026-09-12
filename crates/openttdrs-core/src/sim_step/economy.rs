@@ -80,10 +80,11 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
         false,
     );
     // Industrias ya marcadas con prod_level = 0 el mes pasado: fuera del mapa.
-    let closed = crate::industry::remove_closed_industries_with_neutral_stations(
+    let closed = crate::industry::remove_closed_industries_with_neutral_stations_and_random(
         &mut state.industries,
         &mut state.map,
         &mut state.stations,
+        &mut state.random,
     );
     for at in closed {
         crate::news::report_industry_closed(state, at);

@@ -5430,3 +5430,10 @@ y consume una palabra `Random()` por cada sección de canal/río; el mar conserv
 `MAP4 = 0`. La regresión usa un objeto autoremove de dos teselas dentro de la
 huella de un depósito y comprueba el avance total del RNG. #329/#567 continúan
 abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#499-INDUSTRY-RANDOM-RESTORE (2026-09-12): el cierre mensual
+de una Oil Rig restaura cada tile acuático con el consumo nativo de
+`MakeWaterKeepingClass`; canal y río avanzan el RNG global y guardan el byte
+bajo en `MAP4`, mientras el mar no consume una tirada. La regresión cubre la
+estación neutral y el estado final del stream. #329/#499 continúan abiertas por
+callbacks, pathfinding y aceptación visual/framebuffer.

@@ -3036,6 +3036,17 @@ pub fn remove_closed_industries(
     industries: &mut Vec<Industry>,
     map: &mut crate::map::Map,
 ) -> Vec<TileCoord> {
+    remove_closed_industries_with_random(industries, map, None)
+}
+
+/// Variante interna que puede alinear el consumo de `Random()` de
+/// `MakeWaterKeepingClass` cuando una industria acuática libera su huella.
+fn remove_closed_industries_with_random(
+    industries: &mut Vec<Industry>,
+    map: &mut crate::map::Map,
+    random: Option<&mut Randomizer>,
+) -> Vec<TileCoord> {
+    let mut random = random;
     let mut closed_at = Vec::new();
     industries.retain(|ind| {
         if !ind.is_closing() {
@@ -3053,7 +3064,18 @@ pub fn remove_closed_industries(
                     .map(|current| crate::map::water_class_from_m1(current.m1))
                     .filter(|class| *class != crate::map::WaterClass::Invalid)
                     .unwrap_or(crate::map::WaterClass::Sea);
-                let _ = crate::map::make_water_tile(map, tile, water_class);
+                let random_bits = match water_class {
+                    crate::map::WaterClass::Canal | crate::map::WaterClass::River => random
+                        .as_deref_mut()
+                        .map_or(0, |rng| u8::try_from(rng.next() & 0xFF).unwrap_or(0)),
+                    crate::map::WaterClass::Sea | crate::map::WaterClass::Invalid => 0,
+                };
+                let _ = crate::map::make_water_tile_with_random_bits(
+                    map,
+                    tile,
+                    water_class,
+                    random_bits,
+                );
             } else {
                 let _ = map.set_kind(tile, crate::map::TileKind::Grass);
                 let _ = map.set_m1(tile, 0);
@@ -3080,6 +3102,25 @@ pub fn remove_closed_industries_with_neutral_stations(
     map: &mut crate::map::Map,
     stations: &mut Vec<Station>,
 ) -> Vec<TileCoord> {
+    remove_closed_industries_with_neutral_stations_impl(industries, map, stations, None)
+}
+
+/// Variante de cierre mensual que también conserva el consumo del RNG global.
+pub fn remove_closed_industries_with_neutral_stations_and_random(
+    industries: &mut Vec<Industry>,
+    map: &mut crate::map::Map,
+    stations: &mut Vec<Station>,
+    random: &mut Randomizer,
+) -> Vec<TileCoord> {
+    remove_closed_industries_with_neutral_stations_impl(industries, map, stations, Some(random))
+}
+
+fn remove_closed_industries_with_neutral_stations_impl(
+    industries: &mut Vec<Industry>,
+    map: &mut crate::map::Map,
+    stations: &mut Vec<Station>,
+    random: Option<&mut Randomizer>,
+) -> Vec<TileCoord> {
     let closed_industry_ids: std::collections::HashSet<_> = industries
         .iter()
         .filter(|industry| industry.is_closing())
@@ -3090,7 +3131,7 @@ pub fn remove_closed_industries_with_neutral_stations(
         .filter(|industry| industry.is_closing())
         .filter_map(|industry| industry.neutral_station_id)
         .collect();
-    let closed = remove_closed_industries(industries, map);
+    let closed = remove_closed_industries_with_random(industries, map, random);
     if !closed_station_ids.is_empty() || !closed_industry_ids.is_empty() {
         stations.retain(|station| {
             !closed_station_ids.contains(&station.ottd_station_id.unwrap_or(u32::MAX))
@@ -3638,12 +3679,16 @@ mod tests {
         station.neutral_industry_id = Some(7);
         let mut industries = vec![rig];
         let mut stations = vec![station];
+        let mut random = Randomizer::new(0x1357);
+        let mut expected_random = random;
+        let expected_river_bits = u8::try_from(expected_random.next() & 0xFF).expect("random byte");
 
         assert_eq!(
-            remove_closed_industries_with_neutral_stations(
+            remove_closed_industries_with_neutral_stations_and_random(
                 &mut industries,
                 &mut map,
                 &mut stations,
+                &mut random,
             ),
             vec![origin]
         );
@@ -3660,7 +3705,12 @@ mod tests {
                     crate::map::WaterClass::Sea
                 })
             );
+            assert_eq!(
+                map.get(coord).map(|tile| tile.m3hi),
+                Some(if index == 0 { expected_river_bits } else { 0 })
+            );
         }
+        assert_eq!(random, expected_random);
     }
 
     #[test]

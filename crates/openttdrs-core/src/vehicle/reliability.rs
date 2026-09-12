@@ -378,9 +378,6 @@ impl super::model::Vehicle {
         breakdown_level: u8,
         no_servicing_if_no_breakdowns: bool,
     ) {
-        if !self.running {
-            return;
-        }
         if breakdown_level == 0 && no_servicing_if_no_breakdowns {
             return;
         }
@@ -390,7 +387,7 @@ impl super::model::Vehicle {
         self.reliability = decay_reliability_port(self.reliability, self.reliability_spd_dec);
         self.needs_servicing = self.requires_service();
 
-        if breakdown_level == 0 {
+        if breakdown_level == 0 || !self.running {
             return;
         }
         if self.breakdown_ctr != 0 {
@@ -1266,6 +1263,26 @@ mod tests {
         assert_eq!(state.vehicles[0].breakdown_chance, u8::MAX);
         assert_eq!(state.vehicles[0].breakdown_ctr, 0);
         assert!(!state.vehicles[0].needs_servicing);
+    }
+
+    #[test]
+    fn stopped_vehicle_still_decays_reliability_in_economy_sweep() {
+        let pos = TileCoord::new(1, 1);
+        let mut vehicle = Vehicle::new(1, VehicleKind::Bus, pos, pos);
+        vehicle.running = false;
+        vehicle.reliability = 5_000;
+        vehicle.reliability_spd_dec = 80;
+        vehicle.breakdown_chance = 17;
+        let reliability_before = vehicle.reliability;
+        let mut state = crate::GameState::new(8, 8);
+        state.vehicles.push(vehicle);
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+
+        assert!(state.vehicles[0].reliability < reliability_before);
+        assert_eq!(state.vehicles[0].breakdown_chance, 17);
+        assert_eq!(state.vehicles[0].breakdown_ctr, 0);
     }
 
     #[test]

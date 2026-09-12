@@ -5189,6 +5189,13 @@ contador persistido ahora refleja qué unidades llegan al incremento nativo.
 #329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
 framebuffer.
 
+Actualización #329/#567-STOPPED-RELIABILITY-DECAY (2026-09-11): el barrido
+económico degrada `reliability` también en vehículos detenidos, igual que
+`CheckVehicleBreakdown` antes de comprobar `VehState::Stopped`; el estado
+detenido sólo impide acumular una nueva avería. La regresión cubre un autobús
+detenido dentro del slot diario. #329/#567 continúan abiertas por callbacks,
+pathfinding y aceptación visual/framebuffer.
+
 Actualización #329/#567-VEHICLE-VALUE-DEPRECIATION (2026-09-11): las unidades
 compradas guardan ahora el coste de compra en `Vehicle::value`, y el barrido
 económico aplica `value -= value >> 8` cada ocho incrementos del contador

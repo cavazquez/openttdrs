@@ -46,10 +46,7 @@ const fn ship_depot_m5_for_dir(dir: u8) -> u8 {
     0x30 | PART_AXIS_BY_DIR[dir as usize & 0x03]
 }
 
-fn object_clear_footprint(
-    state: &GameState,
-    c: TileCoord,
-) -> Result<Vec<TileCoord>, CommandError> {
+fn object_clear_footprint(state: &GameState, c: TileCoord) -> Result<Vec<TileCoord>, CommandError> {
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let object_id = object_id_from_tile(&tile).ok_or(CommandError::ObjectInTheWay)?;
     let (origin, width, height) = if let Some(object) = state

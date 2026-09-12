@@ -61,6 +61,17 @@ pub fn rail_build_cost_factored(ge: &GlobalEconomy, cost_multiplier: u16) -> i64
     base.saturating_mul(i64::from(factor)) / 8
 }
 
+/// Ingreso por retirar una pieza de vía (`RailClearCost`).
+///
+/// `OpenTTD` limita el reembolso configurado por `PR_CLEAR_RAIL` a tres
+/// cuartos del coste de construcción cuando el tipo de vía es muy barato.
+#[must_use]
+pub fn rail_clear_cost(ge: &GlobalEconomy, cost_multiplier: u16) -> i64 {
+    let configured = get_price(ge, PriceIndex::ClearRail, 1, 0);
+    let build_cost = rail_build_cost_factored(ge, cost_multiplier);
+    configured.max(-(build_cost.saturating_mul(3) / 4))
+}
+
 /// Coste por tesela de carretera (`Price::BuildRoad`).
 #[must_use]
 pub fn road_build_cost(ge: &GlobalEconomy) -> i64 {
@@ -260,6 +271,14 @@ mod tests {
         assert_eq!(
             rail_build_cost(&ge),
             medium_default_price(PriceIndex::BuildRail)
+        );
+        assert_eq!(
+            rail_clear_cost(&ge, 0),
+            medium_default_price(PriceIndex::ClearRail)
+        );
+        assert_eq!(
+            road_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearRoad)
         );
         assert_eq!(
             station_build_cost(&ge),

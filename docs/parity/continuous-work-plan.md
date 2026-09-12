@@ -5558,3 +5558,12 @@ válida, conserva la restauración acuática y cobra el coste del objeto una sol
 vez. Los objetos `CannotRemove` siguen bloqueando de forma atómica. La
 regresión cubre ambos contratos y el avance del RNG. #329/#567 siguen abiertas
 por infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-ECONOMY-CLEAR-RAIL-ROAD-INDEX (2026-09-12): la tabla
+local vuelve a alinear `PR_CLEAR_RAIL` (27) y `PR_CLEAR_ROAD` (41) con
+`economy_type.h`/`pricebase.h`; antes `road_clear_cost` leía por error el
+reembolso ferroviario. Se expone también la fórmula `RailClearCost`, con el
+límite nativo de tres cuartos del coste de construcción. La prueba de precios
+cubre ambos índices antes de reutilizarlos en limpieza compuesta. #329/#567
+siguen abiertas por infraestructura, callbacks, pathfinding y aceptación
+visual/framebuffer.

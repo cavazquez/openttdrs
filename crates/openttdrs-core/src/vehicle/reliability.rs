@@ -820,6 +820,32 @@ fn check_road_vehicle_needs_service(state: &mut crate::GameState, idx: usize) {
     vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
 }
 
+/// Comprueba que una orden aérea temporal todavía apunta a un hangar de una
+/// estación utilizable por el avión.
+fn aircraft_service_hangar_is_valid(
+    state: &crate::GameState,
+    vehicle: &crate::vehicle::Vehicle,
+    depot: crate::map::TileCoord,
+) -> bool {
+    use crate::airport::airport_tile_is_hangar;
+    use crate::airport_class::airport_allows_aircraft;
+    use crate::engine::aircraft_is_helicopter_def;
+    use crate::newgrf_callback::engine_for_vehicle_catalog;
+    use crate::vehicle::VehicleKind;
+
+    if !airport_tile_is_hangar(&state.map, depot) {
+        return false;
+    }
+    let engine = engine_for_vehicle_catalog(&state.engine_catalog, vehicle);
+    let is_helicopter = aircraft_is_helicopter_def(engine);
+    state.stations.iter().any(|station| {
+        station.has_airport_facility()
+            && station.covers_tile(depot)
+            && station.can_service_vehicle(VehicleKind::Aircraft)
+            && airport_allows_aircraft(station.airport_spec, is_helicopter)
+    })
+}
+
 /// Revisa una aeronave que ya está en un hangar o cuyo aeropuerto objetivo
 /// ofrece un hangar (`CheckIfAircraftNeedsService`).
 ///
@@ -838,7 +864,7 @@ fn check_aircraft_needs_service(state: &mut crate::GameState, idx: usize) {
                 .is_some_and(|order| match order {
                     VehicleOrder::Depot {
                         depot, stop: false, ..
-                    } => !airport_tile_is_hangar(&state.map, *depot),
+                    } => !aircraft_service_hangar_is_valid(state, vehicle, *depot),
                     _ => false,
                 })
     });
@@ -1741,6 +1767,53 @@ mod tests {
             .find(|&tile| crate::airport::airport_tile_is_hangar(&state.map, tile))
             .unwrap();
         state.map.set_kind(hangar, TileKind::Grass).unwrap();
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(state.vehicles[0].orders.len(), 1);
+        assert!(matches!(
+            state.vehicles[0].current_order_ref(),
+            Some(VehicleOrder::Station { station, .. }) if *station == airport
+        ));
+    }
+
+    #[test]
+    fn aircraft_service_order_is_removed_when_station_loses_airport_facility() {
+        use crate::vehicle::order::VehicleOrder;
+        use crate::{Command, GameState, apply_command};
+
+        let mut state = GameState::new(20, 20);
+        let origin = TileCoord::new(2, 2);
+        apply_command(
+            &mut state,
+            &Command::PlaceAirportArea {
+                origin,
+                axis_y: false,
+                spec: crate::AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        let airport = state.stations[0].pos;
+        let mut aircraft = Vehicle::new(1, VehicleKind::Aircraft, TileCoord::new(14, 14), airport);
+        aircraft.running = true;
+        aircraft.aircraft_phase = crate::vehicle::AircraftPhase::Flying;
+        aircraft.service_interval_days = 1;
+        aircraft.last_service_day = 0;
+        aircraft.orders = vec![VehicleOrder::station(airport)];
+        state.vehicles.push(aircraft);
+        state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
+        state.sync_timers_from_tick();
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+        assert!(matches!(
+            state.vehicles[0].current_order_ref(),
+            Some(VehicleOrder::Depot { stop: false, .. })
+        ));
+
+        // Conserva la pieza Airport para distinguir una estación inválida de
+        // una demolición del hangar: el contrato nativo cancela igualmente la
+        // orden temporal cuando el aeropuerto deja de ser utilizable.
+        state.stations[0].facilities = crate::station::StopKind::Dock.facilities_mask() as u8;
         process_vehicle_economy_day(&mut state);
 
         assert_eq!(state.vehicles[0].orders.len(), 1);

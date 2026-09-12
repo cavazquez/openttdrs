@@ -6055,3 +6055,18 @@ temporal aún vive en `SimulationRuntime`; falta serializar el pool nativo
 `Engine::company_avail/preview_*`, completar el botón/feedback visual de
 aceptación y los callbacks de vehículos. #329/#567 siguen abiertas y #326
 permanece abierta.
+
+Corrección #329/#567-VEHICLE-PREVIEW-UI (2026-09-12, `94234caf`): la noticia
+de vehículo con una oferta exclusiva para la compañía activa muestra ahora
+`Aceptar preview` y despacha `WantEnginePreview` por la misma ruta autoritativa
+del HUD. La aceptación cierra el popup y deja feedback visible; una oferta
+expirada conserva el error estándar y no se consume. El showcase del menú
+mantiene una fecha determinista de 1961 para exhibir ferry, helicóptero, tren,
+bus y maglev, mientras que los vehículos preconstruidos usan una excepción
+temporal de bootstrap y restauran el catálogo inmediatamente, sin ampliar la
+disponibilidad real del jugador. El constructor también sincroniza calendario
+y timers con `start_year`. La suite del cliente pasó 1422 tests (2 ignorados),
+además de Clippy estricto en core y cliente, formato y `git diff --check`.
+La serialización SAV del pool nativo `Engine::company_avail/preview_*` y los
+callbacks restantes siguen pendientes; #329/#567 continúan abiertas y #326
+permanece abierta.

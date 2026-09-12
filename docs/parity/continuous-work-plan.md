@@ -6125,3 +6125,16 @@ Pasaron 1424 tests del cliente (2 ignorados), 12 focalizados del panel,
 Clippy estricto en core y cliente, formato y `git diff --check`. #567 sigue
 abierta por callbacks, vecinos, estado naval restante y comparación visual;
 #326 permanece abierta.
+
+Corrección #329-VEHICLE-CB31-AUTOREPLACE (2026-09-12, `47a72ced`): el flujo
+de autoreemplazo consulta `CBID_VEHICLE_START_STOP_CHECK` cuando la unidad aún
+está en marcha y la operación necesita detenerla, usando el motor NewGRF
+activo. Un rechazo conserva el writeback de registros persistentes, deja el
+diagnóstico textual y publica la noticia de fallo sin cambiar motor ni cobrar;
+una unidad ya detenida en depósito no se consulta de nuevo, igual que el
+camino nativo de `AutoReplace`. La regresión cubre rechazo `D010`, preservación
+del motor y posterior reemplazo exitoso cuando la unidad ya está detenida.
+Pasaron 2684 tests del core (1 ignorado), 16 focalizados de autoreemplazo,
+Clippy estricto en core y cliente, formato y `git diff --check`. #329 sigue
+abierta por CB31 en órdenes de depot, callbacks avanzados y APIs legacy sin
+catálogo; #326/#567 permanecen abiertas.

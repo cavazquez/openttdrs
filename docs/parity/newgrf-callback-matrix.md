@@ -1337,8 +1337,11 @@ evalúa `CBID_VEHICLE_START_STOP_CHECK` antes de tocar cualquier bit `running`.
 Una denegación devuelve `NewGrfCallbackDenied`, deja la flota sin cambios
 parciales y conserva el diagnóstico efímero de la unidad que rechazó para el
 feedback textual de #434. La lista de vehículos usa el mismo catálogo y locale
-que las acciones individuales. Las reglas de CB31 para autoreemplazo y órdenes
-de depot siguen pendientes en #329.
+que las acciones individuales. `try_autoreplace_vehicle` evalúa ahora CB31
+cuando el autoreemplazo debe detener una unidad en marcha, conserva el
+writeback persistente y publica el rechazo como noticia/diagnóstico; una unidad
+ya detenida en depósito no recibe una segunda evaluación. Las reglas de CB31
+para órdenes de depot siguen pendientes en #329.
 
 ### #329-VEHICLE-LENGTH-VERSION — frontera CB11/CB36
 

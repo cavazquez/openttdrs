@@ -623,7 +623,8 @@ fn vehicle_is_in_depot_panel(
     depot_pos: TileCoord,
     vehicle: &openttdrs_core::Vehicle,
 ) -> bool {
-    vehicle.pos == depot_pos && openttdrs_core::vehicle_is_in_depot(&sim.state.map, vehicle)
+    openttdrs_core::vehicle_is_in_depot(&sim.state.map, vehicle)
+        && openttdrs_core::vehicle_at_depot_command_tile(&sim.state.map, vehicle, depot_pos)
 }
 
 fn vehicles_at_depot(sim: &SimWorld, depot_pos: TileCoord) -> Vec<&openttdrs_core::Vehicle> {
@@ -1720,6 +1721,34 @@ mod tests {
         };
 
         let listed = vehicles_at_depot(&sim, depot);
+        assert_eq!(
+            listed.iter().map(|vehicle| vehicle.id).collect::<Vec<_>>(),
+            [1]
+        );
+    }
+
+    #[test]
+    fn depot_panel_matches_ship_from_opposite_depot_section() {
+        let mut state = GameState::new(12, 12);
+        let origin = TileCoord::new(5, 4);
+        let [first, second] = openttdrs_core::ship_depot_footprint(origin, 0);
+        for tile in [first, second] {
+            state.map.set_kind(tile, TileKind::Water).unwrap();
+        }
+        apply_command(&mut state, &Command::PlaceShipDepotDir(origin, 0)).unwrap();
+        let north = openttdrs_core::ship_depot_north_tile(&state.map, origin).unwrap();
+        let south = openttdrs_core::ship_depot_other_tile(&state.map, north).unwrap();
+
+        // Los saves legacy pueden conservar la sección opuesta en `Vehicle::pos`.
+        let mut ship = Vehicle::new(1, VehicleKind::Ship, south, north);
+        ship.ship_state = openttdrs_core::ship_movement::SHIP_STATE_DEPOT;
+        state.vehicles.push(ship);
+        let sim = SimWorld {
+            state,
+            ..SimWorld::default()
+        };
+
+        let listed = vehicles_at_depot(&sim, north);
         assert_eq!(
             listed.iter().map(|vehicle| vehicle.id).collect::<Vec<_>>(),
             [1]

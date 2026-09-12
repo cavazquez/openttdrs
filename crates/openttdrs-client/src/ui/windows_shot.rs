@@ -13,7 +13,8 @@
 //! zoom de la cámara del mapa antes de abrir la ventana (UI sin escalar).
 //! `OPENTTDRS_WINDOW_SHOT_DEPOT_KIND=road|rail|ship` selecciona la familia
 //! de depósito para la captura de `Depot`; sin ella conserva road/rail y usa
-//! un depósito naval sólo si no hay otro.
+//! un depósito naval sólo si no hay otro. Para barcos prioriza un depósito con
+//! una unidad estacionada, si el save ofrece uno.
 //! Para `TownAuthority`, `OPENTTDRS_TOWN_AUTHORITY_SHOT_STATE=normal|no-funds|unavailable`
 //! prepara estados reproducibles para el oráculo visual de #295.
 
@@ -1423,6 +1424,7 @@ fn first_depot(sim: &SimWorld) -> Option<TileCoord> {
     let requested = window_shot_depot_kind();
     let (w, h) = sim.state.map.dimensions();
     let mut first_ship = None;
+    let mut first_ship_with_vehicle = None;
     for y in 0..h {
         for x in 0..w {
             let pos = TileCoord::new(x.cast_signed(), y.cast_signed());
@@ -1435,8 +1437,18 @@ fn first_depot(sim: &SimWorld) -> Option<TileCoord> {
                 if first_ship.is_none() {
                     first_ship = Some(canonical);
                 }
-                if requested == WindowShotDepotKind::Ship {
-                    return Some(canonical);
+                if first_ship_with_vehicle.is_none()
+                    && sim.state.vehicles.iter().any(|vehicle| {
+                        vehicle.kind == VehicleKind::Ship
+                            && openttdrs_core::vehicle_is_in_depot(&sim.state.map, vehicle)
+                            && openttdrs_core::vehicle_at_depot_command_tile(
+                                &sim.state.map,
+                                vehicle,
+                                canonical,
+                            )
+                    })
+                {
+                    first_ship_with_vehicle = Some(canonical);
                 }
                 continue;
             }
@@ -1453,8 +1465,11 @@ fn first_depot(sim: &SimWorld) -> Option<TileCoord> {
             }
         }
     }
+    if requested == WindowShotDepotKind::Ship {
+        return first_ship_with_vehicle.or(first_ship);
+    }
     (requested == WindowShotDepotKind::Any)
-        .then_some(first_ship)
+        .then_some(first_ship_with_vehicle.or(first_ship))
         .flatten()
 }
 

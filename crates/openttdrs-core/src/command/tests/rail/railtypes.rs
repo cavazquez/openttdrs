@@ -2,7 +2,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use crate::command::{Command, CommandError, apply_command};
+use crate::command::{Command, CommandError, apply_command, command_would_fail};
 use crate::test_fixtures::SandboxMap;
 use crate::{GameState, TileCoord};
 
@@ -25,6 +25,131 @@ fn convert_rail_preserves_trackbits_and_sets_electric() {
 
     apply_command(&mut s, &Command::ConvertRail(c, RailType::Rail.as_u8())).unwrap();
     assert_eq!(rail_type_from_tile(s.map.get(c).unwrap()), RailType::Rail);
+}
+
+#[test]
+fn convert_rail_bridge_updates_both_ramps_and_scales_cost() {
+    use crate::bridge_spec::{BridgeType, bridge_total_length};
+    use crate::rail_type::{RAIL_CONVERT_COST, RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(10, 6);
+    s.economy.money = 100_000;
+    for x in 2..=3 {
+        s.map
+            .set_kind(TileCoord::new(x, 2), crate::TileKind::Water)
+            .unwrap();
+    }
+    let start = TileCoord::new(1, 2);
+    let end = TileCoord::new(4, 2);
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBridge(start, end, BridgeType::Wooden),
+    )
+    .unwrap();
+
+    let money_before = s.economy.money;
+    apply_command(
+        &mut s,
+        &Command::ConvertRail(start, RailType::Electric.as_u8()),
+    )
+    .unwrap();
+
+    assert_eq!(
+        rail_type_from_tile(s.map.get(start).unwrap()),
+        RailType::Electric
+    );
+    assert_eq!(
+        rail_type_from_tile(s.map.get(end).unwrap()),
+        RailType::Electric
+    );
+    assert_eq!(
+        s.economy.money,
+        money_before - RAIL_CONVERT_COST * i64::from(bridge_total_length(start, end))
+    );
+}
+
+#[test]
+fn convert_rail_bridge_rejects_endpoint_vehicle_atomically() {
+    use crate::bridge_spec::BridgeType;
+    use crate::rail_type::RailType;
+
+    let mut s = GameState::new(10, 6);
+    s.economy.money = 100_000;
+    for x in 2..=3 {
+        s.map
+            .set_kind(TileCoord::new(x, 2), crate::TileKind::Water)
+            .unwrap();
+    }
+    let start = TileCoord::new(1, 2);
+    let end = TileCoord::new(4, 2);
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBridge(start, end, BridgeType::Wooden),
+    )
+    .unwrap();
+    let before = [s.map.get(start).unwrap(), s.map.get(end).unwrap()];
+    let money_before = s.economy.money;
+    s.vehicles.push(crate::Vehicle::new(
+        1,
+        crate::VehicleKind::Train,
+        start,
+        end,
+    ));
+    let command = Command::ConvertRail(start, RailType::Monorail.as_u8());
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(CommandError::VehicleInTheWay)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(CommandError::VehicleInTheWay)
+    );
+    assert_eq!([s.map.get(start).unwrap(), s.map.get(end).unwrap()], before);
+    assert_eq!(s.economy.money, money_before);
+}
+
+#[test]
+fn convert_rail_tunnel_updates_both_mouths_and_keeps_middle_terrain() {
+    use crate::rail_type::{RAIL_CONVERT_COST, RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(16, 16);
+    s.economy.money = 100_000;
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    s.map.set_height(c(5, 5), 2).unwrap();
+    s.map.set_height(c(5, 6), 2).unwrap();
+    s.map.set_height(c(6, 5), 1).unwrap();
+    s.map.set_height(c(6, 6), 1).unwrap();
+    s.map.set_height(c(3, 5), 1).unwrap();
+    s.map.set_height(c(3, 6), 1).unwrap();
+    s.map.set_height(c(4, 5), 2).unwrap();
+    s.map.set_height(c(4, 6), 2).unwrap();
+    let start = c(5, 5);
+    let middle = c(4, 5);
+    let end = c(3, 5);
+    apply_command(&mut s, &Command::PlaceRailTunnel(start, end)).unwrap();
+
+    let money_before = s.economy.money;
+    apply_command(
+        &mut s,
+        &Command::ConvertRail(start, RailType::Electric.as_u8()),
+    )
+    .unwrap();
+
+    assert_eq!(
+        rail_type_from_tile(s.map.get(start).unwrap()),
+        RailType::Electric
+    );
+    assert_eq!(
+        rail_type_from_tile(s.map.get(end).unwrap()),
+        RailType::Electric
+    );
+    assert_eq!(
+        rail_type_from_tile(s.map.get(middle).unwrap()),
+        RailType::Rail,
+        "el vano conserva el terreno y no se convierte dos veces"
+    );
+    assert_eq!(s.economy.money, money_before - RAIL_CONVERT_COST * 3);
 }
 
 #[test]

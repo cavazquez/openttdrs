@@ -12,9 +12,10 @@ use super::town;
 use super::transport::{
     check_airport_area, check_airport_area_with_explicit_layout, check_bridge_placement_with_state,
     check_clear_dock, check_clear_ship_depot, check_clear_tile, check_clear_tunnel_or_bridge,
-    check_clear_water, check_cycle_rail_signal_type, check_dock_placement_at_station_with_state,
-    check_dock_placement_with_state, check_object_can_be_auto_cleared, check_object_can_be_cleared,
-    check_place_aqueduct, check_place_buoy, check_place_canal, check_place_lock, check_place_rail,
+    check_clear_water, check_convert_rail, check_cycle_rail_signal_type,
+    check_dock_placement_at_station_with_state, check_dock_placement_with_state,
+    check_object_can_be_auto_cleared, check_object_can_be_cleared, check_place_aqueduct,
+    check_place_buoy, check_place_canal, check_place_lock, check_place_rail,
     check_place_rail_signal_oriented, check_place_rail_waypoint, check_place_river,
     check_place_road_bits, check_place_road_waypoint, check_rail_depot_placement,
     check_rail_station_area, check_rail_station_slope_callbacks,
@@ -141,13 +142,9 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
                 .err()
                 .or_else(|| check_remove_rail(map, *c).err())
         }
-        Command::ConvertRail(c, _) => require_tile_owned_by_active(state, *c).err().or_else(|| {
-            if map.get_kind(*c) == Some(crate::map::TileKind::Rail) {
-                None
-            } else {
-                Some(CommandError::NoRailToConvert)
-            }
-        }),
+        Command::ConvertRail(c, to) => {
+            check_convert_rail(state, *c, crate::rail_type::RailType::from_u8(*to)).err()
+        }
         Command::PlaceRailSignal(c, orientation, fract_x, fract_y, _)
         | Command::PlaceRailSignalWithVariant(c, orientation, fract_x, fract_y, _, _) => {
             require_tile_owned_by_active(state, *c).err().or_else(|| {

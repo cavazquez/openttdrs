@@ -5811,3 +5811,14 @@ ejecución. Una boca de otro puente, un túnel o un vano que cruza el trazado
 devuelve `MustDemolishBridgeFirst`/`MustDemolishTunnelFirst` sin mutar mapa ni
 dinero. #329/#567 continúa abierta por ownership más amplio, variantes,
 callbacks y aceptación visual/framebuffer restantes.
+
+Corrección #329/#567-CONVERT-RAIL-TUNNEL-BRIDGE (2026-09-12): `ConvertRail`
+ya reconoce `MP_TUNNELBRIDGE` ferroviario y resuelve la pareja completa de
+bocas, tanto en túneles locales materializados como en puentes con vano de
+agua. El cambio de `m8` se aplica a ambos extremos, el coste usa toda la
+longitud nativa del enlace y el preview comparte propiedad, fondos y bloqueo
+por vehículos cuando la nueva red es incompatible. Las reservas PBS de una
+boca se liberan si el consist deja de tener potencia con el nuevo tipo; el
+vano/terreno intermedio no se reescribe. #329/#567 continúa abierta por
+estaciones, depósitos, infraestructura, callbacks, pathfinding restante y
+aceptación visual/framebuffer.

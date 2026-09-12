@@ -4,7 +4,7 @@ use crate::economy::{
 };
 use crate::map::{
     Map, TileCoord, TileKind, opposite_diag_dir, rail_bit_for_sides, rail_bits_touching_side,
-    rail_trackbits_valid_on_slope, tile_slope_and_z,
+    rail_trackbits_valid_on_slope, resolve_existing_tunnel_end, tile_slope_and_z,
 };
 use crate::pathfinder::{station_entrance_faces_rail, station_site_tile_allows_build};
 use crate::rail_signals::{
@@ -18,9 +18,9 @@ use super::shared::check_object_can_be_auto_cleared;
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
-    check_in_bounds, place_single_transport_tile, place_single_transport_tile_with_depot_id,
-    propagate_rail_diag_to_neighbors, refresh_track_junction_from_neighbor, register_depot,
-    trackbits_to_signal_present,
+    axis_line, check_in_bounds, place_single_transport_tile,
+    place_single_transport_tile_with_depot_id, propagate_rail_diag_to_neighbors,
+    refresh_track_junction_from_neighbor, register_depot, trackbits_to_signal_present,
 };
 
 pub(crate) fn check_place_rail(map: &Map, c: TileCoord) -> Result<(), CommandError> {
@@ -620,18 +620,149 @@ pub(in crate::command) fn remove_rail(
     remove_rail_bits(state, c, 0x3F)
 }
 
+fn rail_tunnel_other_end(map: &Map, c: TileCoord) -> Option<TileCoord> {
+    let tile = map.get(c)?;
+    if tile.kind != TileKind::RailTunnel
+        || !tile.is_tunnel_bridge_tile()
+        || tile.m5 & 0x80 != 0
+        || tile.m5 & 0x0C != 0
+    {
+        return None;
+    }
+    let (tileh, _) = tile_slope_and_z(map, c)?;
+    crate::map::inclined_slope_direction(tileh)?;
+
+    let other = crate::pathfinder::tunnel_other_end(map, c, TileKind::RailTunnel)
+        .or_else(|| resolve_existing_tunnel_end(map, c))?;
+    let other_tile = map.get(other)?;
+    (other_tile.kind == TileKind::RailTunnel
+        && other_tile.is_tunnel_bridge_tile()
+        && other_tile.m5 & 0x80 == 0
+        && other_tile.m5 & 0x0C == 0)
+        .then_some(other)
+}
+
+fn rail_portal_other_end(map: &Map, c: TileCoord) -> Option<TileCoord> {
+    match map.get_kind(c) {
+        Some(TileKind::RailTunnel) => rail_tunnel_other_end(map, c),
+        Some(TileKind::RailBridge) => {
+            let tile = map.get(c)?;
+            if !tile.is_tunnel_bridge_tile() || tile.m5 & 0x80 == 0 || tile.m5 & 0x0C != 0 {
+                return None;
+            }
+            let other = crate::rail_bridge_other_end(map, c)?;
+            let other_tile = map.get(other)?;
+            (other_tile.kind == TileKind::RailBridge
+                && other_tile.is_tunnel_bridge_tile()
+                && other_tile.m5 & 0x80 != 0
+                && other_tile.m5 & 0x0C == 0)
+                .then_some(other)
+        }
+        _ => None,
+    }
+}
+
+fn rail_conversion_endpoints(map: &Map, c: TileCoord) -> Result<[TileCoord; 2], CommandError> {
+    let tile = map.get(c).ok_or(CommandError::OutOfBounds)?;
+    match tile.kind {
+        TileKind::Rail => Ok([c, c]),
+        TileKind::RailTunnel | TileKind::RailBridge => rail_portal_other_end(map, c)
+            .map(|other| [c, other])
+            .ok_or(CommandError::NoRailToConvert),
+        _ => Err(CommandError::NoRailToConvert),
+    }
+}
+
+pub(in crate::command) fn check_convert_rail(
+    state: &GameState,
+    c: TileCoord,
+    to_type: crate::rail_type::RailType,
+) -> Result<(), CommandError> {
+    check_in_bounds(&state.map, c)?;
+    let endpoints = rail_conversion_endpoints(&state.map, c)?;
+    require_tile_owned_by_active(state, endpoints[0])?;
+    if endpoints[1] != endpoints[0] {
+        require_tile_owned_by_active(state, endpoints[1])?;
+    }
+
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let current = crate::rail_type::rail_type_from_tile(tile);
+    if current == to_type
+        || (state.construction.disable_elrails
+            && current == crate::rail_type::RailType::Electric
+            && to_type == crate::rail_type::RailType::Rail)
+    {
+        return Ok(());
+    }
+
+    let is_portal = endpoints[1] != endpoints[0];
+    if is_portal {
+        // `TunnelBridgeIsFree` is deliberately checked only for conversions
+        // between incompatible rail networks. Rail <-> electric may happen
+        // while a train is on the portal, just like in OpenTTD.
+        if !crate::rail_type::rail_types_compatible_with_props(
+            current,
+            to_type,
+            &state.runtime.rail_type_props,
+        ) && state.vehicles.iter().any(|vehicle| {
+            endpoints.contains(&vehicle.pos)
+                && matches!(
+                    vehicle.kind,
+                    crate::vehicle::VehicleKind::Train
+                        | crate::vehicle::VehicleKind::Truck
+                        | crate::vehicle::VehicleKind::Bus
+                        | crate::vehicle::VehicleKind::Tram
+                        | crate::vehicle::VehicleKind::Ship
+                )
+        }) {
+            return Err(CommandError::VehicleInTheWay);
+        }
+    } else if state.vehicles.iter().any(|vehicle| {
+        vehicle.pos == c && train_incompatible_with_rail_type(state, vehicle, to_type)
+    }) {
+        // No convertir si un tren en la tesela quedaría incompatible con el
+        // nuevo tipo; se conserva el error específico de la orden plana.
+        return Err(CommandError::TrainIncompatibleWithRailType);
+    }
+
+    let span_tiles = if is_portal {
+        i64::try_from(axis_line(c, endpoints[1]).len()).unwrap_or(i64::MAX)
+    } else {
+        1
+    };
+    let conversion_cost = crate::rail_type::RAIL_CONVERT_COST.saturating_mul(span_tiles);
+    if state.economy.money < conversion_cost {
+        return Err(CommandError::InsufficientFunds);
+    }
+    Ok(())
+}
+
+fn train_incompatible_with_rail_type(
+    state: &GameState,
+    vehicle: &crate::vehicle::Vehicle,
+    to_type: crate::rail_type::RailType,
+) -> bool {
+    vehicle.kind == crate::vehicle::VehicleKind::Train
+        && vehicle.engine_id.is_some_and(|engine_id| {
+            let required = crate::rail_type::required_rail_type_for_engine(engine_id);
+            !(required == to_type
+                || crate::rail_type::rail_types_compatible_with_props(
+                    required,
+                    to_type,
+                    &state.runtime.rail_type_props,
+                ))
+        })
+}
+
 /// Convierte el tipo de vía de una tesela (`CmdConvertRail`).
 pub(in crate::command) fn convert_rail(
     state: &mut GameState,
     c: TileCoord,
     to_type: crate::rail_type::RailType,
 ) -> Result<(), CommandError> {
-    check_in_bounds(&state.map, c)?;
-    require_tile_owned_by_active(state, c)?;
+    check_convert_rail(state, c, to_type)?;
+    let endpoints = rail_conversion_endpoints(&state.map, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
-    if tile.kind != TileKind::Rail {
-        return Err(CommandError::NoRailToConvert);
-    }
     let current = crate::rail_type::rail_type_from_tile(tile);
     if current == to_type {
         return Ok(());
@@ -645,30 +776,49 @@ pub(in crate::command) fn convert_rail(
     {
         return Ok(());
     }
-    // No convertir si un tren en la tesela quedaría incompatible con el nuevo tipo.
-    if state.vehicles.iter().any(|v| {
-        v.pos == c
-            && v.engine_id.is_some_and(|eid| {
-                let req = crate::rail_type::required_rail_type_for_engine(eid);
-                !(req == to_type
-                    || crate::rail_type::rail_types_compatible_with_props(
-                        req,
-                        to_type,
-                        &state.runtime.rail_type_props,
-                    ))
-            })
-    }) {
-        return Err(CommandError::TrainIncompatibleWithRailType);
+
+    let is_portal = endpoints[1] != endpoints[0];
+    let span_tiles = if is_portal {
+        i64::try_from(axis_line(c, endpoints[1]).len()).unwrap_or(i64::MAX)
+    } else {
+        1
+    };
+    let conversion_cost = crate::rail_type::RAIL_CONVERT_COST.saturating_mul(span_tiles);
+
+    if is_portal {
+        // The reservation is attached to the first portal in the native map
+        // format. It is enough to inspect the corresponding track and release
+        // the owning consist before changing its power contract.
+        if let Some(track) = crate::bridge_spec::tunnel_bridge_rail_track(tile) {
+            let reservation_owner = state.vehicles.iter().position(|vehicle| {
+                vehicle.kind == crate::vehicle::VehicleKind::Train
+                    && vehicle.is_consist_head()
+                    && train_incompatible_with_rail_type(state, vehicle, to_type)
+                    && vehicle
+                        .reserved_steps
+                        .iter()
+                        .any(|step| endpoints.contains(&step.tile) && step.track & track != 0)
+            });
+            if let Some(index) = reservation_owner {
+                crate::rail_pbs::free_train_track_reservation(
+                    &mut state.map,
+                    &mut state.vehicles[index],
+                    &mut state.runtime.reservation_tile_dirty,
+                );
+            }
+        }
     }
-    if state.economy.money < crate::rail_type::RAIL_CONVERT_COST {
-        return Err(CommandError::InsufficientFunds);
+
+    let endpoint_count = if is_portal { 2 } else { 1 };
+    for endpoint in endpoints.iter().take(endpoint_count).copied() {
+        let endpoint_tile = state.map.get(endpoint).ok_or(CommandError::OutOfBounds)?;
+        let out = crate::rail_type::set_rail_type_on_tile(endpoint_tile, to_type);
+        state
+            .map
+            .set_tile(endpoint, out)
+            .map_err(|_| CommandError::OutOfBounds)?;
     }
-    let out = crate::rail_type::set_rail_type_on_tile(tile, to_type);
-    state
-        .map
-        .set_tile(c, out)
-        .map_err(|_| CommandError::OutOfBounds)?;
-    state.economy.money -= crate::rail_type::RAIL_CONVERT_COST;
+    state.economy.money -= conversion_cost;
     Ok(())
 }
 

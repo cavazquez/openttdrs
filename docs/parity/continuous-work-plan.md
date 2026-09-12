@@ -6274,3 +6274,14 @@ comprueba ambos resultados. Pasaron 1432 tests del cliente (2 ignorados),
 Clippy estricto, formato y `git diff --check`. #329 continúa abierta por
 callbacks, vistas runtime completas y consumidores legacy restantes;
 #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-CARGO-LABEL-CATALOG-POS (2026-09-12, `162018f3`):
+las etiquetas de carga de diagnóstico reutilizan ahora la posición que el
+renderer acaba de resolver para la cabeza del vehículo, incluyendo capas
+NewGRF runtime y offsets del catálogo. Si no existe una entidad visual, el
+fallback usa `vehicle_sprite_pos_at_with_catalog`; en el flujo normal no se
+crea trabajo adicional cuando las etiquetas están desactivadas. La regresión
+comprueba que el texto conserve el desplazamiento de la capa custom. Pasaron
+1432 tests del cliente (2 ignorados), Clippy estricto, formato y
+`git diff --check`. #329 continúa abierta por callbacks, vistas runtime
+completas y consumidores legacy restantes; #326/#567 permanecen abiertas.

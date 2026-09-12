@@ -1698,3 +1698,11 @@ offsets/tamaño de la vista NewGRF del catálogo activo para calcular el centro
 seleccionable. Esto alinea el clic con el fallback visual catalog-aware y deja
 el radio y la prioridad por cercanía sin cambios; una vista runtime que aún no
 esté materializada conserva el fallback de catálogo.
+
+### #329-VEHICLE-CARGO-LABEL-CATALOG-POS — posición de etiqueta de carga
+
+Actualizado: 2026-09-12 (`162018f3`). Las etiquetas opcionales de carga del
+mapa toman la posición de la capa de vehículo que se resolvió en el mismo
+`update_vehicles`; esto evita que un sprite NewGRF desplazado deje el texto en
+la posición vanilla. El fallback conserva offsets del catálogo y el trabajo
+extra queda limitado a partidas con etiquetas de diagnóstico activas.

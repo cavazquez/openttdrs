@@ -146,6 +146,43 @@ pub fn sync_reservations_to_map(
     *prev_active = next_tracks.keys().copied().collect();
 }
 
+/// Libera reservas PBS que apuntan a teselas de infraestructura que se va a
+/// demoler. La operación se hace antes de cambiar el tipo de tesela para que
+/// también pueda poner en rojo las señales PBS y retirar los pasos del tren;
+/// los restos de terreno bajo un puente o dentro de un túnel importado no se
+/// incluyen en `tiles` y conservan sus reservas propias.
+pub fn clear_train_reservations_on_tiles(
+    map: &mut Map,
+    vehicles: &mut [Vehicle],
+    tiles: &[TileCoord],
+    active: &mut HashSet<TileCoord>,
+    dirty: &mut Vec<TileCoord>,
+) {
+    let affected: HashSet<TileCoord> = tiles.iter().copied().collect();
+    for vehicle in vehicles {
+        vehicle
+            .reserved_steps
+            .retain(|step| !affected.contains(&step.tile));
+    }
+    for &c in tiles {
+        active.remove(&c);
+        let Some(mut tile) = map.get(c) else {
+            continue;
+        };
+        if !is_rail_reservation_tile(tile.kind) {
+            continue;
+        }
+        if decode_rail_reservation_m2_hi(tile.m2_hi) == 0 {
+            continue;
+        }
+        set_pbs_signals_red_on_tile(&mut tile);
+        tile.m2_hi &= !RAIL_RESERVATION_M2_HI_MASK;
+        if map.set_tile(c, tile).is_ok() {
+            dirty.push(c);
+        }
+    }
+}
+
 /// `FreeTrainTrackReservation`: recorre la reserva tesela a tesela, pone PBS a rojo
 /// y limpia `reserved_steps` del tren (`train_cmd.cpp:2476-2536`).
 pub fn free_train_track_reservation(

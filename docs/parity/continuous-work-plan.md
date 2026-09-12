@@ -5738,3 +5738,12 @@ pareja cuando puede decodificar sus índices y actualiza vecinos/señales
 ferroviarios. La construcción, reservas y pathfinding completo de túneles y
 puentes aún requieren contratos propios; #329/#567 continúa abierta por esas
 diferencias y por callbacks, aceptación visual y framebuffer.
+
+Corrección #329/#567-TUNNEL-BRIDGE-RESERVATIONS (2026-09-12): al demoler
+una boca ferroviaria se liberan antes del cambio de tipo las reservas PBS de
+`m2_hi`, el conjunto efímero `reservation_tiles_active` y los
+`reserved_steps` de los trenes. Las señales PBS reciben la transición a rojo
+y el terreno ferroviario que un puente deja debajo no se incluye en la
+liberación. La infraestructura de túneles/puentes, sus reservas de tránsito y
+el pathfinding importado aún requieren cobertura adicional; #329/#567 continúa
+abierta por esas diferencias, callbacks, aceptación visual y framebuffer.

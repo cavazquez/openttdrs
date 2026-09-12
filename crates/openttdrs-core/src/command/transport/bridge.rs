@@ -40,6 +40,7 @@ struct TunnelBridgeClearPlan {
     kind: TileKind,
     end: TileCoord,
     line: Vec<TileCoord>,
+    clear_tiles: Vec<TileCoord>,
     is_tunnel: bool,
 }
 
@@ -152,10 +153,27 @@ fn tunnel_bridge_clear_plan(
         line
     };
 
+    let clear_tiles = if is_tunnel {
+        line.iter()
+            .enumerate()
+            .filter_map(|(index, tile)| {
+                let is_endpoint = index == 0 || index + 1 == line.len();
+                let is_synthetic_middle = state
+                    .map
+                    .get(*tile)
+                    .is_some_and(|raw| raw.kind == start.kind && raw.is_tunnel_bridge_tile());
+                (is_endpoint || is_synthetic_middle).then_some(*tile)
+            })
+            .collect()
+    } else {
+        vec![c, end]
+    };
+
     Ok(TunnelBridgeClearPlan {
         kind: start.kind,
         end,
         line,
+        clear_tiles,
         is_tunnel,
     })
 }
@@ -222,7 +240,7 @@ fn clear_structure_square(state: &mut GameState, c: TileCoord) -> Result<(), Com
         .map_err(|_| CommandError::OutOfBounds)?;
     state
         .map
-        .set_m2(c, 0)
+        .set_m2_u16(c, 0)
         .map_err(|_| CommandError::OutOfBounds)?;
     crate::command::sign::remove_signs_at(state, c);
     Ok(())
@@ -248,16 +266,18 @@ pub(in crate::command) fn clear_tunnel_or_bridge(
 ) -> Result<(), CommandError> {
     let plan = tunnel_bridge_clear_plan(state, c)?;
     let cost = tunnel_bridge_clear_cost(state, &plan);
+    if matches!(plan.kind, TileKind::RailTunnel | TileKind::RailBridge) {
+        crate::rail_pbs::clear_train_reservations_on_tiles(
+            &mut state.map,
+            &mut state.vehicles,
+            &plan.clear_tiles,
+            &mut state.runtime.reservation_tiles_active,
+            &mut state.runtime.reservation_tile_dirty,
+        );
+    }
     if plan.is_tunnel {
-        for (index, tile) in plan.line.iter().enumerate() {
-            let is_endpoint = index == 0 || index + 1 == plan.line.len();
-            let is_synthetic_middle = state
-                .map
-                .get(*tile)
-                .is_some_and(|raw| raw.kind == plan.kind && raw.is_tunnel_bridge_tile());
-            if is_endpoint || is_synthetic_middle {
-                clear_structure_square(state, *tile)?;
-            }
+        for tile in &plan.clear_tiles {
+            clear_structure_square(state, *tile)?;
         }
         remove_jgr_tunnel_record(state, c, plan.end);
     } else {

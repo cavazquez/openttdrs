@@ -148,6 +148,49 @@ fn clear_rail_tunnel_removes_synthetic_path_and_charges_full_length() {
 }
 
 #[test]
+fn clear_rail_bridge_releases_map_and_vehicle_reservations() {
+    let mut state = GameState::new(8, 8);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    for x in 2..=3 {
+        state.map.set_kind(c(x, 1), TileKind::Water).unwrap();
+    }
+    let start = c(1, 1);
+    let end = c(4, 1);
+    apply_command(
+        &mut state,
+        &Command::PlaceRailBridge(start, end, BridgeType::Wooden),
+    )
+    .unwrap();
+    let mut train = Vehicle::new(1, VehicleKind::Train, c(0, 1), c(5, 1));
+    train.reserved_steps = vec![
+        crate::rail_pbs::ReservedRailStep::new(start, RAIL_TB_X),
+        crate::rail_pbs::ReservedRailStep::new(end, RAIL_TB_X),
+    ];
+    state.vehicles.push(train);
+    crate::rail_pbs::sync_reservations_to_map(
+        &mut state.map,
+        &state.vehicles,
+        &mut state.runtime.reservation_tiles_active,
+        &mut state.runtime.reservation_tile_dirty,
+    );
+    assert!(crate::rail_pbs::rail_tile_has_pbs_reservation(
+        state.map.get(start).unwrap().m2_hi
+    ));
+    assert!(crate::rail_pbs::rail_tile_has_pbs_reservation(
+        state.map.get(end).unwrap().m2_hi
+    ));
+
+    apply_command(&mut state, &Command::ClearTile(start)).unwrap();
+
+    for tile in [start, end] {
+        assert_eq!(state.map.get_kind(tile), Some(TileKind::Grass));
+        assert_eq!(state.map.get(tile).unwrap().m2_hi, 0);
+        assert!(!state.runtime.reservation_tiles_active.contains(&tile));
+    }
+    assert!(state.vehicles[0].reserved_steps.is_empty());
+}
+
+#[test]
 fn clear_tunnel_bridge_rejects_endpoint_vehicle_atomically() {
     let mut state = GameState::new(8, 8);
     let c = |x: i32, y: i32| TileCoord::new(x, y);

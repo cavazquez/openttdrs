@@ -58,7 +58,8 @@ pub use wait_policy::{
 
 // Reexports públicos desde map_sync
 pub use map_sync::{
-    CROSSING_RESERVATION_M5_BIT, free_train_track_reservation, sync_reservations_to_map,
+    CROSSING_RESERVATION_M5_BIT, clear_train_reservations_on_tiles, free_train_track_reservation,
+    sync_reservations_to_map,
 };
 
 // Reexports públicos desde choose_track

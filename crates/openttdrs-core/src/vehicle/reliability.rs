@@ -254,7 +254,9 @@ impl super::model::Vehicle {
     /// Evaluación completa con ajustes de partida y autoreemplazo (`NeedsServicing`).
     #[must_use]
     pub fn requires_service_with(&self, state: &crate::GameState) -> bool {
-        if !self.running {
+        // `NeedsServicing` descarta tanto vehículos detenidos como chocados:
+        // ninguno puede desplazarse al depósito por servicio automático.
+        if !self.running || self.crashed {
             return false;
         }
         let servint_ispercent = state
@@ -1744,6 +1746,28 @@ mod tests {
         vehicle.breakdown_ctr = 64;
 
         assert!(vehicle.requires_service_for_company(false));
+    }
+
+    #[test]
+    fn crashed_vehicle_does_not_request_automatic_service() {
+        let mut state = crate::GameState::new(8, 8);
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        vehicle.running = true;
+        vehicle.crashed = true;
+        vehicle.service_interval_days = 1;
+        vehicle.last_service_day = 0;
+        vehicle.sim_tick = u64::from(crate::economy::TICKS_PER_DAY);
+
+        assert!(!vehicle.requires_service_with(&state));
+        state.vehicles.push(vehicle);
+        state.economy_timer.date_fract = 0;
+        process_vehicle_economy_day(&mut state);
+        assert!(state.vehicles[0].orders.is_empty());
     }
 
     #[test]

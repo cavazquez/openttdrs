@@ -5287,3 +5287,10 @@ orden de depósito hacia el mismo depósito conserva la prioridad de
 que esté usando la boca. La regresión evita que el gate global de concurrencia
 de salidas congele esa orden. #329/#567 continúan abiertas por callbacks,
 pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-CRASHED-SERVICE-GATE (2026-09-12):
+`requires_service_with` descarta explícitamente vehículos accidentados, igual
+que `NeedsServicing` nativo, incluso si un estado restaurado conserva
+`running=true` y un intervalo vencido. La regresión cubre tanto la consulta
+como el barrido económico sin insertar una orden temporal. #329/#567 continúan
+abiertas por callbacks, pathfinding y aceptación visual/framebuffer.

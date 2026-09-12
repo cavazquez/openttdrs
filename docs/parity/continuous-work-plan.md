@@ -6152,3 +6152,15 @@ unidad en marcha. Pasaron 2685 tests del core (1 ignorado), 2 focalizados,
 Clippy estricto en core y cliente, formato y `git diff --check`. #329 sigue
 abierta por callbacks avanzados, órdenes de depósito restantes y APIs legacy
 sin catálogo; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-SERVICE-RELIABILITY-CATALOG (2026-09-12, `68cdf07c`):
+`NeedsServicing` usa ahora la fiabilidad del motor resuelto en el catálogo
+activo cuando la compañía configura intervalos porcentuales. La fuente respeta
+la cadena `SyncReliability`, igual que el servicio efectivo en depósito; los
+vehículos custom ya no se comparan contra la fiabilidad del slot vanilla que
+ocupaban originalmente. La regresión contrasta un motor al 40% con el bus
+vanilla al 90% y verifica ambos lados del umbral. Pasaron 2686 tests del core
+(1 ignorado), el focalizado de fiabilidad, Clippy estricto en core y cliente,
+formato y `git diff --check`. #329 sigue abierta por callbacks avanzados,
+órdenes de depósito restantes y APIs legacy sin catálogo; #326/#567 permanecen
+abiertas.

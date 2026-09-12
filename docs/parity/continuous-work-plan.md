@@ -5262,6 +5262,14 @@ Actualización #329/#567-AIRCRAFT-IN-HANGAR-SERVICE (2026-09-12): el handler
 económico revisa una aeronave normal que ya está dentro de un hangar, respetando
 `servint_aircraft` y la misma evaluación de intervalo/averías. La regresión
 comprueba que restaura fiabilidad, limpia `needs_servicing` y reduce el
-acumulador de averías en el slot correcto. La búsqueda y desvío al hangar
-objetivo quedan como subetapa separada del FSM aeroportuario. #329/#567
-continúan abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+acumulador de averías en el slot correcto. #329/#567 continúan abiertas por
+callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-AIRCRAFT-SERVICE-ORDER (2026-09-12): si la aeronave
+tiene servicio pendiente y su orden actual apunta a un aeropuerto compatible
+con hangar, el barrido inserta una orden temporal `stop:false` hacia la bahía
+de ese aeropuerto y conserva la orden persistente original. La regresión cubre
+un aeropuerto pequeño y una aeronave en vuelo con destino al mismo. La búsqueda
+de un hangar alternativo cuando no hay un aeropuerto objetivo válido permanece
+como subetapa separada. #329/#567 continúan abiertas por callbacks, pathfinding
+y aceptación visual/framebuffer.

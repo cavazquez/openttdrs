@@ -5651,9 +5651,9 @@ ya cobra `PR_BUILD_STATION_DOCK` y `RemoveDock` devuelve
 `PR_CLEAR_STATION_DOCK`, en vez de reutilizar el precio ferroviario de una
 estación y `CLEAR_TILE_COST`. La regresión cubre construcción, demolición
 desde la pieza acuática y limpieza de un objeto autoremove. El ciclo de docks
-unidos, estaciones ferroviarias, aeropuertos y locks que intersecten una
-huella de muelle siguen en subetapas separadas; #329/#567 continúa abierta
-por infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.
+unidos, estaciones ferroviarias y aeropuertos sigue en subetapas separadas;
+#329/#567 continúa abierta por infraestructura, callbacks, pathfinding y
+aceptación visual/framebuffer.
 
 Actualización #329/#567-WATER-BUOY-LIFECYCLE (2026-09-12): las boyas ya usan
 `PR_BUILD_WAYPOINT_BUOY` y `PR_CLEAR_WAYPOINT_BUOY` en construcción y
@@ -5662,7 +5662,17 @@ genérico. `ClearTile_Station` restaura la clase de agua, limpia el pool local
 y respeta `HasStationInUse(..., false)`: una orden de otra compañía devuelve
 `BuoyInUse` sin mutar el mapa. `PlaceLock` aplica la misma retirada manual,
 conserva la clase en la parte central y convierte una boya de extremo en canal,
-como `DoBuildLock`/`RemoveBuoy`. Muelles, estaciones ferroviarias,
-aeropuertos, túneles y puentes siguen en subetapas separadas; #329/#567
+como `DoBuildLock`/`RemoveBuoy`. Estaciones ferroviarias, aeropuertos,
+túneles y puentes siguen en subetapas separadas; #329/#567
 continúan abiertas por infraestructura, callbacks, pathfinding y aceptación
 visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-DOCK-CLEAR (2026-09-12): `DoBuildLock`
+ahora puede retirar un muelle mediante `RemoveDock` sin cobrarlo dos veces,
+incluso cuando el cursor apunta a la pieza acuática. El preflight reevalúa los
+extremos después de limpiar el centro, conserva la clase de agua de la pieza
+que vuelve a ser agua y elimina la huella completa de la entidad `Station`.
+Las regresiones cubren ambos accesos y el precio compuesto. Estaciones
+ferroviarias, aeropuertos y otras huellas multi-tesela siguen en subetapas
+separadas; #329/#567 continúa abierta por infraestructura, callbacks,
+pathfinding y aceptación visual/framebuffer.

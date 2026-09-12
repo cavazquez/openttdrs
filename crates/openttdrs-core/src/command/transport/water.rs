@@ -998,6 +998,16 @@ pub(in crate::command) fn clear_dock(
     state: &mut GameState,
     c: TileCoord,
 ) -> Result<(), CommandError> {
+    clear_dock_impl(state, c, true)
+}
+
+/// Variante de `RemoveDock` para comandos compuestos que liquidan el coste
+/// total al final, como `DoBuildLock`.
+fn clear_dock_impl(
+    state: &mut GameState,
+    c: TileCoord,
+    charge_money: bool,
+) -> Result<(), CommandError> {
     let footprint = check_clear_dock(state, c)?;
     let [land, water] = footprint;
     let legacy_single_tile = land == water;
@@ -1035,7 +1045,9 @@ pub(in crate::command) fn clear_dock(
     if !legacy_single_tile {
         refresh_ship_docking_tiles_around(state, water);
     }
-    state.economy.money -= dock_clear_cost(&state.global_economy);
+    if charge_money {
+        state.economy.money -= dock_clear_cost(&state.global_economy);
+    }
     Ok(())
 }
 
@@ -1730,6 +1742,34 @@ fn remove_lock_buoy_state(state: &mut GameState, c: TileCoord) {
         .retain(|station| !(station.pos == c && station.stop_kind == StopKind::Buoy));
 }
 
+/// Prepara la retirada manual de un muelle durante `DoBuildLock`.
+///
+/// `RemoveDock` limpia sus dos piezas aunque el comando se haya apuntado a la
+/// sección acuática. El preflight exige una huella completa para no convertir
+/// una estación importada incompleta en agua silenciosamente.
+fn check_lock_dock_tile(
+    state: &GameState,
+    c: TileCoord,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    if crate::station::dock_footprint_for_tile(&state.map, c).is_none() {
+        return Err(CommandError::MustDemolishDockFirst);
+    }
+    let _ = check_clear_dock(state, c)?;
+    Ok(LockBuildTilePlan {
+        water_class: if is_middle && has_tile_water_ground(tile) {
+            water_class_from_m1(tile.m1)
+        } else {
+            WaterClass::Canal
+        },
+        owner: state.active_company.0,
+        clear_on_build: true,
+        clear_cost: dock_clear_cost(&state.global_economy),
+        add_canal_cost: !is_middle,
+    })
+}
+
 /// Cuenta las llamadas a `CMD_REMOVE_SINGLE_SIGNAL` que hace
 /// `ClearTile_Track` al retirar todos los carriles de una tesela.
 fn rail_signal_clear_count(tile: Tile) -> i64 {
@@ -2042,6 +2082,9 @@ fn check_lock_build_tile(
         {
             check_lock_road_waypoint_tile(state, c, is_middle, tile)
         }
+        TileKind::Station if crate::station::stop_kind_from_m6(tile.m6) == StopKind::Dock => {
+            check_lock_dock_tile(state, c, is_middle, tile)
+        }
         TileKind::Station if crate::station::stop_kind_from_m6(tile.m6) == StopKind::Buoy => {
             check_lock_buoy_tile(state, c, is_middle, tile)
         }
@@ -2057,6 +2100,50 @@ fn check_lock_build_tile(
     }
 }
 
+/// Planifica el mismo orden de limpiezas que `DoBuildLock`.
+///
+/// El centro siempre se limpia primero; los extremos se vuelven a evaluar
+/// después porque `RemoveDock` puede haber convertido la otra pieza del
+/// muelle en agua o en terreno. La copia evita mutar el estado durante el
+/// preview y permite que la ejecución use exactamente los mismos planes.
+fn plan_lock_tiles(
+    state: &GameState,
+    tiles: [TileCoord; 3],
+) -> Result<([LockBuildTilePlan; 3], Vec<Vec<TileCoord>>), CommandError> {
+    let auto_clear_objects = lock_clear_object_plan(state, tiles)?;
+    let mut working = state.clone();
+    let mut cleared_objects = vec![false; auto_clear_objects.len()];
+    let mut plans = [None; 3];
+    for (index, &coord) in tiles.iter().enumerate() {
+        let plan = check_lock_build_tile(&working, coord, index == 0)?;
+        plans[index] = Some(plan);
+        clear_lock_build_tile(&mut working, coord, plan)?;
+        if let Some((object_index, object_tiles)) =
+            auto_clear_objects
+                .iter()
+                .enumerate()
+                .find(|(object_index, object_tiles)| {
+                    !cleared_objects[*object_index] && object_tiles.contains(&coord)
+                })
+        {
+            clear_object_footprint_keep_water_without_charge(
+                &mut working,
+                object_tiles[0],
+                object_tiles,
+            )?;
+            cleared_objects[object_index] = true;
+        }
+    }
+    Ok((
+        [
+            plans[0].ok_or(CommandError::OutOfBounds)?,
+            plans[1].ok_or(CommandError::OutOfBounds)?,
+            plans[2].ok_or(CommandError::OutOfBounds)?,
+        ],
+        auto_clear_objects,
+    ))
+}
+
 /// Ejecuta `DoClearSquare` para una parte de tierra o para el centro acuático.
 fn clear_lock_build_tile(
     state: &mut GameState,
@@ -2065,6 +2152,13 @@ fn clear_lock_build_tile(
 ) -> Result<(), CommandError> {
     if !plan.clear_on_build {
         return Ok(());
+    }
+    let was_dock = state.map.get(c).is_some_and(|tile| {
+        tile.kind == TileKind::Station
+            && crate::station::stop_kind_from_m6(tile.m6) == StopKind::Dock
+    });
+    if was_dock {
+        return clear_dock_impl(state, c, false);
     }
     let was_rail = matches!(
         state.map.get_kind(c),
@@ -2161,10 +2255,7 @@ pub(crate) fn check_place_lock(
     }
     let direction = lock_direction_for_heights(axis_y, ha, hb);
     let [middle, lower, upper] = lock_tiles_from_middle(c, direction);
-    let _clear_objects = lock_clear_object_plan(state, [middle, lower, upper])?;
-    let _middle_plan = check_lock_build_tile(state, middle, true)?;
-    let _lower_plan = check_lock_build_tile(state, lower, false)?;
-    let _upper_plan = check_lock_build_tile(state, upper, false)?;
+    let _ = plan_lock_tiles(state, [middle, lower, upper])?;
     check_non_freeform_edge(map, lower, state.construction.freeform_edges)?;
     check_lock_bridge_clearance(state, [middle, lower, upper])?;
     Ok(())
@@ -2189,12 +2280,7 @@ pub(in crate::command) fn place_lock(
         .height;
     let direction = lock_direction_for_heights(axis_y, first_height, second_height);
     let [middle, lower, upper] = lock_tiles_from_middle(c, direction);
-    let auto_clear_objects = lock_clear_object_plan(state, [middle, lower, upper])?;
-    let plans = [
-        check_lock_build_tile(state, middle, true)?,
-        check_lock_build_tile(state, lower, false)?,
-        check_lock_build_tile(state, upper, false)?,
-    ];
+    let (plans, auto_clear_objects) = plan_lock_tiles(state, [middle, lower, upper])?;
     let object_clear_cost = auto_clear_objects.iter().fold(0_i64, |cost, object_tiles| {
         cost.saturating_add(auto_clear_object_cost(state, object_tiles))
     });

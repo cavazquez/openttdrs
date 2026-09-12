@@ -2717,6 +2717,72 @@ fn place_lock_rejects_buoy_in_use_by_other_company_atomically() {
 }
 
 #[test]
+fn place_lock_clears_dock_from_land_part_and_keeps_water_part() {
+    let mut s = GameState::new(12, 10);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    let dock_water = TileCoord::new(3, 3);
+    let approach = TileCoord::new(3, 4);
+    for coord in [lower, upper, dock_water, approach] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    set_dock_land_slope(&mut s.map, middle, 1, 1);
+    apply_command(&mut s, &Command::PlaceDock(middle, 1)).unwrap();
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command).expect("el lock retira las dos piezas del muelle");
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(dock_water), Some(TileKind::Water));
+    assert!(s.stations.is_empty());
+    assert_eq!(
+        s.economy.money,
+        money - dock_clear_cost(&s.global_economy) - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_clears_dock_from_water_part_and_preserves_class() {
+    let mut s = GameState::new(12, 10);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    let dock_land = TileCoord::new(3, 1);
+    let approach = TileCoord::new(3, 3);
+    for coord in [lower, middle, upper, approach] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    set_dock_land_slope(&mut s.map, dock_land, 1, 1);
+    apply_command(&mut s, &Command::PlaceDock(dock_land, 1)).unwrap();
+    let dock_class = water_class_from_m1(s.map.get(middle).unwrap().m1);
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command).expect("el lock puede apuntar a la pieza acuática");
+
+    assert_eq!(s.map.get_kind(dock_land), Some(TileKind::Grass));
+    assert_eq!(
+        water_class_from_m1(s.map.get(middle).unwrap().m1),
+        dock_class
+    );
+    assert!(s.stations.is_empty());
+    assert_eq!(
+        s.economy.money,
+        money - dock_clear_cost(&s.global_economy) - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
 fn place_buoy_under_bridge_keeps_waterway_available() {
     use crate::BridgeType;
 

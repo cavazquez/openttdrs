@@ -664,9 +664,10 @@ pub use news::{
     calendar_day_index, calendar_day_index_from_state, calendar_year_day, cargo_display_name,
     default_display_for_type, format_calendar_date, format_calendar_date_from_state,
     format_calendar_day_index, format_money, maybe_purge_old_news, news_display_mode_label,
-    news_type_label, poll_vehicle_advice_news, purge_old_news_items, push_cargo_delivery_news,
-    push_first_vehicle_running_news, push_rival_achievement_news, push_vehicle_advice_news,
-    tick_for_calendar_year, vehicle_kind_label,
+    news_type_label, poll_new_vehicle_news, poll_vehicle_advice_news, purge_old_news_items,
+    push_cargo_delivery_news, push_first_vehicle_running_news, push_new_vehicle_available_news,
+    push_rival_achievement_news, push_vehicle_advice_news, tick_for_calendar_year,
+    vehicle_kind_label,
 };
 pub use object_spec::{
     DEFAULT_OBJECT_BUILD_COST_FACTOR, DEFAULT_OBJECT_CLEAR_COST_FACTOR,

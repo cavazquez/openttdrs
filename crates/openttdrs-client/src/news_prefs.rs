@@ -51,6 +51,7 @@ pub(crate) fn settings_from_client_prefs(prefs: &ClientPreferences) -> NewsDispl
         cargo_delivered: mode_from_u8(prefs.news_cargo_delivered),
         first_cargo_delivered: mode_from_u8(prefs.news_first_cargo),
         first_vehicle_running: mode_from_u8(prefs.news_first_vehicle),
+        new_vehicles: mode_from_u8(prefs.news_new_vehicles),
         vehicle_advice: mode_from_u8(prefs.news_vehicle_advice),
         accident: mode_from_u8(prefs.news_accident),
         company_info: mode_from_u8(prefs.news_company_info),
@@ -67,6 +68,7 @@ pub(crate) fn apply_settings_to_client_prefs(
     prefs.news_cargo_delivered = mode_to_u8(settings.cargo_delivered);
     prefs.news_first_cargo = mode_to_u8(settings.first_cargo_delivered);
     prefs.news_first_vehicle = mode_to_u8(settings.first_vehicle_running);
+    prefs.news_new_vehicles = mode_to_u8(settings.new_vehicles);
     prefs.news_vehicle_advice = mode_to_u8(settings.vehicle_advice);
     prefs.news_accident = mode_to_u8(settings.accident);
     prefs.news_company_info = mode_to_u8(settings.company_info);
@@ -100,6 +102,7 @@ pub(crate) fn sync_news_display_prefs_to_client(
     let changed = client.news_cargo_delivered != scratch.news_cargo_delivered
         || client.news_first_cargo != scratch.news_first_cargo
         || client.news_first_vehicle != scratch.news_first_vehicle
+        || client.news_new_vehicles != scratch.news_new_vehicles
         || client.news_vehicle_advice != scratch.news_vehicle_advice
         || client.news_accident != scratch.news_accident
         || client.news_company_info != scratch.news_company_info
@@ -195,6 +198,7 @@ mod tests {
                 (NewsType::CargoDelivered, NewsDisplayMode::Full),
                 (NewsType::FirstCargoDelivered, NewsDisplayMode::Off),
                 (NewsType::FirstVehicleRunning, NewsDisplayMode::Summary),
+                (NewsType::NewVehicles, NewsDisplayMode::Off),
                 (NewsType::VehicleAdvice, NewsDisplayMode::Full),
                 (NewsType::Accident, NewsDisplayMode::Off),
                 (NewsType::CompanyInfo, NewsDisplayMode::Summary),

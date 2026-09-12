@@ -496,7 +496,7 @@ fn spawn_news_popup(
     });
 
     match item.news_type {
-        NewsType::FirstCargoDelivered | NewsType::FirstVehicleRunning => {
+        NewsType::FirstCargoDelivered | NewsType::FirstVehicleRunning | NewsType::NewVehicles => {
             feedback.pending_news_applause = true;
             info!(
                 "noticias: id={} tipo={:?}; popup con sonido",

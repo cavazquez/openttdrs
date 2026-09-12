@@ -29,10 +29,11 @@ pub(crate) struct NewsSettingsModeButton {
     pub(crate) mode: NewsDisplayMode,
 }
 
-const NEWS_TYPES: [NewsType; 9] = [
+const NEWS_TYPES: [NewsType; 10] = [
     NewsType::CargoDelivered,
     NewsType::FirstCargoDelivered,
     NewsType::FirstVehicleRunning,
+    NewsType::NewVehicles,
     NewsType::VehicleAdvice,
     NewsType::Accident,
     NewsType::CompanyInfo,

@@ -285,6 +285,24 @@ const fn default_visual_effect() -> u8 {
 }
 
 impl EngineDef {
+    /// `EngineInfo::extra_flags`: no crear la noticia de disponibilidad.
+    #[must_use]
+    pub const fn no_news(&self) -> bool {
+        self.extra_flags & crate::engine::EXTRA_ENGINE_FLAG_NO_NEWS != 0
+    }
+
+    /// `EngineInfo::extra_flags`: no ofrecer una preview exclusiva.
+    #[must_use]
+    pub const fn no_preview(&self) -> bool {
+        self.extra_flags & crate::engine::EXTRA_ENGINE_FLAG_NO_PREVIEW != 0
+    }
+
+    /// `EngineInfo::extra_flags`: unir la variante a la preview de su padre.
+    #[must_use]
+    pub const fn joins_preview(&self) -> bool {
+        self.extra_flags & crate::engine::EXTRA_ENGINE_FLAG_JOIN_PREVIEW != 0
+    }
+
     /// Preview de compra: primera vista `NewGRF`, si hay.
     #[must_use]
     pub fn newgrf_preview(&self) -> Option<&crate::newgrf_sprites::DecodedSprite> {

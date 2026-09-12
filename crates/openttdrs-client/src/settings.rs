@@ -60,6 +60,8 @@ pub(crate) struct ClientPreferences {
     pub(crate) news_cargo_delivered: u8,
     pub(crate) news_first_cargo: u8,
     pub(crate) news_first_vehicle: u8,
+    /// Preferencia de noticias de nuevos vehículos (0=Off, 1=Summary, 2=Full).
+    pub(crate) news_new_vehicles: u8,
     pub(crate) news_vehicle_advice: u8,
     pub(crate) news_accident: u8,
     pub(crate) news_company_info: u8,
@@ -115,6 +117,7 @@ impl Default for ClientPreferences {
             news_cargo_delivered: crate::news_prefs::DISPLAY_SUMMARY,
             news_first_cargo: crate::news_prefs::DISPLAY_FULL,
             news_first_vehicle: crate::news_prefs::DISPLAY_FULL,
+            news_new_vehicles: crate::news_prefs::DISPLAY_FULL,
             news_vehicle_advice: crate::news_prefs::DISPLAY_SUMMARY,
             news_accident: crate::news_prefs::DISPLAY_FULL,
             news_company_info: crate::news_prefs::DISPLAY_SUMMARY,

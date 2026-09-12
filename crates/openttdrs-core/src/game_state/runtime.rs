@@ -138,6 +138,11 @@ pub struct SimulationRuntime {
     /// Último día de calendario en que se ejecutó purga de noticias antiguas.
     pub news_last_purge_day: u64,
 
+    /// Motores cuya introducción ya fue procesada por el ticker de noticias.
+    pub engine_available_news_sent: HashSet<u16>,
+    /// Evita convertir un save cargado en una ráfaga de noticias históricas.
+    pub engine_available_news_initialized: bool,
+
     /// Bordes del reloj de calendario en el tick actual.
     pub calendar_triggers: crate::timer::TimerTriggers,
 
@@ -309,6 +314,8 @@ impl SimulationRuntime {
             pending_news_events: Vec::new(),
             news_advice_sent: HashSet::new(),
             news_last_purge_day: 0,
+            engine_available_news_sent: HashSet::new(),
+            engine_available_news_initialized: false,
             calendar_triggers: crate::timer::TimerTriggers::default(),
             economy_triggers: crate::timer::TimerTriggers::default(),
             parity: None,

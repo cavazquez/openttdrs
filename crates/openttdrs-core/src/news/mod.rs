@@ -22,11 +22,51 @@ pub use queue::{
     NewsType, PendingNewsEvent, add_news_item, default_display_for_type, maybe_purge_old_news,
     purge_old_news_items, push_autoreplace_failed_news, push_bankruptcy_news,
     push_cargo_delivery_news, push_disaster_news, push_economy_fluctuation_news,
-    push_first_vehicle_running_news, push_rival_achievement_news, push_subsidy_awarded_news,
-    push_subsidy_offer_news, report_industry_closed, report_industry_closing,
-    report_industry_opened,
+    push_first_vehicle_running_news, push_new_vehicle_available_news, push_rival_achievement_news,
+    push_subsidy_awarded_news, push_subsidy_offer_news, report_industry_closed,
+    report_industry_closing, report_industry_opened,
 };
 pub use vehicle_advice::{VehicleAdviceKind, poll_vehicle_advice_news, push_vehicle_advice_news};
+
+/// Detecta motores introducidos desde el último arranque y publica su noticia.
+///
+/// La marca es efímera a propósito: al rehidratar un save se consideran ya
+/// anunciados todos los motores cuya fecha quedó atrás, evitando repetir en
+/// bloque la historia de una partida cargada. Los motores que llegan después
+/// por un stack `NewGRF` sí se anuncian una vez si todavía son contemporáneos.
+pub fn poll_new_vehicle_news(state: &mut crate::GameState) {
+    let year = state.calendar.year;
+    if !state.runtime.engine_available_news_initialized {
+        state.runtime.engine_available_news_sent.extend(
+            state
+                .engine_catalog
+                .iter()
+                .filter_map(|engine| (u32::from(engine.intro_year) <= year).then_some(engine.id)),
+        );
+        state.runtime.engine_available_news_initialized = true;
+        return;
+    }
+
+    let mut pending = Vec::new();
+    for engine in &state.engine_catalog {
+        if u32::from(engine.intro_year) > year
+            || state
+                .runtime
+                .engine_available_news_sent
+                .contains(&engine.id)
+        {
+            continue;
+        }
+        state.runtime.engine_available_news_sent.insert(engine.id);
+        if crate::engine::engine_available_in_year(engine, year) && !engine.no_news() {
+            pending.push((engine.id, engine.kind, engine.name.clone()));
+        }
+    }
+
+    for (engine_id, kind, name) in pending {
+        push_new_vehicle_available_news(state, engine_id, kind, &name);
+    }
+}
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
@@ -102,6 +142,36 @@ mod tests {
         assert_eq!(item.news_type, NewsType::FirstVehicleRunning);
         assert_eq!(item.display, NewsDisplayMode::Full);
         assert!(item.headline.contains("autobús"));
+    }
+
+    #[test]
+    fn new_vehicle_news_respects_no_news_and_is_emitted_once() {
+        let mut state = GameState::new(8, 8);
+        let mut announced =
+            crate::engine::engine_for_vehicle(VehicleKind::Bus, crate::engine::ENGINE_BUS_MPS)
+                .clone();
+        announced.id = 20_101;
+        announced.name = "Bus anunciado".into();
+        announced.intro_year = 1951;
+        let mut silent = announced.clone();
+        silent.id = 20_102;
+        silent.name = "Bus silencioso".into();
+        silent.extra_flags = crate::engine::EXTRA_ENGINE_FLAG_NO_NEWS;
+        state.engine_catalog = vec![announced, silent];
+
+        state.tick = tick_for_calendar_year(1950);
+        state.sync_timers_from_tick();
+        poll_new_vehicle_news(&mut state);
+        state.tick = tick_for_calendar_year(1951);
+        state.sync_timers_from_tick();
+        poll_new_vehicle_news(&mut state);
+        poll_new_vehicle_news(&mut state);
+
+        assert_eq!(state.news.items.len(), 1);
+        let item = &state.news.items[0];
+        assert_eq!(item.news_type, NewsType::NewVehicles);
+        assert!(item.headline.contains("Bus anunciado"));
+        assert!(state.runtime.engine_available_news_sent.contains(&20_102));
     }
 
     #[test]

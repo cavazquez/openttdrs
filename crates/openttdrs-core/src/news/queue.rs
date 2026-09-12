@@ -19,6 +19,8 @@ pub enum NewsType {
     CargoDelivered,
     FirstCargoDelivered,
     FirstVehicleRunning,
+    /// Motor que acaba de quedar disponible para construir.
+    NewVehicles,
     VehicleAdvice,
     /// Accidente (choque de trenes, etc.).
     Accident,
@@ -123,6 +125,8 @@ pub struct NewsDisplaySettings {
     pub cargo_delivered: NewsDisplayMode,
     pub first_cargo_delivered: NewsDisplayMode,
     pub first_vehicle_running: NewsDisplayMode,
+    #[serde(default = "default_new_vehicles_display")]
+    pub new_vehicles: NewsDisplayMode,
     pub vehicle_advice: NewsDisplayMode,
     #[serde(default = "default_accident_display")]
     pub accident: NewsDisplayMode,
@@ -137,6 +141,10 @@ pub struct NewsDisplaySettings {
 }
 
 const fn default_accident_display() -> NewsDisplayMode {
+    NewsDisplayMode::Full
+}
+
+const fn default_new_vehicles_display() -> NewsDisplayMode {
     NewsDisplayMode::Full
 }
 
@@ -169,6 +177,7 @@ impl NewsDisplaySettings {
             cargo_delivered: NewsDisplayMode::Full,
             first_cargo_delivered: NewsDisplayMode::Full,
             first_vehicle_running: NewsDisplayMode::Full,
+            new_vehicles: NewsDisplayMode::Full,
             vehicle_advice: NewsDisplayMode::Summary,
             accident: NewsDisplayMode::Full,
             company_info: NewsDisplayMode::Summary,
@@ -184,6 +193,7 @@ impl NewsDisplaySettings {
             NewsType::CargoDelivered => self.cargo_delivered,
             NewsType::FirstCargoDelivered => self.first_cargo_delivered,
             NewsType::FirstVehicleRunning => self.first_vehicle_running,
+            NewsType::NewVehicles => self.new_vehicles,
             NewsType::VehicleAdvice => self.vehicle_advice,
             NewsType::Accident => self.accident,
             NewsType::CompanyInfo => self.company_info,
@@ -198,6 +208,7 @@ impl NewsDisplaySettings {
             NewsType::CargoDelivered => self.cargo_delivered = mode,
             NewsType::FirstCargoDelivered => self.first_cargo_delivered = mode,
             NewsType::FirstVehicleRunning => self.first_vehicle_running = mode,
+            NewsType::NewVehicles => self.new_vehicles = mode,
             NewsType::VehicleAdvice => self.vehicle_advice = mode,
             NewsType::Accident => self.accident = mode,
             NewsType::CompanyInfo => self.company_info = mode,
@@ -282,6 +293,30 @@ pub fn push_first_vehicle_running_news(
         default_display_for_type(NewsType::FirstVehicleRunning),
         state.tick,
         NewsReference::Tile(at),
+    );
+    add_news_item(state, item);
+}
+
+/// Publica una noticia cuando un motor entra en disponibilidad general.
+pub fn push_new_vehicle_available_news(
+    state: &mut crate::GameState,
+    engine_id: u16,
+    kind: VehicleKind,
+    name: &str,
+) {
+    let kind_label = vehicle_kind_label(kind);
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        format!("Nuevo {kind_label}: {name}"),
+        Some(format!(
+            "El modelo {name} (motor {engine_id}) ya está disponible para construir."
+        )),
+        NewsType::NewVehicles,
+        default_display_for_type(NewsType::NewVehicles),
+        state.tick,
+        NewsReference::None,
     );
     add_news_item(state, item);
 }

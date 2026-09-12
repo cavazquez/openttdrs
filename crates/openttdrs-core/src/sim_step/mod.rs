@@ -1266,6 +1266,7 @@ fn phase_post_tick(state: &mut GameState) {
 
     vehicle_ops::sync_vehicle_order_destinations(state);
     economy::apply_vehicle_running_costs(state);
+    crate::news::poll_new_vehicle_news(state);
     crate::news::poll_vehicle_advice_news(state);
     crate::news::maybe_purge_old_news(state);
     crate::parity::record_tick(state);

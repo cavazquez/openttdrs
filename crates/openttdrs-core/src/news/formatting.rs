@@ -33,6 +33,7 @@ pub fn news_type_label(news_type: NewsType) -> &'static str {
         NewsType::CargoDelivered => "Entrega de carga",
         NewsType::FirstCargoDelivered => "Primera entrega",
         NewsType::FirstVehicleRunning => "Primer vehículo en marcha",
+        NewsType::NewVehicles => "Nuevos vehículos",
         NewsType::VehicleAdvice => "Avisos de vehículo",
         NewsType::Accident => "Accidentes",
         NewsType::CompanyInfo => "Compañías",

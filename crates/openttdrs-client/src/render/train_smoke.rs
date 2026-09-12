@@ -9,7 +9,7 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{
     EngineDef, Vehicle, VehicleAdvancedVisualEffectSpawn, VehicleVisualEffectKind,
     extrapolate_vehicle_pose, resolve_vehicle_spawn_visual_effect_callback, slope_dz_at_subtile,
-    train_smoke_kind, vehicle_subtile_at_with_map, vehicle_visual_effect_spec,
+    train_smoke_kind_for_engine, vehicle_subtile_at_with_map, vehicle_visual_effect_spec,
 };
 
 use crate::audio::{PlayWorldSfx, play_vehicle_event_sound_with_default};
@@ -342,7 +342,9 @@ fn train_smoke_to_emit_with_engine_and_random(
         VehicleVisualEffectKind::Steam => openttdrs_core::TrainSmokeKind::Steam,
         VehicleVisualEffectKind::Diesel => openttdrs_core::TrainSmokeKind::Diesel,
         VehicleVisualEffectKind::Electric => openttdrs_core::TrainSmokeKind::Electric,
-        VehicleVisualEffectKind::Default if engine.is_train_engine() => train_smoke_kind(engine.id),
+        VehicleVisualEffectKind::Default if engine.is_train_engine() => {
+            train_smoke_kind_for_engine(engine)
+        }
         // OpenTTD disables the default effect for wagons; only an explicit
         // CB10 result may opt a wagon into a standard effect.
         VehicleVisualEffectKind::Default => return None,
@@ -1143,6 +1145,21 @@ mod tests {
         assert_eq!(train_smoke_kind(ENGINE_TRAIN_KIRBY), TrainSmokeKind::Steam);
         assert_eq!(
             train_smoke_kind(ENGINE_TRAIN_ASIASTAR),
+            TrainSmokeKind::Electric
+        );
+    }
+
+    #[test]
+    fn catalog_engine_class_controls_default_visual_effect() {
+        let mut custom = openttdrs_core::engine_by_id(ENGINE_TRAIN_KIRBY)
+            .expect("motor vanilla ausente")
+            .clone();
+        custom.id = openttdrs_core::NEWGRF_ENGINE_ID_BASE + 64;
+        custom.rail_engine_class = 4;
+        custom.reliability_pct = 75;
+
+        assert_eq!(
+            train_smoke_kind_for_engine(&custom),
             TrainSmokeKind::Electric
         );
     }

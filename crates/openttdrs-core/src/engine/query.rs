@@ -490,6 +490,22 @@ pub fn train_smoke_kind(engine_id: u16) -> crate::sim_events::TrainSmokeKind {
     }
 }
 
+/// Tipo de humo/chispa usando la clase de tracción del catálogo activo.
+///
+/// `rail_engine_class` conserva `EngineClass` de `OpenTTD`: vapor produce
+/// humo blanco, diésel humo oscuro y las clases eléctrica/monorail/maglev
+/// producen chispas. El wrapper [`train_smoke_kind`] queda disponible para
+/// consumidores que sólo tienen un ID y necesitan el fallback vanilla.
+#[must_use]
+pub fn train_smoke_kind_for_engine(engine: &EngineDef) -> crate::sim_events::TrainSmokeKind {
+    match engine.rail_engine_class {
+        0 => crate::sim_events::TrainSmokeKind::Steam,
+        1 => crate::sim_events::TrainSmokeKind::Diesel,
+        2..=4 => crate::sim_events::TrainSmokeKind::Electric,
+        _ => train_smoke_kind(engine.id),
+    }
+}
+
 #[must_use]
 pub const fn default_engine_id(kind: VehicleKind) -> u16 {
     match kind {
@@ -704,6 +720,19 @@ mod tests {
         custom.is_large_aircraft = true;
 
         assert!(aircraft_is_jet_def(&custom));
+    }
+
+    #[test]
+    fn custom_rail_engine_class_controls_smoke_kind() {
+        let mut custom = engine_for_vehicle(VehicleKind::Train, ENGINE_TRAIN_KIRBY).clone();
+        custom.id = NEWGRF_ENGINE_ID_BASE + 64;
+        custom.rail_engine_class = 4;
+        custom.reliability_pct = RELIABILITY_STEAM;
+
+        assert_eq!(
+            train_smoke_kind_for_engine(&custom),
+            crate::sim_events::TrainSmokeKind::Electric
+        );
     }
 
     #[test]

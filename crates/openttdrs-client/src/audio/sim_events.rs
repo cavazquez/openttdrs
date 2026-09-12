@@ -105,6 +105,23 @@ fn vehicle_departure_sound(sim: &SimWorld, vehicle_id: u32, kind: VehicleKind) -
         .unwrap_or_else(|| SoundId::departure_for_kind(kind))
 }
 
+fn train_tunnel_sound(sim: &SimWorld, vehicle_id: u32) -> Option<SoundId> {
+    let engine = sim
+        .state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == vehicle_id)
+        .and_then(|vehicle| vehicle.engine_id)
+        .and_then(|engine_id| {
+            openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, engine_id)
+                .or_else(|| openttdrs_core::engine_by_id(engine_id))
+        });
+    let smoke_kind = engine
+        .map(openttdrs_core::train_smoke_kind_for_engine)
+        .unwrap_or(openttdrs_core::TrainSmokeKind::Steam);
+    (smoke_kind == openttdrs_core::TrainSmokeKind::Steam).then_some(SoundId::TrainThroughTunnel)
+}
+
 /// `EngineMiscFlag::NoBreakdownSmoke` sólo suprime el efecto visual. El SFX
 /// de avería se resuelve en el mismo evento y debe conservarse, igual que en
 /// `Vehicle::Breakdown` del upstream.
@@ -324,16 +341,7 @@ fn dispatch_sim_events(
                 kind,
             } => {
                 if hud.sound_vehicle && kind == VehicleKind::Train {
-                    let default = sim
-                        .state
-                        .vehicles
-                        .iter()
-                        .find(|vehicle| vehicle.id == vehicle_id)
-                        .and_then(|vehicle| vehicle.engine_id)
-                        .unwrap_or_else(|| openttdrs_core::default_engine_id(VehicleKind::Train));
-                    let default = (openttdrs_core::train_smoke_kind(default)
-                        == openttdrs_core::TrainSmokeKind::Steam)
-                        .then_some(SoundId::TrainThroughTunnel);
+                    let default = train_tunnel_sound(&sim, vehicle_id);
                     play_vehicle_event_sound_with_default(
                         &mut sim,
                         &mut sfx,
@@ -597,6 +605,30 @@ mod aircraft_sound_tests {
             aircraft_takeoff_sound(0x7F02, &catalog),
             SoundId::TakeoffJet
         );
+    }
+
+    #[test]
+    fn tunnel_default_uses_active_catalog_engine_class() {
+        let mut sim = SimWorld {
+            state: GameState::new(4, 4),
+            ..Default::default()
+        };
+        let mut vehicle = Vehicle::new(
+            18,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        let mut custom = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("motor vanilla ausente")
+            .clone();
+        custom.id = openttdrs_core::NEWGRF_ENGINE_ID_BASE + 64;
+        custom.rail_engine_class = 4;
+        vehicle.engine_id = Some(custom.id);
+        sim.state.engine_catalog.push(custom);
+        sim.state.vehicles.push(vehicle);
+
+        assert_eq!(train_tunnel_sound(&sim, 18), None);
     }
 }
 

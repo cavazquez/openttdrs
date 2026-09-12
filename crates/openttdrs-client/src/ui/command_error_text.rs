@@ -8,6 +8,7 @@ use openttdrs_core::CommandError;
 pub const fn command_error_message(err: CommandError) -> &'static str {
     match err {
         CommandError::OutOfBounds => "Fuera del mapa.",
+        CommandError::TooCloseToMapEdge => "Demasiado cerca del borde del mapa.",
         CommandError::CannotPlaceRoadOnWater => "No se puede construir carretera en agua.",
         CommandError::CannotPlaceRoadOnVoid => "No se puede construir carretera aquí.",
         CommandError::CannotPlaceRailOnWater => "No se puede construir vía en agua.",
@@ -213,6 +214,7 @@ mod tests {
         // Lista exhaustiva de errores para asegurar que todos tienen mensaje.
         let errors = [
             CommandError::OutOfBounds,
+            CommandError::TooCloseToMapEdge,
             CommandError::CannotPlaceRoadOnWater,
             CommandError::CannotPlaceRoadOnVoid,
             CommandError::CannotPlaceRailOnWater,

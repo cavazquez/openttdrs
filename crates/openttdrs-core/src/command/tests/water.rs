@@ -89,6 +89,45 @@ fn clear_plain_water_uses_native_cost_and_resets_neighbour_flood_state() {
 }
 
 #[test]
+fn clear_plain_water_rejects_all_non_freeform_map_edges() {
+    for water in [
+        TileCoord::new(0, 3),
+        TileCoord::new(7, 3),
+        TileCoord::new(3, 0),
+        TileCoord::new(3, 7),
+    ] {
+        let mut s = GameState::new(8, 8);
+        s.construction.freeform_edges = false;
+        s.map.set_kind(water, TileKind::Water).unwrap();
+        let money = s.economy.money;
+
+        assert_eq!(
+            command_would_fail(&s, &Command::ClearTile(water)),
+            Some(crate::CommandError::TooCloseToMapEdge),
+            "{water:?} debe conservar el guard nativo de borde"
+        );
+        assert_eq!(
+            apply_command(&mut s, &Command::ClearTile(water)),
+            Err(crate::CommandError::TooCloseToMapEdge)
+        );
+        assert_eq!(s.map.get_kind(water), Some(TileKind::Water));
+        assert_eq!(s.economy.money, money);
+    }
+}
+
+#[test]
+fn clear_plain_water_allows_inner_tile_with_non_freeform_edges() {
+    let mut s = GameState::new(8, 8);
+    s.construction.freeform_edges = false;
+    let water = TileCoord::new(1, 1);
+    s.map.set_kind(water, TileKind::Water).unwrap();
+
+    assert_eq!(command_would_fail(&s, &Command::ClearTile(water)), None);
+    apply_command(&mut s, &Command::ClearTile(water)).unwrap();
+    assert_eq!(s.map.get_kind(water), Some(TileKind::Grass));
+}
+
+#[test]
 fn clear_canal_checks_water_owner_and_uses_canal_cost() {
     let mut s = GameState::new(12, 12);
     let canal = TileCoord::new(5, 5);
@@ -225,6 +264,32 @@ fn place_lock_writes_native_three_part_contract() {
         assert_eq!(tile.m8, 0);
     }
     assert_eq!(s.economy.money, money - lock_build_cost(&s.global_economy));
+}
+
+#[test]
+fn place_lock_rejects_lower_part_on_non_freeform_edge() {
+    let mut s = GameState::new(8, 8);
+    s.construction.freeform_edges = false;
+    let middle = TileCoord::new(1, 3);
+    let lower = TileCoord::new(0, 3);
+    let upper = TileCoord::new(2, 3);
+    for coord in [lower, middle, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 0).unwrap();
+    s.map.set_height(upper, 1).unwrap();
+    let money = s.economy.money;
+
+    assert_eq!(
+        command_would_fail(&s, &Command::PlaceLock(middle, false)),
+        Some(crate::CommandError::TooCloseToMapEdge)
+    );
+    assert_eq!(
+        apply_command(&mut s, &Command::PlaceLock(middle, false)),
+        Err(crate::CommandError::TooCloseToMapEdge)
+    );
+    assert_eq!(s.map.get(middle).unwrap().m5, 0);
+    assert_eq!(s.economy.money, money);
 }
 
 #[test]

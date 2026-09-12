@@ -11,6 +11,9 @@ pub enum OrderMoveDirection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandError {
     OutOfBounds,
+    /// La construcción acuática queda demasiado cerca del borde sin
+    /// `construction.freeform_edges`.
+    TooCloseToMapEdge,
     CannotPlaceRoadOnWater,
     CannotPlaceRoadOnVoid,
     CannotPlaceRailOnWater,

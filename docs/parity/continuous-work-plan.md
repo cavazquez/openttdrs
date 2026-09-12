@@ -5473,3 +5473,10 @@ restaura `Upper` y `Lower` en el orden RNG nativo, trata el `Middle` río como
 `MakeRiver` y el resto como `DoClearSquare`, con precios `PR_BUILD_LOCK` y
 `PR_CLEAR_LOCK`. #329/#567 siguen abiertas por auto-clear sobre tierra,
 infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-FREEFORM-EDGES (2026-09-12): `ClearTile_Water`
+rechaza agua clara en los cuatro márgenes cuando `construction.freeform_edges`
+está desactivado, y `PlaceLock` aplica el mismo contrato al extremo `Lower`
+derivado de la pendiente. La costa conserva su ruta nativa sin ese guard.
+Quedan pendientes el auto-clear de esclusas sobre tierra y los criterios de
+infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.

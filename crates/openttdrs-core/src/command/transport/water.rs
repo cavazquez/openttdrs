@@ -253,6 +253,27 @@ fn check_clear_water_owner(state: &GameState, tile: Tile) -> Result<(), CommandE
     }
 }
 
+/// Traduce `IsInsideMM(tile, 1, Map::Max() - 1)` cuando los bordes libres
+/// están desactivados. El mapa local incluye el marco exterior en sus
+/// dimensiones, igual que `Map::SizeX/Y()` en el motor nativo.
+fn check_non_freeform_edge(
+    map: &Map,
+    c: TileCoord,
+    freeform_edges: bool,
+) -> Result<(), CommandError> {
+    if freeform_edges {
+        return Ok(());
+    }
+    let (width, height) = map.dimensions();
+    let inside_x = u32::try_from(c.x).is_ok_and(|x| x >= 1 && x < width.saturating_sub(2));
+    let inside_y = u32::try_from(c.y).is_ok_and(|y| y >= 1 && y < height.saturating_sub(2));
+    if inside_x && inside_y {
+        Ok(())
+    } else {
+        Err(CommandError::TooCloseToMapEdge)
+    }
+}
+
 /// Validación de `ClearTile_Water` para agua plana, costa o esclusa.
 pub(crate) fn check_clear_water(state: &GameState, c: TileCoord) -> Result<(), CommandError> {
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
@@ -261,6 +282,7 @@ pub(crate) fn check_clear_water(state: &GameState, c: TileCoord) -> Result<(), C
     }
     match water_tile_type(tile) {
         WATER_TILE_TYPE_CLEAR => {
+            check_non_freeform_edge(&state.map, c, state.construction.freeform_edges)?;
             check_clear_water_owner(state, tile)?;
         }
         WATER_TILE_TYPE_COAST => {}
@@ -1284,6 +1306,9 @@ pub(crate) fn check_place_lock(
     if ha.abs_diff(hb) != 1 {
         return Err(CommandError::CannotPlaceStationOnOccupiedTile);
     }
+    let direction = lock_direction_for_heights(axis_y, ha, hb);
+    let lower = lock_tiles_from_middle(c, direction)[1];
+    check_non_freeform_edge(map, lower, state.construction.freeform_edges)?;
     Ok(())
 }
 

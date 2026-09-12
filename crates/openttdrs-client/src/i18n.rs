@@ -995,6 +995,7 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         // el HUD. Mantener sus claves aquí permite que el feedback se
         // actualice también cuando el jugador cambia de idioma en vivo.
         "Fuera del mapa." => "Outside the map.",
+        "Demasiado cerca del borde del mapa." => "Too close to the edge of the map.",
         "No se puede construir carretera en agua." => "Cannot build a road on water.",
         "No se puede construir carretera aquí." => "Cannot build a road here.",
         "No se puede construir vía en agua." => "Cannot build rail on water.",

@@ -1513,3 +1513,11 @@ propiedad del `Middle`, rechaza vehículos en toda la huella y restaura primero
 El `Middle` fluvial usa `MakeRiver`; las demás clases vuelven a suelo claro.
 La integración de esclusas sobre tierra y el resto de criterios de #329/#567
 siguen pendientes.
+
+### #329/#567-WATER-FREEFORM-EDGES — margen de construcción acuática
+
+Actualizado: 2026-09-12. La rama de agua clara de `ClearTile` reproduce el
+guard `IsInsideMM(..., 1, Map::Max() - 1)` de `ClearTile_Water` cuando
+`freeform_edges` está desactivado. `CmdBuildLock` aplica la misma ventana al
+tile `Lower`; la ruta de costa no recibe ese guard. El auto-clear sobre tierra
+y el resto de criterios de #329/#567 siguen pendientes.

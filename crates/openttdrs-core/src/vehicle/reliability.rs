@@ -263,7 +263,7 @@ impl super::model::Vehicle {
             .companies
             .get(self.owner.index())
             .is_some_and(|c| c.servint_ispercent);
-        if !self.interval_requires_service(servint_ispercent) {
+        if !self.interval_requires_service_with_catalog(servint_ispercent, &state.engine_catalog) {
             return false;
         }
         if !state.no_servicing_if_no_breakdowns || state.vehicle_breakdowns != 0 {
@@ -273,11 +273,30 @@ impl super::model::Vehicle {
     }
 
     fn interval_requires_service(&self, servint_ispercent: bool) -> bool {
+        let engine_id = self
+            .engine_id
+            .unwrap_or_else(|| crate::engine::default_engine_id(self.kind));
+        let engine_rel = initial_reliability_for_engine(engine_id, self.kind);
+        self.interval_requires_service_at_reliability(servint_ispercent, engine_rel)
+    }
+
+    fn interval_requires_service_with_catalog(
+        &self,
+        servint_ispercent: bool,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) -> bool {
+        let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, self);
+        let source = crate::engine::engine_reliability_source(engine, engine_catalog);
+        let engine_rel = u16::from(source.reliability_pct) * 100;
+        self.interval_requires_service_at_reliability(servint_ispercent, engine_rel)
+    }
+
+    fn interval_requires_service_at_reliability(
+        &self,
+        servint_ispercent: bool,
+        engine_rel: u16,
+    ) -> bool {
         if servint_ispercent {
-            let engine_id = self
-                .engine_id
-                .unwrap_or_else(|| crate::engine::default_engine_id(self.kind));
-            let engine_rel = initial_reliability_for_engine(engine_id, self.kind);
             let pct = u32::from(self.service_interval_days.min(100));
             let threshold = u32::from(engine_rel) * (100 - pct) / 100;
             if u32::from(self.reliability) >= threshold {
@@ -1911,6 +1930,38 @@ mod tests {
         state.economy_timer.date_fract = 0;
         process_vehicle_economy_day(&mut state);
         assert!(state.vehicles[0].orders.is_empty());
+    }
+
+    #[test]
+    fn percent_service_interval_uses_active_catalog_reliability() {
+        use crate::engine::{ENGINE_BUS_MPS, NEWGRF_ENGINE_ID_BASE};
+
+        let mut state = crate::GameState::new(8, 8);
+        state.companies[0].servint_ispercent = true;
+        let mut custom = crate::engine::engine_by_id(ENGINE_BUS_MPS).unwrap().clone();
+        custom.id = NEWGRF_ENGINE_ID_BASE + 32;
+        custom.reliability_pct = 40;
+        custom.newgrf_grfid = 0x5245_4C49;
+        custom.newgrf_local_id = 0;
+        state.engine_catalog.push(custom);
+
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        vehicle.engine_id = Some(NEWGRF_ENGINE_ID_BASE + 32);
+        vehicle.running = true;
+        vehicle.service_interval_days = 20;
+        vehicle.reliability = 5_000;
+
+        // El umbral del motor custom es 40% × 80% = 32%. La fiabilidad 50%
+        // todavía no requiere servicio; comparar contra el bus vanilla (90%)
+        // lo habría marcado como vencido.
+        assert!(!vehicle.requires_service_with(&state));
+        vehicle.reliability = 3_000;
+        assert!(vehicle.requires_service_with(&state));
     }
 
     #[test]

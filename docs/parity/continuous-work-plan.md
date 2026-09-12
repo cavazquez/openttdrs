@@ -5532,3 +5532,12 @@ queda bajo y conserva el vano cuando el despeje es suficiente. Las regresiones
 cubren puente real bajo/alto y la altura plana de la rampa. Siguen pendientes
 estructuras y objetos autoremove, callbacks, pathfinding, infraestructura y
 aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-SHIP-DEPOT-CLEAR-GUARDS (2026-09-12): `PlaceShipDepot`
+respeta ahora los guards que aporta `ClearTile_Water | Auto`: no construye sobre
+vehículos, bordes restringidos ni canales de otra compañía, y consulta el pool
+de depósitos antes de inspeccionar la limpieza de la huella. La materialización
+y la restauración también reactivan los estados no inundables de las ocho
+vecinas, equivalente a `DoClearSquare`. Las regresiones cubren ambas secciones,
+preview/aplicación atómicos, borde y propiedad. #329/#567 siguen abiertas por
+infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.

@@ -895,7 +895,7 @@ fn place_ship_depot_writes_current_raw_contract_and_active_owner() {
     }
     let mut original = s.map.get(depot).expect("agua del depósito");
     original.mapt = 0x60 | 0x02; // MP_WATER + zona climática persistida.
-    original.m1 = set_water_class_m1(original.m1 | 0x80, WaterClass::Canal);
+    original.m1 = set_water_class_m1(crate::company::OWNER_NONE_M1 | 0x80, WaterClass::Canal);
     original.m2 = 0xFE;
     original.m2_hi = 0xAA;
     original.m3 = 0x81;
@@ -906,7 +906,7 @@ fn place_ship_depot_writes_current_raw_contract_and_active_owner() {
     s.map.set_tile(depot, original).unwrap();
     let mut other_original = s.map.get(other).expect("agua de la parte opuesta");
     other_original.mapt = 0x60 | 0x03;
-    other_original.m1 = set_water_class_m1(other_original.m1, WaterClass::River);
+    other_original.m1 = set_water_class_m1(crate::company::OWNER_WATER_M1, WaterClass::River);
     other_original.m6 = 0xFD;
     s.map.set_tile(other, other_original).unwrap();
 
@@ -988,6 +988,53 @@ fn place_ship_depot_rejects_vehicle_on_either_section_atomically() {
         assert_eq!(s.economy.money, money);
         assert!(s.depots.is_empty());
     }
+}
+
+#[test]
+fn place_ship_depot_respects_water_edge_and_canal_owner() {
+    let mut edge = GameState::new(8, 8);
+    edge.construction.freeform_edges = false;
+    let edge_depot = TileCoord::new(0, 4);
+    let edge_footprint = crate::ship_depot_footprint(edge_depot, 0);
+    for coord in edge_footprint {
+        edge.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+
+    assert_eq!(
+        command_would_fail(&edge, &Command::PlaceShipDepotDir(edge_depot, 0)),
+        Some(crate::CommandError::TooCloseToMapEdge)
+    );
+    assert_eq!(
+        apply_command(&mut edge, &Command::PlaceShipDepotDir(edge_depot, 0)),
+        Err(crate::CommandError::TooCloseToMapEdge)
+    );
+    assert!(edge.depots.is_empty());
+
+    let mut rival = GameState::new(12, 12);
+    rival.ensure_rival_transcargo();
+    let depot = TileCoord::new(4, 4);
+    let [canal, other] = crate::ship_depot_footprint(depot, 0);
+    for coord in [canal, other, TileCoord::new(3, 4)] {
+        rival.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    let mut canal_tile = rival.map.get(canal).unwrap();
+    canal_tile.m1 = set_water_class_m1(1, WaterClass::Canal);
+    rival.map.set_tile(canal, canal_tile).unwrap();
+    let money = rival.economy.money;
+    let command = Command::PlaceShipDepotDir(depot, 0);
+
+    assert_eq!(
+        command_would_fail(&rival, &command),
+        Some(crate::CommandError::TileNotOwned)
+    );
+    assert_eq!(
+        apply_command(&mut rival, &command),
+        Err(crate::CommandError::TileNotOwned)
+    );
+    assert_eq!(rival.map.get_kind(canal), Some(TileKind::Water));
+    assert_eq!(rival.map.get_kind(other), Some(TileKind::Water));
+    assert_eq!(rival.economy.money, money);
+    assert!(rival.depots.is_empty());
 }
 
 #[test]

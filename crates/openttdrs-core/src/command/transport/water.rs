@@ -394,6 +394,22 @@ pub(crate) fn check_ship_depot_placement(
     if crate::depot::next_free_depot_id(&state.map).is_none() {
         return Err(CommandError::DepotPoolFull);
     }
+    // Al limpiar `WaterTileType::Clear`, `ClearTile_Water` conserva primero
+    // el guard de bordes, luego la ocupación y finalmente la propiedad del
+    // agua. Los canales de otra compañía no se pueden reemplazar con un
+    // depósito; el mar y los ríos normalmente llevan OWNER_WATER.
+    for tile in [origin, other] {
+        let Some(raw) = state.map.get(tile) else {
+            return Err(CommandError::OutOfBounds);
+        };
+        if raw.kind == TileKind::Water && water_tile_type(raw) == WATER_TILE_TYPE_CLEAR {
+            check_non_freeform_edge(&state.map, tile, state.construction.freeform_edges)?;
+            if state.vehicles.iter().any(|vehicle| vehicle.pos == tile) {
+                return Err(CommandError::VehicleInTheWay);
+            }
+            check_clear_water_owner(state, raw)?;
+        }
+    }
     // Locks y depósitos también son `MP_WATER` con una clase válida, pero
     // `ClearTile_Water` los rechaza cuando recibe `Auto`; nunca se deben
     // sobrescribir silenciosamente durante la construcción.
@@ -403,15 +419,6 @@ pub(crate) fn check_ship_depot_placement(
         }) {
             return Err(CommandError::BuildingMustBeDemolished);
         }
-    }
-    // La limpieza automática nativa llama a `EnsureNoVehicleOnGround` para
-    // cada parte. Comprobar ambas antes de modificar objetos conserva la
-    // atomicidad del preview y del apply.
-    if [origin, other]
-        .iter()
-        .any(|tile| state.vehicles.iter().any(|vehicle| vehicle.pos == *tile))
-    {
-        return Err(CommandError::VehicleInTheWay);
     }
     // `CmdBuildShipDepot` no consulta una tercera tesela delante de la boca:
     // su contrato sólo exige agua en las dos teselas que reemplaza. La

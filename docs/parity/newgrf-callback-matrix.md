@@ -1662,3 +1662,13 @@ por sí sola, incluso cuando su ID sólo existe por Action0/NewGRF; si el
 catálogo no conoce el motor, se mantiene el fallback vanilla para saves
 antiguos. La regresión cubre capacidad propia en una locomotora custom y
 stock de estación intacto.
+
+### #329-VEHICLE-ROAD-STEP-CATALOG — paso vial de vehículo único
+
+Actualizado: 2026-09-12 (`4d3a68f7`). La ruta
+`Vehicle::step_with_map_and_accel_and_catalog` ya no pierde el catálogo al
+delegar el tick de carretera sin vecinos. El controlador consulta el mismo
+`EngineDef` activo para `CB36`, techo de velocidad, potencia, peso y
+adelantamiento; las APIs públicas legacy mantienen su fallback vanilla. La
+regresión limita a 20 la velocidad de un bus custom y detecta el incremento
+incorrecto que producía la ruta vanilla.

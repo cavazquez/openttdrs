@@ -6231,3 +6231,14 @@ mercancía de la estación. Pasaron 2689 tests del core (1 ignorado), 1430 del
 cliente (2 ignorados), Clippy estricto en core y cliente, formato y
 `git diff --check`. #329 continúa abierta por callbacks y demás contratos de
 vehículo NewGRF; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-ROAD-STEP-CATALOG (2026-09-12, `4d3a68f7`):
+`Vehicle::step_with_map_and_accel_and_catalog` propaga ahora el catálogo
+activo al controlador vial de vehículo único. Antes, la actualización inicial
+consultaba el motor NewGRF pero el tick posterior llamaba a la API legacy y
+podía volver al motor vanilla; un bus custom podía superar su techo de
+velocidad. La regresión usa un motor de carretera custom limitado a 20 y
+verifica que el paso catalog-aware conserve ese límite. Pasaron 2690 tests del
+core (1 ignorado), 1430 del cliente (2 ignorados), Clippy estricto en core y
+cliente, formato y `git diff --check`. #329 continúa abierta por callbacks y
+consumidores legacy restantes; #326/#567 permanecen abiertas.

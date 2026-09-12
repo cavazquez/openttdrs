@@ -5437,3 +5437,10 @@ de una Oil Rig restaura cada tile acuático con el consumo nativo de
 bajo en `MAP4`, mientras el mar no consume una tirada. La regresión cubre la
 estación neutral y el estado final del stream. #329/#499 continúan abiertas por
 callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-ELEVATED-SEA-RESTORE (2026-09-12): la ruta común
+de restauración convierte el mar con `z > 0` en canal, tal como
+`MakeWaterKeepingClass`, y consume el `Random()` correspondiente para `MAP4`;
+el mar plano sigue sin tirada. La regresión usa una estación sobre cuatro
+esquinas elevadas y verifica clase, byte raw y RNG final. #329/#567 continúan
+abiertas por callbacks, pathfinding y aceptación visual/framebuffer.

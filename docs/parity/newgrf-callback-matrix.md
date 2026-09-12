@@ -1465,3 +1465,12 @@ el RNG global al restaurar cada pieza mediante el contrato equivalente a
 bajo en `MAP4`; el mar no consume RNG y queda en cero. La regresión cubre la
 plataforma con estación neutral, verifica el byte raw y el estado final del
 stream. Otros criterios de #329/#499 siguen pendientes.
+
+### #329/#567-WATER-ELEVATED-SEA-RESTORE — agua sobre terreno elevado
+
+Actualizado: 2026-09-12. La restauración compartida que modela
+`MakeWaterKeepingClass` convierte un `Sea` con `z > 0` en `Canal`, consume
+`Random()` y conserva el byte bajo en `MAP4`; el mar a nivel cero mantiene su
+clase y no consume RNG. La regresión construye una estación sobre una tesela
+de mar elevada y comprueba clase, `MAP4` y estado final del stream. Otros
+criterios de #329/#567 siguen pendientes.

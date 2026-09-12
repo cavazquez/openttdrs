@@ -178,6 +178,16 @@ pub(in crate::command::transport) fn make_water_tile_after_native_clear(
     c: TileCoord,
     water_class: WaterClass,
 ) -> Result<(), CommandError> {
+    // `MakeWaterKeepingClass` convierte un mar plano elevado en canal antes
+    // de limpiar: es el caso que evita que un tile de agua sobre terreno
+    // levantado reaparezca como `Sea` tras demoler una instalación.
+    let water_class = if water_class == WaterClass::Sea
+        && tile_slope_and_z(&state.map, c).is_some_and(|(_, z)| z > 0)
+    {
+        WaterClass::Canal
+    } else {
+        water_class
+    };
     let random_bits = match water_class {
         WaterClass::Canal | WaterClass::River => {
             u8::try_from(state.random.next() & 0xFF).unwrap_or(0)
@@ -1190,5 +1200,37 @@ mod tests {
                 .m3hi,
             expected_river_bits
         );
+    }
+
+    #[test]
+    fn native_clear_promotes_elevated_sea_to_canal() {
+        let mut state = GameState::new(8, 8);
+        let water = TileCoord::new(3, 3);
+        for corner in [
+            water,
+            TileCoord::new(water.x + 1, water.y),
+            TileCoord::new(water.x, water.y + 1),
+            TileCoord::new(water.x + 1, water.y + 1),
+        ] {
+            state.map.set_height(corner, 1).expect("elevated corner");
+        }
+        let mut tile = state.map.get(water).expect("water tile");
+        tile.kind = TileKind::Station;
+        tile.m1 = set_water_class_m1(tile.m1, WaterClass::Sea);
+        state.map.set_tile(water, tile).expect("station water");
+        state.random = crate::cargodist::parity::Randomizer {
+            state: [0x1122_3344, 0x5566_7788],
+        };
+        let mut expected_random = state.random;
+        let expected_bits = u8::try_from(expected_random.next() & 0xFF).unwrap_or(0);
+
+        make_water_tile_after_native_clear(&mut state, water, WaterClass::Sea)
+            .expect("restore elevated sea");
+
+        let restored = state.map.get(water).expect("restored water");
+        assert_eq!(restored.kind, TileKind::Water);
+        assert_eq!(water_class_from_m1(restored.m1), WaterClass::Canal);
+        assert_eq!(restored.m3hi, expected_bits);
+        assert_eq!(state.random, expected_random);
     }
 }

@@ -57,9 +57,19 @@ pub fn poll_new_vehicle_news(state: &mut crate::GameState) {
         {
             continue;
         }
-        state.runtime.engine_available_news_sent.insert(engine.id);
-        if crate::engine::engine_available_in_year(engine, year) && !engine.no_news() {
-            pending.push((engine.id, engine.kind, engine.name.clone()));
+        match crate::engine::engine_lifecycle_state_in_year(engine, year) {
+            crate::engine::EngineLifecycleState::Available => {
+                state.runtime.engine_available_news_sent.insert(engine.id);
+                if !engine.no_news() {
+                    pending.push((engine.id, engine.kind, engine.name.clone()));
+                }
+            }
+            crate::engine::EngineLifecycleState::Retired => {
+                state.runtime.engine_available_news_sent.insert(engine.id);
+            }
+            crate::engine::EngineLifecycleState::NotIntroduced
+            | crate::engine::EngineLifecycleState::ExclusivePreview
+            | crate::engine::EngineLifecycleState::PendingAvailability => {}
         }
     }
 
@@ -165,6 +175,8 @@ mod tests {
         state.tick = tick_for_calendar_year(1951);
         state.sync_timers_from_tick();
         poll_new_vehicle_news(&mut state);
+        state.tick = tick_for_calendar_year(1952);
+        state.sync_timers_from_tick();
         poll_new_vehicle_news(&mut state);
 
         assert_eq!(state.news.items.len(), 1);

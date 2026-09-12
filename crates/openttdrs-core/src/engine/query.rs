@@ -33,6 +33,21 @@ pub const EXTRA_ENGINE_FLAG_NO_PREVIEW: u32 = 1 << 1;
 pub const EXTRA_ENGINE_FLAG_JOIN_PREVIEW: u32 = 1 << 2;
 pub const EXTRA_ENGINE_FLAG_SYNC_RELIABILITY: u32 = 1 << 3;
 
+/// Estado de introducción que puede observar el ciclo de previews.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineLifecycleState {
+    /// Todavía no llegó el año de introducción.
+    NotIntroduced,
+    /// El motor está en la ventana de preview exclusiva de un año.
+    ExclusivePreview,
+    /// `NoPreview`: llegó la fecha, pero espera la disponibilidad general.
+    PendingAvailability,
+    /// El motor ya se puede ofrecer a todas las compañías.
+    Available,
+    /// La vida comercial del modelo terminó o quedó inválida.
+    Retired,
+}
+
 /// Devuelve el motor cuya edad y fiabilidad debe compartir `engine`.
 ///
 /// `SyncReliability` sigue la cadena de variantes hacia el padre, como
@@ -101,6 +116,80 @@ pub fn engine_available_in_year(engine: &EngineDef, calendar_year: u32) -> bool 
     calendar_year >= intro
         && (engine.model_life_years == u8::MAX
             || calendar_year < intro.saturating_add(available_years))
+}
+
+/// Estado de introducción anual alineado con `CalendarEnginesMonthlyLoop`.
+#[must_use]
+pub fn engine_lifecycle_state_in_year(
+    engine: &EngineDef,
+    calendar_year: u32,
+) -> EngineLifecycleState {
+    let intro = u32::from(engine.intro_year);
+    if calendar_year < intro {
+        return EngineLifecycleState::NotIntroduced;
+    }
+    if !engine_available_in_year(engine, calendar_year) {
+        return EngineLifecycleState::Retired;
+    }
+    if calendar_year == intro {
+        return if engine.no_preview() {
+            EngineLifecycleState::PendingAvailability
+        } else {
+            EngineLifecycleState::ExclusivePreview
+        };
+    }
+    EngineLifecycleState::Available
+}
+
+/// Devuelve el grupo de preview de un motor, incluyendo sólo variantes que
+/// declaran `JoinPreview` en cada enlace de la cadena.
+#[must_use]
+pub fn engine_preview_group_in(catalog: &[EngineDef], root_id: u16) -> Vec<&EngineDef> {
+    let Some(root) = engine_in_catalog(catalog, root_id) else {
+        return Vec::new();
+    };
+    let mut group = vec![root];
+    let mut frontier = vec![root.id];
+    let mut visited = HashSet::from([root.id]);
+    while let Some(parent_id) = frontier.pop() {
+        for candidate in catalog.iter().filter(|candidate| {
+            candidate.variant_parent_id == Some(parent_id) && candidate.joins_preview()
+        }) {
+            if visited.insert(candidate.id) {
+                group.push(candidate);
+                frontier.push(candidate.id);
+            }
+        }
+    }
+    group
+}
+
+/// Busca la raíz de preview de un motor y corta enlaces inexistentes o cíclicos.
+#[must_use]
+pub fn engine_preview_root_id_in(catalog: &[EngineDef], engine_id: u16) -> Option<u16> {
+    let mut current = engine_in_catalog(catalog, engine_id)?;
+    let mut visited = HashSet::new();
+    loop {
+        if !visited.insert(current.id) || !current.joins_preview() {
+            return Some(current.id);
+        }
+        let Some(parent_id) = current.variant_parent_id else {
+            return Some(current.id);
+        };
+        let Some(parent) = engine_in_catalog(catalog, parent_id) else {
+            return Some(current.id);
+        };
+        current = parent;
+    }
+}
+
+/// Grupo de preview para un motor, resolviendo primero la raíz del enlace.
+#[must_use]
+pub fn engine_preview_group_for_in(catalog: &[EngineDef], engine_id: u16) -> Vec<&EngineDef> {
+    let Some(root_id) = engine_preview_root_id_in(catalog, engine_id) else {
+        return Vec::new();
+    };
+    engine_preview_group_in(catalog, root_id)
 }
 
 /// Motores visibles en la ventana de compra de un depósito, filtrados y ordenados.
@@ -350,6 +439,62 @@ mod tests {
 
         engine.model_life_years = u8::MAX;
         assert!(engine_available_in_year(&engine, 2200));
+    }
+
+    #[test]
+    fn lifecycle_distinguishes_preview_no_preview_and_retirement() {
+        let mut engine = engine_for_vehicle(VehicleKind::Bus, ENGINE_BUS_MPS).clone();
+        engine.intro_year = 1950;
+        engine.model_life_years = 3;
+        assert_eq!(
+            engine_lifecycle_state_in_year(&engine, 1949),
+            EngineLifecycleState::NotIntroduced
+        );
+        assert_eq!(
+            engine_lifecycle_state_in_year(&engine, 1950),
+            EngineLifecycleState::ExclusivePreview
+        );
+        assert_eq!(
+            engine_lifecycle_state_in_year(&engine, 1951),
+            EngineLifecycleState::Available
+        );
+        assert_eq!(
+            engine_lifecycle_state_in_year(&engine, 1953),
+            EngineLifecycleState::Retired
+        );
+
+        engine.extra_flags = EXTRA_ENGINE_FLAG_NO_PREVIEW;
+        assert_eq!(
+            engine_lifecycle_state_in_year(&engine, 1950),
+            EngineLifecycleState::PendingAvailability
+        );
+    }
+
+    #[test]
+    fn preview_group_follows_join_preview_links_without_cycles() {
+        let mut parent = engine_for_vehicle(VehicleKind::Ship, ENGINE_SHIP_MPS).clone();
+        parent.id = 20_101;
+        let mut child = parent.clone();
+        child.id = 20_102;
+        child.variant_parent_id = Some(parent.id);
+        child.extra_flags = EXTRA_ENGINE_FLAG_JOIN_PREVIEW;
+        let mut grandchild = child.clone();
+        grandchild.id = 20_103;
+        grandchild.variant_parent_id = Some(child.id);
+        let mut separate = child.clone();
+        separate.id = 20_104;
+        separate.extra_flags = 0;
+        let catalog = vec![parent, child, grandchild, separate];
+
+        assert_eq!(engine_preview_root_id_in(&catalog, 20_103), Some(20_101));
+        assert_eq!(
+            engine_preview_group_for_in(&catalog, 20_103)
+                .iter()
+                .map(|engine| engine.id)
+                .collect::<Vec<_>>(),
+            vec![20_101, 20_102, 20_103]
+        );
+        assert_eq!(engine_preview_root_id_in(&catalog, 20_104), Some(20_104));
     }
 
     #[test]

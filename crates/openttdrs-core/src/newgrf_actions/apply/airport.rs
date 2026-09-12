@@ -215,6 +215,8 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
                 )
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
+            let newgrf_runtime = (gfx.needs_runtime_resolve() || gfx.has_tile_layouts())
+                .then(|| Box::new(gfx.clone()));
             catalog.push(NewgrfAirportSpecDef {
                 id: global_id,
                 class: class_of_subst(subst),
@@ -236,6 +238,7 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
                 newgrf_grfid: entry.grfid,
                 newgrf_views: views,
                 newgrf_purchase_views: purchase_views,
+                newgrf_runtime,
             });
         }
     }
@@ -456,6 +459,7 @@ mod tests {
             newgrf_grfid: 1,
             newgrf_views: Vec::new(),
             newgrf_purchase_views: Vec::new(),
+            newgrf_runtime: None,
         }];
 
         rehydrate_newgrf_airport_tiles(&mut state);
@@ -532,6 +536,7 @@ mod tests {
             newgrf_grfid: 0,
             newgrf_views: Vec::new(),
             newgrf_purchase_views: Vec::new(),
+            newgrf_runtime: None,
         }];
 
         rehydrate_newgrf_airport_tiles(&mut state);

@@ -248,6 +248,7 @@ fn newgrf_airport_build_uses_declared_east_layout_without_transposing_tiles() {
         newgrf_grfid: 0,
         newgrf_views: Vec::new(),
         newgrf_purchase_views: Vec::new(),
+        newgrf_runtime: None,
     });
     s.current_airport_newgrf_id = Some(10);
     let origin = TileCoord::new(2, 2);
@@ -334,6 +335,7 @@ fn explicit_newgrf_layout_uses_only_declared_tiles_and_rejects_unknown_index() {
         newgrf_grfid: 0,
         newgrf_views: Vec::new(),
         newgrf_purchase_views: Vec::new(),
+        newgrf_runtime: None,
     });
     // El comando explícito lleva el id; no depende de una selección de picker
     // que pudo cambiar antes de aplicarse (red/replay).

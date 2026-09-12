@@ -700,6 +700,7 @@ mod tests {
             newgrf_grfid: 0x1122_3344,
             newgrf_views: Vec::new(),
             newgrf_purchase_views: Vec::new(),
+            newgrf_runtime: None,
         };
         let tile_catalog = vec![current.clone()];
         let mut ctx = action2_eval_ctx_for_airport_tile_with_towns_and_airport_catalog(

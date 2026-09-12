@@ -7446,6 +7446,51 @@ mod tests {
         assert_eq!(preview.rgba, def.newgrf_purchase_views[0].rgba);
     }
 
+    /// Los callbacks 0x155/0x156 usan el mismo grafo Action2 que el preview:
+    /// no deben desaparecer al construir el catálogo de Airports.
+    #[test]
+    fn airports_action2_text_callbacks_survive_catalog_apply() {
+        let air = build_action0_airport_payload(0, 0, &[(0, 0, 0)], 4, 3, "CallbackPort");
+        let action2 = crate::newgrf_sprites::build_action2_callback_literal_payload(
+            ACTION0_FEATURE_AIRPORTS,
+            7,
+            0x12,
+        );
+        let grfid = crate::newgrf_config::grfid_from_bytes([b'A', b'C', 0, 1]);
+        let bytes = crate::newgrf_sprites::build_grf_v2_feature_with_action2_chain(
+            &air,
+            ACTION0_FEATURE_AIRPORTS,
+            0,
+            7,
+            &action2,
+            1,
+            1,
+            &[174],
+            [b'A', b'C', 0, 1],
+            "airport-text-callback",
+        );
+        let dir = tempfile_dir_with("airport-text-callback.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("airport-text-callback.grf", grfid));
+        apply_newgrf_airports(&mut state, &[&dir]);
+
+        let def = state
+            .airport_spec_catalog
+            .first()
+            .expect("Airport Action0 aplicado");
+        assert!(def.newgrf_runtime.is_some());
+        assert_eq!(
+            crate::resolve_airport_text_callback(def, 0, crate::CBID_AIRPORT_LAYOUT_NAME,),
+            crate::AirportTextCallback::Local(0x12)
+        );
+        assert_eq!(
+            crate::resolve_airport_text_callback(def, 1, crate::CBID_AIRPORT_ADDITIONAL_TEXT,),
+            crate::AirportTextCallback::Local(0x12)
+        );
+    }
+
     /// #231: Cargo Action3 adjunta group/views al `CargoSpecDef` sin contaminar ids.
     #[test]
     fn cargoes_ac_action3_views() {

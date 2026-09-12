@@ -1351,6 +1351,10 @@ pub const CBID_AIRPTILE_ANIMATION_NEXT_FRAME: u16 = 0x153;
 pub const CBID_AIRPTILE_ANIMATION_SPEED: u16 = 0x154;
 /// Callback `AirportTile`: foundations dinámicos (`CBID_AIRPTILE_DRAW_FOUNDATIONS`).
 pub const CBID_AIRPTILE_DRAW_FOUNDATIONS: u16 = 0x150;
+/// Callback `Airport`: texto adicional en el picker (`0x155`).
+pub const CBID_AIRPORT_ADDITIONAL_TEXT: u16 = 0x155;
+/// Callback `Airport`: nombre visible de un layout (`0x156`).
+pub const CBID_AIRPORT_LAYOUT_NAME: u16 = 0x156;
 
 /// Bloque de sprites Action5 (shore / catenary / …).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

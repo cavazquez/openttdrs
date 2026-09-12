@@ -3080,6 +3080,7 @@ mod tests {
             newgrf_grfid: 0x1122_3344,
             newgrf_views: Vec::new(),
             newgrf_purchase_views: Vec::new(),
+            newgrf_runtime: None,
         }];
         let mut active = HashSet::new();
 

@@ -226,6 +226,9 @@ pub struct NewgrfAirportSpecDef {
     /// Grupo Action3 purchase (`0xFF`) para picker.
     #[serde(default, skip)]
     pub newgrf_purchase_views: Vec<crate::newgrf_sprites::DecodedSprite>,
+    /// Grafo Action2 del aeropuerto para callbacks y previews dependientes del layout.
+    #[serde(default, skip)]
+    pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
 }
 
 impl NewgrfAirportSpecDef {
@@ -236,7 +239,9 @@ impl NewgrfAirportSpecDef {
 
     #[must_use]
     pub fn has_newgrf_sprites(&self) -> bool {
-        !self.newgrf_views.is_empty() || !self.newgrf_purchase_views.is_empty()
+        !self.newgrf_views.is_empty()
+            || !self.newgrf_purchase_views.is_empty()
+            || self.newgrf_runtime.is_some()
     }
 
     /// Vista para picker: purchase si hay; si no, default.
@@ -245,6 +250,32 @@ impl NewgrfAirportSpecDef {
         self.newgrf_purchase_views
             .first()
             .or_else(|| self.newgrf_views.first())
+    }
+
+    /// Resuelve la preview Action3 para un layout concreto.
+    ///
+    /// `AirportScopeResolver` expone el índice de layout en la variable
+    /// `0x40`, por lo que una cadena Action2 variational puede escoger una
+    /// miniatura distinta para cada layout. El resultado se clona porque el
+    /// picker lo entrega al cache de imágenes de Bevy.
+    #[must_use]
+    pub fn newgrf_preview_sprite_for_layout(
+        &self,
+        layout: u8,
+    ) -> Option<crate::newgrf_sprites::DecodedSprite> {
+        let runtime = self.newgrf_runtime.as_ref()?;
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        ctx.vars.insert(0x40, u32::from(layout));
+        let sprites = runtime
+            .views_for_specific_u16_ctx(
+                u16::from(self.newgrf_local_id),
+                AIRPORT_ACTION3_PURCHASE,
+                &mut ctx,
+            )
+            .or_else(|| {
+                runtime.views_for_local_id_u16_ctx(u16::from(self.newgrf_local_id), &mut ctx)
+            })?;
+        sprites.first().cloned()
     }
 }
 

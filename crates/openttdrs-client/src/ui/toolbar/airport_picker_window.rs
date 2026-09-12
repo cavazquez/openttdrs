@@ -5,10 +5,11 @@
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::{
-    AirportClassId, AirportSpecId, STATION_COVERAGE_RADIUS, airport_spec_def,
-    airport_spec_footprint, list_airport_classes, list_airport_specs,
-    newgrf_airport_footprint_with_layout, newgrf_airport_layout_selection_with_index,
-    newgrf_airport_spec_def, station_coverage_at,
+    AirportClassId, AirportSpecId, AirportTextCallback, CBID_AIRPORT_ADDITIONAL_TEXT,
+    CBID_AIRPORT_LAYOUT_NAME, STATION_COVERAGE_RADIUS, airport_spec_def, airport_spec_footprint,
+    list_airport_classes, list_airport_specs, newgrf_airport_footprint_with_layout,
+    newgrf_airport_layout_selection_with_index, newgrf_airport_spec_def,
+    resolve_airport_text_callback, station_coverage_at,
 };
 
 use crate::i18n::{Locale, localized_text};
@@ -60,6 +61,10 @@ pub(crate) struct AirportPickerSpecList;
 
 #[derive(Component)]
 pub(crate) struct AirportPickerLayoutText;
+
+/// Texto adicional devuelto por `CBID_AIRPORT_ADDITIONAL_TEXT`.
+#[derive(Component)]
+pub(crate) struct AirportPickerAdditionalText;
 
 pub(crate) fn setup_airport_picker(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -189,6 +194,16 @@ pub(crate) fn setup_airport_picker(mut commands: Commands, asset_server: Res<Ass
                     24.0,
                 );
             });
+        panel.spawn((
+            AirportPickerAdditionalText,
+            Text::new(""),
+            window_text_font(asset_server, UiFontRole::Caption),
+            TextColor(WINDOW_TEXT),
+            Node {
+                margin: UiRect::bottom(Val::Px(6.0)),
+                ..default()
+            },
+        ));
         spawn_section_label(panel, asset_server, "Cobertura");
         panel
             .spawn(Node {
@@ -313,6 +328,49 @@ fn airport_layout_label(selection: Option<(u8, u8)>, layout_count: usize) -> Str
     )
 }
 
+fn airport_text_callback_label(
+    def: &openttdrs_core::NewgrfAirportSpecDef,
+    layout: u8,
+    callback: u16,
+    catalog: &openttdrs_core::NewGrfStringCatalog,
+    locale: Locale,
+) -> Option<String> {
+    let string_id = match resolve_airport_text_callback(def, layout, callback) {
+        AirportTextCallback::None | AirportTextCallback::Invalid(_) => return None,
+        AirportTextCallback::Local(offset) => {
+            openttdrs_core::GRF_STRING_GENERIC_BASE + u32::from(offset)
+        }
+        AirportTextCallback::GrfString(string_id) => string_id,
+    };
+    catalog.lookup_rendered(
+        def.newgrf_grfid,
+        string_id,
+        match locale {
+            Locale::Es => openttdrs_core::NEWGRF_LANGUAGE_SPANISH,
+            Locale::En => openttdrs_core::NEWGRF_LANGUAGE_ENGLISH,
+        },
+        &openttdrs_core::NewGrfTextContext::default(),
+    )
+}
+
+fn airport_layout_label_with_newgrf(
+    selection: Option<(u8, u8)>,
+    layout_count: usize,
+    def: Option<&openttdrs_core::NewgrfAirportSpecDef>,
+    catalog: &openttdrs_core::NewGrfStringCatalog,
+    locale: Locale,
+) -> String {
+    if let Some((index, _)) = selection
+        && let Some(def) = def
+        && let Some(label) =
+            airport_text_callback_label(def, index, CBID_AIRPORT_LAYOUT_NAME, catalog, locale)
+        && !label.is_empty()
+    {
+        return label;
+    }
+    airport_layout_label(selection, layout_count)
+}
+
 /// Añade los Airports Action0 que aparecen al aplicar/cambiar NewGRF.
 pub(crate) fn sync_airport_catalog_entries(
     mut commands: Commands,
@@ -404,14 +462,19 @@ pub(crate) fn sync_airport_preview_image(
         return;
     };
     if let Some(def) = active_newgrf_airport(&sim) {
-        let Some(decoded) = def.newgrf_preview_sprite() else {
+        let layout = station_state.airport_layout.unwrap_or(0);
+        let Some(decoded) = def
+            .newgrf_preview_sprite_for_layout(layout)
+            .or_else(|| def.newgrf_preview_sprite().cloned())
+        else {
             node.display = Display::None;
             return;
         };
-        image.image = cache.handle_for(
+        image.image = cache.handle_for_variant(
             AIRPORT_NEWGRF_PREVIEW_CACHE_TYPE,
             def.id,
-            decoded,
+            u32::from(layout).saturating_add(1),
+            &decoded,
             &mut images,
         );
         node.display = Display::Flex;
@@ -456,6 +519,7 @@ pub(crate) fn sync_airport_picker(
             Without<AirportPickerSizeLabel>,
             Without<AirportPickerCoverageText>,
             Without<AirportPickerLayoutText>,
+            Without<AirportPickerAdditionalText>,
         ),
     >,
     mut size_q: Query<
@@ -465,6 +529,7 @@ pub(crate) fn sync_airport_picker(
             Without<AirportPickerCoverageText>,
             Without<FloatingWindowTitleText>,
             Without<AirportPickerLayoutText>,
+            Without<AirportPickerAdditionalText>,
         ),
     >,
     mut coverage_q: Query<
@@ -474,6 +539,7 @@ pub(crate) fn sync_airport_picker(
             Without<AirportPickerSizeLabel>,
             Without<FloatingWindowTitleText>,
             Without<AirportPickerLayoutText>,
+            Without<AirportPickerAdditionalText>,
         ),
     >,
     mut layout_q: Query<
@@ -483,6 +549,17 @@ pub(crate) fn sync_airport_picker(
             Without<AirportPickerSizeLabel>,
             Without<AirportPickerCoverageText>,
             Without<FloatingWindowTitleText>,
+            Without<AirportPickerAdditionalText>,
+        ),
+    >,
+    mut additional_q: Query<
+        &mut Text,
+        (
+            With<AirportPickerAdditionalText>,
+            Without<AirportPickerSizeLabel>,
+            Without<AirportPickerCoverageText>,
+            Without<FloatingWindowTitleText>,
+            Without<AirportPickerLayoutText>,
         ),
     >,
     mut buttons: Query<(&AirportPickerButton, &mut BackgroundColor), With<Button>>,
@@ -553,7 +630,28 @@ pub(crate) fn sync_airport_picker(
         **size = localized_airport_size(locale, w, h);
     }
     if let Ok(mut layout_text) = layout_q.single_mut() {
-        **layout_text = airport_layout_label(layout, layout_count);
+        **layout_text = airport_layout_label_with_newgrf(
+            layout,
+            layout_count,
+            newgrf,
+            &sim.state.runtime.newgrf_string_catalog,
+            locale,
+        );
+    }
+    if let Ok(mut additional) = additional_q.single_mut() {
+        **additional = newgrf
+            .and_then(|def| {
+                layout.and_then(|(index, _)| {
+                    airport_text_callback_label(
+                        def,
+                        index,
+                        CBID_AIRPORT_ADDITIONAL_TEXT,
+                        &sim.state.runtime.newgrf_string_catalog,
+                        locale,
+                    )
+                })
+            })
+            .unwrap_or_default();
     }
     if let Ok(mut cov) = coverage_q.single_mut() {
         let text = if !station_state.airport_show_coverage {
@@ -739,6 +837,7 @@ mod tests {
             newgrf_grfid: 0,
             newgrf_views: Vec::new(),
             newgrf_purchase_views: Vec::new(),
+            newgrf_runtime: None,
         }
     }
 

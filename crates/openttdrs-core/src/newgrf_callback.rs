@@ -6,6 +6,7 @@
 //! - Call sites #266: industry location, house/object construction, station availability,
 //!   industry-tile trigger → Action2 random.
 
+use crate::airport_class::NewgrfAirportSpecDef;
 use crate::cargo_spec::{CargoSpecDef, cargo_type_from_label_with_catalog};
 use crate::cargodist::parity::Randomizer;
 use crate::company::CompanyId;
@@ -3301,6 +3302,52 @@ pub fn resolve_object_slope_callback_for_build(
         def.newgrf_grf_version,
         ctx.registers_100.get(&0x100).copied(),
     )
+}
+
+/// Resultado de texto que devuelve un callback `Airport` en el picker.
+///
+/// `Local` representa `GRFSTR_MISC_GRF_TEXT + result`; `GrfString` conserva el
+/// `StringID` que el callback dejó en `register 0x100` para el resultado
+/// especial `0x40F`. `None` equivale a `CALLBACK_FAILED`/`0x400` y `Invalid`
+/// mantiene visible cualquier retorno fuera del contrato de `OpenTTD` para que
+/// el caller no lo convierta silenciosamente en un nombre.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AirportTextCallback {
+    None,
+    Local(u16),
+    GrfString(u32),
+    Invalid(u16),
+}
+
+/// Evalúa `CBID_AIRPORT_ADDITIONAL_TEXT` o `CBID_AIRPORT_LAYOUT_NAME` en el
+/// scope de compra de aeropuerto.
+///
+/// En esta ruta todavía no existe una estación: como en
+/// `AirportResolverObject(INVALID_TILE, nullptr, ...)`, la única variable de
+/// scope siempre definida es `0x40`, el índice del layout. Los registros
+/// temporales no sobreviven a la llamada; `register 0x100` sólo se lee para
+/// resolver el retorno especial `0x40F`.
+#[must_use]
+pub fn resolve_airport_text_callback(
+    def: &NewgrfAirportSpecDef,
+    layout: u8,
+    callback: u16,
+) -> AirportTextCallback {
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return AirportTextCallback::None;
+    };
+    let mut ctx = Action2EvalCtx::default();
+    ctx.vars.insert(0x40, u32::from(layout));
+    let result = runtime.resolve_callback_ctx(def.newgrf_local_id, callback, 0, 0, &mut ctx);
+    match result {
+        CALLBACK_FAILED | 0x400 => AirportTextCallback::None,
+        0x40F => ctx.registers_100.get(&0x100).copied().map_or(
+            AirportTextCallback::Invalid(result),
+            AirportTextCallback::GrfString,
+        ),
+        0..=0x3FF => AirportTextCallback::Local(result),
+        other => AirportTextCallback::Invalid(other),
+    }
 }
 
 /// Texto que devuelve CB15C para la ventana de construcción de un objeto.

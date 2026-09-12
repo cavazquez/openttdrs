@@ -9384,6 +9384,7 @@ fn built_newgrf_airport_uses_parent_badge_action2_sprite() {
         newgrf_grfid: 0x4150_544C,
         newgrf_views: Vec::new(),
         newgrf_purchase_views: Vec::new(),
+        newgrf_runtime: None,
     }];
 
     let grid = RenderGrid::from_map(&map, 8, 8);

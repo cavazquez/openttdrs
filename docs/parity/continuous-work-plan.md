@@ -5355,3 +5355,11 @@ depósito naval conserva ahora el desempate por `DepotID` de `MAP2`, igual que
 alcanzables equidistantes podían elegir una boca distinta. La regresión cubre
 dos depósitos propios con IDs y posiciones invertidos. #329/#567 continúan
 abiertas por callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-SHIP-OWNER-TRANSFER (2026-09-12): la adquisición de
+una compañía lee y escribe el propietario de infraestructura mediante los
+cinco bits bajos de `MAPO` (`m1 & 0x1F`), como `ChangeTileOwner_Water` nativo.
+Esto transfiere las dos piezas de un depósito naval aunque `m1` tenga clase de
+agua o `DockingTile`, conservando esos flags. La regresión cubre una compañía
+quebrada con un depósito naval y el flag de atraque activo. #329/#567 continúan
+abiertas por callbacks, pathfinding y aceptación visual/framebuffer.

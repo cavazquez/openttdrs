@@ -9,6 +9,8 @@ use crate::news::{NewsReference, NewsType, add_news_item, default_display_for_ty
 
 use super::error::CommandError;
 
+const TILE_OWNER_MASK: u8 = 0x1F;
+
 /// Precio de compra = valoración de activos del rival (mín. 1).
 #[must_use]
 pub fn buy_company_price(state: &GameState, target: CompanyId) -> i64 {
@@ -101,8 +103,11 @@ fn transfer_tile_owners(state: &mut GameState, from: CompanyId, to: CompanyId) {
             ) {
                 continue;
             }
-            if tile.m1 == from.0 {
-                tile.m1 = to.0;
+            // `MAPO` stores the owner in the five low bits. Water-class and
+            // docking flags share `m1` on ship infrastructure and must
+            // survive a company transfer, as in `SetTileOwner` nativo.
+            if tile.m1 & TILE_OWNER_MASK == from.0 {
+                tile.m1 = (tile.m1 & !TILE_OWNER_MASK) | (to.0 & TILE_OWNER_MASK);
                 let _ = state.map.set_tile(pos, tile);
             }
         }
@@ -159,5 +164,37 @@ mod tests {
         state.economy.money = 50_000_000;
         let err = apply_command(&mut state, &Command::BuyCompany(CompanyId(1))).unwrap_err();
         assert_eq!(err, CommandError::CompanyNotBankrupt);
+    }
+
+    #[test]
+    fn buy_bankrupt_rival_transfers_ship_depot_owner_without_losing_water_flags() {
+        let mut state = GameState::new(16, 8);
+        state.ensure_rival_transcargo();
+        let rival = CompanyId(1);
+        let ridx = state.companies.iter().position(|c| c.id == rival).unwrap();
+        state.companies[ridx].economy.money = -2_000_000;
+        state.companies[ridx].economy.max_loan = 200_000;
+        state.companies[ridx].economy.max_loan_override = Some(200_000);
+        state.companies[ridx].economy.loan = 200_000;
+
+        let depot = crate::map::TileCoord::new(5, 3);
+        for tile in crate::ship_depot_footprint(depot, 3) {
+            crate::map::make_water_tile(&mut state.map, tile, crate::WaterClass::Sea).unwrap();
+        }
+        apply_command(&mut state, &Command::PlaceShipDepotDir(depot, 3)).unwrap();
+        for tile in crate::ship_depot_footprint(depot, 3) {
+            let mut raw = state.map.get(tile).unwrap();
+            raw.m1 = (raw.m1 & !TILE_OWNER_MASK) | rival.0 | 0x80;
+            state.map.set_tile(tile, raw).unwrap();
+        }
+
+        state.economy.money = 50_000_000;
+        apply_command(&mut state, &Command::BuyCompany(rival)).unwrap();
+
+        for tile in crate::ship_depot_footprint(depot, 3) {
+            let raw = state.map.get(tile).unwrap();
+            assert_eq!(raw.m1 & TILE_OWNER_MASK, CompanyId::PLAYER.0);
+            assert_ne!(raw.m1 & 0x80, 0, "el flag de docking debe conservarse");
+        }
     }
 }

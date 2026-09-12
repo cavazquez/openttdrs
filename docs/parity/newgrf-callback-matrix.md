@@ -1361,3 +1361,13 @@ navales propios equidistantes con orden geométrico inverso al de sus IDs. El
 selector antiguo por `y/x` queda cubierto como diferencia corregida; callbacks,
 pathfinding completo y aceptación visual/framebuffer siguen pendientes en
 #329/#567.
+
+### #329/#567-SHIP-OWNER-TRANSFER — ownership de depósitos navales
+
+Actualizado: 2026-09-12. La compra de una compañía ahora lee y escribe el
+owner de infraestructura con la máscara baja de `MAPO` (`m1 & 0x1F`), igual
+que `ChangeTileOwner_Water` nativo. Esto permite transferir ambas piezas de un
+depósito naval aun cuando `m1` contenga clase de agua o `DockingTile`, y
+conserva esos flags durante la operación. La regresión usa una adquisición de
+compañía quebrada con el flag de atraque activo. Otros criterios de #329/#567
+siguen pendientes.

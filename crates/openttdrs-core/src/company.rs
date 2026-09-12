@@ -104,10 +104,13 @@ pub const DEFAULT_COMPANY_LANDSCAPING_LIMIT: u32 = 4096 << 16;
 /// Entradas de `PLYR.yearly_expenses`: tres años por trece clases de gasto.
 pub const COMPANY_YEARLY_EXPENSES_COUNT: usize = 3 * 13;
 
-/// Escribe el owner de infraestructura en `m1` (vía / carretera / depósitos).
+/// Escribe el owner de infraestructura en los cinco bits bajos de `m1`.
+///
+/// Las teselas navales comparten el byte con la clase de agua y flags de
+/// atraque; esos bits no forman parte del owner y se conservan.
 #[must_use]
 pub fn tile_with_owner(mut tile: crate::map::Tile, owner: CompanyId) -> crate::map::Tile {
-    tile.m1 = owner.0;
+    tile.m1 = (tile.m1 & !0x1F) | (owner.0 & 0x1F);
     tile
 }
 
@@ -1122,5 +1125,17 @@ mod tests {
             ),
             CompanyId(1)
         );
+    }
+
+    #[test]
+    fn tile_with_owner_preserves_non_owner_m1_bits() {
+        let map = Map::new_flat(4, 4, 0);
+        let coord = TileCoord::new(1, 1);
+        let mut tile = map.get(coord).unwrap();
+        tile.kind = TileKind::ShipDepot;
+        tile.m1 = 0xA1;
+
+        let updated = tile_with_owner(tile, CompanyId(2));
+        assert_eq!(updated.m1, 0xA2);
     }
 }

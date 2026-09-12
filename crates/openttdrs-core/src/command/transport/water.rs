@@ -7,9 +7,10 @@ use crate::bridge_spec::{
 use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build_cost};
 use crate::map::{
     Map, Tile, TileCoord, TileKind, WaterClass, has_tile_water_ground, inclined_slope_direction,
-    is_map_object_tile, is_tunnel_entrance_slope, make_water_tile, object_footprint_tiles,
-    object_id_from_tile, object_origin_from_tile, object_type_dims_id, opposite_diag_dir,
-    set_water_class_m1, tile_slope_and_z, water_class_from_m1,
+    is_map_object_tile, is_tunnel_entrance_slope, make_water_tile,
+    make_water_tile_with_random_bits, object_footprint_tiles, object_id_from_tile,
+    object_origin_from_tile, object_type_dims_id, opposite_diag_dir, set_water_class_m1,
+    tile_slope_and_z, water_class_from_m1,
 };
 use crate::{GameState, Station, StopKind};
 
@@ -822,7 +823,9 @@ pub(in crate::command) fn place_canal(
     if state.map.get(c).is_some_and(crate::map::is_canal_tile) {
         return Ok(());
     }
-    make_water_tile(&mut state.map, c, WaterClass::Canal).map_err(|_| CommandError::OutOfBounds)?;
+    let random_bits = u8::try_from(state.random.next() & 0xFF).unwrap_or(0);
+    make_water_tile_with_random_bits(&mut state.map, c, WaterClass::Canal, random_bits)
+        .map_err(|_| CommandError::OutOfBounds)?;
     state.economy.money -= station_build_cost(&state.global_economy) / 2;
     Ok(())
 }
@@ -850,7 +853,9 @@ pub(in crate::command) fn place_river(
     if state.map.get(c).is_some_and(crate::map::is_river_tile) {
         return Ok(());
     }
-    make_water_tile(&mut state.map, c, WaterClass::River).map_err(|_| CommandError::OutOfBounds)?;
+    let random_bits = u8::try_from(state.random.next() & 0xFF).unwrap_or(0);
+    make_water_tile_with_random_bits(&mut state.map, c, WaterClass::River, random_bits)
+        .map_err(|_| CommandError::OutOfBounds)?;
     crate::world_gen::clear_desert_zone_around_river(&mut state.map, c)
         .map_err(|_| CommandError::OutOfBounds)?;
     state.economy.money -= station_build_cost(&state.global_economy) / 4;
@@ -1130,5 +1135,46 @@ mod tests {
         let mut expected = object;
         expected.mapt = 0xA0;
         assert_eq!(state.map.get(object_pos), Some(expected));
+    }
+
+    #[test]
+    fn place_canal_and_river_consume_random_for_native_map4() {
+        let mut canal_state = GameState::new(7, 7);
+        canal_state.random = crate::cargodist::parity::Randomizer {
+            state: [0x1122_3344, 0x5566_7788],
+        };
+        let mut expected_canal_random = canal_state.random;
+        let expected_canal_bits = expected_canal_random.next() as u8;
+
+        place_canal(&mut canal_state, TileCoord::new(2, 2)).expect("place canal");
+
+        assert_eq!(canal_state.random, expected_canal_random);
+        assert_eq!(
+            canal_state
+                .map
+                .get(TileCoord::new(2, 2))
+                .expect("canal")
+                .m3hi,
+            expected_canal_bits
+        );
+
+        let mut river_state = GameState::new(7, 7);
+        river_state.random = crate::cargodist::parity::Randomizer {
+            state: [0x1122_3344, 0x5566_7788],
+        };
+        let mut expected_river_random = river_state.random;
+        let expected_river_bits = expected_river_random.next() as u8;
+
+        place_river(&mut river_state, TileCoord::new(2, 2)).expect("place river");
+
+        assert_eq!(river_state.random, expected_river_random);
+        assert_eq!(
+            river_state
+                .map
+                .get(TileCoord::new(2, 2))
+                .expect("river")
+                .m3hi,
+            expected_river_bits
+        );
     }
 }

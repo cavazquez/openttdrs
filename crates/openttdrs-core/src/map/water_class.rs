@@ -123,7 +123,22 @@ pub fn river_tile_is_ship_navigable(map: &Map, c: TileCoord) -> bool {
 }
 
 /// Convierte la tesela en agua Clear con la clase dada (conserva altura).
+///
+/// La variante pública histórica usa `MAP4 = 0`; los caminos que modelan una
+/// llamada nativa a `MakeWater(..., Random())` deben usar
+/// [`make_water_tile_with_random_bits`].
 pub fn make_water_tile(map: &mut Map, c: TileCoord, wc: WaterClass) -> Result<(), super::MapError> {
+    make_water_tile_with_random_bits(map, c, wc, 0)
+}
+
+/// Convierte la tesela en agua Clear y escribe el byte bajo de `Random()` en
+/// `MAP4` (`m3hi` en el modelo local), como `MakeWater` de OpenTTD.
+pub fn make_water_tile_with_random_bits(
+    map: &mut Map,
+    c: TileCoord,
+    wc: WaterClass,
+    random_bits: u8,
+) -> Result<(), super::MapError> {
     let mut tile = map.get(c).ok_or(super::MapError::OutOfBounds)?;
     tile.kind = TileKind::Water;
     // `SetTileType(MP_WATER)` changes only MAPT bits 4..7. The tropical-zone
@@ -148,7 +163,7 @@ pub fn make_water_tile(map: &mut Map, c: TileCoord, wc: WaterClass) -> Result<()
     tile.m2 = 0;
     tile.m2_hi = 0;
     tile.m3 = 0;
-    tile.m3hi = 0;
+    tile.m3hi = random_bits;
     // `SB(m6, 2, 6, 0)`: los dos bits bajos no pertenecen a la parte que
     // reinicializa `MakeWater`.
     tile.m6 &= 0x03;
@@ -296,5 +311,15 @@ mod tests {
         assert_eq!(water.m6, 0x03);
         assert_eq!(water.m7, 0);
         assert_eq!(water.m8, 0);
+    }
+
+    #[test]
+    fn make_water_writes_native_map4_random_bits() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let c = TileCoord::new(1, 1);
+
+        make_water_tile_with_random_bits(&mut map, c, WaterClass::River, 0xA5).expect("make river");
+
+        assert_eq!(map.get(c).expect("river").m3hi, 0xA5);
     }
 }

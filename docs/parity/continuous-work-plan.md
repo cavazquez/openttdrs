@@ -5396,3 +5396,10 @@ el nibble bajo de `MAPT`, limpia `DockingTile` y los campos raw, fuerza
 el owner de la compañía siguen compartidos por ambas partes. La regresión
 cubre payload residual en las dos teselas. #329/#567 continúan abiertas por
 callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-RANDOM-BITS (2026-09-12): la construcción de
+canal/río consume ahora la palabra global `Random()` que usa OpenTTD y persiste
+su byte bajo en `MAP4` (`m3hi`) mediante una primitiva de agua con bits
+aleatorios explícitos. La regresión comprueba canal y río, el byte raw y la
+posición final del RNG. #329/#567 continúan abiertas por callbacks,
+pathfinding y aceptación visual/framebuffer.

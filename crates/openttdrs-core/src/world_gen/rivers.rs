@@ -10,7 +10,8 @@ use crate::map::water_flood::{
 };
 use crate::map::{
     Map, MapError, Tile, TileCoord, TileKind, WaterClass, is_river_tile, make_shore_tile,
-    make_water_tile, set_water_class_m1, tile_slope_and_z, water_class_from_m1,
+    make_water_tile, make_water_tile_with_random_bits, set_water_class_m1, tile_slope_and_z,
+    water_class_from_m1,
 };
 
 use super::config::{
@@ -997,10 +998,8 @@ fn build_river_path(
 /// a fresh global `Random()` draw for every newly materialized river tile and
 /// clears desert zones in the surrounding diameter-five spiral.
 fn make_river_tile(map: &mut Map, coord: TileCoord, rng: &mut Randomizer) -> Result<(), MapError> {
-    make_water_tile(map, coord, WaterClass::River)?;
-    let mut tile = map.get(coord).ok_or(MapError::OutOfBounds)?;
-    tile.m3hi = rng.next() as u8;
-    map.set_tile(coord, tile)?;
+    let random_bits = u8::try_from(rng.next() & 0xFF).unwrap_or(0);
+    make_water_tile_with_random_bits(map, coord, WaterClass::River, random_bits)?;
 
     clear_desert_zone_around_river(map, coord)
 }

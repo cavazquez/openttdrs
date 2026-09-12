@@ -1413,3 +1413,13 @@ lógico queda neutral (`OWNER_NONE`) y la demolición puede realizarse desde otr
 compañía sin perder el owner del canal subyacente. Las regresiones cubren
 `m2/m2_hi`, `m3/m3hi`, `m5..m8`, `m6` y la restauración del agua. Otros
 criterios de #329/#567 siguen pendientes.
+
+### #329/#567-WATER-RANDOM-BITS — `MAP4` al materializar canal/río
+
+Actualizado: 2026-09-12. Las operaciones de construcción de canal y río ahora
+consumen una palabra global `Random()` y guardan su byte bajo en `MAP4`
+(`m3hi`), igual que `MakeCanal`/`MakeRiver` nativos. La primitiva de agua
+mantiene además una variante explícita para que los generadores y los comandos
+no mezclen fixtures deterministas con el stream de gameplay. La regresión
+verifica tanto el byte persistido como el estado posterior del RNG. Otros
+criterios de #329/#567 siguen pendientes.

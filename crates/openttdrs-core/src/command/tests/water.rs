@@ -2,10 +2,10 @@
 
 use crate::economy::{
     buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost, dock_build_cost,
-    dock_clear_cost, lock_build_cost, lock_clear_cost, rail_waypoint_clear_cost, road_clear_cost,
-    road_clear_cost_factored, road_depot_clear_cost, road_stop_clear_cost_factored,
-    rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost, train_depot_clear_cost,
-    trees_clear_cost, water_clear_cost,
+    dock_clear_cost, lock_build_cost, lock_clear_cost, rail_station_clear_cost,
+    rail_waypoint_clear_cost, road_clear_cost, road_clear_cost_factored, road_depot_clear_cost,
+    road_stop_clear_cost_factored, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
+    train_depot_clear_cost, trees_clear_cost, water_clear_cost,
 };
 use crate::test_fixtures::SandboxMap;
 use crate::{
@@ -544,6 +544,74 @@ fn place_lock_rejects_foreign_rail_waypoint_atomically() {
     let before = [lower, middle, upper].map(|coord| s.map.get(coord).unwrap());
     let money = s.economy.money;
     let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::TileNotOwned)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::TileNotOwned)
+    );
+    for (coord, raw) in [lower, middle, upper].into_iter().zip(before) {
+        assert_eq!(s.map.get(coord), Some(raw));
+    }
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.economy.money, money);
+}
+
+#[test]
+fn place_lock_clears_single_tile_rail_station_and_updates_station_pool() {
+    let mut s = GameState::new(10, 6);
+    let approach = TileCoord::new(2, 2);
+    let lower = TileCoord::new(3, 1);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(3, 3);
+
+    apply_command(&mut s, &Command::PlaceRail(approach)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailStation(middle, 0)).unwrap();
+    assert_eq!(s.stations[0].stop_kind, StopKind::RailStation);
+    for coord in [lower, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, true);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command)
+        .expect("ClearTile_Station manual retira la estación ferroviaria 1x1");
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+    assert!(s.stations.is_empty());
+    assert_eq!(
+        s.economy.money,
+        money - rail_station_clear_cost(&s.global_economy) - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_rejects_foreign_single_tile_rail_station_atomically() {
+    let mut s = GameState::new(10, 6);
+    let approach = TileCoord::new(2, 2);
+    let lower = TileCoord::new(3, 1);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(3, 3);
+
+    apply_command(&mut s, &Command::PlaceRail(approach)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailStation(middle, 0)).unwrap();
+    s.stations[0].owner = crate::CompanyId(1);
+    for coord in [lower, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let before = [lower, middle, upper].map(|coord| s.map.get(coord).unwrap());
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, true);
 
     assert_eq!(
         command_would_fail(&s, &command),

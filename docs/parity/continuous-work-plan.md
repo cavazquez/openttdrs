@@ -5685,3 +5685,13 @@ regresión cubre el despeje del centro y el coste compuesto. Las estaciones
 ferroviarias multi-tesela, aeropuertos, túneles y puentes siguen en subetapas
 separadas; #329/#567 continúa abierta por infraestructura, callbacks,
 pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-RAIL-STATION-1X1 (2026-09-12):
+`ClearTile_Station` ya retira una estación ferroviaria de una tesela desde
+`DoBuildLock`, usando `PR_CLEAR_STATION_RAIL`, respetando la propiedad y
+eliminando la entrada lógica de `Station`. La implementación delimita
+intencionalmente la huella a 1×1; las plataformas multi-tesela conservan el
+rechazo nativo hasta completar la reducción de área y sus efectos sobre
+reservas, infraestructura y órdenes. #329/#567 continúa abierta por las
+subetapas restantes de estaciones, aeropuertos, callbacks, pathfinding y
+aceptación visual/framebuffer.

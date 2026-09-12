@@ -1073,6 +1073,81 @@ fn place_dock_on_coast_and_serves_ship() {
 }
 
 #[test]
+fn place_dock_writes_native_station_tile_contract() {
+    let mut s = GameState::new(12, 12);
+    let land = TileCoord::new(5, 4);
+    let water = TileCoord::new(5, 5);
+    let approach = TileCoord::new(5, 6);
+    s.map.set_kind(land, TileKind::Grass).unwrap();
+    s.map.set_kind(water, TileKind::Water).unwrap();
+    s.map.set_kind(approach, TileKind::Water).unwrap();
+    set_dock_land_slope(&mut s.map, land, 1, 1);
+
+    let mut land_raw = s.map.get(land).expect("tierra");
+    land_raw.mapt = 0x0B;
+    land_raw.m1 = set_water_class_m1(0x80 | 3, WaterClass::Sea);
+    land_raw.m2 = 0xAA;
+    land_raw.m2_hi = 0xBB;
+    land_raw.m3 = 0xCC;
+    land_raw.m3hi = 0xDD;
+    land_raw.m6 = 0xFF;
+    land_raw.m7 = 0xEE;
+    land_raw.m8 = 0xFFFF;
+    s.map.set_tile(land, land_raw).unwrap();
+
+    let mut water_raw = s.map.get(water).expect("agua");
+    water_raw.mapt = 0x02;
+    water_raw.m1 = set_water_class_m1(0x80 | 7, WaterClass::Canal);
+    water_raw.m2 = 0x11;
+    water_raw.m2_hi = 0x22;
+    water_raw.m3 = 0x33;
+    water_raw.m3hi = 0x44;
+    water_raw.m6 = 0xFF;
+    water_raw.m7 = 0x55;
+    water_raw.m8 = 0x6666;
+    s.map.set_tile(water, water_raw).unwrap();
+
+    apply_command(&mut s, &Command::PlaceDock(land, 1)).unwrap();
+
+    let land_tile = s.map.get(land).expect("pieza de tierra");
+    assert_eq!(land_tile.kind, TileKind::Station);
+    assert_eq!(land_tile.mapt, 0x5B, "SetTileType conserva el nibble bajo");
+    assert_eq!(land_tile.m1 & 0x1F, 0, "owner activo en la pieza de tierra");
+    assert_eq!(land_tile.m1 & 0x80, 0, "MakeStation limpia DockingTile");
+    assert_eq!(
+        crate::map::water_class_from_m1(land_tile.m1),
+        WaterClass::Invalid
+    );
+    assert_eq!(land_tile.m2, 0);
+    assert_eq!(land_tile.m2_hi, 0);
+    assert_eq!(land_tile.m3, 0);
+    assert_eq!(land_tile.m3hi, 0);
+    assert_eq!(land_tile.m5, 1);
+    assert_eq!(land_tile.m6, (5 << 3) | 0x03);
+    assert_eq!(land_tile.m7, 0);
+    assert_eq!(land_tile.m8, 0);
+
+    let water_tile = s.map.get(water).expect("pieza de agua");
+    assert_eq!(water_tile.kind, TileKind::Station);
+    assert_eq!(water_tile.mapt, 0x52, "SetTileType conserva el nibble bajo");
+    assert_eq!(water_tile.m1 & 0x1F, 0, "owner activo en la pieza acuática");
+    assert_eq!(water_tile.m1 & 0x80, 0, "MakeStation limpia DockingTile");
+    assert_eq!(
+        crate::map::water_class_from_m1(water_tile.m1),
+        WaterClass::Canal
+    );
+    assert_eq!(water_tile.m2, 0);
+    assert_eq!(water_tile.m2_hi, 0);
+    assert_eq!(water_tile.m3, 0);
+    assert_eq!(water_tile.m3hi, 0);
+    assert_eq!(water_tile.m5, 5);
+    assert_eq!(water_tile.m6, (5 << 3) | 0x03);
+    assert_eq!(water_tile.m7, 0);
+    assert_eq!(water_tile.m8, 0);
+    assert_eq!(s.stations[0].ottd_station_id, Some(0));
+}
+
+#[test]
 fn dock_uses_shared_native_id_and_clears_from_water_part() {
     let mut s = GameState::new(12, 12);
     let land = TileCoord::new(6, 5);

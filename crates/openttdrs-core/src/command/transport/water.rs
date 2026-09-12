@@ -601,11 +601,15 @@ fn place_dock_with_station(
     )?;
     let mut land_tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let mut water_tile = state.map.get(water).ok_or(CommandError::OutOfBounds)?;
+    let water_class = water_class_from_m1(water_tile.m1);
+    let station_owner = state.active_company.0 & 0x1F;
 
     let [station_id_low, station_id_high] = station_id.to_le_bytes();
     land_tile.kind = TileKind::Station;
-    land_tile.mapt = 0x50;
-    land_tile.m1 = (land_tile.m1 & !0x1F) | state.active_company.0;
+    // `MakeStation` changes only MAPT's type nibble and clears the water
+    // class/docking fields of the land part (`WaterClass::Invalid`).
+    land_tile.mapt = 0x50 | (land_tile.mapt & 0x0F);
+    land_tile.m1 = set_water_class_m1(station_owner, WaterClass::Invalid);
     land_tile.m2 = station_id_low;
     land_tile.m2_hi = station_id_high;
     land_tile.m3 = 0;
@@ -615,8 +619,10 @@ fn place_dock_with_station(
     land_tile.m7 = 0;
     land_tile.m8 = 0;
     water_tile.kind = TileKind::Station;
-    water_tile.mapt = 0x50;
-    water_tile.m1 = (water_tile.m1 & !0x1F) | state.active_company.0;
+    // The water part receives the original water class, but `MakeStation`
+    // still clears its DockingTile bit before docking is recalculated.
+    water_tile.mapt = 0x50 | (water_tile.mapt & 0x0F);
+    water_tile.m1 = set_water_class_m1(station_owner, water_class);
     water_tile.m2 = station_id_low;
     water_tile.m2_hi = station_id_high;
     water_tile.m3 = 0;

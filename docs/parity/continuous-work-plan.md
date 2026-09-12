@@ -5388,3 +5388,11 @@ waypoint como neutral. La demolición por otra compañía restaura el canal sin
 alterar su owner. Las regresiones cubren la huella raw completa y la propiedad
 neutral. #329/#567 continúan abiertas por callbacks, pathfinding y aceptación
 visual/framebuffer.
+
+Actualización #329/#567-SHIP-DOCK-RAW-CONTRACT (2026-09-12): la construcción
+de muelles materializa las dos piezas con el contrato de `MakeDock`: conserva
+el nibble bajo de `MAPT`, limpia `DockingTile` y los campos raw, fuerza
+`WaterClass::Invalid` en tierra y conserva la clase en agua. El `StationID` y
+el owner de la compañía siguen compartidos por ambas partes. La regresión
+cubre payload residual en las dos teselas. #329/#567 continúan abiertas por
+callbacks, pathfinding y aceptación visual/framebuffer.

@@ -1382,6 +1382,16 @@ clase de agua y el bit compartido de `m1`. Las altas y bajas de depósitos y
 muelles siguen recalculando sus vecinos según su instalación activa. Otros
 criterios de #329/#567 siguen pendientes.
 
+### #329/#567-SHIP-DOCK-RAW-CONTRACT — contrato nativo de `MakeDock`
+
+Actualizado: 2026-09-12. Las dos piezas de un muelle ahora conservan el
+nibble bajo de `MAPT`, limpian `DockingTile` y reinician todos los campos raw
+de `MakeStation`. La pieza de tierra fuerza `WaterClass::Invalid`, mientras
+la pieza acuática conserva su clase original; ambas mantienen el `StationID`
+compartido y el owner de la compañía. La regresión usa payload residual en
+ambas teselas y verifica `MAPO`, `MAP2`, `MAP4`, `MAP5`, `MAP6`, `MAP7` y
+`MAP8`. Otros criterios de #329/#567 siguen pendientes.
+
 ### #329/#567-SHIP-DEPOT-WATER-TYPE — validación del subtipo `MP_WATER`
 
 Actualizado: 2026-09-12. Las consultas de `DepotID`, el asignador del pool y

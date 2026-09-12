@@ -544,9 +544,11 @@ fn bridge_other_end(
     for _ in 0..map_w.max(map_h) {
         pos = TileCoord::new(pos.x + step_x, pos.y + step_y);
         let probe = map.get(pos)?;
-        if probe.is_tunnel_bridge_tile()
+        if probe.kind == kind
+            && probe.is_tunnel_bridge_tile()
             && probe.m5 & 0x80 != 0
             && probe.m5 & 0x03 == reverse_direction
+            && probe.m5 & 0x0C == tile.m5 & 0x0C
         {
             return Some(pos);
         }
@@ -744,6 +746,28 @@ mod tests {
         // El vano queda sobre tierra: no depende de `Water` ni de MAPT flags.
         assert_eq!(road_bridge_other_end(&map, west), Some(east));
         assert_eq!(road_bridge_other_end(&map, east), Some(west));
+    }
+
+    #[test]
+    fn other_end_does_not_cross_transport_types() {
+        let mut map = crate::Map::new_flat(8, 1, 0);
+        let west = TileCoord::new(1, 0);
+        let east = TileCoord::new(5, 0);
+
+        let mut west_tile = map.get(west).unwrap();
+        west_tile.kind = TileKind::RoadBridge;
+        // Puente de carretera apuntando hacia +X.
+        west_tile.m5 = 0x80 | 0x04 | 0x02;
+        map.set_tile(west, west_tile).unwrap();
+
+        let mut east_tile = map.get(east).unwrap();
+        east_tile.kind = TileKind::RailBridge;
+        // Rampa ferroviaria opuesta, en la misma línea geométrica.
+        east_tile.m5 = 0x80;
+        map.set_tile(east, east_tile).unwrap();
+
+        assert_eq!(road_bridge_other_end(&map, west), None);
+        assert_eq!(rail_bridge_other_end(&map, east), None);
     }
 
     #[test]

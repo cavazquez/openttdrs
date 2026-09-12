@@ -5747,3 +5747,13 @@ y el terreno ferroviario que un puente deja debajo no se incluye en la
 liberación. La infraestructura de túneles/puentes, sus reservas de tránsito y
 el pathfinding importado aún requieren cobertura adicional; #329/#567 continúa
 abierta por esas diferencias, callbacks, aceptación visual y framebuffer.
+
+Corrección #329/#567-BRIDGE-END-TYPE-GUARD (2026-09-12): los resolvers de
+`RoadBridge` y `RailBridge` ahora exigen que la rampa encontrada conserve el
+mismo tipo de tesela y el mismo `TunnelBridgeTransportType` codificado en
+`m5`. Un save con rampas opuestas de carretera y ferrocarril en la misma línea
+ya no puede producir un enlace lógico cruzado para pathfinding, señales o
+demolición. El salto rampa→rampa vial ya estaba implementado; esta subetapa
+corrige el contrato compartido sin duplicarlo. #329/#567 continúa abierta por
+la infraestructura, reservas de tránsito, pathfinding importado, callbacks,
+aceptación visual y framebuffer restantes.

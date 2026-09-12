@@ -1613,3 +1613,12 @@ fuera el motor vanilla que ocupaba ese slot: el vagón custom recién comprado
 se enlaza mediante `prev_unit` y aparece en la enumeración completa del
 consist. La regresión ECS cubre el flujo de compra y el acople; los callbacks
 avanzados y las APIs legacy sin catálogo siguen parciales.
+
+### #329-VEHICLE-AUTOREPLACE-CATALOG-UI — selector de motores NewGRF
+
+Actualizado: 2026-09-12 (`529f046b`). La ventana de autoreemplazo obtiene los
+motores de origen y destino con `engines_for_depot_kind_in` sobre el catálogo
+activo, y usa la misma fuente para las etiquetas de reglas, resumen y ayuda.
+Los IDs NewGRF ya no quedan fuera del selector ni pierden su nombre al
+rehidratar una regla. La regresión cubre un motor custom de carretera; los
+callbacks avanzados y las APIs legacy sin catálogo siguen parciales.

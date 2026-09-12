@@ -6174,3 +6174,13 @@ del consist igual que un vagón vanilla; la regresión ECS cubre construcción,
 cliente (2 ignorados), Clippy estricto en cliente y core, formato y
 `git diff --check`. #329 sigue abierta por callbacks avanzados, órdenes de
 depósito restantes y APIs legacy sin catálogo; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-AUTOREPLACE-CATALOG-UI (2026-09-12, `529f046b`): la
+ventana de autoreemplazo consulta `engine_catalog` para poblar los motores de
+origen/destino según el depósito, y para renderizar nombres de reglas y del
+resumen. Los motores NewGRF ya no desaparecen del selector ni se muestran como
+`?` cuando una regla conserva su ID custom. La regresión cubre un bus custom
+del catálogo activo y su etiqueta localizada. Pasaron 1426 tests del cliente
+(2 ignorados), Clippy estricto en cliente, formato y `git diff --check`. #329
+sigue abierta por callbacks avanzados, órdenes de depósito restantes y APIs
+legacy sin catálogo; #326/#567 permanecen abiertas.

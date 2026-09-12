@@ -801,7 +801,15 @@ fn train_incompatible_with_rail_type(
 ) -> bool {
     vehicle.kind == crate::vehicle::VehicleKind::Train
         && vehicle.engine_id.is_some_and(|engine_id| {
-            let required = crate::rail_type::required_rail_type_for_engine(engine_id);
+            let required = state
+                .engine_catalog
+                .iter()
+                .find(|engine| engine.id == engine_id)
+                .and_then(|engine| engine.required_rail_type)
+                .map_or_else(
+                    || crate::rail_type::required_rail_type_for_engine(engine_id),
+                    crate::rail_type::RailType::from_u8,
+                );
             !(required == to_type
                 || crate::rail_type::rail_types_compatible_with_props(
                     required,

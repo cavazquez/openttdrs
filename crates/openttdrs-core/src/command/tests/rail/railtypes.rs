@@ -580,6 +580,34 @@ fn maglev_engine_requires_maglev_neighbor() {
 }
 
 #[test]
+fn convert_rail_rejects_custom_maglev_train_on_incompatible_tile() {
+    use crate::rail_type::RailType;
+
+    let mut s = GameState::new(8, 8);
+    s.economy.money = 100_000;
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRail(c)).unwrap();
+
+    let mut engine = crate::engine::engine_by_id(crate::engine::ENGINE_TRAIN_LEV1)
+        .expect("motor maglev vanilla ausente")
+        .clone();
+    engine.id = crate::engine::NEWGRF_ENGINE_ID_BASE + 65;
+    engine.required_rail_type = Some(RailType::Maglev.as_u8());
+    s.engine_catalog.push(engine.clone());
+
+    let mut vehicle = crate::Vehicle::new(77, crate::VehicleKind::Train, c, c);
+    vehicle.engine_id = Some(engine.id);
+    s.vehicles.push(vehicle);
+
+    let before = s.map.get(c).expect("tesela ferroviaria");
+    let err =
+        apply_command(&mut s, &Command::ConvertRail(c, RailType::Electric.as_u8())).unwrap_err();
+
+    assert_eq!(err, CommandError::TrainIncompatibleWithRailType);
+    assert_eq!(s.map.get(c), Some(before));
+}
+
+#[test]
 fn monorail_path_does_not_cross_normal_rail() {
     use crate::pathfinder::find_rail_path_for_engine;
     use crate::rail_type::RailType;

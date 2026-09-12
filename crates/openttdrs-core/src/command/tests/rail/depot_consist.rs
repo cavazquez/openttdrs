@@ -33,6 +33,99 @@ fn set_depot_vehicles_running_toggles_all_in_tile() {
 }
 
 #[test]
+fn set_depot_vehicles_running_honours_cb31_per_vehicle() {
+    use crate::engine::{ENGINE_BUS_MPS, NEWGRF_ENGINE_ID_BASE};
+    use crate::newgrf_callback::VehicleStartStopCallbackOutcome;
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+
+    let mut callback = TrainSpriteGraphics::default();
+    callback.assigns.push(TrainSpriteAssign {
+        local_id: 0,
+        set_id: 2,
+    });
+    callback.action2_var.insert(
+        2,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x1A,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: 0x10,
+                    ..Action2VarAdjust::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(3, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 3)).unwrap();
+
+    let mut unrestricted = Vehicle::new(1, VehicleKind::Bus, depot, depot);
+    unrestricted.running = false;
+    let mut rejected = Vehicle::new(2, VehicleKind::Bus, depot, depot);
+    rejected.running = false;
+    rejected.engine_id = Some(NEWGRF_ENGINE_ID_BASE + 30);
+    let mut engine = crate::engine::engine_by_id(ENGINE_BUS_MPS).unwrap().clone();
+    engine.id = NEWGRF_ENGINE_ID_BASE + 30;
+    engine.newgrf_grfid = 0x4342_3331;
+    engine.newgrf_local_id = 0;
+    engine.newgrf_runtime = Some(Box::new(callback));
+    s.engine_catalog.push(engine);
+    s.vehicles.extend([unrestricted, rejected]);
+
+    apply_command(
+        &mut s,
+        &Command::SetDepotVehiclesRunning {
+            depot_pos: depot,
+            running: true,
+        },
+    )
+    .unwrap();
+    assert!(s.vehicles[0].running, "una unidad permitida debe arrancar");
+    assert!(
+        !s.vehicles[1].running,
+        "un rechazo de CB31 no debe bloquear el resto del depósito"
+    );
+    let diagnostic = s
+        .runtime
+        .last_vehicle_start_stop_diagnostic
+        .expect("el rechazo masivo debe conservar diagnóstico");
+    assert_eq!(diagnostic.vehicle_id, 2);
+    assert_eq!(
+        diagnostic.outcome,
+        VehicleStartStopCallbackOutcome::LocalString(0xD010)
+    );
+
+    // El callback se evalúa también al detener una unidad que ya está en el
+    // depósito; la denegación vuelve a ser local y la otra unidad se detiene.
+    s.vehicles[1].running = true;
+    apply_command(
+        &mut s,
+        &Command::SetDepotVehiclesRunning {
+            depot_pos: depot,
+            running: false,
+        },
+    )
+    .unwrap();
+    assert!(!s.vehicles[0].running);
+    assert!(s.vehicles[1].running);
+    assert_eq!(
+        s.runtime
+            .last_vehicle_start_stop_diagnostic
+            .expect("el rechazo al detener debe conservar diagnóstico")
+            .vehicle_id,
+        2
+    );
+}
+
+#[test]
 fn sell_vehicle_requires_depot_tile() {
     let mut s = GameState::new(8, 8);
     let road = TileCoord::new(2, 2);

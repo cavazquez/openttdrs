@@ -424,7 +424,7 @@ pub(super) fn toggle_vehicle_running_checked(
     vehicles::toggle_vehicle_running(state, vehicle_id)
 }
 
-fn check_vehicle_start_stop_callback(
+pub(super) fn check_vehicle_start_stop_callback(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {

@@ -1592,13 +1592,25 @@ pub(super) fn set_depot_vehicles_running(
         })
         .map(|v| v.id)
         .collect();
+    let mut last_start_stop_diagnostic = None;
     for id in ids {
-        if running && super::vehicle_fleet::can_start_vehicle_from_depot(state, id).is_err() {
-            continue;
-        }
         let Some(idx) = state.vehicles.iter().position(|v| v.id == id) else {
             continue;
         };
+        if state.vehicles[idx].running == running {
+            continue;
+        }
+        if running && super::vehicle_fleet::can_start_vehicle_from_depot(state, id).is_err() {
+            continue;
+        }
+        // OpenTTD's mass start/stop command delegates to the regular command
+        // for each affected unit. A CB31 rejection is therefore local to that
+        // unit and must not prevent the remaining depot vehicles from being
+        // toggled.
+        if super::vehicle_fleet::check_vehicle_start_stop_callback(state, id).is_err() {
+            last_start_stop_diagnostic = state.runtime.last_vehicle_start_stop_diagnostic;
+            continue;
+        }
         let vehicle_pos = state.vehicles[idx].pos;
         let was_at_dest = state.vehicles[idx].pos == state.vehicles[idx].dest;
         let depot_mouth = if running && state.vehicles[idx].kind == VehicleKind::Train {
@@ -1639,6 +1651,7 @@ pub(super) fn set_depot_vehicles_running(
             }
         }
     }
+    state.runtime.last_vehicle_start_stop_diagnostic = last_start_stop_diagnostic;
     Ok(())
 }
 

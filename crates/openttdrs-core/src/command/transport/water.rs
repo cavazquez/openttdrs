@@ -1653,6 +1653,44 @@ fn remove_lock_road_stop_state(state: &mut GameState, c: TileCoord) {
     }
 }
 
+/// Prepara la retirada manual de un waypoint vial.
+///
+/// `RemoveRoadWaypointStop` comparte la categoría de limpieza de camiones,
+/// pero no es una parada de carga y por eso conserva una rama separada del
+/// estado `Station` de bus/camión.
+fn check_lock_road_waypoint_tile(
+    state: &GameState,
+    c: TileCoord,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    if crate::station::stop_kind_from_m6(tile.m6) != StopKind::RoadWaypoint {
+        return Err(CommandError::BuildingMustBeDemolished);
+    }
+    let station = state
+        .stations
+        .iter()
+        .find(|station| station.pos == c && station.stop_kind == StopKind::RoadWaypoint);
+    let owner = station.map_or(tile.m1 & 0x1F, |station| station.owner.0 & 0x1F);
+    if owner != (state.active_company.0 & 0x1F) {
+        return Err(CommandError::TileNotOwned);
+    }
+    Ok(LockBuildTilePlan {
+        water_class: WaterClass::Canal,
+        owner: state.active_company.0,
+        clear_on_build: true,
+        clear_cost: road_stop_clear_cost_factored(&state.global_economy, StopKind::TruckStop, 16),
+        add_canal_cost: !is_middle,
+    })
+}
+
+fn remove_lock_road_waypoint_state(state: &mut GameState, c: TileCoord) {
+    state.newgrf_animated_station_tiles.remove(&c);
+    state
+        .stations
+        .retain(|station| !(station.pos == c && station.stop_kind == StopKind::RoadWaypoint));
+}
+
 /// Cuenta las llamadas a `CMD_REMOVE_SINGLE_SIGNAL` que hace
 /// `ClearTile_Track` al retirar todos los carriles de una tesela.
 fn rail_signal_clear_count(tile: Tile) -> i64 {
@@ -1960,6 +1998,11 @@ fn check_lock_build_tile(
         {
             check_lock_road_stop_tile(state, c, is_middle, tile)
         }
+        TileKind::Station
+            if crate::station::stop_kind_from_m6(tile.m6) == StopKind::RoadWaypoint =>
+        {
+            check_lock_road_waypoint_tile(state, c, is_middle, tile)
+        }
         TileKind::Road if crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind) => {
             check_lock_road_crossing_tile(state, is_middle, tile)
         }
@@ -1992,6 +2035,10 @@ fn clear_lock_build_tile(
                 StopKind::BusStop | StopKind::TruckStop
             )
     });
+    let was_road_waypoint = state.map.get(c).is_some_and(|tile| {
+        tile.kind == TileKind::Station
+            && crate::station::stop_kind_from_m6(tile.m6) == StopKind::RoadWaypoint
+    });
     let depot_id = state
         .map
         .get(c)
@@ -2002,6 +2049,9 @@ fn clear_lock_build_tile(
     clear_neighbour_non_flooding_states(&mut state.map, c);
     if was_road_stop {
         remove_lock_road_stop_state(state, c);
+    }
+    if was_road_waypoint {
+        remove_lock_road_waypoint_state(state, c);
     }
     if let Some(depot_id) = depot_id {
         unregister_depot(state, depot_id);

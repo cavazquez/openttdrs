@@ -5624,3 +5624,12 @@ la ejecución comparten ownership, coste y atomicidad; muelles, boyas,
 estaciones ferroviarias, waypoints, aeropuertos, túneles y puentes siguen en
 subetapas separadas. #329/#567 continúan abiertas por infraestructura,
 callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-ROAD-WAYPOINT-CLEAR (2026-09-12):
+`ClearTile_Station` manual ya puede retirar un `RoadWaypoint` durante
+`DoBuildLock`, aplicando la categoría nativa `PR_CLEAR_STATION_TRUCK` y
+eliminando su entidad `Station` y registro de animación antes de materializar
+el agua. La rama permanece separada de las paradas de carga: waypoints
+ferroviarios, estaciones ferroviarias, muelles, boyas, aeropuertos, túneles y
+puentes conservan sus contratos específicos. #329/#567 continúan abiertas por
+infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.

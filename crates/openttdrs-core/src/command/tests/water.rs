@@ -460,6 +460,42 @@ fn place_lock_rejects_foreign_bus_stop_atomically() {
 }
 
 #[test]
+fn place_lock_clears_road_waypoint_and_updates_station_pool() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+
+    apply_command(&mut s, &Command::PlaceRoadBits(middle, 0x0A)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadWaypoint(middle)).unwrap();
+    assert_eq!(s.stations[0].stop_kind, StopKind::RoadWaypoint);
+    for coord in [lower, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command)
+        .expect("ClearTile_Station manual retira el waypoint vial del centro");
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+    assert!(
+        s.stations.is_empty(),
+        "el waypoint eliminado no deja Station huérfana"
+    );
+    assert_eq!(
+        s.economy.money,
+        money
+            - road_stop_clear_cost_factored(&s.global_economy, StopKind::TruckStop, 16)
+            - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
 fn place_lock_promotes_joined_bus_stop_when_clearing_anchor() {
     let mut s = GameState::new(10, 8);
     let lower = TileCoord::new(2, 2);

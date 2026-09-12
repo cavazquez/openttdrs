@@ -5202,5 +5202,12 @@ Actualización #329/#567-ASSET-VALUE (2026-09-11): el cálculo de patrimonio de
 la compañía usa ahora el valor contable persistido de cada unidad y suma
 también los vagones, como `CalculateCompanyAssetValue` (`v->value * 3 >> 1`).
 La regresión cubre una composición con cabeza y vagón y valores depreciados.
-#329/#567 continúan abiertas por devolución de venta, callbacks, pathfinding
-y aceptación visual/framebuffer.
+#329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
+framebuffer.
+
+Actualización #329/#567-SELL-BOOK-VALUE (2026-09-11): la venta consulta ahora
+`Vehicle::value` persistido: la cabeza para carretera, barco y aeronave, y cada
+unidad eliminada de un consist ferroviario, igual que `CmdSellVehicle` y
+`CmdSellRailWagon`. La regresión cubre un vehículo vial con depreciación y la
+venta de una composición cabeza+vagón. #329/#567 continúan abiertas por
+callbacks, pathfinding y aceptación visual/framebuffer.

@@ -586,7 +586,8 @@ fn sell_vehicle_in_road_depot_succeeds() {
     let mut s = GameState::new(8, 8);
     let depot = TileCoord::new(1, 1);
     s.map.set_kind(depot, TileKind::RoadDepot).unwrap();
-    let vehicle = Vehicle::new(1, VehicleKind::Bus, depot, depot);
+    let mut vehicle = Vehicle::new(1, VehicleKind::Bus, depot, depot);
+    vehicle.value = 12_345;
     let refund = crate::vehicle_sell_refund(&vehicle);
     s.vehicles.push(vehicle);
     let money_before = s.economy.money;

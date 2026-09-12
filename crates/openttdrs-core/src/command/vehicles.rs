@@ -813,6 +813,9 @@ pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(),
         return Err(CommandError::VehicleNotFound);
     };
     let owner = vehicle.owner;
+    let kind = vehicle.kind;
+    let front_id =
+        crate::train_consist::consist_head_id(&state.vehicles, vehicle_id).unwrap_or(vehicle_id);
     let in_depot = matches!(
         state.map.get_kind(vehicle.pos),
         Some(TileKind::RoadDepot | TileKind::RailDepot | TileKind::ShipDepot | TileKind::Airport)
@@ -834,13 +837,23 @@ pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(),
     {
         let _ = crate::train_consist::detach_unit(&mut state.vehicles, vehicle_id);
     }
-    let mut refund_total = 0_i64;
-    for id in &chain {
-        if let Some(v) = state.vehicles.iter().find(|x| x.id == *id) {
-            refund_total +=
-                crate::economy::vehicle_sell_refund_with_catalog(v, &state.engine_catalog);
-        }
-    }
+    let refund_total = if kind == VehicleKind::Train {
+        chain
+            .iter()
+            .filter_map(|id| state.vehicles.iter().find(|v| v.id == *id))
+            .map(|v| crate::economy::vehicle_sell_refund_with_catalog(v, &state.engine_catalog))
+            .sum()
+    } else {
+        // `CmdSellVehicle` deletes the complete non-rail chain but charges
+        // only the value persisted on its first unit.
+        state
+            .vehicles
+            .iter()
+            .find(|v| v.id == front_id)
+            .map_or(0, |v| {
+                crate::economy::vehicle_sell_refund_with_catalog(v, &state.engine_catalog)
+            })
+    };
     state.vehicles.retain(|v| !chain.contains(&v.id));
     // Recalcular cabezas restantes tocadas.
     let heads: Vec<u32> = state

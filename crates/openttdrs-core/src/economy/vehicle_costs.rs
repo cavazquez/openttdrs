@@ -108,28 +108,23 @@ pub fn vehicle_purchase_cost_with_callbacks(engine: &EngineDef, vehicle: &mut Ve
         })
 }
 
-/// Reembolso al vender en depósito (~50 % del precio del modelo del vehículo).
+/// Valor devuelto al vender una unidad en depósito.
+///
+/// `CmdSellVehicle` y `CmdSellRailWagon` consumen el `Vehicle::value` ya
+/// depreciado; no vuelven a consultar el precio actual del motor.
 #[must_use]
 pub fn vehicle_sell_refund(vehicle: &Vehicle) -> i64 {
-    let base = vehicle.effective_engine().price;
-    (base * 50) / 100
+    vehicle.value
 }
 
-/// Reembolso usando el motor runtime y CB36. El callback se evalúa sobre una
-/// copia: vender no debe mutar registros persistentes de la unidad que se va a
-/// eliminar.
+/// Valor devuelto usando el catálogo activo.
+///
+/// El parámetro se conserva para compatibilidad con los callers que resuelven
+/// motores runtime, pero la venta usa el valor contable persistido y no evalúa
+/// CB36.
 #[must_use]
-pub fn vehicle_sell_refund_with_catalog(vehicle: &Vehicle, engine_catalog: &[EngineDef]) -> i64 {
-    let Some(engine) = vehicle
-        .engine_id
-        .and_then(|id| crate::engine::engine_in_catalog(engine_catalog, id))
-        .cloned()
-    else {
-        return vehicle_sell_refund(vehicle);
-    };
-    let mut snapshot = vehicle.clone();
-    let base = vehicle_purchase_cost_with_callbacks(&engine, &mut snapshot);
-    (base * 50) / 100
+pub fn vehicle_sell_refund_with_catalog(vehicle: &Vehicle, _engine_catalog: &[EngineDef]) -> i64 {
+    vehicle_sell_refund(vehicle)
 }
 
 /// Valor contable persistido del vehículo para `CalculateCompanyValue`.
@@ -368,6 +363,20 @@ mod tests {
             engine_running_cost_from_price_base(&ge, engine),
             engine.running_cost_year
         );
+    }
+
+    #[test]
+    fn sell_refund_uses_persisted_vehicle_value() {
+        let mut bus = Vehicle::new(
+            5,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        bus.value = 12_345;
+
+        assert_eq!(vehicle_sell_refund(&bus), 12_345);
+        assert_eq!(vehicle_sell_refund_with_catalog(&bus, &[]), 12_345);
     }
 
     #[test]

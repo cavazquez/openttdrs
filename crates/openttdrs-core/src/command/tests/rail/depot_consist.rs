@@ -250,6 +250,7 @@ fn train_consist_sell_head_sells_chain() {
     }
     let depot = TileCoord::new(4, 5);
     apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+    let money_before_build = s.economy.money;
     apply_command(
         &mut s,
         &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_KIRBY),
@@ -272,6 +273,7 @@ fn train_consist_sell_head_sells_chain() {
     .unwrap();
     apply_command(&mut s, &Command::SellVehicle(head)).unwrap();
     assert!(s.vehicles.is_empty());
+    assert_eq!(s.economy.money, money_before_build);
 }
 
 #[test]

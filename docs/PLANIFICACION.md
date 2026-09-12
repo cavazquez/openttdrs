@@ -584,7 +584,10 @@ Veintidós entradas, **todas cerradas** (P1.1 —con P0.3— a P1.22).
   `_score_part` (vehículos rentables, estaciones servidas, entregas, liquidez, préstamo).
   Tests `monthly_interest_on_100k_loan`, `monthly_interest_includes_negative_cash`,
   `company_value_uses_station_value_times_facilities`, `performance_rating_includes_profit_and_stations`.
-- **Pendiente** — `v->value` con depreciación diaria; variedad real de cargas en `ScoreID::Cargo`;
+- **Hecho** — `Vehicle::value` se inicializa al comprar, se deprecia en el barrido económico y se
+  usa tanto en el patrimonio como en el reembolso de venta; la regresión cubre cabeza, vagón y
+  venta de un consist.
+- **Pendiente** — variedad real de cargas en `ScoreID::Cargo`;
   ingresos min/max desde 12 meses con desglose por tipo de cargo.
 
 #### P1.19 — Subsidios · hecho

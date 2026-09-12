@@ -70,6 +70,22 @@ fn check_tunnel_bridge_transport(tile: crate::map::Tile, is_rail: bool) -> bool 
     tile.m5 & 0x0C == expected
 }
 
+/// Detecta el reemplazo nativo de un puente ferroviario ya existente.
+///
+/// `CmdBuildBridge` conserva `HasTunnelBridgeReservation` al cambiar sólo el
+/// tipo visual del puente. La reserva no vive en `m2_hi`: es el bit 4 de `m5`
+/// de ambas rampas, por lo que debemos capturarla antes de reescribirlas.
+fn rail_bridge_replacement_has_reservation(map: &Map, start: TileCoord, end: TileCoord) -> bool {
+    let Some(tile) = map.get(start) else {
+        return false;
+    };
+    tile.kind == TileKind::RailBridge
+        && tile.is_tunnel_bridge_tile()
+        && check_tunnel_bridge_transport(tile, true)
+        && rail_bridge_other_end(map, start) == Some(end)
+        && crate::tunnel_bridge_rail_reserved(tile)
+}
+
 fn tunnel_bridge_clear_plan(
     state: &GameState,
     c: TileCoord,
@@ -484,6 +500,8 @@ pub(in crate::command) fn place_tunnel_or_bridge(
         axis_line(a, b)
     };
     let is_rail = matches!(kind_to_place, TileKind::RailTunnel | TileKind::RailBridge);
+    let preserve_rail_bridge_reservation =
+        !is_tunnel && is_rail && rail_bridge_replacement_has_reservation(&state.map, a, b);
     let bridge_axis_y = !is_tunnel && (b.x - a.x).abs() < (b.y - a.y).abs();
     let cost = if is_tunnel {
         crate::TUNNEL_BUILD_COST_PER_TILE * i64::try_from(line.len()).unwrap_or(i64::MAX)
@@ -512,7 +530,12 @@ pub(in crate::command) fn place_tunnel_or_bridge(
                 } else {
                     reverse_diag_dir(axis_to_diag_dir(bridge_axis_y))
                 };
-                tile.m5 = bridge_ramp_m5(is_rail, dir);
+                tile.m5 = bridge_ramp_m5(is_rail, dir)
+                    | if preserve_rail_bridge_reservation {
+                        0x10
+                    } else {
+                        0
+                    };
                 tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
             } else {
                 tile.mapt = set_bridge_middle_mapt(tile.mapt, bridge_axis_y);

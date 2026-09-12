@@ -390,3 +390,51 @@ fn rail_bridge_routes_through_both_axes_and_both_ramps() {
     assert_rail_bridge_connects_axis(false);
     assert_rail_bridge_connects_axis(true);
 }
+
+#[test]
+fn replacing_rail_bridge_preserves_pbs_reservation_on_both_ramps() {
+    let mut state = GameState::new(10, 6);
+    let c = TileCoord::new;
+    for x in 2..=3 {
+        state.map.set_kind(c(x, 2), TileKind::Water).unwrap();
+    }
+    let start = c(1, 2);
+    let end = c(4, 2);
+    apply_command(
+        &mut state,
+        &Command::PlaceRailBridge(start, end, BridgeType::Wooden),
+    )
+    .unwrap();
+
+    let mut train = Vehicle::new(1, VehicleKind::Train, c(0, 2), c(5, 2));
+    train.reserved_steps = vec![
+        crate::rail_pbs::ReservedRailStep::new(start, RAIL_TB_X),
+        crate::rail_pbs::ReservedRailStep::new(end, RAIL_TB_X),
+    ];
+    state.vehicles.push(train);
+    crate::rail_pbs::sync_reservations_to_map(
+        &mut state.map,
+        &state.vehicles,
+        &mut state.runtime.reservation_tiles_active,
+        &mut state.runtime.reservation_tile_dirty,
+    );
+
+    apply_command(
+        &mut state,
+        &Command::PlaceRailBridge(start, end, BridgeType::Concrete),
+    )
+    .unwrap();
+
+    for tile in [start, end] {
+        let tile = state.map.get(tile).unwrap();
+        assert_eq!(tile.kind, TileKind::RailBridge);
+        assert_eq!(
+            crate::bridge_spec::bridge_type_from_m6(tile.m6),
+            BridgeType::Concrete
+        );
+        assert_ne!(tile.m5 & 0x10, 0);
+        assert_eq!(tile.m2_hi, 0);
+    }
+    assert!(state.runtime.reservation_tiles_active.contains(&start));
+    assert!(state.runtime.reservation_tiles_active.contains(&end));
+}

@@ -70,6 +70,9 @@ pub(crate) struct BuyVehicleWindowState {
     /// Depósito desde el que se abrió la ventana (`None` = cerrada).
     pub(crate) depot_pos: Option<TileCoord>,
     pub(crate) selected_engine: Option<u16>,
+    /// Motor solicitado desde una noticia mientras no hay un depósito
+    /// compatible abierto.
+    pub(crate) pending_news_engine: Option<u16>,
     pub(crate) sort: EngineCatalogSort,
     pub(crate) road_filter: RoadEngineFilter,
     pub(crate) rail_filter: RailBuyFilter,
@@ -491,6 +494,58 @@ pub(crate) fn engines_for_buy_window<'a>(
         engines.retain(|e| e.name.to_lowercase().contains(&needle));
     }
     engines
+}
+
+/// Conserva la selección de una noticia hasta que exista un depósito desde el
+/// que el motor pueda comprarse.
+pub(crate) fn select_engine_from_news(
+    buy_state: &mut BuyVehicleWindowState,
+    sim: &SimWorld,
+    engine_id: u16,
+) {
+    if let Some(depot_pos) = buy_state.depot_pos {
+        let visible = engines_for_buy_window(
+            sim,
+            depot_pos,
+            buy_state.sort,
+            buy_state.road_filter,
+            buy_state.rail_filter,
+            &buy_state.name_filter,
+        )
+        .iter()
+        .any(|engine| engine.id == engine_id);
+        if visible {
+            buy_state.selected_engine = Some(engine_id);
+            buy_state.pending_news_engine = None;
+            return;
+        }
+    }
+    buy_state.pending_news_engine = Some(engine_id);
+}
+
+/// Abre el catálogo para un depósito y aplica una selección que llegó desde
+/// el historial/ticker de noticias.
+pub(crate) fn prepare_buy_window_for_depot(
+    buy_state: &mut BuyVehicleWindowState,
+    sim: &SimWorld,
+    depot_pos: TileCoord,
+) {
+    buy_state.depot_pos = Some(depot_pos);
+    let Some(engine_id) = buy_state.pending_news_engine.take() else {
+        buy_state.selected_engine = None;
+        return;
+    };
+    buy_state.selected_engine = engines_for_buy_window(
+        sim,
+        depot_pos,
+        buy_state.sort,
+        buy_state.road_filter,
+        buy_state.rail_filter,
+        &buy_state.name_filter,
+    )
+    .iter()
+    .any(|engine| engine.id == engine_id)
+    .then_some(engine_id);
 }
 
 fn cargo_label(locale: Locale, cargo: Option<CargoType>) -> String {
@@ -1167,6 +1222,7 @@ pub(crate) fn buy_window_on_closed(
         if msg.0.class == FloatingWindowId::BuyVehicle {
             buy_state.depot_pos = None;
             buy_state.selected_engine = None;
+            buy_state.pending_news_engine = None;
             buy_state.sort = EngineCatalogSort::default();
             buy_state.road_filter = RoadEngineFilter::default();
             buy_state.rail_filter = RailBuyFilter::default();
@@ -1265,6 +1321,30 @@ mod tests {
             &state,
             BuyVehicleToolbarButton::FilterAll
         ));
+    }
+
+    #[test]
+    fn news_engine_selection_waits_for_a_compatible_depot() {
+        let depot = TileCoord::new(2, 2);
+        let sim = SimWorld {
+            state: road_depot_state(),
+            ..SimWorld::default()
+        };
+        let mut buy_state = BuyVehicleWindowState::default();
+
+        select_engine_from_news(&mut buy_state, &sim, openttdrs_core::ENGINE_BUS_MPS);
+        assert_eq!(
+            buy_state.pending_news_engine,
+            Some(openttdrs_core::ENGINE_BUS_MPS)
+        );
+        assert_eq!(buy_state.selected_engine, None);
+
+        prepare_buy_window_for_depot(&mut buy_state, &sim, depot);
+        assert_eq!(buy_state.pending_news_engine, None);
+        assert_eq!(
+            buy_state.selected_engine,
+            Some(openttdrs_core::ENGINE_BUS_MPS)
+        );
     }
 
     #[test]

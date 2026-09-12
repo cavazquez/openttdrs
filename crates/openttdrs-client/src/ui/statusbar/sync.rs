@@ -6,6 +6,7 @@ use crate::i18n::{Locale, localized_calendar_date};
 use crate::news_prefs::NewsDisplayPrefs;
 use crate::settings::ClientPreferences;
 use crate::state::{EditorSession, SimRunState, SimWorld, sim_is_paused};
+use crate::ui::buy_window::{BuyVehicleWindowState, select_engine_from_news};
 use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo};
 
 use super::{
@@ -535,12 +536,16 @@ pub(crate) fn focus_news_reference(
     sim: &SimWorld,
     focus: &mut CameraFocusRequest,
     selected: &mut SelectedTileInfo,
+    buy_state: &mut BuyVehicleWindowState,
 ) {
-    let NewsReference::Tile(coord) = reference else {
-        return;
-    };
-    focus.target = Some(tile_camera_world_pos(&sim.state.map, coord));
-    selected.pos = Some(coord);
+    match reference {
+        NewsReference::None => {}
+        NewsReference::Tile(coord) => {
+            focus.target = Some(tile_camera_world_pos(&sim.state.map, coord));
+            selected.pos = Some(coord);
+        }
+        NewsReference::Engine(engine_id) => select_engine_from_news(buy_state, sim, engine_id),
+    }
 }
 
 pub(crate) fn handle_news_popup_focus(
@@ -548,6 +553,7 @@ pub(crate) fn handle_news_popup_focus(
     sim: Res<SimWorld>,
     mut focus: ResMut<CameraFocusRequest>,
     mut selected: ResMut<SelectedTileInfo>,
+    mut buy_state: ResMut<BuyVehicleWindowState>,
     interaction_q: Query<&Interaction, (Changed<Interaction>, With<super::NewsPopupFocusButton>)>,
 ) {
     for interaction in &interaction_q {
@@ -560,7 +566,13 @@ pub(crate) fn handle_news_popup_focus(
         let Some(item) = sim.state.news.get(popup.item_id) else {
             continue;
         };
-        focus_news_reference(item.reference, &sim, &mut focus, &mut selected);
+        focus_news_reference(
+            item.reference,
+            &sim,
+            &mut focus,
+            &mut selected,
+            &mut buy_state,
+        );
     }
 }
 
@@ -583,6 +595,7 @@ pub(crate) fn handle_news_popup_close(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // sistema ECS: noticia, foco y catálogo.
 pub(crate) fn handle_status_bar_center_click(
     mut news_ui: ResMut<NewsUiState>,
     mut interaction_q: Query<
@@ -594,6 +607,7 @@ pub(crate) fn handle_status_bar_center_click(
     mut feedback: ResMut<HudBuildFeedback>,
     mut focus: ResMut<CameraFocusRequest>,
     mut selected: ResMut<SelectedTileInfo>,
+    mut buy_state: ResMut<BuyVehicleWindowState>,
 ) {
     for interaction in &mut interaction_q {
         if *interaction != Interaction::Pressed {
@@ -602,7 +616,13 @@ pub(crate) fn handle_status_bar_center_click(
         if let Some(ticker) = &news_ui.ticker
             && let Some(item) = sim.state.news.get(ticker.item_id)
         {
-            focus_news_reference(item.reference, &sim, &mut focus, &mut selected);
+            focus_news_reference(
+                item.reference,
+                &sim,
+                &mut focus,
+                &mut selected,
+                &mut buy_state,
+            );
             continue;
         }
         let Some(item) = sim.state.news.items.front().cloned() else {
@@ -611,7 +631,13 @@ pub(crate) fn handle_status_bar_center_click(
         if news_prefs.0.display_for(item.news_type) != NewsDisplayMode::Full {
             continue;
         }
-        focus_news_reference(item.reference, &sim, &mut focus, &mut selected);
+        focus_news_reference(
+            item.reference,
+            &sim,
+            &mut focus,
+            &mut selected,
+            &mut buy_state,
+        );
         news_ui.shown_full.remove(&item.id);
         news_ui.waiting_full.push_front(item.id);
         if news_has_audible_alert(item.news_type) {

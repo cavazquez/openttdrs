@@ -5,6 +5,7 @@ use openttdrs_core::NewsDisplayMode;
 
 use crate::news_prefs::NewsDisplayPrefs;
 use crate::state::SimWorld;
+use crate::ui::buy_window::BuyVehicleWindowState;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
     spawn_floating_window, window_text_font,
@@ -203,6 +204,7 @@ pub(crate) fn handle_news_history_row_click(
     mut news_ui: ResMut<NewsUiState>,
     mut focus: ResMut<crate::camera::CameraFocusRequest>,
     mut selected: ResMut<crate::ui::hud::SelectedTileInfo>,
+    mut buy_state: ResMut<BuyVehicleWindowState>,
     mut feedback: ResMut<crate::ui::hud::HudBuildFeedback>,
     rows: Query<(&Interaction, &NewsHistoryRow), (Changed<Interaction>, With<Button>)>,
 ) {
@@ -216,7 +218,13 @@ pub(crate) fn handle_news_history_row_click(
         let Some(item) = sim.state.news.get(row.item_id).cloned() else {
             continue;
         };
-        focus_news_reference(item.reference, &sim, &mut focus, &mut selected);
+        focus_news_reference(
+            item.reference,
+            &sim,
+            &mut focus,
+            &mut selected,
+            &mut buy_state,
+        );
         if news_prefs.0.display_for(item.news_type) == NewsDisplayMode::Full {
             news_ui.shown_full.remove(&item.id);
             news_ui.waiting_full.push_front(item.id);

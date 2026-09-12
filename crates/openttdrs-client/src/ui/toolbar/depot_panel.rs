@@ -22,7 +22,7 @@ use crate::render::{
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::autoreplace_window::AutoreplaceWindowState;
-use crate::ui::buy_window::BuyVehicleWindowState;
+use crate::ui::buy_window::{BuyVehicleWindowState, prepare_buy_window_for_depot};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
     spawn_floating_window, window_text_font,
@@ -1364,8 +1364,7 @@ pub(crate) fn handle_depot_panel_buttons(
         };
         match button {
             DepotPanelButton::NewVehicles => {
-                buy_state.depot_pos = Some(depot_pos);
-                buy_state.selected_engine = None;
+                prepare_buy_window_for_depot(&mut buy_state, &sim, depot_pos);
             }
             DepotPanelButton::Autoreplace => {
                 autoreplace.open_for_depot(depot_pos);

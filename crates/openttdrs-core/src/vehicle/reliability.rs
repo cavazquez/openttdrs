@@ -583,6 +583,10 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
             // El equivalente naval se ejecuta en el mismo callback económico,
             // después de actualizar averías y antes del movimiento del tick.
             check_ship_needs_service(state, i);
+            // Las aeronaves que ya están dentro de un hangar se revisan en el
+            // mismo callback; la interrupción de una ruta hacia otro hangar
+            // queda separada porque depende del FSM aeroportuario.
+            check_aircraft_needs_service(state, i);
         }
         if state.vehicles[i].is_timetable_controller_unit(&state.engine_catalog) {
             // El port cobra costos con acumulación fraccional por tick, pero
@@ -810,6 +814,49 @@ fn check_road_vehicle_needs_service(state: &mut crate::GameState, idx: usize) {
     );
     vehicle.path.clear();
     vehicle.sync_order_destination_with_stations(&state.map, &state.stations);
+}
+
+/// Revisa una aeronave que ya está en un hangar (`CheckIfAircraftNeedsService`).
+///
+/// La parte de desvío al hangar se mantiene separada: el handler nativo usa
+/// el aeropuerto objetivo y el FSM de vuelo para resolver esa interrupción.
+/// Este tramo cubre el caso local observable sin ambigüedad: una aeronave
+/// detenida dentro de un hangar debe recibir servicio en su slot económico.
+fn check_aircraft_needs_service(state: &mut crate::GameState, idx: usize) {
+    use crate::refit::vehicle_is_in_depot;
+    use crate::vehicle::VehicleKind;
+    use crate::vehicle::order::VehicleOrder;
+
+    let Some(vehicle) = state.vehicles.get(idx) else {
+        return;
+    };
+    let has_persistent_depot_order = vehicle
+        .orders
+        .iter()
+        .any(|order| matches!(order, VehicleOrder::Depot { stop: true, .. }));
+    if vehicle.kind != VehicleKind::Aircraft
+        || !vehicle.running
+        || vehicle.prev_unit.is_some()
+        || has_persistent_depot_order
+        || vehicle.awaiting_load_window
+        || vehicle.cargo_transfer_active()
+        || state
+            .companies
+            .get(vehicle.owner.index())
+            .is_none_or(|company| company.servint_aircraft == 0)
+    {
+        return;
+    }
+
+    let needs = {
+        let state_ref: &crate::GameState = state;
+        state_ref.vehicles[idx].requires_service_with(state_ref)
+    };
+    if !needs || !vehicle_is_in_depot(&state.map, vehicle) {
+        return;
+    }
+    let engine_catalog = state.engine_catalog.clone();
+    state.vehicles[idx].service_at_depot_with_catalog(&engine_catalog);
 }
 
 #[cfg(test)]
@@ -1467,6 +1514,40 @@ mod tests {
             state.vehicles[0].current_order_ref(),
             Some(VehicleOrder::Station { station, .. }) if *station == TileCoord::new(8, 4)
         ));
+    }
+
+    #[test]
+    fn aircraft_in_hangar_is_serviced_in_its_economy_slot() {
+        use crate::{GameState, TileKind};
+
+        let hangar = TileCoord::new(3, 3);
+        let mut state = GameState::new(8, 8);
+        state.map.set_kind(hangar, TileKind::Airport).unwrap();
+        let mut aircraft = Vehicle::new(1, VehicleKind::Aircraft, hangar, hangar);
+        aircraft.running = true;
+        aircraft.aircraft_phase = crate::vehicle::AircraftPhase::InHangar;
+        aircraft.service_interval_days = 1;
+        aircraft.last_service_day = 0;
+        aircraft.reliability = 1_000;
+        aircraft.needs_servicing = true;
+        aircraft.breakdown_chance = 200;
+        state.vehicles.push(aircraft);
+        state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
+        state.sync_timers_from_tick();
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(
+            state.vehicles[0].reliability,
+            initial_reliability_for_engine(
+                crate::engine::default_engine_id(VehicleKind::Aircraft),
+                VehicleKind::Aircraft,
+            )
+        );
+        assert!(!state.vehicles[0].needs_servicing);
+        assert_eq!(state.vehicles[0].breakdown_chance, 50);
+        assert_eq!(state.vehicles[0].last_service_day, 1);
     }
 
     #[test]

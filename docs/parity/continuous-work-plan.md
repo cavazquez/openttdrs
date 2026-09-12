@@ -5257,3 +5257,11 @@ inserta una orden de depósito aunque el vehículo ya haya superado su intervalo
 local. La regresión usa un depósito alcanzable y una compañía con servicio
 vial desactivado. #329/#567 continúan abiertas por callbacks, pathfinding y
 aceptación visual/framebuffer.
+
+Actualización #329/#567-AIRCRAFT-IN-HANGAR-SERVICE (2026-09-12): el handler
+económico revisa una aeronave normal que ya está dentro de un hangar, respetando
+`servint_aircraft` y la misma evaluación de intervalo/averías. La regresión
+comprueba que restaura fiabilidad, limpia `needs_servicing` y reduce el
+acumulador de averías en el slot correcto. La búsqueda y desvío al hangar
+objetivo quedan como subetapa separada del FSM aeroportuario. #329/#567
+continúan abiertas por callbacks, pathfinding y aceptación visual/framebuffer.

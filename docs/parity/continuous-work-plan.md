@@ -6252,3 +6252,14 @@ en el catálogo activo. Pasaron 2691 tests del core (1 ignorado), 1430 del
 cliente (2 ignorados), Clippy estricto en core y cliente, formato y
 `git diff --check`. #329 continúa abierta por callbacks y consumidores de
 vehículos aún legacy; #326/#567 permanecen abiertas.
+
+Corrección #329-VEHICLE-LIST-CATALOG-FIRST-FRAME (2026-09-12, `777006ac`):
+las filas de la lista global de vehículos eligen ahora su sprite inicial con
+`GameState.engine_catalog`, antes de que el refresco posterior materialice las
+capas NewGRF completas. Un motor custom ya no parpadea con la silueta del slot
+vanilla al reconstruir la lista; el refresco de capas y sus fallbacks siguen
+siendo los mismos. La regresión verifica que el `EngineDef` activo conserva
+su `train_image_index`. Pasaron 2691 tests del core (1 ignorado), 1431 del
+cliente (2 ignorados), Clippy estricto en cliente, formato y `git diff
+--check`. #329 continúa abierta por callbacks, vistas NewGRF completas y
+consumidores legacy restantes; #326/#567 permanecen abiertas.

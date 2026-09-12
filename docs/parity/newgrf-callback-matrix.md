@@ -1681,3 +1681,12 @@ vanilla para saves antiguos. Esto alinea el comando con el selector de la UI y
 permite persistir reglas cuyos dos IDs provienen de Action0/NewGRF. La
 regresión aplica el comando a dos buses custom y verifica ambos extremos de la
 regla.
+
+### #329-VEHICLE-LIST-CATALOG-FIRST-FRAME — sprite inicial de la lista
+
+Actualizado: 2026-09-12 (`777006ac`). `spawn_vehicle_list_row` resuelve el
+`EngineDef` de la unidad contra el catálogo runtime antes de crear la fila.
+Así, un tren custom conserva desde el primer frame su `train_image_index` y no
+presenta durante una reconstrucción la silueta vanilla que el sistema de
+capas posterior reemplazaría. La regresión cubre la prioridad del catálogo;
+las capas NewGRF completas siguen resolviéndose en el refresco de sprites.

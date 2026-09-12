@@ -214,34 +214,81 @@ fn sync_sets_m2_reservation_bits_on_rail() {
 }
 
 #[test]
-fn sync_sets_m2_reservation_bits_on_rail_bridge_ramp() {
+fn sync_sets_m5_reservation_bits_on_rail_bridge_ramps() {
     let mut state = GameState::new(8, 4);
-    let tile = TileCoord::new(2, 1);
+    let west = TileCoord::new(2, 1);
+    let east = TileCoord::new(5, 1);
+    state.map.set_mapt_m5(west, 0x90, 0x82).unwrap();
+    state.map.set_mapt_m5(east, 0x90, 0x80).unwrap();
     state
         .map
-        .set_kind(tile, TileKind::RailBridge)
-        .expect("rampa ferroviaria");
+        .set_kind(west, TileKind::RailBridge)
+        .expect("rampa oeste");
+    state
+        .map
+        .set_kind(east, TileKind::RailBridge)
+        .expect("rampa este");
     let mut train = Vehicle::new(
         1,
         VehicleKind::Train,
         TileCoord::new(1, 1),
-        TileCoord::new(3, 1),
+        TileCoord::new(6, 1),
     );
-    train.reserved_steps = vec![ReservedRailStep::new(tile, 0x01)];
+    train.reserved_steps = vec![ReservedRailStep::new(west, 0x01)];
     state.vehicles = vec![train];
 
     let mut prev = HashSet::new();
     let mut dirty = Vec::new();
     sync_reservations_to_map(&mut state.map, &state.vehicles, &mut prev, &mut dirty);
-    assert!(rail_tile_has_pbs_reservation(
-        state.map.get(tile).expect("rampa").m2_hi
-    ));
-    assert!(dirty.contains(&tile));
+    for ramp in [west, east] {
+        let tile = state.map.get(ramp).expect("rampa");
+        assert!(crate::tunnel_bridge_rail_reserved(tile));
+        assert_eq!(tile.m2_hi, 0, "PBS de puente no invade MAP2");
+        assert!(dirty.contains(&ramp));
+    }
 
     state.vehicles[0].reserved_steps.clear();
     sync_reservations_to_map(&mut state.map, &state.vehicles, &mut prev, &mut dirty);
-    assert!(!rail_tile_has_pbs_reservation(
-        state.map.get(tile).expect("rampa").m2_hi
+    for ramp in [west, east] {
+        assert!(!crate::tunnel_bridge_rail_reserved(
+            state.map.get(ramp).expect("rampa")
+        ));
+    }
+}
+
+#[test]
+fn tunnel_reservation_uses_m5_on_both_vanilla_mouths() {
+    let mut map = crate::Map::new_flat(8, 3, 0);
+    let west = TileCoord::new(1, 1);
+    let east = TileCoord::new(5, 1);
+    map.set_mapt_m5(west, 0x90, 0x02).unwrap();
+    map.set_kind(west, TileKind::RailTunnel).unwrap();
+    map.set_mapt_m5(east, 0x90, 0).unwrap();
+    map.set_kind(east, TileKind::RailTunnel).unwrap();
+
+    let mut train = Vehicle::new(1, VehicleKind::Train, west, east);
+    train.path = VecDeque::from([east]);
+    train.reserved_steps = vec![ReservedRailStep::new(west, crate::RAIL_TB_X)];
+    let vehicles = vec![train];
+    let mut active = HashSet::new();
+    let mut dirty = Vec::new();
+
+    sync_reservations_to_map(&mut map, &vehicles, &mut active, &mut dirty);
+    for mouth in [west, east] {
+        let tile = map.get(mouth).expect("boca");
+        assert!(crate::tunnel_bridge_rail_reserved(tile));
+        assert_eq!(tile.m2_hi, 0, "el túnel no usa MAP2 para PBS");
+        assert!(tile_track_reserved_by_map(&map, mouth, crate::RAIL_TB_X));
+        assert!(!tile_track_reserved_by_map(&map, mouth, crate::RAIL_TB_Y));
+    }
+
+    let mut train = vehicles.into_iter().next().expect("tren");
+    free_train_track_reservation(&mut map, &mut train, &mut dirty);
+    assert!(!crate::tunnel_bridge_rail_reserved(
+        map.get(west).expect("boca oeste")
+    ));
+    assert!(!crate::tunnel_bridge_rail_reserved(
+        map.get(east).expect("boca este")
     ));
 }
 
@@ -347,11 +394,11 @@ fn pbs_reservation_crosses_bridge_blocks_second_train_and_releases() {
     let mut prev = HashSet::new();
     let mut dirty = Vec::new();
     sync_reservations_to_map(&mut state.map, &state.vehicles, &mut prev, &mut dirty);
-    assert!(rail_tile_has_pbs_reservation(
-        state.map.get(west).expect("rampa oeste").m2_hi
+    assert!(crate::tunnel_bridge_rail_reserved(
+        state.map.get(west).expect("rampa oeste")
     ));
-    assert!(rail_tile_has_pbs_reservation(
-        state.map.get(east).expect("rampa este").m2_hi
+    assert!(crate::tunnel_bridge_rail_reserved(
+        state.map.get(east).expect("rampa este")
     ));
 
     assert!(try_path_reserve(
@@ -374,11 +421,11 @@ fn pbs_reservation_crosses_bridge_blocks_second_train_and_releases() {
         &mut state.vehicles[0],
         &mut state.runtime.reservation_tile_dirty,
     );
-    assert!(!rail_tile_has_pbs_reservation(
-        state.map.get(west).expect("rampa oeste").m2_hi
+    assert!(!crate::tunnel_bridge_rail_reserved(
+        state.map.get(west).expect("rampa oeste")
     ));
-    assert!(!rail_tile_has_pbs_reservation(
-        state.map.get(east).expect("rampa este").m2_hi
+    assert!(!crate::tunnel_bridge_rail_reserved(
+        state.map.get(east).expect("rampa este")
     ));
     // Sale físicamente de la rampa antes de que el tren opuesto reintente.
     state.vehicles[0].pos = c(0);
@@ -430,9 +477,10 @@ fn sav_roundtrip_preserves_pbs_reservation_on_rail_bridge_ramps() {
         let tile = loaded.map.get(ramp).expect("rampa cargada");
         assert_eq!(tile.kind, TileKind::RailBridge);
         assert!(
-            rail_tile_has_pbs_reservation(tile.m2_hi),
+            crate::tunnel_bridge_rail_reserved(tile),
             "la reserva PBS debe sobrevivir en {ramp:?}"
         );
+        assert_eq!(tile.m2_hi, 0, "el save no debe mover la reserva a MAP2");
     }
 }
 

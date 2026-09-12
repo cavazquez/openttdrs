@@ -168,7 +168,7 @@ pub use bridge_spec::{
     bridge_line_tiles, bridge_max_speed_for_tile, bridge_middle_length, bridge_spec,
     bridge_spec_def, bridge_total_length, bridge_type_from_m6, calc_bridge_piece,
     rail_bridge_other_end, road_bridge_other_end, set_bridge_middle_mapt, set_bridge_type_m6,
-    tunnel_bridge_rail_reserved, vanilla_bridge_spec_catalog,
+    tunnel_bridge_rail_reserved, tunnel_bridge_rail_track, vanilla_bridge_spec_catalog,
 };
 pub use canal_spec::{
     CANAL_FEATURE_COUNT, CF_BUOY, CF_DIKES, CF_DOCKS, CF_ICON, CF_LOCKS, CF_RIVER_EDGE,

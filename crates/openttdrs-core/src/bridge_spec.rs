@@ -2,7 +2,7 @@
 //!
 //! El catálogo mutable [`BridgeSpecDef`] admite overrides Action0 `Bridges` (`0x06`).
 
-use crate::map::{Tile, TileCoord};
+use crate::map::{RAIL_TB_X, RAIL_TB_Y, Tile, TileCoord};
 use crate::rail_signals::calendar_year_at_tick;
 use crate::tick::GameTick;
 
@@ -518,6 +518,19 @@ pub fn tunnel_bridge_rail_reserved(tile: Tile) -> bool {
     tile.is_tunnel_bridge_tile() && (tile.m5 & 0x0C) == 0 && (tile.m5 & 0x10) != 0
 }
 
+/// `TrackBits` reservados por una rampa ferroviaria de túnel o puente.
+///
+/// `HasTunnelBridgeReservation` sólo persiste un booleano: la dirección de la
+/// rampa determina si la vía es `TRACK_X` o `TRACK_Y` (`DiagDirToDiagTrack`).
+#[must_use]
+pub fn tunnel_bridge_rail_track(tile: Tile) -> Option<u8> {
+    tunnel_bridge_rail_reserved(tile).then_some(if tile.m5 & 1 == 0 {
+        RAIL_TB_X
+    } else {
+        RAIL_TB_Y
+    })
+}
+
 /// Otra rampa del puente `kind`, siguiendo la dirección persistida en `m5`.
 ///
 /// `OpenTTD` no identifica el vano por el tipo de terreno inferior: un puente
@@ -643,6 +656,10 @@ mod tests {
 
         tile.m5 |= 0x10;
         assert!(tunnel_bridge_rail_reserved(tile));
+        assert_eq!(tunnel_bridge_rail_track(tile), Some(RAIL_TB_X));
+
+        tile.m5 = 0x81 | 0x10;
+        assert_eq!(tunnel_bridge_rail_track(tile), Some(RAIL_TB_Y));
 
         tile.kind = TileKind::RoadBridge;
         tile.m5 = 0x80 | 0x04 | 0x10;

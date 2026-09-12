@@ -19,7 +19,36 @@ use super::model::{
 };
 
 fn is_rail_reservation_tile(kind: TileKind) -> bool {
-    matches!(kind, TileKind::Rail | TileKind::RailBridge)
+    kind == TileKind::Rail
+}
+
+fn is_tunnel_bridge_rail_tile(tile: &crate::map::Tile) -> bool {
+    matches!(tile.kind, TileKind::RailTunnel | TileKind::RailBridge)
+        && tile.is_tunnel_bridge_tile()
+        && tile.m5 & 0x0C == 0
+}
+
+fn tunnel_bridge_other_end(map: &Map, c: TileCoord) -> Option<TileCoord> {
+    match map.get_kind(c) {
+        Some(TileKind::RailTunnel) => {
+            crate::pathfinder::tunnel_other_end(map, c, TileKind::RailTunnel)
+        }
+        Some(TileKind::RailBridge) => crate::rail_bridge_other_end(map, c),
+        _ => None,
+    }
+}
+
+fn add_next_track(map: &Map, next_tracks: &mut HashMap<TileCoord, u8>, tile: TileCoord, track: u8) {
+    next_tracks
+        .entry(tile)
+        .and_modify(|bits| *bits |= track)
+        .or_insert(track);
+    if let Some(other) = tunnel_bridge_other_end(map, tile) {
+        next_tracks
+            .entry(other)
+            .and_modify(|bits| *bits |= track)
+            .or_insert(track);
+    }
 }
 
 fn is_rail_station_reservation_tile(tile: &crate::map::Tile) -> bool {
@@ -29,7 +58,8 @@ fn is_rail_station_reservation_tile(tile: &crate::map::Tile) -> bool {
 /// Bit de reserva PBS en cruces a nivel (`HasCrossingReservation` / `m5` bit 4).
 pub const CROSSING_RESERVATION_M5_BIT: u8 = 1 << 4;
 
-/// Escribe reservas PBS en `m2_hi` (vía plana) y `m5` bit 4 (cruces); marca `dirty`.
+/// Escribe reservas PBS en `m2_hi` (vía plana) y `m5` bit 4 (túnel, puente y
+/// cruces); marca `dirty`.
 ///
 /// Al liberar teselas que dejan de estar reservadas, pone en rojo las señales PBS
 /// de esa tesela (paridad de `FreeTrainTrackReservation` / `ClearPathReservation`).
@@ -39,27 +69,44 @@ pub fn sync_reservations_to_map(
     prev_active: &mut HashSet<TileCoord>,
     dirty: &mut Vec<TileCoord>,
 ) {
-    // Primera sync tras importar un `.sav`: las reservas `m2_hi` del save deben
-    // entrar en `prev_active` para poder liberarse cuando el consist ya no las usa.
     if prev_active.is_empty() {
-        let (w, h) = map.dimensions();
-        for y in 0..h.cast_signed() {
-            for x in 0..w.cast_signed() {
-                let c = TileCoord::new(x, y);
-                let Some(tile) = map.get(c) else {
-                    continue;
-                };
-                if (is_rail_reservation_tile(tile.kind)
-                    && decode_rail_reservation_m2_hi(tile.m2_hi) != 0)
-                    || (is_rail_station_reservation_tile(&tile)
-                        && station_tile_has_reservation(tile.m6))
-                {
-                    prev_active.insert(c);
-                }
+        seed_previous_active(map, prev_active);
+    }
+
+    let next_tracks = collect_next_tracks(map, vehicles);
+    apply_reservation_map_sync(map, prev_active, &next_tracks, dirty);
+    *prev_active = next_tracks.keys().copied().collect();
+}
+
+/// Importa reservas ya presentes en el mapa para que la primera sincronización
+/// pueda liberar también los extremos que no estén en `Vehicle::reserved_steps`.
+fn seed_previous_active(map: &Map, prev_active: &mut HashSet<TileCoord>) {
+    let (w, h) = map.dimensions();
+    for y in 0..h.cast_signed() {
+        for x in 0..w.cast_signed() {
+            let c = TileCoord::new(x, y);
+            let Some(tile) = map.get(c) else {
+                continue;
+            };
+            let active = (is_rail_reservation_tile(tile.kind)
+                && decode_rail_reservation_m2_hi(tile.m2_hi) != 0)
+                || (is_tunnel_bridge_rail_tile(&tile) && crate::tunnel_bridge_rail_reserved(tile))
+                || (is_rail_station_reservation_tile(&tile)
+                    && station_tile_has_reservation(tile.m6));
+            if !active {
+                continue;
+            }
+            prev_active.insert(c);
+            if is_tunnel_bridge_rail_tile(&tile)
+                && let Some(other) = tunnel_bridge_other_end(map, c)
+            {
+                prev_active.insert(other);
             }
         }
     }
+}
 
+fn collect_next_tracks(map: &Map, vehicles: &[Vehicle]) -> HashMap<TileCoord, u8> {
     let mut next_tracks: HashMap<TileCoord, u8> = HashMap::new();
     for v in vehicles {
         if v.kind != VehicleKind::Train {
@@ -67,11 +114,15 @@ pub fn sync_reservations_to_map(
         }
         for step in &v.reserved_steps {
             match map.get_kind(step.tile) {
-                Some(TileKind::Rail | TileKind::RailBridge) => {
-                    next_tracks
-                        .entry(step.tile)
-                        .and_modify(|bits| *bits |= step.track)
-                        .or_insert(step.track);
+                Some(TileKind::Rail) => {
+                    add_next_track(map, &mut next_tracks, step.tile, step.track);
+                }
+                Some(TileKind::RailTunnel | TileKind::RailBridge)
+                    if map
+                        .get(step.tile)
+                        .is_some_and(|tile| is_tunnel_bridge_rail_tile(&tile)) =>
+                {
+                    add_next_track(map, &mut next_tracks, step.tile, step.track);
                 }
                 Some(TileKind::Station)
                     if {
@@ -96,7 +147,15 @@ pub fn sync_reservations_to_map(
             }
         }
     }
+    next_tracks
+}
 
+fn apply_reservation_map_sync(
+    map: &mut Map,
+    prev_active: &HashSet<TileCoord>,
+    next_tracks: &HashMap<TileCoord, u8>,
+    dirty: &mut Vec<TileCoord>,
+) {
     let mut touch = HashSet::new();
     for c in prev_active.iter().chain(next_tracks.keys()) {
         touch.insert(*c);
@@ -116,6 +175,15 @@ pub fn sync_reservations_to_map(
             tile.m2_hi = (tile.m2_hi & !RAIL_RESERVATION_M2_HI_MASK)
                 | encode_rail_reservation_to_m2_hi(want);
             had != want || (had != 0 && want == 0)
+        } else if is_tunnel_bridge_rail_tile(&tile) {
+            let had = crate::tunnel_bridge_rail_reserved(tile);
+            let want_flag = want != 0;
+            if want_flag {
+                tile.m5 |= 0x10;
+            } else {
+                tile.m5 &= !0x10;
+            }
+            had != want_flag
         } else if crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind) {
             let had = tile.m5 & CROSSING_RESERVATION_M5_BIT != 0;
             let want_flag = want != 0;
@@ -142,8 +210,6 @@ pub fn sync_reservations_to_map(
             dirty.push(c);
         }
     }
-
-    *prev_active = next_tracks.keys().copied().collect();
 }
 
 /// Libera reservas PBS que apuntan a teselas de infraestructura que se va a
@@ -158,25 +224,39 @@ pub fn clear_train_reservations_on_tiles(
     active: &mut HashSet<TileCoord>,
     dirty: &mut Vec<TileCoord>,
 ) {
-    let affected: HashSet<TileCoord> = tiles.iter().copied().collect();
+    let mut affected_tiles = tiles.to_vec();
+    for &c in tiles {
+        if let Some(other) = tunnel_bridge_other_end(map, c)
+            && !affected_tiles.contains(&other)
+        {
+            affected_tiles.push(other);
+        }
+    }
+    let affected: HashSet<TileCoord> = affected_tiles.iter().copied().collect();
     for vehicle in vehicles {
         vehicle
             .reserved_steps
             .retain(|step| !affected.contains(&step.tile));
     }
-    for &c in tiles {
+    for c in affected_tiles {
         active.remove(&c);
         let Some(mut tile) = map.get(c) else {
             continue;
         };
-        if !is_rail_reservation_tile(tile.kind) {
+        if is_rail_reservation_tile(tile.kind) {
+            if decode_rail_reservation_m2_hi(tile.m2_hi) == 0 {
+                continue;
+            }
+            set_pbs_signals_red_on_tile(&mut tile);
+            tile.m2_hi &= !RAIL_RESERVATION_M2_HI_MASK;
+        } else if is_tunnel_bridge_rail_tile(&tile) {
+            if !crate::tunnel_bridge_rail_reserved(tile) {
+                continue;
+            }
+            tile.m5 &= !0x10;
+        } else {
             continue;
         }
-        if decode_rail_reservation_m2_hi(tile.m2_hi) == 0 {
-            continue;
-        }
-        set_pbs_signals_red_on_tile(&mut tile);
-        tile.m2_hi &= !RAIL_RESERVATION_M2_HI_MASK;
         if map.set_tile(c, tile).is_ok() {
             dirty.push(c);
         }
@@ -219,6 +299,12 @@ pub fn free_train_track_reservation(
                     | encode_rail_reservation_to_m2_hi(next_bits);
                 changed = true;
             }
+        } else if is_tunnel_bridge_rail_tile(&tile) {
+            if crate::tunnel_bridge_rail_reserved(tile) {
+                clear_tunnel_bridge_reservation(map, step.tile, dirty);
+            }
+            prev = Some(step.tile);
+            continue;
         } else if crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind)
             && tile.m5 & CROSSING_RESERVATION_M5_BIT != 0
         {
@@ -230,6 +316,25 @@ pub fn free_train_track_reservation(
             dirty.push(step.tile);
         }
         prev = Some(step.tile);
+    }
+}
+
+fn clear_tunnel_bridge_reservation(map: &mut Map, c: TileCoord, dirty: &mut Vec<TileCoord>) {
+    let mut ends = vec![c];
+    if let Some(other) = tunnel_bridge_other_end(map, c) {
+        ends.push(other);
+    }
+    for end in ends {
+        let Some(mut tile) = map.get(end) else {
+            continue;
+        };
+        if !is_tunnel_bridge_rail_tile(&tile) || !crate::tunnel_bridge_rail_reserved(tile) {
+            continue;
+        }
+        tile.m5 &= !0x10;
+        if map.set_tile(end, tile).is_ok() {
+            dirty.push(end);
+        }
     }
 }
 

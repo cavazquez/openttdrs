@@ -5792,3 +5792,13 @@ regresiones cubren avance boca→boca, renderer con historial, poses de consist
 y reversa detenida. #329/#567 continúa abierta por reservas persistidas en
 m5, movimiento completo de variantes, callbacks y aceptación visual/framebuffer
 restantes.
+
+Corrección #329/#567-TUNNEL-BRIDGE-PBS-M5 (2026-09-12): las reservas PBS de
+`RailTunnel` y `RailBridge` ya respetan `HasTunnelBridgeReservation`: se
+persisten en `m5` bit 4, se reflejan en las dos bocas, se consideran al
+detectar conflictos y se liberan como pareja al vaciar o demoler la
+infraestructura. `m2_hi` continúa reservado para `MP_RAILWAY` plano; la
+dirección de `m5` determina el `TrackBits` X/Y de la rampa. Las regresiones
+cubren puente, túnel, round-trip SAV y liberación de los dos extremos.
+#329/#567 continúa abierta por ownership de reservas, reemplazos, callbacks,
+variantes de puente/túnel y aceptación visual/framebuffer restantes.

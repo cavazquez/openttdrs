@@ -153,7 +153,10 @@ pub fn tile_track_reserved_by_map(map: &Map, tile: TileCoord, track: u8) -> bool
     let Some(t) = map.get(tile) else {
         return false;
     };
-    if !matches!(t.kind, TileKind::Rail | TileKind::RailBridge) {
+    if matches!(t.kind, TileKind::RailTunnel | TileKind::RailBridge) {
+        return crate::tunnel_bridge_rail_track(t).is_some_and(|reserved| reserved & track != 0);
+    }
+    if t.kind != TileKind::Rail {
         return false;
     }
     let reserved = decode_rail_reservation_m2_hi(t.m2_hi);

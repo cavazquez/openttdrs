@@ -173,11 +173,11 @@ fn clear_rail_bridge_releases_map_and_vehicle_reservations() {
         &mut state.runtime.reservation_tiles_active,
         &mut state.runtime.reservation_tile_dirty,
     );
-    assert!(crate::rail_pbs::rail_tile_has_pbs_reservation(
-        state.map.get(start).unwrap().m2_hi
+    assert!(crate::tunnel_bridge_rail_reserved(
+        state.map.get(start).unwrap()
     ));
-    assert!(crate::rail_pbs::rail_tile_has_pbs_reservation(
-        state.map.get(end).unwrap().m2_hi
+    assert!(crate::tunnel_bridge_rail_reserved(
+        state.map.get(end).unwrap()
     ));
 
     apply_command(&mut state, &Command::ClearTile(start)).unwrap();

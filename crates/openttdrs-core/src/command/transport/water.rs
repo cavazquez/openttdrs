@@ -382,6 +382,13 @@ pub(crate) fn check_ship_depot_placement(
             return Err(CommandError::SiteUnsuitable);
         }
     }
+    // `CmdBuildShipDepot` reserva la entrada del pool antes de invocar
+    // `ClearTile(..., Auto)`. Mantener este orden evita que un mapa agotado
+    // informe un bloqueo de la huella que el comando nativo todavía no llega
+    // a inspeccionar.
+    if crate::depot::next_free_depot_id(&state.map).is_none() {
+        return Err(CommandError::DepotPoolFull);
+    }
     // Locks y depósitos también son `MP_WATER` con una clase válida, pero
     // `ClearTile_Water` los rechaza cuando recibe `Auto`; nunca se deben
     // sobrescribir silenciosamente durante la construcción.
@@ -391,6 +398,15 @@ pub(crate) fn check_ship_depot_placement(
         }) {
             return Err(CommandError::BuildingMustBeDemolished);
         }
+    }
+    // La limpieza automática nativa llama a `EnsureNoVehicleOnGround` para
+    // cada parte. Comprobar ambas antes de modificar objetos conserva la
+    // atomicidad del preview y del apply.
+    if [origin, other]
+        .iter()
+        .any(|tile| state.vehicles.iter().any(|vehicle| vehicle.pos == *tile))
+    {
+        return Err(CommandError::VehicleInTheWay);
     }
     // `CmdBuildShipDepot` no consulta una tercera tesela delante de la boca:
     // su contrato sólo exige agua en las dos teselas que reemplaza. La

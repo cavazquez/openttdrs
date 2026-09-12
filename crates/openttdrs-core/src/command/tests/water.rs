@@ -942,6 +942,36 @@ fn place_ship_depot_rejects_land() {
 }
 
 #[test]
+fn place_ship_depot_rejects_vehicle_on_either_section_atomically() {
+    let depot = TileCoord::new(4, 4);
+    let [origin, other] = crate::ship_depot_footprint(depot, 0);
+    for occupied in [origin, other] {
+        let mut s = GameState::new(12, 12);
+        for coord in [origin, other, TileCoord::new(3, 4)] {
+            s.map.set_kind(coord, TileKind::Water).unwrap();
+        }
+        s.vehicles
+            .push(Vehicle::new(1, VehicleKind::Ship, occupied, occupied));
+        let before = s.map.tiles().to_vec();
+        let money = s.economy.money;
+        let command = Command::PlaceShipDepotDir(depot, 0);
+
+        assert_eq!(
+            command_would_fail(&s, &command),
+            Some(crate::CommandError::VehicleInTheWay),
+            "la preview debe inspeccionar la sección ocupada"
+        );
+        assert_eq!(
+            apply_command(&mut s, &command),
+            Err(crate::CommandError::VehicleInTheWay)
+        );
+        assert_eq!(s.map.tiles(), before.as_slice());
+        assert_eq!(s.economy.money, money);
+        assert!(s.depots.is_empty());
+    }
+}
+
+#[test]
 fn place_ship_depot_rejects_bridge_above_both_parts() {
     for dir in 0..4_u8 {
         for part in 0..2_usize {

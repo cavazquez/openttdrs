@@ -5541,3 +5541,12 @@ y la restauración también reactivan los estados no inundables de las ocho
 vecinas, equivalente a `DoClearSquare`. Las regresiones cubren ambas secciones,
 preview/aplicación atómicos, borde y propiedad. #329/#567 siguen abiertas por
 infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-SHIP-DEPOT-WATER-CLASS (2026-09-12): la
+construcción naval captura la clase de agua de cada parte antes de ejecutar la
+auto-limpieza, igual que `CmdBuildShipDepot` captura `wc1/wc2`. Así un mar
+elevado que `MakeWaterKeepingClass` convierte temporalmente en canal no cambia
+la clase raw que recibe el depósito. La regresión cubre un objeto autoremove
+sobre mar elevado y conserva `Sea` en la sección materializada. #329/#567 siguen
+abiertas por infraestructura, callbacks, pathfinding y aceptación
+visual/framebuffer.

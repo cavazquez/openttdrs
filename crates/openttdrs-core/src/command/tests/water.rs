@@ -1406,6 +1406,34 @@ fn place_ship_depot_auto_clears_autoremove_water_object_and_keeps_water() {
 }
 
 #[test]
+fn place_ship_depot_keeps_water_class_captured_before_object_clear() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(3, 3);
+    let other = crate::ship_depot_footprint(depot, 0)[1];
+    add_water_object(
+        &mut s,
+        depot,
+        0x11,
+        crate::object_spec::OBJECT_FLAG_AUTOREMOVE,
+    );
+    s.map.set_kind(other, TileKind::Water).unwrap();
+    for coord in [depot, other] {
+        s.map.set_height(coord, 1).unwrap();
+    }
+    let mut object = s.map.get(depot).unwrap();
+    object.m1 = set_water_class_m1(object.m1, WaterClass::Sea);
+    s.map.set_tile(depot, object).unwrap();
+
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+
+    assert_eq!(
+        water_class_from_m1(s.map.get(depot).unwrap().m1),
+        WaterClass::Sea,
+        "el depósito conserva wc1 capturada antes de MakeWaterKeepingClass"
+    );
+}
+
+#[test]
 fn place_ship_depot_rejects_non_autoremove_water_object_atomically() {
     let mut s = GameState::new(8, 8);
     let depot = TileCoord::new(3, 3);

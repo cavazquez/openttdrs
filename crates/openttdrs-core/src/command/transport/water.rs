@@ -434,11 +434,17 @@ pub(crate) fn check_ship_depot_placement(
 /// de bytes se normaliza igual que el motor nativo para que save/reload no
 /// conserve payload de la tesela anterior.
 #[must_use]
-fn make_ship_depot_tile(original: Tile, owner: u8, dir: u8, depot_id: u16) -> Tile {
+fn make_ship_depot_tile(
+    original: Tile,
+    owner: u8,
+    water_class: WaterClass,
+    dir: u8,
+    depot_id: u16,
+) -> Tile {
     let mut tile = original;
     tile.kind = TileKind::ShipDepot;
     tile.mapt = 0x60 | (original.mapt & 0x0F);
-    tile.m1 = set_water_class_m1(owner & 0x1F, water_class_from_m1(original.m1));
+    tile.m1 = set_water_class_m1(owner & 0x1F, water_class);
     let [m2, m2_hi] = depot_id.to_le_bytes();
     tile.m2 = m2;
     tile.m2_hi = m2_hi;
@@ -461,6 +467,17 @@ pub(in crate::command) fn place_ship_depot_dir(
     let depot_id =
         crate::depot::next_free_depot_id(&state.map).ok_or(CommandError::DepotPoolFull)?;
     let other = ship_depot_other_tile_for_dir(c, dir);
+    // `CmdBuildShipDepot` captura `GetWaterClass` antes de ejecutar ambas
+    // limpiezas. No se debe releer `m1` después: `MakeWaterKeepingClass`
+    // puede convertir un mar elevado en canal o descartar una clase inclinada.
+    let original_water_class = state
+        .map
+        .get(c)
+        .map_or(WaterClass::Sea, |raw| water_class_from_m1(raw.m1));
+    let other_water_class = state
+        .map
+        .get(other)
+        .map_or(WaterClass::Sea, |raw| water_class_from_m1(raw.m1));
     let auto_clear_objects = auto_clear_object_plan(state, [c, other])?;
     for object_tiles in auto_clear_objects {
         clear_object_footprint_keep_water(state, object_tiles[0], &object_tiles)?;
@@ -481,8 +498,14 @@ pub(in crate::command) fn place_ship_depot_dir(
     let original = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let other_original = state.map.get(other).ok_or(CommandError::OutOfBounds)?;
     let owner = state.active_company.0;
-    let depot_tile = make_ship_depot_tile(original, owner, dir, depot_id);
-    let other_tile = make_ship_depot_tile(other_original, owner, dir.wrapping_add(2), depot_id);
+    let depot_tile = make_ship_depot_tile(original, owner, original_water_class, dir, depot_id);
+    let other_tile = make_ship_depot_tile(
+        other_original,
+        owner,
+        other_water_class,
+        dir.wrapping_add(2),
+        depot_id,
+    );
     // `MakeShipDepot` conserva la zona climática de cada parte, cambia el tipo
     // alto a MP_WATER y guarda WaterTileType::Depot (`0x30`) más part/eje en m5.
     // El segundo tile es la parte opuesta de la misma huella 2x1/1x2.

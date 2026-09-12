@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    AutoReplaceRule, DepotPurchaseKind, EngineCatalogSort, RoadEngineFilter, calendar_year_at_tick,
-    engine_by_id, engines_for_depot_kind,
+    AutoReplaceRule, DepotPurchaseKind, EngineCatalogSort, EngineDef, RoadEngineFilter,
+    calendar_year_at_tick, engine_by_id, engines_for_depot_kind_in,
 };
 
 use crate::i18n::{Locale, localized_text};
@@ -340,7 +340,8 @@ fn depot_engines(sim: &SimWorld, depot_pos: TileCoord) -> Vec<u16> {
         _ => DepotPurchaseKind::Road,
     };
     let year = calendar_year_at_tick(sim.state.tick);
-    engines_for_depot_kind(
+    engines_for_depot_kind_in(
+        &sim.state.engine_catalog,
         depot_kind,
         year,
         EngineCatalogSort::Name,
@@ -352,6 +353,10 @@ fn depot_engines(sim: &SimWorld, depot_pos: TileCoord) -> Vec<u16> {
     .collect()
 }
 
+fn engine_for_ui(catalog: &[EngineDef], engine_id: u16) -> Option<&EngineDef> {
+    openttdrs_core::engine_in_catalog(catalog, engine_id).or_else(|| engine_by_id(engine_id))
+}
+
 fn autoreplace_hint(locale: Locale, from: &str, to: &str) -> String {
     match locale {
         Locale::Es => format!("Desde: {from} · Hacia: {to}"),
@@ -359,11 +364,11 @@ fn autoreplace_hint(locale: Locale, from: &str, to: &str) -> String {
     }
 }
 
-fn rule_label(locale: Locale, rule: &AutoReplaceRule) -> String {
-    let from = engine_by_id(rule.from_engine_id)
+fn rule_label(locale: Locale, rule: &AutoReplaceRule, catalog: &[EngineDef]) -> String {
+    let from = engine_for_ui(catalog, rule.from_engine_id)
         .map(|e| e.name.as_str())
         .unwrap_or("?");
-    let to = engine_by_id(rule.to_engine_id)
+    let to = engine_for_ui(catalog, rule.to_engine_id)
         .map(|e| e.name.as_str())
         .unwrap_or("?");
     let flags = match (locale, rule.enabled, rule.only_when_old) {
@@ -468,6 +473,7 @@ pub(crate) fn sync_autoreplace_window(
     }
     *vis = Visibility::Visible;
     let locale = prefs.locale();
+    let catalog = &sim.state.engine_catalog;
 
     if let Some((_, mut title)) = title_q
         .iter_mut()
@@ -478,12 +484,12 @@ pub(crate) fn sync_autoreplace_window(
     if let Ok(mut hint) = hint_q.single_mut() {
         let from = state
             .from_engine
-            .and_then(engine_by_id)
+            .and_then(|id| engine_for_ui(catalog, id))
             .map(|e| e.name.as_str())
             .unwrap_or("—");
         let to = state
             .to_engine
-            .and_then(engine_by_id)
+            .and_then(|id| engine_for_ui(catalog, id))
             .map(|e| e.name.as_str())
             .unwrap_or("—");
         **hint = autoreplace_hint(locale, from, to);
@@ -507,7 +513,7 @@ pub(crate) fn sync_autoreplace_window(
     }
     for (row_text, mut text) in &mut rule_texts {
         if let Some(rule) = rules.get(row_text.slot) {
-            **text = rule_label(locale, rule);
+            **text = rule_label(locale, rule, catalog);
         } else {
             **text = String::new();
         }
@@ -534,7 +540,7 @@ pub(crate) fn sync_autoreplace_window(
     }
     for (row_text, mut text) in &mut from_texts {
         if let Some(&engine_id) = engines.get(row_text.slot) {
-            **text = engine_by_id(engine_id)
+            **text = engine_for_ui(catalog, engine_id)
                 .map(|e| e.name.clone())
                 .unwrap_or_else(|| format!("#{engine_id}"));
         } else {
@@ -558,7 +564,7 @@ pub(crate) fn sync_autoreplace_window(
     }
     for (row_text, mut text) in &mut to_texts {
         if let Some(&engine_id) = engines.get(row_text.slot) {
-            **text = engine_by_id(engine_id)
+            **text = engine_for_ui(catalog, engine_id)
                 .map(|e| e.name.clone())
                 .unwrap_or_else(|| format!("#{engine_id}"));
         } else {
@@ -788,6 +794,7 @@ mod tests {
         let mut rule = AutoReplaceRule::new(ENGINE_TRUCK_MPS, TO);
         rule.enabled = false;
         rule.only_when_old = true;
+        let catalog = [];
         let from = engine_by_id(ENGINE_TRUCK_MPS).unwrap().name.clone();
         let to = engine_by_id(TO).unwrap().name.clone();
 
@@ -795,7 +802,7 @@ mod tests {
             autoreplace_hint(Locale::En, &from, &to),
             format!("From: {from} · To: {to}")
         );
-        let english = rule_label(Locale::En, &rule);
+        let english = rule_label(Locale::En, &rule, &catalog);
         assert!(english.contains(&from));
         assert!(english.contains(&to));
         assert!(english.ends_with("(off · old)"));
@@ -808,9 +815,35 @@ mod tests {
             autoreplace_hint(Locale::Es, &from, &to),
             format!("Desde: {from} · Hacia: {to}")
         );
-        let spanish = rule_label(Locale::Es, &rule);
+        let spanish = rule_label(Locale::Es, &rule, &catalog);
         assert!(spanish.contains(&from));
         assert!(spanish.contains(&to));
         assert!(spanish.ends_with("(inactivo · viejos)"));
+    }
+
+    #[test]
+    fn autoreplace_uses_active_catalog_for_custom_engines() {
+        let custom_id = openttdrs_core::NEWGRF_ENGINE_ID_BASE + 44;
+        let mut state = GameState::new(8, 8);
+        let mut custom = engine_by_id(openttdrs_core::ENGINE_BUS_MPS)
+            .unwrap()
+            .clone();
+        custom.id = custom_id;
+        custom.name = "Ómnibus NewGRF".into();
+        custom.from_newgrf = true;
+        custom.newgrf_grfid = 0x4152_5554;
+        custom.newgrf_local_id = 0;
+        state.engine_catalog.push(custom);
+        let sim = SimWorld {
+            state,
+            ..SimWorld::default()
+        };
+
+        let engines = depot_engines(&sim, TileCoord::new(1, 1));
+        assert!(engines.contains(&custom_id));
+
+        let rule = AutoReplaceRule::new(custom_id, custom_id);
+        let label = rule_label(Locale::Es, &rule, &sim.state.engine_catalog);
+        assert!(label.contains("Ómnibus NewGRF"));
     }
 }

@@ -1096,6 +1096,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "El puente queda demasiado bajo para esta parada NewGRF." => {
             "The bridge is too low for this NewGRF stop."
         }
+        "El puente queda demasiado bajo para construir la esclusa." => {
+            "The bridge is too low to build the lock."
+        }
         "La vía no puede construirse en esta pendiente con esa geometría." => {
             "Rail cannot be built on this slope with that geometry."
         }

@@ -99,6 +99,8 @@ pub enum CommandError {
     InvalidBridgeSpan,
     /// El tablero no deja el despeje declarado por un `RoadStop` `NewGRF`.
     BridgeTooLowForRoadStop,
+    /// El tablero no deja el despeje mínimo sobre una parte de una esclusa.
+    BridgeTooLowForLock,
     /// `TrackBits` incompatibles con la pendiente de la tesela (`GetRailFoundation`).
     InvalidRailOnSlope,
     /// Solo vía recta (eje X o Y) admite waypoint.

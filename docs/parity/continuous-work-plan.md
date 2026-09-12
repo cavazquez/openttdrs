@@ -5492,3 +5492,13 @@ preflight atómico y cobra el coste compuesto una sola vez. Las regresiones
 cubren dos extremos de hierba, un extremo boscoso y el reset raw del centro.
 Siguen pendientes los puentes, estructuras y objetos autoremove, callbacks,
 pathfinding, infraestructura y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-BRIDGE-CLEARANCE (2026-09-12): `PlaceLock`
+ya inspecciona un puente sobre cada parte con la altura derivada de la rampa,
+la fundación y el eje persistido, equivalente a `GetBridgeHeight` más
+`GetSouthernBridgeEnd`. Aplica los mínimos nativos `Middle=2`, `Lower=3` y
+`Upper=2`, devuelve un error específico sin mutar ni cobrar cuando el tablero
+queda bajo y conserva el vano cuando el despeje es suficiente. Las regresiones
+cubren puente real bajo/alto y la altura plana de la rampa. Siguen pendientes
+estructuras y objetos autoremove, callbacks, pathfinding, infraestructura y
+aceptación visual/framebuffer.

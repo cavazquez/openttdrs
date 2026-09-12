@@ -2,7 +2,7 @@
 
 use crate::bridge_spec::{
     BridgeType, axis_line, bridge_above_axis_from_mapt, bridge_build_cost_in,
-    set_bridge_middle_mapt, set_bridge_type_m6,
+    bridge_height_over_tile, set_bridge_middle_mapt, set_bridge_type_m6,
 };
 use crate::economy::{
     canal_build_cost, canal_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
@@ -1199,6 +1199,32 @@ fn lock_tiles_from_middle(middle: TileCoord, direction: u8) -> [TileCoord; 3] {
     [middle, lower, upper]
 }
 
+/// Comprueba el despeje mínimo nativo para un puente sobre cada parte de la
+/// esclusa (`GetLockPartMinimalBridgeHeight`).
+fn check_lock_bridge_clearance(
+    state: &GameState,
+    tiles: [TileCoord; 3],
+) -> Result<(), CommandError> {
+    const MINIMAL_BRIDGE_HEIGHT: [u8; 3] = [2, 3, 2];
+    for (tile, minimal_height) in tiles.into_iter().zip(MINIMAL_BRIDGE_HEIGHT) {
+        let Some(bridge_height) = bridge_height_over_tile(&state.map, tile) else {
+            continue;
+        };
+        let (slope, z) = tile_slope_and_z(&state.map, tile).ok_or(CommandError::OutOfBounds)?;
+        let tile_max_z = z.saturating_add(if slope == 0 {
+            0
+        } else if slope & crate::SLOPE_STEEP != 0 {
+            2
+        } else {
+            1
+        });
+        if bridge_height < tile_max_z.saturating_add(minimal_height) {
+            return Err(CommandError::BridgeTooLowForLock);
+        }
+    }
+    Ok(())
+}
+
 /// Resuelve el centro de una esclusa a partir de cualquier parte de `MP_WATER`.
 /// También verifica que las tres partes pertenezcan a la misma estructura;
 /// evita dejar una esclusa huérfana al limpiar un tile importado corrupto.
@@ -1493,6 +1519,7 @@ pub(crate) fn check_place_lock(
     let _lower_plan = check_lock_build_tile(state, lower, false)?;
     let _upper_plan = check_lock_build_tile(state, upper, false)?;
     check_non_freeform_edge(map, lower, state.construction.freeform_edges)?;
+    check_lock_bridge_clearance(state, [middle, lower, upper])?;
     Ok(())
 }
 

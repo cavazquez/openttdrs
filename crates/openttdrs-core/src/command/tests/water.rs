@@ -334,6 +334,77 @@ fn place_lock_auto_clears_forest_endpoint_with_tree_price() {
     );
 }
 
+fn state_with_bridge_over_lock(high_bridge: bool) -> (GameState, TileCoord) {
+    let mut state = GameState::new(12, 12);
+    if high_bridge {
+        // Elevar las rampas y la tesela contigua deja el vano central bajo el
+        // tablero, como el desnivel que acepta `GetBridgeHeight` nativo.
+        for y in [0, 1, 2, 7, 8, 9] {
+            for x in 0..12 {
+                state.map.set_height(TileCoord::new(x, y), 5).unwrap();
+            }
+        }
+    }
+    let middle = TileCoord::new(5, 4);
+    for y in 2..=7 {
+        state
+            .map
+            .set_kind(TileCoord::new(5, y), TileKind::Water)
+            .unwrap();
+    }
+    apply_command(
+        &mut state,
+        &Command::PlaceRoadBridge(
+            TileCoord::new(5, 1),
+            TileCoord::new(5, 8),
+            crate::bridge_spec::BridgeType::Wooden,
+        ),
+    )
+    .unwrap();
+
+    let lower = TileCoord::new(4, 4);
+    let upper = TileCoord::new(6, 4);
+    for coord in [lower, middle, upper] {
+        state.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    state.map.set_height(lower, 0).unwrap();
+    state.map.set_height(middle, 0).unwrap();
+    state.map.set_height(upper, 1).unwrap();
+    (state, middle)
+}
+
+#[test]
+fn place_lock_rejects_bridge_below_native_clearance() {
+    let (mut state, middle) = state_with_bridge_over_lock(false);
+    let money = state.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(
+        command_would_fail(&state, &command),
+        Some(crate::CommandError::BridgeTooLowForLock)
+    );
+    assert_eq!(
+        apply_command(&mut state, &command),
+        Err(crate::CommandError::BridgeTooLowForLock)
+    );
+    assert_eq!(state.map.get_kind(middle), Some(TileKind::Water));
+    assert_eq!(state.economy.money, money);
+}
+
+#[test]
+fn place_lock_preserves_bridge_above_when_clearance_succeeds() {
+    let (mut state, middle) = state_with_bridge_over_lock(true);
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(command_would_fail(&state, &command), None);
+    apply_command(&mut state, &command).unwrap();
+    assert_eq!(
+        bridge_above_axis_from_mapt(state.map.get(middle).unwrap().mapt),
+        Some(true)
+    );
+    assert_eq!(state.map.get_kind(middle), Some(TileKind::Water));
+}
+
 #[test]
 fn place_lock_rejects_lower_part_on_non_freeform_edge() {
     let mut s = GameState::new(8, 8);

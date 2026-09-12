@@ -447,6 +447,66 @@ pub fn bridge_above_axis_from_mapt(mapt: u8) -> Option<bool> {
     }
 }
 
+/// Altura del tablero en unidades de altura (`GetBridgeHeight`).
+///
+/// `OpenTTD` obtiene la altura de una rampa a partir de `GetTileSlopeZ`, la
+/// fundación elegida para su eje y un nivel adicional para el tablero. El
+/// `m5` de la rampa conserva la dirección diagonal, por lo que también basta
+/// para recuperar el eje sin añadir estado persistente al mapa.
+#[must_use]
+pub fn bridge_height_for_ramp(map: &crate::map::Map, ramp: TileCoord) -> Option<u8> {
+    let tile = map.get(ramp)?;
+    if !matches!(
+        tile.kind,
+        crate::map::TileKind::RailBridge | crate::map::TileKind::RoadBridge
+    ) || !tile.is_tunnel_bridge_tile()
+        || tile.m5 & 0x80 == 0
+    {
+        return None;
+    }
+    let axis_x = tile.m5 & 0x01 == 0;
+    let (tileh, z) = crate::map::tile_slope_and_z(map, ramp)?;
+    let (_, foundation_z) = crate::map::bridge_surface_slope_and_z(tileh, axis_x);
+    z.checked_add(1)?.checked_add(foundation_z)
+}
+
+/// Altura del puente que pasa sobre una tesela con `IsBridgeAbove`.
+///
+/// El mapa local guarda el eje del vano en los bits bajos de `MAPT`, igual que
+/// el tipo nativo. Se buscan las rampas sobre ambos sentidos del eje y sólo se
+/// acepta una cuyo tramo completo contenga la tesela consultada; esto evita
+/// confundir dos puentes colineales cercanos.
+#[must_use]
+pub fn bridge_height_over_tile(map: &crate::map::Map, tile: TileCoord) -> Option<u8> {
+    let bridge_axis_y = bridge_above_axis_from_mapt(map.get(tile)?.mapt)?;
+    let axis_delta = if bridge_axis_y { (0, 1) } else { (1, 0) };
+    let (map_w, map_h) = map.dimensions();
+    let max_steps = map_w.max(map_h);
+
+    for (step_x, step_y) in [axis_delta, (-axis_delta.0, -axis_delta.1)] {
+        let mut probe = tile;
+        for _ in 0..max_steps {
+            probe = TileCoord::new(probe.x + step_x, probe.y + step_y);
+            let Some(candidate) = map.get(probe) else {
+                break;
+            };
+            let kind = match candidate.kind {
+                crate::map::TileKind::RailBridge => crate::map::TileKind::RailBridge,
+                crate::map::TileKind::RoadBridge => crate::map::TileKind::RoadBridge,
+                _ => continue,
+            };
+            let Some(height) = bridge_height_for_ramp(map, probe) else {
+                continue;
+            };
+            let other_end = bridge_other_end(map, probe, kind);
+            if other_end.is_some_and(|end| axis_line(probe, end).contains(&tile)) {
+                return Some(height);
+            }
+        }
+    }
+    None
+}
+
 /// Reserva PBS de una rampa ferroviaria de túnel o puente.
 ///
 /// A diferencia de una tesela `MP_RAILWAY` común, `OpenTTD` guarda este estado
@@ -642,6 +702,25 @@ mod tests {
             bridge_type_from_m6(s.map.get(c(1, 2)).unwrap().m6),
             BridgeType::CantileverRed
         );
+    }
+
+    #[test]
+    fn bridge_height_matches_native_flat_ramp_and_middle() {
+        let mut s = GameState::new(10, 10);
+        let c = |x: i32, y: i32| TileCoord::new(x, y);
+        for y in 2..=4 {
+            s.map.set_kind(c(3, y), TileKind::Water).unwrap();
+        }
+        apply_command(
+            &mut s,
+            &Command::PlaceRoadBridge(c(3, 1), c(3, 5), BridgeType::Wooden),
+        )
+        .unwrap();
+
+        // `GameState::new` empieza en altura de terreno 1: el tablero queda
+        // un nivel por encima, igual que `GetBridgeHeight` nativo.
+        assert_eq!(bridge_height_for_ramp(&s.map, c(3, 1)), Some(2));
+        assert_eq!(bridge_height_over_tile(&s.map, c(3, 3)), Some(2));
     }
 
     #[test]

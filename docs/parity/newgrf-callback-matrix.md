@@ -1533,3 +1533,14 @@ entradas nativas de hierba, rough, rocas, campos, árboles, agua/canal y
 preflight mantiene la mutación atómica. Estructuras, puentes y objetos
 autoremove aún tienen contratos separados y bloquean la construcción hasta
 que se porten.
+
+### #329/#567-WATER-LOCK-BRIDGE-CLEARANCE — despeje bajo puentes
+
+Actualizado: 2026-09-12. `PlaceLock` comprueba las tres partes contra la
+altura efectiva del puente, reconstruida desde la rampa, su fundación y el eje
+de `m5`; la búsqueda requiere que el tramo del puente contenga la parte
+consultada. Los mínimos siguen la tabla nativa de `DoBuildLock`:
+`Middle=2`, `Lower=3`, `Upper=2`. El error es atómico y específico, mientras
+que un puente con altura suficiente conserva sus bits de vano al materializar
+la esclusa. Las estructuras y objetos autoremove aún requieren su propia
+subetapa.

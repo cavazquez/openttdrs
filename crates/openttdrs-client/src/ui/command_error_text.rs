@@ -94,6 +94,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::BridgeTooLowForRoadStop => {
             "El puente queda demasiado bajo para esta parada NewGRF."
         }
+        CommandError::BridgeTooLowForLock => {
+            "El puente queda demasiado bajo para construir la esclusa."
+        }
         CommandError::InvalidRailOnSlope => {
             "La vía no puede construirse en esta pendiente con esa geometría."
         }
@@ -264,6 +267,7 @@ mod tests {
             CommandError::BridgeTypeNotAvailable,
             CommandError::InvalidBridgeSpan,
             CommandError::BridgeTooLowForRoadStop,
+            CommandError::BridgeTooLowForLock,
             CommandError::InvalidRailOnSlope,
             CommandError::CannotPlaceWaypointOnTrack,
             CommandError::NoRailToRemove,

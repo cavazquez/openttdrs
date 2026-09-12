@@ -5,11 +5,11 @@ use crate::bridge_spec::{
     bridge_height_over_tile, set_bridge_middle_mapt, set_bridge_type_m6,
 };
 use crate::economy::{
-    canal_build_cost, canal_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
-    lock_clear_cost, rail_clear_cost, rail_waypoint_clear_cost, road_depot_clear_cost,
-    road_stop_clear_cost_factored, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
-    ship_depot_clear_cost, signal_clear_cost, station_build_cost, train_depot_clear_cost,
-    trees_clear_cost, water_clear_cost,
+    buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost, fields_clear_cost,
+    grass_clear_cost, lock_build_cost, lock_clear_cost, rail_clear_cost, rail_waypoint_clear_cost,
+    road_depot_clear_cost, road_stop_clear_cost_factored, rocks_clear_cost, rough_clear_cost,
+    ship_depot_build_cost, ship_depot_clear_cost, signal_clear_cost, station_build_cost,
+    train_depot_clear_cost, trees_clear_cost, water_clear_cost,
 };
 use crate::map::rail_bits::RAIL_TILE_NORMAL;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
@@ -26,9 +26,10 @@ use crate::{GameState, Station, StopKind};
 
 use super::super::{CommandError, require_tile_owned_by_active};
 use super::shared::{
-    check_in_bounds, check_object_can_be_auto_cleared, check_object_can_be_cleared,
-    clear_object_footprint_keep_water, clear_object_footprint_keep_water_without_charge,
-    object_clear_money_delta, register_depot, road_stop_clear_cost_for_tile, unregister_depot,
+    buoy_in_use_by_other_company, check_in_bounds, check_object_can_be_auto_cleared,
+    check_object_can_be_cleared, clear_object_footprint_keep_water,
+    clear_object_footprint_keep_water_without_charge, object_clear_money_delta, register_depot,
+    road_stop_clear_cost_for_tile, unregister_depot,
 };
 use super::station::apply_station_m6;
 
@@ -1157,7 +1158,7 @@ pub(in crate::command) fn place_buoy(
     st.ottd_station_id = Some(u32::from(station_id));
     st.build_date = crate::station::STATION_BUILD_DATE_DEFAULT.saturating_add(state.calendar.date);
     state.stations.push(st);
-    state.economy.money -= station_build_cost(&state.global_economy) / 2;
+    state.economy.money -= buoy_build_cost(&state.global_economy);
     Ok(())
 }
 
@@ -1691,6 +1692,43 @@ fn remove_lock_road_waypoint_state(state: &mut GameState, c: TileCoord) {
         .retain(|station| !(station.pos == c && station.stop_kind == StopKind::RoadWaypoint));
 }
 
+/// Prepara la retirada manual de una boya durante `DoBuildLock`.
+///
+/// `RemoveBuoy` conserva la clase del agua subyacente sólo para la parte
+/// central; un extremo que deja de ser una boya se materializa como canal por
+/// `MakeLock`. La comprobación de uso sigue la guardia nativa de waypoint.
+fn check_lock_buoy_tile(
+    state: &GameState,
+    c: TileCoord,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    if crate::station::stop_kind_from_m6(tile.m6) != StopKind::Buoy {
+        return Err(CommandError::BuildingMustBeDemolished);
+    }
+    if buoy_in_use_by_other_company(state, c) {
+        return Err(CommandError::BuoyInUse);
+    }
+    Ok(LockBuildTilePlan {
+        water_class: if is_middle {
+            water_class_from_m1(tile.m1)
+        } else {
+            WaterClass::Canal
+        },
+        owner: state.active_company.0,
+        clear_on_build: true,
+        clear_cost: buoy_clear_cost(&state.global_economy),
+        add_canal_cost: !is_middle,
+    })
+}
+
+fn remove_lock_buoy_state(state: &mut GameState, c: TileCoord) {
+    state.newgrf_animated_station_tiles.remove(&c);
+    state
+        .stations
+        .retain(|station| !(station.pos == c && station.stop_kind == StopKind::Buoy));
+}
+
 /// Cuenta las llamadas a `CMD_REMOVE_SINGLE_SIGNAL` que hace
 /// `ClearTile_Track` al retirar todos los carriles de una tesela.
 fn rail_signal_clear_count(tile: Tile) -> i64 {
@@ -2003,6 +2041,9 @@ fn check_lock_build_tile(
         {
             check_lock_road_waypoint_tile(state, c, is_middle, tile)
         }
+        TileKind::Station if crate::station::stop_kind_from_m6(tile.m6) == StopKind::Buoy => {
+            check_lock_buoy_tile(state, c, is_middle, tile)
+        }
         TileKind::Road if crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind) => {
             check_lock_road_crossing_tile(state, is_middle, tile)
         }
@@ -2039,6 +2080,10 @@ fn clear_lock_build_tile(
         tile.kind == TileKind::Station
             && crate::station::stop_kind_from_m6(tile.m6) == StopKind::RoadWaypoint
     });
+    let was_buoy = state.map.get(c).is_some_and(|tile| {
+        tile.kind == TileKind::Station
+            && crate::station::stop_kind_from_m6(tile.m6) == StopKind::Buoy
+    });
     let depot_id = state
         .map
         .get(c)
@@ -2052,6 +2097,9 @@ fn clear_lock_build_tile(
     }
     if was_road_waypoint {
         remove_lock_road_waypoint_state(state, c);
+    }
+    if was_buoy {
+        remove_lock_buoy_state(state, c);
     }
     if let Some(depot_id) = depot_id {
         unregister_depot(state, depot_id);

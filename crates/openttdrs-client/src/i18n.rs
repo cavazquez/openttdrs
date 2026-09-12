@@ -1090,6 +1090,7 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Hay una boya aquí; retirala antes de construir." => {
             "There is a buoy here; remove it before building."
         }
+        "La boya está en uso por otra compañía." => "The buoy is in use by another company.",
         "Hay una plataforma petrolera aquí; demolila antes de construir." => {
             "There is an oil rig here; demolish it before building."
         }

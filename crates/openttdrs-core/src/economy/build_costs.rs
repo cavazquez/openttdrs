@@ -278,6 +278,18 @@ pub fn rail_waypoint_clear_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::ClearWaypointRail, 1, 0)
 }
 
+/// Coste de construir una boya (`PR_BUILD_WAYPOINT_BUOY`).
+#[must_use]
+pub fn buoy_build_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::BuildWaypointBuoy, 1, 0)
+}
+
+/// Coste de retirar una boya (`PR_CLEAR_WAYPOINT_BUOY`).
+#[must_use]
+pub fn buoy_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearWaypointBuoy, 1, 0)
+}
+
 /// Compatibilidad con API que solo recibía el acumulador de inflación.
 #[must_use]
 pub fn terraform_cost_per_corner_inflated(inflation_prices: u64) -> i64 {
@@ -332,6 +344,14 @@ mod tests {
         assert_eq!(
             rail_waypoint_clear_cost(&ge),
             medium_default_price(PriceIndex::ClearWaypointRail)
+        );
+        assert_eq!(
+            buoy_build_cost(&ge),
+            medium_default_price(PriceIndex::BuildWaypointBuoy)
+        );
+        assert_eq!(
+            buoy_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearWaypointBuoy)
         );
         assert_eq!(
             station_build_cost(&ge),

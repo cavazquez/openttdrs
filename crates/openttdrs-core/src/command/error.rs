@@ -96,6 +96,8 @@ pub enum CommandError {
     MustDemolishDockFirst,
     /// Una boya existente bloquea la limpieza automática del agua.
     BuoyInTheWay,
+    /// Una boya tiene órdenes activas de otra compañía.
+    BuoyInUse,
     /// Una plataforma petrolera existente bloquea la limpieza automática del agua.
     OilRigInTheWay,
     /// Una industria existente bloquea la limpieza automática del agua.

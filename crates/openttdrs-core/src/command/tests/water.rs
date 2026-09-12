@@ -1,10 +1,11 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
 use crate::economy::{
-    canal_build_cost, canal_clear_cost, lock_build_cost, lock_clear_cost, rail_waypoint_clear_cost,
-    road_clear_cost, road_clear_cost_factored, road_depot_clear_cost,
-    road_stop_clear_cost_factored, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
-    station_build_cost, train_depot_clear_cost, trees_clear_cost, water_clear_cost,
+    buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost, lock_build_cost,
+    lock_clear_cost, rail_waypoint_clear_cost, road_clear_cost, road_clear_cost_factored,
+    road_depot_clear_cost, road_stop_clear_cost_factored, rough_clear_cost, ship_depot_build_cost,
+    ship_depot_clear_cost, station_build_cost, train_depot_clear_cost, trees_clear_cost,
+    water_clear_cost,
 };
 use crate::test_fixtures::SandboxMap;
 use crate::{
@@ -933,11 +934,6 @@ fn place_lock_preserves_native_errors_for_non_autoremove_structures() {
             TileKind::Station,
             crate::station::STATION_TYPE_DOCK << 3,
             crate::CommandError::MustDemolishDockFirst,
-        ),
-        (
-            TileKind::Station,
-            crate::station::STATION_TYPE_BUOY << 3,
-            crate::CommandError::BuoyInTheWay,
         ),
         (
             TileKind::Station,
@@ -2552,10 +2548,7 @@ fn place_buoy_on_water_is_ship_waypoint() {
     assert!(s.stations[0].is_waypoint());
     assert!(s.stations[0].can_service_vehicle(VehicleKind::Ship));
     assert!(!s.stations[0].accepts_cargo(crate::CargoType::Goods));
-    assert_eq!(
-        s.economy.money,
-        money - station_build_cost(&s.global_economy) / 2
-    );
+    assert_eq!(s.economy.money, money - buoy_build_cost(&s.global_economy));
 }
 
 #[test]
@@ -2640,6 +2633,90 @@ fn clearing_buoy_restores_underlying_canal_water() {
     assert!(s.map.get(buoy).is_some_and(is_canal_tile));
     assert_eq!(s.map.get(buoy).map(|tile| tile.m6), Some(0));
     assert!(s.stations.is_empty());
+}
+
+#[test]
+fn clearing_buoy_uses_native_clear_price() {
+    let mut s = GameState::new(8, 8);
+    let buoy = TileCoord::new(4, 4);
+    s.map.set_kind(buoy, TileKind::Water).unwrap();
+    apply_command(&mut s, &Command::PlaceBuoy(buoy)).unwrap();
+    let money = s.economy.money;
+
+    apply_command(&mut s, &Command::ClearTile(buoy)).unwrap();
+
+    assert_eq!(s.economy.money, money - buoy_clear_cost(&s.global_economy));
+}
+
+#[test]
+fn place_lock_clears_buoy_and_preserves_middle_water_class() {
+    let mut s = GameState::new(10, 8);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    for coord in [lower, middle, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceCanal(middle)).unwrap();
+    apply_command(&mut s, &Command::PlaceBuoy(middle)).unwrap();
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command).expect("la boya se retira como estación waypoint");
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+    assert_eq!(
+        water_class_from_m1(s.map.get(middle).unwrap().m1),
+        WaterClass::Canal
+    );
+    assert!(s.stations.is_empty());
+    assert_eq!(
+        s.economy.money,
+        money - buoy_clear_cost(&s.global_economy) - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_rejects_buoy_in_use_by_other_company_atomically() {
+    let mut s = GameState::new(10, 8);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    for coord in [lower, middle, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceBuoy(middle)).unwrap();
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let mut ship = Vehicle::new(
+        1,
+        VehicleKind::Ship,
+        TileCoord::new(8, 6),
+        TileCoord::new(8, 6),
+    );
+    ship.owner = crate::CompanyId(1);
+    ship.orders = vec![VehicleOrder::waypoint(middle)];
+    s.vehicles.push(ship);
+    let before = s.map.get(middle);
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::BuoyInUse)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::BuoyInUse)
+    );
+    assert_eq!(s.map.get(middle), before);
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.economy.money, money);
 }
 
 #[test]

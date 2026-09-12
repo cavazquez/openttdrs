@@ -10,6 +10,7 @@ use crate::object_spec::{
     NEW_OBJECT_OFFSET, OBJECT_FLAG_AUTOREMOVE, OBJECT_FLAG_CANNOT_REMOVE, OBJECT_FLAG_CLEAR_INCOME,
     OWNED_LAND_COST_FACTOR,
 };
+use crate::vehicle::VehicleOrder;
 use crate::{CLEAR_TILE_COST, GameState, StopKind};
 
 use super::super::{CommandError, in_bounds, require_tile_owned_by_active, tile_owner};
@@ -248,6 +249,45 @@ pub(in crate::command) fn check_object_can_be_auto_cleared(
         return Err(CommandError::TileNotOwned);
     }
     Ok(())
+}
+
+fn order_targets_tile(order: VehicleOrder, target: TileCoord) -> bool {
+    matches!(
+        order,
+        VehicleOrder::Station { .. } | VehicleOrder::Waypoint { .. }
+    ) && order.destination() == target
+}
+
+/// Comprueba `HasStationInUse(..., include_company = false)` para una boya.
+///
+/// Las boyas son waypoints neutrales: el dueño de la orden no se obtiene de
+/// la fila `Station`, sino del vehículo que la ejecuta. Las listas
+/// compartidas se inspeccionan a través de los vehículos que las referencian,
+/// que es la única fuente local de compañía para ese pool.
+pub(in crate::command::transport) fn buoy_in_use_by_other_company(
+    state: &GameState,
+    c: TileCoord,
+) -> bool {
+    state.vehicles.iter().any(|vehicle| {
+        vehicle.owner != state.active_company
+            && (vehicle
+                .orders
+                .iter()
+                .copied()
+                .any(|order| order_targets_tile(order, c))
+                || vehicle.shared_order_id.is_some_and(|shared_id| {
+                    state
+                        .shared_order_lists
+                        .iter()
+                        .find(|list| list.id == shared_id)
+                        .is_some_and(|list| {
+                            list.orders
+                                .iter()
+                                .copied()
+                                .any(|order| order_targets_tile(order, c))
+                        })
+                }))
+    })
 }
 
 fn depot_kind_at(state: &GameState, tile: TileCoord) -> Option<TileKind> {
@@ -665,16 +705,24 @@ pub(in crate::command) fn clear_tile(
     if let Some(kind) = state.map.get_kind(c) {
         check_town_demolition_rating(state, c, kind)?;
     }
-    let is_neutral_buoy = state.stations.iter().any(|station| {
-        station.pos == c
-            && station.stop_kind == crate::station::StopKind::Buoy
-            && station.owner == crate::company::CompanyId::NONE
+    let is_buoy = state.map.get(c).is_some_and(|tile| {
+        tile.kind == TileKind::Station
+            && crate::station::stop_kind_from_m6(tile.m6) == crate::station::StopKind::Buoy
     });
+    let is_neutral_buoy = is_buoy
+        && state.stations.iter().any(|station| {
+            station.pos == c
+                && station.stop_kind == crate::station::StopKind::Buoy
+                && station.owner == crate::company::CompanyId::NONE
+        });
     // Native `CmdLandscapeClear` lets any company remove a buoy. Its tile
     // owner still belongs to the underlying water and is restored by
     // `RemoveBuoy`, so it must not be used as a station ownership gate here.
     if !state.cheats.magic_bulldozer_active() && !is_neutral_buoy {
         require_tile_owned_by_active(state, c)?;
+    }
+    if is_buoy && buoy_in_use_by_other_company(state, c) {
+        return Err(CommandError::BuoyInUse);
     }
     check_object_can_be_cleared(state, c)?;
     if let Some(industry_idx) = state.industries.iter().position(|i| i.contains_tile(c)) {
@@ -703,11 +751,7 @@ pub(in crate::command) fn clear_tile(
     // Una boya es una estación superpuesta sobre agua. Al retirarla, la
     // tesela subyacente debe volver a ser agua (con su clase original), no
     // hierba: de lo contrario se destruye un canal, mar o río navegable.
-    if state
-        .stations
-        .iter()
-        .any(|station| station.pos == c && station.stop_kind == crate::station::StopKind::Buoy)
-    {
+    if is_buoy {
         let water_class = state
             .map
             .get(c)
@@ -720,7 +764,8 @@ pub(in crate::command) fn clear_tile(
             .set_tile(c, tile)
             .map_err(|_| CommandError::OutOfBounds)?;
         state.stations.retain(|station| station.pos != c);
-        state.economy.money -= CLEAR_TILE_COST;
+        state.newgrf_animated_station_tiles.remove(&c);
+        state.economy.money -= crate::economy::buoy_clear_cost(&state.global_economy);
         return Ok(());
     }
 

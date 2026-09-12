@@ -84,6 +84,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         }
         CommandError::MustDemolishDockFirst => "Hay un muelle aquí; demolilo antes de construir.",
         CommandError::BuoyInTheWay => "Hay una boya aquí; retirala antes de construir.",
+        CommandError::BuoyInUse => "La boya está en uso por otra compañía.",
         CommandError::OilRigInTheWay => {
             "Hay una plataforma petrolera aquí; demolila antes de construir."
         }
@@ -268,6 +269,7 @@ mod tests {
             CommandError::BuildingMustBeDemolished,
             CommandError::MustDemolishDockFirst,
             CommandError::BuoyInTheWay,
+            CommandError::BuoyInUse,
             CommandError::OilRigInTheWay,
             CommandError::IndustryInTheWay,
             CommandError::BridgeTypeNotAvailable,

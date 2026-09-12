@@ -5645,3 +5645,15 @@ la tabla `PriceIndex` vuelve a usar las posiciones nativas de `pricebase.h`
 para despejes de depósitos/estaciones, waypoints, canales, esclusas e
 infraestructura. También se rellenan las bases que faltaban, evitando que un
 despeje recién implementado consulte accidentalmente una entrada cero.
+
+Actualización #329/#567-WATER-BUOY-LIFECYCLE (2026-09-12): las boyas ya usan
+`PR_BUILD_WAYPOINT_BUOY` y `PR_CLEAR_WAYPOINT_BUOY` en construcción y
+demolición, en lugar del precio aproximado de una estación o del despeje
+genérico. `ClearTile_Station` restaura la clase de agua, limpia el pool local
+y respeta `HasStationInUse(..., false)`: una orden de otra compañía devuelve
+`BuoyInUse` sin mutar el mapa. `PlaceLock` aplica la misma retirada manual,
+conserva la clase en la parte central y convierte una boya de extremo en canal,
+como `DoBuildLock`/`RemoveBuoy`. Muelles, estaciones ferroviarias,
+aeropuertos, túneles y puentes siguen en subetapas separadas; #329/#567
+continúan abiertas por infraestructura, callbacks, pathfinding y aceptación
+visual/framebuffer.

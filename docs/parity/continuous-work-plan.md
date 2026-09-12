@@ -6318,3 +6318,13 @@ que un corredor Maglev sólo se acepta con el catálogo correcto. Pasaron 2694
 tests del core (1 ignorado), Clippy estricto, formato y `git diff --check`.
 #329 continúa abierta por callbacks, vistas runtime completas y consumidores
 legacy restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-DEPOT-ENGINE-POWER-CATALOG (2026-09-12, `4eb0edcf`): la
+salida ferroviaria del depósito ya resuelve la potencia del motor contra
+`GameState.engine_catalog` antes de decidir si la cabeza está sin propulsión.
+Así un motor NewGRF cuya caché de consist todavía vale cero no se apaga en el
+primer tick por caer al lookup vanilla; la ruta legacy mantiene su fallback y
+la regresión cubre una cabeza custom con potencia válida y caché vacía.
+Pasaron 2695 tests del core (1 ignorado), Clippy estricto, formato y
+`git diff --check`. #329 continúa abierta por callbacks, vistas runtime
+completas y consumidores legacy restantes; #326/#567 permanecen abiertas.

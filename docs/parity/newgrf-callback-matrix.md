@@ -1733,3 +1733,11 @@ alternativos, la adjudicación de plataformas y el reroute después de un
 head-on; los motores NewGRF ya no caen en Rail por no existir en la tabla
 vanilla. La API sin catálogo conserva el fallback legacy y la regresión separa
 un corredor Maglev del comportamiento Rail anterior.
+
+### #329-DEPOT-ENGINE-POWER-CATALOG — potencia en salida de depósito
+
+Actualizado: 2026-09-12 (`4eb0edcf`). `tick_train_stay_in_depot_indexed` usa el
+`EngineDef` del catálogo activo para la comprobación de potencia cuando la
+caché de la cabeza todavía no fue reconstruida. Esto evita apagar un tren
+NewGRF válido como si no tuviera motor en su primer tick; los saves sin
+catálogo siguen usando la tabla vanilla.

@@ -6029,3 +6029,13 @@ con `NoNews` y la deduplicación; pasaron la prueba focalizada, Clippy
 estricto en core y client, formato y `git diff --check`. La aceptación
 interactiva y los callbacks de vehículos siguen pendientes; #326 permanece
 abierta.
+
+Corrección #329/#567-VEHICLE-NEWS-CATALOG-ROUTE (2026-09-12, `2bca332d`):
+popup, ticker e historial de noticias consumen `NewsReference::Engine`. Al
+activar una noticia el catálogo de compra selecciona el motor si hay un
+depósito compatible abierto; si no, conserva la solicitud y la aplica al
+abrir `Nuevos vehículos` desde el depósito elegido. La regresión cubre la
+espera y el consumo de la selección pendiente; pasaron la prueba ECS
+focalizada, Clippy estricto del cliente, formato y `git diff --check`. La
+aceptación interactiva de previews y los callbacks de vehículos siguen
+pendientes; #326 permanece abierta.

@@ -272,6 +272,12 @@ pub fn waypoint_build_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::BuildWaypointRail, 1, 0)
 }
 
+/// Coste de retirar un waypoint ferroviario (`PR_CLEAR_WAYPOINT_RAIL`).
+#[must_use]
+pub fn rail_waypoint_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearWaypointRail, 1, 0)
+}
+
 /// Compatibilidad con API que solo recibía el acumulador de inflación.
 #[must_use]
 pub fn terraform_cost_per_corner_inflated(inflation_prices: u64) -> i64 {
@@ -322,6 +328,10 @@ mod tests {
         assert_eq!(
             train_depot_clear_cost(&ge),
             medium_default_price(PriceIndex::ClearDepotTrain)
+        );
+        assert_eq!(
+            rail_waypoint_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearWaypointRail)
         );
         assert_eq!(
             station_build_cost(&ge),

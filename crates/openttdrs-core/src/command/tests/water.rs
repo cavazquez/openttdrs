@@ -1,10 +1,10 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
 use crate::economy::{
-    canal_build_cost, canal_clear_cost, lock_build_cost, lock_clear_cost, road_clear_cost,
-    road_clear_cost_factored, road_depot_clear_cost, road_stop_clear_cost_factored,
-    rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost, station_build_cost,
-    train_depot_clear_cost, trees_clear_cost, water_clear_cost,
+    canal_build_cost, canal_clear_cost, lock_build_cost, lock_clear_cost, rail_waypoint_clear_cost,
+    road_clear_cost, road_clear_cost_factored, road_depot_clear_cost,
+    road_stop_clear_cost_factored, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
+    station_build_cost, train_depot_clear_cost, trees_clear_cost, water_clear_cost,
 };
 use crate::test_fixtures::SandboxMap;
 use crate::{
@@ -489,9 +489,7 @@ fn place_lock_clears_road_waypoint_and_updates_station_pool() {
     );
     assert_eq!(
         s.economy.money,
-        money
-            - road_stop_clear_cost_factored(&s.global_economy, StopKind::TruckStop, 16)
-            - lock_build_cost(&s.global_economy)
+        money - rail_waypoint_clear_cost(&s.global_economy) - lock_build_cost(&s.global_economy)
     );
 }
 

@@ -6,10 +6,10 @@ use crate::bridge_spec::{
 };
 use crate::economy::{
     canal_build_cost, canal_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
-    lock_clear_cost, rail_clear_cost, road_depot_clear_cost, road_stop_clear_cost_factored,
-    rocks_clear_cost, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
-    signal_clear_cost, station_build_cost, train_depot_clear_cost, trees_clear_cost,
-    water_clear_cost,
+    lock_clear_cost, rail_clear_cost, rail_waypoint_clear_cost, road_depot_clear_cost,
+    road_stop_clear_cost_factored, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
+    ship_depot_clear_cost, signal_clear_cost, station_build_cost, train_depot_clear_cost,
+    trees_clear_cost, water_clear_cost,
 };
 use crate::map::rail_bits::RAIL_TILE_NORMAL;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
@@ -1679,7 +1679,7 @@ fn check_lock_road_waypoint_tile(
         water_class: WaterClass::Canal,
         owner: state.active_company.0,
         clear_on_build: true,
-        clear_cost: road_stop_clear_cost_factored(&state.global_economy, StopKind::TruckStop, 16),
+        clear_cost: rail_waypoint_clear_cost(&state.global_economy),
         add_canal_cost: !is_middle,
     })
 }

@@ -5633,3 +5633,9 @@ el agua. La rama permanece separada de las paradas de carga: waypoints
 ferroviarios, estaciones ferroviarias, muelles, boyas, aeropuertos, túneles y
 puentes conservan sus contratos específicos. #329/#567 continúan abiertas por
 infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.
+
+Corrección de contrato #329/#567-WATER-LOCK-RAIL-WAYPOINT-PRICE (2026-09-12):
+el waypoint ferroviario de `ClearTile_Station` usa `PR_CLEAR_WAYPOINT_RAIL`
+(base 80), no el precio de limpieza de una parada vial. El índice y su
+recálculo de inflación quedan expuestos mediante `rail_waypoint_clear_cost`, y
+la prueba del lock verifica el precio nativo específico.

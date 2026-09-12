@@ -1111,12 +1111,25 @@ impl Vehicle {
     /// Umbral simplificado: `age - max_age >= engine_renew_months * 30` días.
     #[must_use]
     pub fn needs_autorenewing(&self, current_tick: u64, engine_renew_months: i16) -> bool {
+        self.needs_autorenewing_with_catalog(current_tick, engine_renew_months, &[])
+    }
+
+    /// Igual que [`Self::needs_autorenewing`], resolviendo la clase del motor
+    /// contra el catálogo runtime de la partida.
+    #[must_use]
+    pub fn needs_autorenewing_with_catalog(
+        &self,
+        current_tick: u64,
+        engine_renew_months: i16,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) -> bool {
         if self.prev_unit.is_some() {
             return false;
         }
         if self.kind == VehicleKind::Train
-            && self.engine_id.is_some_and(|id| {
-                !crate::engine::engine_for_vehicle(self.kind, id).is_train_engine()
+            && self.engine_id.is_some_and(|_| {
+                !crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, self)
+                    .is_train_engine()
             })
         {
             return false;

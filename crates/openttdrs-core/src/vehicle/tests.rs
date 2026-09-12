@@ -34,6 +34,29 @@ fn display_name_with_catalog_uses_custom_engine_name() {
 }
 
 #[test]
+fn autorenewal_uses_catalog_class_for_custom_train_wagon() {
+    let custom_id = crate::engine::NEWGRF_ENGINE_ID_BASE + 60;
+    let mut custom_wagon = crate::engine::engine_by_id(crate::engine::ENGINE_WAGON_COAL)
+        .unwrap()
+        .clone();
+    custom_wagon.id = custom_id;
+
+    let mut wagon = Vehicle::new(
+        8,
+        VehicleKind::Train,
+        TileCoord::new(1, 1),
+        TileCoord::new(1, 1),
+    );
+    wagon.engine_id = Some(custom_id);
+    wagon.build_tick = 0;
+    wagon.max_age_days = 1;
+    let current_tick = u64::from(crate::economy::TICKS_PER_DAY);
+
+    assert!(wagon.needs_autorenewing(current_tick, 0));
+    assert!(!wagon.needs_autorenewing_with_catalog(current_tick, 0, &[custom_wagon]));
+}
+
+#[test]
 fn progress_requires_multiple_ticks_per_tile() {
     let mut v = Vehicle::new(
         0,

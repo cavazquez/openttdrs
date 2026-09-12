@@ -419,7 +419,11 @@ pub fn pending_autoreplace_for_service(state: &GameState, vehicle: &Vehicle) -> 
     ) && rule.from_engine_id != rule.to_engine_id
     {
         if rule.only_when_old
-            && !vehicle.needs_autorenewing(current_tick, company.engine_renew_months)
+            && !vehicle.needs_autorenewing_with_catalog(
+                current_tick,
+                company.engine_renew_months,
+                &state.engine_catalog,
+            )
         {
             return false;
         }
@@ -434,7 +438,11 @@ pub fn pending_autoreplace_for_service(state: &GameState, vehicle: &Vehicle) -> 
     }
 
     if !company.engine_renew
-        || !vehicle.needs_autorenewing(current_tick, company.engine_renew_months)
+        || !vehicle.needs_autorenewing_with_catalog(
+            current_tick,
+            company.engine_renew_months,
+            &state.engine_catalog,
+        )
     {
         return false;
     }
@@ -482,7 +490,11 @@ pub fn try_autoreplace_vehicle(
     .copied()
     {
         if rule.only_when_old
-            && !vehicle.needs_autorenewing(current_tick, company.engine_renew_months)
+            && !vehicle.needs_autorenewing_with_catalog(
+                current_tick,
+                company.engine_renew_months,
+                &state.engine_catalog,
+            )
         {
             return Ok(false);
         }
@@ -519,7 +531,11 @@ pub fn try_autoreplace_vehicle(
     }
 
     if !company.engine_renew
-        || !vehicle.needs_autorenewing(current_tick, company.engine_renew_months)
+        || !vehicle.needs_autorenewing_with_catalog(
+            current_tick,
+            company.engine_renew_months,
+            &state.engine_catalog,
+        )
     {
         return Ok(false);
     }

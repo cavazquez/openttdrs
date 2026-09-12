@@ -5120,6 +5120,15 @@ regresión naval verifica que un tick intermedio no acorte la avería. #329/#567
 continúan abiertas por la semántica restante de vehículos, callbacks y
 aceptación visual/framebuffer.
 
+Actualización #329/#567-WATER-LOCK-OBJECT-AUTOREMOVE (2026-09-12): la
+limpieza automática de `PlaceLock` ahora admite objetos `MP_OBJECT` con flag
+`Autoremove`, valida la huella completa, conserva agua/clase por tile y cobra
+el `ClearTile_Object` una sola vez junto con el centro y los canales de la
+esclusa. Los objetos no autoremovibles siguen rechazándose sin mutar el mapa;
+la regresión cubre coste, RNG, eliminación de la instancia y atomicidad.
+Quedan pendientes estructuras no autoremovibles, callbacks, pathfinding,
+infraestructura y aceptación visual/framebuffer.
+
 Actualización #329/#567-AIRCRAFT-BREAKDOWN-LANDING (2026-09-11): el FSM de
 aeronaves limpia ahora `breakdown_ctr` cuando el avión vuelve a velocidad de
 suelo, equivalente a `HandleAircraftSmoke` al aterrizar. La limpieza se aplica

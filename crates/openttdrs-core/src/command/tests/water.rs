@@ -334,6 +334,85 @@ fn place_lock_auto_clears_forest_endpoint_with_tree_price() {
     );
 }
 
+#[test]
+fn place_lock_auto_clears_autoremove_water_object_and_charges_once() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    let object_tiles = add_water_object(
+        &mut s,
+        lower,
+        0x11,
+        crate::object_spec::OBJECT_FLAG_AUTOREMOVE,
+    );
+    for coord in [middle, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+    let clear_cost = crate::economy::object_clear_cost_factored(
+        &s.global_economy,
+        1,
+        u32::try_from(object_tiles.len()).unwrap(),
+    );
+    s.random = crate::cargodist::parity::Randomizer {
+        state: [0x1122_3344, 0x5566_7788],
+    };
+    let mut expected_random = s.random;
+    let _ = expected_random.next();
+
+    let command = Command::PlaceLock(middle, false);
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command).expect("la esclusa puede limpiar el objeto autoremove");
+
+    assert!(s.objects.is_empty(), "se quita la instancia completa");
+    assert_eq!(s.random, expected_random);
+    assert_eq!(s.map.get_kind(lower), Some(TileKind::Water));
+    assert_eq!(s.map.get(lower).unwrap().m5, 0x26);
+    assert_eq!(
+        s.economy.money,
+        money
+            - clear_cost
+            - water_clear_cost(&s.global_economy)
+            - canal_build_cost(&s.global_economy)
+            - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_rejects_non_autoremove_object_atomically() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    let object_tiles = add_water_object(&mut s, lower, 0x11, 0);
+    for coord in [middle, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let before = s.map.get(lower);
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::ObjectInTheWay)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::ObjectInTheWay)
+    );
+    assert_eq!(s.map.get(lower), before);
+    assert_eq!(s.objects.len(), 1);
+    assert_eq!(s.map.get_kind(object_tiles[0]), Some(TileKind::Unknown(10)));
+    assert_eq!(s.economy.money, money);
+}
+
 fn state_with_bridge_over_lock(high_bridge: bool) -> (GameState, TileCoord) {
     let mut state = GameState::new(12, 12);
     if high_bridge {

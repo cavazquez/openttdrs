@@ -1530,9 +1530,8 @@ evalúa primero para el centro, luego para cada extremo que no era `MP_WATER`,
 y finalmente `MakeLock` materializa las tres partes. Los costes usan las
 entradas nativas de hierba, rough, rocas, campos, árboles, agua/canal y
 `PR_BUILD_CANAL`; la limpieza de árboles aplica el factor tropical y el
-preflight mantiene la mutación atómica. Estructuras, puentes y objetos
-autoremove aún tienen contratos separados y bloquean la construcción hasta
-que se porten.
+preflight mantiene la mutación atómica. Las estructuras no autoremovibles aún
+tienen contrato separado y bloquean la construcción hasta que se porte.
 
 ### #329/#567-WATER-LOCK-BRIDGE-CLEARANCE — despeje bajo puentes
 
@@ -1542,5 +1541,14 @@ de `m5`; la búsqueda requiere que el tramo del puente contenga la parte
 consultada. Los mínimos siguen la tabla nativa de `DoBuildLock`:
 `Middle=2`, `Lower=3`, `Upper=2`. El error es atómico y específico, mientras
 que un puente con altura suficiente conserva sus bits de vano al materializar
-la esclusa. Las estructuras y objetos autoremove aún requieren su propia
+la esclusa. Las estructuras no autoremovibles aún requieren su propia
 subetapa.
+
+### #329/#567-WATER-LOCK-OBJECT-AUTOREMOVE — objetos en la huella
+
+Actualizado: 2026-09-12. `PlaceLock` admite objetos `MP_OBJECT` con flag
+`Autoremove`, valida la huella completa y utiliza la misma restauración de
+agua/clase por tile que `ClearTile_Object`. El coste de la huella se integra
+una sola vez con la limpieza del centro y el canal del extremo terrestre; la
+secuencia también conserva el consumo de RNG de canal/río. Un objeto sin
+`Autoremove` devuelve `ObjectInTheWay` sin modificar mapa, pool ni dinero.

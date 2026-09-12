@@ -539,6 +539,7 @@ fn clear_object_footprint_impl(
     c: TileCoord,
     object_tiles: &[TileCoord],
     keep_water: bool,
+    charge_money: bool,
 ) -> Result<(), CommandError> {
     let object_id = state.map.get(c).and_then(|tile| object_id_from_tile(&tile));
     let object_clear_delta = state.map.object_type_at(c).and_then(|object_type| {
@@ -603,10 +604,12 @@ fn clear_object_footprint_impl(
     {
         state.towns[town_idx].set_statue(owner, false);
     }
-    if let Some(delta) = object_clear_delta {
-        state.economy.money += delta;
-    } else {
-        state.economy.money -= CLEAR_TILE_COST;
+    if charge_money {
+        if let Some(delta) = object_clear_delta {
+            state.economy.money += delta;
+        } else {
+            state.economy.money -= CLEAR_TILE_COST;
+        }
     }
     Ok(())
 }
@@ -616,7 +619,7 @@ fn clear_object_footprint(
     c: TileCoord,
     object_tiles: &[TileCoord],
 ) -> Result<(), CommandError> {
-    clear_object_footprint_impl(state, c, object_tiles, false)
+    clear_object_footprint_impl(state, c, object_tiles, false, true)
 }
 
 pub(in crate::command::transport) fn clear_object_footprint_keep_water(
@@ -624,7 +627,17 @@ pub(in crate::command::transport) fn clear_object_footprint_keep_water(
     c: TileCoord,
     object_tiles: &[TileCoord],
 ) -> Result<(), CommandError> {
-    clear_object_footprint_impl(state, c, object_tiles, true)
+    clear_object_footprint_impl(state, c, object_tiles, true, true)
+}
+
+/// Variante para comandos compuestos que liquidan el coste total una sola
+/// vez después de limpiar todos sus blockers.
+pub(in crate::command::transport) fn clear_object_footprint_keep_water_without_charge(
+    state: &mut GameState,
+    c: TileCoord,
+    object_tiles: &[TileCoord],
+) -> Result<(), CommandError> {
+    clear_object_footprint_impl(state, c, object_tiles, true, false)
 }
 
 pub(in crate::command) fn clear_tile(

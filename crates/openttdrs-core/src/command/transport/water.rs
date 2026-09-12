@@ -24,7 +24,8 @@ use crate::{GameState, Station, StopKind};
 use super::super::{CommandError, require_tile_owned_by_active};
 use super::shared::{
     check_in_bounds, check_object_can_be_auto_cleared, clear_object_footprint_keep_water,
-    register_depot, unregister_depot,
+    clear_object_footprint_keep_water_without_charge, object_clear_money_delta, register_depot,
+    unregister_depot,
 };
 use super::station::apply_station_m6;
 
@@ -118,6 +119,20 @@ fn auto_clear_object_plan(
         }
     }
     Ok(plan)
+}
+
+/// Coste de una limpieza automática de objeto, convertido al signo de coste
+/// de un comando compuesto (`CommandCost` positivo = dinero que se resta).
+fn auto_clear_object_cost(state: &GameState, object_tiles: &[TileCoord]) -> i64 {
+    let Some(&origin) = object_tiles.first() else {
+        return crate::CLEAR_TILE_COST;
+    };
+    let Some(object_type) = state.map.object_type_at(origin) else {
+        return crate::CLEAR_TILE_COST;
+    };
+    let tile_count = u32::try_from(object_tiles.len()).unwrap_or(u32::MAX);
+    object_clear_money_delta(state, object_type, tile_count)
+        .map_or(crate::CLEAR_TILE_COST, |delta| 0_i64.saturating_sub(delta))
 }
 
 /// `CheckForDockingTile` de `OpenTTD`: una sección de agua puede ser alcanzada
@@ -1330,6 +1345,50 @@ fn clear_tree_cost(state: &GameState, tile: Tile) -> i64 {
         .saturating_mul(tree_multiplier)
 }
 
+/// Prepara la parte de una esclusa ocupada por un objeto autoremovible.
+fn check_lock_object_tile(
+    state: &GameState,
+    c: TileCoord,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    check_object_can_be_auto_cleared(state, c)?;
+    let original_water_class = water_class_from_m1(tile.m1);
+    let has_water_ground = has_tile_water_ground(tile);
+    let water_class = if is_middle {
+        if has_water_ground {
+            original_water_class
+        } else {
+            WaterClass::Canal
+        }
+    } else if has_water_ground {
+        water_class_after_native_clear(&state.map, c, original_water_class)
+    } else {
+        WaterClass::Invalid
+    };
+    let water_class = if water_class == WaterClass::Invalid {
+        WaterClass::Canal
+    } else {
+        water_class
+    };
+    let owner = if is_middle {
+        state.active_company.0
+    } else {
+        match water_class {
+            WaterClass::Sea | WaterClass::River => crate::company::OWNER_WATER_M1 & 0x1F,
+            WaterClass::Canal => tile.m1 & 0x1F,
+            WaterClass::Invalid => state.active_company.0,
+        }
+    };
+    Ok(LockBuildTilePlan {
+        water_class,
+        owner,
+        clear_on_build: false,
+        clear_cost: 0,
+        add_canal_cost: !is_middle,
+    })
+}
+
 /// Prepara la parte de una esclusa como lo haría `DoBuildLock` antes de
 /// ejecutar las limpiezas. Esta fase no muta el mapa: preview y ejecución
 /// comparten exactamente las mismas guardas y costes.
@@ -1345,12 +1404,11 @@ fn check_lock_build_tile(
         CommandError::BuildingMustBeDemolished
     };
 
-    // `DoBuildLock` hereda `CommandFlag::Auto`, pero los objetos requieren
-    // una rama propia de `ClearTile_Object` y no se deben sobrescribir hasta
-    // portar su contrato de huella/coste. Mantenerlos visibles es atómico y
-    // evita perder un objeto al construir una esclusa.
+    // `DoBuildLock` hereda `CommandFlag::Auto`: un objeto sólo se elimina si
+    // es autoremovible. La huella completa se planifica aparte para cobrarla
+    // una sola vez y para no sobrescribirla durante el preflight.
     if is_map_object_tile(tile.mapt) {
-        return Err(CommandError::ObjectInTheWay);
+        return check_lock_object_tile(state, c, is_middle, tile);
     }
 
     match tile.kind {
@@ -1515,6 +1573,7 @@ pub(crate) fn check_place_lock(
     }
     let direction = lock_direction_for_heights(axis_y, ha, hb);
     let [middle, lower, upper] = lock_tiles_from_middle(c, direction);
+    let _auto_clear_objects = auto_clear_object_plan(state, [middle, lower, upper])?;
     let _middle_plan = check_lock_build_tile(state, middle, true)?;
     let _lower_plan = check_lock_build_tile(state, lower, false)?;
     let _upper_plan = check_lock_build_tile(state, upper, false)?;
@@ -1542,24 +1601,37 @@ pub(in crate::command) fn place_lock(
         .height;
     let direction = lock_direction_for_heights(axis_y, first_height, second_height);
     let [middle, lower, upper] = lock_tiles_from_middle(c, direction);
+    let auto_clear_objects = auto_clear_object_plan(state, [middle, lower, upper])?;
     let plans = [
         check_lock_build_tile(state, middle, true)?,
         check_lock_build_tile(state, lower, false)?,
         check_lock_build_tile(state, upper, false)?,
     ];
-    let construction_cost =
-        plans
-            .iter()
-            .fold(lock_build_cost(&state.global_economy), |cost, plan| {
-                cost.saturating_add(plan.clear_cost)
-                    .saturating_add(if plan.add_canal_cost {
-                        canal_build_cost(&state.global_economy)
-                    } else {
-                        0
-                    })
-            });
+    let object_clear_cost = auto_clear_objects.iter().fold(0_i64, |cost, object_tiles| {
+        cost.saturating_add(auto_clear_object_cost(state, object_tiles))
+    });
+    let construction_cost = plans.iter().fold(
+        lock_build_cost(&state.global_economy).saturating_add(object_clear_cost),
+        |cost, plan| {
+            cost.saturating_add(plan.clear_cost)
+                .saturating_add(if plan.add_canal_cost {
+                    canal_build_cost(&state.global_economy)
+                } else {
+                    0
+                })
+        },
+    );
+    let mut cleared_objects = vec![false; auto_clear_objects.len()];
     for (coord, plan) in [(middle, plans[0]), (lower, plans[1]), (upper, plans[2])] {
         clear_lock_build_tile(state, coord, plan)?;
+        if let Some((index, object_tiles)) = auto_clear_objects
+            .iter()
+            .enumerate()
+            .find(|(index, object_tiles)| !cleared_objects[*index] && object_tiles.contains(&coord))
+        {
+            clear_object_footprint_keep_water_without_charge(state, object_tiles[0], object_tiles)?;
+            cleared_objects[index] = true;
+        }
     }
     let middle_original = state.map.get(middle).ok_or(CommandError::OutOfBounds)?;
     let lower_original = state.map.get(lower).ok_or(CommandError::OutOfBounds)?;

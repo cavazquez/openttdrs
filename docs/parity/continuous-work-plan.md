@@ -5458,3 +5458,9 @@ transporte. Una pieza de canal inclinada vuelve a `MP_CLEAR` sin consumir RNG;
 las piezas de agua válidas conservan la tirada nativa. La regresión cubre la
 pendiente y el payload residual. #329/#567 continúan abiertas por callbacks,
 pathfinding, docking y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-CLEAR (2026-09-12): `ClearTile` deja de tratar
+agua clara y costa como una tesela genérica. La nueva ruta valida ownership de
+canales, impide limpiar bajo un vehículo, restablece el payload de `MP_CLEAR`,
+reactiva vecinos no inundables y calcula los precios nativos de agua, canal y
+rough. Las esclusas de tres piezas quedan como subetapa independiente.

@@ -4,13 +4,17 @@ use crate::bridge_spec::{
     BridgeType, axis_line, bridge_above_axis_from_mapt, bridge_build_cost_in,
     set_bridge_middle_mapt, set_bridge_type_m6,
 };
-use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build_cost};
+use crate::economy::{
+    canal_clear_cost, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
+    station_build_cost, water_clear_cost,
+};
 use crate::map::{
-    Map, Tile, TileCoord, TileKind, WaterClass, clear_tile_after_native_water_restore,
-    has_tile_water_ground, inclined_slope_direction, is_map_object_tile, is_tunnel_entrance_slope,
-    make_water_tile_with_random_bits, object_footprint_tiles, object_id_from_tile,
-    object_origin_from_tile, object_type_dims_id, opposite_diag_dir, set_water_class_m1,
-    tile_slope_and_z, water_class_after_native_clear, water_class_from_m1,
+    Map, Tile, TileCoord, TileKind, WaterClass, clear_neighbour_non_flooding_states,
+    clear_tile_after_native_water_restore, has_tile_water_ground, inclined_slope_direction,
+    is_map_object_tile, is_tunnel_entrance_slope, make_water_tile_with_random_bits,
+    object_footprint_tiles, object_id_from_tile, object_origin_from_tile, object_type_dims_id,
+    opposite_diag_dir, set_water_class_m1, tile_slope_and_z, water_class_after_native_clear,
+    water_class_from_m1,
 };
 use crate::{GameState, Station, StopKind};
 
@@ -222,6 +226,83 @@ fn check_ship_depot_water_tile(state: &GameState, c: TileCoord) -> Result<(), Co
         Some(tile) if tile.kind == TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
         _ => Err(CommandError::CannotPlaceStationOnOccupiedTile),
     }
+}
+
+const WATER_TILE_TYPE_CLEAR: u8 = 0;
+const WATER_TILE_TYPE_COAST: u8 = 1;
+
+#[must_use]
+fn water_tile_type(tile: Tile) -> u8 {
+    (tile.m5 >> 4) & 0x0F
+}
+
+#[must_use]
+const fn is_slope_with_one_corner_raised(tileh: u8) -> bool {
+    matches!(tileh, 1 | 2 | 4 | 8)
+}
+
+fn check_clear_water_owner(state: &GameState, tile: Tile) -> Result<(), CommandError> {
+    let owner = tile.m1 & 0x1F;
+    let owner_none = crate::company::OWNER_NONE_M1 & 0x1F;
+    let owner_water = crate::company::OWNER_WATER_M1 & 0x1F;
+    if owner != owner_none && owner != owner_water && owner != state.active_company.0 {
+        Err(CommandError::TileNotOwned)
+    } else {
+        Ok(())
+    }
+}
+
+/// Validación de `ClearTile_Water` para agua plana o costa.
+pub(crate) fn check_clear_water(state: &GameState, c: TileCoord) -> Result<(), CommandError> {
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    if tile.kind != TileKind::Water {
+        return Err(CommandError::CannotPlaceStationOnOccupiedTile);
+    }
+    match water_tile_type(tile) {
+        WATER_TILE_TYPE_CLEAR => {
+            check_clear_water_owner(state, tile)?;
+        }
+        WATER_TILE_TYPE_COAST => {}
+        // Locks have a three-tile lifecycle and are handled by their own
+        // remover; never let generic clear leave two lock pieces orphaned.
+        _ => return Err(CommandError::BuildingMustBeDemolished),
+    }
+    if state.vehicles.iter().any(|vehicle| vehicle.pos == c) {
+        return Err(CommandError::VehicleInTheWay);
+    }
+    Ok(())
+}
+
+/// Implementa la rama de agua clara/costa de `ClearTile_Water`.
+pub(in crate::command) fn clear_water_tile(
+    state: &mut GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    check_clear_water(state, c)?;
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let cost = match water_tile_type(tile) {
+        WATER_TILE_TYPE_CLEAR => {
+            if water_class_from_m1(tile.m1) == WaterClass::Canal {
+                canal_clear_cost(&state.global_economy)
+            } else {
+                water_clear_cost(&state.global_economy)
+            }
+        }
+        WATER_TILE_TYPE_COAST => {
+            let (tileh, _) = tile_slope_and_z(&state.map, c).ok_or(CommandError::OutOfBounds)?;
+            if is_slope_with_one_corner_raised(tileh) {
+                water_clear_cost(&state.global_economy)
+            } else {
+                rough_clear_cost(&state.global_economy)
+            }
+        }
+        _ => return Err(CommandError::BuildingMustBeDemolished),
+    };
+    clear_tile_after_native_water_restore(&mut state.map, c)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    clear_neighbour_non_flooding_states(&mut state.map, c);
+    state.economy.money -= cost;
+    Ok(())
 }
 
 pub(crate) fn check_ship_depot_placement(

@@ -1494,3 +1494,11 @@ ríos válidos conservan agua y consumen el byte bajo de `Random()`. La
 regresión cubre payload residual y confirma que la pendiente inválida no
 avanza el RNG. La retirada de estaciones neutrales y el resto de criterios de
 #329/#567 siguen pendientes.
+
+### #329/#567-WATER-CLEAR — `ClearTile_Water` para agua clara y costa
+
+Actualizado: 2026-09-12. `ClearTile` ya despacha las teselas de agua clara y
+costa por su contrato nativo: valida el dueño de un canal, rechaza vehículos,
+limpia el tile raw, reactiva vecinos no inundables y usa `PR_CLEAR_WATER`,
+`PR_CLEAR_CANAL` o `PR_CLEAR_ROUGH` según corresponda. Las esclusas conservan
+su ciclo separado de tres piezas y siguen pendientes.

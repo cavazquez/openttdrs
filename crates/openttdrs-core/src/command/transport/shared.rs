@@ -641,6 +641,9 @@ pub(in crate::command) fn clear_tile(
     if state.map.get_kind(c) == Some(TileKind::ShipDepot) {
         return super::water::clear_ship_depot(state, c);
     }
+    if state.map.get_kind(c) == Some(TileKind::Water) {
+        return super::water::clear_water_tile(state, c);
+    }
     let depot_id = state.map.get(c).and_then(crate::depot::depot_id_from_tile);
     if let Some(kind) = state.map.get_kind(c) {
         check_town_demolition_rating(state, c, kind)?;

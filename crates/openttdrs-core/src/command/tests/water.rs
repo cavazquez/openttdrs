@@ -1,6 +1,9 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
-use crate::economy::{ship_depot_build_cost, ship_depot_clear_cost, station_build_cost};
+use crate::economy::{
+    canal_clear_cost, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
+    station_build_cost, water_clear_cost,
+};
 use crate::test_fixtures::SandboxMap;
 use crate::{
     CargoType, Command, GameState, StopKind, TileCoord, TileKind, Vehicle, VehicleKind,
@@ -39,6 +42,89 @@ fn place_ship_depot_on_water_with_water_entrance() {
         s.economy.money,
         money - ship_depot_build_cost(&s.global_economy)
     );
+}
+
+#[test]
+fn clear_plain_water_uses_native_cost_and_resets_neighbour_flood_state() {
+    let mut s = GameState::new(12, 12);
+    let water = TileCoord::new(5, 5);
+    let neighbour = TileCoord::new(4, 5);
+    crate::map::make_water_tile(&mut s.map, neighbour, WaterClass::Sea).unwrap();
+    let mut neighbour_tile = s.map.get(neighbour).unwrap();
+    neighbour_tile.m3 |= 1;
+    s.map.set_tile(neighbour, neighbour_tile).unwrap();
+
+    let mut raw = s.map.get(water).unwrap();
+    raw.kind = TileKind::Water;
+    raw.mapt = 0x6B;
+    raw.m1 = set_water_class_m1(0x80, WaterClass::Sea);
+    raw.m2 = 0xAA;
+    raw.m2_hi = 0xBB;
+    raw.m3 = 0xCC;
+    raw.m3hi = 0xDD;
+    raw.m5 = 0;
+    raw.m6 = 0xFF;
+    raw.m7 = 0x12;
+    raw.m8 = 0x3456;
+    s.map.set_tile(water, raw).unwrap();
+    let money = s.economy.money;
+
+    assert_eq!(command_would_fail(&s, &Command::ClearTile(water)), None);
+    apply_command(&mut s, &Command::ClearTile(water)).unwrap();
+
+    let cleared = s.map.get(water).unwrap();
+    assert_eq!(cleared.kind, TileKind::Grass);
+    assert_eq!(cleared.mapt, 0x0B);
+    assert_eq!(cleared.m1, crate::company::OWNER_NONE_M1);
+    assert_eq!(cleared.m2, 0);
+    assert_eq!(cleared.m2_hi, 0);
+    assert_eq!(cleared.m3, 0);
+    assert_eq!(cleared.m3hi, 0);
+    assert_eq!(cleared.m5, 0);
+    assert_eq!(cleared.m6, 0);
+    assert_eq!(cleared.m7, 0);
+    assert_eq!(cleared.m8, 0);
+    assert_eq!(s.map.get(neighbour).unwrap().m3 & 1, 0);
+    assert_eq!(s.economy.money, money - water_clear_cost(&s.global_economy));
+}
+
+#[test]
+fn clear_canal_checks_water_owner_and_uses_canal_cost() {
+    let mut s = GameState::new(12, 12);
+    let canal = TileCoord::new(5, 5);
+    apply_command(&mut s, &Command::PlaceCanal(canal)).unwrap();
+    s.ensure_rival_transcargo();
+    s.active_company = crate::company::CompanyId(1);
+
+    assert_eq!(
+        command_would_fail(&s, &Command::ClearTile(canal)),
+        Some(crate::CommandError::TileNotOwned)
+    );
+    s.active_company = crate::company::CompanyId::PLAYER;
+    let money = s.economy.money;
+
+    apply_command(&mut s, &Command::ClearTile(canal)).unwrap();
+
+    assert_eq!(s.map.get_kind(canal), Some(TileKind::Grass));
+    assert_eq!(s.economy.money, money - canal_clear_cost(&s.global_economy));
+}
+
+#[test]
+fn clear_coast_uses_rough_cost_when_flat() {
+    let mut s = GameState::new(12, 12);
+    let coast = TileCoord::new(5, 5);
+    let mut raw = s.map.get(coast).unwrap();
+    raw.kind = TileKind::Water;
+    raw.mapt = 0x60;
+    raw.m1 = set_water_class_m1(raw.m1, WaterClass::Sea);
+    raw.m5 = 0x10;
+    s.map.set_tile(coast, raw).unwrap();
+    let money = s.economy.money;
+
+    apply_command(&mut s, &Command::ClearTile(coast)).unwrap();
+
+    assert_eq!(s.map.get_kind(coast), Some(TileKind::Grass));
+    assert_eq!(s.economy.money, money - rough_clear_cost(&s.global_economy));
 }
 
 #[test]

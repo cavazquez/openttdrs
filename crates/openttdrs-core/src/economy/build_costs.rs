@@ -91,6 +91,24 @@ pub fn signal_clear_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::ClearSignals, 1, 0)
 }
 
+/// Coste de limpiar agua de mar o río (`PR_CLEAR_WATER`).
+#[must_use]
+pub fn water_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearWater, 1, 0)
+}
+
+/// Coste de limpiar un canal (`PR_CLEAR_CANAL`).
+#[must_use]
+pub fn canal_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearCanal, 1, 0)
+}
+
+/// Coste de limpiar costa sin una sola esquina elevada (`PR_CLEAR_ROUGH`).
+#[must_use]
+pub fn rough_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearRough, 1, 0)
+}
+
 /// Coste del depósito ferroviario (`PR_BUILD_DEPOT_TRAIN`) y su tramo de vía.
 ///
 /// `CmdBuildTrainDepot` suma ambos conceptos incluso cuando la boca ya toca una

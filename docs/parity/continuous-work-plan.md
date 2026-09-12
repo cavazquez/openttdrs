@@ -6039,3 +6039,19 @@ espera y el consumo de la selección pendiente; pasaron la prueba ECS
 focalizada, Clippy estricto del cliente, formato y `git diff --check`. La
 aceptación interactiva de previews y los callbacks de vehículos siguen
 pendientes; #326 permanece abierta.
+
+Corrección #329/#567-VEHICLE-PREVIEW-ACCEPTANCE (2026-09-12, `60419a0d`):
+el core mantiene una oferta diaria exclusiva por motor con compañía
+candidata, máscara de compañías consultadas y ventana de 20 días. El nuevo
+comando `WantEnginePreview` valida la oferta de forma autoritativa, concede
+el motor raíz y las variantes enlazadas con `JoinPreview`, y el comando de
+compra y la ventana de depósito rechazan modelos fuera de disponibilidad o
+aún no aceptados. La referencia de noticia sigue siendo el `engine_id`, por
+lo que la oferta ya puede llegar desde popup, ticker o historial sin depender
+del texto. Se ajustaron los fixtures que construían modelos futuros para
+declarar su año de simulación; pasaron 2678 tests del core (1 ignorado),
+Clippy estricto en core y cliente, formato y `git diff --check`. La oferta
+temporal aún vive en `SimulationRuntime`; falta serializar el pool nativo
+`Engine::company_avail/preview_*`, completar el botón/feedback visual de
+aceptación y los callbacks de vehículos. #329/#567 siguen abiertas y #326
+permanece abierta.

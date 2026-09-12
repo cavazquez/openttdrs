@@ -491,10 +491,15 @@ pub fn nearest_reachable_ship_depot_tile_indexed(
                 return None;
             }
             find_path(map, from, depot, PathNetwork::Water)?;
-            Some((distance_squared, depot.y, depot.x, depot))
+            // `FindClosestShipDepot` nativo recorre el `DepotPool` y sólo
+            // reemplaza el candidato con una distancia estrictamente menor.
+            // El orden observable para una distancia empatada es, por tanto,
+            // el `DepotID` persistido en MAP2, no el orden geométrico.
+            let depot_id = depot_id_from_tile(tile).unwrap_or(u16::MAX);
+            Some((distance_squared, depot_id, depot.y, depot.x, depot))
         })
-        .min_by_key(|(distance_squared, y, x, _)| (*distance_squared, *y, *x))
-        .map(|(_, _, _, depot)| depot)
+        .min_by_key(|(distance_squared, depot_id, y, x, _)| (*distance_squared, *depot_id, *y, *x))
+        .map(|(_, _, _, _, depot)| depot)
 }
 
 /// Boca del depósito de vía (`m5 & 3`) si la tesela es un depósito ferroviario.
@@ -773,6 +778,48 @@ mod tests {
             ),
             None,
             "la distancia máxima usa DistanceSquare, no el largo de la ruta"
+        );
+    }
+
+    #[test]
+    fn reachable_ship_depot_tie_uses_persisted_depot_id() {
+        let mut s = GameState::new(24, 8);
+        for y in [2_i32, 3_i32] {
+            for x in 0..24_i32 {
+                crate::map::make_water_tile(
+                    &mut s.map,
+                    TileCoord::new(x, y),
+                    crate::WaterClass::Sea,
+                )
+                .unwrap();
+            }
+        }
+
+        let left = TileCoord::new(5, 2);
+        let right = TileCoord::new(11, 2);
+        crate::apply_command(&mut s, &crate::Command::PlaceShipDepotDir(left, 3)).unwrap();
+        crate::apply_command(&mut s, &crate::Command::PlaceShipDepotDir(right, 3)).unwrap();
+
+        // Ambos depósitos están a distancia cuadrada 9 de `from`, pero el
+        // depósito de la derecha tiene el ID de pool menor. Esto reproduce
+        // el orden que conserva `Depot::Iterate()` aunque cambie la posición.
+        for tile in crate::ship_depot_footprint(left, 3) {
+            s.map.set_m2_u16(tile, 9).unwrap();
+        }
+        for tile in crate::ship_depot_footprint(right, 3) {
+            s.map.set_m2_u16(tile, 2).unwrap();
+        }
+
+        let mut index = DepotSpatialIndex::default();
+        assert_eq!(
+            nearest_reachable_ship_depot_tile_indexed(
+                &s.map,
+                TileCoord::new(8, 2),
+                crate::CompanyId::PLAYER,
+                MAX_SHIP_DEPOT_SEARCH_DISTANCE,
+                &mut index,
+            ),
+            Some(right)
         );
     }
 

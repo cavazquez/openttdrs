@@ -5347,3 +5347,11 @@ aterrizaje termina directamente sobre una bahía. La regresión verifica que no
 queden fracciones de movimiento que reaparezcan al siguiente despegue.
 #329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
 framebuffer.
+
+Actualización #329/#567-SHIP-DEPOT-TIE-BREAK (2026-09-12): el selector local de
+depósito naval conserva ahora el desempate por `DepotID` de `MAP2`, igual que
+`FindClosestShipDepot` al recorrer el `DepotPool` nativo. Antes un empate de
+`DistanceSquare` se resolvía por coordenadas `y/x`, por lo que dos depósitos
+alcanzables equidistantes podían elegir una boca distinta. La regresión cubre
+dos depósitos propios con IDs y posiciones invertidos. #329/#567 continúan
+abiertas por callbacks, pathfinding y aceptación visual/framebuffer.

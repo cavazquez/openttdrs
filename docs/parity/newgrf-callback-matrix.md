@@ -1349,3 +1349,15 @@ no se mezcla con CB11. `ConsistChanged` vuelve a evaluar las unidades cuyo
 motor proviene de NewGRF antes de sumar la longitud, lo que corrige cadenas
 importadas que comenzaban con el valor por defecto. Las APIs legacy sin
 catálogo y los callbacks avanzados de vehículos siguen pendientes.
+
+### #329/#567-SHIP-DEPOT-TIE-BREAK — empate por `DepotID`
+
+Actualizado: 2026-09-12. `nearest_reachable_ship_depot_tile_indexed` conserva
+la distancia cuadrática y la ruta navegable, pero ahora desempata por el ID de
+depósito persistido en `MAP2`. Esto replica `FindClosestShipDepot` nativo, que
+recorre `Depot::Iterate()` en orden del `DepotPool` y sólo sustituye un
+candidato por otro estrictamente más cercano. La regresión usa dos depósitos
+navales propios equidistantes con orden geométrico inverso al de sus IDs. El
+selector antiguo por `y/x` queda cubierto como diferencia corregida; callbacks,
+pathfinding completo y aceptación visual/framebuffer siguen pendientes en
+#329/#567.

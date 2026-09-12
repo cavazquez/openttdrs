@@ -6285,3 +6285,14 @@ comprueba que el texto conserve el desplazamiento de la capa custom. Pasaron
 1432 tests del cliente (2 ignorados), Clippy estricto, formato y
 `git diff --check`. #329 continúa abierta por callbacks, vistas runtime
 completas y consumidores legacy restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-CALENDAR-AGING-CATALOG (2026-09-12, `54be092b`): el barrido
+diario de calendario resuelve ahora la clase de la unidad ferroviaria contra
+`GameState.engine_catalog`. Antes, un vagón NewGRF con ID fuera de la tabla
+vanilla podía caer en la locomotora por defecto y duplicar su decaimiento de
+fiabilidad al cruzar el límite de vida útil. La API pública legacy conserva
+el fallback vanilla y el barrido autoritativo usa la variante catalog-aware;
+la regresión cubre un vagón custom sin unidad anterior. Pasaron 2692 tests del
+core (1 ignorado), Clippy estricto, formato y `git diff --check`. #329 continúa
+abierta por callbacks, vistas runtime completas y consumidores legacy
+restantes; #326/#567 permanecen abiertas.

@@ -1706,3 +1706,12 @@ mapa toman la posición de la capa de vehículo que se resolvió en el mismo
 `update_vehicles`; esto evita que un sprite NewGRF desplazado deje el texto en
 la posición vanilla. El fallback conserva offsets del catálogo y el trabajo
 extra queda limitado a partidas con etiquetas de diagnóstico activas.
+
+### #329-CALENDAR-AGING-CATALOG — clase NewGRF en el barrido de calendario
+
+Actualizado: 2026-09-12 (`54be092b`). `process_vehicle_calendar_day` pasa el
+catálogo runtime a `age_vehicle_calendar_day_with_catalog`, de modo que la
+decisión de aplicar `AgeVehicle` distingue una locomotora de un vagón custom
+aunque su ID no exista en la tabla vanilla. La API sin catálogo mantiene el
+fallback para consumidores legacy y una regresión evita duplicar el
+decaimiento anual de un vagón NewGRF libre.

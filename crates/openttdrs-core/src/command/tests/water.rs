@@ -2,9 +2,9 @@
 
 use crate::economy::{
     canal_build_cost, canal_clear_cost, lock_build_cost, lock_clear_cost, road_clear_cost,
-    road_clear_cost_factored, road_depot_clear_cost, rough_clear_cost, ship_depot_build_cost,
-    ship_depot_clear_cost, station_build_cost, train_depot_clear_cost, trees_clear_cost,
-    water_clear_cost,
+    road_clear_cost_factored, road_depot_clear_cost, road_stop_clear_cost_factored,
+    rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost, station_build_cost,
+    train_depot_clear_cost, trees_clear_cost, water_clear_cost,
 };
 use crate::test_fixtures::SandboxMap;
 use crate::{
@@ -383,6 +383,134 @@ fn place_lock_clears_single_road_and_charges_road_clear() {
     assert_eq!(
         s.economy.money,
         money - road_clear_cost(&s.global_economy) - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_clears_bus_stop_and_updates_station_pool() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    let approach = TileCoord::new(3, 1);
+
+    apply_command(&mut s, &Command::PlaceRoad(approach)).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(middle, 3)).unwrap();
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].pos, middle);
+    for coord in [lower, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command)
+        .expect("ClearTile_Station manual retira la parada vial del centro");
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+    assert!(
+        s.stations.is_empty(),
+        "la última parada elimina la estación"
+    );
+    assert_eq!(s.map.get_kind(approach), Some(TileKind::Road));
+    assert_eq!(
+        s.economy.money,
+        money
+            - road_stop_clear_cost_factored(&s.global_economy, StopKind::BusStop, 16)
+            - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_rejects_foreign_bus_stop_atomically() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(3, 1))).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(middle, 3)).unwrap();
+    s.stations[0].owner = crate::CompanyId(1);
+    for coord in [lower, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let before = [lower, middle, upper].map(|coord| s.map.get(coord).unwrap());
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, false);
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::TileNotOwned)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::TileNotOwned)
+    );
+    for (coord, raw) in [lower, middle, upper].into_iter().zip(before) {
+        assert_eq!(s.map.get(coord), Some(raw));
+    }
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.economy.money, money);
+}
+
+#[test]
+fn place_lock_promotes_joined_bus_stop_when_clearing_anchor() {
+    let mut s = GameState::new(10, 8);
+    let lower = TileCoord::new(2, 2);
+    let anchor = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    let joined = TileCoord::new(3, 3);
+    let anchor_approach = TileCoord::new(3, 1);
+    let joined_approach = TileCoord::new(3, 4);
+
+    apply_command(&mut s, &Command::PlaceRoad(anchor_approach)).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(anchor, 3)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(joined_approach)).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(joined, 1)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::JoinStations {
+            keep: anchor,
+            merge: joined,
+        },
+    )
+    .unwrap();
+    let mut vehicle = Vehicle::new(1, VehicleKind::Bus, TileCoord::new(8, 6), anchor);
+    vehicle.orders = vec![VehicleOrder::station(anchor)];
+    s.vehicles.push(vehicle);
+
+    for coord in [lower, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(anchor, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceLock(anchor, false);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command).expect("la estación unida conserva su ancla lógica");
+
+    assert_eq!(s.map.get_kind(anchor), Some(TileKind::Water));
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].pos, joined);
+    assert!(!s.stations[0].joined_tiles.contains(&anchor));
+    assert!(s.stations[0].covers_tile(joined));
+    match &s.vehicles[0].orders[0] {
+        VehicleOrder::Station { station, .. } => assert_eq!(*station, joined),
+        other => panic!("orden de estación inesperada: {other:?}"),
+    }
+    assert_eq!(
+        s.economy.money,
+        money
+            - road_stop_clear_cost_factored(&s.global_economy, StopKind::BusStop, 16)
+            - lock_build_cost(&s.global_economy)
     );
 }
 

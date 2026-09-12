@@ -5612,3 +5612,15 @@ conserva al convertir la tesela. El guard general de vehículos de `DoBuildLock`
 también cubre un tren detenido en esa huella. Las ramas de cruces, túneles,
 puentes y estaciones siguen en subetapas propias. #329/#567 siguen abiertas
 por infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-ROAD-STOP-CLEAR (2026-09-12):
+`ClearTile_Station` manual ya puede retirar una parada de bus o camión durante
+`DoBuildLock`, usando el precio vanilla de su categoría o el multiplicador de
+limpieza de `RoadStopSpec`. La entidad local `Station` se actualiza junto con
+sus estados por tesela, se quita el tile del scheduler de animación y, si se
+demuele el ancla de una estación unida, se promueve otra tesela y se redirigen
+las órdenes y subsidios que apuntaban a la coordenada retirada. El preview y
+la ejecución comparten ownership, coste y atomicidad; muelles, boyas,
+estaciones ferroviarias, waypoints, aeropuertos, túneles y puentes siguen en
+subetapas separadas. #329/#567 continúan abiertas por infraestructura,
+callbacks, pathfinding y aceptación visual/framebuffer.

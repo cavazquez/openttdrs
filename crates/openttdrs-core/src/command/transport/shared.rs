@@ -65,15 +65,19 @@ pub(in crate::command::transport) fn propagate_rail_diag_to_neighbors(
     Ok(())
 }
 
-fn road_stop_clear_cost_for_tile(state: &GameState, c: TileCoord) -> Option<i64> {
+pub(in crate::command::transport) fn road_stop_clear_cost_for_tile(
+    state: &GameState,
+    c: TileCoord,
+) -> Option<i64> {
     state
         .stations
         .iter()
         .find(|station| {
-            station.pos == c && matches!(station.stop_kind, StopKind::BusStop | StopKind::TruckStop)
+            station.covers_tile(c)
+                && matches!(station.stop_kind, StopKind::BusStop | StopKind::TruckStop)
         })
         .and_then(|station| {
-            station.road_stop_spec.and_then(|spec_id| {
+            station.road_stop_spec_at(c).and_then(|spec_id| {
                 crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, spec_id)
                     .map(|spec| {
                         road_stop_clear_cost_factored(

@@ -6,9 +6,10 @@ use crate::bridge_spec::{
 };
 use crate::economy::{
     canal_build_cost, canal_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
-    lock_clear_cost, rail_clear_cost, road_depot_clear_cost, rocks_clear_cost, rough_clear_cost,
-    ship_depot_build_cost, ship_depot_clear_cost, signal_clear_cost, station_build_cost,
-    train_depot_clear_cost, trees_clear_cost, water_clear_cost,
+    lock_clear_cost, rail_clear_cost, road_depot_clear_cost, road_stop_clear_cost_factored,
+    rocks_clear_cost, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
+    signal_clear_cost, station_build_cost, train_depot_clear_cost, trees_clear_cost,
+    water_clear_cost,
 };
 use crate::map::rail_bits::RAIL_TILE_NORMAL;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
@@ -27,7 +28,7 @@ use super::super::{CommandError, require_tile_owned_by_active};
 use super::shared::{
     check_in_bounds, check_object_can_be_auto_cleared, check_object_can_be_cleared,
     clear_object_footprint_keep_water, clear_object_footprint_keep_water_without_charge,
-    object_clear_money_delta, register_depot, unregister_depot,
+    object_clear_money_delta, register_depot, road_stop_clear_cost_for_tile, unregister_depot,
 };
 use super::station::apply_station_m6;
 
@@ -1561,6 +1562,97 @@ fn check_lock_rail_depot_tile(
     })
 }
 
+/// Prepara la retirada manual de una parada de bus o camión.
+///
+/// `ClearTile_Station` delega en `RemoveRoadStop` cuando el clear no lleva
+/// `Auto`. El coste vanilla usa la categoría de la parada; una parada
+/// `NewGRF` reemplaza ese precio con su multiplicador de limpieza por tesela.
+fn check_lock_road_stop_tile(
+    state: &GameState,
+    c: TileCoord,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    let stop_kind = crate::station::stop_kind_from_m6(tile.m6);
+    if !matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {
+        return Err(CommandError::BuildingMustBeDemolished);
+    }
+    let station = state
+        .stations
+        .iter()
+        .find(|station| station.covers_tile(c) && station.stop_kind == stop_kind);
+    let owner = station.map_or(tile.m1 & 0x1F, |station| station.owner.0 & 0x1F);
+    if owner != (state.active_company.0 & 0x1F) {
+        return Err(CommandError::TileNotOwned);
+    }
+    let clear_cost = road_stop_clear_cost_for_tile(state, c)
+        .unwrap_or_else(|| road_stop_clear_cost_factored(&state.global_economy, stop_kind, 16));
+    Ok(LockBuildTilePlan {
+        water_class: WaterClass::Canal,
+        owner: state.active_company.0,
+        clear_on_build: true,
+        clear_cost,
+        add_canal_cost: !is_middle,
+    })
+}
+
+/// Retira una tesela de parada vial de la entidad `Station` local.
+///
+/// `RemoveRoadStop` conserva la estación mientras queden otras paradas del
+/// mismo tipo y mantiene la identidad de órdenes. El modelo local representa
+/// esa lista como `pos + joined_tiles`, así que al demoler el ancla promueve
+/// la primera tesela restante y redirige las órdenes que usaban la coordenada
+/// retirada.
+fn remove_lock_road_stop_state(state: &mut GameState, c: TileCoord) {
+    state.newgrf_animated_station_tiles.remove(&c);
+    let Some(station_index) = state.stations.iter().position(|station| {
+        station.covers_tile(c)
+            && matches!(station.stop_kind, StopKind::BusStop | StopKind::TruckStop)
+    }) else {
+        return;
+    };
+    let old_pos = state.stations[station_index].pos;
+    let mut remaining_tiles = state.stations[station_index].joined_tiles.clone();
+    remaining_tiles.retain(|tile| *tile != c);
+    let new_pos = if old_pos == c {
+        remaining_tiles.first().copied()
+    } else {
+        Some(old_pos)
+    };
+    let Some(new_pos) = new_pos else {
+        state.stations.remove(station_index);
+        return;
+    };
+    remaining_tiles.retain(|tile| *tile != new_pos);
+    let had_tile_states = !state.stations[station_index]
+        .road_stop_tile_states
+        .is_empty();
+    let station = &mut state.stations[station_index];
+    station.pos = new_pos;
+    station.joined_tiles = remaining_tiles;
+    station.road_stop_tile_states.retain(|(tile, _)| *tile != c);
+    if had_tile_states {
+        station.normalize_road_stop_tile_states();
+    } else {
+        station.sync_legacy_road_stop_anchor();
+    }
+    for vehicle in &mut state.vehicles {
+        for order in &mut vehicle.orders {
+            super::station::rewrite_order_station(order, c, new_pos);
+        }
+    }
+    for list in &mut state.shared_order_lists {
+        for order in &mut list.orders {
+            super::station::rewrite_order_station(order, c, new_pos);
+        }
+    }
+    for subsidy in &mut state.subsidies {
+        if subsidy.dest_station_pos == c {
+            subsidy.dest_station_pos = new_pos;
+        }
+    }
+}
+
 /// Cuenta las llamadas a `CMD_REMOVE_SINGLE_SIGNAL` que hace
 /// `ClearTile_Track` al retirar todos los carriles de una tesela.
 fn rail_signal_clear_count(tile: Tile) -> i64 {
@@ -1860,6 +1952,14 @@ fn check_lock_build_tile(
             clear_cost: fields_clear_cost(&state.global_economy),
             add_canal_cost: !is_middle,
         }),
+        TileKind::Station
+            if matches!(
+                crate::station::stop_kind_from_m6(tile.m6),
+                StopKind::BusStop | StopKind::TruckStop
+            ) =>
+        {
+            check_lock_road_stop_tile(state, c, is_middle, tile)
+        }
         TileKind::Road if crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind) => {
             check_lock_road_crossing_tile(state, is_middle, tile)
         }
@@ -1885,6 +1985,13 @@ fn clear_lock_build_tile(
         state.map.get_kind(c),
         Some(TileKind::Rail | TileKind::RailDepot)
     );
+    let was_road_stop = state.map.get(c).is_some_and(|tile| {
+        tile.kind == TileKind::Station
+            && matches!(
+                crate::station::stop_kind_from_m6(tile.m6),
+                StopKind::BusStop | StopKind::TruckStop
+            )
+    });
     let depot_id = state
         .map
         .get(c)
@@ -1893,6 +2000,9 @@ fn clear_lock_build_tile(
     clear_tile_after_native_water_restore(&mut state.map, c)
         .map_err(|_| CommandError::OutOfBounds)?;
     clear_neighbour_non_flooding_states(&mut state.map, c);
+    if was_road_stop {
+        remove_lock_road_stop_state(state, c);
+    }
     if let Some(depot_id) = depot_id {
         unregister_depot(state, depot_id);
     }

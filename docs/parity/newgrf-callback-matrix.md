@@ -1741,3 +1741,12 @@ Actualizado: 2026-09-12 (`4eb0edcf`). `tick_train_stay_in_depot_indexed` usa el
 caché de la cabeza todavía no fue reconstruida. Esto evita apagar un tren
 NewGRF válido como si no tuviera motor en su primer tick; los saves sin
 catálogo siguen usando la tabla vanilla.
+
+### #329-AIR-FAST-CATALOG — aeronave grande/rápida en crash y sonido
+
+Actualizado: 2026-09-12 (pendiente de commit). La propiedad Action0 aircraft
+`0x0A` (`AIR_FAST`) se materializa en `EngineDef.is_large_aircraft` y ahora
+participa tanto en la decisión de crash como en el sonido de despegue. Un ID
+NewGRF fuera de la tabla vanilla conserva su clasificación de jet en ambos
+consumidores; los IDs vanilla mantienen el fallback histórico. La API
+`aircraft_is_jet` sin catálogo continúa disponible para consumidores legacy.

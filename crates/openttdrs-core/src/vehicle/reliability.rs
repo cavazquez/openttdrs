@@ -22,6 +22,8 @@ pub const BREAKDOWN_DURATION_TICKS: u32 = 255;
 pub const MIN_SPEED_FOR_BREAKDOWN: u16 = 5;
 /// Días de calendario por año (paridad `CalendarTime::DAYS_IN_LEAP_YEAR`).
 pub const DAYS_PER_VEHICLE_YEAR: u32 = 366;
+/// Edad económica máxima representable por `EconomyTime::MAX_DATE`.
+const MAX_ECONOMY_AGE_DAYS: u32 = 1_826_212_865;
 
 /// Devuelve el intervalo inicial de servicio para el tipo nativo de vehículo.
 #[must_use]
@@ -323,6 +325,26 @@ impl super::model::Vehicle {
         }
     }
 
+    /// Incrementa la edad económica una vez por cada barrido diario.
+    ///
+    /// `OpenTTD` actualiza todas las unidades ferroviarias y navales, pero sólo
+    /// la cabeza de los vehículos de carretera y los aviones normales. Las
+    /// sombras/rotores no existen como vehículos runtime en este port.
+    pub fn age_vehicle_economy_day(&mut self) {
+        let should_age = match self.kind {
+            VehicleKind::Train | VehicleKind::Ship | VehicleKind::Aircraft => true,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => self.prev_unit.is_none(),
+        };
+        if !should_age {
+            return;
+        }
+
+        self.economy_age_days = self.economy_age_days.min(MAX_ECONOMY_AGE_DAYS);
+        if self.economy_age_days < MAX_ECONOMY_AGE_DAYS {
+            self.economy_age_days += 1;
+        }
+    }
+
     /// Barrido diario de economía: decaimiento de fiabilidad y acumulación de avería.
     pub fn check_vehicle_breakdown(&mut self, rng: &mut Randomizer) {
         self.check_vehicle_breakdown_with_setting(rng, 2, false);
@@ -516,6 +538,7 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
                 }
             }
         }
+        state.vehicles[i].age_vehicle_economy_day();
         state.vehicles[i].newgrf_day_counter = state.vehicles[i].newgrf_day_counter.wrapping_add(1);
         if state.vehicles[i].prev_unit.is_none() {
             state.vehicles[i].check_vehicle_breakdown_with_setting(
@@ -1079,6 +1102,71 @@ mod tests {
         process_vehicle_economy_day(&mut state);
 
         assert_eq!(state.vehicles[0].running_ticks, 0);
+    }
+
+    #[test]
+    fn economy_age_follows_native_vehicle_unit_rules() {
+        let pos = TileCoord::new(1, 1);
+        let mut train = Vehicle::new(1, VehicleKind::Train, pos, pos);
+        let mut wagon = Vehicle::new(2, VehicleKind::Train, pos, pos);
+        wagon.prev_unit = Some(train.id);
+        let mut bus = Vehicle::new(3, VehicleKind::Bus, pos, pos);
+        let mut articulated_bus = Vehicle::new(4, VehicleKind::Bus, pos, pos);
+        articulated_bus.prev_unit = Some(bus.id);
+        articulated_bus.newgrf_articulated = true;
+        let mut ship = Vehicle::new(5, VehicleKind::Ship, pos, pos);
+        let mut aircraft = Vehicle::new(6, VehicleKind::Aircraft, pos, pos);
+
+        for vehicle in [
+            &mut train,
+            &mut wagon,
+            &mut bus,
+            &mut articulated_bus,
+            &mut ship,
+            &mut aircraft,
+        ] {
+            vehicle.economy_age_days = 17;
+            vehicle.age_vehicle_economy_day();
+        }
+
+        assert_eq!(train.economy_age_days, 18);
+        assert_eq!(wagon.economy_age_days, 18);
+        assert_eq!(bus.economy_age_days, 18);
+        assert_eq!(articulated_bus.economy_age_days, 17);
+        assert_eq!(ship.economy_age_days, 18);
+        assert_eq!(aircraft.economy_age_days, 18);
+    }
+
+    #[test]
+    fn economy_age_stays_at_native_maximum() {
+        let pos = TileCoord::new(1, 1);
+        let mut vehicle = Vehicle::new(1, VehicleKind::Ship, pos, pos);
+        vehicle.economy_age_days = MAX_ECONOMY_AGE_DAYS;
+
+        vehicle.age_vehicle_economy_day();
+
+        assert_eq!(vehicle.economy_age_days, MAX_ECONOMY_AGE_DAYS);
+    }
+
+    #[test]
+    fn economy_day_sweep_advances_only_the_selected_age_slot() {
+        let mut state = crate::GameState::new(8, 8);
+        for id in 1..=2 {
+            let mut vehicle = Vehicle::new(
+                id,
+                VehicleKind::Bus,
+                TileCoord::new(1, 1),
+                TileCoord::new(2, 1),
+            );
+            vehicle.economy_age_days = 9;
+            state.vehicles.push(vehicle);
+        }
+        state.economy_timer.date_fract = 1;
+
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(state.vehicles[0].economy_age_days, 9);
+        assert_eq!(state.vehicles[1].economy_age_days, 10);
     }
 
     #[test]

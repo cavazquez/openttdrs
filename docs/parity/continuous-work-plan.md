@@ -5172,3 +5172,11 @@ residual aunque estén detenidos. El barrido económico reinicia el contador com
 `OnNewEconomyDay`; el cálculo local de costos fraccionales permanece separado.
 Las regresiones cubren acumulación, velocidad residual y reset; #329/#567
 continúan abiertas por otros criterios pendientes.
+
+Actualización #329/#567-ECONOMY-AGE (2026-09-11): el barrido económico
+incrementa ahora `economy_age` una vez por día para cada unidad ferroviaria y
+naval, y para la cabeza de cada vehículo vial o aeronave runtime. El valor se
+mantiene acotado por `EconomyTime::MAX_DATE`, como `EconomyAgeVehicle`; la
+regresión cubre las reglas por unidad, el límite y el slot escalonado.
+#329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
+framebuffer.

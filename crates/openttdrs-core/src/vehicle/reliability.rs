@@ -381,13 +381,14 @@ impl super::model::Vehicle {
         if breakdown_level == 0 && no_servicing_if_no_breakdowns {
             return;
         }
-        if breakdown_level == 1 && (self.awaiting_load_window || self.cargo_transfer_active()) {
-            return;
-        }
         self.reliability = decay_reliability_port(self.reliability, self.reliability_spd_dec);
         self.needs_servicing = self.requires_service();
 
-        if breakdown_level == 0 || !self.running {
+        if breakdown_level == 0
+            || !self.running
+            || self.awaiting_load_window
+            || self.cargo_transfer_active()
+        {
             return;
         }
         if self.breakdown_ctr != 0 {
@@ -1283,6 +1284,25 @@ mod tests {
         assert!(state.vehicles[0].reliability < reliability_before);
         assert_eq!(state.vehicles[0].breakdown_chance, 17);
         assert_eq!(state.vehicles[0].breakdown_ctr, 0);
+    }
+
+    #[test]
+    fn reduced_breakdowns_decay_reliability_during_loading_window() {
+        let pos = TileCoord::new(1, 1);
+        let mut vehicle = Vehicle::new(1, VehicleKind::Bus, pos, pos);
+        vehicle.running = true;
+        vehicle.awaiting_load_window = true;
+        vehicle.cur_speed = 100;
+        vehicle.reliability = 5_000;
+        vehicle.reliability_spd_dec = 80;
+        vehicle.breakdown_chance = 17;
+        let reliability_before = vehicle.reliability;
+
+        vehicle.check_vehicle_breakdown_with_setting(&mut Randomizer::new(7), 1, false);
+
+        assert!(vehicle.reliability < reliability_before);
+        assert_eq!(vehicle.breakdown_chance, 17);
+        assert_eq!(vehicle.breakdown_ctr, 0);
     }
 
     #[test]

@@ -834,13 +834,13 @@ fn check_aircraft_needs_service(state: &mut crate::GameState, idx: usize) {
     let stale_implicit_depot_order = state.vehicles.get(idx).is_some_and(|vehicle| {
         vehicle.kind == VehicleKind::Aircraft
             && vehicle
-            .current_order_ref()
-            .is_some_and(|order| match order {
-                VehicleOrder::Depot {
-                    depot, stop: false, ..
-                } => !airport_tile_is_hangar(&state.map, *depot),
-                _ => false,
-            })
+                .current_order_ref()
+                .is_some_and(|order| match order {
+                    VehicleOrder::Depot {
+                        depot, stop: false, ..
+                    } => !airport_tile_is_hangar(&state.map, *depot),
+                    _ => false,
+                })
     });
     if stale_implicit_depot_order {
         // El `current_order` temporal nativo se convierte en `Dummy` cuando

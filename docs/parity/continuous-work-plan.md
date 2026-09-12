@@ -5308,3 +5308,11 @@ Actualización #329/#567-AIRCRAFT-STALE-SERVICE (2026-09-12): una orden aérea
  `Dummy` y conservando el circuito persistente. La regresión demuele el único
  hangar después de insertar el servicio. #329/#567 continúan abiertas por
  callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-AIRCRAFT-ALTERNATE-HANGAR (2026-09-12): el fallback de
+aviones sin órdenes ya no escoge cualquier pieza de hangar del mapa. La
+búsqueda indexada filtra por estación aeroportuaria válida, propietario y
+compatibilidad avión/helipuerto antes de elegir la alternativa más cercana,
+como `FindNearestHangar` nativo. Las regresiones cubren un helipuerto
+incompatible y un aeropuerto de otra compañía más próximo. #329/#567
+continúan abiertas por callbacks, pathfinding y aceptación visual/framebuffer.

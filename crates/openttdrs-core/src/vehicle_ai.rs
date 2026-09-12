@@ -1,10 +1,12 @@
 //! Comportamiento de vehículos sin órdenes manuales (paridad `OpenTTD` `ProcessOrders` +
 //! lookahead / `PickRandomBit` en carretera).
 
-use crate::depot::{DepotSpatialIndex, nearest_depot_tile_indexed};
+use crate::company::CompanyId;
+use crate::depot::{DepotSpatialIndex, nearest_depot_tile_indexed_by};
 use crate::map::{Map, TileCoord, TileKind};
 use crate::rail_signals::{dir_from_to, rail_neighbors};
 use crate::ship_movement::water_tiles_connected;
+use crate::station::Station;
 use crate::tick::GameTick;
 use crate::vehicle::{DIR_N, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, VehicleDirection};
 
@@ -283,14 +285,35 @@ pub(crate) fn orderless_tram_next(
     Some(candidates[seeded_index(seed, candidates.len())])
 }
 
-/// Aeropuerto más cercano para aviones sin órdenes (`HandleMissingAircraftOrders`).
+/// Aeropuerto más cercano y utilizable para aviones sin órdenes
+/// (`HandleMissingAircraftOrders` / `FindNearestHangar`).
 #[must_use]
 pub(crate) fn orderless_aircraft_hangar(
     map: &Map,
     pos: TileCoord,
+    owner: CompanyId,
+    is_helicopter: bool,
+    stations: &[Station],
     depot_index: &mut DepotSpatialIndex,
 ) -> Option<TileCoord> {
-    nearest_depot_tile_indexed(map, pos, crate::vehicle::VehicleKind::Aircraft, depot_index)
+    nearest_depot_tile_indexed_by(
+        map,
+        pos,
+        crate::vehicle::VehicleKind::Aircraft,
+        depot_index,
+        |hangar| {
+            stations.iter().any(|station| {
+                station.owner == owner
+                    && station.has_airport_facility()
+                    && station.can_service_vehicle(crate::vehicle::VehicleKind::Aircraft)
+                    && crate::airport_class::airport_allows_aircraft(
+                        station.airport_spec,
+                        is_helicopter,
+                    )
+                    && station.covers_tile(hangar)
+            })
+        },
+    )
 }
 
 /// Fallback Manhattan para vehículos de carretera sin red adyacente.
@@ -369,5 +392,97 @@ mod tests {
         let next =
             orderless_road_next(&s.map, TileCoord::new(1, 1), None, 9, GameTick::new(4)).unwrap();
         assert_eq!(s.map.get_kind(next), Some(TileKind::Road));
+    }
+
+    #[test]
+    fn orderless_aircraft_hangar_ignores_incompatible_airports() {
+        let mut s = GameState::new(24, 16);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: crate::AirportSpecId::Heliport,
+            },
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(14, 2),
+                axis_y: false,
+                spec: crate::AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        let incompatible_hangar = s.stations[0].airport_tiles[0];
+        let compatible_hangar = s.stations[1]
+            .airport_tiles
+            .iter()
+            .copied()
+            .find(|&tile| crate::airport::airport_tile_is_hangar(&s.map, tile))
+            .unwrap();
+        let mut depot_index = DepotSpatialIndex::default();
+
+        assert_eq!(
+            orderless_aircraft_hangar(
+                &s.map,
+                incompatible_hangar,
+                CompanyId::PLAYER,
+                false,
+                &s.stations,
+                &mut depot_index,
+            ),
+            Some(compatible_hangar)
+        );
+    }
+
+    #[test]
+    fn orderless_aircraft_hangar_ignores_other_company_airports() {
+        let mut s = GameState::new(24, 16);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: crate::AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(14, 2),
+                axis_y: false,
+                spec: crate::AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        let rival_hangar = s.stations[0]
+            .airport_tiles
+            .iter()
+            .copied()
+            .find(|&tile| crate::airport::airport_tile_is_hangar(&s.map, tile))
+            .unwrap();
+        let own_hangar = s.stations[1]
+            .airport_tiles
+            .iter()
+            .copied()
+            .find(|&tile| crate::airport::airport_tile_is_hangar(&s.map, tile))
+            .unwrap();
+        s.stations[0].owner = CompanyId(1);
+        let mut depot_index = DepotSpatialIndex::default();
+
+        assert_eq!(
+            orderless_aircraft_hangar(
+                &s.map,
+                rival_hangar,
+                CompanyId::PLAYER,
+                false,
+                &s.stations,
+                &mut depot_index,
+            ),
+            Some(own_hangar)
+        );
     }
 }

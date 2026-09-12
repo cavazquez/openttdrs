@@ -363,6 +363,27 @@ pub fn nearest_depot_tile_indexed(
         .min_by_key(|c| (from.x.abs_diff(c.x) + from.y.abs_diff(c.y), c.y, c.x))
 }
 
+/// Variante indexada que descarta candidatos que no cumplen el contrato del
+/// consumidor antes de comparar distancias.
+pub(crate) fn nearest_depot_tile_indexed_by<F>(
+    map: &Map,
+    from: TileCoord,
+    kind: VehicleKind,
+    index: &mut DepotSpatialIndex,
+    mut is_eligible: F,
+) -> Option<TileCoord>
+where
+    F: FnMut(TileCoord) -> bool,
+{
+    index.ensure_initialized(map);
+    index
+        .candidates(kind)
+        .iter()
+        .copied()
+        .filter(|candidate| is_eligible(*candidate))
+        .min_by_key(|c| (from.x.abs_diff(c.x) + from.y.abs_diff(c.y), c.y, c.x))
+}
+
 /// Depósito alcanzable más cercano por pathfinding (road/tram).
 #[must_use]
 pub fn nearest_reachable_depot_tile(

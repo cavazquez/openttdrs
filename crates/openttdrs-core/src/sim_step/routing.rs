@@ -684,9 +684,18 @@ pub(super) fn extend_orderless_vehicle_paths(state: &mut GameState) {
                 if pos != state.vehicles[i].dest {
                     continue;
                 }
+                let owner = state.vehicles[i].owner;
+                let engine = crate::newgrf_callback::engine_for_vehicle_catalog(
+                    &state.engine_catalog,
+                    &state.vehicles[i],
+                );
+                let is_helicopter = crate::engine::aircraft_is_helicopter_def(engine);
                 let Some(hangar) = vehicle_ai::orderless_aircraft_hangar(
                     &state.map,
                     pos,
+                    owner,
+                    is_helicopter,
+                    &state.stations,
                     &mut state.runtime.depot_spatial_index,
                 ) else {
                     continue;

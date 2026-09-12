@@ -5990,3 +5990,19 @@ overrides no se desplazan al primer id del bloque. La regresión cubre dos
 teselas serializadas en una sola acción y comprueba sus animaciones y tabla
 de overrides; #326/#329 continúan abiertas por callbacks runtime, foundations,
 rotaciones, sonidos y la aceptación raster completa.
+
+Corrección #329/#567-VEHICLE-NO-NEWS (2026-09-12, `9567ed24`): los flags
+`NoNews`, `NoPreview` y `JoinPreview` ya tienen predicados explícitos en
+`EngineDef`; `NoNews` deja de ser sólo un campo conservado. El ciclo de
+noticias del core detecta una vez los motores introducidos, publica la nueva
+categoría `NewVehicles` y omite los motores con `NoNews`; al rehidratar una
+partida se siembran las introducciones históricas para no producir una ráfaga,
+mientras que un motor NewGRF incorporado después del arranque conserva su
+primera notificación contemporánea. La categoría se puede configurar como
+Silencio/Resumen/Completo y mantiene el hash compartido independiente de las
+preferencias locales. La regresión cubre supresión y deduplicación; pasaron
+10 tests de noticias del core, 3 de preferencias del cliente, `cargo check`,
+Clippy estricto, formato y `git diff --check`. #329/#567 continúan abiertas
+por el flujo de oferta exclusiva de `NoPreview`, la propagación recursiva de
+`JoinPreview`, callbacks de vehículos y aceptación visual manual bajo Weston;
+#326 permanece abierta.

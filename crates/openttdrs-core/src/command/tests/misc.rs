@@ -231,7 +231,7 @@ fn clear_any_industry_tile_removes_whole_industry_footprint() {
 
 #[test]
 fn every_command_error_has_user_message() {
-    const ERRORS: [CommandError; 27] = [
+    const ERRORS: [CommandError; 29] = [
         CommandError::OutOfBounds,
         CommandError::CannotPlaceRoadOnWater,
         CommandError::CannotPlaceRoadOnVoid,
@@ -254,6 +254,8 @@ fn every_command_error_has_user_message() {
         CommandError::IncompatibleStopForVehicle,
         CommandError::InvalidTunnelEndpoints,
         CommandError::InvalidBridgeSpan,
+        CommandError::MustRemoveRoadFirst,
+        CommandError::MustRemoveRailroadTrack,
         CommandError::InvalidRailOnSlope,
         CommandError::CannotPlaceWaypointOnTrack,
         CommandError::NoRailToRemove,

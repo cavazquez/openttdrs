@@ -6,9 +6,10 @@ use crate::bridge_spec::{
 };
 use crate::economy::{
     canal_build_cost, canal_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
-    lock_clear_cost, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
+    lock_clear_cost, road_clear_cost, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
     ship_depot_clear_cost, station_build_cost, trees_clear_cost, water_clear_cost,
 };
+use crate::map::rail_bits::RAIL_TILE_NORMAL;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
 use crate::map::{
     Map, Tile, TileCoord, TileKind, WaterClass, clear_neighbour_non_flooding_states,
@@ -1308,6 +1309,57 @@ struct LockBuildTilePlan {
     add_canal_cost: bool,
 }
 
+/// Prepara una carretera normal para `CMD_LANDSCAPE_CLEAR | Auto`.
+///
+/// `ClearTile_Road` sólo acepta una pieza de carretera y ningún trazado de
+/// tranvía. Un cruce, una geometría compuesta o cualquier overlay de tranvía
+/// necesita una demolición explícita y no debe quedar oculto detrás del
+/// fallback genérico de una esclusa.
+fn check_lock_road_tile(
+    state: &GameState,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    let road_subtype = (tile.m5 >> 6) & 0x03;
+    let road_bits = tile.m5 & 0x0F;
+    let tram_bits = crate::road_type::tram_track_bits(&tile);
+    if road_subtype != 0 || road_bits.count_ones() != 1 || tram_bits != 0 {
+        return Err(CommandError::MustRemoveRoadFirst);
+    }
+
+    // `CheckAllowRemoveRoad` permite carretera municipal y carretera neutral;
+    // una red de otra compañía sigue bloqueando la limpieza automática.
+    let owner = tile.m1 & 0x1F;
+    let active = state.active_company.0 & 0x1F;
+    if owner != active
+        && owner != (crate::company::OWNER_TOWN_M1 & 0x1F)
+        && owner != (crate::company::OWNER_NONE_M1 & 0x1F)
+    {
+        return Err(CommandError::TileNotOwned);
+    }
+
+    Ok(LockBuildTilePlan {
+        water_class: WaterClass::Canal,
+        owner: state.active_company.0,
+        clear_on_build: true,
+        clear_cost: road_clear_cost(&state.global_economy),
+        add_canal_cost: !is_middle,
+    })
+}
+
+/// Conserva el resultado de `ClearTile_Track | Auto` para una vía importada.
+fn check_lock_rail_tile(state: &GameState, tile: Tile) -> Result<LockBuildTilePlan, CommandError> {
+    let owner = tile.m1 & 0x1F;
+    if owner != (state.active_company.0 & 0x1F) {
+        return Err(CommandError::TileNotOwned);
+    }
+    if (tile.m5 >> 6) & 0x03 == RAIL_TILE_NORMAL {
+        Err(CommandError::MustRemoveRailroadTrack)
+    } else {
+        Err(CommandError::BuildingMustBeDemolished)
+    }
+}
+
 /// Precio de `ClearTile_Clear` para una tesela de terreno.
 fn clear_land_cost(state: &GameState, tile: Tile) -> i64 {
     let ground = clear_ground_type(tile.m5);
@@ -1392,11 +1444,9 @@ fn check_lock_object_tile(
 /// Error de `CMD_LANDSCAPE_CLEAR | Auto` para estructuras que no se pueden
 /// sobreconstruir durante `DoBuildLock`.
 ///
-/// Las carreteras y vías normales no pasan por esta función todavía: el
-/// motor puede quitar automáticamente una carretera de un solo tramo, pero
-/// exige una decisión distinta para cruces, tranvías y trazados múltiples.
-/// Mantenerlas fuera evita convertir una regla parcial en una demolición
-/// silenciosa.
+/// Las carreteras y vías tienen validadores propios porque `ClearTile_Road`
+/// admite una carretera simple, mientras `ClearTile_Track | Auto` siempre
+/// rechaza la vía normal.
 #[must_use]
 fn lock_structure_clear_error(tile: Tile) -> Option<CommandError> {
     match tile.kind {
@@ -1539,6 +1589,8 @@ fn check_lock_build_tile(
             clear_cost: fields_clear_cost(&state.global_economy),
             add_canal_cost: !is_middle,
         }),
+        TileKind::Road => check_lock_road_tile(state, is_middle, tile),
+        TileKind::Rail => check_lock_rail_tile(state, tile),
         TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
         _ => lock_structure_clear_error(tile).map_or_else(|| Err(occupied_error), Err),
     }

@@ -70,6 +70,12 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::MustDemolishTunnelFirst => {
             "Hay un túnel que debe demolerse antes de construir aquí."
         }
+        CommandError::MustRemoveRoadFirst => {
+            "Hay una carretera, cruce o tranvía que debe retirarse antes de construir aquí."
+        }
+        CommandError::MustRemoveRailroadTrack => {
+            "Hay una vía ferroviaria que debe retirarse antes de construir aquí."
+        }
         CommandError::SiteUnsuitable => {
             "Sitio inadecuado: el depósito naval requiere dos teselas de agua planas."
         }
@@ -256,6 +262,8 @@ mod tests {
             CommandError::InvalidTunnelEndpoints,
             CommandError::MustDemolishBridgeFirst,
             CommandError::MustDemolishTunnelFirst,
+            CommandError::MustRemoveRoadFirst,
+            CommandError::MustRemoveRailroadTrack,
             CommandError::SiteUnsuitable,
             CommandError::BuildingMustBeDemolished,
             CommandError::MustDemolishDockFirst,

@@ -1072,6 +1072,12 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Hay un túnel que debe demolerse antes de construir aquí." => {
             "There is a tunnel that must be demolished before building here."
         }
+        "Hay una carretera, cruce o tranvía que debe retirarse antes de construir aquí." => {
+            "There is a road, crossing, or tram track that must be removed before building here."
+        }
+        "Hay una vía ferroviaria que debe retirarse antes de construir aquí." => {
+            "There is a railway track that must be removed before building here."
+        }
         "Sitio inadecuado: el depósito naval requiere dos teselas de agua planas." => {
             "Unsuitable site: the ship depot requires two flat water tiles."
         }

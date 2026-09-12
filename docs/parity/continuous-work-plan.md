@@ -5513,6 +5513,16 @@ cubren dos extremos de hierba, un extremo boscoso y el reset raw del centro.
 Siguen pendientes los puentes, estructuras y objetos autoremove, callbacks,
 pathfinding, infraestructura y aceptación visual/framebuffer.
 
+Actualización #329/#567-WATER-LOCK-ROAD-RAIL-AUTOCLEAR (2026-09-12):
+`PlaceLock` porta la rama de `ClearTile_Road | Auto`: una carretera normal con
+exactamente un `roadbit`, sin tranvía y con propietario permitido se limpia
+como suelo y suma `PR_CLEAR_ROAD`; cruces, trazados múltiples y tranvías
+devuelven `MustRemoveRoadFirst`. Las vías no se demuelen en automático: una
+vía normal devuelve `MustRemoveRailroadTrack`, mientras una tesela con señales
+conserva `BuildingMustBeDemolished`; el chequeo de ownership ocurre antes de
+ambos errores ferroviarios. Preview y ejecución comparten el preflight y
+siguen siendo atómicos.
+
 Actualización #329/#567-WATER-LOCK-BRIDGE-CLEARANCE (2026-09-12): `PlaceLock`
 ya inspecciona un puente sobre cada parte con la altura derivada de la rampa,
 la fundación y el eje persistido, equivalente a `GetBridgeHeight` más

@@ -84,6 +84,10 @@ pub enum CommandError {
     MustDemolishBridgeFirst,
     /// Hay un túnel en una de las teselas y no se puede limpiar automáticamente.
     MustDemolishTunnelFirst,
+    /// La carretera tiene varios trazados, un cruce o tranvía y debe retirarse primero.
+    MustRemoveRoadFirst,
+    /// La vía ferroviaria normal debe retirarse antes de construir aquí.
+    MustRemoveRailroadTrack,
     /// El depósito naval sólo admite dos teselas de agua planas.
     SiteUnsuitable,
     /// Una estructura existente no puede limpiarse automáticamente.

@@ -79,6 +79,12 @@ pub fn road_build_cost_factored(ge: &GlobalEconomy, cost_multiplier: u16) -> i64
     base.saturating_mul(i64::from(factor)) / 8
 }
 
+/// Coste plano por pieza de carretera (`PR_CLEAR_ROAD`).
+#[must_use]
+pub fn road_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearRoad, 1, 0)
+}
+
 /// Coste de construir una señal ferroviaria (`PR_BUILD_SIGNALS`).
 #[must_use]
 pub fn signal_build_cost(ge: &GlobalEconomy) -> i64 {

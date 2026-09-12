@@ -1564,3 +1564,13 @@ esclusa sin mutar el mapa ante un fallo. La carretera/vía normal requiere otra
 subetapa porque `ClearTile_Road` puede aceptar un único roadbit sin tranvía,
 mientras que `ClearTile_Track` y las configuraciones compuestas deben
 rechazarse.
+
+### #329/#567-WATER-LOCK-ROAD-RAIL-AUTOCLEAR — carretera simple y vía normal
+
+Actualizado: 2026-09-12. La limpieza automática de una esclusa acepta una
+tesela `MP_ROAD` normal sólo cuando contiene un único `roadbit` y no tiene
+tranvía; los cruces, combinaciones y overlays devuelven `MustRemoveRoadFirst`.
+Una `MP_RAILWAY` normal no se elimina con `Auto` y devuelve
+`MustRemoveRailroadTrack`; señales y otros subtipos siguen protegidos como
+estructura. La carretera simple conserva su coste `PR_CLEAR_ROAD` y las tres
+partes de la esclusa mantienen el preflight atómico.

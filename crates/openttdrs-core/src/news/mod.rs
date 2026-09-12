@@ -183,6 +183,7 @@ mod tests {
         let item = &state.news.items[0];
         assert_eq!(item.news_type, NewsType::NewVehicles);
         assert!(item.headline.contains("Bus anunciado"));
+        assert_eq!(item.reference, NewsReference::Engine(20_101));
         assert!(state.runtime.engine_available_news_sent.contains(&20_102));
     }
 

@@ -45,6 +45,8 @@ pub enum NewsDisplayMode {
 pub enum NewsReference {
     None,
     Tile(TileCoord),
+    /// Motor relacionado con una noticia de disponibilidad o preview.
+    Engine(u16),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -316,7 +318,7 @@ pub fn push_new_vehicle_available_news(
         NewsType::NewVehicles,
         default_display_for_type(NewsType::NewVehicles),
         state.tick,
-        NewsReference::None,
+        NewsReference::Engine(engine_id),
     );
     add_news_item(state, item);
 }

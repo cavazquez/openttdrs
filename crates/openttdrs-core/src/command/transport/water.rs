@@ -202,6 +202,11 @@ pub(in crate::command::transport) fn make_water_tile_after_native_clear(
     c: TileCoord,
     water_class: WaterClass,
 ) -> Result<(), CommandError> {
+    // `MakeWaterKeepingClass` empieza por `DoClearSquare`, que reactiva el
+    // tile loop de agua de las ocho vecinas antes de materializar la nueva
+    // superficie. Esto también aplica al agua que reaparece al quitar un
+    // depósito, muelle, boya u objeto construido sobre agua.
+    clear_neighbour_non_flooding_states(&mut state.map, c);
     let water_class = water_class_after_native_clear(&state.map, c, water_class);
     if water_class == WaterClass::Invalid {
         clear_tile_after_native_water_restore(&mut state.map, c)
@@ -452,6 +457,19 @@ pub(in crate::command) fn place_ship_depot_dir(
     let auto_clear_objects = auto_clear_object_plan(state, [c, other])?;
     for object_tiles in auto_clear_objects {
         clear_object_footprint_keep_water(state, object_tiles[0], &object_tiles)?;
+    }
+    // Para una superficie `MP_WATER` simple, `ClearTile_Water` ejecutado con
+    // `Auto` llama a `DoClearSquare` antes de que el depósito la reemplace.
+    // Las estructuras ya fueron rechazadas arriba y los objetos se encargan
+    // de este mismo efecto dentro de `MakeWaterKeepingClass`.
+    for tile in [c, other] {
+        if state
+            .map
+            .get(tile)
+            .is_some_and(|raw| raw.kind == TileKind::Water)
+        {
+            clear_neighbour_non_flooding_states(&mut state.map, tile);
+        }
     }
     let original = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let other_original = state.map.get(other).ok_or(CommandError::OutOfBounds)?;

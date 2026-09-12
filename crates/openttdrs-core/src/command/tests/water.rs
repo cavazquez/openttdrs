@@ -46,6 +46,25 @@ fn place_ship_depot_on_water_with_water_entrance() {
 }
 
 #[test]
+fn place_ship_depot_reactivates_neighbouring_water_loops() {
+    let mut s = GameState::new(12, 12);
+    let depot = TileCoord::new(4, 4);
+    let other = crate::ship_depot_footprint(depot, 0)[1];
+    let entrance = TileCoord::new(3, 4);
+    let neighbour = TileCoord::new(4, 3);
+    for coord in [depot, other, entrance, neighbour] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    let mut neighbour_tile = s.map.get(neighbour).unwrap();
+    neighbour_tile.m3 |= 1;
+    s.map.set_tile(neighbour, neighbour_tile).unwrap();
+
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+
+    assert_eq!(s.map.get(neighbour).unwrap().m3 & 1, 0);
+}
+
+#[test]
 fn clear_plain_water_uses_native_cost_and_resets_neighbour_flood_state() {
     let mut s = GameState::new(12, 12);
     let water = TileCoord::new(5, 5);
@@ -1846,6 +1865,26 @@ fn clear_ship_depot_from_either_section_restores_both_water_tiles() {
         s.economy.money,
         money - ship_depot_clear_cost(&s.global_economy)
     );
+}
+
+#[test]
+fn clear_ship_depot_reactivates_neighbouring_water_loops() {
+    let mut s = GameState::new(12, 12);
+    let depot = TileCoord::new(5, 5);
+    let other = crate::ship_depot_footprint(depot, 0)[1];
+    let entrance = TileCoord::new(4, 5);
+    let neighbour = TileCoord::new(5, 4);
+    for coord in [depot, other, entrance, neighbour] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceShipDepotDir(depot, 0)).unwrap();
+    let mut neighbour_tile = s.map.get(neighbour).unwrap();
+    neighbour_tile.m3 |= 1;
+    s.map.set_tile(neighbour, neighbour_tile).unwrap();
+
+    apply_command(&mut s, &Command::ClearTile(depot)).unwrap();
+
+    assert_eq!(s.map.get(neighbour).unwrap().m3 & 1, 0);
 }
 
 #[test]

@@ -6111,3 +6111,17 @@ Pasaron 1423 tests del cliente (2 ignorados), 39 tests focalizados del arnés,
 Clippy estricto en core y cliente, formato y `git diff --check`. #567 sigue
 abierta por callbacks, vecinos, estado naval restante y validación visual
 comparada; #326 permanece abierta.
+
+Corrección #326/#567-SHIP-DEPOT-OCCUPANCY (2026-09-12, `51b1a3dd`): el panel
+de depósito naval ya no exige que `Vehicle::pos` sea literalmente la sección
+norte. Usa `vehicle_at_depot_command_tile`, que normaliza ambas secciones de
+la huella 2×1 al mismo ancla nativa, pero conserva la comprobación de estado
+`SHIP_STATE_DEPOT`; así no muestra barcos que están saliendo. La regresión
+cubre un save legacy con el barco persistido en la sección opuesta. El arnés
+Wayland también prioriza un depósito naval ocupado para que la evidencia
+visual pruebe la lista real: `Kale_TitleGame.sav` renderizó bajo Weston el
+panel `Nunwood Depósito de Barcos` con `Ferry #3017` y sus acciones de fila.
+Pasaron 1424 tests del cliente (2 ignorados), 12 focalizados del panel,
+Clippy estricto en core y cliente, formato y `git diff --check`. #567 sigue
+abierta por callbacks, vecinos, estado naval restante y comparación visual;
+#326 permanece abierta.

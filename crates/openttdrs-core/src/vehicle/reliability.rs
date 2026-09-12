@@ -561,11 +561,20 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
             state.vehicles[i].decrease_vehicle_value();
         }
         if state.vehicles[i].is_timetable_controller_unit(&state.engine_catalog) {
-            state.vehicles[i].check_vehicle_breakdown_with_setting(
-                &mut state.random,
-                breakdown_level,
-                no_servicing,
-            );
+            // `RoadVehicle::OnNewEconomyDay` omite `CheckVehicleBreakdown`
+            // mientras el vehículo sigue bloqueado. El resto del handler
+            // (edad, servicio y órdenes) continúa ejecutándose en ese slot.
+            let blocked_road_vehicle = matches!(
+                state.vehicles[i].kind,
+                VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+            ) && state.vehicles[i].blocked_ctr != 0;
+            if !blocked_road_vehicle {
+                state.vehicles[i].check_vehicle_breakdown_with_setting(
+                    &mut state.random,
+                    breakdown_level,
+                    no_servicing,
+                );
+            }
             // `RunEconomyVehicleDayProc` llama `OnNewEconomyDay` para este
             // slot; en road vehicles eso incluye `CheckIfRoadVehNeedsService`.
             // Hacerlo aquí (y no para toda la flota al cambiar el día) mantiene
@@ -1303,6 +1312,28 @@ mod tests {
         assert!(vehicle.reliability < reliability_before);
         assert_eq!(vehicle.breakdown_chance, 17);
         assert_eq!(vehicle.breakdown_ctr, 0);
+    }
+
+    #[test]
+    fn blocked_road_vehicle_skips_economy_breakdown_check() {
+        let pos = TileCoord::new(1, 1);
+        let mut vehicle = Vehicle::new(1, VehicleKind::Bus, pos, pos);
+        vehicle.running = true;
+        vehicle.cur_speed = 100;
+        vehicle.blocked_ctr = 1;
+        vehicle.reliability = 5_000;
+        vehicle.reliability_spd_dec = 80;
+        vehicle.breakdown_chance = 17;
+        let reliability_before = vehicle.reliability;
+        let mut state = crate::GameState::new(8, 8);
+        state.vehicles.push(vehicle);
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(state.vehicles[0].reliability, reliability_before);
+        assert_eq!(state.vehicles[0].breakdown_chance, 17);
+        assert_eq!(state.vehicles[0].breakdown_ctr, 0);
     }
 
     #[test]

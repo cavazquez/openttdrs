@@ -5233,3 +5233,11 @@ no acumula averías ni dispara servicio automático mientras permanece libre en
 el depósito. La regresión cubre un `ENGINE_WAGON_COAL` sin `prev_unit`.
 #329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
 framebuffer.
+
+Actualización #329/#567-BLOCKED-ROAD-BREAKDOWN (2026-09-11): el barrido
+económico respeta el gate nativo de `RoadVehicle::OnNewEconomyDay`: un vehículo
+de carretera con `blocked_ctr != 0` no ejecuta la comprobación de averías en
+ese slot, aunque conserva el envejecimiento, servicio y órdenes del handler.
+La regresión verifica que fiabilidad, acumulador y avería activa no cambian
+mientras el autobús está bloqueado. #329/#567 continúan abiertas por callbacks,
+pathfinding y aceptación visual/framebuffer.

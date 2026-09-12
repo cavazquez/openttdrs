@@ -8,8 +8,8 @@
 use crate::bridge_spec::{bridge_line_tiles, rail_bridge_other_end};
 use crate::company::CompanyId;
 use crate::map::{
-    Map, Tile, TileCoord, TileKind, diag_dir_offset, is_road_level_crossing,
-    resolve_existing_tunnel_end,
+    Map, Tile, TileCoord, TileKind, WaterClass, diag_dir_offset, is_map_object_tile,
+    is_road_level_crossing, resolve_existing_tunnel_end, water_class_from_m1,
 };
 use crate::rail_signals::{rail_signal_present_mask, rail_tile_is_signals, tracks_overlap};
 use crate::rail_type::{RailType, rail_type_from_tile};
@@ -19,6 +19,7 @@ use crate::road_type::{
 };
 use crate::station::{
     Station, StopKind, is_rail_station_type, station_at_tile, station_type_from_m6,
+    stop_kind_from_m6,
 };
 
 /// Cantidad de railtypes vanilla que puede tener una compañía.
@@ -103,10 +104,33 @@ impl RoadInfrastructureSummary {
     }
 }
 
+/// Parte acuática de `CompanyInfrastructure`.
+///
+/// `OpenTTD` sólo contabiliza agua que forma parte de la infraestructura de una
+/// compañía: canales, las piezas estructurales de depósitos/esclusas y los
+/// acueductos. El mar, los ríos y el agua libre no pertenecen a ninguna
+/// compañía y por eso no entran en este contador.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct WaterInfrastructureSummary {
+    /// Piezas acuáticas según `AfterLoadCompanyStats`.
+    pub water: u32,
+}
+
+impl WaterInfrastructureSummary {
+    /// Suma de piezas de infraestructura acuática.
+    #[must_use]
+    pub const fn water_total(self) -> u32 {
+        self.water
+    }
+}
+
 const TUNNELBRIDGE_TRACKBIT_FACTOR: u32 = 4;
 const LEVELCROSSING_TRACKBIT_FACTOR: u32 = 2;
 const ROAD_STOP_TRACKBIT_FACTOR: u32 = 2;
+const LOCK_DEPOT_TILE_FACTOR: u32 = 2;
 const INVALID_ROADTYPE: u8 = 0x3F;
+const WATER_TILE_TYPE_LOCK: u8 = 2;
+const WATER_TILE_TYPE_DEPOT: u8 = 3;
 
 fn tile_owned_by(tile: Tile, owner: CompanyId) -> bool {
     tile.m1 & 0x1F == owner.0 & 0x1F
@@ -243,6 +267,89 @@ fn add_road_pieces(summary: &mut RoadInfrastructureSummary, road_type: RoadType,
     }
     let slot = &mut summary.road[usize::from(road_type.as_u8())];
     *slot = slot.saturating_add(pieces);
+}
+
+#[must_use]
+fn water_tile_type(tile: Tile) -> u8 {
+    (tile.m5 >> 4) & 0x0F
+}
+
+#[must_use]
+fn water_owner_matches(tile: Tile, owner: CompanyId) -> bool {
+    owner.0 < crate::company::MAX_COMPANIES && owner_slot(tile.m1) == owner_slot(owner.0)
+}
+
+fn add_water_pieces(summary: &mut WaterInfrastructureSummary, pieces: u32) {
+    summary.water = summary.water.saturating_add(pieces);
+}
+
+/// Cuenta una tesela `MP_WATER` con las mismas excepciones que
+/// `AfterLoadCompanyStats`.
+fn add_water_tile(summary: &mut WaterInfrastructureSummary, tile: Tile, owner: CompanyId) {
+    let tile_type = water_tile_type(tile);
+    if tile_type == WATER_TILE_TYPE_DEPOT && water_owner_matches(tile, owner) {
+        add_water_pieces(summary, LOCK_DEPOT_TILE_FACTOR);
+    }
+
+    if tile_type == WATER_TILE_TYPE_LOCK && (tile.m5 >> 2).trailing_zeros() >= 2 {
+        // La parte central guarda el owner de toda la esclusa y reemplaza el
+        // posible canal subyacente por tres piezas estructurales.
+        if water_owner_matches(tile, owner) {
+            add_water_pieces(summary, 3 * LOCK_DEPOT_TILE_FACTOR);
+        }
+        return;
+    }
+
+    if water_class_from_m1(tile.m1) == WaterClass::Canal && water_owner_matches(tile, owner) {
+        add_water_pieces(summary, 1);
+    }
+}
+
+#[must_use]
+fn is_water_aqueduct_endpoint(tile: Tile) -> bool {
+    tile.is_tunnel_bridge_tile() && tile.m5 & 0x80 != 0 && (tile.m5 >> 2) & 0x03 == 2
+}
+
+fn water_aqueduct_other_end(map: &Map, start: TileCoord, tile: Tile) -> Option<TileCoord> {
+    let (dx, dy) = diag_dir_offset(tile.m5 & 0x03);
+    let reverse_direction = (tile.m5.wrapping_add(2)) & 0x03;
+    let (width, height) = map.dimensions();
+    let mut pos = start;
+    for _ in 0..width.max(height) {
+        pos = TileCoord::new(pos.x + dx, pos.y + dy);
+        let probe = map.get(pos)?;
+        if is_water_aqueduct_endpoint(probe) && probe.m5 & 0x03 == reverse_direction {
+            return Some(pos);
+        }
+    }
+    None
+}
+
+fn add_water_aqueduct(
+    map: &Map,
+    coord: TileCoord,
+    tile: Tile,
+    owner: CompanyId,
+    summary: &mut WaterInfrastructureSummary,
+) {
+    let Some(end) = water_aqueduct_other_end(map, coord, tile) else {
+        return;
+    };
+    if !is_before_in_map_order(coord, end) || !water_owner_matches(tile, owner) {
+        return;
+    }
+    let length = u32::try_from(bridge_line_tiles(coord, end).len()).unwrap_or(u32::MAX);
+    add_water_pieces(summary, length.saturating_mul(TUNNELBRIDGE_TRACKBIT_FACTOR));
+}
+
+fn add_water_station_tile(summary: &mut WaterInfrastructureSummary, tile: Tile, owner: CompanyId) {
+    if !matches!(stop_kind_from_m6(tile.m6), StopKind::Dock | StopKind::Buoy)
+        || water_class_from_m1(tile.m1) != WaterClass::Canal
+        || !water_owner_matches(tile, owner)
+    {
+        return;
+    }
+    add_water_pieces(summary, 1);
 }
 
 #[must_use]
@@ -468,6 +575,57 @@ pub fn road_infrastructure_for_company_with_stations(
                             add_road_pieces(&mut summary, road_type, ROAD_STOP_TRACKBIT_FACTOR);
                         }
                     }
+                }
+                _ => {}
+            }
+        }
+    }
+    summary
+}
+
+/// Reconstruye la parte acuática de `CompanyInfrastructure` a partir del mapa.
+///
+/// La superficie de mar/río sólo es terreno neutral. El contador nativo se
+/// incrementa para canales propios, estaciones/boyas apoyadas en canal,
+/// depósitos, esclusas y acueductos; un acueducto se cuenta una sola vez desde
+/// su rampa anterior en el orden lineal del mapa.
+#[must_use]
+pub fn water_infrastructure_for_company(map: &Map, owner: CompanyId) -> WaterInfrastructureSummary {
+    let (width, height) = map.dimensions();
+    let mut summary = WaterInfrastructureSummary::default();
+    for y in 0..height {
+        let Ok(y) = i32::try_from(y) else {
+            continue;
+        };
+        for x in 0..width {
+            let Ok(x) = i32::try_from(x) else {
+                continue;
+            };
+            let coord = TileCoord::new(x, y);
+            let Some(tile) = map.get(coord) else {
+                continue;
+            };
+
+            if is_water_aqueduct_endpoint(tile) {
+                add_water_aqueduct(map, coord, tile, owner, &mut summary);
+                continue;
+            }
+
+            if is_map_object_tile(tile.mapt) {
+                if water_class_from_m1(tile.m1) == WaterClass::Canal
+                    && water_owner_matches(tile, owner)
+                {
+                    add_water_pieces(&mut summary, 1);
+                }
+                continue;
+            }
+
+            match tile.kind {
+                TileKind::Water | TileKind::ShipDepot => {
+                    add_water_tile(&mut summary, tile, owner);
+                }
+                TileKind::Station => {
+                    add_water_station_tile(&mut summary, tile, owner);
                 }
                 _ => {}
             }
@@ -772,5 +930,112 @@ mod tests {
             station.owner,
         );
         assert_eq!(summary.road_total(), 2);
+    }
+
+    #[test]
+    fn counts_owned_water_infrastructure_by_native_tile_contract() {
+        let mut map = Map::new_flat(16, 8, 1);
+        let active = CompanyId::PLAYER;
+        let rival = CompanyId(1);
+        let canal = |mut tile: Tile, owner: CompanyId| {
+            tile.m1 = crate::map::set_water_class_m1(owner.0, WaterClass::Canal);
+            tile
+        };
+
+        let plain_canal = canal(tile(TileKind::Water, 0x60, 0, active, 0, 0, 0), active);
+        map.set_tile(TileCoord::new(1, 1), plain_canal).unwrap();
+        let sea_depot = tile(TileKind::ShipDepot, 0x60, 0x30, active, 0, 0, 0);
+        map.set_tile(TileCoord::new(3, 1), sea_depot).unwrap();
+        let canal_depot = canal(
+            tile(TileKind::ShipDepot, 0x60, 0x31, active, 0, 0, 0),
+            active,
+        );
+        map.set_tile(TileCoord::new(4, 1), canal_depot).unwrap();
+
+        // Middle = part 0; the lower and upper sections retain their own
+        // canal ownership and count as ordinary canal pieces.
+        for (coord, m5) in [
+            (TileCoord::new(1, 3), 0x26),
+            (TileCoord::new(2, 3), 0x22),
+            (TileCoord::new(3, 3), 0x2A),
+        ] {
+            map.set_tile(
+                coord,
+                canal(tile(TileKind::Water, 0x60, m5, active, 0, 0, 0), active),
+            )
+            .unwrap();
+        }
+
+        let dock = canal(
+            tile(
+                TileKind::Station,
+                0x50,
+                4,
+                active,
+                0,
+                crate::station::STATION_TYPE_DOCK << 3,
+                0,
+            ),
+            active,
+        );
+        map.set_tile(TileCoord::new(5, 1), dock).unwrap();
+        let buoy = canal(
+            tile(
+                TileKind::Station,
+                0x50,
+                0,
+                active,
+                0,
+                crate::station::STATION_TYPE_BUOY << 3,
+                0,
+            ),
+            active,
+        );
+        map.set_tile(TileCoord::new(6, 1), buoy).unwrap();
+
+        // Imported MP_OBJECT tiles can be semantically Unknown while MAPT is
+        // still authoritative for the water class.
+        let object = canal(
+            tile(TileKind::Unknown(10), 0xA0, 0, active, 0, 0, 0),
+            active,
+        );
+        map.set_tile(TileCoord::new(7, 1), object).unwrap();
+
+        let rival_canal = canal(tile(TileKind::Water, 0x60, 0, rival, 0, 0, 0), rival);
+        map.set_tile(TileCoord::new(10, 1), rival_canal).unwrap();
+
+        let summary = water_infrastructure_for_company(&map, active);
+        // plain canal (1) + depot sections (2 + 3) + lock (6 + 1 + 1) +
+        // dock + buoy + object.
+        assert_eq!(summary.water_total(), 17);
+        assert_eq!(
+            water_infrastructure_for_company(&map, rival).water_total(),
+            1
+        );
+    }
+
+    #[test]
+    fn counts_an_owned_aqueduct_once_with_structural_factor() {
+        let mut map = Map::new_flat(12, 8, 0);
+        let active = CompanyId::PLAYER;
+        let west = TileCoord::new(2, 3);
+        let east = TileCoord::new(6, 3);
+        let mut west_tile = tile(TileKind::Water, 0x90, 0x8A, active, 0, 0, 0);
+        west_tile.m1 = crate::map::set_water_class_m1(active.0, WaterClass::Sea);
+        let mut east_tile = tile(TileKind::Water, 0x90, 0x88, active, 0, 0, 0);
+        east_tile.m1 = crate::map::set_water_class_m1(active.0, WaterClass::Sea);
+        map.set_tile(west, west_tile).unwrap();
+        map.set_tile(east, east_tile).unwrap();
+
+        for x in 3..6 {
+            let mut middle = map.get(TileCoord::new(x, 3)).unwrap();
+            middle.mapt = 0x64;
+            middle.m1 =
+                crate::map::set_water_class_m1(crate::company::OWNER_WATER_M1, WaterClass::Sea);
+            map.set_tile(TileCoord::new(x, 3), middle).unwrap();
+        }
+
+        let summary = water_infrastructure_for_company(&map, active);
+        assert_eq!(summary.water_total(), 5 * TUNNELBRIDGE_TRACKBIT_FACTOR);
     }
 }

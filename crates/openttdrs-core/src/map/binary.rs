@@ -165,16 +165,21 @@ fn ottd_tile_kind(ottd_type: u8, m5: u8) -> TileKind {
         8 => TileKind::Industry,
         9 => {
             let is_bridge = m5 & 0x80 != 0;
-            // `TransportType` de OpenTTD en bits 2–3: 0 = rail, 1 = road.
+            // `TransportType` de OpenTTD en bits 2–3: 0 = rail, 1 = road,
+            // 2 = agua (rampa de acueducto).
             let transport = (m5 >> 2) & 0x3;
             if is_bridge {
                 if transport == 0 {
                     TileKind::RailBridge
+                } else if transport == 2 {
+                    TileKind::Water
                 } else {
                     TileKind::RoadBridge
                 }
             } else if transport == 0 {
                 TileKind::RailTunnel
+            } else if transport == 2 {
+                TileKind::Water
             } else {
                 TileKind::RoadTunnel
             }

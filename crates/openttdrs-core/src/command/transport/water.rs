@@ -1279,8 +1279,19 @@ pub(in crate::command) fn place_aqueduct(
             let dir = aqueduct_toward_dir(*c, other).unwrap_or(0);
             // `MP_TUNNELBRIDGE` para que el render detecte rampa (`ramp_tile`).
             tile.mapt = 0x90;
+            // `MakeAqueductBridgeRamp` usa el owner de la compañía en MAPO y
+            // borra el estado de atraque. Los cinco bits bajos son el owner;
+            // el resto de M1 conserva flags que no pertenecen a la propiedad.
+            tile = crate::company::tile_with_owner(tile, state.active_company);
+            tile.m1 &= !0x80;
+            tile.m2 = 0;
+            tile.m2_hi = 0;
+            tile.m3 = 0;
+            tile.m3hi = 0;
             tile.m5 = aqueduct_ramp_m5(dir);
             tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
+            tile.m7 = 0;
+            tile.m8 = 0;
         } else {
             tile.mapt = set_bridge_middle_mapt(0x60, bridge_axis_y);
             tile.m5 = 0;

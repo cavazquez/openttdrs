@@ -485,8 +485,9 @@ pub use house_spec::{
     vanilla_or_newgrf_house,
 };
 pub use infrastructure::{
-    ROAD_INFRASTRUCTURE_ROADTYPE_COUNT, RoadInfrastructureSummary, road_infrastructure_for_company,
-    road_infrastructure_for_company_with_stations,
+    ROAD_INFRASTRUCTURE_ROADTYPE_COUNT, RoadInfrastructureSummary, WaterInfrastructureSummary,
+    road_infrastructure_for_company, road_infrastructure_for_company_with_stations,
+    water_infrastructure_for_company,
 };
 pub use map::{
     ObjectScopeCounts, action2_eval_ctx_for_object_tile,

@@ -3591,6 +3591,8 @@ fn place_aqueduct_between_facing_slopes() {
     apply_command(&mut s, &Command::PlaceAqueduct(west, east)).unwrap();
     assert_eq!(s.map.get_kind(west), Some(TileKind::Water));
     assert_eq!(s.map.get_kind(east), Some(TileKind::Water));
+    assert_eq!(s.map.get(west).unwrap().m1 & 0x1F, s.active_company.0);
+    assert_eq!(s.map.get(east).unwrap().m1 & 0x1F, s.active_company.0);
     let mid = s.map.get(TileCoord::new(5, 5)).unwrap();
     assert_eq!(mid.kind, TileKind::Water);
     assert!(bridge_above_axis_from_mapt(mid.mapt).is_some());
@@ -3598,6 +3600,11 @@ fn place_aqueduct_between_facing_slopes() {
         &s.map,
         TileCoord::new(5, 5)
     ));
+    assert_eq!(
+        crate::infrastructure::water_infrastructure_for_company(&s.map, s.active_company)
+            .water_total(),
+        5 * 4
+    );
 }
 
 #[test]

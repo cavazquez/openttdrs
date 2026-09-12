@@ -5895,3 +5895,15 @@ MAP7 y el nibble de owner M3 correspondiente, también para compañías distinta
 del jugador. Las regresiones ejercitan construcción real con compañía rival.
 #329/#567 continúa abierta por conversión de capas existentes, agua,
 aeropuertos, callbacks, arrastre de áreas y aceptación visual/framebuffer.
+
+Corrección #329/#567-WATER-INFRASTRUCTURE-SUMMARY (2026-09-12): Finanzas ya
+reconstruye la parte acuática de `CompanyInfrastructure` por owner, siguiendo
+`AfterLoadCompanyStats`: canales y objetos sobre canal, muelles y boyas,
+depósitos, esclusas y acueductos con el factor estructural nativo. Los
+acueductos se deduplican por pareja de rampas y sus bocas `MP_TUNNELBRIDGE`
+persisten owner, dirección, tipo de transporte y payload limpio; el decoder
+también los conserva como agua. La regresión cubre compañías rivales,
+secciones de esclusa y round-trip de rampas. #329/#567 continúa abierta por
+la exposición restante de otras infraestructuras, aeropuertos, conversión de
+capas existentes, callbacks, arrastre de áreas y aceptación
+visual/framebuffer.

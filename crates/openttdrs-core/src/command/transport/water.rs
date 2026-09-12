@@ -5,9 +5,11 @@ use crate::bridge_spec::{
     set_bridge_middle_mapt, set_bridge_type_m6,
 };
 use crate::economy::{
-    canal_clear_cost, lock_build_cost, lock_clear_cost, rough_clear_cost, ship_depot_build_cost,
-    ship_depot_clear_cost, station_build_cost, water_clear_cost,
+    canal_build_cost, canal_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
+    lock_clear_cost, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
+    ship_depot_clear_cost, station_build_cost, trees_clear_cost, water_clear_cost,
 };
+use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
 use crate::map::{
     Map, Tile, TileCoord, TileKind, WaterClass, clear_neighbour_non_flooding_states,
     clear_tile_after_native_water_restore, has_tile_water_ground, inclined_slope_direction,
@@ -16,6 +18,7 @@ use crate::map::{
     opposite_diag_dir, set_water_class_m1, tile_slope_and_z, water_class_after_native_clear,
     water_class_from_m1,
 };
+use crate::world_gen::{CLEAR_GROUND_FIELDS, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY};
 use crate::{GameState, Station, StopKind};
 
 use super::super::{CommandError, require_tile_owned_by_active};
@@ -1250,14 +1253,207 @@ fn check_clear_lock(state: &GameState, c: TileCoord) -> Result<(), CommandError>
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+struct LockBuildTilePlan {
+    /// Clase que `MakeLockTile` debe conservar en esta sección.
+    water_class: WaterClass,
+    /// `MakeLock` conserva el owner de un extremo que ya era agua; para tierra
+    /// usa la compañía que construye la esclusa después de limpiarla.
+    owner: u8,
+    /// `DoBuildLock` llama a `CMD_LANDSCAPE_CLEAR` sobre el centro siempre y
+    /// sobre un extremo sólo cuando no era `MP_WATER`.
+    clear_on_build: bool,
+    clear_cost: i64,
+    add_canal_cost: bool,
+}
+
+/// Precio de `ClearTile_Clear` para una tesela de terreno.
+fn clear_land_cost(state: &GameState, tile: Tile) -> i64 {
+    let ground = clear_ground_type(tile.m5);
+    let density = clear_density(tile.m5);
+    let base = match ground {
+        CLEAR_GROUND_GRASS => grass_clear_cost(&state.global_economy),
+        CLEAR_GROUND_ROCKY => rocks_clear_cost(&state.global_economy),
+        CLEAR_GROUND_FIELDS => fields_clear_cost(&state.global_economy),
+        // `CLEAR_SNOW` y `CLEAR_DESERT` comparten `PR_CLEAR_ROUGH` en la
+        // tabla nativa. Los valores desconocidos siguen el caso default de
+        // `ClearTile_Clear` para no convertir una tesela importada en gratis.
+        _ => rough_clear_cost(&state.global_economy),
+    };
+    if tile.m3 & 0x10 != 0 {
+        let rough = rough_clear_cost(&state.global_economy);
+        let grass = grass_clear_cost(&state.global_economy);
+        let surcharge = if rough >= grass {
+            rough - grass
+        } else {
+            grass - rough
+        };
+        base.saturating_add(surcharge)
+    } else if ground != CLEAR_GROUND_GRASS || density != 0 {
+        base
+    } else {
+        0
+    }
+}
+
+/// Precio de `ClearTile_Trees`, incluido el multiplicador tropical nativo.
+fn clear_tree_cost(state: &GameState, tile: Tile) -> i64 {
+    let tree_multiplier = if (20..27).contains(&tile.m3) { 4 } else { 1 };
+    trees_clear_cost(&state.global_economy)
+        .saturating_mul(i64::from(tree_count(tile.m5)))
+        .saturating_mul(tree_multiplier)
+}
+
+/// Prepara la parte de una esclusa como lo haría `DoBuildLock` antes de
+/// ejecutar las limpiezas. Esta fase no muta el mapa: preview y ejecución
+/// comparten exactamente las mismas guardas y costes.
+fn check_lock_build_tile(
+    state: &GameState,
+    c: TileCoord,
+    is_middle: bool,
+) -> Result<LockBuildTilePlan, CommandError> {
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let occupied_error = if is_middle {
+        CommandError::CannotPlaceStationOnOccupiedTile
+    } else {
+        CommandError::BuildingMustBeDemolished
+    };
+
+    // `DoBuildLock` hereda `CommandFlag::Auto`, pero los objetos requieren
+    // una rama propia de `ClearTile_Object` y no se deben sobrescribir hasta
+    // portar su contrato de huella/coste. Mantenerlos visibles es atómico y
+    // evita perder un objeto al construir una esclusa.
+    if is_map_object_tile(tile.mapt) {
+        return Err(CommandError::ObjectInTheWay);
+    }
+
+    match tile.kind {
+        TileKind::Water => match water_tile_type(tile) {
+            WATER_TILE_TYPE_CLEAR => {
+                let water_class = water_class_from_m1(tile.m1);
+                if is_middle {
+                    check_non_freeform_edge(&state.map, c, state.construction.freeform_edges)?;
+                    check_clear_water_owner(state, tile)?;
+                    let clear_cost = if water_class == WaterClass::Canal {
+                        canal_clear_cost(&state.global_economy)
+                    } else {
+                        water_clear_cost(&state.global_economy)
+                    };
+                    Ok(LockBuildTilePlan {
+                        water_class,
+                        owner: state.active_company.0,
+                        clear_on_build: true,
+                        clear_cost,
+                        add_canal_cost: false,
+                    })
+                } else {
+                    // Los extremos acuáticos no pasan por LandscapeClear en
+                    // `DoBuildLock`; por eso no se comprueba ownership ni se
+                    // cobra el despeje aquí.
+                    Ok(LockBuildTilePlan {
+                        water_class,
+                        owner: tile.m1 & 0x1F,
+                        clear_on_build: false,
+                        clear_cost: 0,
+                        add_canal_cost: false,
+                    })
+                }
+            }
+            WATER_TILE_TYPE_COAST => {
+                let clear_cost = if is_middle {
+                    let (tileh, _) =
+                        tile_slope_and_z(&state.map, c).ok_or(CommandError::OutOfBounds)?;
+                    if is_slope_with_one_corner_raised(tileh) {
+                        water_clear_cost(&state.global_economy)
+                    } else {
+                        rough_clear_cost(&state.global_economy)
+                    }
+                } else {
+                    0
+                };
+                Ok(LockBuildTilePlan {
+                    // `HasTileWaterGround` is false for a coast, so the
+                    // native middle falls back to a canal. An endpoint is
+                    // still `IsWaterTile` and keeps its saved class.
+                    water_class: if is_middle {
+                        WaterClass::Canal
+                    } else {
+                        water_class_from_m1(tile.m1)
+                    },
+                    owner: if is_middle {
+                        state.active_company.0
+                    } else {
+                        tile.m1 & 0x1F
+                    },
+                    clear_on_build: is_middle,
+                    clear_cost,
+                    add_canal_cost: false,
+                })
+            }
+            _ => Err(occupied_error),
+        },
+        TileKind::Grass => {
+            if tile.ottd_type_nibble() != 0 {
+                return Err(occupied_error);
+            }
+            Ok(LockBuildTilePlan {
+                water_class: WaterClass::Canal,
+                owner: state.active_company.0,
+                clear_on_build: true,
+                clear_cost: clear_land_cost(state, tile),
+                add_canal_cost: !is_middle,
+            })
+        }
+        TileKind::Forest => Ok(LockBuildTilePlan {
+            water_class: WaterClass::Canal,
+            owner: state.active_company.0,
+            clear_on_build: true,
+            clear_cost: clear_tree_cost(state, tile),
+            add_canal_cost: !is_middle,
+        }),
+        // `CoalField` es la representación semántica histórica de un campo
+        // `MP_CLEAR`; su limpieza usa la entrada `PR_CLEAR_FIELDS` nativa.
+        TileKind::CoalField => Ok(LockBuildTilePlan {
+            water_class: WaterClass::Canal,
+            owner: state.active_company.0,
+            clear_on_build: true,
+            clear_cost: fields_clear_cost(&state.global_economy),
+            add_canal_cost: !is_middle,
+        }),
+        TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
+        _ => Err(occupied_error),
+    }
+}
+
+/// Ejecuta `DoClearSquare` para una parte de tierra o para el centro acuático.
+fn clear_lock_build_tile(
+    state: &mut GameState,
+    c: TileCoord,
+    plan: LockBuildTilePlan,
+) -> Result<(), CommandError> {
+    if !plan.clear_on_build {
+        return Ok(());
+    }
+    clear_tile_after_native_water_restore(&mut state.map, c)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    clear_neighbour_non_flooding_states(&mut state.map, c);
+    Ok(())
+}
+
 /// Escribe una parte de `MakeLockTile`, normalizando todos los campos raw que
 /// `OpenTTD` reinicia al reemplazar la tesela.
 #[must_use]
-fn make_lock_tile(original: Tile, owner: u8, direction: u8, part: u8) -> Tile {
+fn make_lock_tile(
+    original: Tile,
+    owner: u8,
+    direction: u8,
+    part: u8,
+    water_class: WaterClass,
+) -> Tile {
     let mut tile = original;
     tile.kind = TileKind::Water;
     tile.mapt = 0x60 | (original.mapt & 0x0F);
-    tile.m1 = set_water_class_m1(owner & 0x1F, water_class_from_m1(original.m1));
+    tile.m1 = set_water_class_m1(owner & 0x1F, water_class);
     tile.m2 = 0;
     tile.m2_hi = 0;
     tile.m3 = 0;
@@ -1277,24 +1473,9 @@ pub(crate) fn check_place_lock(
 ) -> Result<(), CommandError> {
     let map = &state.map;
     check_in_bounds(map, c)?;
-    let center = map.get(c).ok_or(CommandError::OutOfBounds)?;
-    if center.kind != TileKind::Water || water_tile_type(center) != WATER_TILE_TYPE_CLEAR {
-        return Err(CommandError::CannotPlaceStationOnOccupiedTile);
-    }
     let (a, b) = lock_axis_neighbors(c, axis_y);
     check_in_bounds(map, a)?;
     check_in_bounds(map, b)?;
-    for endpoint in [a, b] {
-        if !crate::ship_movement::is_water_network_tile_at(map, endpoint) {
-            return Err(CommandError::StationNotAdjacentToTransport);
-        }
-        let tile = map.get(endpoint).ok_or(CommandError::OutOfBounds)?;
-        if tile.kind != TileKind::Water || water_tile_type(tile) != WATER_TILE_TYPE_CLEAR {
-            return Err(CommandError::BuildingMustBeDemolished);
-        }
-        check_clear_water_owner(state, tile)?;
-    }
-    check_clear_water_owner(state, center)?;
     if [c, a, b]
         .iter()
         .any(|tile| state.vehicles.iter().any(|vehicle| vehicle.pos == *tile))
@@ -1307,7 +1488,10 @@ pub(crate) fn check_place_lock(
         return Err(CommandError::CannotPlaceStationOnOccupiedTile);
     }
     let direction = lock_direction_for_heights(axis_y, ha, hb);
-    let lower = lock_tiles_from_middle(c, direction)[1];
+    let [middle, lower, upper] = lock_tiles_from_middle(c, direction);
+    let _middle_plan = check_lock_build_tile(state, middle, true)?;
+    let _lower_plan = check_lock_build_tile(state, lower, false)?;
+    let _upper_plan = check_lock_build_tile(state, upper, false)?;
     check_non_freeform_edge(map, lower, state.construction.freeform_edges)?;
     Ok(())
 }
@@ -1318,22 +1502,69 @@ pub(in crate::command) fn place_lock(
     axis_y: bool,
 ) -> Result<(), CommandError> {
     check_place_lock(state, c, axis_y)?;
-    let (lower, upper) = lock_axis_neighbors(c, axis_y);
+    let (first, second) = lock_axis_neighbors(c, axis_y);
+    let first_height = state
+        .map
+        .get(first)
+        .ok_or(CommandError::OutOfBounds)?
+        .height;
+    let second_height = state
+        .map
+        .get(second)
+        .ok_or(CommandError::OutOfBounds)?
+        .height;
+    let direction = lock_direction_for_heights(axis_y, first_height, second_height);
+    let [middle, lower, upper] = lock_tiles_from_middle(c, direction);
+    let plans = [
+        check_lock_build_tile(state, middle, true)?,
+        check_lock_build_tile(state, lower, false)?,
+        check_lock_build_tile(state, upper, false)?,
+    ];
+    let construction_cost =
+        plans
+            .iter()
+            .fold(lock_build_cost(&state.global_economy), |cost, plan| {
+                cost.saturating_add(plan.clear_cost)
+                    .saturating_add(if plan.add_canal_cost {
+                        canal_build_cost(&state.global_economy)
+                    } else {
+                        0
+                    })
+            });
+    for (coord, plan) in [(middle, plans[0]), (lower, plans[1]), (upper, plans[2])] {
+        clear_lock_build_tile(state, coord, plan)?;
+    }
+    let middle_original = state.map.get(middle).ok_or(CommandError::OutOfBounds)?;
     let lower_original = state.map.get(lower).ok_or(CommandError::OutOfBounds)?;
     let upper_original = state.map.get(upper).ok_or(CommandError::OutOfBounds)?;
-    let middle_original = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
-    let direction =
-        lock_direction_for_heights(axis_y, lower_original.height, upper_original.height);
-    let middle_tile = make_lock_tile(middle_original, state.active_company.0, direction, 0);
-    let lower_tile = make_lock_tile(lower_original, lower_original.m1 & 0x1F, direction, 1);
-    let upper_tile = make_lock_tile(upper_original, upper_original.m1 & 0x1F, direction, 2);
+    let middle_tile = make_lock_tile(
+        middle_original,
+        plans[0].owner,
+        direction,
+        0,
+        plans[0].water_class,
+    );
+    let lower_tile = make_lock_tile(
+        lower_original,
+        plans[1].owner,
+        direction,
+        1,
+        plans[1].water_class,
+    );
+    let upper_tile = make_lock_tile(
+        upper_original,
+        plans[2].owner,
+        direction,
+        2,
+        plans[2].water_class,
+    );
     for (coord, tile) in [(c, middle_tile), (lower, lower_tile), (upper, upper_tile)] {
         state
             .map
             .set_tile(coord, tile)
             .map_err(|_| CommandError::OutOfBounds)?;
     }
-    state.economy.money -= lock_build_cost(&state.global_economy);
+    state.economy.money -= construction_cost;
     Ok(())
 }
 

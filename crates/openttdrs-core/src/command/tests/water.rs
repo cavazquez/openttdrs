@@ -1,8 +1,9 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
 use crate::economy::{
-    canal_clear_cost, lock_build_cost, lock_clear_cost, rough_clear_cost, ship_depot_build_cost,
-    ship_depot_clear_cost, station_build_cost, water_clear_cost,
+    canal_build_cost, canal_clear_cost, lock_build_cost, lock_clear_cost, rough_clear_cost,
+    ship_depot_build_cost, ship_depot_clear_cost, station_build_cost, trees_clear_cost,
+    water_clear_cost,
 };
 use crate::test_fixtures::SandboxMap;
 use crate::{
@@ -238,7 +239,7 @@ fn place_lock_writes_native_three_part_contract() {
     assert_eq!(middle_tile.m1 & 0x1F, 0, "middle pertenece al constructor");
     assert_eq!(middle_tile.m1 & 0x80, 0);
     assert_eq!(water_class_from_m1(middle_tile.m1), WaterClass::Sea);
-    assert_eq!(middle_tile.m6, 0x03);
+    assert_eq!(middle_tile.m6, 0, "el centro se limpia antes de MakeLock");
 
     let lower_tile = s.map.get(lower).unwrap();
     assert_eq!(lower_tile.mapt, 0x62);
@@ -263,7 +264,74 @@ fn place_lock_writes_native_three_part_contract() {
         assert_eq!(tile.m7, 0);
         assert_eq!(tile.m8, 0);
     }
-    assert_eq!(s.economy.money, money - lock_build_cost(&s.global_economy));
+    assert_eq!(
+        s.economy.money,
+        money - water_clear_cost(&s.global_economy) - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_auto_clears_grass_endpoints_and_charges_canal_cost() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    for coord in [lower, middle, upper] {
+        s.map.set_kind(coord, TileKind::Grass).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+
+    apply_command(&mut s, &Command::PlaceLock(middle, false)).unwrap();
+
+    for coord in [lower, middle, upper] {
+        assert_eq!(s.map.get_kind(coord), Some(TileKind::Water));
+        assert_eq!(
+            water_class_from_m1(s.map.get(coord).unwrap().m1),
+            WaterClass::Canal
+        );
+    }
+    assert_eq!(s.map.get(lower).unwrap().m1 & 0x1F, s.active_company.0);
+    assert_eq!(
+        s.economy.money,
+        money - 2 * canal_build_cost(&s.global_economy) - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_auto_clears_forest_endpoint_with_tree_price() {
+    let mut s = GameState::new(10, 6);
+    let lower = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let upper = TileCoord::new(4, 2);
+    s.map.set_kind(lower, TileKind::Forest).unwrap();
+    s.map
+        .set_mapt_m5(lower, 0x40, crate::map::with_tree_count(0, 2))
+        .unwrap();
+    s.map.set_kind(middle, TileKind::Water).unwrap();
+    s.map.set_kind(upper, TileKind::Water).unwrap();
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+
+    apply_command(&mut s, &Command::PlaceLock(middle, false)).unwrap();
+
+    let lower_tile = s.map.get(lower).unwrap();
+    assert_eq!(lower_tile.kind, TileKind::Water);
+    assert_eq!(water_class_from_m1(lower_tile.m1), WaterClass::Canal);
+    assert_eq!(lower_tile.m2, 0);
+    assert_eq!(lower_tile.m3, 0);
+    assert_eq!(
+        s.economy.money,
+        money
+            - 3 * trees_clear_cost(&s.global_economy)
+            - canal_build_cost(&s.global_economy)
+            - water_clear_cost(&s.global_economy)
+            - lock_build_cost(&s.global_economy)
+    );
 }
 
 #[test]

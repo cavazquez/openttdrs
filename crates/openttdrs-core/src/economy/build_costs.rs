@@ -97,6 +97,12 @@ pub fn water_clear_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::ClearWater, 1, 0)
 }
 
+/// Coste base de limpiar hierba con densidad (`PR_CLEAR_GRASS`).
+#[must_use]
+pub fn grass_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearGrass, 1, 0)
+}
+
 /// Coste de limpiar un canal (`PR_CLEAR_CANAL`).
 #[must_use]
 pub fn canal_clear_cost(ge: &GlobalEconomy) -> i64 {
@@ -107,6 +113,30 @@ pub fn canal_clear_cost(ge: &GlobalEconomy) -> i64 {
 #[must_use]
 pub fn rough_clear_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::ClearRough, 1, 0)
+}
+
+/// Coste de limpiar roca (`PR_CLEAR_ROCKS`).
+#[must_use]
+pub fn rocks_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearRocks, 1, 0)
+}
+
+/// Coste de limpiar un campo (`PR_CLEAR_FIELDS`).
+#[must_use]
+pub fn fields_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearFields, 1, 0)
+}
+
+/// Coste base de limpiar una tesela de árboles (`PR_CLEAR_TREES`).
+#[must_use]
+pub fn trees_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearTrees, 1, 0)
+}
+
+/// Coste de construir una tesela adicional de canal (`PR_BUILD_CANAL`).
+#[must_use]
+pub fn canal_build_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::BuildCanal, 1, 0)
 }
 
 /// Coste de construir una esclusa (`PR_BUILD_LOCK`).
@@ -257,6 +287,30 @@ mod tests {
         assert_eq!(
             lock_clear_cost(&ge),
             medium_default_price(PriceIndex::ClearLock)
+        );
+        assert_eq!(
+            canal_build_cost(&ge),
+            medium_default_price(PriceIndex::BuildCanal)
+        );
+        assert_eq!(
+            grass_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearGrass)
+        );
+        assert_eq!(
+            rough_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearRough)
+        );
+        assert_eq!(
+            rocks_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearRocks)
+        );
+        assert_eq!(
+            fields_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearFields)
+        );
+        assert_eq!(
+            trees_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearTrees)
         );
     }
 

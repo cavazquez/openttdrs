@@ -5478,5 +5478,17 @@ Actualización #329/#567-WATER-FREEFORM-EDGES (2026-09-12): `ClearTile_Water`
 rechaza agua clara en los cuatro márgenes cuando `construction.freeform_edges`
 está desactivado, y `PlaceLock` aplica el mismo contrato al extremo `Lower`
 derivado de la pendiente. La costa conserva su ruta nativa sin ese guard.
-Quedan pendientes el auto-clear de esclusas sobre tierra y los criterios de
-infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.
+Quedan pendientes los puentes/estructuras y objetos dentro de la limpieza
+automática, además de los criterios de infraestructura, callbacks, pathfinding
+y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-AUTO-CLEAR (2026-09-12): `PlaceLock` ahora
+porta la secuencia de `DoBuildLock`: limpia el centro siempre, limpia cada
+extremo terrestre antes de convertirlo en canal y deja intacto el owner/clase
+de los extremos que ya eran agua. Se añadieron `PR_CLEAR_GRASS`,
+`PR_CLEAR_ROCKS`, `PR_CLEAR_FIELDS`, `PR_CLEAR_TREES`, el recargo de nieve,
+`PR_BUILD_CANAL` y el multiplicador tropical de árboles; la operación mantiene
+preflight atómico y cobra el coste compuesto una sola vez. Las regresiones
+cubren dos extremos de hierba, un extremo boscoso y el reset raw del centro.
+Siguen pendientes los puentes, estructuras y objetos autoremove, callbacks,
+pathfinding, infraestructura y aceptación visual/framebuffer.

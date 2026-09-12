@@ -1521,3 +1521,15 @@ guard `IsInsideMM(..., 1, Map::Max() - 1)` de `ClearTile_Water` cuando
 `freeform_edges` está desactivado. `CmdBuildLock` aplica la misma ventana al
 tile `Lower`; la ruta de costa no recibe ese guard. El auto-clear sobre tierra
 y el resto de criterios de #329/#567 siguen pendientes.
+
+### #329/#567-WATER-LOCK-AUTO-CLEAR — limpieza compuesta de esclusas
+
+Actualizado: 2026-09-12. `PlaceLock` replica la secuencia de `DoBuildLock` para
+el subconjunto local de terreno despejado y árboles: `CMD_LANDSCAPE_CLEAR` se
+evalúa primero para el centro, luego para cada extremo que no era `MP_WATER`,
+y finalmente `MakeLock` materializa las tres partes. Los costes usan las
+entradas nativas de hierba, rough, rocas, campos, árboles, agua/canal y
+`PR_BUILD_CANAL`; la limpieza de árboles aplica el factor tropical y el
+preflight mantiene la mutación atómica. Estructuras, puentes y objetos
+autoremove aún tienen contratos separados y bloquean la construcción hasta
+que se porten.

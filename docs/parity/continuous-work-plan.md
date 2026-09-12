@@ -5241,3 +5241,12 @@ ese slot, aunque conserva el envejecimiento, servicio y órdenes del handler.
 La regresión verifica que fiabilidad, acumulador y avería activa no cambian
 mientras el autobús está bloqueado. #329/#567 continúan abiertas por callbacks,
 pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-CANCEL-ROAD-SERVICE (2026-09-12): si el depósito deja
+de ser alcanzable mientras un vehículo vial tiene una orden implícita de
+servicio (`stop:false`), el barrido la retira y restaura la siguiente orden del
+circuito, igual que `CheckIfRoadVehNeedsService` convierte el `current_order`
+temporal nativo en `Dummy`. Las órdenes persistentes (`stop:true`) no se
+alteran. La regresión cubre la demolición del único depósito entre dos slots
+económicos. #329/#567 continúan abiertas por callbacks, pathfinding y
+aceptación visual/framebuffer.

@@ -685,7 +685,7 @@ fn check_ship_needs_service(state: &mut crate::GameState, idx: usize) {
         MAX_SHIP_DEPOT_SEARCH_DISTANCE,
         &mut state.runtime.depot_spatial_index,
     ) else {
-        cancel_pending_ship_service_order(state, idx);
+        cancel_pending_implicit_service_order(state, idx);
         return;
     };
     // Fuera de un depósito, conservar una orden existente evita insertar una
@@ -717,7 +717,7 @@ fn check_ship_needs_service(state: &mut crate::GameState, idx: usize) {
 /// modelo local representa esa orden temporal dentro de `orders`, por lo que
 /// hay que eliminar la entrada `stop:false` que este módulo insertó y volver a
 /// sincronizar el destino de la orden real que queda debajo.
-fn cancel_pending_ship_service_order(state: &mut crate::GameState, idx: usize) {
+fn cancel_pending_implicit_service_order(state: &mut crate::GameState, idx: usize) {
     let Some(vehicle) = state.vehicles.get(idx) else {
         return;
     };
@@ -760,15 +760,16 @@ fn check_road_vehicle_needs_service(state: &mut crate::GameState, idx: usize) {
     let Some(vehicle) = state.vehicles.get(idx) else {
         return;
     };
+    let has_persistent_depot_order = vehicle
+        .orders
+        .iter()
+        .any(|order| matches!(order, VehicleOrder::Depot { stop: true, .. }));
     if !matches!(
         vehicle.kind,
         VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
     ) || !vehicle.running
         || vehicle.prev_unit.is_some()
-        || vehicle
-            .orders
-            .iter()
-            .any(|o| matches!(o, VehicleOrder::Depot { .. }))
+        || has_persistent_depot_order
     {
         return;
     }
@@ -790,6 +791,7 @@ fn check_road_vehicle_needs_service(state: &mut crate::GameState, idx: usize) {
         kind,
         &mut state.runtime.depot_spatial_index,
     ) else {
+        cancel_pending_implicit_service_order(state, idx);
         return;
     };
     let dist = crate::economy::manhattan_distance(pos, depot);
@@ -1379,6 +1381,51 @@ mod tests {
             state.vehicles[0].orders[0],
             VehicleOrder::Depot { stop: false, .. }
         ));
+    }
+
+    #[test]
+    fn road_service_order_is_removed_when_no_depot_is_reachable() {
+        use crate::vehicle::order::VehicleOrder;
+        use crate::{Command, GameState, TileKind, apply_command};
+
+        let mut state = GameState::new(12, 12);
+        let depot = TileCoord::new(6, 4);
+        let road = TileCoord::new(3, 4);
+        for x in 2..=5 {
+            apply_command(
+                &mut state,
+                &Command::PlaceRoadBits(TileCoord::new(x, 4), 0x0F),
+            )
+            .unwrap();
+        }
+        apply_command(&mut state, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+
+        let mut vehicle = Vehicle::new(1, VehicleKind::Bus, road, TileCoord::new(8, 4));
+        vehicle.running = true;
+        vehicle.service_interval_days = 1;
+        vehicle.last_service_day = 0;
+        vehicle.orders = vec![VehicleOrder::station(TileCoord::new(8, 4))];
+        state.vehicles.push(vehicle);
+        state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
+        state.sync_timers_from_tick();
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+        assert!(matches!(
+            state.vehicles[0].current_order_ref(),
+            Some(VehicleOrder::Depot { stop: false, .. })
+        ));
+
+        state.map.set_kind(depot, TileKind::Grass).unwrap();
+        state.runtime.depot_spatial_index.invalidate();
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(state.vehicles[0].orders.len(), 1);
+        assert!(matches!(
+            state.vehicles[0].current_order_ref(),
+            Some(VehicleOrder::Station { station, .. }) if *station == TileCoord::new(8, 4)
+        ));
+        assert_eq!(state.vehicles[0].dest, TileCoord::new(8, 4));
     }
 
     #[test]

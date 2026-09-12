@@ -431,6 +431,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                 &sim.state.runtime.roadstop_action5_newgrf_sprites,
                 climate,
                 &sim.state.newgrf_stack,
+                &sim.state.canal_feature_catalog,
                 Some(openttdrs_core::RoadStopWorldContext {
                     towns: &sim.state.towns,
                     companies: &sim.state.companies,

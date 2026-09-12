@@ -5962,3 +5962,12 @@ mismo criterio que `ViewportSortParentSprites`. La regresión cubre la caja
 literal y el spawn ECS junto con el suelo de agua. #326/#567 continúan
 abiertas por los producers y callbacks navales restantes, clipping, framebuffer
 y la aceptación raster completa.
+
+Corrección #326/#567-BUOY-CANAL-FEATURE (2026-09-12): el productor de boya
+recibe ahora `canal_feature_catalog` y aplica la vista `CF_BUOY` seleccionada
+por Action2/callback antes de crear el parent del compositor. El sprite
+custom conserva offsets y dimensiones NFO; el suelo de agua permanece en su
+capa propia y la ausencia de una vista válida cae al sprite vanilla. La
+regresión cubre el reemplazo ECS y confirma que bounds, depth e inserción
+siguen siendo los de `TILE_SEQ_LINE`; #326/#567 continúa abierta por las
+familias navales restantes, clipping, framebuffer y la aceptación raster.

@@ -4803,3 +4803,14 @@ mismo criterio que `ViewportSortParentSprites`. La regresión cubre la caja
 literal y el spawn ECS junto con el suelo de agua. #326/#567 continúan
 abiertas por los producers y callbacks navales restantes, clipping, framebuffer
 y la aceptación raster completa.
+
+Corrección #326/#567-BUOY-CANAL-FEATURE (2026-09-12): el producer de boya ya
+recibe el catálogo de canales del estado y resuelve `CF_BUOY` mediante el
+contexto Action2/variables de la tesela. Las vistas y callbacks de un Canal o
+NewGRF pueden sustituir el sprite de `SPR_IMG_BUOY`; cuando no hay una vista
+usable se conserva el fallback OpenGFX vanilla. La sustitución sólo cambia la
+imagen y sus offsets NFO: el parent mantiene la línea `TILE_SEQ_LINE` de
+extensión cero, su depth global y la clave de inserción. La regresión cubre el
+override de catálogo y la caja sortable; #326/#567 continúan abiertas por los
+producers navales restantes, clipping, framebuffer y la aceptación raster
+completa.

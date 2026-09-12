@@ -29,6 +29,8 @@ use crate::sprites::{WATER_LOCK_SPRITE_META, WATER_RIVER_SLOPE_SPRITE_META};
 
 /// `SPR_FLAT_WATER_TILE` de `table/sprites.h`.
 const SPR_FLAT_WATER_TILE: u32 = 4061;
+/// `SPR_IMG_BUOY` resuelto por el OpenGFX del renderer.
+const SPR_BUOY: u32 = 9282;
 /// `SPR_CANAL_DIKES_BASE` de `table/sprites.h`.
 pub(crate) const SPR_CANAL_DIKES_BASE: u32 = 5380;
 /// Tipo Action5 y primer slot de los diques dentro de `0x08 Canals`.
@@ -50,10 +52,10 @@ const SPR_SHORE_BASE: u32 = 5936;
 /// que usa `GetCanalSprite` en OpenTTD.
 #[must_use]
 pub(crate) fn canal_feature_trace_sprite_id(feature_id: u8, slot: usize) -> u32 {
-    let base = if feature_id == openttdrs_core::CF_DIKES {
-        SPR_CANAL_DIKES_BASE
-    } else {
-        SPR_RIVER_SLOPE_BASE
+    let base = match feature_id {
+        openttdrs_core::CF_DIKES => SPR_CANAL_DIKES_BASE,
+        openttdrs_core::CF_BUOY => SPR_BUOY,
+        _ => SPR_RIVER_SLOPE_BASE,
     };
     base.saturating_add(u32::try_from(slot).unwrap_or(u32::MAX))
 }
@@ -237,6 +239,32 @@ fn canal_feature_sprite_with_context_and_slot(
         decoded,
         selected_slot,
     ))
+}
+
+/// Resuelve la vista `CF_BUOY` que `DrawTile_Station` suma a
+/// `SPR_IMG_BUOY` mediante `GetCanalSprite`.
+///
+/// Las boyas no usan el flag `CFF_HAS_FLAT_SPRITE`: su primer slot es el
+/// sprite del objeto, no el suelo de agua. Separar esta entrada del helper de
+/// superficies evita que una sustitución de Canal se aplique por accidente al
+/// ground y permite que la llamada conserve el contexto de random/altura de la
+/// tesela.
+pub(crate) fn canal_feature_buoy_sprite(
+    ctx: &TileRenderContext,
+    map: &Map,
+    canal_features: &[openttdrs_core::CanalFeatureDef],
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
+) -> Option<(Sprite, DecodedSprite, usize)> {
+    let mut action2 = canal_action2_context_for_tile(map, ctx);
+    canal_feature_sprite_with_context_and_slot(
+        canal_features,
+        openttdrs_core::CF_BUOY,
+        0,
+        &mut action5_sprites,
+        &mut images,
+        &mut action2,
+    )
 }
 
 /// Resuelve el primer sprite plano de un feature de canal que declara

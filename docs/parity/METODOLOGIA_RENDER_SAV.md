@@ -519,3 +519,11 @@ extensión cero se conserva como parent sortable, no como sprite directo. La
 regresión valida la caja `TILE_SEQ_LINE`, la clave de inserción y el spawn
 ECS junto al suelo de agua; esto cubre el contrato estructural, no una nueva
 aceptación raster completa.
+
+Corrección #326/#567-BUOY-CANAL-FEATURE (2026-09-12): el spawn de estación
+inyecta el catálogo `CF_BUOY` en la ruta de boya y conserva el contexto de
+Action2 para seleccionar vistas/callbacks de Canal o NewGRF. El fallback
+vanilla sigue siendo explícito cuando no existe una vista usable. La prueba
+ECS compara la imagen materializada y verifica simultáneamente que no cambian
+la caja de extensión cero ni el depth del parent sortable; la aceptación
+raster de una sustitución real queda como paso posterior del oráculo.

@@ -14,8 +14,9 @@ use super::transport::{
     spawn_rail_catenary_for_surface, spawn_road_catenary_for_type,
 };
 use super::water::{
-    canal_feature_surface_ground, canal_feature_trace_sprite_id, river_edge_sprite_offset,
-    spawn_canal_dikes_with_action5, spawn_river_edges, spawn_river_slope_ground_with_action5,
+    canal_feature_buoy_sprite, canal_feature_surface_ground, canal_feature_trace_sprite_id,
+    river_edge_sprite_offset, spawn_canal_dikes_with_action5, spawn_river_edges,
+    spawn_river_slope_ground_with_action5,
 };
 use super::{
     catenary_under_low_bridge,
@@ -1631,6 +1632,7 @@ pub(crate) fn spawn_station_tile(
         roadstop_action5,
         climate,
         newgrf_stack,
+        &[],
         None,
     );
 }
@@ -1664,6 +1666,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
     roadstop_action5: &[Option<openttdrs_core::DecodedSprite>],
     climate: openttdrs_core::Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    canal_features: &[openttdrs_core::CanalFeatureDef],
     world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
 ) {
     let tileh = ctx.info.tileh;
@@ -2759,22 +2762,52 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             } else {
                 slope_half_h(tileh)
             };
+            let custom_buoy = canal_feature_buoy_sprite(
+                ctx,
+                map,
+                canal_features,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
+            let (sprite, sprite_id, mut position) =
+                if let Some((sprite, decoded, selected_slot)) = custom_buoy {
+                    (
+                        tint_building_sprite(sprite),
+                        canal_feature_trace_sprite_id(openttdrs_core::CF_BUOY, selected_slot),
+                        overlay_pos(
+                            ctx.iso_pos,
+                            f32::from(decoded.x_offs),
+                            f32::from(decoded.y_offs),
+                            f32::from(decoded.width),
+                            f32::from(decoded.height),
+                            base_z,
+                            0.04,
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                        ),
+                    )
+                } else {
+                    (
+                        tint_building_sprite(assets.buoy.sprite()),
+                        SPR_BUOY,
+                        tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04, half_h),
+                    )
+                };
             WorldDrawTrace::record_sprite_with_geometry(
                 "station-buoy",
                 "sortable",
-                SPR_BUOY,
+                sprite_id,
                 false,
                 (0, 0, 0),
                 0,
                 Some(buoy_trace_bounds()),
             );
-            let mut position = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04, half_h);
             let source_depth = viewport_source_depth(position.z, ctx.tx, dims.0);
             position.z = source_depth;
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                tint_building_sprite(assets.buoy.sprite()),
+                sprite,
                 Transform::from_translation(position),
                 ViewportSortableParent {
                     sprite_id: SPR_BUOY,

@@ -970,6 +970,107 @@ fn buoy_station_water_keeps_openttd_ground_xrel_center() {
     );
 }
 
+#[test]
+fn buoy_station_uses_canal_feature_sprite_when_the_catalog_overrides_it() {
+    let assets = boot_assets_app();
+    let buoy = TileCoord::new(3, 3);
+    let mut map = fresh_map8();
+    map.set_tile(
+        buoy,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m6: openttdrs_core::station::STATION_TYPE_BUOY << 3,
+            ..tile_template()
+        },
+    )
+    .expect("buoy station tile");
+    let custom = DecodedSprite {
+        width: 3,
+        height: 4,
+        x_offs: -2,
+        y_offs: -7,
+        rgba: [12, 210, 96, 255].repeat(12),
+        mask: Vec::new(),
+    };
+    let mut canal_features = openttdrs_core::vanilla_canal_feature_catalog();
+    canal_features[usize::from(openttdrs_core::CF_BUOY)] = openttdrs_core::CanalFeatureDef {
+        id: openttdrs_core::CF_BUOY,
+        callback_mask: 0,
+        flags: 0,
+        from_newgrf: true,
+        grfid: 0x4255_4F59,
+        newgrf_views: vec![custom.clone()],
+        newgrf_runtime: None,
+    };
+    let road_catalog = vanilla_road_type_catalog();
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfAction5SpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: ResMut<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_station_tile_with_world_and_road_types(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, buoy.x as u32, buoy.y as u32),
+                    &[],
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    &road_catalog,
+                    None,
+                    None,
+                    Some(&mut images),
+                    &[],
+                    None,
+                    &[],
+                    Some(&mut cache),
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                    &canal_features,
+                    None,
+                );
+            },
+        )
+        .expect("custom buoy spawn");
+
+    let (parent, _sprite, transform) = world
+        .query::<(&ViewportSortableParent, &Sprite, &Transform)>()
+        .iter(&world)
+        .find(|(parent, sprite, _)| {
+            parent.sprite_id == 9282
+                && world
+                    .resource::<Assets<Image>>()
+                    .get(&sprite.image)
+                    .and_then(|image| image.data.as_deref())
+                    == Some(custom.rgba.as_slice())
+        })
+        .expect("parent sortable de boya custom");
+    assert_eq!(parent.sprite_id, 9282);
+    assert_eq!(
+        parent.bounds,
+        ParentSpriteBounds::new(52, 47, 0, 51, 46, -1)
+    );
+    assert_eq!(parent.source_depth, transform.translation.z);
+}
+
 /// Un muelle vanilla son dos teselas distintas: la de tierra conserva una
 /// pendiente y la de agua es plana. En Kale, (137,2)/(138,2) son precisamente
 /// la pareja `m5=2/4`; intercambiar sus layouts deja el muelle aparentemente
@@ -1541,6 +1642,7 @@ fn runtime_only_road_waypoint_surfaces_keep_both_newgrf_views() {
                     None,
                     &[],
                     TEST_CLIMATE,
+                    &[],
                     &[],
                     None,
                 );
@@ -4183,6 +4285,7 @@ fn assert_drive_through_stop_overlay_groups(pure_tram: bool) {
                     &[],
                     TEST_CLIMATE,
                     &[],
+                    &[],
                     None,
                 );
             },
@@ -4325,6 +4428,7 @@ fn assert_bay_roadstop_group_replaces_station_surface(slope: bool) {
                     None,
                     &[],
                     TEST_CLIMATE,
+                    &[],
                     &[],
                     None,
                 );

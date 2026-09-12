@@ -5915,3 +5915,10 @@ entidad con facilidad aérea una sola vez, incluyendo Oil Rig; la UI muestra
 ambos valores y la regresión cubre ownership rival y tipos especiales. El
 frente #329/#567 continúa abierto por conversión de capas existentes,
 callbacks, arrastre de áreas y aceptación visual/framebuffer.
+
+Corrección #330-TRAIN-LINE-DEPOT-EVENT (2026-09-12): el escenario ferroviario
+de paridad ahora inicia el tren con estado físico dentro del depósito, precarga
+el umbral de salida y conserva la potencia sintética de la unidad legacy. La
+traza emite DepotExit en el primer tick sin añadir una espera artificial de
+37 ticks; la regresión completa de parity_system y la suite del core quedan
+verdes.

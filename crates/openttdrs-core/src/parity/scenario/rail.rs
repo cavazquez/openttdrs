@@ -152,10 +152,15 @@ pub fn build_train_line() -> GameState {
     if let Some(path) = find_path(&state.map, train.pos, train.dest, PathNetwork::Rail) {
         train.path = VecDeque::from(path);
     }
-    // Escenario: ya en servicio (sin espera de 37 ticks al spawnear).
-    train.depot_leave_cleared = true;
+    // El escenario comienza físicamente dentro del depósito, pero precarga el
+    // umbral para emitir DepotExit en el primer tick sin añadir 37 ticks de
+    // espera a la traza.
+    train.depot_leave_cleared = false;
+    train.wait_counter = crate::depot_leave::TRAIN_DEPOT_LEAVE_WAIT_TICKS;
     // Escenario legado de una unidad abstracta: no representa una locomotora
     // comprable y conserva la capacidad sintética usada por las trazas.
+    // La potencia mínima permite pasar el preflight de salida aun sin motor.
+    train.cached_power_hp = 1;
     train.engine_id = None;
     state.vehicles.push(train);
 

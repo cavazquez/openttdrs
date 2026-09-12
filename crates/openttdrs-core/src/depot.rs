@@ -634,12 +634,7 @@ mod tests {
         let mut index = DepotSpatialIndex::default();
         assert_eq!(index.len_for(&s.map, VehicleKind::Aircraft), 1);
         assert_eq!(
-            nearest_depot_tile_indexed(
-                &s.map,
-                from,
-                VehicleKind::Aircraft,
-                &mut index,
-            ),
+            nearest_depot_tile_indexed(&s.map, from, VehicleKind::Aircraft, &mut index,),
             Some(far_hangar)
         );
     }

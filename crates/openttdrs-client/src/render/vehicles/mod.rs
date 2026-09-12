@@ -458,6 +458,53 @@ mod tests {
     }
 
     #[test]
+    fn pick_vehicle_uses_catalog_sprite_offsets() {
+        let mut sim = SimWorld {
+            state: openttdrs_core::GameState::new(16, 16),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let tile = TileCoord::new(4, 4);
+        sim.state
+            .map
+            .set_kind(tile, TileKind::Road)
+            .expect("road tile");
+
+        let mut custom = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_BUS_MPS)
+            .expect("vanilla bus")
+            .clone();
+        custom.id = openttdrs_core::NEWGRF_ENGINE_ID_BASE + 73;
+        custom.newgrf_views = vec![openttdrs_core::DecodedSprite {
+            width: 4,
+            height: 4,
+            x_offs: 96,
+            y_offs: 0,
+            rgba: vec![255; 4 * 4 * 4],
+            mask: Vec::new(),
+        }];
+        sim.state.engine_catalog.push(custom.clone());
+
+        let mut vehicle = Vehicle::new(43, VehicleKind::Bus, tile, tile);
+        vehicle.engine_id = Some(custom.id);
+        sim.state.vehicles.push(vehicle);
+
+        let vehicle = &sim.state.vehicles[0];
+        let pose = openttdrs_core::extrapolate_vehicle_pose(vehicle, 0.0);
+        let catalog_pos = vehicle_sprite_pos_at_with_catalog(
+            vehicle,
+            &sim.state.map,
+            pose,
+            Some(&sim.state.engine_catalog),
+        )
+        .truncate();
+        let vanilla_pos = vehicle_sprite_pos_at(vehicle, &sim.state.map, pose).truncate();
+
+        assert!(catalog_pos.distance(vanilla_pos) > 34.0);
+        assert_eq!(pick_vehicle_id_at_world(catalog_pos, &sim), Some(43));
+        assert_eq!(pick_vehicle_id_at_world(vanilla_pos, &sim), None);
+    }
+
+    #[test]
     fn vehicle_index_and_sprite_helpers_work() {
         let mut idx = VehicleIndex::default();
         let v = sample_vehicle(7);

@@ -6,9 +6,9 @@ use crate::bridge_spec::{
 };
 use crate::economy::{
     canal_build_cost, canal_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
-    lock_clear_cost, rail_clear_cost, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
-    ship_depot_clear_cost, signal_clear_cost, station_build_cost, trees_clear_cost,
-    water_clear_cost,
+    lock_clear_cost, rail_clear_cost, road_depot_clear_cost, rocks_clear_cost, rough_clear_cost,
+    ship_depot_build_cost, ship_depot_clear_cost, signal_clear_cost, station_build_cost,
+    trees_clear_cost, water_clear_cost,
 };
 use crate::map::rail_bits::RAIL_TILE_NORMAL;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
@@ -1466,6 +1466,25 @@ fn check_lock_road_tile(
     })
 }
 
+/// Prepara el despeje manual de un depósito de carretera.
+fn check_lock_road_depot_tile(
+    state: &GameState,
+    is_middle: bool,
+    tile: Tile,
+) -> Result<LockBuildTilePlan, CommandError> {
+    let owner = tile.m1 & 0x1F;
+    if owner != (state.active_company.0 & 0x1F) {
+        return Err(CommandError::TileNotOwned);
+    }
+    Ok(LockBuildTilePlan {
+        water_class: WaterClass::Canal,
+        owner: state.active_company.0,
+        clear_on_build: true,
+        clear_cost: road_depot_clear_cost(&state.global_economy),
+        add_canal_cost: !is_middle,
+    })
+}
+
 /// Cuenta las llamadas a `CMD_REMOVE_SINGLE_SIGNAL` que hace
 /// `ClearTile_Track` al retirar todos los carriles de una tesela.
 fn rail_signal_clear_count(tile: Tile) -> i64 {
@@ -1620,7 +1639,7 @@ fn lock_structure_clear_error(tile: Tile) -> Option<CommandError> {
         },
         TileKind::RoadBridge | TileKind::RailBridge => Some(CommandError::MustDemolishBridgeFirst),
         TileKind::RoadTunnel | TileKind::RailTunnel => Some(CommandError::MustDemolishTunnelFirst),
-        TileKind::Airport | TileKind::RoadDepot | TileKind::RailDepot | TileKind::ShipDepot => {
+        TileKind::Airport | TileKind::RailDepot | TileKind::ShipDepot => {
             Some(CommandError::BuildingMustBeDemolished)
         }
         TileKind::Grass
@@ -1628,6 +1647,7 @@ fn lock_structure_clear_error(tile: Tile) -> Option<CommandError> {
         | TileKind::Forest
         | TileKind::CoalField
         | TileKind::Road
+        | TileKind::RoadDepot
         | TileKind::Rail
         | TileKind::Void
         | TileKind::Unknown(_) => None,
@@ -1750,6 +1770,7 @@ fn check_lock_build_tile(
             add_canal_cost: !is_middle,
         }),
         TileKind::Road => check_lock_road_tile(state, is_middle, tile),
+        TileKind::RoadDepot => check_lock_road_depot_tile(state, is_middle, tile),
         TileKind::Rail => check_lock_rail_tile(state, tile),
         TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
         _ => lock_structure_clear_error(tile).map_or_else(|| Err(occupied_error), Err),
@@ -1766,9 +1787,17 @@ fn clear_lock_build_tile(
         return Ok(());
     }
     let was_rail = state.map.get_kind(c) == Some(TileKind::Rail);
+    let depot_id = state
+        .map
+        .get(c)
+        .filter(|tile| tile.kind == TileKind::RoadDepot)
+        .and_then(crate::depot::depot_id_from_tile);
     clear_tile_after_native_water_restore(&mut state.map, c)
         .map_err(|_| CommandError::OutOfBounds)?;
     clear_neighbour_non_flooding_states(&mut state.map, c);
+    if let Some(depot_id) = depot_id {
+        unregister_depot(state, depot_id);
+    }
     if was_rail {
         super::rail::refresh_rail_neighbors(state, c)?;
         crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, c);

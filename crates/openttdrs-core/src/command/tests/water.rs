@@ -2,8 +2,8 @@
 
 use crate::economy::{
     canal_build_cost, canal_clear_cost, lock_build_cost, lock_clear_cost, road_clear_cost,
-    road_clear_cost_factored, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
-    station_build_cost, trees_clear_cost, water_clear_cost,
+    road_clear_cost_factored, road_depot_clear_cost, rough_clear_cost, ship_depot_build_cost,
+    ship_depot_clear_cost, station_build_cost, trees_clear_cost, water_clear_cost,
 };
 use crate::test_fixtures::SandboxMap;
 use crate::{
@@ -386,6 +386,43 @@ fn place_lock_clears_single_road_and_charges_road_clear() {
 }
 
 #[test]
+fn place_lock_clears_road_depot_and_unregisters_it() {
+    let mut s = GameState::new(10, 6);
+    let entrance = TileCoord::new(2, 2);
+    let middle = TileCoord::new(3, 2);
+    let lower = TileCoord::new(3, 1);
+    let upper = TileCoord::new(3, 3);
+
+    apply_command(&mut s, &Command::PlaceRoad(entrance)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(middle, 0)).unwrap();
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::RoadDepot));
+    assert_eq!(s.depots.len(), 1);
+
+    for coord in [lower, upper] {
+        s.map.set_kind(coord, TileKind::Water).unwrap();
+    }
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, true);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command).expect("la demolición manual del depósito es válida");
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+    assert!(
+        s.depots.is_empty(),
+        "DEPT debe retirar el depósito demolido"
+    );
+    assert_eq!(s.map.get_kind(entrance), Some(TileKind::Road));
+    assert_eq!(
+        s.economy.money,
+        money - road_depot_clear_cost(&s.global_economy) - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
 fn place_lock_clears_composite_road_and_tram_without_auto_flag() {
     let cases = [(0x0A_u8, 0x00_u8, 0x0000_u16), (0x02, 0x05, 1 << 6)];
 
@@ -680,11 +717,6 @@ fn place_lock_preserves_native_errors_for_non_autoremove_structures() {
             TileKind::RailTunnel,
             0,
             crate::CommandError::MustDemolishTunnelFirst,
-        ),
-        (
-            TileKind::RoadDepot,
-            0,
-            crate::CommandError::BuildingMustBeDemolished,
         ),
         (
             TileKind::RailDepot,

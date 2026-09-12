@@ -199,6 +199,12 @@ pub fn road_depot_build_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::BuildDepotRoad, 1, 0)
 }
 
+/// Coste de retirar un depósito de carretera (`PR_CLEAR_DEPOT_ROAD`).
+#[must_use]
+pub fn road_depot_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearDepotRoad, 1, 0)
+}
+
 /// Coste del depósito naval (`PR_BUILD_DEPOT_SHIP`).
 #[must_use]
 pub fn ship_depot_build_cost(ge: &GlobalEconomy) -> i64 {
@@ -302,6 +308,10 @@ mod tests {
         assert_eq!(
             road_clear_cost_factored(&ge, true, 16),
             road_clear_cost(&ge) - road_build_cost_factored(&ge, 16) * 3 / 4
+        );
+        assert_eq!(
+            road_depot_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearDepotRoad)
         );
         assert_eq!(
             station_build_cost(&ge),

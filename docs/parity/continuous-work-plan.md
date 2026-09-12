@@ -5584,3 +5584,12 @@ depósito, túnel y puente siguen separados por sus contratos de demolición.
 Las regresiones cubren carretera compuesta, carretera+tranvía y atomicidad de
 un subtipo no soportado. #329/#567 siguen abiertas por infraestructura,
 callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-WATER-LOCK-ROAD-DEPOT-CLEAR (2026-09-12):
+`ClearTile_Road` manual ya puede retirar un depósito de carretera durante
+`DoBuildLock`, aplicando `PR_CLEAR_DEPOT_ROAD`, comprobando propiedad y
+desregistrando la fila `DEPT` antes de materializar el agua de la esclusa. El
+acceso vial vecino permanece intacto; el costo de canal se conserva para un
+depósito que ocupa un extremo. Depósitos ferroviarios, cruces, túneles,
+puentes y estaciones siguen en subetapas propias. #329/#567 siguen abiertas
+por infraestructura, callbacks, pathfinding y aceptación visual/framebuffer.

@@ -257,7 +257,7 @@ pub use economy::{
     fields_clear_cost, grass_clear_cost, increase_loan, inflation_income_factor,
     inflation_prices_factor, lock_build_cost, lock_clear_cost, manhattan_distance,
     monthly_loan_interest, object_clear_cost_factored, rail_build_cost_factored, rail_clear_cost,
-    road_build_cost_factored, road_clear_cost, road_clear_cost_factored,
+    road_build_cost_factored, road_clear_cost, road_clear_cost_factored, road_depot_clear_cost,
     road_stop_build_cost_factored, road_stop_clear_cost_factored, rocks_clear_cost,
     rough_clear_cost, terraform_cost_per_corner, ticks_to_transit_periods,
     transported_goods_income, transported_goods_income_for_climate,

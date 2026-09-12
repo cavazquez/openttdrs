@@ -383,6 +383,7 @@ fn build_vehicle_at_depot_charges_model_price() {
     .unwrap();
     assert_eq!(s.economy.money, money_before - engine.price);
     assert_eq!(s.vehicles[0].capacity, engine.capacity);
+    assert_eq!(s.vehicles[0].value, engine.price);
 }
 
 #[test]

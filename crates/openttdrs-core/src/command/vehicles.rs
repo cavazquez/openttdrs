@@ -341,6 +341,11 @@ pub(super) fn build_vehicle_at_depot(
         );
         }
     }
+    if let Some(front) = state.vehicles.iter_mut().find(|v| v.id == next_id) {
+        // `CmdBuildVehicle` stores the complete purchase cost on the first
+        // vehicle; articulated parts and the rear multihead stay at zero.
+        front.value = purchase_cost;
+    }
     state.economy.money -= purchase_cost;
     Ok(())
 }

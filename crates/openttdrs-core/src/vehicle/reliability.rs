@@ -344,10 +344,18 @@ impl super::model::Vehicle {
     /// Avanza el `day_counter` sólo para las unidades cuyo handler económico
     /// nativo lo incrementa. Los vagones sí lo hacen; las partes articuladas
     /// viales retornan antes de llegar a ese incremento.
-    pub fn advance_newgrf_day_counter(&mut self) {
-        if self.participates_in_economy_day() {
-            self.newgrf_day_counter = self.newgrf_day_counter.wrapping_add(1);
+    pub fn advance_newgrf_day_counter(&mut self) -> bool {
+        if !self.participates_in_economy_day() {
+            return false;
         }
+        self.newgrf_day_counter = self.newgrf_day_counter.wrapping_add(1);
+        self.newgrf_day_counter.is_multiple_of(8)
+    }
+
+    /// Aplica `DecreaseVehicleValue` con la misma aritmética de dinero entero
+    /// que el motor nativo.
+    pub fn decrease_vehicle_value(&mut self) {
+        self.value -= self.value >> 8;
     }
 
     fn participates_in_economy_day(&self) -> bool {
@@ -551,7 +559,9 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
             }
         }
         state.vehicles[i].age_vehicle_economy_day();
-        state.vehicles[i].advance_newgrf_day_counter();
+        if state.vehicles[i].advance_newgrf_day_counter() {
+            state.vehicles[i].decrease_vehicle_value();
+        }
         if state.vehicles[i].prev_unit.is_none() {
             state.vehicles[i].check_vehicle_breakdown_with_setting(
                 &mut state.random,
@@ -1212,6 +1222,26 @@ mod tests {
         assert_eq!(articulated_road.newgrf_day_counter, 41);
         assert_eq!(ship.newgrf_day_counter, 42);
         assert_eq!(aircraft.newgrf_day_counter, 42);
+    }
+
+    #[test]
+    fn economy_day_depreciates_value_on_every_eighth_unit_day() {
+        let mut state = crate::GameState::new(8, 8);
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        vehicle.newgrf_day_counter = 7;
+        vehicle.value = 25_600;
+        state.vehicles.push(vehicle);
+        state.economy_timer.date_fract = 0;
+
+        process_vehicle_economy_day(&mut state);
+
+        assert_eq!(state.vehicles[0].newgrf_day_counter, 8);
+        assert_eq!(state.vehicles[0].value, 25_500);
     }
 
     #[test]

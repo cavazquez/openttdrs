@@ -5188,3 +5188,12 @@ runtime. El callback CB32 sigue evaluándose antes del handler diario, pero el
 contador persistido ahora refleja qué unidades llegan al incremento nativo.
 #329/#567 continúan abiertas por callbacks, pathfinding y aceptación visual/
 framebuffer.
+
+Actualización #329/#567-VEHICLE-VALUE-DEPRECIATION (2026-09-11): las unidades
+compradas guardan ahora el coste de compra en `Vehicle::value`, y el barrido
+económico aplica `value -= value >> 8` cada ocho incrementos del contador
+diario, como `DecreaseVehicleValue`. Las piezas articuladas conservan valor
+cero, igual que las piezas materializadas por el constructor nativo; la
+regresión cubre el importe inicial y la depreciación escalonada. #329/#567
+continúan abiertas por valoración de activos, callbacks, pathfinding y
+aceptación visual/framebuffer.

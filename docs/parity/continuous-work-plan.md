@@ -5639,3 +5639,9 @@ el waypoint ferroviario de `ClearTile_Station` usa `PR_CLEAR_WAYPOINT_RAIL`
 (base 80), no el precio de limpieza de una parada vial. El índice y su
 recálculo de inflación quedan expuestos mediante `rail_waypoint_clear_cost`, y
 la prueba del lock verifica el precio nativo específico.
+
+Corrección de contrato #329/#567-ECONOMY-PRICE-INDEX-LAYOUT (2026-09-12):
+la tabla `PriceIndex` vuelve a usar las posiciones nativas de `pricebase.h`
+para despejes de depósitos/estaciones, waypoints, canales, esclusas e
+infraestructura. También se rellenan las bases que faltaban, evitando que un
+despeje recién implementado consulte accidentalmente una entrada cero.

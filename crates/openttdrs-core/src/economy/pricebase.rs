@@ -45,25 +45,42 @@ pub enum PriceIndex {
     ClearDepotShip = 32,
     ClearTunnel = 33,
     ClearWater = 34,
-    ClearStationBus = 36,
-    ClearStationTruck = 37,
+    ClearStationRail = 35,
+    ClearStationAirport = 36,
+    ClearStationBus = 37,
+    ClearStationTruck = 38,
+    ClearStationDock = 39,
+    ClearHouse = 40,
     ClearRoad = 41,
+    BuildIndustry = 48,
+    ClearIndustry = 49,
     BuildObject = 50,
     ClearObject = 51,
+    BuildWaypointRail = 52,
     ClearWaypointRail = 53,
+    BuildWaypointBuoy = 54,
+    ClearWaypointBuoy = 55,
     RunningTrainSteam = 42,
     RunningTrainDiesel = 43,
     RunningTrainElectric = 44,
     RunningAircraft = 45,
     RunningRoadveh = 46,
     RunningShip = 47,
-    BuildWaypointRail = 56,
-    BuildCanal = 57,
-    ClearCanal = 58,
-    BuildAqueduct = 59,
-    ClearAqueduct = 60,
-    BuildLock = 61,
-    ClearLock = 62,
+    TownAction = 56,
+    BuildFoundation = 57,
+    BuildIndustryRaw = 58,
+    BuildTown = 59,
+    BuildCanal = 60,
+    ClearCanal = 61,
+    BuildAqueduct = 62,
+    ClearAqueduct = 63,
+    BuildLock = 64,
+    ClearLock = 65,
+    InfrastructureRail = 66,
+    InfrastructureRoad = 67,
+    InfrastructureWater = 68,
+    InfrastructureStation = 69,
+    InfrastructureAirport = 70,
 }
 
 impl PriceIndex {
@@ -128,10 +145,18 @@ const PRICE_BASE_SPECS: [PriceBaseSpec; PRICE_TABLE_LEN] = {
     table[26] = spec(20, PriceCategory::Construction);
     table[27] = spec(-70, PriceCategory::Construction);
     table[28] = spec(10, PriceCategory::Construction);
+    table[29] = spec(50, PriceCategory::Construction);
+    table[30] = spec(80, PriceCategory::Construction);
+    table[31] = spec(80, PriceCategory::Construction);
     table[32] = spec(90, PriceCategory::Construction);
+    table[33] = spec(30, PriceCategory::Construction);
     table[34] = spec(10_000, PriceCategory::Construction);
-    table[36] = spec(50, PriceCategory::Construction);
+    table[35] = spec(50, PriceCategory::Construction);
+    table[36] = spec(30, PriceCategory::Construction);
     table[37] = spec(50, PriceCategory::Construction);
+    table[38] = spec(50, PriceCategory::Construction);
+    table[39] = spec(55, PriceCategory::Construction);
+    table[40] = spec(1_600, PriceCategory::Construction);
     table[41] = spec(40, PriceCategory::Construction);
     table[42] = spec(5_600, PriceCategory::Running);
     table[43] = spec(5_200, PriceCategory::Running);
@@ -141,14 +166,25 @@ const PRICE_BASE_SPECS: [PriceBaseSpec; PRICE_TABLE_LEN] = {
     table[47] = spec(5_600, PriceCategory::Running);
     table[50] = spec(40, PriceCategory::Construction);
     table[51] = spec(40, PriceCategory::Construction);
+    table[52] = spec(600, PriceCategory::Construction);
     table[53] = spec(80, PriceCategory::Construction);
-    table[56] = spec(600, PriceCategory::Construction);
-    table[57] = spec(5_000, PriceCategory::Construction);
-    table[58] = spec(5_000, PriceCategory::Construction);
-    table[59] = spec(10_000, PriceCategory::Construction);
-    table[60] = spec(2_000, PriceCategory::Construction);
-    table[61] = spec(7_500, PriceCategory::Construction);
-    table[62] = spec(2_000, PriceCategory::Construction);
+    table[54] = spec(350, PriceCategory::Construction);
+    table[55] = spec(50, PriceCategory::Construction);
+    table[56] = spec(1_000_000, PriceCategory::Construction);
+    table[57] = spec(250, PriceCategory::Construction);
+    table[58] = spec(8_000_000, PriceCategory::Construction);
+    table[59] = spec(1_000_000, PriceCategory::Construction);
+    table[60] = spec(5_000, PriceCategory::Construction);
+    table[61] = spec(5_000, PriceCategory::Construction);
+    table[62] = spec(10_000, PriceCategory::Construction);
+    table[63] = spec(2_000, PriceCategory::Construction);
+    table[64] = spec(7_500, PriceCategory::Construction);
+    table[65] = spec(2_000, PriceCategory::Construction);
+    table[66] = spec(10, PriceCategory::Running);
+    table[67] = spec(10, PriceCategory::Running);
+    table[68] = spec(8, PriceCategory::Running);
+    table[69] = spec(100, PriceCategory::Running);
+    table[70] = spec(5_000, PriceCategory::Running);
     table
 };
 
@@ -281,6 +317,27 @@ mod tests {
         let ge = GlobalEconomy::new();
         assert_eq!(get_price(&ge, PriceIndex::Terraform, 1, 0), 250);
         assert_eq!(get_price(&ge, PriceIndex::BuildRoad, 1, 0), 95);
+    }
+
+    #[test]
+    fn price_index_layout_matches_native_pricebase() {
+        assert_eq!(PriceIndex::ClearDepotTrain as u8, 30);
+        assert_eq!(PriceIndex::ClearDepotRoad as u8, 31);
+        assert_eq!(PriceIndex::ClearStationRail as u8, 35);
+        assert_eq!(PriceIndex::ClearStationBus as u8, 37);
+        assert_eq!(PriceIndex::ClearStationTruck as u8, 38);
+        assert_eq!(PriceIndex::ClearStationDock as u8, 39);
+        assert_eq!(PriceIndex::BuildWaypointRail as u8, 52);
+        assert_eq!(PriceIndex::ClearWaypointRail as u8, 53);
+        assert_eq!(PriceIndex::BuildWaypointBuoy as u8, 54);
+        assert_eq!(PriceIndex::ClearWaypointBuoy as u8, 55);
+        assert_eq!(PriceIndex::BuildCanal as u8, 60);
+        assert_eq!(PriceIndex::ClearCanal as u8, 61);
+        assert_eq!(PriceIndex::BuildLock as u8, 64);
+        assert_eq!(PriceIndex::ClearLock as u8, 65);
+        assert_eq!(medium_default_price(PriceIndex::ClearDepotTrain), 80);
+        assert_eq!(medium_default_price(PriceIndex::ClearDepotRoad), 80);
+        assert_eq!(medium_default_price(PriceIndex::ClearWaypointBuoy), 50);
     }
 
     #[test]

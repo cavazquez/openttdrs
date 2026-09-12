@@ -2,7 +2,10 @@
 
 use bevy::prelude::*;
 use openttdrs_core::Command;
-use openttdrs_core::{LOAN_INTERVAL, format_money};
+use openttdrs_core::{
+    CompanyId, LOAN_INTERVAL, RailInfrastructureSummary, format_money,
+    rail_infrastructure_for_company,
+};
 
 use crate::i18n::{Locale, localized_text};
 use crate::settings::ClientPreferences;
@@ -51,6 +54,8 @@ struct CompanyFinanceRow {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FinancesSnapshot {
+    active_company: CompanyId,
+    map_revision: u64,
     money: i64,
     loan: i64,
     max_loan: i64,
@@ -60,7 +65,7 @@ struct FinancesSnapshot {
     units_delivered: u64,
     vehicles: usize,
     stations: usize,
-    rail_tiles: u32,
+    rail_infrastructure: RailInfrastructureSummary,
     road_tiles: u32,
     companies: Vec<CompanyFinanceRow>,
 }
@@ -278,6 +283,8 @@ pub(crate) fn sync_finances_window(
         })
         .collect();
     let soft = FinancesSnapshot {
+        active_company: sim.state.active_company,
+        map_revision: sim.state.map.mutation_revision(),
         money: sim.state.economy.money,
         loan: sim.state.economy.loan,
         max_loan: sim.state.economy.max_loan,
@@ -289,12 +296,19 @@ pub(crate) fn sync_finances_window(
         units_delivered: sim.state.stats.cargo_units_delivered,
         vehicles,
         stations,
-        rail_tiles: cache.snapshot.as_ref().map_or(0, |s| s.rail_tiles),
+        rail_infrastructure: cache
+            .snapshot
+            .as_ref()
+            .map_or_else(RailInfrastructureSummary::default, |s| {
+                s.rail_infrastructure
+            }),
         road_tiles: cache.snapshot.as_ref().map_or(0, |s| s.road_tiles),
         companies,
     };
     let need_infra = cache.snapshot.as_ref().is_none_or(|prev| {
-        prev.money != soft.money
+        prev.active_company != soft.active_company
+            || prev.map_revision != soft.map_revision
+            || prev.money != soft.money
             || prev.loan != soft.loan
             || prev.cargo_income != soft.cargo_income
             || prev.running_costs != soft.running_costs
@@ -303,35 +317,33 @@ pub(crate) fn sync_finances_window(
             || prev.stations != soft.stations
             || prev.companies != soft.companies
     });
-    let (rail_tiles, road_tiles) = if need_infra {
-        let (mw, mh) = sim.state.map.dimensions();
-        let mut rail_tiles = 0_u32;
-        let mut road_tiles = 0_u32;
-        for y in 0..mh {
-            for x in 0..mw {
-                match sim
-                    .state
-                    .map
-                    .get_kind(openttdrs_core::TileCoord::new(x as i32, y as i32))
-                {
-                    Some(openttdrs_core::TileKind::Rail)
-                    | Some(openttdrs_core::TileKind::RailDepot)
-                    | Some(openttdrs_core::TileKind::RailBridge)
-                    | Some(openttdrs_core::TileKind::RailTunnel) => rail_tiles += 1,
-                    Some(openttdrs_core::TileKind::Road)
-                    | Some(openttdrs_core::TileKind::RoadDepot)
-                    | Some(openttdrs_core::TileKind::RoadBridge)
-                    | Some(openttdrs_core::TileKind::RoadTunnel) => road_tiles += 1,
-                    _ => {}
-                }
-            }
-        }
-        (rail_tiles, road_tiles)
+    let (rail_infrastructure, road_tiles) = if need_infra {
+        let rail_infrastructure =
+            rail_infrastructure_for_company(&sim.state.map, sim.state.active_company);
+        let road_tiles = u32::try_from(
+            sim.state
+                .map
+                .tiles()
+                .iter()
+                .filter(|tile| {
+                    (tile.m1 & 0x1F) == (sim.state.active_company.0 & 0x1F)
+                        && matches!(
+                            tile.kind,
+                            openttdrs_core::TileKind::Road
+                                | openttdrs_core::TileKind::RoadDepot
+                                | openttdrs_core::TileKind::RoadBridge
+                                | openttdrs_core::TileKind::RoadTunnel
+                        )
+                })
+                .count(),
+        )
+        .unwrap_or(u32::MAX);
+        (rail_infrastructure, road_tiles)
     } else {
-        (soft.rail_tiles, soft.road_tiles)
+        (soft.rail_infrastructure, soft.road_tiles)
     };
     let snapshot = FinancesSnapshot {
-        rail_tiles,
+        rail_infrastructure,
         road_tiles,
         ..soft
     };
@@ -385,7 +397,7 @@ pub(crate) fn sync_finances_window(
              {}:\n\
                {}: {}\n\
                {}: {}\n\
-               {}: {} {} · {}: {} {}{}",
+               {}: {} {} ({}: {}, {}: {}, {}: {}, {}: {}; {}: {}) · {}: {} {}{}",
             localized_text(locale, "Efectivo"),
             format_money(snapshot.money),
             localized_text(locale, "Préstamo"),
@@ -411,8 +423,26 @@ pub(crate) fn sync_finances_window(
             localized_text(locale, "Estaciones"),
             snapshot.stations,
             localized_text(locale, "Vía"),
-            snapshot.rail_tiles,
-            localized_text(locale, "teselas"),
+            snapshot.rail_infrastructure.rail_total(),
+            localized_text(locale, "piezas"),
+            localized_text(locale, "Normal"),
+            snapshot
+                .rail_infrastructure
+                .rail_type_count(openttdrs_core::RailType::Rail),
+            localized_text(locale, "Eléctrica"),
+            snapshot
+                .rail_infrastructure
+                .rail_type_count(openttdrs_core::RailType::Electric),
+            localized_text(locale, "Monorail"),
+            snapshot
+                .rail_infrastructure
+                .rail_type_count(openttdrs_core::RailType::Monorail),
+            localized_text(locale, "Maglev"),
+            snapshot
+                .rail_infrastructure
+                .rail_type_count(openttdrs_core::RailType::Maglev),
+            localized_text(locale, "Señales"),
+            snapshot.rail_infrastructure.signals,
             localized_text(locale, "Carretera"),
             snapshot.road_tiles,
             localized_text(locale, "teselas"),

@@ -218,6 +218,12 @@ pub struct Map {
     /// terminales: tipo `Station`/`Airport` e `StationID` MAP2.
     #[serde(skip)]
     terminal_topology_revision: u64,
+    /// Revisión efímera de cualquier mutación de tesela.
+    ///
+    /// No forma parte del save: sólo permite invalidar caches derivados del
+    /// mapa, como los contadores de infraestructura de la UI.
+    #[serde(skip)]
+    mutation_revision: u64,
 }
 
 static NEXT_TERMINAL_TOPOLOGY_EPOCH: std::sync::atomic::AtomicU64 =
@@ -275,6 +281,7 @@ impl<'de> serde::Deserialize<'de> for Map {
             imported_object_types: serialized.imported_object_types,
             terminal_topology_epoch: next_terminal_topology_epoch(),
             terminal_topology_revision: 0,
+            mutation_revision: 0,
         })
     }
 }
@@ -313,6 +320,7 @@ impl Map {
             imported_object_types: None,
             terminal_topology_epoch: next_terminal_topology_epoch(),
             terminal_topology_revision: 0,
+            mutation_revision: 0,
         }
     }
 
@@ -360,9 +368,14 @@ impl Map {
     /// no suelo desnudo explícito. Las pasa a hierba completa (`m5 = 3`).
     pub fn migrate_legacy_clear_grass_m5(&mut self) {
         const FULL_GRASS_M5: u8 = 3;
-        for tile in &mut self.tiles {
-            if tile.kind == TileKind::Grass && tile.mapt == 0 && tile.m5 == 0 {
+        for index in 0..self.tiles.len() {
+            if self.tiles[index].kind == TileKind::Grass
+                && self.tiles[index].mapt == 0
+                && self.tiles[index].m5 == 0
+            {
+                let mut tile = self.tiles[index];
                 tile.m5 = FULL_GRASS_M5;
+                self.replace_tile_at(index, tile);
             }
         }
     }
@@ -401,6 +414,9 @@ impl Map {
     fn replace_tile_at(&mut self, index: usize, tile: Tile) {
         let previous = self.tiles[index];
         self.tiles[index] = tile;
+        if previous != tile {
+            self.mutation_revision = self.mutation_revision.wrapping_add(1);
+        }
         if terminal_tile_station_id(previous) != terminal_tile_station_id(tile) {
             self.bump_terminal_topology_revision();
         }
@@ -421,7 +437,10 @@ impl Map {
 
     pub fn set_height(&mut self, c: TileCoord, height: u8) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
-        self.tiles[i].height = height;
+        if self.tiles[i].height != height {
+            self.tiles[i].height = height;
+            self.mutation_revision = self.mutation_revision.wrapping_add(1);
+        }
         Ok(())
     }
 
@@ -435,14 +454,20 @@ impl Map {
 
     pub fn set_mapt_m5(&mut self, c: TileCoord, mapt: u8, m5: u8) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
-        self.tiles[i].mapt = mapt;
-        self.tiles[i].m5 = m5;
+        if self.tiles[i].mapt != mapt || self.tiles[i].m5 != m5 {
+            self.tiles[i].mapt = mapt;
+            self.tiles[i].m5 = m5;
+            self.mutation_revision = self.mutation_revision.wrapping_add(1);
+        }
         Ok(())
     }
 
     pub fn set_m1(&mut self, c: TileCoord, m1: u8) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
-        self.tiles[i].m1 = m1;
+        if self.tiles[i].m1 != m1 {
+            self.tiles[i].m1 = m1;
+            self.mutation_revision = self.mutation_revision.wrapping_add(1);
+        }
         Ok(())
     }
 
@@ -472,7 +497,10 @@ impl Map {
 
     pub fn set_m3(&mut self, c: TileCoord, m3: u8) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
-        self.tiles[i].m3 = m3;
+        if self.tiles[i].m3 != m3 {
+            self.tiles[i].m3 = m3;
+            self.mutation_revision = self.mutation_revision.wrapping_add(1);
+        }
         Ok(())
     }
 
@@ -550,6 +578,12 @@ impl Map {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
         self.replace_tile_at(i, tile);
         Ok(())
+    }
+
+    /// Revisión efímera para invalidar datos derivados de las teselas.
+    #[must_use]
+    pub const fn mutation_revision(&self) -> u64 {
+        self.mutation_revision
     }
 
     #[must_use]
@@ -1281,6 +1315,19 @@ mod ottdmap_binary_tests {
 #[cfg(test)]
 mod map_set_tile_tests {
     use super::*;
+
+    #[test]
+    fn mutation_revision_tracks_real_tile_changes() {
+        let mut m = Map::new_flat(2, 2, 0);
+        let c = TileCoord::new(0, 0);
+        let initial = m.mutation_revision();
+        m.set_m1(c, 1).expect("owner");
+        assert!(m.mutation_revision() > initial);
+
+        let after_owner = m.mutation_revision();
+        m.set_m1(c, 1).expect("same owner");
+        assert_eq!(m.mutation_revision(), after_owner);
+    }
 
     #[test]
     fn set_tile_replaces_cell() {

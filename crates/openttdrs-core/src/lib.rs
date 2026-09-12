@@ -44,6 +44,7 @@ pub mod industry_builder;
 pub mod industry_scheduler_trace;
 pub mod industry_spec;
 pub mod industry_tile;
+pub mod infrastructure;
 pub mod map;
 pub mod newgrf_actions;
 pub mod newgrf_callback;
@@ -303,6 +304,9 @@ pub use fleet_index::{FleetIndex, TerminalSpatialIndex};
 pub use ground_crash::{
     CRASHED_CTR_REMOVE, CRASHED_CTR_START, crash_vehicle, maybe_road_train_crash,
     road_veh_check_train_crash, tick_crashed_vehicles,
+};
+pub use infrastructure::{
+    RAIL_INFRASTRUCTURE_RAILTYPE_COUNT, RailInfrastructureSummary, rail_infrastructure_for_company,
 };
 pub use script_cargo_monitor::ScriptCargoMonitor;
 // Namespaces de compatibilidad cargodist (sin aplanar tipos en la raíz; #157).

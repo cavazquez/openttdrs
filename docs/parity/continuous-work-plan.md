@@ -5866,3 +5866,14 @@ un puente conserva su reserva PBS, pero rechaza cambiar de railtype sin
 demolición, igual que el comando nativo; el tramo sintético del túnel no se
 trata como una segunda boca. #329/#567 continúa abierta por contadores de
 infraestructura, callbacks, arrastre de áreas y aceptación visual/framebuffer.
+
+Corrección #329/#567-RAIL-INFRASTRUCTURE-SUMMARY (2026-09-12): Finanzas ya no
+cuenta todas las teselas del mapa como si fueran de la compañía activa. El
+core reconstruye la parte ferroviaria de CompanyInfrastructure por owner y
+railtype: piezas planas (incluidos cruces), señales, depósitos,
+estaciones/waypoints y túneles/puentes con el factor estructural nativo. El
+resumen se invalida al cambiar de compañía o cualquier tesela, y la UI muestra
+el desglose normal/eléctrica/monorail/maglev. La métrica de carretera sigue
+siendo provisional por teselas y queda para su frente de contadores propio.
+#329/#567 continúa abierta por contadores vial/agua/aeropuerto, callbacks,
+arrastre de áreas y aceptación visual/framebuffer.

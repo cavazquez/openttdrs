@@ -674,6 +674,20 @@ pub fn ship_depot_exit_blocked(map: &Map, vehicles: &[Vehicle], vehicle_index: u
     if vehicle.kind != VehicleKind::Ship || vehicle.ship_state != SHIP_STATE_DEPOT {
         return false;
     }
+    // `CheckShipStayInDepot` procesa primero una orden que vuelve al mismo
+    // depósito (`VehicleEnterDepot`); la espera por otra nave ocurre después.
+    // Este gate se consulta antes del controlador en el paso global, así que
+    // hay que conservar explícitamente esa prioridad nativa.
+    let same_depot_order = vehicle.current_order_ref().is_some_and(|order| {
+        let VehicleOrder::Depot { depot, .. } = order else {
+            return false;
+        };
+        crate::depot::canonical_depot_tile_for_vehicle(map, *depot, VehicleKind::Ship)
+            == vehicle.pos
+    });
+    if same_depot_order {
+        return false;
+    }
     let depot_tile = crate::depot::ship_depot_north_tile(map, vehicle.pos).unwrap_or(vehicle.pos);
     vehicles.iter().enumerate().any(|(other_index, other)| {
         other_index != vehicle_index
@@ -1665,6 +1679,9 @@ mod tests {
         s.vehicles.extend([waiting, leaving]);
 
         assert!(ship_depot_exit_blocked(&s.map, &s.vehicles, 0));
+
+        s.vehicles[0].orders = vec![VehicleOrder::depot(depot)];
+        assert!(!ship_depot_exit_blocked(&s.map, &s.vehicles, 0));
 
         s.vehicles[1].cur_speed = 0;
         assert!(!ship_depot_exit_blocked(&s.map, &s.vehicles, 0));

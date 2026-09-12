@@ -5280,3 +5280,10 @@ carga activa. Es el gate de `NeedsAutomaticServicing` que ya respetaban los
 handlers naval y aéreo; la regresión comprueba que un autobús debido conserva
 su orden de estación durante la carga. #329/#567 continúan abiertas por
 callbacks, pathfinding y aceptación visual/framebuffer.
+
+Actualización #329/#567-SHIP-DEPOT-ORDER-PRIORITY (2026-09-12): una nave con
+orden de depósito hacia el mismo depósito conserva la prioridad de
+`CheckShipStayInDepot`: se reingresa/procesa `halt` antes de esperar a otra nave
+que esté usando la boca. La regresión evita que el gate global de concurrencia
+de salidas congele esa orden. #329/#567 continúan abiertas por callbacks,
+pathfinding y aceptación visual/framebuffer.

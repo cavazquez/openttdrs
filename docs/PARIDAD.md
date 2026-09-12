@@ -4793,3 +4793,13 @@ restaura la carga principal después del callback. La entidad FTA separada y
 sus scopes/estado propios siguen pendientes; #329/#567 continúan abiertas.
 Core queda en `2488 passed; 0 failed; 1 ignored` y cliente en `1394 passed; 0
 failed; 2 ignored`, con Clippy estricto, formato y `diff --check` limpios.
+
+Corrección #326/#567-BUOY-GLOBAL-SORT (2026-09-12): la boya ahora conserva
+su producer `TILE_SEQ_LINE(4, -1, 0, 0, 0, 0, SPR_IMG_BUOY)` como parent
+sortable del compositor Bevy. La caja de extensión cero y su clave de
+inserción se traducen a coordenadas mundiales sin inflarla a una tesela,
+por lo que un barco o una estructura vecina vuelve a poder taparla con el
+mismo criterio que `ViewportSortParentSprites`. La regresión cubre la caja
+literal y el spawn ECS junto con el suelo de agua. #326/#567 continúan
+abiertas por los producers y callbacks navales restantes, clipping, framebuffer
+y la aceptación raster completa.

@@ -513,3 +513,9 @@ El estado exacto y la validación de la pausa se mantienen en el
 [checkpoint](../checkpoints/2026-08-09-parity-oracle-pause.md). Los esquemas
 son los contratos de largo plazo; este documento es el método operativo para
 aplicarlos.
+
+Corrección #326/#567-BUOY-GLOBAL-SORT (2026-09-12): la línea de boya con
+extensión cero se conserva como parent sortable, no como sprite directo. La
+regresión valida la caja `TILE_SEQ_LINE`, la clave de inserción y el spawn
+ECS junto al suelo de agua; esto cubre el contrato estructural, no una nueva
+aceptación raster completa.

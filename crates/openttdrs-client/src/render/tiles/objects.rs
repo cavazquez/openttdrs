@@ -363,6 +363,28 @@ const fn buoy_trace_bounds() -> TraceSpriteBounds {
     TraceSpriteBounds::new(4, -1, 0, 0, 0, 0)
 }
 
+/// Caja mundial de la línea `TILE_SEQ_LINE` de la boya.
+///
+/// `station_land.h` usa extensiones cero deliberadamente: el sprite queda
+/// debajo de los barcos, pero sigue participando en `ViewportSortParentSprites`.
+/// Conservar el máximo inclusivo menor que el mínimo es importante; convertir
+/// la boya a una caja de tesela volvería a darle una precedencia que OpenTTD
+/// no le asigna.
+fn buoy_parent_bounds(ctx: &TileRenderContext, base_z: u8) -> ParentSpriteBounds {
+    let bounds = buoy_trace_bounds();
+    tile_seq_parent_bounds(
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        base_z,
+        bounds.ox,
+        bounds.oy,
+        bounds.oz,
+        bounds.ex,
+        bounds.ey,
+        bounds.ez,
+    )
+}
+
 fn dock_clear_land_sprite_id(tileh: u8) -> u32 {
     SPR_FLAT_BARE_LAND + 3 * 19 + u32::from(slope_sprite_offset(tileh))
 }
@@ -2746,17 +2768,20 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 0,
                 Some(buoy_trace_bounds()),
             );
+            let mut position = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04, half_h);
+            let source_depth = viewport_source_depth(position.z, ctx.tx, dims.0);
+            position.z = source_depth;
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 tint_building_sprite(assets.buoy.sprite()),
-                Transform::from_translation(tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    0.04,
-                    half_h,
-                )),
+                Transform::from_translation(position),
+                ViewportSortableParent {
+                    sprite_id: SPR_BUOY,
+                    bounds: buoy_parent_bounds(ctx, base_z),
+                    insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
+                    source_depth,
+                },
             ));
         }
         StationTileClass::Airport => {
@@ -7229,8 +7254,8 @@ mod tests {
 
     use super::{
         INVALID_ROAD_TYPE_ID, ROTSG_DEPOT, TileRenderContext,
-        airport_station_ground_layer_trace_offset, buoy_trace_bounds, dock_clear_land_sprite_id,
-        dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
+        airport_station_ground_layer_trace_offset, buoy_parent_bounds, buoy_trace_bounds,
+        dock_clear_land_sprite_id, dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
         rail_depot_build_parent_sprites, rail_depot_catenary_parent_sprite,
         rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
         rail_station_roof_glass_mask_color, road_depot_foundation_child_offset,
@@ -7473,6 +7498,19 @@ mod tests {
                 bounds.ox, bounds.oy, bounds.oz, bounds.ex, bounds.ey, bounds.ez
             ),
             (4, -1, 0, 0, 0, 0)
+        );
+    }
+
+    #[test]
+    fn buoy_parent_preserves_zero_extent_sort_bounds() {
+        let map = Map::new_flat(256, 256, 0);
+        let grid = RenderGrid::from_map(&map, 256, 256);
+        let ctx = TileRenderContext::new(&map, &grid, 194, 149);
+
+        assert_eq!(
+            buoy_parent_bounds(&ctx, 2),
+            ParentSpriteBounds::new(3108, 2383, 16, 3107, 2382, 15),
+            "la boya debe conservar la caja cero de TILE_SEQ_LINE, no una caja de tesela"
         );
     }
 

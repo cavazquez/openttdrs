@@ -949,6 +949,25 @@ fn buoy_station_water_keeps_openttd_ground_xrel_center() {
         crate::iso::iso(buoy.x, buoy.y).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET,
         "la boya debe conservar el xrel=-31 de su DrawWaterClassGround"
     );
+
+    let (buoy_parent, buoy_transform) = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .find(|(parent, _)| parent.sprite_id == 9282)
+        .expect("parent sortable de boya");
+    assert_eq!(
+        buoy_parent.bounds,
+        ParentSpriteBounds::new(52, 47, 0, 51, 46, -1),
+        "la boya debe usar la caja cero TILE_SEQ_LINE de station_land.h"
+    );
+    assert_eq!(
+        buoy_parent.insertion_key,
+        viewport_insertion_key(buoy.x as u32, buoy.y as u32, 1)
+    );
+    assert_eq!(
+        buoy_parent.source_depth, buoy_transform.translation.z,
+        "el sprite de boya debe conservar el slot de profundidad del compositor"
+    );
 }
 
 /// Un muelle vanilla son dos teselas distintas: la de tierra conserva una

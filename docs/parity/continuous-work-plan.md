@@ -5952,3 +5952,13 @@ spec declara `NoCatenary` se mantiene el bloque legacy 2–3. Las regresiones
 ECS cubren parada y waypoint incompletos, ambos ejes y layout vacío. La
 brecha estructural de #563 queda resuelta; #326 permanece abierta por la
 aceptación raster/oráculo dedicado, clipping, pivotes y framebuffer.
+
+Corrección #326/#567-BUOY-GLOBAL-SORT (2026-09-12): la boya ahora conserva
+su producer `TILE_SEQ_LINE(4, -1, 0, 0, 0, 0, SPR_IMG_BUOY)` como parent
+sortable del compositor Bevy. La caja de extensión cero y su clave de
+inserción se traducen a coordenadas mundiales sin inflarla a una tesela,
+por lo que un barco o una estructura vecina vuelve a poder taparla con el
+mismo criterio que `ViewportSortParentSprites`. La regresión cubre la caja
+literal y el spawn ECS junto con el suelo de agua. #326/#567 continúan
+abiertas por los producers y callbacks navales restantes, clipping, framebuffer
+y la aceptación raster completa.

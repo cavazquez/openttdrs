@@ -5216,6 +5216,17 @@ detenido sólo impide acumular una nueva avería. La regresión cubre un autobú
 detenido dentro del slot diario. #329/#567 continúan abiertas por callbacks,
 pathfinding y aceptación visual/framebuffer.
 
+Actualización #329/#567-WATER-LOCK-AIRPORT-FOOTPRINT (2026-09-12): `DoBuildLock`
+ya puede retirar un aeropuerto puro desde cualquier tesela de su huella, siguiendo
+el contrato de `RemoveAirport`: comprueba propiedad, aviones/vehículos en toda la
+huella, cobra `PR_CLEAR_STATION_AIRPORT` por tesela y conserva la operación atómica.
+La ejecución limpia la huella, las animaciones NewGRF, el ruido del pueblo más
+cercano y el estado FTA local antes de convertir la tesela central en agua y las
+restantes en terreno. Los aeropuertos intermodales, órdenes de aeronaves fuera de
+la huella y la infraestructura nativa todavía requieren subetapas propias.
+#329/#567 continúa abierta por esas diferencias y por callbacks, pathfinding y
+aceptación visual/framebuffer.
+
 Actualización #329/#567-SHIP-DOCK-RANDOM-RESTORE (2026-09-12): al demoler un
 muelle se restaura la pieza acuática con el consumo nativo de `Random()` para
 canal/río y `MAP4 = 0` para mar. La regresión usa demolición desde la sección

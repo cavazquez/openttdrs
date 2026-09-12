@@ -5,12 +5,12 @@ use crate::bridge_spec::{
     bridge_height_over_tile, set_bridge_middle_mapt, set_bridge_type_m6,
 };
 use crate::economy::{
-    buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost, dock_build_cost,
-    dock_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost, lock_clear_cost,
-    rail_clear_cost, rail_station_clear_cost, rail_waypoint_clear_cost, road_depot_clear_cost,
-    road_stop_clear_cost_factored, rocks_clear_cost, rough_clear_cost, ship_depot_build_cost,
-    ship_depot_clear_cost, signal_clear_cost, station_build_cost, train_depot_clear_cost,
-    trees_clear_cost, water_clear_cost,
+    airport_clear_cost, buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost,
+    dock_build_cost, dock_clear_cost, fields_clear_cost, grass_clear_cost, lock_build_cost,
+    lock_clear_cost, rail_clear_cost, rail_station_clear_cost, rail_waypoint_clear_cost,
+    road_depot_clear_cost, road_stop_clear_cost_factored, rocks_clear_cost, rough_clear_cost,
+    ship_depot_build_cost, ship_depot_clear_cost, signal_clear_cost, station_build_cost,
+    train_depot_clear_cost, trees_clear_cost, water_clear_cost,
 };
 use crate::map::rail_bits::RAIL_TILE_NORMAL;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
@@ -1836,6 +1836,125 @@ fn clear_lock_rail_station(state: &mut GameState, c: TileCoord) -> Result<(), Co
     Ok(())
 }
 
+/// Devuelve el ancla y la huella que `RemoveAirport` debe retirar.
+fn airport_clear_info(
+    state: &GameState,
+    c: TileCoord,
+) -> Result<(TileCoord, Vec<TileCoord>), CommandError> {
+    state
+        .stations
+        .iter()
+        .filter(|station| station.has_airport_facility())
+        .find_map(|station| {
+            let tiles = if station.airport_tiles.is_empty() {
+                vec![station.pos]
+            } else {
+                station.airport_tiles.clone()
+            };
+            (tiles.contains(&c)
+                && tiles
+                    .iter()
+                    .all(|&tile| state.map.get_kind(tile) == Some(TileKind::Airport)))
+            .then_some((station.pos, tiles))
+        })
+        .ok_or(CommandError::BuildingMustBeDemolished)
+}
+
+/// Comprueba la retirada de un aeropuerto puro antes de `MakeLock`.
+fn check_lock_airport_tile(
+    state: &GameState,
+    c: TileCoord,
+    is_middle: bool,
+) -> Result<LockBuildTilePlan, CommandError> {
+    let (anchor, tiles) = airport_clear_info(state, c)?;
+    let station = state
+        .stations
+        .iter()
+        .find(|station| station.pos == anchor && station.has_airport_facility())
+        .ok_or(CommandError::BuildingMustBeDemolished)?;
+    if station.effective_facilities() & !0x08 != 0 {
+        return Err(CommandError::BuildingMustBeDemolished);
+    }
+    if (station.owner.0 & 0x1F) != (state.active_company.0 & 0x1F) {
+        return Err(CommandError::TileNotOwned);
+    }
+    let aircraft_in_way = state.vehicles.iter().any(|vehicle| {
+        let on_airport = tiles.contains(&vehicle.pos)
+            && (vehicle.kind != crate::vehicle::VehicleKind::Aircraft
+                || vehicle.aircraft_phase != crate::vehicle::AircraftPhase::Flying);
+        let in_fta = vehicle.kind == crate::vehicle::VehicleKind::Aircraft
+            && vehicle.airport_fta_station == Some(anchor)
+            && vehicle.aircraft_phase != crate::vehicle::AircraftPhase::Flying;
+        on_airport || in_fta
+    });
+    if aircraft_in_way {
+        return Err(CommandError::VehicleInTheWay);
+    }
+    let footprint_count = i64::try_from(tiles.len()).unwrap_or(i64::MAX);
+    Ok(LockBuildTilePlan {
+        water_class: WaterClass::Canal,
+        owner: state.active_company.0,
+        clear_on_build: true,
+        clear_cost: airport_clear_cost(&state.global_economy).saturating_mul(footprint_count),
+        add_canal_cost: !is_middle,
+    })
+}
+
+/// Ruido que `RemoveAirport` debe descontar del pueblo más cercano.
+fn airport_noise_for_station(state: &GameState, station: &Station) -> Option<(usize, u8)> {
+    let (town_idx, distance) = crate::town::nearest_town_index(&state.towns, station.pos)?;
+    let noise_level = station
+        .airport_newgrf_spec_id
+        .and_then(|id| {
+            crate::airport_class::newgrf_airport_spec_def(&state.airport_spec_catalog, id)
+        })
+        .map(|def| def.noise_level)
+        .or_else(|| {
+            crate::airport_class::airport_spec_def(station.airport_spec).map(|def| def.noise_level)
+        })
+        .unwrap_or(0);
+    Some((
+        town_idx,
+        crate::airport_class::airport_noise_for_distance(noise_level, distance, 8),
+    ))
+}
+
+/// Ejecuta `RemoveAirport` sobre toda la huella antes de `MakeLock`.
+fn clear_lock_airport(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
+    let (anchor, tiles) = airport_clear_info(state, c)?;
+    let station = state
+        .stations
+        .iter()
+        .find(|station| station.pos == anchor && station.has_airport_facility())
+        .ok_or(CommandError::BuildingMustBeDemolished)?;
+    if station.effective_facilities() & !0x08 != 0 {
+        return Err(CommandError::BuildingMustBeDemolished);
+    }
+    let noise = airport_noise_for_station(state, station);
+    for &tile in &tiles {
+        clear_tile_after_native_water_restore(&mut state.map, tile)
+            .map_err(|_| CommandError::OutOfBounds)?;
+        clear_neighbour_non_flooding_states(&mut state.map, tile);
+        state.newgrf_animated_airport_tiles.remove(&tile);
+    }
+    if let Some((town_idx, amount)) = noise {
+        state.towns[town_idx].noise_reached = state.towns[town_idx]
+            .noise_reached
+            .saturating_sub(u16::from(amount));
+    }
+    for vehicle in &mut state.vehicles {
+        if vehicle.airport_fta_station == Some(anchor) {
+            vehicle.airport_fta_station = None;
+            vehicle.airport_blocks_held = 0;
+            vehicle.airport_fta_active = false;
+        }
+    }
+    state
+        .stations
+        .retain(|station| !(station.pos == anchor && station.has_airport_facility()));
+    Ok(())
+}
+
 /// Prepara la retirada manual de una boya durante `DoBuildLock`.
 ///
 /// `RemoveBuoy` conserva la clase del agua subyacente sólo para la parte
@@ -2223,6 +2342,7 @@ fn check_lock_build_tile(
         {
             check_lock_rail_station_tile(state, c, is_middle, tile)
         }
+        TileKind::Airport => check_lock_airport_tile(state, c, is_middle),
         TileKind::Station if crate::station::stop_kind_from_m6(tile.m6) == StopKind::Dock => {
             check_lock_dock_tile(state, c, is_middle, tile)
         }
@@ -2300,6 +2420,10 @@ fn clear_lock_build_tile(
     });
     if was_dock {
         return clear_dock_impl(state, c, false);
+    }
+    let was_airport = state.map.get_kind(c) == Some(TileKind::Airport);
+    if was_airport {
+        return clear_lock_airport(state, c);
     }
     let was_rail_station = state.map.get(c).is_some_and(|tile| {
         tile.kind == TileKind::Station

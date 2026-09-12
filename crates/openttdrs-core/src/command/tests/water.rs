@@ -1,8 +1,8 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
 use crate::economy::{
-    buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost, dock_build_cost,
-    dock_clear_cost, lock_build_cost, lock_clear_cost, rail_station_clear_cost,
+    airport_clear_cost, buoy_build_cost, buoy_clear_cost, canal_build_cost, canal_clear_cost,
+    dock_build_cost, dock_clear_cost, lock_build_cost, lock_clear_cost, rail_station_clear_cost,
     rail_waypoint_clear_cost, road_clear_cost, road_clear_cost_factored, road_depot_clear_cost,
     road_stop_clear_cost_factored, rough_clear_cost, ship_depot_build_cost, ship_depot_clear_cost,
     train_depot_clear_cost, trees_clear_cost, water_clear_cost,
@@ -681,6 +681,116 @@ fn place_lock_rejects_vehicle_on_extra_rail_station_tile_atomically() {
         .into_iter()
         .zip(before)
     {
+        assert_eq!(s.map.get(coord), Some(raw));
+    }
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.economy.money, money);
+}
+
+#[test]
+fn place_lock_clears_airport_footprint_and_animation_state() {
+    let mut s = GameState::new(16, 10);
+    let origin = TileCoord::new(2, 2);
+    let middle = TileCoord::new(4, 2);
+    let lower = TileCoord::new(4, 1);
+    let upper = TileCoord::new(4, 3);
+
+    apply_command(
+        &mut s,
+        &Command::PlaceAirportArea {
+            origin,
+            axis_y: false,
+            spec: crate::AirportSpecId::Small,
+        },
+    )
+    .unwrap();
+    let airport_tiles = s.stations[0].airport_tiles.clone();
+    assert_eq!(airport_tiles.len(), 12);
+    assert!(airport_tiles.contains(&middle));
+    // `upper` todavía pertenece a la huella: el centro debe despejarlo como
+    // parte de `RemoveAirport`, no tratarlo como agua preexistente.
+    s.map.set_kind(lower, TileKind::Water).unwrap();
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    s.newgrf_animated_airport_tiles
+        .extend(airport_tiles.iter().copied());
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, true);
+
+    assert_eq!(command_would_fail(&s, &command), None);
+    apply_command(&mut s, &command)
+        .expect("RemoveAirport debe retirar toda la huella antes de construir");
+
+    assert_eq!(s.map.get_kind(middle), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(lower), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(upper), Some(TileKind::Water));
+    for tile in airport_tiles {
+        if tile != middle && tile != upper {
+            assert_eq!(s.map.get_kind(tile), Some(TileKind::Grass));
+        }
+    }
+    assert!(s.stations.is_empty());
+    assert!(s.newgrf_animated_airport_tiles.is_empty());
+    assert_eq!(
+        s.economy.money,
+        money
+            - 12 * airport_clear_cost(&s.global_economy)
+            - canal_build_cost(&s.global_economy)
+            - lock_build_cost(&s.global_economy)
+    );
+}
+
+#[test]
+fn place_lock_rejects_aircraft_on_extra_airport_tile_atomically() {
+    let mut s = GameState::new(16, 10);
+    let origin = TileCoord::new(2, 2);
+    let middle = TileCoord::new(4, 2);
+    let lower = TileCoord::new(4, 1);
+    let upper = TileCoord::new(4, 3);
+
+    apply_command(
+        &mut s,
+        &Command::PlaceAirportArea {
+            origin,
+            axis_y: false,
+            spec: crate::AirportSpecId::Small,
+        },
+    )
+    .unwrap();
+    let airport_tiles = s.stations[0].airport_tiles.clone();
+    let extra = airport_tiles
+        .iter()
+        .copied()
+        .find(|&tile| tile != middle)
+        .expect("el aeropuerto tiene una tesela adicional");
+    s.map.set_kind(lower, TileKind::Water).unwrap();
+    s.map.set_height(lower, 1).unwrap();
+    s.map.set_height(middle, 1).unwrap();
+    s.map.set_height(upper, 2).unwrap();
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Aircraft, extra, extra));
+    let tracked = airport_tiles
+        .iter()
+        .copied()
+        .chain([lower, middle, upper])
+        .collect::<Vec<_>>();
+    let before = tracked
+        .iter()
+        .map(|&coord| s.map.get(coord).unwrap())
+        .collect::<Vec<_>>();
+    let money = s.economy.money;
+    let command = Command::PlaceLock(middle, true);
+
+    assert_eq!(
+        command_would_fail(&s, &command),
+        Some(crate::CommandError::VehicleInTheWay)
+    );
+    assert_eq!(
+        apply_command(&mut s, &command),
+        Err(crate::CommandError::VehicleInTheWay)
+    );
+    for (coord, raw) in tracked.into_iter().zip(before) {
         assert_eq!(s.map.get(coord), Some(raw));
     }
     assert_eq!(s.stations.len(), 1);

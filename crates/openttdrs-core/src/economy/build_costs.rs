@@ -235,6 +235,12 @@ pub fn rail_station_clear_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::ClearStationRail, 1, 0)
 }
 
+/// Coste de retirar una tesela de aeropuerto (`PR_CLEAR_STATION_AIRPORT`).
+#[must_use]
+pub fn airport_clear_cost(ge: &GlobalEconomy) -> i64 {
+    get_price(ge, PriceIndex::ClearStationAirport, 1, 0)
+}
+
 /// Coste de construir un muelle (`PR_BUILD_STATION_DOCK`).
 #[must_use]
 pub fn dock_build_cost(ge: &GlobalEconomy) -> i64 {
@@ -378,6 +384,10 @@ mod tests {
         assert_eq!(
             rail_station_clear_cost(&ge),
             medium_default_price(PriceIndex::ClearStationRail)
+        );
+        assert_eq!(
+            airport_clear_cost(&ge),
+            medium_default_price(PriceIndex::ClearStationAirport)
         );
         assert_eq!(
             dock_build_cost(&ge),

@@ -366,6 +366,12 @@ pub(in crate::command) fn place_rail_depot_dir(
         train_depot_build_cost(&state.global_economy, rail_cost_multiplier),
         depot_id,
     )?;
+    let depot_tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let depot_tile = crate::rail_type::set_rail_type_on_tile(depot_tile, state.current_rail_type);
+    state
+        .map
+        .set_tile(c, depot_tile)
+        .map_err(|_| CommandError::OutOfBounds)?;
     if let Some((exit, before, after)) = connection
         && before != after
     {

@@ -310,6 +310,24 @@ fn place_rail_uses_current_rail_type() {
 }
 
 #[test]
+fn place_rail_depot_uses_current_rail_type() {
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(10, 8);
+    s.economy.money = 100_000;
+    s.current_rail_type = RailType::Monorail;
+    let rail = TileCoord::new(4, 4);
+    let depot = TileCoord::new(4, 5);
+    apply_command(&mut s, &Command::PlaceRail(rail)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+
+    assert_eq!(
+        rail_type_from_tile(s.map.get(depot).unwrap()),
+        RailType::Monorail
+    );
+}
+
+#[test]
 fn convert_rail_cycles_through_mono_and_maglev() {
     use crate::rail_type::{RailType, rail_type_from_tile};
 

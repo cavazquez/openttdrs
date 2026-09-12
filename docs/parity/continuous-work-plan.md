@@ -5833,3 +5833,11 @@ boca se liberan si el consist deja de tener potencia con el nuevo tipo; el
 vano/terreno intermedio no se reescribe. #329/#567 continúa abierta por
 estaciones, depósitos, infraestructura, callbacks, pathfinding restante y
 aceptación visual/framebuffer.
+
+Corrección #329/#567-RAIL-DEPOT-RAILTYPE (2026-09-12): la construcción de un
+depósito ferroviario ahora escribe en `m8` el tipo de vía seleccionado, igual
+que `MakeRailDepot`, en vez de dejar siempre el valor heredado del terreno.
+Esto mantiene coherentes la compra de motores, la conversión posterior y el
+round-trip SAV; la conexión automática con la vía vecina conserva su propio
+tipo. #329/#567 continúa abierta por contadores de infraestructura, callbacks,
+arrastre de áreas y aceptación visual/framebuffer.

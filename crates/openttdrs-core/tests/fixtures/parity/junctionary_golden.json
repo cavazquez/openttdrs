@@ -9,7 +9,7 @@
       },
       "name": "truck_bay",
       "signal_tiles": 0,
-      "tile_hash": "017975547da1e486"
+      "tile_hash": "e6db5c3f4d402b9c"
     },
     {
       "bounds": {
@@ -82,11 +82,11 @@
         "x0": 0,
         "x1": 23,
         "y0": 0,
-        "y1": 11
+        "y1": 13
       },
       "name": "ai_rival_line",
       "signal_tiles": 0,
-      "tile_hash": "d9264aa91dab42c0"
+      "tile_hash": "4401f83131eff206"
     },
     {
       "bounds": {

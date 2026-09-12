@@ -6242,3 +6242,13 @@ verifica que el paso catalog-aware conserve ese límite. Pasaron 2690 tests del
 core (1 ignorado), 1430 del cliente (2 ignorados), Clippy estricto en core y
 cliente, formato y `git diff --check`. #329 continúa abierta por callbacks y
 consumidores legacy restantes; #326/#567 permanecen abiertas.
+
+Corrección #329-AUTOREPLACE-COMMAND-CATALOG (2026-09-12, `c4d604f4`): el
+comando `SetAutoReplaceRule` valida ahora los motores origen y destino contra
+`GameState.engine_catalog` antes de caer a la tabla vanilla. La ventana ya
+podía seleccionar motores NewGRF, pero el comando rechazaba sus IDs con
+`EngineNotFound`; la regresión crea una regla entre dos buses sólo presentes
+en el catálogo activo. Pasaron 2691 tests del core (1 ignorado), 1430 del
+cliente (2 ignorados), Clippy estricto en core y cliente, formato y
+`git diff --check`. #329 continúa abierta por callbacks y consumidores de
+vehículos aún legacy; #326/#567 permanecen abiertas.

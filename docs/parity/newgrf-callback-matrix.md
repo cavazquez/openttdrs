@@ -1672,3 +1672,12 @@ delegar el tick de carretera sin vecinos. El controlador consulta el mismo
 adelantamiento; las APIs públicas legacy mantienen su fallback vanilla. La
 regresión limita a 20 la velocidad de un bus custom y detecta el incremento
 incorrecto que producía la ruta vanilla.
+
+### #329-AUTOREPLACE-COMMAND-CATALOG — regla de autoreemplazo
+
+Actualizado: 2026-09-12 (`c4d604f4`). `SetAutoReplaceRule` resuelve el motor
+origen y el destino en `GameState.engine_catalog`, con fallback a la tabla
+vanilla para saves antiguos. Esto alinea el comando con el selector de la UI y
+permite persistir reglas cuyos dos IDs provienen de Action0/NewGRF. La
+regresión aplica el comando a dos buses custom y verifica ambos extremos de la
+regla.

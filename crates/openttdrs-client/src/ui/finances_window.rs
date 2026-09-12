@@ -4,8 +4,9 @@ use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::{
     CompanyId, LOAN_INTERVAL, RailInfrastructureSummary, RoadInfrastructureSummary, RoadTramType,
-    WaterInfrastructureSummary, format_money, rail_infrastructure_for_company,
-    road_infrastructure_for_company_with_stations, water_infrastructure_for_company,
+    StationInfrastructureSummary, WaterInfrastructureSummary, format_money,
+    rail_infrastructure_for_company, road_infrastructure_for_company_with_stations,
+    station_infrastructure_for_company, water_infrastructure_for_company,
 };
 
 use crate::i18n::{Locale, localized_text};
@@ -69,6 +70,7 @@ struct FinancesSnapshot {
     rail_infrastructure: RailInfrastructureSummary,
     road_infrastructure: RoadInfrastructureSummary,
     water_infrastructure: WaterInfrastructureSummary,
+    station_infrastructure: StationInfrastructureSummary,
     companies: Vec<CompanyFinanceRow>,
 }
 
@@ -316,6 +318,12 @@ pub(crate) fn sync_finances_window(
             .map_or_else(WaterInfrastructureSummary::default, |s| {
                 s.water_infrastructure
             }),
+        station_infrastructure: cache
+            .snapshot
+            .as_ref()
+            .map_or_else(StationInfrastructureSummary::default, |s| {
+                s.station_infrastructure
+            }),
         companies,
     };
     let need_infra = cache.snapshot.as_ref().is_none_or(|prev| {
@@ -328,34 +336,44 @@ pub(crate) fn sync_finances_window(
             || prev.deliveries != soft.deliveries
             || prev.vehicles != soft.vehicles
             || prev.stations != soft.stations
+            || prev.station_infrastructure != soft.station_infrastructure
             || prev.companies != soft.companies
     });
-    let (rail_infrastructure, road_infrastructure, water_infrastructure) = if need_infra {
-        let rail_infrastructure =
-            rail_infrastructure_for_company(&sim.state.map, sim.state.active_company);
-        let road_infrastructure = road_infrastructure_for_company_with_stations(
-            &sim.state.map,
-            &sim.state.stations,
-            sim.state.active_company,
-        );
-        let water_infrastructure =
-            water_infrastructure_for_company(&sim.state.map, sim.state.active_company);
-        (
-            rail_infrastructure,
-            road_infrastructure,
-            water_infrastructure,
-        )
-    } else {
-        (
-            soft.rail_infrastructure,
-            soft.road_infrastructure,
-            soft.water_infrastructure,
-        )
-    };
+    let (rail_infrastructure, road_infrastructure, water_infrastructure, station_infrastructure) =
+        if need_infra {
+            let rail_infrastructure =
+                rail_infrastructure_for_company(&sim.state.map, sim.state.active_company);
+            let road_infrastructure = road_infrastructure_for_company_with_stations(
+                &sim.state.map,
+                &sim.state.stations,
+                sim.state.active_company,
+            );
+            let water_infrastructure =
+                water_infrastructure_for_company(&sim.state.map, sim.state.active_company);
+            let station_infrastructure = station_infrastructure_for_company(
+                &sim.state.map,
+                &sim.state.stations,
+                sim.state.active_company,
+            );
+            (
+                rail_infrastructure,
+                road_infrastructure,
+                water_infrastructure,
+                station_infrastructure,
+            )
+        } else {
+            (
+                soft.rail_infrastructure,
+                soft.road_infrastructure,
+                soft.water_infrastructure,
+                soft.station_infrastructure,
+            )
+        };
     let snapshot = FinancesSnapshot {
         rail_infrastructure,
         road_infrastructure,
         water_infrastructure,
+        station_infrastructure,
         ..soft
     };
     if cache.locale == Some(locale) && cache.snapshot.as_ref() == Some(&snapshot) {
@@ -408,6 +426,7 @@ pub(crate) fn sync_finances_window(
              {}:\n\
                {}: {}\n\
                {}: {}\n\
+               {}: {}\n\
              {}: {} {} ({}: {}, {}: {}, {}: {}, {}: {}; {}: {}) · {}: {} {} ({}: {}, {}: {}) · {}: {} {}{}",
             localized_text(locale, "Efectivo"),
             format_money(snapshot.money),
@@ -432,7 +451,9 @@ pub(crate) fn sync_finances_window(
             localized_text(locale, "Vehículos"),
             snapshot.vehicles,
             localized_text(locale, "Estaciones"),
-            snapshot.stations,
+            snapshot.station_infrastructure.station_total(),
+            localized_text(locale, "Aeropuertos"),
+            snapshot.station_infrastructure.airport_total(),
             localized_text(locale, "Vía"),
             snapshot.rail_infrastructure.rail_total(),
             localized_text(locale, "piezas"),

@@ -3,7 +3,8 @@
 //! `OpenTTD` no serializa `CompanyInfrastructure`: lo reconstruye al cargar un
 //! save y lo mantiene actualizado mientras ejecuta comandos. El runtime
 //! propio todavía no tiene el contador incremental en cada Company, por lo
-//! que esta primera superficie calcula el contrato ferroviario desde el mapa.
+//! que estas superficies reconstruyen los contratos de infraestructura desde
+//! el mapa y las entidades persistentes.
 
 use crate::bridge_spec::{bridge_line_tiles, rail_bridge_other_end};
 use crate::company::CompanyId;
@@ -124,11 +125,41 @@ impl WaterInfrastructureSummary {
     }
 }
 
+/// Parte de estaciones de `CompanyInfrastructure`.
+///
+/// stations cuenta teselas `MP_STATION` propias, excepto aeropuertos y boyas.
+/// airports cuenta estaciones con facilidad aérea una sola vez por entidad;
+/// esto incluye una plataforma petrolera cuando conserva esa facilidad.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct StationInfrastructureSummary {
+    /// Teselas de estación que no son aeropuerto ni boya.
+    pub stations: u32,
+    /// Entidades propias con facilidad aérea.
+    pub airports: u32,
+}
+
+impl StationInfrastructureSummary {
+    /// Cantidad de piezas de estación no aéreas.
+    #[must_use]
+    pub const fn station_total(self) -> u32 {
+        self.stations
+    }
+
+    /// Cantidad de aeropuertos/facilidades aéreas.
+    #[must_use]
+    pub const fn airport_total(self) -> u32 {
+        self.airports
+    }
+}
+
 const TUNNELBRIDGE_TRACKBIT_FACTOR: u32 = 4;
 const LEVELCROSSING_TRACKBIT_FACTOR: u32 = 2;
 const ROAD_STOP_TRACKBIT_FACTOR: u32 = 2;
 const LOCK_DEPOT_TILE_FACTOR: u32 = 2;
 const INVALID_ROADTYPE: u8 = 0x3F;
+const OTTD_TILETYPE_STATION: u8 = 5;
+const STATION_TYPE_AIRPORT: u8 = 1;
+const STATION_TYPE_BUOY: u8 = crate::station::STATION_TYPE_BUOY;
 const WATER_TILE_TYPE_LOCK: u8 = 2;
 const WATER_TILE_TYPE_DEPOT: u8 = 3;
 
@@ -275,7 +306,7 @@ fn water_tile_type(tile: Tile) -> u8 {
 }
 
 #[must_use]
-fn water_owner_matches(tile: Tile, owner: CompanyId) -> bool {
+fn company_owner_matches(tile: Tile, owner: CompanyId) -> bool {
     owner.0 < crate::company::MAX_COMPANIES && owner_slot(tile.m1) == owner_slot(owner.0)
 }
 
@@ -287,20 +318,20 @@ fn add_water_pieces(summary: &mut WaterInfrastructureSummary, pieces: u32) {
 /// `AfterLoadCompanyStats`.
 fn add_water_tile(summary: &mut WaterInfrastructureSummary, tile: Tile, owner: CompanyId) {
     let tile_type = water_tile_type(tile);
-    if tile_type == WATER_TILE_TYPE_DEPOT && water_owner_matches(tile, owner) {
+    if tile_type == WATER_TILE_TYPE_DEPOT && company_owner_matches(tile, owner) {
         add_water_pieces(summary, LOCK_DEPOT_TILE_FACTOR);
     }
 
     if tile_type == WATER_TILE_TYPE_LOCK && (tile.m5 >> 2).trailing_zeros() >= 2 {
         // La parte central guarda el owner de toda la esclusa y reemplaza el
         // posible canal subyacente por tres piezas estructurales.
-        if water_owner_matches(tile, owner) {
+        if company_owner_matches(tile, owner) {
             add_water_pieces(summary, 3 * LOCK_DEPOT_TILE_FACTOR);
         }
         return;
     }
 
-    if water_class_from_m1(tile.m1) == WaterClass::Canal && water_owner_matches(tile, owner) {
+    if water_class_from_m1(tile.m1) == WaterClass::Canal && company_owner_matches(tile, owner) {
         add_water_pieces(summary, 1);
     }
 }
@@ -335,7 +366,7 @@ fn add_water_aqueduct(
     let Some(end) = water_aqueduct_other_end(map, coord, tile) else {
         return;
     };
-    if !is_before_in_map_order(coord, end) || !water_owner_matches(tile, owner) {
+    if !is_before_in_map_order(coord, end) || !company_owner_matches(tile, owner) {
         return;
     }
     let length = u32::try_from(bridge_line_tiles(coord, end).len()).unwrap_or(u32::MAX);
@@ -345,7 +376,7 @@ fn add_water_aqueduct(
 fn add_water_station_tile(summary: &mut WaterInfrastructureSummary, tile: Tile, owner: CompanyId) {
     if !matches!(stop_kind_from_m6(tile.m6), StopKind::Dock | StopKind::Buoy)
         || water_class_from_m1(tile.m1) != WaterClass::Canal
-        || !water_owner_matches(tile, owner)
+        || !company_owner_matches(tile, owner)
     {
         return;
     }
@@ -613,7 +644,7 @@ pub fn water_infrastructure_for_company(map: &Map, owner: CompanyId) -> WaterInf
 
             if is_map_object_tile(tile.mapt) {
                 if water_class_from_m1(tile.m1) == WaterClass::Canal
-                    && water_owner_matches(tile, owner)
+                    && company_owner_matches(tile, owner)
                 {
                     add_water_pieces(&mut summary, 1);
                 }
@@ -634,13 +665,67 @@ pub fn water_infrastructure_for_company(map: &Map, owner: CompanyId) -> WaterInf
     summary
 }
 
+/// Reconstruye las partes de estaciones y aeropuertos de
+/// `CompanyInfrastructure`.
+///
+/// El contador nativo recorre las teselas `MP_STATION` para stations, pero
+/// obtiene airports desde las entidades `BaseStation` con facilidad aérea.
+/// Mantener ambas fuentes evita multiplicar un aeropuerto por cada pieza de su
+/// huella y conserva Oil Rig como facilidad aérea cuando corresponde.
+#[must_use]
+pub fn station_infrastructure_for_company(
+    map: &Map,
+    stations: &[Station],
+    owner: CompanyId,
+) -> StationInfrastructureSummary {
+    let mut summary = StationInfrastructureSummary {
+        airports: u32::try_from(
+            stations
+                .iter()
+                .filter(|station| station.owner == owner && station.has_airport_facility())
+                .count(),
+        )
+        .unwrap_or(u32::MAX),
+        ..StationInfrastructureSummary::default()
+    };
+    if owner.0 >= crate::company::MAX_COMPANIES {
+        summary.airports = 0;
+        return summary;
+    }
+
+    let (width, height) = map.dimensions();
+    for y in 0..height {
+        let Ok(y) = i32::try_from(y) else {
+            continue;
+        };
+        for x in 0..width {
+            let Ok(x) = i32::try_from(x) else {
+                continue;
+            };
+            let Some(tile) = map.get(TileCoord::new(x, y)) else {
+                continue;
+            };
+            if tile.mapt >> 4 != OTTD_TILETYPE_STATION
+                || !company_owner_matches(tile, owner)
+                || matches!(
+                    station_type_from_m6(tile.m6),
+                    STATION_TYPE_AIRPORT | STATION_TYPE_BUOY
+                )
+            {
+                continue;
+            }
+            summary.stations = summary.stations.saturating_add(1);
+        }
+    }
+    summary
+}
+
 /// Reconstruye la infraestructura ferroviaria de una compañía a partir del
 /// mapa actual.
 ///
 /// El recorrido cubre vía plana, señales, depósitos, estaciones/waypoints,
 /// cruces a nivel y túneles/puentes. La parte de carretera, agua y aeropuertos
-/// permanece fuera de esta primera superficie y se incorporará con sus
-/// contratos de ownership propios.
+/// usa resúmenes separados con sus contratos de ownership propios.
 #[must_use]
 pub fn rail_infrastructure_for_company(map: &Map, owner: CompanyId) -> RailInfrastructureSummary {
     let (width, height) = map.dimensions();
@@ -930,6 +1015,62 @@ mod tests {
             station.owner,
         );
         assert_eq!(summary.road_total(), 2);
+    }
+
+    #[test]
+    fn counts_station_tiles_and_airports_by_native_contract() {
+        let mut map = Map::new_flat(12, 8, 1);
+        let active = CompanyId::PLAYER;
+        let rival = CompanyId(1);
+        let station_tile =
+            |owner, station_type| tile(TileKind::Station, 0x50, 0, owner, 0, station_type << 3, 0);
+
+        map.set_tile(TileCoord::new(1, 1), station_tile(active, 0))
+            .unwrap();
+        map.set_tile(
+            TileCoord::new(2, 1),
+            station_tile(active, crate::station::STATION_TYPE_DOCK),
+        )
+        .unwrap();
+        map.set_tile(
+            TileCoord::new(3, 1),
+            station_tile(active, crate::station::STATION_TYPE_DOCK),
+        )
+        .unwrap();
+        map.set_tile(
+            TileCoord::new(4, 1),
+            station_tile(active, STATION_TYPE_BUOY),
+        )
+        .unwrap();
+        map.set_tile(
+            TileCoord::new(5, 1),
+            tile(
+                TileKind::Airport,
+                0x50,
+                0,
+                active,
+                0,
+                STATION_TYPE_AIRPORT << 3,
+                0,
+            ),
+        )
+        .unwrap();
+        map.set_tile(TileCoord::new(6, 1), station_tile(rival, 0))
+            .unwrap();
+
+        let mut airport = Station::new_with_kind(TileCoord::new(5, 2), StopKind::Airport);
+        airport.owner = active;
+        let mut oilrig = Station::new_with_kind(TileCoord::new(8, 2), StopKind::OilRig);
+        oilrig.owner = rival;
+        let stations = [airport, oilrig];
+
+        let active_summary = station_infrastructure_for_company(&map, &stations, active);
+        assert_eq!(active_summary.station_total(), 3);
+        assert_eq!(active_summary.airport_total(), 1);
+
+        let rival_summary = station_infrastructure_for_company(&map, &stations, rival);
+        assert_eq!(rival_summary.station_total(), 1);
+        assert_eq!(rival_summary.airport_total(), 1);
     }
 
     #[test]

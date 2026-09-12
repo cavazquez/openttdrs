@@ -5904,6 +5904,14 @@ acueductos se deduplican por pareja de rampas y sus bocas `MP_TUNNELBRIDGE`
 persisten owner, dirección, tipo de transporte y payload limpio; el decoder
 también los conserva como agua. La regresión cubre compañías rivales,
 secciones de esclusa y round-trip de rampas. #329/#567 continúa abierta por
-la exposición restante de otras infraestructuras, aeropuertos, conversión de
-capas existentes, callbacks, arrastre de áreas y aceptación
+la exposición restante de otras infraestructuras, conversión de capas
+existentes, callbacks, arrastre de áreas y aceptación
 visual/framebuffer.
+
+Corrección #329/#567-STATION-AIRPORT-SUMMARY (2026-09-12): Finanzas ya separa
+las teselas MP_STATION propias de las facilidades aéreas. El core cuenta
+estaciones no aéreas excluyendo boyas y aeropuertos, mientras cuenta cada
+entidad con facilidad aérea una sola vez, incluyendo Oil Rig; la UI muestra
+ambos valores y la regresión cubre ownership rival y tipos especiales. El
+frente #329/#567 continúa abierto por conversión de capas existentes,
+callbacks, arrastre de áreas y aceptación visual/framebuffer.

@@ -11,6 +11,9 @@
 //! Escala opcional: `OPENTTDRS_SHOT_UI_SCALE=1` o `2`.
 //! En captura individual, `OPENTTDRS_MAP_SHOT_SCALE=1/2/4/8` fija además el
 //! zoom de la cámara del mapa antes de abrir la ventana (UI sin escalar).
+//! `OPENTTDRS_WINDOW_SHOT_DEPOT_KIND=road|rail|ship` selecciona la familia
+//! de depósito para la captura de `Depot`; sin ella conserva road/rail y usa
+//! un depósito naval sólo si no hay otro.
 //! Para `TownAuthority`, `OPENTTDRS_TOWN_AUTHORITY_SHOT_STATE=normal|no-funds|unavailable`
 //! prepara estados reproducibles para el oráculo visual de #295.
 
@@ -1391,20 +1394,68 @@ fn auto_start_game(
     );
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WindowShotDepotKind {
+    Any,
+    Road,
+    Rail,
+    Ship,
+}
+
+fn parse_window_shot_depot_kind(raw: Option<&str>) -> WindowShotDepotKind {
+    match raw.map(str::trim) {
+        Some(value) if value.eq_ignore_ascii_case("road") => WindowShotDepotKind::Road,
+        Some(value) if value.eq_ignore_ascii_case("rail") => WindowShotDepotKind::Rail,
+        Some(value) if value.eq_ignore_ascii_case("ship") => WindowShotDepotKind::Ship,
+        _ => WindowShotDepotKind::Any,
+    }
+}
+
+fn window_shot_depot_kind() -> WindowShotDepotKind {
+    parse_window_shot_depot_kind(
+        std::env::var("OPENTTDRS_WINDOW_SHOT_DEPOT_KIND")
+            .ok()
+            .as_deref(),
+    )
+}
+
 fn first_depot(sim: &SimWorld) -> Option<TileCoord> {
+    let requested = window_shot_depot_kind();
     let (w, h) = sim.state.map.dimensions();
+    let mut first_ship = None;
     for y in 0..h {
         for x in 0..w {
             let pos = TileCoord::new(x.cast_signed(), y.cast_signed());
-            if matches!(
-                sim.state.map.get_kind(pos),
-                Some(TileKind::RoadDepot | TileKind::RailDepot)
-            ) {
+            let Some(kind) = sim.state.map.get_kind(pos) else {
+                continue;
+            };
+            if kind == TileKind::ShipDepot {
+                let canonical =
+                    openttdrs_core::ship_depot_north_tile(&sim.state.map, pos).unwrap_or(pos);
+                if first_ship.is_none() {
+                    first_ship = Some(canonical);
+                }
+                if requested == WindowShotDepotKind::Ship {
+                    return Some(canonical);
+                }
+                continue;
+            }
+            let matches = match requested {
+                WindowShotDepotKind::Any => {
+                    matches!(kind, TileKind::RoadDepot | TileKind::RailDepot)
+                }
+                WindowShotDepotKind::Road => kind == TileKind::RoadDepot,
+                WindowShotDepotKind::Rail => kind == TileKind::RailDepot,
+                WindowShotDepotKind::Ship => false,
+            };
+            if matches {
                 return Some(pos);
             }
         }
     }
-    None
+    (requested == WindowShotDepotKind::Any)
+        .then_some(first_ship)
+        .flatten()
 }
 
 fn first_station(sim: &SimWorld) -> Option<TileCoord> {
@@ -2311,6 +2362,23 @@ mod tests {
             Some(FloatingWindowId::Orders)
         );
         assert_eq!(window_id_by_storage_key("does-not-exist"), None);
+    }
+
+    #[test]
+    fn depot_shot_kind_selects_ship_and_falls_back_to_any() {
+        assert_eq!(
+            parse_window_shot_depot_kind(Some("ship")),
+            WindowShotDepotKind::Ship
+        );
+        assert_eq!(
+            parse_window_shot_depot_kind(Some("RAIL")),
+            WindowShotDepotKind::Rail
+        );
+        assert_eq!(
+            parse_window_shot_depot_kind(Some("unknown")),
+            WindowShotDepotKind::Any
+        );
+        assert_eq!(parse_window_shot_depot_kind(None), WindowShotDepotKind::Any);
     }
 
     #[test]

@@ -909,6 +909,7 @@ pub(crate) fn sync_buy_window_preview(
             Without<BuyVehicleRowSprite>,
             Without<BuyVehicleRoadToolbar>,
             Without<BuyVehicleRailToolbar>,
+            Without<BuyVehiclePreviewFrame>,
             Without<Button>,
         ),
     >,

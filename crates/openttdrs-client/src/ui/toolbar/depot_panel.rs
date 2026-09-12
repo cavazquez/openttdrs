@@ -690,7 +690,7 @@ pub(crate) fn sync_depot_panel(
             &mut BackgroundColor,
             &mut BorderColor,
         ),
-        Without<DepotConsistUnitSprite>,
+        (Without<DepotConsistUnitSprite>, Without<DepotRenameRow>),
     >,
     row_interaction_q: Query<
         (&DepotVehicleRow, &Interaction),

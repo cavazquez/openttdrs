@@ -23,8 +23,8 @@ use crate::iso::{
 use crate::render::atlas::AtlasSprite;
 use crate::render::newgrf_cache::{
     direct_tile_layout_ground, direct_tile_layout_object_sequence, direct_tile_layout_sequence,
-    runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_is_renderable,
-    tile_layout_sprite_color_with_palette, vars,
+    runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_is_object_renderable,
+    tile_layout_is_renderable, tile_layout_sprite_color_with_palette, vars,
 };
 use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -2683,7 +2683,7 @@ fn spawn_newgrf_object_layout_ground(
     images: &mut Assets<Image>,
     tint: Color,
 ) -> bool {
-    if !tile_layout_is_renderable(layout) {
+    if !tile_layout_is_object_renderable(layout) {
         return false;
     }
     let Some(ground) = layout.ground.as_ref() else {
@@ -2711,7 +2711,7 @@ fn spawn_newgrf_object_layout_ground(
             f32::from(decoded.width),
             f32::from(decoded.height),
         )
-    } else if let Some(base) = direct_tile_layout_ground(ground, assets) {
+    } else if let Some(base) = direct_tile_layout_object_sequence(ground, assets) {
         (
             base.atlas.sprite_colored(tint),
             base.x_offs,
@@ -2760,7 +2760,7 @@ fn spawn_newgrf_object_layout_sequence(
     images: &mut Assets<Image>,
     tint: Color,
 ) -> bool {
-    if !tile_layout_is_renderable(layout) || layout.sequence.is_empty() {
+    if !tile_layout_is_object_renderable(layout) || layout.sequence.is_empty() {
         return false;
     }
     let mut last_parent: Option<(Entity, Vec2)> = None;
@@ -3284,7 +3284,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
     if ottd_type == 10 {
         use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
         let custom_object_layout = object_layout.as_ref().is_some_and(|(_, layout, _, _, _)| {
-            tile_layout_is_renderable(layout) && object_sprites.is_some() && images.is_some()
+            tile_layout_is_object_renderable(layout) && object_sprites.is_some() && images.is_some()
         });
         if is_hidden(TransparencyOption::Structures) && !custom_object_layout {
             return;
@@ -3383,7 +3383,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
             );
             if let Some((layout_def, layout, runtime_fp, _layout_view_idx, object_colour)) =
                 object_layout.as_ref()
-                && tile_layout_is_renderable(layout)
+                && tile_layout_is_object_renderable(layout)
             {
                 if spawn_newgrf_object_layout_sequence(
                     commands,

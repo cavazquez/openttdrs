@@ -448,12 +448,14 @@ fn direct_tile_layout_house_geometry(sprite_id: u16) -> Option<DirectTileLayoutG
     geometry
 }
 
-/// Geometría NFO de las referencias directas que `object_land.h` usa dentro
-/// del namespace de objetos. Estos IDs también pueden aparecer en tablas de
-/// estación (por ejemplo, el transmisor 2601); por eso el consumidor de
-/// objetos tiene un resolver contextual y no se sobreescribe la prioridad de
-/// los metadatos de estación del resolver genérico.
-fn direct_tile_layout_object_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
+/// Geometría NFO de las referencias directas compartidas que `object_land.h`
+/// usa dentro del namespace de objetos. Estos IDs también pueden aparecer en
+/// tablas de estación (por ejemplo, el transmisor 2601); por eso el resolver
+/// genérico conserva sólo este subconjunto y el consumidor de objetos tiene
+/// un resolver contextual.
+fn direct_tile_layout_common_object_geometry(
+    sprite_id: u16,
+) -> Option<DirectTileLayoutGroundGeometry> {
     match sprite_id {
         1420 => Some(DirectTileLayoutGroundGeometry {
             width: 64.0,
@@ -489,6 +491,24 @@ fn direct_tile_layout_object_geometry(sprite_id: u16) -> Option<DirectTileLayout
     }
 }
 
+/// Geometría NFO de todas las referencias directas de `object_land.h`.
+///
+/// Las sedes (`2603..2631`) comparten rango numérico con sprites de otros
+/// consumidores del baseset. Por eso no se agregan al resolver global: sólo
+/// `DrawNewObjectTile` puede seleccionar este namespace sin ambigüedad.
+fn direct_tile_layout_object_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
+    direct_tile_layout_common_object_geometry(sprite_id).or_else(|| {
+        crate::sprites::company_hq_sprite_meta(u32::from(sprite_id)).map(|meta| {
+            DirectTileLayoutGroundGeometry {
+                width: meta.width,
+                height: meta.height,
+                x_offs: meta.x_offs,
+                y_offs: meta.y_offs,
+            }
+        })
+    })
+}
+
 fn direct_tile_layout_object_atlas(sprite_id: u16, assets: &WorldAssets) -> Option<AtlasSprite> {
     match sprite_id {
         1420 => Some(assets.object_concrete.clone()),
@@ -496,7 +516,14 @@ fn direct_tile_layout_object_atlas(sprite_id: u16, assets: &WorldAssets) -> Opti
         2602 => Some(assets.lighthouse.clone()),
         2632 => Some(assets.company_statue.clone()),
         4790 => Some(assets.bought_land.clone()),
-        _ => None,
+        _ => {
+            let hq_index =
+                u32::from(sprite_id).checked_sub(crate::sprites::COMPANY_HQ_SPRITE_BASE)?;
+            if hq_index >= crate::sprites::COMPANY_HQ_SPRITE_COUNT as u32 {
+                return None;
+            }
+            assets.hq.get(usize::try_from(hq_index).ok()?).cloned()
+        }
     }
 }
 
@@ -530,11 +557,21 @@ fn direct_tile_layout_sequence_geometry(sprite_id: u16) -> Option<DirectTileLayo
                 }
             })
         })
-        .or_else(|| direct_tile_layout_object_geometry(sprite_id))
+        .or_else(|| direct_tile_layout_common_object_geometry(sprite_id))
 }
 
 fn direct_tile_layout_sequence_sprite_is_supported(sprite_id: u16) -> bool {
     direct_tile_layout_sequence_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_object_sequence_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_sequence_sprite_is_supported(sprite_id)
+        || direct_tile_layout_object_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_object_ground_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_ground_sprite_is_supported(sprite_id)
+        || direct_tile_layout_object_geometry(sprite_id).is_some()
 }
 
 /// Base-sprite data that a TileLayout renderer needs in addition to the atlas
@@ -575,6 +612,40 @@ pub(crate) fn tile_layout_is_renderable(layout: &ResolvedTileLayout) -> bool {
                     ground.sprite_modifiers == 0
                         && ground.direct_palette == 0
                         && direct_tile_layout_ground_sprite_is_supported(id)
+                })
+        }
+    }
+}
+
+/// Variante contextual para `DrawNewObjectTile`.
+///
+/// El contrato global no admite todavía el rango HQ porque `2603..2631`
+/// colisiona con sprites de túneles, puertos y herramientas en otros
+/// namespaces. Un layout de objeto sí puede resolverlo de forma inequívoca,
+/// así que amplía únicamente sus referencias directas sin cambiar la
+/// decisión de estaciones, casas o industrias.
+#[must_use]
+pub(crate) fn tile_layout_is_object_renderable(layout: &ResolvedTileLayout) -> bool {
+    if !layout.complete
+        || layout.sequence.iter().any(|entry| {
+            entry.action1_sprite().is_none()
+                && !entry.base_sprite_id().is_some_and(|id| {
+                    entry.sprite_modifiers == 0
+                        && entry.direct_palette == 0
+                        && direct_tile_layout_object_sequence_sprite_is_supported(id)
+                })
+        })
+    {
+        return false;
+    }
+    match layout.ground.as_ref() {
+        None => true,
+        Some(ground) => {
+            ground.action1_sprite().is_some()
+                || ground.base_sprite_id().is_some_and(|id| {
+                    ground.sprite_modifiers == 0
+                        && ground.direct_palette == 0
+                        && direct_tile_layout_object_ground_sprite_is_supported(id)
                 })
         }
     }
@@ -1126,6 +1197,43 @@ mod tests {
         layout.sequence[0].base_sprite = Some(2601);
         layout.sequence[0].direct_palette = 1;
         assert!(!tile_layout_is_renderable(&layout));
+    }
+
+    #[test]
+    fn direct_object_hq_layout_is_contextual_and_keeps_global_collisions_isolated() {
+        let direct_ground = ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(3981),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [0, 0, 0],
+        };
+        let mut layout = ResolvedTileLayout {
+            ground: Some(direct_ground),
+            sequence: vec![action1_sprite()],
+            complete: true,
+        };
+
+        for sprite_id in [2603, 2612, 2626, 2631] {
+            layout.sequence[0].sprite = None;
+            layout.sequence[0].base_sprite = Some(sprite_id);
+            assert!(
+                !tile_layout_is_renderable(&layout),
+                "HQ {sprite_id} no debe entrar al resolver global"
+            );
+            assert!(
+                tile_layout_is_object_renderable(&layout),
+                "HQ {sprite_id} debe entrar al resolver contextual de objetos"
+            );
+        }
+
+        layout.sequence[0].base_sprite = Some(2603);
+        layout.ground.as_mut().expect("ground").base_sprite = Some(2603);
+        assert!(tile_layout_is_object_renderable(&layout));
+
+        layout.sequence[0].direct_palette = 1;
+        assert!(!tile_layout_is_object_renderable(&layout));
     }
 
     #[test]

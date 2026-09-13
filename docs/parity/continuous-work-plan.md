@@ -6892,5 +6892,14 @@ dentro de la huella 2×2 desde `OBJS`, aplica la paleta de compañía y emite
 las tres piezas BUILD con sus cajas `TILE_SEQ_LINE` de 20/50/60 unidades al
 sorter global. Las pendientes usan la fundación nivelada y mantienen el
 ground como child, igual que `DrawTile_Object`; la regresión cubre footprint,
- nivel, atlas y bounds. #326/#329 continúan abiertas por los namespaces,
- callbacks y contratos visuales restantes.
+nivel, atlas y bounds. #326/#329 continúan abiertas por los namespaces,
+callbacks y contratos visuales restantes.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-OBJECT-HQ (2026-09-13): las referencias
+directas `2603..2631` de una secuencia `TileLayout` de objetos reutilizan ahora
+el atlas de las cinco etapas HQ y la geometría NFO individual, incluidos los
+BUILD altos de niveles 2..4. La ampliación se mantiene contextual al namespace
+`DrawNewObjectTile`: el resolver global no incorpora ese rango y conserva las
+colisiones con túneles, estaciones y herramientas. La regresión cubre los 29
+sprites, sus anclas y el fallback de renderizabilidad entre namespaces;
+#326/#329 continúan abiertas.

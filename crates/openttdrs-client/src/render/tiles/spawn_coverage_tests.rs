@@ -13371,6 +13371,32 @@ fn direct_object_build_uses_object_atlas_and_namespace_anchor() {
 }
 
 #[test]
+fn direct_object_hq_build_uses_hq_atlas_and_nfo_geometry() {
+    let assets = boot_assets_app();
+
+    for sprite_id in 2603u32..=2631 {
+        let index = usize::try_from(sprite_id - 2603).expect("HQ atlas index");
+        let layer = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(u16::try_from(sprite_id).expect("HQ SpriteID")),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [14, 14, 61],
+        };
+
+        let resolved = direct_tile_layout_object_sequence(&layer, &assets)
+            .unwrap_or_else(|| panic!("object HQ BUILD sprite {sprite_id}"));
+        let meta = crate::sprites::company_hq_sprite_meta(sprite_id).expect("HQ metadata");
+        assert!(resolved.atlas.matches(&assets.hq[index].sprite()));
+        assert_eq!(resolved.width, meta.width, "sprite {sprite_id}");
+        assert_eq!(resolved.height, meta.height, "sprite {sprite_id}");
+        assert_eq!(resolved.x_offs, meta.x_offs, "sprite {sprite_id}");
+        assert_eq!(resolved.y_offs, meta.y_offs, "sprite {sprite_id}");
+    }
+}
+
+#[test]
 fn company_hq_uses_persisted_2x2_footprint_level_and_build_sorting() {
     use openttdrs_core::map::{MP_OBJECT_MAPT, OBJECT_TYPE_COMPANY_HEADQUARTERS};
 

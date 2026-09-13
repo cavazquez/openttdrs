@@ -7434,3 +7434,12 @@ La carga dedicada de OpenTTD pasó; la comparación completa confirmó la famili
 paleta y orden relativos equivalentes. La cobertura naval queda respaldada por
 una partida real; #326 permanece abierta por las familias no cubiertas y el
 gate raster completo.
+
+Corrección #326-RAIL-FIXTURE-VALID-TYPE (2026-09-13): el helper `tiny_state`
+puede conservar bytes arbitrarios para pruebas de persistencia, pero no debe
+ser la fuente directa de un SAV visual. `mvp_stations_state` normaliza ahora
+los bits bajos de `m8` de su tesela Rail a `RailType::Rail`; OpenTTD deja de
+resolver esa tesela como tipo `0x34`. Tras regenerar las fixtures derivadas,
+`mvp_openttd_ship.sav` compara 4104/4104 selecciones y 4104/4104 órdenes
+relativas, con `rail-track` y `ship-depot` alineados. Esto cierra la falsa
+divergencia de fixture, no el issue padre #326.

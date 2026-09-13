@@ -4866,3 +4866,13 @@ ejercitaba. OpenTTD acepta el save; en la traza completa de 64×64 las 3 capas
 relativo coinciden con la referencia. Esto cubre la evidencia que faltaba para
 el depósito naval, pero no cierra #326: siguen pendientes la aceptación raster
 amplia y otras familias/callbacks NewGRF.
+
+Corrección #326-RAIL-FIXTURE-VALID-TYPE (2026-09-13): las fixtures visuales
+derivadas de `tiny_state` ya no arrastran `m8=0x1234` en la tesela ferroviaria
+de diagnóstico. Ese valor era válido para probar round-trip de bytes, pero
+OpenTTD lo interpretaba como un `RailType` no definido (`0x34`) y producía el
+sprite espurio `20` en `(10,20)`. Con RailType normal explícito, la traza
+completa de `mvp_openttd_ship.sav` queda en 4104/4104 selecciones, 4104/4104
+órdenes relativas y la familia `rail-track` pasa 2/2 con geometría exacta.
+La diferencia anterior no era un fallo del renderer; #326 sigue abierta por
+la cobertura raster y las familias aún no instrumentadas.

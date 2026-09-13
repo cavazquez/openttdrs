@@ -564,3 +564,12 @@ oráculo se ejecuta sobre una huella naval real y no sólo sobre fixtures ECS.
 registró 3 selecciones de depósito y 2 de agua con IDs, geometrías, paletas y
 orden contenido en la referencia; cualquier diferencia restante de esa corrida
 pertenece a otra familia y debe aislarse por separado.
+
+Evidencia #326-RAIL-FIXTURE-VALID-TYPE (2026-09-13): no se debe usar un
+`m8` arbitrario de los helpers de round-trip como RailType de una fixture que
+OpenTTD va a dibujar. `tiny_state` conserva `0x1234` para su prueba de campos
+desconocidos, pero las fixtures MVP derivadas limpian los seis bits de
+RailType antes de exportar. Así se evita que OpenTTD lea `0x34` y termine
+emitiendo el offset desnudo `20` en vez de `1011 + 20 = 1031`. La repetición
+del world-draw de barco alcanzó 4104 selecciones contenidas y eliminó el
+residual ferroviario sin modificar el selector Rust.

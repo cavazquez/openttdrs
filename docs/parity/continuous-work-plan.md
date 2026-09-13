@@ -6815,3 +6815,15 @@ conserva una copia acotada a los 256 slots nativos y descarta sus handles
 cuando cambia el runtime, evitando tanto un índice fuera de rango como una
 textura horneada con el GRF anterior. Las regresiones cubren los cuatro
 consumidores y el reemplazo de una tabla; #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-SLOPED-GROUND (2026-09-13): las
+referencias directas del baseset a terreno inclinado dejan de caer al
+fallback cuando apuntan a los rangos auditados de `table/sprites.h`: las
+cuatro densidades de césped (`3924..3999`), rough/variantes rocosas
+(`4000..4060`), agua (`4061..4079`) y nieve/desierto (`4493..4568`). El
+cliente enlaza cada offset con su asset atlas real y conserva las anclas NFO
+variables, incluidos los sprites parciales de agua (`4070..4079`), en lugar
+de imponer el 64×31 plano. Los modifiers y paletas directas siguen forzando
+fallback atómico. Las regresiones cubren todos los IDs admitidos, rangos
+fuera del contrato y los anclajes normales/parciales; #326/#329 continúan
+abiertas por los layouts y callbacks restantes.

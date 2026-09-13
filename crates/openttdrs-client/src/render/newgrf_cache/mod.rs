@@ -36,38 +36,293 @@ pub(crate) fn twocc_map_for_palette(
         .cloned()
 }
 
-/// Baseset sprites that are safe to use as a `TileLayout` ground without
-/// guessing a palette, an animation, or NFO geometry. They all share the
-/// flat 64×31 tile geometry and `xrel=-31, yrel=0`.
+/// Geometry of a normal-size baseset sprite as emitted by `DrawGroundSprite`.
 ///
-/// The groups mirror the vanilla landscape table: bare/grass densities
-/// (`3924, 3943, 3962, 3981`), the five rough variants (`4000, 4019..4022`),
-/// both rocky sets (`4023, 4042`), water (`4061`) and the four
-/// snow/desert densities (`4493, 4512, 4531, 4550`). Sloped neighbours are
-/// deliberately absent because their sprite-specific geometry is not this
-/// flat ground contract.
-const DIRECT_FLAT_GROUND_SPRITES: [u16; 16] = [
-    3924,
-    3943,
-    3962,
-    3981,
-    4000,
-    4019,
-    4020,
-    4021,
-    4022,
-    4023,
-    4042,
-    SPR_FLAT_WATER_TILE as u16,
-    4493,
-    4512,
-    4531,
-    4550,
+/// The PNG is cropped to its visible rectangle, so its pixel dimensions alone
+/// are not enough to position it. These values mirror the normal 8bpp NFO
+/// rows in `ogfx1_base.nfo`; the same logical geometry is used by the active
+/// OpenGFX profile when the atlas is built.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DirectTileLayoutGroundGeometry {
+    width: f32,
+    height: f32,
+    x_offs: f32,
+    y_offs: f32,
+}
+
+const STANDARD_TERRAIN_GROUND_GEOMETRY: [DirectTileLayoutGroundGeometry; 19] = [
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 23.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 23.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 23.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 23.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 39.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 39.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 39.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 39.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 47.0,
+        x_offs: -31.0,
+        y_offs: -16.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 15.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
 ];
 
+/// Water uses the same ground draw contract for the first nine offsets, then
+/// switches to partial edge sprites. Keeping those final anchors is what
+/// prevents a direct water slope from becoming a misplaced 64×31 tile.
+const WATER_GROUND_GEOMETRY: [DirectTileLayoutGroundGeometry; 19] = [
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 31.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 23.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 39.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 23.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 39.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 23.0,
+        x_offs: -31.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 39.0,
+        x_offs: -31.0,
+        y_offs: -8.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 64.0,
+        x_offs: -61.0,
+        y_offs: -48.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 64.0,
+        height: 64.0,
+        x_offs: -1.0,
+        y_offs: -47.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 32.0,
+        height: 53.0,
+        x_offs: -29.0,
+        y_offs: -37.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 32.0,
+        height: 53.0,
+        x_offs: -1.0,
+        y_offs: -36.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 14.0,
+        height: 13.0,
+        x_offs: -31.0,
+        y_offs: 2.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 14.0,
+        height: 13.0,
+        x_offs: 19.0,
+        y_offs: 3.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 1.0,
+        height: 1.0,
+        x_offs: 0.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 20.0,
+        height: 20.0,
+        x_offs: 0.0,
+        y_offs: 0.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 1.0,
+        height: 1.0,
+        x_offs: 4.0,
+        y_offs: 3.0,
+    },
+    DirectTileLayoutGroundGeometry {
+        width: 3.0,
+        height: 3.0,
+        x_offs: -1.0,
+        y_offs: -1.0,
+    },
+];
+
+fn direct_tile_layout_ground_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
+    let (geometry, offset) = match sprite_id {
+        3924..=3999 => (
+            &STANDARD_TERRAIN_GROUND_GEOMETRY,
+            usize::from((sprite_id - 3924) % 19),
+        ),
+        4000..=4018 => (
+            &STANDARD_TERRAIN_GROUND_GEOMETRY,
+            usize::from(sprite_id - 4000),
+        ),
+        4019..=4022 => (&STANDARD_TERRAIN_GROUND_GEOMETRY, 0),
+        4023..=4060 => (
+            &STANDARD_TERRAIN_GROUND_GEOMETRY,
+            usize::from((sprite_id - 4023) % 19),
+        ),
+        4061..=4079 => (&WATER_GROUND_GEOMETRY, usize::from(sprite_id - 4061)),
+        4493..=4568 => (
+            &STANDARD_TERRAIN_GROUND_GEOMETRY,
+            usize::from((sprite_id - 4493) % 19),
+        ),
+        _ => return None,
+    };
+    geometry.get(offset).copied()
+}
+
+/// Direct baseset references that have a known atlas asset and NFO anchor.
+/// These ranges cover the four grass densities, rough/rocky terrain, water,
+/// and the four snow/desert densities. Any modifier or palette still forces
+/// the complete layout fallback in `tile_layout_is_renderable`.
+fn direct_tile_layout_ground_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_ground_geometry(sprite_id).is_some()
+}
+
 /// Base-sprite data that a TileLayout renderer needs in addition to the atlas
-/// rect. `AtlasSprite` deliberately has no NFO offset, so keeping this small
-/// whitelist prevents a direct reference from silently using a wrong anchor.
+/// rect. `AtlasSprite` deliberately has no NFO offset, so resolving only
+/// audited IDs prevents a direct reference from silently using a wrong anchor.
 #[derive(Clone)]
 pub(crate) struct DirectTileLayoutGround {
     pub(crate) atlas: AtlasSprite,
@@ -79,8 +334,8 @@ pub(crate) struct DirectTileLayoutGround {
 
 /// Whether every TileLayout entry can be emitted by the current compact
 /// renderer. Action1 entries are fully decoded; a direct base reference is
-/// accepted only for one of the audited flat ground sprites, whose geometry is
-/// also safe when the entry is a BUILD parent or child.
+/// accepted only for an audited ground sprite with a known atlas asset and NFO
+/// geometry, which is also safe when the entry is a BUILD parent or child.
 #[must_use]
 pub(crate) fn tile_layout_is_renderable(layout: &ResolvedTileLayout) -> bool {
     if !layout.complete
@@ -89,7 +344,7 @@ pub(crate) fn tile_layout_is_renderable(layout: &ResolvedTileLayout) -> bool {
                 && !entry.base_sprite_id().is_some_and(|id| {
                     entry.sprite_modifiers == 0
                         && entry.direct_palette == 0
-                        && DIRECT_FLAT_GROUND_SPRITES.contains(&id)
+                        && direct_tile_layout_ground_sprite_is_supported(id)
                 })
         })
     {
@@ -102,7 +357,7 @@ pub(crate) fn tile_layout_is_renderable(layout: &ResolvedTileLayout) -> bool {
                 || ground.base_sprite_id().is_some_and(|id| {
                     ground.sprite_modifiers == 0
                         && ground.direct_palette == 0
-                        && DIRECT_FLAT_GROUND_SPRITES.contains(&id)
+                        && direct_tile_layout_ground_sprite_is_supported(id)
                 })
         }
     }
@@ -115,34 +370,55 @@ pub(crate) fn direct_tile_layout_ground(
     ground: &ResolvedTileLayoutSprite,
     assets: &WorldAssets,
 ) -> Option<DirectTileLayoutGround> {
-    if ground.action1_sprite().is_some() || ground.direct_palette != 0 {
+    if ground.action1_sprite().is_some()
+        || ground.sprite_modifiers != 0
+        || ground.direct_palette != 0
+    {
         return None;
     }
-    let atlas = match ground.base_sprite_id()? {
+    let sprite_id = ground.base_sprite_id()?;
+    let atlas = match sprite_id {
         3924 => assets.industries.get(&3924)?.clone(), // SPR_FLAT_BARE_LAND
-        3943 => assets.grass_density[1][0].clone(),    // SPR_FLAT_1_THIRD_GRASS_TILE
-        3962 => assets.grass_density[2][0].clone(),    // SPR_FLAT_2_THIRD_GRASS_TILE
-        3981 => assets.grass.clone(),                  // SPR_FLAT_GRASS_TILE
-        4000 => assets.rough_flat[0].clone(),          // SPR_FLAT_ROUGH_LAND
-        4019 => assets.rough_flat[1].clone(),          // SPR_FLAT_ROUGH_LAND_1
-        4020 => assets.rough_flat[2].clone(),          // SPR_FLAT_ROUGH_LAND_2
-        4021 => assets.rough_flat[3].clone(),          // SPR_FLAT_ROUGH_LAND_3
-        4022 => assets.rough_flat[4].clone(),          // SPR_FLAT_ROUGH_LAND_4
-        4023 => assets.rocky[0][0].clone(),            // SPR_FLAT_ROCKY_LAND_1
-        4042 => assets.rocky[1][0].clone(),            // SPR_FLAT_ROCKY_LAND_2
+        3925..=3942 => assets.grass_density[0][usize::from(sprite_id - 3924)].clone(),
+        3943 => assets.grass_density[1][0].clone(), // SPR_FLAT_1_THIRD_GRASS_TILE
+        3944..=3961 => assets.grass_density[1][usize::from(sprite_id - 3943)].clone(),
+        3962 => assets.grass_density[2][0].clone(), // SPR_FLAT_2_THIRD_GRASS_TILE
+        3963..=3980 => assets.grass_density[2][usize::from(sprite_id - 3962)].clone(),
+        3981 => assets.grass.clone(), // SPR_FLAT_GRASS_TILE
+        3982..=3999 => assets
+            .grass_slopes
+            .get(usize::from(sprite_id - 3982))?
+            .clone(),
+        4000 => assets.rough_flat[0].clone(), // SPR_FLAT_ROUGH_LAND
+        4001..=4018 => assets
+            .rough_slopes
+            .get(usize::from(sprite_id - 4001))?
+            .clone(),
+        4019 => assets.rough_flat[1].clone(), // SPR_FLAT_ROUGH_LAND_1
+        4020 => assets.rough_flat[2].clone(), // SPR_FLAT_ROUGH_LAND_2
+        4021 => assets.rough_flat[3].clone(), // SPR_FLAT_ROUGH_LAND_3
+        4022 => assets.rough_flat[4].clone(), // SPR_FLAT_ROUGH_LAND_4
+        4023..=4041 => assets.rocky[0][usize::from(sprite_id - 4023)].clone(),
+        4042..=4060 => assets.rocky[1][usize::from(sprite_id - 4042)].clone(),
         id if id == SPR_FLAT_WATER_TILE as u16 => assets.water.clone(),
+        4062..=4079 => assets.water_slopes[usize::from(sprite_id - 4061)].clone(),
         4493 => assets.snow_desert[0][0].clone(), // SPR_FLAT_1_QUART_SNOW_DESERT_TILE
+        4494..=4511 => assets.snow_desert[0][usize::from(sprite_id - 4493)].clone(),
         4512 => assets.snow_desert[1][0].clone(), // SPR_FLAT_2_QUART_SNOW_DESERT_TILE
+        4513..=4530 => assets.snow_desert[1][usize::from(sprite_id - 4512)].clone(),
         4531 => assets.snow_desert[2][0].clone(), // SPR_FLAT_3_QUART_SNOW_DESERT_TILE
+        4532..=4549 => assets.snow_desert[2][usize::from(sprite_id - 4531)].clone(),
         4550 => assets.snow_desert[3][0].clone(), // SPR_FLAT_SNOW_DESERT_TILE
+        4551..=4568 => assets.snow_desert[3][usize::from(sprite_id - 4550)].clone(),
         _ => return None,
     };
+    let geometry = direct_tile_layout_ground_geometry(sprite_id)?;
     Some(DirectTileLayoutGround {
         atlas,
-        width: 64.0,
-        height: 31.0,
-        x_offs: -31.0,
-        y_offs: 0.0,
+        width: geometry.width,
+        height: geometry.height,
+        x_offs: geometry.x_offs,
+        y_offs: geometry.y_offs,
     })
 }
 
@@ -225,15 +501,15 @@ mod tests {
             .ground
             .as_mut()
             .expect("ground")
-            .base_sprite = Some(4062);
+            .base_sprite = Some(4080);
         assert!(!tile_layout_is_renderable(&unsupported_ground));
 
-        for sprite_id in DIRECT_FLAT_GROUND_SPRITES {
+        for sprite_id in (3924u16..=4079).chain(4493u16..=4568) {
             let mut supported = layout.clone();
             supported.ground.as_mut().expect("ground").base_sprite = Some(sprite_id);
             assert!(
                 tile_layout_is_renderable(&supported),
-                "sprite plano vanilla {sprite_id} debe conservarse como ground"
+                "sprite de terreno vanilla {sprite_id} debe conservarse como ground"
             );
         }
 
@@ -250,7 +526,61 @@ mod tests {
         direct_build.sequence[0].base_sprite = Some(3981);
         assert!(tile_layout_is_renderable(&direct_build));
         direct_build.sequence[0].base_sprite = Some(4062);
+        assert!(tile_layout_is_renderable(&direct_build));
+        direct_build.sequence[0].base_sprite = Some(4080);
         assert!(!tile_layout_is_renderable(&direct_build));
+    }
+
+    #[test]
+    fn direct_base_ground_uses_nfo_geometry_for_land_and_water_slopes() {
+        assert_eq!(
+            direct_tile_layout_ground_geometry(3982),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 64.0,
+                height: 31.0,
+                x_offs: -31.0,
+                y_offs: 0.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_ground_geometry(3996),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 64.0,
+                height: 47.0,
+                x_offs: -31.0,
+                y_offs: -16.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_ground_geometry(4064),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 64.0,
+                height: 23.0,
+                x_offs: -31.0,
+                y_offs: 0.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_ground_geometry(4070),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 64.0,
+                height: 64.0,
+                x_offs: -61.0,
+                y_offs: -48.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_ground_geometry(4079),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 3.0,
+                height: 3.0,
+                x_offs: -1.0,
+                y_offs: -1.0,
+            })
+        );
+        assert_eq!(direct_tile_layout_ground_geometry(4080), None);
+        assert_eq!(direct_tile_layout_ground_geometry(4492), None);
+        assert_eq!(direct_tile_layout_ground_geometry(4569), None);
     }
 
     #[test]

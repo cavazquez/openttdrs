@@ -12022,16 +12022,33 @@ fn flat_newgrf_industry_tile_layout_keeps_ground_in_ground_pass() {
 fn flat_newgrf_industry_tile_layout_renders_audited_direct_base_ground() {
     use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
 
-    for direct_sprite in [3924_u16, 3981, 4000] {
+    for direct_sprite in [
+        3924_u16, 3943, 3962, 3981, 4000, 4019, 4020, 4021, 4022, 4023, 4042, 4061, 4493, 4512,
+        4531, 4550,
+    ] {
         let assets = boot_assets_app();
+        let sequence_asset = assets.grass.clone();
         let expected = match direct_sprite {
             3924 => assets
                 .industries
                 .get(&3924)
                 .expect("bare-land atlas sprite")
                 .clone(),
+            3943 => assets.grass_density[1][0].clone(),
+            3962 => assets.grass_density[2][0].clone(),
             3981 => assets.grass.clone(),
             4000 => assets.rough_flat[0].clone(),
+            4019 => assets.rough_flat[1].clone(),
+            4020 => assets.rough_flat[2].clone(),
+            4021 => assets.rough_flat[3].clone(),
+            4022 => assets.rough_flat[4].clone(),
+            4023 => assets.rocky[0][0].clone(),
+            4042 => assets.rocky[1][0].clone(),
+            4061 => assets.water.clone(),
+            4493 => assets.snow_desert[0][0].clone(),
+            4512 => assets.snow_desert[1][0].clone(),
+            4531 => assets.snow_desert[2][0].clone(),
+            4550 => assets.snow_desert[3][0].clone(),
             _ => unreachable!(),
         };
         let coord = TileCoord::new(1, 1);
@@ -12062,7 +12079,12 @@ fn flat_newgrf_industry_tile_layout_renders_audited_direct_base_ground() {
                     direct_sprite,
                     ..Default::default()
                 },
-                sequence: Vec::new(),
+                sequence: vec![TileLayoutSpriteRef {
+                    direct_sprite: 3981,
+                    origin: [20, 20, 0],
+                    extent: [1, 1, 1],
+                    ..Default::default()
+                }],
             },
         );
         let industry_def = IndustryTileSpecDef {
@@ -12148,6 +12170,20 @@ fn flat_newgrf_industry_tile_layout_renders_audited_direct_base_ground() {
             depths,
             vec![ground_draw_z(coord.x, coord.y, 0.45)],
             "SpriteID base {direct_sprite} debe conservar atlas, ancla y ground pass"
+        );
+        let sequence_sprites: Vec<_> = world
+            .query::<(&Sprite, &Transform)>()
+            .iter(&world)
+            .filter_map(|(sprite, transform)| {
+                (sequence_asset.matches(sprite)
+                    && transform.translation.truncate() != expected_position.truncate())
+                .then_some(transform.translation)
+            })
+            .collect();
+        assert_eq!(
+            sequence_sprites.len(),
+            1,
+            "la entrada BUILD base 3981 debe materializarse como secuencia"
         );
     }
 }

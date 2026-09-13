@@ -1954,6 +1954,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             {
                 let _ = spawn_newgrf_station_layout_sequence(
                     commands,
+                    assets,
                     ctx,
                     rail_base_z,
                     dims.0,
@@ -2675,6 +2676,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             {
                 used_newgrf_waypoint_layout = spawn_newgrf_road_stop_layout_sequence(
                     commands,
+                    assets,
                     ctx,
                     waypoint_base_z,
                     dims.0,
@@ -3363,6 +3365,7 @@ fn spawn_newgrf_station_layout_ground(
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_station_layout_sequence(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     base_z: u8,
     map_width: u32,
@@ -3395,22 +3398,41 @@ fn spawn_newgrf_station_layout_sequence(
             }
             continue;
         }
-        let Some(decoded) = layer.action1_sprite() else {
-            return false;
-        };
-        let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle = cache.handle_for_layout(
-            def,
-            slot,
-            owner_colour,
-            runtime_fp,
-            layer.sprite_modifiers,
-            layer.direct_palette,
-            decoded,
-            images,
-        );
-        let width = f32::from(decoded.width);
-        let height = f32::from(decoded.height);
+        let (mut sprite, width, height, x_offs, y_offs) =
+            if let Some(decoded) = layer.action1_sprite() {
+                let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
+                let handle = cache.handle_for_layout(
+                    def,
+                    slot,
+                    owner_colour,
+                    runtime_fp,
+                    layer.sprite_modifiers,
+                    layer.direct_palette,
+                    decoded,
+                    images,
+                );
+                (
+                    tint_building_sprite(Sprite {
+                        image: handle,
+                        color: Color::WHITE,
+                        ..default()
+                    }),
+                    f32::from(decoded.width),
+                    f32::from(decoded.height),
+                    f32::from(decoded.x_offs),
+                    f32::from(decoded.y_offs),
+                )
+            } else if let Some(base) = direct_tile_layout_ground(layer, assets) {
+                (
+                    tint_building_sprite(base.atlas.sprite()),
+                    base.width,
+                    base.height,
+                    base.x_offs,
+                    base.y_offs,
+                )
+            } else {
+                return false;
+            };
         let origin = crate::iso::RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -3419,16 +3441,11 @@ fn spawn_newgrf_station_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(decoded.x_offs),
-            y_offs: f32::from(decoded.y_offs),
+            x_offs,
+            y_offs,
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
-        let mut sprite = tint_building_sprite(Sprite {
-            image: handle,
-            color: Color::WHITE,
-            ..default()
-        });
         sprite.color = tile_layout_sprite_color_with_palette(
             sprite.color,
             layer.sprite_modifiers,
@@ -3765,6 +3782,7 @@ fn newgrf_road_stop_child_center(
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_road_stop_layout_sequence(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     base_z: u8,
     map_width: u32,
@@ -3813,27 +3831,46 @@ fn spawn_newgrf_road_stop_layout_sequence(
             }
             continue;
         }
-        let Some(decoded) = layer.action1_sprite() else {
-            return false;
-        };
         let Some(index) = u16::try_from(index).ok() else {
             return false;
         };
         let Some(slot) = slot_base.checked_add(index) else {
             return false;
         };
-        let handle = cache.handle_for_variant_with_company_colour_and_modifiers(
-            ROADSTOP_TILE_LAYOUT_CACHE_TYPE,
-            slot,
-            runtime_fp,
-            owner_colour,
-            layer.sprite_modifiers,
-            layer.direct_palette,
-            decoded,
-            images,
-        );
-        let width = f32::from(decoded.width);
-        let height = f32::from(decoded.height);
+        let (mut sprite, width, height, x_offs, y_offs) =
+            if let Some(decoded) = layer.action1_sprite() {
+                let handle = cache.handle_for_variant_with_company_colour_and_modifiers(
+                    ROADSTOP_TILE_LAYOUT_CACHE_TYPE,
+                    slot,
+                    runtime_fp,
+                    owner_colour,
+                    layer.sprite_modifiers,
+                    layer.direct_palette,
+                    decoded,
+                    images,
+                );
+                (
+                    tint_building_sprite(Sprite {
+                        image: handle,
+                        color: Color::WHITE,
+                        ..default()
+                    }),
+                    f32::from(decoded.width),
+                    f32::from(decoded.height),
+                    f32::from(decoded.x_offs),
+                    f32::from(decoded.y_offs),
+                )
+            } else if let Some(base) = direct_tile_layout_ground(layer, assets) {
+                (
+                    tint_building_sprite(base.atlas.sprite()),
+                    base.width,
+                    base.height,
+                    base.x_offs,
+                    base.y_offs,
+                )
+            } else {
+                return false;
+            };
         let origin = crate::iso::RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -3842,16 +3879,11 @@ fn spawn_newgrf_road_stop_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(decoded.x_offs),
-            y_offs: f32::from(decoded.y_offs),
+            x_offs,
+            y_offs,
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
-        let mut sprite = tint_building_sprite(Sprite {
-            image: handle,
-            color: Color::WHITE,
-            ..default()
-        });
         sprite.color = tile_layout_sprite_color_with_palette(
             sprite.color,
             layer.sprite_modifiers,
@@ -4023,6 +4055,7 @@ fn spawn_road_stop_buildings(
         if let Some(layout) = layout
             && spawn_newgrf_road_stop_layout_sequence(
                 commands,
+                assets,
                 ctx,
                 base_z,
                 map.dimensions().0,
@@ -4540,6 +4573,7 @@ fn spawn_newgrf_airport_layout_ground(
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_airport_layout_sequence(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     base_z: u8,
     map_width: u32,
@@ -4572,24 +4606,43 @@ fn spawn_newgrf_airport_layout_sequence(
             }
             continue;
         }
-        let Some(decoded) = layer.action1_sprite() else {
-            return false;
-        };
         let Some(slot) = airport_tile_layout_cache_slot(gfx, index.saturating_add(1)) else {
             return false;
         };
-        let handle = cache.handle_for_variant_with_company_colour_and_modifiers(
-            AIRPORT_TILE_ACTION3_CACHE_TYPE,
-            slot,
-            runtime_fp,
-            owner_colour,
-            layer.sprite_modifiers,
-            layer.direct_palette,
-            decoded,
-            images,
-        );
-        let width = f32::from(decoded.width);
-        let height = f32::from(decoded.height);
+        let (mut sprite, width, height, x_offs, y_offs) =
+            if let Some(decoded) = layer.action1_sprite() {
+                let handle = cache.handle_for_variant_with_company_colour_and_modifiers(
+                    AIRPORT_TILE_ACTION3_CACHE_TYPE,
+                    slot,
+                    runtime_fp,
+                    owner_colour,
+                    layer.sprite_modifiers,
+                    layer.direct_palette,
+                    decoded,
+                    images,
+                );
+                (
+                    tint_building_sprite(Sprite {
+                        image: handle,
+                        color: Color::WHITE,
+                        ..default()
+                    }),
+                    f32::from(decoded.width),
+                    f32::from(decoded.height),
+                    f32::from(decoded.x_offs),
+                    f32::from(decoded.y_offs),
+                )
+            } else if let Some(base) = direct_tile_layout_ground(layer, assets) {
+                (
+                    tint_building_sprite(base.atlas.sprite()),
+                    base.width,
+                    base.height,
+                    base.x_offs,
+                    base.y_offs,
+                )
+            } else {
+                return false;
+            };
         let origin = crate::iso::RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -4598,16 +4651,11 @@ fn spawn_newgrf_airport_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(decoded.x_offs),
-            y_offs: f32::from(decoded.y_offs),
+            x_offs,
+            y_offs,
             remap_x_adj: 0.0,
         };
         let layer_z = 0.05 + index as f32 * 0.0003;
-        let mut sprite = tint_building_sprite(Sprite {
-            image: handle,
-            color: Color::WHITE,
-            ..default()
-        });
         sprite.color = tile_layout_sprite_color_with_palette(
             sprite.color,
             layer.sprite_modifiers,
@@ -5804,6 +5852,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types_and_tramway_action5(
                 }
                 let _ = spawn_newgrf_airport_layout_sequence(
                     commands,
+                    assets,
                     ctx,
                     custom_base_z,
                     dims.0,

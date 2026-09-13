@@ -791,6 +791,7 @@ pub(crate) fn spawn_house_tile(
     {
         if spawn_newgrf_house_layout_sequence(
             commands,
+            assets,
             ctx,
             resources.map_dims.0,
             foundation_surface_base_z,
@@ -1228,6 +1229,7 @@ fn spawn_newgrf_house_layout_ground(
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_house_layout_sequence(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     map_width: u32,
     surface_base_z: u8,
@@ -1258,21 +1260,52 @@ fn spawn_newgrf_house_layout_sequence(
             }
             continue;
         }
-        let Some(decoded) = layer.action1_sprite() else {
+        let (sprite, width, height, x_offs, y_offs) = if let Some(decoded) = layer.action1_sprite()
+        {
+            let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
+            let handle = cache.handle_for_layout(
+                def,
+                slot,
+                runtime_fp,
+                layer.sprite_modifiers,
+                layer.direct_palette,
+                decoded,
+                images,
+            );
+            let width = f32::from(decoded.width);
+            let height = f32::from(decoded.height);
+            let sprite = Sprite {
+                image: handle,
+                color: tile_layout_sprite_color_with_palette(
+                    tint,
+                    layer.sprite_modifiers,
+                    layer.direct_palette,
+                ),
+                ..default()
+            };
+            (
+                sprite,
+                width,
+                height,
+                f32::from(decoded.x_offs),
+                f32::from(decoded.y_offs),
+            )
+        } else if let Some(base) = direct_tile_layout_ground(layer, assets) {
+            let color = tile_layout_sprite_color_with_palette(
+                tint,
+                layer.sprite_modifiers,
+                layer.direct_palette,
+            );
+            (
+                base.atlas.sprite_colored(color),
+                base.width,
+                base.height,
+                base.x_offs,
+                base.y_offs,
+            )
+        } else {
             return false;
         };
-        let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle = cache.handle_for_layout(
-            def,
-            slot,
-            runtime_fp,
-            layer.sprite_modifiers,
-            layer.direct_palette,
-            decoded,
-            images,
-        );
-        let width = f32::from(decoded.width);
-        let height = f32::from(decoded.height);
         let seq = RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -1281,20 +1314,11 @@ fn spawn_newgrf_house_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(decoded.x_offs),
-            y_offs: f32::from(decoded.y_offs),
+            x_offs,
+            y_offs,
             remap_x_adj: 0.0,
         };
         let layer_z = 0.5 + index as f32 * 0.0003;
-        let sprite = Sprite {
-            image: handle,
-            color: tile_layout_sprite_color_with_palette(
-                tint,
-                layer.sprite_modifiers,
-                layer.direct_palette,
-            ),
-            ..default()
-        };
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(
                 ctx.iso_pos,
@@ -1670,6 +1694,7 @@ pub(crate) fn spawn_industry_tile_with_world(
     {
         if spawn_newgrf_industry_layout_sequence(
             commands,
+            assets,
             ctx,
             map_width,
             foundation.surface_base_z,
@@ -2082,6 +2107,7 @@ fn spawn_newgrf_industry_layout_ground(
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_industry_layout_sequence(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     map_width: u32,
     surface_base_z: u8,
@@ -2116,22 +2142,53 @@ fn spawn_newgrf_industry_layout_sequence(
             }
             continue;
         }
-        let Some(decoded) = layer.action1_sprite() else {
+        let (sprite, width, height, x_offs, y_offs) = if let Some(decoded) = layer.action1_sprite()
+        {
+            let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
+            let handle = cache.handle_for_layout(
+                def,
+                slot,
+                Some(palette_colour),
+                runtime_fp,
+                layer.sprite_modifiers,
+                layer.direct_palette,
+                decoded,
+                images,
+            );
+            let width = f32::from(decoded.width);
+            let height = f32::from(decoded.height);
+            let sprite = Sprite {
+                image: handle,
+                color: tile_layout_sprite_color_with_palette(
+                    tint,
+                    layer.sprite_modifiers,
+                    layer.direct_palette,
+                ),
+                ..default()
+            };
+            (
+                sprite,
+                width,
+                height,
+                f32::from(decoded.x_offs),
+                f32::from(decoded.y_offs),
+            )
+        } else if let Some(base) = direct_tile_layout_ground(layer, assets) {
+            let color = tile_layout_sprite_color_with_palette(
+                tint,
+                layer.sprite_modifiers,
+                layer.direct_palette,
+            );
+            (
+                base.atlas.sprite_colored(color),
+                base.width,
+                base.height,
+                base.x_offs,
+                base.y_offs,
+            )
+        } else {
             return false;
         };
-        let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle = cache.handle_for_layout(
-            def,
-            slot,
-            Some(palette_colour),
-            runtime_fp,
-            layer.sprite_modifiers,
-            layer.direct_palette,
-            decoded,
-            images,
-        );
-        let width = f32::from(decoded.width);
-        let height = f32::from(decoded.height);
         let seq = RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -2140,20 +2197,11 @@ fn spawn_newgrf_industry_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(decoded.x_offs),
-            y_offs: f32::from(decoded.y_offs),
+            x_offs,
+            y_offs,
             remap_x_adj: 0.0,
         };
         let layer_z = 0.5 + index as f32 * 0.0003;
-        let sprite = Sprite {
-            image: handle,
-            color: tile_layout_sprite_color_with_palette(
-                tint,
-                layer.sprite_modifiers,
-                layer.direct_palette,
-            ),
-            ..default()
-        };
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(
                 ctx.iso_pos,
@@ -2474,6 +2522,7 @@ fn spawn_newgrf_object_layout_ground(
 #[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_object_layout_sequence(
     commands: &mut Commands,
+    assets: &WorldAssets,
     ctx: &TileRenderContext,
     map_width: u32,
     def: &ObjectSpecDef,
@@ -2504,22 +2553,53 @@ fn spawn_newgrf_object_layout_sequence(
             }
             continue;
         }
-        let Some(decoded) = layer.action1_sprite() else {
+        let (sprite, width, height, x_offs, y_offs) = if let Some(decoded) = layer.action1_sprite()
+        {
+            let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
+            let handle = cache.handle_for_layout(
+                def,
+                slot,
+                object_colour,
+                runtime_fp,
+                layer.sprite_modifiers,
+                layer.direct_palette,
+                decoded,
+                images,
+            );
+            let width = f32::from(decoded.width);
+            let height = f32::from(decoded.height);
+            let sprite = Sprite {
+                image: handle,
+                color: tile_layout_sprite_color_with_palette(
+                    tint,
+                    layer.sprite_modifiers,
+                    layer.direct_palette,
+                ),
+                ..default()
+            };
+            (
+                sprite,
+                width,
+                height,
+                f32::from(decoded.x_offs),
+                f32::from(decoded.y_offs),
+            )
+        } else if let Some(base) = direct_tile_layout_ground(layer, assets) {
+            let color = tile_layout_sprite_color_with_palette(
+                tint,
+                layer.sprite_modifiers,
+                layer.direct_palette,
+            );
+            (
+                base.atlas.sprite_colored(color),
+                base.width,
+                base.height,
+                base.x_offs,
+                base.y_offs,
+            )
+        } else {
             return false;
         };
-        let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
-        let handle = cache.handle_for_layout(
-            def,
-            slot,
-            object_colour,
-            runtime_fp,
-            layer.sprite_modifiers,
-            layer.direct_palette,
-            decoded,
-            images,
-        );
-        let width = f32::from(decoded.width);
-        let height = f32::from(decoded.height);
         let seq = RoadStopSeqGfx {
             dx: f32::from(layer.origin[0]),
             dy: f32::from(layer.origin[1]),
@@ -2528,20 +2608,11 @@ fn spawn_newgrf_object_layout_sequence(
             } else {
                 0.0
             },
-            x_offs: f32::from(decoded.x_offs),
-            y_offs: f32::from(decoded.y_offs),
+            x_offs,
+            y_offs,
             remap_x_adj: 0.0,
         };
         let layer_z = 0.6 + index as f32 * 0.0003;
-        let sprite = Sprite {
-            image: handle,
-            color: tile_layout_sprite_color_with_palette(
-                tint,
-                layer.sprite_modifiers,
-                layer.direct_palette,
-            ),
-            ..default()
-        };
         if layer.is_parent() {
             let position = road_stop_build_sprite_center(
                 ctx.iso_pos,
@@ -3076,6 +3147,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
             {
                 if spawn_newgrf_object_layout_sequence(
                     commands,
+                    assets,
                     ctx,
                     map_width,
                     layout_def,

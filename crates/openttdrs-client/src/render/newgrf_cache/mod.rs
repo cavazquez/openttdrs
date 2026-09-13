@@ -58,15 +58,19 @@ pub(crate) struct DirectTileLayoutGround {
 
 /// Whether every TileLayout entry can be emitted by the current compact
 /// renderer. Action1 entries are fully decoded; a direct base reference is
-/// accepted only for one of the audited flat ground sprites, never for BUILD
-/// parents or children.
+/// accepted only for one of the audited flat ground sprites, whose geometry is
+/// also safe when the entry is a BUILD parent or child.
 #[must_use]
 pub(crate) fn tile_layout_is_renderable(layout: &ResolvedTileLayout) -> bool {
     if !layout.complete
-        || layout
-            .sequence
-            .iter()
-            .any(|entry| entry.action1_sprite().is_none())
+        || layout.sequence.iter().any(|entry| {
+            entry.action1_sprite().is_none()
+                && !entry.base_sprite_id().is_some_and(|id| {
+                    entry.sprite_modifiers == 0
+                        && entry.direct_palette == 0
+                        && DIRECT_FLAT_GROUND_SPRITES.contains(&id)
+                })
+        })
     {
         return false;
     }
@@ -223,10 +227,9 @@ mod tests {
         let mut direct_build = layout;
         direct_build.sequence[0].sprite = None;
         direct_build.sequence[0].base_sprite = Some(3981);
-        assert!(
-            !tile_layout_is_renderable(&direct_build),
-            "base BUILD sprites need their own NFO anchors and bounds"
-        );
+        assert!(tile_layout_is_renderable(&direct_build));
+        direct_build.sequence[0].base_sprite = Some(4062);
+        assert!(!tile_layout_is_renderable(&direct_build));
     }
 
     #[test]

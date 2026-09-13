@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use super::action2::{eval_action2_random, eval_action2_var, resolve_callback_chain};
 use super::pixel_codec::{
-    bake_sprite_company_palette, bake_sprite_crash, bake_sprite_newspaper, bake_sprite_palette_map,
+    bake_sprite_bare_land, bake_sprite_company_palette, bake_sprite_crash, bake_sprite_newspaper,
+    bake_sprite_palette_map,
 };
 
 /// Rango `PALETTE_RECOLOUR_START..=+15` que puede hornearse sin conservar un
@@ -17,6 +18,8 @@ const PALETTE_RECOLOUR_START: u16 = 775;
 const PALETTE_RECOLOUR_END: u16 = PALETTE_RECOLOUR_START + 15;
 /// Paleta nativa de sprites en estado de choque (`PALETTE_CRASH`).
 const PALETTE_CRASH: u16 = 804;
+/// Paleta nativa para tonos de terreno desnudo (`PALETTE_TO_BARE_LAND`).
+const PALETTE_TO_BARE_LAND: u16 = 791;
 /// Paleta nativa de sprites de periódico (`PALETTE_NEWSPAPER`).
 const PALETTE_NEWSPAPER: u16 = 803;
 /// Paletas nativas que recolorean sprites compartidos de estructuras.
@@ -526,6 +529,17 @@ fn resolve_layout_sprite_asset(
             sprite.rgba = bake_sprite_company_palette(&sprite, colour);
             // La paleta explícita ya quedó horneada. Evitar que el cliente
             // vuelva a tratarla como máscara del color del dueño.
+            sprite.mask.clear();
+            return Some((Some(sprite), None, 0));
+        }
+        if direct_palette == PALETTE_TO_BARE_LAND {
+            let Some(rgba) = bake_sprite_bare_land(&sprite) else {
+                *complete = false;
+                return None;
+            };
+            sprite.rgba = rgba;
+            // La tabla ya quedó materializada; no debe reaplicarse como
+            // máscara de paleta al subir la textura al cliente.
             sprite.mask.clear();
             return Some((Some(sprite), None, 0));
         }

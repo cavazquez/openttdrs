@@ -6709,3 +6709,14 @@ con `PALETTE_TO_TRANSPARENT` (que depende del destino). `PALETTE_TO_BARE_LAND`,
 fallback atómico hasta verificar sus tablas/compositor; la regresión
 `tile_layout_honours_newspaper_palette_on_action1_sprite` fija el alcance y
 #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-BARE-LAND-PALETTE (2026-09-13): las entradas
+Action1 de `TileLayout` que seleccionan `PALETTE_TO_BARE_LAND` (`791`) usan la
+tabla DOS de 256 entradas verificada en `ogfx1_base.grf`. El core aplica el
+remapeo sobre sprites 8bpp y sobre máscaras 32bpp, conserva el brillo de las
+entradas con máscara y limpia la máscara una vez materializado el resultado.
+Los índices no modificados por la tabla mantienen su color; si un sprite no
+permite recuperar un índice DOS completo se conserva el fallback atómico. La
+regresión `tile_layout_honours_bare_land_palette_on_action1_sprite` fija el
+contrato; `PALETTE_TO_TRANSPARENT`, 2CC y referencias directas del baseset
+continúan pendientes y #326/#329 siguen abiertas.

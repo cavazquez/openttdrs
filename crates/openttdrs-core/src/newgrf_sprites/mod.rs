@@ -47,13 +47,14 @@ pub(crate) use model::{map_tile_layout_sprite_modifiers, tile_layout_flags_valid
 
 // Re-exportar funciones de runtime de pixel_codec
 pub use pixel_codec::{
-    SPRITE_V2_ZOOM_PREFERENCE, apply_company_colour_mask, bake_sprite_company_mask,
-    bake_sprite_company_palette, bake_sprite_crash, bake_sprite_newspaper, bake_sprite_palette_map,
-    bake_sprite_two_company_palette, bake_sprite_two_company_palette_with_map, decode_chunked_8bpp,
-    decode_chunked_pixels, decode_real_sprite_v1, decode_real_sprite_v1_uncompressed,
-    decode_real_sprite_v2_section, decode_real_sprite_v2_section_zoom, decompress_grf_lz77,
-    encode_chunked_8bpp_full_rows, encode_chunked_pixels_full_rows, index_sprite_section,
-    indices_to_rgba, resolve_fd_sprite, sprite_v2_bpp,
+    SPRITE_V2_ZOOM_PREFERENCE, apply_company_colour_mask, bake_sprite_bare_land,
+    bake_sprite_company_mask, bake_sprite_company_palette, bake_sprite_crash,
+    bake_sprite_newspaper, bake_sprite_palette_map, bake_sprite_two_company_palette,
+    bake_sprite_two_company_palette_with_map, decode_chunked_8bpp, decode_chunked_pixels,
+    decode_real_sprite_v1, decode_real_sprite_v1_uncompressed, decode_real_sprite_v2_section,
+    decode_real_sprite_v2_section_zoom, decompress_grf_lz77, encode_chunked_8bpp_full_rows,
+    encode_chunked_pixels_full_rows, index_sprite_section, indices_to_rgba, resolve_fd_sprite,
+    sprite_v2_bpp,
 };
 
 // Re-exportar funciones de runtime de action_graph
@@ -1328,6 +1329,22 @@ mod tests {
             bake_sprite_newspaper(&sprite),
             vec![grey, grey, grey, 255, 1, 2, 3, 0]
         );
+    }
+
+    #[test]
+    fn bake_bare_land_palette_matches_opengfx_recolour_table() {
+        let sprite = DecodedSprite {
+            width: 3,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: indices_to_rgba(&[0x51, 0x5A, 0x20], 3, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let baked = bake_sprite_bare_land(&sprite).expect("complete bare-land map");
+        assert_eq!(&baked[0..3], &DOS_PALETTE_RGB[105]);
+        assert_eq!(&baked[4..7], &DOS_PALETTE_RGB[123]);
+        assert_eq!(&baked[8..11], &DOS_PALETTE_RGB[0x20]);
     }
 
     #[test]

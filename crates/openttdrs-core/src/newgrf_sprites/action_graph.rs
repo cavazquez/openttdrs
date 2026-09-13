@@ -1628,6 +1628,54 @@ mod tests {
     }
 
     #[test]
+    fn tile_layout_honours_bare_land_palette_on_action1_sprite() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: crate::newgrf_sprites::indices_to_rgba(&[0x51], 1, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 7,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    direct_palette: 791, // PALETTE_TO_BARE_LAND
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: Vec::new(),
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("direct bare-land palette TileLayout");
+        let ground = layout.ground.expect("ground");
+        assert!(layout.complete);
+        assert_eq!(
+            ground.action1_sprite().map(|decoded| decoded.rgba.clone()),
+            Some(crate::newgrf_sprites::bake_sprite_bare_land(&sprite).unwrap())
+        );
+        assert!(
+            ground
+                .action1_sprite()
+                .is_some_and(|decoded| decoded.mask.is_empty()),
+            "el remapeo bare-land explícito debe quedar horneado"
+        );
+    }
+
+    #[test]
     fn tile_layout_preserves_structure_palette_on_action1_sprite() {
         let sprite = DecodedSprite {
             width: 1,

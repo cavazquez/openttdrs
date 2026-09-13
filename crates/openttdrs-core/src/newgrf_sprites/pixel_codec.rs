@@ -485,18 +485,28 @@ fn sprite_palette_indices(sprite: &DecodedSprite) -> Option<Vec<u8>> {
     (indices.len() == pixel_count).then_some(indices)
 }
 
-/// Hornea un mapa de paleta Action1 sobre un sprite `NewGRF`.
+/// Tabla `PALETTE_TO_BARE_LAND` (`791`) del `ogfx1_base.grf` de `OpenGFX`.
 ///
-/// `OpenTTD` representa estos mapas como un sprite `256×1`: cada píxel de la
-/// paleta contiene el índice DOS que reemplaza al índice del sprite fuente.
-/// El blitter deja intacto un píxel cuando el mapa devuelve cero, por lo que
-/// se conserva esa semántica aquí. La máscara 32bpp sigue aportando el índice
-/// fuente y su brillo, mientras que los sprites 8bpp se reconstruyen desde su
-/// RGBA DOS exacto.
-#[must_use]
-pub fn bake_sprite_palette_map(sprite: &DecodedSprite, map: &DecodedSprite) -> Option<Vec<u8>> {
+/// Es una tabla DOS de 256 entradas. Se conserva completa para que los
+/// índices no representados sigan teniendo exactamente la identidad nativa.
+const BARE_LAND_PALETTE_MAP: [u8; 256] = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+    26, 27, 124, 126, 58, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+    49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72,
+    73, 74, 75, 76, 77, 78, 79, 80, 105, 106, 107, 108, 109, 109, 87, 88, 89, 123, 91, 92, 125,
+    127, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113,
+    114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132,
+    133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151,
+    152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170,
+    171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189,
+    190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208,
+    209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227,
+    228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246,
+    247, 248, 249, 250, 251, 252, 253, 254, 255,
+];
+
+fn bake_sprite_index_map(sprite: &DecodedSprite, map_indices: &[u8]) -> Option<Vec<u8>> {
     let source_indices = sprite_palette_indices(sprite)?;
-    let map_indices = sprite_palette_indices(map)?;
     if map_indices.len() < 256 {
         return None;
     }
@@ -523,6 +533,26 @@ pub fn bake_sprite_palette_map(sprite: &DecodedSprite, map: &DecodedSprite) -> O
         pixel[..3].copy_from_slice(&tuned);
     }
     Some(rgba)
+}
+
+/// Hornea un mapa de paleta Action1 sobre un sprite `NewGRF`.
+///
+/// `OpenTTD` representa estos mapas como un sprite `256×1`: cada píxel de la
+/// paleta contiene el índice DOS que reemplaza al índice del sprite fuente.
+/// El blitter deja intacto un píxel cuando el mapa devuelve cero, por lo que
+/// se conserva esa semántica aquí. La máscara 32bpp sigue aportando el índice
+/// fuente y su brillo, mientras que los sprites 8bpp se reconstruyen desde su
+/// RGBA DOS exacto.
+#[must_use]
+pub fn bake_sprite_palette_map(sprite: &DecodedSprite, map: &DecodedSprite) -> Option<Vec<u8>> {
+    let map_indices = sprite_palette_indices(map)?;
+    bake_sprite_index_map(sprite, &map_indices)
+}
+
+/// Hornea `PALETTE_TO_BARE_LAND` sobre un sprite `NewGRF`.
+#[must_use]
+pub fn bake_sprite_bare_land(sprite: &DecodedSprite) -> Option<Vec<u8>> {
+    bake_sprite_index_map(sprite, &BARE_LAND_PALETTE_MAP)
 }
 
 fn standard_twocc_colour(index: u8, primary: u8, secondary: u8) -> Option<[u8; 3]> {

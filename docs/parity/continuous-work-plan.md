@@ -7175,6 +7175,13 @@ diagonales mantienen el agua plana. River edges, offsets por features/Action5,
 callbacks y aceptación raster quedan fuera de esta unidad; #326 continúa
 abierta.
 
+Corrección #326-SHIP-DEPOT-PREVIEW-CANAL-ACTION5 (2026-09-13): los diques del
+ghost naval consumen ahora el bloque Action5 `Canals` desde el slot 52, usando
+el tamaño/ancla del sprite reemplazado y la misma caché que el mapa; cada slot
+ausente conserva el fallback vanilla OpenGFX y todos entran en la profundidad
+del pase `DrawGroundSprite`. Features Action1/3, callbacks, river edges y
+aceptación raster siguen fuera de esta unidad; #326 continúa abierta.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

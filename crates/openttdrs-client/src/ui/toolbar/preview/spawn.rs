@@ -114,6 +114,9 @@ pub(crate) fn spawn_preview_plan(
                 *origin,
                 *dir,
                 *valid,
+                &sim.state.runtime.canal_action5_newgrf_sprites,
+                &mut preview_newgrf.action5_sprites,
+                &mut preview_newgrf.images,
             );
         }
         PreviewPlan::Dock {

@@ -8,9 +8,9 @@ use crate::iso::{
 };
 use crate::render::viewport_sort::{ParentSpriteBounds, tile_seq_parent_bounds};
 use crate::render::{
-    CompanyColoredSprites, ViewportSortableParent, WorldAssets, canal_dike_slots,
-    river_slope_sprite_index, sprite_from_atlas_or_company_colour, sprite_from_company_or_asset,
-    viewport_insertion_key, viewport_source_depth,
+    CompanyColoredSprites, NewGrfAction5SpriteCache, ViewportSortableParent, WorldAssets,
+    canal_dike_slots, river_slope_sprite_index, sprite_from_atlas_or_company_colour,
+    sprite_from_company_or_asset, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
     SHIP_DEPOT_PATHS, WATER_CANAL_DIKE_SPRITE_META, WATER_RIVER_SLOPE_SPRITE_META,
@@ -23,6 +23,8 @@ const PREVIEW_Z_BASE: f32 = 3.0;
 const PREVIEW_WATER_LAYER: f32 = PREVIEW_Z_BASE - 0.030;
 const PREVIEW_DIKE_LAYER: f32 = PREVIEW_WATER_LAYER + 0.010;
 const PREVIEW_SCALE: f32 = 1.002;
+const ACTION5_CANALS_DIKES_OFFSET: usize = 52;
+const ACTION5_TYPE_CANALS: u8 = openttdrs_core::ACTION5_TYPE_CANALS;
 const RIVER_SLOPE_PATHS: [&str; 4] = [
     "assets/opengfx/tiles/water_river_slope_y_up.png",
     "assets/opengfx/tiles/water_river_slope_x_down.png",
@@ -43,6 +45,9 @@ pub(crate) fn spawn_ship_depot_preview(
     origin: TileCoord,
     dir: u8,
     valid: bool,
+    canal_action5: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: &mut NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
 ) {
     let [origin, other] = ship_depot_footprint(origin, dir);
     let axis_y = dir & 0x01 != 0;
@@ -111,6 +116,9 @@ pub(crate) fn spawn_ship_depot_preview(
             coord,
             base_z,
             tint,
+            canal_action5,
+            action5_sprites,
+            images,
         );
         let ref_pos = iso(coord.x, coord.y);
         for (layer_i, layer) in ship_depot_layers(axis_y, part_south).iter().enumerate() {
@@ -180,6 +188,7 @@ pub(crate) fn spawn_ship_depot_preview(
 /// Dibuja los bordes vanilla que `DrawWaterEdges(true, 0, tile)` agrega a un
 /// depósito sobre canal. El selector comparte la conectividad del renderer:
 /// un segundo depósito adyacente no vuelve a pintar el dique interno.
+#[allow(clippy::too_many_arguments)] // parámetros ECS/assets de spawn
 fn spawn_ship_depot_canal_dikes(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -188,6 +197,9 @@ fn spawn_ship_depot_canal_dikes(
     coord: TileCoord,
     base_z: u8,
     tint: Color,
+    canal_action5: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: &mut NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
 ) {
     if map.get(coord).and_then(water_class) != Some(WaterClass::Canal) {
         return;
@@ -197,30 +209,58 @@ fn spawn_ship_depot_canal_dikes(
         if !selected {
             continue;
         }
-        let Some(&(width, height, xrel, yrel)) = WATER_CANAL_DIKE_SPRITE_META.get(slot) else {
-            continue;
-        };
-        let sprite = world_assets.map_or_else(
-            || Sprite {
-                image: asset_server.load::<Image>(format!(
-                    "assets/opengfx/tiles/water_canal_dike_{slot:02}.png"
-                )),
-                color: tint,
-                ..default()
-            },
-            |assets| assets.canal_dikes[slot].sprite_colored(tint),
-        );
-        let position = overlay_pos(
+        let action5_slot = ACTION5_CANALS_DIKES_OFFSET.saturating_add(slot);
+        let action5 = canal_action5
+            .get(action5_slot)
+            .and_then(Option::as_ref)
+            .and_then(|decoded| {
+                let sprite = action5_sprites.sprite_colored(
+                    ACTION5_TYPE_CANALS,
+                    action5_slot,
+                    canal_action5,
+                    tint,
+                    images,
+                )?;
+                Some((
+                    sprite,
+                    f32::from(decoded.width),
+                    f32::from(decoded.height),
+                    f32::from(decoded.x_offs),
+                    f32::from(decoded.y_offs),
+                ))
+            });
+        let (sprite, width, height, xrel, yrel) = action5.unwrap_or_else(|| {
+            let (width, height, xrel, yrel) = WATER_CANAL_DIKE_SPRITE_META[slot];
+            let sprite = world_assets.map_or_else(
+                || Sprite {
+                    image: asset_server.load::<Image>(format!(
+                        "assets/opengfx/tiles/water_canal_dike_{slot:02}.png"
+                    )),
+                    color: tint,
+                    ..default()
+                },
+                |assets| assets.canal_dikes[slot].sprite_colored(tint),
+            );
+            (
+                sprite,
+                f32::from(width),
+                f32::from(height),
+                f32::from(xrel),
+                f32::from(yrel),
+            )
+        });
+        let mut position = overlay_pos(
             origin,
-            f32::from(xrel),
-            f32::from(yrel),
-            f32::from(width),
-            f32::from(height),
+            xrel,
+            yrel,
+            width,
+            height,
             base_z,
             PREVIEW_DIKE_LAYER + slot as f32 * 0.0001,
             coord.x,
             coord.y,
         );
+        position.z = ground_draw_z(coord.x, coord.y, PREVIEW_DIKE_LAYER + slot as f32 * 0.0001);
         commands.spawn((
             BuildGhostPreview,
             sprite,

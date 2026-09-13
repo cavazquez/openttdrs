@@ -6933,3 +6933,13 @@ normales conservan el resolver genérico. Paletas, modifiers, IDs fuera de las
 tablas e imágenes ausentes mantienen fallback atómico. Las regresiones cubren
 los ocho atlas/anclajes, la diferencia frente a la tabla genérica y el
 aislamiento del ground; #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-AIRPORT-GROUND (2026-09-13): los
+`AirportTileLayout` pueden materializar referencias directas de todo el banco
+airport (`2095`, `2601`, `2633..2691`, `3981`, `4982`, `5966..5968`) también
+en `ground`, no sólo en `BUILD`. El resolver contextual prioriza
+`WorldAssets.airport_station` y sus metadatos NFO, evitando que IDs compartidos
+como `2601` elijan la textura de otro feature; la fundación Action5, la
+rotación y el fallback atómico de paletas/modifiers se conservan. La regresión
+cubre los 66 sprites en ground y BUILD; #326/#329 continúan abiertas por la
+matriz completa de callbacks, rotaciones, sonidos y aceptación raster.

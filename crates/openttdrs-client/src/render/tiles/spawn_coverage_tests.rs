@@ -23,6 +23,7 @@ const TEST_WORLD_SEED: u64 = 0;
 use crate::iso::{ground_draw_z, overlay_pos};
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::newgrf_cache::{
+    direct_tile_layout_airport_ground, direct_tile_layout_airport_sequence,
     direct_tile_layout_object_sequence, direct_tile_layout_rail_waypoint_sequence,
     direct_tile_layout_road_stop_sequence, direct_tile_layout_road_waypoint_sequence,
     direct_tile_layout_sequence,
@@ -13567,6 +13568,43 @@ fn direct_rail_waypoint_build_uses_shared_anchor_and_rail_atlas() {
             assert_eq!(resolved.height, height, "sprite {sprite_id}");
             assert_eq!(resolved.x_offs, x_offs, "sprite {sprite_id}");
             assert_eq!(resolved.y_offs, y_offs, "sprite {sprite_id}");
+        }
+    }
+}
+
+#[test]
+fn direct_airport_tile_layout_uses_airport_atlas_and_nfo_geometry() {
+    let assets = boot_assets_app();
+
+    for meta in crate::sprites::AIRPORT_STATION_SPRITES.iter() {
+        let sprite_id = u16::try_from(meta.sprite_id).expect("airport SpriteID");
+        let expected_atlas = assets
+            .airport_station_sprite(meta.sprite_id)
+            .unwrap_or_else(|| panic!("airport atlas {sprite_id}"));
+        let layer = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+            sprite: None,
+            base_sprite: Some(sprite_id),
+            sprite_modifiers: 0,
+            direct_palette: 0,
+            origin: [0, 0, 0],
+            extent: [16, 16, 16],
+        };
+
+        for (name, resolved) in [
+            ("ground", direct_tile_layout_airport_ground(&layer, &assets)),
+            (
+                "sequence",
+                direct_tile_layout_airport_sequence(&layer, &assets),
+            ),
+        ] {
+            let resolved = resolved.unwrap_or_else(|| {
+                panic!("airport {name} sprite {sprite_id} no se pudo materializar")
+            });
+            assert!(resolved.atlas.matches(&expected_atlas.sprite()));
+            assert_eq!(resolved.width, meta.w, "{name} sprite {sprite_id}");
+            assert_eq!(resolved.height, meta.h, "{name} sprite {sprite_id}");
+            assert_eq!(resolved.x_offs, meta.x_offs, "{name} sprite {sprite_id}");
+            assert_eq!(resolved.y_offs, meta.y_offs, "{name} sprite {sprite_id}");
         }
     }
 }

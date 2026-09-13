@@ -623,6 +623,21 @@ fn direct_tile_layout_rail_waypoint_geometry(
     })
 }
 
+/// Geometría NFO de los sprites que `AirportDrawTileLayout` puede recibir
+/// como referencia directa. El aeropuerto comparte varios SpriteID con otros
+/// features (por ejemplo `2601`), por lo que el consumidor debe decidir el
+/// namespace antes de seleccionar el atlas.
+fn direct_tile_layout_airport_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
+    crate::sprites::airport_station_sprite_for_id(u32::from(sprite_id)).map(|sprite| {
+        DirectTileLayoutGroundGeometry {
+            width: sprite.w,
+            height: sprite.h,
+            x_offs: sprite.x_offs,
+            y_offs: sprite.y_offs,
+        }
+    })
+}
+
 fn direct_tile_layout_road_waypoint_atlas(
     sprite_id: u16,
     assets: &WorldAssets,
@@ -750,6 +765,16 @@ fn direct_tile_layout_rail_waypoint_sequence_sprite_is_supported(sprite_id: u16)
 fn direct_tile_layout_rail_waypoint_ground_sprite_is_supported(sprite_id: u16) -> bool {
     direct_tile_layout_ground_sprite_is_supported(sprite_id)
         || direct_tile_layout_rail_waypoint_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_airport_sequence_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_sequence_sprite_is_supported(sprite_id)
+        || direct_tile_layout_airport_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_airport_ground_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_ground_sprite_is_supported(sprite_id)
+        || direct_tile_layout_airport_geometry(sprite_id).is_some()
 }
 
 fn direct_tile_layout_object_sequence_sprite_is_supported(sprite_id: u16) -> bool {
@@ -932,6 +957,37 @@ pub(crate) fn tile_layout_is_rail_waypoint_renderable(layout: &ResolvedTileLayou
     }
 }
 
+/// Variante contextual para `AirportDrawTileLayout`. El resolver global ya
+/// admite los sprites airport en `BUILD`, pero no en `ground` porque el mismo
+/// espacio numérico también lo consumen otros features. Aquí el tipo de tile
+/// elimina esa ambigüedad sin ampliar el contrato de estaciones o industrias.
+#[must_use]
+pub(crate) fn tile_layout_is_airport_renderable(layout: &ResolvedTileLayout) -> bool {
+    if !layout.complete
+        || layout.sequence.iter().any(|entry| {
+            entry.action1_sprite().is_none()
+                && !entry.base_sprite_id().is_some_and(|id| {
+                    entry.sprite_modifiers == 0
+                        && entry.direct_palette == 0
+                        && direct_tile_layout_airport_sequence_sprite_is_supported(id)
+                })
+        })
+    {
+        return false;
+    }
+    match layout.ground.as_ref() {
+        None => true,
+        Some(ground) => {
+            ground.action1_sprite().is_some()
+                || ground.base_sprite_id().is_some_and(|id| {
+                    ground.sprite_modifiers == 0
+                        && ground.direct_palette == 0
+                        && direct_tile_layout_airport_ground_sprite_is_supported(id)
+                })
+        }
+    }
+}
+
 /// Resolves the texture and audited NFO geometry of a supported direct base
 /// ground. Action1 sprites stay in the per-feature NewGRF cache instead.
 #[must_use]
@@ -1017,6 +1073,37 @@ pub(crate) fn direct_tile_layout_rail_waypoint_ground(
     let sprite_id = ground.base_sprite_id()?;
     let geometry = direct_tile_layout_rail_waypoint_geometry(sprite_id)?;
     let atlas = assets.rail.get(&u32::from(sprite_id)).cloned()?;
+    Some(DirectTileLayoutGround {
+        atlas,
+        width: geometry.width,
+        height: geometry.height,
+        x_offs: geometry.x_offs,
+        y_offs: geometry.y_offs,
+    })
+}
+
+/// Resuelve el suelo directo de un `AirportTile`. Primero conserva el terreno
+/// común y después consulta el atlas airport con sus dimensiones/anclas NFO;
+/// no reutiliza la entrada de otro namespace que comparta SpriteID.
+#[must_use]
+pub(crate) fn direct_tile_layout_airport_ground(
+    ground: &ResolvedTileLayoutSprite,
+    assets: &WorldAssets,
+) -> Option<DirectTileLayoutGround> {
+    if let Some(base) = direct_tile_layout_ground(ground, assets) {
+        return Some(base);
+    }
+    if ground.action1_sprite().is_some()
+        || ground.sprite_modifiers != 0
+        || ground.direct_palette != 0
+    {
+        return None;
+    }
+    let sprite_id = ground.base_sprite_id()?;
+    let geometry = direct_tile_layout_airport_geometry(sprite_id)?;
+    let atlas = assets
+        .airport_station_sprite(u32::from(sprite_id))
+        .cloned()?;
     Some(DirectTileLayoutGround {
         atlas,
         width: geometry.width,
@@ -1159,6 +1246,36 @@ pub(crate) fn direct_tile_layout_rail_waypoint_sequence(
     if layer.action1_sprite().is_some() || layer.sprite_modifiers != 0 || layer.direct_palette != 0
     {
         return None;
+    }
+    direct_tile_layout_sequence(layer, assets)
+}
+
+/// Resuelve una referencia directa desde el namespace de `AirportTile`.
+/// Ground y BUILD priorizan el atlas airport; el resolver común sigue
+/// disponible para terreno y bancos ya auditados que un layout pueda mezclar.
+#[must_use]
+pub(crate) fn direct_tile_layout_airport_sequence(
+    layer: &ResolvedTileLayoutSprite,
+    assets: &WorldAssets,
+) -> Option<DirectTileLayoutGround> {
+    if let Some(ground) = direct_tile_layout_airport_ground(layer, assets) {
+        return Some(ground);
+    }
+    if layer.action1_sprite().is_some() || layer.sprite_modifiers != 0 || layer.direct_palette != 0
+    {
+        return None;
+    }
+    if let Some(sprite_id) = layer.base_sprite_id()
+        && let Some(geometry) = direct_tile_layout_airport_geometry(sprite_id)
+        && let Some(atlas) = assets.airport_station_sprite(u32::from(sprite_id)).cloned()
+    {
+        return Some(DirectTileLayoutGround {
+            atlas,
+            width: geometry.width,
+            height: geometry.height,
+            x_offs: geometry.x_offs,
+            y_offs: geometry.y_offs,
+        });
     }
     direct_tile_layout_sequence(layer, assets)
 }
@@ -1513,6 +1630,55 @@ mod tests {
         layout.sequence[0].direct_palette = 1;
         assert!(!tile_layout_is_rail_waypoint_renderable(&layout));
         assert_eq!(direct_tile_layout_rail_waypoint_geometry(4982), None);
+    }
+
+    #[test]
+    fn direct_airport_tile_layout_keeps_ground_in_the_airport_namespace() {
+        let mut layout = ResolvedTileLayout {
+            ground: Some(ResolvedTileLayoutSprite {
+                sprite: None,
+                base_sprite: Some(2634),
+                sprite_modifiers: 0,
+                direct_palette: 0,
+                origin: [0, 0, 0],
+                extent: [1, 1, 1],
+            }),
+            sequence: vec![action1_sprite()],
+            complete: true,
+        };
+        assert!(!tile_layout_is_renderable(&layout));
+        assert!(tile_layout_is_airport_renderable(&layout));
+
+        for sprite in crate::sprites::AIRPORT_STATION_SPRITES {
+            let sprite_id = u16::try_from(sprite.sprite_id).expect("airport SpriteID");
+            layout.sequence[0].sprite = None;
+            layout.sequence[0].base_sprite = Some(sprite_id);
+            assert!(
+                tile_layout_is_airport_renderable(&layout),
+                "AirportTile debe aceptar BUILD directo {sprite_id}"
+            );
+            assert_eq!(
+                direct_tile_layout_airport_geometry(sprite_id),
+                Some(DirectTileLayoutGroundGeometry {
+                    width: sprite.w,
+                    height: sprite.h,
+                    x_offs: sprite.x_offs,
+                    y_offs: sprite.y_offs,
+                }),
+                "geometría airport {sprite_id}"
+            );
+        }
+
+        layout.ground.as_mut().expect("ground").base_sprite = Some(2601);
+        layout.sequence[0] = action1_sprite();
+        assert!(tile_layout_is_airport_renderable(&layout));
+        assert!(!tile_layout_is_renderable(&layout));
+
+        layout.ground.as_mut().expect("ground").base_sprite = Some(2692);
+        assert!(!tile_layout_is_airport_renderable(&layout));
+        layout.ground.as_mut().expect("ground").base_sprite = Some(2634);
+        layout.ground.as_mut().expect("ground").direct_palette = 1;
+        assert!(!tile_layout_is_airport_renderable(&layout));
     }
 
     #[test]

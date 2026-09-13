@@ -1201,6 +1201,30 @@ impl TruckHandles {
                 if !layers.is_empty() {
                     return layers;
                 }
+                // Un runtime puede existir para callbacks, SpriteStack o
+                // grupos de carga aunque la pose actual no tenga una capa
+                // resoluble. Si Action1 dejó una vista estática, conservarla
+                // es preferible a saltar al sprite vanilla.
+                if let Some(view) = eng.newgrf_view(dir) {
+                    let policy = vehicle_image_policy(
+                        palette_override,
+                        colour,
+                        livery_secondary,
+                        eng.uses_2cc,
+                    );
+                    let twocc_map = twocc_action5_map_for_palette(sim, palette_override);
+                    let handle = cache.handle_for_image(
+                        decoded_sprite_image_with_twocc_map(view, policy, twocc_map),
+                        images,
+                    );
+                    return vec![NewGrfVehicleLayer {
+                        handle,
+                        x_offs: view.x_offs,
+                        y_offs: view.y_offs,
+                        width: view.width,
+                        height: view.height,
+                    }];
+                }
             } else if let Some(handle) =
                 cache.handle_for_with_livery(eng, dir, colour, livery_secondary, images)
                 && let Some(view) = eng.newgrf_view(dir)
@@ -1814,6 +1838,72 @@ mod tests {
                 )
                 .as_slice()
             )
+        );
+    }
+
+    #[test]
+    fn runtime_empty_layers_fall_back_to_static_catalog_view() {
+        use openttdrs_core::newgrf_sprites::{DecodedSprite, TrainSpriteGraphics};
+
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train")
+            .clone();
+        engine.id = 0x7F08;
+        engine.from_newgrf = true;
+        engine.newgrf_grfid = 0x5354_4154;
+        engine.newgrf_local_id = 0x12;
+        engine.newgrf_views = vec![DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 4,
+            y_offs: -2,
+            rgba: vec![77, 0, 0, 255, 77, 0, 0, 255],
+            mask: Vec::new(),
+        }];
+        // El runtime se conserva para callbacks del motor, pero no tiene una
+        // asignación para este ID; la vista Action1 sigue siendo válida.
+        engine.newgrf_runtime = Some(Box::new(TrainSpriteGraphics::default()));
+
+        let mut state = GameState::new(8, 8);
+        state.engine_catalog.push(engine.clone());
+        let mut vehicle = Vehicle::new(
+            203,
+            VehicleKind::Train,
+            TileCoord::new(2, 2),
+            TileCoord::new(3, 2),
+        );
+        vehicle.engine_id = Some(engine.id);
+        vehicle.direction = openttdrs_core::DIR_E;
+        state.vehicles.push(vehicle.clone());
+        let sim = crate::state::SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let handles = distinct_test_handles();
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+
+        let layers = handles.for_vehicle_with_newgrf_layers(
+            &vehicle,
+            openttdrs_core::VehiclePose::from_vehicle(&vehicle),
+            None,
+            None,
+            &sim,
+            &mut cache,
+            &mut images,
+        );
+
+        let layer = layers.first().expect("static catalog layer");
+        assert_eq!((layer.x_offs, layer.y_offs), (4, -2));
+        assert_eq!((layer.width, layer.height), (2, 1));
+        assert_eq!(
+            images.get(&layer.handle).unwrap().data.as_deref(),
+            Some(&[77, 0, 0, 255, 77, 0, 0, 255][..])
+        );
+        assert_ne!(
+            layer.handle,
+            handles.train_groups[0][openttdrs_core::DIR_E as usize]
         );
     }
 

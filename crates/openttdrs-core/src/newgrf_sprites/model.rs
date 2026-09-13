@@ -5,6 +5,14 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::action2::{eval_action2_random, eval_action2_var, resolve_callback_chain};
+use super::pixel_codec::bake_sprite_company_palette;
+
+/// Rango `PALETTE_RECOLOUR_START..=+15` que puede hornearse sin conservar un
+/// identificador de paleta en el cliente. Otras paletas directas necesitan
+/// mapas Action5 o semántica de transparencia que este resolver todavía no
+/// transporta.
+const PALETTE_RECOLOUR_START: u16 = 775;
+const PALETTE_RECOLOUR_END: u16 = PALETTE_RECOLOUR_START + 15;
 
 /// Sprite RGBA decodificado (índice 0 → alpha 0).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -284,7 +292,27 @@ fn resolve_layout_sprite_asset(
             *complete = false;
             return None;
         };
-        return Some((Some(sprite), None));
+        if reference.direct_palette == 0 {
+            return Some((Some(sprite), None));
+        }
+        if (PALETTE_RECOLOUR_START..=PALETTE_RECOLOUR_END).contains(&reference.direct_palette) {
+            let mut sprite = sprite;
+            let Some(colour) = u8::try_from(reference.direct_palette - PALETTE_RECOLOUR_START).ok()
+            else {
+                *complete = false;
+                return None;
+            };
+            sprite.rgba = bake_sprite_company_palette(&sprite, colour);
+            // La paleta explícita ya quedó horneada. Evitar que el cliente
+            // vuelva a tratarla como máscara del color del dueño.
+            sprite.mask.clear();
+            return Some((Some(sprite), None));
+        }
+        // No entregar una textura cruda cuando el layout pidió una paleta
+        // que este cliente aún no puede representar (2CC, transparencia,
+        // mapa Action1, etc.). El caller podrá usar su fallback atómico.
+        *complete = false;
+        return None;
     }
 
     // Sprite zero means no ground/child in the original TTD layout.

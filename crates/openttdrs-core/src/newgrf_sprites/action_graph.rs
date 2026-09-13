@@ -1370,6 +1370,69 @@ mod tests {
     }
 
     #[test]
+    fn tile_layout_honours_explicit_company_palette_on_action1_sprite() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![20, 220, 80, 255],
+            mask: vec![198],
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 7,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    direct_palette: 775 + 4, // PALETTE_RECOLOUR_START + Red
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: Vec::new(),
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("explicit company palette TileLayout");
+        let ground = layout.ground.expect("ground");
+        assert!(layout.complete);
+        assert_eq!(
+            ground.action1_sprite().map(|decoded| decoded.rgba.clone()),
+            Some(crate::newgrf_sprites::bake_sprite_company_palette(
+                &sprite, 4
+            ))
+        );
+        assert!(
+            ground
+                .action1_sprite()
+                .is_some_and(|decoded| decoded.mask.is_empty()),
+            "el color explícito debe quedar horneado y no reaplicarse como máscara"
+        );
+
+        let mut unsupported = graphics
+            .tile_layouts
+            .get(&9)
+            .cloned()
+            .expect("source layout");
+        unsupported.ground.direct_palette = crate::newgrf_sprites::TWOCC_PALETTE_BASE;
+        graphics.tile_layouts.insert(9, unsupported);
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("unsupported palette TileLayout");
+        assert!(!layout.complete);
+        assert!(layout.ground.is_none());
+    }
+
+    #[test]
     fn parse_industry_production_groups_all_versions() {
         // v0: 3 signed words, 2 unsigned words, again.
         let mut v0 = vec![0x02, ACTION0_FEATURE_INDUSTRIES, 4, 0];

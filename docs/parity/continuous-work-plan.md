@@ -6922,3 +6922,14 @@ Action1 y la emisión de parents/children; paletas, modifiers e IDs fuera de
 las tablas auditadas conservan el fallback atómico. Las regresiones cubren
 ambos ejes, el aislamiento de namespaces y la geometría de los cuatro
 sprites; #326/#329 continúan abiertas.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-RAILWAYPOINT (2026-09-13): los
+`TileLayout` de `RailWaypoint` pueden materializar ahora sus ocho referencias
+directas vanilla (`4974..4981`) con `WorldAssets.rail` y la geometría NFO
+específica de `rail_waypoint_layer_meta`. Las mitades este reutilizan el ancla
+oeste que exige `TILE_SEQ_LINE`, en lugar de tomar el `xrel` crudo del PNG;
+ground y BUILD usan el mismo namespace contextual y las estaciones rail
+normales conservan el resolver genérico. Paletas, modifiers, IDs fuera de las
+tablas e imágenes ausentes mantienen fallback atómico. Las regresiones cubren
+los ocho atlas/anclajes, la diferencia frente a la tabla genérica y el
+aislamiento del ground; #326/#329 continúan abiertas.

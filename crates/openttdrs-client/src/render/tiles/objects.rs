@@ -36,9 +36,11 @@ use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
 use crate::render::newgrf_cache::{
-    direct_tile_layout_ground, direct_tile_layout_road_stop_sequence,
+    direct_tile_layout_ground, direct_tile_layout_rail_waypoint_ground,
+    direct_tile_layout_rail_waypoint_sequence, direct_tile_layout_road_stop_sequence,
     direct_tile_layout_road_waypoint_sequence, direct_tile_layout_sequence, runtime_fingerprint,
-    tile_layout_entry_is_hidden, tile_layout_is_renderable, tile_layout_is_road_stop_renderable,
+    tile_layout_entry_is_hidden, tile_layout_is_rail_waypoint_renderable,
+    tile_layout_is_renderable, tile_layout_is_road_stop_renderable,
     tile_layout_is_road_waypoint_renderable, tile_layout_sprite_color_with_palette, vars,
 };
 use crate::render::road_newgrf::{
@@ -1759,6 +1761,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     rail_base_z,
                     dims.0,
                     foundation_child_parent,
+                    class == StationTileClass::RailWaypoint,
                     def,
                     owner_colour,
                     *runtime_fp,
@@ -1849,14 +1852,12 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             // parent de esa fundación evita que el sprite vuelva a la banda
             // de profundidad de la tesela inclinada.
             let mut newgrf_overlay = None;
-            if !station_layout
-                .as_ref()
-                .is_some_and(|(_, layout, _, _)| tile_layout_is_renderable(layout))
-                && matches!(
-                    class,
-                    StationTileClass::Rail | StationTileClass::RailWaypoint
-                )
-                && !buildings_hidden()
+            if !station_layout.as_ref().is_some_and(|(_, layout, _, _)| {
+                station_layout_is_renderable(layout, class == StationTileClass::RailWaypoint)
+            }) && matches!(
+                class,
+                StationTileClass::Rail | StationTileClass::RailWaypoint
+            ) && !buildings_hidden()
                 && let Some(def) =
                     newgrf_station_def_for_tile(station_catalog, map, stations, ctx.coord)
                 && let (Some(cache), Some(images)) = (station_sprites.as_mut(), images.as_mut())
@@ -1923,7 +1924,8 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             // decide si debemos omitir las capas vanilla al ordenar.
             let has_newgrf_layout_sequence =
                 station_layout.as_ref().is_some_and(|(_, layout, _, _)| {
-                    tile_layout_is_renderable(layout) && !layout.sequence.is_empty()
+                    station_layout_is_renderable(layout, class == StationTileClass::RailWaypoint)
+                        && !layout.sequence.is_empty()
                 }) && station_sprites.is_some()
                     && images.is_some();
             let used_newgrf =
@@ -1960,6 +1962,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     ctx,
                     rail_base_z,
                     dims.0,
+                    class == StationTileClass::RailWaypoint,
                     def,
                     owner_colour,
                     *runtime_fp,
@@ -3280,6 +3283,18 @@ fn resolve_station_layout_for_tile<'a>(
     Some((def, layout, runtime_fp, view_idx))
 }
 
+#[inline]
+fn station_layout_is_renderable(
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    waypoint: bool,
+) -> bool {
+    if waypoint {
+        tile_layout_is_rail_waypoint_renderable(layout)
+    } else {
+        tile_layout_is_renderable(layout)
+    }
+}
+
 /// Emite el sprite de suelo de un layout de estación. Un layout completo sin
 /// `ground` es intencional (`DODRAW = 0`) y suprime el suelo vanilla.
 #[allow(clippy::too_many_arguments)]
@@ -3290,6 +3305,7 @@ fn spawn_newgrf_station_layout_ground(
     base_z: u8,
     map_width: u32,
     foundation_child_parent: Option<Entity>,
+    waypoint: bool,
     def: &StationSpecDef,
     owner_colour: Option<CompanyColour>,
     runtime_fp: u32,
@@ -3297,7 +3313,7 @@ fn spawn_newgrf_station_layout_ground(
     cache: &mut NewGrfStationSpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !tile_layout_is_renderable(layout) {
+    if !station_layout_is_renderable(layout, waypoint) {
         return false;
     }
     let Some(ground) = layout.ground.as_ref() else {
@@ -3325,7 +3341,11 @@ fn spawn_newgrf_station_layout_ground(
             f32::from(decoded.width),
             f32::from(decoded.height),
         )
-    } else if let Some(base) = direct_tile_layout_ground(ground, assets) {
+    } else if let Some(base) = if waypoint {
+        direct_tile_layout_rail_waypoint_ground(ground, assets)
+    } else {
+        direct_tile_layout_ground(ground, assets)
+    } {
         (
             tint_building_sprite(base.atlas.sprite()),
             base.x_offs,
@@ -3374,6 +3394,7 @@ fn spawn_newgrf_station_layout_sequence(
     ctx: &TileRenderContext,
     base_z: u8,
     map_width: u32,
+    waypoint: bool,
     def: &StationSpecDef,
     owner_colour: Option<CompanyColour>,
     runtime_fp: u32,
@@ -3381,7 +3402,7 @@ fn spawn_newgrf_station_layout_sequence(
     cache: &mut NewGrfStationSpriteCache,
     images: &mut Assets<Image>,
 ) -> bool {
-    if !tile_layout_is_renderable(layout) || layout.sequence.is_empty() {
+    if !station_layout_is_renderable(layout, waypoint) || layout.sequence.is_empty() {
         return false;
     }
 
@@ -3427,7 +3448,11 @@ fn spawn_newgrf_station_layout_sequence(
                     f32::from(decoded.x_offs),
                     f32::from(decoded.y_offs),
                 )
-            } else if let Some(base) = direct_tile_layout_sequence(layer, assets) {
+            } else if let Some(base) = if waypoint {
+                direct_tile_layout_rail_waypoint_sequence(layer, assets)
+            } else {
+                direct_tile_layout_sequence(layer, assets)
+            } {
                 (
                     tint_building_sprite(base.atlas.sprite()),
                     base.width,

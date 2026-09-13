@@ -597,6 +597,32 @@ fn direct_tile_layout_road_waypoint_geometry(
     })
 }
 
+/// Geometría NFO de los ocho sprites que `DrawTile_Station` publica para un
+/// waypoint ferroviario. Las mitades este deben reutilizar el ancla oeste;
+/// `rail_station_sprite_meta` por sí solo devolvería el `xrel` del PNG este y
+/// desplazaría la marquesina al resolver una referencia directa.
+fn direct_tile_layout_rail_waypoint_geometry(
+    sprite_id: u16,
+) -> Option<DirectTileLayoutGroundGeometry> {
+    let sprite_id = u32::from(sprite_id);
+    let is_waypoint_sprite = [0u8, 1u8].into_iter().any(|axis| {
+        crate::sprites::rail_waypoint_draw_layers(axis)
+            .iter()
+            .any(|layer| layer.sprite_id == sprite_id)
+    });
+    if !is_waypoint_sprite {
+        return None;
+    }
+    crate::sprites::rail_waypoint_layer_meta(sprite_id).map(|(width, height, x_offs, y_offs)| {
+        DirectTileLayoutGroundGeometry {
+            width,
+            height,
+            x_offs,
+            y_offs,
+        }
+    })
+}
+
 fn direct_tile_layout_road_waypoint_atlas(
     sprite_id: u16,
     assets: &WorldAssets,
@@ -714,6 +740,16 @@ fn direct_tile_layout_road_waypoint_sequence_sprite_is_supported(sprite_id: u16)
 fn direct_tile_layout_road_waypoint_ground_sprite_is_supported(sprite_id: u16) -> bool {
     direct_tile_layout_ground_sprite_is_supported(sprite_id)
         || direct_tile_layout_road_waypoint_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_rail_waypoint_sequence_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_sequence_sprite_is_supported(sprite_id)
+        || direct_tile_layout_rail_waypoint_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_rail_waypoint_ground_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_ground_sprite_is_supported(sprite_id)
+        || direct_tile_layout_rail_waypoint_geometry(sprite_id).is_some()
 }
 
 fn direct_tile_layout_object_sequence_sprite_is_supported(sprite_id: u16) -> bool {
@@ -866,6 +902,36 @@ pub(crate) fn tile_layout_is_road_waypoint_renderable(layout: &ResolvedTileLayou
     }
 }
 
+/// Variante contextual para `DrawTile_Station` cuando la estación es un
+/// waypoint ferroviario. El atlas es compartido con rail, pero sus sprites
+/// 4974..4981 tienen un contrato de anclaje distinto para las mitades este.
+#[must_use]
+pub(crate) fn tile_layout_is_rail_waypoint_renderable(layout: &ResolvedTileLayout) -> bool {
+    if !layout.complete
+        || layout.sequence.iter().any(|entry| {
+            entry.action1_sprite().is_none()
+                && !entry.base_sprite_id().is_some_and(|id| {
+                    entry.sprite_modifiers == 0
+                        && entry.direct_palette == 0
+                        && direct_tile_layout_rail_waypoint_sequence_sprite_is_supported(id)
+                })
+        })
+    {
+        return false;
+    }
+    match layout.ground.as_ref() {
+        None => true,
+        Some(ground) => {
+            ground.action1_sprite().is_some()
+                || ground.base_sprite_id().is_some_and(|id| {
+                    ground.sprite_modifiers == 0
+                        && ground.direct_palette == 0
+                        && direct_tile_layout_rail_waypoint_ground_sprite_is_supported(id)
+                })
+        }
+    }
+}
+
 /// Resolves the texture and audited NFO geometry of a supported direct base
 /// ground. Action1 sprites stay in the per-feature NewGRF cache instead.
 #[must_use]
@@ -922,6 +988,35 @@ pub(crate) fn direct_tile_layout_ground(
     let geometry = direct_tile_layout_ground_geometry(sprite_id)
         .or_else(|| direct_tile_layout_industry_ground_geometry(sprite_id))
         .or_else(|| direct_tile_layout_house_ground_geometry(sprite_id))?;
+    Some(DirectTileLayoutGround {
+        atlas,
+        width: geometry.width,
+        height: geometry.height,
+        x_offs: geometry.x_offs,
+        y_offs: geometry.y_offs,
+    })
+}
+
+/// Resuelve el suelo directo de un `TileLayout` en el namespace de waypoint
+/// ferroviario. Conserva primero los sprites de terreno comunes y luego
+/// permite una referencia explícita a uno de los ocho layers del waypoint.
+#[must_use]
+pub(crate) fn direct_tile_layout_rail_waypoint_ground(
+    ground: &ResolvedTileLayoutSprite,
+    assets: &WorldAssets,
+) -> Option<DirectTileLayoutGround> {
+    if let Some(base) = direct_tile_layout_ground(ground, assets) {
+        return Some(base);
+    }
+    if ground.action1_sprite().is_some()
+        || ground.sprite_modifiers != 0
+        || ground.direct_palette != 0
+    {
+        return None;
+    }
+    let sprite_id = ground.base_sprite_id()?;
+    let geometry = direct_tile_layout_rail_waypoint_geometry(sprite_id)?;
+    let atlas = assets.rail.get(&u32::from(sprite_id)).cloned()?;
     Some(DirectTileLayoutGround {
         atlas,
         width: geometry.width,
@@ -1046,6 +1141,24 @@ pub(crate) fn direct_tile_layout_road_waypoint_sequence(
             x_offs: geometry.x_offs,
             y_offs: geometry.y_offs,
         });
+    }
+    direct_tile_layout_sequence(layer, assets)
+}
+
+/// Resuelve una referencia directa desde el namespace de `RailWaypoint`.
+/// Para los ocho sprites vanilla se corrige el ancla NFO compartida; otros
+/// sprites de terreno/estación mantienen el resolver común ya auditado.
+#[must_use]
+pub(crate) fn direct_tile_layout_rail_waypoint_sequence(
+    layer: &ResolvedTileLayoutSprite,
+    assets: &WorldAssets,
+) -> Option<DirectTileLayoutGround> {
+    if let Some(ground) = direct_tile_layout_rail_waypoint_ground(layer, assets) {
+        return Some(ground);
+    }
+    if layer.action1_sprite().is_some() || layer.sprite_modifiers != 0 || layer.direct_palette != 0
+    {
+        return None;
     }
     direct_tile_layout_sequence(layer, assets)
 }
@@ -1333,6 +1446,73 @@ mod tests {
         layout.sequence[0].base_sprite = Some(6143);
         layout.sequence[0].direct_palette = 1;
         assert!(!tile_layout_is_road_waypoint_renderable(&layout));
+    }
+
+    #[test]
+    fn direct_rail_waypoint_layout_reuses_the_west_anchor_for_east_layers() {
+        let mut layout = ResolvedTileLayout {
+            ground: Some(ResolvedTileLayoutSprite {
+                sprite: None,
+                base_sprite: Some(3981),
+                sprite_modifiers: 0,
+                direct_palette: 0,
+                origin: [0, 0, 0],
+                extent: [1, 1, 1],
+            }),
+            sequence: vec![action1_sprite()],
+            complete: true,
+        };
+        let expected = [
+            (4974, 40.0, 29.0, -30.0, -9.0),
+            (4975, 40.0, 29.0, -30.0, -9.0),
+            (4976, 38.0, 28.0, -28.0, -8.0),
+            (4977, 38.0, 28.0, -28.0, -8.0),
+            (4978, 23.0, 14.0, -23.0, -5.0),
+            (4979, 23.0, 14.0, -23.0, -5.0),
+            (4980, 23.0, 14.0, -23.0, -5.0),
+            (4981, 23.0, 14.0, -23.0, -5.0),
+        ];
+
+        for (sprite_id, width, height, x_offs, y_offs) in expected {
+            assert_eq!(
+                direct_tile_layout_rail_waypoint_geometry(sprite_id),
+                Some(DirectTileLayoutGroundGeometry {
+                    width,
+                    height,
+                    x_offs,
+                    y_offs,
+                }),
+                "geometría NFO del waypoint ferroviario {sprite_id}"
+            );
+            layout.sequence[0].sprite = None;
+            layout.sequence[0].base_sprite = Some(sprite_id);
+            assert!(
+                tile_layout_is_rail_waypoint_renderable(&layout),
+                "el namespace ferroviario debe aceptar {sprite_id}"
+            );
+            let raw =
+                direct_tile_layout_sequence_geometry(sprite_id).expect("meta cruda de estación");
+            if matches!(sprite_id, 4975 | 4977) {
+                assert_eq!(raw.x_offs, -8.0);
+                assert_ne!(raw.x_offs, x_offs);
+            } else if matches!(sprite_id, 4979 | 4981) {
+                assert_eq!(raw.x_offs, 2.0);
+                assert_ne!(raw.x_offs, x_offs);
+            } else {
+                assert_eq!(raw.x_offs, x_offs);
+            }
+        }
+
+        layout.ground.as_mut().expect("ground").base_sprite = Some(4974);
+        layout.sequence[0] = action1_sprite();
+        assert!(!tile_layout_is_renderable(&layout));
+        assert!(tile_layout_is_rail_waypoint_renderable(&layout));
+
+        layout.sequence[0].sprite = None;
+        layout.sequence[0].base_sprite = Some(4975);
+        layout.sequence[0].direct_palette = 1;
+        assert!(!tile_layout_is_rail_waypoint_renderable(&layout));
+        assert_eq!(direct_tile_layout_rail_waypoint_geometry(4982), None);
     }
 
     #[test]

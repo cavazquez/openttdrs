@@ -162,14 +162,17 @@ pub use badge::{
     next_free_badge_id, resolve_badge_labels, resolve_badge_labels_detailed,
 };
 pub use bridge_spec::{
-    BRIDGE_AXIS_COUNT, BRIDGE_MIDDLE_PIECE_COUNT, BRIDGE_SPECS, BridgePiece,
-    BridgePillarFlagsTable, BridgeSpec, BridgeSpecDef, BridgeType, bridge_above_axis_from_mapt,
-    bridge_available, bridge_available_at_tick, bridge_available_at_tick_in, bridge_available_in,
-    bridge_build_cost, bridge_build_cost_in, bridge_height_for_ramp, bridge_height_over_tile,
-    bridge_line_tiles, bridge_max_speed_for_tile, bridge_middle_length, bridge_spec,
-    bridge_spec_def, bridge_total_length, bridge_type_from_m6, calc_bridge_piece,
-    rail_bridge_other_end, road_bridge_other_end, set_bridge_middle_mapt, set_bridge_type_m6,
-    tunnel_bridge_rail_reserved, tunnel_bridge_rail_track, vanilla_bridge_spec_catalog,
+    BRIDGE_AXIS_COUNT, BRIDGE_MIDDLE_PIECE_COUNT, BRIDGE_PIECE_COUNT, BRIDGE_SPECS,
+    BRIDGE_SPRITE_COUNT, BRIDGE_SPRITE_MODIFIER_OPAQUE, BRIDGE_SPRITE_MODIFIER_RECOLOUR,
+    BRIDGE_SPRITE_MODIFIER_TRANSPARENT, BridgePiece, BridgePillarFlagsTable, BridgeSpec,
+    BridgeSpecDef, BridgeSpriteRef, BridgeSpriteTable, BridgeSpriteTables, BridgeType,
+    bridge_above_axis_from_mapt, bridge_available, bridge_available_at_tick,
+    bridge_available_at_tick_in, bridge_available_in, bridge_build_cost, bridge_build_cost_in,
+    bridge_height_for_ramp, bridge_height_over_tile, bridge_line_tiles, bridge_max_speed_for_tile,
+    bridge_middle_length, bridge_spec, bridge_spec_def, bridge_total_length, bridge_type_from_m6,
+    calc_bridge_piece, rail_bridge_other_end, road_bridge_other_end, set_bridge_middle_mapt,
+    set_bridge_type_m6, tunnel_bridge_rail_reserved, tunnel_bridge_rail_track,
+    vanilla_bridge_spec_catalog,
 };
 pub use canal_spec::{
     CANAL_FEATURE_COUNT, CF_BUOY, CF_DIKES, CF_DOCKS, CF_ICON, CF_LOCKS, CF_RIVER_EDGE,

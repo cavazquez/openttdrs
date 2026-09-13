@@ -9,7 +9,58 @@ use crate::tick::GameTick;
 /// Cantidad de piezas centrales y ejes que conserva `BridgeSpec`.
 pub const BRIDGE_MIDDLE_PIECE_COUNT: usize = 6;
 pub const BRIDGE_AXIS_COUNT: usize = 2;
+/// `NUM_BRIDGE_PIECES` de `OpenTTD`: seis piezas de vano y una cabeza.
+pub const BRIDGE_PIECE_COUNT: usize = BRIDGE_MIDDLE_PIECE_COUNT + 1;
+/// Cantidad de entradas por tabla de sprites de una pieza de puente.
+pub const BRIDGE_SPRITE_COUNT: usize = 32;
 pub type BridgePillarFlagsTable = [[u8; BRIDGE_AXIS_COUNT]; BRIDGE_MIDDLE_PIECE_COUNT];
+
+/// Modificador nativo que `MapSpriteMappingRecolour` aplica al sprite.
+pub const BRIDGE_SPRITE_MODIFIER_OPAQUE: u8 = 1 << 0;
+/// Modificador nativo de transparencia de destino.
+pub const BRIDGE_SPRITE_MODIFIER_TRANSPARENT: u8 = 1 << 1;
+/// Modificador nativo de recoloración por compañía.
+pub const BRIDGE_SPRITE_MODIFIER_RECOLOUR: u8 = 1 << 2;
+
+/// Pareja `(SpriteID, PaletteID)` de una entrada Action0 `Bridges` `0x0D`.
+///
+/// Los bits de recoloración de `TTDPatch` se separan en `modifiers`, como hace
+/// `MapSpriteMappingRecolour` en `OpenTTD`, para que el renderer no confunda un
+/// ID de sprite con una bandera de composición.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BridgeSpriteRef {
+    pub sprite_id: u16,
+    pub palette: u16,
+    pub modifiers: u8,
+}
+
+impl BridgeSpriteRef {
+    #[must_use]
+    pub const fn from_raw(mut sprite_id: u16, mut palette: u16) -> Self {
+        let mut modifiers = 0;
+        if palette & 0x4000 != 0 {
+            palette &= !0x4000;
+            modifiers |= BRIDGE_SPRITE_MODIFIER_OPAQUE;
+        }
+        if sprite_id & 0x4000 != 0 {
+            sprite_id &= !0x4000;
+            modifiers |= BRIDGE_SPRITE_MODIFIER_TRANSPARENT;
+        }
+        if sprite_id & 0x8000 != 0 {
+            sprite_id &= !0x8000;
+            modifiers |= BRIDGE_SPRITE_MODIFIER_RECOLOUR;
+        }
+        Self {
+            sprite_id,
+            palette,
+            modifiers,
+        }
+    }
+}
+
+/// Tablas parciales de un override: `None` conserva el fallback vanilla.
+pub type BridgeSpriteTable = [BridgeSpriteRef; BRIDGE_SPRITE_COUNT];
+pub type BridgeSpriteTables = [Option<BridgeSpriteTable>; BRIDGE_PIECE_COUNT];
 
 /// Línea recta entre dos teselas (misma regla que el arrastre de puente).
 #[must_use]
@@ -123,6 +174,10 @@ pub struct BridgeSpecDef {
     /// Action0 prop `0x0D` (tablas de sprites) presente en algún override.
     #[serde(default)]
     pub has_custom_sprites: bool,
+    /// Tablas Action0 `0x0D` capturadas para el runtime. No se serializan:
+    /// sus imágenes se vuelven a resolver al reconstruir el stack `NewGRF`.
+    #[serde(default, skip)]
+    pub custom_sprite_tables: BridgeSpriteTables,
     /// Action0 prop `0x15`: máscara de pilares por pieza central/eje.
     /// Cada bit sigue `BridgePillarFlag` de `OpenTTD` (esquinas 0..3, aristas 4..7).
     #[serde(default)]
@@ -147,6 +202,7 @@ impl BridgeSpecDef {
             from_newgrf: false,
             grfid: 0,
             has_custom_sprites: false,
+            custom_sprite_tables: [None; BRIDGE_PIECE_COUNT],
             pillar_flags: [[0; BRIDGE_AXIS_COUNT]; BRIDGE_MIDDLE_PIECE_COUNT],
             has_custom_pillar_flags: false,
         }

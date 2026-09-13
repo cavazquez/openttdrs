@@ -5999,6 +5999,88 @@ mod tests {
         assert_eq!(def.pillar_flags[5], [6, 0x85]);
     }
 
+    /// #326: Bridges — Action0 `0x0D` conserva tablas parciales, modificadores
+    /// de recoloración y el rango completo de IDs consecutivos.
+    #[test]
+    fn bridge_sprite_tables_parse_apply_and_truncate() {
+        use crate::bridge_spec::{
+            BRIDGE_SPRITE_COUNT, BRIDGE_SPRITE_MODIFIER_OPAQUE, BRIDGE_SPRITE_MODIFIER_RECOLOUR,
+            BRIDGE_SPRITE_MODIFIER_TRANSPARENT, BridgeType,
+        };
+
+        let mut a0 = vec![
+            0x00,
+            ACTION0_FEATURE_BRIDGES,
+            0x01, // sólo sprite tables
+            0x02, // IDs 0 y 1
+            0x00,
+            0x0D,
+            0x01, // tableid: BRIDGE_PIECE_SOUTH
+            0x02, // dos tablas: SOUTH + INNER_NORTH
+        ];
+        for table in 0..2u16 {
+            for sprite in 0..BRIDGE_SPRITE_COUNT {
+                let (image, palette) = if table == 0 && sprite == 0 {
+                    (0xC123, 0x4007) // transparent + recolour + opaque
+                } else {
+                    (
+                        0x0200 + table * 0x20 + sprite as u16,
+                        0x0100 + sprite as u16,
+                    )
+                };
+                a0.extend_from_slice(&image.to_le_bytes());
+                a0.extend_from_slice(&palette.to_le_bytes());
+            }
+        }
+
+        let meta = parse_action0_bridge_meta(&a0).expect("bridge sprite tables");
+        assert_eq!(meta.local_id, 0);
+        assert_eq!(meta.num_ids, 2);
+        assert!(meta.has_custom_sprites);
+        let south = meta.custom_sprite_tables[1]
+            .as_ref()
+            .expect("south custom table");
+        assert_eq!(south[0].sprite_id, 0x0123);
+        assert_eq!(south[0].palette, 0x0007);
+        assert_eq!(
+            south[0].modifiers,
+            BRIDGE_SPRITE_MODIFIER_OPAQUE
+                | BRIDGE_SPRITE_MODIFIER_RECOLOUR
+                | BRIDGE_SPRITE_MODIFIER_TRANSPARENT
+        );
+        assert_eq!(
+            meta.custom_sprite_tables[2]
+                .as_ref()
+                .expect("inner north custom table")[31]
+                .sprite_id,
+            0x023F
+        );
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'B', b'S', 0, 1], "bridge", "");
+        let dir = tempfile_dir_with("bridge.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("bridge.grf", 0x4253_0001));
+        apply_newgrf_bridges(&mut state, &[&dir]);
+        for bridge_type in [BridgeType::Wooden, BridgeType::Concrete] {
+            let def = crate::bridge_spec_def(&state.bridge_spec_catalog, bridge_type)
+                .expect("bridge catalog slot");
+            assert!(def.has_custom_sprites);
+            assert_eq!(def.custom_sprite_tables[1], Some(*south));
+        }
+
+        let truncated = &a0[..a0.len() - 1];
+        let truncated_meta = parse_action0_bridge_meta(truncated).expect("truncated metadata");
+        assert!(!truncated_meta.has_custom_sprites);
+        assert!(
+            truncated_meta
+                .custom_sprite_tables
+                .iter()
+                .all(Option::is_none)
+        );
+    }
+
     /// #259: Bridges — dos GRFs mismo `local_id`; el último gana.
     #[test]
     fn infra_ac_bridge_two_grf_stack_last_wins() {

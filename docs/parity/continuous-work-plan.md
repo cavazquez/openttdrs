@@ -7306,3 +7306,11 @@ roadtype, respetando la prioridad del contrato y conservando el fallback
 vanilla; las cabezas siguen usando sus Action5/atlas específicos. #326 continúa
 abierta por callbacks y sprites estructurales NewGRF custom restantes, además
 de la aceptación raster.
+
+Corrección #326-BRIDGE-ACTION0-SPRITE-TABLE-DATA (2026-09-13): Action0
+`Bridges` ya conserva las siete tablas parciales de 32 entradas, los pares
+`(SpriteID, PaletteID)` y los tres modificadores de `MapSpriteMappingRecolour`;
+los overrides se aplican a todos los IDs consecutivos declarados por
+`num_ids`. La etapa todavía no dibuja esos sprites en Bevy: la resolución de
+IDs globales del sprite section/Action1 y su geometría quedan separadas para no
+confundir referencias con píxeles. #326 permanece abierta.

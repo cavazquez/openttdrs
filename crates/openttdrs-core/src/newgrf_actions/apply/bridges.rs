@@ -26,38 +26,50 @@ pub fn apply_newgrf_bridges(state: &mut GameState, search_dirs: &[&Path]) {
             continue;
         };
         for meta in collect_bridge_metas_from_grf(&data) {
-            let idx = usize::from(meta.local_id);
-            if idx >= catalog.len() {
-                continue;
+            for offset in 0..usize::from(meta.num_ids) {
+                let Some(idx) = usize::from(meta.local_id).checked_add(offset) else {
+                    break;
+                };
+                let Some(slot) = catalog.get_mut(idx) else {
+                    break;
+                };
+                if meta.year_set {
+                    slot.available_from_year = meta.available_from_year;
+                }
+                if meta.min_len_set {
+                    slot.min_middle_len = meta.min_middle_len;
+                }
+                if meta.max_len_set {
+                    slot.max_middle_len = meta.max_middle_len;
+                }
+                if meta.price_set {
+                    slot.price_mult = meta.price_mult;
+                }
+                if meta.speed_set {
+                    slot.max_speed = meta.max_speed;
+                }
+                if let Some(name) = meta.name.as_ref() {
+                    slot.name.clone_from(name);
+                }
+                if meta.has_custom_sprites {
+                    slot.has_custom_sprites = true;
+                    for (destination, source) in slot
+                        .custom_sprite_tables
+                        .iter_mut()
+                        .zip(meta.custom_sprite_tables.iter().copied())
+                    {
+                        if source.is_some() {
+                            *destination = source;
+                        }
+                    }
+                }
+                if meta.pillar_flags_set {
+                    slot.pillar_flags = meta.pillar_flags;
+                    slot.has_custom_pillar_flags = true;
+                }
+                slot.from_newgrf = true;
+                slot.grfid = entry.grfid;
             }
-            let slot = &mut catalog[idx];
-            if meta.year_set {
-                slot.available_from_year = meta.available_from_year;
-            }
-            if meta.min_len_set {
-                slot.min_middle_len = meta.min_middle_len;
-            }
-            if meta.max_len_set {
-                slot.max_middle_len = meta.max_middle_len;
-            }
-            if meta.price_set {
-                slot.price_mult = meta.price_mult;
-            }
-            if meta.speed_set {
-                slot.max_speed = meta.max_speed;
-            }
-            if let Some(name) = meta.name {
-                slot.name = name;
-            }
-            if meta.has_custom_sprites {
-                slot.has_custom_sprites = true;
-            }
-            if meta.pillar_flags_set {
-                slot.pillar_flags = meta.pillar_flags;
-                slot.has_custom_pillar_flags = true;
-            }
-            slot.from_newgrf = true;
-            slot.grfid = entry.grfid;
         }
     }
     state.bridge_spec_catalog = catalog;

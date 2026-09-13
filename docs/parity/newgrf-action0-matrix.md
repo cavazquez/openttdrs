@@ -286,7 +286,7 @@ override → costes/disponibilidad iguales a `_orig_bridge` / `BRIDGE_SPECS`.
 | `0A` max length BYTE (`>16` → unlimited) | **runtime** |
 | `0B` price BYTE | **runtime** |
 | `0C` speed WORD (`0`→`u16::MAX`) | **runtime** |
-| `0D` sprite tables | consumida (ancho fijo; `has_custom_sprites`) |
+| `0D` sprite tables | **runtime parcial** (tablas parciales, pareja sprite/paleta y modificadores preservados; materialización Bevy pendiente) |
 | `0E` flags BYTE | consumida |
 | `0F` year DWORD | **runtime** |
 | `10`–`12` string IDs WORD | consumidas |

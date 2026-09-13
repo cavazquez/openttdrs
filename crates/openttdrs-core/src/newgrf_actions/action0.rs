@@ -849,6 +849,8 @@ pub struct ParsedCanalMeta {
 #[allow(clippy::struct_excessive_bools)]
 pub struct ParsedBridgeMeta {
     pub local_id: u8,
+    /// Cantidad de IDs consecutivos a los que se aplica el bloque.
+    pub num_ids: u8,
     pub available_from_year: u32,
     pub min_middle_len: u16,
     pub max_middle_len: Option<u16>,
@@ -856,6 +858,9 @@ pub struct ParsedBridgeMeta {
     pub max_speed: u16,
     pub name: Option<String>,
     pub has_custom_sprites: bool,
+    /// Tablas parciales de Action0 `0x0D`; `None` significa que esa pieza no
+    /// fue redefinida por este bloque.
+    pub custom_sprite_tables: crate::bridge_spec::BridgeSpriteTables,
     /// Action0 `0x15`: máscaras de pilares por pieza/eje.
     pub pillar_flags: crate::bridge_spec::BridgePillarFlagsTable,
     pub pillar_flags_set: bool,
@@ -3053,18 +3058,25 @@ pub fn collect_canal_metas_from_grf(data: &[u8]) -> Vec<ParsedCanalMeta> {
     out
 }
 
-fn skip_bridge_sprite_tables(payload: &[u8], i: &mut usize) -> bool {
-    if *i + 2 > payload.len() {
-        return false;
+fn read_bridge_sprite_tables(
+    payload: &[u8],
+    i: &mut usize,
+) -> Option<crate::bridge_spec::BridgeSpriteTables> {
+    let table_id = usize::from(read_u8(payload, i)?);
+    let numtables = usize::from(read_u8(payload, i)?);
+    let mut tables = [None; crate::bridge_spec::BRIDGE_PIECE_COUNT];
+    for table_offset in 0..numtables {
+        let mut table = [crate::bridge_spec::BridgeSpriteRef::default(); BRIDGE_SPRITES_PER_PIECE];
+        for sprite in &mut table {
+            let image = read_u16(payload, i)?;
+            let palette = read_u16(payload, i)?;
+            *sprite = crate::bridge_spec::BridgeSpriteRef::from_raw(image, palette);
+        }
+        if let Some(destination) = tables.get_mut(table_id.saturating_add(table_offset)) {
+            *destination = Some(table);
+        }
     }
-    let numtables = payload[*i + 1];
-    *i += 2; // skip tableid + numtables
-    let bytes = usize::from(numtables).saturating_mul(BRIDGE_SPRITES_PER_PIECE * 4);
-    if *i + bytes > payload.len() {
-        return false;
-    }
-    *i += bytes;
-    true
+    Some(tables)
 }
 
 fn read_bridge_pillars(
@@ -3093,7 +3105,7 @@ pub fn parse_action0_bridge_meta(payload: &[u8]) -> Option<ParsedBridgeMeta> {
         return None;
     }
     let local_id = payload[4];
-    if local_id >= 13 {
+    if local_id >= 13 || usize::from(local_id).saturating_add(usize::from(header.num_ids)) > 13 {
         return None;
     }
     let mut i = 5usize;
@@ -3104,6 +3116,7 @@ pub fn parse_action0_bridge_meta(payload: &[u8]) -> Option<ParsedBridgeMeta> {
     let mut max_speed = u16::MAX;
     let mut name = None;
     let mut has_custom_sprites = false;
+    let mut custom_sprite_tables = [None; crate::bridge_spec::BRIDGE_PIECE_COUNT];
     let mut pillar_flags =
         [[0; crate::bridge_spec::BRIDGE_AXIS_COUNT]; crate::bridge_spec::BRIDGE_MIDDLE_PIECE_COUNT];
     let mut pillar_flags_set = false;
@@ -3159,8 +3172,15 @@ pub fn parse_action0_bridge_meta(payload: &[u8]) -> Option<ParsedBridgeMeta> {
                 speed_set = true;
             }
             PROP_BRIDGE_SPRITE_TABLES => {
-                if !skip_bridge_sprite_tables(payload, &mut i) {
+                let Some(tables) = read_bridge_sprite_tables(payload, &mut i) else {
                     break;
+                };
+                for (destination, source) in
+                    custom_sprite_tables.iter_mut().zip(tables.iter().copied())
+                {
+                    if source.is_some() {
+                        *destination = source;
+                    }
                 }
                 has_custom_sprites = true;
             }
@@ -3211,6 +3231,7 @@ pub fn parse_action0_bridge_meta(payload: &[u8]) -> Option<ParsedBridgeMeta> {
     }
     Some(ParsedBridgeMeta {
         local_id,
+        num_ids: header.num_ids,
         available_from_year,
         min_middle_len,
         max_middle_len,
@@ -3218,6 +3239,7 @@ pub fn parse_action0_bridge_meta(payload: &[u8]) -> Option<ParsedBridgeMeta> {
         max_speed,
         name,
         has_custom_sprites,
+        custom_sprite_tables,
         pillar_flags,
         pillar_flags_set,
         year_set,

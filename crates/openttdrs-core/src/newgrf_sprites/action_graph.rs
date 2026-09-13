@@ -1498,6 +1498,124 @@ mod tests {
     }
 
     #[test]
+    fn tile_layout_applies_palette_register_to_custom_action1_map() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: crate::newgrf_sprites::indices_to_rgba(&[198], 1, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let palette = |target| {
+            let mut indices: Vec<u8> = (0..=u8::MAX).collect();
+            indices[198] = target;
+            DecodedSprite {
+                width: 256,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: crate::newgrf_sprites::indices_to_rgba(&indices, 256, 1).unwrap(),
+                mask: Vec::new(),
+            }
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()], vec![palette(175), palette(176)]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 7,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    palette_action1_set: Some(1),
+                    flags: 0x04 | 0x08,
+                    registers: TileLayoutRegisterRefs {
+                        palette: Some(3),
+                        ..TileLayoutRegisterRefs::default()
+                    },
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: Vec::new(),
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        ctx.temp_registers.insert(3, 1);
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("register-selected custom Action1 palette");
+        let ground = layout.ground.expect("ground");
+        assert!(layout.complete);
+        assert_eq!(
+            ground.action1_sprite().map(|decoded| decoded.rgba.clone()),
+            Some(
+                crate::newgrf_sprites::bake_sprite_palette_map(&sprite, &graphics.sets[1][1],)
+                    .expect("valid palette map")
+            )
+        );
+    }
+
+    #[test]
+    fn tile_layout_applies_palette_register_to_direct_company_palette() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![20, 220, 80, 255],
+            mask: vec![198],
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 7,
+                set_id: 9,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    direct_palette: 775 + 3,
+                    flags: 0x04,
+                    registers: TileLayoutRegisterRefs {
+                        palette: Some(4),
+                        ..TileLayoutRegisterRefs::default()
+                    },
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: Vec::new(),
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        ctx.temp_registers.insert(4, 2);
+        let layout = graphics
+            .tile_layout_for_local_id_ctx(7, 0, &mut ctx)
+            .expect("register-selected direct palette");
+        let ground = layout.ground.expect("ground");
+        assert!(layout.complete);
+        assert_eq!(
+            ground.action1_sprite().map(|decoded| decoded.rgba.clone()),
+            Some(crate::newgrf_sprites::bake_sprite_company_palette(
+                &sprite, 5
+            ))
+        );
+        assert!(
+            ground
+                .action1_sprite()
+                .is_some_and(|decoded| decoded.mask.is_empty())
+        );
+    }
+
+    #[test]
     fn parse_industry_production_groups_all_versions() {
         // v0: 3 signed words, 2 unsigned words, again.
         let mut v0 = vec![0x02, ACTION0_FEATURE_INDUSTRIES, 4, 0];

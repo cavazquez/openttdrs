@@ -187,7 +187,11 @@ fn resolve_layout_sprite(
     // Register-driven palettes and var10 palette chains still need the
     // original blitter metadata. Static custom Action1 palettes are baked
     // below, so they can continue through the common TileLayout path.
-    if reference.flags & (0x04 | 0x80) != 0 {
+    if reference.flags & 0x80 != 0 {
+        *complete = false;
+        return None;
+    }
+    if reference.flags & 0x04 != 0 && reference.registers.palette.is_none() {
         *complete = false;
         return None;
     }
@@ -252,6 +256,74 @@ fn resolve_layout_sprite(
     })
 }
 
+fn resolve_layout_direct_palette(
+    reference: &TileLayoutSpriteRef,
+    ctx: &Action2EvalCtx,
+    complete: &mut bool,
+) -> Option<u16> {
+    let palette = if reference.flags & 0x08 != 0 {
+        i32::from(reference.direct_palette)
+    } else if reference.flags & 0x04 != 0 {
+        i32::from(reference.direct_palette)
+            .saturating_add(signed_register(ctx, reference.registers.palette))
+    } else {
+        i32::from(reference.direct_palette)
+    };
+    let Ok(palette) = u16::try_from(palette) else {
+        *complete = false;
+        return None;
+    };
+    Some(palette)
+}
+
+fn resolve_custom_layout_palette(
+    reference: &TileLayoutSpriteRef,
+    mut sprite: DecodedSprite,
+    graphics: &TrainSpriteGraphics,
+    ctx: &Action2EvalCtx,
+    complete: &mut bool,
+) -> Option<DecodedSprite> {
+    if reference.flags & 0x08 == 0 {
+        if reference.palette_action1_set.is_some() {
+            *complete = false;
+            return None;
+        }
+        return Some(sprite);
+    }
+
+    let Some(palette_set) = reference.palette_action1_set else {
+        *complete = false;
+        return None;
+    };
+    let Some(palettes) = graphics.sets.get(usize::from(palette_set)) else {
+        *complete = false;
+        return None;
+    };
+    let palette_index = if reference.flags & 0x04 != 0 {
+        let offset = signed_register(ctx, reference.registers.palette);
+        let Ok(offset) = usize::try_from(offset) else {
+            *complete = false;
+            return None;
+        };
+        offset
+    } else {
+        0
+    };
+    let Some(palette) = palettes.get(palette_index) else {
+        *complete = false;
+        return None;
+    };
+    let Some(rgba) = bake_sprite_palette_map(&sprite, palette) else {
+        *complete = false;
+        return None;
+    };
+    sprite.rgba = rgba;
+    // La paleta Action1 ya quedó horneada. Evitar que el cliente vuelva a
+    // aplicar la máscara de compañía por defecto.
+    sprite.mask.clear();
+    Some(sprite)
+}
+
 fn resolve_layout_sprite_asset(
     reference: &TileLayoutSpriteRef,
     graphics: &TrainSpriteGraphics,
@@ -288,42 +360,17 @@ fn resolve_layout_sprite_asset(
             *complete = false;
             return None;
         };
-        let Some(mut sprite) = sprites.get(sprite_index).cloned() else {
+        let Some(sprite) = sprites.get(sprite_index).cloned() else {
             *complete = false;
             return None;
         };
-        if reference.flags & 0x08 != 0 {
-            let Some(palette_set) = reference.palette_action1_set else {
-                *complete = false;
-                return None;
-            };
-            let Some(palettes) = graphics.sets.get(usize::from(palette_set)) else {
-                *complete = false;
-                return None;
-            };
-            let Some(palette) = palettes.first() else {
-                *complete = false;
-                return None;
-            };
-            let Some(rgba) = bake_sprite_palette_map(&sprite, palette) else {
-                *complete = false;
-                return None;
-            };
-            sprite.rgba = rgba;
-            // La paleta Action1 ya quedó horneada. Evitar que el cliente
-            // vuelva a aplicar la máscara de compañía por defecto.
-            sprite.mask.clear();
-        } else if reference.palette_action1_set.is_some() {
-            *complete = false;
-            return None;
-        }
-        if reference.direct_palette == 0 {
+        let direct_palette = resolve_layout_direct_palette(reference, ctx, complete)?;
+        let mut sprite = resolve_custom_layout_palette(reference, sprite, graphics, ctx, complete)?;
+        if direct_palette == 0 {
             return Some((Some(sprite), None));
         }
-        if (PALETTE_RECOLOUR_START..=PALETTE_RECOLOUR_END).contains(&reference.direct_palette) {
-            let mut sprite = sprite;
-            let Some(colour) = u8::try_from(reference.direct_palette - PALETTE_RECOLOUR_START).ok()
-            else {
+        if (PALETTE_RECOLOUR_START..=PALETTE_RECOLOUR_END).contains(&direct_palette) {
+            let Some(colour) = u8::try_from(direct_palette - PALETTE_RECOLOUR_START).ok() else {
                 *complete = false;
                 return None;
             };
@@ -347,7 +394,8 @@ fn resolve_layout_sprite_asset(
     // A direct baseset sprite can be materialized only while its identity stays
     // constant and uses PAL_NONE. Keep the atomic fallback for register-selected
     // or recoloured base sprites.
-    if reference.direct_palette != 0
+    let direct_palette = resolve_layout_direct_palette(reference, ctx, complete)?;
+    if direct_palette != 0
         || reference.flags & (0x02 | 0x40 | 0x08) != 0
         || reference.palette_action1_set.is_some()
     {

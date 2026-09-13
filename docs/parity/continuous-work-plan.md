@@ -7073,6 +7073,14 @@ parent; la regresión compara la caja inclusiva de la capa NE con el helper
 runtime. #326 continúa abierta por catenaria del preview, `RTSG_DEPOT`/Action5,
 clipping y aceptación raster.
 
+Corrección #326-RAIL-DEPOT-PREVIEW-CATENARY (2026-09-13): la preview de un
+depósito eléctrico dibuja ahora el cable especial de entrada de
+`_rail_catenary_sprite_data_depot`, con atlas `WorldAssets`, reemplazo Action5,
+alpha de transparencia y el mismo parent sortable/ordinal que el mapa. El
+helper de regresión cubre los ejes X/Y de los bounds inclusivos. #326 continúa
+abierta por catenaria de pórticos si el contrato NewGRF la exige, `RTSG_DEPOT`,
+clipping y aceptación raster.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

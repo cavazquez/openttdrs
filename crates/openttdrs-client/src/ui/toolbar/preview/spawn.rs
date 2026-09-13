@@ -181,6 +181,7 @@ pub(crate) fn spawn_preview_plan(
                     company,
                     world_assets,
                     &sim.state.map,
+                    &sim.state.runtime.catenary_newgrf_sprites,
                     action,
                     anim_cursor_frame,
                     custom_depot_def,
@@ -419,6 +420,7 @@ fn spawn_tile_preview(
     company: Option<&CompanyColoredSprites>,
     world_assets: Option<&WorldAssets>,
     map: &Map,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     action: crate::ui::toolbar::BuildMenuAction,
     anim_cursor_frame: u8,
     custom_depot_def: Option<&openttdrs_core::RoadTypeDef>,
@@ -523,6 +525,9 @@ fn spawn_tile_preview(
                     company,
                     world_assets,
                     map_width: map.dimensions().0,
+                    catenary_newgrf,
+                    catenary_sprites: &mut preview_newgrf.catenary_sprites,
+                    images: &mut preview_newgrf.images,
                 },
             );
         }

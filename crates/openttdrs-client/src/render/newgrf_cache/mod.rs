@@ -320,12 +320,44 @@ fn direct_tile_layout_ground_sprite_is_supported(sprite_id: u16) -> bool {
     direct_tile_layout_ground_geometry(sprite_id).is_some()
 }
 
+/// Busca la geometría del overlay de industria en todas sus etapas. Un mismo
+/// sprite puede repetirse cuando sólo cambia el suelo o la etapa; si el atlas
+/// publicado tuviera dos anclas distintas para el mismo ID, no se debe elegir
+/// una al azar y desplazar la secuencia `BUILD`.
+fn direct_tile_layout_industry_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
+    if sprite_id == 0 {
+        return None;
+    }
+    let sprite_id = u32::from(sprite_id);
+    let mut geometry = None;
+    for entry in crate::sprites::INDUSTRY_GFX_DATA
+        .iter()
+        .filter(|entry| entry.sprite_id == sprite_id)
+    {
+        let candidate = DirectTileLayoutGroundGeometry {
+            width: entry.w,
+            height: entry.h,
+            x_offs: entry.xrel,
+            y_offs: entry.yrel,
+        };
+        if let Some(previous) = geometry {
+            if previous != candidate {
+                return None;
+            }
+        } else {
+            geometry = Some(candidate);
+        }
+    }
+    geometry
+}
+
 /// Geometría NFO de un sprite vanilla que puede aparecer en una secuencia
 /// `BUILD`. Además del terreno, las tablas de estación rail y airport ya
 /// conservan el tamaño y el ancla de cada sprite; no es correcto tratarlos
 /// como un rombo plano sólo porque vienen de un `TileLayout` directo.
 fn direct_tile_layout_sequence_geometry(sprite_id: u16) -> Option<DirectTileLayoutGroundGeometry> {
     direct_tile_layout_ground_geometry(sprite_id)
+        .or_else(|| direct_tile_layout_industry_geometry(sprite_id))
         .or_else(|| {
             crate::sprites::rail_station_sprite_meta(u32::from(sprite_id)).map(
                 |(width, height, x_offs, y_offs)| DirectTileLayoutGroundGeometry {
@@ -476,6 +508,7 @@ pub(crate) fn direct_tile_layout_sequence(
         .rail
         .get(&u32::from(sprite_id))
         .cloned()
+        .or_else(|| assets.industries.get(&u32::from(sprite_id)).cloned())
         .or_else(|| assets.airport_station_sprite(u32::from(sprite_id)).cloned())?;
     Some(DirectTileLayoutGround {
         atlas,
@@ -611,7 +644,9 @@ mod tests {
             complete: true,
         };
 
-        for sprite_id in [1069, 1083, 1151, 1233, 4974, 2633, 2651, 2668, 4982, 5966] {
+        for sprite_id in [
+            1069, 1083, 1151, 1233, 4974, 2633, 2651, 2668, 4982, 5966, 2011, 2047,
+        ] {
             layout.sequence[0].sprite = None;
             layout.sequence[0].base_sprite = Some(sprite_id);
             assert!(
@@ -619,7 +654,7 @@ mod tests {
                 "sprite de estación vanilla {sprite_id} debe conservarse como BUILD"
             );
         }
-        for sprite_id in [2692, 4983, 5969] {
+        for sprite_id in [2000, 2692, 4983, 5969] {
             layout.sequence[0].base_sprite = Some(sprite_id);
             assert!(
                 !tile_layout_is_renderable(&layout),
@@ -705,6 +740,29 @@ mod tests {
             direct_tile_layout_ground_geometry(3981)
         );
         assert_eq!(direct_tile_layout_sequence_geometry(2692), None);
+    }
+
+    #[test]
+    fn direct_base_build_uses_consistent_industry_overlay_geometry() {
+        assert_eq!(
+            direct_tile_layout_industry_geometry(2011),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 36.0,
+                height: 25.0,
+                x_offs: -17.0,
+                y_offs: -7.0,
+            })
+        );
+        assert_eq!(
+            direct_tile_layout_industry_geometry(2047),
+            Some(DirectTileLayoutGroundGeometry {
+                width: 43.0,
+                height: 56.0,
+                x_offs: -21.0,
+                y_offs: -34.0,
+            })
+        );
+        assert_eq!(direct_tile_layout_industry_geometry(2000), None);
     }
 
     #[test]

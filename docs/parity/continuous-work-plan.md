@@ -6839,3 +6839,13 @@ radar y helipads), manteniendo `TILE_SEQ` como origen de la caja y el orden
 parent/child existente. Los IDs fuera del catálogo, modifiers y paletas
 explícitas conservan fallback atómico; #326/#329 continúan abiertas por los
 namespaces de objetos/vehículos, callbacks y layouts aún no auditados.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-INDUSTRY-BUILD (2026-09-13): las
+secuencias `BUILD` de industrias que referencian directamente un overlay del
+baseset ahora reutilizan `WorldAssets.industries` y los offsets publicados en
+`INDUSTRY_GFX_DATA`. El resolver recorre las cuatro etapas, sólo acepta un ID
+cuando todas sus apariciones conservan la misma geometría NFO y mantiene el
+fallback si el atlas falta o la referencia usa paleta/modifier. Los suelos
+industriales (`ground_sprite_id`) y draw-procs animados quedan explícitamente
+fuera de esta subetapa para no confundir su contrato con un overlay BUILD;
+#326/#329 continúan abiertas.

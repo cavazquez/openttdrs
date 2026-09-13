@@ -22,6 +22,7 @@ const TEST_WORLD_SEED: u64 = 0;
 
 use crate::iso::{ground_draw_z, overlay_pos};
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
+use crate::render::newgrf_cache::direct_tile_layout_sequence;
 use crate::render::tiles::{
     FLAT_WATER_LAYER_FRAC, HouseSpawnResources, TramwayDepotAction5, flush_map_batches,
     push_forest_tree, push_water_tile, push_water_tile_with_action5, spawn_bridge_middle,
@@ -13251,6 +13252,26 @@ fn industry_bare_land_ground_is_drawn_before_power_plant() {
             .iter()
             .any(|sprite| expected_building.matches(sprite))
     );
+}
+
+#[test]
+fn direct_industry_build_uses_the_industry_atlas_and_overlay_anchor() {
+    let assets = boot_assets_app();
+    let layer = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+        sprite: None,
+        base_sprite: Some(2047),
+        sprite_modifiers: 0,
+        direct_palette: 0,
+        origin: [0, 0, 0],
+        extent: [14, 14, 44],
+    };
+
+    let resolved = direct_tile_layout_sequence(&layer, &assets).expect("industry BUILD sprite");
+    assert!(resolved.atlas.matches(&assets.industries[&2047].sprite()));
+    assert_eq!(resolved.width, 43.0);
+    assert_eq!(resolved.height, 56.0);
+    assert_eq!(resolved.x_offs, -21.0);
+    assert_eq!(resolved.y_offs, -34.0);
 }
 
 #[test]

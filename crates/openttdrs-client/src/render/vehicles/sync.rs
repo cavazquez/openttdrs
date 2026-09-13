@@ -280,6 +280,7 @@ pub(crate) fn update_vehicles(
     // poses discretas con la pose interpolada de otra representación.
     let mut stack_layers_by_parent: HashMap<Entity, ResolvedNewGrfStack> = HashMap::new();
     let mut rotor_layers_by_vehicle: HashMap<u32, Vec<NewGrfVehicleLayer>> = HashMap::new();
+    let mut rendered_vehicle_layers_by_id: HashMap<u32, NewGrfVehicleLayer> = HashMap::new();
     let mut rendered_vehicle_positions =
         (!labels.is_empty()).then(|| HashMap::with_capacity(sim.state.vehicles.len()));
     for (entity, vs, mut transform, mut sprite, mut visibility, parent) in &mut q {
@@ -348,6 +349,9 @@ pub(crate) fn update_vehicles(
                     &sim.state.engine_catalog,
                 )
             });
+        if let Some(layer) = layers.first() {
+            rendered_vehicle_layers_by_id.insert(v.id, layer.clone());
+        }
         set_sprite_image_if_changed(&mut sprite, image);
         set_sprite_color_if_changed(&mut sprite, vehicle_tint(v));
         if super::vehicle_uses_newgrf_stack(&sim, v) {
@@ -518,9 +522,22 @@ pub(crate) fn update_vehicles(
         }
         visibility.set_if_neq(Visibility::Visible);
         let dir = openttdrs_core::vehicle_render_direction_at(v, pose).min(7) as usize;
-        let layer = &vehicle_layers_with_catalog(v, &sim.state.engine_catalog)[dir];
-        let mut shadow_pos =
-            aircraft_aux_sprite_pos_at(v, &sim.state.map, pose, layer, false, 0.85);
+        let mut shadow_pos = if let Some(layer) = rendered_vehicle_layers_by_id.get(&v.id) {
+            aircraft_aux_sprite_pos_at_offsets(
+                v,
+                &sim.state.map,
+                pose,
+                f32::from(layer.x_offs),
+                f32::from(layer.y_offs),
+                f32::from(layer.width),
+                f32::from(layer.height),
+                false,
+                0.85,
+            )
+        } else {
+            let layer = &vehicle_layers_with_catalog(v, &sim.state.engine_catalog)[dir];
+            aircraft_aux_sprite_pos_at(v, &sim.state.map, pose, layer, false, 0.85)
+        };
         let source_depth = vehicle_source_depth(v, &sim.state.map, pose, shadow_pos);
         shadow_pos.z = source_depth;
         let preserves_sorted_depth = child.is_some();
@@ -533,7 +550,12 @@ pub(crate) fn update_vehicles(
         }
         set_sprite_image_if_changed(
             &mut sprite,
-            trucks.for_vehicle_with_catalog(v, pose, None, None, &sim.state.engine_catalog),
+            rendered_vehicle_layers_by_id
+                .get(&v.id)
+                .map(|layer| layer.handle.clone())
+                .unwrap_or_else(|| {
+                    trucks.for_vehicle_with_catalog(v, pose, None, None, &sim.state.engine_catalog)
+                }),
         );
     }
 

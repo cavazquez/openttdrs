@@ -986,6 +986,85 @@ mod tests {
     }
 
     #[test]
+    fn aircraft_shadow_reuses_custom_body_layer() {
+        use openttdrs_core::newgrf_sprites::{
+            DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics,
+        };
+
+        let mut state = GameState::new(8, 8);
+        let mut custom = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_AIRCRAFT_DAKOTA)
+            .expect("vanilla aircraft")
+            .clone();
+        custom.id = 0x7F08;
+        custom.from_newgrf = true;
+        custom.newgrf_grfid = 0x5348_444F;
+        custom.newgrf_local_id = 0;
+        custom.newgrf_runtime = Some(Box::new(TrainSpriteGraphics {
+            sets: vec![vec![DecodedSprite {
+                width: 2,
+                height: 2,
+                x_offs: 32,
+                y_offs: 4,
+                rgba: vec![
+                    17, 33, 49, 255, 17, 33, 49, 255, 17, 33, 49, 255, 17, 33, 49, 255,
+                ],
+                mask: Vec::new(),
+            }]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            }],
+            ..Default::default()
+        }));
+        state.engine_catalog.push(custom.clone());
+        let pos = TileCoord::new(2, 2);
+        let mut aircraft = Vehicle::new(11, VehicleKind::Aircraft, pos, pos);
+        aircraft.engine_id = Some(custom.id);
+        state.vehicles.push(aircraft);
+
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        });
+        world.insert_resource(crate::simulation::SimClock::default());
+        world.insert_resource(default_handles());
+        world.insert_resource(crate::render::CompanyColoredSprites::default());
+        world.insert_resource(VehicleIndex::default());
+        world.insert_resource(NewGrfTrainSpriteCache::default());
+        world.init_resource::<Assets<Image>>();
+
+        let body = world
+            .spawn((
+                sync::VehicleSprite(11),
+                Transform::default(),
+                Sprite::default(),
+                Visibility::Visible,
+            ))
+            .id();
+        let shadow = world
+            .spawn((
+                sync::AircraftShadowSprite(11),
+                Transform::default(),
+                Sprite::default(),
+                Visibility::Visible,
+            ))
+            .id();
+
+        world.run_system_once(rebuild_vehicle_index).unwrap();
+        world.run_system_once(update_vehicles).unwrap();
+
+        let body_sprite = world.entity(body).get::<Sprite>().expect("body sprite");
+        let shadow_sprite = world.entity(shadow).get::<Sprite>().expect("shadow sprite");
+        assert_eq!(body_sprite.image, shadow_sprite.image);
+        let body_pos = world.entity(body).get::<Transform>().expect("body pos");
+        let shadow_pos = world.entity(shadow).get::<Transform>().expect("shadow pos");
+        assert_eq!(body_pos.translation.x, shadow_pos.translation.x);
+        assert_eq!(body_pos.translation.y, shadow_pos.translation.y);
+    }
+
+    #[test]
     fn stable_vehicle_sync_keeps_the_viewport_sorter_idle() {
         use crate::render::viewport_sort::ParentSpriteBounds;
         use crate::render::{

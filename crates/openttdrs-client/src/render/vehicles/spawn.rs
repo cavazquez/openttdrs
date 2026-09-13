@@ -269,7 +269,7 @@ pub(crate) fn spawn_initial_vehicles(
                 MapVisualLayer,
                 VehicleSprite(vehicle.id),
                 Sprite {
-                    image: vehicle_image,
+                    image: vehicle_image.clone(),
                     color: Color::WHITE,
                     ..default()
                 },
@@ -295,10 +295,27 @@ pub(crate) fn spawn_initial_vehicles(
             &layers,
         );
         if vehicle.kind == VehicleKind::Aircraft {
-            let layer = &vehicle_layers_with_catalog(vehicle, &sim.state.engine_catalog)
-                [openttdrs_core::vehicle_render_direction_at(vehicle, pose).min(7) as usize];
-            let mut shadow_pos =
-                aircraft_aux_sprite_pos_at(vehicle, &sim.state.map, pose, layer, false, 0.85);
+            let mut shadow_pos = layers.first().map_or_else(
+                || {
+                    let layer = &vehicle_layers_with_catalog(vehicle, &sim.state.engine_catalog)
+                        [openttdrs_core::vehicle_render_direction_at(vehicle, pose).min(7)
+                            as usize];
+                    aircraft_aux_sprite_pos_at(vehicle, &sim.state.map, pose, layer, false, 0.85)
+                },
+                |layer| {
+                    aircraft_aux_sprite_pos_at_offsets(
+                        vehicle,
+                        &sim.state.map,
+                        pose,
+                        f32::from(layer.x_offs),
+                        f32::from(layer.y_offs),
+                        f32::from(layer.width),
+                        f32::from(layer.height),
+                        false,
+                        0.85,
+                    )
+                },
+            );
             let shadow_source_depth = viewport_source_depth(
                 shadow_pos.z,
                 u32::try_from(pose.pos.x).unwrap_or(0),
@@ -309,13 +326,7 @@ pub(crate) fn spawn_initial_vehicles(
                 MapVisualLayer,
                 AircraftShadowSprite(vehicle.id),
                 Sprite {
-                    image: trucks.for_vehicle_with_catalog(
-                        vehicle,
-                        pose,
-                        None,
-                        None,
-                        &sim.state.engine_catalog,
-                    ),
+                    image: vehicle_image,
                     color: Color::srgba(0.08, 0.08, 0.08, 0.5),
                     ..default()
                 },

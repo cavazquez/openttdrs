@@ -12,7 +12,8 @@ use openttdrs_core::{
 use super::{
     helpers::{
         FLAT_WATER_LAYER_FRAC, foundation_surface_overlay_pos,
-        spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_sprite_at,
+        spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_ground_sprite_at,
+        spawn_foundation_child_sprite_at,
     },
     push_object_water_ground_with_action5, sloped_or_flat_image, spawn_ground_sprite,
 };
@@ -2675,6 +2676,9 @@ fn spawn_newgrf_object_layout_ground(
     commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
+    map_width: u32,
+    surface_base_z: u8,
+    foundation_child_parent: Option<Entity>,
     def: &ObjectSpecDef,
     object_colour: u8,
     runtime_fp: u32,
@@ -2728,20 +2732,24 @@ fn spawn_newgrf_object_layout_ground(
         y_offs,
         width,
         height,
-        ctx.info.base_z,
+        surface_base_z,
         0.55,
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
     // `DrawNewObjectTile` entrega el ground TileLayout a `DrawGroundSprite`;
     // la secuencia BUILD se materializa separadamente en el compositor global.
-    position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.55);
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        sprite,
-        Transform::from_translation(position),
-    ));
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.55);
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
     true
 }
 
@@ -2752,6 +2760,7 @@ fn spawn_newgrf_object_layout_sequence(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     map_width: u32,
+    surface_base_z: u8,
     def: &ObjectSpecDef,
     object_colour: u8,
     runtime_fp: u32,
@@ -2845,7 +2854,7 @@ fn spawn_newgrf_object_layout_sequence(
                 ctx.iso_pos,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
-                ctx.info.base_z,
+                surface_base_z,
                 layer_z,
                 seq,
                 width,
@@ -2856,7 +2865,7 @@ fn spawn_newgrf_object_layout_sequence(
             let bounds = object_tile_seq_bounds(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
-                ctx.info.base_z,
+                surface_base_z,
                 layer.origin,
                 layer.extent,
             );
@@ -2890,7 +2899,7 @@ fn spawn_newgrf_object_layout_sequence(
                 height,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
-                ctx.info.base_z,
+                surface_base_z,
                 layer_z,
             );
             let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
@@ -2909,7 +2918,7 @@ fn spawn_newgrf_object_layout_sequence(
                 ctx.iso_pos,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
-                ctx.info.base_z,
+                surface_base_z,
                 layer_z,
                 seq,
                 width,
@@ -3036,6 +3045,11 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
     let ottd_type = ctx.tile.map_or(0u8, |t| (t.mapt >> 4) & 0xF);
     let tile_m5 = ctx.tile.map_or(0u8, |t| t.m5);
     let object_type = ctx.object_type.unwrap_or(u16::from(tile_m5));
+    let newgrf_object_def = if ottd_type == 10 && is_newgrf_object_type_id(object_type) {
+        crate::render::object_newgrf::newgrf_object_def_for_type(object_catalog, object_type)
+    } else {
+        None
+    };
     let object_layout = if ottd_type == 10 && is_newgrf_object_type_id(object_type) {
         ctx.tile.and_then(|tile| {
             resolve_newgrf_object_layout(
@@ -3054,6 +3068,34 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
     } else {
         None
     };
+
+    // `DrawTile_Object` llama a `DrawFoundation` antes del ground y de la
+    // secuencia del objeto. La única excepción de objetos NewGRF es
+    // `HasNoFoundation`; sin este paso, una construcción en pendiente queda
+    // ocho píxeles por debajo de OpenTTD y su TileSeq se ordena contra la
+    // superficie inclinada en vez de la plataforma nivelada.
+    let object_foundation = newgrf_object_def
+        .filter(|def| !def.has_no_foundation())
+        .map(|_| {
+            spawn_forced_leveled_foundation_with_child_parent(
+                commands,
+                map,
+                map.dimensions(),
+                assets,
+                ctx,
+                tileh,
+                "object-newgrf",
+                "object-newgrf-foundation",
+                &[],
+                None,
+                None,
+            )
+        });
+    let object_surface_base_z = object_foundation
+        .map(|foundation| foundation.surface_base_z)
+        .unwrap_or(ctx.info.base_z);
+    let object_foundation_child_parent =
+        object_foundation.and_then(|foundation| foundation.child_parent);
 
     // MP_CLEAR (0): distinguir subtipo de suelo vía m5 bits 2-4.
     // MP_OBJECT (10): el suelo depende del ObjectType resuelto desde OBJS;
@@ -3238,6 +3280,9 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                 commands,
                 assets,
                 ctx,
+                map_width,
+                object_surface_base_z,
+                object_foundation_child_parent,
                 def,
                 *object_colour,
                 *runtime_fp,
@@ -3261,7 +3306,21 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
         );
     }
     if !used_newgrf_layout_ground && !used_vanilla_hq_ground {
-        spawn_ground_sprite(commands, &image, color, ctx, slope_half_ground);
+        if let Some(parent) = object_foundation_child_parent {
+            spawn_foundation_child_ground_sprite_at(
+                commands,
+                &image,
+                color,
+                ctx,
+                object_surface_base_z,
+                0.55,
+                slope_half_ground,
+                map_width,
+                parent,
+            );
+        } else {
+            spawn_ground_sprite(commands, &image, color, ctx, slope_half_ground);
+        }
     }
 
     // Los dos hitos originales requieren terreno plano y `DrawTile_Object`
@@ -3390,6 +3449,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                     assets,
                     ctx,
                     map_width,
+                    object_surface_base_z,
                     layout_def,
                     *object_colour,
                     *runtime_fp,
@@ -3419,7 +3479,7 @@ pub(crate) fn spawn_generic_land_tile_with_objects_and_water(
                     f32::from(view.y_offs),
                     f32::from(view.width),
                     f32::from(view.height),
-                    ctx.info.base_z,
+                    object_surface_base_z,
                     0.6,
                     ctx.tx_i32(),
                     ctx.ty_i32(),

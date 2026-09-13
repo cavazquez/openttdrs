@@ -42,6 +42,9 @@ pub const OBJECT_FLAG_CANNOT_REMOVE: u16 = 1 << 1;
 pub const OBJECT_FLAG_AUTOREMOVE: u16 = 1 << 2;
 /// Bit `ClearIncome` de `ObjectFlag` (Action0 `0x10`).
 pub const OBJECT_FLAG_CLEAR_INCOME: u16 = 1 << 4;
+/// Bit `HasNoFoundation` de `ObjectFlag` (Action0 `0x10`). El objeto no
+/// nivela la tesela ni muestra cimientos cuando se construye en pendiente.
+pub const OBJECT_FLAG_HAS_NO_FOUNDATION: u16 = 1 << 5;
 /// Bit `DrawWater` de `ObjectFlag` (Action0 `0x10`). El ground del objeto
 /// debe delegar en `DrawWaterClassGround` cuando la tesela conserva agua.
 pub const OBJECT_FLAG_DRAW_WATER: u16 = 1 << 10;
@@ -220,6 +223,12 @@ impl ObjectSpecDef {
     #[must_use]
     pub const fn available_in_climate(&self, climate_bit: u8) -> bool {
         self.climate_mask & climate_bit != 0
+    }
+
+    /// `true` si `DrawTile_Object` debe omitir la fundación nivelada.
+    #[must_use]
+    pub const fn has_no_foundation(&self) -> bool {
+        self.flags & OBJECT_FLAG_HAS_NO_FOUNDATION != 0
     }
 
     /// `true` si el objeto solicita CB `0x157` para cada tesela de su footprint.

@@ -10,11 +10,11 @@ use openttdrs_core::{
     Action2VarAdjust, Action2VarEntry, Action2VarTerm, AirportClassId, AirportSpecId,
     AirportTileGfxId, AirportTileSpecDef, BridgeType, Climate, DecodedSprite,
     FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef, IndustryTileGfxId, IndustryTileSpecDef,
-    NewgrfAirportSpecDef, OBJECT_FLAG_DRAW_WATER, ObjectSpecDef, RailType, RoadStopSpecDef,
-    RoadTramType, RoadType, RoadTypeDef, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, StationClassId,
-    StationSpecDef, StationSpecId, TrainSpriteAssign, TrainSpriteGraphics, WaterClass,
-    make_water_tile, set_bridge_middle_mapt, set_bridge_type_m6, set_water_class_m1,
-    vanilla_road_type_catalog,
+    NewgrfAirportSpecDef, OBJECT_FLAG_DRAW_WATER, OBJECT_FLAG_HAS_NO_FOUNDATION, ObjectSpecDef,
+    RailType, RoadStopSpecDef, RoadTramType, RoadType, RoadTypeDef, SLOPE_NE, SLOPE_NW, SLOPE_SE,
+    SLOPE_SW, StationClassId, StationSpecDef, StationSpecId, TrainSpriteAssign,
+    TrainSpriteGraphics, WaterClass, make_water_tile, set_bridge_middle_mapt, set_bridge_type_m6,
+    set_water_class_m1, vanilla_road_type_catalog,
 };
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
@@ -12379,6 +12379,248 @@ fn flat_newgrf_object_tile_layout_keeps_ground_in_ground_pass() {
         vec![ground_draw_z(coord.x, coord.y, 0.55)],
         "DrawNewObjectTile debe dejar el ground TileLayout en DrawGroundSprite"
     );
+}
+
+#[test]
+fn sloped_newgrf_object_tile_layout_matches_foundation_and_no_foundation_flags() {
+    use openttdrs_core::newgrf_sprites::{TileLayout, TileLayoutSpriteRef};
+
+    let object_type = openttdrs_core::NEW_OBJECT_OFFSET;
+    let ground = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: [240, 10, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let parent = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -3,
+        y_offs: -4,
+        rgba: [10, 240, 10, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let child = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -5,
+        y_offs: -6,
+        rgba: [10, 10, 240, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![
+            vec![ground.clone()],
+            vec![parent.clone()],
+            vec![child.clone()],
+        ],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 4,
+            set_id: 9,
+        }],
+        ..Default::default()
+    };
+    runtime.tile_layouts.insert(
+        9,
+        TileLayout {
+            ground: TileLayoutSpriteRef {
+                action1_set: Some(0),
+                ..Default::default()
+            },
+            sequence: vec![
+                TileLayoutSpriteRef {
+                    action1_set: Some(1),
+                    origin: [1, 2, 3],
+                    extent: [4, 5, 6],
+                    ..Default::default()
+                },
+                TileLayoutSpriteRef {
+                    action1_set: Some(2),
+                    origin: [7, -4, i8::MIN],
+                    ..Default::default()
+                },
+            ],
+        },
+    );
+
+    for (flags, expects_foundation) in [(0, true), (OBJECT_FLAG_HAS_NO_FOUNDATION, false)] {
+        let assets = boot_assets_app();
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut tile = tile_template();
+        tile.mapt = 0xA0;
+        tile.m5 = u8::try_from(object_type).expect("NewGRF object type byte");
+        map.set_tile(coord, tile).expect("sloped object tile");
+        // W elevado: la tesela queda en SLOPE_W y su plataforma debe avanzar
+        // una unidad de altura, como FlatteningFoundation.
+        map.set_height(TileCoord::new(2, 1), 1)
+            .expect("west corner height");
+        let object_def = ObjectSpecDef {
+            id: object_type,
+            class_label: "TEST".into(),
+            name: "Sloped TileLayout object".into(),
+            size: openttdrs_core::OBJECT_SIZE_1X1,
+            from_newgrf: true,
+            local_id: 4,
+            grfid: 0x4F42_4A54,
+            newgrf_grf_version: 8,
+            climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            clear_cost_factor: openttdrs_core::DEFAULT_OBJECT_CLEAR_COST_FACTOR,
+            flags,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
+            callback_mask: 0,
+            views: vec![ground.clone()],
+            newgrf_runtime: Some(Box::new(runtime.clone())),
+            associated_badges: Vec::new(),
+        };
+        assert!(
+            crate::render::object_newgrf::newgrf_object_def_for_type(
+                std::slice::from_ref(&object_def),
+                object_type,
+            )
+            .is_some()
+        );
+        let grid = RenderGrid::from_map(&map, 4, 4);
+        let ctx = TileRenderContext::new(&map, &grid, coord.x as u32, coord.y as u32);
+        assert_eq!(ctx.info.tileh, 0x01, "fixture slope SLOPE_W");
+        let mut world = World::new();
+        world.insert_resource(TsMap(map));
+        world.insert_resource(TsGrid(grid));
+        world.insert_resource(TsAssets(assets));
+        world.insert_resource(crate::render::NewGrfObjectSpriteCache::default());
+        world.insert_resource(Assets::<Image>::default());
+        world
+            .run_system_once(
+                move |mut commands: Commands,
+                      m: Res<TsMap>,
+                      g: Res<TsGrid>,
+                      a: Res<TsAssets>,
+                      mut cache: ResMut<crate::render::NewGrfObjectSpriteCache>,
+                      mut images: ResMut<Assets<Image>>| {
+                    let mut ctx = TileRenderContext::new(&m.0, &g.0, 1, 1);
+                    ctx.object_type = Some(object_type);
+                    spawn_generic_land_tile(
+                        &mut commands,
+                        &a.0,
+                        None,
+                        None,
+                        &ctx,
+                        &m.0,
+                        4.0,
+                        TEST_CLIMATE,
+                        TEST_WORLD_SEED,
+                        4,
+                        std::slice::from_ref(&object_def),
+                        &[],
+                        Some(&mut cache),
+                        Some(&mut images),
+                    );
+                },
+            )
+            .expect("sloped object TileLayout spawn");
+
+        let foundation_parents: std::collections::HashSet<_> = world
+            .query::<(Entity, &ViewportSortableParent)>()
+            .iter(&world)
+            .filter_map(|(entity, parent)| {
+                (FOUNDATION_ORIGINAL_SPRITE_BASE
+                    ..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                    .contains(&parent.sprite_id)
+                    .then_some(entity)
+            })
+            .collect();
+        assert_eq!(
+            !foundation_parents.is_empty(),
+            expects_foundation,
+            "HasNoFoundation debe controlar DrawFoundation"
+        );
+
+        let ground_child_handles: Vec<_> = world
+            .query::<(&ViewportSortableChild, &Sprite)>()
+            .iter(&world)
+            .map(|(child_component, sprite)| (*child_component, sprite.image.clone()))
+            .collect();
+        let ground_children: Vec<_> = {
+            let images = world.resource::<Assets<Image>>();
+            ground_child_handles
+                .iter()
+                .filter_map(|(child_component, handle)| {
+                    (images.get(handle).and_then(|image| image.data.as_deref())
+                        == Some(ground.rgba.as_slice()))
+                    .then_some(*child_component)
+                })
+                .collect()
+        };
+        if expects_foundation {
+            assert_eq!(
+                ground_children.len(),
+                1,
+                "el ground debe colgar de foundation"
+            );
+            assert!(foundation_parents.contains(&ground_children[0].parent));
+        } else {
+            assert!(
+                ground_children.is_empty(),
+                "sin foundation no hay child de ground"
+            );
+        }
+
+        let parent_rows: Vec<_> = world
+            .query::<(Entity, &ViewportSortableParent, &Sprite)>()
+            .iter(&world)
+            .map(|(entity, parent_component, sprite)| {
+                (entity, *parent_component, sprite.image.clone())
+            })
+            .collect();
+        let sequence_parent = {
+            let images = world.resource::<Assets<Image>>();
+            parent_rows
+                .iter()
+                .find_map(|(entity, parent_component, handle)| {
+                    (images.get(handle).and_then(|image| image.data.as_deref())
+                        == Some(parent.rgba.as_slice()))
+                    .then_some((*entity, *parent_component))
+                })
+                .expect("parent BUILD del objeto")
+        };
+        let expected_base_z = if expects_foundation { 1 } else { 0 };
+        assert_eq!(
+            sequence_parent.1.bounds,
+            ParentSpriteBounds::new(
+                17,
+                18,
+                expected_base_z * 8 + 3,
+                20,
+                22,
+                expected_base_z * 8 + 8,
+            ),
+            "BUILD conserva la superficie efectiva según HasNoFoundation"
+        );
+        let sequence_child_handles: Vec<_> = world
+            .query::<(&ViewportSortableChild, &Sprite)>()
+            .iter(&world)
+            .map(|(child_component, sprite)| (*child_component, sprite.image.clone()))
+            .collect();
+        let sequence_children: Vec<_> = {
+            let images = world.resource::<Assets<Image>>();
+            sequence_child_handles
+                .iter()
+                .filter_map(|(child_component, handle)| {
+                    (child_component.parent == sequence_parent.0
+                        && images.get(handle).and_then(|image| image.data.as_deref())
+                            == Some(child.rgba.as_slice()))
+                    .then_some(*child_component)
+                })
+                .collect()
+        };
+        assert_eq!(sequence_children.len(), 1, "BUILD child conserva su parent");
+    }
 }
 
 #[test]

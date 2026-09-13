@@ -260,7 +260,11 @@ Action1/2 también se aplican a carretera, barcos y aeronaves. Los tiletypes
 NewGRF de estaciones rail se resuelven en pendientes y se vinculan al parent
 de la fundación nivelada. Los objetos NewGRF también reevalúan Action2 por
 tesela (random, offset, pendiente/terreno, animación y owner) y cachean la
-textura por fingerprint. Las industrias NewGRF también usan la vista Action2
+textura por fingerprint. En una pendiente, `DrawTile_Object` aplica ahora
+`FlatteningFoundation` salvo que `ObjectFlag::HasNoFoundation` lo prohíba; el
+ground, `BUILD` y las vistas de fallback reciben la cota efectiva y el ground
+se vincula al parent de esa fundación cuando existe. La regresión cubre ambas
+ramas sobre `SLOPE_W`. Las industrias NewGRF también usan la vista Action2
 runtime y cuelgan su overlay del parent de la fundación nivelada cuando existe;
 las casas NewGRF hacen lo mismo para etapa/hash, edad, terreno, frame,
 posición y random/triggers, y registran el edificio como parent sortable. El

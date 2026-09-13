@@ -4821,3 +4821,13 @@ extensión cero, su depth global y la clave de inserción. La regresión cubre e
 override de catálogo y la caja sortable; #326/#567 continúan abiertas por los
 producers navales restantes, clipping, framebuffer y la aceptación raster
 completa.
+
+Corrección #326-NEWGRF-OBJECT-FOUNDATIONS (2026-09-13): los objetos NewGRF
+inclinados consultan ahora `ObjectFlag::HasNoFoundation`, aplican
+`FlatteningFoundation` cuando corresponde y usan la cota nivelada para el
+ground, las entradas `BUILD` y las vistas de fallback. El ground se vincula al
+último parent de la fundación cuando OpenTTD lo deja activo; con
+`HasNoFoundation` conserva la pendiente y no crea ese parent. La regresión ECS
+cubre `SLOPE_W` en ambas variantes. Las tablas de fundación Action5 específicas
+del objeto, layouts/children dinámicos completos y la aceptación raster sobre
+saves reales siguen pendientes; #326 continúa abierta.

@@ -7390,3 +7390,13 @@ la baranda mantiene el fallback como parent visible. La regresión ECS cubre
 vanilla y NewGRF, ambos ejes de caja y la relación parent/child. La aceptación
 raster y los layouts/callbacks NewGRF que todavía no publican todos sus
 children siguen pendientes; #326 continúa abierta.
+
+Corrección #326-NEWGRF-OBJECT-FOUNDATIONS (2026-09-13): los objetos NewGRF
+inclinados consultan ahora `ObjectFlag::HasNoFoundation`, aplican
+`FlatteningFoundation` cuando corresponde y usan la cota nivelada para el
+ground, las entradas `BUILD` y las vistas de fallback. El ground se vincula al
+último parent de la fundación cuando OpenTTD lo deja activo; con
+`HasNoFoundation` conserva la pendiente y no crea ese parent. La regresión ECS
+cubre `SLOPE_W` en ambas variantes. Las tablas de fundación Action5 específicas
+del objeto, layouts/children dinámicos completos y la aceptación raster sobre
+saves reales siguen pendientes; #326 continúa abierta.

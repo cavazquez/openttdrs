@@ -87,6 +87,7 @@ pub(crate) struct PreviewNewGrfResources<'w> {
     pub action5_sprites: ResMut<'w, crate::render::NewGrfAction5SpriteCache>,
     pub road_sprites: ResMut<'w, crate::render::NewGrfRoadSpriteCache>,
     pub catenary_sprites: ResMut<'w, crate::render::NewGrfCatenarySpriteCache>,
+    pub signal_sprites: ResMut<'w, crate::render::NewGrfSignalSpriteCache>,
 }
 
 /// Assets opcionales que consume cada variante del preview.

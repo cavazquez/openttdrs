@@ -7081,6 +7081,14 @@ helper de regresión cubre los ejes X/Y de los bounds inclusivos. #326 continúa
 abierta por catenaria de pórticos si el contrato NewGRF la exige, `RTSG_DEPOT`,
 clipping y aceptación raster.
 
+Corrección #326-RAIL-DEPOT-PREVIEW-RTSG (2026-09-13): la preview de depósito
+consulta ahora `rail_type_depot_newgrf` con el mismo contexto Action2 de vía
+(tipo seleccionado, terreno, random, fecha, tablas y parámetros GRFID) que el
+mapa. La selección de los seis slots relocatables (`SE_1`, `SE_2`, `SW_1`,
+`SW_2`, `NE`, `NW`) quedó centralizada y las vistas HD conservan sus offsets
+NFO. Si el grupo no resuelve, el fallback vanilla sigue activo; #326 continúa
+abierta por clipping y aceptación raster.
+
 Corrección #326-BRIDGE-PREVIEW-RAIL-CATENARY (2026-09-13): la preview de
 construcción de puentes ferroviarios eléctricos reutiliza `collect_catenary_
 bridge_draws`, por lo que los vanos alternan los wires corto/largo y colocan

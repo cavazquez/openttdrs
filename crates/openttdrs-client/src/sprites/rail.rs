@@ -1622,6 +1622,24 @@ pub const fn rail_depot_visual_type_index(rail_type: openttdrs_core::RailType) -
     }
 }
 
+/// Índice del sprite `RTSG_DEPOT` para una fachada y dirección del depósito.
+///
+/// El bloque relocatable de OpenTTD comienza en `SE_1` (1063), no en la
+/// primera orientación de la tabla visual: el orden es `SE_1`, `SE_2`,
+/// `SW_1`, `SW_2`, `NE`, `NW`. Compartir esta conversión evita que el mapa y
+/// la preview resuelvan una fachada NewGRF distinta para la misma dirección.
+#[must_use]
+pub const fn rail_depot_custom_sprite_index(dir: usize, layer: usize) -> Option<u8> {
+    let dir = if dir > 3 { 3 } else { dir };
+    match dir {
+        0 if layer == 0 => Some(4),
+        1 if layer < 2 => Some(layer as u8),
+        2 if layer < 2 => Some(2 + layer as u8),
+        3 if layer == 0 => Some(5),
+        _ => None,
+    }
+}
+
 /// Capas BUILD del depósito de vía (`_depot_gfx_NE..NW` en `track_land.h`).
 ///
 /// El generador mantiene `dx`/`dy` de cada `TILE_SEQ_LINE` y los offsets NFO

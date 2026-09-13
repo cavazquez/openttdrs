@@ -72,9 +72,10 @@ use crate::sprites::{
     catenary_tunnel_wire_sprite, catenary_wire_world_z_delta,
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
     dock_tile_gfx, dock_tile_is_water_part, dock_tile_layer, is_hidden,
-    log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
-    rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
-    rail_station_draw_layers, rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
+    log_unknown_station_type_once, rail_depot_build_layers, rail_depot_custom_sprite_index,
+    rail_depot_seq_gfx, rail_depot_visual_type_index, rail_ghost_overlay_offset,
+    rail_pbs_reservation_offset, rail_station_draw_layers,
+    rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
     rail_waypoint_child_parent_slot, rail_waypoint_draw_layers, rail_waypoint_layer_bounds,
     rail_waypoint_layer_meta, rail_waypoint_parent_slot, rail_waypoint_sprite_center,
@@ -7045,22 +7046,6 @@ fn rail_depot_build_parent_bounds(
 const RAIL_DEPOT_CATENARY_PARENT_ORDINAL: u8 = 1;
 const RAIL_DEPOT_BUILDING_PARENT_ORDINAL: u8 = 2;
 
-/// Índice de una fachada vanilla dentro del bloque relocatable de
-/// `RTSG_DEPOT`. OpenTTD calcula el desplazamiento desde `SE_1` (1063), por lo
-/// que el orden global es `SE_1`, `SE_2`, `SW_1`, `SW_2`, `NE`, `NW` aunque la
-/// tabla de orientaciones se presente como NE/SE/SW/NW.
-#[must_use]
-const fn rail_depot_custom_sprite_index(dir: usize, layer: usize) -> Option<u8> {
-    let dir = if dir > 3 { 3 } else { dir };
-    match dir {
-        0 if layer == 0 => Some(4),
-        1 if layer < 2 => Some(layer as u8),
-        2 if layer < 2 => Some(2 + layer as u8),
-        3 if layer == 0 => Some(5),
-        _ => None,
-    }
-}
-
 /// Resuelve una capa del grupo Action3 `RailSpriteType::Depot` manteniendo el
 /// mismo contexto de vía que `GetCustomRailSprite` (`0x40`–`0x45`, fecha,
 /// random y parámetros del GRF).
@@ -8037,14 +8022,32 @@ mod tests {
 
     #[test]
     fn rail_depot_newgrf_slots_follow_the_relocated_vanilla_order() {
-        assert_eq!(super::rail_depot_custom_sprite_index(0, 0), Some(4));
-        assert_eq!(super::rail_depot_custom_sprite_index(1, 0), Some(0));
-        assert_eq!(super::rail_depot_custom_sprite_index(1, 1), Some(1));
-        assert_eq!(super::rail_depot_custom_sprite_index(2, 0), Some(2));
-        assert_eq!(super::rail_depot_custom_sprite_index(2, 1), Some(3));
-        assert_eq!(super::rail_depot_custom_sprite_index(3, 0), Some(5));
-        assert_eq!(super::rail_depot_custom_sprite_index(0, 1), None);
-        assert_eq!(super::rail_depot_custom_sprite_index(3, 1), None);
+        assert_eq!(
+            crate::sprites::rail_depot_custom_sprite_index(0, 0),
+            Some(4)
+        );
+        assert_eq!(
+            crate::sprites::rail_depot_custom_sprite_index(1, 0),
+            Some(0)
+        );
+        assert_eq!(
+            crate::sprites::rail_depot_custom_sprite_index(1, 1),
+            Some(1)
+        );
+        assert_eq!(
+            crate::sprites::rail_depot_custom_sprite_index(2, 0),
+            Some(2)
+        );
+        assert_eq!(
+            crate::sprites::rail_depot_custom_sprite_index(2, 1),
+            Some(3)
+        );
+        assert_eq!(
+            crate::sprites::rail_depot_custom_sprite_index(3, 0),
+            Some(5)
+        );
+        assert_eq!(crate::sprites::rail_depot_custom_sprite_index(0, 1), None);
+        assert_eq!(crate::sprites::rail_depot_custom_sprite_index(3, 1), None);
     }
 
     #[test]

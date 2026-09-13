@@ -70,6 +70,7 @@ pub(crate) struct RailSignalGhostPreviewParams<'w, 's> {
 #[derive(SystemParam)]
 pub(crate) struct PreviewNewGrfResources<'w> {
     pub images: ResMut<'w, Assets<Image>>,
+    pub action5_sprites: ResMut<'w, crate::render::NewGrfAction5SpriteCache>,
     pub road_sprites: ResMut<'w, crate::render::NewGrfRoadSpriteCache>,
     pub catenary_sprites: ResMut<'w, crate::render::NewGrfCatenarySpriteCache>,
 }

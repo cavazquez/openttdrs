@@ -7089,3 +7089,11 @@ trasero del vano. Esto conserva las variantes vanilla de rail, eléctrico,
 monorriel, maglev y carretera tanto en los ejes X/Y como al invertir el drag;
 las capas de fundación visibles y la aceptación raster siguen abiertas. #326
 continúa abierta.
+
+Corrección #326-BRIDGE-PREVIEW-RAMP-FOUNDATION (2026-09-13): los extremos de
+la preview ahora recorren el mismo `foundation_draw_plan` que el mapa, con el
+bloque `HasFoundationNW/NE`, el `z_delta` y el origen de `SpriteBounds`
+remapeados mediante el anclaje NFO real. Los 14 sprites clásicos se cargan de
+OpenGFX y las fundaciones virtuales usan la tabla Action5 vigente del save,
+incluidos los reemplazos NewGRF; el suelo efectivo de la rampa queda para la
+siguiente etapa. #326 continúa abierta.

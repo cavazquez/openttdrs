@@ -135,6 +135,8 @@ pub(crate) fn spawn_preview_plan(
                     road_sprites: &mut preview_newgrf.road_sprites,
                     catenary_newgrf: &sim.state.runtime.catenary_newgrf_sprites,
                     catenary_sprites: &mut preview_newgrf.catenary_sprites,
+                    foundation_newgrf: &sim.state.runtime.foundation_newgrf_sprites,
+                    action5_sprites: &mut preview_newgrf.action5_sprites,
                     images: &mut preview_newgrf.images,
                 },
             );

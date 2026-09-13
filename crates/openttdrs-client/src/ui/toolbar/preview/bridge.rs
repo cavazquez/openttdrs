@@ -9,15 +9,16 @@ use openttdrs_core::{
 
 use crate::iso::{HEIGHT_PX, iso, overlay_pos, remap_tile_offset, tile_slope_and_min_z};
 use crate::render::{
-    CatenarySpriteAnchor, NewGrfCatenarySpriteCache, NewGrfRoadSpriteCache,
-    bridge_foundation_decision_at, bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta,
-    catenary_local_z_delta, catenary_sprite_anchor, catenary_sprite_center,
+    CatenarySpriteAnchor, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache,
+    NewGrfRoadSpriteCache, bridge_foundation_decision_at, bridge_ramp_catenary_slope,
+    bridge_ramp_catenary_world_z_delta, catenary_local_z_delta, catenary_sprite_anchor,
+    catenary_sprite_center,
 };
 use crate::sprites::{
     BridgeDeckSpriteIds, OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, bridge_deck_sprite_ids,
     bridge_ramp_sprite_id, bridge_sprite_meta, catenary_sprite_atlas_key, catenary_sprite_color,
     catenary_tile_location_group, collect_catenary_bridge_draws,
-    collect_catenary_ramp_draws_from_map,
+    collect_catenary_ramp_draws_from_map, foundation_asset_path, foundation_gfx_for_tileh,
 };
 use crate::ui::toolbar::BuildMenuAction;
 
@@ -25,6 +26,10 @@ use super::BuildGhostPreview;
 
 const DECK_LAYER: f32 = 0.04;
 const FRONT_LAYER: f32 = 0.045;
+/// La preview conserva la misma secuencia local que el mapa: fundación debajo
+/// del suelo efectivo y del tablero. El ordinal evita invertir las dos piezas
+/// de una pendiente empinada cuando comparten tesela.
+const FOUNDATION_LAYER: f32 = DECK_LAYER - 0.006;
 const CUSTOM_BRIDGE_LAYER: f32 = DECK_LAYER + 0.001;
 const CUSTOM_OVERLAY_LAYER: f32 = DECK_LAYER + 0.002;
 const CUSTOM_CATENARY_BACK_LAYER: f32 = DECK_LAYER + 0.003;
@@ -51,6 +56,8 @@ pub(crate) struct BridgeSpanPreviewSpawn<'a> {
     pub road_sprites: &'a mut NewGrfRoadSpriteCache,
     pub catenary_newgrf: &'a [Option<openttdrs_core::DecodedSprite>],
     pub catenary_sprites: &'a mut NewGrfCatenarySpriteCache,
+    pub foundation_newgrf: &'a [Option<openttdrs_core::DecodedSprite>],
+    pub action5_sprites: &'a mut NewGrfAction5SpriteCache,
     pub images: &'a mut Assets<Image>,
 }
 
@@ -489,6 +496,100 @@ fn spawn_rail_bridge_ramp_catenary(
     }
 }
 
+/// Dibuja una pieza de `DrawFoundation` en la preview usando el mismo anclaje
+/// NFO que `spawn_foundation_sprite`. Los 14 sprites clásicos se cargan del
+/// atlas OpenGFX; las fundaciones virtuales se resuelven desde el bloque
+/// Action5 vigente del save/NewGRF.
+#[allow(clippy::too_many_arguments)]
+fn spawn_bridge_ramp_foundations(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    px: i32,
+    py: i32,
+    raw_base_z: u8,
+    plan: openttdrs_core::RailFoundationDrawPlan,
+    tint: Color,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: &mut NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
+) {
+    let foundation_tint = tint.with_alpha(tint.alpha() * 0.84);
+    for (ordinal, draw) in plan.sprites.into_iter().flatten().enumerate() {
+        let (image, xrel, yrel, width, height) = if let Some(tileh) = draw
+            .sprite_id
+            .checked_sub(openttdrs_core::FOUNDATION_ORIGINAL_SPRITE_BASE)
+            .and_then(|value| u8::try_from(value).ok())
+            .filter(|tileh| (1..=14).contains(tileh))
+        {
+            let (Some(path), Some(gfx)) = (
+                foundation_asset_path(tileh),
+                foundation_gfx_for_tileh(tileh),
+            ) else {
+                continue;
+            };
+            (
+                asset_server.load::<Image>(path),
+                gfx.xrel,
+                gfx.yrel,
+                gfx.w,
+                gfx.h,
+            )
+        } else {
+            let Some(slot) = openttdrs_core::foundation_action5_slot_for_sprite_id(draw.sprite_id)
+            else {
+                continue;
+            };
+            let Some(decoded) = foundation_newgrf.get(slot).and_then(Option::as_ref) else {
+                continue;
+            };
+            let Some(slot_u16) = u16::try_from(slot).ok() else {
+                continue;
+            };
+            (
+                action5_sprites.handle_for(
+                    openttdrs_core::ACTION5_TYPE_FOUNDATIONS,
+                    slot_u16,
+                    decoded,
+                    images,
+                ),
+                f32::from(decoded.x_offs),
+                f32::from(decoded.y_offs),
+                f32::from(decoded.width),
+                f32::from(decoded.height),
+            )
+        };
+
+        let mut position = overlay_pos(
+            iso(px, py),
+            xrel,
+            yrel,
+            width,
+            height,
+            raw_base_z.saturating_add(draw.z_delta),
+            FOUNDATION_LAYER + ordinal as f32 * 0.0005,
+            px,
+            py,
+        );
+        // `AddSortableSpriteToDraw` remapea también el origen de SpriteBounds;
+        // omitirlo desalinearía las mitades de una fundación de media tesela.
+        let bounds_offset = remap_tile_offset(
+            f32::from(draw.bounds.ox),
+            f32::from(draw.bounds.oy),
+            f32::from(draw.bounds.oz),
+        ) * 0.5;
+        position += Vec3::new(bounds_offset.x, bounds_offset.y, 0.0);
+        commands.spawn((
+            BuildGhostPreview,
+            Sprite {
+                image,
+                color: foundation_tint,
+                ..default()
+            },
+            Transform::from_translation(position).with_scale(Vec3::splat(1.002)),
+        ));
+    }
+}
+
 /// Posición en pantalla con offsets NFO, como `spawn_layer` en `bridge_draw.rs`.
 fn bridge_ghost_translation(
     px: i32,
@@ -526,6 +627,8 @@ pub(crate) fn spawn_bridge_span_preview(
         road_sprites,
         catenary_newgrf,
         catenary_sprites,
+        foundation_newgrf,
+        action5_sprites,
         images,
     } = spawn;
     let is_rail = action == BuildMenuAction::RailBridge;
@@ -564,6 +667,33 @@ pub(crate) fn spawn_bridge_span_preview(
         let ramp_foundation = ramp_direction.map(|direction| {
             bridge_foundation_decision_at(map, coord, map_dims, tileh, base_z, direction)
         });
+        if !is_middle
+            && let Some(foundation) = ramp_foundation
+            && foundation.foundation != 0
+        {
+            let plan = openttdrs_core::foundation_draw_plan(
+                tileh,
+                foundation.foundation,
+                foundation.sprite_block,
+            );
+            debug_assert_eq!(plan.surface_tileh, foundation.surface_tileh);
+            debug_assert_eq!(
+                plan.surface_z_delta,
+                foundation.surface_base_z.saturating_sub(base_z)
+            );
+            spawn_bridge_ramp_foundations(
+                commands,
+                asset_server,
+                px,
+                py,
+                base_z,
+                plan,
+                tint,
+                foundation_newgrf,
+                action5_sprites,
+                images,
+            );
+        }
         let (sprite_id, shift, layer) = if is_middle {
             (ids.front[axis], bridge_front_shift(axis), FRONT_LAYER)
         } else {

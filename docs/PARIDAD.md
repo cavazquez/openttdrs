@@ -4892,3 +4892,11 @@ bajaron de `97.102/921.600` (`10,536241319 %`) a `94.775/921.600`
 Es una corrección acotada del contrato de captura limpia, no paridad de
 framebuffer; #326 continúa abierta por composición global, clipping, pivotes,
 familias y layouts restantes.
+
+Corrección #326-CLEAN-FULL-ANIMATION (2026-09-13): el perfil de captura limpia
+fuerza `full_animation = false`, equivalente a limpiar `DO_FULL_ANIMATION` en
+`PrepareCleanWorldScreenshot`. Antes el valor del usuario podía quedar activo
+durante la captura; la regresión parte de `true` y verifica que el perfil lo
+desactive, mientras el guard restaura el valor original al finalizar. Es una
+corrección del contrato determinista de captura; no cierra #326 ni cambia el
+perfil persistido del usuario.

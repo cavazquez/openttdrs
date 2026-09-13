@@ -7454,3 +7454,10 @@ pasó de `97.102` a `94.775` píxeles distintos sobre `921.600`
 no cambia. Esto reduce una fuente concreta de desplazamiento de profundidad,
 pero #326 sigue abierta por los producers restantes, segmentación, clipping,
 pivotes y raster global.
+
+Corrección #326-CLEAN-FULL-ANIMATION (2026-09-13): el perfil temporal de
+`OPENTTDRS_MAP_SHOT_CLEAN=1` fuerza `full_animation=false`, alineado con
+`PrepareCleanWorldScreenshot` y `DO_FULL_ANIMATION` de OpenTTD. La regresión
+arranca con la preferencia en `true`, comprueba que se congele durante la
+captura y que el guard restaure el valor original; no se modifica la
+preferencia persistida. #326 continúa abierta.

@@ -150,6 +150,10 @@ fn normalize_clean_map_shot_preferences(prefs: &mut ClientPreferences) {
     prefs.show_station_labels = false;
     prefs.smoke_amount = 0;
     prefs.full_detail = true;
+    // `PrepareCleanWorldScreenshot` limpia `DO_FULL_ANIMATION` antes de
+    // renderizar. El perfil debe reflejarlo aunque el usuario tuviera la
+    // animación completa activa en su configuración.
+    prefs.full_animation = false;
     prefs.transparency_opt = 0;
     prefs.invisibility_opt = 0;
 }
@@ -2201,7 +2205,7 @@ mod tests {
             full_detail: false,
             transparency_opt: 0x55,
             invisibility_opt: 0xaa,
-            full_animation: false,
+            full_animation: true,
             ..ClientPreferences::default()
         };
         let original = prefs.clone();

@@ -999,6 +999,18 @@ fn rail_track_fence_parent_bounds(
     )
 }
 
+/// Desplazamiento visual del origen de `SpriteBounds` de `DrawTrackFence`.
+///
+/// `AddSortableSpriteToDraw` suma `bounds.origin` a las coordenadas del mundo
+/// antes de calcular `RemapCoords`, no sólo al prisma de ordenamiento. Las
+/// vallas SE/NW y las verticales usan origins distintos de cero; omitirlos
+/// deja la textura sobre el centro de la tesela aunque el parent conserve la
+/// caja correcta.
+#[inline]
+fn rail_track_fence_visual_offset(bounds: TraceSpriteBounds) -> Vec2 {
+    remap_tile_offset(bounds.ox as f32, bounds.oy as f32, bounds.oz as f32) * 0.5
+}
+
 /// Caja global de una señal de `DrawSingleSignal`.
 ///
 /// A diferencia de una cerca, `SignalPositions` ya entrega una coordenada
@@ -3450,8 +3462,9 @@ pub(crate) fn spawn_rail_tile(
             );
 
             let filename = format!("track_fence_{}.png", draw.sprite_index);
+            let bounds_offset = rail_track_fence_visual_offset(fence_bounds);
             let mut pos3 = overlay_pos(
-                ctx.iso_pos,
+                ctx.iso_pos + bounds_offset,
                 f32::from(meta.xrel),
                 f32::from(meta.yrel),
                 f32::from(meta.width),
@@ -3673,10 +3686,11 @@ mod tests {
         rail_catenary_wire_parent_bounds, rail_custom_overlay_offsets,
         rail_custom_underlay_offsets, rail_foundation_after_pass, rail_ground_complete_offset,
         rail_ground_sprite_id, rail_initial_ground_draw, rail_signal_parent_bounds,
-        rail_track_fence_parent_bounds, rail_track_trace_mode, rail_upper_halftile_ground_draw,
-        road_catenary_bits_for_render, road_catenary_custom_groups_are_active,
-        road_catenary_parent_bounds, road_detail_world_z_delta, road_foundation_child_offset,
-        road_tile_may_have_road, roadside_detail_parent_bounds, signal_trace_geometry,
+        rail_track_fence_parent_bounds, rail_track_fence_visual_offset, rail_track_trace_mode,
+        rail_upper_halftile_ground_draw, road_catenary_bits_for_render,
+        road_catenary_custom_groups_are_active, road_catenary_parent_bounds,
+        road_detail_world_z_delta, road_foundation_child_offset, road_tile_may_have_road,
+        roadside_detail_parent_bounds, signal_trace_geometry,
     };
     use crate::render::viewport_sort::{ParentSprite, ParentSpriteBounds};
     use crate::render::world_draw_trace::TraceSpriteBounds;
@@ -4154,6 +4168,24 @@ mod tests {
         assert_eq!(
             rail_signal_parent_bounds(170, 105, 2, (11, 13), 8, signal_bounds),
             ParentSpriteBounds::new(2731, 1693, 24, 2731, 1693, 29)
+        );
+    }
+
+    #[test]
+    fn rail_fence_visual_anchor_includes_bounds_origin() {
+        // `AddSortableSpriteToDraw` mueve el origen de la valla SE 15
+        // unidades hacia Y antes de aplicar el ancla NFO. En la escala del
+        // cliente equivale a 30 px a la derecha y 15 px hacia abajo.
+        assert_eq!(
+            rail_track_fence_visual_offset(TraceSpriteBounds::new(0, 15, 0, 16, 1, 4)),
+            Vec2::new(30.0, -15.0)
+        );
+        // Las vallas verticales usan el punto central de la tesela como
+        // origen de bounds, que no puede desaparecer sólo porque su caja sea
+        // de una única celda.
+        assert_eq!(
+            rail_track_fence_visual_offset(TraceSpriteBounds::new(8, 8, 0, 1, 1, 4)),
+            Vec2::new(0.0, -16.0)
         );
     }
 

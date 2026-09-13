@@ -7474,3 +7474,14 @@ acotado a clipping/composición segmentada; el depósito naval real y los
 assets de sentido único no presentan una divergencia reproducible adicional.
 La métrica raster actual es `94775/921600` (`10,283745660 %`) y #326 no se
 cierra.
+
+Corrección #326-RAIL-FENCE-BOUNDS-ORIGIN (2026-09-13): las cercas de vía
+aplican ahora el `bounds.origin` de `DrawTrackFence` también a la posición
+visual del PNG, igual que `AddSortableSpriteToDraw` antes de ejecutar
+`RemapCoords`. Esto alinea las vallas SE/NW y las verticales con sus prismas
+sortables; la regresión cubre los offsets `(0,15,0)` y `(8,8,0)`. En la
+captura limpia de `Kale_TitleGame.sav` (`189,126`, `1280×720`, `Normal`) el
+raster pasó de `94775/921600` a `77258/921600` píxeles distintos
+(`10,283745660 %` → `8,383029514 %`) y el delta medio de canal bajó de
+`3,610982` a `2,814533`. El trace dejó la caja de la valla presente y no
+introdujo bounds candidatos fuera de la referencia; #326 continúa abierta.

@@ -24,7 +24,8 @@ use crate::iso::{ground_draw_z, overlay_pos};
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::newgrf_cache::{
     direct_tile_layout_airport_ground, direct_tile_layout_airport_sequence,
-    direct_tile_layout_object_sequence, direct_tile_layout_rail_waypoint_sequence,
+    direct_tile_layout_object_sequence, direct_tile_layout_rail_station_ground,
+    direct_tile_layout_rail_station_sequence, direct_tile_layout_rail_waypoint_sequence,
     direct_tile_layout_road_stop_sequence, direct_tile_layout_road_waypoint_sequence,
     direct_tile_layout_sequence,
 };
@@ -13605,6 +13606,60 @@ fn direct_airport_tile_layout_uses_airport_atlas_and_nfo_geometry() {
             assert_eq!(resolved.height, meta.h, "{name} sprite {sprite_id}");
             assert_eq!(resolved.x_offs, meta.x_offs, "{name} sprite {sprite_id}");
             assert_eq!(resolved.y_offs, meta.y_offs, "{name} sprite {sprite_id}");
+        }
+    }
+}
+
+#[test]
+fn direct_rail_station_tile_layout_uses_rail_atlas_and_nfo_geometry() {
+    let assets = boot_assets_app();
+
+    for rail_type in [
+        RailType::Rail,
+        RailType::Electric,
+        RailType::Monorail,
+        RailType::Maglev,
+    ] {
+        for m5 in 0u8..8 {
+            for layer in crate::sprites::rail_station_draw_layers(m5) {
+                let typed = crate::sprites::rail_station_layer_for_type(*layer, rail_type);
+                let sprite_id = u16::try_from(typed.sprite_id).expect("rail station SpriteID");
+                let expected_atlas = assets
+                    .rail
+                    .get(&typed.sprite_id)
+                    .unwrap_or_else(|| panic!("rail station atlas {sprite_id}"));
+                let (width, height, x_offs, y_offs) =
+                    crate::sprites::rail_station_sprite_meta(typed.sprite_id)
+                        .expect("rail station NFO metadata");
+                let resolved_layer = openttdrs_core::newgrf_sprites::ResolvedTileLayoutSprite {
+                    sprite: None,
+                    base_sprite: Some(sprite_id),
+                    sprite_modifiers: 0,
+                    direct_palette: 0,
+                    origin: [0, 0, 0],
+                    extent: [16, 16, 16],
+                };
+
+                for (name, resolved) in [
+                    (
+                        "ground",
+                        direct_tile_layout_rail_station_ground(&resolved_layer, &assets),
+                    ),
+                    (
+                        "sequence",
+                        direct_tile_layout_rail_station_sequence(&resolved_layer, &assets),
+                    ),
+                ] {
+                    let resolved = resolved.unwrap_or_else(|| {
+                        panic!("rail station {name} sprite {sprite_id} no se pudo materializar")
+                    });
+                    assert!(resolved.atlas.matches(&expected_atlas.sprite()));
+                    assert_eq!(resolved.width, width, "{name} sprite {sprite_id}");
+                    assert_eq!(resolved.height, height, "{name} sprite {sprite_id}");
+                    assert_eq!(resolved.x_offs, x_offs, "{name} sprite {sprite_id}");
+                    assert_eq!(resolved.y_offs, y_offs, "{name} sprite {sprite_id}");
+                }
+            }
         }
     }
 }

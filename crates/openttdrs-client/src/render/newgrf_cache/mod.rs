@@ -638,6 +638,23 @@ fn direct_tile_layout_airport_geometry(sprite_id: u16) -> Option<DirectTileLayou
     })
 }
 
+/// Geometría NFO de las referencias directas del banco de estaciones rail.
+/// La ruta genérica ya podía usar estos sprites en `BUILD`, pero no en
+/// `ground`; el consumidor `DrawTile_Station` conoce el namespace y puede
+/// materializar ambos con el mismo atlas ferroviario.
+fn direct_tile_layout_rail_station_geometry(
+    sprite_id: u16,
+) -> Option<DirectTileLayoutGroundGeometry> {
+    crate::sprites::rail_station_sprite_meta(u32::from(sprite_id)).map(
+        |(width, height, x_offs, y_offs)| DirectTileLayoutGroundGeometry {
+            width,
+            height,
+            x_offs,
+            y_offs,
+        },
+    )
+}
+
 fn direct_tile_layout_road_waypoint_atlas(
     sprite_id: u16,
     assets: &WorldAssets,
@@ -775,6 +792,16 @@ fn direct_tile_layout_airport_sequence_sprite_is_supported(sprite_id: u16) -> bo
 fn direct_tile_layout_airport_ground_sprite_is_supported(sprite_id: u16) -> bool {
     direct_tile_layout_ground_sprite_is_supported(sprite_id)
         || direct_tile_layout_airport_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_rail_station_sequence_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_sequence_sprite_is_supported(sprite_id)
+        || direct_tile_layout_rail_station_geometry(sprite_id).is_some()
+}
+
+fn direct_tile_layout_rail_station_ground_sprite_is_supported(sprite_id: u16) -> bool {
+    direct_tile_layout_ground_sprite_is_supported(sprite_id)
+        || direct_tile_layout_rail_station_geometry(sprite_id).is_some()
 }
 
 fn direct_tile_layout_object_sequence_sprite_is_supported(sprite_id: u16) -> bool {
@@ -988,6 +1015,37 @@ pub(crate) fn tile_layout_is_airport_renderable(layout: &ResolvedTileLayout) -> 
     }
 }
 
+/// Variante contextual para `DrawTile_Station` de una estación ferroviaria
+/// normal. El atlas rail ya está cargado para las capas vanilla, pero el
+/// contrato global sólo las reconoce dentro de una secuencia `BUILD`; aquí
+/// también se acepta una referencia directa usada como `ground`.
+#[must_use]
+pub(crate) fn tile_layout_is_rail_station_renderable(layout: &ResolvedTileLayout) -> bool {
+    if !layout.complete
+        || layout.sequence.iter().any(|entry| {
+            entry.action1_sprite().is_none()
+                && !entry.base_sprite_id().is_some_and(|id| {
+                    entry.sprite_modifiers == 0
+                        && entry.direct_palette == 0
+                        && direct_tile_layout_rail_station_sequence_sprite_is_supported(id)
+                })
+        })
+    {
+        return false;
+    }
+    match layout.ground.as_ref() {
+        None => true,
+        Some(ground) => {
+            ground.action1_sprite().is_some()
+                || ground.base_sprite_id().is_some_and(|id| {
+                    ground.sprite_modifiers == 0
+                        && ground.direct_palette == 0
+                        && direct_tile_layout_rail_station_ground_sprite_is_supported(id)
+                })
+        }
+    }
+}
+
 /// Resolves the texture and audited NFO geometry of a supported direct base
 /// ground. Action1 sprites stay in the per-feature NewGRF cache instead.
 #[must_use]
@@ -1104,6 +1162,36 @@ pub(crate) fn direct_tile_layout_airport_ground(
     let atlas = assets
         .airport_station_sprite(u32::from(sprite_id))
         .cloned()?;
+    Some(DirectTileLayoutGround {
+        atlas,
+        width: geometry.width,
+        height: geometry.height,
+        x_offs: geometry.x_offs,
+        y_offs: geometry.y_offs,
+    })
+}
+
+/// Resuelve el suelo directo de una estación ferroviaria normal. Las
+/// referencias a plataformas, edificios y techos rail son inequívocas en
+/// `DrawTile_Station`, aunque el resolver global sólo las necesita para
+/// secuencias `BUILD`.
+#[must_use]
+pub(crate) fn direct_tile_layout_rail_station_ground(
+    ground: &ResolvedTileLayoutSprite,
+    assets: &WorldAssets,
+) -> Option<DirectTileLayoutGround> {
+    if let Some(base) = direct_tile_layout_ground(ground, assets) {
+        return Some(base);
+    }
+    if ground.action1_sprite().is_some()
+        || ground.sprite_modifiers != 0
+        || ground.direct_palette != 0
+    {
+        return None;
+    }
+    let sprite_id = ground.base_sprite_id()?;
+    let geometry = direct_tile_layout_rail_station_geometry(sprite_id)?;
+    let atlas = assets.rail.get(&u32::from(sprite_id)).cloned()?;
     Some(DirectTileLayoutGround {
         atlas,
         width: geometry.width,
@@ -1268,6 +1356,36 @@ pub(crate) fn direct_tile_layout_airport_sequence(
     if let Some(sprite_id) = layer.base_sprite_id()
         && let Some(geometry) = direct_tile_layout_airport_geometry(sprite_id)
         && let Some(atlas) = assets.airport_station_sprite(u32::from(sprite_id)).cloned()
+    {
+        return Some(DirectTileLayoutGround {
+            atlas,
+            width: geometry.width,
+            height: geometry.height,
+            x_offs: geometry.x_offs,
+            y_offs: geometry.y_offs,
+        });
+    }
+    direct_tile_layout_sequence(layer, assets)
+}
+
+/// Resuelve una referencia directa desde el namespace de una estación rail
+/// normal. Ground y BUILD priorizan el atlas ferroviario; terreno y otros
+/// sprites ya auditados siguen disponibles mediante el resolver compartido.
+#[must_use]
+pub(crate) fn direct_tile_layout_rail_station_sequence(
+    layer: &ResolvedTileLayoutSprite,
+    assets: &WorldAssets,
+) -> Option<DirectTileLayoutGround> {
+    if let Some(ground) = direct_tile_layout_rail_station_ground(layer, assets) {
+        return Some(ground);
+    }
+    if layer.action1_sprite().is_some() || layer.sprite_modifiers != 0 || layer.direct_palette != 0
+    {
+        return None;
+    }
+    if let Some(sprite_id) = layer.base_sprite_id()
+        && let Some(geometry) = direct_tile_layout_rail_station_geometry(sprite_id)
+        && let Some(atlas) = assets.rail.get(&u32::from(sprite_id)).cloned()
     {
         return Some(DirectTileLayoutGround {
             atlas,
@@ -1679,6 +1797,48 @@ mod tests {
         layout.ground.as_mut().expect("ground").base_sprite = Some(2634);
         layout.ground.as_mut().expect("ground").direct_palette = 1;
         assert!(!tile_layout_is_airport_renderable(&layout));
+    }
+
+    #[test]
+    fn direct_rail_station_layout_keeps_station_ground_in_rail_namespace() {
+        let mut layout = ResolvedTileLayout {
+            ground: Some(ResolvedTileLayoutSprite {
+                sprite: None,
+                base_sprite: Some(1069),
+                sprite_modifiers: 0,
+                direct_palette: 0,
+                origin: [0, 0, 0],
+                extent: [1, 1, 1],
+            }),
+            sequence: vec![action1_sprite()],
+            complete: true,
+        };
+        assert!(!tile_layout_is_renderable(&layout));
+        assert!(tile_layout_is_rail_station_renderable(&layout));
+
+        for sprite_id in [1069, 1083, 1151, 1167, 1233, 1249, 4974] {
+            layout.sequence[0].sprite = None;
+            layout.sequence[0].base_sprite = Some(sprite_id);
+            assert!(
+                tile_layout_is_rail_station_renderable(&layout),
+                "la estación rail debe aceptar BUILD directo {sprite_id}"
+            );
+            assert!(
+                direct_tile_layout_rail_station_geometry(sprite_id).is_some(),
+                "debe existir geometría NFO para {sprite_id}"
+            );
+        }
+
+        layout.ground.as_mut().expect("ground").base_sprite = Some(1083);
+        layout.sequence[0] = action1_sprite();
+        assert!(tile_layout_is_rail_station_renderable(&layout));
+        assert!(!tile_layout_is_renderable(&layout));
+
+        layout.ground.as_mut().expect("ground").base_sprite = Some(2692);
+        assert!(!tile_layout_is_rail_station_renderable(&layout));
+        layout.ground.as_mut().expect("ground").base_sprite = Some(1069);
+        layout.ground.as_mut().expect("ground").direct_palette = 1;
+        assert!(!tile_layout_is_rail_station_renderable(&layout));
     }
 
     #[test]

@@ -6943,3 +6943,14 @@ como `2601` elijan la textura de otro feature; la fundación Action5, la
 rotación y el fallback atómico de paletas/modifiers se conservan. La regresión
 cubre los 66 sprites en ground y BUILD; #326/#329 continúan abiertas por la
 matriz completa de callbacks, rotaciones, sonidos y aceptación raster.
+
+Corrección #326/#329-TILELAYOUT-DIRECT-RAIL-STATION-GROUND (2026-09-13): los
+`TileLayout` de estaciones ferroviarias normales pueden materializar ahora sus
+referencias directas al banco rail (`1069..1086`, mono/maglev y capas de
+waypoint compartidas) también en `ground`, usando `WorldAssets.rail` y la
+geometría NFO de cada sprite. La decisión queda contextualizada en
+`DrawTile_Station`; los layouts de otros consumidores conservan el contrato
+global y el fallback ante paletas, modifiers, IDs no auditados o atlas ausente.
+La regresión cubre las capas rail para los cuatro tipos de red en ground y
+BUILD; #326/#329 continúan abiertas por callbacks, rotaciones exhaustivas,
+otros namespaces y aceptación raster.

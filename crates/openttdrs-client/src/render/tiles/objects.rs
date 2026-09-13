@@ -37,11 +37,11 @@ use crate::render::catenary_newgrf::{
 };
 use crate::render::newgrf_cache::{
     direct_tile_layout_airport_ground, direct_tile_layout_airport_sequence,
-    direct_tile_layout_ground, direct_tile_layout_rail_waypoint_ground,
-    direct_tile_layout_rail_waypoint_sequence, direct_tile_layout_road_stop_sequence,
-    direct_tile_layout_road_waypoint_sequence, direct_tile_layout_sequence, runtime_fingerprint,
-    tile_layout_entry_is_hidden, tile_layout_is_airport_renderable,
-    tile_layout_is_rail_waypoint_renderable, tile_layout_is_renderable,
+    direct_tile_layout_rail_station_ground, direct_tile_layout_rail_station_sequence,
+    direct_tile_layout_rail_waypoint_ground, direct_tile_layout_rail_waypoint_sequence,
+    direct_tile_layout_road_stop_sequence, direct_tile_layout_road_waypoint_sequence,
+    runtime_fingerprint, tile_layout_entry_is_hidden, tile_layout_is_airport_renderable,
+    tile_layout_is_rail_station_renderable, tile_layout_is_rail_waypoint_renderable,
     tile_layout_is_road_stop_renderable, tile_layout_is_road_waypoint_renderable,
     tile_layout_sprite_color_with_palette, vars,
 };
@@ -3293,7 +3293,7 @@ fn station_layout_is_renderable(
     if waypoint {
         tile_layout_is_rail_waypoint_renderable(layout)
     } else {
-        tile_layout_is_renderable(layout)
+        tile_layout_is_rail_station_renderable(layout)
     }
 }
 
@@ -3346,7 +3346,7 @@ fn spawn_newgrf_station_layout_ground(
     } else if let Some(base) = if waypoint {
         direct_tile_layout_rail_waypoint_ground(ground, assets)
     } else {
-        direct_tile_layout_ground(ground, assets)
+        direct_tile_layout_rail_station_ground(ground, assets)
     } {
         (
             tint_building_sprite(base.atlas.sprite()),
@@ -3453,7 +3453,7 @@ fn spawn_newgrf_station_layout_sequence(
             } else if let Some(base) = if waypoint {
                 direct_tile_layout_rail_waypoint_sequence(layer, assets)
             } else {
-                direct_tile_layout_sequence(layer, assets)
+                direct_tile_layout_rail_station_sequence(layer, assets)
             } {
                 (
                     tint_building_sprite(base.atlas.sprite()),

@@ -1558,8 +1558,15 @@ mod tests {
         let parsed = parse_action0_station_meta(&a0).expect("advanced station metadata");
         assert_eq!(parsed.local_id, 7);
         assert_eq!(parsed.num_ids, 2);
-        assert_eq!(parsed.advanced_layouts.len(), 2, "action0={a0:?}");
-        assert_eq!(parsed.advanced_layouts[1].sequence.len(), 1);
+        assert_eq!(
+            parsed.action0_layouts.as_ref().map(Vec::len),
+            Some(2),
+            "action0={a0:?}"
+        );
+        assert_eq!(
+            parsed.action0_layouts.as_ref().unwrap()[1].sequence.len(),
+            1
+        );
 
         let indices = vec![174_u8; 8 * 8];
         let bytes = crate::newgrf_sprites::build_grf_v2_station_with_preview_sprite(
@@ -1585,11 +1592,11 @@ mod tests {
             .expect("advanced station spec");
         let runtime = def.newgrf_runtime.as_ref().expect("advanced runtime");
         assert_eq!(
-            runtime.station_advanced_layouts.get(&7).map(Vec::len),
+            runtime.station_action0_layouts.get(&7).map(Vec::len),
             Some(2)
         );
         assert_eq!(
-            runtime.station_advanced_layouts.get(&8).map(Vec::len),
+            runtime.station_action0_layouts.get(&8).map(Vec::len),
             Some(2)
         );
         assert_eq!(def.newgrf_local_id, 7);
@@ -1608,6 +1615,129 @@ mod tests {
         assert_eq!(layout.sequence.len(), 1);
         assert_eq!(layout.sequence[0].origin, [7, 8, 9]);
         assert_eq!(layout.sequence[0].extent, [10, 11, 12]);
+    }
+
+    #[test]
+    fn apply_station_legacy_layout_attaches_runtime_tile_seq() {
+        let mut a0 = build_action0_station_payload(b"LEGS", b"Plat", 0, 0, "Legacy station");
+        let name_start = a0.len().saturating_sub("Legacy station".len() + 2);
+        let tail = a0.split_off(name_start);
+        a0[2] = a0[2].saturating_add(2);
+        a0.extend_from_slice(&[0x09, 0x02]); // pareja de layouts X/Y
+        for _ in 0..2 {
+            a0.extend_from_slice(&0_u16.to_le_bytes());
+            a0.extend_from_slice(&0x8000_u16.to_le_bytes()); // ground desde Action1 0
+            a0.extend_from_slice(&[1, 2, 3, 4, 5, 6]); // parent origin + extent
+            a0.extend_from_slice(&0_u16.to_le_bytes());
+            a0.extend_from_slice(&0_u16.to_le_bytes()); // building desde Action1 0
+            a0.extend_from_slice(&[7, 8, 0x80]); // child: sin caja propia
+            a0.extend_from_slice(&0_u16.to_le_bytes());
+            a0.extend_from_slice(&0_u16.to_le_bytes()); // child desde Action1 0
+            a0.push(0x80); // fin de la secuencia
+        }
+        a0.extend_from_slice(&[0x13, 0x04]); // prop posterior: CB141 random bits
+        a0.extend_from_slice(&tail);
+
+        let parsed = parse_action0_station_meta(&a0).expect("legacy station metadata");
+        let layouts = parsed.action0_layouts.as_ref().expect("legacy layouts");
+        assert_eq!(layouts.len(), 2);
+        assert_eq!(layouts[0].sequence.len(), 2);
+        assert_eq!(layouts[0].sequence[1].origin, [7, 8, i8::MIN]);
+        assert_eq!(parsed.flags, 0x04);
+
+        let indices = vec![174_u8; 8 * 8];
+        let bytes = crate::newgrf_sprites::build_grf_v2_station_with_preview_sprite(
+            &a0,
+            0,
+            8,
+            8,
+            &indices,
+            [b'L', b'E', 0, 1],
+            "legacy-station",
+        );
+        let dir = tempfile_dir_with("legacy-station.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("legacy-station.grf", 2));
+        apply_newgrf_stations(&mut state, &[&dir]);
+
+        let def = state
+            .station_spec_catalog
+            .iter()
+            .find(|candidate| candidate.from_newgrf)
+            .expect("legacy station spec");
+        let runtime = def.newgrf_runtime.as_ref().expect("legacy runtime");
+        assert_eq!(
+            runtime.station_action0_layouts.get(&0).map(Vec::len),
+            Some(2)
+        );
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        let layout = def
+            .newgrf_tile_layout_runtime(0, &mut ctx)
+            .expect("legacy station layout");
+        assert!(layout.complete);
+        assert_eq!(layout.sequence.len(), 2);
+        assert_eq!(layout.sequence[0].origin, [1, 2, 3]);
+        assert_eq!(layout.sequence[0].extent, [4, 5, 6]);
+        assert_eq!(layout.sequence[1].origin, [7, 8, i8::MIN]);
+    }
+
+    #[test]
+    fn apply_station_legacy_layout_copy_uses_local_source_id() {
+        let mut source = build_action0_station_payload(b"COPY", b"Plat", 0, 0, "Source station");
+        let source_name_start = source.len().saturating_sub("Source station".len() + 2);
+        let source_tail = source.split_off(source_name_start);
+        source[4] = 0;
+        source[2] = source[2].saturating_add(1);
+        source.extend_from_slice(&[0x09, 0x02]);
+        for _ in 0..2 {
+            source.extend_from_slice(&3924_u16.to_le_bytes()); // ground base auditado
+            source.extend_from_slice(&0_u16.to_le_bytes());
+            source.push(0x80);
+        }
+        source.extend_from_slice(&source_tail);
+
+        let mut copy = build_action0_station_payload(b"COPY", b"Plat", 0, 0, "Copied station");
+        let copy_name_start = copy.len().saturating_sub("Copied station".len() + 2);
+        let copy_tail = copy.split_off(copy_name_start);
+        copy[4] = 1;
+        copy[2] = copy[2].saturating_add(1);
+        copy.extend_from_slice(&[0x0A, 0]); // copiar el layout del id local 0
+        copy.extend_from_slice(&copy_tail);
+
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&source, &copy],
+            [b'C', b'P', 0, 1],
+            "legacy-copy",
+            "",
+        );
+        let dir = tempfile_dir_with("legacy-copy.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("legacy-copy.grf", 2));
+        apply_newgrf_stations(&mut state, &[&dir]);
+
+        let def = state
+            .station_spec_catalog
+            .iter()
+            .find(|candidate| candidate.from_newgrf && candidate.newgrf_local_id == 1)
+            .expect("copied station spec");
+        let runtime = def.newgrf_runtime.as_ref().expect("copied runtime");
+        assert_eq!(
+            runtime.station_action0_layouts.get(&1).map(Vec::len),
+            Some(2)
+        );
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        let layout = def
+            .newgrf_tile_layout_runtime(0, &mut ctx)
+            .expect("copied station layout");
+        assert!(layout.complete);
+        assert_eq!(
+            layout.ground.and_then(|ground| ground.base_sprite_id()),
+            Some(3924)
+        );
     }
 
     #[test]

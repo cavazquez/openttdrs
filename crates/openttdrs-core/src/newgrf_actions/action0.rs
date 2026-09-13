@@ -218,9 +218,13 @@ pub struct ParsedStationMeta {
     pub badge_local_ids: Vec<u16>,
     /// Layouts prop `0x0E`: `(platforms, length)` → tiletypes.
     pub custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
-    /// Layouts avanzados prop `0x1A`, alternados X/Y.
-    pub advanced_layouts: Vec<TileLayout>,
-    /// Prop `0x0F`: copiar layouts desde este id local (si definido).
+    /// Layouts de sprite Action0 (`0x09` o `0x1A`), alternados X/Y.
+    /// `Some(empty)` conserva que la última propiedad limpió los layouts y
+    /// permite que el consumidor vuelva al fallback vanilla.
+    pub action0_layouts: Option<Vec<TileLayout>>,
+    /// Prop `0x0A`: copiar el layout de sprites desde este id local.
+    pub copy_sprite_layout_from: Option<u16>,
+    /// Prop `0x0F`: copiar layouts custom desde este id local (si definido).
     pub copy_layout_from: Option<u16>,
 }
 
@@ -1391,44 +1395,87 @@ fn read_station_extended_byte(payload: &[u8], i: &mut usize) -> Option<usize> {
     Some(usize::from(u16::from_le_bytes([bytes[0], bytes[1]])))
 }
 
-/// Salta el layout clásico de estación Action0 `0x09`.
+/// Lee un sprite del layout clásico de estación Action0 `0x09`.
 ///
-/// El renderer actual no usa esta representación (consume Action1/2/3), pero
-/// no debe impedir leer las props posteriores —en especial `0x13` y
-/// `0x16`–`0x18` de animación. La forma antigua consiste en `n` layouts,
-/// cada uno con un ground sprite de cuatro bytes y cero o más building
-/// sprites de 10 bytes terminados por `delta_x = 0x80`; `0,0,0,0` es el
-/// atajo vanilla sin secuencia.
-fn skip_station_legacy_sprite_layouts(payload: &[u8], i: &mut usize) -> bool {
-    let Some(layouts) = read_station_extended_byte(payload, i) else {
-        return false;
-    };
+/// En el ground el bit 15 de la paleta indica una referencia Action1; en los
+/// sprites de building `OpenTTD` invierte ese sentido por compatibilidad con el
+/// formato histórico. No hay flags ni registros dinámicos en este formato.
+fn read_station_legacy_sprite(
+    payload: &[u8],
+    i: &mut usize,
+    invert_action1_flag: bool,
+) -> Option<TileLayoutSpriteRef> {
+    let sprite = read_u16(payload, i)?;
+    let palette = read_u16(payload, i)?;
+    let custom_sprite = (palette & 0x8000 != 0) != invert_action1_flag;
+    Some(TileLayoutSpriteRef {
+        action1_set: custom_sprite.then_some(sprite & 0x3FFF),
+        direct_sprite: if custom_sprite { 0 } else { sprite },
+        direct_palette: palette & 0x7FFF,
+        ..TileLayoutSpriteRef::default()
+    })
+}
+
+/// Lee el layout clásico de estación Action0 `0x09`.
+///
+/// Cada entrada contiene un ground `sprite/palette` y una secuencia terminada
+/// por `delta_x = 0x80`. Para una entrada vanilla (`0,0,0,0`) `OpenTTD` instala
+/// una tabla interna de sprites; el modelo común no puede expresar esa tabla
+/// sin inventar IDs, por lo que el resultado vacío solicita fallback vanilla
+/// para el bloque completo. Aun así se consume toda la entrada para que las
+/// propiedades posteriores mantengan su alineación.
+fn parse_station_legacy_sprite_layouts(payload: &[u8], i: &mut usize) -> Option<Vec<TileLayout>> {
+    let layouts = read_station_extended_byte(payload, i)?;
+    let mut parsed = Vec::with_capacity(layouts);
+    let mut has_vanilla_fallback = false;
     for _ in 0..layouts {
-        let Some(ground) = payload.get(*i..*i + 4) else {
-            return false;
-        };
-        *i += 4;
-        if ground == [0, 0, 0, 0] {
+        let ground_bytes = payload.get(*i..*i + 4)?;
+        let ground_is_vanilla = ground_bytes == [0, 0, 0, 0];
+        let ground = read_station_legacy_sprite(payload, i, false)?;
+        if ground_is_vanilla {
+            has_vanilla_fallback = true;
             continue;
         }
+
+        let mut sequence = Vec::new();
         loop {
-            let Some(&delta_x) = payload.get(*i) else {
-                return false;
-            };
-            *i += 1;
+            let delta_x = read_u8(payload, i)?;
             if delta_x == 0x80 {
                 break;
             }
-            let Some(next) = (*i).checked_add(9) else {
-                return false;
-            };
-            if next > payload.len() {
-                return false;
+            let origin_y = read_u8(payload, i)?;
+            let raw_z = read_u8(payload, i)?;
+            let is_parent = raw_z != 0x80;
+            let mut extent = [0_u8; 3];
+            if is_parent {
+                extent = [
+                    read_u8(payload, i)?,
+                    read_u8(payload, i)?,
+                    read_u8(payload, i)?,
+                ];
             }
-            *i = next;
+            let mut sprite = read_station_legacy_sprite(payload, i, true)?;
+            sprite.origin = [
+                i8::from_ne_bytes([delta_x]),
+                i8::from_ne_bytes([origin_y]),
+                if is_parent {
+                    i8::from_ne_bytes([raw_z])
+                } else {
+                    i8::MIN
+                },
+            ];
+            sprite.extent = extent;
+            sequence.push(sprite);
         }
+        parsed.push(TileLayout { ground, sequence });
     }
-    true
+    if has_vanilla_fallback {
+        return Some(Vec::new());
+    }
+    if parsed.len() & 1 != 0 {
+        parsed.pop();
+    }
+    Some(parsed)
 }
 
 /// Lee una entrada de sprite del layout avanzado de `Stations`.
@@ -1595,7 +1642,8 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
     let mut animation_triggers = 0u16;
     let mut badge_local_ids = Vec::new();
     let mut custom_layouts = std::collections::HashMap::new();
-    let mut advanced_layouts = Vec::new();
+    let mut action0_layouts = None;
+    let mut copy_sprite_layout_from = None;
     let mut copy_layout_from = None;
     for _ in 0..header.num_props {
         if i >= payload.len() {
@@ -1610,18 +1658,20 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                 };
                 class_short = s;
             }
-            // 0x09 layout clásico. Se consume para alcanzar las propiedades
-            // posteriores; sprites runtime siguen viniendo de Action1/2/3.
+            // 0x09 layout clásico, con ground y BUILD/child sprites.
             0x09 => {
-                if !skip_station_legacy_sprite_layouts(payload, &mut i) {
+                let Some(layouts) = parse_station_legacy_sprite_layouts(payload, &mut i) else {
                     break;
-                }
+                };
+                action0_layouts = Some(layouts);
             }
-            // 0x0A copy sprite layout: extended-byte id (consumida; gfx vía Action1/3).
+            // 0x0A copy sprite layout: extended-byte id local.
             0x0A => {
-                if parse_station_copy_layout_id(payload, &mut i).is_none() {
+                let Some(id) = parse_station_copy_layout_id(payload, &mut i) else {
                     break;
-                }
+                };
+                action0_layouts = None;
+                copy_sprite_layout_from = Some(id);
             }
             PROP_STATION_CALLBACK_MASK => {
                 if i >= payload.len() {
@@ -1657,7 +1707,8 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                 let Some(layouts) = parse_station_advanced_sprite_layouts(payload, &mut i) else {
                     break;
                 };
-                advanced_layouts = layouts;
+                action0_layouts = Some(layouts);
+                copy_sprite_layout_from = None;
             }
             // Props intermedias de ancho fijo que no cambian aún el modelo
             // Rust, pero suelen preceder a la configuración de animación.
@@ -1723,7 +1774,8 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                 label = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
                 i += nul + 1;
             }
-            // 0x09 sprite layout es variable; sin consumidor aún → cortar el bloque.
+            // Otras propiedades variables no representadas aún cortan el
+            // bloque para no adivinar su ancho.
             _ => break,
         }
     }
@@ -1742,7 +1794,8 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
         animation_triggers,
         badge_local_ids,
         custom_layouts,
-        advanced_layouts,
+        action0_layouts,
+        copy_sprite_layout_from,
         copy_layout_from,
     ))
 }
@@ -1763,7 +1816,8 @@ fn finish_parsed_station_meta(
     animation_triggers: u16,
     badge_local_ids: Vec<u16>,
     custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
-    advanced_layouts: Vec<TileLayout>,
+    action0_layouts: Option<Vec<TileLayout>>,
+    copy_sprite_layout_from: Option<u16>,
     copy_layout_from: Option<u16>,
 ) -> ParsedStationMeta {
     let short_label = {
@@ -1803,7 +1857,8 @@ fn finish_parsed_station_meta(
         animation_triggers,
         badge_local_ids,
         custom_layouts,
-        advanced_layouts,
+        action0_layouts,
+        copy_sprite_layout_from,
         copy_layout_from,
     }
 }

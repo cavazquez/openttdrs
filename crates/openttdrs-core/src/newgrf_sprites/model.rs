@@ -785,9 +785,9 @@ pub struct TrainSpriteGraphics {
     /// aeropuertos, industrias y road stops). Se conserva el layout crudo para
     /// resolver sus sets Action1 cuando el feature se dibuja.
     pub tile_layouts: HashMap<u8, TileLayout>,
-    /// Layouts avanzados de Action0 `Stations`, indexados por id local. Cada
-    /// pareja consecutiva corresponde a las orientaciones X/Y nativas.
-    pub station_advanced_layouts: HashMap<u16, Vec<TileLayout>>,
+    /// Layouts de Action0 `Stations` (`0x09`/`0x1A`), indexados por id local.
+    /// Cada pareja consecutiva corresponde a las orientaciones X/Y nativas.
+    pub station_action0_layouts: HashMap<u16, Vec<TileLayout>>,
 }
 
 impl TrainSpriteGraphics {
@@ -852,7 +852,7 @@ impl TrainSpriteGraphics {
         view: usize,
         ctx: &mut Action2EvalCtx,
     ) -> Option<ResolvedTileLayout> {
-        if let Some(layouts) = self.station_advanced_layouts.get(&local_id) {
+        if let Some(layouts) = self.station_action0_layouts.get(&local_id) {
             let layout = layouts.get(view).or_else(|| layouts.get(view & 1))?;
             return Some(layout.resolve_with_palette_var10(self, ctx, view, true));
         }
@@ -1267,10 +1267,10 @@ impl TrainSpriteGraphics {
         !self.tile_layouts.is_empty()
     }
 
-    /// ¿Conserva layouts avanzados `Station` provenientes de Action0 `0x1A`?
+    /// ¿Conserva layouts `Station` provenientes de Action0 `0x09`/`0x1A`?
     #[must_use]
-    pub fn has_station_advanced_layouts(&self) -> bool {
-        !self.station_advanced_layouts.is_empty()
+    pub fn has_station_action0_layouts(&self) -> bool {
+        !self.station_action0_layouts.is_empty()
     }
 
     /// Busca el grupo de producción asignado por Action3 y atraviesa grupos

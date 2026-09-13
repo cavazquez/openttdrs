@@ -59,15 +59,33 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
         let mut gfx =
             crate::newgrf_sprites::collect_station_sprite_graphics(&data).unwrap_or_default();
         let metas = collect_station_metas_from_grf(&data);
+        // Action0 `0x09` y `0x1A` escriben la misma tabla nativa de layouts;
+        // `0x0A` copia esa tabla por id local. Mantener el índice separado
+        // permite resolver copias después de un bloque que declara el origen,
+        // sin volver a depender del orden físico de los specs globales.
+        let mut station_layouts_by_local =
+            std::collections::HashMap::<u16, Vec<crate::newgrf_sprites::TileLayout>>::new();
         for meta in &metas {
-            if !meta.advanced_layouts.is_empty() {
-                for offset in 0..meta.num_ids {
-                    let Some(local_id) = meta.local_id.checked_add(u16::from(offset)) else {
-                        break;
-                    };
-                    gfx.station_advanced_layouts
-                        .insert(local_id, meta.advanced_layouts.clone());
+            let layouts = if let Some(layouts) = meta.action0_layouts.as_ref() {
+                Some(layouts.clone())
+            } else {
+                meta.copy_sprite_layout_from
+                    .and_then(|source| station_layouts_by_local.get(&source).cloned())
+            };
+            let Some(layouts) = layouts else {
+                continue;
+            };
+            for offset in 0..meta.num_ids {
+                let Some(local_id) = meta.local_id.checked_add(u16::from(offset)) else {
+                    break;
+                };
+                if layouts.is_empty() {
+                    gfx.station_action0_layouts.remove(&local_id);
+                } else {
+                    gfx.station_action0_layouts
+                        .insert(local_id, layouts.clone());
                 }
+                station_layouts_by_local.insert(local_id, layouts.clone());
             }
         }
         // Resolver copy_layout (0x0F) dentro del mismo GRF por id local, no
@@ -122,7 +140,7 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 let preview = views.first().cloned();
                 let newgrf_runtime = if gfx.needs_runtime_resolve()
                     || gfx.has_tile_layouts()
-                    || gfx.has_station_advanced_layouts()
+                    || gfx.has_station_action0_layouts()
                 {
                     Some(Box::new(gfx.clone()))
                 } else {

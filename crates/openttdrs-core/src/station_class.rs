@@ -310,8 +310,9 @@ impl StationSpecDef {
 
     /// Layout `TileSeq` de una tesela de estación, resuelto con las variables
     /// y registros de la tesela actual. Los grupos Action2 y los layouts
-    /// avanzados Action0 no son sprites planos: conservar el grafo completo
-    /// permite materializar suelo y parents/children con la selección nativa.
+    /// Action0 clásicos/avanzados no son sprites planos: conservar el grafo
+    /// completo permite materializar suelo y parents/children con la selección
+    /// nativa.
     pub fn newgrf_tile_layout_runtime(
         &self,
         view: usize,

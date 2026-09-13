@@ -1658,7 +1658,7 @@ mod tests {
             ..TrainSpriteGraphics::default()
         };
         graphics
-            .station_advanced_layouts
+            .station_action0_layouts
             .insert(3, vec![advanced.clone(), advanced]);
 
         let mut ctx = Action2EvalCtx::default();
@@ -1678,7 +1678,7 @@ mod tests {
 
         // The same flag remains unsupported for an Action2 TileLayout, whose
         // native reader calls ReadSpriteLayout with allow_var10=false.
-        graphics.station_advanced_layouts.clear();
+        graphics.station_action0_layouts.clear();
         graphics.assigns.push(TrainSpriteAssign {
             local_id: 3,
             set_id: 9,

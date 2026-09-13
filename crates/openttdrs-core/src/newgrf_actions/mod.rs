@@ -1536,6 +1536,66 @@ mod tests {
     }
 
     #[test]
+    fn apply_station_advanced_layout_attaches_runtime_tile_seq() {
+        let mut a0 = build_action0_station_payload(b"ADVS", b"Plat", 0, 0, "Advanced station");
+        let name_start = a0.len().saturating_sub("Advanced station".len() + 2);
+        let tail = a0.split_off(name_start);
+        a0[2] = a0[2].saturating_add(1);
+        a0.extend_from_slice(&[0x1A, 0x02]); // X/Y
+        for (origin, extent) in [([1_u8, 2, 3], [4_u8, 5, 6]), ([7, 8, 9], [10, 11, 12])] {
+            a0.push(0x01); // one parent sprite in each orientation
+            a0.extend_from_slice(&0_u16.to_le_bytes());
+            a0.extend_from_slice(&0x8000_u16.to_le_bytes());
+            a0.extend_from_slice(&0_u16.to_le_bytes());
+            a0.extend_from_slice(&0x8000_u16.to_le_bytes());
+            a0.extend_from_slice(&origin);
+            a0.extend_from_slice(&extent);
+        }
+        a0.extend_from_slice(&tail);
+
+        let parsed = parse_action0_station_meta(&a0).expect("advanced station metadata");
+        assert_eq!(parsed.advanced_layouts.len(), 2, "action0={a0:?}");
+        assert_eq!(parsed.advanced_layouts[1].sequence.len(), 1);
+
+        let indices = vec![174_u8; 8 * 8];
+        let bytes = crate::newgrf_sprites::build_grf_v2_station_with_preview_sprite(
+            &a0,
+            0,
+            8,
+            8,
+            &indices,
+            [b'A', b'D', 0, 1],
+            "advanced-station",
+        );
+        let dir = tempfile_dir_with("advanced-station.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("advanced-station.grf", 2));
+        apply_newgrf_stations(&mut state, &[&dir]);
+
+        let def = state
+            .station_spec_catalog
+            .iter()
+            .find(|candidate| candidate.from_newgrf)
+            .expect("advanced station spec");
+        let runtime = def.newgrf_runtime.as_ref().expect("advanced runtime");
+        assert_eq!(
+            runtime.station_advanced_layouts.get(&0).map(Vec::len),
+            Some(2)
+        );
+
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        let layout = def
+            .newgrf_tile_layout_runtime(1, &mut ctx)
+            .expect("Y advanced station layout");
+        assert!(layout.complete);
+        assert_eq!(layout.sequence.len(), 1);
+        assert_eq!(layout.sequence[0].origin, [7, 8, 9]);
+        assert_eq!(layout.sequence[0].extent, [10, 11, 12]);
+    }
+
+    #[test]
     fn apply_station_with_action2_chain_attaches_views() {
         let a0 = build_action0_station_payload(b"A2ST", b"Plat", 0, 0, "A2 Andén");
         let mut indices = vec![0u8; 8 * 8];

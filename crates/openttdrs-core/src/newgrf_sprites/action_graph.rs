@@ -99,7 +99,9 @@ fn parse_action2_tile_layout(payload: &[u8], feature: u8) -> Option<(u8, TileLay
         let custom_sprite = palette & 0x8000 != 0;
         let action1_set = custom_sprite.then_some(sprite & 0x3FFF);
         let direct_sprite = if custom_sprite { 0 } else { sprite };
-        let custom_palette = flags & 0x08 != 0 && palette & 0x8000 != 0;
+        // `TLF_CUSTOM_PALETTE` selects the palette Action1 set independently
+        // of bit 15; the native reader clears that bit before the index.
+        let custom_palette = flags & 0x08 != 0;
         let palette_action1_set = custom_palette.then_some(palette & 0x3FFF);
         let direct_palette = if custom_palette { 0 } else { palette & 0x7FFF };
 
@@ -1613,6 +1615,86 @@ mod tests {
                 .action1_sprite()
                 .is_some_and(|decoded| decoded.mask.is_empty())
         );
+    }
+
+    #[test]
+    fn station_advanced_layout_resolves_palette_var10_without_permitting_action2_layouts() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: crate::newgrf_sprites::indices_to_rgba(&[198], 1, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let palette = |target| {
+            let mut indices: Vec<u8> = (0..=u8::MAX).collect();
+            indices[198] = target;
+            DecodedSprite {
+                width: 256,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: crate::newgrf_sprites::indices_to_rgba(&indices, 256, 1).unwrap(),
+                mask: Vec::new(),
+            }
+        };
+        let reference = TileLayoutSpriteRef {
+            action1_set: Some(0),
+            palette_action1_set: Some(1),
+            flags: 0x88, // CUSTOM_PALETTE + PALETTE_VAR10
+            registers: TileLayoutRegisterRefs {
+                palette_var10: Some(4),
+                ..TileLayoutRegisterRefs::default()
+            },
+            ..TileLayoutSpriteRef::default()
+        };
+        let advanced = TileLayout {
+            ground: reference.clone(),
+            sequence: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()], vec![palette(175), palette(176)]],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics
+            .station_advanced_layouts
+            .insert(3, vec![advanced.clone(), advanced]);
+
+        let mut ctx = Action2EvalCtx::default();
+        ctx.temp_registers.insert(4, 1);
+        let resolved = graphics
+            .tile_layout_for_local_id_ctx(3, 1, &mut ctx)
+            .expect("advanced station layout");
+        let ground = resolved.ground.expect("ground");
+        assert!(resolved.complete);
+        assert_eq!(
+            ground.action1_sprite().map(|value| value.rgba.clone()),
+            Some(
+                crate::newgrf_sprites::bake_sprite_palette_map(&sprite, &graphics.sets[1][1])
+                    .expect("palette var10 map")
+            )
+        );
+
+        // The same flag remains unsupported for an Action2 TileLayout, whose
+        // native reader calls ReadSpriteLayout with allow_var10=false.
+        graphics.station_advanced_layouts.clear();
+        graphics.assigns.push(TrainSpriteAssign {
+            local_id: 3,
+            set_id: 9,
+        });
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: reference,
+                sequence: Vec::new(),
+            },
+        );
+        let rejected = graphics
+            .tile_layout_for_local_id_ctx(3, 0, &mut ctx)
+            .expect("Action2 layout preserves atomic result");
+        assert!(!rejected.complete);
+        assert!(rejected.ground.is_none());
     }
 
     #[test]

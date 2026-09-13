@@ -1,6 +1,7 @@
 //! Parsing compartido de cabeceras y metadatos Action0.
 
 use crate::newgrf_config::{GrfScanError, parse_grf_container};
+use crate::newgrf_sprites::{TileLayout, TileLayoutRegisterRefs, TileLayoutSpriteRef};
 use crate::newgrf_walk::for_each_pseudo_sprite;
 use crate::road_type::RoadTramType;
 use crate::vehicle::VehicleKind;
@@ -213,6 +214,8 @@ pub struct ParsedStationMeta {
     pub badge_local_ids: Vec<u16>,
     /// Layouts prop `0x0E`: `(platforms, length)` → tiletypes.
     pub custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
+    /// Layouts avanzados prop `0x1A`, alternados X/Y.
+    pub advanced_layouts: Vec<TileLayout>,
     /// Prop `0x0F`: copiar layouts desde este id local (si definido).
     pub copy_layout_from: Option<u16>,
 }
@@ -1424,153 +1427,127 @@ fn skip_station_legacy_sprite_layouts(payload: &[u8], i: &mut usize) -> bool {
     true
 }
 
-/// Consume los registros opcionales de un sprite del layout avanzado.
+/// Lee una entrada de sprite del layout avanzado de `Stations`.
 ///
-/// `ReadSpriteLayoutRegisters` de `OpenTTD` usa el mismo orden para Action0
-/// `Stations` y para los grupos `TileLayout`: primero los offsets de sprite y
-/// paleta, luego la caja/child y finalmente los selectores `var10`. Aquí sólo
-/// necesitamos avanzar el cursor, pero respetar ese orden es esencial para
-/// no interpretar la siguiente propiedad como parte del layout.
-fn skip_station_advanced_registers(
+/// El formato es el de `ReadSpriteLayoutSprite`/`ReadSpriteLayoutRegisters`
+/// de `OpenTTD`, pero conserva las referencias Action1 y los registros en el
+/// modelo común de `TileLayout` para que el resolver no tenga dos contratos.
+fn read_station_advanced_sprite(
     payload: &[u8],
     i: &mut usize,
-    flags: u16,
-    is_parent: bool,
-) -> bool {
-    // TLF_DRAWING_FLAGS = TLF_KNOWN_FLAGS sin TLF_CUSTOM_PALETTE. Los bits
-    // altos de un WORD son desconocidos y no agregan bytes al wire format.
-    if flags & 0x00F7 == 0 {
-        return true;
-    }
-    let mut width = 0usize;
-    if flags & 0x01 != 0 {
-        width += 1;
-    }
-    if flags & 0x02 != 0 {
-        width += 1;
-    }
-    if flags & 0x04 != 0 {
-        width += 1;
-    }
-    if is_parent {
-        if flags & 0x10 != 0 {
-            width += 2;
+    has_flags: bool,
+    is_ground: bool,
+) -> Option<TileLayoutSpriteRef> {
+    let sprite = read_u16(payload, i)?;
+    let palette = read_u16(payload, i)?;
+    let raw_flags = if has_flags { read_u16(payload, i)? } else { 0 };
+    let flags = u8::try_from(raw_flags).ok()?;
+    let custom_sprite = palette & 0x8000 != 0;
+    let action1_set = custom_sprite.then_some(sprite & 0x3FFF);
+    let direct_sprite = if custom_sprite { 0 } else { sprite };
+    // `TLF_CUSTOM_PALETTE` selects the palette Action1 set independently of
+    // bit 15. That bit belongs to the sprite reference itself and the native
+    // reader clears it before interpreting the palette index.
+    let custom_palette = flags & 0x08 != 0;
+    let palette_action1_set = custom_palette.then_some(palette & 0x3FFF);
+    let direct_palette = if custom_palette { 0 } else { palette & 0x7FFF };
+
+    let mut origin = [0_i8; 3];
+    let mut extent = [0_u8; 3];
+    if !is_ground {
+        origin[0] = i8::from_ne_bytes([read_u8(payload, i)?]);
+        origin[1] = i8::from_ne_bytes([read_u8(payload, i)?]);
+        let z = read_u8(payload, i)?;
+        origin[2] = if z == 0x80 {
+            i8::MIN
+        } else {
+            i8::from_ne_bytes([z])
+        };
+        if origin[2] != i8::MIN {
+            extent[0] = read_u8(payload, i)?;
+            extent[1] = read_u8(payload, i)?;
+            extent[2] = read_u8(payload, i)?;
         }
-        if flags & 0x20 != 0 {
-            width += 1;
+    }
+
+    let mut registers = TileLayoutRegisterRefs::default();
+    if has_flags {
+        if flags & 0x01 != 0 {
+            registers.dodraw = Some(read_u8(payload, i)?);
         }
-    } else {
-        if flags & 0x10 != 0 {
-            width += 1;
+        if flags & 0x02 != 0 {
+            registers.sprite = Some(read_u8(payload, i)?);
         }
-        if flags & 0x20 != 0 {
-            width += 1;
+        if flags & 0x04 != 0 {
+            registers.palette = Some(read_u8(payload, i)?);
+        }
+        if !is_ground {
+            if origin[2] == i8::MIN {
+                if flags & 0x10 != 0 {
+                    registers.child_delta[0] = Some(read_u8(payload, i)?);
+                }
+                if flags & 0x20 != 0 {
+                    registers.child_delta[1] = Some(read_u8(payload, i)?);
+                }
+            } else {
+                if flags & 0x10 != 0 {
+                    registers.parent_delta[0] = Some(read_u8(payload, i)?);
+                    registers.parent_delta[1] = Some(read_u8(payload, i)?);
+                }
+                if flags & 0x20 != 0 {
+                    registers.parent_delta[2] = Some(read_u8(payload, i)?);
+                }
+            }
+        }
+        if flags & 0x40 != 0 {
+            registers.sprite_var10 = Some(read_u8(payload, i)?);
+        }
+        if flags & 0x80 != 0 {
+            registers.palette_var10 = Some(read_u8(payload, i)?);
         }
     }
-    if flags & 0x40 != 0 {
-        width += 1;
-    }
-    if flags & 0x80 != 0 {
-        width += 1;
-    }
-    skip_station_fixed_property(payload, i, width)
+
+    Some(TileLayoutSpriteRef {
+        action1_set,
+        direct_sprite,
+        palette_action1_set,
+        direct_palette,
+        flags,
+        registers,
+        origin,
+        extent,
+    })
 }
 
-/// Salta `Stations` Action0 `prop 0x1A` (advanced sprite layout).
+/// Lee `Stations` Action0 `prop 0x1A` (advanced sprite layout).
 ///
-/// A diferencia del layout clásico `0x09`, cada entrada declara un contador
-/// de building sprites y puede llevar un WORD de flags más registros. Se
-/// conserva el consumo completo, incluidos `TLF_PALETTE_VAR10`, aunque el
-/// renderer todavía no materializa esta representación legacy.
-fn skip_station_advanced_sprite_layouts(payload: &[u8], i: &mut usize) -> bool {
-    let Some(layouts) = read_station_extended_byte(payload, i) else {
-        return false;
-    };
+/// Las entradas se guardan en orden alternado X/Y, igual que `renderdata` de
+/// `OpenTTD`. Un número impar descarta el último layout, como hace el loader
+/// nativo; los selectores `var10` se conservan para la resolución posterior.
+fn parse_station_advanced_sprite_layouts(payload: &[u8], i: &mut usize) -> Option<Vec<TileLayout>> {
+    let layouts = read_station_extended_byte(payload, i)?;
+    let mut parsed = Vec::with_capacity(layouts);
     for _ in 0..layouts {
-        let Some(&raw_building_count) = payload.get(*i) else {
-            return false;
-        };
-        *i += 1;
+        let raw_building_count = read_u8(payload, i)?;
         // Bit 6 indica que cada sprite trae un WORD de flags; los seis bits
         // bajos son el número de building sprites. Bit 7 no pertenece a
         // este contrato y se rechaza para no perder sincronización.
         if raw_building_count & 0x80 != 0 {
-            return false;
+            return None;
         }
         let has_flags = raw_building_count & 0x40 != 0;
         let building_count = raw_building_count & 0x3F;
-
-        let Some(ground_end) = (*i).checked_add(4) else {
-            return false;
-        };
-        if payload.get(*i..ground_end).is_none() {
-            return false;
-        }
-        *i = ground_end;
-        let ground_flags = if has_flags {
-            let Some(end) = (*i).checked_add(2) else {
-                return false;
-            };
-            let Some(bytes) = payload.get(*i..end) else {
-                return false;
-            };
-            *i = end;
-            u16::from_le_bytes([bytes[0], bytes[1]])
-        } else {
-            0
-        };
-        // OpenTTD passes `false` for the ground entry when consuming its
-        // optional registers, even though invalid non-ground flags are later
-        // rejected by the native loader.
-        if !skip_station_advanced_registers(payload, i, ground_flags, false) {
-            return false;
-        }
-
+        let ground = read_station_advanced_sprite(payload, i, has_flags, true)?;
+        let mut sequence = Vec::with_capacity(usize::from(building_count));
         for _ in 0..building_count {
-            let Some(sprite_end) = (*i).checked_add(4) else {
-                return false;
-            };
-            if payload.get(*i..sprite_end).is_none() {
-                return false;
-            }
-            *i = sprite_end;
-            let flags = if has_flags {
-                let Some(end) = (*i).checked_add(2) else {
-                    return false;
-                };
-                let Some(bytes) = payload.get(*i..end) else {
-                    return false;
-                };
-                *i = end;
-                u16::from_le_bytes([bytes[0], bytes[1]])
-            } else {
-                0
-            };
-
-            // Stations call ReadSpriteLayout with no_z_position=false.
-            let Some(origin_end) = (*i).checked_add(3) else {
-                return false;
-            };
-            let Some(origin) = payload.get(*i..origin_end) else {
-                return false;
-            };
-            *i = origin_end;
-            let is_parent = origin[2] != 0x80;
-            if is_parent {
-                let Some(extent_end) = (*i).checked_add(3) else {
-                    return false;
-                };
-                if payload.get(*i..extent_end).is_none() {
-                    return false;
-                }
-                *i = extent_end;
-            }
-            if !skip_station_advanced_registers(payload, i, flags, is_parent) {
-                return false;
-            }
+            sequence.push(read_station_advanced_sprite(payload, i, has_flags, false)?);
         }
+        parsed.push(TileLayout { ground, sequence });
     }
-    true
+    if parsed.len() & 1 != 0 {
+        parsed.pop();
+    }
+    Some(parsed)
 }
 
 /// Salta una propiedad de ancho fijo cuyo runtime aún no está representado.
@@ -1608,6 +1585,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
     let mut animation_triggers = 0u16;
     let mut badge_local_ids = Vec::new();
     let mut custom_layouts = std::collections::HashMap::new();
+    let mut advanced_layouts = Vec::new();
     let mut copy_layout_from = None;
     for _ in 0..header.num_props {
         if i >= payload.len() {
@@ -1666,9 +1644,10 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                 copy_layout_from = Some(id);
             }
             PROP_STATION_ADVANCED_LAYOUT => {
-                if !skip_station_advanced_sprite_layouts(payload, &mut i) {
+                let Some(layouts) = parse_station_advanced_sprite_layouts(payload, &mut i) else {
                     break;
-                }
+                };
+                advanced_layouts = layouts;
             }
             // Props intermedias de ancho fijo que no cambian aún el modelo
             // Rust, pero suelen preceder a la configuración de animación.
@@ -1751,6 +1730,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
         animation_triggers,
         badge_local_ids,
         custom_layouts,
+        advanced_layouts,
         copy_layout_from,
     ))
 }
@@ -1769,6 +1749,7 @@ fn finish_parsed_station_meta(
     animation_triggers: u16,
     badge_local_ids: Vec<u16>,
     custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
+    advanced_layouts: Vec<TileLayout>,
     copy_layout_from: Option<u16>,
 ) -> ParsedStationMeta {
     let short_label = {
@@ -1806,6 +1787,7 @@ fn finish_parsed_station_meta(
         animation_triggers,
         badge_local_ids,
         custom_layouts,
+        advanced_layouts,
         copy_layout_from,
     }
 }

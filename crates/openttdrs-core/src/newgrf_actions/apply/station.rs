@@ -56,8 +56,17 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
         };
         let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
         let tables_opt = (!type_tables.is_empty()).then_some(type_tables);
-        let gfx = crate::newgrf_sprites::collect_station_sprite_graphics(&data).unwrap_or_default();
+        let mut gfx =
+            crate::newgrf_sprites::collect_station_sprite_graphics(&data).unwrap_or_default();
         let metas = collect_station_metas_from_grf(&data);
+        for (local_idx, meta) in metas.iter().enumerate() {
+            if !meta.advanced_layouts.is_empty()
+                && let Ok(local_id) = u8::try_from(local_idx)
+            {
+                gfx.station_advanced_layouts
+                    .insert(local_id, meta.advanced_layouts.clone());
+            }
+        }
         // Resolver copy_layout (0x0F) dentro del mismo GRF por índice local.
         let mut layouts_by_local: Vec<std::collections::HashMap<(u8, u8), Vec<u8>>> =
             Vec::with_capacity(metas.len());
@@ -86,7 +95,10 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
             let preview = views.first().cloned();
-            let newgrf_runtime = if gfx.needs_runtime_resolve() || gfx.has_tile_layouts() {
+            let newgrf_runtime = if gfx.needs_runtime_resolve()
+                || gfx.has_tile_layouts()
+                || gfx.has_station_advanced_layouts()
+            {
                 Some(Box::new(gfx.clone()))
             } else {
                 None

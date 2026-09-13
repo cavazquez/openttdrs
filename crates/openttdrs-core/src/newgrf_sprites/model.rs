@@ -145,8 +145,32 @@ impl TileLayout {
         ctx: &Action2EvalCtx,
         view: usize,
     ) -> ResolvedTileLayout {
+        self.resolve_with_palette_var10(graphics, ctx, view, false)
+    }
+
+    /// Resuelve un layout avanzado de `Stations` Action0.
+    ///
+    /// `OpenTTD` permite `TLF_PALETTE_VAR10` en `ReadSpriteLayout` de
+    /// estaciones, pero lo rechaza en los grupos Action2 `TileLayout`. El
+    /// booleano mantiene ambas reglas separadas en lugar de hacer permisiva
+    /// toda la ruta común.
+    fn resolve_with_palette_var10(
+        &self,
+        graphics: &TrainSpriteGraphics,
+        ctx: &Action2EvalCtx,
+        view: usize,
+        allow_palette_var10: bool,
+    ) -> ResolvedTileLayout {
         let mut complete = true;
-        let ground = resolve_layout_sprite(&self.ground, true, graphics, ctx, view, &mut complete);
+        let ground = resolve_layout_sprite(
+            &self.ground,
+            true,
+            graphics,
+            ctx,
+            view,
+            allow_palette_var10,
+            &mut complete,
+        );
         // `DrawCommonTileSeq` sets `skip_childs` when a parent resolves to
         // sprite zero (including `DODRAW=0`) and resumes at the next parent.
         // Do that while resolving instead of dropping the parent and then
@@ -160,8 +184,15 @@ impl TileLayout {
                 if skip_children && !is_parent {
                     return None;
                 }
-                let resolved =
-                    resolve_layout_sprite(reference, false, graphics, ctx, view, &mut complete);
+                let resolved = resolve_layout_sprite(
+                    reference,
+                    false,
+                    graphics,
+                    ctx,
+                    view,
+                    allow_palette_var10,
+                    &mut complete,
+                );
                 if is_parent {
                     skip_children = resolved.is_none();
                 }
@@ -182,12 +213,25 @@ fn resolve_layout_sprite(
     graphics: &TrainSpriteGraphics,
     ctx: &Action2EvalCtx,
     _view: usize,
+    allow_palette_var10: bool,
     complete: &mut bool,
 ) -> Option<ResolvedTileLayoutSprite> {
     // Register-driven palettes and var10 palette chains still need the
     // original blitter metadata. Static custom Action1 palettes are baked
     // below, so they can continue through the common TileLayout path.
-    if reference.flags & 0x80 != 0 {
+    if reference.flags & 0x80 != 0 && !allow_palette_var10 {
+        *complete = false;
+        return None;
+    }
+    if reference.flags & 0x80 != 0 && reference.registers.palette_var10.is_none() {
+        *complete = false;
+        return None;
+    }
+    if reference.flags & 0x80 != 0 && reference.palette_action1_set.is_none() {
+        // The native path may keep a non-Action1 palette only because its
+        // Action2 chain is resolved with var10. This compact resolver has no
+        // sprite-group relocation for that case; fall back atomically rather
+        // than applying the value to an unrelated direct palette.
         *complete = false;
         return None;
     }
@@ -299,15 +343,24 @@ fn resolve_custom_layout_palette(
         *complete = false;
         return None;
     };
-    let palette_index = if reference.flags & 0x04 != 0 {
-        let offset = signed_register(ctx, reference.registers.palette);
-        let Ok(offset) = usize::try_from(offset) else {
+    let var10 = if reference.flags & 0x80 != 0 {
+        let value = register_value(ctx, reference.registers.palette_var10);
+        if value > 7 {
             *complete = false;
             return None;
-        };
-        offset
+        }
+        i32::try_from(value).unwrap_or(0)
     } else {
         0
+    };
+    let offset = if reference.flags & 0x04 != 0 {
+        signed_register(ctx, reference.registers.palette)
+    } else {
+        0
+    };
+    let Ok(palette_index) = usize::try_from(var10.saturating_add(offset)) else {
+        *complete = false;
+        return None;
     };
     let Some(palette) = palettes.get(palette_index) else {
         *complete = false;
@@ -732,6 +785,9 @@ pub struct TrainSpriteGraphics {
     /// aeropuertos, industrias y road stops). Se conserva el layout crudo para
     /// resolver sus sets Action1 cuando el feature se dibuja.
     pub tile_layouts: HashMap<u8, TileLayout>,
+    /// Layouts avanzados de Action0 `Stations`, indexados por id local. Cada
+    /// pareja consecutiva corresponde a las orientaciones X/Y nativas.
+    pub station_advanced_layouts: HashMap<u8, Vec<TileLayout>>,
 }
 
 impl TrainSpriteGraphics {
@@ -796,6 +852,12 @@ impl TrainSpriteGraphics {
         view: usize,
         ctx: &mut Action2EvalCtx,
     ) -> Option<ResolvedTileLayout> {
+        if let Ok(local_id) = u8::try_from(local_id)
+            && let Some(layouts) = self.station_advanced_layouts.get(&local_id)
+        {
+            let layout = layouts.get(view).or_else(|| layouts.get(view & 1))?;
+            return Some(layout.resolve_with_palette_var10(self, ctx, view, true));
+        }
         let mut id = self
             .extended_assigns
             .iter()
@@ -1205,6 +1267,12 @@ impl TrainSpriteGraphics {
     #[must_use]
     pub fn has_tile_layouts(&self) -> bool {
         !self.tile_layouts.is_empty()
+    }
+
+    /// ¿Conserva layouts avanzados `Station` provenientes de Action0 `0x1A`?
+    #[must_use]
+    pub fn has_station_advanced_layouts(&self) -> bool {
+        !self.station_advanced_layouts.is_empty()
     }
 
     /// Busca el grupo de producción asignado por Action3 y atraviesa grupos
